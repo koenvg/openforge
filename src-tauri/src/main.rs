@@ -6,6 +6,7 @@ mod opencode_manager;
 mod opencode_client;
 mod jira_client;
 mod jira_sync;
+mod github_client;
 
 use std::sync::Mutex;
 use tauri::{Manager, State};

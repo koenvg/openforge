@@ -526,3 +526,109 @@ jira_poll_interval  - Seconds between polls (default: 60)
 - Future: Add manual sync trigger command (don't wait for next poll)
 - Future: Add sync status indicator (last sync time, error state)
 
+
+
+## Task 3.1: GitHub REST API Client (2026-02-17)
+
+### GitHub Client Implementation
+- Created `src-tauri/src/github_client.rs` following established JIRA client pattern
+- Implements type-safe wrappers for GitHub REST API v3
+- Uses `reqwest::Client` for HTTP requests with reusable client instance
+- Module imported in main.rs: `mod github_client;`
+
+### Authentication Pattern
+- GitHub uses Personal Access Token (PAT) authentication
+- Header format: `Authorization: token {personal_access_token}`
+- Different from JIRA's Basic Auth (base64-encoded email:token)
+- No helper function needed (simpler than JIRA's base64 encoding)
+
+### Required Headers
+- `Authorization: token {pat}` - Authentication
+- `User-Agent: ai-command-center` - Required by GitHub API (returns 403 without it)
+
+### API Endpoints Implemented
+1. **Get PR Details**: `GET /repos/{owner}/{repo}/pulls/{number}`
+   - Returns: `PullRequest` struct with number, title, state, html_url, user
+   
+2. **Get PR Comments**: Merges two endpoints into unified response
+   - Review comments: `GET /repos/{owner}/{repo}/pulls/{number}/comments` (inline code comments)
+   - Issue comments: `GET /repos/{owner}/{repo}/issues/{number}/comments` (general comments)
+   - Returns: `Vec<PrComment>` with `comment_type` field to distinguish types
+   
+3. **Post PR Comment**: `POST /repos/{owner}/{repo}/issues/{number}/comments`
+   - Posts general comment (not inline review comment)
+   - Request body: `{ "body": "comment text" }`
+   
+4. **Get PR Status**: Reuses `get_pr_details` and extracts `state` field
+   - Returns: String ("open", "closed", "merged")
+
+### Type System Design
+- **PullRequest**: Core PR metadata (number, title, state, html_url, user)
+- **PrComment**: Unified comment type with optional fields for review comments
+  - `path: Option<String>` - File path (only for review comments)
+  - `line: Option<i32>` - Line number (only for review comments)
+  - `comment_type: String` - "review_comment" or "issue_comment"
+- **GitHubUser**: Simple user representation (login + extra fields)
+- **ReviewComment** (internal): Raw review comment from API
+- **IssueComment** (internal): Raw issue comment from API
+- All structs use `#[serde(flatten)]` for extra fields (forward compatibility)
+
+### Error Handling
+- **GitHubError** enum with three variants:
+  - `NetworkError(String)` - Connection failures, timeouts
+  - `ApiError { status: u16, message: String }` - Non-2xx responses
+  - `ParseError(String)` - JSON deserialization failures
+- Implements `std::error::Error` and `Display` traits
+- Same pattern as JiraError (consistency across clients)
+
+### Comment Merging Strategy
+- Fetches both review and issue comments in parallel (two API calls)
+- Converts internal types to unified `PrComment` type
+- Tags review comments with `comment_type: "review_comment"`
+- Tags issue comments with `comment_type: "issue_comment"`
+- Review comments have `path` and `line` fields populated
+- Issue comments have `path` and `line` as `None`
+- Returns single `Vec<PrComment>` for easy frontend consumption
+
+### Testing
+- 6 unit tests covering:
+  - Client creation and default trait
+  - Comment request serialization
+  - Error display formatting
+  - PR comment serialization with all fields
+  - Pull request deserialization with extra fields
+- All tests pass: `cargo test` shows 22 passed (6 new + 16 existing)
+
+### Key Learnings
+1. **GitHub API quirks**: Requires User-Agent header (403 without it)
+2. **Comment types**: PRs have two comment types (review vs issue), must merge manually
+3. **Simpler auth**: Token-based auth is simpler than JIRA's Basic Auth (no base64 encoding)
+4. **Unified types**: Better UX to merge similar data types into one with discriminator field
+5. **Optional fields**: Use `Option<T>` for fields that only exist in some variants
+6. **Reusable patterns**: Following JIRA client pattern made implementation straightforward
+7. **Error consistency**: Using same error pattern across clients improves maintainability
+
+### API Design Decisions
+- **Why merge comments?**: Frontend doesn't need to know about GitHub's internal distinction
+- **Why `comment_type` field?**: Allows frontend to filter/display differently if needed
+- **Why reuse `get_pr_details` in `get_pr_status`?**: Avoids code duplication, single source of truth
+- **Why not implement inline review comments?**: Task scope limited to general comments (POST to issues endpoint)
+
+### Dependencies
+- No new dependencies added (all required deps already present from JIRA client)
+- Uses: reqwest, serde, serde_json, std::error::Error, std::fmt
+
+### Integration Notes
+- Module imported in main.rs but not yet used in Tauri commands
+- Ready for Task 3.3 (Tauri commands for GitHub operations)
+- Client can be instantiated with `GitHubClient::new()` or `GitHubClient::default()`
+- All methods are async and return `Result<T, GitHubError>`
+
+### Next Steps
+- Task 3.2: Background polling for GitHub PR status changes
+- Task 3.3: Tauri commands to expose GitHub client to frontend
+- Task 3.4: Frontend UI to display PR comments and post new comments
+- Future: Add support for posting inline review comments (requires different endpoint)
+- Future: Add pagination support for large comment threads
+- Future: Add rate limit handling (GitHub API has rate limits)
+
