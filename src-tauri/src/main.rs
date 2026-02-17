@@ -8,6 +8,7 @@ mod jira_client;
 mod jira_sync;
 mod github_client;
 mod github_poller;
+mod orchestrator;
 
 use std::sync::Mutex;
 use tauri::{Manager, State, Emitter};

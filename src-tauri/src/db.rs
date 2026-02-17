@@ -44,6 +44,30 @@ pub struct PrCommentRow {
     pub created_at: i64,
 }
 
+/// Agent session row from database
+#[derive(Debug, Clone, Serialize)]
+pub struct AgentSessionRow {
+    pub id: String,
+    pub ticket_id: String,
+    pub opencode_session_id: Option<String>,
+    pub stage: String,
+    pub status: String,
+    pub checkpoint_data: Option<String>,
+    pub error_message: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+/// Agent log row from database
+#[derive(Debug, Clone, Serialize)]
+pub struct AgentLogRow {
+    pub id: i64,
+    pub session_id: String,
+    pub timestamp: i64,
+    pub log_type: String,
+    pub content: String,
+}
+
 /// Database connection wrapper for thread-safe access
 pub struct Database {
     conn: Arc<Mutex<Connection>>,
@@ -420,10 +444,232 @@ impl Database {
         Ok(result)
     }
 
-    /// Mark a PR comment as addressed
     pub fn mark_comment_addressed(&self, id: i64) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute("UPDATE pr_comments SET addressed = 1 WHERE id = ?1", [id])?;
+        Ok(())
+    }
+
+    pub fn create_agent_session(
+        &self,
+        id: &str,
+        ticket_id: &str,
+        opencode_session_id: Option<&str>,
+        stage: &str,
+        status: &str,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs() as i64;
+        conn.execute(
+            "INSERT INTO agent_sessions (id, ticket_id, opencode_session_id, stage, status, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params![id, ticket_id, opencode_session_id, stage, status, now, now],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_agent_session(
+        &self,
+        id: &str,
+        stage: &str,
+        status: &str,
+        checkpoint_data: Option<&str>,
+        error_message: Option<&str>,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs() as i64;
+        conn.execute(
+            "UPDATE agent_sessions SET stage = ?1, status = ?2, checkpoint_data = ?3, error_message = ?4, updated_at = ?5 WHERE id = ?6",
+            rusqlite::params![stage, status, checkpoint_data, error_message, now, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn set_agent_session_opencode_id(&self, id: &str, opencode_session_id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE agent_sessions SET opencode_session_id = ?1 WHERE id = ?2",
+            [opencode_session_id, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_agent_session(&self, id: &str) -> Result<Option<AgentSessionRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, ticket_id, opencode_session_id, stage, status, checkpoint_data, error_message, created_at, updated_at
+             FROM agent_sessions WHERE id = ?1",
+        )?;
+        let mut rows = stmt.query([id])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(AgentSessionRow {
+                id: row.get(0)?,
+                ticket_id: row.get(1)?,
+                opencode_session_id: row.get(2)?,
+                stage: row.get(3)?,
+                status: row.get(4)?,
+                checkpoint_data: row.get(5)?,
+                error_message: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn get_latest_session_for_ticket(
+        &self,
+        ticket_id: &str,
+    ) -> Result<Option<AgentSessionRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, ticket_id, opencode_session_id, stage, status, checkpoint_data, error_message, created_at, updated_at
+             FROM agent_sessions WHERE ticket_id = ?1 ORDER BY created_at DESC, rowid DESC LIMIT 1",
+        )?;
+        let mut rows = stmt.query([ticket_id])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(AgentSessionRow {
+                id: row.get(0)?,
+                ticket_id: row.get(1)?,
+                opencode_session_id: row.get(2)?,
+                stage: row.get(3)?,
+                status: row.get(4)?,
+                checkpoint_data: row.get(5)?,
+                error_message: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn insert_agent_log(&self, session_id: &str, log_type: &str, content: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs() as i64;
+        conn.execute(
+            "INSERT INTO agent_logs (session_id, timestamp, log_type, content) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![session_id, now, log_type, content],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_agent_logs(&self, session_id: &str) -> Result<Vec<AgentLogRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, session_id, timestamp, log_type, content FROM agent_logs WHERE session_id = ?1 ORDER BY timestamp ASC",
+        )?;
+        let logs = stmt.query_map([session_id], |row| {
+            Ok(AgentLogRow {
+                id: row.get(0)?,
+                session_id: row.get(1)?,
+                timestamp: row.get(2)?,
+                log_type: row.get(3)?,
+                content: row.get(4)?,
+            })
+        })?;
+        let mut result = Vec::new();
+        for log in logs {
+            result.push(log?);
+        }
+        Ok(result)
+    }
+
+    pub fn get_ticket(&self, id: &str) -> Result<Option<TicketRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, title, description, status, jira_status, assignee, created_at, updated_at FROM tickets WHERE id = ?1",
+        )?;
+        let mut rows = stmt.query([id])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(TicketRow {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                description: row.get(2)?,
+                status: row.get(3)?,
+                jira_status: row.get(4)?,
+                assignee: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn get_pr_comments_by_ids(&self, ids: &[i64]) -> Result<Vec<PrCommentRow>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let conn = self.conn.lock().unwrap();
+        let placeholders: Vec<String> = ids
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("?{}", i + 1))
+            .collect();
+        let sql = format!(
+            "SELECT id, pr_id, author, body, comment_type, file_path, line_number, addressed, created_at FROM pr_comments WHERE id IN ({}) ORDER BY created_at ASC",
+            placeholders.join(", ")
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let params: Vec<Box<dyn rusqlite::types::ToSql>> = ids
+            .iter()
+            .map(|id| Box::new(*id) as Box<dyn rusqlite::types::ToSql>)
+            .collect();
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+            params.iter().map(|p| p.as_ref()).collect();
+        let comments = stmt.query_map(param_refs.as_slice(), |row| {
+            Ok(PrCommentRow {
+                id: row.get(0)?,
+                pr_id: row.get(1)?,
+                author: row.get(2)?,
+                body: row.get(3)?,
+                comment_type: row.get(4)?,
+                file_path: row.get(5)?,
+                line_number: row.get(6)?,
+                addressed: row.get(7)?,
+                created_at: row.get(8)?,
+            })
+        })?;
+        let mut result = Vec::new();
+        for comment in comments {
+            result.push(comment?);
+        }
+        Ok(result)
+    }
+
+    pub fn mark_comments_addressed(&self, ids: &[i64]) -> Result<()> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let conn = self.conn.lock().unwrap();
+        let placeholders: Vec<String> = ids
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("?{}", i + 1))
+            .collect();
+        let sql = format!(
+            "UPDATE pr_comments SET addressed = 1 WHERE id IN ({})",
+            placeholders.join(", ")
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let params: Vec<Box<dyn rusqlite::types::ToSql>> = ids
+            .iter()
+            .map(|id| Box::new(*id) as Box<dyn rusqlite::types::ToSql>)
+            .collect();
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+            params.iter().map(|p| p.as_ref()).collect();
+        stmt.execute(param_refs.as_slice())?;
         Ok(())
     }
 }
