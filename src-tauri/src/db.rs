@@ -16,6 +16,34 @@ pub struct TicketRow {
     pub updated_at: i64,
 }
 
+/// Pull request row from database
+#[derive(Debug, Clone, Serialize)]
+pub struct PrRow {
+    pub id: i64,
+    pub ticket_id: String,
+    pub repo_owner: String,
+    pub repo_name: String,
+    pub title: String,
+    pub url: String,
+    pub state: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+/// PR comment row from database
+#[derive(Debug, Clone, Serialize)]
+pub struct PrCommentRow {
+    pub id: i64,
+    pub pr_id: i64,
+    pub author: String,
+    pub body: String,
+    pub comment_type: String,
+    pub file_path: Option<String>,
+    pub line_number: Option<i32>,
+    pub addressed: i32,
+    pub created_at: i64,
+}
+
 /// Database connection wrapper for thread-safe access
 pub struct Database {
     conn: Arc<Mutex<Connection>>,
@@ -257,6 +285,108 @@ impl Database {
             result.push(ticket?);
         }
         Ok(result)
+    }
+
+    /// Get all open pull requests from the database
+    pub fn get_open_prs(&self) -> Result<Vec<PrRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, ticket_id, repo_owner, repo_name, title, url, state, created_at, updated_at 
+             FROM pull_requests 
+             WHERE state = 'open' 
+             ORDER BY updated_at DESC"
+        )?;
+
+        let prs = stmt.query_map([], |row| {
+            Ok(PrRow {
+                id: row.get(0)?,
+                ticket_id: row.get(1)?,
+                repo_owner: row.get(2)?,
+                repo_name: row.get(3)?,
+                title: row.get(4)?,
+                url: row.get(5)?,
+                state: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
+            })
+        })?;
+
+        let mut result = Vec::new();
+        for pr in prs {
+            result.push(pr?);
+        }
+        Ok(result)
+    }
+
+    /// Check if a PR comment exists by ID
+    pub fn comment_exists(&self, id: i64) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT COUNT(*) FROM pr_comments WHERE id = ?1")?;
+        let count: i64 = stmt.query_row([id], |row| row.get(0))?;
+        Ok(count > 0)
+    }
+
+    /// Insert a PR comment into the database
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_pr_comment(
+        &self,
+        id: i64,
+        pr_id: i64,
+        author: &str,
+        body: &str,
+        comment_type: &str,
+        file_path: Option<&str>,
+        line_number: Option<i32>,
+        created_at: i64,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO pr_comments (id, pr_id, author, body, comment_type, file_path, line_number, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params![
+                id,
+                pr_id,
+                author,
+                body,
+                comment_type,
+                file_path,
+                line_number,
+                created_at,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Insert or replace a pull request in the database
+    pub fn insert_pull_request(
+        &self,
+        id: i64,
+        ticket_id: &str,
+        repo_owner: &str,
+        repo_name: &str,
+        title: &str,
+        url: &str,
+        state: &str,
+        created_at: i64,
+        updated_at: i64,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT OR REPLACE INTO pull_requests (id, ticket_id, repo_owner, repo_name, title, url, state, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            rusqlite::params![
+                id,
+                ticket_id,
+                repo_owner,
+                repo_name,
+                title,
+                url,
+                state,
+                created_at,
+                updated_at,
+            ],
+        )?;
+        Ok(())
     }
 }
 

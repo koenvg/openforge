@@ -21,6 +21,7 @@ reqwest = { version = "0.12", features = ["json", "stream"] }
 which = "6.0"
 nix = { version = "0.29", features = ["signal", "process"] }
 base64 = "0.22"
+chrono = "0.4"
 
 [features]
 # This feature is used for production builds where `devPath` points to the filesystem

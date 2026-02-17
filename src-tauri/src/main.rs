@@ -7,6 +7,7 @@ mod opencode_client;
 mod jira_client;
 mod jira_sync;
 mod github_client;
+mod github_poller;
 
 use std::sync::Mutex;
 use tauri::{Manager, State};
@@ -306,6 +307,13 @@ fn main() {
             });
 
             println!("JIRA sync task started");
+
+            let app_handle_github = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                github_poller::start_github_poller(app_handle_github).await;
+            });
+
+            println!("GitHub poller task started");
 
             Ok(())
         })
