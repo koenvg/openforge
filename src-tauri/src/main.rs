@@ -86,6 +86,33 @@ async fn get_tickets(
     }
 }
 
+#[tauri::command]
+async fn get_ticket_detail(
+    db: State<'_, Mutex<db::Database>>,
+    ticket_id: String,
+) -> Result<db::TicketRow, String> {
+    let db = db.lock().unwrap();
+    db.get_ticket(&ticket_id)
+        .map_err(|e| format!("Failed to get ticket: {}", e))?
+        .ok_or_else(|| format!("Ticket {} not found", ticket_id))
+}
+
+#[tauri::command]
+async fn update_ticket_fields(
+    db: State<'_, Mutex<db::Database>>,
+    ticket_id: String,
+    acceptance_criteria: String,
+    plan_text: String,
+) -> Result<(), String> {
+    let db = db.lock().unwrap();
+    db.update_ticket_fields(
+        &ticket_id,
+        Some(&acceptance_criteria),
+        Some(&plan_text),
+    )
+    .map_err(|e| format!("Failed to update ticket fields: {}", e))
+}
+
 /// Sync JIRA now (one-shot sync, not the background loop)
 #[tauri::command]
 async fn sync_jira_now(
@@ -757,6 +784,8 @@ fn main() {
             create_session,
             send_prompt,
             get_tickets,
+            get_ticket_detail,
+            update_ticket_fields,
             sync_jira_now,
             transition_ticket,
             poll_pr_comments_now,

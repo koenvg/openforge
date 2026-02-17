@@ -300,6 +300,24 @@ impl Database {
         Ok(())
     }
 
+    pub fn update_ticket_fields(
+        &self,
+        id: &str,
+        acceptance_criteria: Option<&str>,
+        plan_text: Option<&str>,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs() as i64;
+        conn.execute(
+            "UPDATE tickets SET acceptance_criteria = ?1, plan_text = ?2, updated_at = ?3 WHERE id = ?4",
+            rusqlite::params![acceptance_criteria, plan_text, now, id],
+        )?;
+        Ok(())
+    }
+
     /// Get all tickets from the database
     pub fn get_all_tickets(&self) -> Result<Vec<TicketRow>> {
         let conn = self.conn.lock().unwrap();
