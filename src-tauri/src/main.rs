@@ -359,6 +359,94 @@ async fn mark_comment_addressed(
         .map_err(|e| format!("Failed to mark comment addressed: {}", e))
 }
 
+/// Start ticket implementation via orchestrator
+#[tauri::command]
+async fn start_ticket_implementation(
+    orchestrator: State<'_, orchestrator::Orchestrator>,
+    db: State<'_, Mutex<db::Database>>,
+    app: tauri::AppHandle,
+    ticket_id: String,
+) -> Result<String, String> {
+    orchestrator.start_implementation(&db, &app, &ticket_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Approve a checkpoint in the orchestrator
+#[tauri::command]
+async fn approve_checkpoint(
+    orchestrator: State<'_, orchestrator::Orchestrator>,
+    db: State<'_, Mutex<db::Database>>,
+    app: tauri::AppHandle,
+    session_id: String,
+) -> Result<(), String> {
+    orchestrator.approve_checkpoint(&db, &app, &session_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Reject a checkpoint with feedback
+#[tauri::command]
+async fn reject_checkpoint(
+    orchestrator: State<'_, orchestrator::Orchestrator>,
+    db: State<'_, Mutex<db::Database>>,
+    app: tauri::AppHandle,
+    session_id: String,
+    feedback: String,
+) -> Result<(), String> {
+    orchestrator.reject_checkpoint(&db, &app, &session_id, &feedback)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Address selected PR comments via orchestrator
+#[tauri::command]
+async fn address_selected_pr_comments(
+    orchestrator: State<'_, orchestrator::Orchestrator>,
+    db: State<'_, Mutex<db::Database>>,
+    app: tauri::AppHandle,
+    ticket_id: String,
+    comment_ids: Vec<i64>,
+) -> Result<String, String> {
+    orchestrator.address_pr_comments(&db, &app, &ticket_id, comment_ids)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Get the status of an agent session
+#[tauri::command]
+async fn get_session_status(
+    orchestrator: State<'_, orchestrator::Orchestrator>,
+    db: State<'_, Mutex<db::Database>>,
+    session_id: String,
+) -> Result<db::AgentSessionRow, String> {
+    orchestrator.get_session_status(&db, &session_id)
+        .map_err(|e| e.to_string())
+}
+
+/// Abort an agent session
+#[tauri::command]
+async fn abort_session(
+    orchestrator: State<'_, orchestrator::Orchestrator>,
+    db: State<'_, Mutex<db::Database>>,
+    app: tauri::AppHandle,
+    session_id: String,
+) -> Result<(), String> {
+    orchestrator.abort_session(&db, &app, &session_id)
+        .map_err(|e| e.to_string())
+}
+
+/// Get agent logs for a session
+#[tauri::command]
+async fn get_agent_logs(
+    db: State<'_, Mutex<db::Database>>,
+    session_id: String,
+) -> Result<Vec<db::AgentLogRow>, String> {
+    let db_lock = db.lock().unwrap();
+    db_lock.get_agent_logs(&session_id)
+        .map_err(|e| format!("Failed to get agent logs: {}", e))
+}
+
 /// Map JIRA status to cockpit status
 fn map_jira_status_to_cockpit(jira_status: &str) -> &'static str {
     match jira_status {
@@ -423,11 +511,15 @@ fn main() {
             // Create GitHub client
             let github_client = GitHubClient::new();
 
+            // Create orchestrator (uses OpenCodeClient for AI agent control)
+            let orchestrator = orchestrator::Orchestrator::new(OpenCodeClient::with_base_url(opencode_manager.api_url()));
+
             // Store OpenCode manager and client in app state
             app.manage(opencode_manager);
             app.manage(opencode_client);
             app.manage(jira_client);
             app.manage(github_client);
+            app.manage(orchestrator);
 
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -454,7 +546,14 @@ fn main() {
             transition_ticket,
             poll_pr_comments_now,
             get_pr_comments,
-            mark_comment_addressed
+            mark_comment_addressed,
+            start_ticket_implementation,
+            approve_checkpoint,
+            reject_checkpoint,
+            address_selected_pr_comments,
+            get_session_status,
+            abort_session,
+            get_agent_logs
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

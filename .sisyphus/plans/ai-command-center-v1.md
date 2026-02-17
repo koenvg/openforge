@@ -515,17 +515,17 @@ async fn poll_pr_comments(db: &Database, github_client: &GitHubClient) {
 
 ### Phase 4: Orchestrator (Checkpoint-Based Agent Control)
 
-- [ ] **Task 4.1**: Implement orchestrator state machine (Rust)
+- [x] **Task 4.1**: Implement orchestrator state machine (Rust)
   - Parallelizable: No (depends on 1.5, 2.3)
   - Estimated effort: 4 hours
   - Deliverable: Rust module with functions: `start_implementation()`, `approve_checkpoint()`, `handle_error()`
 
-- [ ] **Task 4.2**: Implement checkpoint detection logic
+- [x] **Task 4.2**: Implement checkpoint detection logic
   - Parallelizable: No (depends on 4.1)
   - Estimated effort: 2 hours
   - Deliverable: Logic to parse OpenCode responses, extract checkpoint data (proposal, diff, PR details)
 
-- [ ] **Task 4.3**: Implement PR comment response orchestration
+- [x] **Task 4.3**: Implement PR comment response orchestration
   - Parallelizable: No (depends on 4.1, 3.3)
   - Estimated effort: 2 hours
   - Deliverable: Function to resume OpenCode session with selected PR comments
