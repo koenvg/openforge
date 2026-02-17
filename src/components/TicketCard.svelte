@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Ticket, AgentSession, PullRequestInfo } from '../lib/types'
+  import { openUrl } from '../lib/ipc'
   import { createEventDispatcher } from 'svelte'
 
   export let ticket: Ticket
@@ -53,17 +54,17 @@
   {#if pullRequests.length > 0}
     <div class="card-prs">
       {#each pullRequests as pr}
-        <a
-          href={pr.url}
-          target="_blank"
-          rel="noopener"
+        <span
           class="pr-link"
           class:pr-open={pr.state === 'open'}
           class:pr-closed={pr.state !== 'open'}
-          on:click|stopPropagation
+          role="link"
+          tabindex="0"
+          on:click|stopPropagation={() => openUrl(pr.url)}
+          on:keydown|stopPropagation={(e) => e.key === 'Enter' && openUrl(pr.url)}
         >
           PR #{pr.id}
-        </a>
+        </span>
       {/each}
     </div>
   {/if}
@@ -166,7 +167,7 @@
     font-weight: 600;
     padding: 1px 6px;
     border-radius: 4px;
-    text-decoration: none;
+    cursor: pointer;
     transition: opacity 0.15s;
   }
 

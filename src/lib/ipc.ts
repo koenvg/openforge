@@ -53,6 +53,10 @@ export async function getPullRequests(): Promise<PullRequestInfo[]> {
   return invoke<PullRequestInfo[]>("get_pull_requests");
 }
 
+export async function openUrl(url: string): Promise<void> {
+  return invoke("open_url", { url });
+}
+
 export async function getPrComments(prId: number): Promise<PrComment[]> {
   return invoke<PrComment[]>("get_pr_comments", { prId });
 }

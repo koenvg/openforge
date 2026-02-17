@@ -3,15 +3,17 @@
 //! Type-safe Rust client for interacting with the OpenCode HTTP server.
 //! Provides functions for session management, prompt sending, and SSE event streaming.
 //!
-//! ## API Endpoints
-//! - POST /sessions — Create new session
-//! - POST /sessions/{id}/prompt — Send prompt to session
-//! - GET /events — Subscribe to server-sent events
-//! - GET /health — Health check
+//! ## API Endpoints (opencode serve)
+//! - POST /session — Create new session
+//! - POST /session/{id}/message — Send message to session
+//! - POST /session/{id}/prompt_async — Send message async (no wait)
+//! - POST /session/{id}/abort — Abort a running session
+//! - GET /event — Subscribe to server-sent events
+//! - GET /global/health — Health check
 //!
 //! ## Base URL
 //! Default: http://localhost:4096
-//! Configurable via OpenCodeClient::new(base_url)
+//! Configurable via OpenCodeClient::with_base_url(base_url)
 
 use reqwest::{Client, Response};
 use serde::{Deserialize, Serialize};
@@ -61,7 +63,7 @@ impl OpenCodeClient {
     /// # }
     /// ```
     pub async fn create_session(&self, title: String) -> Result<String, OpenCodeError> {
-        let url = format!("{}/sessions", self.base_url);
+        let url = format!("{}/session", self.base_url);
         let request = CreateSessionRequest { title };
 
         let response = self
@@ -115,7 +117,7 @@ impl OpenCodeClient {
         session_id: &str,
         text: String,
     ) -> Result<serde_json::Value, OpenCodeError> {
-        let url = format!("{}/sessions/{}/prompt", self.base_url, session_id);
+        let url = format!("{}/session/{}/message", self.base_url, session_id);
         let request = SendPromptRequest {
             parts: vec![Part {
                 r#type: "text".to_string(),
@@ -170,7 +172,7 @@ impl OpenCodeClient {
     /// # }
     /// ```
     pub async fn subscribe_events(&self) -> Result<EventStream, OpenCodeError> {
-        let url = format!("{}/events", self.base_url);
+        let url = format!("{}/event", self.base_url);
 
         let response = self
             .client
@@ -199,7 +201,7 @@ impl OpenCodeClient {
     /// # Returns
     /// Health status and version information
     pub async fn health(&self) -> Result<HealthResponse, OpenCodeError> {
-        let url = format!("{}/health", self.base_url);
+        let url = format!("{}/global/health", self.base_url);
 
         let response = self
             .client

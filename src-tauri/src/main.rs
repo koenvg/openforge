@@ -379,6 +379,22 @@ async fn poll_pr_comments_now(
 }
 
 #[tauri::command]
+async fn open_url(url: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    let cmd = "open";
+    #[cfg(target_os = "linux")]
+    let cmd = "xdg-open";
+    #[cfg(target_os = "windows")]
+    let cmd = "start";
+
+    std::process::Command::new(cmd)
+        .arg(&url)
+        .spawn()
+        .map_err(|e| format!("Failed to open URL: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
 async fn get_pull_requests(
     db: State<'_, Mutex<db::Database>>,
 ) -> Result<Vec<db::PrRow>, String> {
@@ -670,6 +686,7 @@ fn main() {
             get_session_status,
             abort_session,
             get_agent_logs,
+            open_url,
             get_config,
             set_config,
             check_opencode_installed

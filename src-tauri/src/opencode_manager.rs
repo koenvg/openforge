@@ -52,7 +52,7 @@ impl OpenCodeManager {
 
         // Spawn the opencode web process
         let child = Command::new(opencode_path)
-            .arg("web")
+            .arg("serve")
             .arg("--port")
             .arg(OPENCODE_PORT.to_string())
             .arg("--hostname")
@@ -65,7 +65,7 @@ impl OpenCodeManager {
 
         let manager = Self {
             child: Arc::new(Mutex::new(Some(child))),
-            health_url: format!("http://{}:{}/health", OPENCODE_HOST, OPENCODE_PORT),
+            health_url: format!("http://{}:{}/global/health", OPENCODE_HOST, OPENCODE_PORT),
         };
 
         // Wait for server to become healthy

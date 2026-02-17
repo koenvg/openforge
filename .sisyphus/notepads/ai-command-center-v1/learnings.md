@@ -88,16 +88,50 @@ This file accumulates knowledge about the codebase patterns, naming conventions,
 - JIRA sync service (Task 2.2) will use this database
 - GitHub poller (Task 3.2) will use this database
 
+## OpenCode Server API (2026-02-17) — CRITICAL LESSON
+
+### Always Consult Official Docs
+- **Docs URL**: https://opencode.ai/docs/server/
+- The OpenCode API endpoints are NOT what you'd guess. Always check the docs before implementing.
+- The `opencode serve` command runs a headless HTTP server (not `opencode web`).
+
+### Correct API Endpoints (from docs)
+| Endpoint | Path |
+|---|---|
+| Health | `GET /global/health` |
+| Events SSE | `GET /event` |
+| List sessions | `GET /session` |
+| Create session | `POST /session` |
+| Get session | `GET /session/:id` |
+| Send message (sync) | `POST /session/:id/message` |
+| Send message (async) | `POST /session/:id/prompt_async` |
+| Abort session | `POST /session/:id/abort` |
+| Session diff | `GET /session/:id/diff` |
+| List messages | `GET /session/:id/message` |
+| OpenAPI spec | `GET /doc` |
+
+### Common Mistakes to Avoid
+- `/sessions` (plural) is WRONG → use `/session` (singular)
+- `/sessions/{id}/prompt` is WRONG → use `/session/{id}/message`
+- `/events` (plural) is WRONG → use `/event` (singular)
+- `/health` is WRONG → use `/global/health`
+- `opencode web` is for the web UI, `opencode serve` is the headless server
+
+### Server Launch
+- Command: `opencode serve --port <port> --hostname <host>`
+- Default port: 4096, default hostname: 127.0.0.1
+- Auth: set `OPENCODE_SERVER_PASSWORD` env var for HTTP basic auth
+
 ## Task 1.3: OpenCode Process Manager (2026-02-17)
 
 ### Process Management Implementation
-- Created `src-tauri/src/opencode_manager.rs` to spawn and monitor `opencode web` server
+- Created `src-tauri/src/opencode_manager.rs` to spawn and monitor `opencode serve` server
 - Uses `tokio::process::Command` for async process spawning with `kill_on_drop(true)`
 - Stores child process in `Arc<Mutex<Option<Child>>>` for thread-safe access
-- Process spawned with: `opencode web --port 4096 --hostname 127.0.0.1`
+- Process spawned with: `opencode serve --port 4096 --hostname 127.0.0.1`
 
 ### Health Check Pattern
-- Polls `http://localhost:4096/health` every 500ms until server responds
+- Polls `http://localhost:4096/global/health` every 500ms until server responds
 - Uses `reqwest::Client` with 5-second timeout per request
 - Overall health check timeout: 30 seconds (configurable via const)
 - Blocks app startup until server is healthy (ensures API is ready before UI shows)
@@ -209,11 +243,12 @@ This file accumulates knowledge about the codebase patterns, naming conventions,
 - EventStream provides low-level byte stream access (SSE parsing to be added in Task 1.5)
 - Base URL hardcoded to localhost:4096 (matches OpenCodeManager default port)
 
-### API Endpoint Reference (from SDK)
-- POST /sessions — Create session, returns { id: string, ... }
-- POST /sessions/{id}/prompt — Send prompt, body: { parts: [{ type: "text", text: string }] }
-- GET /events — Server-sent events stream
-- GET /health — Health check, returns { healthy: bool, version: string }
+### API Endpoint Reference (from official docs: https://opencode.ai/docs/server/)
+- POST /session — Create session, body: { parentID?, title? }, returns Session
+- POST /session/{id}/message — Send message, body: { parts, model?, agent? }, returns { info, parts }
+- POST /session/{id}/prompt_async — Send message async, returns 204
+- GET /event — Server-sent events stream
+- GET /global/health — Health check, returns { healthy: bool, version: string }
 
 ### Next Steps
 - Task 1.5 will create Tauri commands that use this client

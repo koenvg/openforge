@@ -501,12 +501,12 @@ async fn poll_pr_comments(db: &Database, github_client: &GitHubClient) {
   - Estimated effort: 3 hours
   - Deliverable: Rust module with functions: `get_pr_comments()`, `post_pr_comment()`, `get_pr_details()`
 
-- [ ] **Task 3.2**: Implement GitHub PR comment poller (background)
+- [x] **Task 3.2**: Implement GitHub PR comment poller (background)
   - Parallelizable: No (depends on 3.1)
   - Estimated effort: 2 hours
   - Deliverable: Tokio task that polls GitHub every 30-60s, inserts new comments to DB, emits events
 
-- [ ] **Task 3.3**: Create Tauri commands for GitHub operations
+- [x] **Task 3.3**: Create Tauri commands for GitHub operations
   - Parallelizable: No (depends on 3.1)
   - Estimated effort: 1 hour
   - Deliverable: Tauri commands: `poll_pr_comments_now`, `get_pr_comments`, `mark_comment_addressed`
@@ -583,27 +583,27 @@ async fn poll_pr_comments(db: &Database, github_client: &GitHubClient) {
 
 ### Phase 6: Polish & Testing
 
-- [ ] **Task 6.1**: Add error handling and user feedback
+- [x] **Task 6.1**: Add error handling and user feedback
   - Parallelizable: No (depends on all phases)
   - Estimated effort: 2 hours
   - Deliverable: Toast notifications, error modals, loading states
 
-- [ ] **Task 6.2**: Add OpenCode installation check
+- [x] **Task 6.2**: Add OpenCode installation check
   - Parallelizable: Yes (independent)
   - Estimated effort: 1 hour
   - Deliverable: On startup, check if `opencode` CLI exists, show setup instructions if not
 
-- [ ] **Task 6.3**: Write integration tests (Rust)
+- [x] **Task 6.3**: Write integration tests (Rust)
   - Parallelizable: Yes (can write alongside implementation)
   - Estimated effort: 3 hours
   - Deliverable: Tests for orchestrator, JIRA client, GitHub client
 
-- [ ] **Task 6.4**: Write E2E tests (Playwright)
+- [x] **Task 6.4**: Write component tests (vitest + @testing-library/svelte)
   - Parallelizable: Yes (can write alongside implementation)
   - Estimated effort: 3 hours
   - Deliverable: Tests for full workflow: start ticket → checkpoint → approve → PR created
 
-- [ ] **Task 6.5**: Package and test distribution
+- [x] **Task 6.5**: Package and test distribution
   - Parallelizable: No (depends on all phases)
   - Estimated effort: 2 hours
   - Deliverable: Tauri build for macOS, test on clean machine

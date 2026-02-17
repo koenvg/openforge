@@ -80,8 +80,7 @@
 
   .column {
     flex: 1;
-    min-width: 200px;
-    max-width: 300px;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     background: var(--bg-secondary);
