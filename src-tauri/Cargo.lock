@@ -33,6 +33,7 @@ dependencies = [
 name = "ai-command-center"
 version = "0.0.1"
 dependencies = [
+ "base64 0.22.1",
  "bytes",
  "nix",
  "reqwest 0.12.28",

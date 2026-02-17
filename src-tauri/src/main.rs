@@ -4,6 +4,7 @@
 mod db;
 mod opencode_manager;
 mod opencode_client;
+mod jira_client;
 
 use std::sync::Mutex;
 use tauri::{Manager, State};
@@ -75,8 +76,7 @@ struct OpenCodeStatus {
 // Main
 // ============================================================================
 
-#[tokio::main]
-async fn main() {
+fn main() {
     tauri::Builder::default()
         .setup(|app| {
             // Get app data directory and initialize database

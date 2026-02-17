@@ -12,7 +12,7 @@ tauri-build = { version = "2.0", features = [] }
 [dependencies]
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-tauri = "2.8"
+tauri = { version = "2.8", features = [] }
 tokio = { version = "1", features = ["full"] }
 tokio-stream = "0.1"
 bytes = "1.0"
@@ -20,6 +20,7 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 reqwest = { version = "0.12", features = ["json", "stream"] }
 which = "6.0"
 nix = { version = "0.29", features = ["signal", "process"] }
+base64 = "0.22"
 
 [features]
 # This feature is used for production builds where `devPath` points to the filesystem

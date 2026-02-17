@@ -477,7 +477,7 @@ async fn poll_pr_comments(db: &Database, github_client: &GitHubClient) {
 
 ### Phase 2: JIRA Integration
 
-- [ ] **Task 2.1**: Implement JIRA API client (Rust)
+- [x] **Task 2.1**: Implement JIRA API client (Rust)
   - Parallelizable: Yes (independent of Phase 1)
   - Estimated effort: 3 hours
   - Deliverable: Rust module with functions: `search_issues(jql)`, `get_ticket_details()`, `transition_ticket()`

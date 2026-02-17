@@ -327,3 +327,97 @@ const response = await invoke<any>('send_prompt', {
 - Phase 4: Orchestrator will use OpenCodeClient directly (not via commands)
 - Phase 5: Frontend will implement UI to call these commands
 
+
+## Task 2.1: JIRA Cloud REST API Client (2026-02-17)
+
+### Implementation Overview
+- Created `src-tauri/src/jira_client.rs` with complete type-safe JIRA Cloud REST API v3 client
+- Follows same pattern as OpenCodeClient (reusable reqwest::Client, async methods, Result types)
+- Implements HTTP Basic Auth with base64-encoded `email:api_token`
+
+### API Client Structure
+- **JiraClient** struct with connection pooling via reusable `reqwest::Client`
+- Base URL parameterized (caller provides `https://your-domain.atlassian.net`)
+- All methods are async and return `Result<T, JiraError>`
+- Client is Clone-able for sharing across Tauri commands
+
+### Implemented Functions
+1. **search_issues(base_url, email, api_token, jql) -> Result<Vec<JiraIssue>>**
+   - GET `/rest/api/3/search?jql={jql}`
+   - Returns vector of issues matching JQL query
+   - Example JQL: `"project = PROJ AND status = 'In Progress'"`
+
+2. **get_ticket_details(base_url, email, api_token, key) -> Result<JiraIssue>**
+   - GET `/rest/api/3/issue/{key}`
+   - Returns full issue details for specific key (e.g., "PROJ-123")
+
+3. **transition_ticket(base_url, email, api_token, key, transition_id) -> Result<()>**
+   - POST `/rest/api/3/issue/{key}/transitions`
+   - Body: `{ transition: { id: "31" } }`
+   - Changes issue status (e.g., "To Do" → "In Progress")
+
+4. **get_available_transitions(base_url, email, api_token, key) -> Result<Vec<JiraTransition>>**
+   - GET `/rest/api/3/issue/{key}/transitions`
+   - Returns available transitions with IDs and names
+   - Use this to get transition_id for transition_ticket()
+
+### Type System
+- **Request types**: TransitionRequest, TransitionId
+- **Response types**: SearchResponse, JiraIssue, JiraFields, JiraStatus, JiraUser, JiraPriority, JiraTransition, TransitionsResponse
+- **Error type**: JiraError enum with NetworkError, ApiError, ParseError variants
+- All types use serde for JSON serialization/deserialization
+- Used `#[serde(flatten)]` to capture extra fields from API responses
+- Used `#[serde(default)]` for optional fields (assignee, priority, description)
+- Used `#[serde(rename = "displayName")]` for camelCase API fields
+
+### Authentication Pattern
+- HTTP Basic Auth: `Authorization: Basic {base64(email:api_token)}`
+- Helper function `create_basic_auth_header(email, api_token)` encodes credentials
+- Uses `base64` crate v0.22 with STANDARD engine
+- Auth header added to every request via `.header("Authorization", auth_header)`
+
+### Error Handling Pattern
+- Custom JiraError enum implements Display and std::error::Error
+- Network errors: Connection failures, timeouts
+- API errors: Non-2xx status codes with status and message
+- Parse errors: JSON deserialization failures
+- All API methods check `response.status().is_success()` before parsing
+
+### Testing
+- 5 unit tests covering:
+  - Client creation
+  - Basic auth header generation
+  - Base64 encoding
+  - Request serialization (TransitionRequest)
+  - Error display formatting
+- All tests pass: `cargo test` shows 13 passed (5 new + 8 existing)
+
+### Dependencies Added
+- `base64 = "0.22"` - Base64 encoding for HTTP Basic Auth
+
+### Key Learnings
+1. **HTTP Basic Auth**: Format is `Authorization: Basic {base64(email:api_token)}`
+2. **JIRA API v3**: Uses `/rest/api/3/` prefix for all endpoints
+3. **JQL (JIRA Query Language)**: Passed as query parameter `?jql={jql}`
+4. **Transition IDs**: Must call `get_available_transitions()` first to get valid IDs
+5. **Parameterized base URL**: No default URL (caller must provide domain)
+6. **Serde patterns**: Use `#[serde(flatten)]` for extra fields, `#[serde(default)]` for optional fields
+7. **Clone-able client**: Allows sharing across async tasks and Tauri commands
+
+### Integration Notes
+- Module imported in main.rs but not yet used (Task 2.3 will create Tauri commands)
+- Client will be used by JIRA sync service (Task 2.2) for background polling
+- Client will be used by Tauri commands (Task 2.3) for frontend integration
+- Base URL, email, and API token will come from database config (set by user in UI)
+
+### JIRA API Endpoint Reference
+- GET `/rest/api/3/search?jql={jql}` — Search issues, returns `{ issues: [{ key, fields }] }`
+- GET `/rest/api/3/issue/{key}` — Get issue details, returns `{ key, fields, ... }`
+- POST `/rest/api/3/issue/{key}/transitions` — Transition issue, body: `{ transition: { id } }`
+- GET `/rest/api/3/issue/{key}/transitions` — Get available transitions, returns `{ transitions: [{ id, name }] }`
+
+### Next Steps
+- Task 2.2: Background polling service that uses this client to sync tickets every 60s
+- Task 2.3: Tauri commands that expose JIRA functions to frontend
+- Task 2.4: Frontend UI for JIRA ticket management
+

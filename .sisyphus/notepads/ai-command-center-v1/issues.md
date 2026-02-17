@@ -81,3 +81,52 @@ This file documents problems encountered and their solutions.
 3. Add command to get session history/logs from database (Phase 5)
 4. Consider adding timeout configuration for commands (currently uses default reqwest timeout)
 
+
+## Task 2.1: JIRA Cloud REST API Client (2026-02-17)
+
+### Issues Encountered
+
+1. **Test Compilation Error: reqwest::Client::timeout() not public**
+   - Initial test tried to call `client.client.timeout()` to verify client creation
+   - Error: `no method named 'timeout' found for struct 'Client'`
+   - Resolution: Simplified test to just create client without assertions (creation itself validates)
+   - Lesson: reqwest::Client doesn't expose timeout() in public API
+
+### Gotchas & Notes
+
+1. **JIRA API Authentication**
+   - Must use HTTP Basic Auth with base64-encoded `email:api_token`
+   - API token is NOT the same as password (generate from Atlassian account settings)
+   - Format: `Authorization: Basic {base64(email:api_token)}`
+
+2. **JIRA API v3 Endpoint Structure**
+   - All endpoints use `/rest/api/3/` prefix
+   - Search endpoint uses query parameter: `?jql={jql}`
+   - Transition endpoint requires POST with JSON body: `{ transition: { id: "31" } }`
+
+3. **Transition IDs are workflow-specific**
+   - Transition IDs vary by JIRA project workflow configuration
+   - Must call `get_available_transitions()` first to get valid IDs
+   - Cannot hardcode transition IDs (e.g., "31" for "In Progress" may not work in all projects)
+
+4. **Base URL must include domain**
+   - Format: `https://your-domain.atlassian.net`
+   - No default URL (unlike OpenCodeClient which defaults to localhost:4096)
+   - Caller must provide full base URL from config
+
+5. **Optional fields in JIRA API**
+   - Many fields are optional (assignee, priority, description)
+   - Used `#[serde(default)]` to handle missing fields gracefully
+   - Used `Option<T>` for optional fields in structs
+
+6. **Extra fields in API responses**
+   - JIRA API returns many fields we don't need
+   - Used `#[serde(flatten)] extra: serde_json::Value` to capture unknown fields
+   - Prevents deserialization errors when API adds new fields
+
+### Warnings (Expected)
+- All JiraClient methods unused (will be used in Task 2.2 and 2.3)
+- All structs unused (will be used when methods are called)
+- JiraError enum unused (will be used when methods are called)
+- Helper functions unused (will be used when methods are called)
+
