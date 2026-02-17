@@ -447,6 +447,27 @@ async fn get_agent_logs(
         .map_err(|e| format!("Failed to get agent logs: {}", e))
 }
 
+#[tauri::command]
+async fn get_config(
+    db: State<'_, Mutex<db::Database>>,
+    key: String,
+) -> Result<Option<String>, String> {
+    let db_lock = db.lock().unwrap();
+    db_lock.get_config(&key)
+        .map_err(|e| format!("Failed to get config: {}", e))
+}
+
+#[tauri::command]
+async fn set_config(
+    db: State<'_, Mutex<db::Database>>,
+    key: String,
+    value: String,
+) -> Result<(), String> {
+    let db_lock = db.lock().unwrap();
+    db_lock.set_config(&key, &value)
+        .map_err(|e| format!("Failed to set config: {}", e))
+}
+
 /// Map JIRA status to cockpit status
 fn map_jira_status_to_cockpit(jira_status: &str) -> &'static str {
     match jira_status {
@@ -553,7 +574,9 @@ fn main() {
             address_selected_pr_comments,
             get_session_status,
             abort_session,
-            get_agent_logs
+            get_agent_logs,
+            get_config,
+            set_config
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -56,3 +56,11 @@ export async function getPrComments(prId: number): Promise<PrComment[]> {
 export async function markCommentAddressed(commentId: number): Promise<void> {
   return invoke("mark_comment_addressed", { commentId });
 }
+
+export async function getConfig(key: string): Promise<string | null> {
+  return invoke<string | null>("get_config", { key });
+}
+
+export async function setConfig(key: string, value: string): Promise<void> {
+  return invoke("set_config", { key, value });
+}

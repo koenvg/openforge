@@ -539,7 +539,7 @@ async fn poll_pr_comments(db: &Database, github_client: &GitHubClient) {
 
 ### Phase 5: Frontend (Svelte UI)
 
-- [ ] **Task 5.1**: Build Kanban board component
+- [x] **Task 5.1**: Build Kanban board component
   - Parallelizable: Yes (can start early with mock data)
   - Estimated effort: 4 hours
   - Deliverable: Svelte component with 5 columns, drag-and-drop, ticket cards
@@ -569,12 +569,12 @@ async fn poll_pr_comments(db: &Database, github_client: &GitHubClient) {
   - Estimated effort: 2 hours
   - Deliverable: Svelte component with forms for JIRA (API token, board ID, username, filters), GitHub, OpenCode config
 
-- [ ] **Task 5.7**: Implement Tauri IPC client (Svelte)
+- [x] **Task 5.7**: Implement Tauri IPC client (Svelte)
   - Parallelizable: No (depends on all Tauri commands)
   - Estimated effort: 2 hours
   - Deliverable: TypeScript module wrapping all Tauri commands with type-safe API
 
-- [ ] **Task 5.8**: Wire up frontend to backend (state sync)
+- [x] **Task 5.8**: Wire up frontend to backend (state sync)
   - Parallelizable: No (depends on 5.1-5.7)
   - Estimated effort: 3 hours
   - Deliverable: Svelte stores synced with Tauri events, real-time UI updates

@@ -2,13 +2,19 @@
   import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn } from '@tauri-apps/api/event'
-  import { tickets, activeSessions, error } from './lib/stores'
+  import { tickets, selectedTicketId, activeSessions, error } from './lib/stores'
   import { getTickets, getOpenCodeStatus, getSessionStatus } from './lib/ipc'
-  import type { OpenCodeStatus } from './lib/types'
+  import type { OpenCodeStatus, PrComment } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
+  import DetailPanel from './components/DetailPanel.svelte'
+  import SettingsPanel from './components/SettingsPanel.svelte'
 
   let openCodeStatus: OpenCodeStatus | null = null
   let unlisteners: UnlistenFn[] = []
+  let showSettings = false
+  let prComments: PrComment[] = []
+
+  $: selectedTicket = $tickets.find(t => t.id === $selectedTicketId) || null
 
   async function loadTickets() {
     try {
@@ -84,6 +90,9 @@
   <header class="top-bar">
     <h1 class="app-title">AI Command Center</h1>
     <div class="status-bar">
+      <button class="settings-btn" on:click={() => showSettings = !showSettings}>
+        {showSettings ? 'Board' : 'Settings'}
+      </button>
       {#if openCodeStatus}
         <span class="status-indicator" class:healthy={openCodeStatus.healthy} class:unhealthy={!openCodeStatus.healthy}>
           <span class="dot"></span>
@@ -99,7 +108,18 @@
   </header>
 
   <main class="main-content">
-    <KanbanBoard />
+    {#if showSettings}
+      <SettingsPanel on:close={() => showSettings = false} />
+    {:else}
+      <div class="board-area" class:has-detail={selectedTicket !== null}>
+        <KanbanBoard />
+      </div>
+      {#if selectedTicket}
+        <div class="detail-area">
+          <DetailPanel ticket={selectedTicket} comments={prComments} on:close={() => $selectedTicketId = null} />
+        </div>
+      {/if}
+    {/if}
   </main>
 </div>
 
@@ -191,5 +211,36 @@
   .main-content {
     flex: 1;
     overflow: hidden;
+    display: flex;
+  }
+
+  .board-area {
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .board-area.has-detail {
+    flex: 1;
+  }
+
+  .detail-area {
+    width: 400px;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  .settings-btn {
+    all: unset;
+    padding: 4px 12px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .settings-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--accent);
   }
 </style>
