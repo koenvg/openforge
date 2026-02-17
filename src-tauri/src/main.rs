@@ -601,6 +601,81 @@ struct OpenCodeInstallStatus {
     version: Option<String>,
 }
 
+#[derive(serde::Serialize, Clone)]
+struct SseEventPayload {
+    event_type: String,
+    data: String,
+}
+
+// ============================================================================
+// Background Tasks
+// ============================================================================
+
+/// Background task that subscribes to OpenCode SSE events and forwards them to the frontend
+async fn start_sse_bridge(app_handle: tauri::AppHandle, client: opencode_client::OpenCodeClient) {
+    loop {
+        println!("SSE bridge: Connecting to OpenCode event stream...");
+        match client.subscribe_events().await {
+            Ok(event_stream) => {
+                println!("SSE bridge: Connected to event stream");
+                use tokio_stream::StreamExt;
+                let mut stream = event_stream.into_stream();
+                let mut buffer = String::new();
+                
+                while let Some(chunk_result) = stream.next().await {
+                    match chunk_result {
+                        Ok(bytes) => {
+                            if let Ok(text) = std::str::from_utf8(&bytes) {
+                                buffer.push_str(text);
+                                
+                                while let Some(pos) = buffer.find("\n\n") {
+                                    let event_block = buffer[..pos].to_string();
+                                    buffer = buffer[pos + 2..].to_string();
+                                    
+                                    let mut event_type = String::from("message");
+                                    let mut data_lines = Vec::new();
+                                    
+                                    for line in event_block.lines() {
+                                        if let Some(value) = line.strip_prefix("event:") {
+                                            event_type = value.trim().to_string();
+                                        } else if let Some(value) = line.strip_prefix("data:") {
+                                            data_lines.push(value.trim().to_string());
+                                        } else if let Some(value) = line.strip_prefix("event: ") {
+                                            event_type = value.to_string();
+                                        } else if let Some(value) = line.strip_prefix("data: ") {
+                                            data_lines.push(value.to_string());
+                                        }
+                                    }
+                                    
+                                    let data = data_lines.join("\n");
+                                    
+                                    if !data.is_empty() {
+                                        let payload = SseEventPayload {
+                                            event_type: event_type.clone(),
+                                            data,
+                                        };
+                                        let _ = app_handle.emit("opencode-event", payload);
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("SSE bridge: Stream error: {}", e);
+                            break;
+                        }
+                    }
+                }
+                println!("SSE bridge: Stream ended, will reconnect...");
+            }
+            Err(e) => {
+                eprintln!("SSE bridge: Failed to connect: {}", e);
+            }
+        }
+        
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    }
+}
+
 // ============================================================================
 // Main
 // ============================================================================
@@ -631,10 +706,11 @@ fn main() {
             })
             .expect("Failed to start OpenCode server");
 
-            println!("OpenCode server started at: {}", opencode_manager.api_url());
+            let api_url = opencode_manager.api_url();
+            println!("OpenCode server started at: {}", api_url);
 
             // Create OpenCode API client
-            let opencode_client = OpenCodeClient::with_base_url(opencode_manager.api_url());
+            let opencode_client = OpenCodeClient::with_base_url(api_url.clone());
 
             // Create JIRA client
             let jira_client = JiraClient::new();
@@ -643,7 +719,7 @@ fn main() {
             let github_client = GitHubClient::new();
 
             // Create orchestrator (uses OpenCodeClient for AI agent control)
-            let orchestrator = orchestrator::Orchestrator::new(OpenCodeClient::with_base_url(opencode_manager.api_url()));
+            let orchestrator = orchestrator::Orchestrator::new(OpenCodeClient::with_base_url(api_url.clone()));
 
             // Store OpenCode manager and client in app state
             app.manage(opencode_manager);
@@ -665,6 +741,14 @@ fn main() {
             });
 
             println!("GitHub poller task started");
+
+            let app_handle_sse = app.handle().clone();
+            let sse_client = OpenCodeClient::with_base_url(api_url);
+            tauri::async_runtime::spawn(async move {
+                start_sse_bridge(app_handle_sse, sse_client).await;
+            });
+
+            println!("SSE event bridge started");
 
             Ok(())
         })
