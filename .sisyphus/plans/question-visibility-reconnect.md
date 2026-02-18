@@ -64,10 +64,10 @@ Make pending agent questions visible and persistent: survive app restart, show p
 - Test files covering all new behavior
 
 ### Definition of Done
-- [ ] `npx vitest run` — ALL tests pass (0 failures)
-- [ ] `cargo test` — ALL Rust tests pass
-- [ ] App restart with a paused session → question banner visible in AgentPanel
-- [ ] Kanban card for paused session has prominent visual treatment (not just small badge)
+- [x] `npx vitest run` — ALL tests pass (0 failures)
+- [x] `cargo test` — ALL Rust tests pass
+- [x] App restart with a paused session → question banner visible in AgentPanel
+- [x] Kanban card for paused session has prominent visual treatment (not just small badge)
 
 ### Must Have
 - checkpoint_data persisted to DB when `permission.updated` arrives
@@ -164,7 +164,7 @@ Max Concurrent: 3 (Wave 1)
 
 ## TODOs
 
-- [ ] 1. Extend `persist_session_status` to accept optional checkpoint_data
+- [x] 1. Extend `persist_session_status` to accept optional checkpoint_data
 
   **What to do**:
   - In `src-tauri/src/main.rs`: Add an optional `checkpoint_data: Option<String>` parameter to the `persist_session_status` Tauri command. Pass it through to `db.update_agent_session()` instead of hardcoded `None`.
@@ -239,7 +239,7 @@ Max Concurrent: 3 (Wave 1)
   - Files: `src-tauri/src/main.rs`, `src-tauri/src/db.rs`, `src/lib/ipc.ts`
   - Pre-commit: `cargo test`
 
-- [ ] 3. Enhance TaskCard visual indicator for needs-input state
+- [x] 3. Enhance TaskCard visual indicator for needs-input state
 
   **What to do**:
   - In `src/components/TaskCard.svelte`: Enhance the visual treatment when `needsInput` is true (line 31: `$: needsInput = session?.status === 'paused' && session?.checkpoint_data !== null`)
@@ -315,7 +315,7 @@ Max Concurrent: 3 (Wave 1)
   - Files: `src/components/TaskCard.svelte`
   - Pre-commit: `npx vitest run src/components/TaskCard.test.ts`
 
-- [ ] 2. Create checkpoint data parser utility
+- [x] 2. Create checkpoint data parser utility
 
   **What to do**:
   - Create `src/lib/parseCheckpoint.ts` with a single exported function: `parseCheckpointQuestion(checkpointData: string | null): string | null`
@@ -396,7 +396,7 @@ Max Concurrent: 3 (Wave 1)
   - Files: `src/lib/parseCheckpoint.ts`
   - Pre-commit: `npx vitest run --passWithNoTests`
 
-- [ ] 4. Wire checkpoint persistence + load paused sessions on startup
+- [x] 4. Wire checkpoint persistence + load paused sessions on startup
 
   **What to do**:
   - **Persist on `permission.updated`**: In `src/App.svelte`, in the `permission.updated` event handler (line 263-278), after updating the in-memory store, call `persistSessionStatus(taskId, 'paused', null, event.payload.data)` to write checkpoint_data to DB. Use the extended IPC from Task 1.
@@ -479,7 +479,7 @@ Max Concurrent: 3 (Wave 1)
   - Files: `src/App.svelte`, `src/components/AgentPanel.svelte`
   - Pre-commit: `npx vitest run`
 
-- [ ] 5. Add question banner to AgentPanel
+- [x] 5. Add question banner to AgentPanel
 
   **What to do**:
   - In `src/components/AgentPanel.svelte`: Import `parseCheckpointQuestion` from `../lib/parseCheckpoint`
@@ -581,7 +581,7 @@ Max Concurrent: 3 (Wave 1)
   - Files: `src/components/AgentPanel.svelte`
   - Pre-commit: `npx vitest run`
 
-- [ ] 6. Comprehensive test suite for all changes
+- [x] 6. Comprehensive test suite for all changes
 
   **What to do**:
   - **`src/lib/parseCheckpoint.test.ts`** (NEW file): Test the parser utility:
@@ -688,19 +688,19 @@ Max Concurrent: 3 (Wave 1)
 
 > 4 review agents run in PARALLEL. ALL must APPROVE. Rejection -> fix -> re-run.
 
-- [ ] F1. **Plan Compliance Audit** — `oracle`
+- [x] F1. **Plan Compliance Audit** — `oracle`
   Read the plan end-to-end. For each "Must Have": verify implementation exists (read file, run command). For each "Must NOT Have": search codebase for forbidden patterns — reject with file:line if found. Check evidence files exist in .sisyphus/evidence/. Compare deliverables against plan.
   Output: `Must Have [N/N] | Must NOT Have [N/N] | Tasks [N/N] | VERDICT: APPROVE/REJECT`
 
-- [ ] F2. **Code Quality Review** — `unspecified-high`
+- [x] F2. **Code Quality Review** — `unspecified-high`
   Run `npx vitest run` + `cargo test`. Review all changed files for: `as any`/`@ts-ignore`, empty catches, console.log in prod, commented-out code, unused imports. Check AI slop: excessive comments, over-abstraction, generic names (data/result/item/temp).
   Output: `Build [PASS/FAIL] | Tests [N pass/N fail] | Files [N clean/N issues] | VERDICT`
 
-- [ ] F3. **Real Manual QA** — `unspecified-high`
+- [x] F3. **Real Manual QA** — `unspecified-high`
   Start from clean state. Execute EVERY QA scenario from EVERY task — follow exact steps, capture evidence. Test cross-task integration (features working together). Test edge cases: null checkpoint_data, malformed JSON, rapid permission.updated/replied. Save to `.sisyphus/evidence/final-qa/`.
   Output: `Scenarios [N/N pass] | Integration [N/N] | Edge Cases [N tested] | VERDICT`
 
-- [ ] F4. **Scope Fidelity Check** — `deep`
+- [x] F4. **Scope Fidelity Check** — `deep`
   For each task: read "What to do", read actual diff (git log/diff). Verify 1:1 — everything in spec was built (no missing), nothing beyond spec was built (no creep). Check "Must NOT do" compliance (no reply UI, no CheckpointToast changes, no new stores). Flag unaccounted changes.
   Output: `Tasks [N/N compliant] | Contamination [CLEAN/N issues] | Unaccounted [CLEAN/N files] | VERDICT`
 
@@ -727,9 +727,9 @@ cargo test              # Expected: ALL Rust tests pass
 ```
 
 ### Final Checklist
-- [ ] All "Must Have" present
-- [ ] All "Must NOT Have" absent
-- [ ] All tests pass (vitest + cargo)
-- [ ] App restart preserves question data for paused sessions
-- [ ] Question banner visible in AgentPanel for paused sessions
-- [ ] Kanban card prominently indicates needs-input state
+- [x] All "Must Have" present
+- [x] All "Must NOT Have" absent
+- [x] All tests pass (vitest + cargo)
+- [x] App restart preserves question data for paused sessions
+- [x] Question banner visible in AgentPanel for paused sessions
+- [x] Kanban card prominently indicates needs-input state
