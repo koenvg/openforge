@@ -1383,6 +1383,11 @@ struct OpenCodeInstallStatus {
 // ============================================================================
 
 fn main() {
+    // Fix PATH for macOS GUI apps launched from Finder/Dock.
+    // Without this, ~/.opencode/bin and other user PATH entries are missing.
+    #[cfg(desktop)]
+    let _ = fix_path_env::fix();
+
     tauri::Builder::default()
         .setup(|app| {
             let app_data_dir = app
