@@ -183,7 +183,7 @@ export interface ReviewSubmission {
 }
 
 /** App-level view for top-bar navigation */
-export type AppView = "board" | "pr_review" | "settings";
+export type AppView = "board" | "pr_review" | "settings" | "global_settings";
 
 export interface PtySpawnRequest {
   task_id: string;

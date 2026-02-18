@@ -35,7 +35,7 @@
     $selectedTaskId = null
   }
   
-  $: if ($currentView === 'settings') {
+  $: if ($currentView === 'settings' || $currentView === 'global_settings') {
     $selectedTaskId = null
   }
 
@@ -345,8 +345,8 @@
       </button>
       <button 
         class="view-tab" 
-        class:active={$currentView === 'settings'} 
-        on:click={() => $currentView = 'settings'}
+        class:active={$currentView === 'settings' || $currentView === 'global_settings'} 
+        on:click={() => { if ($currentView !== 'settings' && $currentView !== 'global_settings') $currentView = 'settings' }}
       >
         Settings
       </button>
@@ -368,8 +368,32 @@
   </header>
 
   <main class="main-content">
-    {#if $currentView === 'settings'}
-      <SettingsPanel on:close={() => $currentView = 'board'} on:project-deleted={loadProjects} />
+    {#if $currentView === 'settings' || $currentView === 'global_settings'}
+      <div class="settings-view">
+        <div class="settings-sub-tabs">
+          <button
+            class="sub-tab"
+            class:active={$currentView === 'settings'}
+            on:click={() => $currentView = 'settings'}
+          >
+            Project
+          </button>
+          <button
+            class="sub-tab"
+            class:active={$currentView === 'global_settings'}
+            on:click={() => $currentView = 'global_settings'}
+          >
+            Global
+          </button>
+        </div>
+        <div class="settings-panel-content">
+          {#if $currentView === 'settings'}
+            <SettingsPanel on:close={() => $currentView = 'board'} on:project-deleted={loadProjects} />
+          {:else}
+            <GlobalSettingsPanel on:close={() => $currentView = 'board'} />
+          {/if}
+        </div>
+      </div>
     {:else if $currentView === 'pr_review'}
       <PrReviewView />
     {:else if selectedTask}
@@ -544,6 +568,48 @@
     flex: 1;
     overflow: hidden;
     display: flex;
+  }
+
+  .settings-view {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+    width: 100%;
+  }
+
+  .settings-sub-tabs {
+    display: flex;
+    gap: 0;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    padding: 0 20px;
+    flex-shrink: 0;
+  }
+
+  .sub-tab {
+    all: unset;
+    padding: 10px 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+  }
+
+  .sub-tab:hover {
+    color: var(--text-primary);
+  }
+
+  .sub-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  .settings-panel-content {
+    flex: 1;
+    overflow: hidden;
   }
 
   .board-area {
