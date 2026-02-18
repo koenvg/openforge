@@ -12,6 +12,7 @@ mod server_manager;
 mod sse_bridge;
 mod pty_manager;
 mod agent_coordinator;
+mod diff_parser;
 
 use std::sync::Mutex;
 use tauri::{Manager, State, Emitter};
