@@ -3,7 +3,7 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
   import { tasks, selectedTaskId, activeSessions, checkpointNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount } from './lib/stores'
-  import { getProjects, getTasksForProject, getOpenCodeStatus, getPullRequests, runAction, getSessionStatus, getLatestSessions, persistSessionStatus } from './lib/ipc'
+  import { getProjects, getTasksForProject, getOpenCodeStatus, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, persistSessionStatus } from './lib/ipc'
   import type { Task, PullRequestInfo, OpenCodeStatus, AgentEvent } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
   import TaskDetailView from './components/TaskDetailView.svelte'
@@ -192,6 +192,22 @@
           $checkpointNotification = null
         }
         loadTasks()
+      })
+    )
+
+    unlisteners.push(
+      await listen<{ task_id: string; port: number }>('server-resumed', async (event: Event<{ task_id: string; port: number }>) => {
+        const taskId = event.payload.task_id
+        try {
+          const session = await getLatestSession(taskId)
+          if (session) {
+            const updated = new Map($activeSessions)
+            updated.set(taskId, session)
+            $activeSessions = updated
+          }
+        } catch (e) {
+          console.error('[startup] Failed to load session after server resume for task:', taskId, e)
+        }
       })
     )
 

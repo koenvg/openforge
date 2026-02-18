@@ -756,6 +756,44 @@ impl Database {
         Ok(result)
     }
 
+    /// Get worktrees that need OpenCode server restart on app startup.
+    /// Returns active worktrees for non-done tasks that have at least one agent session
+    /// (i.e., tasks that previously had agent work in progress).
+    pub fn get_resumable_worktrees(&self) -> Result<Vec<WorktreeRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT w.id, w.task_id, w.project_id, w.repo_path, w.worktree_path,
+                    w.branch_name, w.opencode_port, w.opencode_pid, w.status, w.created_at, w.updated_at
+             FROM worktrees w
+             INNER JOIN tasks t ON w.task_id = t.id
+             INNER JOIN agent_sessions a ON w.task_id = a.ticket_id
+             WHERE w.status = 'active' AND t.status != 'done'
+             ORDER BY w.updated_at DESC",
+        )?;
+
+        let worktrees = stmt.query_map([], |row| {
+            Ok(WorktreeRow {
+                id: row.get(0)?,
+                task_id: row.get(1)?,
+                project_id: row.get(2)?,
+                repo_path: row.get(3)?,
+                worktree_path: row.get(4)?,
+                branch_name: row.get(5)?,
+                opencode_port: row.get(6)?,
+                opencode_pid: row.get(7)?,
+                status: row.get(8)?,
+                created_at: row.get(9)?,
+                updated_at: row.get(10)?,
+            })
+        })?;
+
+        let mut result = Vec::new();
+        for worktree in worktrees {
+            result.push(worktree?);
+        }
+        Ok(result)
+    }
+
     /// Get all tasks for a project
     pub fn get_tasks_for_project(&self, project_id: &str) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();

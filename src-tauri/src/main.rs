@@ -476,7 +476,7 @@ async fn run_action(
             "paused" => {
                 return Err("Answer pending question first".to_string());
             }
-            "completed" | "failed" => {
+            "completed" | "failed" | "interrupted" => {
                 if let Some(port) = server_mgr.get_server_port(&task_id).await {
                     if let Some(ref opencode_session_id) = session.opencode_session_id {
                         {
@@ -484,7 +484,7 @@ async fn run_action(
                             let recheck_session = db.get_latest_session_for_ticket(&task_id)
                                 .map_err(|e| format!("Failed to recheck session: {}", e))?;
                             if let Some(s) = recheck_session {
-                                if s.status != "completed" && s.status != "failed" {
+                                if s.status != "completed" && s.status != "failed" && s.status != "interrupted" {
                                     return Err("Session status changed, cannot reuse".to_string());
                                 }
                             }
@@ -1588,6 +1588,88 @@ struct OpenCodeInstallStatus {
 }
 
 // ============================================================================
+// Startup: Resume OpenCode Servers
+// ============================================================================
+
+async fn resume_task_servers(app: tauri::AppHandle) {
+    let worktrees = {
+        let db = app.state::<Mutex<db::Database>>();
+        let db_lock = db.lock().unwrap();
+        match db_lock.get_resumable_worktrees() {
+            Ok(wts) => wts,
+            Err(e) => {
+                eprintln!("[startup] Failed to get resumable worktrees: {}", e);
+                return;
+            }
+        }
+    };
+
+    if worktrees.is_empty() {
+        return;
+    }
+
+    println!("[startup] Resuming OpenCode servers for {} task(s)", worktrees.len());
+
+    let server_mgr = app.state::<server_manager::ServerManager>();
+    let sse_mgr = app.state::<sse_bridge::SseBridgeManager>();
+
+    for worktree in worktrees {
+        let worktree_path = std::path::Path::new(&worktree.worktree_path);
+        if !worktree_path.exists() {
+            eprintln!(
+                "[startup] Worktree path missing for task {}, skipping: {}",
+                worktree.task_id, worktree.worktree_path
+            );
+            continue;
+        }
+
+        match server_mgr.spawn_server(&worktree.task_id, worktree_path).await {
+            Ok(port) => {
+                {
+                    let db = app.state::<Mutex<db::Database>>();
+                    let db_lock = db.lock().unwrap();
+                    if let Err(e) = db_lock.update_worktree_server(&worktree.task_id, port as i64, 0) {
+                        eprintln!(
+                            "[startup] Failed to update worktree server for {}: {}",
+                            worktree.task_id, e
+                        );
+                    }
+                }
+
+                if let Err(e) = sse_mgr
+                    .start_bridge(app.clone(), worktree.task_id.clone(), port)
+                    .await
+                {
+                    eprintln!(
+                        "[startup] Failed to start SSE bridge for {}: {}",
+                        worktree.task_id, e
+                    );
+                }
+
+                let _ = app.emit(
+                    "server-resumed",
+                    serde_json::json!({
+                        "task_id": worktree.task_id,
+                        "port": port,
+                    }),
+                );
+
+                println!(
+                    "[startup] Resumed server for task {} on port {}",
+                    worktree.task_id, port
+                );
+            }
+            Err(e) => {
+                eprintln!(
+                    "[startup] Failed to spawn server for task {}: {}",
+                    worktree.task_id, e
+                );
+            }
+        }
+    }
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -1675,6 +1757,13 @@ fn main() {
             });
 
             println!("GitHub poller task started");
+
+            let app_handle_resume = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                resume_task_servers(app_handle_resume).await;
+            });
+
+            println!("Server resume task started");
 
             Ok(())
         })
