@@ -1,8 +1,8 @@
 {
-  "active_plan": "/Users/koen.vangeert/workspace/tmp/my-command-center/.sisyphus/plans/remove-subfolder-scanning.md",
-  "started_at": "2026-02-18T05:02:49.750Z",
+  "active_plan": "/Users/koen.vangeert/workspace/tmp/my-command-center/.sisyphus/plans/global-config.md",
+  "started_at": "2026-02-18T05:38:35.036Z",
   "session_ids": [
-    "ses_390f32464ffeu7aCeQrAvShnOb"
+    "ses_390f17ff0ffeyDcOGbSg365jTt"
   ],
-  "plan_name": "remove-subfolder-scanning"
+  "plan_name": "global-config"
 }

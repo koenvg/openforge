@@ -155,6 +155,11 @@ Strict mode enabled. Key settings: `noUnusedLocals`, `noUnusedParameters`,
 ### Module Organization
 
 One file per module, declared in `main.rs` with `mod name;`. No nested module directories.
+Additional modules not in original structure:
+- `server_manager.rs` — OpenCode server process lifecycle per worktree
+- `sse_bridge.rs` — SSE event bridge (OpenCode → Tauri frontend)
+- `git_worktree.rs` — Git worktree creation/cleanup
+- `agent_coordinator.rs` — Agent workflow orchestration
 
 ### Tauri Commands
 
@@ -262,3 +267,61 @@ mod tests {
     }
 }
 ```
+
+## OpenCode SSE Event Protocol
+
+The app connects to OpenCode's HTTP server SSE endpoint (`/event`) via `sse_bridge.rs`.
+
+### Wire Format
+
+OpenCode sends SSE events with **only** a `data:` field — no `event:` field is set.
+The event type lives inside the JSON payload under `type`, not in the SSE header.
+
+```
+data: {"type":"message.part.delta","properties":{"sessionID":"...","delta":"text"}}
+
+data: {"type":"session.idle","properties":{"sessionID":"..."}}
+```
+
+All events follow this JSON structure:
+```json
+{ "type": "event.type.name", "properties": { /* event-specific */ } }
+```
+
+### Event Types Reference (from sst/opencode source)
+
+**Streaming output:**
+- `message.part.delta` — Text streaming chunk. `properties: { sessionID, messageID, partID, field, delta }`
+- `message.part.updated` — Part finished/changed. `properties: { part }`
+- `message.updated` — Full message update. `properties: { info }`
+- `message.removed` — Message deleted. `properties: { messageID, sessionID }`
+
+**Session lifecycle:**
+- `session.status` — Status change (preferred). `properties: { sessionID, status: { type: "idle"|"busy"|"retry" } }`
+- `session.idle` — Session done (deprecated, use session.status). `properties: { sessionID }`
+- `session.error` — Error. `properties: { sessionID, error: { name, data } }`
+- `session.created` — New session. `properties: { info }`
+- `session.updated` — Session metadata changed. `properties: { info }`
+- `session.deleted` — Session removed. `properties: { sessionID }`
+
+**Server:**
+- `server.connected` — Sent on initial SSE connection. `properties: {}`
+- `server.heartbeat` — Keep-alive every 10s. `properties: {}`
+
+**Other:**
+- `todo.updated` — Agent todo list changed. `properties: { sessionID, todos[] }`
+- `file.edited` — File written by agent. `properties: { file }`
+- `permission.updated` / `permission.replied` — Permission prompts
+
+### Architecture: Event Flow
+
+```
+OpenCode server (/event SSE)
+  → sse_bridge.rs (Rust, per-task, connects to per-worktree OpenCode port)
+    → Tauri emit("agent-event", { task_id, event_type, data, timestamp })
+      → App.svelte listener (updates activeSessions store)
+      → AgentPanel.svelte listener (appends streaming text to output)
+```
+
+`sse_bridge.rs` must parse the JSON `data` field to extract `type` as the `event_type`
+forwarded to the frontend, since OpenCode does not set the SSE `event:` header field.
