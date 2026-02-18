@@ -1,5 +1,5 @@
 import { writable } from "svelte/store";
-import type { Task, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, ReviewPullRequest, PrFileDiff, AppView } from "./types";
+import type { Task, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, ReviewPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment } from "./types";
 
 export const tasks = writable<Task[]>([]);
 // selectedTaskId serves as both selection state and navigation:
@@ -20,3 +20,5 @@ export const reviewPrs = writable<ReviewPullRequest[]>([]);
 export const selectedReviewPr = writable<ReviewPullRequest | null>(null);
 export const prFileDiffs = writable<PrFileDiff[]>([]);
 export const reviewRequestCount = writable<number>(0);
+export const reviewComments = writable<ReviewComment[]>([]);
+export const pendingManualComments = writable<ReviewSubmissionComment[]>([]);

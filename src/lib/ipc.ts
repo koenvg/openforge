@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Task, AgentSession, AgentLog, PrComment, PullRequestInfo, OpenCodeStatus, Project, WorktreeInfo, ImplementationStatus, ReviewPullRequest, PrFileDiff } from "./types";
+import type { Task, AgentSession, AgentLog, PrComment, PullRequestInfo, OpenCodeStatus, Project, WorktreeInfo, ImplementationStatus, ReviewPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment } from "./types";
 
 export async function createTask(title: string, description: string, status: string, jiraKey: string | null, projectId: string | null): Promise<Task> {
   return invoke<Task>("create_task", { title, description, status, jiraKey, projectId });
@@ -161,6 +161,14 @@ export async function getFileContent(owner: string, repo: string, sha: string): 
 
 export async function getFileAtRef(owner: string, repo: string, path: string, refSha: string): Promise<string> {
   return invoke<string>("get_file_at_ref", { owner, repo, path, refSha });
+}
+
+export async function getReviewComments(owner: string, repo: string, prNumber: number): Promise<ReviewComment[]> {
+  return invoke<ReviewComment[]>("get_review_comments", { owner, repo, prNumber });
+}
+
+export async function submitPrReview(owner: string, repo: string, prNumber: number, event: string, body: string, comments: ReviewSubmissionComment[], commitId: string): Promise<void> {
+  return invoke<void>("submit_pr_review", { owner, repo, prNumber, event, body, comments, commitId });
 }
 
 export async function spawnPty(taskId: string, serverPort: number, opencodeSessionId: string, cols: number, rows: number): Promise<void> {

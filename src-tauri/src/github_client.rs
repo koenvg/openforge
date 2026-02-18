@@ -635,6 +635,99 @@ impl GitHubClient {
 
         Ok(content)
     }
+
+    /// Fetch positioned review comments for a PR
+    /// Returns inline review comments with path/line/side data
+    pub async fn get_pr_review_comments(
+        &self,
+        owner: &str,
+        repo: &str,
+        pr_number: i64,
+        token: &str,
+    ) -> Result<Vec<PrReviewComment>, GitHubError> {
+        let url = format!(
+            "https://api.github.com/repos/{}/{}/pulls/{}/comments?per_page=100",
+            owner, repo, pr_number
+        );
+
+        let response = self
+            .client
+            .get(&url)
+            .header("Authorization", format!("token {}", token))
+            .header("User-Agent", "ai-command-center")
+            .send()
+            .await
+            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unable to read response body".to_string());
+            return Err(GitHubError::ApiError {
+                status: status.as_u16(),
+                message: body,
+            });
+        }
+
+        let comments: Vec<PrReviewComment> = response
+            .json()
+            .await
+            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+
+        Ok(comments)
+    }
+
+    /// Submit a PR review with inline comments
+    /// event: "APPROVE", "REQUEST_CHANGES", or "COMMENT"
+    pub async fn submit_review(
+        &self,
+        owner: &str,
+        repo: &str,
+        pr_number: i64,
+        event: &str,
+        body: &str,
+        comments: Vec<ReviewSubmitComment>,
+        commit_id: &str,
+        token: &str,
+    ) -> Result<(), GitHubError> {
+        let url = format!(
+            "https://api.github.com/repos/{}/{}/pulls/{}/reviews",
+            owner, repo, pr_number
+        );
+
+        let request_body = ReviewSubmitRequest {
+            commit_id: commit_id.to_string(),
+            event: event.to_string(),
+            body: body.to_string(),
+            comments,
+        };
+
+        let response = self
+            .client
+            .post(&url)
+            .header("Authorization", format!("token {}", token))
+            .header("User-Agent", "ai-command-center")
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unable to read response body".to_string());
+            return Err(GitHubError::ApiError {
+                status: status.as_u16(),
+                message: body,
+            });
+        }
+
+        Ok(())
+    }
 }
 
 impl Default for GitHubClient {
@@ -695,6 +788,20 @@ pub struct PrFileDiff {
     pub changes: i64,
     pub patch: Option<String>,
     pub previous_filename: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PrReviewComment {
+    pub id: i64,
+    pub path: String,
+    pub line: Option<i32>,
+    pub side: Option<String>,
+    pub body: String,
+    pub user: GitHubUser,
+    pub created_at: String,
+    pub in_reply_to_id: Option<i64>,
+    #[serde(flatten)]
+    pub extra: serde_json::Value,
 }
 
 /// Unified PR comment (can be review comment or issue comment)
@@ -758,6 +865,22 @@ struct IssueComment {
 #[derive(Debug, Serialize)]
 struct CommentRequest {
     body: String,
+}
+
+#[derive(Debug, Serialize)]
+struct ReviewSubmitRequest {
+    commit_id: String,
+    event: String,
+    body: String,
+    comments: Vec<ReviewSubmitComment>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReviewSubmitComment {
+    pub path: String,
+    pub line: i32,
+    pub side: String,
+    pub body: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -926,5 +1049,167 @@ mod tests {
         assert_eq!(pr.state, "open");
         assert_eq!(pr.user.login, "testuser");
         assert_eq!(pr.head.ref_name, "feature/PROJ-123-fix-bug");
+    }
+
+    #[test]
+    fn test_pr_file_diff_deserialization() {
+        let json = r#"{
+            "sha": "abc123",
+            "filename": "src/main.rs",
+            "status": "modified",
+            "additions": 10,
+            "deletions": 5,
+            "changes": 15,
+            "patch": "@@ -1,3 +1,5 @@\n-old\n+new",
+            "previous_filename": null
+        }"#;
+        let diff: PrFileDiff = serde_json::from_str(json).unwrap();
+        assert_eq!(diff.sha, "abc123");
+        assert_eq!(diff.filename, "src/main.rs");
+        assert_eq!(diff.status, "modified");
+        assert_eq!(diff.additions, 10);
+        assert_eq!(diff.deletions, 5);
+        assert_eq!(diff.changes, 15);
+        assert!(diff.patch.is_some());
+        assert!(diff.previous_filename.is_none());
+    }
+
+    #[test]
+    fn test_pr_file_diff_with_rename() {
+        let json = r#"{
+            "sha": "def456",
+            "filename": "src/new.rs",
+            "status": "renamed",
+            "additions": 2,
+            "deletions": 1,
+            "changes": 3,
+            "patch": null,
+            "previous_filename": "src/old.rs"
+        }"#;
+        let diff: PrFileDiff = serde_json::from_str(json).unwrap();
+        assert_eq!(diff.filename, "src/new.rs");
+        assert_eq!(diff.status, "renamed");
+        assert!(diff.patch.is_none());
+        assert_eq!(diff.previous_filename, Some("src/old.rs".to_string()));
+    }
+
+    #[test]
+    fn test_pr_review_comment_deserialization() {
+        let json = r#"{
+            "id": 456,
+            "path": "src/auth.rs",
+            "line": 42,
+            "side": "RIGHT",
+            "body": "This needs a null check",
+            "user": { "login": "reviewer" },
+            "created_at": "2024-01-15T10:30:00Z",
+            "in_reply_to_id": null
+        }"#;
+        let comment: PrReviewComment = serde_json::from_str(json).unwrap();
+        assert_eq!(comment.id, 456);
+        assert_eq!(comment.path, "src/auth.rs");
+        assert_eq!(comment.line, Some(42));
+        assert_eq!(comment.side, Some("RIGHT".to_string()));
+        assert_eq!(comment.body, "This needs a null check");
+        assert_eq!(comment.user.login, "reviewer");
+        assert!(comment.in_reply_to_id.is_none());
+    }
+
+    #[test]
+    fn test_pr_review_comment_with_reply() {
+        let json = r#"{
+            "id": 789,
+            "path": "src/lib.rs",
+            "line": 10,
+            "side": "LEFT",
+            "body": "I agree with this suggestion",
+            "user": { "login": "author" },
+            "created_at": "2024-01-15T11:00:00Z",
+            "in_reply_to_id": 100
+        }"#;
+        let comment: PrReviewComment = serde_json::from_str(json).unwrap();
+        assert_eq!(comment.id, 789);
+        assert_eq!(comment.in_reply_to_id, Some(100));
+        assert_eq!(comment.body, "I agree with this suggestion");
+    }
+
+    #[test]
+    fn test_review_submit_comment_serialization() {
+        let comment = ReviewSubmitComment {
+            path: "src/main.rs".to_string(),
+            line: 10,
+            side: "RIGHT".to_string(),
+            body: "Fix this".to_string(),
+        };
+        let json = serde_json::to_string(&comment).unwrap();
+        assert!(json.contains("\"path\":\"src/main.rs\""));
+        assert!(json.contains("\"line\":10"));
+        assert!(json.contains("\"side\":\"RIGHT\""));
+        assert!(json.contains("\"body\":\"Fix this\""));
+    }
+
+    #[test]
+    fn test_review_submit_request_serialization() {
+        let request = ReviewSubmitRequest {
+            commit_id: "sha123".to_string(),
+            event: "APPROVE".to_string(),
+            body: "Looks good!".to_string(),
+            comments: vec![ReviewSubmitComment {
+                path: "src/lib.rs".to_string(),
+                line: 5,
+                side: "RIGHT".to_string(),
+                body: "Nice change".to_string(),
+            }],
+        };
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.contains("\"commit_id\":\"sha123\""));
+        assert!(json.contains("\"event\":\"APPROVE\""));
+        assert!(json.contains("\"comments\""));
+    }
+
+    #[test]
+    fn test_search_item_deserialization() {
+        let json = r#"{
+            "id": 789,
+            "number": 42,
+            "title": "Fix bug",
+            "body": "Description",
+            "state": "open",
+            "draft": false,
+            "html_url": "https://github.com/owner/repo/pull/42",
+            "user": { "login": "author", "avatar_url": "https://example.com/avatar.png" },
+            "repository_url": "https://api.github.com/repos/owner/repo",
+            "created_at": "2024-01-15T10:00:00Z",
+            "updated_at": "2024-01-15T12:00:00Z"
+        }"#;
+        let item: SearchItem = serde_json::from_str(json).unwrap();
+        assert_eq!(item.id, 789);
+        assert_eq!(item.number, 42);
+        assert_eq!(item.title, "Fix bug");
+        assert_eq!(item.draft, Some(false));
+        assert_eq!(item.user.login, "author");
+        assert_eq!(
+            item.user.avatar_url,
+            Some("https://example.com/avatar.png".to_string())
+        );
+    }
+
+    #[test]
+    fn test_blob_response_deserialization() {
+        let json = r#"{
+            "content": "SGVsbG8gV29ybGQ=\n",
+            "encoding": "base64",
+            "size": 11
+        }"#;
+        let blob: BlobResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(blob.encoding, "base64");
+        assert!(!blob.content.is_empty());
+    }
+
+    #[test]
+    fn test_authenticated_user_deserialization() {
+        let json = r#"{ "login": "testuser", "id": 12345, "type": "User" }"#;
+        let user: AuthenticatedUser = serde_json::from_str(json).unwrap();
+        assert_eq!(user.login, "testuser");
     }
 }

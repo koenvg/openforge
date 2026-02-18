@@ -1313,6 +1313,52 @@ async fn get_file_at_ref(
         .map_err(|e| format!("UTF-8 decode error: {}", e))
 }
 
+#[tauri::command]
+async fn get_review_comments(
+    db: State<'_, Mutex<db::Database>>,
+    github_client: State<'_, GitHubClient>,
+    owner: String,
+    repo: String,
+    pr_number: i64,
+) -> Result<Vec<github_client::PrReviewComment>, String> {
+    let token = {
+        let db_lock = db.lock().unwrap();
+        db_lock.get_config("github_token")
+            .map_err(|e| format!("Failed to get config: {}", e))?
+            .ok_or("github_token not configured")?
+    };
+
+    github_client
+        .get_pr_review_comments(&owner, &repo, pr_number, &token)
+        .await
+        .map_err(|e| format!("Failed to get review comments: {}", e))
+}
+
+#[tauri::command]
+async fn submit_pr_review(
+    db: State<'_, Mutex<db::Database>>,
+    github_client: State<'_, GitHubClient>,
+    owner: String,
+    repo: String,
+    pr_number: i64,
+    event: String,
+    body: String,
+    comments: Vec<github_client::ReviewSubmitComment>,
+    commit_id: String,
+) -> Result<(), String> {
+    let token = {
+        let db_lock = db.lock().unwrap();
+        db_lock.get_config("github_token")
+            .map_err(|e| format!("Failed to get config: {}", e))?
+            .ok_or("github_token not configured")?
+    };
+
+    github_client
+        .submit_review(&owner, &repo, pr_number, &event, &body, comments, &commit_id, &token)
+        .await
+        .map_err(|e| format!("Failed to submit review: {}", e))
+}
+
 // ============================================================================
 // Response Types
 // ============================================================================
@@ -1438,6 +1484,8 @@ fn main() {
             get_pr_file_diffs,
             get_file_content,
             get_file_at_ref,
+            get_review_comments,
+            submit_pr_review,
             pty_spawn,
             pty_write,
             pty_resize,

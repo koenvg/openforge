@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { reviewPrs, selectedReviewPr, prFileDiffs, reviewRequestCount } from '../lib/stores'
-  import { fetchReviewPrs, getReviewPrs, getPrFileDiffs, openUrl } from '../lib/ipc'
+  import { reviewPrs, selectedReviewPr, prFileDiffs, reviewRequestCount, reviewComments, pendingManualComments } from '../lib/stores'
+  import { fetchReviewPrs, getReviewPrs, getPrFileDiffs, openUrl, getReviewComments } from '../lib/ipc'
   import ReviewPrCard from './ReviewPrCard.svelte'
   import FileTree from './FileTree.svelte'
   import DiffViewer from './DiffViewer.svelte'
+  import ReviewSubmitPanel from './ReviewSubmitPanel.svelte'
   import type { ReviewPullRequest } from '../lib/types'
 
   let isLoading = false
@@ -60,6 +61,8 @@
     try {
       const diffs = await getPrFileDiffs(pr.repo_owner, pr.repo_name, pr.number)
       $prFileDiffs = diffs
+      const comments = await getReviewComments(pr.repo_owner, pr.repo_name, pr.number)
+      $reviewComments = comments
     } catch (e) {
       console.error('Failed to load PR diffs:', e)
       error = String(e)
@@ -71,6 +74,8 @@
   function backToList() {
     $selectedReviewPr = null
     $prFileDiffs = []
+    $reviewComments = []
+    $pendingManualComments = []
   }
 
   function handleFileSelect(filename: string) {
@@ -136,9 +141,22 @@
           </div>
         {:else}
           <FileTree files={$prFileDiffs} onSelectFile={handleFileSelect} />
-          <DiffViewer bind:this={diffViewer} files={$prFileDiffs} />
+          <DiffViewer 
+            bind:this={diffViewer} 
+            files={$prFileDiffs}
+            existingComments={$reviewComments}
+            repoOwner={$selectedReviewPr.repo_owner}
+            repoName={$selectedReviewPr.repo_name}
+          />
         {/if}
       </div>
+
+      <ReviewSubmitPanel 
+        repoOwner={$selectedReviewPr.repo_owner}
+        repoName={$selectedReviewPr.repo_name}
+        prNumber={$selectedReviewPr.number}
+        commitId={$selectedReviewPr.head_sha}
+      />
     </div>
   {:else}
     <div class="list-view">

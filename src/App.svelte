@@ -300,6 +300,12 @@
         }
       })
     )
+
+    unlisteners.push(
+      await listen<number>('review-pr-count-changed', (event) => {
+        $reviewRequestCount = event.payload
+      })
+    )
   })
 
   onDestroy(() => {

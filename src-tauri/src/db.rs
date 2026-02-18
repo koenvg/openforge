@@ -2308,4 +2308,244 @@ mod tests {
         drop(db);
         let _ = fs::remove_file(&path);
     }
+
+    #[test]
+    fn test_review_pr_upsert_and_retrieve() {
+        let (db, path) = make_test_db("review_pr_upsert");
+
+        // Insert a review PR with full fields
+        db.upsert_review_pr(
+            123,
+            456,
+            "Add new feature",
+            Some("This PR adds a new feature"),
+            "open",
+            false,
+            "https://github.com/owner/repo/pull/456",
+            "octocat",
+            Some("https://avatars.githubusercontent.com/u/1?v=4"),
+            "owner",
+            "repo",
+            "feature-branch",
+            "main",
+            "abc123def",
+            100,
+            50,
+            10,
+            1000,
+            2000,
+        )
+        .expect("upsert failed");
+
+        // Retrieve and verify all fields
+        let prs = db.get_all_review_prs().expect("get_all failed");
+        assert_eq!(prs.len(), 1);
+        assert_eq!(prs[0].id, 123);
+        assert_eq!(prs[0].number, 456);
+        assert_eq!(prs[0].title, "Add new feature");
+        assert_eq!(prs[0].body, Some("This PR adds a new feature".to_string()));
+        assert_eq!(prs[0].state, "open");
+        assert_eq!(prs[0].draft, false);
+        assert_eq!(prs[0].html_url, "https://github.com/owner/repo/pull/456");
+        assert_eq!(prs[0].user_login, "octocat");
+        assert_eq!(
+            prs[0].user_avatar_url,
+            Some("https://avatars.githubusercontent.com/u/1?v=4".to_string())
+        );
+        assert_eq!(prs[0].repo_owner, "owner");
+        assert_eq!(prs[0].repo_name, "repo");
+        assert_eq!(prs[0].head_ref, "feature-branch");
+        assert_eq!(prs[0].base_ref, "main");
+        assert_eq!(prs[0].head_sha, "abc123def");
+        assert_eq!(prs[0].additions, 100);
+        assert_eq!(prs[0].deletions, 50);
+        assert_eq!(prs[0].changed_files, 10);
+        assert_eq!(prs[0].created_at, 1000);
+        assert_eq!(prs[0].updated_at, 2000);
+
+        // Update the same PR with a new title
+        db.upsert_review_pr(
+            123,
+            456,
+            "Add new feature - updated",
+            Some("This PR adds a new feature"),
+            "open",
+            false,
+            "https://github.com/owner/repo/pull/456",
+            "octocat",
+            Some("https://avatars.githubusercontent.com/u/1?v=4"),
+            "owner",
+            "repo",
+            "feature-branch",
+            "main",
+            "abc123def",
+            100,
+            50,
+            10,
+            1000,
+            3000,
+        )
+        .expect("upsert update failed");
+
+        // Verify still 1 row with new title
+        let prs = db.get_all_review_prs().expect("get_all failed");
+        assert_eq!(prs.len(), 1);
+        assert_eq!(prs[0].title, "Add new feature - updated");
+        assert_eq!(prs[0].updated_at, 3000);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_review_pr_delete_stale() {
+        let (db, path) = make_test_db("review_pr_stale");
+
+        // Insert 3 review PRs
+        db.upsert_review_pr(
+            100,
+            1,
+            "PR 1",
+            None,
+            "open",
+            false,
+            "https://github.com/owner/repo/pull/1",
+            "user1",
+            None,
+            "owner",
+            "repo",
+            "branch1",
+            "main",
+            "sha1",
+            10,
+            5,
+            2,
+            1000,
+            1000,
+        )
+        .expect("insert 1 failed");
+        db.upsert_review_pr(
+            200,
+            2,
+            "PR 2",
+            None,
+            "open",
+            false,
+            "https://github.com/owner/repo/pull/2",
+            "user2",
+            None,
+            "owner",
+            "repo",
+            "branch2",
+            "main",
+            "sha2",
+            20,
+            10,
+            3,
+            2000,
+            2000,
+        )
+        .expect("insert 2 failed");
+        db.upsert_review_pr(
+            300,
+            3,
+            "PR 3",
+            None,
+            "open",
+            false,
+            "https://github.com/owner/repo/pull/3",
+            "user3",
+            None,
+            "owner",
+            "repo",
+            "branch3",
+            "main",
+            "sha3",
+            30,
+            15,
+            4,
+            3000,
+            3000,
+        )
+        .expect("insert 3 failed");
+
+        // Keep only ids 100 and 300, delete 200
+        db.delete_stale_review_prs(&[100, 300])
+            .expect("delete stale failed");
+
+        let prs = db.get_all_review_prs().expect("get_all failed");
+        assert_eq!(prs.len(), 2);
+        assert!(prs.iter().any(|pr| pr.id == 100));
+        assert!(prs.iter().any(|pr| pr.id == 300));
+        assert!(!prs.iter().any(|pr| pr.id == 200));
+
+        // Delete all by passing empty slice
+        db.delete_stale_review_prs(&[]).expect("delete all failed");
+
+        let prs = db.get_all_review_prs().expect("get_all failed");
+        assert_eq!(prs.len(), 0);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_review_pr_ordering() {
+        let (db, path) = make_test_db("review_pr_ordering");
+
+        // Insert 2 review PRs with different updated_at values
+        db.upsert_review_pr(
+            1,
+            10,
+            "Older PR",
+            None,
+            "open",
+            false,
+            "https://github.com/owner/repo/pull/10",
+            "user1",
+            None,
+            "owner",
+            "repo",
+            "branch1",
+            "main",
+            "sha1",
+            10,
+            5,
+            2,
+            1000,
+            1000,
+        )
+        .expect("insert older failed");
+        db.upsert_review_pr(
+            2,
+            20,
+            "Newer PR",
+            None,
+            "open",
+            false,
+            "https://github.com/owner/repo/pull/20",
+            "user2",
+            None,
+            "owner",
+            "repo",
+            "branch2",
+            "main",
+            "sha2",
+            20,
+            10,
+            3,
+            2000,
+            5000,
+        )
+        .expect("insert newer failed");
+
+        // Verify descending order by updated_at
+        let prs = db.get_all_review_prs().expect("get_all failed");
+        assert_eq!(prs.len(), 2);
+        assert_eq!(prs[0].id, 2); // Newer PR first
+        assert_eq!(prs[1].id, 1); // Older PR second
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
 }

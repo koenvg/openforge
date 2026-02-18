@@ -154,6 +154,36 @@ export interface PrFileDiff {
   previous_filename: string | null;
 }
 
+/** Inline review comment from GitHub PR */
+export interface ReviewComment {
+  id: number;
+  pr_number: number;
+  repo_owner: string;
+  repo_name: string;
+  path: string;
+  line: number | null;
+  side: string | null;
+  body: string;
+  author: string;
+  created_at: string;
+  in_reply_to_id: number | null;
+}
+
+/** Comment to include in a review submission */
+export interface ReviewSubmissionComment {
+  path: string;
+  line: number;
+  side: string;
+  body: string;
+}
+
+/** Review submission payload */
+export interface ReviewSubmission {
+  event: "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
+  body: string;
+  comments: ReviewSubmissionComment[];
+}
+
 /** App-level view for top-bar navigation */
 export type AppView = "board" | "pr_review" | "settings";
 

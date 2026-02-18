@@ -150,6 +150,11 @@ pub async fn start_github_poller(app: AppHandle) {
             );
         }
 
+        // Poll review-requested PRs
+        if let Err(e) = poll_review_prs(&github_client, &db, &app, &github_token).await {
+            eprintln!("[GitHub Poller] Failed to poll review PRs: {}", e);
+        }
+
         sleep(Duration::from_secs(30)).await;
     }
 }
@@ -484,6 +489,71 @@ async fn poll_pr_comments(
     }
 
     Ok(new_count)
+}
+
+async fn poll_review_prs(
+    github_client: &GitHubClient,
+    db: &Mutex<Database>,
+    app: &AppHandle,
+    github_token: &str,
+) -> Result<(), String> {
+    let username = {
+        let db_lock = db.lock().unwrap();
+        db_lock.get_config("github_username")
+            .map_err(|e| e.to_string())?
+    };
+
+    let Some(username) = username else {
+        return Ok(());
+    };
+
+    let prs = github_client
+        .search_review_requested_prs(&username, github_token)
+        .await
+        .map_err(|e| format!("Failed to search review PRs: {}", e))?;
+
+    let current_ids: Vec<i64> = prs.iter().map(|pr| pr.id).collect();
+
+    {
+        let db_lock = db.lock().unwrap();
+        for pr in &prs {
+            let created_at = chrono::DateTime::parse_from_rfc3339(&pr.created_at)
+                .map(|dt| dt.timestamp())
+                .unwrap_or(0);
+            let updated_at = chrono::DateTime::parse_from_rfc3339(&pr.updated_at)
+                .map(|dt| dt.timestamp())
+                .unwrap_or(0);
+
+            let _ = db_lock.upsert_review_pr(
+                pr.id,
+                pr.number,
+                &pr.title,
+                pr.body.as_deref(),
+                &pr.state,
+                pr.draft,
+                &pr.html_url,
+                &pr.user_login,
+                pr.user_avatar_url.as_deref(),
+                &pr.repo_owner,
+                &pr.repo_name,
+                &pr.head_ref,
+                &pr.base_ref,
+                &pr.head_sha,
+                pr.additions,
+                pr.deletions,
+                pr.changed_files,
+                created_at,
+                updated_at,
+            );
+        }
+
+        let _ = db_lock.delete_stale_review_prs(&current_ids);
+    }
+
+    let count = current_ids.len();
+    let _ = app.emit("review-pr-count-changed", count);
+
+    Ok(())
 }
 
 /// Parse GitHub timestamp (ISO 8601) to Unix timestamp
