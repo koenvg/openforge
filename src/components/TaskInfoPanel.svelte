@@ -95,6 +95,12 @@
 </script>
 
 <div class="info-panel">
+  <!-- Title / Initial Prompt Section -->
+  <section class="section">
+    <h3 class="section-title">Initial Prompt</h3>
+    <div class="task-title-full">{task.title}</div>
+  </section>
+
   <!-- Metadata Section -->
   <section class="section">
     <h3 class="section-title">Task Info</h3>
@@ -281,6 +287,14 @@
     overflow-y: auto;
     background: var(--bg-secondary);
     height: 100%;
+  }
+
+  .task-title-full {
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
   .section {

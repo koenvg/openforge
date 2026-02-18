@@ -157,6 +157,10 @@
     color: var(--text-primary);
     margin: 0;
     flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
   }
 
   .status-badge {
