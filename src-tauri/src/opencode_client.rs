@@ -17,6 +17,7 @@
 
 use reqwest::{Client, Response};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::fmt;
 use tokio_stream::Stream;
@@ -420,6 +421,77 @@ impl OpenCodeClient {
 
         Ok(session)
     }
+
+    /// Get child sessions of a parent session
+    ///
+    /// # Arguments
+    /// * `session_id` - Parent session ID
+    ///
+    /// # Returns
+    /// List of child session information
+    pub async fn get_session_children(&self, session_id: &str) -> Result<Vec<SessionInfo>, OpenCodeError> {
+        let url = format!("{}/session/{}/children", self.base_url, session_id);
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unable to read response body".to_string());
+            return Err(OpenCodeError::ApiError {
+                status: status.as_u16(),
+                message: body,
+            });
+        }
+
+        let children: Vec<SessionInfo> = response
+            .json()
+            .await
+            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
+
+        Ok(children)
+    }
+
+    /// Get status of all sessions
+    ///
+    /// # Returns
+    /// Map of session IDs to their status information
+    pub async fn get_all_session_statuses(&self) -> Result<HashMap<String, SessionStatusInfo>, OpenCodeError> {
+        let url = format!("{}/session/status", self.base_url);
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unable to read response body".to_string());
+            return Err(OpenCodeError::ApiError {
+                status: status.as_u16(),
+                message: body,
+            });
+        }
+
+        let statuses: HashMap<String, SessionStatusInfo> = response
+            .json()
+            .await
+            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
+
+        Ok(statuses)
+    }
 }
 
 impl Default for OpenCodeClient {
@@ -496,13 +568,23 @@ pub struct AgentInfo {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-/// Session information
+/// Session information from OpenCode API
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SessionInfo {
     pub id: String,
-    pub status: String,
+    pub title: String,
+    #[serde(rename = "parentID", default)]
+    pub parent_id: Option<String>,
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+/// Status of a single session from the /session/status endpoint
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SessionStatusInfo {
+    /// Status type: "idle", "busy", or "retry"
+    #[serde(rename = "type")]
+    pub status_type: String,
 }
 
 // ============================================================================
@@ -590,5 +672,49 @@ mod tests {
 
         let err = OpenCodeError::ParseError("Invalid JSON".to_string());
         assert_eq!(err.to_string(), "Parse error: Invalid JSON");
+    }
+
+    #[test]
+    fn test_session_info_deserialization_with_parent() {
+        let json = r#"{"id": "ses_123", "title": "Test Session", "parentID": "ses_parent"}"#;
+        let info: SessionInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(info.id, "ses_123");
+        assert_eq!(info.title, "Test Session");
+        assert_eq!(info.parent_id, Some("ses_parent".to_string()));
+    }
+
+    #[test]
+    fn test_session_info_deserialization_without_parent() {
+        let json = r#"{"id": "ses_456", "title": "Root Session"}"#;
+        let info: SessionInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(info.id, "ses_456");
+        assert_eq!(info.title, "Root Session");
+        assert_eq!(info.parent_id, None);
+    }
+
+    #[test]
+    fn test_session_info_no_status_field() {
+        // Regression: old SessionInfo had `status: String` which would fail
+        // because OpenCode Session has no status field
+        let json = r#"{"id": "ses_789", "title": "No Status", "version": 1}"#;
+        let info: SessionInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(info.id, "ses_789");
+        assert!(info.extra.contains_key("version"));
+    }
+
+    #[test]
+    fn test_session_status_info_deserialization() {
+        let json = r#"{"type": "busy"}"#;
+        let status: SessionStatusInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(status.status_type, "busy");
+    }
+
+    #[test]
+    fn test_session_status_map_deserialization() {
+        let json = r#"{"ses_1": {"type": "busy"}, "ses_2": {"type": "retry"}}"#;
+        let map: HashMap<String, SessionStatusInfo> = serde_json::from_str(json).unwrap();
+        assert_eq!(map.len(), 2);
+        assert_eq!(map.get("ses_1").unwrap().status_type, "busy");
+        assert_eq!(map.get("ses_2").unwrap().status_type, "retry");
     }
 }

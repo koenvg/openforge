@@ -393,17 +393,17 @@ async fn start_implementation(
             .map_err(|e| e.to_string())?;
     }
     
-    sse_mgr
-        .start_bridge(app.clone(), task_id.clone(), port)
-        .await
-        .map_err(|e| e.to_string())?;
-    
     let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
     
     let opencode_session_id = client
         .create_session(format!("Task {}", task_id))
         .await
         .map_err(|e| format!("Failed to create session: {}", e))?;
+    
+    sse_mgr
+        .start_bridge(app.clone(), task_id.clone(), Some(opencode_session_id.clone()), port)
+        .await
+        .map_err(|e| e.to_string())?;
     
     let prompt = build_task_prompt(&task, "Implement this task. Create a branch, make the changes, and create a pull request when done.");
     
@@ -503,7 +503,7 @@ async fn run_action(
                                 .map_err(|e| format!("Failed to update agent session: {}", e))?;
                         }
                         
-                        match sse_mgr.start_bridge(app.clone(), task_id.clone(), port).await {
+                        match sse_mgr.start_bridge(app.clone(), task_id.clone(), Some(opencode_session_id.clone()), port).await {
                             Ok(_) => {},
                             Err(e) if e.to_string().contains("already running") => {},
                             Err(e) => return Err(e.to_string()),
@@ -584,17 +584,17 @@ async fn run_action(
             .map_err(|e| e.to_string())?;
     }
     
-    sse_mgr
-        .start_bridge(app.clone(), task_id.clone(), port)
-        .await
-        .map_err(|e| e.to_string())?;
-    
     let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
     
     let opencode_session_id = client
         .create_session(format!("Task {}", task_id))
         .await
         .map_err(|e| format!("Failed to create session: {}", e))?;
+    
+    sse_mgr
+        .start_bridge(app.clone(), task_id.clone(), Some(opencode_session_id.clone()), port)
+        .await
+        .map_err(|e| e.to_string())?;
     
     client
         .prompt_async(&opencode_session_id, prompt, agent)
