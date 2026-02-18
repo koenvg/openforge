@@ -70,6 +70,10 @@ export interface OpenCodeStatus {
   version: string | null;
 }
 
+export interface AgentInfo {
+  name: string;
+}
+
 export interface OpenCodeEvent {
   event_type: string;
   data: string;

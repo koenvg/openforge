@@ -9,6 +9,7 @@ vi.mock('../lib/ipc', () => ({
   getTasks: vi.fn(),
   updateTaskStatus: vi.fn(),
   deleteTask: vi.fn(),
+  getAgents: vi.fn(() => Promise.resolve([{ name: 'build' }, { name: 'oracle' }])),
 }))
 
 // Mock actions module
@@ -170,5 +171,6 @@ describe('KanbanBoard', () => {
     expect(dispatchedEvent).toBeTruthy()
     expect(dispatchedEvent.taskId).toBe('T-1')
     expect(dispatchedEvent.actionPrompt).toBe('Implement this task')
+    expect(dispatchedEvent.agent).toBeNull()
   })
 })

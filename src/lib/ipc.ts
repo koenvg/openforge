@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Task, AgentSession, AgentLog, PrComment, PullRequestInfo, OpenCodeStatus, Project, WorktreeInfo, ImplementationStatus, ReviewPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment } from "./types";
+import type { Task, AgentSession, AgentLog, PrComment, PullRequestInfo, OpenCodeStatus, AgentInfo, Project, WorktreeInfo, ImplementationStatus, ReviewPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment } from "./types";
 
 export async function createTask(title: string, status: string, jiraKey: string | null, projectId: string | null): Promise<Task> {
   return invoke<Task>("create_task", { title, status, jiraKey, projectId });
@@ -23,6 +23,10 @@ export async function refreshJiraInfo(): Promise<number> {
 
 export async function getOpenCodeStatus(): Promise<OpenCodeStatus> {
   return invoke<OpenCodeStatus>("get_opencode_status");
+}
+
+export async function getAgents(): Promise<AgentInfo[]> {
+  return invoke<AgentInfo[]>("get_agents");
 }
 
 export async function createProject(name: string, path: string): Promise<Project> {
@@ -60,8 +64,8 @@ export async function startImplementation(taskId: string, repoPath: string): Pro
   return invoke<ImplementationStatus>("start_implementation", { taskId, repoPath });
 }
 
-export async function runAction(taskId: string, repoPath: string, actionPrompt: string): Promise<ImplementationStatus> {
-  return invoke<ImplementationStatus>("run_action", { taskId, repoPath, actionPrompt });
+export async function runAction(taskId: string, repoPath: string, actionPrompt: string, agent: string | null): Promise<ImplementationStatus> {
+  return invoke<ImplementationStatus>("run_action", { taskId, repoPath, actionPrompt, agent });
 }
 
 export async function abortImplementation(taskId: string): Promise<void> {
