@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
-  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount } from './lib/stores'
+  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount } from './lib/stores'
   import { getProjects, getTasksForProject, getOpenCodeStatus, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, persistSessionStatus } from './lib/ipc'
   import type { Task, PullRequestInfo, OpenCodeStatus, AgentEvent } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
@@ -13,6 +13,7 @@
   import PrReviewView from './components/PrReviewView.svelte'
   import Toast from './components/Toast.svelte'
   import CheckpointToast from './components/CheckpointToast.svelte'
+  import CiFailureToast from './components/CiFailureToast.svelte'
   import ProjectSwitcher from './components/ProjectSwitcher.svelte'
   import ProjectSetupDialog from './components/ProjectSetupDialog.svelte'
 
@@ -234,6 +235,22 @@
     unlisteners.push(
       await listen('new-pr-comment', () => {
         loadTasks()
+        loadPullRequests()
+      })
+    )
+
+    unlisteners.push(
+      await listen<{ task_id: string, pr_id: number, pr_title: string, ci_status: string, timestamp: number }>('ci-status-changed', (event) => {
+        if (event.payload.ci_status === 'failure') {
+          $ciFailureNotification = {
+            task_id: event.payload.task_id,
+            pr_id: event.payload.pr_id,
+            pr_title: event.payload.pr_title,
+            ci_status: event.payload.ci_status,
+            timestamp: event.payload.timestamp,
+          }
+        }
+        // Always refresh PR data to update CI dots on cards
         loadPullRequests()
       })
     )
@@ -484,6 +501,7 @@
 
 <Toast />
 <CheckpointToast />
+<CiFailureToast />
 
 <style>
   :global(:root) {

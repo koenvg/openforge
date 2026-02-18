@@ -89,6 +89,9 @@
           onclick={(e: MouseEvent) => { e.stopPropagation(); openUrl(pr.url) }}
           onkeydown={(e: KeyboardEvent) => { e.stopPropagation(); if (e.key === 'Enter') openUrl(pr.url) }}
         >
+          {#if pr.ci_status && pr.ci_status !== 'none'}
+            <span class="ci-dot ci-{pr.ci_status}"></span>
+          {/if}
           PR #{pr.id}
         </span>
       {/each}
@@ -299,6 +302,34 @@
   .pr-link.pr-closed {
     background: rgba(86, 95, 137, 0.2);
     color: var(--text-secondary);
+  }
+
+  .ci-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 3px;
+    vertical-align: middle;
+  }
+
+  .ci-dot.ci-success {
+    background: var(--success);
+  }
+
+  .ci-dot.ci-failure {
+    background: var(--error);
+    animation: ci-pulse 1.5s ease-in-out infinite;
+  }
+
+  .ci-dot.ci-pending {
+    background: var(--warning);
+    animation: ci-pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes ci-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
   }
 
   .card-assignee {

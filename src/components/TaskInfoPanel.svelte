@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import type { Task, PrComment, KanbanColumn, WorktreeInfo } from '../lib/types'
-  import { COLUMN_LABELS } from '../lib/types'
+  import { COLUMN_LABELS, parseCheckRuns } from '../lib/types'
   import { ticketPrs } from '../lib/stores'
   import { 
     updateTaskStatus, 
@@ -179,6 +179,50 @@
           </div>
         {/each}
       </div>
+    </section>
+  {/if}
+
+  <!-- Pipeline Status Section -->
+  {#if taskPrs.some(pr => pr.ci_status)}
+    <section class="section">
+      <h3 class="section-title">Pipeline Status</h3>
+      {#each taskPrs as pr (pr.id)}
+        {#if pr.ci_status}
+          {@const checkRuns = parseCheckRuns(pr.ci_check_runs)}
+          <div class="pipeline-group">
+            <div class="pipeline-header">
+              <span class="pipeline-pr-name">{pr.title}</span>
+              <span class="pipeline-status-badge pipeline-{pr.ci_status}">
+                {#if pr.ci_status === 'success'}✓ Passing
+                {:else if pr.ci_status === 'failure'}✗ Failing
+                {:else if pr.ci_status === 'pending'}⏳ Running
+                {:else if pr.ci_status === 'none'}— No CI
+                {/if}
+              </span>
+            </div>
+            {#if checkRuns.length > 0}
+              <div class="check-runs-list">
+                {#each checkRuns as check (check.id)}
+                  <div class="check-run-item">
+                    <span class="check-status-icon"
+                      class:check-success={check.conclusion === 'success'}
+                      class:check-failure={check.conclusion === 'failure'}
+                      class:check-pending={check.status !== 'completed'}
+                      class:check-neutral={check.conclusion === 'neutral' || check.conclusion === 'skipped'}
+                    >
+                      {#if check.conclusion === 'success'}✓
+                      {:else if check.conclusion === 'failure'}✗
+                      {:else if check.status !== 'completed'}⏳
+                      {:else}—{/if}
+                    </span>
+                    <span class="check-name">{check.name}</span>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/if}
+      {/each}
     </section>
   {/if}
 
@@ -473,5 +517,88 @@
     font-size: 0.7rem;
     color: var(--success);
     font-weight: 500;
+  }
+
+  .pipeline-group {
+    margin-bottom: 12px;
+  }
+
+  .pipeline-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .pipeline-pr-name {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+  }
+
+  .pipeline-status-badge {
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+
+  .pipeline-success {
+    background: rgba(158, 206, 106, 0.15);
+    color: var(--success);
+  }
+
+  .pipeline-failure {
+    background: rgba(247, 118, 142, 0.15);
+    color: var(--error);
+  }
+
+  .pipeline-pending {
+    background: rgba(224, 175, 104, 0.15);
+    color: var(--warning);
+  }
+
+  .pipeline-none {
+    background: rgba(86, 95, 137, 0.15);
+    color: var(--text-secondary);
+  }
+
+  .check-runs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .check-run-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+  }
+
+  .check-status-icon {
+    width: 16px;
+    text-align: center;
+    font-weight: 600;
+  }
+
+  .check-success {
+    color: var(--success);
+  }
+
+  .check-failure {
+    color: var(--error);
+  }
+
+  .check-pending {
+    color: var(--warning);
+  }
+
+  .check-neutral {
+    color: var(--text-secondary);
+  }
+
+  .check-name {
+    color: var(--text-primary);
   }
 </style>
