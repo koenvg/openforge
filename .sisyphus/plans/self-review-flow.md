@@ -1404,7 +1404,7 @@ Max Concurrent: 4 (Waves 1 & 2)
   - Files: `src/lib/reviewPrompt.test.ts`, `src/components/SelfReviewView.test.ts`, `src/components/TaskDetailView.test.ts`
   - Pre-commit: `pnpm vitest run`
 
-- [ ] 14. Build Verification + Integration Check
+- [x] 14. Build Verification + Integration Check
 
   **What to do**:
   - Run full build pipeline and verify everything works together:
