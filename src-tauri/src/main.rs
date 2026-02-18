@@ -480,6 +480,14 @@ async fn run_action(
                             .map(|w| w.worktree_path)
                             .unwrap_or_default();
                         
+                        // Auto-move task from backlog to doing when starting an action
+                        if task.status == "backlog" {
+                            let db = db.lock().unwrap();
+                            db.update_task_status(&task_id, "doing")
+                                .map_err(|e| format!("Failed to update task status: {}", e))?;
+                            let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": task_id }));
+                        }
+                        
                         return Ok(serde_json::json!({
                             "task_id": task_id,
                             "session_id": session.id,
@@ -565,6 +573,14 @@ async fn run_action(
             "running",
         )
         .map_err(|e| format!("Failed to create agent session: {}", e))?;
+    }
+    
+    // Auto-move task from backlog to doing when starting an action
+    if task.status == "backlog" {
+        let db = db.lock().unwrap();
+        db.update_task_status(&task_id, "doing")
+            .map_err(|e| format!("Failed to update task status: {}", e))?;
+        let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": task_id }));
     }
     
     Ok(serde_json::json!({
