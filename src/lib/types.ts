@@ -115,6 +115,19 @@ export interface ImplementationStatus {
   session_id: string;
 }
 
+export interface PtySpawnRequest {
+  task_id: string;
+  server_port: number;
+  opencode_session_id: string;
+  cols: number;
+  rows: number;
+}
+
+export interface PtyEvent {
+  task_id: string;
+  data: string;
+}
+
 export type KanbanColumn = "todo" | "in_progress" | "in_review" | "testing" | "done";
 
 export const COLUMN_LABELS: Record<KanbanColumn, string> = {

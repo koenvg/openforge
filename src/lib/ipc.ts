@@ -138,3 +138,19 @@ export async function getSessionOutput(taskId: string): Promise<string> {
 export async function updateTaskFields(taskId: string, acceptanceCriteria: string, planText: string): Promise<void> {
   return invoke("update_task_fields", { taskId, acceptanceCriteria, planText });
 }
+
+export async function spawnPty(taskId: string, serverPort: number, opencodeSessionId: string, cols: number, rows: number): Promise<void> {
+  return invoke("pty_spawn", { taskId, serverPort, opencodeSessionId, cols, rows });
+}
+
+export async function writePty(taskId: string, data: string): Promise<void> {
+  return invoke("pty_write", { taskId, data });
+}
+
+export async function resizePty(taskId: string, cols: number, rows: number): Promise<void> {
+  return invoke("pty_resize", { taskId, cols, rows });
+}
+
+export async function killPty(taskId: string): Promise<void> {
+  return invoke("pty_kill", { taskId });
+}
