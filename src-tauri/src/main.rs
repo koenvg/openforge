@@ -293,7 +293,6 @@ fn build_task_prompt(task: &db::TaskRow, action_instruction: &str) -> String {
 }
 
 #[tauri::command]
-// Legacy: kept for backward compatibility. New code should use run_action.
 async fn start_implementation(
     db: State<'_, Mutex<db::Database>>,
     server_mgr: State<'_, server_manager::ServerManager>,
@@ -327,7 +326,7 @@ async fn start_implementation(
         std::path::Path::new(&repo_path),
         &worktree_path,
         &branch,
-        "HEAD",
+        "origin/main",
     )
     .await
     .map_err(|e| e.to_string())?;
@@ -510,7 +509,7 @@ async fn run_action(
         std::path::Path::new(&repo_path),
         &worktree_path,
         &branch,
-        "HEAD",
+        "origin/main",
     )
     .await
     .map_err(|e| e.to_string())?;

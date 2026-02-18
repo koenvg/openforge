@@ -115,6 +115,20 @@ pub async fn create_worktree(
         println!("Warning: worktree prune failed: {}", stderr);
     }
 
+    // Fetch latest from origin so the base ref (e.g. origin/main) is up to date
+    let fetch_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("fetch")
+        .arg("origin")
+        .output()
+        .await?;
+
+    if !fetch_output.status.success() {
+        let stderr = String::from_utf8_lossy(&fetch_output.stderr);
+        println!("Warning: git fetch origin failed: {}", stderr);
+    }
+
     if worktree_path.exists() {
         return Ok(());
     }
