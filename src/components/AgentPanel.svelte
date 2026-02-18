@@ -102,7 +102,7 @@
       let existingSession = $activeSessions.get(taskId)
       if (!existingSession) {
         const dbSession = await getLatestSession(taskId)
-        if (dbSession && (dbSession.status === 'completed' || dbSession.status === 'failed')) {
+        if (dbSession && (dbSession.status === 'completed' || dbSession.status === 'failed' || dbSession.status === 'interrupted')) {
           const updated = new Map($activeSessions)
           updated.set(taskId, dbSession)
           $activeSessions = updated
@@ -117,7 +117,7 @@
         if (worktree?.opencode_port) opencodePort = worktree.opencode_port
       }
 
-      if (existingSession.status !== 'completed' && existingSession.status !== 'failed' && existingSession.status !== 'paused') return
+      if (existingSession.status !== 'completed' && existingSession.status !== 'failed' && existingSession.status !== 'paused' && existingSession.status !== 'interrupted') return
 
       if (existingSession.status === 'completed') {
         status = 'complete'
@@ -307,6 +307,7 @@
       case 'running': return 'badge-running'
       case 'completed': return 'badge-completed'
       case 'failed': return 'badge-failed'
+      case 'interrupted': return 'badge-interrupted'
       case 'paused': return 'badge-paused'
       default: return 'badge-default'
     }
@@ -518,6 +519,11 @@
   .badge-paused {
     background: rgba(224, 175, 104, 0.15);
     color: var(--warning);
+  }
+
+  .badge-interrupted {
+    background: rgba(86, 95, 137, 0.2);
+    color: var(--text-secondary);
   }
 
   .badge-default {

@@ -1573,6 +1573,19 @@ impl Database {
         Ok(())
     }
 
+    pub fn mark_running_sessions_interrupted(&self) -> Result<usize> {
+        let conn = self.conn.lock().unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs() as i64;
+        conn.execute(
+            "UPDATE agent_sessions SET status = 'interrupted', error_message = 'Session interrupted by app restart', updated_at = ?1 WHERE status = 'running'",
+            rusqlite::params![now],
+        )?;
+        Ok(conn.changes() as usize)
+    }
+
     pub fn mark_comments_addressed(&self, ids: &[i64]) -> Result<()> {
         if ids.is_empty() {
             return Ok(());
@@ -2343,6 +2356,50 @@ mod tests {
             db.get_config("jira_api_token").unwrap(),
             Some("existing-token".to_string())
         );
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_mark_running_sessions_interrupted() {
+        let (db, path) = make_test_db("mark_interrupted");
+        insert_test_task(&db);
+
+        db.create_agent_session("ses-run1", "T-100", None, "implement", "running")
+            .expect("create running 1 failed");
+        db.create_agent_session("ses-run2", "T-100", None, "implement", "running")
+            .expect("create running 2 failed");
+        db.create_agent_session("ses-done", "T-100", None, "implement", "completed")
+            .expect("create completed failed");
+        db.create_agent_session("ses-fail", "T-100", None, "implement", "failed")
+            .expect("create failed failed");
+
+        let count = db
+            .mark_running_sessions_interrupted()
+            .expect("mark interrupted failed");
+        assert_eq!(count, 2);
+
+        let s1 = db.get_agent_session("ses-run1").expect("get").unwrap();
+        assert_eq!(s1.status, "interrupted");
+        assert_eq!(
+            s1.error_message,
+            Some("Session interrupted by app restart".to_string())
+        );
+
+        let s2 = db.get_agent_session("ses-run2").expect("get").unwrap();
+        assert_eq!(s2.status, "interrupted");
+
+        let s3 = db.get_agent_session("ses-done").expect("get").unwrap();
+        assert_eq!(s3.status, "completed");
+
+        let s4 = db.get_agent_session("ses-fail").expect("get").unwrap();
+        assert_eq!(s4.status, "failed");
+
+        let count2 = db
+            .mark_running_sessions_interrupted()
+            .expect("second call failed");
+        assert_eq!(count2, 0);
 
         drop(db);
         let _ = fs::remove_file(&path);
