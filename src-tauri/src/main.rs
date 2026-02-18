@@ -1568,6 +1568,16 @@ fn main() {
                 }
             }
 
+            match database.clear_stale_worktree_servers() {
+                Ok(count) if count > 0 => {
+                    println!("[startup] Cleared stale server info from {} worktree(s)", count);
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("[startup] Failed to clear stale worktree servers: {}", e);
+                }
+            }
+
             app.manage(Mutex::new(database));
 
             println!("Database initialized successfully");
