@@ -3,7 +3,7 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn } from '@tauri-apps/api/event'
   import { tasks, selectedTaskId, activeSessions, checkpointNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount } from './lib/stores'
-  import { getProjects, getTasksForProject, getOpenCodeStatus, getPullRequests, startImplementation, getSessionStatus, getLatestSessions, persistSessionStatus } from './lib/ipc'
+  import { getProjects, getTasksForProject, getOpenCodeStatus, getPullRequests, runAction, getSessionStatus, getLatestSessions, persistSessionStatus } from './lib/ipc'
   import type { Task, PullRequestInfo, OpenCodeStatus, AgentEvent } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
   import TaskDetailView from './components/TaskDetailView.svelte'
@@ -115,31 +115,29 @@
     }
   }
 
-  async function handleStartImplementation(event: CustomEvent<{ taskId: string }>) {
+  async function handleRunAction(event: CustomEvent<{ taskId: string; actionPrompt: string }>) {
     if (!activeProject) {
       $error = 'No active project selected'
       return
     }
-    const taskId = event.detail.taskId
+    const { taskId, actionPrompt } = event.detail
     try {
-      console.log('[session] Starting implementation for task:', taskId)
-      const result = await startImplementation(taskId, activeProject.path)
-      console.log('[session] Implementation started, session_id:', result.session_id)
+      console.log('[session] Running action for task:', taskId)
+      const result = await runAction(taskId, activeProject.path, actionPrompt)
+      console.log('[session] Action started, session_id:', result.session_id)
 
-      // Fetch the full session from DB and populate the activeSessions store
       try {
         const session = await getSessionStatus(result.session_id)
-        console.log('[session] Fetched session status:', session.id, 'status:', session.status, 'stage:', session.stage)
         const updated = new Map($activeSessions)
         updated.set(taskId, session)
         $activeSessions = updated
       } catch (sessionErr) {
-        console.error('[session] Failed to fetch session after start:', sessionErr)
+        console.error('[session] Failed to fetch session after action:', sessionErr)
       }
 
       await loadTasks()
     } catch (e) {
-      console.error('[session] Failed to start implementation for task:', taskId, e)
+      console.error('[session] Failed to run action for task:', taskId, e)
       $error = String(e)
     }
   }
@@ -160,9 +158,9 @@
     )
 
     unlisteners.push(
-      await listen<{ task_id: string }>('implementation-complete', (event) => {
+      await listen<{ task_id: string }>('action-complete', (event) => {
         const taskId = event.payload.task_id
-        console.log('[session] Implementation complete for task:', taskId)
+        console.log('[session] Action complete for task:', taskId)
         const session = $activeSessions.get(taskId)
         if (session) {
           const updated = new Map($activeSessions)
@@ -378,7 +376,7 @@
             <span>Loading tasks...</span>
           </div>
         {:else}
-          <KanbanBoard on:start-implementation={handleStartImplementation} />
+          <KanbanBoard on:run-action={handleRunAction} />
         {/if}
       </div>
     {/if}

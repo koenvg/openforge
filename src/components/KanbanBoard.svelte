@@ -1,9 +1,10 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte'
-  import type { Task, AgentSession, KanbanColumn } from '../lib/types'
+  import type { Task, AgentSession, KanbanColumn, Action } from '../lib/types'
   import { COLUMNS, COLUMN_LABELS } from '../lib/types'
   import { tasks, selectedTaskId, activeSessions, ticketPrs, error, activeProjectId } from '../lib/stores'
   import { updateTaskStatus, deleteTask, getTasksForProject } from '../lib/ipc'
+  import { loadActions, getEnabledActions } from '../lib/actions'
   import TaskCard from './TaskCard.svelte'
   import AddTaskInline from './AddTaskInline.svelte'
 
@@ -31,6 +32,15 @@
   }
 
   let contextMenu = { visible: false, x: 0, y: 0, taskId: '', showMoveSubmenu: false }
+  let actions: Action[] = []
+  
+  $: if ($activeProjectId) {
+    loadActions($activeProjectId).then(a => { actions = getEnabledActions(a) })
+  }
+
+  $: contextSession = contextMenu.taskId ? $activeSessions.get(contextMenu.taskId) : null
+  $: isSessionBusy = contextSession?.status === 'running' || contextSession?.status === 'paused'
+  $: busyReason = contextSession?.status === 'running' ? 'Agent is busy' : contextSession?.status === 'paused' ? 'Answer pending question first' : ''
 
   function handleContextMenu(event: MouseEvent, taskId: string) {
     event.preventDefault()
@@ -45,10 +55,10 @@
     contextMenu = { ...contextMenu, showMoveSubmenu: !contextMenu.showMoveSubmenu }
   }
 
-  async function handleStartImplementation() {
+  function handleRunAction(action: Action) {
     const taskId = contextMenu.taskId
     closeContextMenu()
-    dispatch('start-implementation', { taskId })
+    dispatch('run-action', { taskId, actionPrompt: action.prompt })
   }
 
   async function handleMoveTo(column: KanbanColumn) {
@@ -110,7 +120,18 @@
 
 {#if contextMenu.visible}
   <div class="context-menu" style="left: {contextMenu.x}px; top: {contextMenu.y}px;">
-    <button class="context-item" on:click={handleStartImplementation}>Start Implementation</button>
+    {#each actions as action (action.id)}
+      <button
+        class="context-item"
+        class:disabled={isSessionBusy}
+        disabled={isSessionBusy}
+        title={isSessionBusy ? busyReason : action.name}
+        on:click={() => handleRunAction(action)}
+      >
+        {action.name}
+      </button>
+    {/each}
+    <div class="context-divider"></div>
     <button class="context-item has-submenu" on:click|stopPropagation={toggleMoveSubmenu}>
       Move to...
     </button>
@@ -219,6 +240,16 @@
   .context-item:hover {
     background: var(--accent);
     color: var(--bg-primary);
+  }
+
+  .context-item.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .context-item.disabled:hover {
+    background: none;
+    color: var(--text-primary);
   }
 
   .has-submenu::after {

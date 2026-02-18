@@ -280,6 +280,38 @@ async fn get_worktree_for_task(
 // ============================================================================
 
 #[tauri::command]
+fn build_task_prompt(task: &db::TaskRow, action_instruction: &str) -> String {
+    let mut prompt = format!("You are working on task {}: {}\n\n", task.id, task.title);
+    
+    if let Some(ref description) = task.description {
+        if !description.is_empty() {
+            prompt.push_str(description);
+            prompt.push_str("\n\n");
+        }
+    }
+    
+    if let Some(ref acceptance_criteria) = task.acceptance_criteria {
+        if !acceptance_criteria.is_empty() {
+            prompt.push_str("Acceptance Criteria:\n");
+            prompt.push_str(acceptance_criteria);
+            prompt.push_str("\n\n");
+        }
+    }
+    
+    if let Some(ref plan_text) = task.plan_text {
+        if !plan_text.is_empty() {
+            prompt.push_str("Plan:\n");
+            prompt.push_str(plan_text);
+            prompt.push_str("\n\n");
+        }
+    }
+    
+    prompt.push_str(action_instruction);
+    prompt
+}
+
+#[tauri::command]
+// Legacy: kept for backward compatibility. New code should use run_action.
 async fn start_implementation(
     db: State<'_, Mutex<db::Database>>,
     server_mgr: State<'_, server_manager::ServerManager>,
@@ -355,32 +387,7 @@ async fn start_implementation(
     
     println!("[start_implementation] OpenCode session created: {} for task {} on port {}", opencode_session_id, task_id, port);
 
-    let mut prompt = format!("You are working on task {}: {}\n\n", task_id, task.title);
-    
-    if let Some(ref description) = task.description {
-        if !description.is_empty() {
-            prompt.push_str(description);
-            prompt.push_str("\n\n");
-        }
-    }
-    
-    if let Some(ref acceptance_criteria) = task.acceptance_criteria {
-        if !acceptance_criteria.is_empty() {
-            prompt.push_str("Acceptance Criteria:\n");
-            prompt.push_str(acceptance_criteria);
-            prompt.push_str("\n\n");
-        }
-    }
-    
-    if let Some(ref plan_text) = task.plan_text {
-        if !plan_text.is_empty() {
-            prompt.push_str("Plan:\n");
-            prompt.push_str(plan_text);
-            prompt.push_str("\n\n");
-        }
-    }
-    
-    prompt.push_str("Implement this task. Create a branch, make the changes, and create a pull request when done.");
+    let prompt = build_task_prompt(&task, "Implement this task. Create a branch, make the changes, and create a pull request when done.");
     
     println!("[start_implementation] Sending prompt_async to opencode session {}", opencode_session_id);
     client
@@ -412,6 +419,192 @@ async fn start_implementation(
         db.update_task_status(&task_id, "in_progress")
             .map_err(|e| format!("Failed to update task status: {}", e))?;
     }
+
+    Ok(serde_json::json!({
+        "task_id": task_id,
+        "worktree_path": worktree_path.to_str().unwrap(),
+        "port": port,
+        "session_id": agent_session_id,
+    }))
+}
+
+#[tauri::command]
+async fn run_action(
+    db: State<'_, Mutex<db::Database>>,
+    server_mgr: State<'_, server_manager::ServerManager>,
+    sse_mgr: State<'_, sse_bridge::SseBridgeManager>,
+    app: tauri::AppHandle,
+    task_id: String,
+    repo_path: String,
+    action_prompt: String,
+) -> Result<serde_json::Value, String> {
+    let (task, project_id_owned) = {
+        let db = db.lock().unwrap();
+        let task = db.get_task(&task_id)
+            .map_err(|e| format!("Failed to get task: {}", e))?
+            .ok_or("Task not found")?;
+        let project_id = task.project_id.clone().unwrap_or_default();
+        (task, project_id)
+    };
+    
+    let prompt = build_task_prompt(&task, &action_prompt);
+    
+    let existing_session = {
+        let db = db.lock().unwrap();
+        db.get_latest_session_for_ticket(&task_id)
+            .map_err(|e| format!("Failed to get latest session: {}", e))?
+    };
+    
+    if let Some(session) = existing_session {
+        match session.status.as_str() {
+            "running" => {
+                return Err("Agent is busy".to_string());
+            }
+            "paused" => {
+                return Err("Answer pending question first".to_string());
+            }
+            "completed" | "failed" => {
+                if let Some(port) = server_mgr.get_server_port(&task_id).await {
+                    if let Some(ref opencode_session_id) = session.opencode_session_id {
+                        {
+                            let db = db.lock().unwrap();
+                            let recheck_session = db.get_latest_session_for_ticket(&task_id)
+                                .map_err(|e| format!("Failed to recheck session: {}", e))?;
+                            if let Some(s) = recheck_session {
+                                if s.status != "completed" && s.status != "failed" {
+                                    return Err("Session status changed, cannot reuse".to_string());
+                                }
+                            }
+                        }
+                        
+                        let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
+                        
+                        println!("[run_action] Reusing session {} for task {}", opencode_session_id, task_id);
+                        
+                        client
+                            .prompt_async(opencode_session_id, prompt, None)
+                            .await
+                            .map_err(|e| format!("Failed to send prompt: {}", e))?;
+                        
+                        {
+                            let db = db.lock().unwrap();
+                            db.update_agent_session(&session.id, &session.stage, "running", None, None)
+                                .map_err(|e| format!("Failed to update agent session: {}", e))?;
+                        }
+                        
+                        match sse_mgr.start_bridge(app.clone(), task_id.clone(), port).await {
+                            Ok(_) => {},
+                            Err(e) if e.to_string().contains("already running") => {
+                                println!("[run_action] SSE bridge already running for task {}", task_id);
+                            },
+                            Err(e) => return Err(e.to_string()),
+                        }
+                        
+                        let worktree = {
+                            let db = db.lock().unwrap();
+                            db.get_worktree_for_task(&task_id)
+                                .map_err(|e| format!("Failed to get worktree: {}", e))?
+                        };
+                        
+                        let worktree_path = worktree
+                            .map(|w| w.worktree_path)
+                            .unwrap_or_default();
+                        
+                        return Ok(serde_json::json!({
+                            "task_id": task_id,
+                            "session_id": session.id,
+                            "worktree_path": worktree_path,
+                            "port": port,
+                        }));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    
+    let branch = git_worktree::slugify_branch_name(&task_id, &task.title);
+    let home = dirs::home_dir().ok_or("Failed to get home directory")?;
+    let repo_name = std::path::Path::new(&repo_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or("Invalid repo path")?;
+    let worktree_path = home
+        .join(".ai-command-center")
+        .join("worktrees")
+        .join(repo_name)
+        .join(&task_id);
+    
+    git_worktree::create_worktree(
+        std::path::Path::new(&repo_path),
+        &worktree_path,
+        &branch,
+        "HEAD",
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    
+    {
+        let db = db.lock().unwrap();
+        db.create_worktree_record(
+            &task_id,
+            &project_id_owned,
+            &repo_path,
+            worktree_path.to_str().unwrap(),
+            &branch,
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    
+    let port = server_mgr
+        .spawn_server(&task_id, &worktree_path)
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    {
+        let db = db.lock().unwrap();
+        db.update_worktree_server(&task_id, port as i64, 0)
+            .map_err(|e| e.to_string())?;
+    }
+    
+    sse_mgr
+        .start_bridge(app.clone(), task_id.clone(), port)
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
+    
+    let opencode_session_id = client
+        .create_session(format!("Task {}", task_id))
+        .await
+        .map_err(|e| format!("Failed to create session: {}", e))?;
+    
+    println!("[run_action] OpenCode session created: {} for task {} on port {}", opencode_session_id, task_id, port);
+    
+    println!("[run_action] Sending prompt_async to opencode session {}", opencode_session_id);
+    client
+        .prompt_async(&opencode_session_id, prompt, None)
+        .await
+        .map_err(|e| format!("Failed to send prompt: {}", e))?;
+    println!("[run_action] Prompt sent successfully to opencode session {}", opencode_session_id);
+    
+    let agent_session_id = uuid::Uuid::new_v4().to_string();
+    {
+        let db = db.lock().unwrap();
+        db.create_agent_session(
+            &agent_session_id,
+            &task_id,
+            Some(&opencode_session_id),
+            "implementing",
+            "running",
+        )
+        .map_err(|e| format!("Failed to create agent session: {}", e))?;
+    }
+    
+    println!(
+        "[run_action] Agent session created: {} (opencode: {}) for task {}",
+        agent_session_id, opencode_session_id, task_id
+    );
 
     Ok(serde_json::json!({
         "task_id": task_id,
@@ -1388,6 +1581,8 @@ fn main() {
     #[cfg(desktop)]
     let _ = fix_path_env::fix();
 
+    ctrlc::set_handler(|| std::process::exit(0)).ok();
+
     tauri::Builder::default()
         .setup(|app| {
             let app_data_dir = app
@@ -1477,6 +1672,7 @@ fn main() {
             get_tasks_for_project,
             get_worktree_for_task,
             start_implementation,
+            run_action,
             abort_implementation,
             refresh_jira_info,
             poll_pr_comments_now,
@@ -1509,4 +1705,87 @@ fn main() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_task_prompt_all_fields() {
+        let task = db::TaskRow {
+            id: "T-123".to_string(),
+            title: "Test Task".to_string(),
+            description: Some("This is a test description".to_string()),
+            acceptance_criteria: Some("- Must work\n- Must be tested".to_string()),
+            plan_text: Some("Step 1: Do this\nStep 2: Do that".to_string()),
+            status: "todo".to_string(),
+            jira_key: None,
+            jira_status: None,
+            jira_assignee: None,
+            project_id: None,
+            created_at: 0,
+            updated_at: 0,
+        };
+
+        let prompt = build_task_prompt(&task, "Do the thing!");
+        
+        assert!(prompt.contains("You are working on task T-123: Test Task"));
+        assert!(prompt.contains("This is a test description"));
+        assert!(prompt.contains("Acceptance Criteria:"));
+        assert!(prompt.contains("- Must work"));
+        assert!(prompt.contains("Plan:"));
+        assert!(prompt.contains("Step 1: Do this"));
+        assert!(prompt.ends_with("Do the thing!"));
+    }
+
+    #[test]
+    fn test_build_task_prompt_minimal_fields() {
+        let task = db::TaskRow {
+            id: "T-456".to_string(),
+            title: "Minimal Task".to_string(),
+            description: None,
+            acceptance_criteria: None,
+            plan_text: None,
+            status: "todo".to_string(),
+            jira_key: None,
+            jira_status: None,
+            jira_assignee: None,
+            project_id: None,
+            created_at: 0,
+            updated_at: 0,
+        };
+
+        let prompt = build_task_prompt(&task, "Execute now!");
+        
+        assert!(prompt.contains("You are working on task T-456: Minimal Task"));
+        assert!(!prompt.contains("Acceptance Criteria:"));
+        assert!(!prompt.contains("Plan:"));
+        assert!(prompt.ends_with("Execute now!"));
+    }
+
+    #[test]
+    fn test_build_task_prompt_empty_optional_fields() {
+        let task = db::TaskRow {
+            id: "T-789".to_string(),
+            title: "Empty Fields Task".to_string(),
+            description: Some("".to_string()),
+            acceptance_criteria: Some("".to_string()),
+            plan_text: Some("".to_string()),
+            status: "todo".to_string(),
+            jira_key: None,
+            jira_status: None,
+            jira_assignee: None,
+            project_id: None,
+            created_at: 0,
+            updated_at: 0,
+        };
+
+        let prompt = build_task_prompt(&task, "Run test!");
+        
+        assert!(prompt.contains("You are working on task T-789: Empty Fields Task"));
+        assert!(!prompt.contains("Acceptance Criteria:"));
+        assert!(!prompt.contains("Plan:"));
+        assert!(prompt.ends_with("Run test!"));
+    }
 }

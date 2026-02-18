@@ -42,7 +42,7 @@ pub struct AgentEventPayload {
     pub timestamp: u64,
 }
 
-/// Payload for implementation-complete event
+/// Payload for action-complete event
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct CompletionPayload {
     pub task_id: String,
@@ -195,20 +195,13 @@ impl SseBridgeManager {
                                     .and_then(|p| p.get("status"))
                                     .and_then(|s| s.get("type"))
                                     .and_then(|t| t.as_str()) == Some("idle") {
-                                    println!("[SSE] Session idle → emitting implementation-complete for task {}", task_id);
-
-                                    let db_state = app_clone.state::<std::sync::Mutex<db::Database>>();
-                                    if let Ok(db) = db_state.lock() {
-                                        if let Err(e) = db.update_task_status(&task_id, "in_review") {
-                                            eprintln!("[SSE] Failed to update task status to in_review: {}", e);
-                                        }
-                                    }
+                                    println!("[SSE] Session idle → emitting action-complete for task {}", task_id);
 
                                     let completion = CompletionPayload {
                                         task_id: task_id.clone(),
                                     };
-                                    if let Err(e) = app_clone.emit("implementation-complete", &completion) {
-                                        eprintln!("[SSE] Failed to emit implementation-complete: {}", e);
+                                    if let Err(e) = app_clone.emit("action-complete", &completion) {
+                                        eprintln!("[SSE] Failed to emit action-complete: {}", e);
                                     }
                                 } else if real_event_type == "session.error" {
                                     println!("[SSE] Session error → emitting implementation-failed for task {}", task_id);

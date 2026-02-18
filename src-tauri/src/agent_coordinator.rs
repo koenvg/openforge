@@ -1,9 +1,8 @@
 //! Agent Coordinator
 //!
-//! Simplified coordinator that replaces the old checkpoint-based orchestrator.
-//! Creates an OpenCode session, sends a fire-and-forget prompt, and lets SSE handle the rest.
-//!
-//! No stages, no checkpoints — just start implementation and monitor via SSE events.
+//! DEPRECATED: This module is no longer actively used. Implementation logic has been moved to main.rs.
+//! Kept for backward compatibility and potential future use.
+//! See main.rs: start_implementation and run_action commands.
 
 use crate::db::Database;
 use crate::opencode_client::{OpenCodeClient, OpenCodeError};
@@ -55,168 +54,59 @@ impl From<OpenCodeError> for CoordinatorError {
 
 /// Start implementation for a task
 ///
-/// Creates an OpenCode session, builds a prompt from task context, and sends it asynchronously.
-/// Returns the agent session ID for tracking.
-///
-/// # Arguments
-/// * `db` - Database reference
-/// * `app` - Tauri app handle (unused for now, kept for future event emission)
-/// * `task_id` - Task ID to implement
-/// * `server_port` - OpenCode server port
-///
-/// # Returns
-/// Agent session ID on success
+/// DEPRECATED: This function is no longer used. See main.rs start_implementation command instead.
+/// Kept for backward compatibility.
 pub async fn start_implementation(
-    db: &Database,
-    app: &tauri::AppHandle,
-    task_id: &str,
-    server_port: u16,
+    _db: &Database,
+    _app: &tauri::AppHandle,
+    _task_id: &str,
+    _server_port: u16,
 ) -> Result<String, CoordinatorError> {
-    let task = db
-        .get_task(task_id)?
-        .ok_or_else(|| CoordinatorError::TaskNotFound(format!("Task {} not found", task_id)))?;
-
-    let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", server_port));
-
-    let opencode_session_id = client
-        .create_session(format!("Task {}", task_id))
-        .await
-        .map_err(|e| CoordinatorError::SessionCreationFailed(e.to_string()))?;
-
-    let mut prompt = format!("You are working on task {}: {}\n\n", task_id, task.title);
-
-    if let Some(ref description) = task.description {
-        if !description.is_empty() {
-            prompt.push_str(description);
-            prompt.push_str("\n\n");
-        }
-    }
-
-    if let Some(ref acceptance_criteria) = task.acceptance_criteria {
-        if !acceptance_criteria.is_empty() {
-            prompt.push_str("Acceptance Criteria:\n");
-            prompt.push_str(acceptance_criteria);
-            prompt.push_str("\n\n");
-        }
-    }
-
-    prompt.push_str(
-        "Implement this task. Create a branch, make the changes, and create a pull request when done.",
-    );
-
-    client
-        .prompt_async(&opencode_session_id, prompt, None)
-        .await
-        .map_err(|e| CoordinatorError::PromptFailed(e.to_string()))?;
-
-    let agent_session_id = uuid::Uuid::new_v4().to_string();
-    db.create_agent_session(
-        &agent_session_id,
-        task_id,
-        Some(&opencode_session_id),
-        "implementing",
-        "running",
-    )?;
-
-    let _ = app;
-
-    Ok(agent_session_id)
+    Err(CoordinatorError::PromptFailed(
+        "start_implementation is deprecated. Use main.rs start_implementation command instead.".to_string(),
+    ))
 }
 
 /// Abort implementation for a task
 ///
-/// Finds the latest running agent session for the task and aborts the OpenCode session.
-///
-/// # Arguments
-/// * `db` - Database reference
-/// * `app` - Tauri app handle (unused for now, kept for future event emission)
-/// * `task_id` - Task ID to abort
-/// * `server_port` - OpenCode server port
-///
-/// # Returns
-/// Ok on success
+/// DEPRECATED: This function is no longer used. See main.rs abort_implementation command instead.
+/// Kept for backward compatibility.
 pub async fn abort_implementation(
-    db: &Database,
-    app: &tauri::AppHandle,
-    task_id: &str,
-    server_port: u16,
+    _db: &Database,
+    _app: &tauri::AppHandle,
+    _task_id: &str,
+    _server_port: u16,
 ) -> Result<(), CoordinatorError> {
-    let session = db
-        .get_latest_session_for_ticket(task_id)?
-        .ok_or_else(|| {
-            CoordinatorError::TaskNotFound(format!("No session found for task {}", task_id))
-        })?;
-
-    let opencode_session_id = session.opencode_session_id.ok_or_else(|| {
-        CoordinatorError::AbortFailed(format!("Session {} has no OpenCode session ID", session.id))
-    })?;
-
-    let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", server_port));
-
-    client
-        .abort_session(&opencode_session_id)
-        .await
-        .map_err(|e| CoordinatorError::AbortFailed(e.to_string()))?;
-
-    db.update_agent_session(&session.id, "implementing", "failed", None, Some("Aborted by user"))?;
-
-    let _ = app;
-
-    Ok(())
+    Err(CoordinatorError::AbortFailed(
+        "abort_implementation is deprecated. Use main.rs abort_implementation command instead.".to_string(),
+    ))
 }
 
 /// Handle implementation completion
 ///
-/// Called when SSE detects that the agent has completed the task.
-/// Updates the agent session status to "completed".
-///
-/// # Arguments
-/// * `db` - Database reference
-/// * `task_id` - Task ID that completed
-///
-/// # Returns
-/// Ok on success
+/// DEPRECATED: This function is no longer used. SSE event handling is now in sse_bridge.rs.
+/// Kept for backward compatibility.
 pub async fn handle_implementation_complete(
-    db: &Database,
-    task_id: &str,
+    _db: &Database,
+    _task_id: &str,
 ) -> Result<(), CoordinatorError> {
-    let session = db
-        .get_latest_session_for_ticket(task_id)?
-        .ok_or_else(|| {
-            CoordinatorError::TaskNotFound(format!("No session found for task {}", task_id))
-        })?;
-
-    db.update_agent_session(&session.id, &session.stage, "completed", None, None)?;
-
-    Ok(())
+    Err(CoordinatorError::PromptFailed(
+        "handle_implementation_complete is deprecated.".to_string(),
+    ))
 }
 
 /// Handle implementation failure
 ///
-/// Called when SSE detects that the agent has failed.
-/// Updates the agent session status to "failed" with error message.
-///
-/// # Arguments
-/// * `db` - Database reference
-/// * `task_id` - Task ID that failed
-/// * `error` - Error message
-///
-/// # Returns
-/// Ok on success
+/// DEPRECATED: This function is no longer used. SSE event handling is now in sse_bridge.rs.
+/// Kept for backward compatibility.
 pub async fn handle_implementation_failed(
-    db: &Database,
-    task_id: &str,
-    error: &str,
+    _db: &Database,
+    _task_id: &str,
+    _error: &str,
 ) -> Result<(), CoordinatorError> {
-    let session = db
-        .get_latest_session_for_ticket(task_id)?
-        .ok_or_else(|| {
-            CoordinatorError::TaskNotFound(format!("No session found for task {}", task_id))
-        })?;
-
-    db.update_agent_session(&session.id, &session.stage, "failed", None, Some(error))?;
-
-    Ok(())
+    Err(CoordinatorError::PromptFailed(
+        "handle_implementation_failed is deprecated.".to_string(),
+    ))
 }
 
 // ============================================================================
