@@ -7,15 +7,15 @@ Manages JIRA tickets on a Kanban board with AI agent orchestration via OpenCode.
 
 ```bash
 # Frontend
-npm run dev              # Vite dev server (port 1420)
-npm run build            # Vite production build
-npm run test             # vitest run (all frontend tests)
-npx vitest run src/components/Toast.test.ts          # single test file
-npx vitest run -t "renders ticket id"                # single test by name
+pnpm dev                 # Vite dev server (port 1420)
+pnpm build               # Vite production build
+pnpm test                # vitest run (all frontend tests)
+pnpm vitest run src/components/Toast.test.ts         # single test file
+pnpm vitest run -t "renders ticket id"               # single test by name
 
 # Tauri (full desktop app)
-npm run tauri:dev        # Dev mode (starts Vite + Rust)
-npm run tauri:build      # Production build
+pnpm tauri:dev           # Dev mode (starts Vite + Rust)
+pnpm tauri:build         # Production build
 
 # Rust backend (run from src-tauri/)
 cargo build              # Build backend
