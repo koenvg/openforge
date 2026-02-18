@@ -236,3 +236,38 @@
 - `pnpm build` passed with 0 new TypeScript/Svelte errors
 - 196 modules transformed (same count as previous waves)
 - All warnings are pre-existing in other files
+
+## SelfReviewView Component (Wave 2 - T9)
+
+### Layout Architecture
+- Outer wrapper `.self-review-view`: `display: flex; flex-direction: column; height: 100%; overflow: hidden`
+- `.review-content`: `display: flex; flex: 1; overflow: hidden` — holds loading/error/empty/detail states
+- `.detail-content`: `display: flex; flex: 1; overflow: hidden` — three-column flex row (FileTree | DiffViewer | sidebar)
+- `.sidebar-container`: `width: 280px; flex-shrink: 0; border-left: 1px solid var(--border)` — wraps GeneralCommentsSidebar
+- `SendToAgentPanel` placed directly after `.review-content` at the bottom (not inside it)
+
+### Store Initialization Pattern
+- On mount: load all data, then populate stores (diff → general comments → archived → inline)
+- Inline comments from DB converted to `ReviewSubmissionComment[]`: `{ path: c.file_path!, line: c.line_number!, body: c.body, side: 'RIGHT' }`
+- `!` non-null assertions safe because `comment_type === 'inline'` guarantees file_path + line_number are set
+- `$pendingManualComments` cleared implicitly by assignment (fresh start)
+
+### Store Cleanup on Destroy
+- `onDestroy` clears all 4 stores: `selfReviewDiffFiles`, `selfReviewGeneralComments`, `selfReviewArchivedComments`, `pendingManualComments`
+- Prevents cross-view contamination (stores are shared between PrReviewView and SelfReviewView)
+
+### Svelte 5 Runes - bind:this Pattern
+- `let diffViewer = $state<DiffViewer>()` — typed with component type, initially undefined
+- `bind:this={diffViewer}` on the DiffViewer component
+- Guard `if (diffViewer)` before calling `diffViewer.scrollToFile(filename)`
+
+### Props Pattern
+- Interface declaration inside `<script lang="ts">` block
+- `let { task, agentStatus, onSendToAgent }: Props = $props()`
+- `{agentStatus}` shorthand for `agentStatus={agentStatus}` when prop and variable names match
+- `onRefresh={handleRefresh}` — passes function as prop for child to call
+
+### Build Verification
+- `pnpm build` passed: 196 modules transformed, 0 TypeScript/Svelte errors
+- All warnings are pre-existing (a11y, unused CSS in other files)
+- Module count unchanged (component not yet imported anywhere — wired up by TaskDetailView in separate task)
