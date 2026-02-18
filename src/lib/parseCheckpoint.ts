@@ -1,5 +1,5 @@
 export function parseCheckpointQuestion(checkpointData: string | null): string | null {
-  if (!checkpointData) {
+  if (checkpointData === null || checkpointData === undefined || checkpointData === '') {
     return null;
   }
 
@@ -16,10 +16,7 @@ export function parseCheckpointQuestion(checkpointData: string | null): string |
       parsed.properties?.description,
       parsed.properties?.title,
       parsed.properties?.permission?.description,
-      parsed.properties?.permission?.title,
       parsed.properties?.message,
-      parsed.description,
-      parsed.title,
       parsed.message,
     ];
 
