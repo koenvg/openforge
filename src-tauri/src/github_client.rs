@@ -389,7 +389,9 @@ impl GitHubClient {
         Ok(prs)
     }
 
-    /// Get check runs for a commit
+    /// Get all check runs for a commit (paginated)
+    ///
+    /// Fetches all pages of check runs to ensure none are missed.
     ///
     /// # Arguments
     /// * `owner` - Repository owner
@@ -398,7 +400,7 @@ impl GitHubClient {
     /// * `token` - GitHub Personal Access Token
     ///
     /// # Returns
-    /// CheckRunsResponse with list of check runs
+    /// CheckRunsResponse with complete list of check runs
     pub async fn get_check_runs(
         &self,
         owner: &str,
@@ -406,48 +408,72 @@ impl GitHubClient {
         sha: &str,
         token: &str,
     ) -> Result<CheckRunsResponse, GitHubError> {
-        let url = format!(
-            "https://api.github.com/repos/{}/{}/commits/{}/check-runs?per_page=100",
-            owner, repo, sha
-        );
+        let mut all_check_runs: Vec<CheckRun> = Vec::new();
+        let mut page = 1u32;
+        let per_page = 100;
 
-        let response = self
-            .client
-            .get(&url)
-            .header("Authorization", format!("token {}", token))
-            .header("User-Agent", "ai-command-center")
-            .send()
-            .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
-        }
-
-        let check_runs: CheckRunsResponse = response
-            .json()
-            .await
-            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
-
-        if check_runs.total_count > 100 {
-            eprintln!(
-                "[GitHub] PR has {} check runs, only first 100 fetched",
-                check_runs.total_count
+        loop {
+            let url = format!(
+                "https://api.github.com/repos/{}/{}/commits/{}/check-runs?per_page={}&page={}",
+                owner, repo, sha, per_page, page
             );
+
+            let response = self
+                .client
+                .get(&url)
+                .header("Authorization", format!("token {}", token))
+                .header("User-Agent", "ai-command-center")
+                .send()
+                .await
+                .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let body = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unable to read response body".to_string());
+                return Err(GitHubError::ApiError {
+                    status: status.as_u16(),
+                    message: body,
+                });
+            }
+
+            let page_response: CheckRunsResponse = response
+                .json()
+                .await
+                .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+
+            let total_count = page_response.total_count;
+            all_check_runs.extend(page_response.check_runs);
+
+            if all_check_runs.len() >= total_count {
+                break;
+            }
+
+            page += 1;
+
+            // Safety: cap at 10 pages (1000 check runs) to avoid infinite loops
+            if page > 10 {
+                eprintln!(
+                    "[GitHub] Capped check runs pagination at 10 pages ({} of {} fetched)",
+                    all_check_runs.len(),
+                    total_count
+                );
+                break;
+            }
         }
 
-        Ok(check_runs)
+        let total_count = all_check_runs.len();
+        Ok(CheckRunsResponse {
+            total_count,
+            check_runs: all_check_runs,
+        })
     }
 
-    /// Get combined status for a commit
+    /// Get combined status for a commit (paginated)
+    ///
+    /// Fetches all pages of commit statuses to ensure none are missed.
     ///
     /// # Arguments
     /// * `owner` - Repository owner
@@ -456,7 +482,7 @@ impl GitHubClient {
     /// * `token` - GitHub Personal Access Token
     ///
     /// # Returns
-    /// CombinedStatusResponse with commit status information
+    /// CombinedStatusResponse with complete commit status information
     pub async fn get_combined_status(
         &self,
         owner: &str,
@@ -464,38 +490,78 @@ impl GitHubClient {
         sha: &str,
         token: &str,
     ) -> Result<CombinedStatusResponse, GitHubError> {
-        let url = format!(
-            "https://api.github.com/repos/{}/{}/commits/{}/status",
-            owner, repo, sha
-        );
+        let mut all_statuses: Vec<CommitStatusEntry> = Vec::new();
+        let mut result_state = String::new();
+        let mut result_sha = String::new();
+        let mut result_extra = serde_json::Value::Object(serde_json::Map::new());
+        let mut page = 1u32;
+        let per_page = 100;
 
-        let response = self
-            .client
-            .get(&url)
-            .header("Authorization", format!("token {}", token))
-            .header("User-Agent", "ai-command-center")
-            .send()
-            .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+        loop {
+            let url = format!(
+                "https://api.github.com/repos/{}/{}/commits/{}/status?per_page={}&page={}",
+                owner, repo, sha, per_page, page
+            );
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
+            let response = self
+                .client
+                .get(&url)
+                .header("Authorization", format!("token {}", token))
+                .header("User-Agent", "ai-command-center")
+                .send()
                 .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
+                .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let body = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unable to read response body".to_string());
+                return Err(GitHubError::ApiError {
+                    status: status.as_u16(),
+                    message: body,
+                });
+            }
+
+            let page_response: CombinedStatusResponse = response
+                .json()
+                .await
+                .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+
+            if page == 1 {
+                result_state = page_response.state;
+                result_sha = page_response.sha;
+                result_extra = page_response.extra;
+            }
+
+            let total_count = page_response.total_count;
+            all_statuses.extend(page_response.statuses);
+
+            if all_statuses.len() >= total_count || total_count == 0 {
+                break;
+            }
+
+            page += 1;
+
+            // Safety: cap at 10 pages (1000 statuses) to avoid infinite loops
+            if page > 10 {
+                eprintln!(
+                    "[GitHub] Capped combined status pagination at 10 pages ({} of {} fetched)",
+                    all_statuses.len(),
+                    total_count
+                );
+                break;
+            }
         }
 
-        let combined_status: CombinedStatusResponse = response
-            .json()
-            .await
-            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
-
-        Ok(combined_status)
+        Ok(CombinedStatusResponse {
+            state: result_state,
+            statuses: all_statuses,
+            sha: result_sha,
+            total_count: 0,
+            extra: result_extra,
+        })
     }
 
     /// Get authenticated user's login
