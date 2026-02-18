@@ -1396,6 +1396,16 @@ fn main() {
 
             let database = db::Database::new(db_path).expect("Failed to initialize database");
 
+            match database.mark_running_sessions_interrupted() {
+                Ok(count) if count > 0 => {
+                    println!("[startup] Marked {} stale running sessions as interrupted", count);
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("[startup] Failed to mark stale sessions: {}", e);
+                }
+            }
+
             app.manage(Mutex::new(database));
 
             println!("Database initialized successfully");

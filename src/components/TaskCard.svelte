@@ -31,7 +31,7 @@
   $: needsInput = session?.status === 'paused' && session?.checkpoint_data !== null
 </script>
 
-<button class="card" class:running={statusClass === 'running'} class:paused={statusClass === 'paused'} class:failed={statusClass === 'failed'} class:needs-input={needsInput} on:click={handleClick}>
+<button class="card" class:running={statusClass === 'running'} class:paused={statusClass === 'paused'} class:failed={statusClass === 'failed'} class:interrupted={statusClass === 'interrupted'} class:needs-input={needsInput} on:click={handleClick}>
   <div class="card-header">
     <div class="id-row">
       <span class="task-id">{task.id}</span>
@@ -55,6 +55,8 @@
         Awaiting approval
       {:else if session.status === 'failed'}
         {session.error_message || 'Error'}
+      {:else if session.status === 'interrupted'}
+        Interrupted
       {:else if session.status === 'completed'}
         Completed
       {/if}
@@ -111,6 +113,10 @@
 
   .card.failed {
     border-left: 3px solid var(--error);
+  }
+
+  .card.interrupted {
+    border-left: 3px solid var(--text-secondary);
   }
 
   .card.needs-input {
@@ -187,6 +193,10 @@
 
   .status-dot.failed {
     background: var(--error);
+  }
+
+  .status-dot.interrupted {
+    background: var(--text-secondary);
   }
 
   @keyframes pulse {

@@ -84,9 +84,7 @@
       const sessions = await getLatestSessions(taskIds)
       const updated = new Map($activeSessions)
       for (const session of sessions) {
-        if (session.status === 'completed' || session.status === 'failed' || session.status === 'paused') {
-          updated.set(session.ticket_id, session)
-        }
+        updated.set(session.ticket_id, session)
       }
       $activeSessions = updated
     } catch (e) {
