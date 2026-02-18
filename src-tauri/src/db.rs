@@ -1562,6 +1562,20 @@ impl Database {
         Ok(conn.changes() as usize)
     }
 
+    /// Clear stale OpenCode server port/pid from all worktrees on app startup
+    pub fn clear_stale_worktree_servers(&self) -> Result<usize> {
+        let conn = self.conn.lock().unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs() as i64;
+        conn.execute(
+            "UPDATE worktrees SET opencode_port = NULL, opencode_pid = NULL, updated_at = ?1 WHERE opencode_port IS NOT NULL",
+            rusqlite::params![now],
+        )?;
+        Ok(conn.changes() as usize)
+    }
+
     pub fn mark_comments_addressed(&self, ids: &[i64]) -> Result<()> {
         if ids.is_empty() {
             return Ok(());
@@ -2350,6 +2364,91 @@ mod tests {
 
         let count2 = db
             .mark_running_sessions_interrupted()
+            .expect("second call failed");
+        assert_eq!(count2, 0);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_clear_stale_worktree_servers() {
+        let (db, path) = make_test_db("clear_stale_servers");
+
+        // Create a project (required FK for worktrees)
+        let project = db
+            .create_project("Test Project", "/tmp/test")
+            .expect("create project failed");
+
+        // Create task T-100
+        insert_test_task(&db);
+
+        // Create worktree for T-100 and set port
+        db.create_worktree_record("T-100", &project.id, "/tmp/repo", "/tmp/wt1", "branch-1")
+            .expect("create wt1 failed");
+        db.update_worktree_server("T-100", 12345, 0)
+            .expect("set port 1 failed");
+
+        // Create task T-200
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO tasks (id, title, status, jira_key, jira_status, jira_assignee, plan_text, project_id, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            rusqlite::params!["T-200", "Test task 2", "backlog", "PROJ-200", "To Do", "bob", None::<String>, None::<String>, 1000, 1000],
+        ).expect("Failed to insert test task T-200");
+        drop(conn);
+
+        // Create worktree for T-200 and set port
+        db.create_worktree_record("T-200", &project.id, "/tmp/repo", "/tmp/wt2", "branch-2")
+            .expect("create wt2 failed");
+        db.update_worktree_server("T-200", 54321, 0)
+            .expect("set port 2 failed");
+
+        // Create task T-300
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO tasks (id, title, status, jira_key, jira_status, jira_assignee, plan_text, project_id, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            rusqlite::params!["T-300", "Test task 3", "backlog", "PROJ-300", "To Do", "charlie", None::<String>, None::<String>, 1000, 1000],
+        ).expect("Failed to insert test task T-300");
+        drop(conn);
+
+        // Create worktree for T-300 WITHOUT setting port (already NULL)
+        db.create_worktree_record("T-300", &project.id, "/tmp/repo", "/tmp/wt3", "branch-3")
+            .expect("create wt3 failed");
+
+        // Call clear_stale_worktree_servers, should clear 2 worktrees
+        let count = db
+            .clear_stale_worktree_servers()
+            .expect("clear_stale_worktree_servers failed");
+        assert_eq!(count, 2);
+
+        // Verify T-100 worktree is cleared
+        let wt1 = db
+            .get_worktree_for_task("T-100")
+            .expect("get wt1 failed")
+            .expect("wt1 not found");
+        assert_eq!(wt1.opencode_port, None);
+        assert_eq!(wt1.opencode_pid, None);
+
+        // Verify T-200 worktree is cleared
+        let wt2 = db
+            .get_worktree_for_task("T-200")
+            .expect("get wt2 failed")
+            .expect("wt2 not found");
+        assert_eq!(wt2.opencode_port, None);
+        assert_eq!(wt2.opencode_pid, None);
+
+        // Verify T-300 worktree is still NULL (was already NULL)
+        let wt3 = db
+            .get_worktree_for_task("T-300")
+            .expect("get wt3 failed")
+            .expect("wt3 not found");
+        assert_eq!(wt3.opencode_port, None);
+
+        // Call again, should return 0 (idempotent)
+        let count2 = db
+            .clear_stale_worktree_servers()
             .expect("second call failed");
         assert_eq!(count2, 0);
 
