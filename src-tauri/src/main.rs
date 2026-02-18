@@ -1734,7 +1734,7 @@ async fn resume_task_servers(app: tauri::AppHandle) {
                 }
 
                 if let Err(e) = sse_mgr
-                    .start_bridge(app.clone(), worktree.task_id.clone(), port)
+                    .start_bridge(app.clone(), worktree.task_id.clone(), None, port)
                     .await
                 {
                     eprintln!(
