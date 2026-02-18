@@ -12,6 +12,7 @@ mod server_manager;
 mod sse_bridge;
 mod pty_manager;
 mod agent_coordinator;
+mod diff_parser;
 
 use std::sync::Mutex;
 use tauri::{Manager, State, Emitter};
@@ -1570,6 +1571,102 @@ async fn submit_pr_review(
 }
 
 // ============================================================================
+// Self-Review Commands
+// ============================================================================
+
+#[tauri::command]
+async fn get_task_diff(
+    task_id: String,
+    db: State<'_, Mutex<db::Database>>,
+) -> Result<Vec<diff_parser::TaskFileDiff>, String> {
+    let worktree_path = {
+        let db = db.lock().unwrap();
+        let row = db
+            .get_worktree_for_task(&task_id)
+            .map_err(|e| format!("Failed to get worktree for task: {}", e))?;
+        row.ok_or_else(|| format!("No worktree found for task {}", task_id))?
+            .worktree_path
+    };
+
+    let output = tokio::process::Command::new("git")
+        .arg("-C")
+        .arg(&worktree_path)
+        .arg("diff")
+        .arg("origin/main...HEAD")
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run git diff: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("git diff failed: {}", stderr));
+    }
+
+    let diff_output = String::from_utf8_lossy(&output.stdout);
+    Ok(diff_parser::parse_unified_diff(&diff_output))
+}
+
+#[tauri::command]
+async fn add_self_review_comment(
+    task_id: String,
+    comment_type: String,
+    file_path: Option<String>,
+    line_number: Option<i32>,
+    body: String,
+    db: State<'_, Mutex<db::Database>>,
+) -> Result<i64, String> {
+    let db = db.lock().unwrap();
+    db.insert_self_review_comment(
+        &task_id,
+        &comment_type,
+        file_path.as_deref(),
+        line_number,
+        &body,
+    )
+    .map_err(|e| format!("Failed to add self review comment: {}", e))
+}
+
+#[tauri::command]
+async fn get_active_self_review_comments(
+    task_id: String,
+    db: State<'_, Mutex<db::Database>>,
+) -> Result<Vec<db::SelfReviewCommentRow>, String> {
+    let db = db.lock().unwrap();
+    db.get_active_self_review_comments(&task_id)
+        .map_err(|e| format!("Failed to get active self review comments: {}", e))
+}
+
+#[tauri::command]
+async fn get_archived_self_review_comments(
+    task_id: String,
+    db: State<'_, Mutex<db::Database>>,
+) -> Result<Vec<db::SelfReviewCommentRow>, String> {
+    let db = db.lock().unwrap();
+    db.get_archived_self_review_comments(&task_id)
+        .map_err(|e| format!("Failed to get archived self review comments: {}", e))
+}
+
+#[tauri::command]
+async fn delete_self_review_comment(
+    comment_id: i64,
+    db: State<'_, Mutex<db::Database>>,
+) -> Result<(), String> {
+    let db = db.lock().unwrap();
+    db.delete_self_review_comment(comment_id)
+        .map_err(|e| format!("Failed to delete self review comment: {}", e))
+}
+
+#[tauri::command]
+async fn archive_self_review_comments(
+    task_id: String,
+    db: State<'_, Mutex<db::Database>>,
+) -> Result<(), String> {
+    let db = db.lock().unwrap();
+    db.archive_self_review_comments(&task_id)
+        .map_err(|e| format!("Failed to archive self review comments: {}", e))
+}
+
+// ============================================================================
 // Response Types
 // ============================================================================
 
@@ -1816,7 +1913,13 @@ fn main() {
             pty_spawn,
             pty_write,
             pty_resize,
-            pty_kill
+            pty_kill,
+            get_task_diff,
+            add_self_review_comment,
+            get_active_self_review_comments,
+            get_archived_self_review_comments,
+            delete_self_review_comment,
+            archive_self_review_comments
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
