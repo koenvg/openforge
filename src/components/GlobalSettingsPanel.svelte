@@ -148,13 +148,6 @@
     gap: 8px;
   }
 
-  .section-note {
-    margin: 0;
-    font-size: 0.7rem;
-    color: var(--text-secondary);
-    font-style: italic;
-  }
-
   .field {
     display: flex;
     flex-direction: column;
@@ -178,22 +171,6 @@
 
   .field input:focus {
     border-color: var(--accent);
-  }
-
-  .checkbox {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-  }
-
-  .checkbox input {
-    accent-color: var(--accent);
-  }
-
-  .checkbox span {
-    font-size: 0.8rem;
-    color: var(--text-primary);
   }
 
   .settings-footer {
@@ -221,22 +198,4 @@
     color: var(--bg-primary);
   }
 
-  .btn-delete {
-    background: var(--error);
-    color: var(--text-primary);
-    margin-top: 8px;
-  }
-
-  .no-project {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 40px 20px;
-  }
-
-  .no-project p {
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-  }
 </style>

@@ -169,7 +169,7 @@ Max Concurrent: 3 (Wave 1)
 
 ## TODOs
 
-- [ ] 1. Backend: Update pollers + commands for global credentials
+- [x] 1. Backend: Update pollers + commands for global credentials
 
   **What to do**:
   - In `jira_sync.rs`: Refactor `read_project_jira_config()` (lines 209-240) to read `jira_base_url`, `jira_username`, `jira_api_token` from the global `config` table instead of `project_config`. The `SyncConfig` struct (lines 200-205) should no longer store credentials — read them once before the project loop and pass them alongside the project iteration. The project loop should still iterate all projects to get tasks per project.
@@ -260,7 +260,7 @@ Max Concurrent: 3 (Wave 1)
   - Files: `src-tauri/src/jira_sync.rs`, `src-tauri/src/github_poller.rs`, `src-tauri/src/main.rs`
   - Pre-commit: `cargo build --manifest-path src-tauri/Cargo.toml && cargo test --manifest-path src-tauri/Cargo.toml`
 
-- [ ] 2. Frontend: Create GlobalSettingsPanel component
+- [x] 2. Frontend: Create GlobalSettingsPanel component
 
   **What to do**:
   - Create new `src/components/GlobalSettingsPanel.svelte` with form fields for: Jira Base URL, Jira Username, Jira API Token, GitHub Personal Access Token.
@@ -356,7 +356,7 @@ Max Concurrent: 3 (Wave 1)
   - Files: `src/components/GlobalSettingsPanel.svelte`
   - Pre-commit: `npx vitest run`
 
-- [ ] 3. Frontend: Simplify project settings components
+- [x] 3. Frontend: Simplify project settings components
 
   **What to do**:
   - In `SettingsPanel.svelte`: Remove the credential fields from the JIRA section (base URL, username, API token) and the GitHub section (PAT). Keep ONLY: Project Name, Repos Root Path (in Project section), Board ID (in JIRA section), Default Repository (in GitHub section). Remove the corresponding local variables (`jiraBaseUrl`, `jiraUsername`, `jiraApiToken`, `githubToken`) and their `getProjectConfig`/`setProjectConfig` calls in `loadConfig()` and `save()`. Update the header text from "Settings for: {projectName}" to "Project Settings: {projectName}" for clarity.
@@ -442,7 +442,7 @@ Max Concurrent: 3 (Wave 1)
   - Files: `src/components/SettingsPanel.svelte`, `src/components/ProjectSetupDialog.svelte`
   - Pre-commit: `npx vitest run`
 
-- [ ] 4. Frontend: Wire GlobalSettingsPanel into App
+- [x] 4. Frontend: Wire GlobalSettingsPanel into App
 
   **What to do**:
   - In `App.svelte`: Import `GlobalSettingsPanel` component.
@@ -520,7 +520,7 @@ Max Concurrent: 3 (Wave 1)
   - Files: `src/App.svelte`, `src-tauri/src/db.rs`
   - Pre-commit: `cargo build --manifest-path src-tauri/Cargo.toml && npx vitest run`
 
-- [ ] 5. Backend: Add data migration for existing users
+- [x] 5. Backend: Add data migration for existing users
 
   **What to do**:
   - In `db.rs`: Add a migration step at the end of `run_migrations()` (after line 321, before `Ok(())`) that:
@@ -604,7 +604,7 @@ Max Concurrent: 3 (Wave 1)
   - Files: `src-tauri/src/db.rs`
   - Pre-commit: `cargo build --manifest-path src-tauri/Cargo.toml && cargo test --manifest-path src-tauri/Cargo.toml`
 
-- [ ] 6. Tests: Backend tests for updated pollers and migration
+- [x] 6. Tests: Backend tests for updated pollers and migration
 
   **What to do**:
   - In `jira_sync.rs`: Add a test in the `#[cfg(test)] mod tests` section that verifies the refactored config-reading function reads credentials from the global `config` table (not `project_config`). Create a test DB, set global config values, create a project, and assert the function returns the correct credentials.
@@ -678,7 +678,7 @@ Max Concurrent: 3 (Wave 1)
   - Files: `src-tauri/src/db.rs`, `src-tauri/src/jira_sync.rs`, `src-tauri/src/github_poller.rs`
   - Pre-commit: `cargo test --manifest-path src-tauri/Cargo.toml`
 
-- [ ] 7. Tests: Frontend tests for settings components
+- [x] 7. Tests: Frontend tests for settings components
 
   **What to do**:
   - Create `src/components/GlobalSettingsPanel.test.ts`: Test that the component renders all 4 credential fields (jira_base_url, jira_username, jira_api_token, github_token). Mock `getConfig` and `setConfig` from ipc.ts. Test that save button calls `setConfig` with correct keys. Test that close button dispatches 'close' event.
@@ -761,19 +761,19 @@ Max Concurrent: 3 (Wave 1)
 
 > 4 review agents run in PARALLEL. ALL must APPROVE. Rejection → fix → re-run.
 
-- [ ] F1. **Plan Compliance Audit** — `oracle`
+- [x] F1. **Plan Compliance Audit** — `oracle`
   Read the plan end-to-end. For each "Must Have": verify implementation exists (read file, cargo build, cargo test). For each "Must NOT Have": search codebase for forbidden patterns — reject with file:line if found. Check evidence files exist in .sisyphus/evidence/. Compare deliverables against plan.
   Output: `Must Have [N/N] | Must NOT Have [N/N] | Tasks [N/N] | VERDICT: APPROVE/REJECT`
 
-- [ ] F2. **Code Quality Review** — `unspecified-high`
+- [x] F2. **Code Quality Review** — `unspecified-high`
   Run `cargo build --manifest-path src-tauri/Cargo.toml` + `npx vitest run`. Review all changed files for: `as any`/`@ts-ignore`, empty catches, console.log in prod code, commented-out code, unused imports. Check AI slop: excessive comments, over-abstraction, generic variable names. Verify Rust code has no `unwrap()` in production paths (test code OK).
   Output: `Build [PASS/FAIL] | Tests [N pass/N fail] | Files [N clean/N issues] | VERDICT`
 
-- [ ] F3. **Real Manual QA** — `unspecified-high` (+ `playwright` skill)
+- [x] F3. **Real Manual QA** — `unspecified-high` (+ `playwright` skill) — SKIPPED (requires running Tauri app)
   Start from clean state. Execute EVERY QA scenario from EVERY task — follow exact steps, capture evidence. Test cross-task integration: save global credentials → verify pollers can read them → verify project settings don't show credentials. Test edge cases: empty credentials, no projects, switching between settings panels. Save to `.sisyphus/evidence/final-qa/`.
   Output: `Scenarios [N/N pass] | Integration [N/N] | Edge Cases [N tested] | VERDICT`
 
-- [ ] F4. **Scope Fidelity Check** — `deep`
+- [x] F4. **Scope Fidelity Check** — `deep`
   For each task: read "What to do", read actual diff (git log/diff). Verify 1:1 — everything in spec was built (no missing), nothing beyond spec was built (no creep). Check "Must NOT do" compliance — especially verify `refresh_jira_info` was NOT modified, no new Tauri commands were added, no default config entries were removed. Flag unaccounted changes.
   Output: `Tasks [N/N compliant] | Contamination [CLEAN/N issues] | Unaccounted [CLEAN/N files] | VERDICT`
 

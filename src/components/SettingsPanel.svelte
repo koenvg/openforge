@@ -185,13 +185,6 @@
     gap: 8px;
   }
 
-  .section-note {
-    margin: 0;
-    font-size: 0.7rem;
-    color: var(--text-secondary);
-    font-style: italic;
-  }
-
   .field {
     display: flex;
     flex-direction: column;
@@ -215,22 +208,6 @@
 
   .field input:focus {
     border-color: var(--accent);
-  }
-
-  .checkbox {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-  }
-
-  .checkbox input {
-    accent-color: var(--accent);
-  }
-
-  .checkbox span {
-    font-size: 0.8rem;
-    color: var(--text-primary);
   }
 
   .settings-footer {
