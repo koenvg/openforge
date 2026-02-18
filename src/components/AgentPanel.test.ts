@@ -226,4 +226,32 @@ describe('AgentPanel', () => {
     render(AgentPanel, { props: { taskId: 'T-1' } })
     expect(screen.queryByText('Agent is waiting for input')).toBeNull()
   })
+
+  it('shows question text from question.asked event format', () => {
+    const session: AgentSession = {
+      id: 'ses-1',
+      ticket_id: 'T-1',
+      opencode_session_id: null,
+      stage: 'implement',
+      status: 'paused',
+      checkpoint_data: JSON.stringify({
+        type: 'question.asked',
+        properties: {
+          id: 'que_abc',
+          sessionID: 'ses_xyz',
+          questions: [{ question: 'Run or Bike?', header: 'Run or Bike', options: [] }]
+        }
+      }),
+      error_message: null,
+      created_at: 1000,
+      updated_at: 2000,
+    }
+
+    const sessions = new Map<string, AgentSession>()
+    sessions.set('T-1', session)
+    activeSessions.set(sessions)
+
+    render(AgentPanel, { props: { taskId: 'T-1' } })
+    expect(screen.getByText('Run or Bike?')).toBeTruthy()
+  })
 })

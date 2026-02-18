@@ -260,28 +260,25 @@
           if ($checkpointNotification?.ticketId === taskId) {
             $checkpointNotification = null
           }
-        } else if (eventType === 'permission.updated') {
-          // Agent is blocked waiting for user approval
-          console.log('[session] SSE permission.updated for task:', taskId)
+        } else if (eventType === 'permission.updated' || eventType === 'question.asked') {
+          console.log('[session] SSE', eventType, 'for task:', taskId)
           const updated = new Map($activeSessions)
           updated.set(taskId, { ...session, status: 'paused', checkpoint_data: event.payload.data })
           $activeSessions = updated
           persistSessionStatus(taskId, 'paused', null, event.payload.data).catch(e =>
             console.error('[session] Failed to persist paused status:', e)
           )
-          // Find the task to get ticketKey
           const task = $tasks.find(t => t.id === taskId)
           $checkpointNotification = {
             ticketId: taskId,
             ticketKey: task?.jira_key ?? null,
             sessionId: session.id,
             stage: session.stage,
-            message: 'Agent needs approval',
+            message: 'Agent needs input',
             timestamp: Date.now(),
           }
-        } else if (eventType === 'permission.replied') {
-          // User responded to permission prompt — agent is no longer blocked
-          console.log('[session] SSE permission.replied for task:', taskId)
+        } else if (eventType === 'permission.replied' || eventType === 'question.answered') {
+          console.log('[session] SSE', eventType, 'for task:', taskId)
           const updated = new Map($activeSessions)
           updated.set(taskId, { ...session, status: 'running', checkpoint_data: null })
           $activeSessions = updated

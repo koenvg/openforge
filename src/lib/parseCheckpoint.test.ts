@@ -45,4 +45,41 @@ describe('parseCheckpointQuestion', () => {
     const data = JSON.stringify({ properties: { description: 'desc', title: 'title' } })
     expect(parseCheckpointQuestion(data)).toBe('desc')
   })
+
+  it('extracts question from question.asked event format', () => {
+    const data = JSON.stringify({
+      type: 'question.asked',
+      properties: {
+        id: 'que_abc123',
+        sessionID: 'ses_xyz',
+        questions: [
+          {
+            question: 'Run or Bike?',
+            header: 'Run or Bike',
+            options: [{ label: 'Run' }, { label: 'Bike' }]
+          }
+        ]
+      }
+    })
+    expect(parseCheckpointQuestion(data)).toBe('Run or Bike?')
+  })
+
+  it('falls back to header when question field is absent in questions array', () => {
+    const data = JSON.stringify({
+      properties: {
+        questions: [{ header: 'Choose action' }]
+      }
+    })
+    expect(parseCheckpointQuestion(data)).toBe('Choose action')
+  })
+
+  it('prefers questions[0].question over properties.description', () => {
+    const data = JSON.stringify({
+      properties: {
+        description: 'generic desc',
+        questions: [{ question: 'specific question?' }]
+      }
+    })
+    expect(parseCheckpointQuestion(data)).toBe('specific question?')
+  })
 })

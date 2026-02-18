@@ -6,7 +6,13 @@ export function parseCheckpointQuestion(checkpointData: string | null): string |
   try {
     const parsed = JSON.parse(checkpointData);
 
+    const firstQuestion = Array.isArray(parsed.properties?.questions)
+      ? parsed.properties.questions[0]
+      : null;
+
     const candidates = [
+      firstQuestion?.question,
+      firstQuestion?.header,
       parsed.properties?.description,
       parsed.properties?.title,
       parsed.properties?.permission?.description,
