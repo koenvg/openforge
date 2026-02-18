@@ -59,6 +59,7 @@ export async function getTasksForProject(projectId: string): Promise<Task[]> {
   return invoke<Task[]>("get_tasks_for_project", { projectId });
 }
 
+/** @deprecated Use runAction instead */
 export async function startImplementation(taskId: string, repoPath: string): Promise<ImplementationStatus> {
   return invoke<ImplementationStatus>("start_implementation", { taskId, repoPath });
 }
