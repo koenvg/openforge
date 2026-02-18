@@ -10,37 +10,45 @@
   import '@xterm/xterm/css/xterm.css'
   import { parseCheckpointQuestion } from '../lib/parseCheckpoint'
 
-  export let taskId: string
+  interface Props {
+    taskId: string
+  }
 
-  let status: 'idle' | 'running' | 'complete' | 'error' = 'idle'
-  let errorMessage: string | null = null
+  let { taskId }: Props = $props()
+
+  let status = $state<'idle' | 'running' | 'complete' | 'error'>('idle')
+  let errorMessage = $state<string | null>(null)
   let unlisten: UnlistenFn | null = null
   let ptyOutputUnlisten: UnlistenFn | null = null
   let ptyExitUnlisten: UnlistenFn | null = null
-  let loadingHistory = false
+  let loadingHistory = $state(false)
   let terminalContainer: HTMLDivElement
   let terminal: Terminal | null = null
   let fitAddon: FitAddon | null = null
   let resizeObserver: ResizeObserver | null = null
-  let ptySpawned = false
+  let ptySpawned = $state(false)
   let terminalMounted = false
   let opencodePort: number | null = null
 
-  $: session = $activeSessions.get(taskId) || null
-  $: attachCommand = session?.opencode_session_id && opencodePort
+  let session = $derived($activeSessions.get(taskId) || null)
+  let attachCommand = $derived(session?.opencode_session_id && opencodePort
     ? `opencode attach http://127.0.0.1:${opencodePort} -s ${session.opencode_session_id}`
-    : null
-  $: questionText = session ? parseCheckpointQuestion(session.checkpoint_data) : null
+    : null)
+  let questionText = $derived(session ? parseCheckpointQuestion(session.checkpoint_data) : null)
 
-  $: if (questionText !== undefined) {
-    // Re-fit terminal when banner visibility changes
-    setTimeout(() => fitAddon?.fit(), 50)
-  }
+  $effect(() => {
+    if (questionText !== undefined) {
+      // Re-fit terminal when banner visibility changes
+      setTimeout(() => fitAddon?.fit(), 50)
+    }
+  })
 
   // Auto-spawn PTY when session becomes running and terminal is mounted
-  $: if (session && session.status === 'running' && terminalContainer && terminal && !ptySpawned) {
-    spawnPtyForSession()
-  }
+  $effect(() => {
+    if (session && session.status === 'running' && terminalContainer && terminal && !ptySpawned) {
+      spawnPtyForSession()
+    }
+  })
 
   async function spawnPtyForSession() {
     if (ptySpawned) return
@@ -172,10 +180,6 @@
     })
   }
 
-  $: if (terminalContainer && terminal) {
-    mountTerminal()
-  }
-
   onMount(async () => {
     // Initialize xterm.js terminal
     terminal = new Terminal({
@@ -212,6 +216,10 @@
 
     fitAddon = new FitAddon()
     terminal.loadAddon(fitAddon)
+
+    // Mount terminal immediately — by onMount time, bind:this has set terminalContainer.
+    // In Svelte 5, $effect won't track plain let variables, so we mount directly here.
+    mountTerminal()
 
     await loadSessionHistory()
 
@@ -318,7 +326,7 @@
               {session.status}
             </span>
             {#if attachCommand}
-              <button class="attach-command" on:click={() => { navigator.clipboard.writeText(attachCommand ?? '') }} title="Click to copy">
+              <button class="attach-command" onclick={() => { navigator.clipboard.writeText(attachCommand ?? '') }} title="Click to copy">
                 {attachCommand}
               </button>
             {:else if session.opencode_session_id}
@@ -332,7 +340,7 @@
     </div>
     <div class="controls">
       {#if status === 'running'}
-        <button class="abort-button" on:click={handleAbort}>
+        <button class="abort-button" onclick={handleAbort}>
           Abort
         </button>
       {/if}
