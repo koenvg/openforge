@@ -30,7 +30,6 @@
   $: attachCommand = session?.opencode_session_id && opencodePort
     ? `opencode attach http://127.0.0.1:${opencodePort} -s ${session.opencode_session_id}`
     : null
-  $: console.log('[AgentPanel] session reactive update for task:', taskId, 'session:', session ? `id=${session.id} status=${session.status} stage=${session.stage}` : 'null')
   $: questionText = session ? parseCheckpointQuestion(session.checkpoint_data) : null
 
   $: if (questionText !== undefined) {
@@ -69,9 +68,7 @@
 
       const cols = terminal?.cols ?? 80
       const rows = terminal?.rows ?? 24
-      console.log('[AgentPanel] Spawning PTY for task:', taskId, 'port:', port, 'session:', opencodeSessionId, 'size:', cols, 'x', rows)
       await spawnPty(taskId, port, opencodeSessionId, cols, rows)
-      console.log('[AgentPanel] PTY spawn succeeded, listening on pty-output-' + taskId)
       status = 'running'
     } catch (e) {
       console.error('[AgentPanel] Failed to spawn PTY:', e)
@@ -82,16 +79,12 @@
   async function setupPtyListeners() {
     // Listen for PTY output → write to xterm
     ptyOutputUnlisten = await listen<PtyEvent>(`pty-output-${taskId}`, (event) => {
-      console.log('[AgentPanel] pty-output received, payload:', JSON.stringify(event.payload).slice(0, 200))
       if (terminal && event.payload.data) {
         terminal.write(event.payload.data)
-      } else {
-        console.warn('[AgentPanel] pty-output skipped: terminal=', !!terminal, 'data=', !!event.payload?.data)
       }
     })
 
-    ptyExitUnlisten = await listen<PtyEvent>(`pty-exit-${taskId}`, (event) => {
-      console.log('[AgentPanel] PTY exited for task:', taskId, 'data:', event.payload.data)
+    ptyExitUnlisten = await listen<PtyEvent>(`pty-exit-${taskId}`, () => {
       ptySpawned = false
     })
   }
@@ -156,11 +149,9 @@
 
   function mountTerminal() {
     if (terminalMounted || !terminal || !terminalContainer) return
-    console.log('[AgentPanel] Opening terminal into container', terminalContainer.clientWidth, 'x', terminalContainer.clientHeight)
     terminal.open(terminalContainer)
     terminalMounted = true
     fitAddon?.fit()
-    console.log('[AgentPanel] Terminal opened, size:', terminal.cols, 'x', terminal.rows)
 
     resizeObserver = new ResizeObserver(() => {
       fitAddon?.fit()
@@ -186,8 +177,6 @@
   }
 
   onMount(async () => {
-    console.log('[AgentPanel] Mounted for task:', taskId)
-
     // Initialize xterm.js terminal
     terminal = new Terminal({
       fontFamily: "'SF Mono', 'Fira Code', 'Consolas', monospace",
@@ -231,22 +220,18 @@
 
       const eventType = event.payload.event_type
       const data = event.payload.data
-      console.log('[AgentPanel] agent-event for task:', taskId, 'type:', eventType)
 
       if (eventType === 'session.idle') {
-        console.log('[AgentPanel] Session idle (complete) for task:', taskId)
         status = 'complete'
       } else if (eventType === 'session.status') {
         try {
           const parsed = JSON.parse(data)
           const statusType = parsed.properties?.status?.type
           if (statusType === 'idle') {
-            console.log('[AgentPanel] Session status idle (complete) for task:', taskId)
             status = 'complete'
           }
         } catch { /* ignore parse errors */ }
       } else if (eventType === 'session.error') {
-        console.log('[AgentPanel] Session error for task:', taskId, 'error:', data)
         status = 'error'
         errorMessage = data
       }

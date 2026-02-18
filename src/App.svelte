@@ -122,9 +122,7 @@
     }
     const { taskId, actionPrompt } = event.detail
     try {
-      console.log('[session] Running action for task:', taskId)
       const result = await runAction(taskId, activeProject.path, actionPrompt)
-      console.log('[session] Action started, session_id:', result.session_id)
 
       try {
         const session = await getSessionStatus(result.session_id)
@@ -160,15 +158,11 @@
     unlisteners.push(
       await listen<{ task_id: string }>('action-complete', (event) => {
         const taskId = event.payload.task_id
-        console.log('[session] Action complete for task:', taskId)
         const session = $activeSessions.get(taskId)
         if (session) {
           const updated = new Map($activeSessions)
           updated.set(taskId, { ...session, status: 'completed' })
           $activeSessions = updated
-          console.log('[session] Updated session status to completed for task:', taskId)
-        } else {
-          console.warn('[session] No active session found for completed task:', taskId)
         }
         persistSessionStatus(taskId, 'completed', null).catch(e =>
           console.error('[session] Failed to persist completed status:', e)
@@ -183,15 +177,11 @@
     unlisteners.push(
       await listen<{ task_id: string; error: string }>('implementation-failed', (event) => {
         const taskId = event.payload.task_id
-        console.log('[session] Implementation failed for task:', taskId, 'error:', event.payload.error)
         const session = $activeSessions.get(taskId)
         if (session) {
           const updated = new Map($activeSessions)
           updated.set(taskId, { ...session, status: 'failed', error_message: event.payload.error })
           $activeSessions = updated
-          console.log('[session] Updated session status to failed for task:', taskId)
-        } else {
-          console.warn('[session] No active session found for failed task:', taskId)
         }
         persistSessionStatus(taskId, 'failed', event.payload.error).catch(e =>
           console.error('[session] Failed to persist failed status:', e)
@@ -227,7 +217,6 @@
             const parsed = JSON.parse(event.payload.data)
             const statusType = parsed.properties?.status?.type
             if (eventType === 'session.idle' || statusType === 'idle') {
-              console.log('[session] SSE session idle for task:', taskId)
               const updated = new Map($activeSessions)
               updated.set(taskId, { ...session, status: 'completed' })
               $activeSessions = updated
@@ -238,7 +227,6 @@
             }
           } catch {
             if (eventType === 'session.idle') {
-              console.log('[session] SSE session.idle for task:', taskId)
               const updated = new Map($activeSessions)
               updated.set(taskId, { ...session, status: 'completed' })
               $activeSessions = updated
@@ -248,7 +236,6 @@
             }
           }
         } else if (eventType === 'session.error') {
-          console.log('[session] SSE session.error for task:', taskId, 'data:', event.payload.data)
           const updated = new Map($activeSessions)
           updated.set(taskId, { ...session, status: 'failed', error_message: event.payload.data })
           $activeSessions = updated
@@ -257,7 +244,6 @@
             $checkpointNotification = null
           }
         } else if (eventType === 'permission.updated' || eventType === 'question.asked') {
-          console.log('[session] SSE', eventType, 'for task:', taskId)
           const updated = new Map($activeSessions)
           updated.set(taskId, { ...session, status: 'paused', checkpoint_data: event.payload.data })
           $activeSessions = updated
@@ -274,7 +260,6 @@
             timestamp: Date.now(),
           }
         } else if (eventType === 'permission.replied' || eventType === 'question.answered') {
-          console.log('[session] SSE', eventType, 'for task:', taskId)
           const updated = new Map($activeSessions)
           updated.set(taskId, { ...session, status: 'running', checkpoint_data: null })
           $activeSessions = updated
@@ -290,7 +275,6 @@
 
     unlisteners.push(
       await listen<{ ticket_id: string; session_id: string }>('session-aborted', (event) => {
-        console.log('[session] Session aborted for task:', event.payload.ticket_id)
         const updated = new Map($activeSessions)
         updated.delete(event.payload.ticket_id)
         $activeSessions = updated
