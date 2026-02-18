@@ -147,7 +147,21 @@
     loadProjects()
   }
 
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.metaKey && e.key === 't') {
+      e.preventDefault()
+      if (!showAddDialog) {
+        dialogMode = 'create'
+        editingTask = null
+        showAddDialog = true
+      }
+    }
+  }
+
   onMount(async () => {
+    window.addEventListener('keydown', handleKeydown)
+    unlisteners.push(() => window.removeEventListener('keydown', handleKeydown))
+
     await loadProjects()
     await checkOpenCode()
 
@@ -368,7 +382,7 @@
           showAddDialog = true
         }}
       >
-        + Add Task
+        + Add Task <span class="shortcut-hint">&#8984;T</span>
       </button>
     </div>
     
@@ -556,6 +570,13 @@
 
   .add-task-btn:active {
     transform: scale(0.98);
+  }
+
+  .shortcut-hint {
+    font-size: 0.65rem;
+    opacity: 0.7;
+    margin-left: 4px;
+    font-weight: 400;
   }
 
   .view-switcher {
