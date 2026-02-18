@@ -77,41 +77,42 @@
       <button class="close-btn" onclick={close} type="button">X</button>
     </div>
 
-    <form class="dialog-body" onsubmit={(e: SubmitEvent) => { e.preventDefault(); handleSubmit() }}>
-      <label class="field">
-        <span>Title <span class="required">*</span></span>
-        <input
-          type="text"
-          bind:value={title}
-          placeholder="Enter task title"
-          required
-          autofocus
-        />
-      </label>
+    <form onsubmit={(e: SubmitEvent) => { e.preventDefault(); handleSubmit() }}>
+      <div class="dialog-body">
+        <label class="field">
+          <span>Title <span class="required">*</span></span>
+          <input
+            type="text"
+            bind:value={title}
+            placeholder="Enter task title"
+            required
+            autofocus
+          />
+        </label>
 
-      <label class="field">
-        <span>JIRA Key</span>
-        <input
-          type="text"
-          bind:value={jiraKey}
-          placeholder="e.g. PROJ-123"
-        />
-      </label>
+        <label class="field">
+          <span>JIRA Key</span>
+          <input
+            type="text"
+            bind:value={jiraKey}
+            placeholder="e.g. PROJ-123"
+          />
+        </label>
+      </div>
+
+      <div class="dialog-footer">
+        <button class="btn btn-cancel" onclick={close} type="button" disabled={isSubmitting}>
+          Cancel
+        </button>
+        <button
+          class="btn btn-submit"
+          type="submit"
+          disabled={!title.trim() || isSubmitting}
+        >
+          {isSubmitting ? 'Saving...' : mode === 'create' ? 'Create Task' : 'Save Changes'}
+        </button>
+      </div>
     </form>
-
-    <div class="dialog-footer">
-      <button class="btn btn-cancel" onclick={close} type="button" disabled={isSubmitting}>
-        Cancel
-      </button>
-      <button
-        class="btn btn-submit"
-        onclick={handleSubmit}
-        type="button"
-        disabled={!title.trim() || isSubmitting}
-      >
-        {isSubmitting ? 'Saving...' : mode === 'create' ? 'Create Task' : 'Save Changes'}
-      </button>
-    </div>
   </div>
 </div>
 
