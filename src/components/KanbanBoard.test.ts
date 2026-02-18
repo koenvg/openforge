@@ -13,8 +13,8 @@ vi.mock('../lib/ipc', () => ({
 
 // Mock actions module
 const mockActions: Action[] = [
-  { id: 'action-1', name: 'Start Implementation', prompt: 'Implement this task', builtin: true, enabled: true },
-  { id: 'action-2', name: 'Write Tests', prompt: 'Write tests for this', builtin: true, enabled: true },
+  { id: 'action-1', name: 'Start Implementation', prompt: 'Implement this task', agent: null, builtin: true, enabled: true },
+  { id: 'action-2', name: 'Write Tests', prompt: 'Write tests for this', agent: null, builtin: true, enabled: true },
 ]
 
 vi.mock('../lib/actions', () => ({
@@ -170,5 +170,6 @@ describe('KanbanBoard', () => {
     expect(dispatchedEvent).toBeTruthy()
     expect(dispatchedEvent.taskId).toBe('T-1')
     expect(dispatchedEvent.actionPrompt).toBe('Implement this task')
+    expect(dispatchedEvent.agent).toBeNull()
   })
 })

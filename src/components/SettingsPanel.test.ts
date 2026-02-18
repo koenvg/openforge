@@ -8,6 +8,7 @@ vi.mock('../lib/ipc', () => ({
   setProjectConfig: vi.fn(),
   updateProject: vi.fn(),
   deleteProject: vi.fn(),
+  getAgents: vi.fn(() => Promise.resolve([{ name: 'build' }, { name: 'oracle' }])),
 }))
 
 vi.mock('../lib/actions', () => ({
@@ -15,9 +16,9 @@ vi.mock('../lib/actions', () => ({
   saveActions: vi.fn(),
   createAction: vi.fn(),
   DEFAULT_ACTIONS: [
-    { id: 'builtin-start-implementation', name: 'Start Implementation', prompt: 'Implement this task...', builtin: true, enabled: true },
-    { id: 'builtin-plan-design', name: 'Plan/Design', prompt: 'Analyze this task...', builtin: true, enabled: true },
-    { id: 'builtin-manual-testing', name: 'Manual Testing', prompt: 'Create a comprehensive manual testing plan...', builtin: true, enabled: true },
+    { id: 'builtin-start-implementation', name: 'Start Implementation', prompt: 'Implement this task...', agent: null, builtin: true, enabled: true },
+    { id: 'builtin-plan-design', name: 'Plan/Design', prompt: 'Analyze this task...', agent: null, builtin: true, enabled: true },
+    { id: 'builtin-manual-testing', name: 'Manual Testing', prompt: 'Create a comprehensive manual testing plan...', agent: null, builtin: true, enabled: true },
   ],
 }))
 
@@ -93,6 +94,7 @@ describe('SettingsPanel', () => {
       id: 'new-action-id',
       name: 'New Action',
       prompt: '',
+      agent: null,
       builtin: false,
       enabled: true,
     })

@@ -42,6 +42,17 @@ async fn get_opencode_status(
     })
 }
 
+/// Get list of available agents from OpenCode server
+#[tauri::command]
+async fn get_agents(
+    client: State<'_, OpenCodeClient>,
+) -> Result<Vec<opencode_client::AgentInfo>, String> {
+    client
+        .list_agents()
+        .await
+        .map_err(|e| format!("Failed to get agents: {}", e))
+}
+
 /// Create a new OpenCode session
 #[tauri::command]
 async fn create_session(
@@ -387,6 +398,7 @@ async fn run_action(
     task_id: String,
     repo_path: String,
     action_prompt: String,
+    agent: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let (task, project_id_owned) = {
         let db = db.lock().unwrap();
@@ -430,7 +442,7 @@ async fn run_action(
                         let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
                         
                         client
-                            .prompt_async(opencode_session_id, prompt, None)
+                            .prompt_async(opencode_session_id, prompt, agent.clone())
                             .await
                             .map_err(|e| format!("Failed to send prompt: {}", e))?;
                         
@@ -526,7 +538,7 @@ async fn run_action(
         .map_err(|e| format!("Failed to create session: {}", e))?;
     
     client
-        .prompt_async(&opencode_session_id, prompt, None)
+        .prompt_async(&opencode_session_id, prompt, agent)
         .await
         .map_err(|e| format!("Failed to send prompt: {}", e))?;
     
@@ -1591,6 +1603,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             get_opencode_status,
+            get_agents,
             create_session,
             send_prompt,
             get_tasks,

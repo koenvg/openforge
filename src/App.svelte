@@ -115,14 +115,14 @@
     }
   }
 
-  async function handleRunAction(event: CustomEvent<{ taskId: string; actionPrompt: string }>) {
+  async function handleRunAction(event: CustomEvent<{ taskId: string; actionPrompt: string; agent: string | null }>) {
     if (!activeProject) {
       $error = 'No active project selected'
       return
     }
-    const { taskId, actionPrompt } = event.detail
+    const { taskId, actionPrompt, agent } = event.detail
     try {
-      const result = await runAction(taskId, activeProject.path, actionPrompt)
+      const result = await runAction(taskId, activeProject.path, actionPrompt, agent)
 
       try {
         const session = await getSessionStatus(result.session_id)

@@ -58,7 +58,7 @@
   function handleRunAction(action: Action) {
     const taskId = contextMenu.taskId
     closeContextMenu()
-    dispatch('run-action', { taskId, actionPrompt: action.prompt })
+    dispatch('run-action', { taskId, actionPrompt: action.prompt, agent: action.agent })
   }
 
   async function handleMoveTo(column: KanbanColumn) {
@@ -278,4 +278,6 @@
     background: var(--error);
     color: white;
   }
+
+
 </style>

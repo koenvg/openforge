@@ -1,9 +1,9 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte'
   import { activeProjectId, projects } from '../lib/stores'
-  import { getProjectConfig, setProjectConfig, updateProject, deleteProject } from '../lib/ipc'
+  import { getProjectConfig, setProjectConfig, updateProject, deleteProject, getAgents } from '../lib/ipc'
   import { loadActions, saveActions, createAction, DEFAULT_ACTIONS } from '../lib/actions'
-  import type { Action } from '../lib/types'
+  import type { Action, AgentInfo } from '../lib/types'
 
   const dispatch = createEventDispatcher()
 
@@ -12,6 +12,7 @@
   let jiraBoardId = ''
   let githubDefaultRepo = ''
   let actions: Action[] = []
+  let availableAgents: AgentInfo[] = []
   let isSaving = false
   let saved = false
   let isDeleting = false
@@ -29,6 +30,7 @@
       jiraBoardId = (await getProjectConfig(projectId, 'jira_board_id')) || ''
       githubDefaultRepo = (await getProjectConfig(projectId, 'github_default_repo')) || ''
       actions = await loadActions(projectId)
+      availableAgents = await getAgents().catch(() => [])
     } catch (e) {
       console.error('Failed to load settings:', e)
     }
@@ -158,6 +160,15 @@
               <span>Prompt</span>
               <textarea bind:value={action.prompt} placeholder="Instruction for the AI agent..." rows="3"></textarea>
             </label>
+            <label class="field">
+              <span>Agent</span>
+              <select value={action.agent ?? ''} on:change={(e) => action.agent = e.currentTarget.value || null}>
+                <option value="">Default</option>
+                {#each availableAgents as agent}
+                  <option value={agent.name}>{agent.name}</option>
+                {/each}
+              </select>
+            </label>
           </div>
         {/each}
         
@@ -260,6 +271,20 @@
   }
 
   .field input:focus {
+    border-color: var(--accent);
+  }
+
+  .field select {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 10px;
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    outline: none;
+  }
+
+  .field select:focus {
     border-color: var(--accent);
   }
 
