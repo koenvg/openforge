@@ -271,3 +271,38 @@
 - `pnpm build` passed: 196 modules transformed, 0 TypeScript/Svelte errors
 - All warnings are pre-existing (a11y, unused CSS in other files)
 - Module count unchanged (component not yet imported anywhere — wired up by TaskDetailView in separate task)
+
+## T-213: Code/Review Mode Toggle Integration
+
+### TaskDetailView.svelte Pattern
+- `$effect` fires on task change and is ideal for async side-effects (worktree check)
+- Reset `reviewMode = false` inside `$effect` so switching tasks always returns to Code mode
+- `$derived` with `$activeSessions.get(task.id)` correctly reacts to store changes
+- `currentSession?.status ?? null` safely handles missing sessions
+- `{#if hasWorktree}` guards the toggle so it only renders when a worktree exists
+
+### Segmented Control CSS Pattern
+- Pill outer container: `border-radius: 20px`, `padding: 3px`, `background: var(--bg-card)`
+- Inner buttons: `border-radius: 16px`, `padding: 5px 16px`
+- Active state: `background: var(--accent)`, dark text `color: #1a1b26` (not white — accent is light blue)
+- `all: unset` on buttons then add back needed styles
+
+### App.svelte Wiring
+- `handleRunAction` at line 120 already has full session update logic — just pass it through
+- Only one line to change: add `onRunAction={handleRunAction}` to `<TaskDetailView>`
+
+### Build Notes
+- Pre-existing warnings in KanbanBoard, AddTaskDialog, AddTaskInline, DiffViewer — not introduced by this task
+- Build succeeds in ~1.17s, 203 modules
+
+## T-213: GitHub PR Comments in SelfReviewView
+
+- `$ticketPrs.get(task.id)` returns `PullRequestInfo[] | undefined` — guard with `|| []`
+- Filter `state === 'open'` + sort by `updated_at` desc to find most recent open PR
+- `getPrComments(pr.id)` where `pr.id` is the numeric GitHub PR number stored in DB
+- Place GitHub section above GeneralCommentsSidebar inside `.sidebar-container`
+- Use `openUrl()` IPC (NOT `<a href target="_blank">`) — Tauri webview limitation
+- Non-null assertion `linkedPr!.url` needed inside `onclick` because TS narrowing doesn't persist through closures
+- `$state<PullRequestInfo | null>(null)` for reactive state in Svelte 5
+- CSS: `max-height: 240px; overflow-y: auto` on comments list keeps sidebar usable with many comments
+- `color-mix(in srgb, var(--accent) 15%, transparent)` works for subtle tinted backgrounds with CSS variables

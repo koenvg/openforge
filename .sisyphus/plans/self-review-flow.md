@@ -1071,7 +1071,7 @@ Max Concurrent: 4 (Waves 1 & 2)
   - Files: `src/components/SelfReviewView.svelte`
   - Pre-commit: `pnpm build`
 
-- [ ] 10. TaskDetailView Mode Toggle + onRunAction Wiring
+- [x] 10. TaskDetailView Mode Toggle + onRunAction Wiring
 
   **What to do**:
   - Modify `src/components/TaskDetailView.svelte`:
@@ -1172,7 +1172,7 @@ Max Concurrent: 4 (Waves 1 & 2)
   - Files: `src/components/TaskDetailView.svelte`, `src/App.svelte`
   - Pre-commit: `pnpm build`
 
-- [ ] 11. GitHub PR Comments Sidebar in Review View
+- [x] 11. GitHub PR Comments Sidebar in Review View
 
   **What to do**:
   - Enhance `SelfReviewView.svelte` to show GitHub PR comments when a task has linked PRs:

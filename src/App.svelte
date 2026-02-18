@@ -475,7 +475,7 @@
     {:else if $currentView === 'pr_review'}
       <PrReviewView />
     {:else if selectedTask}
-      <TaskDetailView task={selectedTask} />
+      <TaskDetailView task={selectedTask} onRunAction={handleRunAction} />
     {:else}
       <div class="board-area">
         {#if $isLoading && $tasks.length === 0}

@@ -1,14 +1,31 @@
 <script lang="ts">
   import type { Task } from '../lib/types'
-  import { selectedTaskId } from '../lib/stores'
+  import { selectedTaskId, activeSessions } from '../lib/stores'
+  import { getWorktreeForTask } from '../lib/ipc'
   import AgentPanel from './AgentPanel.svelte'
   import TaskInfoPanel from './TaskInfoPanel.svelte'
+  import SelfReviewView from './SelfReviewView.svelte'
 
   interface Props {
     task: Task
+    onRunAction: (data: { taskId: string; actionPrompt: string; agent: string | null }) => void
   }
 
-  let { task }: Props = $props()
+  let { task, onRunAction }: Props = $props()
+
+  let reviewMode = $state(false)
+  let hasWorktree = $state(false)
+
+  let currentSession = $derived($activeSessions.get(task.id))
+  let agentStatus = $derived(currentSession?.status ?? null)
+
+  $effect(() => {
+    const taskId = task.id
+    reviewMode = false
+    getWorktreeForTask(taskId).then((worktree) => {
+      hasWorktree = worktree !== null
+    })
+  })
 
   function handleBack() {
     $selectedTaskId = null
@@ -18,6 +35,10 @@
     if (event.key === 'Escape') {
       $selectedTaskId = null
     }
+  }
+
+  function handleSendToAgent(prompt: string) {
+    onRunAction({ taskId: task.id, actionPrompt: prompt, agent: null })
   }
 
   function getStatusColor(status: string): string {
@@ -47,17 +68,27 @@
       <span class="status-badge" style="background: {getStatusColor(task.status)};">
         {getStatusLabel(task.status)}
       </span>
+      {#if hasWorktree}
+        <div class="mode-toggle">
+          <button class="toggle-btn" class:active={!reviewMode} onclick={() => reviewMode = false}>Code</button>
+          <button class="toggle-btn" class:active={reviewMode} onclick={() => reviewMode = true}>Review</button>
+        </div>
+      {/if}
     </div>
   </header>
 
   <div class="detail-body">
-    <div class="left-column">
-      <AgentPanel taskId={task.id} />
-    </div>
-    <div class="divider"></div>
-    <div class="right-column">
-      <TaskInfoPanel task={task} />
-    </div>
+    {#if reviewMode}
+      <SelfReviewView {task} {agentStatus} onSendToAgent={handleSendToAgent} />
+    {:else}
+      <div class="left-column">
+        <AgentPanel taskId={task.id} />
+      </div>
+      <div class="divider"></div>
+      <div class="right-column">
+        <TaskInfoPanel task={task} />
+      </div>
+    {/if}
   </div>
 </div>
 
@@ -136,6 +167,40 @@
     color: white;
     text-transform: uppercase;
     letter-spacing: 0.05em;
+  }
+
+  .mode-toggle {
+    display: inline-flex;
+    align-items: center;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 3px;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+
+  .toggle-btn {
+    all: unset;
+    padding: 5px 16px;
+    border-radius: 16px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.18s ease;
+    white-space: nowrap;
+  }
+
+  .toggle-btn:hover:not(.active) {
+    color: var(--text-primary);
+    background: rgba(122, 162, 247, 0.08);
+  }
+
+  .toggle-btn.active {
+    background: var(--accent);
+    color: #1a1b26;
+    font-weight: 600;
   }
 
   .detail-body {
