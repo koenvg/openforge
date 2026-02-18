@@ -427,6 +427,23 @@ impl Database {
             }
         }
 
+        // ============================================================================
+        // One-time migration: Simplify kanban columns from 5 to 3
+        // Maps: todo→backlog, in_progress/in_review/testing→doing, done stays done
+        // ============================================================================
+        conn.execute(
+            "UPDATE tasks SET status = 'backlog' WHERE status = 'todo'",
+            [],
+        )?;
+        conn.execute(
+            "UPDATE tasks SET status = 'doing' WHERE status IN ('in_progress', 'in_review', 'testing')",
+            [],
+        )?;
+        conn.execute(
+            "UPDATE tasks SET status = 'backlog' WHERE status NOT IN ('backlog', 'doing', 'done')",
+            [],
+        )?;
+
         Ok(())
     }
 
@@ -1661,7 +1678,7 @@ mod tests {
         let conn = conn.lock().unwrap();
         conn.execute(
             "INSERT INTO tasks (id, title, status, jira_key, jira_status, jira_assignee, plan_text, project_id, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-            rusqlite::params!["T-100", "Test task", "todo", "PROJ-100", "To Do", "alice", None::<String>, None::<String>, 1000, 1000],
+            rusqlite::params!["T-100", "Test task", "backlog", "PROJ-100", "To Do", "alice", None::<String>, None::<String>, 1000, 1000],
         ).expect("Failed to insert test task");
     }
 
@@ -1670,12 +1687,12 @@ mod tests {
         let (db, path) = make_test_db("create_task");
 
         let task = db
-            .create_task("My task", "todo", None, None)
+            .create_task("My task", "backlog", None, None)
             .expect("create failed");
 
         assert_eq!(task.id, "T-1");
         assert_eq!(task.title, "My task");
-        assert_eq!(task.status, "todo");
+        assert_eq!(task.status, "backlog");
 
         let tasks = db.get_all_tasks().expect("get_all failed");
         assert_eq!(tasks.len(), 1);
@@ -1691,7 +1708,7 @@ mod tests {
         let (db, path) = make_test_db("update_task");
 
         let task = db
-            .create_task("Original", "todo", None, None)
+            .create_task("Original", "backlog", None, None)
             .expect("create failed");
 
         db.update_task(&task.id, "Updated", None)
@@ -1710,7 +1727,7 @@ mod tests {
         let (db, path) = make_test_db("get_task_by_id");
 
         let task = db
-            .create_task("Found me", "todo", None, None)
+            .create_task("Found me", "backlog", None, None)
             .expect("create failed");
 
         let retrieved = db.get_task(&task.id).expect("get failed");
@@ -2088,13 +2105,13 @@ mod tests {
         let (db, path) = make_test_db("task_autoincrement");
 
         let task1 = db
-            .create_task("Task 1", "todo", None, None)
+            .create_task("Task 1", "backlog", None, None)
             .expect("create 1 failed");
         let task2 = db
-            .create_task("Task 2", "todo", None, None)
+            .create_task("Task 2", "backlog", None, None)
             .expect("create 2 failed");
         let task3 = db
-            .create_task("Task 3", "todo", None, None)
+            .create_task("Task 3", "backlog", None, None)
             .expect("create 3 failed");
 
         assert_eq!(task1.id, "T-1");
@@ -2110,14 +2127,14 @@ mod tests {
         let (db, path) = make_test_db("update_task_status");
 
         let task = db
-            .create_task("My task", "todo", None, None)
+            .create_task("My task", "backlog", None, None)
             .expect("create failed");
 
-        db.update_task_status(&task.id, "in_progress")
+        db.update_task_status(&task.id, "doing")
             .expect("update status failed");
 
         let updated = db.get_task(&task.id).expect("get failed").unwrap();
-        assert_eq!(updated.status, "in_progress");
+        assert_eq!(updated.status, "doing");
 
         drop(db);
         let _ = fs::remove_file(&path);
@@ -2127,9 +2144,9 @@ mod tests {
     fn test_update_task_jira_info() {
         let (db, path) = make_test_db("update_jira_info");
 
-        db.create_task("Linked task", "todo", Some("PROJ-1"), None)
+        db.create_task("Linked task", "backlog", Some("PROJ-1"), None)
             .expect("create 1 failed");
-        db.create_task("Unlinked task", "todo", None, None)
+        db.create_task("Unlinked task", "backlog", None, None)
             .expect("create 2 failed");
 
         let updated = db
@@ -2154,11 +2171,11 @@ mod tests {
     fn test_get_tasks_with_jira_links() {
         let (db, path) = make_test_db("tasks_with_jira");
 
-        db.create_task("Task 1", "todo", Some("PROJ-1"), None)
+        db.create_task("Task 1", "backlog", Some("PROJ-1"), None)
             .expect("create 1 failed");
-        db.create_task("Task 2", "todo", Some("PROJ-2"), None)
+        db.create_task("Task 2", "backlog", Some("PROJ-2"), None)
             .expect("create 2 failed");
-        db.create_task("Task 3", "todo", None, None)
+        db.create_task("Task 3", "backlog", None, None)
             .expect("create 3 failed");
 
         let linked = db.get_tasks_with_jira_links().expect("get linked failed");

@@ -389,7 +389,7 @@ async fn start_implementation(
     
     {
         let db = db.lock().unwrap();
-        db.update_task_status(&task_id, "in_progress")
+        db.update_task_status(&task_id, "doing")
             .map_err(|e| format!("Failed to update task status: {}", e))?;
     }
     let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": task_id }));
@@ -1679,7 +1679,7 @@ mod tests {
             id: "T-123".to_string(),
             title: "Test Task".to_string(),
             plan_text: Some("Step 1: Do this\nStep 2: Do that".to_string()),
-            status: "todo".to_string(),
+            status: "backlog".to_string(),
             jira_key: None,
             jira_status: None,
             jira_assignee: None,
@@ -1702,7 +1702,7 @@ mod tests {
             id: "T-456".to_string(),
             title: "Minimal Task".to_string(),
             plan_text: None,
-            status: "todo".to_string(),
+            status: "backlog".to_string(),
             jira_key: None,
             jira_status: None,
             jira_assignee: None,
@@ -1725,7 +1725,7 @@ mod tests {
             id: "T-789".to_string(),
             title: "Empty Fields Task".to_string(),
             plan_text: Some("".to_string()),
-            status: "todo".to_string(),
+            status: "backlog".to_string(),
             jira_key: None,
             jira_status: None,
             jira_assignee: None,

@@ -15,14 +15,14 @@
 
   let title = $state('')
   let jiraKey = $state('')
-  let status = $state<KanbanColumn>('todo')
+  let status = $state<KanbanColumn>('backlog')
   let isSubmitting = $state(false)
 
   // Initialize form values from props
   $effect(() => {
     title = mode === 'edit' && task ? task.title : ''
     jiraKey = mode === 'edit' && task ? (task.jira_key || '') : ''
-    status = mode === 'edit' && task ? (task.status as KanbanColumn) : 'todo'
+    status = mode === 'edit' && task ? (task.status as KanbanColumn) : 'backlog'
   })
 
   async function handleSubmit() {

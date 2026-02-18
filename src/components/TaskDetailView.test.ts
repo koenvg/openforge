@@ -33,7 +33,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 const baseTask: Task = {
   id: 'T-42',
   title: 'Implement auth middleware',
-  status: 'todo',
+  status: 'backlog',
   jira_key: 'PROJ-123',
   jira_status: 'To Do',
   jira_assignee: 'Alice',
@@ -68,7 +68,8 @@ describe('TaskDetailView', () => {
 
   it('renders status badge with status label', () => {
     render(TaskDetailView, { props: { task: baseTask } })
-    expect(screen.getByText('Todo')).toBeTruthy()
+    const matches = screen.getAllByText('Backlog')
+    expect(matches.length).toBeGreaterThanOrEqual(1)
   })
 
   it('has AgentPanel child with empty state text', () => {

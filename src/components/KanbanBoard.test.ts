@@ -26,7 +26,7 @@ vi.mock('../lib/actions', () => ({
 const baseTask: Task = {
   id: 'T-1',
   title: 'Test task',
-  status: 'todo',
+  status: 'backlog',
   jira_key: null,
   jira_status: null,
   jira_assignee: null,
@@ -45,10 +45,8 @@ describe('KanbanBoard', () => {
 
   it('renders kanban columns', () => {
     render(KanbanBoard)
-    expect(screen.getByText('To Do')).toBeTruthy()
-    expect(screen.getByText('In Progress')).toBeTruthy()
-    expect(screen.getByText('In Review')).toBeTruthy()
-    expect(screen.getByText('Testing')).toBeTruthy()
+    expect(screen.getByText('Backlog')).toBeTruthy()
+    expect(screen.getByText('Doing')).toBeTruthy()
     expect(screen.getByText('Done')).toBeTruthy()
   })
 

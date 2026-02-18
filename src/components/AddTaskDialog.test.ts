@@ -7,7 +7,7 @@ vi.mock('../lib/ipc', () => ({
   createTask: vi.fn().mockResolvedValue({
     id: 'T-1',
     title: 'New Task',
-    status: 'todo',
+    status: 'backlog',
     jira_key: null,
     jira_status: null,
     jira_assignee: null,
@@ -23,7 +23,7 @@ import { createTask, updateTask } from '../lib/ipc'
 const mockTask: Task = {
   id: 'T-42',
   title: 'Existing Task',
-  status: 'in_progress',
+  status: 'doing',
   jira_key: 'PROJ-123',
   jira_status: 'In Progress',
   jira_assignee: 'Alice',
@@ -75,7 +75,7 @@ describe('AddTaskDialog', () => {
     await fireEvent.click(submitBtn)
     
     await new Promise((r) => setTimeout(r, 10))
-    expect(createTask).toHaveBeenCalledWith('My new task', 'todo', 'PROJ-456', null)
+    expect(createTask).toHaveBeenCalledWith('My new task', 'backlog', 'PROJ-456', null)
   })
 
   it('pre-fills fields in edit mode', () => {

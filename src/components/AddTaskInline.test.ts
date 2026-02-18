@@ -7,7 +7,7 @@ vi.mock('../lib/ipc', () => ({
   createTask: vi.fn().mockResolvedValue({
     id: 'T-1',
     title: 'New Task',
-    status: 'todo',
+    status: 'backlog',
     jira_key: null,
     jira_status: null,
     jira_assignee: null,
@@ -26,14 +26,14 @@ describe('AddTaskInline', () => {
   })
 
   it('renders + button in collapsed state', () => {
-    render(AddTaskInline, { props: { column: 'todo' } })
+    render(AddTaskInline, { props: { column: 'backlog' } })
     const button = screen.getByRole('button')
     expect(button).toBeTruthy()
     expect(button.getAttribute('title')).toBe('Add task')
   })
 
   it('shows input when + button is clicked', async () => {
-    render(AddTaskInline, { props: { column: 'todo' } })
+    render(AddTaskInline, { props: { column: 'backlog' } })
     const button = screen.getByRole('button')
     await fireEvent.click(button)
     
@@ -43,7 +43,7 @@ describe('AddTaskInline', () => {
   })
 
   it('calls createTask when Enter is pressed with text', async () => {
-    render(AddTaskInline, { props: { column: 'todo' } })
+    render(AddTaskInline, { props: { column: 'backlog' } })
     const button = screen.getByRole('button')
     await fireEvent.click(button)
     
@@ -53,7 +53,7 @@ describe('AddTaskInline', () => {
   })
 
   it('calls createTask when Enter is pressed with text', async () => {
-    render(AddTaskInline, { props: { column: 'todo' } })
+    render(AddTaskInline, { props: { column: 'backlog' } })
     const button = screen.getByRole('button')
     await fireEvent.click(button)
     
@@ -64,11 +64,11 @@ describe('AddTaskInline', () => {
     await fireEvent.keyDown(input, { key: 'Enter' })
     
     await new Promise((r) => setTimeout(r, 10))
-    expect(createTask).toHaveBeenCalledWith('New task title', 'todo', null, null)
+    expect(createTask).toHaveBeenCalledWith('New task title', 'backlog', null, null)
   })
 
   it('collapses without creating when Escape is pressed', async () => {
-    render(AddTaskInline, { props: { column: 'in_progress' } })
+    render(AddTaskInline, { props: { column: 'doing' } })
     const button = screen.getByRole('button')
     await fireEvent.click(button)
     
@@ -84,7 +84,7 @@ describe('AddTaskInline', () => {
   })
 
   it('collapses without creating when input is blurred with no text', async () => {
-    render(AddTaskInline, { props: { column: 'todo' } })
+    render(AddTaskInline, { props: { column: 'backlog' } })
     const button = screen.getByRole('button')
     await fireEvent.click(button)
     

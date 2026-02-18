@@ -6,7 +6,7 @@ import type { Task, AgentSession } from '../lib/types'
 const baseTask: Task = {
   id: 'T-42',
   title: 'Implement auth middleware',
-  status: 'todo',
+  status: 'backlog',
   jira_key: 'PROJ-123',
   jira_status: 'To Do',
   jira_assignee: 'Alice',

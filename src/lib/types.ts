@@ -203,17 +203,15 @@ export interface PtyEvent {
 }
 
 
-export type KanbanColumn = "todo" | "in_progress" | "in_review" | "testing" | "done";
+export type KanbanColumn = "backlog" | "doing" | "done";
 
 export const COLUMN_LABELS: Record<KanbanColumn, string> = {
-  todo: "To Do",
-  in_progress: "In Progress",
-  in_review: "In Review",
-  testing: "Testing",
+  backlog: "Backlog",
+  doing: "Doing",
   done: "Done",
 };
 
-export const COLUMNS: KanbanColumn[] = ["todo", "in_progress", "in_review", "testing", "done"];
+export const COLUMNS: KanbanColumn[] = ["backlog", "doing", "done"];
 
 export interface Action {
   id: string;

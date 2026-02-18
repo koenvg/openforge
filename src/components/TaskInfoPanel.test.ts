@@ -25,7 +25,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 const baseTask: Task = {
   id: 'T-42',
   title: 'Implement auth middleware',
-  status: 'todo',
+  status: 'backlog',
   jira_key: 'PROJ-123',
   jira_status: 'To Do',
   jira_assignee: 'Alice',
@@ -43,7 +43,7 @@ describe('TaskInfoPanel', () => {
 
   it('renders task status label from COLUMN_LABELS', () => {
     render(TaskInfoPanel, { props: { task: baseTask } })
-    const matches = screen.getAllByText('To Do')
+    const matches = screen.getAllByText('Backlog')
     expect(matches.length).toBeGreaterThanOrEqual(1)
   })
 
@@ -73,9 +73,7 @@ describe('TaskInfoPanel', () => {
   it('shows Change Status section with status buttons', () => {
     render(TaskInfoPanel, { props: { task: baseTask } })
     expect(screen.getByText('Change Status')).toBeTruthy()
-    expect(screen.getByText('In Progress')).toBeTruthy()
-    expect(screen.getByText('In Review')).toBeTruthy()
-    expect(screen.getByText('Testing')).toBeTruthy()
+    expect(screen.getByText('Doing')).toBeTruthy()
     expect(screen.getByText('Done')).toBeTruthy()
   })
 

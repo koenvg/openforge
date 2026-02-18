@@ -95,7 +95,7 @@ export interface Ticket {
   created_at: number;           // Unix timestamps as numbers
 }
 
-export type KanbanColumn = "todo" | "in_progress" | "in_review" | "testing" | "done";
+export type KanbanColumn = "backlog" | "doing" | "done";
 ```
 
 ### State Management
@@ -350,7 +350,7 @@ The app tracks **two separate status fields** per task:
 
 | Field | Values | Storage | Purpose |
 |-------|--------|---------|---------|
-| `Task.status` | `todo`, `in_progress`, `in_review`, `testing`, `done` | `tasks` table | Kanban column |
+| `Task.status` | `backlog`, `doing`, `done` | `tasks` table | Kanban column |
 | `AgentSession.status` | `running`, `paused`, `completed`, `failed`, `interrupted` | `agent_sessions` table | Agent execution state |
 
 **OpenCode → App status mapping** (in `sse_bridge.rs`):
