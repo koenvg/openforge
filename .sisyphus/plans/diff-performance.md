@@ -630,7 +630,7 @@ Max Concurrent: 3 (Wave 1)
 
   **Commit**: NO (groups with Task 4 commit)
 
-- [ ] 6. Wire SelfReviewView.svelte with new DiffViewer
+- [x] 6. Wire SelfReviewView.svelte with new DiffViewer
 
   **What to do**:
   - Update `src/components/SelfReviewView.svelte` to work with the new DiffViewer
@@ -719,7 +719,7 @@ Max Concurrent: 3 (Wave 1)
   - Files: `src/components/SelfReviewView.svelte`, `src/components/PrReviewView.svelte`
   - Pre-commit: `pnpm build`
 
-- [ ] 7. Wire PrReviewView.svelte with new DiffViewer
+- [x] 7. Wire PrReviewView.svelte with new DiffViewer
 
   **What to do**:
   - Update `src/components/PrReviewView.svelte` to work with the new DiffViewer
@@ -798,7 +798,7 @@ Max Concurrent: 3 (Wave 1)
 
   **Commit**: NO (groups with Task 6 commit)
 
-- [ ] 8. Vitest tests for adapter utilities
+- [x] 8. Vitest tests for adapter utilities
 
   **What to do**:
   - Create `src/lib/diffAdapter.test.ts` — tests for `toGitDiffViewData` and `getFileLanguage`:
@@ -882,7 +882,7 @@ Max Concurrent: 3 (Wave 1)
   - Files: `src/lib/diffAdapter.test.ts`, `src/lib/diffComments.test.ts`
   - Pre-commit: `pnpm test`
 
-- [ ] 9. Remove diff2html, dead code cleanup
+- [x] 9. Remove diff2html, dead code cleanup
 
   **What to do**:
   - Verify diff2html is already removed from `package.json` (done in Task 1)
@@ -953,7 +953,7 @@ Max Concurrent: 3 (Wave 1)
   - Files: Any files with remaining diff2html references
   - Pre-commit: `pnpm build`
 
-- [ ] 10. Build verification and smoke test
+- [x] 10. Build verification and smoke test
 
   **What to do**:
   - Run full build pipeline: `pnpm build`
