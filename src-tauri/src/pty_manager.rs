@@ -89,8 +89,14 @@ impl PtyManager {
         let mut sessions = self.sessions.lock().await;
 
         if sessions.contains_key(task_id) {
-            println!("PTY already running for task {}", task_id);
-            return Ok(());
+            println!("[PTY] Replacing existing PTY for task {}", task_id);
+            if let Some(mut old_session) = sessions.remove(task_id) {
+                let _ = old_session.child.kill();
+            }
+            // Clean up old PID file (will be recreated below)
+            if let Ok(pid_dir) = self.get_pid_dir() {
+                let _ = std::fs::remove_file(pid_dir.join(format!("{}-pty.pid", task_id)));
+            }
         }
 
         println!("Spawning PTY for task {} ({}x{})", task_id, cols, rows);

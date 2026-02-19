@@ -275,7 +275,8 @@
     if (ptyExitUnlisten) ptyExitUnlisten()
     if (resizeTimeout) clearTimeout(resizeTimeout)
     if (resizeObserver) resizeObserver.disconnect()
-    if (ptySpawned) {
+    const isSessionRunning = session?.status === 'running'
+    if (ptySpawned && !isSessionRunning) {
       killPty(taskId).catch((e) => {
         console.error('[AgentPanel] Failed to kill PTY on destroy:', e)
       })
