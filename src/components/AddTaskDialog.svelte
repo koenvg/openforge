@@ -2,6 +2,7 @@
   import type { Task, KanbanColumn } from '../lib/types'
   import { createTask, updateTask } from '../lib/ipc'
   import { activeProjectId } from '../lib/stores'
+  import Modal from './Modal.svelte'
 
   interface Props {
     mode?: 'create' | 'edit'
@@ -56,65 +57,49 @@
   function close() {
     onClose?.()
   }
-
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') {
-      e.stopPropagation()
-      close()
-    }
-  }
-
-  function handleOverlayClick(e: MouseEvent) {
-    if (e.target === e.currentTarget) {
-      close()
-    }
-  }
 </script>
 
-<div class="modal modal-open" onclick={handleOverlayClick} onkeydown={handleKeydown} role="dialog" aria-modal="true" tabindex="-1">
-  <div class="modal-box bg-base-100 shadow-xl max-w-[500px] p-0 flex flex-col max-h-[90vh]">
-    <div class="flex items-center justify-between px-5 py-4 border-b border-base-300">
-      <h2 class="text-[0.95rem] font-semibold text-base-content m-0">{mode === 'create' ? 'Create Task' : 'Edit Task'}</h2>
-      <button class="btn btn-ghost btn-xs" onclick={close} type="button">✕</button>
+<Modal onClose={close} maxWidth="500px">
+  {#snippet header()}
+    <h2 class="text-[0.95rem] font-semibold text-base-content m-0">{mode === 'create' ? 'Create Task' : 'Edit Task'}</h2>
+  {/snippet}
+
+  <form onsubmit={(e: SubmitEvent) => { e.preventDefault(); handleSubmit() }}>
+    <div class="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+      <label class="flex flex-col gap-1.5">
+        <span class="text-xs text-base-content/60 font-medium">Title <span class="text-error">*</span></span>
+        <input
+          type="text"
+          class="input input-bordered input-sm w-full"
+          bind:value={title}
+          placeholder="Enter task title"
+          required
+          autofocus
+        />
+      </label>
+
+      <label class="flex flex-col gap-1.5">
+        <span class="text-xs text-base-content/60 font-medium">JIRA Key</span>
+        <input
+          type="text"
+          class="input input-bordered input-sm w-full"
+          bind:value={jiraKey}
+          placeholder="e.g. PROJ-123"
+        />
+      </label>
     </div>
 
-    <form onsubmit={(e: SubmitEvent) => { e.preventDefault(); handleSubmit() }}>
-      <div class="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
-        <label class="flex flex-col gap-1.5">
-          <span class="text-xs text-base-content/60 font-medium">Title <span class="text-error">*</span></span>
-          <input
-            type="text"
-            class="input input-bordered input-sm w-full"
-            bind:value={title}
-            placeholder="Enter task title"
-            required
-            autofocus
-          />
-        </label>
-
-        <label class="flex flex-col gap-1.5">
-          <span class="text-xs text-base-content/60 font-medium">JIRA Key</span>
-          <input
-            type="text"
-            class="input input-bordered input-sm w-full"
-            bind:value={jiraKey}
-            placeholder="e.g. PROJ-123"
-          />
-        </label>
-      </div>
-
-      <div class="flex gap-2.5 px-5 py-4 border-t border-base-300 justify-end">
-        <button class="btn btn-ghost btn-sm" onclick={close} type="button" disabled={isSubmitting}>
-          Cancel
-        </button>
-        <button
-          class="btn btn-primary btn-sm"
-          type="submit"
-          disabled={!title.trim() || isSubmitting}
-        >
-          {isSubmitting ? 'Saving...' : mode === 'create' ? 'Create Task' : 'Save Changes'}
-        </button>
-      </div>
-    </form>
-  </div>
-</div>
+    <div class="flex gap-2.5 px-5 py-4 border-t border-base-300 justify-end">
+      <button class="btn btn-ghost btn-sm" onclick={close} type="button" disabled={isSubmitting}>
+        Cancel
+      </button>
+      <button
+        class="btn btn-primary btn-sm"
+        type="submit"
+        disabled={!title.trim() || isSubmitting}
+      >
+        {isSubmitting ? 'Saving...' : mode === 'create' ? 'Create Task' : 'Save Changes'}
+      </button>
+    </div>
+  </form>
+</Modal>

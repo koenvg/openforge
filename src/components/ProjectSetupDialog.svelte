@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Project } from '../lib/types'
   import { createProject, setProjectConfig } from '../lib/ipc'
+  import Modal from './Modal.svelte'
 
   interface Props {
     onClose?: () => void
@@ -46,117 +47,101 @@
   function close() {
     onClose?.()
   }
-
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') {
-      e.stopPropagation()
-      close()
-    }
-  }
-
-  function handleOverlayClick(e: MouseEvent) {
-    if (e.target === e.currentTarget) {
-      close()
-    }
-  }
 </script>
 
-<div class="modal modal-open" onclick={handleOverlayClick} onkeydown={handleKeydown} role="dialog" aria-modal="true" tabindex="-1">
-  <div class="modal-box bg-base-100 shadow-xl max-w-[550px] p-0 flex flex-col max-h-[90vh]">
-    <div class="flex items-center justify-between px-5 py-4 border-b border-base-300">
-      <h2 class="text-[0.95rem] font-semibold text-base-content m-0">New Project</h2>
-      <button class="btn btn-ghost btn-xs" onclick={close} type="button">✕</button>
-    </div>
+<Modal onClose={close} maxWidth="550px">
+  {#snippet header()}
+    <h2 class="text-[0.95rem] font-semibold text-base-content m-0">New Project</h2>
+  {/snippet}
 
-    <form class="flex-1 overflow-y-auto p-5 flex flex-col gap-4" onsubmit={(e: SubmitEvent) => { e.preventDefault(); handleSubmit() }}>
-      <label class="flex flex-col gap-1.5">
-        <span class="text-xs text-base-content/60 font-medium">Project Name <span class="text-error">*</span></span>
-        <input
-          type="text"
-          class="input input-bordered input-sm w-full"
-          bind:value={projectName}
-          placeholder="My Awesome Project"
-          required
-          autofocus
-        />
-      </label>
+  <form class="flex-1 overflow-y-auto p-5 flex flex-col gap-4" onsubmit={(e: SubmitEvent) => { e.preventDefault(); handleSubmit() }}>
+    <label class="flex flex-col gap-1.5">
+      <span class="text-xs text-base-content/60 font-medium">Project Name <span class="text-error">*</span></span>
+      <input
+        type="text"
+        class="input input-bordered input-sm w-full"
+        bind:value={projectName}
+        placeholder="My Awesome Project"
+        required
+        autofocus
+      />
+    </label>
 
-      <label class="flex flex-col gap-1.5">
-        <span class="text-xs text-base-content/60 font-medium">Repository Path <span class="text-error">*</span></span>
-        <input
-          type="text"
-          class="input input-bordered input-sm w-full"
-          bind:value={path}
-          placeholder="/Users/you/workspace/my-project"
-          required
-        />
-      </label>
+    <label class="flex flex-col gap-1.5">
+      <span class="text-xs text-base-content/60 font-medium">Repository Path <span class="text-error">*</span></span>
+      <input
+        type="text"
+        class="input input-bordered input-sm w-full"
+        bind:value={path}
+        placeholder="/Users/you/workspace/my-project"
+        required
+      />
+    </label>
 
-      <div class="divider my-2"></div>
+    <div class="divider my-2"></div>
 
-      <div class="my-1">
-        <button
-          class="btn btn-ghost btn-xs gap-2 text-base-content/60 font-semibold"
-          onclick={() => showJiraSection = !showJiraSection}
-          type="button"
-        >
-          <span class="text-[0.6rem] transition-transform duration-200 {showJiraSection ? 'rotate-90' : ''}">▶</span>
-          <span>JIRA Configuration (Optional)</span>
-        </button>
-      </div>
-
-      {#if showJiraSection}
-        <div class="flex flex-col gap-3.5 pl-4 mt-2">
-          <label class="flex flex-col gap-1.5">
-            <span class="text-xs text-base-content/60 font-medium">Board ID</span>
-            <input
-              type="text"
-              class="input input-bordered input-sm w-full"
-              bind:value={jiraBoardId}
-              placeholder="123"
-            />
-          </label>
-        </div>
-      {/if}
-
-      <div class="divider my-2"></div>
-
-      <div class="my-1">
-        <button
-          class="btn btn-ghost btn-xs gap-2 text-base-content/60 font-semibold"
-          onclick={() => showGithubSection = !showGithubSection}
-          type="button"
-        >
-          <span class="text-[0.6rem] transition-transform duration-200 {showGithubSection ? 'rotate-90' : ''}">▶</span>
-          <span>GitHub Configuration (Optional)</span>
-        </button>
-      </div>
-
-      {#if showGithubSection}
-        <div class="flex flex-col gap-3.5 pl-4 mt-2">
-          <label class="flex flex-col gap-1.5">
-            <span class="text-xs text-base-content/60 font-medium">Default Repository</span>
-            <input
-              type="text"
-              class="input input-bordered input-sm w-full"
-              bind:value={githubDefaultRepo}
-              placeholder="owner/repo-name"
-            />
-          </label>
-        </div>
-      {/if}
-    </form>
-
-    <div class="flex gap-2.5 px-5 py-4 border-t border-base-300 justify-end">
-      <button class="btn btn-ghost btn-sm" onclick={close} type="button" disabled={isSubmitting}>Cancel</button>
+    <div class="my-1">
       <button
-        class="btn btn-primary btn-sm"
-        onclick={handleSubmit}
+        class="btn btn-ghost btn-xs gap-2 text-base-content/60 font-semibold"
+        onclick={() => showJiraSection = !showJiraSection}
         type="button"
-        disabled={!projectName.trim() || !path.trim() || isSubmitting}
       >
-        {isSubmitting ? 'Creating...' : 'Create Project'}
+        <span class="text-[0.6rem] transition-transform duration-200 {showJiraSection ? 'rotate-90' : ''}">▶</span>
+        <span>JIRA Configuration (Optional)</span>
       </button>
     </div>
+
+    {#if showJiraSection}
+      <div class="flex flex-col gap-3.5 pl-4 mt-2">
+        <label class="flex flex-col gap-1.5">
+          <span class="text-xs text-base-content/60 font-medium">Board ID</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full"
+            bind:value={jiraBoardId}
+            placeholder="123"
+          />
+        </label>
+      </div>
+    {/if}
+
+    <div class="divider my-2"></div>
+
+    <div class="my-1">
+      <button
+        class="btn btn-ghost btn-xs gap-2 text-base-content/60 font-semibold"
+        onclick={() => showGithubSection = !showGithubSection}
+        type="button"
+      >
+        <span class="text-[0.6rem] transition-transform duration-200 {showGithubSection ? 'rotate-90' : ''}">▶</span>
+        <span>GitHub Configuration (Optional)</span>
+      </button>
+    </div>
+
+    {#if showGithubSection}
+      <div class="flex flex-col gap-3.5 pl-4 mt-2">
+        <label class="flex flex-col gap-1.5">
+          <span class="text-xs text-base-content/60 font-medium">Default Repository</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full"
+            bind:value={githubDefaultRepo}
+            placeholder="owner/repo-name"
+          />
+        </label>
+      </div>
+    {/if}
+  </form>
+
+  <div class="flex gap-2.5 px-5 py-4 border-t border-base-300 justify-end">
+    <button class="btn btn-ghost btn-sm" onclick={close} type="button" disabled={isSubmitting}>Cancel</button>
+    <button
+      class="btn btn-primary btn-sm"
+      onclick={handleSubmit}
+      type="button"
+      disabled={!projectName.trim() || !path.trim() || isSubmitting}
+    >
+      {isSubmitting ? 'Creating...' : 'Create Project'}
+    </button>
   </div>
-</div>
+</Modal>
