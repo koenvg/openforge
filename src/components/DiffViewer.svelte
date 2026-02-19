@@ -23,6 +23,48 @@
   let commentText = $state('')
   let fileContentsMap = $state<Map<string, FileContents>>(new Map())
 
+  let collapsedFiles = $state(new Set<string>())
+
+  function getStatusIcon(status: string): string {
+    switch (status) {
+      case 'added': return '+'
+      case 'removed': return '−'
+      case 'modified': return '±'
+      case 'renamed': return '→'
+      default: return '•'
+    }
+  }
+
+  function getStatusColor(status: string): string {
+    switch (status) {
+      case 'added': return 'var(--success)'
+      case 'removed': return 'var(--error)'
+      case 'modified': return 'var(--warning)'
+      case 'renamed': return 'var(--accent)'
+      default: return 'var(--text-secondary)'
+    }
+  }
+
+  function getStatusLabel(status: string): string {
+    switch (status) {
+      case 'added': return 'Added'
+      case 'removed': return 'Deleted'
+      case 'modified': return 'Modified'
+      case 'renamed': return 'Renamed'
+      default: return status
+    }
+  }
+
+  function toggleCollapse(filename: string) {
+    const next = new Set(collapsedFiles)
+    if (next.has(filename)) {
+      next.delete(filename)
+    } else {
+      next.add(filename)
+    }
+    collapsedFiles = next
+  }
+
   let fetchedKeys = new Set<string>()
 
   $effect(() => {
@@ -81,6 +123,25 @@
     {:else}
       {#each files as file (file.filename)}
         <div data-diff-file={file.filename} class="diff-file-wrapper">
+          <button class="file-header" onclick={() => toggleCollapse(file.filename)}>
+            <span class="collapse-indicator">{collapsedFiles.has(file.filename) ? '▶' : '▼'}</span>
+            <span class="file-status-badge" style="color: {getStatusColor(file.status)}">
+              {getStatusIcon(file.status)}
+            </span>
+            <span class="file-path" title={file.filename}>
+              {#if file.previous_filename}
+                <span class="file-renamed-old">{file.previous_filename}</span>
+                <span class="file-renamed-arrow">→</span>
+              {/if}
+              {file.filename}
+            </span>
+            <span class="file-status-label" style="color: {getStatusColor(file.status)}">{getStatusLabel(file.status)}</span>
+            <span class="file-stats">
+              {#if file.additions > 0}<span class="file-additions">+{file.additions}</span>{/if}
+              {#if file.deletions > 0}<span class="file-deletions">−{file.deletions}</span>{/if}
+            </span>
+          </button>
+          {#if !collapsedFiles.has(file.filename)}
           <DiffView
             data={toGitDiffViewData(file, fileContentsMap.get(file.filename))}
             extendData={buildExtendData(file.filename, existingComments, $pendingManualComments)}
@@ -158,6 +219,7 @@
               </div>
             {/snippet}
           </DiffView>
+          {/if}
         </div>
       {/each}
     {/if}
@@ -220,7 +282,95 @@
   }
 
   .diff-file-wrapper {
-    margin-bottom: 1px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .diff-file-wrapper:last-child {
+    margin-bottom: 0;
+  }
+
+  /* ── File header ──────────────────────────────────────────────────────── */
+
+  .file-header {
+    all: unset;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background 0.1s;
+    box-sizing: border-box;
+  }
+
+  .file-header:hover {
+    background: rgba(122, 162, 247, 0.06);
+  }
+
+  .collapse-indicator {
+    font-size: 0.6rem;
+    color: var(--text-secondary);
+    width: 12px;
+    flex-shrink: 0;
+  }
+
+  .file-status-badge {
+    font-weight: bold;
+    font-size: 0.9rem;
+    width: 16px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .file-path {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.75rem;
+    text-align: left;
+  }
+
+  .file-renamed-old {
+    color: var(--text-secondary);
+    text-decoration: line-through;
+  }
+
+  .file-renamed-arrow {
+    color: var(--accent);
+    margin: 0 4px;
+  }
+
+  .file-status-label {
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    flex-shrink: 0;
+  }
+
+  .file-stats {
+    display: flex;
+    gap: 8px;
+    font-size: 0.7rem;
+    flex-shrink: 0;
+    margin-left: 4px;
+  }
+
+  .file-additions {
+    color: var(--success);
+  }
+
+  .file-deletions {
+    color: var(--error);
   }
 
   .empty {
