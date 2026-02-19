@@ -79,6 +79,7 @@ impl JiraClient {
             .query(&[
                 ("jql", jql),
                 ("fields", "summary,status,description,assignee,priority"),
+                ("expand", "renderedFields"),
             ])
             .send()
             .await
@@ -143,6 +144,7 @@ impl JiraClient {
             .client
             .get(&url)
             .header("Authorization", auth_header)
+            .query(&[("expand", "renderedFields")])
             .send()
             .await
             .map_err(|e| JiraError::NetworkError(e.to_string()))?;
@@ -325,6 +327,8 @@ pub struct SearchResponse {
 pub struct JiraIssue {
     pub key: String,
     pub fields: JiraFields,
+    #[serde(default, rename = "renderedFields")]
+    pub rendered_fields: Option<JiraRenderedFields>,
     #[serde(flatten)]
     pub extra: serde_json::Value,
 }
@@ -341,6 +345,15 @@ pub struct JiraFields {
     pub assignee: Option<JiraUser>,
     #[serde(default)]
     pub priority: Option<JiraPriority>,
+    #[serde(flatten)]
+    pub extra: serde_json::Value,
+}
+
+/// Pre-rendered HTML fields from JIRA (via expand=renderedFields)
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct JiraRenderedFields {
+    #[serde(default)]
+    pub description: Option<String>,
     #[serde(flatten)]
     pub extra: serde_json::Value,
 }
