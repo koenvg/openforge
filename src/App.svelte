@@ -387,7 +387,7 @@
 
 <div class="flex flex-col h-screen overflow-hidden">
   <header class="navbar bg-base-200 border-b border-base-300 px-5 gap-5 min-h-14 shrink-0">
-    <div class="flex items-center gap-4">
+    <div class="flex items-center gap-4 flex-1">
       <h1 class="text-sm font-semibold text-base-content tracking-wide m-0">AI Command Center</h1>
       <ProjectSwitcher onNewProject={() => showProjectSetup = true} />
       <button 
@@ -430,7 +430,7 @@
       </button>
     </nav>
 
-    <div class="flex items-center gap-3">
+    <div class="flex items-center gap-3 flex-1 justify-end">
       {#if openCodeStatus}
         <span class="flex items-center gap-1.5 text-xs text-base-content/60">
           <span class="status {openCodeStatus.healthy ? 'status-success' : 'status-error'}"></span>
