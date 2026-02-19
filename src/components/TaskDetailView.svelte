@@ -33,6 +33,8 @@
 
   function handleEscape(event: KeyboardEvent) {
     if (event.key === 'Escape') {
+      // Don't navigate back if a dialog or overlay is open
+      if (document.querySelector('[role="dialog"]')) return
       $selectedTaskId = null
     }
   }
