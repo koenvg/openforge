@@ -379,15 +379,15 @@
     </div>
   {/if}
 
-  <div class="flex-1 overflow-hidden min-h-0 bg-white border border-base-300 rounded-md relative">
+  <div class="flex-1 overflow-hidden min-h-0 bg-base-100 border border-base-300 rounded-md relative">
     <div class="terminal-wrapper" bind:this={terminalContainer}></div>
     {#if loadingHistory}
-      <div class="absolute inset-0 flex flex-col items-center justify-center p-16 gap-4 bg-white z-[1]">
+      <div class="absolute inset-0 flex flex-col items-center justify-center p-16 gap-4 bg-base-100 z-[1]">
         <span class="loading loading-spinner loading-md text-primary"></span>
         <div class="text-base font-semibold text-base-content">Loading session output...</div>
       </div>
     {:else if !session && status === 'idle'}
-      <div class="absolute inset-0 flex flex-col items-center justify-center p-16 gap-4 bg-white z-[1]">
+      <div class="absolute inset-0 flex flex-col items-center justify-center p-16 gap-4 bg-base-100 z-[1]">
         <svg class="w-16 h-16 text-base-content/40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -414,15 +414,15 @@
   }
 
   :global(.terminal-wrapper .xterm-viewport::-webkit-scrollbar-track) {
-    background: #f3f4f6;
+    background: oklch(var(--color-base-200));
   }
 
   :global(.terminal-wrapper .xterm-viewport::-webkit-scrollbar-thumb) {
-    background: #d1d5db;
+    background: oklch(var(--color-base-300));
     border-radius: 3px;
   }
 
   :global(.terminal-wrapper .xterm-viewport::-webkit-scrollbar-thumb:hover) {
-    background: #9ca3af;
+    background: oklch(var(--color-base-content) / 0.4);
   }
 </style>

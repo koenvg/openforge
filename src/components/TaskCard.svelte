@@ -130,23 +130,23 @@
   /* Status border-left indicators — use daisyUI theme color vars */
   :global(.running) {
     border-left: 3px solid oklch(var(--color-success));
-    background: linear-gradient(to right, oklch(var(--color-success) / 0.05), transparent 40%);
+    background-image: linear-gradient(to right, oklch(var(--color-success) / 0.05), transparent 40%);
   }
   :global(.completed) {
     border-left: 3px solid oklch(var(--color-primary));
-    background: linear-gradient(to right, oklch(var(--color-primary) / 0.08), transparent 40%);
+    background-image: linear-gradient(to right, oklch(var(--color-primary) / 0.08), transparent 40%);
   }
   :global(.paused) {
     border-left: 3px solid oklch(var(--color-warning));
-    background: linear-gradient(to right, oklch(var(--color-warning) / 0.05), transparent 40%);
+    background-image: linear-gradient(to right, oklch(var(--color-warning) / 0.05), transparent 40%);
   }
   :global(.failed) {
     border-left: 3px solid oklch(var(--color-error));
-    background: linear-gradient(to right, oklch(var(--color-error) / 0.05), transparent 40%);
+    background-image: linear-gradient(to right, oklch(var(--color-error) / 0.05), transparent 40%);
   }
   :global(.interrupted) {
     border-left: 3px solid oklch(var(--color-base-content) / 0.3);
-    background: linear-gradient(to right, oklch(var(--color-base-content) / 0.03), transparent 40%);
+    background-image: linear-gradient(to right, oklch(var(--color-base-content) / 0.03), transparent 40%);
   }
   :global(.needs-input) {
     border: 2px solid oklch(var(--color-warning));
