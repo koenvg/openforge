@@ -1089,30 +1089,6 @@ async fn get_agent_logs(
 }
 
 #[tauri::command]
-async fn persist_session_status(
-    db: State<'_, Mutex<db::Database>>,
-    task_id: String,
-    status: String,
-    error_message: Option<String>,
-    checkpoint_data: Option<String>,
-) -> Result<(), String> {
-    let db_lock = db.lock().unwrap();
-    let session = db_lock
-        .get_latest_session_for_ticket(&task_id)
-        .map_err(|e| format!("Failed to get session: {}", e))?
-        .ok_or_else(|| format!("No session found for task {}", task_id))?;
-    db_lock
-        .update_agent_session(
-            &session.id,
-            &session.stage,
-            &status,
-            checkpoint_data.as_deref(),
-            error_message.as_deref(),
-        )
-        .map_err(|e| format!("Failed to update session: {}", e))
-}
-
-#[tauri::command]
 async fn get_latest_session(
     db: State<'_, Mutex<db::Database>>,
     task_id: String,
@@ -1997,7 +1973,6 @@ fn main() {
             get_session_status,
             abort_session,
             get_agent_logs,
-            persist_session_status,
             get_latest_session,
             get_latest_sessions,
             get_session_output,

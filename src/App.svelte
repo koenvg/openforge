@@ -3,7 +3,7 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
   import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount } from './lib/stores'
-  import { getProjects, getTasksForProject, getOpenCodeStatus, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, persistSessionStatus } from './lib/ipc'
+  import { getProjects, getTasksForProject, getOpenCodeStatus, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions } from './lib/ipc'
   import type { Task, PullRequestInfo, OpenCodeStatus, AgentEvent } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
   import TaskDetailView from './components/TaskDetailView.svelte'
@@ -181,9 +181,6 @@
           updated.set(taskId, { ...session, status: 'completed' })
           $activeSessions = updated
         }
-        persistSessionStatus(taskId, 'completed', null).catch(e =>
-          console.error('[session] Failed to persist completed status:', e)
-        )
         if ($checkpointNotification?.ticketId === taskId) {
           $checkpointNotification = null
         }
@@ -200,9 +197,6 @@
           updated.set(taskId, { ...session, status: 'failed', error_message: event.payload.error })
           $activeSessions = updated
         }
-        persistSessionStatus(taskId, 'failed', event.payload.error).catch(e =>
-          console.error('[session] Failed to persist failed status:', e)
-        )
         if ($checkpointNotification?.ticketId === taskId) {
           $checkpointNotification = null
         }
@@ -278,9 +272,6 @@
               const updated = new Map($activeSessions)
               updated.set(taskId, { ...session, status: 'running', checkpoint_data: null })
               $activeSessions = updated
-              persistSessionStatus(taskId, 'running', null, null).catch(e =>
-                console.error('[session] Failed to persist running status:', e)
-              )
               if ($checkpointNotification?.ticketId === taskId) {
                 $checkpointNotification = null
               }
@@ -289,9 +280,6 @@
               const updated = new Map($activeSessions)
               updated.set(taskId, { ...session, status: 'running', checkpoint_data: null })
               $activeSessions = updated
-              persistSessionStatus(taskId, 'running', null, null).catch(e =>
-                console.error('[session] Failed to persist running status:', e)
-              )
               if ($checkpointNotification?.ticketId === taskId) {
                 $checkpointNotification = null
               }
@@ -318,9 +306,6 @@
           const updated = new Map($activeSessions)
           updated.set(taskId, { ...session, status: 'paused', checkpoint_data: event.payload.data })
           $activeSessions = updated
-          persistSessionStatus(taskId, 'paused', null, event.payload.data).catch(e =>
-            console.error('[session] Failed to persist paused status:', e)
-          )
           const task = $tasks.find(t => t.id === taskId)
           $checkpointNotification = {
             ticketId: taskId,
@@ -334,9 +319,6 @@
           const updated = new Map($activeSessions)
           updated.set(taskId, { ...session, status: 'running', checkpoint_data: null })
           $activeSessions = updated
-          persistSessionStatus(taskId, 'running', null, null).catch(e =>
-            console.error('[session] Failed to persist running status:', e)
-          )
           if ($checkpointNotification?.ticketId === taskId) {
             $checkpointNotification = null
           }
