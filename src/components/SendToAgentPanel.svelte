@@ -108,7 +108,7 @@
     {/if}
 
     <button
-      class="btn btn-ghost btn-sm border border-base-300"
+      class="btn btn-soft btn-sm shadow-sm hover:shadow-md transition-shadow"
       onclick={onRefresh}
       disabled={isSending}
       title="Refresh diff"
@@ -117,7 +117,7 @@
     </button>
 
     <button
-      class="btn btn-primary btn-sm font-semibold tracking-wide"
+      class="btn btn-primary btn-sm font-semibold tracking-wide shadow-sm hover:shadow-md transition-shadow"
       onclick={handleSendToAgent}
       disabled={!canSend}
       title={!hasComments ? 'Add comments before sending' : isAgentBusy ? 'Agent is currently running' : 'Send feedback to agent'}

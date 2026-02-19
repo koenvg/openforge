@@ -365,7 +365,7 @@
     </div>
     <div class="flex items-center gap-3">
       {#if status === 'running'}
-        <button class="btn btn-error btn-sm uppercase tracking-wide" onclick={handleAbort}>
+        <button class="btn btn-error btn-sm uppercase tracking-wide shadow-sm hover:shadow-md transition-shadow" onclick={handleAbort}>
           Abort
         </button>
       {/if}

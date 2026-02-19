@@ -170,7 +170,7 @@
 
   {#if task.status !== 'done'}
     <section class="flex flex-col gap-2.5">
-      <button class="btn btn-success btn-block text-base font-bold" onclick={() => handleStatusChange('done')}>
+      <button class="btn btn-success btn-block text-base font-bold shadow-sm hover:shadow-md transition-shadow" onclick={() => handleStatusChange('done')}>
         Move to Done
       </button>
     </section>
@@ -317,7 +317,7 @@
                   <div class="text-sm text-base-content leading-snug whitespace-pre-wrap break-words">{comment.body}</div>
                   {#if comment.addressed === 0}
                     <button 
-                      class="btn btn-ghost btn-xs border border-base-300 w-fit"
+                      class="btn btn-soft btn-xs w-fit shadow-sm hover:shadow-md transition-shadow"
                       onclick={() => handleMarkAddressed(comment.id, pr.id)}>
                       Mark Addressed
                     </button>

@@ -70,7 +70,7 @@
 
 <div class="flex flex-col flex-1 h-full bg-base-100 overflow-hidden">
   <header class="flex flex-col gap-4 px-6 py-5 bg-base-200 border-b border-base-300 shrink-0">
-    <button class="btn btn-ghost btn-sm gap-2 w-fit border border-base-300" onclick={handleBack}>
+    <button class="btn btn-soft btn-sm gap-2 w-fit shadow-sm hover:shadow-md transition-shadow" onclick={handleBack}>
       <span class="text-lg leading-none">←</span>
       Back to Board
     </button>
@@ -81,16 +81,16 @@
         {getStatusLabel(task.status)}
       </span>
       {#if hasWorktree}
-        <div class="inline-flex items-center bg-base-300 border border-base-300 rounded-full p-0.5 gap-0.5 shrink-0">
-          <button class="btn btn-ghost btn-xs rounded-full px-4 {!reviewMode ? 'btn-active bg-primary text-primary-content font-semibold' : ''}" onclick={() => reviewMode = false}>Code</button>
-          <button class="btn btn-ghost btn-xs rounded-full px-4 {reviewMode ? 'btn-active bg-primary text-primary-content font-semibold' : ''}" onclick={() => reviewMode = true}>Review</button>
+        <div class="inline-flex items-center bg-base-300 border border-base-300 rounded-full p-0.5 gap-0.5 shrink-0 shadow-sm">
+          <button class="btn btn-ghost btn-xs rounded-full px-4 transition-all duration-200 {!reviewMode ? 'btn-active bg-primary text-primary-content font-semibold shadow-sm' : 'hover:bg-base-200'}" onclick={() => reviewMode = false}>Code</button>
+          <button class="btn btn-ghost btn-xs rounded-full px-4 transition-all duration-200 {reviewMode ? 'btn-active bg-primary text-primary-content font-semibold shadow-sm' : 'hover:bg-base-200'}" onclick={() => reviewMode = true}>Review</button>
         </div>
       {/if}
       {#if actions.length > 0}
         <div class="flex gap-1.5 shrink-0">
           {#each actions as action (action.id)}
             <button
-              class="btn btn-ghost btn-sm border border-base-300 text-base-content/70 hover:text-primary hover:border-primary"
+              class="btn btn-soft btn-sm shadow-sm hover:shadow-md hover:btn-primary transition-all duration-200"
               disabled={isSessionBusy}
               title={isSessionBusy ? busyReason : action.name}
               onclick={() => handleActionClick(action)}
