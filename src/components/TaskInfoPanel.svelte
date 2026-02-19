@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import type { Task, PrComment, KanbanColumn, WorktreeInfo } from '../lib/types'
-  import { COLUMN_LABELS, parseCheckRuns } from '../lib/types'
+  import { COLUMN_LABELS, parseCheckRuns, isReadyToMerge } from '../lib/types'
   import { ticketPrs } from '../lib/stores'
   import { 
     updateTaskStatus, 
@@ -173,6 +173,35 @@
     </section>
   {/if}
 
+  <!-- Merge Status Section -->
+  {#if taskPrs.some(pr => pr.state === 'merged' || isReadyToMerge(pr))}
+    <section class="section">
+      <h3 class="section-title">Merge Status</h3>
+      {#each taskPrs as pr (pr.id)}
+        {#if pr.state === 'merged'}
+          <div class="merge-status-group">
+            <div class="merge-status-header">
+              <span class="pipeline-pr-name">{pr.title}</span>
+              <span class="pipeline-status-badge merge-merged">&#x2714; Merged</span>
+            </div>
+            {#if pr.merged_at}
+              <div class="merge-timestamp">
+                Merged on {formatDate(pr.merged_at)}
+              </div>
+            {/if}
+          </div>
+        {:else if isReadyToMerge(pr)}
+          <div class="merge-status-group">
+            <div class="merge-status-header">
+              <span class="pipeline-pr-name">{pr.title}</span>
+              <span class="pipeline-status-badge merge-ready">&#x25CF; Ready to Merge</span>
+            </div>
+          </div>
+        {/if}
+      {/each}
+    </section>
+  {/if}
+
   <!-- PR Links Section -->
   {#if taskPrs.length > 0}
     <section class="section">
@@ -181,7 +210,7 @@
         {#each taskPrs as pr (pr.id)}
           <div class="pr-item">
             <div class="pr-header">
-              <span class="pr-state" class:open={pr.state === 'open'} class:closed={pr.state === 'closed'}>
+              <span class="pr-state" class:open={pr.state === 'open'} class:closed={pr.state === 'closed'} class:merged={pr.state === 'merged'}>
                 {pr.state}
               </span>
               <span class="pr-title">{pr.title}</span>
@@ -448,6 +477,11 @@
     color: white;
   }
 
+  .pr-state.merged {
+    background: #bb9af7;
+    color: white;
+  }
+
   .pr-state.closed {
     background: var(--error);
     color: white;
@@ -630,6 +664,39 @@
   .review-review_required {
     background: rgba(86, 95, 137, 0.15);
     color: var(--text-secondary);
+  }
+
+  .merge-merged {
+    background: rgba(187, 154, 247, 0.15);
+    color: #bb9af7;
+  }
+
+  .merge-ready {
+    background: rgba(158, 206, 106, 0.25);
+    color: var(--success);
+    animation: ready-pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes ready-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
+  .merge-status-group {
+    margin-bottom: 12px;
+  }
+
+  .merge-status-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .merge-timestamp {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    margin-top: 4px;
   }
 
   .check-runs-list {

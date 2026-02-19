@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Task, AgentSession, PullRequestInfo } from '../lib/types'
+  import { isReadyToMerge } from '../lib/types'
   import { openUrl } from '../lib/ipc'
 
   interface Props {
@@ -85,23 +86,32 @@
       {#each pullRequests as pr}
         <span
           class="pr-link"
-          class:pr-open={pr.state === 'open'}
-          class:pr-closed={pr.state !== 'open'}
+          class:pr-open={pr.state === 'open' && !isReadyToMerge(pr)}
+          class:pr-merged={pr.state === 'merged'}
+          class:pr-ready={isReadyToMerge(pr)}
+          class:pr-closed={pr.state === 'closed'}
           role="link"
           tabindex="0"
           onclick={(e: MouseEvent) => { e.stopPropagation(); openUrl(pr.url) }}
           onkeydown={(e: KeyboardEvent) => { e.stopPropagation(); if (e.key === 'Enter') openUrl(pr.url) }}
         >
-          {#if pr.ci_status && pr.ci_status !== 'none'}
+          {#if pr.ci_status && pr.ci_status !== 'none' && pr.state === 'open'}
             <span class="ci-dot ci-{pr.ci_status}" title="CI: {pr.ci_status}"></span>
           {/if}
-          {#if pr.review_status && pr.review_status !== 'none'}
+          {#if pr.review_status && pr.review_status !== 'none' && pr.state === 'open'}
             <span class="review-dot review-{pr.review_status}" title="Review: {pr.review_status}"></span>
           {/if}
           PR #{pr.id}
         </span>
       {/each}
     </div>
+    {#each pullRequests as pr}
+      {#if pr.state === 'merged'}
+        <div class="card-merge-status merged">Merged</div>
+      {:else if isReadyToMerge(pr)}
+        <div class="card-merge-status ready">Ready to merge</div>
+      {/if}
+    {/each}
   {/if}
   {#if task.jira_assignee}
     <div class="card-assignee">{task.jira_assignee}</div>
@@ -312,9 +322,40 @@
     color: var(--success);
   }
 
+  .pr-link.pr-merged {
+    background: rgba(187, 154, 247, 0.15);
+    color: #bb9af7;
+  }
+
+  .pr-link.pr-ready {
+    background: rgba(158, 206, 106, 0.25);
+    color: var(--success);
+    border: 1px solid rgba(158, 206, 106, 0.4);
+  }
+
   .pr-link.pr-closed {
     background: rgba(86, 95, 137, 0.2);
     color: var(--text-secondary);
+  }
+
+  .card-merge-status {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin-top: 4px;
+    text-align: center;
+  }
+
+  .card-merge-status.merged {
+    background: rgba(187, 154, 247, 0.15);
+    color: #bb9af7;
+  }
+
+  .card-merge-status.ready {
+    background: rgba(158, 206, 106, 0.15);
+    color: var(--success);
+    border: 1px solid rgba(158, 206, 106, 0.3);
   }
 
   .ci-dot {

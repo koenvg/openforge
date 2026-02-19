@@ -341,6 +341,52 @@ async fn sync_open_prs(
             .collect::<Vec<_>>()
     };
 
+    let mut merged_pr_ids: HashSet<i64> = HashSet::new();
+    let merge_check_futures: Vec<_> = closed_prs
+        .iter()
+        .map(|pr| {
+            let client = github_client.clone();
+            let token = github_token.to_string();
+            let owner = pr.repo_owner.clone();
+            let name = pr.repo_name.clone();
+            let pr_id = pr.id;
+            async move {
+                match client.get_pr_details(&owner, &name, pr_id, &token).await {
+                    Ok(details) => {
+                        let merged = details.extra.get("merged")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+                        let merged_at = details.extra.get("merged_at")
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                            .map(|dt| dt.timestamp());
+                        (pr_id, merged, merged_at)
+                    }
+                    Err(e) => {
+                        eprintln!("[GitHub Poller] Failed to check merge status for PR #{}: {}", pr_id, e);
+                        (pr_id, false, None)
+                    }
+                }
+            }
+        })
+        .collect();
+
+    let merge_results = join_all(merge_check_futures).await;
+
+    {
+        let db_lock = db.lock().unwrap();
+        for (pr_id, merged, merged_at) in &merge_results {
+            if *merged {
+                merged_pr_ids.insert(*pr_id);
+                if let Some(ts) = merged_at {
+                    if let Err(e) = db_lock.update_pr_merged(*pr_id, *ts) {
+                        eprintln!("[GitHub Poller] Failed to update merged status for PR #{}: {}", pr_id, e);
+                    }
+                }
+            }
+        }
+    }
+
     for closed_pr in closed_prs {
         let task_id = closed_pr.ticket_id.clone();
         let app_clone = app.clone();
@@ -356,10 +402,13 @@ async fn sync_open_prs(
         });
     }
 
+    let mut dont_close_ids = open_pr_ids.clone();
+    dont_close_ids.extend(merged_pr_ids.iter());
+
     {
         let db_lock = db.lock().unwrap();
         db_lock
-            .close_stale_open_prs(repo_owner, repo_name, &open_pr_ids)
+            .close_stale_open_prs(repo_owner, repo_name, &dont_close_ids)
             .map_err(|e| format!("Failed to close stale PRs: {}", e))?;
     }
 

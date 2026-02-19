@@ -65,8 +65,16 @@ export interface PullRequestInfo {
   ci_status: string | null;
   ci_check_runs: string | null;
   review_status: string | null;
+  merged_at: number | null;
   created_at: number;
   updated_at: number;
+}
+
+/** Check if a PR is ready to merge (open + CI green + approved) */
+export function isReadyToMerge(pr: PullRequestInfo): boolean {
+  return pr.state === 'open'
+    && pr.ci_status === 'success'
+    && pr.review_status === 'approved';
 }
 
 export interface CheckRunInfo {

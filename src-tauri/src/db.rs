@@ -60,6 +60,7 @@ pub struct PrRow {
     pub ci_status: Option<String>,
     pub ci_check_runs: Option<String>,
     pub review_status: Option<String>,
+    pub merged_at: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -486,6 +487,22 @@ impl Database {
                 "ALTER TABLE pull_requests ADD COLUMN review_status TEXT",
                 [],
             )?;
+        }
+
+        // ============================================================================
+        // Migration: Add merged_at column to pull_requests table
+        // ============================================================================
+        let merged_at_exists: bool = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('pull_requests') WHERE name='merged_at'",
+            [],
+            |row| {
+                let count: i64 = row.get(0)?;
+                Ok(count > 0)
+            },
+        )?;
+
+        if !merged_at_exists {
+            conn.execute("ALTER TABLE pull_requests ADD COLUMN merged_at INTEGER", [])?;
         }
 
         // ============================================================================
@@ -1191,9 +1208,9 @@ impl Database {
     pub fn get_open_prs(&self) -> Result<Vec<PrRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, created_at, updated_at 
-             FROM pull_requests 
-             WHERE state = 'open' 
+            "SELECT id, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, merged_at, created_at, updated_at
+             FROM pull_requests
+             WHERE state = 'open'
              ORDER BY updated_at DESC"
         )?;
 
@@ -1210,8 +1227,9 @@ impl Database {
                 ci_status: row.get(8)?,
                 ci_check_runs: row.get(9)?,
                 review_status: row.get(10)?,
-                created_at: row.get(11)?,
-                updated_at: row.get(12)?,
+                merged_at: row.get(11)?,
+                created_at: row.get(12)?,
+                updated_at: row.get(13)?,
             })
         })?;
 
@@ -1225,7 +1243,7 @@ impl Database {
     pub fn get_all_pull_requests(&self) -> Result<Vec<PrRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, created_at, updated_at
+            "SELECT id, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, merged_at, created_at, updated_at
              FROM pull_requests
              ORDER BY updated_at DESC",
         )?;
@@ -1243,8 +1261,9 @@ impl Database {
                 ci_status: row.get(8)?,
                 ci_check_runs: row.get(9)?,
                 review_status: row.get(10)?,
-                created_at: row.get(11)?,
-                updated_at: row.get(12)?,
+                merged_at: row.get(11)?,
+                created_at: row.get(12)?,
+                updated_at: row.get(13)?,
             })
         })?;
 
@@ -1377,6 +1396,15 @@ impl Database {
         conn.execute(
             "UPDATE pull_requests SET review_status = ?1 WHERE id = ?2",
             rusqlite::params![review_status, pr_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_pr_merged(&self, id: i64, merged_at: i64) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE pull_requests SET state = 'merged', merged_at = ?1 WHERE id = ?2",
+            rusqlite::params![merged_at, id],
         )?;
         Ok(())
     }
