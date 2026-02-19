@@ -170,9 +170,13 @@ pub async fn start_jira_sync(app: AppHandle) {
                             .as_ref()
                             .map(|u| u.display_name.clone())
                             .unwrap_or_default();
+                        let jira_description = issue.rendered_fields
+                            .as_ref()
+                            .and_then(|rf| rf.description.clone())
+                            .unwrap_or_default();
 
                         let db_lock = db.lock().unwrap();
-                        match db_lock.update_task_jira_info(&issue.key, &jira_title, &jira_status, &assignee) {
+                        match db_lock.update_task_jira_info(&issue.key, &jira_title, &jira_status, &assignee, &jira_description) {
                             Ok(count) => updated += count,
                             Err(e) => {
                                 eprintln!("[JIRA Sync] Failed to update {}: {}", issue.key, e)
