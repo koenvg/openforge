@@ -10,6 +10,7 @@
     openUrl, 
     getWorktreeForTask 
   } from '../lib/ipc'
+  import CopyButton from './CopyButton.svelte'
 
   interface Props {
     task: Task
@@ -90,20 +91,6 @@
     return comments.filter(c => c.addressed === 0).length
   }
 
-  let copiedField = $state<string | null>(null)
-  let copyTimeout: ReturnType<typeof setTimeout> | null = null
-
-  async function copyToClipboard(text: string, field: string) {
-    try {
-      await navigator.clipboard.writeText(text)
-      copiedField = field
-      if (copyTimeout) clearTimeout(copyTimeout)
-      copyTimeout = setTimeout(() => { copiedField = null }, 2000)
-    } catch (e) {
-      console.error('Failed to copy:', e)
-    }
-  }
-
   let statusLabel = $derived(COLUMN_LABELS[task.status as KanbanColumn] || task.status)
   let taskPrs = $derived($ticketPrs.get(task.id) || [])
 </script>
@@ -158,36 +145,14 @@
         <span class="label">Worktree Branch</span>
         <div class="copyable-field">
           <span class="value monospace">{worktree.branch_name}</span>
-          <button
-            class="copy-btn"
-            class:copied={copiedField === 'branch'}
-            title={copiedField === 'branch' ? 'Copied!' : 'Copy branch name'}
-            onclick={() => copyToClipboard(worktree?.branch_name ?? '', 'branch')}
-          >
-            {#if copiedField === 'branch'}
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-            {:else}
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-            {/if}
-          </button>
+          <CopyButton text={worktree.branch_name} label="Copy branch name" />
         </div>
       </div>
       <div class="field">
         <span class="label">Worktree Path</span>
         <div class="copyable-field">
           <span class="value monospace small">{worktree.worktree_path}</span>
-          <button
-            class="copy-btn"
-            class:copied={copiedField === 'path'}
-            title={copiedField === 'path' ? 'Copied!' : 'Copy path'}
-            onclick={() => copyToClipboard(worktree?.worktree_path ?? '', 'path')}
-          >
-            {#if copiedField === 'path'}
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-            {:else}
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-            {/if}
-          </button>
+          <CopyButton text={worktree.worktree_path} label="Copy path" />
         </div>
       </div>
       {#if worktree.opencode_port}
@@ -390,29 +355,6 @@
   .copyable-field .value {
     flex: 1;
     min-width: 0;
-  }
-
-  .copy-btn {
-    all: unset;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    width: 26px;
-    height: 26px;
-    border-radius: 4px;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .copy-btn:hover {
-    color: var(--accent);
-    background: rgba(122, 162, 247, 0.1);
-  }
-
-  .copy-btn.copied {
-    color: var(--success);
   }
 
   .status-badge {
