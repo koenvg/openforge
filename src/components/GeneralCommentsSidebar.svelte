@@ -109,22 +109,25 @@
   })
 </script>
 
-<div class="sidebar">
+<div class="flex flex-col h-full bg-base-200 overflow-hidden">
   {#if archivedCount > 0}
-    <div class="archived-section">
-      <button class="archived-toggle" onclick={toggleArchived}>
-        <span class="toggle-icon">{archivedExpanded ? '▾' : '▸'}</span>
-        <span class="toggle-label">Previous Round ({archivedCount})</span>
+    <div class="border-b border-base-300 shrink-0">
+      <button
+        class="flex items-center gap-1.5 w-full px-4 py-2.5 cursor-pointer hover:bg-base-content/5 transition-colors text-left"
+        onclick={toggleArchived}
+      >
+        <span class="text-xs text-base-content/50 w-2.5 shrink-0">{archivedExpanded ? '▾' : '▸'}</span>
+        <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Previous Round ({archivedCount})</span>
       </button>
       {#if archivedExpanded}
-        <div class="archived-list">
+        <div class="flex flex-col px-3 pb-3 max-h-[220px] overflow-y-auto">
           {#each $selfReviewArchivedComments as comment (comment.id)}
-            <div class="comment-item archived">
-              <div class="comment-meta">
-                <span class="comment-index">#{comment.id}</span>
-                <span class="comment-timestamp">{formatTimestamp(comment.created_at)}</span>
+            <div class="flex flex-col gap-1.5 px-1 py-2 border-b border-base-300 opacity-50 last:border-b-0">
+              <div class="flex items-center gap-2">
+                <span class="text-[0.7rem] font-semibold text-primary/70 tabular-nums">#{comment.id}</span>
+                <span class="text-[0.7rem] text-base-content/50 ml-auto">{formatTimestamp(comment.created_at)}</span>
               </div>
-              <div class="comment-body">{comment.body}</div>
+              <div class="text-xs text-base-content/50 leading-relaxed whitespace-pre-wrap break-words">{comment.body}</div>
             </div>
           {/each}
         </div>
@@ -132,56 +135,56 @@
     </div>
   {/if}
 
-  <div class="comments-list">
+  <div class="flex-1 overflow-y-auto flex flex-col p-3 min-h-0">
     {#if loadError}
-      <div class="load-error">
-        <span class="error-icon">⚠</span>
+      <div class="flex items-center gap-2 px-2.5 py-2 bg-error/10 border border-error/30 rounded-md text-error text-xs mb-2">
+        <span class="shrink-0">⚠</span>
         <span>{loadError}</span>
       </div>
     {:else if $selfReviewGeneralComments.length === 0}
-      <div class="empty-state">
-        <span class="empty-icon">📝</span>
-        <p class="empty-text">No comments yet. Add notes from manual testing.</p>
+      <div class="flex flex-col items-center justify-center gap-2.5 flex-1 px-4 py-8 text-center">
+        <span class="text-2xl opacity-40">📝</span>
+        <p class="m-0 text-xs text-base-content/50 leading-relaxed">No comments yet. Add notes from manual testing.</p>
       </div>
     {:else}
       {#each $selfReviewGeneralComments as comment, i (comment.id)}
-        <div class="comment-item">
-          <div class="comment-header">
-            <span class="comment-index">#{i + 1}</span>
-            <span class="comment-timestamp">{formatTimestamp(comment.created_at)}</span>
+        <div class="flex flex-col gap-1.5 px-3 py-2.5 bg-base-100 border border-base-300 rounded-lg mb-2 last:mb-0">
+          <div class="flex items-center gap-2">
+            <span class="text-[0.7rem] font-semibold text-primary/70 tabular-nums">#{i + 1}</span>
+            <span class="flex-1 text-right text-[0.7rem] text-base-content/50">{formatTimestamp(comment.created_at)}</span>
             <button
-              class="delete-btn"
+              class="btn btn-ghost btn-xs shrink-0 text-base-content/50 hover:text-error hover:bg-error/10"
               onclick={() => handleDelete(comment.id)}
               disabled={isDeleting === comment.id}
               title="Delete comment"
             >
-              {isDeleting === comment.id ? '…' : '×'}
+              {isDeleting === comment.id ? '…' : '✕'}
             </button>
           </div>
-          <div class="comment-body">{comment.body}</div>
+          <div class="text-xs text-base-content leading-relaxed whitespace-pre-wrap break-words">{comment.body}</div>
         </div>
       {/each}
     {/if}
   </div>
 
-  <div class="add-comment-area">
+  <div class="shrink-0 p-3 border-t border-base-300 flex flex-col gap-2">
     {#if addError}
-      <div class="add-error">
-        <span class="error-icon">⚠</span>
+      <div class="flex items-center gap-2 px-2.5 py-2 bg-error/10 border border-error/30 rounded-md text-error text-xs mb-2">
+        <span class="shrink-0">⚠</span>
         <span>{addError}</span>
       </div>
     {/if}
     <textarea
-      class="comment-input"
+      class="textarea textarea-bordered w-full text-xs leading-relaxed resize-y disabled:opacity-50 disabled:cursor-not-allowed"
       placeholder="Add a testing note… (Cmd+Enter to submit)"
       rows={3}
       bind:value={newCommentBody}
       disabled={isAdding}
       onkeydown={handleKeydown}
     ></textarea>
-    <div class="add-actions">
+    <div class="flex justify-end">
       <button
-        class="add-btn"
+        class="btn btn-primary btn-sm"
         onclick={handleAdd}
         disabled={!canAdd}
       >
@@ -190,279 +193,3 @@
     </div>
   </div>
 </div>
-
-<style>
-  .sidebar {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    background: var(--bg-secondary);
-    overflow: hidden;
-  }
-
-  .archived-section {
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-
-  .archived-toggle {
-    all: unset;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    width: 100%;
-    padding: 10px 16px;
-    cursor: pointer;
-    transition: background 0.1s;
-    box-sizing: border-box;
-  }
-
-  .archived-toggle:hover {
-    background: rgba(255, 255, 255, 0.04);
-  }
-
-  .toggle-icon {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    width: 10px;
-    flex-shrink: 0;
-  }
-
-  .toggle-label {
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  .archived-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    padding: 0 12px 12px;
-    max-height: 220px;
-    overflow-y: auto;
-  }
-
-  .comments-list {
-    flex: 1;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    padding: 12px;
-    min-height: 0;
-  }
-
-  .comment-item {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 10px 12px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    margin-bottom: 8px;
-  }
-
-  .comment-item:last-child {
-    margin-bottom: 0;
-  }
-
-  .comment-item.archived {
-    opacity: 0.5;
-    background: transparent;
-    border-color: transparent;
-    border-bottom: 1px solid var(--border);
-    border-radius: 0;
-    padding: 8px 4px;
-  }
-
-  .comment-item.archived:last-child {
-    border-bottom: none;
-  }
-
-  .comment-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .comment-meta {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .comment-index {
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: var(--accent);
-    opacity: 0.7;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .comment-timestamp {
-    font-size: 0.7rem;
-    color: var(--text-secondary);
-    margin-left: auto;
-    flex-shrink: 0;
-  }
-
-  .comment-header .comment-timestamp {
-    flex: 1;
-    text-align: right;
-  }
-
-  .comment-body {
-    font-size: 0.82rem;
-    color: var(--text-primary);
-    line-height: 1.55;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-
-  .comment-item.archived .comment-body {
-    color: var(--text-secondary);
-  }
-
-  .delete-btn {
-    all: unset;
-    width: 20px;
-    height: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 4px;
-    font-size: 1rem;
-    line-height: 1;
-    color: var(--text-secondary);
-    cursor: pointer;
-    flex-shrink: 0;
-    transition: color 0.15s, background 0.15s;
-  }
-
-  .delete-btn:hover:not(:disabled) {
-    color: var(--error);
-    background: rgba(247, 118, 142, 0.12);
-  }
-
-  .delete-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-
-  .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    flex: 1;
-    padding: 32px 16px;
-    text-align: center;
-  }
-
-  .empty-icon {
-    font-size: 1.5rem;
-    opacity: 0.4;
-  }
-
-  .empty-text {
-    margin: 0;
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    line-height: 1.5;
-  }
-
-  .load-error,
-  .add-error {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 10px;
-    background: rgba(247, 118, 142, 0.1);
-    border: 1px solid rgba(247, 118, 142, 0.25);
-    border-radius: 6px;
-    color: var(--error);
-    font-size: 0.78rem;
-    margin-bottom: 8px;
-  }
-
-  .error-icon {
-    flex-shrink: 0;
-  }
-
-  .add-comment-area {
-    flex-shrink: 0;
-    padding: 12px;
-    border-top: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .comment-input {
-    width: 100%;
-    min-height: 72px;
-    padding: 9px 11px;
-    background: var(--bg-primary);
-    color: var(--text-primary);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    font-family: inherit;
-    font-size: 0.82rem;
-    line-height: 1.5;
-    resize: vertical;
-    transition: border-color 0.15s;
-    box-sizing: border-box;
-  }
-
-  .comment-input::placeholder {
-    color: var(--text-secondary);
-    opacity: 0.7;
-  }
-
-  .comment-input:focus {
-    outline: none;
-    border-color: var(--accent);
-  }
-
-  .comment-input:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .add-actions {
-    display: flex;
-    justify-content: flex-end;
-  }
-
-  .add-btn {
-    all: unset;
-    padding: 7px 18px;
-    font-size: 0.8rem;
-    font-weight: 600;
-    border-radius: 6px;
-    cursor: pointer;
-    background: var(--accent);
-    color: var(--bg-primary);
-    transition: opacity 0.15s, transform 0.1s;
-  }
-
-  .add-btn:hover:not(:disabled) {
-    opacity: 0.88;
-    transform: translateY(-1px);
-  }
-
-  .add-btn:active:not(:disabled) {
-    transform: translateY(0);
-  }
-
-  .add-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-    transform: none;
-  }
-</style>

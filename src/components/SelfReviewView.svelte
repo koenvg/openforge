@@ -131,26 +131,26 @@
   })
 </script>
 
-<div class="self-review-view">
-  <div class="review-content">
+<div class="flex flex-col w-full h-full overflow-hidden">
+  <div class="flex flex-1 overflow-hidden">
     {#if isLoading}
-      <div class="loading">
-        <div class="spinner"></div>
+      <div class="flex flex-col items-center justify-center flex-1 gap-3 text-base-content/50 text-sm">
+        <span class="loading loading-spinner loading-md text-primary"></span>
         <span>Loading diff...</span>
       </div>
     {:else if error}
-      <div class="error-state">
-        <span class="error-icon">⚠</span>
+      <div class="flex flex-col items-center justify-center flex-1 gap-3 text-error text-sm text-center p-5">
+        <span class="text-5xl">⚠</span>
         <span>{error}</span>
       </div>
     {:else if $selfReviewDiffFiles.length === 0}
-      <div class="empty-state">
-        <span class="empty-icon">📂</span>
-        <h3>No changes on this branch yet</h3>
-        <p>Make some changes and they will appear here automatically.</p>
+      <div class="flex flex-col items-center justify-center flex-1 gap-4 text-base-content/50 text-center p-10">
+        <span class="text-6xl">📂</span>
+        <h3 class="text-xl font-semibold text-base-content m-0">No changes on this branch yet</h3>
+        <p class="text-sm m-0">Make some changes and they will appear here automatically.</p>
       </div>
     {:else}
-      <div class="detail-content">
+      <div class="flex flex-1 overflow-hidden">
         {#if fileTreeVisible}
           <FileTree files={$selfReviewDiffFiles} onSelectFile={handleFileSelect} />
         {/if}
@@ -162,27 +162,33 @@
           onToggleFileTree={() => { fileTreeVisible = !fileTreeVisible }}
           fetchFileContents={fetchTaskFileContents}
         />
-        <div class="sidebar-container">
+        <div class="w-[280px] shrink-0 border-l border-base-300 overflow-hidden flex flex-col">
           {#if linkedPr}
-            <div class="github-comments-section">
-              <div class="github-header">
-                <span class="github-title">GitHub PR Comments</span>
-                <span class="pr-badge">#{linkedPr.id}</span>
-                <span class="gh-link" role="link" tabindex="0" onclick={() => openUrl(linkedPr!.url)} onkeydown={(e) => e.key === 'Enter' && openUrl(linkedPr!.url)}>View on GitHub ↗</span>
+            <div class="border-b border-base-300 shrink-0">
+              <div class="flex items-center gap-1.5 px-3 py-2.5 bg-base-200 border-b border-base-300 flex-wrap">
+                <span class="text-xs font-semibold text-base-content uppercase tracking-wider flex-1">GitHub PR Comments</span>
+                <span class="badge badge-primary badge-sm">#{linkedPr.id}</span>
+                <span
+                  class="text-xs text-primary cursor-pointer hover:underline"
+                  role="link"
+                  tabindex="0"
+                  onclick={() => openUrl(linkedPr!.url)}
+                  onkeydown={(e: KeyboardEvent) => e.key === 'Enter' && openUrl(linkedPr!.url)}
+                >View on GitHub ↗</span>
               </div>
               {#if prComments.length === 0}
-                <div class="no-comments">No review comments on this PR yet</div>
+                <div class="px-3 py-3 text-xs text-base-content/50 text-center">No review comments on this PR yet</div>
               {:else}
-                <div class="github-comments-list">
+                <div class="flex flex-col overflow-y-auto max-h-60">
                   {#each prComments as comment (comment.id)}
-                    <div class="github-comment-item">
-                      <div class="comment-header">
-                        <span class="comment-author">@{comment.author}</span>
+                    <div class="px-3 py-2.5 border-b border-base-300 bg-base-100 last:border-b-0">
+                      <div class="flex items-center gap-1.5 mb-1 flex-wrap">
+                        <span class="text-xs font-semibold text-primary">@{comment.author}</span>
                         {#if comment.file_path}
-                          <span class="comment-location">{comment.file_path}{#if comment.line_number}:{comment.line_number}{/if}</span>
+                          <span class="text-[0.68rem] text-base-content/50 font-mono bg-base-200 rounded px-1 overflow-hidden text-ellipsis whitespace-nowrap max-w-[150px]">{comment.file_path}{#if comment.line_number}:{comment.line_number}{/if}</span>
                         {/if}
                       </div>
-                      <div class="comment-body">{comment.body}</div>
+                      <div class="text-xs text-base-content leading-snug whitespace-pre-wrap break-words">{comment.body}</div>
                     </div>
                   {/each}
                 </div>
@@ -203,208 +209,3 @@
     onRefresh={handleRefresh}
   />
 </div>
-
-<style>
-  .self-review-view {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-  }
-
-  .review-content {
-    display: flex;
-    flex: 1;
-    overflow: hidden;
-  }
-
-  .detail-content {
-    display: flex;
-    flex: 1;
-    overflow: hidden;
-  }
-
-  .sidebar-container {
-    width: 280px;
-    flex-shrink: 0;
-    border-left: 1px solid var(--border);
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .loading {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    flex: 1;
-    gap: 12px;
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-  }
-
-  .spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.6s linear infinite;
-  }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-
-  .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    flex: 1;
-    gap: 16px;
-    color: var(--text-secondary);
-    text-align: center;
-    padding: 40px;
-  }
-
-  .empty-icon {
-    font-size: 4rem;
-  }
-
-  .empty-state h3 {
-    font-size: 1.2rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin: 0;
-  }
-
-  .empty-state p {
-    font-size: 0.9rem;
-    margin: 0;
-  }
-
-  .error-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    flex: 1;
-    gap: 12px;
-    color: var(--error);
-    font-size: 0.85rem;
-    text-align: center;
-    padding: 20px;
-  }
-
-  .error-icon {
-    font-size: 3rem;
-  }
-
-  .github-comments-section {
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-
-  .github-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 10px 12px;
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border);
-    flex-wrap: wrap;
-  }
-
-  .github-title {
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    flex: 1;
-  }
-
-  .pr-badge {
-    font-size: 0.7rem;
-    color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 15%, transparent);
-    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-    border-radius: 4px;
-    padding: 1px 5px;
-    font-weight: 600;
-  }
-
-  .gh-link {
-    font-size: 0.7rem;
-    color: var(--accent);
-    cursor: pointer;
-    text-decoration: none;
-  }
-
-  .gh-link:hover {
-    text-decoration: underline;
-  }
-
-  .no-comments {
-    padding: 12px;
-    font-size: 0.78rem;
-    color: var(--text-secondary);
-    text-align: center;
-  }
-
-  .github-comments-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    overflow-y: auto;
-    max-height: 240px;
-  }
-
-  .github-comment-item {
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--border);
-    background: var(--bg-card);
-  }
-
-  .github-comment-item:last-child {
-    border-bottom: none;
-  }
-
-  .comment-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 5px;
-    flex-wrap: wrap;
-  }
-
-  .comment-author {
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--accent);
-  }
-
-  .comment-location {
-    font-size: 0.68rem;
-    color: var(--text-secondary);
-    font-family: monospace;
-    background: var(--bg-secondary);
-    border-radius: 3px;
-    padding: 1px 4px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    max-width: 150px;
-  }
-
-  .comment-body {
-    font-size: 0.78rem;
-    color: var(--text-primary);
-    line-height: 1.45;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-</style>
