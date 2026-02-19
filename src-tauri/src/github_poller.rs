@@ -128,6 +128,7 @@ pub async fn start_github_poller(app: AppHandle) {
                 continue;
             }
 
+            let sync_start = Instant::now();
             if let Err(e) = sync_open_prs(&github_client, &db, &app, &config, &github_token).await {
                 eprintln!(
                     "[GitHub Poller] Failed to sync PRs for project {}: {}",
@@ -136,6 +137,11 @@ pub async fn start_github_poller(app: AppHandle) {
                 total_errors += 1;
                 continue;
             }
+            println!(
+                "[GitHub Poller] Sync open PRs for project {} took {:.1}s",
+                project.id,
+                sync_start.elapsed().as_secs_f64()
+            );
 
             let open_prs = match get_open_prs_for_project(&db, &project.id) {
                 Ok(prs) => prs,
@@ -168,10 +174,14 @@ pub async fn start_github_poller(app: AppHandle) {
             );
         }
 
-        // Poll review-requested PRs
+        let review_start = Instant::now();
         if let Err(e) = poll_review_prs(&github_client, &db, &app, &github_token).await {
             eprintln!("[GitHub Poller] Failed to poll review PRs: {}", e);
         }
+        println!(
+            "[GitHub Poller] Review PR polling took {:.1}s",
+            review_start.elapsed().as_secs_f64()
+        );
 
         println!(
             "[GitHub Poller] Cycle completed in {:.1}s ({} projects, {} new comments, {} errors)",
