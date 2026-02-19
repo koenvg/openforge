@@ -3617,4 +3617,46 @@ mod tests {
         drop(db);
         let _ = fs::remove_file(&path);
     }
+
+    #[test]
+    fn test_jira_description_null_handling() {
+        let (db, path) = make_test_db("jira_desc_null");
+
+        db.create_task("Task with jira", "backlog", Some("PROJ-1"), None)
+            .expect("create task failed");
+
+        let task = db.get_task("T-1").expect("get failed").unwrap();
+        assert_eq!(task.jira_description, None);
+
+        db.update_task_jira_info("PROJ-1", "Title", "To Do", "alice", "")
+            .expect("update with empty desc failed");
+
+        let task = db.get_task("T-1").expect("get failed").unwrap();
+        assert_eq!(task.jira_description, Some("".to_string()));
+
+        db.update_task_jira_info(
+            "PROJ-1",
+            "Title",
+            "In Progress",
+            "bob",
+            "<p>Test description</p>",
+        )
+        .expect("update with html desc failed");
+
+        let task = db.get_task("T-1").expect("get failed").unwrap();
+        assert_eq!(
+            task.jira_description,
+            Some("<p>Test description</p>".to_string())
+        );
+
+        let multiline = "Line 1\nLine 2\nLine 3";
+        db.update_task_jira_info("PROJ-1", "Title", "Done", "charlie", multiline)
+            .expect("update with multiline desc failed");
+
+        let task = db.get_task("T-1").expect("get failed").unwrap();
+        assert_eq!(task.jira_description, Some(multiline.to_string()));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
 }
