@@ -60,18 +60,19 @@
   }
 </script>
 
-<div class="overlay" onclick={handleOverlayClick} onkeydown={handleKeydown} role="dialog" aria-modal="true" tabindex="-1">
-  <div class="dialog">
-    <div class="dialog-header">
-      <h2>New Project</h2>
-      <button class="close-btn" onclick={close} type="button">X</button>
+<div class="modal modal-open" onclick={handleOverlayClick} onkeydown={handleKeydown} role="dialog" aria-modal="true" tabindex="-1">
+  <div class="modal-box bg-base-100 shadow-xl max-w-[550px] p-0 flex flex-col max-h-[90vh]">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-base-300">
+      <h2 class="text-[0.95rem] font-semibold text-base-content m-0">New Project</h2>
+      <button class="btn btn-ghost btn-xs" onclick={close} type="button">✕</button>
     </div>
 
-    <form class="dialog-body" onsubmit={(e: SubmitEvent) => { e.preventDefault(); handleSubmit() }}>
-      <label class="field">
-        <span>Project Name <span class="required">*</span></span>
+    <form class="flex-1 overflow-y-auto p-5 flex flex-col gap-4" onsubmit={(e: SubmitEvent) => { e.preventDefault(); handleSubmit() }}>
+      <label class="flex flex-col gap-1.5">
+        <span class="text-xs text-base-content/60 font-medium">Project Name <span class="text-error">*</span></span>
         <input
           type="text"
+          class="input input-bordered input-sm w-full"
           bind:value={projectName}
           placeholder="My Awesome Project"
           required
@@ -79,35 +80,37 @@
         />
       </label>
 
-      <label class="field">
-         <span>Repository Path <span class="required">*</span></span>
-         <input
-           type="text"
-           bind:value={path}
-           placeholder="/Users/you/workspace/my-project"
-           required
-         />
-       </label>
+      <label class="flex flex-col gap-1.5">
+        <span class="text-xs text-base-content/60 font-medium">Repository Path <span class="text-error">*</span></span>
+        <input
+          type="text"
+          class="input input-bordered input-sm w-full"
+          bind:value={path}
+          placeholder="/Users/you/workspace/my-project"
+          required
+        />
+      </label>
 
-      <div class="section-divider"></div>
+      <div class="divider my-2"></div>
 
-      <div class="section-toggle">
+      <div class="my-1">
         <button
-          class="toggle-btn"
+          class="btn btn-ghost btn-xs gap-2 text-base-content/60 font-semibold"
           onclick={() => showJiraSection = !showJiraSection}
           type="button"
         >
-          <span class="toggle-icon" class:expanded={showJiraSection}>▶</span>
+          <span class="text-[0.6rem] transition-transform duration-200 {showJiraSection ? 'rotate-90' : ''}">▶</span>
           <span>JIRA Configuration (Optional)</span>
         </button>
       </div>
 
       {#if showJiraSection}
-        <div class="section-content">
-          <label class="field">
-            <span>Board ID</span>
+        <div class="flex flex-col gap-3.5 pl-4 mt-2">
+          <label class="flex flex-col gap-1.5">
+            <span class="text-xs text-base-content/60 font-medium">Board ID</span>
             <input
               type="text"
+              class="input input-bordered input-sm w-full"
               bind:value={jiraBoardId}
               placeholder="123"
             />
@@ -115,25 +118,26 @@
         </div>
       {/if}
 
-      <div class="section-divider"></div>
+      <div class="divider my-2"></div>
 
-      <div class="section-toggle">
+      <div class="my-1">
         <button
-          class="toggle-btn"
+          class="btn btn-ghost btn-xs gap-2 text-base-content/60 font-semibold"
           onclick={() => showGithubSection = !showGithubSection}
           type="button"
         >
-          <span class="toggle-icon" class:expanded={showGithubSection}>▶</span>
+          <span class="text-[0.6rem] transition-transform duration-200 {showGithubSection ? 'rotate-90' : ''}">▶</span>
           <span>GitHub Configuration (Optional)</span>
         </button>
       </div>
 
       {#if showGithubSection}
-        <div class="section-content">
-          <label class="field">
-            <span>Default Repository</span>
+        <div class="flex flex-col gap-3.5 pl-4 mt-2">
+          <label class="flex flex-col gap-1.5">
+            <span class="text-xs text-base-content/60 font-medium">Default Repository</span>
             <input
               type="text"
+              class="input input-bordered input-sm w-full"
               bind:value={githubDefaultRepo}
               placeholder="owner/repo-name"
             />
@@ -142,203 +146,16 @@
       {/if}
     </form>
 
-    <div class="dialog-footer">
-      <button class="btn btn-cancel" onclick={close} type="button" disabled={isSubmitting}>
-        Cancel
-      </button>
+    <div class="flex gap-2.5 px-5 py-4 border-t border-base-300 justify-end">
+      <button class="btn btn-ghost btn-sm" onclick={close} type="button" disabled={isSubmitting}>Cancel</button>
       <button
-         class="btn btn-submit"
-         onclick={handleSubmit}
-         type="button"
-         disabled={!projectName.trim() || !path.trim() || isSubmitting}
-       >
+        class="btn btn-primary btn-sm"
+        onclick={handleSubmit}
+        type="button"
+        disabled={!projectName.trim() || !path.trim() || isSubmitting}
+      >
         {isSubmitting ? 'Creating...' : 'Create Project'}
       </button>
     </div>
   </div>
 </div>
-
-<style>
-  .overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.7);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-    backdrop-filter: blur(2px);
-  }
-
-  .dialog {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    width: 90%;
-    max-width: 550px;
-    max-height: 90vh;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-  }
-
-  .dialog-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .dialog-header h2 {
-    margin: 0;
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-
-  .close-btn {
-    all: unset;
-    cursor: pointer;
-    color: var(--text-secondary);
-    font-size: 0.8rem;
-    padding: 4px 8px;
-    border-radius: 4px;
-  }
-
-  .close-btn:hover {
-    background: var(--bg-card);
-    color: var(--text-primary);
-  }
-
-  .dialog-body {
-    flex: 1;
-    overflow-y: auto;
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .field > span {
-    font-size: 0.7rem;
-    color: var(--text-secondary);
-    font-weight: 500;
-  }
-
-  .required {
-    color: var(--error);
-  }
-
-  .field input {
-    background: var(--bg-primary);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 8px 10px;
-    color: var(--text-primary);
-    font-size: 0.8rem;
-    outline: none;
-    font-family: inherit;
-  }
-
-  .field input:focus {
-    border-color: var(--accent);
-  }
-
-  .section-divider {
-    height: 1px;
-    background: var(--border);
-    margin: 8px 0;
-  }
-
-  .section-toggle {
-    margin: 4px 0;
-  }
-
-  .toggle-btn {
-    all: unset;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-    padding: 6px 8px;
-    border-radius: 4px;
-    transition: all 0.15s ease;
-  }
-
-  .toggle-btn:hover {
-    background: var(--bg-card);
-    color: var(--text-primary);
-  }
-
-  .toggle-icon {
-    font-size: 0.6rem;
-    transition: transform 0.2s ease;
-  }
-
-  .toggle-icon.expanded {
-    transform: rotate(90deg);
-  }
-
-  .section-content {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    padding-left: 16px;
-    margin-top: 8px;
-  }
-
-  .dialog-footer {
-    display: flex;
-    gap: 10px;
-    padding: 16px 20px;
-    border-top: 1px solid var(--border);
-    justify-content: flex-end;
-  }
-
-  .btn {
-    padding: 8px 16px;
-    border: none;
-    border-radius: 4px;
-    font-size: 0.8rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .btn-cancel {
-    background: var(--bg-card);
-    color: var(--text-primary);
-    border: 1px solid var(--border);
-  }
-
-  .btn-cancel:not(:disabled):hover {
-    background: var(--bg-primary);
-  }
-
-  .btn-submit {
-    background: var(--accent);
-    color: var(--bg-primary);
-  }
-
-  .btn-submit:not(:disabled):hover {
-    filter: brightness(1.1);
-  }
-</style>
