@@ -173,6 +173,24 @@
     )
 
     unlisteners.push(
+      await listen('github-sync-complete', () => {
+        loadPullRequests()
+      })
+    )
+
+    unlisteners.push(
+      await listen('ci-status-changed', () => {
+        loadPullRequests()
+      })
+    )
+
+    unlisteners.push(
+      await listen('review-status-changed', () => {
+        loadPullRequests()
+      })
+    )
+
+    unlisteners.push(
       await listen<{ task_id: string }>('action-complete', (event: Event<{ task_id: string }>) => {
         const taskId = event.payload.task_id
         const session = $activeSessions.get(taskId)

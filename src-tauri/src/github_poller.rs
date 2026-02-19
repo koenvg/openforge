@@ -271,7 +271,18 @@ pub async fn start_github_poller(app: AppHandle) {
                 .unwrap_or(30)
         };
 
-        poll_github_once(&app, &github_client).await;
+        let result = poll_github_once(&app, &github_client).await;
+
+        let has_changes = result.new_comments > 0
+            || result.ci_changes > 0
+            || result.review_changes > 0
+            || result.pr_changes > 0;
+
+        if has_changes {
+            if let Err(e) = app.emit("github-sync-complete", &result) {
+                eprintln!("[GitHub Poller] Failed to emit github-sync-complete: {}", e);
+            }
+        }
 
         sleep(Duration::from_secs(poll_interval)).await;
     }
