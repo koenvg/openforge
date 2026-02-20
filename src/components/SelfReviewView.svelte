@@ -3,13 +3,14 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
   import { selfReviewDiffFiles, selfReviewGeneralComments, selfReviewArchivedComments, pendingManualComments, ticketPrs } from '../lib/stores'
-  import { getTaskDiff, getTaskFileContents, getActiveSelfReviewComments, getArchivedSelfReviewComments, getPrComments, openUrl } from '../lib/ipc'
+  import { getTaskDiff, getTaskFileContents, getActiveSelfReviewComments, getArchivedSelfReviewComments, getPrComments, markCommentAddressed, openUrl } from '../lib/ipc'
   import type { Task, PullRequestInfo, PrComment, AgentEvent, PrFileDiff } from '../lib/types'
   import type { FileContents } from '../lib/diffAdapter'
   import FileTree from './FileTree.svelte'
   import DiffViewer from './DiffViewer.svelte'
   import GeneralCommentsSidebar from './GeneralCommentsSidebar.svelte'
   import SendToAgentPanel from './SendToAgentPanel.svelte'
+  import MarkdownContent from './MarkdownContent.svelte'
 
   interface Props {
     task: Task
@@ -30,6 +31,30 @@
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
   const DEBOUNCE_MS = 1500
+
+  let unaddressedCount = $derived(prComments.filter(c => c.addressed === 0).length)
+
+  function timeAgo(timestamp: number): string {
+    const seconds = Math.floor((Date.now() / 1000) - timestamp)
+    if (seconds < 60) return 'just now'
+    const minutes = Math.floor(seconds / 60)
+    if (minutes < 60) return `${minutes}m ago`
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return `${hours}h ago`
+    const days = Math.floor(hours / 24)
+    return `${days}d ago`
+  }
+
+  async function handleMarkAddressed(commentId: number) {
+    try {
+      await markCommentAddressed(commentId)
+      prComments = prComments.map(c =>
+        c.id === commentId ? { ...c, addressed: 1 } : c
+      )
+    } catch (e) {
+      console.error('Failed to mark comment addressed:', e)
+    }
+  }
 
   function handleFileSelect(filename: string) {
     if (diffViewer) {
@@ -166,33 +191,52 @@
             fetchFileContents={fetchTaskFileContents}
           />
         {/key}
-        <div class="w-[280px] shrink-0 border-l border-base-300 overflow-hidden flex flex-col">
+        <div class="w-[320px] shrink-0 border-l border-base-300 overflow-hidden flex flex-col">
           {#if linkedPr}
-            <div class="border-b border-base-300 shrink-0">
-              <div class="flex items-center gap-1.5 px-3 py-2.5 bg-base-200 border-b border-base-300 flex-wrap">
-                <span class="text-xs font-semibold text-base-content uppercase tracking-wider flex-1">GitHub PR Comments</span>
-                <span class="badge badge-primary badge-sm">#{linkedPr.id}</span>
+            <div class="flex flex-col shrink-0 min-h-0 max-h-[50%] overflow-hidden">
+              <div class="flex items-center gap-1.5 px-3 py-2.5 bg-base-200 border-b border-base-300 flex-wrap shrink-0">
+                <span class="text-xs font-semibold text-base-content uppercase tracking-wider">PR Comments</span>
+                {#if unaddressedCount > 0}
+                  <span class="badge badge-error badge-xs">{unaddressedCount}</span>
+                {/if}
+                <span class="flex-1"></span>
                 <span
-                  class="text-xs text-primary cursor-pointer hover:underline"
+                  class="text-[0.7rem] text-primary cursor-pointer hover:underline"
                   role="link"
                   tabindex="0"
                   onclick={() => openUrl(linkedPr!.url)}
                   onkeydown={(e: KeyboardEvent) => e.key === 'Enter' && openUrl(linkedPr!.url)}
-                >View on GitHub ↗</span>
+                >GitHub ↗</span>
               </div>
               {#if prComments.length === 0}
-                <div class="px-3 py-3 text-xs text-base-content/50 text-center">No review comments on this PR yet</div>
+                <div class="px-3 py-4 text-xs text-base-content/50 text-center border-b border-base-300">No review comments on this PR yet</div>
               {:else}
-                <div class="flex flex-col overflow-y-auto max-h-60">
+                <div class="flex flex-col overflow-y-auto border-b border-base-300">
                   {#each prComments as comment (comment.id)}
-                    <div class="px-3 py-2.5 border-b border-base-300 bg-base-100 last:border-b-0">
-                      <div class="flex items-center gap-1.5 mb-1 flex-wrap">
-                        <span class="text-xs font-semibold text-primary">@{comment.author}</span>
-                        {#if comment.file_path}
-                          <span class="text-[0.68rem] text-base-content/50 font-mono bg-base-200 rounded px-1 overflow-hidden text-ellipsis whitespace-nowrap max-w-[150px]">{comment.file_path}{#if comment.line_number}:{comment.line_number}{/if}</span>
-                        {/if}
+                    <div class="px-3 py-3 border-b border-base-300 last:border-b-0 {comment.addressed === 1 ? 'opacity-50' : ''}">
+                      <div class="flex items-center gap-1.5 mb-1.5 flex-wrap">
+                        <div class="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center text-[0.6rem] font-bold text-primary shrink-0">
+                          {comment.author.charAt(0).toUpperCase()}
+                        </div>
+                        <span class="text-xs font-semibold text-base-content">@{comment.author}</span>
+                        <span class="text-[0.65rem] text-base-content/40 ml-auto">{timeAgo(comment.created_at)}</span>
                       </div>
-                      <div class="text-xs text-base-content leading-snug whitespace-pre-wrap break-words">{comment.body}</div>
+                      {#if comment.file_path}
+                        <div class="flex items-center gap-1 mb-1.5">
+                          <span class="text-[0.65rem] text-base-content/50 font-mono bg-base-200 rounded px-1.5 py-0.5 overflow-hidden text-ellipsis whitespace-nowrap max-w-full">{comment.file_path}{#if comment.line_number}:{comment.line_number}{/if}</span>
+                        </div>
+                      {/if}
+                      <div class="text-xs text-base-content leading-relaxed [&_.markdown-body]:text-xs [&_.markdown-body_pre]:text-[0.7rem] [&_.markdown-body_code]:text-[0.7rem] [&_.markdown-body_p]:my-1">
+                        <MarkdownContent content={comment.body} />
+                      </div>
+                      {#if comment.addressed === 0}
+                        <button
+                          class="btn btn-ghost btn-xs mt-1.5 text-base-content/50 hover:text-success hover:bg-success/10"
+                          onclick={() => handleMarkAddressed(comment.id)}
+                        >✓ Mark addressed</button>
+                      {:else}
+                        <span class="text-[0.65rem] text-success font-medium mt-1">✓ Addressed</span>
+                      {/if}
                     </div>
                   {/each}
                 </div>
