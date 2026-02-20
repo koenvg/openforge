@@ -29,6 +29,7 @@
   let resizeTimeout: ReturnType<typeof setTimeout> | null = null
   let visibilityObserver: IntersectionObserver | null = null
   let ptySpawned = false
+  let expectedPtyInstance: number | null = null
   let terminalMounted = false
   let opencodePort: number | null = null
 
@@ -71,7 +72,8 @@
       await setupPtyListeners()
       const cols = terminal?.cols ?? 80
       const rows = terminal?.rows ?? 24
-      await spawnPty(taskId, port, sessionId, cols, rows)
+      expectedPtyInstance = await spawnPty(taskId, port, sessionId, cols, rows)
+      terminal?.focus()
 
       if (currentSession.status === 'running') {
         status = 'running'
@@ -83,6 +85,10 @@
   }
 
   async function setupPtyListeners() {
+    // Clean up old listeners before registering new ones (prevents listener leak)
+    if (ptyOutputUnlisten) { ptyOutputUnlisten(); ptyOutputUnlisten = null }
+    if (ptyExitUnlisten) { ptyExitUnlisten(); ptyExitUnlisten = null }
+
     // Listen for PTY output → write to xterm
     ptyOutputUnlisten = await listen<PtyEvent>(`pty-output-${taskId}`, (event) => {
       if (terminal && event.payload.data) {
@@ -90,8 +96,14 @@
       }
     })
 
-    ptyExitUnlisten = await listen<PtyEvent>(`pty-exit-${taskId}`, () => {
+    ptyExitUnlisten = await listen<PtyEvent>(`pty-exit-${taskId}`, (event) => {
+      const exitInstance = event.payload?.instance_id
+      if (exitInstance != null && exitInstance !== expectedPtyInstance) {
+        console.warn(`[AgentPanel] Ignoring stale pty-exit (instance ${exitInstance}, expected ${expectedPtyInstance})`)
+        return
+      }
       ptySpawned = false
+      expectedPtyInstance = null
     })
   }
 
@@ -152,6 +164,7 @@
     ])
 
     terminal.open(terminalContainer)
+    terminal.focus()
     terminalMounted = true
     requestAnimationFrame(() => {
       safeFit()
@@ -181,6 +194,7 @@
         requestAnimationFrame(() => {
           safeFit()
           terminal?.refresh(0, (terminal?.rows ?? 1) - 1)
+          terminal?.focus()
         })
       }
     }, { threshold: 0 })
@@ -285,6 +299,7 @@
         console.error('[AgentPanel] Failed to kill PTY on destroy:', e)
       })
     }
+    expectedPtyInstance = null
     if (terminal) terminal.dispose()
   })
 
@@ -384,12 +399,12 @@
   <div class="flex-1 overflow-hidden min-h-0 bg-base-100 border border-base-300 rounded-md relative">
     <div class="terminal-wrapper" bind:this={terminalContainer}></div>
     {#if loadingHistory}
-      <div class="absolute inset-0 flex flex-col items-center justify-center p-16 gap-4 bg-base-100 z-[1]">
+      <div class="absolute inset-0 flex flex-col items-center justify-center p-16 gap-4 bg-base-100 z-[1] pointer-events-none">
         <span class="loading loading-spinner loading-md text-primary"></span>
         <div class="text-base font-semibold text-base-content">Loading session output...</div>
       </div>
     {:else if !session && status === 'idle'}
-      <div class="absolute inset-0 flex flex-col items-center justify-center p-16 gap-4 bg-base-100 z-[1]">
+      <div class="absolute inset-0 flex flex-col items-center justify-center p-16 gap-4 bg-base-100 z-[1] pointer-events-none">
         <svg class="w-16 h-16 text-base-content/40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
