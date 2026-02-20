@@ -99,19 +99,19 @@
           onclick={(e: MouseEvent) => { e.stopPropagation(); openUrl(pr.url) }}
           onkeydown={(e: KeyboardEvent) => { e.stopPropagation(); if (e.key === 'Enter') openUrl(pr.url) }}
         >
+          PR #{pr.id}
           {#if pr.ci_status && pr.ci_status !== 'none' && pr.state === 'open'}
+            <span class="text-base-content/30 mx-px">·</span>
             <span
-              class="ci-dot ci-{pr.ci_status} inline-block w-1.5 h-1.5 rounded-full mr-0.5 align-middle {pr.ci_status === 'success' ? 'bg-success' : ''} {pr.ci_status === 'failure' ? 'bg-error' : ''} {pr.ci_status === 'pending' ? 'bg-warning' : ''}"
-              title="CI: {pr.ci_status}"
-            ></span>
+              class="{pr.ci_status === 'success' ? 'text-success' : ''} {pr.ci_status === 'failure' ? 'text-error ci-failure-text' : ''} {pr.ci_status === 'pending' ? 'text-warning ci-pending-text' : ''}"
+            >{pr.ci_status === 'success' ? 'Passed' : pr.ci_status === 'failure' ? 'Failed' : 'Pending'}</span>
           {/if}
           {#if pr.review_status && pr.review_status !== 'none' && pr.state === 'open'}
+            <span class="text-base-content/30 mx-px">·</span>
             <span
-              class="review-dot review-{pr.review_status} inline-block w-1.5 h-1.5 rounded-full mr-0.5 align-middle {pr.review_status === 'approved' ? 'bg-success' : ''} {pr.review_status === 'changes_requested' ? 'bg-warning' : ''} {pr.review_status === 'review_required' ? 'bg-base-content/50' : ''}"
-              title="Review: {pr.review_status}"
-            ></span>
+              class="{pr.review_status === 'approved' ? 'text-success' : ''} {pr.review_status === 'changes_requested' ? 'text-warning' : ''} {pr.review_status === 'review_required' ? 'text-base-content/50 review-pending-text' : ''}"
+            >{pr.review_status === 'approved' ? 'Approved' : pr.review_status === 'changes_requested' ? 'Changes req.' : 'Needs review'}</span>
           {/if}
-          PR #{pr.id}
         </span>
       {/each}
     </div>
@@ -189,14 +189,14 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
   }
-  /* CI/Review dot animations */
-  :global(.ci-dot.ci-failure) {
+  /* CI/Review text animations */
+  :global(.ci-failure-text) {
     animation: ci-pulse 1.5s ease-in-out infinite;
   }
-  :global(.ci-dot.ci-pending) {
+  :global(.ci-pending-text) {
     animation: ci-pulse 2s ease-in-out infinite;
   }
-  :global(.review-dot.review-review_required) {
+  :global(.review-pending-text) {
     animation: ci-pulse 2s ease-in-out infinite;
   }
 </style>

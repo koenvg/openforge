@@ -296,16 +296,17 @@ describe('TaskCard', () => {
     expect(card.classList.contains('needs-input')).toBe(false)
   })
 
-  it('renders CI status dot for success', () => {
+  it('renders CI status text for success', () => {
     const pr = { ...basePr, ci_status: 'success' }
     render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
-    const dot = document.querySelector('.ci-dot.ci-success')
-    expect(dot).toBeTruthy()
+    expect(screen.getByText('Passed')).toBeTruthy()
   })
 
-  it('no CI dot when ci_status is null', () => {
+  it('no CI text when ci_status is null', () => {
     render(TaskCard, { props: { task: baseTask, pullRequests: [basePr] } })
-    expect(document.querySelector('.ci-dot')).toBeNull()
+    expect(screen.queryByText('Passed')).toBeNull()
+    expect(screen.queryByText('Failed')).toBeNull()
+    expect(screen.queryByText('Pending')).toBeNull()
   })
 
   it('applies ci-failed class when open PR has ci_status failure', () => {
