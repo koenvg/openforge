@@ -211,6 +211,20 @@ impl ServerManager {
         servers.get(task_id).map(|s| s.port)
     }
 
+    /// Returns the port of any running server for the given project's tasks, or None if no server is running
+    ///
+    /// # Arguments
+    /// * `task_ids` - Slice of task identifiers to check for running servers
+    pub async fn get_any_server_port_for_project(&self, task_ids: &[String]) -> Option<u16> {
+        let servers = self.servers.lock().await;
+        for task_id in task_ids {
+            if let Some(server) = servers.get(task_id) {
+                return Some(server.port);
+            }
+        }
+        None
+    }
+
     /// Cleans up stale PID files for processes that are no longer running
     pub fn cleanup_stale_pids(&self) -> Result<(), ServerError> {
         let pid_dir = self.get_pid_dir()?;
@@ -348,5 +362,15 @@ mod tests {
     fn test_server_manager_new() {
         let manager = ServerManager::new();
         assert!(manager.servers.try_lock().is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_get_any_server_port_for_project() {
+        let manager = ServerManager::new();
+        let task_ids = vec!["task1".to_string(), "task2".to_string()];
+        
+        // Should return None when no servers are running
+        let port = manager.get_any_server_port_for_project(&task_ids).await;
+        assert_eq!(port, None);
     }
 }

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Task, AgentSession, AgentLog, PrComment, PollResult, PullRequestInfo, OpenCodeStatus, AgentInfo, Project, WorktreeInfo, ImplementationStatus, ReviewPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment } from "./types";
+import type { Task, AgentSession, AgentLog, PrComment, PollResult, PullRequestInfo, OpenCodeStatus, AgentInfo, Project, WorktreeInfo, ImplementationStatus, ReviewPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, CommandInfo, AutocompleteAgentInfo } from "./types";
 
 export async function createTask(title: string, status: string, jiraKey: string | null, projectId: string | null): Promise<Task> {
   return invoke<Task>("create_task", { title, status, jiraKey, projectId });
@@ -214,4 +214,16 @@ export async function deleteSelfReviewComment(commentId: number): Promise<void> 
 
 export async function archiveSelfReviewComments(taskId: string): Promise<void> {
   return invoke<void>("archive_self_review_comments", { taskId });
+}
+
+export async function listOpenCodeCommands(projectId: string): Promise<CommandInfo[]> {
+  return invoke<CommandInfo[]>("list_opencode_commands", { projectId });
+}
+
+export async function searchOpenCodeFiles(projectId: string, query: string): Promise<string[]> {
+  return invoke<string[]>("search_opencode_files", { projectId, query });
+}
+
+export async function listOpenCodeAgents(projectId: string): Promise<AutocompleteAgentInfo[]> {
+  return invoke<AutocompleteAgentInfo[]>("list_opencode_agents", { projectId });
 }

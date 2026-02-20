@@ -112,6 +112,25 @@ export interface AgentInfo {
   name: string;
 }
 
+// ============================================================================
+// Autocomplete Types (OpenCode API)
+// ============================================================================
+
+/** Command/skill info from OpenCode GET /command endpoint — used for / autocomplete */
+export interface CommandInfo {
+  name: string;
+  description: string | null;
+  source: string | null;
+  agent: string | null;
+}
+
+/** Extended agent info from OpenCode GET /agent endpoint — used for @ autocomplete */
+export interface AutocompleteAgentInfo {
+  name: string;
+  hidden: boolean | null;
+  mode: string | null;
+}
+
 export interface OpenCodeEvent {
   event_type: string;
   data: string;

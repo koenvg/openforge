@@ -377,6 +377,98 @@ async fn get_worktree_for_task(
 }
 
 // ============================================================================
+// Autocomplete Commands (OpenCode API proxy)
+// ============================================================================
+
+/// List available commands from a running OpenCode server for the project
+#[tauri::command]
+async fn list_opencode_commands(
+    db: State<'_, Mutex<db::Database>>,
+    server_mgr: State<'_, server_manager::ServerManager>,
+    project_id: String,
+) -> Result<Vec<opencode_client::CommandInfo>, String> {
+    // Get task IDs for the project
+    let task_ids: Vec<String> = {
+        let db = db.lock().unwrap();
+        db.get_tasks_for_project(&project_id)
+            .map_err(|e| format!("Failed to get tasks: {}", e))?
+            .into_iter()
+            .map(|t| t.id)
+            .collect()
+    };
+    
+    // Find any running server
+    let port = match server_mgr.get_any_server_port_for_project(&task_ids).await {
+        Some(p) => p,
+        None => return Ok(vec![]),  // Graceful degradation
+    };
+    
+    // Query the server
+    let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
+    client.list_commands().await
+        .map_err(|e| format!("Failed to list commands: {}", e))
+}
+
+/// Search files in a running OpenCode server for the project
+#[tauri::command]
+async fn search_opencode_files(
+    db: State<'_, Mutex<db::Database>>,
+    server_mgr: State<'_, server_manager::ServerManager>,
+    project_id: String,
+    query: String,
+) -> Result<Vec<String>, String> {
+    // Get task IDs for the project
+    let task_ids: Vec<String> = {
+        let db = db.lock().unwrap();
+        db.get_tasks_for_project(&project_id)
+            .map_err(|e| format!("Failed to get tasks: {}", e))?
+            .into_iter()
+            .map(|t| t.id)
+            .collect()
+    };
+    
+    // Find any running server
+    let port = match server_mgr.get_any_server_port_for_project(&task_ids).await {
+        Some(p) => p,
+        None => return Ok(vec![]),  // Graceful degradation
+    };
+    
+    // Query the server
+    let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
+    client.find_files(&query, true, 10).await
+        .map_err(|e| format!("Failed to search files: {}", e))
+}
+
+/// List available agents from a running OpenCode server for the project
+#[tauri::command]
+async fn list_opencode_agents(
+    db: State<'_, Mutex<db::Database>>,
+    server_mgr: State<'_, server_manager::ServerManager>,
+    project_id: String,
+) -> Result<Vec<opencode_client::AgentInfo>, String> {
+    // Get task IDs for the project
+    let task_ids: Vec<String> = {
+        let db = db.lock().unwrap();
+        db.get_tasks_for_project(&project_id)
+            .map_err(|e| format!("Failed to get tasks: {}", e))?
+            .into_iter()
+            .map(|t| t.id)
+            .collect()
+    };
+    
+    // Find any running server
+    let port = match server_mgr.get_any_server_port_for_project(&task_ids).await {
+        Some(p) => p,
+        None => return Ok(vec![]),  // Graceful degradation
+    };
+    
+    // Query the server
+    let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
+    client.list_agents().await
+        .map_err(|e| format!("Failed to list agents: {}", e))
+}
+
+// ============================================================================
 // Implementation Orchestration Commands
 // ============================================================================
 
@@ -1898,7 +1990,10 @@ fn main() {
             get_active_self_review_comments,
             get_archived_self_review_comments,
             delete_self_review_comment,
-            archive_self_review_comments
+            archive_self_review_comments,
+            list_opencode_commands,
+            search_opencode_files,
+            list_opencode_agents
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

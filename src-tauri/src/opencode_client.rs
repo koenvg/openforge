@@ -345,6 +345,79 @@ impl OpenCodeClient {
         Ok(agents)
     }
 
+    /// List available commands
+    ///
+    /// # Returns
+    /// List of command information
+    pub async fn list_commands(&self) -> Result<Vec<CommandInfo>, OpenCodeError> {
+        let url = format!("{}/command", self.base_url);
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unable to read response body".to_string());
+            return Err(OpenCodeError::ApiError {
+                status: status.as_u16(),
+                message: body,
+            });
+        }
+
+        let commands: Vec<CommandInfo> = response
+            .json()
+            .await
+            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
+
+        Ok(commands)
+    }
+
+    /// Find files matching a query
+    ///
+    /// # Arguments
+    /// * `query` - Search query string
+    /// * `dirs` - Include directories in results
+    /// * `limit` - Maximum number of results
+    ///
+    /// # Returns
+    /// List of matching file paths
+    pub async fn find_files(&self, query: &str, dirs: bool, limit: u32) -> Result<Vec<String>, OpenCodeError> {
+        let url = format!("{}/find/file?query={}&dirs={}&limit={}", self.base_url, query, dirs, limit);
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unable to read response body".to_string());
+            return Err(OpenCodeError::ApiError {
+                status: status.as_u16(),
+                message: body,
+            });
+        }
+
+        let files: Vec<String> = response
+            .json()
+            .await
+            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
+
+        Ok(files)
+    }
+
     /// Get session messages
     ///
     /// # Arguments
@@ -564,6 +637,24 @@ pub struct PromptAsyncRequest {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AgentInfo {
     pub name: String,
+    #[serde(default)]
+    pub hidden: Option<bool>,
+    #[serde(default)]
+    pub mode: Option<String>,
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+/// Command information
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CommandInfo {
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub agent: Option<String>,
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
