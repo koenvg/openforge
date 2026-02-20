@@ -3,11 +3,11 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
   import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount } from './lib/stores'
-  import { getProjects, getTasksForProject, getOpenCodeStatus, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync } from './lib/ipc'
+   import { getProjects, getTasksForProject, getOpenCodeStatus, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask } from './lib/ipc'
   import type { Task, PullRequestInfo, OpenCodeStatus, AgentEvent } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
   import TaskDetailView from './components/TaskDetailView.svelte'
-  import AddTaskDialog from './components/AddTaskDialog.svelte'
+   import PromptInput from './components/PromptInput.svelte'
   import SettingsPanel from './components/SettingsPanel.svelte'
   import GlobalSettingsPanel from './components/GlobalSettingsPanel.svelte'
   import PrReviewView from './components/PrReviewView.svelte'
@@ -507,8 +507,31 @@
       </div>
     {/if}
 
-    {#if showAddDialog}
-      <AddTaskDialog mode={dialogMode} task={editingTask} onClose={() => { showAddDialog = false; editingTask = null }} onTaskSaved={() => { showAddDialog = false; editingTask = null; loadTasks() }} />
+    {#if showAddDialog && $activeProjectId}
+      <div class="px-4 py-3 bg-base-200 border-b border-base-300">
+        <PromptInput
+          projectId={$activeProjectId}
+          value={editingTask ? editingTask.title : ''}
+          jiraKey={editingTask ? (editingTask.jira_key || '') : ''}
+          autofocus={true}
+          onSubmit={async (prompt, jiraKey) => {
+            try {
+              if (editingTask) {
+                await updateTask(editingTask.id, prompt, jiraKey)
+              } else {
+                await createTask(prompt, 'backlog', jiraKey, $activeProjectId)
+              }
+              showAddDialog = false
+              editingTask = null
+              await loadTasks()
+            } catch (e) {
+              console.error('Failed to save task:', e)
+              $error = String(e)
+            }
+          }}
+          onCancel={() => { showAddDialog = false; editingTask = null }}
+        />
+      </div>
     {/if}
 
     {#if showProjectSetup}
