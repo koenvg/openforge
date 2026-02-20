@@ -1390,6 +1390,18 @@ struct FrontendReviewComment {
     in_reply_to_id: Option<i64>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct FrontendPrOverviewComment {
+    id: i64,
+    body: String,
+    author: String,
+    avatar_url: Option<String>,
+    comment_type: String,
+    file_path: Option<String>,
+    line_number: Option<i32>,
+    created_at: String,
+}
+
 #[tauri::command]
 async fn get_review_comments(
     db: State<'_, Mutex<db::Database>>,
@@ -1431,6 +1443,43 @@ async fn get_review_comments(
                 created_at: c.created_at,
                 in_reply_to_id: c.in_reply_to_id,
             }
+        })
+        .collect();
+
+    Ok(mapped)
+}
+
+#[tauri::command]
+async fn get_pr_overview_comments(
+    db: State<'_, Mutex<db::Database>>,
+    github_client: State<'_, GitHubClient>,
+    owner: String,
+    repo: String,
+    pr_number: i64,
+) -> Result<Vec<FrontendPrOverviewComment>, String> {
+    let token = {
+        let db_lock = db.lock().unwrap();
+        db_lock.get_config("github_token")
+            .map_err(|e| format!("Failed to get config: {}", e))?
+            .ok_or("github_token not configured")?
+    };
+
+    let comments = github_client
+        .get_pr_comments(&owner, &repo, pr_number, &token, None)
+        .await
+        .map_err(|e| format!("Failed to get PR overview comments: {}", e))?;
+
+    let mapped: Vec<FrontendPrOverviewComment> = comments
+        .into_iter()
+        .map(|c| FrontendPrOverviewComment {
+            id: c.id,
+            body: c.body,
+            author: c.user.login,
+            avatar_url: c.user.extra.get("avatar_url").and_then(|v| v.as_str()).map(String::from),
+            comment_type: c.comment_type,
+            file_path: c.path,
+            line_number: c.line,
+            created_at: c.created_at,
         })
         .collect();
 
@@ -1887,6 +1936,7 @@ fn main() {
             get_file_content,
             get_file_at_ref,
             get_review_comments,
+            get_pr_overview_comments,
             submit_pr_review,
             pty_spawn,
             pty_write,
