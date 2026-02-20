@@ -1184,7 +1184,7 @@ async fn pty_spawn(
     opencode_session_id: String,
     cols: u16,
     rows: u16,
-) -> Result<(), String> {
+) -> Result<u64, String> {
     pty_mgr
         .spawn_pty(&task_id, server_port, &opencode_session_id, cols, rows, app)
         .await

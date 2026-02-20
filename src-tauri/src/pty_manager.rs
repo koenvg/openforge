@@ -3,9 +3,16 @@ use std::fmt;
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::Mutex;
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use tauri::Emitter;
+
+// ============================================================================
+// Instance ID Generator
+// ============================================================================
+
+static NEXT_INSTANCE_ID: AtomicU64 = AtomicU64::new(1);
 
 // ============================================================================
 // Error Types
@@ -43,6 +50,7 @@ impl From<std::io::Error> for PtyError {
 // ============================================================================
 
 struct PtySession {
+    instance_id: u64,
     #[allow(dead_code)]
     child: Box<dyn portable_pty::Child + Send + Sync>,
     #[allow(dead_code)]
@@ -77,6 +85,9 @@ impl PtyManager {
     /// * `cols` - Terminal width in columns
     /// * `rows` - Terminal height in rows
     /// * `app_handle` - Tauri app handle for emitting events
+    ///
+    /// # Returns
+    /// The unique instance ID for this PTY session
     pub async fn spawn_pty(
         &self,
         task_id: &str,
@@ -85,7 +96,7 @@ impl PtyManager {
         cols: u16,
         rows: u16,
         app_handle: tauri::AppHandle,
-    ) -> Result<(), PtyError> {
+    ) -> Result<u64, PtyError> {
         let mut sessions = self.sessions.lock().await;
 
         if sessions.contains_key(task_id) {
@@ -147,6 +158,9 @@ impl PtyManager {
         let pid = child.process_id().unwrap_or(0);
         println!("PTY for task {} started (PID: {})", task_id, pid);
 
+        // Generate unique instance ID for this PTY session
+        let instance_id = NEXT_INSTANCE_ID.fetch_add(1, Ordering::Relaxed);
+
         // Get reader and writer from master
         let reader = pair
             .master
@@ -162,6 +176,7 @@ impl PtyManager {
         sessions.insert(
             task_id.to_string(),
             PtySession {
+                instance_id,
                 child,
                 master: pair.master,
                 writer,
@@ -241,6 +256,7 @@ impl PtyManager {
         const MAX_BUFFER_SIZE: usize = 65536; // 64KB early flush threshold
 
         let task_id_emitter = task_id.to_string();
+        let instance_id_emitter = instance_id;
         tokio::spawn(async move {
             let mut buffer = String::new();
             let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(FLUSH_INTERVAL_MS));
@@ -275,7 +291,7 @@ impl PtyManager {
                                     buffer.clear();
                                 }
                                 println!("[PTY] task={} emitter received exit signal", task_id_emitter);
-                                let _ = app_handle.emit(&format!("pty-exit-{}", task_id_emitter), ());
+                                let _ = app_handle.emit(&format!("pty-exit-{}", task_id_emitter), serde_json::json!({"instance_id": instance_id_emitter}));
                                 break;
                             }
                         }
@@ -295,7 +311,7 @@ impl PtyManager {
             }
         });
 
-        Ok(())
+        Ok(instance_id)
     }
 
     /// Writes data to the PTY for the given task_id
@@ -621,5 +637,13 @@ mod tests {
         // Should at least have fallback values
         assert!(env.contains_key("PATH"));
         assert!(env.contains_key("LANG"));
+    }
+
+    #[test]
+    fn test_instance_id_generation() {
+        let id1 = NEXT_INSTANCE_ID.fetch_add(1, Ordering::Relaxed);
+        let id2 = NEXT_INSTANCE_ID.fetch_add(1, Ordering::Relaxed);
+        assert_ne!(id1, id2);
+        assert!(id2 > id1);
     }
 }
