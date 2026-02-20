@@ -3,7 +3,7 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
   import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount } from './lib/stores'
-  import { getProjects, getTasksForProject, getOpenCodeStatus, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions } from './lib/ipc'
+  import { getProjects, getTasksForProject, getOpenCodeStatus, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync } from './lib/ipc'
   import type { Task, PullRequestInfo, OpenCodeStatus, AgentEvent } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
   import TaskDetailView from './components/TaskDetailView.svelte'
@@ -21,6 +21,7 @@
   let openCodeStatus = $state<OpenCodeStatus | null>(null)
   let unlisteners: UnlistenFn[] = []
   let showAddDialog = $state(false)
+  let isSyncing = $state(false)
   let editingTask = $state<Task | null>(null)
   let dialogMode = $state<'create' | 'edit'>('create')
   let showProjectSetup = $state(false)
@@ -110,6 +111,21 @@
     }
   }
 
+  async function triggerGithubSync() {
+    if (isSyncing) return
+    isSyncing = true
+    try {
+      await forceGithubSync()
+      await loadPullRequests()
+      await loadTasks()
+    } catch (e) {
+      console.error('Failed to sync GitHub:', e)
+      $error = String(e)
+    } finally {
+      isSyncing = false
+    }
+  }
+
   async function checkOpenCode() {
     try {
       openCodeStatus = await getOpenCodeStatus()
@@ -157,6 +173,10 @@
         showAddDialog = true
       }
     }
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'R') {
+      e.preventDefault()
+      triggerGithubSync()
+    }
   }
 
   onMount(async () => {
@@ -169,6 +189,24 @@
     unlisteners.push(
       await listen('jira-sync-complete', () => {
         loadTasks()
+      })
+    )
+
+    unlisteners.push(
+      await listen('github-sync-complete', () => {
+        loadPullRequests()
+      })
+    )
+
+    unlisteners.push(
+      await listen('ci-status-changed', () => {
+        loadPullRequests()
+      })
+    )
+
+    unlisteners.push(
+      await listen('review-status-changed', () => {
+        loadPullRequests()
       })
     )
 
@@ -464,7 +502,7 @@
             <span>Loading tasks...</span>
           </div>
         {:else}
-          <KanbanBoard onRunAction={handleRunAction} />
+          <KanbanBoard onRunAction={handleRunAction} {isSyncing} onRefresh={triggerGithubSync} />
         {/if}
       </div>
     {/if}

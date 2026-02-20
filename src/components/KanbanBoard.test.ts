@@ -263,4 +263,36 @@ describe('KanbanBoard', () => {
     expect(screen.getByText('Task A')).toBeTruthy()
     expect(screen.getByText('Task B')).toBeTruthy()
   })
+
+  it('renders refresh button with correct title', () => {
+    render(KanbanBoard)
+    const refreshBtn = screen.getByTitle('Refresh GitHub data (⌘⇧R)')
+    expect(refreshBtn).toBeTruthy()
+  })
+
+  it('calls onRefresh when refresh button is clicked', async () => {
+    const onRefresh = vi.fn()
+    render(KanbanBoard, { props: { onRefresh } })
+    const refreshBtn = screen.getByTitle('Refresh GitHub data (⌘⇧R)')
+    await fireEvent.click(refreshBtn)
+    expect(onRefresh).toHaveBeenCalledOnce()
+  })
+
+  it('shows loading spinner and disables button when isSyncing is true', () => {
+    render(KanbanBoard, { props: { isSyncing: true } })
+    const refreshBtn = screen.getByTitle('Refresh GitHub data (⌘⇧R)') as HTMLButtonElement
+    expect(refreshBtn.disabled).toBe(true)
+    const spinner = refreshBtn.querySelector('.loading-spinner')
+    expect(spinner).toBeTruthy()
+  })
+
+  it('shows refresh SVG icon and button is enabled when isSyncing is false', () => {
+    render(KanbanBoard, { props: { isSyncing: false } })
+    const refreshBtn = screen.getByTitle('Refresh GitHub data (⌘⇧R)') as HTMLButtonElement
+    expect(refreshBtn.disabled).toBe(false)
+    const svg = refreshBtn.querySelector('svg')
+    expect(svg).toBeTruthy()
+    const spinner = refreshBtn.querySelector('.loading-spinner')
+    expect(spinner).toBeNull()
+  })
 })

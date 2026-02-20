@@ -20,14 +20,24 @@
 use futures::future::join_all;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
+use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::fmt;
+use std::sync::{Arc, Mutex};
 use base64::{Engine as _, engine::general_purpose};
+
+/// Cached HTTP response with ETag for conditional requests
+struct CachedResponse {
+    etag: String,
+    body: String,
+}
 
 /// GitHub API client
 #[derive(Clone)]
 pub struct GitHubClient {
     client: Client,
+    etag_cache: Arc<Mutex<HashMap<String, CachedResponse>>>,
 }
 
 impl GitHubClient {
@@ -35,7 +45,92 @@ impl GitHubClient {
     pub fn new() -> Self {
         Self {
             client: Client::new(),
+            etag_cache: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    /// Make a GET request with ETag conditional request support.
+    ///
+    /// Sends `If-None-Match` header when a cached ETag exists for the URL.
+    /// On 304 Not Modified, returns the cached deserialized response.
+    /// On 200, caches the response body + ETag and returns the parsed result.
+    async fn get_with_etag<T: DeserializeOwned>(
+        &self,
+        url: &str,
+        token: &str,
+    ) -> Result<T, GitHubError> {
+        let cached_etag = {
+            self.etag_cache
+                .lock()
+                .unwrap()
+                .get(url)
+                .map(|c| c.etag.clone())
+        };
+
+        let mut req = self
+            .client
+            .get(url)
+            .header("Authorization", format!("token {}", token))
+            .header("User-Agent", "ai-command-center");
+
+        if let Some(ref etag) = cached_etag {
+            req = req.header("If-None-Match", etag);
+        }
+
+        let response = req
+            .send()
+            .await
+            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+
+        if response.status() == reqwest::StatusCode::NOT_MODIFIED {
+            if let Some(cached) = self.etag_cache.lock().unwrap().get(url) {
+                let result: T = serde_json::from_str(&cached.body)
+                    .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+                return Ok(result);
+            }
+            // Cache miss despite 304 — fall through to error
+            return Err(GitHubError::ParseError(
+                "Received 304 but no cached response found".to_string(),
+            ));
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unable to read response body".to_string());
+            return Err(GitHubError::ApiError {
+                status: status.as_u16(),
+                message: body,
+            });
+        }
+
+        let etag = response
+            .headers()
+            .get("etag")
+            .and_then(|v| v.to_str().ok())
+            .map(String::from);
+
+        let body = response
+            .text()
+            .await
+            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+
+        if let Some(etag_value) = etag {
+            self.etag_cache.lock().unwrap().insert(
+                url.to_string(),
+                CachedResponse {
+                    etag: etag_value,
+                    body: body.clone(),
+                },
+            );
+        }
+
+        let result: T =
+            serde_json::from_str(&body).map_err(|e| GitHubError::ParseError(e.to_string()))?;
+
+        Ok(result)
     }
 
     /// Get pull request details
@@ -146,7 +241,6 @@ impl GitHubClient {
         token: &str,
         since: Option<&str>,
     ) -> Result<Vec<PrComment>, GitHubError> {
-        // Fetch review comments (inline code comments)
         let mut review_comments_url = format!(
             "https://api.github.com/repos/{}/{}/pulls/{}/comments",
             owner, repo, pr_number
@@ -155,33 +249,75 @@ impl GitHubClient {
             review_comments_url.push_str(&format!("?since={}", ts));
         }
 
-        let review_response = self
+        let review_cached_etag = {
+            self.etag_cache
+                .lock()
+                .unwrap()
+                .get(&review_comments_url)
+                .map(|c| c.etag.clone())
+        };
+
+        let mut review_req = self
             .client
             .get(&review_comments_url)
             .header("Authorization", format!("token {}", token))
-            .header("User-Agent", "ai-command-center")
+            .header("User-Agent", "ai-command-center");
+        if let Some(ref etag) = review_cached_etag {
+            review_req = review_req.header("If-None-Match", etag);
+        }
+
+        let review_response = review_req
             .send()
             .await
             .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
 
-        if !review_response.status().is_success() {
-            let status = review_response.status();
-            let body = review_response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
-        }
+        let mut review_comments: Vec<ReviewComment> =
+            if review_response.status() == reqwest::StatusCode::NOT_MODIFIED {
+                if let Some(cached) = self
+                    .etag_cache
+                    .lock()
+                    .unwrap()
+                    .get(&review_comments_url)
+                {
+                    serde_json::from_str(&cached.body)
+                        .map_err(|e| GitHubError::ParseError(e.to_string()))?
+                } else {
+                    vec![]
+                }
+            } else {
+                if !review_response.status().is_success() {
+                    let status = review_response.status();
+                    let body = review_response
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unable to read response body".to_string());
+                    return Err(GitHubError::ApiError {
+                        status: status.as_u16(),
+                        message: body,
+                    });
+                }
+                let review_etag = review_response
+                    .headers()
+                    .get("etag")
+                    .and_then(|v| v.to_str().ok())
+                    .map(String::from);
+                let body = review_response
+                    .text()
+                    .await
+                    .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+                if let Some(etag_value) = review_etag {
+                    self.etag_cache.lock().unwrap().insert(
+                        review_comments_url.clone(),
+                        CachedResponse {
+                            etag: etag_value,
+                            body: body.clone(),
+                        },
+                    );
+                }
+                serde_json::from_str(&body)
+                    .map_err(|e| GitHubError::ParseError(e.to_string()))?
+            };
 
-        let mut review_comments: Vec<ReviewComment> = review_response
-            .json()
-            .await
-            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
-
-        // Fetch general issue comments
         let mut issue_comments_url = format!(
             "https://api.github.com/repos/{}/{}/issues/{}/comments",
             owner, repo, pr_number
@@ -190,36 +326,77 @@ impl GitHubClient {
             issue_comments_url.push_str(&format!("?since={}", ts));
         }
 
-        let issue_response = self
+        let issue_cached_etag = {
+            self.etag_cache
+                .lock()
+                .unwrap()
+                .get(&issue_comments_url)
+                .map(|c| c.etag.clone())
+        };
+
+        let mut issue_req = self
             .client
             .get(&issue_comments_url)
             .header("Authorization", format!("token {}", token))
-            .header("User-Agent", "ai-command-center")
+            .header("User-Agent", "ai-command-center");
+        if let Some(ref etag) = issue_cached_etag {
+            issue_req = issue_req.header("If-None-Match", etag);
+        }
+
+        let issue_response = issue_req
             .send()
             .await
             .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
 
-        if !issue_response.status().is_success() {
-            let status = issue_response.status();
-            let body = issue_response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
-        }
+        let mut issue_comments: Vec<IssueComment> =
+            if issue_response.status() == reqwest::StatusCode::NOT_MODIFIED {
+                if let Some(cached) = self
+                    .etag_cache
+                    .lock()
+                    .unwrap()
+                    .get(&issue_comments_url)
+                {
+                    serde_json::from_str(&cached.body)
+                        .map_err(|e| GitHubError::ParseError(e.to_string()))?
+                } else {
+                    vec![]
+                }
+            } else {
+                if !issue_response.status().is_success() {
+                    let status = issue_response.status();
+                    let body = issue_response
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unable to read response body".to_string());
+                    return Err(GitHubError::ApiError {
+                        status: status.as_u16(),
+                        message: body,
+                    });
+                }
+                let issue_etag = issue_response
+                    .headers()
+                    .get("etag")
+                    .and_then(|v| v.to_str().ok())
+                    .map(String::from);
+                let body = issue_response
+                    .text()
+                    .await
+                    .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+                if let Some(etag_value) = issue_etag {
+                    self.etag_cache.lock().unwrap().insert(
+                        issue_comments_url.clone(),
+                        CachedResponse {
+                            etag: etag_value,
+                            body: body.clone(),
+                        },
+                    );
+                }
+                serde_json::from_str(&body)
+                    .map_err(|e| GitHubError::ParseError(e.to_string()))?
+            };
 
-        let mut issue_comments: Vec<IssueComment> = issue_response
-            .json()
-            .await
-            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
-
-        // Merge both comment types into a single vector
         let mut all_comments = Vec::new();
 
-        // Convert review comments
         for comment in review_comments.drain(..) {
             all_comments.push(PrComment {
                 id: comment.id,
@@ -232,7 +409,6 @@ impl GitHubClient {
             });
         }
 
-        // Convert issue comments
         for comment in issue_comments.drain(..) {
             all_comments.push(PrComment {
                 id: comment.id,
@@ -369,34 +545,7 @@ impl GitHubClient {
             "https://api.github.com/repos/{}/{}/pulls?state=open&per_page=100",
             owner, repo
         );
-
-        let response = self
-            .client
-            .get(&url)
-            .header("Authorization", format!("token {}", token))
-            .header("User-Agent", "ai-command-center")
-            .send()
-            .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
-        }
-
-        let prs: Vec<PullRequest> = response
-            .json()
-            .await
-            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
-
-        Ok(prs)
+        self.get_with_etag::<Vec<PullRequest>>(&url, token).await
     }
 
     /// Get all check runs for a commit (paginated)
@@ -418,11 +567,71 @@ impl GitHubClient {
         sha: &str,
         token: &str,
     ) -> Result<CheckRunsResponse, GitHubError> {
-        let mut all_check_runs: Vec<CheckRun> = Vec::new();
-        let mut page = 1u32;
         let per_page = 100;
+        let first_page_url = format!(
+            "https://api.github.com/repos/{}/{}/commits/{}/check-runs?per_page={}&page=1",
+            owner, repo, sha, per_page
+        );
 
-        loop {
+        let cached_etag = {
+            self.etag_cache
+                .lock()
+                .unwrap()
+                .get(&first_page_url)
+                .map(|c| c.etag.clone())
+        };
+
+        let mut req = self
+            .client
+            .get(&first_page_url)
+            .header("Authorization", format!("token {}", token))
+            .header("User-Agent", "ai-command-center");
+
+        if let Some(ref etag) = cached_etag {
+            req = req.header("If-None-Match", etag);
+        }
+
+        let response = req
+            .send()
+            .await
+            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+
+        if response.status() == reqwest::StatusCode::NOT_MODIFIED {
+            if let Some(cached) = self.etag_cache.lock().unwrap().get(&first_page_url) {
+                let result: CheckRunsResponse = serde_json::from_str(&cached.body)
+                    .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+                return Ok(result);
+            }
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unable to read response body".to_string());
+            return Err(GitHubError::ApiError {
+                status: status.as_u16(),
+                message: body,
+            });
+        }
+
+        let first_etag = response
+            .headers()
+            .get("etag")
+            .and_then(|v| v.to_str().ok())
+            .map(String::from);
+
+        let first_page_response: CheckRunsResponse = response
+            .json()
+            .await
+            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+
+        let total_count = first_page_response.total_count;
+        let mut all_check_runs: Vec<CheckRun> = first_page_response.check_runs;
+        let mut page = 2u32;
+
+        while all_check_runs.len() < total_count && page <= 10 {
             let url = format!(
                 "https://api.github.com/repos/{}/{}/commits/{}/check-runs?per_page={}&page={}",
                 owner, repo, sha, per_page, page
@@ -454,31 +663,37 @@ impl GitHubClient {
                 .await
                 .map_err(|e| GitHubError::ParseError(e.to_string()))?;
 
-            let total_count = page_response.total_count;
             all_check_runs.extend(page_response.check_runs);
 
-            if all_check_runs.len() >= total_count {
-                break;
-            }
-
-            page += 1;
-
-            // Safety: cap at 10 pages (1000 check runs) to avoid infinite loops
-            if page > 10 {
+            if page == 10 && all_check_runs.len() < total_count {
                 eprintln!(
                     "[GitHub] Capped check runs pagination at 10 pages ({} of {} fetched)",
                     all_check_runs.len(),
                     total_count
                 );
-                break;
             }
+
+            page += 1;
         }
 
-        let total_count = all_check_runs.len();
-        Ok(CheckRunsResponse {
-            total_count,
+        let result = CheckRunsResponse {
+            total_count: all_check_runs.len(),
             check_runs: all_check_runs,
-        })
+        };
+
+        if let Some(etag_value) = first_etag {
+            let body = serde_json::to_string(&result)
+                .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+            self.etag_cache.lock().unwrap().insert(
+                first_page_url,
+                CachedResponse {
+                    etag: etag_value,
+                    body,
+                },
+            );
+        }
+
+        Ok(result)
     }
 
     /// Get combined status for a commit (paginated)
@@ -500,14 +715,74 @@ impl GitHubClient {
         sha: &str,
         token: &str,
     ) -> Result<CombinedStatusResponse, GitHubError> {
-        let mut all_statuses: Vec<CommitStatusEntry> = Vec::new();
-        let mut result_state = String::new();
-        let mut result_sha = String::new();
-        let mut result_extra = serde_json::Value::Object(serde_json::Map::new());
-        let mut page = 1u32;
         let per_page = 100;
+        let first_page_url = format!(
+            "https://api.github.com/repos/{}/{}/commits/{}/status?per_page={}&page=1",
+            owner, repo, sha, per_page
+        );
 
-        loop {
+        let cached_etag = {
+            self.etag_cache
+                .lock()
+                .unwrap()
+                .get(&first_page_url)
+                .map(|c| c.etag.clone())
+        };
+
+        let mut req = self
+            .client
+            .get(&first_page_url)
+            .header("Authorization", format!("token {}", token))
+            .header("User-Agent", "ai-command-center");
+
+        if let Some(ref etag) = cached_etag {
+            req = req.header("If-None-Match", etag);
+        }
+
+        let response = req
+            .send()
+            .await
+            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+
+        if response.status() == reqwest::StatusCode::NOT_MODIFIED {
+            if let Some(cached) = self.etag_cache.lock().unwrap().get(&first_page_url) {
+                let result: CombinedStatusResponse = serde_json::from_str(&cached.body)
+                    .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+                return Ok(result);
+            }
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unable to read response body".to_string());
+            return Err(GitHubError::ApiError {
+                status: status.as_u16(),
+                message: body,
+            });
+        }
+
+        let first_etag = response
+            .headers()
+            .get("etag")
+            .and_then(|v| v.to_str().ok())
+            .map(String::from);
+
+        let first_page_response: CombinedStatusResponse = response
+            .json()
+            .await
+            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+
+        let result_state = first_page_response.state;
+        let result_sha = first_page_response.sha;
+        let result_extra = first_page_response.extra;
+        let total_count = first_page_response.total_count;
+        let mut all_statuses: Vec<CommitStatusEntry> = first_page_response.statuses;
+        let mut page = 2u32;
+
+        while (all_statuses.len() < total_count && total_count > 0) && page <= 10 {
             let url = format!(
                 "https://api.github.com/repos/{}/{}/commits/{}/status?per_page={}&page={}",
                 owner, repo, sha, per_page, page
@@ -539,39 +814,40 @@ impl GitHubClient {
                 .await
                 .map_err(|e| GitHubError::ParseError(e.to_string()))?;
 
-            if page == 1 {
-                result_state = page_response.state;
-                result_sha = page_response.sha;
-                result_extra = page_response.extra;
-            }
-
-            let total_count = page_response.total_count;
             all_statuses.extend(page_response.statuses);
 
-            if all_statuses.len() >= total_count || total_count == 0 {
-                break;
-            }
-
-            page += 1;
-
-            // Safety: cap at 10 pages (1000 statuses) to avoid infinite loops
-            if page > 10 {
+            if page == 10 && all_statuses.len() < total_count {
                 eprintln!(
                     "[GitHub] Capped combined status pagination at 10 pages ({} of {} fetched)",
                     all_statuses.len(),
                     total_count
                 );
-                break;
             }
+
+            page += 1;
         }
 
-        Ok(CombinedStatusResponse {
+        let result = CombinedStatusResponse {
             state: result_state,
             statuses: all_statuses,
             sha: result_sha,
             total_count: 0,
             extra: result_extra,
-        })
+        };
+
+        if let Some(etag_value) = first_etag {
+            let body = serde_json::to_string(&result)
+                .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+            self.etag_cache.lock().unwrap().insert(
+                first_page_url,
+                CachedResponse {
+                    etag: etag_value,
+                    body,
+                },
+            );
+        }
+
+        Ok(result)
     }
 
     /// Get authenticated user's login
@@ -954,34 +1230,7 @@ impl GitHubClient {
             "https://api.github.com/repos/{}/{}/pulls/{}/reviews?per_page=100",
             owner, repo, pr_number
         );
-
-        let response = self
-            .client
-            .get(&url)
-            .header("Authorization", format!("token {}", token))
-            .header("User-Agent", "ai-command-center")
-            .send()
-            .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
-        }
-
-        let reviews: Vec<PrReview> = response
-            .json()
-            .await
-            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
-
-        Ok(reviews)
+        self.get_with_etag::<Vec<PrReview>>(&url, token).await
     }
 }
 
@@ -1401,6 +1650,23 @@ mod tests {
     #[test]
     fn test_client_default() {
         let _client = GitHubClient::default();
+    }
+
+    #[test]
+    fn test_etag_cache_initialized_empty() {
+        let client = GitHubClient::new();
+        let cache = client.etag_cache.lock().unwrap();
+        assert!(cache.is_empty());
+    }
+
+    #[test]
+    fn test_cached_response_fields() {
+        let cached = CachedResponse {
+            etag: "\"abc123\"".to_string(),
+            body: "[{\"id\":1}]".to_string(),
+        };
+        assert_eq!(cached.etag, "\"abc123\"");
+        assert_eq!(cached.body, "[{\"id\":1}]");
     }
 
     #[test]

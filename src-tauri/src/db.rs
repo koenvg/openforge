@@ -287,7 +287,7 @@ impl Database {
             ("opencode_port", "4096"),
             ("opencode_auto_start", "true"),
             ("jira_poll_interval", "60"),
-            ("github_poll_interval", "30"),
+            ("github_poll_interval", "15"),
         ];
 
         for (key, value) in &default_configs {
@@ -1406,6 +1406,18 @@ impl Database {
     pub fn get_pr_ci_status(&self, pr_id: i64) -> Result<Option<String>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare("SELECT ci_status FROM pull_requests WHERE id = ?1")?;
+        let mut rows = stmt.query([pr_id])?;
+        if let Some(row) = rows.next()? {
+            Ok(row.get(0)?)
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Get review status for a pull request
+    pub fn get_pr_review_status(&self, pr_id: i64) -> Result<Option<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT review_status FROM pull_requests WHERE id = ?1")?;
         let mut rows = stmt.query([pr_id])?;
         if let Some(row) = rows.next()? {
             Ok(row.get(0)?)

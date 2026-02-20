@@ -70,6 +70,14 @@ export interface PullRequestInfo {
   updated_at: number;
 }
 
+export interface PollResult {
+  new_comments: number;
+  ci_changes: number;
+  review_changes: number;
+  pr_changes: number;
+  errors: number;
+}
+
 /** Check if a PR is ready to merge (open + CI green + approved) */
 export function isReadyToMerge(pr: PullRequestInfo): boolean {
   return pr.state === 'open'

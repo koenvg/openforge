@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Task, AgentSession, AgentLog, PrComment, PullRequestInfo, OpenCodeStatus, AgentInfo, Project, WorktreeInfo, ImplementationStatus, ReviewPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment } from "./types";
+import type { Task, AgentSession, AgentLog, PrComment, PollResult, PullRequestInfo, OpenCodeStatus, AgentInfo, Project, WorktreeInfo, ImplementationStatus, ReviewPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment } from "./types";
 
 export async function createTask(title: string, status: string, jiraKey: string | null, projectId: string | null): Promise<Task> {
   return invoke<Task>("create_task", { title, status, jiraKey, projectId });
@@ -88,8 +88,8 @@ export async function getAgentLogs(sessionId: string): Promise<AgentLog[]> {
   return invoke<AgentLog[]>("get_agent_logs", { sessionId });
 }
 
-export async function pollPrCommentsNow(): Promise<number> {
-  return invoke<number>("poll_pr_comments_now");
+export async function forceGithubSync(): Promise<PollResult> {
+  return invoke<PollResult>("force_github_sync");
 }
 
 export async function getPullRequests(): Promise<PullRequestInfo[]> {

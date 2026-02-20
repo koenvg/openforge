@@ -38,6 +38,7 @@
 use crate::db::{Database, PrRow};
 use crate::github_client::{aggregate_ci_status, aggregate_review_status, CheckRunsResponse, CombinedStatusResponse, GitHubClient, PrComment, PrReview};
 use futures::future::join_all;
+use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Mutex;
@@ -45,11 +46,221 @@ use std::time::Instant;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::time::{sleep, Duration};
 
+// ============================================================================
+// PollResult
+// ============================================================================
+
+/// Result of a single GitHub polling cycle.
+///
+/// Returned by `poll_github_once()` and used by callers to observe what
+/// happened during the cycle (e.g. for IPC responses or logging).
+#[derive(Debug, Clone, Serialize)]
+pub struct PollResult {
+    /// Number of new PR comments inserted into the database this cycle.
+    pub new_comments: usize,
+    /// Number of CI status changes detected this cycle (reserved for Task 3).
+    pub ci_changes: usize,
+    /// Number of review status changes detected this cycle (reserved for Task 3).
+    pub review_changes: usize,
+    /// Number of PR state changes (open/closed/merged) detected this cycle (reserved for Task 3).
+    pub pr_changes: usize,
+    /// Number of errors encountered during this cycle.
+    pub errors: usize,
+}
+
+// ============================================================================
+// Public API
+// ============================================================================
+
+/// Execute a single GitHub polling cycle.
+///
+/// Reads the GitHub token from the database, iterates all projects, syncs open
+/// PRs, polls comments and CI status for each PR, and polls review-requested
+/// PRs. All event emissions happen inside this function exactly as they did in
+/// the original loop body.
+///
+/// The caller is responsible for creating and owning the `GitHubClient` so that
+/// ETag caching (added in Task 2) persists across cycles in the background loop
+/// while still allowing a fresh client to be used from a Tauri command.
+///
+/// # Arguments
+/// * `app` - Tauri AppHandle for accessing managed state and emitting events
+/// * `github_client` - Shared GitHub API client (caller owns lifetime)
+pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> PollResult {
+    let cycle_start = Instant::now();
+    let db = app.state::<Mutex<Database>>();
+
+    let github_token = {
+        let db_lock = db.lock().unwrap();
+        db_lock
+            .get_config("github_token")
+            .ok()
+            .flatten()
+            .unwrap_or_default()
+    };
+
+    if github_token.is_empty() {
+        return PollResult {
+            new_comments: 0,
+            ci_changes: 0,
+            review_changes: 0,
+            pr_changes: 0,
+            errors: 0,
+        };
+    }
+
+    let projects = {
+        let db_lock = db.lock().unwrap();
+        db_lock.get_all_projects()
+    };
+
+    let projects = match projects {
+        Ok(projects) => projects,
+        Err(e) => {
+            eprintln!("[GitHub Poller] Failed to get projects: {}", e);
+            return PollResult {
+                new_comments: 0,
+                ci_changes: 0,
+                review_changes: 0,
+                pr_changes: 0,
+                errors: 1,
+            };
+        }
+    };
+
+    if projects.is_empty() {
+        return PollResult {
+            new_comments: 0,
+            ci_changes: 0,
+            review_changes: 0,
+            pr_changes: 0,
+            errors: 0,
+        };
+    }
+
+    println!("[GitHub Poller] Polling {} projects for PR updates...", projects.len());
+
+    let project_count = projects.len();
+    let mut total_new_comments = 0;
+    let mut total_ci_changes = 0;
+    let mut total_review_changes = 0;
+    let mut total_errors = 0;
+
+    for project in projects {
+        let config = match read_project_config(&db, &project.id) {
+            Ok(Some(cfg)) => cfg,
+            Ok(None) => {
+                continue;
+            }
+            Err(e) => {
+                eprintln!("[GitHub Poller] Failed to read config for project {}: {}", project.id, e);
+                total_errors += 1;
+                continue;
+            }
+        };
+
+        if config.github_default_repo.is_empty() {
+            continue;
+        }
+
+        let parts: Vec<&str> = config.github_default_repo.split('/').collect();
+        if parts.len() != 2 {
+            eprintln!(
+                "[GitHub Poller] Invalid repo format for project {}: {}",
+                project.id, config.github_default_repo
+            );
+            total_errors += 1;
+            continue;
+        }
+
+        let sync_start = Instant::now();
+        if let Err(e) = sync_open_prs(github_client, &db, app, &config, &github_token).await {
+            eprintln!(
+                "[GitHub Poller] Failed to sync PRs for project {}: {}",
+                project.id, e
+            );
+            total_errors += 1;
+            continue;
+        }
+        println!(
+            "[GitHub Poller] Sync open PRs for project {} took {:.1}s",
+            project.id,
+            sync_start.elapsed().as_secs_f64()
+        );
+
+        let open_prs = match get_open_prs_for_project(&db, &project.id) {
+            Ok(prs) => prs,
+            Err(e) => {
+                eprintln!(
+                    "[GitHub Poller] Failed to get PRs for project {}: {}",
+                    project.id, e
+                );
+                total_errors += 1;
+                continue;
+            }
+        };
+
+        let poll_start = Instant::now();
+        let (new_comments, ci_changes, review_changes, errors) =
+            poll_prs_for_project(github_client, &db, app, &github_token, open_prs).await;
+        println!(
+            "[GitHub Poller] PR polling for project {} took {:.1}s",
+            project.id,
+            poll_start.elapsed().as_secs_f64()
+        );
+        total_new_comments += new_comments;
+        total_ci_changes += ci_changes;
+        total_review_changes += review_changes;
+        total_errors += errors;
+    }
+
+    if total_new_comments > 0 || total_errors > 0 {
+        println!(
+            "[GitHub Poller] Found {} new comments ({} errors)",
+            total_new_comments, total_errors
+        );
+    }
+
+    let review_start = Instant::now();
+    if let Err(e) = poll_review_prs(github_client, &db, app, &github_token).await {
+        eprintln!("[GitHub Poller] Failed to poll review PRs: {}", e);
+    }
+    println!(
+        "[GitHub Poller] Review PR polling took {:.1}s",
+        review_start.elapsed().as_secs_f64()
+    );
+
+    println!(
+        "[GitHub Poller] Cycle completed in {:.1}s ({} projects, {} new comments, {} CI changes, {} review changes, {} errors)",
+        cycle_start.elapsed().as_secs_f64(),
+        project_count,
+        total_new_comments,
+        total_ci_changes,
+        total_review_changes,
+        total_errors
+    );
+
+    PollResult {
+        new_comments: total_new_comments,
+        ci_changes: total_ci_changes,
+        review_changes: total_review_changes,
+        pr_changes: 0,
+        errors: total_errors,
+    }
+}
+
+/// Start the GitHub poller background task.
+///
+/// Runs indefinitely: reads the poll interval from the database, calls
+/// `poll_github_once()`, then sleeps. The `GitHubClient` is created once and
+/// reused across cycles so that ETag caching (Task 2) persists.
+///
+/// # Arguments
+/// * `app` - Tauri AppHandle for accessing managed state and emitting events
 pub async fn start_github_poller(app: AppHandle) {
     let github_client = GitHubClient::new();
 
     loop {
-        let cycle_start = Instant::now();
         let db = app.state::<Mutex<Database>>();
 
         let poll_interval = {
@@ -62,134 +273,18 @@ pub async fn start_github_poller(app: AppHandle) {
                 .unwrap_or(30)
         };
 
-        let github_token = {
-            let db_lock = db.lock().unwrap();
-            db_lock
-                .get_config("github_token")
-                .ok()
-                .flatten()
-                .unwrap_or_default()
-        };
+        let result = poll_github_once(&app, &github_client).await;
 
-        if github_token.is_empty() {
-            sleep(Duration::from_secs(poll_interval)).await;
-            continue;
-        }
+        let has_changes = result.new_comments > 0
+            || result.ci_changes > 0
+            || result.review_changes > 0
+            || result.pr_changes > 0;
 
-        let projects = {
-            let db_lock = db.lock().unwrap();
-            db_lock.get_all_projects()
-        };
-
-        let projects = match projects {
-            Ok(projects) => projects,
-            Err(e) => {
-                eprintln!("[GitHub Poller] Failed to get projects: {}", e);
-                sleep(Duration::from_secs(poll_interval)).await;
-                continue;
+        if has_changes {
+            if let Err(e) = app.emit("github-sync-complete", &result) {
+                eprintln!("[GitHub Poller] Failed to emit github-sync-complete: {}", e);
             }
-        };
-
-        if projects.is_empty() {
-            sleep(Duration::from_secs(poll_interval)).await;
-            continue;
         }
-
-        println!("[GitHub Poller] Polling {} projects for PR updates...", projects.len());
-
-        let project_count = projects.len();
-        let mut total_new_comments = 0;
-        let mut total_errors = 0;
-
-        for project in projects {
-            let config = match read_project_config(&db, &project.id) {
-                Ok(Some(cfg)) => cfg,
-                Ok(None) => {
-                    continue;
-                }
-                Err(e) => {
-                    eprintln!("[GitHub Poller] Failed to read config for project {}: {}", project.id, e);
-                    total_errors += 1;
-                    continue;
-                }
-            };
-
-            if config.github_default_repo.is_empty() {
-                continue;
-            }
-
-            let parts: Vec<&str> = config.github_default_repo.split('/').collect();
-            if parts.len() != 2 {
-                eprintln!(
-                    "[GitHub Poller] Invalid repo format for project {}: {}",
-                    project.id, config.github_default_repo
-                );
-                total_errors += 1;
-                continue;
-            }
-
-            let sync_start = Instant::now();
-            if let Err(e) = sync_open_prs(&github_client, &db, &app, &config, &github_token).await {
-                eprintln!(
-                    "[GitHub Poller] Failed to sync PRs for project {}: {}",
-                    project.id, e
-                );
-                total_errors += 1;
-                continue;
-            }
-            println!(
-                "[GitHub Poller] Sync open PRs for project {} took {:.1}s",
-                project.id,
-                sync_start.elapsed().as_secs_f64()
-            );
-
-            let open_prs = match get_open_prs_for_project(&db, &project.id) {
-                Ok(prs) => prs,
-                Err(e) => {
-                    eprintln!(
-                        "[GitHub Poller] Failed to get PRs for project {}: {}",
-                        project.id, e
-                    );
-                    total_errors += 1;
-                    continue;
-                }
-            };
-
-            let poll_start = Instant::now();
-            let (new_comments, errors) =
-                poll_prs_for_project(&github_client, &db, &app, &github_token, open_prs).await;
-            println!(
-                "[GitHub Poller] PR polling for project {} took {:.1}s",
-                project.id,
-                poll_start.elapsed().as_secs_f64()
-            );
-            total_new_comments += new_comments;
-            total_errors += errors;
-        }
-
-        if total_new_comments > 0 || total_errors > 0 {
-            println!(
-                "[GitHub Poller] Found {} new comments ({} errors)",
-                total_new_comments, total_errors
-            );
-        }
-
-        let review_start = Instant::now();
-        if let Err(e) = poll_review_prs(&github_client, &db, &app, &github_token).await {
-            eprintln!("[GitHub Poller] Failed to poll review PRs: {}", e);
-        }
-        println!(
-            "[GitHub Poller] Review PR polling took {:.1}s",
-            review_start.elapsed().as_secs_f64()
-        );
-
-        println!(
-            "[GitHub Poller] Cycle completed in {:.1}s ({} projects, {} new comments, {} errors)",
-            cycle_start.elapsed().as_secs_f64(),
-            project_count,
-            total_new_comments,
-            total_errors
-        );
 
         sleep(Duration::from_secs(poll_interval)).await;
     }
@@ -513,6 +608,7 @@ struct PollSinglePrResult {
     pr_title: String,
     head_sha: String,
     old_ci_status: Option<String>,
+    old_review_status: Option<String>,
     comments: Vec<PrComment>,
     check_runs: Option<CheckRunsResponse>,
     combined_status: Option<CombinedStatusResponse>,
@@ -527,6 +623,7 @@ async fn poll_single_pr(
     pr: PrRow,
     since: Option<String>,
     old_ci_status: Option<String>,
+    old_review_status: Option<String>,
 ) -> PollSinglePrResult {
     let since_ref = since.as_deref();
 
@@ -543,6 +640,7 @@ async fn poll_single_pr(
                 pr_title: pr.title,
                 head_sha: pr.head_sha,
                 old_ci_status,
+                old_review_status,
                 comments: vec![],
                 check_runs: None,
                 combined_status: None,
@@ -619,6 +717,7 @@ async fn poll_single_pr(
         pr_title: pr.title,
         head_sha: pr.head_sha,
         old_ci_status,
+        old_review_status,
         comments,
         check_runs,
         combined_status,
@@ -634,26 +733,27 @@ async fn poll_prs_for_project(
     app: &AppHandle,
     github_token: &str,
     open_prs: Vec<PrRow>,
-) -> (usize, usize) {
+) -> (usize, usize, usize, usize) {
     if open_prs.is_empty() {
-        return (0, 0);
+        return (0, 0, 0, 0);
     }
 
-    let pr_metadata: Vec<(i64, Option<i64>, Option<String>)> = {
+    let pr_metadata: Vec<(i64, Option<i64>, Option<String>, Option<String>)> = {
         let db_lock = db.lock().unwrap();
         open_prs
             .iter()
             .map(|pr| {
                 let last_polled = db_lock.get_pr_last_polled(pr.id).ok().flatten();
                 let old_ci = db_lock.get_pr_ci_status(pr.id).ok().flatten();
-                (pr.id, last_polled, old_ci)
+                let old_review = db_lock.get_pr_review_status(pr.id).ok().flatten();
+                (pr.id, last_polled, old_ci, old_review)
             })
             .collect()
     };
 
     let since_map: HashMap<i64, Option<String>> = pr_metadata
         .iter()
-        .map(|(pr_id, last_polled, _)| {
+        .map(|(pr_id, last_polled, _, _)| {
             let since = last_polled.map(|ts| {
                 chrono::DateTime::from_timestamp(ts, 0)
                     .map(|dt| dt.format("%Y-%m-%dT%H:%M:%SZ").to_string())
@@ -664,8 +764,13 @@ async fn poll_prs_for_project(
         .collect();
 
     let old_ci_map: HashMap<i64, Option<String>> = pr_metadata
+        .iter()
+        .map(|(pr_id, _, old_ci, _)| (*pr_id, old_ci.clone()))
+        .collect();
+
+    let old_review_map: HashMap<i64, Option<String>> = pr_metadata
         .into_iter()
-        .map(|(pr_id, _, old_ci)| (pr_id, old_ci))
+        .map(|(pr_id, _, _, old_review)| (pr_id, old_review))
         .collect();
 
     let futures: Vec<_> = open_prs
@@ -675,7 +780,8 @@ async fn poll_prs_for_project(
             let token = github_token.to_string();
             let since = since_map.get(&pr.id).cloned().flatten();
             let old_ci = old_ci_map.get(&pr.id).cloned().flatten();
-            poll_single_pr(client, token, pr, since, old_ci)
+            let old_review = old_review_map.get(&pr.id).cloned().flatten();
+            poll_single_pr(client, token, pr, since, old_ci, old_review)
         })
         .collect();
 
@@ -687,6 +793,8 @@ async fn poll_prs_for_project(
         .as_secs() as i64;
 
     let mut new_comment_count = 0;
+    let mut ci_change_count = 0;
+    let mut review_change_count = 0;
     let mut error_count = 0;
 
     let db_lock = db.lock().unwrap();
@@ -758,7 +866,7 @@ async fn poll_prs_for_project(
                 db_lock.update_pr_ci_status(result.pr_id, &result.head_sha, &new_status, &check_runs_json)
             {
                 eprintln!("[GitHub Poller] Failed to update CI status for PR #{}: {}", result.pr_id, e);
-            } else if result.old_ci_status.as_deref() != Some("failure") && new_status == "failure" {
+            } else if result.old_ci_status.as_deref() != Some(new_status.as_str()) {
                 if let Err(e) = app.emit(
                     "ci-status-changed",
                     serde_json::json!({
@@ -771,6 +879,7 @@ async fn poll_prs_for_project(
                 ) {
                     eprintln!("[GitHub Poller] Failed to emit ci-status-changed event: {}", e);
                 }
+                ci_change_count += 1;
             }
         }
 
@@ -778,6 +887,20 @@ async fn poll_prs_for_project(
             let review_status = aggregate_review_status(reviews, result.has_requested_reviewers);
             if let Err(e) = db_lock.update_pr_review_status(result.pr_id, &review_status) {
                 eprintln!("[GitHub Poller] Failed to update review status for PR #{}: {}", result.pr_id, e);
+            } else if result.old_review_status.as_deref() != Some(review_status.as_str()) {
+                if let Err(e) = app.emit(
+                    "review-status-changed",
+                    serde_json::json!({
+                        "task_id": result.ticket_id,
+                        "pr_id": result.pr_id,
+                        "pr_title": result.pr_title,
+                        "review_status": review_status,
+                        "timestamp": now
+                    }),
+                ) {
+                    eprintln!("[GitHub Poller] Failed to emit review-status-changed event: {}", e);
+                }
+                review_change_count += 1;
             }
         }
 
@@ -788,7 +911,7 @@ async fn poll_prs_for_project(
 
     drop(db_lock);
 
-    (new_comment_count, error_count)
+    (new_comment_count, ci_change_count, review_change_count, error_count)
 }
 
 async fn poll_review_prs(
@@ -869,6 +992,23 @@ fn parse_github_timestamp(timestamp: &str) -> Option<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_poll_result_construction() {
+        let result = PollResult {
+            new_comments: 3,
+            ci_changes: 0,
+            review_changes: 0,
+            pr_changes: 0,
+            errors: 1,
+        };
+
+        assert_eq!(result.new_comments, 3);
+        assert_eq!(result.ci_changes, 0);
+        assert_eq!(result.review_changes, 0);
+        assert_eq!(result.pr_changes, 0);
+        assert_eq!(result.errors, 1);
+    }
 
     #[test]
     fn test_parse_github_timestamp() {

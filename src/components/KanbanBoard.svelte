@@ -8,9 +8,11 @@
 
   interface Props {
     onRunAction?: (data: { taskId: string; actionPrompt: string; agent: string | null }) => void
+    isSyncing?: boolean
+    onRefresh?: () => void
   }
 
-  let { onRunAction }: Props = $props()
+  let { onRunAction, isSyncing = false, onRefresh = () => {} }: Props = $props()
 
   let searchInput: HTMLInputElement | undefined = $state()
 
@@ -136,6 +138,20 @@
     {#if $searchQuery}
       <span class="text-xs text-base-content/50">{filteredTasks.length} of {$tasks.length} tasks</span>
     {/if}
+    <button
+      class="btn btn-ghost btn-sm btn-square ml-auto"
+      onclick={onRefresh}
+      disabled={isSyncing}
+      title="Refresh GitHub data (⌘⇧R)"
+    >
+      {#if isSyncing}
+        <span class="loading loading-spinner loading-xs"></span>
+      {:else}
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
+          <path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H4.598a.75.75 0 00-.75.75v3.634a.75.75 0 001.5 0v-2.033l.312.311a7 7 0 0011.712-3.138.75.75 0 00-1.449-.39zm-1.624-7.848a7 7 0 00-11.712 3.138.75.75 0 001.449.39 5.5 5.5 0 019.201-2.466l.312.311H10.5a.75.75 0 000 1.5h3.634a.75.75 0 00.75-.75V2.265a.75.75 0 00-1.5 0v2.033l-.312-.311z" clip-rule="evenodd" />
+        </svg>
+      {/if}
+    </button>
   </div>
 
   <div class="flex gap-3 p-4 flex-1 overflow-x-auto">
