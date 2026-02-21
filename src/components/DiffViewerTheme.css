@@ -26,6 +26,11 @@
   color: #1f2937;
 }
 
+/* Prevent diff base color from overriding daisyUI button text */
+.diff-tailwindcss-wrapper[data-theme='light'] .diff-style-root .btn-primary {
+  color: #ffffff;
+}
+
 /* GitHub-style syntax highlighting for light theme */
 .diff-tailwindcss-wrapper[data-theme="light"] .diff-line-syntax-raw .hljs {
   color: #24292e;
