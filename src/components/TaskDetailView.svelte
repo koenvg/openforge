@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { onMount } from 'svelte'
   import type { Task, Action } from '../lib/types'
   import { selectedTaskId, activeSessions, activeProjectId } from '../lib/stores'
-  import { getWorktreeForTask } from '../lib/ipc'
+  import { getWorktreeForTask, updateTaskStatus, openUrl, getConfig } from '../lib/ipc'
   import { loadActions, getEnabledActions } from '../lib/actions'
   import AgentPanel from './AgentPanel.svelte'
   import TaskInfoPanel from './TaskInfoPanel.svelte'
@@ -16,6 +17,7 @@
 
   let reviewMode = $state(false)
   let hasWorktree = $state(false)
+  let jiraBaseUrl = $state('')
   // Plain variable (not $state) so it's not tracked as a reactive dependency.
   // Used to detect actual task changes vs. same-task prop re-renders.
   let lastTaskId = ''
@@ -43,8 +45,24 @@
     }
   })
 
+  onMount(async () => {
+    jiraBaseUrl = (await getConfig('jira_base_url')) || ''
+  })
+
   function handleBack() {
     $selectedTaskId = null
+  }
+
+  async function handleStatusChange(newStatus: string) {
+    if (newStatus === task.status) return
+    try {
+      await updateTaskStatus(task.id, newStatus)
+      if (newStatus === 'done') {
+        $selectedTaskId = null
+      }
+    } catch (e) {
+      console.error('Failed to update status:', e)
+    }
   }
 
   function handleActionClick(action: Action) {
@@ -69,49 +87,63 @@
 <svelte:window onkeydown={handleEscape} />
 
 <div class="flex flex-col flex-1 h-full bg-base-100 overflow-hidden">
-  <header class="flex flex-col gap-4 px-6 py-5 bg-base-200 border-b border-base-300 shrink-0">
-    <button class="btn btn-soft btn-sm gap-2 w-fit shadow-sm hover:shadow-md transition-shadow" onclick={handleBack}>
-      <span class="text-lg leading-none">←</span>
-      Back to Board
+  <header class="flex items-center gap-3 px-6 py-3.5 bg-base-200 border-b border-base-300 shrink-0">
+    <button class="btn btn-soft btn-sm gap-1.5 shrink-0 shadow-sm hover:shadow-md transition-shadow" onclick={handleBack}>
+      <span class="text-base leading-none">←</span>
+      Back
     </button>
-    <div class="flex items-center gap-3">
-      <span class="text-[0.8125rem] font-semibold text-base-content/50 font-mono">{task.jira_key || task.id}</span>
-      <h1 class="text-2xl font-bold text-base-content m-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap min-w-0 max-[800px]:text-xl">{task.jira_title || task.title}</h1>
-      <span class="badge {task.status === 'doing' ? 'badge-success' : task.status === 'done' ? 'badge-primary' : 'badge-ghost'} uppercase tracking-wider text-xs font-semibold">
-        {getStatusLabel(task.status)}
-      </span>
-      {#if hasWorktree}
-        <div class="inline-flex items-center bg-base-300 border border-base-300 rounded-full p-0.5 gap-0.5 shrink-0 shadow-sm">
-          <button class="btn btn-ghost btn-xs rounded-full px-4 transition-all duration-200 {!reviewMode ? 'btn-active bg-primary text-primary-content font-semibold shadow-sm' : 'hover:bg-base-200'}" onclick={() => reviewMode = false}>Code</button>
-          <button class="btn btn-ghost btn-xs rounded-full px-4 transition-all duration-200 {reviewMode ? 'btn-active bg-primary text-primary-content font-semibold shadow-sm' : 'hover:bg-base-200'}" onclick={() => reviewMode = true}>Review</button>
-        </div>
-      {/if}
-      {#if actions.length > 0}
-        <div class="flex gap-1.5 shrink-0">
-          {#each actions as action (action.id)}
-            <button
-              class="btn btn-soft btn-sm shadow-sm hover:shadow-md hover:btn-primary transition-all duration-200"
-              disabled={isSessionBusy}
-              title={isSessionBusy ? busyReason : action.name}
-              onclick={() => handleActionClick(action)}
-            >
-              {action.name}
-            </button>
-          {/each}
-        </div>
-      {/if}
-    </div>
+    <span class="text-base-content/20 select-none">|</span>
+    <span class="text-[0.8125rem] font-semibold text-base-content/50 font-mono shrink-0">{task.jira_key || task.id}</span>
+    {#if task.jira_key && jiraBaseUrl}
+      <button
+        class="btn btn-ghost btn-xs px-1.5 min-h-0 h-auto text-primary hover:underline"
+        onclick={() => openUrl(`${jiraBaseUrl}/browse/${task.jira_key}`)}
+        title="Open in Jira"
+      >↗</button>
+    {/if}
+    <h1 class="text-lg font-bold text-base-content m-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap min-w-0">{task.jira_title || task.title}</h1>
+    <span class="badge {task.status === 'doing' ? 'badge-success' : task.status === 'done' ? 'badge-primary' : 'badge-ghost'} uppercase tracking-wider text-xs font-semibold shrink-0">
+      {getStatusLabel(task.status)}
+    </span>
+    {#if hasWorktree}
+      <div class="inline-flex items-center bg-base-300 border border-base-300 rounded-full p-0.5 gap-0.5 shrink-0 shadow-sm">
+        <button class="btn btn-ghost btn-xs rounded-full px-4 transition-all duration-200 {!reviewMode ? 'btn-active bg-primary text-primary-content font-semibold shadow-sm' : 'hover:bg-base-200'}" onclick={() => reviewMode = false}>Code</button>
+        <button class="btn btn-ghost btn-xs rounded-full px-4 transition-all duration-200 {reviewMode ? 'btn-active bg-primary text-primary-content font-semibold shadow-sm' : 'hover:bg-base-200'}" onclick={() => reviewMode = true}>Review</button>
+      </div>
+    {/if}
+    {#if task.status !== 'done'}
+      <button
+        class="btn btn-success btn-sm shrink-0 shadow-sm hover:shadow-md transition-shadow"
+        onclick={() => handleStatusChange('done')}
+      >
+        Move to Done
+      </button>
+    {/if}
+    {#if actions.length > 0}
+      <div class="flex gap-1.5 shrink-0">
+        {#each actions as action (action.id)}
+          <button
+            class="btn btn-soft btn-sm shadow-sm hover:shadow-md hover:btn-primary transition-all duration-200"
+            disabled={isSessionBusy}
+            title={isSessionBusy ? busyReason : action.name}
+            onclick={() => handleActionClick(action)}
+          >
+            {action.name}
+          </button>
+        {/each}
+      </div>
+    {/if}
   </header>
 
   <div class="flex flex-1 overflow-hidden max-[800px]:flex-col">
     {#if reviewMode}
       <SelfReviewView {task} {agentStatus} onSendToAgent={handleSendToAgent} />
     {:else}
-      <div class="basis-[70%] p-6 overflow-hidden max-[800px]:basis-auto max-[800px]:p-4">
+      <div class="basis-[70%] p-5 overflow-hidden max-[800px]:basis-auto max-[800px]:p-4">
         <AgentPanel taskId={task.id} />
       </div>
       <div class="w-px bg-base-300 shrink-0 max-[800px]:w-full max-[800px]:h-px"></div>
-      <div class="basis-[30%] p-6 overflow-y-auto bg-base-200 max-[800px]:basis-auto max-[800px]:p-4">
+      <div class="basis-[30%] overflow-y-auto bg-base-200 max-[800px]:basis-auto">
         <TaskInfoPanel task={task} />
       </div>
     {/if}

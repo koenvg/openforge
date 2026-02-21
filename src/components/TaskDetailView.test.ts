@@ -19,6 +19,7 @@ vi.mock('../lib/ipc', () => ({
   markCommentAddressed: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn().mockResolvedValue(undefined),
   getWorktreeForTask: vi.fn().mockResolvedValue(null),
+  getConfig: vi.fn().mockResolvedValue(''),
   getProjectConfig: vi.fn().mockResolvedValue(null),
   setProjectConfig: vi.fn().mockResolvedValue(undefined),
 }))
@@ -47,6 +48,7 @@ const baseTask: Task = {
   jira_title: null,
   jira_status: 'To Do',
   jira_assignee: 'Alice',
+  jira_description: null,
   plan_text: null,
   project_id: null,
   created_at: 1000,
@@ -68,9 +70,9 @@ const baseSession: AgentSession = {
 }
 
 describe('TaskDetailView', () => {
-  it('renders back button with "Back to Board" text', () => {
+  it('renders back button with "Back" text', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
-    expect(screen.getByText('Back to Board')).toBeTruthy()
+    expect(screen.getByText('Back')).toBeTruthy()
   })
 
   it('renders task jira_key when present', () => {
@@ -102,9 +104,20 @@ describe('TaskDetailView', () => {
     expect(screen.getByText('No active agent session')).toBeTruthy()
   })
 
-  it('has TaskInfoPanel child with section title', () => {
+  it('has TaskInfoPanel child with Initial Prompt section', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
-    expect(screen.getByText('Task Info')).toBeTruthy()
+    expect(screen.getByText('Initial Prompt')).toBeTruthy()
+  })
+
+  it('shows Move to Done button when task is not done', () => {
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    expect(screen.getByText('Move to Done')).toBeTruthy()
+  })
+
+  it('hides Move to Done button when task is already done', () => {
+    const doneTask = { ...baseTask, status: 'done' }
+    render(TaskDetailView, { props: { task: doneTask, onRunAction: mockOnRunAction } })
+    expect(screen.queryByText('Move to Done')).toBeNull()
   })
 
   it('hides Review toggle when no worktree', async () => {
