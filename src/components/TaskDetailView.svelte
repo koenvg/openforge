@@ -51,12 +51,6 @@
     onRunAction({ taskId: task.id, actionPrompt: action.prompt, agent: action.agent ?? null })
   }
 
-  function handleEscape(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
-      $selectedTaskId = null
-    }
-  }
-
   function handleSendToAgent(prompt: string) {
     onRunAction({ taskId: task.id, actionPrompt: prompt, agent: null })
   }
@@ -65,8 +59,6 @@
     return status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
   }
 </script>
-
-<svelte:window onkeydown={handleEscape} />
 
 <div class="flex flex-col flex-1 h-full bg-base-100 overflow-hidden">
   <header class="flex flex-col gap-4 px-6 py-5 bg-base-200 border-b border-base-300 shrink-0">
