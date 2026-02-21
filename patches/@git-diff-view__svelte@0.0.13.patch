@@ -1,0 +1,13 @@
+diff --git a/dist/components/DiffUnifiedExtendLine.svelte b/dist/components/DiffUnifiedExtendLine.svelte
+index ed1c42c8c45480d3e5fe5a5cca57e16ac5bd2e0c..5c1d2ddc0b1a3cc46e07c70bb078f86e36b3b0b7 100644
+--- a/dist/components/DiffUnifiedExtendLine.svelte
++++ b/dist/components/DiffUnifiedExtendLine.svelte
+@@ -28,7 +28,7 @@
+ 	const currentIsHidden = $derived.by(() => unifiedItem.isHidden);
+ 
+ 	const currentIsShow = $derived.by(() =>
+-		Boolean((oldExtend || newExtend) && currentIsHidden && renderExtend)
++		Boolean((oldExtend || newExtend) && !currentIsHidden && renderExtend)
+ 	);
+ 
+ 	const width = $derived.by(

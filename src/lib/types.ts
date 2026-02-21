@@ -69,6 +69,7 @@ export interface PullRequestInfo {
   merged_at: number | null;
   created_at: number;
   updated_at: number;
+  unaddressed_comment_count: number;
 }
 
 export interface PollResult {
@@ -213,6 +214,18 @@ export interface PrFileDiff {
   previous_filename: string | null;
   is_truncated: boolean;
   patch_line_count: number | null;
+}
+
+/** PR overview comment (both review and general comments) */
+export interface PrOverviewComment {
+  id: number;
+  body: string;
+  author: string;
+  avatar_url: string | null;
+  comment_type: string;
+  file_path: string | null;
+  line_number: number | null;
+  created_at: string;
 }
 
 /** Inline review comment from GitHub PR */

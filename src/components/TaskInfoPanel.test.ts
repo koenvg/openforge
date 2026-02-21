@@ -1,21 +1,18 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
+import { render, screen } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
-import { writable, get } from 'svelte/store'
+import { writable } from 'svelte/store'
 import TaskInfoPanel from './TaskInfoPanel.svelte'
 import type { Task, PullRequestInfo } from '../lib/types'
-import { ticketPrs, selectedTaskId } from '../lib/stores'
+import { ticketPrs } from '../lib/stores'
 
 vi.mock('../lib/stores', () => ({
   ticketPrs: writable(new Map()),
-  selectedTaskId: writable('T-42'),
 }))
 
 vi.mock('../lib/ipc', () => ({
-  updateTaskStatus: vi.fn().mockResolvedValue(undefined),
   getPrComments: vi.fn().mockResolvedValue([]),
   markCommentAddressed: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn().mockResolvedValue(undefined),
-  getWorktreeForTask: vi.fn().mockResolvedValue(null),
 }))
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -30,6 +27,7 @@ const baseTask: Task = {
   jira_title: null,
   jira_status: 'To Do',
   jira_assignee: 'Alice',
+  jira_description: null,
   plan_text: null,
   project_id: null,
   created_at: 1000,
@@ -37,66 +35,16 @@ const baseTask: Task = {
 }
 
 describe('TaskInfoPanel', () => {
-  it('renders "Task Info" section title', () => {
+  it('renders Initial Prompt section with task title', () => {
     render(TaskInfoPanel, { props: { task: baseTask } })
-    expect(screen.getByText('Task Info')).toBeTruthy()
-  })
-
-  it('renders task status label from COLUMN_LABELS', () => {
-    render(TaskInfoPanel, { props: { task: baseTask } })
-    const matches = screen.getAllByText('Backlog')
-    expect(matches.length).toBeGreaterThanOrEqual(1)
-  })
-
-  it('renders JIRA key when present', () => {
-    render(TaskInfoPanel, { props: { task: baseTask } })
-    expect(screen.getByText('PROJ-123')).toBeTruthy()
-  })
-
-  it('renders JIRA status when present', () => {
-    render(TaskInfoPanel, { props: { task: baseTask } })
-    expect(screen.getByText('JIRA Status')).toBeTruthy()
-  })
-
-  it('renders JIRA assignee when present', () => {
-    render(TaskInfoPanel, { props: { task: baseTask } })
-    expect(screen.getByText('Alice')).toBeTruthy()
-  })
-
-  it('hides JIRA fields when jira_key is null', () => {
-    const taskWithoutJira = { ...baseTask, jira_key: null, jira_status: null, jira_assignee: null }
-    render(TaskInfoPanel, { props: { task: taskWithoutJira } })
-    expect(screen.queryByText('JIRA')).toBeNull()
-    expect(screen.queryByText('JIRA Status')).toBeNull()
-    expect(screen.queryByText('JIRA Assignee')).toBeNull()
-  })
-
-  it('shows Move to Done button when task is not done', () => {
-    render(TaskInfoPanel, { props: { task: baseTask } })
-    expect(screen.getByText('Move to Done')).toBeTruthy()
-  })
-
-  it('hides Move to Done button when task is already done', () => {
-    const doneTask = { ...baseTask, status: 'done' }
-    render(TaskInfoPanel, { props: { task: doneTask } })
-    expect(screen.queryByText('Move to Done')).toBeNull()
+    expect(screen.getByText('Initial Prompt')).toBeTruthy()
+    expect(screen.getByText('Implement auth middleware')).toBeTruthy()
   })
 
   it('does not show Edit Task or Delete buttons', () => {
     render(TaskInfoPanel, { props: { task: baseTask } })
     expect(screen.queryByText('Edit Task')).toBeNull()
     expect(screen.queryByText('Delete')).toBeNull()
-  })
-
-  it('navigates back to board after marking task as done', async () => {
-    selectedTaskId.set('T-42')
-    render(TaskInfoPanel, { props: { task: baseTask } })
-
-    const btn = screen.getByText('Move to Done')
-    await fireEvent.click(btn)
-
-    await new Promise((r) => setTimeout(r, 10))
-    expect(get(selectedTaskId)).toBeNull()
   })
 
   it('renders pipeline status section when PRs have CI data', async () => {
@@ -114,13 +62,16 @@ describe('TaskInfoPanel', () => {
         { id: 1, name: 'build', status: 'completed', conclusion: 'failure', html_url: 'https://example.com' },
         { id: 2, name: 'lint', status: 'completed', conclusion: 'success', html_url: 'https://example.com' }
       ]),
+      review_status: null,
+      merged_at: null,
       created_at: 1000,
       updated_at: 2000,
+      unaddressed_comment_count: 0,
     }
 
     ticketPrs.set(new Map([['T-42', [prWithCi]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, onEdit: vi.fn() } })
+    render(TaskInfoPanel, { props: { task: baseTask } })
 
     await new Promise((r) => setTimeout(r, 10))
     expect(screen.getByText('Pipeline Status')).toBeTruthy()

@@ -25,23 +25,18 @@
     return text.split('\n')[0]
   }
 
-  function stageLabel(stage: string): string {
-    const labels: Record<string, string> = {
-      read_ticket: 'Reading ticket',
-      implement: 'Implementing',
-      create_pr: 'Creating PR',
-      address_comments: 'Addressing comments',
-    }
-    return labels[stage] || stage
-  }
 
   let statusClass = $derived(session?.status || 'idle')
   let needsInput = $derived(session?.status === 'paused' && session?.checkpoint_data !== null)
   let hasVisibleStatus = $derived(session !== null && ['running', 'completed', 'paused', 'failed', 'interrupted'].includes(session?.status ?? ''))
+  let hasCiFailure = $derived(pullRequests.some(pr => pr.ci_status === 'failure' && pr.state === 'open'))
+  let totalUnaddressed = $derived(
+    pullRequests.reduce((sum, pr) => sum + (pr.unaddressed_comment_count || 0), 0)
+  )
 </script>
 
 <Card
-  class="block px-3 py-2.5 {statusClass === 'running' ? 'running' : ''} {statusClass === 'paused' && !needsInput ? 'paused' : ''} {statusClass === 'failed' ? 'failed' : ''} {statusClass === 'interrupted' ? 'interrupted' : ''} {statusClass === 'completed' ? 'completed' : ''} {needsInput ? 'needs-input' : ''}"
+  class="block px-3.5 py-3 {hasCiFailure && statusClass !== 'running' && !needsInput ? 'ci-failed' : ''} {statusClass === 'running' ? 'running' : ''} {statusClass === 'paused' && !needsInput ? 'paused' : ''} {statusClass === 'failed' ? 'failed' : ''} {statusClass === 'interrupted' ? 'interrupted' : ''} {statusClass === 'completed' ? 'completed' : ''} {needsInput ? 'needs-input' : ''}"
   onclick={handleClick}
 >
   <div class="flex items-center justify-between mb-1">
@@ -82,21 +77,7 @@
   {#if task.jira_title}
     <div class="text-xs text-base-content/50 leading-tight mb-1.5">{truncate(task.jira_title, 80)}</div>
   {/if}
-  {#if session}
-    <div class="text-[0.7rem] mb-1 {statusClass === 'running' ? 'text-success' : statusClass === 'completed' ? 'text-primary' : statusClass === 'failed' ? 'text-error' : statusClass === 'paused' ? 'text-warning' : 'text-base-content/50'}">
-      {#if session.status === 'running'}
-        {stageLabel(session.stage)}...
-      {:else if session.status === 'paused'}
-        Awaiting approval
-      {:else if session.status === 'failed'}
-        {session.error_message || 'Error'}
-      {:else if session.status === 'interrupted'}
-        Interrupted
-      {:else if session.status === 'completed'}
-        Completed
-      {/if}
-    </div>
-  {/if}
+
   {#if pullRequests.length > 0}
     <div class="flex flex-wrap gap-1 mb-1">
       {#each pullRequests as pr}
@@ -107,19 +88,19 @@
           onclick={(e: MouseEvent) => { e.stopPropagation(); openUrl(pr.url) }}
           onkeydown={(e: KeyboardEvent) => { e.stopPropagation(); if (e.key === 'Enter') openUrl(pr.url) }}
         >
+          PR #{pr.id}
           {#if pr.ci_status && pr.ci_status !== 'none' && pr.state === 'open'}
+            <span class="text-base-content/30 mx-px">·</span>
             <span
-              class="ci-dot ci-{pr.ci_status} inline-block w-1.5 h-1.5 rounded-full mr-0.5 align-middle {pr.ci_status === 'success' ? 'bg-success' : ''} {pr.ci_status === 'failure' ? 'bg-error' : ''} {pr.ci_status === 'pending' ? 'bg-warning' : ''}"
-              title="CI: {pr.ci_status}"
-            ></span>
+              class="{pr.ci_status === 'success' ? 'text-success' : ''} {pr.ci_status === 'failure' ? 'text-error ci-failure-text' : ''} {pr.ci_status === 'pending' ? 'text-warning ci-pending-text' : ''}"
+            >{pr.ci_status === 'success' ? 'Passed' : pr.ci_status === 'failure' ? 'Failed' : 'Pending'}</span>
           {/if}
           {#if pr.review_status && pr.review_status !== 'none' && pr.state === 'open'}
+            <span class="text-base-content/30 mx-px">·</span>
             <span
-              class="review-dot review-{pr.review_status} inline-block w-1.5 h-1.5 rounded-full mr-0.5 align-middle {pr.review_status === 'approved' ? 'bg-success' : ''} {pr.review_status === 'changes_requested' ? 'bg-warning' : ''} {pr.review_status === 'review_required' ? 'bg-base-content/50' : ''}"
-              title="Review: {pr.review_status}"
-            ></span>
+              class="{pr.review_status === 'approved' ? 'text-success' : ''} {pr.review_status === 'changes_requested' ? 'text-warning' : ''} {pr.review_status === 'review_required' ? 'text-base-content/50 review-pending-text' : ''}"
+            >{pr.review_status === 'approved' ? 'Approved' : pr.review_status === 'changes_requested' ? 'Changes req.' : 'Needs review'}</span>
           {/if}
-          PR #{pr.id}
         </span>
       {/each}
     </div>
@@ -130,6 +111,11 @@
         <div class="text-[0.7rem] font-semibold px-2 py-0.5 rounded mt-1 text-center bg-success/15 text-success border border-success/30">Ready to merge</div>
       {/if}
     {/each}
+  {/if}
+  {#if totalUnaddressed > 0}
+    <div class="flex items-center gap-1 mt-1">
+      <span class="badge badge-error badge-xs">{totalUnaddressed} unaddressed</span>
+    </div>
   {/if}
   {#if task.jira_assignee}
     <div class="text-[0.7rem] text-base-content/50">{task.jira_assignee}</div>
@@ -165,6 +151,10 @@
     background-color: var(--color-base-100);
     animation: border-pulse-warning 2s ease-in-out infinite;
   }
+  :global(.ci-failed) {
+    border: 2px solid var(--color-error);
+    background-image: linear-gradient(to right, color-mix(in oklch, var(--color-error) 8%, transparent), transparent 40%);
+  }
   @keyframes border-pulse-success {
     0%, 100% {
       border-color: var(--color-success);
@@ -193,14 +183,14 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
   }
-  /* CI/Review dot animations */
-  :global(.ci-dot.ci-failure) {
+  /* CI/Review text animations */
+  :global(.ci-failure-text) {
     animation: ci-pulse 1.5s ease-in-out infinite;
   }
-  :global(.ci-dot.ci-pending) {
+  :global(.ci-pending-text) {
     animation: ci-pulse 2s ease-in-out infinite;
   }
-  :global(.review-dot.review-review_required) {
+  :global(.review-pending-text) {
     animation: ci-pulse 2s ease-in-out infinite;
   }
 </style>

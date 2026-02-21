@@ -1,18 +1,22 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { reviewPrs, selectedReviewPr, prFileDiffs, reviewRequestCount, reviewComments, pendingManualComments } from '../lib/stores'
+  import { reviewPrs, selectedReviewPr, prFileDiffs, reviewRequestCount, reviewComments, pendingManualComments, prOverviewComments } from '../lib/stores'
   import { fetchReviewPrs, getReviewPrs, getPrFileDiffs, openUrl, getReviewComments, getFileContent, getFileAtRef } from '../lib/ipc'
   import ReviewPrCard from './ReviewPrCard.svelte'
   import FileTree from './FileTree.svelte'
   import DiffViewer from './DiffViewer.svelte'
   import ReviewSubmitPanel from './ReviewSubmitPanel.svelte'
+  import PrOverviewTab from './PrOverviewTab.svelte'
   import type { ReviewPullRequest, PrFileDiff } from '../lib/types'
   import type { FileContents } from '../lib/diffAdapter'
+
+  type PrDetailTab = 'overview' | 'files'
 
   let isLoading = $state(false)
   let error = $state<string | null>(null)
   let diffViewer = $state<DiffViewer>()
   let fileTreeVisible = $state(true)
+  let activeTab = $state<PrDetailTab>('overview')
 
   let groupedPrs = $derived(groupByRepo($reviewPrs))
 
@@ -78,6 +82,8 @@
     $prFileDiffs = []
     $reviewComments = []
     $pendingManualComments = []
+    $prOverviewComments = []
+    activeTab = 'overview'
   }
 
   function handleFileSelect(filename: string) {
@@ -155,42 +161,56 @@
             >View on GitHub ↗</span>
           </div>
         </div>
+        <div class="flex gap-1 mt-1">
+          <button
+            class="btn btn-ghost btn-sm {activeTab === 'overview' ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
+            onclick={() => { activeTab = 'overview' }}
+          >Overview</button>
+          <button
+            class="btn btn-ghost btn-sm {activeTab === 'files' ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
+            onclick={() => { activeTab = 'files' }}
+          >Files changed <span class="badge badge-sm ml-1">{$prFileDiffs.length}</span></button>
+        </div>
       </div>
 
-      <div class="flex flex-1 overflow-hidden">
-        {#if isLoading}
-          <div class="flex flex-col items-center justify-center flex-1 gap-3 text-base-content/50 text-sm">
-            <span class="loading loading-spinner loading-md text-primary"></span>
-            <span>Loading diffs...</span>
-          </div>
-        {:else if error}
-          <div class="flex flex-col items-center justify-center h-full gap-3 text-error text-sm text-center p-5">
-            <span class="text-5xl">⚠</span>
-            <span>{error}</span>
-          </div>
-        {:else}
-          {#if fileTreeVisible}
-            <FileTree files={$prFileDiffs} onSelectFile={handleFileSelect} />
+      {#if activeTab === 'overview'}
+        <PrOverviewTab pr={$selectedReviewPr} />
+      {:else}
+        <div class="flex flex-1 overflow-hidden">
+          {#if isLoading}
+            <div class="flex flex-col items-center justify-center flex-1 gap-3 text-base-content/50 text-sm">
+              <span class="loading loading-spinner loading-md text-primary"></span>
+              <span>Loading diffs...</span>
+            </div>
+          {:else if error}
+            <div class="flex flex-col items-center justify-center h-full gap-3 text-error text-sm text-center p-5">
+              <span class="text-5xl">⚠</span>
+              <span>{error}</span>
+            </div>
+          {:else}
+            {#if fileTreeVisible}
+              <FileTree files={$prFileDiffs} onSelectFile={handleFileSelect} />
+            {/if}
+            <DiffViewer
+              bind:this={diffViewer}
+              files={$prFileDiffs}
+              existingComments={$reviewComments}
+              repoOwner={$selectedReviewPr.repo_owner}
+              repoName={$selectedReviewPr.repo_name}
+              {fileTreeVisible}
+              onToggleFileTree={() => { fileTreeVisible = !fileTreeVisible }}
+              fetchFileContents={fetchPrFileContents}
+            />
           {/if}
-          <DiffViewer
-            bind:this={diffViewer}
-            files={$prFileDiffs}
-            existingComments={$reviewComments}
-            repoOwner={$selectedReviewPr.repo_owner}
-            repoName={$selectedReviewPr.repo_name}
-            {fileTreeVisible}
-            onToggleFileTree={() => { fileTreeVisible = !fileTreeVisible }}
-            fetchFileContents={fetchPrFileContents}
-          />
-        {/if}
-      </div>
+        </div>
 
-      <ReviewSubmitPanel
-        repoOwner={$selectedReviewPr.repo_owner}
-        repoName={$selectedReviewPr.repo_name}
-        prNumber={$selectedReviewPr.number}
-        commitId={$selectedReviewPr.head_sha}
-      />
+        <ReviewSubmitPanel
+          repoOwner={$selectedReviewPr.repo_owner}
+          repoName={$selectedReviewPr.repo_name}
+          prNumber={$selectedReviewPr.number}
+          commitId={$selectedReviewPr.head_sha}
+        />
+      {/if}
     </div>
   {:else}
     <div class="flex flex-col h-full overflow-hidden">
@@ -204,7 +224,7 @@
         </button>
       </div>
 
-      <div class="flex-1 overflow-y-auto p-6">
+      <div class="flex-1 overflow-y-auto p-6 pb-8">
         {#if isLoading && $reviewPrs.length === 0}
           <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm">
             <span class="loading loading-spinner loading-md text-primary"></span>
@@ -225,7 +245,7 @@
           {#each [...groupedPrs.entries()] as [repo, prs]}
             <div class="mb-8">
               <h3 class="text-xs font-semibold text-base-content/50 m-0 mb-3 uppercase tracking-wider">{repo}</h3>
-              <div class="grid grid-cols-[repeat(auto-fill,minmax(400px,1fr))] gap-4">
+              <div class="grid grid-cols-[repeat(auto-fill,minmax(340px,1fr))] gap-5 max-w-6xl">
                 {#each prs as pr}
                   <ReviewPrCard
                     {pr}

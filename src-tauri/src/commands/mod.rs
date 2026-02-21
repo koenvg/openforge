@@ -1,0 +1,11 @@
+pub mod opencode;
+pub mod tasks;
+pub mod projects;
+pub mod orchestration;
+pub mod jira;
+pub mod github;
+pub mod agents;
+pub mod pty;
+pub mod review;
+pub mod self_review;
+pub mod config;

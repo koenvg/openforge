@@ -24,6 +24,7 @@
   let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents }: Props = $props()
 
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
+  let diffViewWrap = $state(false)
   let commentText = $state('')
   let fileContentsMap = $state<Map<string, FileContents>>(new Map())
   let collapsedFiles = $state(new Set<string>())
@@ -143,6 +144,14 @@
     >
       Unified
     </button>
+    <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
+    <button
+      class="btn btn-ghost btn-xs {diffViewWrap ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
+      onclick={() => (diffViewWrap = !diffViewWrap)}
+      title={diffViewWrap ? 'Disable line wrapping' : 'Enable line wrapping'}
+    >
+      Wrap
+    </button>
   </div>
 
   <div class="flex-1 overflow-y-auto overflow-x-hidden bg-base-100">
@@ -188,6 +197,7 @@
               data={toGitDiffViewData(file, fileContentsMap.get(file.filename))}
               extendData={buildExtendData(file.filename, existingComments, $pendingManualComments)}
               diffViewMode={diffViewMode}
+              diffViewWrap={diffViewWrap}
               diffViewTheme="light"
               diffViewHighlight={true}
               diffViewAddWidget={true}

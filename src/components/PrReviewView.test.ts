@@ -10,6 +10,7 @@ vi.mock('../lib/stores', () => ({
   reviewRequestCount: writable(0),
   reviewComments: writable([]),
   pendingManualComments: writable([]),
+  prOverviewComments: writable([]),
 }))
 
 vi.mock('../lib/ipc', () => ({
@@ -17,6 +18,7 @@ vi.mock('../lib/ipc', () => ({
   getReviewPrs: vi.fn().mockResolvedValue([]),
   getPrFileDiffs: vi.fn().mockResolvedValue([]),
   getReviewComments: vi.fn().mockResolvedValue([]),
+  getPrOverviewComments: vi.fn().mockResolvedValue([]),
   submitPrReview: vi.fn(),
   openUrl: vi.fn(),
 }))

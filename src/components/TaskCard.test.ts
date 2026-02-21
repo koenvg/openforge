@@ -28,6 +28,8 @@ const basePr: PullRequestInfo = {
   head_sha: 'abc123',
   ci_status: null,
   ci_check_runs: null,
+  review_status: null,
+  merged_at: null,
   created_at: 1000,
   updated_at: 2000,
 }
@@ -79,7 +81,6 @@ describe('TaskCard', () => {
       updated_at: 2000,
     }
     render(TaskCard, { props: { task: baseTask, session } })
-    expect(screen.getByText('Implementing...')).toBeTruthy()
     expect(screen.getByText('Running')).toBeTruthy()
   })
 
@@ -97,7 +98,6 @@ describe('TaskCard', () => {
     }
     render(TaskCard, { props: { task: baseTask, session } })
     expect(screen.getByText('Done')).toBeTruthy()
-    expect(screen.getByText('Completed')).toBeTruthy()
   })
 
   it('applies completed class to card when session is completed', () => {
@@ -130,7 +130,6 @@ describe('TaskCard', () => {
       updated_at: 2000,
     }
     render(TaskCard, { props: { task: baseTask, session } })
-    expect(screen.getByText('Awaiting approval')).toBeTruthy()
     expect(screen.getByText('Paused')).toBeTruthy()
   })
 
@@ -147,7 +146,6 @@ describe('TaskCard', () => {
       updated_at: 2000,
     }
     render(TaskCard, { props: { task: baseTask, session } })
-    expect(screen.getByText('Build failed')).toBeTruthy()
     const card = screen.getByRole('button')
     expect(card.classList.contains('failed')).toBe(true)
   })
@@ -166,7 +164,6 @@ describe('TaskCard', () => {
     }
     render(TaskCard, { props: { task: baseTask, session } })
     expect(screen.getByText('Stopped')).toBeTruthy()
-    expect(screen.getByText('Interrupted')).toBeTruthy()
   })
 
   it('shows needs-input badge when session is paused with checkpoint data', () => {
@@ -296,15 +293,141 @@ describe('TaskCard', () => {
     expect(card.classList.contains('needs-input')).toBe(false)
   })
 
-  it('renders CI status dot for success', () => {
+  it('renders CI status text for success', () => {
     const pr = { ...basePr, ci_status: 'success' }
     render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
-    const dot = document.querySelector('.ci-dot.ci-success')
-    expect(dot).toBeTruthy()
+    expect(screen.getByText('Passed')).toBeTruthy()
   })
 
-  it('no CI dot when ci_status is null', () => {
+  it('no CI text when ci_status is null', () => {
     render(TaskCard, { props: { task: baseTask, pullRequests: [basePr] } })
-    expect(document.querySelector('.ci-dot')).toBeNull()
+    expect(screen.queryByText('Passed')).toBeNull()
+    expect(screen.queryByText('Failed')).toBeNull()
+    expect(screen.queryByText('Pending')).toBeNull()
+  })
+
+  it('renders CI status text for failure', () => {
+    const pr = { ...basePr, ci_status: 'failure' }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
+    expect(screen.getByText('Failed')).toBeTruthy()
+  })
+
+  it('renders CI status text for pending', () => {
+    const pr = { ...basePr, ci_status: 'pending' }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
+    expect(screen.getByText('Pending')).toBeTruthy()
+  })
+
+  it('renders review status text for approved', () => {
+    const pr = { ...basePr, review_status: 'approved' }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
+    expect(screen.getByText('Approved')).toBeTruthy()
+  })
+
+  it('renders review status text for changes requested', () => {
+    const pr = { ...basePr, review_status: 'changes_requested' }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
+    expect(screen.getByText('Changes req.')).toBeTruthy()
+  })
+
+  it('renders review status text for review required', () => {
+    const pr = { ...basePr, review_status: 'review_required' }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
+    expect(screen.getByText('Needs review')).toBeTruthy()
+  })
+
+  it('no review text when review_status is null', () => {
+    render(TaskCard, { props: { task: baseTask, pullRequests: [basePr] } })
+    expect(screen.queryByText('Approved')).toBeNull()
+    expect(screen.queryByText('Changes req.')).toBeNull()
+    expect(screen.queryByText('Needs review')).toBeNull()
+  })
+
+  it('no review text when PR is closed', () => {
+    const pr = { ...basePr, review_status: 'approved', state: 'closed' }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
+    expect(screen.queryByText('Approved')).toBeNull()
+  })
+
+  it('applies ci-failed class when open PR has ci_status failure', () => {
+    const pr = { ...basePr, ci_status: 'failure', state: 'open' }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
+    const card = screen.getByRole('button')
+    expect(card.classList.contains('ci-failed')).toBe(true)
+  })
+
+  it('does not apply ci-failed class when ci_status is success', () => {
+    const pr = { ...basePr, ci_status: 'success', state: 'open' }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
+    const card = screen.getByRole('button')
+    expect(card.classList.contains('ci-failed')).toBe(false)
+  })
+
+  it('does not apply ci-failed class when PR is closed with failure', () => {
+    const pr = { ...basePr, ci_status: 'failure', state: 'closed' }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
+    const card = screen.getByRole('button')
+    expect(card.classList.contains('ci-failed')).toBe(false)
+  })
+
+  it('does not apply ci-failed class when agent is running despite CI failure', () => {
+    const session: AgentSession = {
+      id: 'ses-1',
+      ticket_id: 'T-42',
+      opencode_session_id: null,
+      stage: 'implement',
+      status: 'running',
+      checkpoint_data: null,
+      error_message: null,
+      created_at: 1000,
+      updated_at: 2000,
+    }
+    const pr = { ...basePr, ci_status: 'failure', state: 'open' }
+    render(TaskCard, { props: { task: baseTask, session, pullRequests: [pr] } })
+    const card = screen.getByRole('button')
+    expect(card.classList.contains('ci-failed')).toBe(false)
+    expect(card.classList.contains('running')).toBe(true)
+  })
+
+  it('applies ci-failed class when agent is completed and CI failed', () => {
+    const session: AgentSession = {
+      id: 'ses-1',
+      ticket_id: 'T-42',
+      opencode_session_id: null,
+      stage: 'implement',
+      status: 'completed',
+      checkpoint_data: null,
+      error_message: null,
+      created_at: 1000,
+      updated_at: 2000,
+    }
+    const pr = { ...basePr, ci_status: 'failure', state: 'open' }
+    render(TaskCard, { props: { task: baseTask, session, pullRequests: [pr] } })
+    const card = screen.getByRole('button')
+    expect(card.classList.contains('ci-failed')).toBe(true)
+  })
+
+  it('shows unaddressed comment badge when comments exist', () => {
+    const pr = { ...basePr, unaddressed_comment_count: 3 }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
+    expect(screen.getByText('3 unaddressed')).toBeTruthy()
+  })
+
+  it('hides unaddressed comment badge when count is 0', () => {
+    const pr = { ...basePr, unaddressed_comment_count: 0 }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
+    expect(screen.queryByText('unaddressed')).toBeNull()
+  })
+
+  it('sums unaddressed counts across multiple PRs', () => {
+    const pr1 = { ...basePr, id: 1, unaddressed_comment_count: 2 }
+    const pr2 = { ...basePr, id: 2, unaddressed_comment_count: 1 }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr1, pr2] } })
+    expect(screen.getByText('3 unaddressed')).toBeTruthy()
+  })
+
+  it('hides badge when no pull requests', () => {
+    render(TaskCard, { props: { task: baseTask } })
+    expect(screen.queryByText('unaddressed')).toBeNull()
   })
 })

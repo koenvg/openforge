@@ -43,8 +43,30 @@ src-tauri/                    # Rust backend
   Cargo.toml                  # Rust dependencies
   tauri.conf.json             # Tauri window/build configuration
   src/
-    main.rs                   # Tauri commands + app setup
-    db.rs                     # SQLite database layer (rusqlite)
+    main.rs                   # App entry, main(), startup, command registration
+    commands/                 # Tauri command handlers (by domain)
+      mod.rs                  # Module declarations
+      opencode.rs             # OpenCode server commands (4)
+      tasks.rs                # Task CRUD commands (7)
+      projects.rs             # Project management commands (8)
+      orchestration.rs        # Implementation lifecycle + shared helpers (3)
+      jira.rs                 # JIRA integration command (1)
+      github.rs               # GitHub PR/sync commands (5)
+      agents.rs               # Agent session commands (6)
+      pty.rs                  # PTY terminal commands (4)
+      review.rs               # GitHub PR review commands (9)
+      self_review.rs          # Self-review comment commands (7)
+      config.rs               # Config/utility commands (3)
+    db/                       # SQLite database layer (by domain)
+      mod.rs                  # Database struct, migrations, re-exports
+      tasks.rs                # Task table operations
+      projects.rs             # Project + project config operations
+      worktrees.rs            # Worktree operations
+      pull_requests.rs        # PR + comment operations
+      agents.rs               # Agent session + log operations
+      config.rs               # Global config operations
+      review.rs               # Review PR operations
+      self_review.rs          # Self-review comment operations
     orchestrator.rs           # AI agent workflow orchestration
     opencode_client.rs        # OpenCode API client
     opencode_manager.rs       # OpenCode server lifecycle
@@ -195,8 +217,16 @@ Vite plugin: `@tailwindcss/vite` — must be listed BEFORE `svelte()` in `vite.c
 
 ### Module Organization
 
-One file per module, declared in `main.rs` with `mod name;`. No nested module directories.
-Additional modules not in original structure:
+Two directory modules group related code by domain; everything else is a single file.
+
+**Directory modules** (declared in `main.rs` with `mod commands;` and `mod db;`):
+- `commands/` — all Tauri command handlers, one file per domain, with `commands/mod.rs` declaring sub-modules
+- `db/` — all database operations, one file per domain, with `db/mod.rs` owning the `Database` struct, migrations, and re-exports
+
+**Single-file modules** (declared in `main.rs` with `mod name;`):
+- `orchestrator.rs`, `opencode_client.rs`, `opencode_manager.rs`, `jira_client.rs`, `jira_sync.rs`, `github_client.rs`, `github_poller.rs`
+
+Additional single-file modules not in the original structure:
 - `server_manager.rs` — OpenCode server process lifecycle per worktree
 - `sse_bridge.rs` — SSE event bridge (OpenCode → Tauri frontend)
 - `git_worktree.rs` — Git worktree creation/cleanup
@@ -204,18 +234,28 @@ Additional modules not in original structure:
 
 ### Tauri Commands
 
-All `#[tauri::command]` functions live in `main.rs`. They accept `State<'_>` parameters and
-return `Result<T, String>`. Convert internal errors with `.map_err(|e| format!(...))`.
+Commands are organized in `src-tauri/src/commands/` by domain. Each command module contains
+`pub async fn` handlers annotated with `#[tauri::command]`. They accept `State<'_>` parameters
+and return `Result<T, String>`. Convert internal errors with `.map_err(|e| format!(...))`.
+
+Commands are registered in `main.rs` via `commands::module::fn_name` in `generate_handler!`:
 
 ```rust
+// In commands/tasks.rs
 #[tauri::command]
-async fn get_tickets(
+pub async fn get_tickets(
     db: State<'_, Mutex<db::Database>>,
-) -> Result<Vec<TicketRow>, String> {
+) -> Result<Vec<db::TaskRow>, String> {
     let db = db.lock().unwrap();
     db.get_all_tickets()
         .map_err(|e| format!("Failed to get tickets: {}", e))
 }
+
+// In main.rs
+tauri::generate_handler![
+    commands::tasks::get_tickets,
+    // ...
+]
 ```
 
 ### Error Handling (Backend)
@@ -237,9 +277,14 @@ impl StdError for JiraError {}
 
 ### Database Layer
 
-`db.rs` owns all SQL. Structs with `#[derive(Debug, Clone, Serialize)]` and public fields
-for rows. Database struct wraps `Arc<Mutex<Connection>>`. Methods take `&self` and lock
-internally. Doc comments (`///`) on all public methods with argument descriptions.
+`db/mod.rs` owns the `Database` struct, runs migrations, and re-exports all public types so
+`db::TaskRow` etc. still work from call sites. Domain sub-modules (`db/tasks.rs`,
+`db/projects.rs`, etc.) each implement methods via `impl super::Database`, accessing the
+connection through the `pub(crate) conn` field.
+
+Structs use `#[derive(Debug, Clone, Serialize)]` with public fields for rows. Doc comments
+(`///`) on all public methods with argument descriptions. Test helpers (`make_test_db`,
+`insert_test_task`) live in `db/mod.rs` under `#[cfg(test)] pub mod test_helpers`.
 
 ### Naming (Rust)
 
