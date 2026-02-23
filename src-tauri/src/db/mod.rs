@@ -492,14 +492,6 @@ impl Database {
             [],
         )?;
 
-        // ============================================================================
-        // Retroactive migration: Mark existing bot comments as addressed
-        // ============================================================================
-        conn.execute(
-            "UPDATE pr_comments SET addressed = 1 WHERE author LIKE '%[bot]%' AND addressed = 0",
-            [],
-        )?;
-
         Ok(())
     }
 
