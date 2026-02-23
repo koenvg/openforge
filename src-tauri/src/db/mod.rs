@@ -492,6 +492,29 @@ impl Database {
             [],
         )?;
 
+        // ============================================================================
+        // Migration: Add indexes for self-review and review-pr queries
+        // ============================================================================
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_self_review_comments_task_archived ON self_review_comments(task_id, archived_at)",
+            [],
+        )?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_self_review_comments_task_round ON self_review_comments(task_id, round)",
+            [],
+        )?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_review_prs_updated_at ON review_prs(updated_at DESC)",
+            [],
+        )?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_review_prs_repo ON review_prs(repo_owner, repo_name)",
+            [],
+        )?;
+
         Ok(())
     }
 
@@ -636,4 +659,41 @@ mod tests {
         drop(db);
         let _ = fs::remove_file(&path);
     }
+    #[test]
+    fn test_indexes_created_on_migration() {
+        let path = format!("/tmp/test_indexes_{}.db", std::process::id());
+        let _ = fs::remove_file(&path);
+
+        let db = Database::new(PathBuf::from(&path)).expect("Failed to create DB");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        // Verify all 4 indexes exist in sqlite_master
+        let index_names = vec![
+            "idx_self_review_comments_task_archived",
+            "idx_self_review_comments_task_round",
+            "idx_review_prs_updated_at",
+            "idx_review_prs_repo",
+        ];
+
+        for index_name in index_names {
+            let exists: bool = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name=?1",
+                    rusqlite::params![index_name],
+                    |row| {
+                        let count: i64 = row.get(0)?;
+                        Ok(count > 0)
+                    },
+                )
+                .expect("Failed to query sqlite_master");
+
+            assert!(exists, "Index {} should exist", index_name);
+        }
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
 }
