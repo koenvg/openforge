@@ -35,10 +35,7 @@
       "icons/icon.png"
     ],
     "macOS": {
-      "entitlements": "entitlements.plist",
-      "infoPlist": {
-        "NSMicrophoneUsageDescription": "AI Command Center needs microphone access for voice dictation when creating tasks."
-      }
+      "entitlements": "entitlements.plist"
     }
   }
 

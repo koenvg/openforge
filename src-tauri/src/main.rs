@@ -13,6 +13,7 @@ mod sse_bridge;
 mod pty_manager;
 mod agent_coordinator;
 mod diff_parser;
+mod whisper_manager;
 mod commands;
 
 use std::sync::Mutex;
