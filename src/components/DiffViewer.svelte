@@ -24,9 +24,10 @@
     fetchFileContents?: (file: PrFileDiff) => Promise<FileContents>
     batchFetchFileContents?: (files: PrFileDiff[]) => Promise<Map<string, FileContents>>
     toolbarExtra?: Snippet
+    includeUncommitted?: boolean
   }
 
-  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra }: Props = $props()
+  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, includeUncommitted = false }: Props = $props()
 
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
   let diffViewWrap = $state(false)
@@ -100,6 +101,19 @@
   // Fetch file contents for all files with patches
   let fetchedKeys = new Set<string>()
   let fetchGeneration = 0
+  // Reset file contents when includeUncommitted changes (non-destructive: preserves collapsedFiles/scroll)
+  let prevIncludeUncommitted: boolean | undefined = undefined
+  $effect(() => {
+    const current = includeUncommitted
+    if (prevIncludeUncommitted !== undefined && prevIncludeUncommitted !== current) {
+      // Clear fetch state to trigger re-fetch with new includeUncommitted value
+      fetchedKeys = new Set<string>()
+      fileContentsMap = new Map()
+      fetchGeneration++ // invalidate any in-flight fetches
+    }
+    prevIncludeUncommitted = current
+  })
+
   $effect(() => {
     const hasFetcher = batchFetchFileContents || fetchFileContents
     if (!hasFetcher || files.length === 0) return

@@ -210,7 +210,6 @@
         {#if fileTreeVisible}
           <FileTree files={$selfReviewDiffFiles} onSelectFile={handleFileSelect} />
         {/if}
-        {#key includeUncommitted}
           <DiffViewer
             bind:this={diffViewer}
             files={$selfReviewDiffFiles}
@@ -219,6 +218,7 @@
             onToggleFileTree={() => { fileTreeVisible = !fileTreeVisible }}
             fetchFileContents={fetchTaskFileContents}
             batchFetchFileContents={batchFetchTaskFileContents}
+            {includeUncommitted}
           >
             {#snippet toolbarExtra()}
               <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
@@ -234,7 +234,6 @@
               </button>
             {/snippet}
           </DiffViewer>
-        {/key}
         {#if sidebarVisible}
           <div class="w-[480px] shrink-0 border-l border-base-300 overflow-hidden flex flex-col bg-base-100">
             <div class="flex items-center border-b border-base-300 bg-base-200 shrink-0">
