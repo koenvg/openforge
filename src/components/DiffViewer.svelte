@@ -9,6 +9,7 @@
   import { buildExtendData, type CommentDisplayData } from '../lib/diffComments'
   import { diffHighlighter } from '../lib/diffHighlighter'
   import { createDiffSearch } from '../lib/useDiffSearch.svelte'
+  import { sortFilesAsTree } from '../lib/fileSort'
   import type { Snippet } from 'svelte'
 
   setEnableFastDiffTemplate(true)
@@ -130,6 +131,7 @@
   const totalFiles = $derived(files.length)
   const collapsedCount = $derived(collapsedFiles.size)
   const showLargeDiffWarning = $derived(totalChanges > 5000)
+  const sortedFiles = $derived(sortFilesAsTree(files))
 
 </script>
 
@@ -225,7 +227,7 @@
           <span>Large diff — {totalFiles} files, {totalChanges} total changes. {collapsedCount} files auto-collapsed for performance.</span>
         </div>
       {/if}
-      {#each files as file (file.filename)}
+      {#each sortedFiles as file (file.filename)}
         {@const truncated = isTruncated(file)}
         {@const truncStats = getTruncationStats(file)}
         <div data-diff-file={file.filename} class="border border-base-300 rounded-md overflow-hidden mb-3">
