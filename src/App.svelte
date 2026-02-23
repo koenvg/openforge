@@ -19,6 +19,8 @@
   import ProjectSetupDialog from './components/ProjectSetupDialog.svelte'
 
 
+  import { computeDoingStatus } from './lib/doingStatus'
+
   let openCodeStatus = $state<OpenCodeStatus | null>(null)
   let unlisteners: UnlistenFn[] = []
   let showAddDialog = $state(false)
@@ -27,6 +29,10 @@
   let showProjectSetup = $state(false)
 
   let selectedTask = $derived($tasks.find(t => t.id === $selectedTaskId) || null)
+
+
+  // Doing column status indicators for Board nav button
+  let doingStatus = $derived(computeDoingStatus($tasks, $activeSessions))
 
   // Navigation logic - clear selected task when switching views
   $effect(() => {
@@ -432,6 +438,20 @@
         onclick={() => $currentView = 'board'}
       >
         Board
+        {#if doingStatus.doingCount > 0}
+          <span class="flex items-center gap-1 ml-1">
+            {#if doingStatus.hasNeedsAnswer}
+              <span class="w-2.5 h-2.5 rounded-full bg-warning" title="Agent needs input"></span>
+            {/if}
+            {#if doingStatus.hasRunning}
+              <span class="w-2.5 h-2.5 rounded-full bg-success animate-pulse" title="Agent running"></span>
+            {/if}
+            {#if doingStatus.allDone}
+              <span class="w-2.5 h-2.5 rounded-full bg-info" title="All agents completed"></span>
+            {/if}
+            <span class="badge badge-ghost badge-sm">{doingStatus.doingCount}</span>
+          </span>
+        {/if}
       </button>
       <button 
         class="btn btn-ghost btn-sm"
