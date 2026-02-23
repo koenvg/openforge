@@ -282,6 +282,23 @@ impl Database {
         )?;
 
         // ============================================================================
+        // Migration: Add viewed state columns to review_prs table
+        // ============================================================================
+        let viewed_at_exists: bool = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('review_prs') WHERE name='viewed_at'",
+            [],
+            |row| {
+                let count: i64 = row.get(0)?;
+                Ok(count > 0)
+            },
+        )?;
+
+        if !viewed_at_exists {
+            conn.execute("ALTER TABLE review_prs ADD COLUMN viewed_at INTEGER", [])?;
+            conn.execute("ALTER TABLE review_prs ADD COLUMN viewed_head_sha TEXT", [])?;
+        }
+
+        // ============================================================================
         // Migration: Add CI status columns to pull_requests table
         // ============================================================================
         let head_sha_exists: bool = conn.query_row(
