@@ -388,7 +388,7 @@
       </div>
     </div>
     <div class="flex items-center gap-3">
-      <VoiceInput onTranscription={handleTranscription} disabled={!ptySpawned} listenToHotkey />
+      <VoiceInput onTranscription={handleTranscription} listenToHotkey />
       {#if status === 'running'}
         <button class="btn btn-error btn-sm uppercase tracking-wide shadow-sm hover:shadow-md transition-shadow" onclick={handleAbort}>
           Abort

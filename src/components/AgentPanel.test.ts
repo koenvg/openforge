@@ -296,10 +296,10 @@ describe('AgentPanel', () => {
     expect(button).toBeTruthy()
   })
 
-  it('voice input button is present when no PTY is spawned', () => {
+  it('voice input button is always enabled regardless of PTY state', () => {
     render(AgentPanel, { props: { taskId: 'T-1' } })
     const button = screen.getByRole('button', { name: 'Start voice input' })
     expect(button).toBeTruthy()
-    expect(button.hasAttribute('disabled')).toBe(true)
+    expect(button.hasAttribute('disabled')).toBe(false)
   })
 })
