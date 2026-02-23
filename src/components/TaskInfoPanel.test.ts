@@ -36,13 +36,13 @@ const baseTask: Task = {
 
 describe('TaskInfoPanel', () => {
   it('renders Initial Prompt section with task title', () => {
-    render(TaskInfoPanel, { props: { task: baseTask } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
     expect(screen.getByText('Initial Prompt')).toBeTruthy()
     expect(screen.getByText('Implement auth middleware')).toBeTruthy()
   })
 
   it('does not show Edit Task or Delete buttons', () => {
-    render(TaskInfoPanel, { props: { task: baseTask } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
     expect(screen.queryByText('Edit Task')).toBeNull()
     expect(screen.queryByText('Delete')).toBeNull()
   })
@@ -71,10 +71,21 @@ describe('TaskInfoPanel', () => {
 
     ticketPrs.set(new Map([['T-42', [prWithCi]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
 
     await new Promise((r) => setTimeout(r, 10))
     expect(screen.getByText('Pipeline Status')).toBeTruthy()
   })
 
+
+  it('renders worktree path section when worktreePath is provided', () => {
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: '/home/user/worktrees/T-42' } })
+    expect(screen.getByText('Worktree')).toBeTruthy()
+    expect(screen.getByText('/home/user/worktrees/T-42')).toBeTruthy()
+  })
+
+  it('does not render worktree section when worktreePath is null', () => {
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    expect(screen.queryByText('Worktree')).toBeNull()
+  })
 })

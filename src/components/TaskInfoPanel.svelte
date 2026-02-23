@@ -4,12 +4,14 @@
   import { ticketPrs } from '../lib/stores'
   import { getPrComments, markCommentAddressed, openUrl } from '../lib/ipc'
   import MarkdownContent from './MarkdownContent.svelte'
+  import CopyButton from './CopyButton.svelte'
 
   interface Props {
     task: Task
+    worktreePath: string | null
   }
 
-  let { task }: Props = $props()
+  let { task, worktreePath }: Props = $props()
 
   let prCommentsByPr = $state<Map<number, PrComment[]>>(new Map())
 
@@ -73,6 +75,17 @@
     <div class="text-sm text-base-content leading-relaxed whitespace-pre-wrap break-words">{task.title}</div>
   </section>
 
+
+  <!-- Worktree Path Section -->
+  {#if worktreePath}
+    <section class="flex flex-col gap-2.5">
+      <h3 class="text-xs font-semibold text-primary uppercase tracking-wider m-0">Worktree</h3>
+      <div class="flex items-center gap-2 bg-base-100 border border-base-300 rounded-md px-3 py-2">
+        <span class="text-xs font-mono text-base-content/70 truncate flex-1" title={worktreePath}>{worktreePath}</span>
+        <CopyButton text={worktreePath} label="Copy worktree path" />
+      </div>
+    </section>
+  {/if}
   <!-- Merge Status Section -->
   {#if taskPrs.some(pr => pr.state === 'merged' || isReadyToMerge(pr))}
     <section class="flex flex-col gap-2.5">

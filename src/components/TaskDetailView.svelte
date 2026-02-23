@@ -16,7 +16,7 @@
   let { task, onRunAction }: Props = $props()
 
   let reviewMode = $state(false)
-  let hasWorktree = $state(false)
+  let worktreePath = $state<string | null>(null)
   let jiraBaseUrl = $state('')
   // Plain variable (not $state) so it's not tracked as a reactive dependency.
   // Used to detect actual task changes vs. same-task prop re-renders.
@@ -34,7 +34,7 @@
       lastTaskId = taskId
       reviewMode = false
       getWorktreeForTask(taskId).then((worktree) => {
-        hasWorktree = worktree !== null
+        worktreePath = worktree?.worktree_path ?? null
       })
     }
   })
@@ -97,7 +97,7 @@
     <span class="badge {task.status === 'doing' ? 'badge-success' : task.status === 'done' ? 'badge-primary' : 'badge-ghost'} uppercase tracking-wider text-xs font-semibold shrink-0">
       {getStatusLabel(task.status)}
     </span>
-    {#if hasWorktree}
+    {#if worktreePath !== null}
       <div class="inline-flex items-center bg-base-300 border border-base-300 rounded-full p-0.5 gap-0.5 shrink-0 shadow-sm">
         <button class="btn btn-ghost btn-xs rounded-full px-4 transition-all duration-200 {!reviewMode ? 'btn-active bg-primary text-primary-content font-semibold shadow-sm' : 'hover:bg-base-200'}" onclick={() => reviewMode = false}>Code</button>
         <button class="btn btn-ghost btn-xs rounded-full px-4 transition-all duration-200 {reviewMode ? 'btn-active bg-primary text-primary-content font-semibold shadow-sm' : 'hover:bg-base-200'}" onclick={() => reviewMode = true}>Review</button>
@@ -136,7 +136,7 @@
       </div>
       <div class="w-px bg-base-300 shrink-0 max-[800px]:w-full max-[800px]:h-px"></div>
       <div class="basis-[30%] overflow-y-auto bg-base-200 max-[800px]:basis-auto">
-        <TaskInfoPanel task={task} />
+        <TaskInfoPanel task={task} {worktreePath} />
       </div>
     {/if}
   </div>
