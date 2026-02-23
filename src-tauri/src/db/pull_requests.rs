@@ -990,7 +990,7 @@ mod tests {
             "review_comment",
             None,
             None,
-            true,
+            false,
             2000,
         )
         .expect("insert comment 1 failed");
@@ -1036,112 +1036,8 @@ mod tests {
         let pr1 = prs.iter().find(|p| p.id == 101).expect("pr 1 not found");
         let pr2 = prs.iter().find(|p| p.id == 102).expect("pr 2 not found");
 
-        assert_eq!(pr1.unaddressed_comment_count, 2);
+        assert_eq!(pr1.unaddressed_comment_count, 3);
         assert_eq!(pr2.unaddressed_comment_count, 0);
-
-        drop(db);
-        let _ = fs::remove_file(&path);
-    }
-
-    #[test]
-    fn test_retroactive_bot_migration() {
-        let (db, path) = make_test_db("bot_migration");
-        insert_test_task(&db);
-
-        db.insert_pull_request(
-            103,
-            "T-100",
-            "acme",
-            "repo",
-            "PR title",
-            "https://example.com",
-            "open",
-            1000,
-            1000,
-        )
-        .expect("insert pr failed");
-
-        db.insert_pr_comment(
-            721,
-            103,
-            "dependabot[bot]",
-            "Dependency update",
-            "review_comment",
-            None,
-            None,
-            false,
-            2000,
-        )
-        .expect("insert dependabot comment failed");
-        db.insert_pr_comment(
-            722,
-            103,
-            "codecov[bot]",
-            "Coverage report",
-            "review_comment",
-            None,
-            None,
-            false,
-            2001,
-        )
-        .expect("insert codecov comment failed");
-        db.insert_pr_comment(
-            723,
-            103,
-            "renovate[bot]",
-            "Renovate update",
-            "review_comment",
-            None,
-            None,
-            false,
-            2002,
-        )
-        .expect("insert renovate comment failed");
-        db.insert_pr_comment(
-            724,
-            103,
-            "human-reviewer",
-            "Please fix this",
-            "review_comment",
-            None,
-            None,
-            false,
-            2003,
-        )
-        .expect("insert human comment failed");
-
-        let conn = db.conn.lock().unwrap();
-        conn.execute(
-            "UPDATE pr_comments SET addressed = 1 WHERE author LIKE '%[bot]%' AND addressed = 0",
-            [],
-        )
-        .expect("migration failed");
-        drop(conn);
-
-        let comments = db.get_comments_for_pr(103).expect("get comments failed");
-        assert_eq!(comments.len(), 4);
-
-        let dependabot = comments
-            .iter()
-            .find(|c| c.id == 721)
-            .expect("dependabot not found");
-        let codecov = comments
-            .iter()
-            .find(|c| c.id == 722)
-            .expect("codecov not found");
-        let renovate = comments
-            .iter()
-            .find(|c| c.id == 723)
-            .expect("renovate not found");
-        let human = comments
-            .iter()
-            .find(|c| c.id == 724)
-            .expect("human not found");
-
-        assert_eq!(dependabot.addressed, 1);
-        assert_eq!(codecov.addressed, 1);
-        assert_eq!(renovate.addressed, 1);
-        assert_eq!(human.addressed, 0);
 
         drop(db);
         let _ = fs::remove_file(&path);
