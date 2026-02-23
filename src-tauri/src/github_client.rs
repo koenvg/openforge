@@ -1232,6 +1232,119 @@ impl GitHubClient {
         );
         self.get_with_etag::<Vec<PrReview>>(&url, token).await
     }
+
+    /// Get required status checks for a branch from branch protection rules
+    ///
+    /// Fetches the list of required status check context names from the branch
+    /// protection configuration. Returns an empty list if no branch protection
+    /// is configured or if the API call fails (graceful degradation).
+    ///
+    /// # Arguments
+    /// * `owner` - Repository owner
+    /// * `repo` - Repository name
+    /// * `branch` - Branch name (e.g., "main")
+    /// * `token` - GitHub Personal Access Token
+    ///
+    /// # Returns
+    /// Vector of required check context names (empty if no protection configured)
+    pub async fn get_required_status_checks(
+        &self,
+        owner: &str,
+        repo: &str,
+        branch: &str,
+        token: &str,
+    ) -> Vec<String> {
+        let url = format!(
+            "https://api.github.com/repos/{}/{}/branches/{}/protection/required_status_checks",
+            owner, repo, branch
+        );
+
+        let cached_etag = {
+            self.etag_cache
+                .lock()
+                .unwrap()
+                .get(&url)
+                .map(|c| c.etag.clone())
+        };
+
+        let mut req = self
+            .client
+            .get(&url)
+            .header("Authorization", format!("token {}", token))
+            .header("User-Agent", "ai-command-center");
+
+        if let Some(ref etag) = cached_etag {
+            req = req.header("If-None-Match", etag);
+        }
+
+        let response = match req.send().await {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!(
+                    "[GitHub] Failed to fetch required status checks for {}/{} branch {}: {}",
+                    owner, repo, branch, e
+                );
+                return vec![];
+            }
+        };
+
+        // 404 = no branch protection or no required checks configured
+        // 403 = insufficient permissions
+        if response.status() == reqwest::StatusCode::NOT_FOUND
+            || response.status() == reqwest::StatusCode::FORBIDDEN
+        {
+            return vec![];
+        }
+
+        if response.status() == reqwest::StatusCode::NOT_MODIFIED {
+            if let Some(cached) = self.etag_cache.lock().unwrap().get(&url) {
+                if let Ok(result) = serde_json::from_str::<RequiredStatusChecksResponse>(&cached.body) {
+                    return result.into_context_names();
+                }
+            }
+            return vec![];
+        }
+
+        if !response.status().is_success() {
+            eprintln!(
+                "[GitHub] Unexpected status {} fetching required checks for {}/{} branch {}",
+                response.status(), owner, repo, branch
+            );
+            return vec![];
+        }
+
+        let etag = response
+            .headers()
+            .get("etag")
+            .and_then(|v| v.to_str().ok())
+            .map(String::from);
+
+        let body = match response.text().await {
+            Ok(b) => b,
+            Err(_) => return vec![],
+        };
+
+        if let Some(etag_value) = etag {
+            self.etag_cache.lock().unwrap().insert(
+                url.clone(),
+                CachedResponse {
+                    etag: etag_value,
+                    body: body.clone(),
+                },
+            );
+        }
+
+        match serde_json::from_str::<RequiredStatusChecksResponse>(&body) {
+            Ok(result) => result.into_context_names(),
+            Err(e) => {
+                eprintln!(
+                    "[GitHub] Failed to parse required status checks for {}/{} branch {}: {}",
+                    owner, repo, branch, e
+                );
+                vec![]
+            }
+        }
+    }
 }
 
 /// Aggregate CI status from check runs and commit status
@@ -1286,6 +1399,64 @@ pub fn aggregate_ci_status(
     }
 
     "success".to_string()
+}
+
+/// Filter check runs and commit statuses to only include required checks
+///
+/// When branch protection rules specify required status checks, this function
+/// filters the full set of check runs and commit statuses to only include those
+/// that match the required check context names.
+///
+/// # Arguments
+/// * `check_runs` - Full check runs response from GitHub API
+/// * `combined_status` - Full combined status response from GitHub API
+/// * `required_names` - List of required check context names from branch protection
+///
+/// # Returns
+/// Tuple of (filtered CheckRunsResponse, filtered CombinedStatusResponse)
+pub fn filter_to_required(
+    check_runs: &CheckRunsResponse,
+    combined_status: &CombinedStatusResponse,
+    required_names: &[String],
+) -> (CheckRunsResponse, CombinedStatusResponse) {
+    let filtered_runs: Vec<CheckRun> = check_runs
+        .check_runs
+        .iter()
+        .filter(|cr| required_names.iter().any(|name| name == &cr.name))
+        .cloned()
+        .collect();
+
+    let filtered_statuses: Vec<CommitStatusEntry> = combined_status
+        .statuses
+        .iter()
+        .filter(|s| required_names.iter().any(|name| name == &s.context))
+        .cloned()
+        .collect();
+
+    // Recompute the combined state based on only the required statuses
+    let filtered_state = if filtered_statuses.is_empty() {
+        combined_status.state.clone()
+    } else if filtered_statuses.iter().any(|s| s.state == "failure" || s.state == "error") {
+        "failure".to_string()
+    } else if filtered_statuses.iter().any(|s| s.state == "pending") {
+        "pending".to_string()
+    } else {
+        "success".to_string()
+    };
+
+    (
+        CheckRunsResponse {
+            total_count: filtered_runs.len(),
+            check_runs: filtered_runs,
+        },
+        CombinedStatusResponse {
+            state: filtered_state,
+            statuses: filtered_statuses,
+            sha: combined_status.sha.clone(),
+            total_count: 0,
+            extra: combined_status.extra.clone(),
+        },
+    )
 }
 
 /// Aggregate review status from PR reviews and requested reviewers
@@ -1610,6 +1781,42 @@ pub struct CommitStatusEntry {
     /// URL to view the status
     #[serde(default)]
     pub target_url: Option<String>,
+}
+
+
+/// Required status checks response from GitHub branch protection API
+#[derive(Debug, Clone, Deserialize)]
+struct RequiredStatusChecksResponse {
+    /// Deprecated flat list of required check names
+    #[serde(default)]
+    contexts: Vec<String>,
+    /// Required checks with context name and optional app_id
+    #[serde(default)]
+    checks: Vec<RequiredCheckEntry>,
+    #[serde(flatten)]
+    extra: serde_json::Value,
+}
+
+/// Individual required check entry from branch protection API
+#[derive(Debug, Clone, Deserialize)]
+struct RequiredCheckEntry {
+    /// Check context name (matches CheckRun.name or CommitStatusEntry.context)
+    context: String,
+    #[serde(flatten)]
+    extra: serde_json::Value,
+}
+
+impl RequiredStatusChecksResponse {
+    /// Extract deduplicated context names from both `checks` and `contexts` fields
+    fn into_context_names(self) -> Vec<String> {
+        let mut names: Vec<String> = self.checks.into_iter().map(|c| c.context).collect();
+        for ctx in self.contexts {
+            if !names.contains(&ctx) {
+                names.push(ctx);
+            }
+        }
+        names
+    }
 }
 
 // ============================================================================
@@ -2024,4 +2231,213 @@ mod tests {
         let null_conclusion_runs = make_check_runs(vec![("build", "completed", None)]);
         assert_eq!(aggregate_ci_status(&null_conclusion_runs, &empty_combined), "success");
     }
+
+    // ========================================================================
+    // Required Status Checks: filter_to_required
+    // ========================================================================
+
+    fn make_check_runs_helper(runs: Vec<(&str, &str, Option<&str>)>) -> CheckRunsResponse {
+        CheckRunsResponse {
+            total_count: runs.len(),
+            check_runs: runs.into_iter().map(|(name, status, conclusion)| CheckRun {
+                id: 1,
+                name: name.to_string(),
+                status: status.to_string(),
+                conclusion: conclusion.map(|c| c.to_string()),
+                html_url: "https://example.com".to_string(),
+            }).collect(),
+        }
+    }
+
+    fn make_combined_helper(state: &str, statuses: Vec<(&str, &str)>) -> CombinedStatusResponse {
+        CombinedStatusResponse {
+            state: state.to_string(),
+            statuses: statuses.into_iter().map(|(state, context)| CommitStatusEntry {
+                state: state.to_string(),
+                context: context.to_string(),
+                description: None,
+                target_url: None,
+            }).collect(),
+            sha: "abc123".to_string(),
+            total_count: 0,
+            extra: serde_json::Value::Object(serde_json::Map::new()),
+        }
+    }
+
+    #[test]
+    fn test_filter_to_required_filters_by_name() {
+        let check_runs = make_check_runs_helper(vec![
+            ("build", "completed", Some("success")),
+            ("test", "completed", Some("failure")),
+            ("lint", "completed", Some("success")),
+        ]);
+        let combined = make_combined_helper("success", vec![
+            ("success", "ci/deploy"),
+            ("failure", "ci/security"),
+        ]);
+        let required = vec!["build".to_string(), "ci/security".to_string()];
+
+        let (filtered_runs, filtered_combined) = filter_to_required(&check_runs, &combined, &required);
+
+        assert_eq!(filtered_runs.check_runs.len(), 1);
+        assert_eq!(filtered_runs.check_runs[0].name, "build");
+        assert_eq!(filtered_runs.total_count, 1);
+        assert_eq!(filtered_combined.statuses.len(), 1);
+        assert_eq!(filtered_combined.statuses[0].context, "ci/security");
+        assert_eq!(filtered_combined.state, "failure");
+    }
+
+    #[test]
+    fn test_filter_to_required_empty_required_list() {
+        let check_runs = make_check_runs_helper(vec![
+            ("build", "completed", Some("success")),
+            ("test", "completed", Some("success")),
+        ]);
+        let combined = make_combined_helper("success", vec![("success", "ci/deploy")]);
+        let required: Vec<String> = vec![];
+
+        let (filtered_runs, filtered_combined) = filter_to_required(&check_runs, &combined, &required);
+
+        assert!(filtered_runs.check_runs.is_empty());
+        assert_eq!(filtered_runs.total_count, 0);
+        assert!(filtered_combined.statuses.is_empty());
+    }
+
+    #[test]
+    fn test_filter_to_required_partial_match() {
+        let check_runs = make_check_runs_helper(vec![
+            ("build", "completed", Some("success")),
+            ("test", "in_progress", None),
+        ]);
+        let combined = make_combined_helper("pending", vec![]);
+        // "deploy" doesn't exist in check runs — only "build" matches
+        let required = vec!["build".to_string(), "deploy".to_string()];
+
+        let (filtered_runs, filtered_combined) = filter_to_required(&check_runs, &combined, &required);
+
+        assert_eq!(filtered_runs.check_runs.len(), 1);
+        assert_eq!(filtered_runs.check_runs[0].name, "build");
+        // "test" was NOT required, so it's excluded even though it's in_progress
+        assert!(filtered_combined.statuses.is_empty());
+    }
+
+    #[test]
+    fn test_filter_to_required_recomputes_combined_state() {
+        // Combined status reports overall failure, but the only required status is success
+        let check_runs = make_check_runs_helper(vec![]);
+        let combined = make_combined_helper("failure", vec![
+            ("success", "required-check"),
+            ("failure", "optional-check"),
+        ]);
+        let required = vec!["required-check".to_string()];
+
+        let (_, filtered_combined) = filter_to_required(&check_runs, &combined, &required);
+
+        assert_eq!(filtered_combined.statuses.len(), 1);
+        assert_eq!(filtered_combined.state, "success");
+    }
+
+    #[test]
+    fn test_filter_to_required_preserves_sha() {
+        let check_runs = make_check_runs_helper(vec![]);
+        let combined = make_combined_helper("success", vec![]);
+        let required = vec!["build".to_string()];
+
+        let (_, filtered_combined) = filter_to_required(&check_runs, &combined, &required);
+
+        assert_eq!(filtered_combined.sha, "abc123");
+    }
+
+    // ========================================================================
+    // Required Status Checks: RequiredStatusChecksResponse
+    // ========================================================================
+
+    #[test]
+    fn test_required_status_checks_response_into_context_names_deduplicates() {
+        let resp = RequiredStatusChecksResponse {
+            contexts: vec!["ci/build".to_string(), "ci/test".to_string()],
+            checks: vec![
+                RequiredCheckEntry { context: "ci/build".to_string(), extra: serde_json::json!({}) },
+                RequiredCheckEntry { context: "ci/lint".to_string(), extra: serde_json::json!({}) },
+            ],
+            extra: serde_json::json!({}),
+        };
+
+        let names = resp.into_context_names();
+        // "ci/build" from checks, "ci/lint" from checks, "ci/test" from contexts (ci/build deduplicated)
+        assert_eq!(names.len(), 3);
+        assert!(names.contains(&"ci/build".to_string()));
+        assert!(names.contains(&"ci/lint".to_string()));
+        assert!(names.contains(&"ci/test".to_string()));
+    }
+
+    #[test]
+    fn test_required_status_checks_response_checks_field_only() {
+        let resp = RequiredStatusChecksResponse {
+            contexts: vec![],
+            checks: vec![
+                RequiredCheckEntry { context: "ci/build".to_string(), extra: serde_json::json!({}) },
+                RequiredCheckEntry { context: "ci/test".to_string(), extra: serde_json::json!({}) },
+            ],
+            extra: serde_json::json!({}),
+        };
+
+        let names = resp.into_context_names();
+        assert_eq!(names.len(), 2);
+        assert_eq!(names[0], "ci/build");
+        assert_eq!(names[1], "ci/test");
+    }
+
+    #[test]
+    fn test_required_status_checks_response_contexts_field_only() {
+        let resp = RequiredStatusChecksResponse {
+            contexts: vec!["ci/build".to_string(), "ci/test".to_string()],
+            checks: vec![],
+            extra: serde_json::json!({}),
+        };
+
+        let names = resp.into_context_names();
+        assert_eq!(names.len(), 2);
+        assert_eq!(names[0], "ci/build");
+        assert_eq!(names[1], "ci/test");
+    }
+
+    #[test]
+    fn test_required_status_checks_response_empty() {
+        let resp = RequiredStatusChecksResponse {
+            contexts: vec![],
+            checks: vec![],
+            extra: serde_json::json!({}),
+        };
+
+        let names = resp.into_context_names();
+        assert!(names.is_empty());
+    }
+
+    #[test]
+    fn test_required_status_checks_response_deserialization() {
+        let json = r#"{
+            "contexts": ["ci/build", "ci/test"],
+            "checks": [
+                {"context": "ci/build", "app_id": 15368},
+                {"context": "ci/lint", "app_id": null}
+            ],
+            "strict": true
+        }"#;
+        let resp: RequiredStatusChecksResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.contexts.len(), 2);
+        assert_eq!(resp.checks.len(), 2);
+        assert_eq!(resp.checks[0].context, "ci/build");
+        assert_eq!(resp.checks[1].context, "ci/lint");
+    }
+
+    #[test]
+    fn test_required_status_checks_response_deserialization_minimal() {
+        // API might return minimal response
+        let json = r#"{}"#;
+        let resp: RequiredStatusChecksResponse = serde_json::from_str(json).unwrap();
+        assert!(resp.contexts.is_empty());
+        assert!(resp.checks.is_empty());
+    }
+
 }

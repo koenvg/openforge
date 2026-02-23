@@ -36,7 +36,7 @@
 //! - Skips projects with missing GitHub config
 
 use crate::db::{Database, PrRow};
-use crate::github_client::{aggregate_ci_status, aggregate_review_status, CheckRunsResponse, CombinedStatusResponse, GitHubClient, PrComment, PrReview};
+use crate::github_client::{aggregate_ci_status, aggregate_review_status, filter_to_required, CheckRunsResponse, CombinedStatusResponse, GitHubClient, PrComment, PrReview};
 use futures::future::join_all;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
@@ -614,6 +614,7 @@ struct PollSinglePrResult {
     combined_status: Option<CombinedStatusResponse>,
     reviews: Option<Vec<PrReview>>,
     has_requested_reviewers: bool,
+    required_check_names: Vec<String>,
     error: Option<String>,
 }
 
@@ -646,6 +647,7 @@ async fn poll_single_pr(
                 combined_status: None,
                 reviews: None,
                 has_requested_reviewers: false,
+                required_check_names: vec![],
                 error: Some(format!("Failed to fetch comments: {}", e)),
             };
         }
@@ -711,6 +713,20 @@ async fn poll_single_pr(
         }
     };
 
+    // Fetch required status check names from branch protection
+    let required_check_names = match &pr_details_result {
+        Ok(details) => {
+            let base_ref = details.extra.get("base")
+                .and_then(|b| b.get("ref"))
+                .and_then(|r| r.as_str())
+                .unwrap_or("main");
+            github_client.get_required_status_checks(
+                &pr.repo_owner, &pr.repo_name, base_ref, &github_token
+            ).await
+        }
+        Err(_) => vec![],
+    };
+
     PollSinglePrResult {
         pr_id: pr.id,
         ticket_id: pr.ticket_id,
@@ -723,6 +739,7 @@ async fn poll_single_pr(
         combined_status,
         reviews,
         has_requested_reviewers,
+        required_check_names,
         error: None,
     }
 }
@@ -859,8 +876,22 @@ async fn poll_prs_for_project(
         if let (Some(check_runs), Some(combined_status)) =
             (&result.check_runs, &result.combined_status)
         {
-            let new_status = aggregate_ci_status(check_runs, combined_status);
-            let check_runs_json = serde_json::to_string(&check_runs.check_runs)
+            // Filter to required checks only when branch protection is configured
+            let (display_runs, new_status) = if !result.required_check_names.is_empty() {
+                let (filtered_runs, filtered_combined) = filter_to_required(
+                    check_runs, combined_status, &result.required_check_names
+                );
+                let status = if filtered_runs.check_runs.is_empty() && filtered_combined.statuses.is_empty() {
+                    // Required checks haven't run yet
+                    "pending".to_string()
+                } else {
+                    aggregate_ci_status(&filtered_runs, &filtered_combined)
+                };
+                (filtered_runs.check_runs, status)
+            } else {
+                (check_runs.check_runs.clone(), aggregate_ci_status(check_runs, combined_status))
+            };
+            let check_runs_json = serde_json::to_string(&display_runs)
                 .unwrap_or_else(|_| "[]".to_string());
 
             if let Err(e) =

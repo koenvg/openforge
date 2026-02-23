@@ -224,7 +224,7 @@
           </DiffViewer>
         {/key}
         {#if sidebarVisible}
-          <div class="w-[380px] shrink-0 border-l border-base-300 overflow-hidden flex flex-col bg-base-100">
+          <div class="w-[480px] shrink-0 border-l border-base-300 overflow-hidden flex flex-col bg-base-100">
             <div class="flex items-center border-b border-base-300 bg-base-200 shrink-0">
               <button class="flex-1 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-center transition-colors {sidebarTab === 'pr' ? 'text-primary border-b-2 border-primary bg-base-100' : 'text-base-content/50 hover:text-base-content hover:bg-base-content/5'}"
                 onclick={() => { sidebarTab = 'pr' }}>
@@ -260,7 +260,7 @@
                   <div class="flex-1 overflow-y-auto">
                     {#each prComments as comment (comment.id)}
                       {@const isSelected = selectedPrCommentIds.has(comment.id)}
-                      <div class="px-3 py-3 border-b border-base-300 last:border-b-0 {comment.addressed === 1 ? 'opacity-40' : ''}">
+                      <div class="px-4 py-3.5 border-b border-base-300 last:border-b-0 {comment.addressed === 1 ? 'opacity-40' : ''}">
                         <div class="flex items-start gap-2">
                           {#if comment.addressed === 0}
                             <input
@@ -280,10 +280,10 @@
                             </div>
                             {#if comment.file_path}
                               <div class="flex items-center gap-1 mb-1.5">
-                                <span class="text-[0.65rem] text-base-content/50 font-mono bg-base-200 rounded px-1.5 py-0.5 overflow-hidden text-ellipsis whitespace-nowrap max-w-full">{comment.file_path}{#if comment.line_number}:{comment.line_number}{/if}</span>
+                                <span class="text-xs text-base-content/50 font-mono bg-base-200 rounded px-1.5 py-0.5 overflow-hidden text-ellipsis whitespace-nowrap max-w-full">{comment.file_path}{#if comment.line_number}:{comment.line_number}{/if}</span>
                               </div>
                             {/if}
-                            <div class="text-xs text-base-content leading-relaxed [&_.markdown-body]:text-xs [&_.markdown-body_pre]:text-[0.7rem] [&_.markdown-body_code]:text-[0.7rem] [&_.markdown-body_p]:my-1">
+                            <div class="text-sm text-base-content leading-relaxed [&_.markdown-body]:text-sm [&_.markdown-body_pre]:text-xs [&_.markdown-body_code]:text-xs [&_.markdown-body_p]:my-1.5">
                               <MarkdownContent content={comment.body} />
                             </div>
                             {#if comment.addressed === 0}
