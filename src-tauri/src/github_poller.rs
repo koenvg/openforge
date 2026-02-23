@@ -615,6 +615,7 @@ struct PollSinglePrResult {
     reviews: Option<Vec<PrReview>>,
     has_requested_reviewers: bool,
     required_check_names: Vec<String>,
+    required_approving_count: Option<usize>,
     error: Option<String>,
 }
 
@@ -648,6 +649,7 @@ async fn poll_single_pr(
                 reviews: None,
                 has_requested_reviewers: false,
                 required_check_names: vec![],
+                required_approving_count: None,
                 error: Some(format!("Failed to fetch comments: {}", e)),
             };
         }
@@ -713,18 +715,24 @@ async fn poll_single_pr(
         }
     };
 
-    // Fetch required status check names from branch protection
-    let required_check_names = match &pr_details_result {
+    // Fetch required status check names and required review count from branch protection
+    let (required_check_names, required_approving_count) = match &pr_details_result {
         Ok(details) => {
             let base_ref = details.extra.get("base")
                 .and_then(|b| b.get("ref"))
                 .and_then(|r| r.as_str())
                 .unwrap_or("main");
-            github_client.get_required_status_checks(
-                &pr.repo_owner, &pr.repo_name, base_ref, &github_token
-            ).await
+            let (checks, reviews_count) = tokio::join!(
+                github_client.get_required_status_checks(
+                    &pr.repo_owner, &pr.repo_name, base_ref, &github_token
+                ),
+                github_client.get_required_approving_review_count(
+                    &pr.repo_owner, &pr.repo_name, base_ref, &github_token
+                )
+            );
+            (checks, reviews_count)
         }
-        Err(_) => vec![],
+        Err(_) => (vec![], None),
     };
 
     PollSinglePrResult {
@@ -740,6 +748,7 @@ async fn poll_single_pr(
         reviews,
         has_requested_reviewers,
         required_check_names,
+        required_approving_count,
         error: None,
     }
 }
@@ -919,7 +928,7 @@ async fn poll_prs_for_project(
         }
 
         if let Some(reviews) = &result.reviews {
-            let review_status = aggregate_review_status(reviews, result.has_requested_reviewers);
+            let review_status = aggregate_review_status(reviews, result.has_requested_reviewers, result.required_approving_count);
             if let Err(e) = db_lock.update_pr_review_status(result.pr_id, &review_status) {
                 eprintln!("[GitHub Poller] Failed to update review status for PR #{}: {}", result.pr_id, e);
             } else if result.old_review_status.as_deref() != Some(review_status.as_str()) {

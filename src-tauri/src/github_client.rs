@@ -1345,6 +1345,119 @@ impl GitHubClient {
             }
         }
     }
+
+    /// Get required pull request reviews config from branch protection rules
+    ///
+    /// Fetches the required approving review count from the branch protection
+    /// configuration. Returns `None` if no branch protection is configured,
+    /// if required reviews are not enabled, or if the API call fails (graceful degradation).
+    ///
+    /// # Arguments
+    /// * `owner` - Repository owner
+    /// * `repo` - Repository name
+    /// * `branch` - Branch name (e.g., "main")
+    /// * `token` - GitHub Personal Access Token
+    ///
+    /// # Returns
+    /// Required approving review count, or None if not configured
+    pub async fn get_required_approving_review_count(
+        &self,
+        owner: &str,
+        repo: &str,
+        branch: &str,
+        token: &str,
+    ) -> Option<usize> {
+        let url = format!(
+            "https://api.github.com/repos/{}/{}/branches/{}/protection/required_pull_request_reviews",
+            owner, repo, branch
+        );
+
+        let cached_etag = {
+            self.etag_cache
+                .lock()
+                .unwrap()
+                .get(&url)
+                .map(|c| c.etag.clone())
+        };
+
+        let mut req = self
+            .client
+            .get(&url)
+            .header("Authorization", format!("token {}", token))
+            .header("User-Agent", "ai-command-center");
+
+        if let Some(ref etag) = cached_etag {
+            req = req.header("If-None-Match", etag);
+        }
+
+        let response = match req.send().await {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!(
+                    "[GitHub] Failed to fetch required reviews for {}/{} branch {}: {}",
+                    owner, repo, branch, e
+                );
+                return None;
+            }
+        };
+
+        // 404 = no branch protection or no required reviews configured
+        // 403 = insufficient permissions
+        if response.status() == reqwest::StatusCode::NOT_FOUND
+            || response.status() == reqwest::StatusCode::FORBIDDEN
+        {
+            return None;
+        }
+
+        if response.status() == reqwest::StatusCode::NOT_MODIFIED {
+            if let Some(cached) = self.etag_cache.lock().unwrap().get(&url) {
+                if let Ok(result) = serde_json::from_str::<RequiredPullRequestReviewsResponse>(&cached.body) {
+                    return Some(result.required_approving_review_count);
+                }
+            }
+            return None;
+        }
+
+        if !response.status().is_success() {
+            eprintln!(
+                "[GitHub] Unexpected status {} fetching required reviews for {}/{} branch {}",
+                response.status(), owner, repo, branch
+            );
+            return None;
+        }
+
+        let etag = response
+            .headers()
+            .get("etag")
+            .and_then(|v| v.to_str().ok())
+            .map(String::from);
+
+        let body = match response.text().await {
+            Ok(b) => b,
+            Err(_) => return None,
+        };
+
+        if let Some(etag_value) = etag {
+            self.etag_cache.lock().unwrap().insert(
+                url.clone(),
+                CachedResponse {
+                    etag: etag_value,
+                    body: body.clone(),
+                },
+            );
+        }
+
+        match serde_json::from_str::<RequiredPullRequestReviewsResponse>(&body) {
+            Ok(result) => Some(result.required_approving_review_count),
+            Err(e) => {
+                eprintln!(
+                    "[GitHub] Failed to parse required reviews for {}/{} branch {}: {}",
+                    owner, repo, branch, e
+                );
+                None
+            }
+        }
+    }
 }
 
 /// Aggregate CI status from check runs and commit status
@@ -1494,15 +1607,18 @@ pub fn filter_to_required(
 /// Aggregate review status from PR reviews and requested reviewers
 ///
 /// Determines the overall review status by examining submitted reviews.
+/// When `required_approving_count` is provided (from branch protection rules),
+/// the function treats reviews as sufficient once the required number of approvals
+/// is reached, even if optional reviewers are still pending.
 /// Returns one of: "approved", "changes_requested", "review_required", or "none".
 pub fn aggregate_review_status(
     reviews: &[PrReview],
     has_requested_reviewers: bool,
+    required_approving_count: Option<usize>,
 ) -> String {
     if reviews.is_empty() && !has_requested_reviewers {
         return "none".to_string();
     }
-
     // Build effective review state per reviewer (latest actionable review wins)
     let mut effective: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
     for review in reviews {
@@ -1513,7 +1629,6 @@ pub fn aggregate_review_status(
             _ => {}
         }
     }
-
     // Check if any reviewer requested changes (and hasn't since approved)
     for state in effective.values() {
         if *state == "CHANGES_REQUESTED" {
@@ -1521,21 +1636,28 @@ pub fn aggregate_review_status(
         }
     }
 
+    // Count current approvals
+    let approval_count = effective.values().filter(|s| **s == "APPROVED").count();
+
+    // If we know the required approval count (from branch protection),
+    // check if we have enough — remaining reviewers are optional
+    if let Some(required) = required_approving_count {
+        if required > 0 && approval_count >= required {
+            return "approved".to_string();
+        }
+    }
     // If there are still pending reviewers, reviews are required
     if has_requested_reviewers {
         return "review_required".to_string();
     }
-
     // If at least one approval exists and no changes requested
-    if effective.values().any(|s| *s == "APPROVED") {
+    if approval_count > 0 {
         return "approved".to_string();
     }
-
     // Reviews exist but none are actionable (all COMMENTED/PENDING)
     if !reviews.is_empty() {
         return "review_required".to_string();
     }
-
     "none".to_string()
 }
 
@@ -1849,6 +1971,17 @@ impl RequiredStatusChecksResponse {
         }
         names
     }
+}
+
+
+/// Required pull request reviews response from GitHub branch protection API
+#[derive(Debug, Clone, Deserialize)]
+struct RequiredPullRequestReviewsResponse {
+    /// Number of approving reviews required
+    #[serde(default)]
+    required_approving_review_count: usize,
+    #[serde(flatten)]
+    extra: serde_json::Value,
 }
 
 // ============================================================================
@@ -2475,7 +2608,6 @@ mod tests {
     // ============================================================================
     // deduplicate_check_runs tests
     // ============================================================================
-
     fn make_check_run(id: i64, name: &str, status: &str, conclusion: Option<&str>) -> CheckRun {
         CheckRun {
             id,
@@ -2501,12 +2633,9 @@ mod tests {
         let deduped = deduplicate_check_runs(&response);
         assert_eq!(deduped.total_count, 2);
         assert_eq!(deduped.check_runs.len(), 2);
-
         let prelim = deduped.check_runs.iter().find(|r| r.name == "preliminary-checks").unwrap();
         assert_eq!(prelim.id, 400, "should keep the newest run (highest ID)");
         assert_eq!(prelim.conclusion.as_deref(), Some("success"));
-
-        let build = deduped.check_runs.iter().find(|r| r.name == "build").unwrap();
         assert_eq!(build.id, 200);
     }
 
@@ -2554,5 +2683,189 @@ mod tests {
         assert_eq!(ci.id, 500);
         assert_eq!(ci.status, "in_progress");
         assert_eq!(ci.conclusion, None, "in-progress run should have no conclusion");
+    }
+
+    // ========================================================================
+    // aggregate_review_status tests
+    // ========================================================================
+    fn make_review(login: &str, state: &str) -> PrReview {
+        PrReview {
+            id: 1,
+            user: GitHubUser {
+                login: login.to_string(),
+                extra: serde_json::json!({}),
+            },
+            state: state.to_string(),
+            submitted_at: None,
+            extra: serde_json::json!({}),
+        }
+    }
+
+    #[test]
+    fn test_aggregate_review_status_no_reviews_no_requested() {
+        let result = aggregate_review_status(&[], false, None);
+        assert_eq!(result, "none");
+    }
+
+    #[test]
+    fn test_aggregate_review_status_no_reviews_with_requested() {
+        let result = aggregate_review_status(&[], true, None);
+        assert_eq!(result, "review_required");
+    }
+
+    #[test]
+    fn test_aggregate_review_status_single_approval_no_requested() {
+        let reviews = vec![make_review("alice", "APPROVED")];
+        let result = aggregate_review_status(&reviews, false, None);
+        assert_eq!(result, "approved");
+    }
+
+    #[test]
+    fn test_aggregate_review_status_changes_requested() {
+        let reviews = vec![make_review("alice", "CHANGES_REQUESTED")];
+        let result = aggregate_review_status(&reviews, false, None);
+        assert_eq!(result, "changes_requested");
+    }
+
+    #[test]
+    fn test_aggregate_review_status_changes_requested_takes_priority() {
+        let reviews = vec![
+            make_review("alice", "APPROVED"),
+            make_review("bob", "CHANGES_REQUESTED"),
+        ];
+        let result = aggregate_review_status(&reviews, false, None);
+        assert_eq!(result, "changes_requested");
+    }
+
+    #[test]
+    fn test_aggregate_review_status_approval_with_pending_reviewers_no_required_count() {
+        // Without required count, pending reviewers mean review_required
+        let reviews = vec![make_review("alice", "APPROVED")];
+        let result = aggregate_review_status(&reviews, true, None);
+        assert_eq!(result, "review_required");
+    }
+
+    #[test]
+    fn test_aggregate_review_status_enough_approvals_with_required_count() {
+        // 1 required, 1 approval, optional reviewers still pending → approved
+        let reviews = vec![make_review("alice", "APPROVED")];
+        let result = aggregate_review_status(&reviews, true, Some(1));
+        assert_eq!(result, "approved");
+    }
+
+    #[test]
+    fn test_aggregate_review_status_more_approvals_than_required() {
+        // 1 required, 2 approvals, optional reviewers still pending → approved
+        let reviews = vec![
+            make_review("alice", "APPROVED"),
+            make_review("bob", "APPROVED"),
+        ];
+        let result = aggregate_review_status(&reviews, true, Some(1));
+        assert_eq!(result, "approved");
+    }
+
+    #[test]
+    fn test_aggregate_review_status_not_enough_approvals_for_required_count() {
+        // 2 required, only 1 approval, pending reviewers → review_required
+        let reviews = vec![make_review("alice", "APPROVED")];
+        let result = aggregate_review_status(&reviews, true, Some(2));
+        assert_eq!(result, "review_required");
+    }
+
+    #[test]
+    fn test_aggregate_review_status_exact_required_approvals_met() {
+        // 2 required, 2 approvals, optional reviewers pending → approved
+        let reviews = vec![
+            make_review("alice", "APPROVED"),
+            make_review("bob", "APPROVED"),
+        ];
+        let result = aggregate_review_status(&reviews, true, Some(2));
+        assert_eq!(result, "approved");
+    }
+
+    #[test]
+    fn test_aggregate_review_status_changes_requested_overrides_required_count() {
+        // Even with enough approvals, changes_requested takes priority
+        let reviews = vec![
+            make_review("alice", "APPROVED"),
+            make_review("bob", "CHANGES_REQUESTED"),
+        ];
+        let result = aggregate_review_status(&reviews, true, Some(1));
+        assert_eq!(result, "changes_requested");
+    }
+
+    #[test]
+    fn test_aggregate_review_status_required_count_zero() {
+        // required_approving_count of 0 means no approvals needed,
+        // but we don't short-circuit on 0 — fall through to normal logic
+        let reviews = vec![];
+        let result = aggregate_review_status(&reviews, true, Some(0));
+        assert_eq!(result, "review_required");
+    }
+
+    #[test]
+    fn test_aggregate_review_status_only_commented_reviews() {
+        let reviews = vec![make_review("alice", "COMMENTED")];
+        let result = aggregate_review_status(&reviews, false, None);
+        assert_eq!(result, "review_required");
+    }
+
+    #[test]
+    fn test_aggregate_review_status_latest_review_wins() {
+        // Same reviewer: first CHANGES_REQUESTED, then APPROVED
+        let reviews = vec![
+            make_review("alice", "CHANGES_REQUESTED"),
+            make_review("alice", "APPROVED"),
+        ];
+        let result = aggregate_review_status(&reviews, false, None);
+        assert_eq!(result, "approved");
+    }
+
+    #[test]
+    fn test_aggregate_review_status_dismissed_then_approved() {
+        let reviews = vec![
+            make_review("alice", "CHANGES_REQUESTED"),
+            make_review("alice", "DISMISSED"),
+        ];
+        // DISMISSED overwrites CHANGES_REQUESTED for same reviewer
+        let result = aggregate_review_status(&reviews, false, None);
+        // No approvals, only dismissed — reviews exist but not actionable
+        assert_eq!(result, "review_required");
+    }
+
+    // ========================================================================
+    // RequiredPullRequestReviewsResponse tests
+    // ========================================================================
+
+    #[test]
+    fn test_required_pr_reviews_response_deserialization() {
+        let json = r#"{
+            "required_approving_review_count": 2,
+            "dismiss_stale_reviews": true,
+            "require_code_owner_reviews": false
+        }"#;
+        let resp: RequiredPullRequestReviewsResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.required_approving_review_count, 2);
+    }
+
+    #[test]
+    fn test_required_pr_reviews_response_deserialization_minimal() {
+        // API might return minimal response — default to 0
+        let json = r#"{}"#;
+        let resp: RequiredPullRequestReviewsResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.required_approving_review_count, 0);
+    }
+
+    #[test]
+    fn test_required_pr_reviews_response_extra_fields() {
+        let json = r#"{
+            "required_approving_review_count": 1,
+            "dismiss_stale_reviews": false,
+            "require_code_owner_reviews": true,
+            "require_last_push_approval": false,
+            "dismissal_restrictions": {}
+        }"#;
+        let resp: RequiredPullRequestReviewsResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.required_approving_review_count, 1);
     }
 }
