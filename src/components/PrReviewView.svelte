@@ -137,38 +137,38 @@
 <div class="flex flex-col w-full h-full overflow-hidden">
   {#if $selectedReviewPr}
     <div class="flex flex-col h-full overflow-hidden">
-      <div class="flex flex-col gap-3 px-6 py-5 bg-base-200 border-b border-base-300 shrink-0">
-        <button class="btn btn-ghost btn-sm gap-2 self-start text-base-content/50" onclick={backToList}>
-          ← Back to list
-        </button>
-        <div class="flex flex-col gap-2">
-          <span class="badge badge-primary badge-sm self-start">{$selectedReviewPr.repo_owner}/{$selectedReviewPr.repo_name}</span>
-          <h2 class="text-lg font-semibold text-base-content m-0 leading-snug">{$selectedReviewPr.title}</h2>
+      <div class="flex flex-col gap-1.5 px-4 py-2.5 bg-base-200 border-b border-base-300 shrink-0">
+        <div class="flex items-center gap-2 min-w-0">
+          <button class="btn btn-ghost btn-xs text-base-content/50 shrink-0" onclick={backToList}>← Back</button>
+          <span class="badge badge-primary badge-sm shrink-0">{$selectedReviewPr.repo_owner}/{$selectedReviewPr.repo_name}</span>
+          <h2 class="text-sm font-semibold text-base-content m-0 truncate flex-1">{$selectedReviewPr.title}</h2>
+          <span
+            class="text-xs text-primary font-medium cursor-pointer hover:opacity-80 hover:underline shrink-0"
+            role="link"
+            tabindex="0"
+            onclick={openPrOnGitHub}
+            onkeydown={(e: KeyboardEvent) => e.key === 'Enter' && openPrOnGitHub()}
+          >GitHub ↗</span>
+        </div>
+        <div class="flex items-center">
           <div class="flex items-center gap-2 text-xs text-base-content/50">
             <span class="font-semibold text-base-content">#{$selectedReviewPr.number}</span>
             <span class="text-base-300">•</span>
             <span class="font-medium">{$selectedReviewPr.user_login}</span>
             <span class="text-base-300">•</span>
             <span>{timeAgo($selectedReviewPr.created_at)}</span>
-            <span class="text-base-300">•</span>
-            <span
-              class="text-primary font-medium cursor-pointer hover:opacity-80 hover:underline"
-              role="link"
-              tabindex="0"
-              onclick={openPrOnGitHub}
-              onkeydown={(e: KeyboardEvent) => e.key === 'Enter' && openPrOnGitHub()}
-            >View on GitHub ↗</span>
           </div>
-        </div>
-        <div class="flex gap-1 mt-1">
-          <button
-            class="btn btn-ghost btn-sm {activeTab === 'overview' ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
-            onclick={() => { activeTab = 'overview' }}
-          >Overview</button>
-          <button
-            class="btn btn-ghost btn-sm {activeTab === 'files' ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
-            onclick={() => { activeTab = 'files' }}
-          >Files changed <span class="badge badge-sm ml-1">{$prFileDiffs.length}</span></button>
+          <span class="flex-1"></span>
+          <div class="flex gap-1">
+            <button
+              class="btn btn-ghost btn-xs {activeTab === 'overview' ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
+              onclick={() => { activeTab = 'overview' }}
+            >Overview</button>
+            <button
+              class="btn btn-ghost btn-xs {activeTab === 'files' ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
+              onclick={() => { activeTab = 'files' }}
+            >Files changed <span class="badge badge-xs ml-1">{$prFileDiffs.length}</span></button>
+          </div>
         </div>
       </div>
 
