@@ -65,6 +65,7 @@ struct PtySession {
 /// Manages multiple PTY sessions (one per task)
 pub struct PtyManager {
     sessions: Arc<Mutex<HashMap<String, PtySession>>>,
+    pid_dir_override: Option<PathBuf>,
 }
 
 impl PtyManager {
@@ -72,9 +73,9 @@ impl PtyManager {
     pub fn new() -> Self {
         Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
+            pid_dir_override: None,
         }
     }
-
     /// Spawns a new PTY process for the given task_id.
     /// Runs `opencode attach http://127.0.0.1:{server_port} --session {opencode_session_id}`
     ///
@@ -443,7 +444,37 @@ impl PtyManager {
             };
 
             if !is_running {
-                println!("Removing stale PTY PID file: {:?}", path);
+                println!("[cleanup] Removing stale PTY PID file (process dead): {:?}", path);
+                let _ = std::fs::remove_file(&path);
+            } else {
+                // Process is alive — verify it's actually opencode before killing
+                let is_opencode = std::process::Command::new("ps")
+                    .args(["-p", &pid.to_string(), "-o", "command="])
+                    .output()
+                    .map(|output| {
+                        let cmd = String::from_utf8_lossy(&output.stdout);
+                        cmd.contains("opencode")
+                    })
+                    .unwrap_or(false);
+
+                if is_opencode {
+                    println!("[cleanup] Killing orphaned opencode PTY process (PID: {})", pid);
+                    unsafe {
+                        libc::kill(pid, libc::SIGTERM);
+                    }
+                    // Brief wait for graceful shutdown
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    // Check if still running, force kill if needed
+                    let still_running = unsafe { libc::kill(pid, 0) == 0 };
+                    if still_running {
+                        println!("[cleanup] Force killing PTY process (PID: {})", pid);
+                        unsafe {
+                            libc::kill(pid, libc::SIGKILL);
+                        }
+                    }
+                } else {
+                    println!("[cleanup] PID {} is not opencode (PID reuse), removing stale PTY file: {:?}", pid, path);
+                }
                 let _ = std::fs::remove_file(&path);
             }
         }
@@ -457,6 +488,9 @@ impl PtyManager {
 
     /// Returns the PID directory path
     fn get_pid_dir(&self) -> Result<PathBuf, PtyError> {
+        if let Some(ref dir) = self.pid_dir_override {
+            return Ok(dir.clone());
+        }
         let home = dirs::home_dir().ok_or_else(|| {
             PtyError::IoError(io::Error::new(
                 io::ErrorKind::NotFound,
@@ -470,6 +504,13 @@ impl PtyManager {
 impl Default for PtyManager {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+impl PtyManager {
+    pub fn set_pid_dir(&mut self, dir: PathBuf) {
+        self.pid_dir_override = Some(dir);
     }
 }
 
@@ -645,5 +686,33 @@ mod tests {
         let id2 = NEXT_INSTANCE_ID.fetch_add(1, Ordering::Relaxed);
         assert_ne!(id1, id2);
         assert!(id2 > id1);
+    }
+
+    #[tokio::test]
+    async fn test_kill_all_empty_sessions() {
+        let manager = PtyManager::new();
+        // Should complete without panic or error on empty session map
+        manager.kill_all().await;
+        let sessions = manager.sessions.lock().await;
+        assert_eq!(sessions.len(), 0);
+    }
+
+    #[test]
+    fn test_cleanup_stale_pids_invalid_content() {
+        let mut manager = PtyManager::new();
+        let tmp_dir = std::env::temp_dir().join("test_pty_cleanup_invalid");
+        std::fs::create_dir_all(&tmp_dir).unwrap();
+        manager.set_pid_dir(tmp_dir.clone());
+
+        // Only -pty.pid files are processed by pty cleanup
+        let pid_file = tmp_dir.join("task123-pty.pid");
+        std::fs::write(&pid_file, "not_a_number").unwrap();
+        assert!(pid_file.exists());
+
+        let result = manager.cleanup_stale_pids();
+        assert!(result.is_ok());
+        assert!(!pid_file.exists(), "Invalid PTY PID file should be removed");
+
+        let _ = std::fs::remove_dir_all(&tmp_dir);
     }
 }

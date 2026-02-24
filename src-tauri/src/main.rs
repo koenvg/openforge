@@ -115,9 +115,9 @@ fn main() {
     #[cfg(desktop)]
     let _ = fix_path_env::fix();
 
-    ctrlc::set_handler(|| std::process::exit(0)).ok();
+    // ctrlc handler is set up after app is built so it can trigger proper cleanup
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .setup(|app| {
             let app_data_dir = app
                 .path()
@@ -277,6 +277,38 @@ fn main() {
             commands::whisper::set_whisper_model,
             commands::opencode::list_opencode_agents,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    // Fix Ctrl+C to route through Tauri's exit path so RunEvent::Exit fires
+    let ctrlc_handle = app.handle().clone();
+    ctrlc::set_handler(move || {
+        println!("[shutdown] Ctrl+C received, triggering exit...");
+        ctrlc_handle.exit(0);
+    }).ok();
+
+    app.run(|app_handle, event| {
+        if let tauri::RunEvent::Exit = event {
+            println!("[shutdown] App exit triggered, cleaning up...");
+            let sse_mgr = app_handle.state::<sse_bridge::SseBridgeManager>();
+            let server_mgr = app_handle.state::<server_manager::ServerManager>();
+            let pty_mgr = app_handle.state::<pty_manager::PtyManager>();
+
+            tauri::async_runtime::block_on(async {
+                // Order matters: PTY → SSE → Server
+                println!("[shutdown] Killing all PTY sessions...");
+                pty_mgr.kill_all().await;
+
+                println!("[shutdown] Stopping all SSE bridges...");
+                sse_mgr.stop_all().await;
+
+                println!("[shutdown] Stopping all OpenCode servers...");
+                if let Err(e) = server_mgr.stop_all().await {
+                    eprintln!("[shutdown] Error stopping servers: {}", e);
+                }
+
+                println!("[shutdown] Cleanup complete");
+            });
+        }
+    });
 }

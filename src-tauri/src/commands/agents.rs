@@ -122,7 +122,10 @@ pub async fn get_session_output(
         (oc_id, wt)
     };
 
-    let port = match server_mgr.get_server_port(&task_id).await {
+    let existing_port = server_mgr.get_server_port(&task_id).await;
+    let spawned_server = existing_port.is_none();
+
+    let port = match existing_port {
         Some(port) => port,
         None => {
             let wt_path = worktree_path
@@ -156,6 +159,11 @@ pub async fn get_session_output(
                 }
             }
         }
+    }
+
+    // Stop server if we spawned it just for this query
+    if spawned_server {
+        let _ = server_mgr.stop_server(&task_id).await;
     }
 
     Ok(output)

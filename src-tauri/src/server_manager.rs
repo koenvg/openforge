@@ -69,16 +69,16 @@ struct ManagedServer {
 /// Manages multiple OpenCode servers (one per task/worktree)
 pub struct ServerManager {
     servers: Arc<Mutex<HashMap<String, ManagedServer>>>,
+    pid_dir_override: Option<PathBuf>,
 }
-
 impl ServerManager {
     /// Creates a new ServerManager with an empty server map
     pub fn new() -> Self {
         Self {
             servers: Arc::new(Mutex::new(HashMap::new())),
+            pid_dir_override: None,
         }
     }
-
     /// Spawns a new OpenCode server for the given task_id and worktree_path.
     /// Returns the dynamically assigned port number.
     /// If a server is already running for this task_id, returns its existing port.
@@ -259,7 +259,37 @@ impl ServerManager {
             };
 
             if !is_running {
-                println!("Removing stale PID file: {:?}", path);
+                println!("[cleanup] Removing stale PID file (process dead): {:?}", path);
+                let _ = std::fs::remove_file(&path);
+            } else {
+                // Process is alive — verify it's actually opencode before killing
+                let is_opencode = std::process::Command::new("ps")
+                    .args(["-p", &pid.to_string(), "-o", "command="])
+                    .output()
+                    .map(|output| {
+                        let cmd = String::from_utf8_lossy(&output.stdout);
+                        cmd.contains("opencode")
+                    })
+                    .unwrap_or(false);
+
+                if is_opencode {
+                    println!("[cleanup] Killing orphaned opencode process (PID: {})", pid);
+                    unsafe {
+                        libc::kill(pid, libc::SIGTERM);
+                    }
+                    // Brief wait for graceful shutdown
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    // Check if still running, force kill if needed
+                    let still_running = unsafe { libc::kill(pid, 0) == 0 };
+                    if still_running {
+                        println!("[cleanup] Force killing process (PID: {})", pid);
+                        unsafe {
+                            libc::kill(pid, libc::SIGKILL);
+                        }
+                    }
+                } else {
+                    println!("[cleanup] PID {} is not opencode (PID reuse), removing stale file: {:?}", pid, path);
+                }
                 let _ = std::fs::remove_file(&path);
             }
         }
@@ -273,6 +303,9 @@ impl ServerManager {
 
     /// Returns the PID directory path
     fn get_pid_dir(&self) -> Result<PathBuf, ServerError> {
+        if let Some(ref dir) = self.pid_dir_override {
+            return Ok(dir.clone());
+        }
         let home = dirs::home_dir()
             .ok_or_else(|| ServerError::IoError(io::Error::new(io::ErrorKind::NotFound, "Home directory not found")))?;
         Ok(home.join(".ai-command-center").join("pids"))
@@ -343,6 +376,13 @@ impl Default for ServerManager {
 }
 
 #[cfg(test)]
+impl ServerManager {
+    pub fn set_pid_dir(&mut self, dir: PathBuf) {
+        self.pid_dir_override = Some(dir);
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -372,5 +412,72 @@ mod tests {
         // Should return None when no servers are running
         let port = manager.get_any_server_port_for_project(&task_ids).await;
         assert_eq!(port, None);
+    }
+
+    #[test]
+    fn test_cleanup_stale_pids_empty_dir() {
+        let mut manager = ServerManager::new();
+        let tmp_dir = std::env::temp_dir().join("test_srv_cleanup_empty");
+        std::fs::create_dir_all(&tmp_dir).unwrap();
+        manager.set_pid_dir(tmp_dir.clone());
+
+        let result = manager.cleanup_stale_pids();
+        assert!(result.is_ok());
+
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+    }
+
+    #[test]
+    fn test_cleanup_stale_pids_invalid_content() {
+        let mut manager = ServerManager::new();
+        let tmp_dir = std::env::temp_dir().join("test_srv_cleanup_invalid");
+        std::fs::create_dir_all(&tmp_dir).unwrap();
+        manager.set_pid_dir(tmp_dir.clone());
+
+        let pid_file = tmp_dir.join("task123.pid");
+        std::fs::write(&pid_file, "not_a_number").unwrap();
+        assert!(pid_file.exists());
+
+        let result = manager.cleanup_stale_pids();
+        assert!(result.is_ok());
+        assert!(!pid_file.exists(), "Invalid PID file should be removed");
+
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+    }
+
+    #[test]
+    fn test_cleanup_stale_pids_dead_process() {
+        let mut manager = ServerManager::new();
+        let tmp_dir = std::env::temp_dir().join("test_srv_cleanup_dead");
+        std::fs::create_dir_all(&tmp_dir).unwrap();
+        manager.set_pid_dir(tmp_dir.clone());
+
+        // PID 999999 is virtually guaranteed to not be running
+        let pid_file = tmp_dir.join("dead_task.pid");
+        std::fs::write(&pid_file, "999999").unwrap();
+        assert!(pid_file.exists());
+
+        let result = manager.cleanup_stale_pids();
+        assert!(result.is_ok());
+        assert!(!pid_file.exists(), "Stale PID file for dead process should be removed");
+
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+    }
+
+    #[test]
+    fn test_cleanup_stale_pids_non_pid_files_ignored() {
+        let mut manager = ServerManager::new();
+        let tmp_dir = std::env::temp_dir().join("test_srv_cleanup_nonpid");
+        std::fs::create_dir_all(&tmp_dir).unwrap();
+        manager.set_pid_dir(tmp_dir.clone());
+
+        let non_pid_file = tmp_dir.join("README.txt");
+        std::fs::write(&non_pid_file, "not a pid file").unwrap();
+
+        let result = manager.cleanup_stale_pids();
+        assert!(result.is_ok());
+        assert!(non_pid_file.exists(), "Non-.pid files should not be removed");
+
+        let _ = std::fs::remove_dir_all(&tmp_dir);
     }
 }
