@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { reviewPrs, selectedReviewPr, prFileDiffs, reviewRequestCount, reviewComments, pendingManualComments, prOverviewComments } from '../lib/stores'
-  import { fetchReviewPrs, getReviewPrs, getPrFileDiffs, openUrl, getReviewComments, getFileContent, getFileAtRef } from '../lib/ipc'
+  import { fetchReviewPrs, getReviewPrs, getPrFileDiffs, openUrl, getReviewComments, getFileContent, getFileAtRef, markReviewPrViewed } from '../lib/ipc'
   import ReviewPrCard from './ReviewPrCard.svelte'
   import FileTree from './FileTree.svelte'
   import DiffViewer from './DiffViewer.svelte'
@@ -37,7 +37,7 @@
     try {
       const prs = await getReviewPrs()
       $reviewPrs = prs
-      $reviewRequestCount = prs.length
+      $reviewRequestCount = prs.filter(p => p.viewed_at === null).length
     } catch (e) {
       console.error('Failed to load PRs:', e)
       error = String(e)
@@ -52,7 +52,7 @@
     try {
       const prs = await fetchReviewPrs()
       $reviewPrs = prs
-      $reviewRequestCount = prs.length
+      $reviewRequestCount = prs.filter(p => p.viewed_at === null).length
     } catch (e) {
       console.error('Failed to refresh PRs:', e)
       error = String(e)
@@ -62,7 +62,14 @@
   }
 
   async function selectPr(pr: ReviewPullRequest) {
-    $selectedReviewPr = pr
+    // Optimistic update: mark as viewed immediately
+    const now = Math.floor(Date.now() / 1000)
+    const updatedPr = { ...pr, viewed_at: now, viewed_head_sha: pr.head_sha }
+    $selectedReviewPr = updatedPr
+    $reviewPrs = $reviewPrs.map(p => p.id === pr.id ? updatedPr : p)
+    $reviewRequestCount = $reviewPrs.filter(p => p.viewed_at === null).length
+    // Fire-and-forget IPC
+    markReviewPrViewed(pr.id, pr.head_sha).catch(e => console.error('Failed to mark viewed:', e))
     isLoading = true
     try {
       const diffs = await getPrFileDiffs(pr.repo_owner, pr.repo_name, pr.number)

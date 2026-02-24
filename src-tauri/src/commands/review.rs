@@ -363,3 +363,15 @@ pub async fn submit_pr_review(
         .await
         .map_err(|e| format!("Failed to submit review: {}", e))
 }
+
+
+#[tauri::command]
+pub async fn mark_review_pr_viewed(
+    db: State<'_, Mutex<db::Database>>,
+    pr_id: i64,
+    head_sha: String,
+) -> Result<(), String> {
+    let db = db.lock().unwrap();
+    db.mark_review_pr_viewed(pr_id, &head_sha)
+        .map_err(|e| format!("Failed to mark review PR viewed: {}", e))
+}

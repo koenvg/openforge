@@ -23,6 +23,8 @@ pub struct ReviewPrRow {
     pub changed_files: i64,
     pub created_at: i64,
     pub updated_at: i64,
+    pub viewed_at: Option<i64>,
+    pub viewed_head_sha: Option<String>,
 }
 
 impl super::Database {
@@ -51,8 +53,29 @@ impl super::Database {
     ) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT OR REPLACE INTO review_prs (id, number, title, body, state, draft, html_url, user_login, user_avatar_url, repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions, changed_files, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+            "INSERT INTO review_prs (id, number, title, body, state, draft, html_url, user_login, user_avatar_url, repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions, changed_files, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
+             ON CONFLICT(id) DO UPDATE SET
+                 number = excluded.number,
+                 title = excluded.title,
+                 body = excluded.body,
+                 state = excluded.state,
+                 draft = excluded.draft,
+                 html_url = excluded.html_url,
+                 user_login = excluded.user_login,
+                 user_avatar_url = excluded.user_avatar_url,
+                 repo_owner = excluded.repo_owner,
+                 repo_name = excluded.repo_name,
+                 head_ref = excluded.head_ref,
+                 base_ref = excluded.base_ref,
+                 head_sha = excluded.head_sha,
+                 additions = excluded.additions,
+                 deletions = excluded.deletions,
+                 changed_files = excluded.changed_files,
+                 created_at = excluded.created_at,
+                 updated_at = excluded.updated_at,
+                 viewed_at = CASE WHEN review_prs.viewed_head_sha IS NOT NULL AND review_prs.viewed_head_sha != excluded.head_sha THEN NULL ELSE review_prs.viewed_at END,
+                 viewed_head_sha = CASE WHEN review_prs.viewed_head_sha IS NOT NULL AND review_prs.viewed_head_sha != excluded.head_sha THEN NULL ELSE review_prs.viewed_head_sha END",
             rusqlite::params![
                 id, number, title, body, state, draft as i32, html_url, user_login, user_avatar_url,
                 repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions, changed_files,
@@ -67,8 +90,9 @@ impl super::Database {
         let mut stmt = conn.prepare(
             "SELECT id, number, title, body, state, draft, html_url, user_login, user_avatar_url,
                     repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions,
-                    changed_files, created_at, updated_at
-             FROM review_prs ORDER BY updated_at DESC",
+                    changed_files, created_at, updated_at, viewed_at, viewed_head_sha
+             FROM review_prs
+             ORDER BY CASE WHEN viewed_at IS NULL THEN 0 ELSE 1 END, updated_at DESC",
         )?;
         let rows = stmt.query_map([], |row| {
             Ok(ReviewPrRow {
@@ -91,6 +115,8 @@ impl super::Database {
                 changed_files: row.get(16)?,
                 created_at: row.get(17)?,
                 updated_at: row.get(18)?,
+                viewed_at: row.get(19)?,
+                viewed_head_sha: row.get(20)?,
             })
         })?;
         let mut result = Vec::new();
@@ -98,6 +124,21 @@ impl super::Database {
             result.push(row?);
         }
         Ok(result)
+    }
+
+    /// Mark a review PR as viewed with the given head SHA.
+    /// Sets `viewed_at` to the current Unix timestamp and `viewed_head_sha` to the provided sha.
+    pub fn mark_review_pr_viewed(&self, pr_id: i64, head_sha: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs() as i64;
+        conn.execute(
+            "UPDATE review_prs SET viewed_at = ?1, viewed_head_sha = ?2 WHERE id = ?3",
+            rusqlite::params![now, head_sha, pr_id],
+        )?;
+        Ok(())
     }
 
     pub fn delete_stale_review_prs(&self, current_ids: &[i64]) -> Result<()> {
@@ -358,6 +399,202 @@ mod tests {
         assert_eq!(prs.len(), 2);
         assert_eq!(prs[0].id, 2);
         assert_eq!(prs[1].id, 1);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_review_pr_viewed_null_by_default() {
+        let (db, path) = make_test_db("review_pr_viewed_null");
+
+        db.upsert_review_pr(
+            1, 10, "PR 1", None, "open", false,
+            "https://github.com/owner/repo/pull/10",
+            "user1", None, "owner", "repo",
+            "branch1", "main", "sha1",
+            10, 5, 2, 1000, 2000,
+        )
+        .expect("upsert failed");
+
+        let prs = db.get_all_review_prs().expect("get_all failed");
+        assert_eq!(prs.len(), 1);
+        assert!(prs[0].viewed_at.is_none());
+        assert!(prs[0].viewed_head_sha.is_none());
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_mark_review_pr_viewed() {
+        let (db, path) = make_test_db("review_pr_mark_viewed");
+
+        db.upsert_review_pr(
+            1, 10, "PR 1", None, "open", false,
+            "https://github.com/owner/repo/pull/10",
+            "user1", None, "owner", "repo",
+            "branch1", "main", "sha1",
+            10, 5, 2, 1000, 2000,
+        )
+        .expect("upsert failed");
+
+        db.mark_review_pr_viewed(1, "sha1").expect("mark viewed failed");
+
+        let prs = db.get_all_review_prs().expect("get_all failed");
+        assert_eq!(prs.len(), 1);
+        assert!(prs[0].viewed_at.is_some());
+        assert_eq!(prs[0].viewed_head_sha, Some("sha1".to_string()));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_upsert_preserves_viewed_when_sha_unchanged() {
+        let (db, path) = make_test_db("review_pr_preserve_viewed");
+
+        db.upsert_review_pr(
+            1, 10, "PR 1", None, "open", false,
+            "https://github.com/owner/repo/pull/10",
+            "user1", None, "owner", "repo",
+            "branch1", "main", "abc",
+            10, 5, 2, 1000, 2000,
+        )
+        .expect("upsert failed");
+
+        db.mark_review_pr_viewed(1, "abc").expect("mark viewed failed");
+
+        let prs_before = db.get_all_review_prs().expect("get_all failed");
+        let viewed_at_before = prs_before[0].viewed_at;
+
+        // Upsert again with same sha
+        db.upsert_review_pr(
+            1, 10, "PR 1 updated", None, "open", false,
+            "https://github.com/owner/repo/pull/10",
+            "user1", None, "owner", "repo",
+            "branch1", "main", "abc",
+            10, 5, 2, 1000, 3000,
+        )
+        .expect("re-upsert failed");
+
+        let prs = db.get_all_review_prs().expect("get_all failed");
+        assert_eq!(prs.len(), 1);
+        assert_eq!(prs[0].viewed_at, viewed_at_before);
+        assert_eq!(prs[0].viewed_head_sha, Some("abc".to_string()));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_upsert_clears_viewed_when_sha_changed() {
+        let (db, path) = make_test_db("review_pr_clear_viewed");
+
+        db.upsert_review_pr(
+            1, 10, "PR 1", None, "open", false,
+            "https://github.com/owner/repo/pull/10",
+            "user1", None, "owner", "repo",
+            "branch1", "main", "abc",
+            10, 5, 2, 1000, 2000,
+        )
+        .expect("upsert failed");
+
+        db.mark_review_pr_viewed(1, "abc").expect("mark viewed failed");
+
+        // Upsert again with different sha
+        db.upsert_review_pr(
+            1, 10, "PR 1", None, "open", false,
+            "https://github.com/owner/repo/pull/10",
+            "user1", None, "owner", "repo",
+            "branch1", "main", "def",
+            10, 5, 2, 1000, 3000,
+        )
+        .expect("re-upsert failed");
+
+        let prs = db.get_all_review_prs().expect("get_all failed");
+        assert_eq!(prs.len(), 1);
+        assert!(prs[0].viewed_at.is_none());
+        assert!(prs[0].viewed_head_sha.is_none());
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_upsert_never_viewed_stays_unviewed() {
+        let (db, path) = make_test_db("review_pr_never_viewed");
+
+        db.upsert_review_pr(
+            1, 10, "PR 1", None, "open", false,
+            "https://github.com/owner/repo/pull/10",
+            "user1", None, "owner", "repo",
+            "branch1", "main", "abc",
+            10, 5, 2, 1000, 2000,
+        )
+        .expect("upsert failed");
+
+        // Never mark as viewed, upsert with new sha
+        db.upsert_review_pr(
+            1, 10, "PR 1", None, "open", false,
+            "https://github.com/owner/repo/pull/10",
+            "user1", None, "owner", "repo",
+            "branch1", "main", "new-sha",
+            10, 5, 2, 1000, 3000,
+        )
+        .expect("re-upsert failed");
+
+        let prs = db.get_all_review_prs().expect("get_all failed");
+        assert_eq!(prs.len(), 1);
+        assert!(prs[0].viewed_at.is_none());
+        assert!(prs[0].viewed_head_sha.is_none());
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_review_pr_viewed_sorting() {
+        let (db, path) = make_test_db("review_pr_viewed_sorting");
+
+        // Insert 3 PRs (all unviewed initially)
+        for i in 1_i64..=3 {
+            db.upsert_review_pr(
+                i,
+                i * 10,
+                &format!("PR {}", i),
+                None,
+                "open",
+                false,
+                &format!("https://github.com/owner/repo/pull/{}", i * 10),
+                "user1",
+                None,
+                "owner",
+                "repo",
+                &format!("branch{}", i),
+                "main",
+                &format!("sha{}", i),
+                10,
+                5,
+                2,
+                i * 1000,
+                i * 1000,
+            )
+            .expect("upsert failed");
+        }
+
+        // Mark PR 2 as viewed
+        db.mark_review_pr_viewed(2, "sha2").expect("mark viewed failed");
+
+        let prs = db.get_all_review_prs().expect("get_all failed");
+        assert_eq!(prs.len(), 3);
+
+        // Unviewed PRs should come first
+        assert!(prs[0].viewed_at.is_none());
+        assert!(prs[1].viewed_at.is_none());
+        // Viewed PR should be last
+        assert!(prs[2].viewed_at.is_some());
+        assert_eq!(prs[2].id, 2);
 
         drop(db);
         let _ = fs::remove_file(&path);

@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { writable } from 'svelte/store'
+import { writable, get } from 'svelte/store'
 import type { ReviewPullRequest, PrFileDiff, ReviewSubmissionComment } from '../lib/types'
 
 vi.mock('../lib/stores', () => ({
@@ -20,12 +20,13 @@ vi.mock('../lib/ipc', () => ({
   getReviewComments: vi.fn().mockResolvedValue([]),
   getPrOverviewComments: vi.fn().mockResolvedValue([]),
   submitPrReview: vi.fn(),
+  markReviewPrViewed: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn(),
 }))
 
 import PrReviewView from './PrReviewView.svelte'
-import { reviewPrs, selectedReviewPr, prFileDiffs, reviewComments, pendingManualComments } from '../lib/stores'
-import { getReviewPrs, fetchReviewPrs, getPrFileDiffs, getReviewComments } from '../lib/ipc'
+import { reviewPrs, selectedReviewPr, prFileDiffs, reviewComments, pendingManualComments, reviewRequestCount } from '../lib/stores'
+import { getReviewPrs, fetchReviewPrs, getPrFileDiffs, getReviewComments, markReviewPrViewed } from '../lib/ipc'
 
 const basePr: ReviewPullRequest = {
   id: 12345,
@@ -47,6 +48,8 @@ const basePr: ReviewPullRequest = {
   changed_files: 3,
   created_at: Date.now() - 3600000,
   updated_at: Date.now(),
+  viewed_at: null,
+  viewed_head_sha: null,
 }
 
 describe('PrReviewView', () => {
@@ -56,6 +59,7 @@ describe('PrReviewView', () => {
     prFileDiffs.set([])
     reviewComments.set([])
     pendingManualComments.set([])
+    reviewRequestCount.set(0)
     vi.clearAllMocks()
   })
 
@@ -344,4 +348,38 @@ describe('PrReviewView', () => {
       expect(currentComments.length).toBe(0)
     })
   })
+
+  it('calls markReviewPrViewed when a PR is selected', async () => {
+    const mockMarkViewed = vi.mocked(markReviewPrViewed).mockResolvedValue(undefined)
+    vi.mocked(getReviewPrs).mockResolvedValue([basePr])
+    vi.mocked(getPrFileDiffs).mockResolvedValue([])
+    vi.mocked(getReviewComments).mockResolvedValue([])
+
+    reviewPrs.set([basePr])
+
+    render(PrReviewView)
+
+    await waitFor(() => {
+      expect(screen.getByText('Fix authentication middleware')).toBeTruthy()
+    })
+
+    const prCard = screen.getByText('Fix authentication middleware')
+    await fireEvent.click(prCard)
+
+    await waitFor(() => {
+      expect(mockMarkViewed).toHaveBeenCalledWith(basePr.id, basePr.head_sha)
+    })
+  })
+
+  it('sets reviewRequestCount to unviewed count, not total', async () => {
+    const viewedPr = { ...basePr, id: 67890, number: 43, viewed_at: 1234567890, viewed_head_sha: 'abc123' }
+    vi.mocked(getReviewPrs).mockResolvedValue([basePr, viewedPr])
+
+    render(PrReviewView)
+
+    await waitFor(() => {
+      expect(get(reviewRequestCount)).toBe(1)
+    })
+  })
+
 })

@@ -1015,10 +1015,11 @@ async fn poll_review_prs(
         }
 
         let _ = db_lock.delete_stale_review_prs(&current_ids);
+        let count = db_lock.get_all_review_prs()
+            .map(|prs| prs.iter().filter(|p| p.viewed_at.is_none()).count())
+            .unwrap_or(0);
+        let _ = app.emit("review-pr-count-changed", count);
     }
-
-    let count = current_ids.len();
-    let _ = app.emit("review-pr-count-changed", count);
 
     Ok(())
 }

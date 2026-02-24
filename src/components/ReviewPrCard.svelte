@@ -23,7 +23,7 @@
 </script>
 
 <Card
-  class="flex flex-col gap-2.5 p-4 duration-150 {!selected ? 'hover:-translate-y-px' : ''}"
+  class="flex flex-col gap-2.5 p-4 duration-150 {!selected ? 'hover:-translate-y-px' : ''} {pr.viewed_at ? 'opacity-50' : ''}"
   {selected}
   onclick={onClick}
 >

@@ -255,6 +255,7 @@ fn main() {
             commands::review::get_review_comments,
             commands::review::get_pr_overview_comments,
             commands::review::submit_pr_review,
+            commands::review::mark_review_pr_viewed,
             commands::pty::pty_spawn,
             commands::pty::pty_write,
             commands::pty::pty_resize,
