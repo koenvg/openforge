@@ -184,6 +184,51 @@ interface Props {
 
 Used in `Modal.svelte` and `DiffViewer.svelte` to pass structured markup as props.
 
+### Component Structure
+
+**Size guidance**: Soft limit of ~300 lines per component. If a component exceeds this,
+check whether it mixes unrelated concerns (data fetching + state management + presentation
+all in one file). A component should be split when it manages 2+ unrelated concerns.
+
+**Exception**: Root orchestrator components like `App.svelte` that manage global event
+listeners, Tauri event subscriptions, and top-level routing may exceed this limit. That's
+expected and acceptable.
+
+**Standard script ordering** -- keep declarations in this order for consistency:
+
+```ts
+// 1. Imports (external -> internal, per existing convention)
+// 2. Props interface + $props() destructuring
+// 3. Local state ($state declarations)
+// 4. Derived state ($derived declarations)
+// 5. Effects ($effect blocks)
+// 6. Lifecycle hooks (onMount, onDestroy)
+// 7. Event handlers and helper functions
+```
+
+Good examples: `TaskCard.svelte` (~196 lines, single concern: card rendering),
+`FileTree.svelte` (~164 lines, single concern: tree navigation).
+
+### Code Extraction
+
+Extract code to `src/lib/` when:
+- A utility function is used by 2+ components -> `src/lib/{name}.ts`
+- State logic uses runes and can be reused -> `src/lib/use{Name}.svelte.ts`
+- Data transformation is complex enough to test in isolation -> `src/lib/{name}.ts`
+
+**Naming conventions:**
+- `camelCase.ts` for plain utilities (no rune usage)
+- `use{Name}.svelte.ts` for Svelte 5 composables that use runes
+
+**Existing examples** (codify these patterns, don't reinvent them):
+- `src/lib/doingStatus.ts` -- pure function used by `App.svelte`
+- `src/lib/parseCheckpoint.ts` -- parsing logic separated from UI
+- `src/lib/diffAdapter.ts` -- data transformation layer
+- `src/lib/useDiffSearch.svelte.ts` -- Svelte 5 composable with rune usage
+
+**Anti-pattern**: Duplicating utility functions across components (e.g., a `timeAgo()`
+helper copied into multiple files). Extract once, import everywhere.
+
 ### Types
 
 All shared types live in `src/lib/types.ts` as exported interfaces. Use `interface` for
