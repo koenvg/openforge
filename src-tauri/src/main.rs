@@ -64,6 +64,36 @@ async fn resume_task_servers(app: tauri::AppHandle) {
             continue;
         }
 
+        // Check provider for this task's latest session
+        let latest_session = {
+            let db = app.state::<Mutex<db::Database>>();
+            let db_lock = db.lock().unwrap();
+            db_lock.get_latest_session_for_ticket(&worktree.task_id).ok().flatten()
+        };
+        let provider = latest_session.as_ref().map(|s| s.provider.as_str()).unwrap_or("opencode");
+
+        // Handle Claude Code sessions: mark as interrupted and skip server spawn
+        if provider == "claude-code" {
+            if let Some(ref session) = latest_session {
+                let db = app.state::<Mutex<db::Database>>();
+                let db_lock = db.lock().unwrap();
+                let _ = db_lock.update_agent_session(&session.id, &session.stage, "interrupted", None, Some("App restarted"));
+            }
+            let _ = app.emit(
+                "server-resumed",
+                serde_json::json!({
+                    "task_id": worktree.task_id,
+                    "port": 0,
+                }),
+            );
+            println!(
+                "[startup] Claude Code task {} marked as interrupted (process doesn't survive restart)",
+                worktree.task_id
+            );
+            continue;
+        }
+
+        // OpenCode path: spawn server and start SSE bridge
         match server_mgr.spawn_server(&worktree.task_id, worktree_path).await {
             Ok(port) => {
                 {
