@@ -265,3 +265,65 @@ Registered `ClaudeProcessManager` and `ClaudeBridgeManager` as Tauri managed sta
 - daisyUI `badge-xs badge-success` / `badge-xs badge-warning` work for auth status indicators
 - `alert alert-warning text-xs py-2` works for the "not installed" warning
 - `import type { ClaudeInstallStatus }` is NOT needed in the component — inline type inference from `checkClaudeInstalled()` return value is sufficient; importing unused types fails with `noUnusedLocals`
+
+## Task: Provider-aware PTY spawning in usePtyBridge.svelte.ts
+
+**Date**: 2026-02-25
+
+### What was done
+Modified `src/lib/usePtyBridge.svelte.ts` to support two PTY providers:
+- `"claude-code"`: calls `spawnClaudePty(taskId, worktreePath, claudeSessionId, cols, rows)`
+- `"opencode"` (default/else): existing behavior unchanged, calls `spawnPty(taskId, port, sessionId, cols, rows)`
+
+### Key implementation decisions
+1. `setupListeners()` is now called BEFORE the provider branch (both paths share the same PTY event listeners — `pty-output-{taskId}` and `pty-exit-{taskId}`)
+2. `setOpencodePort()` is only called for the OpenCode path (Claude doesn't use a port)
+3. `sessionId` parameter to `attachPty()` is still required by the public `PtyBridgeHandle` interface but is only used in the OpenCode path; Claude uses `deps.claudeSessionId` instead
+4. Early `return` inside `try` (missing params) sets `ptySpawned = false` before returning — same guard pattern as the original
+5. `term?.focus()` and `deps.onAttached()` are at the END of the `try` block (after the if/else), so they only fire on the happy path
+
+### Interface change
+`createPtyBridge` deps now accepts 3 optional fields:
+```ts
+provider?: string           // "opencode" or "claude-code"
+claudeSessionId?: string    // Claude session ID for --resume
+worktreePath?: string       // worktree path for Claude PTY
+```
+`PtyBridgeHandle` interface itself is UNCHANGED.
+
+### Test results
+- `usePtyBridge.test.ts`: 8/8 pass ✓
+- `pnpm build`: clean ✓
+- `pnpm test`: same pre-existing failures only (PrReviewView ×5, TaskDetailView ×1)
+
+## Task: Provider-aware resume_task_servers (2026-02-25T13:00:00Z)
+
+### Implementation Summary
+Modified `src-tauri/src/main.rs` `resume_task_servers()` function (lines 33-139) to add provider-aware branching:
+
+**New Logic (lines 65-94):**
+1. For each resumable worktree, fetch the latest session: `db_lock.get_latest_session_for_ticket(&worktree.task_id).ok().flatten()`
+2. Extract provider field: `latest_session.as_ref().map(|s| s.provider.as_str()).unwrap_or("opencode")`
+3. If `provider == "claude-code"`:
+   - Mark session as interrupted: `db_lock.update_agent_session(&session.id, &session.stage, "interrupted", None, Some("App restarted"))`
+   - Emit `server-resumed` event with `port: 0` (tells frontend worktree exists but needs re-triggering)
+   - Log: `"[startup] Claude Code task {} marked as interrupted (process doesn't survive restart)"`
+   - `continue;` to skip OpenCode server spawn
+4. Else: existing OpenCode logic runs unchanged (spawn server, start SSE bridge, emit with actual port)
+
+### Key Design Decisions
+- **No process resurrection**: Claude Code processes are ephemeral — they don't survive app restart. Session persists on disk (Claude's own persistence), so user can re-run with `--resume` via `run_action` command.
+- **Worktree preservation**: Worktree is NOT removed or marked as done — it's still valid for re-running.
+- **Port 0 signal**: Emitting `port: 0` tells the frontend the worktree exists but the server isn't running (Claude doesn't use ports).
+- **Session status**: Marking as "interrupted" (not "completed" or "failed") indicates the session was cut off by app restart, not by user action or error.
+
+### Build & Test Results
+- ✅ `cargo build` passes (44 warnings, all pre-existing)
+- ✅ `cargo test` passes all 232 tests with 0 failures
+- ✅ No new warnings or regressions introduced
+
+### Code Pattern Notes
+- Provider check happens BEFORE worktree path existence check (provider is the primary branching point)
+- Both paths (Claude and OpenCode) emit `server-resumed` event (frontend expects this for all resumable tasks)
+- Database access pattern: `let db = app.state::<Mutex<db::Database>>(); let db_lock = db.lock().unwrap();` (same as existing code)
+- Error handling: `let _ = ...` for non-critical operations (emit, update_agent_session)
