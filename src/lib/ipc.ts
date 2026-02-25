@@ -124,6 +124,10 @@ export async function checkOpenCodeInstalled(): Promise<{ installed: boolean; pa
   return invoke("check_opencode_installed");
 }
 
+export async function checkClaudeInstalled(): Promise<{ installed: boolean; path: string | null; version: string | null; authenticated: boolean }> {
+  return invoke<{ installed: boolean; path: string | null; version: string | null; authenticated: boolean }>("check_claude_installed");
+}
+
 export async function getConfig(key: string): Promise<string | null> {
   return invoke<string | null>("get_config", { key });
 }

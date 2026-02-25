@@ -161,6 +161,7 @@ pub async fn start_implementation(
             Some(&opencode_session_id),
             "implementing",
             "running",
+            "opencode",
         )
         .map_err(|e| format!("Failed to create agent session: {}", e))?;
     }
@@ -355,6 +356,7 @@ pub async fn run_action(
             Some(&opencode_session_id),
             "implementing",
             "running",
+            "opencode",
         )
         .map_err(|e| format!("Failed to create agent session: {}", e))?;
     }

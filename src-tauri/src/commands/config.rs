@@ -10,6 +10,14 @@ pub struct OpenCodeInstallStatus {
     pub version: Option<String>,
 }
 
+#[derive(Serialize)]
+pub struct ClaudeInstallStatus {
+    pub installed: bool,
+    pub path: Option<String>,
+    pub version: Option<String>,
+    pub authenticated: bool,
+}
+
 #[tauri::command]
 pub async fn check_opencode_installed() -> Result<OpenCodeInstallStatus, String> {
     let output = std::process::Command::new("which")
@@ -40,6 +48,47 @@ pub async fn check_opencode_installed() -> Result<OpenCodeInstallStatus, String>
             installed: false,
             path: None,
             version: None,
+        }),
+    }
+}
+
+#[tauri::command]
+pub async fn check_claude_installed() -> Result<ClaudeInstallStatus, String> {
+    let output = std::process::Command::new("which")
+        .arg("claude")
+        .output();
+
+    match output {
+        Ok(out) if out.status.success() => {
+            let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            let version = std::process::Command::new("claude")
+                .arg("--version")
+                .output()
+                .ok()
+                .and_then(|v| {
+                    if v.status.success() {
+                        Some(String::from_utf8_lossy(&v.stdout).trim().to_string())
+                    } else {
+                        None
+                    }
+                });
+            let authenticated = std::process::Command::new("claude")
+                .args(["auth", "status"])
+                .output()
+                .map(|v| v.status.success())
+                .unwrap_or(false);
+            Ok(ClaudeInstallStatus {
+                installed: true,
+                path: Some(path),
+                version,
+                authenticated,
+            })
+        }
+        _ => Ok(ClaudeInstallStatus {
+            installed: false,
+            path: None,
+            version: None,
+            authenticated: false,
         }),
     }
 }

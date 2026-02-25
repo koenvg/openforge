@@ -17,6 +17,7 @@ mod whisper_manager;
 mod http_server;
 mod plugin_installer;
 mod commands;
+mod claude_process_manager;
 
 use std::sync::{Mutex, Arc};
 use tauri::{Manager, Emitter};
@@ -269,6 +270,7 @@ fn main() {
             commands::config::set_config,
             commands::config::check_opencode_installed,
             commands::config::get_app_mode,
+            commands::config::check_claude_installed,
             commands::review::get_github_username,
             commands::review::fetch_review_prs,
             commands::review::get_review_prs,
