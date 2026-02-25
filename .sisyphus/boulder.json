@@ -1,7 +1,9 @@
 {
-  "active_plan": "/Users/koenpersonal/.ai-command-center/worktrees/my-command-center/T-76/.sisyphus/plans/session-spawned-tasks.md",
-  "started_at": "2026-02-26T19:54:26.697Z",
-  "session_ids": ["ses_364951b11ffeoN1ZG1Ms9Rszz4"],
-  "plan_name": "session-spawned-tasks",
+  "active_plan": "/Users/koen.vangeert/.ai-command-center/worktrees/my-command-center/T-392/.sisyphus/plans/claude-code-support.md",
+  "started_at": "2026-02-25T10:00:00.000Z",
+  "session_ids": [
+    "ses_36c088cd3ffeaUAi802AVDKkyN"
+  ],
+  "plan_name": "claude-code-support",
   "agent": "atlas"
 }
