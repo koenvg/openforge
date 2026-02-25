@@ -19,6 +19,7 @@ mod plugin_installer;
 mod commands;
 mod claude_process_manager;
 
+mod claude_bridge;
 use std::sync::{Mutex, Arc};
 use tauri::{Manager, Emitter};
 use jira_client::JiraClient;
