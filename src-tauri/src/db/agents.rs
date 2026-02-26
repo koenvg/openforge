@@ -436,6 +436,62 @@ mod tests {
     }
 
     #[test]
+    fn test_agent_logs_claude_event_types() {
+        let (db, path) = make_test_db("claude_event_types");
+        insert_test_task(&db);
+
+        db.create_agent_session("ses-claude", "T-100", None, "implement", "running", "claude-code")
+            .expect("create session failed");
+
+        // Insert logs with all semantic log_type values used by the Claude bridge
+        db.insert_agent_log("ses-claude", "system.init", r#"{"type":"system","subtype":"init","session_id":"abc"}"#)
+            .expect("insert system.init failed");
+        db.insert_agent_log("ses-claude", "assistant", r#"{"type":"assistant","content":[{"type":"text","text":"Hello"}]}"#)
+            .expect("insert assistant failed");
+        db.insert_agent_log("ses-claude", "tool_use", r#"{"type":"tool_use","name":"Read","input":{"path":"foo.rs"}}"#)
+            .expect("insert tool_use failed");
+        db.insert_agent_log("ses-claude", "tool_result", r#"{"type":"tool_result","content":"file contents"}"#)
+            .expect("insert tool_result failed");
+        db.insert_agent_log("ses-claude", "result.success", r#"{"type":"result","subtype":"success","cost_usd":0.05}"#)
+            .expect("insert result.success failed");
+        db.insert_agent_log("ses-claude", "result.error_max_turns", r#"{"type":"result","subtype":"error_max_turns"}"#)
+            .expect("insert result.error_max_turns failed");
+
+        // Retrieve logs and verify
+        let logs = db.get_agent_logs("ses-claude").expect("get logs failed");
+        assert_eq!(logs.len(), 6);
+
+        // Verify log_type values in order
+        assert_eq!(logs[0].log_type, "system.init");
+        assert_eq!(logs[1].log_type, "assistant");
+        assert_eq!(logs[2].log_type, "tool_use");
+        assert_eq!(logs[3].log_type, "tool_result");
+        assert_eq!(logs[4].log_type, "result.success");
+        assert_eq!(logs[5].log_type, "result.error_max_turns");
+
+        // Verify content values match what was inserted
+        assert_eq!(logs[0].content, r#"{"type":"system","subtype":"init","session_id":"abc"}"#);
+        assert_eq!(logs[1].content, r#"{"type":"assistant","content":[{"type":"text","text":"Hello"}]}"#);
+        assert_eq!(logs[2].content, r#"{"type":"tool_use","name":"Read","input":{"path":"foo.rs"}}"#);
+        assert_eq!(logs[3].content, r#"{"type":"tool_result","content":"file contents"}"#);
+        assert_eq!(logs[4].content, r#"{"type":"result","subtype":"success","cost_usd":0.05}"#);
+        assert_eq!(logs[5].content, r#"{"type":"result","subtype":"error_max_turns"}"#);
+
+        // Verify session_id is correct for all logs
+        for log in &logs {
+            assert_eq!(log.session_id, "ses-claude");
+        }
+
+        // Verify chronological ordering (timestamps are non-decreasing)
+        for i in 0..logs.len() - 1 {
+            assert!(logs[i].timestamp <= logs[i + 1].timestamp, "Logs should be in chronological order");
+        }
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
     fn test_mark_running_sessions_interrupted() {
         let (db, path) = make_test_db("mark_interrupted");
         insert_test_task(&db);
