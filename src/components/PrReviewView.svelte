@@ -1,7 +1,9 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
-  import { reviewPrs, selectedReviewPr, prFileDiffs, reviewRequestCount, reviewComments, pendingManualComments, prOverviewComments } from '../lib/stores'
-  import { fetchReviewPrs, getReviewPrs, getPrFileDiffs, openUrl, getReviewComments, getFileContent, getFileAtRef, markReviewPrViewed } from '../lib/ipc'
+  import { onMount, onDestroy } from 'svelte'
+  import { listen } from '@tauri-apps/api/event'
+  import type { UnlistenFn } from '@tauri-apps/api/event'
+  import { reviewPrs, selectedReviewPr, prFileDiffs, reviewRequestCount, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, agentReviewLoading, agentReviewError } from '../lib/stores'
+  import { fetchReviewPrs, getReviewPrs, getPrFileDiffs, openUrl, getReviewComments, getFileContent, getFileAtRef, markReviewPrViewed, startAgentReview, getAgentReviewComments, abortAgentReview } from '../lib/ipc'
   import { pushNavState, navigateBack } from '../lib/navigation'
   import { timeAgo } from '../lib/timeAgo'
   import ReviewPrCard from './ReviewPrCard.svelte'
@@ -19,6 +21,8 @@
   let diffViewer = $state<DiffViewer>()
   let fileTreeVisible = $state(true)
   let activeTab = $state<PrDetailTab>('overview')
+  let reviewSessionKey = $state<string | null>(null)
+  let unlisteners: UnlistenFn[] = []
 
   let groupedPrs = $derived(groupByRepo($reviewPrs))
 
@@ -78,6 +82,8 @@
       $prFileDiffs = diffs
       const comments = await getReviewComments(pr.repo_owner, pr.repo_name, pr.number)
       $reviewComments = comments
+      const agentComments = await getAgentReviewComments(pr.id)
+      $agentReviewComments = agentComments
     } catch (e) {
       console.error('Failed to load PR diffs:', e)
       error = 'Failed to load pull request details.'
@@ -93,6 +99,11 @@
       $reviewComments = []
       $pendingManualComments = []
       $prOverviewComments = []
+      $agentReviewComments = []
+      $agentReviewLoading = false
+      $agentReviewError = null
+      reviewSessionKey = null
+      showOutputModal = false
     }
     activeTab = 'overview'
   }
@@ -106,6 +117,41 @@
   function openPrOnGitHub() {
     if ($selectedReviewPr) {
       openUrl($selectedReviewPr.html_url)
+    }
+  }
+
+  async function handleStartAgentReview() {
+    if (!$selectedReviewPr) return
+    $agentReviewLoading = true
+    $agentReviewError = null
+    try {
+      const result = await startAgentReview(
+        $selectedReviewPr.repo_owner,
+        $selectedReviewPr.repo_name,
+        $selectedReviewPr.number,
+        $selectedReviewPr.head_ref,
+        $selectedReviewPr.base_ref,
+        $selectedReviewPr.title,
+        $selectedReviewPr.body,
+        $selectedReviewPr.id
+      )
+      reviewSessionKey = result.review_session_key
+    } catch (e) {
+      console.error('[PrReviewView] Failed to start agent review:', e)
+      $agentReviewError = 'Failed to start AI review. Please try again.'
+      $agentReviewLoading = false
+    }
+  }
+
+  async function handleCancelReview() {
+    if (!reviewSessionKey) return
+    try {
+      await abortAgentReview(reviewSessionKey)
+    } catch (e) {
+      console.error('[PrReviewView] Failed to cancel agent review:', e)
+    } finally {
+      $agentReviewLoading = false
+      reviewSessionKey = null
     }
   }
 
@@ -132,8 +178,41 @@
     return { oldContent, newContent }
   }
 
-  onMount(() => {
+  onMount(async () => {
     loadPrs()
+    unlisteners.push(
+      await listen<{ task_id: string; event_type: string; data: string }>('agent-event', async (event) => {
+        const { task_id, event_type, data } = event.payload
+        const pr = $selectedReviewPr
+        if (!pr) return
+        if (task_id !== `pr-review-${pr.id}`) return
+
+        if (event_type === 'session.idle' || event_type === 'session.status') {
+          try {
+            const parsed = JSON.parse(data)
+            const statusType = parsed.properties?.status?.type
+            if (event_type === 'session.idle' || statusType === 'idle') {
+              const comments = await getAgentReviewComments(pr.id)
+              $agentReviewComments = comments
+              $agentReviewLoading = false
+            }
+          } catch {
+            if (event_type === 'session.idle') {
+              const comments = await getAgentReviewComments(pr.id)
+              $agentReviewComments = comments
+              $agentReviewLoading = false
+            }
+          }
+        } else if (event_type === 'session.error') {
+          $agentReviewError = 'Agent review failed. Please try again.'
+          $agentReviewLoading = false
+        }
+      })
+    )
+  })
+
+  onDestroy(() => {
+    unlisteners.forEach(fn => fn())
   })
 </script>
 
@@ -202,7 +281,37 @@
               {fileTreeVisible}
               onToggleFileTree={() => { fileTreeVisible = !fileTreeVisible }}
               fetchFileContents={fetchPrFileContents}
-            />
+              agentComments={$agentReviewComments}
+            >
+              {#snippet toolbarExtra()}
+                <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
+                {#if $agentReviewLoading}
+                  <button class="btn btn-ghost btn-xs gap-1 text-base-content/50" disabled>
+                    <span class="loading loading-spinner loading-xs"></span>
+                    Reviewing...
+                  </button>
+                  <button
+                    class="btn btn-ghost btn-xs text-error"
+                    onclick={handleCancelReview}
+                    title="Cancel AI review"
+                  >Cancel</button>
+                {:else}
+                  <button
+                    class="btn btn-ghost btn-xs gap-1 text-base-content/50"
+                    onclick={handleStartAgentReview}
+                    title="Start AI review"
+                  >
+                    AI Review
+                    {#if $agentReviewComments.length > 0}
+                      <span class="badge badge-primary badge-xs">{$agentReviewComments.length}</span>
+                    {/if}
+                  </button>
+                {/if}
+                {#if $agentReviewError}
+                  <span class="text-xs text-error">{$agentReviewError}</span>
+                {/if}
+              {/snippet}
+            </DiffViewer>
           {/if}
         </div>
 
