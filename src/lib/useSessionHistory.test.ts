@@ -9,11 +9,12 @@ vi.mock('./stores', () => ({
 vi.mock('./ipc', () => ({
   getLatestSession: vi.fn().mockResolvedValue(null),
   getWorktreeForTask: vi.fn().mockResolvedValue(null),
+  getAgentLogs: vi.fn().mockResolvedValue([]),
 }))
 
 import { createSessionHistory } from './useSessionHistory.svelte'
 import { activeSessions } from './stores'
-import { getLatestSession } from './ipc'
+import { getLatestSession, getAgentLogs } from './ipc'
 
 const baseSession: AgentSession = {
   id: 'ses-1',
@@ -25,6 +26,8 @@ const baseSession: AgentSession = {
   error_message: null,
   created_at: 1000,
   updated_at: 2000,
+  provider: 'opencode',
+  claude_session_id: null,
 }
 
 describe('createSessionHistory', () => {
@@ -100,5 +103,46 @@ describe('createSessionHistory', () => {
     await history.loadSessionHistory()
     // Existing session should trigger status update without needing DB lookup
     expect(onStatusUpdate).toHaveBeenCalledWith('complete')
+  })
+
+  it('starts with empty storedEvents', () => {
+    const history = createSessionHistory({ taskId, getOpencodePort, setOpencodePort, onStatusUpdate })
+    expect(history.storedEvents).toEqual([])
+  })
+
+  it('fetches agent logs for claude-code sessions', async () => {
+    const mockLogs = [
+      { id: 1, session_id: 'ses-1', timestamp: 1000, log_type: 'system.init', content: '{}' },
+      { id: 2, session_id: 'ses-1', timestamp: 1001, log_type: 'assistant', content: '{}' },
+    ]
+    vi.mocked(getAgentLogs).mockResolvedValue(mockLogs)
+    vi.mocked(getLatestSession).mockResolvedValue({ ...baseSession, provider: 'claude-code', status: 'completed' })
+
+    const history = createSessionHistory({ taskId, getOpencodePort, setOpencodePort, onStatusUpdate })
+    await history.loadSessionHistory()
+
+    expect(getAgentLogs).toHaveBeenCalledWith('ses-1')
+    expect(history.storedEvents).toEqual(mockLogs)
+  })
+
+  it('does not fetch agent logs for opencode sessions', async () => {
+    vi.mocked(getLatestSession).mockResolvedValue({ ...baseSession, provider: 'opencode', status: 'completed' })
+
+    const history = createSessionHistory({ taskId, getOpencodePort, setOpencodePort, onStatusUpdate })
+    await history.loadSessionHistory()
+
+    expect(getAgentLogs).not.toHaveBeenCalled()
+    expect(history.storedEvents).toEqual([])
+  })
+
+  it('handles getAgentLogs failure gracefully', async () => {
+    vi.mocked(getAgentLogs).mockRejectedValue(new Error('DB error'))
+    vi.mocked(getLatestSession).mockResolvedValue({ ...baseSession, provider: 'claude-code', status: 'completed' })
+
+    const history = createSessionHistory({ taskId, getOpencodePort, setOpencodePort, onStatusUpdate })
+    await history.loadSessionHistory()
+
+    // Should not throw, storedEvents should remain empty
+    expect(history.storedEvents).toEqual([])
   })
 })

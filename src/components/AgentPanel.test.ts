@@ -79,6 +79,7 @@ vi.mock('../lib/usePtyBridge.svelte', () => ({
 vi.mock('../lib/useSessionHistory.svelte', () => ({
   createSessionHistory: vi.fn(() => ({
     get loadingHistory() { return false },
+    get storedEvents() { return [] },
     loadSessionHistory: vi.fn().mockResolvedValue(undefined),
   })),
 }))
