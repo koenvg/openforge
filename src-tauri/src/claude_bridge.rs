@@ -100,174 +100,193 @@ impl ClaudeBridgeManager {
                                     continue;
                                 }
 
-                                let parsed = serde_json::from_str::<serde_json::Value>(&line).ok();
-                                if let Some(ref json) = parsed {
-                                    let event_type = json
-                                        .get("type")
-                                        .and_then(|t| t.as_str())
-                                        .unwrap_or("unknown");
-                                    let subtype = json
-                                        .get("subtype")
-                                        .and_then(|s| s.as_str())
-                                        .unwrap_or("");
+                                println!(
+                                    "[Claude Bridge] [{}] Raw line ({} bytes): {}",
+                                    task_id_clone,
+                                    line.len(),
+                                    if line.len() > 200 { &line[..200] } else { &line }
+                                );
 
-                                    let timestamp = std::time::SystemTime::now()
-                                        .duration_since(std::time::UNIX_EPOCH)
-                                        .unwrap_or_default()
-                                        .as_secs();
+                                let parsed = serde_json::from_str::<serde_json::Value>(&line);
+                                if let Err(ref e) = parsed {
+                                    eprintln!(
+                                        "[Claude Bridge] [{}] JSON parse error: {} — line: {}",
+                                        task_id_clone,
+                                        e,
+                                        if line.len() > 100 { &line[..100] } else { &line }
+                                    );
+                                    continue;
+                                }
+                                let json = parsed.unwrap();
+                                let event_type = json
+                                    .get("type")
+                                    .and_then(|t| t.as_str())
+                                    .unwrap_or("unknown");
+                                let subtype = json
+                                    .get("subtype")
+                                    .and_then(|s| s.as_str())
+                                    .unwrap_or("");
 
-                                    match (event_type, subtype) {
-                                        ("system", "init") => {
-                                            // Extract claude session_id and persist to DB
-                                            if let Some(claude_session_id) = json
-                                                .get("session_id")
-                                                .and_then(|s| s.as_str())
-                                            {
-                                                store_claude_session_id(
-                                                    &app,
-                                                    &task_id_clone,
-                                                    claude_session_id,
-                                                );
-                                            }
+                                println!(
+                                    "[Claude Bridge] [{}] Event: type={} subtype={}",
+                                    task_id_clone, event_type, subtype
+                                );
 
-                                            persist_event(&app, &task_id_clone, "system.init", &line);
+                                let timestamp = std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_secs();
 
-                                            let payload = AgentEventPayload {
-                                                task_id: task_id_clone.clone(),
-                                                event_type: "system.init".to_string(),
-                                                data: line.clone(),
-                                                timestamp,
-                                            };
-                                            if let Err(e) = app.emit("agent-event", &payload) {
-                                                eprintln!(
-                                                    "[Claude Bridge] Failed to emit agent-event: {}",
-                                                    e
-                                                );
-                                            }
-
-                                            // Emit synthetic session.status event so AgentPanel
-                                            // transitions to "running" and attaches the PTY.
-                                            // This matches the OpenCode event format that the
-                                            // frontend expects.
-                                            let busy_payload = AgentEventPayload {
-                                                task_id: task_id_clone.clone(),
-                                                event_type: "session.status".to_string(),
-                                                data: r#"{"properties":{"status":{"type":"busy"}}}"#.to_string(),
-                                                timestamp,
-                                            };
-                                            if let Err(e) = app.emit("agent-event", &busy_payload) {
-                                                eprintln!(
-                                                    "[Claude Bridge] Failed to emit synthetic session.status: {}",
-                                                    e
-                                                );
-                                            }
-                                        }
-
-                                        ("assistant", _) => {
-                                            persist_event(&app, &task_id_clone, "assistant", &line);
-                                            let payload = AgentEventPayload {
-                                                task_id: task_id_clone.clone(),
-                                                event_type: "assistant".to_string(),
-                                                data: line.clone(),
-                                                timestamp,
-                                            };
-                                            if let Err(e) = app.emit("agent-event", &payload) {
-                                                eprintln!(
-                                                    "[Claude Bridge] Failed to emit agent-event: {}",
-                                                    e
-                                                );
-                                            }
-                                        }
-
-                                        ("tool_use", _) => {
-                                            persist_event(&app, &task_id_clone, "tool_use", &line);
-                                            let payload = AgentEventPayload {
-                                                task_id: task_id_clone.clone(),
-                                                event_type: "tool_use".to_string(),
-                                                data: line.clone(),
-                                                timestamp,
-                                            };
-                                            if let Err(e) = app.emit("agent-event", &payload) {
-                                                eprintln!(
-                                                    "[Claude Bridge] Failed to emit agent-event: {}",
-                                                    e
-                                                );
-                                            }
-                                        }
-
-                                        ("tool_result", _) => {
-                                            persist_event(&app, &task_id_clone, "tool_result", &line);
-                                            let payload = AgentEventPayload {
-                                                task_id: task_id_clone.clone(),
-                                                event_type: "tool_result".to_string(),
-                                                data: line.clone(),
-                                                timestamp,
-                                            };
-                                            if let Err(e) = app.emit("agent-event", &payload) {
-                                                eprintln!(
-                                                    "[Claude Bridge] Failed to emit agent-event: {}",
-                                                    e
-                                                );
-                                            }
-                                        }
-
-                                        ("result", "success") => {
-                                            persist_event(&app, &task_id_clone, "result.success", &line);
-                                            result_received = true;
-                                            println!(
-                                                "[Claude Bridge] Result success → action-complete for task {}",
-                                                task_id_clone
+                                match (event_type, subtype) {
+                                    ("system", "init") => {
+                                        // Extract claude session_id and persist to DB
+                                        if let Some(claude_session_id) = json
+                                            .get("session_id")
+                                            .and_then(|s| s.as_str())
+                                        {
+                                            store_claude_session_id(
+                                                &app,
+                                                &task_id_clone,
+                                                claude_session_id,
                                             );
-                                            persist_session_completed(&app, &task_id_clone);
-                                            let completion = CompletionPayload {
-                                                task_id: task_id_clone.clone(),
-                                            };
-                                            if let Err(e) = app.emit("action-complete", &completion) {
-                                                eprintln!(
-                                                    "[Claude Bridge] Failed to emit action-complete: {}",
-                                                    e
-                                                );
-                                            }
                                         }
 
-                                        ("result", sub) if sub.starts_with("error") => {
-                                            persist_event(&app, &task_id_clone, &format!("result.{}", sub), &line);
-                                            result_received = true;
-                                            println!(
-                                                "[Claude Bridge] Result error ({}) → implementation-failed for task {}",
-                                                sub, task_id_clone
+                                        persist_event(&app, &task_id_clone, "system.init", &line);
+
+                                        let payload = AgentEventPayload {
+                                            task_id: task_id_clone.clone(),
+                                            event_type: "system.init".to_string(),
+                                            data: line.clone(),
+                                            timestamp,
+                                        };
+                                        if let Err(e) = app.emit("agent-event", &payload) {
+                                            eprintln!(
+                                                "[Claude Bridge] Failed to emit agent-event: {}",
+                                                e
                                             );
-                                            persist_session_failed(&app, &task_id_clone, &line);
-                                            let failure = FailurePayload {
-                                                task_id: task_id_clone.clone(),
-                                                error: line.clone(),
-                                            };
-                                            if let Err(e) =
-                                                app.emit("implementation-failed", &failure)
-                                            {
-                                                eprintln!(
-                                                    "[Claude Bridge] Failed to emit implementation-failed: {}",
-                                                    e
-                                                );
-                                            }
                                         }
 
-                                        _ => {
-                                            // Forward other events as generic agent-events
-                                            persist_event(&app, &task_id_clone, event_type, &line);
-                                            // Forward other events as generic agent-events
-                                            let payload = AgentEventPayload {
-                                                task_id: task_id_clone.clone(),
-                                                event_type: event_type.to_string(),
-                                                data: line.clone(),
-                                                timestamp,
-                                            };
-                                            if let Err(e) = app.emit("agent-event", &payload) {
-                                                eprintln!(
-                                                    "[Claude Bridge] Failed to emit agent-event: {}",
-                                                    e
-                                                );
-                                            }
+                                        // Emit synthetic session.status event so AgentPanel
+                                        // transitions to "running" and attaches the PTY.
+                                        // This matches the OpenCode event format that the
+                                        // frontend expects.
+                                        let busy_payload = AgentEventPayload {
+                                            task_id: task_id_clone.clone(),
+                                            event_type: "session.status".to_string(),
+                                            data: r#"{"properties":{"status":{"type":"busy"}}}"#.to_string(),
+                                            timestamp,
+                                        };
+                                        if let Err(e) = app.emit("agent-event", &busy_payload) {
+                                            eprintln!(
+                                                "[Claude Bridge] Failed to emit synthetic session.status: {}",
+                                                e
+                                            );
+                                        }
+                                    }
+
+                                    ("assistant", _) => {
+                                        persist_event(&app, &task_id_clone, "assistant", &line);
+                                        let payload = AgentEventPayload {
+                                            task_id: task_id_clone.clone(),
+                                            event_type: "assistant".to_string(),
+                                            data: line.clone(),
+                                            timestamp,
+                                        };
+                                        if let Err(e) = app.emit("agent-event", &payload) {
+                                            eprintln!(
+                                                "[Claude Bridge] Failed to emit agent-event: {}",
+                                                e
+                                            );
+                                        }
+                                    }
+
+                                    ("tool_use", _) => {
+                                        persist_event(&app, &task_id_clone, "tool_use", &line);
+                                        let payload = AgentEventPayload {
+                                            task_id: task_id_clone.clone(),
+                                            event_type: "tool_use".to_string(),
+                                            data: line.clone(),
+                                            timestamp,
+                                        };
+                                        if let Err(e) = app.emit("agent-event", &payload) {
+                                            eprintln!(
+                                                "[Claude Bridge] Failed to emit agent-event: {}",
+                                                e
+                                            );
+                                        }
+                                    }
+
+                                    ("tool_result", _) => {
+                                        persist_event(&app, &task_id_clone, "tool_result", &line);
+                                        let payload = AgentEventPayload {
+                                            task_id: task_id_clone.clone(),
+                                            event_type: "tool_result".to_string(),
+                                            data: line.clone(),
+                                            timestamp,
+                                        };
+                                        if let Err(e) = app.emit("agent-event", &payload) {
+                                            eprintln!(
+                                                "[Claude Bridge] Failed to emit agent-event: {}",
+                                                e
+                                            );
+                                        }
+                                    }
+
+                                    ("result", "success") => {
+                                        persist_event(&app, &task_id_clone, "result.success", &line);
+                                        result_received = true;
+                                        println!(
+                                            "[Claude Bridge] Result success → action-complete for task {}",
+                                            task_id_clone
+                                        );
+                                        persist_session_completed(&app, &task_id_clone);
+                                        let completion = CompletionPayload {
+                                            task_id: task_id_clone.clone(),
+                                        };
+                                        if let Err(e) = app.emit("action-complete", &completion) {
+                                            eprintln!(
+                                                "[Claude Bridge] Failed to emit action-complete: {}",
+                                                e
+                                            );
+                                        }
+                                    }
+
+                                    ("result", sub) if sub.starts_with("error") => {
+                                        persist_event(&app, &task_id_clone, &format!("result.{}", sub), &line);
+                                        result_received = true;
+                                        println!(
+                                            "[Claude Bridge] Result error ({}) → implementation-failed for task {}",
+                                            sub, task_id_clone
+                                        );
+                                        persist_session_failed(&app, &task_id_clone, &line);
+                                        let failure = FailurePayload {
+                                            task_id: task_id_clone.clone(),
+                                            error: line.clone(),
+                                        };
+                                        if let Err(e) =
+                                            app.emit("implementation-failed", &failure)
+                                        {
+                                            eprintln!(
+                                                "[Claude Bridge] Failed to emit implementation-failed: {}",
+                                                e
+                                            );
+                                        }
+                                    }
+
+                                    _ => {
+                                        // Forward other events as generic agent-events
+                                        persist_event(&app, &task_id_clone, event_type, &line);
+                                        let payload = AgentEventPayload {
+                                            task_id: task_id_clone.clone(),
+                                            event_type: event_type.to_string(),
+                                            data: line.clone(),
+                                            timestamp,
+                                        };
+                                        if let Err(e) = app.emit("agent-event", &payload) {
+                                            eprintln!(
+                                                "[Claude Bridge] Failed to emit agent-event: {}",
+                                                e
+                                            );
                                         }
                                     }
                                 }
@@ -425,15 +444,35 @@ fn persist_session_interrupted(app: &AppHandle, task_id: &str) {
 
 fn persist_event(app: &AppHandle, task_id: &str, log_type: &str, content: &str) {
     let db = app.state::<std::sync::Mutex<db::Database>>();
-    if let Ok(db_lock) = db.lock() {
-        if let Ok(Some(session)) = db_lock.get_latest_session_for_ticket(task_id) {
-            if let Err(e) = db_lock.insert_agent_log(&session.id, log_type, content) {
-                eprintln!(
-                    "[Claude Bridge] Failed to insert agent log for task {}: {}",
+    match db.lock() {
+        Ok(db_lock) => {
+            match db_lock.get_latest_session_for_ticket(task_id) {
+                Ok(Some(session)) => {
+                    match db_lock.insert_agent_log(&session.id, log_type, content) {
+                        Ok(_) => println!(
+                            "[Claude Bridge] [{}] Persisted event: log_type={} session={} ({} bytes)",
+                            task_id, log_type, &session.id[..8.min(session.id.len())], content.len()
+                        ),
+                        Err(e) => eprintln!(
+                            "[Claude Bridge] [{}] Failed to insert agent log: {}",
+                            task_id, e
+                        ),
+                    }
+                }
+                Ok(None) => eprintln!(
+                    "[Claude Bridge] [{}] No session found for persist_event (log_type={}). Session may not be created yet.",
+                    task_id, log_type
+                ),
+                Err(e) => eprintln!(
+                    "[Claude Bridge] [{}] DB error looking up session: {}",
                     task_id, e
-                );
+                ),
             }
         }
+        Err(e) => eprintln!(
+            "[Claude Bridge] [{}] Failed to acquire DB lock: {}",
+            task_id, e
+        ),
     };
 }
 

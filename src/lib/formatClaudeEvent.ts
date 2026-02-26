@@ -4,10 +4,17 @@ const DIM = '\x1b[2m'
 const CYAN = '\x1b[36m'
 const BOLD = '\x1b[1m'
 const YELLOW = '\x1b[33m'
+const GREEN = '\x1b[32m'
 
 /**
  * Format a Claude NDJSON event into ANSI-colored terminal text.
  * Returns null for events that should be silently skipped.
+ *
+ * Claude CLI NDJSON format:
+ *   system.init: { type: "system", subtype: "init", session_id: "...", ... }
+ *   assistant:   { type: "assistant", message: { content: [{ type: "text"|"tool_use", ... }] } }
+ *   tool_result: { type: "tool_result", content: "..."|[...], tool_use_id: "..." }
+ *   result:      { type: "result", subtype: "success"|"error_...", result: "..." }
  */
 export function formatClaudeEvent(eventType: string, data: string): string | null {
   try {
@@ -19,11 +26,11 @@ export function formatClaudeEvent(eventType: string, data: string): string | nul
       case 'assistant':
         return formatAssistant(json)
 
-      case 'tool_use':
-        return formatToolUse(json)
-
       case 'tool_result':
         return formatToolResult(json)
+
+      case 'result.success':
+        return formatResultSuccess(json)
 
       default:
         return null
@@ -33,8 +40,15 @@ export function formatClaudeEvent(eventType: string, data: string): string | nul
   }
 }
 
+/**
+ * Format an assistant message event.
+ * Content is nested at json.message.content (array of text/tool_use blocks).
+ */
 function formatAssistant(json: Record<string, unknown>): string | null {
-  const content = json.content
+  const message = json.message as Record<string, unknown> | undefined
+  if (!message) return null
+
+  const content = message.content
   if (!Array.isArray(content)) return null
 
   let out = ''
@@ -42,7 +56,10 @@ function formatAssistant(json: Record<string, unknown>): string | null {
     if (block && typeof block === 'object' && 'type' in block) {
       if (block.type === 'text' && typeof block.text === 'string') {
         out += formatTextBlock(block.text)
+      } else if (block.type === 'tool_use') {
+        out += formatToolUseBlock(block as Record<string, unknown>)
       }
+      // Skip 'thinking' blocks silently
     }
   }
   return out || null
@@ -54,12 +71,14 @@ function formatTextBlock(text: string): string {
   return text.replace(/\n/g, '\r\n') + '\r\n'
 }
 
-function formatToolUse(json: Record<string, unknown>): string | null {
-  const name = typeof json.name === 'string' ? json.name : 'unknown_tool'
+/**
+ * Format a tool_use content block (inside an assistant message).
+ */
+function formatToolUseBlock(block: Record<string, unknown>): string {
+  const name = typeof block.name === 'string' ? block.name : 'unknown_tool'
   let inputPreview = ''
-  if (json.input && typeof json.input === 'object') {
-    const input = json.input as Record<string, unknown>
-    // Show a short preview of tool input
+  if (block.input && typeof block.input === 'object') {
+    const input = block.input as Record<string, unknown>
     const keys = Object.keys(input)
     if (keys.length > 0) {
       const firstKey = keys[0]
@@ -70,6 +89,10 @@ function formatToolUse(json: Record<string, unknown>): string | null {
   return `\r\n${CYAN}${BOLD}> ${name}${RESET}${inputPreview}\r\n`
 }
 
+/**
+ * Format a top-level tool_result event.
+ * Format: { type: "tool_result", content: "..."|[...], tool_use_id: "..." }
+ */
 function formatToolResult(json: Record<string, unknown>): string | null {
   const content = json.content
   let summary = ''
@@ -77,7 +100,6 @@ function formatToolResult(json: Record<string, unknown>): string | null {
   if (typeof content === 'string') {
     summary = truncate(content, 200)
   } else if (Array.isArray(content)) {
-    // content blocks: extract text from first text block
     for (const block of content) {
       if (block && typeof block === 'object' && 'type' in block && block.type === 'text' && typeof block.text === 'string') {
         summary = truncate(block.text, 200)
@@ -88,9 +110,18 @@ function formatToolResult(json: Record<string, unknown>): string | null {
 
   if (!summary) return `${DIM}  (result)${RESET}\r\n`
 
-  // Show truncated result, converting newlines for terminal
   const formatted = summary.replace(/\n/g, '\r\n')
   return `${DIM}${YELLOW}  ${formatted}${RESET}\r\n`
+}
+
+/**
+ * Format a result.success event (final summary).
+ */
+function formatResultSuccess(json: Record<string, unknown>): string | null {
+  const result = typeof json.result === 'string' ? json.result : null
+  if (!result) return `\r\n${GREEN}${BOLD}--- Done ---${RESET}\r\n`
+  const formatted = truncate(result, 300).replace(/\n/g, '\r\n')
+  return `\r\n${GREEN}${BOLD}--- Done ---${RESET}\r\n${DIM}${formatted}${RESET}\r\n`
 }
 
 function truncate(str: string, maxLen: number): string {

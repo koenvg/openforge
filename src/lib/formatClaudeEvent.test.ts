@@ -17,10 +17,10 @@ describe('formatClaudeEvent', () => {
     expect(result).toContain('unknown')
   })
 
-  it('formats assistant event with text content', () => {
+  it('formats assistant event with text content (nested under message)', () => {
     const data = JSON.stringify({
       type: 'assistant',
-      content: [{ type: 'text', text: 'Hello world' }],
+      message: { content: [{ type: 'text', text: 'Hello world' }] },
     })
     const result = formatClaudeEvent('assistant', data)
     expect(result).toContain('Hello world')
@@ -30,54 +30,87 @@ describe('formatClaudeEvent', () => {
   it('formats assistant event with multiline text', () => {
     const data = JSON.stringify({
       type: 'assistant',
-      content: [{ type: 'text', text: 'line1\nline2' }],
+      message: { content: [{ type: 'text', text: 'line1\nline2' }] },
     })
     const result = formatClaudeEvent('assistant', data)
     expect(result).toContain('line1\r\nline2')
   })
 
-  it('returns null for assistant event with no text content', () => {
+  it('formats assistant event with tool_use content block', () => {
     const data = JSON.stringify({
       type: 'assistant',
-      content: [{ type: 'tool_use', name: 'foo' }],
+      message: {
+        content: [{ type: 'tool_use', name: 'Read', input: { file_path: '/src/main.ts' } }],
+      },
     })
+    const result = formatClaudeEvent('assistant', data)
+    expect(result).toContain('Read')
+    expect(result).toContain('file_path=/src/main.ts')
+  })
+
+  it('formats assistant event with mixed text and tool_use blocks', () => {
+    const data = JSON.stringify({
+      type: 'assistant',
+      message: {
+        content: [
+          { type: 'text', text: 'Let me read that file' },
+          { type: 'tool_use', name: 'Read', input: { file_path: '/src/main.ts' } },
+        ],
+      },
+    })
+    const result = formatClaudeEvent('assistant', data)
+    expect(result).toContain('Let me read that file')
+    expect(result).toContain('Read')
+  })
+
+  it('skips thinking blocks in assistant events', () => {
+    const data = JSON.stringify({
+      type: 'assistant',
+      message: {
+        content: [
+          { type: 'thinking', thinking: 'Let me think about this...' },
+          { type: 'text', text: 'Here is my answer' },
+        ],
+      },
+    })
+    const result = formatClaudeEvent('assistant', data)
+    expect(result).not.toContain('Let me think')
+    expect(result).toContain('Here is my answer')
+  })
+
+  it('returns null for assistant event with only thinking blocks', () => {
+    const data = JSON.stringify({
+      type: 'assistant',
+      message: {
+        content: [{ type: 'thinking', thinking: 'Hmm...' }],
+      },
+    })
+    const result = formatClaudeEvent('assistant', data)
+    expect(result).toBeNull()
+  })
+
+  it('returns null for assistant event with no message field', () => {
+    const data = JSON.stringify({ type: 'assistant' })
     const result = formatClaudeEvent('assistant', data)
     expect(result).toBeNull()
   })
 
   it('returns null for assistant event with non-array content', () => {
-    const data = JSON.stringify({ type: 'assistant', content: 'not an array' })
+    const data = JSON.stringify({ type: 'assistant', message: { content: 'not an array' } })
     const result = formatClaudeEvent('assistant', data)
     expect(result).toBeNull()
   })
 
-  it('formats tool_use event with name and input preview', () => {
-    const data = JSON.stringify({
-      type: 'tool_use',
-      name: 'Read',
-      input: { file_path: '/src/main.ts' },
-    })
-    const result = formatClaudeEvent('tool_use', data)
-    expect(result).toContain('Read')
-    expect(result).toContain('file_path=/src/main.ts')
-  })
-
-  it('formats tool_use event with no input', () => {
-    const data = JSON.stringify({ type: 'tool_use', name: 'Bash' })
-    const result = formatClaudeEvent('tool_use', data)
-    expect(result).toContain('Bash')
-  })
-
-  it('truncates long tool input values', () => {
+  it('truncates long tool input values in tool_use blocks', () => {
     const longVal = 'a'.repeat(100)
     const data = JSON.stringify({
-      type: 'tool_use',
-      name: 'Write',
-      input: { content: longVal },
+      type: 'assistant',
+      message: {
+        content: [{ type: 'tool_use', name: 'Write', input: { content: longVal } }],
+      },
     })
-    const result = formatClaudeEvent('tool_use', data)
+    const result = formatClaudeEvent('assistant', data)
     expect(result).toContain('...')
-    // Should be truncated to 60 chars + ...
     expect(result!.length).toBeLessThan(longVal.length + 50)
   })
 
@@ -112,9 +145,22 @@ describe('formatClaudeEvent', () => {
     expect(result).toContain('...')
   })
 
-  it('returns null for unknown event types', () => {
+  it('formats result.success with result text', () => {
+    const data = JSON.stringify({ type: 'result', subtype: 'success', result: 'All done!' })
+    const result = formatClaudeEvent('result.success', data)
+    expect(result).toContain('Done')
+    expect(result).toContain('All done!')
+  })
+
+  it('formats result.success without result text', () => {
     const data = JSON.stringify({ type: 'result', subtype: 'success' })
-    expect(formatClaudeEvent('result', data)).toBeNull()
+    const result = formatClaudeEvent('result.success', data)
+    expect(result).toContain('Done')
+  })
+
+  it('returns null for unknown event types', () => {
+    const data = JSON.stringify({ type: 'unknown' })
+    expect(formatClaudeEvent('unknown', data)).toBeNull()
   })
 
   it('returns null for invalid JSON', () => {

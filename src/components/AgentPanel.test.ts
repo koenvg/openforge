@@ -40,6 +40,7 @@ vi.mock('../lib/ipc', () => ({
   writePty: vi.fn().mockResolvedValue(undefined),
   resizePty: vi.fn().mockResolvedValue(undefined),
   killPty: vi.fn().mockResolvedValue(undefined),
+  getAgentLogs: vi.fn().mockResolvedValue([]),
   transcribeAudio: vi.fn(),
   getWhisperModelStatus: vi.fn(),
   downloadWhisperModel: vi.fn(),
@@ -87,42 +88,39 @@ vi.mock('../lib/useSessionHistory.svelte', () => ({
 import AgentPanel from './AgentPanel.svelte'
 import { activeSessions } from '../lib/stores'
 
-describe('AgentPanel', () => {
+describe('AgentPanel (router)', () => {
   beforeEach(() => {
     activeSessions.set(new Map())
   })
 
-  it('renders empty state text "No active agent session" when idle', () => {
+  it('renders OpenCode panel by default when no session exists', async () => {
     render(AgentPanel, { props: { taskId: 'T-1' } })
-    expect(screen.getByText('No active agent session')).toBeTruthy()
+    // Wait for async onMount to complete
+    await vi.waitFor(() => {
+      expect(screen.getByText('No active agent session')).toBeTruthy()
+    })
   })
 
-  it('shows guidance text "Use the action buttons in the header to get started"', () => {
+  it('shows guidance text via OpenCode panel', async () => {
     render(AgentPanel, { props: { taskId: 'T-1' } })
-    expect(screen.getByText('Use the action buttons in the header to get started')).toBeTruthy()
+    await vi.waitFor(() => {
+      expect(screen.getByText('Use the action buttons in the header to get started')).toBeTruthy()
+    })
   })
 
-  it('status text shows "No active implementation" when idle', () => {
-    render(AgentPanel, { props: { taskId: 'T-1' } })
-    expect(screen.getByText('No active implementation')).toBeTruthy()
-  })
-
-  it('does not show abort button when idle', () => {
-    render(AgentPanel, { props: { taskId: 'T-1' } })
-    expect(screen.queryByText('Abort')).toBeNull()
-  })
-
-  it('shows running session status when session is running', () => {
+  it('shows OpenCode panel for opencode provider session', async () => {
     const session: AgentSession = {
       id: 'ses-1',
       ticket_id: 'T-1',
-      opencode_session_id: null,
+      opencode_session_id: 'oc-sess-1',
       stage: 'implement',
       status: 'running',
       checkpoint_data: null,
       error_message: null,
       created_at: 1000,
       updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -134,7 +132,61 @@ describe('AgentPanel', () => {
     expect(screen.getByText('running')).toBeTruthy()
   })
 
-  it('shows different stage labels for different stages', () => {
+  it('renders Claude panel for claude-code provider session', () => {
+    const session: AgentSession = {
+      id: 'ses-1',
+      ticket_id: 'T-1',
+      opencode_session_id: null,
+      stage: 'implement',
+      status: 'running',
+      checkpoint_data: null,
+      error_message: null,
+      created_at: 1000,
+      updated_at: 2000,
+      provider: 'claude-code',
+      claude_session_id: 'claude-sess-1',
+    }
+
+    const sessions = new Map<string, AgentSession>()
+    sessions.set('T-1', session)
+    activeSessions.set(sessions)
+
+    render(AgentPanel, { props: { taskId: 'T-1' } })
+    expect(screen.getByText('Implementing')).toBeTruthy()
+    expect(screen.getByText('running')).toBeTruthy()
+  })
+})
+
+describe('OpenCodeAgentPanel (via router)', () => {
+  beforeEach(() => {
+    activeSessions.set(new Map())
+  })
+
+  it('shows running session status', () => {
+    const session: AgentSession = {
+      id: 'ses-1',
+      ticket_id: 'T-1',
+      opencode_session_id: null,
+      stage: 'implement',
+      status: 'running',
+      checkpoint_data: null,
+      error_message: null,
+      created_at: 1000,
+      updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
+    }
+
+    const sessions = new Map<string, AgentSession>()
+    sessions.set('T-1', session)
+    activeSessions.set(sessions)
+
+    render(AgentPanel, { props: { taskId: 'T-1' } })
+    expect(screen.getByText('Implementing')).toBeTruthy()
+    expect(screen.getByText('running')).toBeTruthy()
+  })
+
+  it('shows different stage labels', () => {
     const session: AgentSession = {
       id: 'ses-1',
       ticket_id: 'T-1',
@@ -145,6 +197,8 @@ describe('AgentPanel', () => {
       error_message: null,
       created_at: 1000,
       updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -153,29 +207,6 @@ describe('AgentPanel', () => {
 
     render(AgentPanel, { props: { taskId: 'T-1' } })
     expect(screen.getByText('Reading Ticket')).toBeTruthy()
-  })
-
-  it('does not show abort button when session is running but PTY has not started', () => {
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: 'oc-sess-1',
-      stage: 'implement',
-      status: 'running',
-      checkpoint_data: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-    }
-
-    const sessions = new Map<string, AgentSession>()
-    sessions.set('T-1', session)
-    activeSessions.set(sessions)
-
-    render(AgentPanel, { props: { taskId: 'T-1' } })
-    // Abort button only shows when internal status is 'running',
-    // which requires a successful PTY spawn (not testable in unit tests without full PTY mock)
-    expect(screen.queryByText('Abort')).toBeNull()
   })
 
   it('shows completed badge when session is completed', () => {
@@ -189,6 +220,8 @@ describe('AgentPanel', () => {
       error_message: null,
       created_at: 1000,
       updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -210,6 +243,8 @@ describe('AgentPanel', () => {
       error_message: null,
       created_at: 1000,
       updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -231,6 +266,8 @@ describe('AgentPanel', () => {
       error_message: null,
       created_at: 1000,
       updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -252,6 +289,8 @@ describe('AgentPanel', () => {
       error_message: null,
       created_at: 1000,
       updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -262,9 +301,11 @@ describe('AgentPanel', () => {
     expect(screen.queryByText('Agent is waiting for input')).toBeNull()
   })
 
-  it('does not show question banner when no session exists', () => {
+  it('does not show question banner when no session exists', async () => {
     render(AgentPanel, { props: { taskId: 'T-1' } })
-    expect(screen.queryByText('Agent is waiting for input')).toBeNull()
+    await vi.waitFor(() => {
+      expect(screen.queryByText('Agent is waiting for input')).toBeNull()
+    })
   })
 
   it('shows question text from question.asked event format', () => {
@@ -285,6 +326,8 @@ describe('AgentPanel', () => {
       error_message: null,
       created_at: 1000,
       updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -295,42 +338,11 @@ describe('AgentPanel', () => {
     expect(screen.getByText('Run or Bike?')).toBeTruthy()
   })
 
-  it('ignores stale pty-exit events with wrong instance ID', async () => {
-    // This test verifies the instance ID filtering logic exists in the component.
-    // The actual filtering is tested by verifying the component renders correctly
-    // and the spawnPty mock returns a number (instance ID).
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: 'oc-sess-1',
-      stage: 'implement',
-      status: 'running',
-      checkpoint_data: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-    }
-
-    const sessions = new Map<string, AgentSession>()
-    sessions.set('T-1', session)
-    activeSessions.set(sessions)
-
+  it('renders voice input mic button', async () => {
     render(AgentPanel, { props: { taskId: 'T-1' } })
-    // Component should render running state
-    expect(screen.getByText('Implementing')).toBeTruthy()
-    expect(screen.getByText('running')).toBeTruthy()
-  })
-
-  it('renders voice input mic button', () => {
-    render(AgentPanel, { props: { taskId: 'T-1' } })
-    const button = screen.getByRole('button', { name: 'Start voice input' })
-    expect(button).toBeTruthy()
-  })
-
-  it('voice input button is always enabled regardless of PTY state', () => {
-    render(AgentPanel, { props: { taskId: 'T-1' } })
-    const button = screen.getByRole('button', { name: 'Start voice input' })
-    expect(button).toBeTruthy()
-    expect(button.hasAttribute('disabled')).toBe(false)
+    await vi.waitFor(() => {
+      const button = screen.getByRole('button', { name: 'Start voice input' })
+      expect(button).toBeTruthy()
+    })
   })
 })

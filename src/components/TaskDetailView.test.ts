@@ -1,3 +1,63 @@
+// Mock xterm.js — provide a minimal Terminal stub
+vi.mock('@xterm/xterm', () => {
+  const Terminal = vi.fn().mockImplementation(() => ({
+    open: vi.fn(),
+    write: vi.fn(),
+    dispose: vi.fn(),
+    onData: vi.fn(),
+    loadAddon: vi.fn(),
+    refresh: vi.fn(),
+    cols: 80,
+    rows: 24,
+  }))
+  return { Terminal }
+})
+
+vi.mock('@xterm/addon-fit', () => {
+  const FitAddon = vi.fn().mockImplementation(() => ({
+    fit: vi.fn(),
+    proposeDimensions: vi.fn().mockReturnValue({ cols: 80, rows: 24 }),
+  }))
+  return { FitAddon }
+})
+
+vi.mock('@xterm/xterm/css/xterm.css', () => ({}))
+
+vi.mock('../lib/audioRecorder', () => ({
+  createAudioRecorder: vi.fn(),
+}))
+
+// Mock composables to avoid xterm constructor issues in test environment
+vi.mock('../lib/useTerminal.svelte', () => ({
+  createTerminal: vi.fn(() => ({
+    get terminalEl() { return null },
+    set terminalEl(_el: HTMLDivElement | null) {},
+    get terminal() { return null },
+    get terminalMounted() { return false },
+    mount: vi.fn().mockResolvedValue(undefined),
+    safeFit: vi.fn(),
+    dispose: vi.fn(),
+  })),
+}))
+
+vi.mock('../lib/usePtyBridge.svelte', () => ({
+  createPtyBridge: vi.fn(() => ({
+    get ptySpawned() { return false },
+    attachPty: vi.fn().mockResolvedValue(undefined),
+    writeToPty: vi.fn(),
+    killPty: vi.fn().mockResolvedValue(undefined),
+    dispose: vi.fn(),
+  })),
+}))
+
+vi.mock('../lib/useSessionHistory.svelte', () => ({
+  createSessionHistory: vi.fn(() => ({
+    get loadingHistory() { return false },
+    get storedEvents() { return [] },
+    loadSessionHistory: vi.fn().mockResolvedValue(undefined),
+  })),
+}))
+
 import { render, screen, waitFor, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
 import { writable } from 'svelte/store'
@@ -22,6 +82,15 @@ vi.mock('../lib/ipc', () => ({
   getConfig: vi.fn().mockResolvedValue(''),
   getProjectConfig: vi.fn().mockResolvedValue(null),
   setProjectConfig: vi.fn().mockResolvedValue(undefined),
+  getLatestSession: vi.fn().mockResolvedValue(null),
+  getAgentLogs: vi.fn().mockResolvedValue([]),
+  spawnPty: vi.fn().mockResolvedValue(1),
+  writePty: vi.fn().mockResolvedValue(undefined),
+  resizePty: vi.fn().mockResolvedValue(undefined),
+  killPty: vi.fn().mockResolvedValue(undefined),
+  transcribeAudio: vi.fn(),
+  getWhisperModelStatus: vi.fn(),
+  downloadWhisperModel: vi.fn(),
 }))
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -67,6 +136,8 @@ const baseSession: AgentSession = {
   error_message: null,
   created_at: 1000,
   updated_at: 2000,
+  provider: 'opencode',
+  claude_session_id: null,
 }
 
 describe('TaskDetailView', () => {
@@ -99,9 +170,11 @@ describe('TaskDetailView', () => {
     expect(matches.length).toBeGreaterThanOrEqual(1)
   })
 
-  it('has AgentPanel child with empty state text', () => {
+  it('has AgentPanel child with empty state text', async () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
-    expect(screen.getByText('No active agent session')).toBeTruthy()
+    await vi.waitFor(() => {
+      expect(screen.getByText('No active agent session')).toBeTruthy()
+    })
   })
 
   it('has TaskInfoPanel child with Initial Prompt section', () => {
