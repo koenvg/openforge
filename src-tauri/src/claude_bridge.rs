@@ -130,6 +130,8 @@ impl ClaudeBridgeManager {
                                                 );
                                             }
 
+                                            persist_event(&app, &task_id_clone, "system.init", &line);
+
                                             let payload = AgentEventPayload {
                                                 task_id: task_id_clone.clone(),
                                                 event_type: "system.init".to_string(),
@@ -142,9 +144,27 @@ impl ClaudeBridgeManager {
                                                     e
                                                 );
                                             }
+
+                                            // Emit synthetic session.status event so AgentPanel
+                                            // transitions to "running" and attaches the PTY.
+                                            // This matches the OpenCode event format that the
+                                            // frontend expects.
+                                            let busy_payload = AgentEventPayload {
+                                                task_id: task_id_clone.clone(),
+                                                event_type: "session.status".to_string(),
+                                                data: r#"{"properties":{"status":{"type":"busy"}}}"#.to_string(),
+                                                timestamp,
+                                            };
+                                            if let Err(e) = app.emit("agent-event", &busy_payload) {
+                                                eprintln!(
+                                                    "[Claude Bridge] Failed to emit synthetic session.status: {}",
+                                                    e
+                                                );
+                                            }
                                         }
 
                                         ("assistant", _) => {
+                                            persist_event(&app, &task_id_clone, "assistant", &line);
                                             let payload = AgentEventPayload {
                                                 task_id: task_id_clone.clone(),
                                                 event_type: "assistant".to_string(),
@@ -160,6 +180,7 @@ impl ClaudeBridgeManager {
                                         }
 
                                         ("tool_use", _) => {
+                                            persist_event(&app, &task_id_clone, "tool_use", &line);
                                             let payload = AgentEventPayload {
                                                 task_id: task_id_clone.clone(),
                                                 event_type: "tool_use".to_string(),
@@ -175,6 +196,7 @@ impl ClaudeBridgeManager {
                                         }
 
                                         ("tool_result", _) => {
+                                            persist_event(&app, &task_id_clone, "tool_result", &line);
                                             let payload = AgentEventPayload {
                                                 task_id: task_id_clone.clone(),
                                                 event_type: "tool_result".to_string(),
@@ -190,6 +212,7 @@ impl ClaudeBridgeManager {
                                         }
 
                                         ("result", "success") => {
+                                            persist_event(&app, &task_id_clone, "result.success", &line);
                                             result_received = true;
                                             println!(
                                                 "[Claude Bridge] Result success → action-complete for task {}",
@@ -208,6 +231,7 @@ impl ClaudeBridgeManager {
                                         }
 
                                         ("result", sub) if sub.starts_with("error") => {
+                                            persist_event(&app, &task_id_clone, &format!("result.{}", sub), &line);
                                             result_received = true;
                                             println!(
                                                 "[Claude Bridge] Result error ({}) → implementation-failed for task {}",
@@ -229,6 +253,8 @@ impl ClaudeBridgeManager {
                                         }
 
                                         _ => {
+                                            // Forward other events as generic agent-events
+                                            persist_event(&app, &task_id_clone, event_type, &line);
                                             // Forward other events as generic agent-events
                                             let payload = AgentEventPayload {
                                                 task_id: task_id_clone.clone(),
@@ -390,6 +416,20 @@ fn persist_session_interrupted(app: &AppHandle, task_id: &str) {
             ) {
                 eprintln!(
                     "[Claude Bridge] Failed to persist interrupted status for task {}: {}",
+                    task_id, e
+                );
+            }
+        }
+    };
+}
+
+fn persist_event(app: &AppHandle, task_id: &str, log_type: &str, content: &str) {
+    let db = app.state::<std::sync::Mutex<db::Database>>();
+    if let Ok(db_lock) = db.lock() {
+        if let Ok(Some(session)) = db_lock.get_latest_session_for_ticket(task_id) {
+            if let Err(e) = db_lock.insert_agent_log(&session.id, log_type, content) {
+                eprintln!(
+                    "[Claude Bridge] Failed to insert agent log for task {}: {}",
                     task_id, e
                 );
             }
