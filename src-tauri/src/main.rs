@@ -11,6 +11,7 @@ mod git_worktree;
 mod server_manager;
 mod sse_bridge;
 mod pty_manager;
+mod review_prompt;
 mod agent_coordinator;
 mod diff_parser;
 mod whisper_manager;
