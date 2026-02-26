@@ -15,6 +15,7 @@ mod agent_coordinator;
 mod diff_parser;
 mod whisper_manager;
 mod http_server;
+mod plugin_installer;
 mod commands;
 
 use std::sync::{Mutex, Arc};
@@ -154,6 +155,11 @@ fn main() {
                 Err(e) => {
                     eprintln!("[startup] Failed to clear stale worktree servers: {}", e);
                 }
+            }
+
+            // Install global OpenCode plugin for spawning tasks
+            if let Err(e) = plugin_installer::install_spawn_task_plugin() {
+                eprintln!("[startup] Failed to install spawn-task plugin: {}", e);
             }
             let whisper_model_pref = database.get_config("whisper_model_size")
                 .ok()
