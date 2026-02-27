@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::sync::{Mutex, Arc};
 use tauri::{State, Emitter};
 use crate::{db, opencode_client::OpenCodeClient, server_manager::ServerManager, sse_bridge::SseBridgeManager, git_worktree, pty_manager::PtyManager};
 
@@ -26,8 +26,9 @@ pub fn build_task_prompt(task: &db::TaskRow, action_instruction: &str, additiona
     prompt
 }
 
-pub(crate) async fn abort_task_agent(
-    db: &State<'_, Mutex<db::Database>>,
+
+    pub(crate) async fn abort_task_agent(
+    db: &State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: &State<'_, ServerManager>,
     sse_mgr: &State<'_, SseBridgeManager>,
     task_id: &str,
@@ -69,7 +70,7 @@ pub(crate) async fn abort_task_agent(
 
 #[tauri::command]
 pub async fn start_implementation(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, ServerManager>,
     sse_mgr: State<'_, SseBridgeManager>,
     app: tauri::AppHandle,
@@ -181,7 +182,7 @@ pub async fn start_implementation(
 
 #[tauri::command]
 pub async fn run_action(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, ServerManager>,
     sse_mgr: State<'_, SseBridgeManager>,
     app: tauri::AppHandle,
@@ -374,7 +375,8 @@ pub async fn run_action(
 
 #[tauri::command]
 pub async fn abort_implementation(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
+
     server_mgr: State<'_, ServerManager>,
     sse_mgr: State<'_, SseBridgeManager>,
     pty_mgr: State<'_, PtyManager>,

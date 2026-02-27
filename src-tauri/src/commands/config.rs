@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::sync::{Mutex, Arc};
 use tauri::State;
 use serde::Serialize;
 use crate::db;
@@ -46,7 +46,7 @@ pub async fn check_opencode_installed() -> Result<OpenCodeInstallStatus, String>
 
 #[tauri::command]
 pub async fn get_config(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     key: String,
 ) -> Result<Option<String>, String> {
     let db_lock = db.lock().unwrap();
@@ -56,7 +56,8 @@ pub async fn get_config(
 
 #[tauri::command]
 pub async fn set_config(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
+
     key: String,
     value: String,
 ) -> Result<(), String> {

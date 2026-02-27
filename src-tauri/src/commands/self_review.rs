@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::sync::{Mutex, Arc};
 use serde::Deserialize;
 use tauri::State;
 use crate::{db, diff_parser};
@@ -7,7 +7,7 @@ use crate::{db, diff_parser};
 pub async fn get_task_diff(
     task_id: String,
     include_uncommitted: bool,
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<Vec<diff_parser::TaskFileDiff>, String> {
     let worktree_path = {
         let db = db.lock().unwrap();
@@ -190,7 +190,7 @@ pub async fn get_task_file_contents(
     old_path: Option<String>,
     status: String,
     include_uncommitted: bool,
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<(String, String), String> {
     let worktree_path = {
         let db = db.lock().unwrap();
@@ -245,7 +245,7 @@ pub async fn get_task_batch_file_contents(
     task_id: String,
     files: Vec<FileContentRequest>,
     include_uncommitted: bool,
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<Vec<(String, String)>, String> {
     let worktree_path = {
         let db = db.lock().unwrap();
@@ -299,7 +299,7 @@ pub async fn add_self_review_comment(
     file_path: Option<String>,
     line_number: Option<i32>,
     body: String,
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<i64, String> {
     let db = db.lock().unwrap();
     db.insert_self_review_comment(
@@ -315,7 +315,7 @@ pub async fn add_self_review_comment(
 #[tauri::command]
 pub async fn get_active_self_review_comments(
     task_id: String,
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<Vec<db::SelfReviewCommentRow>, String> {
     let db = db.lock().unwrap();
     db.get_active_self_review_comments(&task_id)
@@ -325,7 +325,7 @@ pub async fn get_active_self_review_comments(
 #[tauri::command]
 pub async fn get_archived_self_review_comments(
     task_id: String,
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<Vec<db::SelfReviewCommentRow>, String> {
     let db = db.lock().unwrap();
     db.get_archived_self_review_comments(&task_id)
@@ -335,7 +335,7 @@ pub async fn get_archived_self_review_comments(
 #[tauri::command]
 pub async fn delete_self_review_comment(
     comment_id: i64,
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<(), String> {
     let db = db.lock().unwrap();
     db.delete_self_review_comment(comment_id)
@@ -345,7 +345,7 @@ pub async fn delete_self_review_comment(
 #[tauri::command]
 pub async fn archive_self_review_comments(
     task_id: String,
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<(), String> {
     let db = db.lock().unwrap();
     db.archive_self_review_comments(&task_id)

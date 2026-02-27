@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::sync::{Mutex, Arc};
 use tauri::{Emitter, State};
 use crate::{db, github_poller};
 
@@ -29,7 +29,7 @@ pub async fn open_url(url: String) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn get_pull_requests(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<Vec<db::PrRow>, String> {
     let db_lock = db.lock().unwrap();
     db_lock
@@ -39,7 +39,7 @@ pub async fn get_pull_requests(
 
 #[tauri::command]
 pub async fn get_pr_comments(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     pr_id: i64,
 ) -> Result<Vec<db::PrCommentRow>, String> {
     let db_lock = db.lock().unwrap();
@@ -52,7 +52,8 @@ pub async fn get_pr_comments(
 #[tauri::command]
 pub async fn mark_comment_addressed(
     app: tauri::AppHandle,
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
+
     comment_id: i64,
 ) -> Result<(), String> {
     let db_lock = db.lock().unwrap();

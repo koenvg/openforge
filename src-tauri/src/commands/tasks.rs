@@ -1,10 +1,10 @@
-use std::sync::Mutex;
+use std::sync::{Mutex, Arc};
 use tauri::{State, Emitter};
 use crate::{db, server_manager::ServerManager, sse_bridge::SseBridgeManager, pty_manager::PtyManager, git_worktree};
 
 #[tauri::command]
 pub async fn get_tasks(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<Vec<db::TaskRow>, String> {
     let db = db.lock().unwrap();
     db.get_all_tasks()
@@ -13,7 +13,7 @@ pub async fn get_tasks(
 
 #[tauri::command]
 pub async fn get_task_detail(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     task_id: String,
 ) -> Result<db::TaskRow, String> {
     let db = db.lock().unwrap();
@@ -24,7 +24,7 @@ pub async fn get_task_detail(
 
 #[tauri::command]
 pub async fn create_task(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     app: tauri::AppHandle,
     title: String,
     status: String,
@@ -40,7 +40,7 @@ pub async fn create_task(
 
 #[tauri::command]
 pub async fn update_task(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     app: tauri::AppHandle,
     id: String,
     title: String,
@@ -55,7 +55,7 @@ pub async fn update_task(
 
 #[tauri::command]
 pub async fn update_task_status(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, ServerManager>,
     sse_mgr: State<'_, SseBridgeManager>,
     pty_mgr: State<'_, PtyManager>,
@@ -107,7 +107,7 @@ pub async fn update_task_status(
 
 #[tauri::command]
 pub async fn delete_task(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, ServerManager>,
     sse_mgr: State<'_, SseBridgeManager>,
     pty_mgr: State<'_, PtyManager>,
@@ -146,7 +146,7 @@ pub async fn delete_task(
 
 #[tauri::command]
 pub async fn clear_done_tasks(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, ServerManager>,
     sse_mgr: State<'_, SseBridgeManager>,
     pty_mgr: State<'_, PtyManager>,

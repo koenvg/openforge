@@ -1,10 +1,11 @@
-use std::sync::Mutex;
+use std::sync::{Mutex, Arc};
 use tauri::State;
 use crate::{db, jira_client::JiraClient};
 
 #[tauri::command]
 pub async fn refresh_jira_info(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
+
     jira_client: State<'_, JiraClient>,
 ) -> Result<usize, String> {
     let (jira_base_url, jira_username, jira_api_token) = {

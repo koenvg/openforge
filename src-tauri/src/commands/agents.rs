@@ -1,10 +1,10 @@
-use std::sync::Mutex;
+use std::sync::{Mutex, Arc};
 use tauri::State;
 use crate::{db, opencode_client::OpenCodeClient, server_manager::ServerManager, sse_bridge::SseBridgeManager};
 
 #[tauri::command]
 pub async fn get_session_status(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     session_id: String,
 ) -> Result<db::AgentSessionRow, String> {
     let db_lock = db.lock().unwrap();
@@ -16,7 +16,7 @@ pub async fn get_session_status(
 
 #[tauri::command]
 pub async fn abort_session(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, ServerManager>,
     sse_mgr: State<'_, SseBridgeManager>,
     _app: tauri::AppHandle,
@@ -70,7 +70,7 @@ pub async fn abort_session(
 /// Get agent logs for a session
 #[tauri::command]
 pub async fn get_agent_logs(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     session_id: String,
 ) -> Result<Vec<db::AgentLogRow>, String> {
     let db_lock = db.lock().unwrap();
@@ -80,7 +80,7 @@ pub async fn get_agent_logs(
 
 #[tauri::command]
 pub async fn get_latest_session(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     task_id: String,
 ) -> Result<Option<db::AgentSessionRow>, String> {
     let db_lock = db.lock().unwrap();
@@ -91,7 +91,7 @@ pub async fn get_latest_session(
 
 #[tauri::command]
 pub async fn get_latest_sessions(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     task_ids: Vec<String>,
 ) -> Result<Vec<db::AgentSessionRow>, String> {
     let db_lock = db.lock().unwrap();
@@ -102,7 +102,8 @@ pub async fn get_latest_sessions(
 
 #[tauri::command]
 pub async fn get_session_output(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
+
     server_mgr: State<'_, ServerManager>,
     task_id: String,
 ) -> Result<String, String> {

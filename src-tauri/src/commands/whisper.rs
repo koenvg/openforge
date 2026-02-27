@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::sync::{Mutex, Arc};
 use tauri::State;
 use crate::{db, whisper_manager::{WhisperManager, WhisperModelSize}};
 
@@ -29,7 +29,7 @@ pub async fn get_all_whisper_model_statuses(
 pub async fn download_whisper_model(
     whisper: State<'_, WhisperManager>,
     app: tauri::AppHandle,
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     model_size: String,
 ) -> Result<(), String> {
     let size = WhisperModelSize::from_str(&model_size)
@@ -48,7 +48,7 @@ pub async fn download_whisper_model(
 #[tauri::command]
 pub async fn set_whisper_model(
     whisper: State<'_, WhisperManager>,
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     model_size: String,
 ) -> Result<(), String> {
     let size = WhisperModelSize::from_str(&model_size)

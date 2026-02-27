@@ -1,10 +1,10 @@
-use std::sync::Mutex;
+use std::sync::{Mutex, Arc};
 use tauri::State;
 use crate::db;
 
 #[tauri::command]
 pub async fn create_project(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     name: String,
     path: String,
 ) -> Result<db::ProjectRow, String> {
@@ -15,7 +15,7 @@ pub async fn create_project(
 
 #[tauri::command]
 pub async fn get_projects(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<Vec<db::ProjectRow>, String> {
     let db = db.lock().unwrap();
     db.get_all_projects()
@@ -24,7 +24,7 @@ pub async fn get_projects(
 
 #[tauri::command]
 pub async fn update_project(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     id: String,
     name: String,
     path: String,
@@ -36,7 +36,7 @@ pub async fn update_project(
 
 #[tauri::command]
 pub async fn delete_project(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     id: String,
 ) -> Result<(), String> {
     let db = db.lock().unwrap();
@@ -46,7 +46,7 @@ pub async fn delete_project(
 
 #[tauri::command]
 pub async fn get_project_config(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     project_id: String,
     key: String,
 ) -> Result<Option<String>, String> {
@@ -57,7 +57,7 @@ pub async fn get_project_config(
 
 #[tauri::command]
 pub async fn set_project_config(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     project_id: String,
     key: String,
     value: String,
@@ -69,7 +69,7 @@ pub async fn set_project_config(
 
 #[tauri::command]
 pub async fn get_tasks_for_project(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     project_id: String,
 ) -> Result<Vec<db::TaskRow>, String> {
     let db = db.lock().unwrap();
@@ -79,7 +79,7 @@ pub async fn get_tasks_for_project(
 
 #[tauri::command]
 pub async fn get_worktree_for_task(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     task_id: String,
 ) -> Result<Option<db::WorktreeRow>, String> {
     let db = db.lock().unwrap();
@@ -90,7 +90,7 @@ pub async fn get_worktree_for_task(
 
 #[tauri::command]
 pub async fn get_project_attention(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<Vec<db::ProjectAttentionRow>, String> {
     let db = db.lock().unwrap();
     db.get_project_attention_summaries()

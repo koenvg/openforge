@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::sync::{Mutex, Arc};
 use tauri::State;
 use serde::Serialize;
 use crate::{db, github_client::GitHubClient};
@@ -32,7 +32,7 @@ pub struct FrontendPrOverviewComment {
 
 #[tauri::command]
 pub async fn get_github_username(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     github_client: State<'_, GitHubClient>,
 ) -> Result<String, String> {
     let cached_username = {
@@ -68,7 +68,7 @@ pub async fn get_github_username(
 
 #[tauri::command]
 pub async fn fetch_review_prs(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     github_client: State<'_, GitHubClient>,
 ) -> Result<Vec<db::ReviewPrRow>, String> {
     let cached_username = {
@@ -156,7 +156,7 @@ pub async fn fetch_review_prs(
 
 #[tauri::command]
 pub async fn get_review_prs(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<Vec<db::ReviewPrRow>, String> {
     let db_lock = db.lock().unwrap();
     db_lock.get_all_review_prs()
@@ -165,7 +165,7 @@ pub async fn get_review_prs(
 
 #[tauri::command]
 pub async fn get_pr_file_diffs(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     github_client: State<'_, GitHubClient>,
     owner: String,
     repo: String,
@@ -186,7 +186,7 @@ pub async fn get_pr_file_diffs(
 
 #[tauri::command]
 pub async fn get_file_content(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     github_client: State<'_, GitHubClient>,
     owner: String,
     repo: String,
@@ -207,7 +207,7 @@ pub async fn get_file_content(
 
 #[tauri::command]
 pub async fn get_file_at_ref(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     _github_client: State<'_, GitHubClient>,
     owner: String,
     repo: String,
@@ -259,7 +259,7 @@ pub async fn get_file_at_ref(
 
 #[tauri::command]
 pub async fn get_review_comments(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     github_client: State<'_, GitHubClient>,
     owner: String,
     repo: String,
@@ -304,7 +304,7 @@ pub async fn get_review_comments(
 
 #[tauri::command]
 pub async fn get_pr_overview_comments(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     github_client: State<'_, GitHubClient>,
     owner: String,
     repo: String,
@@ -341,7 +341,7 @@ pub async fn get_pr_overview_comments(
 
 #[tauri::command]
 pub async fn submit_pr_review(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     github_client: State<'_, GitHubClient>,
     owner: String,
     repo: String,
@@ -367,7 +367,7 @@ pub async fn submit_pr_review(
 
 #[tauri::command]
 pub async fn mark_review_pr_viewed(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     pr_id: i64,
     head_sha: String,
 ) -> Result<(), String> {

@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::sync::{Mutex, Arc};
 use tauri::State;
 use serde::Serialize;
 use crate::opencode_client::OpenCodeClient;
@@ -68,7 +68,7 @@ pub async fn send_prompt(
 /// List available commands from a running OpenCode server for the project
 #[tauri::command]
 pub async fn list_opencode_commands(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, server_manager::ServerManager>,
     project_id: String,
 ) -> Result<Vec<crate::opencode_client::CommandInfo>, String> {
@@ -97,7 +97,7 @@ pub async fn list_opencode_commands(
 /// Search files in a running OpenCode server for the project
 #[tauri::command]
 pub async fn search_opencode_files(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, server_manager::ServerManager>,
     project_id: String,
     query: String,
@@ -127,7 +127,7 @@ pub async fn search_opencode_files(
 /// List available agents from a running OpenCode server for the project
 #[tauri::command]
 pub async fn list_opencode_agents(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, server_manager::ServerManager>,
     project_id: String,
 ) -> Result<Vec<crate::opencode_client::AgentInfo>, String> {
