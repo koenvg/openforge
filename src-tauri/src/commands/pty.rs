@@ -17,21 +17,6 @@ pub async fn pty_spawn(
         .map_err(|e| format!("Failed to spawn PTY: {}", e))
 }
 
-#[tauri::command]
-pub async fn pty_spawn_claude(
-    pty_mgr: State<'_, PtyManager>,
-    app: tauri::AppHandle,
-    task_id: String,
-    worktree_path: String,
-    claude_session_id: String,
-    cols: u16,
-    rows: u16,
-) -> Result<u64, String> {
-    pty_mgr
-        .spawn_claude_pty(&task_id, std::path::Path::new(&worktree_path), &claude_session_id, cols, rows, app)
-        .await
-        .map_err(|e| format!("Failed to spawn Claude PTY: {}", e))
-}
 
 #[tauri::command]
 pub async fn pty_write(
