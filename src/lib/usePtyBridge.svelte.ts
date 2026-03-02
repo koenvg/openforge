@@ -1,14 +1,11 @@
 import { listen } from '@tauri-apps/api/event'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import type { PtyEvent } from './types'
-import { getWorktreeForTask, spawnPty, spawnClaudePty, writePty, killPty as killPtyIpc } from './ipc'
+import { getWorktreeForTask, spawnPty, writePty, killPty as killPtyIpc } from './ipc'
 
 export interface AttachPtyContext {
   provider?: string
   opencodeSessionId?: string | null
-  claudeSessionId?: string | null
-  /** When set, controls whether a PTY is actually spawned (Claude Code only). */
-  sessionStatus?: string
 }
 
 export interface PtyBridgeHandle {
@@ -63,46 +60,22 @@ export function createPtyBridge(deps: {
       const cols = term?.cols ?? 80
       const rows = term?.rows ?? 24
 
-      if (context.provider === 'claude-code') {
-        // Claude Code path: skip PTY when session is still running (bridge events render live)
-        if (context.sessionStatus === 'running') {
-          ptySpawned = false
-          deps.onAttached(context.sessionStatus)
-          return
-        }
-
-        const claudeSessionId = context.claudeSessionId
-        if (!claudeSessionId) {
-          console.error('[usePtyBridge] Missing claudeSessionId for Claude Code PTY')
-          ptySpawned = false
-          return
-        }
-        const worktree = await getWorktreeForTask(deps.taskId)
-        const worktreePath = worktree?.worktree_path
-        if (!worktreePath) {
-          console.error('[usePtyBridge] No worktree_path found for task:', deps.taskId)
-          ptySpawned = false
-          return
-        }
-        expectedPtyInstance = await spawnClaudePty(deps.taskId, worktreePath, claudeSessionId, cols, rows)
-      } else {
-        // OpenCode path: existing logic unchanged
-        const worktree = await getWorktreeForTask(deps.taskId)
-        const port = worktree?.opencode_port
-        if (!port) {
-          console.error('[usePtyBridge] No opencode_port found for task:', deps.taskId)
-          ptySpawned = false
-          return
-        }
-        deps.setOpencodePort(port)
-        const sessionId = context.opencodeSessionId
-        if (!sessionId) {
-          console.error('[usePtyBridge] Missing opencodeSessionId for OpenCode PTY')
-          ptySpawned = false
-          return
-        }
-        expectedPtyInstance = await spawnPty(deps.taskId, port, sessionId, cols, rows)
+      // OpenCode path: existing logic unchanged
+      const worktree = await getWorktreeForTask(deps.taskId)
+      const port = worktree?.opencode_port
+      if (!port) {
+        console.error('[usePtyBridge] No opencode_port found for task:', deps.taskId)
+        ptySpawned = false
+        return
       }
+      deps.setOpencodePort(port)
+      const sessionId = context.opencodeSessionId
+      if (!sessionId) {
+        console.error('[usePtyBridge] Missing opencodeSessionId for OpenCode PTY')
+        ptySpawned = false
+        return
+      }
+      expectedPtyInstance = await spawnPty(deps.taskId, port, sessionId, cols, rows)
 
       term?.focus()
       deps.onAttached()

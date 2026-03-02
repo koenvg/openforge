@@ -7,13 +7,12 @@ vi.mock('@tauri-apps/api/event', () => ({
 vi.mock('./ipc', () => ({
   getWorktreeForTask: vi.fn().mockResolvedValue(null),
   spawnPty: vi.fn().mockResolvedValue(1),
-  spawnClaudePty: vi.fn().mockResolvedValue(2),
   writePty: vi.fn().mockResolvedValue(undefined),
   killPty: vi.fn().mockResolvedValue(undefined),
 }))
 
 import { createPtyBridge } from './usePtyBridge.svelte'
-import { getWorktreeForTask, spawnPty, spawnClaudePty, killPty } from './ipc'
+import { getWorktreeForTask, spawnPty, killPty } from './ipc'
 
 describe('createPtyBridge', () => {
   let getTerminal: () => { cols: number; rows: number; write: (data: string) => void; focus: () => void } | null
@@ -28,7 +27,6 @@ describe('createPtyBridge', () => {
     onAttached = vi.fn<(sessionStatus?: string) => void>()
     vi.mocked(getWorktreeForTask).mockResolvedValue(null)
     vi.mocked(spawnPty).mockResolvedValue(1)
-    vi.mocked(spawnClaudePty).mockResolvedValue(2)
     vi.mocked(killPty).mockResolvedValue(undefined)
   })
 
@@ -89,47 +87,4 @@ describe('createPtyBridge', () => {
     expect(() => bridge.dispose()).not.toThrow()
   })
 
-  // Claude Code provider tests
-  it('attachPty spawns Claude PTY when provider is claude-code', async () => {
-    vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/worktree' } as never)
-    const bridge = createPtyBridge({ taskId, getTerminal, setOpencodePort, onAttached })
-    await bridge.attachPty({ provider: 'claude-code', claudeSessionId: 'claude-ses-1' })
-    expect(bridge.ptySpawned).toBe(true)
-    expect(spawnClaudePty).toHaveBeenCalledWith(taskId, '/tmp/worktree', 'claude-ses-1', 80, 24)
-    expect(spawnPty).not.toHaveBeenCalled()
-    expect(onAttached).toHaveBeenCalled()
-  })
-
-  it('attachPty does nothing for claude-code when claudeSessionId is missing', async () => {
-    const bridge = createPtyBridge({ taskId, getTerminal, setOpencodePort, onAttached })
-    await bridge.attachPty({ provider: 'claude-code' })
-    expect(bridge.ptySpawned).toBe(false)
-    expect(spawnClaudePty).not.toHaveBeenCalled()
-    expect(onAttached).not.toHaveBeenCalled()
-  })
-
-  it('attachPty skips PTY spawn for claude-code when sessionStatus is running', async () => {
-    const bridge = createPtyBridge({ taskId, getTerminal, setOpencodePort, onAttached })
-    await bridge.attachPty({ provider: 'claude-code', claudeSessionId: 'claude-ses-1', sessionStatus: 'running' })
-    expect(bridge.ptySpawned).toBe(false)
-    expect(spawnClaudePty).not.toHaveBeenCalled()
-    expect(onAttached).toHaveBeenCalledWith('running')
-  })
-
-  it('attachPty spawns PTY for claude-code when sessionStatus is completed', async () => {
-    vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/worktree' } as never)
-    const bridge = createPtyBridge({ taskId, getTerminal, setOpencodePort, onAttached })
-    await bridge.attachPty({ provider: 'claude-code', claudeSessionId: 'claude-ses-1', sessionStatus: 'completed' })
-    expect(bridge.ptySpawned).toBe(true)
-    expect(spawnClaudePty).toHaveBeenCalledWith(taskId, '/tmp/worktree', 'claude-ses-1', 80, 24)
-  })
-
-  it('attachPty does nothing for claude-code when worktree not found', async () => {
-    vi.mocked(getWorktreeForTask).mockResolvedValue(null)
-    const bridge = createPtyBridge({ taskId, getTerminal, setOpencodePort, onAttached })
-    await bridge.attachPty({ provider: 'claude-code', claudeSessionId: 'claude-ses-1' })
-    expect(bridge.ptySpawned).toBe(false)
-    expect(spawnClaudePty).not.toHaveBeenCalled()
-    expect(onAttached).not.toHaveBeenCalled()
-  })
 })
