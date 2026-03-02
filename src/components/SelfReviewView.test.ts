@@ -11,6 +11,13 @@ vi.mock('../lib/stores', () => ({
   ticketPrs: writable(new Map()),
 }))
 
+vi.mock('../lib/useDiffWorker.svelte', () => ({
+  createDiffWorker: vi.fn().mockReturnValue({
+    getDiffFile: () => undefined,
+    processing: false,
+  }),
+}))
+
 vi.mock('../lib/ipc', () => ({
   getTaskDiff: vi.fn().mockResolvedValue([]),
   getTaskFileContents: vi.fn().mockResolvedValue(['', '']),

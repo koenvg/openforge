@@ -1,6 +1,5 @@
 <script lang="ts">
   import { DiffView, DiffModeEnum, SplitSide } from '@git-diff-view/svelte'
-  import { setEnableFastDiffTemplate } from '@git-diff-view/core'
   import '@git-diff-view/svelte/styles/diff-view-pure.css'
   import './DiffViewerTheme.css'
   import type { PrFileDiff, ReviewComment, ReviewSubmissionComment } from '../lib/types'
@@ -9,13 +8,11 @@
   import { buildExtendData, type CommentDisplayData } from '../lib/diffComments'
   import { diffHighlighter } from '../lib/diffHighlighter'
   import { createDiffSearch } from '../lib/useDiffSearch.svelte'
-  import { createDiffFileCache } from '../lib/useDiffFileCache.svelte'
+  import { createDiffWorker } from '../lib/useDiffWorker.svelte'
   import { createFileContentsFetcher } from '../lib/useFileContentsFetcher.svelte'
   import { sortFilesAsTree } from '../lib/fileSort'
   import { getFileStatusIcon, getFileStatusColor, getFileStatusLabel } from '../lib/fileStatus'
   import type { Snippet } from 'svelte'
-
-  setEnableFastDiffTemplate(true)
   interface Props {
     files?: PrFileDiff[]
     existingComments?: ReviewComment[]
@@ -40,7 +37,7 @@
     getFetchFileContents: () => fetchFileContents,
     getBatchFetchFileContents: () => batchFetchFileContents,
   })
-  const diffFileCache = createDiffFileCache({
+  const diffWorker = createDiffWorker({
     getFiles: () => files,
     getFileContentsMap: () => fileContentsFetcher.fileContentsMap,
   })
@@ -216,8 +213,10 @@
                 </span>
               </div>
             {/if}
+            {@const workerDiffFile = diffWorker.getDiffFile(file.filename)}
+            {#if workerDiffFile}
             <DiffView
-              data={diffFileCache.getStableDiffData(file)}
+              diffFile={workerDiffFile}
               extendData={buildExtendData(file.filename, existingComments, $pendingManualComments)}
               diffViewMode={diffViewMode}
               diffViewWrap={diffViewWrap}
@@ -291,6 +290,12 @@
                   </div>
                 {/snippet}
               </DiffView>
+            {:else}
+              <div class="flex items-center justify-center py-8 text-base-content/40">
+                <span class="loading loading-spinner loading-sm mr-2"></span>
+                <span class="text-xs">Processing diff…</span>
+              </div>
+            {/if}
           {/if}
         </div>
       {/each}

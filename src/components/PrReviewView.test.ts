@@ -13,6 +13,13 @@ vi.mock('../lib/stores', () => ({
   prOverviewComments: writable([]),
 }))
 
+vi.mock('../lib/useDiffWorker.svelte', () => ({
+  createDiffWorker: vi.fn().mockReturnValue({
+    getDiffFile: () => undefined,
+    processing: false,
+  }),
+}))
+
 vi.mock('../lib/ipc', () => ({
   fetchReviewPrs: vi.fn(),
   getReviewPrs: vi.fn().mockResolvedValue([]),

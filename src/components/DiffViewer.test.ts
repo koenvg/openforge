@@ -18,8 +18,11 @@ vi.mock('@git-diff-view/svelte', () => ({
   SplitSide: { old: 1, new: 2 },
 }))
 
-vi.mock('@git-diff-view/core', () => ({
-  setEnableFastDiffTemplate: vi.fn(),
+vi.mock('../lib/useDiffWorker.svelte', () => ({
+  createDiffWorker: vi.fn().mockReturnValue({
+    getDiffFile: () => undefined,
+    processing: false,
+  }),
 }))
 
 vi.mock('../lib/diffSearch', () => ({

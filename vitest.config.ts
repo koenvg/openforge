@@ -7,6 +7,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    setupFiles: ['src/test-setup.ts'],
     include: ['src/**/*.test.ts'],
     alias: {
       '@tauri-apps/api/core': new URL('./src/__mocks__/@tauri-apps/api/core.ts', import.meta.url).pathname,
