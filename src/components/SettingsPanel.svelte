@@ -1,6 +1,6 @@
 <script lang="ts">
   import { activeProjectId, projects } from '../lib/stores'
-  import { getProjectConfig, setProjectConfig, updateProject, deleteProject, getAgents, getAllWhisperModelStatuses, setWhisperModel } from '../lib/ipc'
+  import { getProjectConfig, setProjectConfig, updateProject, deleteProject, getAgents, getConfig, getAllWhisperModelStatuses, setWhisperModel } from '../lib/ipc'
   import { loadActions, saveActions, createAction, DEFAULT_ACTIONS } from '../lib/actions'
   import type { Action, AgentInfo, WhisperModelStatus, WhisperModelSizeId } from '../lib/types'
   import ModelDownloadProgress from './ModelDownloadProgress.svelte'
@@ -23,6 +23,7 @@
   let saved = $state(false)
   let isDeleting = $state(false)
   let modelStatuses = $state<WhisperModelStatus[]>([])
+  let aiProvider = $state<string | null>(null)
   let downloadingModel = $state<WhisperModelSizeId | null>(null)
 
   let activeModel = $derived(modelStatuses.find(m => m.is_active))
@@ -48,7 +49,8 @@
       githubDefaultRepo = (await getProjectConfig(projectId, 'github_default_repo')) || ''
       agentInstructions = (await getProjectConfig(projectId, 'additional_instructions')) || ''
       actions = await loadActions(projectId)
-      availableAgents = await getAgents().catch(() => [])
+      aiProvider = await getConfig('ai_provider').catch(() => null)
+      availableAgents = aiProvider !== 'claude-code' ? await getAgents().catch(() => []) : []
       modelStatuses = await getAllWhisperModelStatuses().catch(() => [])
     } catch (e) {
       console.error('Failed to load settings:', e)
@@ -179,7 +181,7 @@
        </section>
 
        <section class="flex flex-col gap-2">
-         <h3 class="text-xs font-semibold text-primary uppercase tracking-wider mb-3 mt-0">Agent</h3>
+         <h3 class="text-xs font-semibold text-primary uppercase tracking-wider mb-3 mt-0">AI Instructions</h3>
          <label class="flex flex-col gap-1">
            <span class="text-[0.7rem] text-base-content/50">Additional Instructions</span>
            <textarea bind:value={agentInstructions} placeholder="Optional instructions prepended to the first prompt when starting a new task..." rows="5" class="textarea textarea-bordered w-full text-sm resize-y"></textarea>
@@ -253,7 +255,7 @@
 
        <section class="flex flex-col gap-2">
          <h3 class="text-xs font-semibold text-primary uppercase tracking-wider mb-3 mt-0">Actions</h3>
-        <p class="text-[0.7rem] text-base-content/50 mb-2 leading-snug">Configure actions available in the task context menu. Each action sends its prompt to the AI agent along with the task context.</p>
+        <p class="text-[0.7rem] text-base-content/50 mb-2 leading-snug">Configure actions available in the task context menu. Each action sends its prompt to the AI provider along with the task context.</p>
         
         {#each actions as action, i (action.id)}
           <div class="bg-base-100 border border-base-300 rounded-md p-3 flex flex-col gap-2">
@@ -270,17 +272,19 @@
             </label>
             <label class="flex flex-col gap-1">
               <span class="text-[0.7rem] text-base-content/50">Prompt</span>
-              <textarea bind:value={action.prompt} placeholder="Instruction for the AI agent..." rows="3" class="textarea textarea-bordered w-full text-sm resize-y"></textarea>
+              <textarea bind:value={action.prompt} placeholder="Instruction for the AI provider..." rows="3" class="textarea textarea-bordered w-full text-sm resize-y"></textarea>
             </label>
-            <label class="flex flex-col gap-1">
-              <span class="text-[0.7rem] text-base-content/50">Agent</span>
-              <select value={action.agent ?? ''} onchange={(e) => action.agent = (e.currentTarget as HTMLSelectElement).value || null} class="select select-bordered select-sm w-full">
-                <option value="">Default</option>
-                {#each availableAgents as agent}
-                  <option value={agent.name}>{agent.name}</option>
-                {/each}
-              </select>
-            </label>
+            {#if aiProvider !== 'claude-code'}
+              <label class="flex flex-col gap-1">
+                <span class="text-[0.7rem] text-base-content/50">Agent</span>
+                <select value={action.agent ?? ''} onchange={(e) => action.agent = (e.currentTarget as HTMLSelectElement).value || null} class="select select-bordered select-sm w-full">
+                  <option value="">Default</option>
+                  {#each availableAgents as agent}
+                    <option value={agent.name}>{agent.name}</option>
+                  {/each}
+                </select>
+              </label>
+            {/if}
           </div>
         {/each}
         
