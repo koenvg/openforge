@@ -70,7 +70,7 @@ async fn resume_task_servers(app: tauri::AppHandle) {
             let db_lock = db.lock().unwrap();
             db_lock.get_latest_session_for_ticket(&worktree.task_id).ok().flatten()
         };
-        let provider = latest_session.as_ref().map(|s| s.provider.as_str()).unwrap_or("opencode");
+        let provider = latest_session.as_ref().map(|s| s.provider.as_str()).unwrap_or("claude-code");
 
         // Handle Claude Code sessions: mark as interrupted and skip server spawn
         if provider == "claude-code" {

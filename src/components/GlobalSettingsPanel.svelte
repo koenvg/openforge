@@ -8,7 +8,7 @@
 
   let { onClose }: Props = $props()
 
-  let aiProvider = $state('opencode')
+  let aiProvider = $state('claude-code')
   let opencodeInstalled = $state(false)
   let opencodeVersion = $state<string | null>(null)
   let claudeInstalled = $state(false)
@@ -27,7 +27,7 @@
 
   async function loadConfig() {
     try {
-      aiProvider = (await getConfig('ai_provider')) || 'opencode'
+      aiProvider = (await getConfig('ai_provider')) || 'claude-code'
       jiraBaseUrl = (await getConfig('jira_base_url')) || ''
       jiraUsername = (await getConfig('jira_username')) || ''
       jiraApiToken = (await getConfig('jira_api_token')) || ''
@@ -84,8 +84,8 @@
       <label class="flex flex-col gap-1">
         <span class="text-[0.7rem] text-base-content/50">Provider</span>
         <select bind:value={aiProvider} class="select select-bordered select-sm w-full">
-          <option value="opencode">OpenCode</option>
           <option value="claude-code">Claude Code</option>
+          <option value="opencode">OpenCode</option>
         </select>
       </label>
       <!-- Install status indicators -->

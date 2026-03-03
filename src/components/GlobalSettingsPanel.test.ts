@@ -89,7 +89,7 @@ describe('GlobalSettingsPanel', () => {
     expect(vi.mocked(setConfig)).toHaveBeenCalledWith('jira_username', 'test@example.com')
     expect(vi.mocked(setConfig)).toHaveBeenCalledWith('jira_api_token', 'token123')
     expect(vi.mocked(setConfig)).toHaveBeenCalledWith('github_token', 'ghp_abc123')
-    expect(vi.mocked(setConfig)).toHaveBeenCalledWith('ai_provider', 'opencode')
+    expect(vi.mocked(setConfig)).toHaveBeenCalledWith('ai_provider', 'claude-code')
     expect(vi.mocked(setConfig)).toHaveBeenCalledTimes(5)
   })
 })

@@ -354,6 +354,24 @@ INSERT OR IGNORE INTO config (key, value) VALUES ('next_project_id', '1')
                 Ok(())
             },
         ),
+        M::up_with_hook(
+            r#""#,
+            |tx| {
+                let config_exists: bool = tx.query_row(
+                    "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='config'",
+                    [],
+                    |r| r.get(0),
+                ).unwrap_or(false);
+
+                if config_exists {
+                    tx.execute(
+                        "UPDATE config SET value = 'claude-code' WHERE key = 'ai_provider' AND value = 'opencode'",
+                        [],
+                    ).map_err(rusqlite_migration::HookError::RusqliteError)?;
+                }
+                Ok(())
+            },
+        ),
         M::up(
             r#"
 CREATE TABLE IF NOT EXISTS agent_review_comments (
@@ -636,8 +654,8 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(
-            uv, 2,
-            "Fresh DB should have user_version=2 after migrations, got {}",
+            uv, 4,
+            "Fresh DB should have user_version=4 after migrations, got {}",
             uv
         );
 

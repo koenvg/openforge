@@ -37,7 +37,7 @@ pub fn build_task_prompt(task: &db::TaskRow, action_instruction: &str, additiona
     let (provider, session) = {
         let db_lock = db.lock().unwrap();
         let session = db_lock.get_latest_session_for_ticket(task_id).ok().flatten();
-        let provider = session.as_ref().map(|s| s.provider.clone()).unwrap_or_else(|| "opencode".to_string());
+        let provider = session.as_ref().map(|s| s.provider.clone()).unwrap_or_else(|| "claude-code".to_string());
         (provider, session)
     };
 
@@ -110,7 +110,7 @@ pub async fn start_implementation(
 
     let provider = {
         let db_lock = db.lock().unwrap();
-        db_lock.get_config("ai_provider").ok().flatten().unwrap_or_else(|| "opencode".to_string())
+        db_lock.get_config("ai_provider").ok().flatten().unwrap_or_else(|| "claude-code".to_string())
     };
 
     // Shared: create worktree (both providers use the same logic)
@@ -277,7 +277,7 @@ pub async fn run_action(
 
     let provider = {
         let db_lock = db.lock().unwrap();
-        db_lock.get_config("ai_provider").ok().flatten().unwrap_or_else(|| "opencode".to_string())
+        db_lock.get_config("ai_provider").ok().flatten().unwrap_or_else(|| "claude-code".to_string())
     };
 
     if provider == "claude-code" {
