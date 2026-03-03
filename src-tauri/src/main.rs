@@ -72,9 +72,75 @@ async fn resume_task_servers(app: tauri::AppHandle) {
         };
         let provider = latest_session.as_ref().map(|s| s.provider.as_str()).unwrap_or("claude-code");
 
-        // Handle Claude Code sessions: mark as interrupted and skip server spawn
+        // Handle Claude Code sessions: auto-resume with --resume if we have a session ID
         if provider == "claude-code" {
             if let Some(ref session) = latest_session {
+                if let Some(ref claude_session_id) = session.claude_session_id {
+                    // We have a Claude session ID — resume the PTY
+                    // Resolve hooks path before the await to keep non-Send Box<dyn Error> off the await boundary
+                    let port = claude_hooks::get_http_server_port();
+                    let hooks_path = claude_hooks::generate_hooks_settings(port)
+                        .map_err(|e| {
+                            eprintln!(
+                                "[startup] Failed to generate hooks settings for task {}: {}",
+                                worktree.task_id, e
+                            );
+                        })
+                        .ok();
+
+                    if let Some(hooks_path) = hooks_path {
+                        let pty_mgr = app.state::<PtyManager>();
+                        match pty_mgr.spawn_claude_pty(
+                            &worktree.task_id,
+                            std::path::Path::new(&worktree.worktree_path),
+                            "Continue working on this task",
+                            Some(claude_session_id),
+                            &hooks_path,
+                            80,
+                            24,
+                            app.clone(),
+                        ).await {
+                            Ok(_) => {
+                                {
+                                    let db = app.state::<Arc<Mutex<db::Database>>>();
+                                    let db_lock = db.lock().unwrap();
+                                    let _ = db_lock.update_agent_session(
+                                        &session.id, &session.stage, "running", None, None,
+                                    );
+                                }
+                                let _ = app.emit(
+                                    "agent-status-changed",
+                                    serde_json::json!({
+                                        "task_id": worktree.task_id,
+                                        "status": "running",
+                                        "provider": "claude-code"
+                                    }),
+                                );
+                                let _ = app.emit(
+                                    "server-resumed",
+                                    serde_json::json!({
+                                        "task_id": worktree.task_id,
+                                        "port": 0,
+                                    }),
+                                );
+                                println!(
+                                    "[startup] Claude Code task {} resumed with --resume {}",
+                                    worktree.task_id, claude_session_id
+                                );
+                                continue;
+                            }
+                            Err(e) => {
+                                eprintln!(
+                                    "[startup] Failed to spawn Claude PTY for task {}: {}",
+                                    worktree.task_id, e
+                                );
+                                // Fall through to mark as interrupted
+                            }
+                        }
+                    }
+                }
+
+                // No claude_session_id or resume failed — mark interrupted
                 let db = app.state::<Arc<Mutex<db::Database>>>();
                 let db_lock = db.lock().unwrap();
                 let _ = db_lock.update_agent_session(&session.id, &session.stage, "interrupted", None, Some("App restarted"));
@@ -87,7 +153,7 @@ async fn resume_task_servers(app: tauri::AppHandle) {
                 }),
             );
             println!(
-                "[startup] Claude Code task {} marked as interrupted (process doesn't survive restart)",
+                "[startup] Claude Code task {} marked as interrupted (no session ID to resume)",
                 worktree.task_id
             );
             continue;
