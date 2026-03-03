@@ -32,7 +32,15 @@ use whisper_manager::{WhisperManager, WhisperModelSize};
 // Startup: Resume OpenCode Servers
 // ============================================================================
 
-async fn resume_task_servers(app: tauri::AppHandle) {
+async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::oneshot::Receiver<()>) {
+    // Wait for the HTTP server to be listening so Claude Code hooks don't get connection-refused
+    match http_ready.await {
+        Ok(()) => println!("[startup] HTTP server ready, proceeding with session resume"),
+        Err(_) => {
+            eprintln!("[startup] HTTP server ready channel dropped — resuming anyway (hooks may fail)");
+        }
+    }
+
     let worktrees = {
         let db = app.state::<Arc<Mutex<db::Database>>>();
         let db_lock = db.lock().unwrap();
@@ -40,12 +48,14 @@ async fn resume_task_servers(app: tauri::AppHandle) {
             Ok(wts) => wts,
             Err(e) => {
                 eprintln!("[startup] Failed to get resumable worktrees: {}", e);
+                let _ = app.emit("startup-resume-complete", ());
                 return;
             }
         }
     };
 
     if worktrees.is_empty() {
+        let _ = app.emit("startup-resume-complete", ());
         return;
     }
 
@@ -204,6 +214,9 @@ async fn resume_task_servers(app: tauri::AppHandle) {
             }
         }
     }
+
+    let _ = app.emit("startup-resume-complete", ());
+    println!("[startup] Resume complete, emitted startup-resume-complete event");
 }
 // ============================================================================
 // Main
@@ -267,10 +280,11 @@ fn main() {
 
             let db_arc = Arc::new(Mutex::new(database));
 
+            let (http_ready_tx, http_ready_rx) = tokio::sync::oneshot::channel::<()>();
             let app_handle_http = app.handle().clone();
             let db_for_http = db_arc.clone();
             tauri::async_runtime::spawn(async move {
-                if let Err(e) = http_server::start_http_server(app_handle_http, db_for_http).await {
+                if let Err(e) = http_server::start_http_server(app_handle_http, db_for_http, http_ready_tx).await {
                     eprintln!("[http_server] Failed to start: {}", e);
                 }
             });
@@ -328,7 +342,7 @@ fn main() {
 
             let app_handle_resume = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                resume_task_servers(app_handle_resume).await;
+                resume_task_servers(app_handle_resume, http_ready_rx).await;
             });
 
             println!("Server resume task started");

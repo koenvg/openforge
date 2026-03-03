@@ -304,6 +304,12 @@
     )
 
     unlisteners.push(
+      await listen('startup-resume-complete', () => {
+        loadSessions()
+      })
+    )
+
+    unlisteners.push(
       await listen('worktree-cleaned', () => {
         loadTasks()
       })
@@ -453,10 +459,25 @@
 
     // Claude Code hooks → frontend status updates
     unlisteners.push(
-      await listen<{ task_id: string; status: string }>('agent-status-changed', (event: Event<{ task_id: string; status: string }>) => {
+      await listen<{ task_id: string; status: string }>('agent-status-changed', async (event: Event<{ task_id: string; status: string }>) => {
         const { task_id: taskId, status } = event.payload
-        const session = $activeSessions.get(taskId)
-        if (!session) return
+        let session = $activeSessions.get(taskId)
+        if (!session) {
+          // Session not in store yet (e.g. resumed at startup before frontend loaded sessions)
+          try {
+            const fetched = await getLatestSession(taskId)
+            if (fetched) {
+              session = fetched
+              const updated = new Map($activeSessions)
+              updated.set(taskId, fetched)
+              $activeSessions = updated
+            } else {
+              return
+            }
+          } catch {
+            return
+          }
+        }
 
         if (status === 'completed') {
           if (session.status === 'completed') return

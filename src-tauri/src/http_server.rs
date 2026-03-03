@@ -245,7 +245,11 @@ pub fn create_router(state: AppState) -> Router {
 /// 
 /// The port can be configured via the AI_COMMAND_CENTER_PORT
 /// environment variable, defaulting to 17422.
-pub async fn start_http_server(app: tauri::AppHandle, db: std::sync::Arc<Mutex<db::Database>>) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn start_http_server(
+    app: tauri::AppHandle,
+    db: std::sync::Arc<Mutex<db::Database>>,
+    ready_tx: tokio::sync::oneshot::Sender<()>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let port = std::env::var("AI_COMMAND_CENTER_PORT")
         .unwrap_or_else(|_| "17422".to_string())
         .parse::<u16>()
@@ -258,6 +262,8 @@ pub async fn start_http_server(app: tauri::AppHandle, db: std::sync::Arc<Mutex<d
     println!("[http_server] Starting on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
+    // Signal that the server is listening before entering the serve loop
+    let _ = ready_tx.send(());
     axum::serve(listener, router).await?;
 
     Ok(())
