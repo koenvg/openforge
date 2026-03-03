@@ -92,9 +92,6 @@
 
   onDestroy(() => {
     unlisteners.forEach(fn => fn())
-    if (ptyActive && session?.status !== 'running') {
-      killPty(taskId).catch(e => console.error('[ClaudeAgentPanel] Failed to kill PTY on destroy:', e))
-    }
     termHandle.dispose()
   })
 
