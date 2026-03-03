@@ -83,23 +83,10 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
         };
         let provider = latest_session.as_ref().map(|s| s.provider.as_str()).unwrap_or("claude-code");
 
-        // Handle Claude Code sessions: restart the PTY if the session was in progress.
+        // Handle Claude Code sessions: always resume when the task is in the doing column.
         // Uses --resume when a claude_session_id is available, otherwise starts fresh.
         if provider == "claude-code" {
             if let Some(ref session) = latest_session {
-                // Only restart sessions that were actively in progress
-                if !matches!(session.status.as_str(), "interrupted" | "paused") {
-                    let _ = app.emit(
-                        "server-resumed",
-                        serde_json::json!({ "task_id": worktree.task_id, "port": 0 }),
-                    );
-                    println!(
-                        "[startup] Claude Code task {} session already {} — skipping",
-                        worktree.task_id, session.status
-                    );
-                    continue;
-                }
-
                 let port = claude_hooks::get_http_server_port();
                 let hooks_path = claude_hooks::generate_hooks_settings(port)
                     .map_err(|e| {

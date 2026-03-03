@@ -149,7 +149,7 @@ impl super::Database {
              FROM worktrees w
              INNER JOIN tasks t ON w.task_id = t.id
              INNER JOIN agent_sessions a ON w.task_id = a.ticket_id
-             WHERE w.status = 'active' AND t.status != 'done'
+             WHERE w.status = 'active' AND t.status = 'doing'
              ORDER BY w.updated_at DESC",
         )?;
 

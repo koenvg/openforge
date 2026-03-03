@@ -28,17 +28,17 @@ pub struct AgentLogRow {
 }
 
 impl AgentSessionRow {
-    /// Whether this Claude Code session should be auto-resumed at app startup.
+    /// Whether this Claude Code session can be resumed with `--resume`.
     ///
-    /// Returns `true` only when all three conditions are met:
+    /// Returns `true` when both conditions are met:
     /// - provider is `"claude-code"`
     /// - a `claude_session_id` was captured (needed for `--resume`)
-    /// - status is `"interrupted"` or `"paused"` (i.e. the session was actively
-    ///   in progress when the app was last closed)
+    ///
+    /// The task's board column (doing/done) determines whether to auto-resume
+    /// at startup — that decision lives in the query/caller, not here.
     pub fn is_resumable(&self) -> bool {
         self.provider == "claude-code"
             && self.claude_session_id.is_some()
-            && matches!(self.status.as_str(), "interrupted" | "paused")
     }
 }
 
@@ -790,23 +790,21 @@ mod tests {
     }
 
     #[test]
-    fn test_is_resumable_completed_not_resumable() {
+    fn test_is_resumable_completed_with_session_id() {
         let session = make_session("completed", "claude-code", Some("claude-ses-123"));
-        assert!(!session.is_resumable(), "Completed session should NOT be resumable");
+        assert!(session.is_resumable(), "Completed Claude session with session ID should be resumable");
     }
 
     #[test]
-    fn test_is_resumable_failed_not_resumable() {
+    fn test_is_resumable_failed_with_session_id() {
         let session = make_session("failed", "claude-code", Some("claude-ses-123"));
-        assert!(!session.is_resumable(), "Failed session should NOT be resumable");
+        assert!(session.is_resumable(), "Failed Claude session with session ID should be resumable");
     }
 
     #[test]
-    fn test_is_resumable_running_not_resumable() {
-        // After mark_running_sessions_interrupted, no sessions should be "running".
-        // If one somehow is, it shouldn't be resumed (it might be a stale state).
+    fn test_is_resumable_running_with_session_id() {
         let session = make_session("running", "claude-code", Some("claude-ses-123"));
-        assert!(!session.is_resumable(), "Running session should NOT be resumable at startup");
+        assert!(session.is_resumable(), "Running Claude session with session ID should be resumable");
     }
 
     #[test]
