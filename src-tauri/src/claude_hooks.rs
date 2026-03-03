@@ -220,26 +220,32 @@ mod tests {
     }
 
     #[test]
-    fn test_get_http_server_port_default() {
+    fn test_get_http_server_port_variants() {
+        // Backup the original env var once
         let backup = std::env::var("AI_COMMAND_CENTER_PORT").ok();
+
+        // Test 1: Default (env var not set)
         std::env::remove_var("AI_COMMAND_CENTER_PORT");
-
         let port = get_http_server_port();
-        assert_eq!(port, 17422);
+        assert_eq!(
+            port, 17422,
+            "Should return default 17422 when env var is not set"
+        );
 
-        if let Some(val) = backup {
-            std::env::set_var("AI_COMMAND_CENTER_PORT", val);
-        }
-    }
-
-    #[test]
-    fn test_get_http_server_port_from_env() {
-        let backup = std::env::var("AI_COMMAND_CENTER_PORT").ok();
+        // Test 2: Valid value from env
         std::env::set_var("AI_COMMAND_CENTER_PORT", "9999");
-
         let port = get_http_server_port();
-        assert_eq!(port, 9999);
+        assert_eq!(port, 9999, "Should return 9999 when env var is set to 9999");
 
+        // Test 3: Invalid value in env
+        std::env::set_var("AI_COMMAND_CENTER_PORT", "invalid");
+        let port = get_http_server_port();
+        assert_eq!(
+            port, 17422,
+            "Should return default 17422 when env var is invalid"
+        );
+
+        // Restore the original env var
         if let Some(val) = backup {
             std::env::set_var("AI_COMMAND_CENTER_PORT", val);
         } else {
@@ -248,17 +254,70 @@ mod tests {
     }
 
     #[test]
-    fn test_get_http_server_port_invalid_env() {
-        let backup = std::env::var("AI_COMMAND_CENTER_PORT").ok();
-        std::env::set_var("AI_COMMAND_CENTER_PORT", "invalid");
+    fn test_hooks_settings_urls_match_http_server_port() {
+        let port = 54321u16;
+        let json = build_hooks_json(port);
 
-        let port = get_http_server_port();
-        assert_eq!(port, 17422);
+        let hook_entries = [
+            ("PreToolUse", "/hooks/pre-tool-use"),
+            ("PostToolUse", "/hooks/post-tool-use"),
+            ("Stop", "/hooks/stop"),
+            ("SessionEnd", "/hooks/session-end"),
+            ("Notification", "/hooks/notification"),
+        ];
 
-        if let Some(val) = backup {
-            std::env::set_var("AI_COMMAND_CENTER_PORT", val);
-        } else {
-            std::env::remove_var("AI_COMMAND_CENTER_PORT");
+        for (hook_key, expected_route) in &hook_entries {
+            let cmd = json["hooks"][hook_key][0]["hooks"][0]["command"]
+                .as_str()
+                .unwrap_or_else(|| panic!("Missing command for {}", hook_key));
+
+            assert!(
+                cmd.contains(&format!("127.0.0.1:{}", port)),
+                "{} command should use port {}, got: {}",
+                hook_key,
+                port,
+                cmd
+            );
+            assert!(
+                cmd.contains(expected_route),
+                "{} command should POST to {}, got: {}",
+                hook_key,
+                expected_route,
+                cmd
+            );
+            assert!(cmd.contains("curl"), "{} command should use curl", hook_key);
+            assert!(
+                cmd.contains("-X POST"),
+                "{} command should be a POST",
+                hook_key
+            );
         }
+    }
+
+    #[test]
+    fn test_hooks_settings_and_claude_args_integration() {
+        let hooks_json = build_hooks_json(17422);
+        let json_string = serde_json::to_string_pretty(&hooks_json).unwrap();
+
+        let temp_path =
+            std::env::temp_dir().join("test_hooks_settings_claude_args_integration.json");
+        fs::write(&temp_path, &json_string).unwrap();
+
+        let args = crate::pty_manager::build_claude_args("implement feature", None, &temp_path);
+
+        let settings_idx = args
+            .iter()
+            .position(|a| a == "--settings")
+            .expect("--settings flag should be present in claude args");
+        assert_eq!(
+            args[settings_idx + 1],
+            temp_path.to_string_lossy().to_string(),
+        );
+
+        let content = fs::read_to_string(&temp_path).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert!(parsed.get("hooks").is_some());
+
+        let _ = fs::remove_file(&temp_path);
     }
 }

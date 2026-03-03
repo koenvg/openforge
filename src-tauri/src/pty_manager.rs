@@ -1201,6 +1201,105 @@ mod tests {
         assert!(prompt_pos > session_pos);
     }
 
+    #[test]
+    fn test_claude_pty_args_with_real_hooks_path() {
+        let temp_dir = std::env::temp_dir().join("test_pty_args_real_hooks_home");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let home_backup = std::env::var("HOME").ok();
+        std::env::set_var("HOME", &temp_dir);
+        let temp_path = crate::claude_hooks::generate_hooks_settings(17422)
+            .expect("generate_hooks_settings should succeed");
+        if let Some(home) = home_backup {
+            std::env::set_var("HOME", home);
+        } else {
+            std::env::remove_var("HOME");
+        }
+
+        let args_new = build_claude_args("fix the bug", None, &temp_path);
+        assert_eq!(args_new[0], "fix the bug");
+        let s_idx = args_new.iter().position(|a| a == "--settings").unwrap();
+        assert_eq!(args_new[s_idx + 1], temp_path.to_string_lossy().to_string());
+        assert!(!args_new.contains(&"-p".to_string()));
+
+        let args_resume = build_claude_args("continue impl", Some("resume-sess-999"), &temp_path);
+        assert_eq!(args_resume[0], "--resume");
+        assert_eq!(args_resume[1], "resume-sess-999");
+        assert_eq!(args_resume[2], "continue impl");
+        let s_idx_r = args_resume.iter().position(|a| a == "--settings").unwrap();
+        assert_eq!(args_resume[s_idx_r + 1], temp_path.to_string_lossy().to_string());
+
+        let content = std::fs::read_to_string(&temp_path).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert!(parsed.get("hooks").is_some());
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_ring_buffer_concurrent_write_and_drain() {
+        use std::sync::{Arc, Mutex as StdMutex};
+        use std::thread;
+
+        let buffer = Arc::new(StdMutex::new(RingBuffer::new(1024)));
+        let mut write_handles = vec![];
+
+        for i in 0..4 {
+            let buf_clone = Arc::clone(&buffer);
+            let handle = thread::spawn(move || {
+                for j in 0..25 {
+                    let data = format!("t{}-c{} ", i, j);
+                    let mut buf = buf_clone.lock().unwrap();
+                    buf.push(data.as_bytes());
+                }
+            });
+            write_handles.push(handle);
+        }
+
+        let buf_drain = Arc::clone(&buffer);
+        let drain_handle = thread::spawn(move || {
+            for _ in 0..5 {
+                let mut buf = buf_drain.lock().unwrap();
+                buf.drain();
+            }
+        });
+
+        for handle in write_handles {
+            handle.join().expect("writer thread panicked");
+        }
+        drain_handle.join().expect("drain thread panicked");
+
+        let mut buf = buffer.lock().unwrap();
+        let remaining = buf.drain();
+        assert!(remaining.len() <= 1024, "Ring buffer must not exceed capacity");
+    }
+
+    #[test]
+    fn test_freeze_detection_with_ring_buffer() {
+        let mut ring_buf = RingBuffer::new(512);
+        ring_buf.push(b"Claude is processing...\n");
+        ring_buf.push(b"Tool call: bash\n");
+
+        let now_ms: u64 = 200_000_000;
+        let last_output_ms = now_ms - 20_000;
+
+        let frozen = frozen_seconds(last_output_ms, now_ms);
+        assert_eq!(frozen, Some(20));
+
+        let buffered = ring_buf.drain();
+        assert!(buffered.contains("Claude is processing"));
+        assert!(buffered.contains("Tool call: bash"));
+
+        assert_eq!(ring_buf.drain(), "", "Ring buffer empty after drain");
+
+        let still_frozen = frozen_seconds(last_output_ms, now_ms);
+        assert_eq!(still_frozen, Some(20), "Freeze detection unaffected by ring buffer drain");
+
+        let recent_output = now_ms - 5_000;
+        assert!(frozen_seconds(recent_output, now_ms).is_none());
+    }
+
     #[tokio::test]
     async fn test_interrupt_claude_not_found() {
         let manager = PtyManager::new();

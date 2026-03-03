@@ -504,4 +504,39 @@ mod tests {
         assert_eq!(payload.claude_task_id, Some("task-456".to_string()));
     }
 
+    #[test]
+    fn test_map_hook_to_status_full_lifecycle() {
+        let mut status = "started".to_string();
+
+        if let Some(s) = map_hook_to_status("pre-tool-use", &status) {
+            status = s;
+        }
+        assert_eq!(status, "running");
+
+        if let Some(s) = map_hook_to_status("pre-tool-use", &status) {
+            status = s;
+        }
+        assert_eq!(status, "running", "Already running — no change");
+
+        if let Some(s) = map_hook_to_status("post-tool-use", &status) {
+            status = s;
+        }
+        assert_eq!(status, "running", "post-tool-use when running — no change");
+
+        if let Some(s) = map_hook_to_status("stop", &status) {
+            status = s;
+        }
+        assert_eq!(status, "completed");
+
+        if let Some(s) = map_hook_to_status("pre-tool-use", &status) {
+            status = s;
+        }
+        assert_eq!(status, "running", "Resumed: pre-tool-use transitions completed→running");
+
+        if let Some(s) = map_hook_to_status("session-end", &status) {
+            status = s;
+        }
+        assert_eq!(status, "completed");
+    }
+
 }

@@ -182,4 +182,57 @@ describe('ClaudeAgentPanel', () => {
       expect(ipc.getClaudePtyBuffer).toHaveBeenCalledWith('T-1')
     })
   })
+
+  it('test_status_transitions_from_store_updates', async () => {
+    const sessions = new Map<string, AgentSession>()
+    sessions.set('T-1', { ...baseSession, status: 'running' })
+    activeSessions.set(sessions)
+
+    render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
+    expect(screen.getByText('running')).toBeTruthy()
+
+    const completedSessions = new Map<string, AgentSession>()
+    completedSessions.set('T-1', { ...baseSession, status: 'completed' })
+    activeSessions.set(completedSessions)
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('completed')).toBeTruthy()
+    })
+    expect(screen.queryByText('running')).toBeNull()
+
+    const failedSessions = new Map<string, AgentSession>()
+    failedSessions.set('T-1', { ...baseSession, status: 'failed' })
+    activeSessions.set(failedSessions)
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('failed')).toBeTruthy()
+    })
+    expect(screen.queryByText('completed')).toBeNull()
+  })
+
+  it('test_abort_button_visible_only_when_running', async () => {
+    const runningSessions = new Map<string, AgentSession>()
+    runningSessions.set('T-1', { ...baseSession, status: 'running' })
+    activeSessions.set(runningSessions)
+
+    const { unmount } = render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
+
+    await vi.waitFor(() => {
+      expect(screen.queryByRole('button', { name: /abort/i })).toBeTruthy()
+    })
+
+    unmount()
+    activeSessions.set(new Map())
+
+    const completedSessions = new Map<string, AgentSession>()
+    completedSessions.set('T-1', { ...baseSession, status: 'completed' })
+    activeSessions.set(completedSessions)
+
+    render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
+
+    await vi.waitFor(() => {
+      expect(screen.queryByText('completed')).toBeTruthy()
+    })
+    expect(screen.queryByRole('button', { name: /abort/i })).toBeNull()
+  })
 })
