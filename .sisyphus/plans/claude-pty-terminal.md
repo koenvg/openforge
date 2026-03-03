@@ -1087,7 +1087,7 @@ Max Concurrent: 4 (Waves 1)
   - Files: test files
   - Pre-commit: `cargo test && pnpm test`
 
-- [ ] 13. Startup Hooks File Generation + Cleanup
+- [x] 13. Startup Hooks File Generation + Cleanup
 
   **What to do**:
   - RED: Write test — on app startup, after HTTP server port is known, `generate_hooks_settings(port)` is called and file is written

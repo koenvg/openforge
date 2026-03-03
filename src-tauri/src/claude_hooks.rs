@@ -2,6 +2,15 @@ use serde_json::{json, Value};
 use std::fs;
 use std::path::PathBuf;
 
+/// Get the HTTP server port from the AI_COMMAND_CENTER_PORT environment variable.
+/// Defaults to 17422 if not set or invalid.
+pub fn get_http_server_port() -> u16 {
+    std::env::var("AI_COMMAND_CENTER_PORT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(17422)
+}
+
 pub fn generate_hooks_settings(port: u16) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let home = dirs::home_dir().ok_or("Could not determine home directory")?;
     let settings_dir = home.join(".ai-command-center");
@@ -208,5 +217,48 @@ mod tests {
         let json_string = serde_json::to_string_pretty(&json).unwrap();
         let parsed: Value = serde_json::from_str(&json_string).unwrap();
         assert!(parsed.is_object());
+    }
+
+    #[test]
+    fn test_get_http_server_port_default() {
+        let backup = std::env::var("AI_COMMAND_CENTER_PORT").ok();
+        std::env::remove_var("AI_COMMAND_CENTER_PORT");
+
+        let port = get_http_server_port();
+        assert_eq!(port, 17422);
+
+        if let Some(val) = backup {
+            std::env::set_var("AI_COMMAND_CENTER_PORT", val);
+        }
+    }
+
+    #[test]
+    fn test_get_http_server_port_from_env() {
+        let backup = std::env::var("AI_COMMAND_CENTER_PORT").ok();
+        std::env::set_var("AI_COMMAND_CENTER_PORT", "9999");
+
+        let port = get_http_server_port();
+        assert_eq!(port, 9999);
+
+        if let Some(val) = backup {
+            std::env::set_var("AI_COMMAND_CENTER_PORT", val);
+        } else {
+            std::env::remove_var("AI_COMMAND_CENTER_PORT");
+        }
+    }
+
+    #[test]
+    fn test_get_http_server_port_invalid_env() {
+        let backup = std::env::var("AI_COMMAND_CENTER_PORT").ok();
+        std::env::set_var("AI_COMMAND_CENTER_PORT", "invalid");
+
+        let port = get_http_server_port();
+        assert_eq!(port, 17422);
+
+        if let Some(val) = backup {
+            std::env::set_var("AI_COMMAND_CENTER_PORT", val);
+        } else {
+            std::env::remove_var("AI_COMMAND_CENTER_PORT");
+        }
     }
 }

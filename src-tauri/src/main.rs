@@ -207,6 +207,14 @@ fn main() {
                 }
             });
             println!("HTTP server task started");
+
+            // Generate Claude hooks settings file with the HTTP server port
+            let hooks_port = claude_hooks::get_http_server_port();
+            match claude_hooks::generate_hooks_settings(hooks_port) {
+                Ok(path) => println!("Claude hooks settings generated at: {:?}", path),
+                Err(e) => eprintln!("Failed to generate Claude hooks settings: {}", e),
+            }
+
             app.manage(db_arc.clone());
 
             println!("Database initialized successfully");

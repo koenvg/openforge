@@ -148,7 +148,8 @@ pub async fn start_implementation(
     }
 
     if provider == "claude-code" {
-        let hooks_path = crate::claude_hooks::generate_hooks_settings(17422).map_err(|e| e.to_string())?;
+        let port = crate::claude_hooks::get_http_server_port();
+        let hooks_path = crate::claude_hooks::generate_hooks_settings(port).map_err(|e| e.to_string())?;
         let prompt = build_task_prompt(&task, "Implement this task. Create a branch, make the changes, and create a pull request when done.", additional_instructions.as_deref());
 
         pty_mgr.spawn_claude_pty(
@@ -299,7 +300,8 @@ pub async fn run_action(
                         };
 
                         if let Some(w) = worktree {
-                            let hooks_path = crate::claude_hooks::generate_hooks_settings(17422).map_err(|e| e.to_string())?;
+                            let port = crate::claude_hooks::get_http_server_port();
+                            let hooks_path = crate::claude_hooks::generate_hooks_settings(port).map_err(|e| e.to_string())?;
 
                             pty_mgr.spawn_claude_pty(
                                 &task_id,
@@ -338,7 +340,8 @@ pub async fn run_action(
             }
         }
 
-        let hooks_path = crate::claude_hooks::generate_hooks_settings(17422).map_err(|e| e.to_string())?;
+        let port = crate::claude_hooks::get_http_server_port();
+        let hooks_path = crate::claude_hooks::generate_hooks_settings(port).map_err(|e| e.to_string())?;
         let prompt = build_task_prompt(&task, &action_prompt, additional_instructions.as_deref());
 
         let branch = git_worktree::slugify_branch_name(&task_id, &task.title);
