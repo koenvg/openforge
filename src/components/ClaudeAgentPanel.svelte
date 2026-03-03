@@ -2,11 +2,10 @@
   import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn } from '@tauri-apps/api/event'
-  import type { PtyEvent } from '../lib/types'
   import { activeSessions } from '../lib/stores'
-  import { writePty, resizePty, killPty, abortImplementation, getClaudePtyBuffer } from '../lib/ipc'
+  import { writePty, killPty, abortImplementation } from '../lib/ipc'
   import '@xterm/xterm/css/xterm.css'
-  import { createTerminal } from '../lib/useTerminal.svelte'
+  import { acquire, attach, detach, type PoolEntry } from '../lib/terminalPool'
   import VoiceInput from './VoiceInput.svelte'
 
   interface Props {
@@ -17,24 +16,19 @@
 
   let terminalEl: HTMLDivElement
   let unlisteners: UnlistenFn[] = []
+  let poolEntry: PoolEntry | null = null
   let ptyActive = $state(false)
   let status = $state<'idle' | 'running' | 'complete' | 'error'>('idle')
-
-  const termHandle = createTerminal({
-    onData: (data: string) => {
-      if (ptyActive) writePty(taskId, data).catch(e => console.error('[ClaudeAgentPanel] write failed:', e))
-    },
-    onResize: (cols: number, rows: number) => {
-      if (ptyActive) resizePty(taskId, cols, rows).catch(e => console.error('[ClaudeAgentPanel] resize failed:', e))
-    },
-  })
 
   // Derived state from activeSessions store
   let session = $derived($activeSessions.get(taskId) || null)
 
   onMount(async () => {
-    termHandle.terminalEl = terminalEl
-    await termHandle.mount()
+    poolEntry = await acquire(taskId)
+    attach(poolEntry, terminalEl)
+
+    // Sync local ptyActive from pool entry
+    ptyActive = poolEntry.ptyActive
 
     // If session already exists and is running, PTY is already spawned
     if (session?.status === 'running') {
@@ -45,35 +39,6 @@
     } else if (session?.status === 'failed') {
       status = 'error'
     }
-
-    // Reconnect: flush buffered PTY output if session exists
-    if (session) {
-      try {
-        const buffered = await getClaudePtyBuffer(taskId)
-        if (buffered) {
-          termHandle.terminal?.write(buffered)
-          ptyActive = true
-        }
-      } catch (e) {
-        console.error('[ClaudeAgentPanel] Failed to get PTY buffer:', e)
-      }
-    }
-
-    // Listen for PTY output — backend spawns Claude PTY and emits pty-output-{taskId}
-    unlisteners.push(await listen<PtyEvent>(`pty-output-${taskId}`, (event) => {
-      if (event.payload.data) {
-        termHandle.terminal?.write(event.payload.data)
-        if (!ptyActive) {
-          ptyActive = true
-          status = 'running'
-        }
-      }
-    }))
-
-    // Listen for PTY exit
-    unlisteners.push(await listen<PtyEvent>(`pty-exit-${taskId}`, () => {
-      ptyActive = false
-    }))
 
     // Listen for agent-status-changed events (App.svelte also updates activeSessions store)
     unlisteners.push(await listen<{ task_id: string; status: string }>('agent-status-changed', (event) => {
@@ -92,12 +57,14 @@
 
   onDestroy(() => {
     unlisteners.forEach(fn => fn())
-    termHandle.dispose()
+    if (poolEntry) {
+      detach(poolEntry)
+    }
   })
 
   async function handleAbort() {
     try {
-      if (ptyActive) {
+      if (poolEntry?.ptyActive) {
         await killPty(taskId).catch(e => {
           console.error('[ClaudeAgentPanel] Failed to kill PTY on abort:', e)
         })
@@ -110,7 +77,7 @@
   }
 
   function handleTranscription(text: string) {
-    if (ptyActive) writePty(taskId, text).catch(e => console.error('[ClaudeAgentPanel] transcription write failed:', e))
+    if (poolEntry?.ptyActive) writePty(taskId, text).catch(e => console.error('[ClaudeAgentPanel] transcription write failed:', e))
   }
 
   function getStatusText(): string {

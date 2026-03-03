@@ -22,6 +22,7 @@
 
   import { computeDoingStatus } from './lib/doingStatus'
   import { pushNavState, navigateBack } from './lib/navigation'
+  import { release as releaseTerminal } from './lib/terminalPool'
 
   let openCodeStatus = $state<OpenCodeStatus | null>(null)
   let unlisteners: UnlistenFn[] = []
@@ -442,6 +443,7 @@
         const updated = new Map($activeSessions)
         updated.delete(event.payload.ticket_id)
         $activeSessions = updated
+        releaseTerminal(event.payload.ticket_id)
         if ($checkpointNotification?.ticketId === event.payload.ticket_id) {
           $checkpointNotification = null
         }
@@ -534,6 +536,7 @@
           const updated = new Map($activeSessions)
           updated.delete(taskId)
           $activeSessions = updated
+          releaseTerminal(taskId)
           if ($checkpointNotification?.ticketId === taskId) {
             $checkpointNotification = null
           }

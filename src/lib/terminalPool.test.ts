@@ -1,0 +1,231 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
+// Track listen callbacks so tests can simulate events
+const listenCallbacks = new Map<string, (event: unknown) => void>()
+const unlistenFns: Array<ReturnType<typeof vi.fn>> = []
+
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn(async (eventName: string, cb: (event: unknown) => void) => {
+    listenCallbacks.set(eventName, cb)
+    const unlisten = vi.fn()
+    unlistenFns.push(unlisten)
+    return unlisten
+  }),
+}))
+
+vi.mock('@xterm/xterm', () => {
+  class Terminal {
+    open = vi.fn()
+    write = vi.fn()
+    dispose = vi.fn()
+    onData = vi.fn().mockReturnValue({ dispose: vi.fn() })
+    loadAddon = vi.fn()
+    refresh = vi.fn()
+    focus = vi.fn()
+    reset = vi.fn()
+    cols = 80
+    rows = 24
+  }
+  return { Terminal }
+})
+
+vi.mock('@xterm/addon-fit', () => {
+  class FitAddon {
+    fit = vi.fn()
+    proposeDimensions = vi.fn().mockReturnValue({ cols: 80, rows: 24 })
+  }
+  return { FitAddon }
+})
+
+vi.mock('./ipc', () => ({
+  writePty: vi.fn().mockResolvedValue(undefined),
+  resizePty: vi.fn().mockResolvedValue(undefined),
+  getClaudePtyBuffer: vi.fn().mockResolvedValue(null),
+}))
+
+import { acquire, attach, detach, release, releaseAll, _getPool } from './terminalPool'
+
+// Stub browser APIs not available in jsdom
+globalThis.ResizeObserver = class {
+  observe = vi.fn()
+  unobserve = vi.fn()
+  disconnect = vi.fn()
+} as unknown as typeof ResizeObserver
+
+globalThis.IntersectionObserver = class {
+  observe = vi.fn()
+  unobserve = vi.fn()
+  disconnect = vi.fn()
+} as unknown as typeof IntersectionObserver
+
+describe('terminalPool', () => {
+  beforeEach(() => {
+    releaseAll()
+    listenCallbacks.clear()
+    unlistenFns.length = 0
+    vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    releaseAll()
+  })
+
+  it('acquire creates a new pool entry', async () => {
+    const entry = await acquire('task-1')
+    expect(entry).toBeDefined()
+    expect(entry.taskId).toBe('task-1')
+    expect(entry.terminal).toBeDefined()
+    expect(entry.fitAddon).toBeDefined()
+    expect(entry.hostDiv).toBeInstanceOf(HTMLDivElement)
+    expect(entry.attached).toBe(false)
+    expect(_getPool().has('task-1')).toBe(true)
+  })
+
+  it('acquire returns existing entry on second call', async () => {
+    const entry1 = await acquire('task-2')
+    const entry2 = await acquire('task-2')
+    expect(entry1).toBe(entry2)
+  })
+
+  it('acquire sets up pty-output and pty-exit listeners', async () => {
+    await acquire('task-3')
+    expect(listenCallbacks.has('pty-output-task-3')).toBe(true)
+    expect(listenCallbacks.has('pty-exit-task-3')).toBe(true)
+  })
+
+  it('attach appends hostDiv to wrapper and marks attached', async () => {
+    const entry = await acquire('task-4')
+    const wrapper = document.createElement('div')
+
+    attach(entry, wrapper)
+
+    expect(wrapper.contains(entry.hostDiv)).toBe(true)
+    expect(entry.attached).toBe(true)
+  })
+
+  it('attach is idempotent', async () => {
+    const entry = await acquire('task-5')
+    const wrapper = document.createElement('div')
+
+    attach(entry, wrapper)
+    attach(entry, wrapper)
+
+    expect(wrapper.childElementCount).toBe(1)
+  })
+
+  it('detach removes hostDiv from DOM', async () => {
+    const entry = await acquire('task-6')
+    const wrapper = document.createElement('div')
+
+    attach(entry, wrapper)
+    expect(wrapper.contains(entry.hostDiv)).toBe(true)
+
+    detach(entry)
+    expect(wrapper.contains(entry.hostDiv)).toBe(false)
+    expect(entry.attached).toBe(false)
+  })
+
+  it('detach is safe to call when not attached', async () => {
+    const entry = await acquire('task-7')
+    expect(() => detach(entry)).not.toThrow()
+  })
+
+  it('release disposes terminal and removes from pool', async () => {
+    const entry = await acquire('task-8')
+    const disposeSpy = entry.terminal.dispose as ReturnType<typeof vi.fn>
+
+    release('task-8')
+
+    expect(disposeSpy).toHaveBeenCalled()
+    expect(_getPool().has('task-8')).toBe(false)
+  })
+
+  it('release calls unlisten functions', async () => {
+    await acquire('task-9')
+    const savedUnlistens = [...unlistenFns]
+
+    release('task-9')
+
+    for (const fn of savedUnlistens) {
+      expect(fn).toHaveBeenCalled()
+    }
+  })
+
+  it('release is safe for unknown taskId', () => {
+    expect(() => release('nonexistent')).not.toThrow()
+  })
+
+  it('releaseAll clears all entries', async () => {
+    await acquire('task-a')
+    await acquire('task-b')
+    expect(_getPool().size).toBe(2)
+
+    releaseAll()
+    expect(_getPool().size).toBe(0)
+  })
+
+  it('pty-output listener writes to terminal', async () => {
+    const entry = await acquire('task-10')
+    const writeSpy = entry.terminal.write as ReturnType<typeof vi.fn>
+
+    const outputCb = listenCallbacks.get('pty-output-task-10')!
+    outputCb({ payload: { data: 'hello world' } })
+
+    expect(writeSpy).toHaveBeenCalledWith('hello world')
+    expect(entry.ptyActive).toBe(true)
+  })
+
+  it('pty-exit listener marks ptyActive false and needsClear true', async () => {
+    const entry = await acquire('task-11')
+    entry.ptyActive = true
+
+    const exitCb = listenCallbacks.get('pty-exit-task-11')!
+    exitCb({ payload: {} })
+
+    expect(entry.ptyActive).toBe(false)
+    expect(entry.needsClear).toBe(true)
+  })
+
+  it('needsClear causes terminal.reset on next pty-output', async () => {
+    const entry = await acquire('task-12')
+    entry.needsClear = true
+    const resetSpy = entry.terminal.reset as ReturnType<typeof vi.fn>
+    const writeSpy = entry.terminal.write as ReturnType<typeof vi.fn>
+
+    const outputCb = listenCallbacks.get('pty-output-task-12')!
+    outputCb({ payload: { data: 'new session output' } })
+
+    expect(resetSpy).toHaveBeenCalled()
+    expect(writeSpy).toHaveBeenCalledWith('new session output')
+    expect(entry.needsClear).toBe(false)
+  })
+
+  it('terminal survives detach/re-attach cycle', async () => {
+    const entry = await acquire('task-13')
+    const wrapper1 = document.createElement('div')
+    const wrapper2 = document.createElement('div')
+
+    attach(entry, wrapper1)
+    expect(entry.attached).toBe(true)
+
+    // Simulate pty output while attached
+    const outputCb = listenCallbacks.get('pty-output-task-13')!
+    outputCb({ payload: { data: 'first output' } })
+
+    detach(entry)
+    expect(entry.attached).toBe(false)
+
+    // Output while detached still writes to terminal
+    outputCb({ payload: { data: 'background output' } })
+    expect((entry.terminal.write as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith('background output')
+
+    // Re-acquire returns same entry
+    const reacquired = await acquire('task-13')
+    expect(reacquired).toBe(entry)
+
+    // Re-attach to different wrapper
+    attach(reacquired, wrapper2)
+    expect(wrapper2.contains(entry.hostDiv)).toBe(true)
+    expect(entry.attached).toBe(true)
+  })
+})

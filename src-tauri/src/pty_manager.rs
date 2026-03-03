@@ -12,7 +12,7 @@ use tauri::Emitter;
 // Ring Buffer
 // ============================================================================
 
-const CLAUDE_BUFFER_CAPACITY: usize = 51200; // 50KB
+const CLAUDE_BUFFER_CAPACITY: usize = 262_144; // 256KB
 
 struct RingBuffer {
     data: Vec<u8>,
@@ -39,6 +39,10 @@ impl RingBuffer {
         let result = String::from_utf8_lossy(&self.data).to_string();
         self.data.clear();
         result
+    }
+
+    fn snapshot(&self) -> String {
+        String::from_utf8_lossy(&self.data).to_string()
     }
 }
 
@@ -738,8 +742,9 @@ impl PtyManager {
     pub async fn get_claude_pty_buffer(&self, task_id: &str) -> Option<String> {
         let buffers = self.claude_output_buffers.lock().await;
         let buffer = buffers.get(task_id)?;
-        let mut buf = buffer.lock().unwrap();
-        Some(buf.drain())
+        let buf = buffer.lock().unwrap();
+        let content = buf.snapshot();
+        if content.is_empty() { None } else { Some(content) }
     }
 
     /// Cleans up stale PID files for processes that are no longer running
@@ -1342,5 +1347,50 @@ mod tests {
     fn test_frozen_seconds_above_threshold() {
         let now_ms: u64 = 100_000_000;
         assert_eq!(frozen_seconds(now_ms - 60_000, now_ms), Some(60));
+    }
+
+    #[test]
+    fn test_ring_buffer_snapshot_does_not_clear() {
+        let mut buf = RingBuffer::new(100);
+        buf.push(b"hello world");
+        let snap1 = buf.snapshot();
+        assert_eq!(snap1, "hello world");
+        let snap2 = buf.snapshot();
+        assert_eq!(snap2, "hello world", "snapshot must not clear buffer");
+        let drained = buf.drain();
+        assert_eq!(drained, "hello world");
+        let snap3 = buf.snapshot();
+        assert_eq!(snap3, "", "snapshot after drain should be empty");
+    }
+
+    #[test]
+    fn test_ring_buffer_snapshot_with_overflow() {
+        let mut buf = RingBuffer::new(10);
+        buf.push(b"abcdefghijklmno"); // 15 bytes, capacity 10
+        let snap = buf.snapshot();
+        assert_eq!(snap, "fghijklmno");
+        assert_eq!(snap.len(), 10);
+        // Original buffer still intact
+        let snap2 = buf.snapshot();
+        assert_eq!(snap2, "fghijklmno");
+    }
+
+    #[tokio::test]
+    async fn test_get_claude_pty_buffer_returns_snapshot() {
+        let manager = PtyManager::new();
+        let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(1024)));
+        {
+            let mut buf = ring.lock().unwrap();
+            buf.push(b"test output data");
+        }
+        {
+            let mut buffers = manager.claude_output_buffers.lock().await;
+            buffers.insert("task-snap".to_string(), Arc::clone(&ring));
+        }
+        let first = manager.get_claude_pty_buffer("task-snap").await;
+        assert_eq!(first, Some("test output data".to_string()));
+        // Second call should still return the same data (snapshot, not drain)
+        let second = manager.get_claude_pty_buffer("task-snap").await;
+        assert_eq!(second, Some("test output data".to_string()));
     }
 }

@@ -13,6 +13,7 @@ vi.mock('@xterm/xterm', () => {
     loadAddon: vi.fn(),
     refresh: vi.fn(),
     focus: vi.fn(),
+    reset: vi.fn(),
     cols: 80,
     rows: 24,
   }))
@@ -52,22 +53,32 @@ vi.mock('../lib/audioRecorder', () => ({
   createAudioRecorder: vi.fn(),
 }))
 
-// Mock useTerminal composable to avoid xterm constructor issues in test environment
-vi.mock('../lib/useTerminal.svelte', () => ({
-  createTerminal: vi.fn(() => ({
-    get terminalEl() { return null },
-    set terminalEl(_el: HTMLDivElement | null) {},
-    get terminal() { return null },
-    get terminalMounted() { return false },
-    mount: vi.fn().mockResolvedValue(undefined),
-    safeFit: vi.fn(),
-    dispose: vi.fn(),
-  })),
+// Mock terminalPool to avoid xterm constructor issues in test environment
+const { mockPoolEntry } = vi.hoisted(() => ({
+  mockPoolEntry: {
+    taskId: '',
+    terminal: { write: vi.fn(), dispose: vi.fn(), reset: vi.fn(), cols: 80, rows: 24 },
+    fitAddon: { fit: vi.fn() },
+    hostDiv: document.createElement('div'),
+    ptyActive: false,
+    needsClear: false,
+    unlisteners: [] as Array<() => void>,
+    resizeObserver: null,
+    visibilityObserver: null,
+    resizeTimeout: null,
+    attached: false,
+  },
+}))
+
+vi.mock('../lib/terminalPool', () => ({
+  acquire: vi.fn().mockResolvedValue(mockPoolEntry),
+  attach: vi.fn(),
+  detach: vi.fn(),
+  release: vi.fn(),
 }))
 
 import ClaudeAgentPanel from './ClaudeAgentPanel.svelte'
 import { activeSessions } from '../lib/stores'
-import * as ipc from '../lib/ipc'
 
 const baseSession: AgentSession = {
   id: 'ses-1',
@@ -86,6 +97,8 @@ const baseSession: AgentSession = {
 describe('ClaudeAgentPanel', () => {
   beforeEach(() => {
     activeSessions.set(new Map())
+    mockPoolEntry.ptyActive = false
+    mockPoolEntry.attached = false
   })
 
   it('renders the terminal container element', async () => {
@@ -172,14 +185,16 @@ describe('ClaudeAgentPanel', () => {
     expect(screen.queryByText('No active agent session')).toBeNull()
   })
 
-  it('calls getClaudePtyBuffer on mount when session exists', async () => {
+  it('calls acquire on mount', async () => {
+    const { acquire } = await import('../lib/terminalPool')
+
     const sessions = new Map<string, AgentSession>()
     sessions.set('T-1', baseSession)
     activeSessions.set(sessions)
 
     render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
     await vi.waitFor(() => {
-      expect(ipc.getClaudePtyBuffer).toHaveBeenCalledWith('T-1')
+      expect(acquire).toHaveBeenCalledWith('T-1')
     })
   })
 
