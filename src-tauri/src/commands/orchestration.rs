@@ -12,8 +12,6 @@ pub fn build_task_prompt(task: &db::TaskRow, action_instruction: &str, additiona
         }
     }
     
-    prompt.push_str(&format!("You are working on task {}: {}\n\n", task.id, task.title));
-    
     if let Some(ref plan_text) = task.plan_text {
         if !plan_text.is_empty() {
             prompt.push_str("Plan:\n");
@@ -23,6 +21,7 @@ pub fn build_task_prompt(task: &db::TaskRow, action_instruction: &str, additiona
     }
     
     prompt.push_str(action_instruction);
+    prompt.push_str(&format!("\n\nYou are working on task {}: {}", task.id, task.title));
     prompt
 }
 
@@ -411,10 +410,10 @@ mod tests {
 
         let prompt = build_task_prompt(&task, "Do the thing!", None);
         
-        assert!(prompt.contains("You are working on task T-123: Test Task"));
         assert!(prompt.contains("Plan:"));
         assert!(prompt.contains("Step 1: Do this"));
-        assert!(prompt.ends_with("Do the thing!"));
+        assert!(prompt.contains("Do the thing!"));
+        assert!(prompt.ends_with("You are working on task T-123: Test Task"));
     }
 
     #[test]
@@ -436,10 +435,10 @@ mod tests {
 
         let prompt = build_task_prompt(&task, "Execute now!", None);
         
-        assert!(prompt.contains("You are working on task T-456: Minimal Task"));
         assert!(!prompt.contains("Acceptance Criteria:"));
         assert!(!prompt.contains("Plan:"));
-        assert!(prompt.ends_with("Execute now!"));
+        assert!(prompt.contains("Execute now!"));
+        assert!(prompt.ends_with("You are working on task T-456: Minimal Task"));
     }
 
     #[test]
@@ -461,10 +460,10 @@ mod tests {
 
         let prompt = build_task_prompt(&task, "Run test!", None);
         
-        assert!(prompt.contains("You are working on task T-789: Empty Fields Task"));
         assert!(!prompt.contains("Acceptance Criteria:"));
         assert!(!prompt.contains("Plan:"));
-        assert!(prompt.ends_with("Run test!"));
+        assert!(prompt.contains("Run test!"));
+        assert!(prompt.ends_with("You are working on task T-789: Empty Fields Task"));
     }
 
     #[test]
@@ -487,9 +486,9 @@ mod tests {
         let prompt = build_task_prompt(&task, "Do the thing!", Some("Always use TypeScript strict mode.\nFollow the project coding standards."));
         
         assert!(prompt.starts_with("Always use TypeScript strict mode."));
-        assert!(prompt.contains("You are working on task"));
         assert!(prompt.contains("Plan:\n"));
-        assert!(prompt.ends_with("Do the thing!"));
+        assert!(prompt.contains("Do the thing!"));
+        assert!(prompt.ends_with("You are working on task T-999: Instructions Task"));
     }
 
     #[test]
@@ -534,6 +533,6 @@ mod tests {
 
         let prompt = build_task_prompt(&task, "Do the thing!", None);
         
-        assert!(prompt.starts_with("You are working on task"));
+        assert!(prompt.ends_with("You are working on task T-222: None Instructions Task"));
     }
 }
