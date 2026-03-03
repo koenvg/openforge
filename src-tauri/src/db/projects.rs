@@ -178,6 +178,30 @@ impl super::Database {
         Ok(result)
     }
 
+    /// Find a project by its github_default_repo config value.
+    /// Returns the project that has github_default_repo set to the given repo_full_name (e.g. "owner/repo").
+    pub fn find_project_by_github_repo(&self, repo_full_name: &str) -> Result<Option<ProjectRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT p.id, p.name, p.path, p.created_at, p.updated_at
+             FROM projects p
+             JOIN project_config pc ON p.id = pc.project_id
+             WHERE pc.key = 'github_default_repo' AND pc.value = ?1"
+        )?;
+        let mut rows = stmt.query([repo_full_name])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(ProjectRow {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                path: row.get(2)?,
+                created_at: row.get(3)?,
+                updated_at: row.get(4)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Get attention summaries for all projects.
     ///
     /// Aggregates cross-domain signals (agent status, PR status) per project
@@ -416,5 +440,28 @@ mod tests {
 
         drop(db);
         let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_find_project_by_github_repo() {
+        let (db, path) = make_test_db("find_by_repo");
+        // Create a project
+        let project_id = db.create_project("My Project", "/path/to/project").expect("create failed");
+        // Set github_default_repo config
+        db.set_project_config(&project_id.id, "github_default_repo", "facebook/react").expect("set config failed");
+        
+        // Should find the project
+        let found = db.find_project_by_github_repo("facebook/react").expect("find failed");
+        assert!(found.is_some());
+        let found = found.unwrap();
+        assert_eq!(found.id, project_id.id);
+        assert_eq!(found.path, "/path/to/project");
+        
+        // Should NOT find with different repo
+        let not_found = db.find_project_by_github_repo("unknown/repo").expect("find failed");
+        assert!(not_found.is_none());
+        
+        drop(db);
+        let _ = std::fs::remove_file(&path);
     }
 }

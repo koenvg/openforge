@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { ReviewComment, ReviewSubmissionComment } from './types'
+import type { ReviewComment, ReviewSubmissionComment, AgentReviewComment } from './types'
 import { sideToSplitSide, buildExtendData } from './diffComments'
 
 // ============================================================================
@@ -25,6 +25,21 @@ const basePendingComment: ReviewSubmissionComment = {
   line: 15,
   side: 'RIGHT',
   body: 'Needs improvement',
+}
+
+const baseAgentComment: AgentReviewComment = {
+  id: 100,
+  review_pr_id: 1,
+  review_session_key: 'session-1',
+  comment_type: 'inline',
+  file_path: 'src/main.ts',
+  line_number: 20,
+  side: 'RIGHT',
+  body: 'Consider error handling here',
+  status: 'pending',
+  opencode_session_id: null,
+  created_at: 1000,
+  updated_at: 1000,
 }
 
 // ============================================================================
@@ -326,5 +341,65 @@ describe('buildExtendData', () => {
     const result = buildExtendData('src/main.ts', comments, [])
 
     expect(result.newFile['1']).toBeDefined()
+  })
+
+  it('agent comments appear in extendData output', () => {
+    const agentComments: AgentReviewComment[] = [baseAgentComment]
+    
+    const result = buildExtendData('src/main.ts', [], [], agentComments)
+    
+    expect(result.newFile['20']).toBeDefined()
+    expect(result.newFile['20'].data.comments).toHaveLength(1)
+    expect(result.newFile['20'].data.comments[0].type).toBe('agent')
+    expect(result.newFile['20'].data.comments[0].body).toBe('Consider error handling here')
+  })
+  
+  it('dismissed agent comments are excluded', () => {
+    const dismissed: AgentReviewComment = {
+      ...baseAgentComment,
+      status: 'dismissed',
+    }
+    
+    const result = buildExtendData('src/main.ts', [], [], [dismissed])
+    
+    expect(result.oldFile).toEqual({})
+    expect(result.newFile).toEqual({})
+  })
+  
+  it('approved agent comments are included', () => {
+    const approved: AgentReviewComment = {
+      ...baseAgentComment,
+      status: 'approved',
+    }
+    
+    const result = buildExtendData('src/main.ts', [], [], [approved])
+    
+    expect(result.newFile['20']).toBeDefined()
+    expect(result.newFile['20'].data.comments[0].status).toBe('approved')
+  })
+  
+  it('summary agent comments are excluded', () => {
+    const summary: AgentReviewComment = {
+      ...baseAgentComment,
+      comment_type: 'summary',
+    }
+    
+    const result = buildExtendData('src/main.ts', [], [], [summary])
+    
+    expect(result.oldFile).toEqual({})
+    expect(result.newFile).toEqual({})
+  })
+  
+  it('agent comment has commentId and status fields', () => {
+    const agentComments: AgentReviewComment[] = [baseAgentComment]
+    
+    const result = buildExtendData('src/main.ts', [], [], agentComments)
+    
+    const comment = result.newFile['20'].data.comments[0]
+    expect(comment.commentId).toBe(100)
+    expect(comment.status).toBe('pending')
+    expect(comment.filePath).toBe('src/main.ts')
+    expect(comment.lineNumber).toBe(20)
+    expect(comment.commentSide).toBe('RIGHT')
   })
 })

@@ -282,6 +282,22 @@ export interface SelfReviewComment {
   archived_at: number | null;
 }
 
+/** Agent review comment for AI-powered PR review */
+export interface AgentReviewComment {
+  id: number;
+  review_pr_id: number;
+  review_session_key: string;
+  comment_type: string;  // 'inline' | 'summary'
+  file_path: string | null;
+  line_number: number | null;
+  side: string | null;  // 'LEFT' | 'RIGHT'
+  body: string;
+  status: string;  // 'pending' | 'approved' | 'dismissed'
+  opencode_session_id: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
 /** App-level view for top-bar navigation */
 export type AppView = "board" | "pr_review" | "settings" | "global_settings";
 

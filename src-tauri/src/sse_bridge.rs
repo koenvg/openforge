@@ -178,12 +178,36 @@ impl SseBridgeManager {
                                     .unwrap_or(&evt.event_type);
 
                                 match real_event_type {
+                                    "message.part.delta" if task_id.starts_with("pr-review-") => {
+                                        // Allow streaming deltas through for PR review sessions
+                                        if let Some(ref parsed_val) = parsed {
+                                            let delta_preview = parsed_val
+                                                .get("properties")
+                                                .and_then(|p| p.get("delta"))
+                                                .and_then(|d| d.as_str())
+                                                .map(|s| if s.len() > 100 { format!("{}...", &s[..100]) } else { s.to_string() })
+                                                .unwrap_or_else(|| "<no delta field>".to_string());
+                                            let field = parsed_val
+                                                .get("properties")
+                                                .and_then(|p| p.get("field"))
+                                                .and_then(|f| f.as_str())
+                                                .unwrap_or("<no field>");
+                                            println!("[SSE][{}] message.part.delta field={} delta_preview={}", task_id, field, delta_preview);
+                                        } else {
+                                            println!("[SSE][{}] message.part.delta (unparsed): {}", task_id, &evt.data[..std::cmp::min(200, evt.data.len())]);
+                                        }
+                                    }
                                     "message.part.delta" | "message.part.updated" |
                                     "message.updated" | "message.removed" |
                                     "server.heartbeat" | "server.connected" => {
                                         return Ok(());
                                     }
                                     _ => {}
+                                }
+
+                                // Log all events emitted for pr-review tasks
+                                if task_id.starts_with("pr-review-") {
+                                    println!("[SSE][{}] Emitting event: {} data_len={}", task_id, real_event_type, evt.data.len());
                                 }
 
                                 let payload = AgentEventPayload {

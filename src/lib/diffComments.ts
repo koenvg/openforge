@@ -1,4 +1,4 @@
-import type { ReviewComment, ReviewSubmissionComment } from './types'
+import type { ReviewComment, ReviewSubmissionComment, AgentReviewComment } from './types'
 
 /**
  * Display data for comments on a single line.
@@ -8,9 +8,14 @@ export interface CommentDisplayData {
   comments: Array<{
     body: string
     author?: string
-    type: 'existing' | 'pending'
+    type: 'existing' | 'pending' | 'agent'
     createdAt?: string
     index?: number // For pending comment deletion
+    commentId?: number // DB id for agent comments
+    status?: string // 'pending' | 'approved' | 'dismissed' for agent comments
+    filePath?: string // original file path for agent comments
+    lineNumber?: number // original line number for agent comments
+    commentSide?: string // original side for agent comments
   }>
 }
 
@@ -48,7 +53,8 @@ function pathMatches(commentPath: string, targetFilename: string): boolean {
 export function buildExtendData(
   filename: string,
   existingComments: ReviewComment[],
-  pendingComments: ReviewSubmissionComment[]
+  pendingComments: ReviewSubmissionComment[],
+  agentComments: AgentReviewComment[] = []
 ): {
   oldFile: Record<string, { data: CommentDisplayData }>
   newFile: Record<string, { data: CommentDisplayData }>
@@ -101,6 +107,35 @@ export function buildExtendData(
       body: comment.body,
       type: 'pending',
       index
+    })
+  }
+
+  // Process agent comments
+  for (const comment of agentComments) {
+    // Skip non-inline comments (summaries)
+    if (comment.comment_type !== 'inline') continue
+    // Skip dismissed comments
+    if (comment.status === 'dismissed') continue
+    // Skip comments without file/line
+    if (!comment.file_path || comment.line_number === null) continue
+    // Skip comments for other files
+    if (!pathMatches(comment.file_path, filename)) continue
+    
+    const target = sideToSplitSide(comment.side) === 'oldFile' ? oldFile : newFile
+    const lineKey = String(comment.line_number)
+    
+    if (!target[lineKey]) {
+      target[lineKey] = { data: { comments: [] } }
+    }
+    
+    target[lineKey].data.comments.push({
+      body: comment.body,
+      type: 'agent',
+      commentId: comment.id,
+      status: comment.status,
+      filePath: comment.file_path,
+      lineNumber: comment.line_number,
+      commentSide: comment.side ?? 'RIGHT'
     })
   }
 

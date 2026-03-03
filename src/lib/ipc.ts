@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Task, AgentSession, AgentLog, PrComment, PollResult, PullRequestInfo, OpenCodeStatus, AgentInfo, Project, ProjectAttention, WorktreeInfo, ImplementationStatus, ReviewPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus, WhisperModelSizeId } from "./types";
+import type { Task, AgentSession, AgentLog, PrComment, PollResult, PullRequestInfo, OpenCodeStatus, AgentInfo, Project, ProjectAttention, WorktreeInfo, ImplementationStatus, ReviewPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus, WhisperModelSizeId } from "./types";
 
 export async function createTask(title: string, status: string, jiraKey: string | null, projectId: string | null): Promise<Task> {
   return invoke<Task>("create_task", { title, status, jiraKey, projectId });
@@ -240,6 +240,26 @@ export async function deleteSelfReviewComment(commentId: number): Promise<void> 
 
 export async function archiveSelfReviewComments(taskId: string): Promise<void> {
   return invoke<void>("archive_self_review_comments", { taskId });
+}
+
+export async function startAgentReview(repoOwner: string, repoName: string, prNumber: number, headRef: string, baseRef: string, prTitle: string, prBody: string | null, reviewPrId: number): Promise<{ review_session_key: string }> {
+  return invoke<{ review_session_key: string }>("start_agent_review", { repoOwner, repoName, prNumber, headRef, baseRef, prTitle, prBody, reviewPrId });
+}
+
+export async function getAgentReviewComments(reviewPrId: number): Promise<AgentReviewComment[]> {
+  return invoke<AgentReviewComment[]>("get_agent_review_comments", { reviewPrId });
+}
+
+export async function updateAgentReviewCommentStatus(commentId: number, status: string): Promise<void> {
+  return invoke<void>("update_agent_review_comment_status", { commentId, status });
+}
+
+export async function dismissAllAgentReviewComments(reviewPrId: number): Promise<void> {
+  return invoke<void>("dismiss_all_agent_review_comments", { reviewPrId });
+}
+
+export async function abortAgentReview(reviewSessionKey: string): Promise<void> {
+  return invoke<void>("abort_agent_review", { reviewSessionKey });
 }
 
 export async function listOpenCodeCommands(projectId: string): Promise<CommandInfo[]> {
