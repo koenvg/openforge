@@ -139,7 +139,14 @@
 <div class="flex flex-col h-full w-full bg-base-200">
   <div class="flex items-center justify-between px-6 py-4 border-b border-base-300">
     <h2 class="text-[0.9rem] font-semibold text-base-content m-0">Project Settings: {projectName || 'No Project'}</h2>
-    <button class="btn btn-ghost btn-xs" onclick={close}>✕</button>
+    <div class="flex items-center gap-2">
+      {#if $activeProjectId}
+        <button class="btn btn-primary btn-sm" onclick={save} disabled={isSaving}>
+          {#if isSaving}Saving...{:else if saved}Saved!{:else}Save Settings{/if}
+        </button>
+      {/if}
+      <button class="btn btn-ghost btn-xs" onclick={close}>✕</button>
+    </div>
   </div>
 
   {#if !$activeProjectId}
@@ -296,12 +303,6 @@
       </div>
     </div>
 
-    <div class="border-t border-base-300">
-      <div class="py-4 max-w-4xl mx-auto w-full px-6">
-        <button class="btn btn-primary btn-block" onclick={save} disabled={isSaving}>
-          {#if isSaving}Saving...{:else if saved}Saved!{:else}Save Settings{/if}
-        </button>
-      </div>
-    </div>
+
   {/if}
 </div>
