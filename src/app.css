@@ -24,8 +24,8 @@
   --color-accent-content: #000000;
   --color-neutral: #000000;
   --color-neutral-content: #FFFFFF;
-  --color-info: #00D084;
-  --color-info-content: #000000;
+  --color-info: #3B82F6;
+  --color-info-content: #FFFFFF;
   --color-success: #00D084;
   --color-success-content: #000000;
   --color-warning: #FFB800;
@@ -55,8 +55,8 @@
   animation: border-pulse-success 2s ease-in-out infinite;
 }
 .completed {
-  border-left: 3px solid var(--color-primary);
-  background-image: linear-gradient(to right, color-mix(in oklch, var(--color-primary) 8%, transparent), transparent 40%);
+  border-left: 3px solid var(--color-info);
+  background-image: linear-gradient(to right, color-mix(in oklch, var(--color-info) 8%, transparent), transparent 40%);
 }
 .paused {
   border-left: 3px solid var(--color-warning);
@@ -78,6 +78,10 @@
 .ci-failed {
   border: 2px solid var(--color-error);
   background-image: linear-gradient(to right, color-mix(in oklch, var(--color-error) 8%, transparent), transparent 40%);
+}
+.ready-to-merge {
+  border: 2px solid var(--color-info);
+  background-image: linear-gradient(to right, color-mix(in oklch, var(--color-info) 8%, transparent), transparent 40%);
 }
 @keyframes border-pulse-success {
   0%, 100% {
