@@ -11,6 +11,13 @@ vi.mock('../lib/stores', () => ({
   reviewComments: writable([]),
   pendingManualComments: writable([]),
   prOverviewComments: writable([]),
+  agentReviewComments: writable([]),
+  agentReviewLoading: writable(false),
+  agentReviewError: writable(null),
+}))
+
+vi.mock('../lib/navigation', () => ({
+  pushNavState: vi.fn(),
 }))
 
 vi.mock('../lib/useDiffWorker.svelte', () => ({
@@ -26,13 +33,14 @@ vi.mock('../lib/ipc', () => ({
   getPrFileDiffs: vi.fn().mockResolvedValue([]),
   getReviewComments: vi.fn().mockResolvedValue([]),
   getPrOverviewComments: vi.fn().mockResolvedValue([]),
+  getAgentReviewComments: vi.fn().mockResolvedValue([]),
   submitPrReview: vi.fn(),
   markReviewPrViewed: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn(),
 }))
 
 import PrReviewView from './PrReviewView.svelte'
-import { reviewPrs, selectedReviewPr, prFileDiffs, reviewComments, pendingManualComments, reviewRequestCount } from '../lib/stores'
+import { reviewPrs, selectedReviewPr, prFileDiffs, reviewComments, pendingManualComments, reviewRequestCount, agentReviewComments, agentReviewLoading, agentReviewError } from '../lib/stores'
 import { getReviewPrs, fetchReviewPrs, getPrFileDiffs, getReviewComments, markReviewPrViewed } from '../lib/ipc'
 
 const basePr: ReviewPullRequest = {
@@ -67,6 +75,9 @@ describe('PrReviewView', () => {
     reviewComments.set([])
     pendingManualComments.set([])
     reviewRequestCount.set(0)
+    agentReviewComments.set([])
+    agentReviewLoading.set(false)
+    agentReviewError.set(null)
     vi.clearAllMocks()
   })
 
@@ -163,7 +174,7 @@ describe('PrReviewView', () => {
     selectedReviewPr.set(basePr)
 
     await waitFor(() => {
-      expect(screen.getByText('← Back to list')).toBeTruthy()
+      expect(screen.getByText('← Back')).toBeTruthy()
       expect(screen.getByText('Fix authentication middleware')).toBeTruthy()
     })
   })
@@ -178,7 +189,7 @@ describe('PrReviewView', () => {
     selectedReviewPr.set(basePr)
 
     await waitFor(() => {
-      expect(screen.getByText('← Back to list')).toBeTruthy()
+      expect(screen.getByText('← Back')).toBeTruthy()
     })
   })
 
@@ -220,10 +231,10 @@ describe('PrReviewView', () => {
     selectedReviewPr.set(basePr)
 
     await waitFor(() => {
-      expect(screen.getByText('← Back to list')).toBeTruthy()
+      expect(screen.getByText('← Back')).toBeTruthy()
     })
 
-    const backBtn = screen.getByText('← Back to list')
+    const backBtn = screen.getByText('← Back')
     await fireEvent.click(backBtn)
 
     await waitFor(() => {
@@ -313,10 +324,10 @@ describe('PrReviewView', () => {
     ])
 
     await waitFor(() => {
-      expect(screen.getByText('← Back to list')).toBeTruthy()
+      expect(screen.getByText('← Back')).toBeTruthy()
     })
 
-    const backBtn = screen.getByText('← Back to list')
+    const backBtn = screen.getByText('← Back')
     await fireEvent.click(backBtn)
 
     await waitFor(() => {
@@ -341,10 +352,10 @@ describe('PrReviewView', () => {
     ])
 
     await waitFor(() => {
-      expect(screen.getByText('← Back to list')).toBeTruthy()
+      expect(screen.getByText('← Back')).toBeTruthy()
     })
 
-    const backBtn = screen.getByText('← Back to list')
+    const backBtn = screen.getByText('← Back')
     await fireEvent.click(backBtn)
 
     await waitFor(() => {

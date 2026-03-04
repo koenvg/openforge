@@ -4,7 +4,7 @@
   import type { UnlistenFn } from '@tauri-apps/api/event'
   import { reviewPrs, selectedReviewPr, prFileDiffs, reviewRequestCount, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, agentReviewLoading, agentReviewError } from '../lib/stores'
   import { fetchReviewPrs, getReviewPrs, getPrFileDiffs, openUrl, getReviewComments, getFileContent, getFileAtRef, markReviewPrViewed, startAgentReview, getAgentReviewComments, abortAgentReview } from '../lib/ipc'
-  import { pushNavState, navigateBack } from '../lib/navigation'
+  import { pushNavState } from '../lib/navigation'
   import { timeAgo } from '../lib/timeAgo'
   import ReviewPrCard from './ReviewPrCard.svelte'
   import FileTree from './FileTree.svelte'
@@ -95,18 +95,16 @@
   }
 
   function backToList() {
-    if (!navigateBack()) {
-      $selectedReviewPr = null
-      $prFileDiffs = []
-      $reviewComments = []
-      $pendingManualComments = []
-      $prOverviewComments = []
-      $agentReviewComments = []
-      $agentReviewLoading = false
-      $agentReviewError = null
-      reviewSessionKey = null
-      showOutputModal = false
-    }
+    $selectedReviewPr = null
+    $prFileDiffs = []
+    $reviewComments = []
+    $pendingManualComments = []
+    $prOverviewComments = []
+    $agentReviewComments = []
+    $agentReviewLoading = false
+    $agentReviewError = null
+    reviewSessionKey = null
+    showOutputModal = false
     activeTab = 'overview'
   }
 
