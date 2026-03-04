@@ -210,7 +210,7 @@ describe('SelfReviewView integration — performance fixes', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByTitle('Search (\u2318F)')).toBeTruthy()
+      expect(screen.getByText('Split')).toBeTruthy()
     })
 
     const cb = screen.getByRole('checkbox') as HTMLInputElement
@@ -218,7 +218,7 @@ describe('SelfReviewView integration — performance fixes', () => {
     cb.dispatchEvent(new Event('change', { bubbles: true }))
 
     await waitFor(() => {
-      expect(screen.getByTitle('Search (\u2318F)')).toBeTruthy()
+      expect(screen.getByText('Split')).toBeTruthy()
     }, { timeout: 2000 })
   })
 })

@@ -608,7 +608,7 @@
       </div>
     </header>
 
-    {#if $currentView === 'board'}
+    {#if $currentView === 'board' && !selectedTask}
       <div class="flex items-center gap-3 px-6 py-2 border-b border-base-300 shrink-0">
         <label class="input input-bordered input-sm flex items-center gap-2 w-72 font-mono text-xs">
           <span class="text-secondary">$</span>
