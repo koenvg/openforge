@@ -596,8 +596,10 @@
           + new_task <span class="text-[0.65rem] opacity-70 ml-1 font-normal">&#8984;T</span>
         </button>
       </div>
-
-
+      <div class="flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-primary"></span>
+        <span class="text-xs text-secondary font-mono">connected</span>
+      </div>
     </header>
 
     {#if $currentView === 'board'}

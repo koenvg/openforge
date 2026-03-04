@@ -63,7 +63,7 @@
 <div class="flex flex-col gap-5 p-5 overflow-y-auto bg-base-200 h-full">
   <!-- Title / Initial Prompt Section -->
   <section class="flex flex-col gap-2.5">
-    <h3 class="text-xs font-semibold text-primary uppercase tracking-wider m-0">Initial Prompt</h3>
+    <h3 class="text-[10px] font-bold text-primary font-mono tracking-[1.2px] m-0" aria-label="Initial Prompt">// INITIAL_PROMPT</h3>
     <div class="text-sm text-base-content leading-relaxed whitespace-pre-wrap break-words">{task.title}</div>
   </section>
 
@@ -71,7 +71,7 @@
   <!-- Worktree Path Section -->
   {#if worktreePath}
     <section class="flex flex-col gap-2.5">
-      <h3 class="text-xs font-semibold text-primary uppercase tracking-wider m-0">Worktree</h3>
+      <h3 class="text-[10px] font-bold text-primary font-mono tracking-[1.2px] m-0" aria-label="Worktree">// WORKTREE</h3>
       <div class="flex items-center gap-2 bg-base-100 border border-base-300 rounded-md px-3 py-2">
         <span class="text-xs font-mono text-base-content/70 truncate flex-1" title={worktreePath}>{worktreePath}</span>
         <CopyButton text={worktreePath} label="Copy worktree path" />
@@ -81,7 +81,7 @@
   <!-- Merge Status Section -->
   {#if taskPrs.some(pr => pr.state === 'merged' || isReadyToMerge(pr))}
     <section class="flex flex-col gap-2.5">
-      <h3 class="text-xs font-semibold text-primary uppercase tracking-wider m-0">Merge Status</h3>
+      <h3 class="text-[10px] font-bold text-primary font-mono tracking-[1.2px] m-0" aria-label="Merge Status">// MERGE_STATUS</h3>
       {#each taskPrs as pr (pr.id)}
         {#if pr.state === 'merged'}
           <div class="mb-3">
@@ -99,7 +99,7 @@
           <div class="mb-3">
             <div class="flex items-center justify-between gap-2">
               <span class="text-xs text-base-content/50">{pr.title}</span>
-              <span class="text-[0.65rem] font-semibold px-1.5 py-0.5 rounded bg-success/25 text-success merge-ready">&#x25CF; Ready to Merge</span>
+              <span class="text-[0.65rem] font-semibold px-1.5 py-0.5 rounded bg-info/15 text-info merge-ready">&#x25CF; Ready to Merge</span>
             </div>
           </div>
         {/if}
@@ -110,7 +110,7 @@
   <!-- PR Links Section -->
   {#if taskPrs.length > 0}
     <section class="flex flex-col gap-2.5">
-      <h3 class="text-xs font-semibold text-primary uppercase tracking-wider m-0">Pull Requests</h3>
+      <h3 class="text-[10px] font-bold text-primary font-mono tracking-[1.2px] m-0" aria-label="Pull Requests">// PULL_REQUESTS</h3>
       <div class="flex flex-col gap-2">
         {#each taskPrs as pr (pr.id)}
           <div class="bg-base-100 border border-base-300 rounded-md p-3 flex flex-col gap-2">
@@ -132,7 +132,7 @@
   <!-- Pipeline Status Section -->
   {#if taskPrs.some(pr => pr.ci_status)}
     <section class="flex flex-col gap-2.5">
-      <h3 class="text-xs font-semibold text-primary uppercase tracking-wider m-0">Pipeline Status</h3>
+      <h3 class="text-[10px] font-bold text-primary font-mono tracking-[1.2px] m-0" aria-label="Pipeline Status">// PIPELINE_STATUS</h3>
       {#each taskPrs as pr (pr.id)}
         {#if pr.ci_status}
           {@const checkRuns = parseCheckRuns(pr.ci_check_runs)}
@@ -171,7 +171,7 @@
   <!-- Review Status Section -->
   {#if taskPrs.some(pr => pr.review_status && pr.review_status !== 'none')}
     <section class="flex flex-col gap-2.5">
-      <h3 class="text-xs font-semibold text-primary uppercase tracking-wider m-0">Review Status</h3>
+      <h3 class="text-[10px] font-bold text-primary font-mono tracking-[1.2px] m-0" aria-label="Review Status">// REVIEW_STATUS</h3>
       {#each taskPrs as pr (pr.id)}
         {#if pr.review_status && pr.review_status !== 'none'}
           <div class="mb-3">
@@ -197,7 +197,7 @@
     {#if allComments.length > 0}
       <section class="flex flex-col gap-2.5">
         <div class="flex items-center gap-2">
-          <h3 class="text-xs font-semibold text-primary uppercase tracking-wider m-0">PR Comments</h3>
+          <h3 class="text-[10px] font-bold text-primary font-mono tracking-[1.2px] m-0" aria-label="PR Comments">// PR_COMMENTS</h3>
           {#if totalUnaddressed > 0}
             <span class="badge badge-error badge-xs">{totalUnaddressed}</span>
           {:else}

@@ -92,17 +92,17 @@
 
   function getStageLabel(stage: string): string {
     const stageMap: Record<string, string> = {
-      'read_ticket': 'Reading Ticket',
-      'implement': 'Implementing',
-      'create_pr': 'Creating PR',
-      'address_comments': 'Addressing Comments',
+      'read_ticket': 'reading ticket',
+      'implement': 'implementing',
+      'create_pr': 'creating PR',
+      'address_comments': 'addressing comments',
     }
     return stageMap[stage] || stage
   }
 
   function getSessionStatusBadgeClass(sessionStatus: string): string {
     switch (sessionStatus) {
-      case 'running': return 'badge-success'
+      case 'running': return 'bg-success/10 text-success'
       case 'completed': return 'badge-primary'
       case 'failed': return 'badge-error'
       case 'interrupted': return 'badge-ghost'
@@ -117,15 +117,15 @@
     <div class="flex items-start gap-2.5">
       <span class="mt-1.5 shrink-0 {status === 'idle' ? 'status status-neutral' : status === 'running' ? 'status status-success' : status === 'complete' ? 'status status-primary' : 'status status-error'}"></span>
       <div class="flex flex-col gap-1.5">
-        <span class="text-sm font-semibold text-base-content">{getStatusText()}</span>
+        <span class="text-sm font-semibold text-base-content font-mono">{getStatusText()}</span>
         {#if session}
           <div class="flex items-center gap-2">
-            <span class="text-xs font-medium text-base-content/50 tracking-wide">{getStageLabel(session.stage)}</span>
-            <span class="badge badge-sm {getSessionStatusBadgeClass(session.status)}">
-              {session.status}
+            <span class="text-xs font-mono text-secondary">// {getStageLabel(session.stage)}</span>
+            <span class="badge badge-sm font-mono font-bold {getSessionStatusBadgeClass(session.status)}">
+              {session.status.toUpperCase()}
             </span>
             {#if session.claude_session_id}
-              <span class="text-[0.6875rem] font-mono text-base-content/50 max-w-[180px] truncate" title={session.claude_session_id}>
+              <span class="text-[0.6875rem] font-mono text-secondary max-w-[180px] truncate" title={session.claude_session_id}>
                 {session.claude_session_id}
               </span>
             {/if}
@@ -136,7 +136,7 @@
     <div class="flex items-center gap-3">
       <VoiceInput onTranscription={handleTranscription} listenToHotkey />
       {#if status === 'running'}
-        <button class="btn btn-error btn-sm uppercase tracking-wide shadow-sm hover:shadow-md transition-shadow" onclick={handleAbort}>
+        <button class="btn btn-outline btn-error btn-sm uppercase tracking-wide font-mono" onclick={handleAbort}>
           Abort
         </button>
       {/if}

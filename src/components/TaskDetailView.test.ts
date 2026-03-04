@@ -140,9 +140,9 @@ const baseSession: AgentSession = {
 }
 
 describe('TaskDetailView', () => {
-  it('renders back button with "Back" text', () => {
+  it('renders back button with "back" text', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
-    expect(screen.getByText('Back')).toBeTruthy()
+    expect(screen.getByText('back')).toBeTruthy()
   })
 
   it('renders task jira_key when present', () => {
@@ -173,7 +173,7 @@ describe('TaskDetailView', () => {
 
   it('has TaskInfoPanel child with Initial Prompt section', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
-    expect(screen.getByText('Initial Prompt')).toBeTruthy()
+    expect(screen.getByText('// INITIAL_PROMPT')).toBeTruthy()
   })
 
   it('shows Move to Done button when task is not done', () => {

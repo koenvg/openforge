@@ -81,12 +81,11 @@
 <div class="flex flex-col flex-1 h-full bg-base-100 overflow-hidden">
   <header class="flex flex-col bg-base-200 border-b border-base-300 shrink-0">
     <div class="flex items-center gap-3 px-6 py-3.5">
-      <button class="btn btn-soft btn-sm gap-1.5 shrink-0 shadow-sm hover:shadow-md transition-shadow" onclick={handleBack}>
-        <span class="text-base leading-none">←</span>
-        Back
+      <button class="btn btn-ghost btn-sm font-mono text-sm text-secondary border border-base-300 shrink-0 px-2.5 h-7" onclick={handleBack}>
+        <span aria-hidden="true">&lt; </span><span>back</span>
       </button>
       <span class="text-base-content/20 select-none">|</span>
-      <span class="text-[0.8125rem] font-semibold text-base-content/50 font-mono shrink-0">{task.jira_key || task.id}</span>
+      <span class="text-[0.8125rem] font-semibold text-primary font-mono shrink-0">{task.jira_key || task.id}</span>
       {#if task.jira_key && jiraBaseUrl}
         <button
           class="btn btn-ghost btn-xs px-1.5 min-h-0 h-auto text-primary hover:underline"
@@ -118,13 +117,16 @@
         </div>
       {/if}
     </div>
-    <div class="text-sm text-base-content/50 truncate px-6 pb-3 -mt-1" data-testid="subtitle-row">
+    <div class="flex items-center h-8 px-5 border-t border-base-300" data-testid="subtitle-row">
       {#if task.jira_title && task.jira_key}
-        <button
-          class="hover:text-primary transition-colors cursor-pointer text-left w-full truncate"
+        <span
+          class="text-sm text-secondary font-mono truncate flex-1 cursor-pointer hover:text-primary transition-colors"
           title={task.jira_title}
+          role="button"
+          tabindex="0"
           onclick={() => jiraBaseUrl && openUrl(`${jiraBaseUrl}/browse/${task.jira_key}`)}
-        >{task.jira_title}</button>
+          onkeydown={(e) => e.key === 'Enter' && jiraBaseUrl && openUrl(`${jiraBaseUrl}/browse/${task.jira_key}`)}
+        >{task.jira_title}</span>
       {:else}
         <span class="invisible">&#8203;</span>
       {/if}
