@@ -104,7 +104,7 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
                         match pty_mgr.spawn_claude_pty(
                             &worktree.task_id,
                             std::path::Path::new(&worktree.worktree_path),
-                            "Continue working on this task",
+                            "",
                             Some(claude_session_id),
                             &hooks_path,
                             80,

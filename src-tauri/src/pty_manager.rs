@@ -1018,7 +1018,9 @@ pub(crate) fn build_claude_args(
         args.push("--resume".to_string());
         args.push(session_id.to_string());
     }
-    args.push(prompt.to_string());
+    if !prompt.is_empty() {
+        args.push(prompt.to_string());
+    }
     args.push("--settings".to_string());
     args.push(hooks_settings_path.to_string_lossy().to_string());
     args
@@ -1188,7 +1190,7 @@ mod tests {
     }
 
     #[test]
-    fn test_build_claude_args_resume_session() {
+    fn test_build_claude_args_resume_session_with_prompt() {
         let settings = Path::new("/path/to/settings.json");
         let args = build_claude_args("continue work", Some("sess-abc-123"), settings);
         assert_eq!(
@@ -1197,6 +1199,22 @@ mod tests {
                 "--resume",
                 "sess-abc-123",
                 "continue work",
+                "--settings",
+                "/path/to/settings.json",
+            ]
+        );
+    }
+
+    #[test]
+    fn test_build_claude_args_resume_session_without_prompt() {
+        let settings = Path::new("/path/to/settings.json");
+        let args = build_claude_args("", Some("sess-abc-123"), settings);
+        // When resuming without a prompt, no prompt arg should be included
+        assert_eq!(
+            args,
+            vec![
+                "--resume",
+                "sess-abc-123",
                 "--settings",
                 "/path/to/settings.json",
             ]

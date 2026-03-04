@@ -149,7 +149,7 @@ impl super::Database {
              FROM worktrees w
              INNER JOIN tasks t ON w.task_id = t.id
              INNER JOIN agent_sessions a ON w.task_id = a.ticket_id
-             WHERE w.status = 'active' AND t.status != 'done'
+             WHERE w.status = 'active' AND t.status = 'doing'
              ORDER BY w.updated_at DESC",
         )?;
 
@@ -278,6 +278,66 @@ mod tests {
             .clear_stale_worktree_servers()
             .expect("second call failed");
         assert_eq!(count2, 0);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_get_resumable_worktrees_only_doing_tasks() {
+        let (db, path) = make_test_db("resumable_worktrees_doing");
+
+        let project = db
+            .create_project("Test Project", "/tmp/test")
+            .expect("create project failed");
+
+        // Insert a "doing" task with active worktree and agent session — should be resumable
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO tasks (id, title, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            rusqlite::params!["T-1", "Doing task", "doing", "PROJ-1", "Summary", "In Progress", "alice", None::<String>, 1000, 1000, None::<String>],
+        ).expect("insert T-1");
+        drop(conn);
+
+        db.create_worktree_record("T-1", &project.id, "/tmp/repo", "/tmp/wt1", "branch-1")
+            .expect("create wt1");
+        db.create_agent_session("sess-1", "T-1", None, "implementing", "interrupted", "claude-code")
+            .expect("create session 1");
+
+        // Insert a "backlog" task with active worktree and agent session — should NOT be resumable
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO tasks (id, title, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            rusqlite::params!["T-2", "Backlog task", "backlog", "PROJ-2", "Summary", "To Do", "bob", None::<String>, 1000, 1000, None::<String>],
+        ).expect("insert T-2");
+        drop(conn);
+
+        db.create_worktree_record("T-2", &project.id, "/tmp/repo", "/tmp/wt2", "branch-2")
+            .expect("create wt2");
+        db.create_agent_session("sess-2", "T-2", None, "implementing", "interrupted", "claude-code")
+            .expect("create session 2");
+
+        // Insert a "done" task with active worktree and agent session — should NOT be resumable
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO tasks (id, title, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            rusqlite::params!["T-3", "Done task", "done", "PROJ-3", "Summary", "Done", "charlie", None::<String>, 1000, 1000, None::<String>],
+        ).expect("insert T-3");
+        drop(conn);
+
+        db.create_worktree_record("T-3", &project.id, "/tmp/repo", "/tmp/wt3", "branch-3")
+            .expect("create wt3");
+        db.create_agent_session("sess-3", "T-3", None, "implementing", "completed", "claude-code")
+            .expect("create session 3");
+
+        let resumable = db.get_resumable_worktrees().expect("get resumable");
+
+        // Only the "doing" task should be returned
+        assert_eq!(resumable.len(), 1);
+        assert_eq!(resumable[0].task_id, "T-1");
 
         drop(db);
         let _ = fs::remove_file(&path);
