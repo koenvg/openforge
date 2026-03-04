@@ -25,7 +25,7 @@
 
   {#each navItems as { view, Icon }}
     <button
-      class={currentView === view ? 'text-primary' : 'text-[#666666]'}
+      class="cursor-pointer {currentView === view ? 'text-primary' : 'text-[#666666]'}"
       onclick={() => onNavigate(view)}
     >
       <Icon size={20} />
