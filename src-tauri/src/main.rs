@@ -353,7 +353,6 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::opencode::get_opencode_status,
             commands::opencode::get_agents,
             commands::opencode::create_session,
             commands::opencode::send_prompt,

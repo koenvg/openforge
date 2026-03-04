@@ -197,40 +197,6 @@ impl OpenCodeClient {
         Ok(EventStream { response })
     }
 
-    /// Health check
-    ///
-    /// # Returns
-    /// Health status and version information
-    pub async fn health(&self) -> Result<HealthResponse, OpenCodeError> {
-        let url = format!("{}/global/health", self.base_url);
-
-        let response = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(OpenCodeError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
-        }
-
-        let health: HealthResponse = response
-            .json()
-            .await
-            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
-
-        Ok(health)
-    }
-
     /// Send a prompt asynchronously (fire-and-forget)
     ///
     /// # Arguments
@@ -615,14 +581,6 @@ pub struct Part {
     #[serde(rename = "type")]
     pub r#type: String,
     pub text: String,
-}
-
-/// Health check response
-#[derive(Debug, Serialize, Deserialize)]
-pub struct HealthResponse {
-    pub healthy: bool,
-    #[serde(default)]
-    pub version: Option<String>,
 }
 
 /// Request to send a prompt asynchronously
