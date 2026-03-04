@@ -117,8 +117,8 @@
         </div>
       {/if}
     </div>
-    <div class="flex items-center h-8 px-5 border-t border-base-300" data-testid="subtitle-row">
-      {#if task.jira_title && task.jira_key}
+    {#if task.jira_title && task.jira_key}
+      <div class="flex items-center h-8 px-5 border-t border-base-300" data-testid="subtitle-row">
         <span
           class="text-sm text-secondary font-mono truncate flex-1 cursor-pointer hover:text-primary transition-colors"
           title={task.jira_title}
@@ -127,10 +127,8 @@
           onclick={() => jiraBaseUrl && openUrl(`${jiraBaseUrl}/browse/${task.jira_key}`)}
           onkeydown={(e) => e.key === 'Enter' && jiraBaseUrl && openUrl(`${jiraBaseUrl}/browse/${task.jira_key}`)}
         >{task.jira_title}</span>
-      {:else}
-        <span class="invisible">&#8203;</span>
-      {/if}
-    </div>
+      </div>
+    {/if}
   </header>
 
   <div class="flex items-center justify-between h-10 px-6 border-b border-base-300 shrink-0">
