@@ -154,7 +154,8 @@ describe('TaskDetailView', () => {
   it('renders task id when jira_key is null', () => {
     const taskWithoutJira = { ...baseTask, jira_key: null }
     render(TaskDetailView, { props: { task: taskWithoutJira, onRunAction: mockOnRunAction } })
-    expect(screen.getByText('T-42')).toBeTruthy()
+    const matches = screen.getAllByText('T-42')
+    expect(matches.length).toBeGreaterThanOrEqual(1)
   })
 
   it('renders task title in header', () => {
@@ -162,8 +163,6 @@ describe('TaskDetailView', () => {
     const titles = screen.getAllByText('Implement auth middleware')
     expect(titles.length).toBeGreaterThanOrEqual(1)
   })
-
-
 
   it('has AgentPanel child with empty state text', async () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
@@ -191,7 +190,7 @@ describe('TaskDetailView', () => {
   it('hides Review toggle when no worktree', async () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     await waitFor(() => {
-      expect(screen.queryByText('Review')).toBeNull()
+      expect(screen.queryByText('review_view')).toBeNull()
     })
   })
 
@@ -232,6 +231,48 @@ describe('TaskDetailView', () => {
     })
     const button = screen.getByText('Start Implementation').closest('button')
     expect(button?.disabled).toBe(false)
+  })
+
+  it('renders breadcrumb with board path segment', () => {
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    expect(screen.getByText('$ cd board')).toBeTruthy()
+  })
+
+  it('renders breadcrumb with task status segment', () => {
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    const breadcrumbRoot = screen.getByText('$ cd board').closest('div')
+    expect(breadcrumbRoot?.textContent).toContain('backlog')
+  })
+
+  it('renders breadcrumb with task identifier', () => {
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    const breadcrumbRoot = screen.getByText('$ cd board').closest('div')
+    expect(breadcrumbRoot?.textContent).toContain('PROJ-123')
+  })
+
+  it('renders breadcrumb with code segment by default', () => {
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    const breadcrumbRoot = screen.getByText('$ cd board').closest('div')
+    expect(breadcrumbRoot?.textContent).toContain('code')
+  })
+
+  it('renders breadcrumb with task id when no jira_key', () => {
+    const taskWithoutJira = { ...baseTask, jira_key: null }
+    render(TaskDetailView, { props: { task: taskWithoutJira, onRunAction: mockOnRunAction } })
+    const breadcrumbRoot = screen.getByText('$ cd board').closest('div')
+    expect(breadcrumbRoot?.textContent).toContain('T-42')
+  })
+
+  it('renders subtitle row even when jira_title is null', () => {
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    const subtitleRow = screen.getByTestId('subtitle-row')
+    expect(subtitleRow).toBeTruthy()
+  })
+
+  it('renders jira_title in subtitle when available', () => {
+    const taskWithJiraTitle = { ...baseTask, jira_title: 'Some Jira Title' }
+    render(TaskDetailView, { props: { task: taskWithJiraTitle, onRunAction: mockOnRunAction } })
+    expect(screen.getByText('Some Jira Title')).toBeTruthy()
   })
 
 })
