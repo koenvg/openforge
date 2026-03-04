@@ -10,6 +10,8 @@
 
 ---
 
+![Open Forge — Board](docs/images/board.png)
+
 ## What it does
 
 Open Forge is a command center for AI-assisted development. You define coding tasks, an AI agent (Claude Code or OpenCode) implements them in isolated git worktrees on dedicated branches, and the app tracks the full lifecycle: agent progress, CI status, PR reviews, and Jira sync.
@@ -22,6 +24,10 @@ Open Forge is a command center for AI-assisted development. You define coding ta
 | **PR review** | Review pull requests assigned to you. Browse diffs, leave comments, and submit reviews directly from the app. |
 | **GitHub & Jira** | Background polling keeps PR status, CI checks, and Jira issues in sync. |
 | **Voice input** | Dictate instructions to the agent using on-device speech recognition (Whisper). |
+
+![Open Forge — Task View](docs/images/task-view.png)
+
+![Open Forge — Self-Review](docs/images/self-review.png)
 
 ## Tech stack
 
