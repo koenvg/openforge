@@ -1,33 +1,8 @@
 use std::sync::{Mutex, Arc};
 use tauri::State;
-use serde::Serialize;
 use crate::opencode_client::OpenCodeClient;
 use crate::server_manager;
 use crate::db;
-
-#[derive(Serialize)]
-pub struct OpenCodeStatus {
-    pub api_url: String,
-    pub healthy: bool,
-    pub version: Option<String>,
-}
-
-/// Get OpenCode server status and API URL
-#[tauri::command]
-pub async fn get_opencode_status(
-    client: State<'_, OpenCodeClient>,
-) -> Result<OpenCodeStatus, String> {
-    let health = client
-        .health()
-        .await
-        .map_err(|e| format!("Health check failed: {}", e))?;
-    
-    Ok(OpenCodeStatus {
-        api_url: "http://127.0.0.1:4096".to_string(),
-        healthy: health.healthy,
-        version: health.version,
-    })
-}
 
 /// Get list of available agents from OpenCode server
 #[tauri::command]
