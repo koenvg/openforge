@@ -261,15 +261,4 @@ describe('TaskDetailView', () => {
     expect(breadcrumbRoot?.textContent).toContain('T-42')
   })
 
-  it('does not render subtitle row when jira_title is null', () => {
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
-    expect(screen.queryByTestId('subtitle-row')).toBeNull()
-  })
-
-  it('renders jira_title in subtitle when available', () => {
-    const taskWithJiraTitle = { ...baseTask, jira_title: 'Some Jira Title' }
-    render(TaskDetailView, { props: { task: taskWithJiraTitle, onRunAction: mockOnRunAction } })
-    expect(screen.getByText('Some Jira Title')).toBeTruthy()
-  })
-
 })

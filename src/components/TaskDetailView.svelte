@@ -2,7 +2,7 @@
   import { onMount } from 'svelte'
   import type { Task, Action } from '../lib/types'
   import { selectedTaskId, activeSessions, activeProjectId } from '../lib/stores'
-  import { getWorktreeForTask, updateTaskStatus, openUrl, getConfig } from '../lib/ipc'
+  import { getWorktreeForTask, updateTaskStatus, getConfig } from '../lib/ipc'
   import { navigateBack } from '../lib/navigation'
   import { loadActions, getEnabledActions } from '../lib/actions'
   import AgentPanel from './AgentPanel.svelte'
@@ -84,16 +84,9 @@
       <button class="btn btn-ghost btn-sm font-mono text-sm text-secondary border border-base-300 shrink-0 px-2.5 h-7" onclick={handleBack}>
         <span aria-hidden="true">&lt; </span><span>back</span>
       </button>
-      <span class="text-base-content/20 select-none">|</span>
-      <span class="text-[0.8125rem] font-semibold text-primary font-mono shrink-0">{task.jira_key || task.id}</span>
-      {#if task.jira_key && jiraBaseUrl}
-        <button
-          class="btn btn-ghost btn-xs px-1.5 min-h-0 h-auto text-primary hover:underline"
-          onclick={() => openUrl(`${jiraBaseUrl}/browse/${task.jira_key}`)}
-          title="Open in Jira"
-        >↗</button>
-      {/if}
-      <h1 class="text-lg font-bold text-base-content m-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap min-w-0" title={task.title.split('\n')[0]}>{task.title.split('\n')[0]}</h1>
+       <span class="text-base-content/20 select-none">|</span>
+       <span class="text-[0.8125rem] font-semibold text-primary font-mono shrink-0">{task.jira_key || task.id}</span>
+       <h1 class="text-lg font-bold text-base-content m-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap min-w-0" title={task.title.split('\n')[0]}>{task.title.split('\n')[0]}</h1>
       {#if task.status !== 'done'}
         <button
           class="btn btn-success btn-sm shrink-0 shadow-sm hover:shadow-md transition-shadow"
@@ -115,21 +108,9 @@
             </button>
           {/each}
         </div>
-      {/if}
-    </div>
-    {#if task.jira_title && task.jira_key}
-      <div class="flex items-center h-8 px-5 border-t border-base-300" data-testid="subtitle-row">
-        <span
-          class="text-sm text-secondary font-mono truncate flex-1 cursor-pointer hover:text-primary transition-colors"
-          title={task.jira_title}
-          role="button"
-          tabindex="0"
-          onclick={() => jiraBaseUrl && openUrl(`${jiraBaseUrl}/browse/${task.jira_key}`)}
-          onkeydown={(e) => e.key === 'Enter' && jiraBaseUrl && openUrl(`${jiraBaseUrl}/browse/${task.jira_key}`)}
-        >{task.jira_title}</span>
-      </div>
-    {/if}
-  </header>
+       {/if}
+     </div>
+   </header>
 
   <div class="flex items-center justify-between h-10 px-6 border-b border-base-300 shrink-0">
     <div class="flex items-center gap-1 font-mono text-xs">
@@ -159,13 +140,13 @@
     {#if reviewMode}
       <SelfReviewView {task} {agentStatus} onSendToAgent={handleSendToAgent} />
     {:else}
-      <div class="basis-[70%] p-5 overflow-hidden max-[800px]:basis-auto max-[800px]:p-4">
-        <AgentPanel taskId={task.id} />
-      </div>
-      <div class="w-px bg-base-300 shrink-0 max-[800px]:w-full max-[800px]:h-px"></div>
-      <div class="basis-[30%] overflow-y-auto bg-base-200 max-[800px]:basis-auto">
-        <TaskInfoPanel task={task} {worktreePath} />
-      </div>
+       <div class="basis-[70%] p-5 overflow-hidden max-[800px]:basis-auto max-[800px]:p-4">
+         <AgentPanel taskId={task.id} />
+       </div>
+       <div class="w-px bg-base-300 shrink-0 max-[800px]:w-full max-[800px]:h-px"></div>
+       <div class="basis-[30%] overflow-y-auto bg-base-200 max-[800px]:basis-auto">
+         <TaskInfoPanel task={task} {worktreePath} {jiraBaseUrl} />
+       </div>
     {/if}
   </div>
 </div>
