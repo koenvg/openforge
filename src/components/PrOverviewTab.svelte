@@ -2,7 +2,7 @@
   import { onMount } from 'svelte'
   import { prOverviewComments } from '../lib/stores'
   import { getPrOverviewComments } from '../lib/ipc'
-  import { timeAgo } from '../lib/timeAgo'
+  import { timeAgo, timeAgoFromSeconds } from '../lib/timeAgo'
   import type { ReviewPullRequest, PrOverviewComment } from '../lib/types'
   import MarkdownContent from './MarkdownContent.svelte'
 
@@ -60,7 +60,7 @@
         <div class="flex items-center gap-2 text-sm flex-wrap">
           <span class="font-semibold text-base-content">{pr.user_login}</span>
           <span class="text-base-content/50">opened this pull request</span>
-          <span class="text-base-content/50" title={formatDate(new Date(pr.created_at).toISOString())}>{timeAgo(new Date(pr.created_at).getTime())}</span>
+          <span class="text-base-content/50" title={formatDate(new Date(pr.created_at * 1000).toISOString())}>{timeAgoFromSeconds(pr.created_at)}</span>
         </div>
       </div>
       <div class="px-5 py-4">

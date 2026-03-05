@@ -5,7 +5,7 @@
   import { reviewPrs, selectedReviewPr, prFileDiffs, reviewRequestCount, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, agentReviewLoading, agentReviewError } from '../lib/stores'
   import { fetchReviewPrs, getReviewPrs, getPrFileDiffs, openUrl, getReviewComments, getFileContent, getFileAtRef, markReviewPrViewed, startAgentReview, getAgentReviewComments, abortAgentReview } from '../lib/ipc'
   import { pushNavState } from '../lib/navigation'
-  import { timeAgo } from '../lib/timeAgo'
+  import { timeAgoFromSeconds } from '../lib/timeAgo'
   import ReviewPrCard from './ReviewPrCard.svelte'
   import FileTree from './FileTree.svelte'
   import ResizablePanel from './ResizablePanel.svelte'
@@ -248,7 +248,7 @@
             <span class="text-base-300">•</span>
             <span class="font-medium">{$selectedReviewPr.user_login}</span>
             <span class="text-base-300">•</span>
-            <span>{timeAgo($selectedReviewPr.created_at)}</span>
+            <span>{timeAgoFromSeconds($selectedReviewPr.created_at)}</span>
           </div>
           <span class="flex-1"></span>
           <div class="flex gap-1">

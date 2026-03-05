@@ -12,3 +12,11 @@ export function timeAgo(timestampMs: number): string {
   const days = Math.floor(hours / 24)
   return `${days}d ago`
 }
+
+/**
+ * Format a Unix timestamp in seconds as a human-readable relative time string.
+ * @param timestampSeconds Unix timestamp in seconds
+ */
+export function timeAgoFromSeconds(timestampSeconds: number): string {
+  return timeAgo(timestampSeconds * 1000)
+}

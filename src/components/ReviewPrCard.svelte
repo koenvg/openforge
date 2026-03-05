@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { ReviewPullRequest } from '../lib/types'
   import Card from './Card.svelte'
-  import { timeAgo } from '../lib/timeAgo'
+  import { timeAgoFromSeconds } from '../lib/timeAgo'
 
   interface Props {
     pr: ReviewPullRequest
@@ -35,7 +35,7 @@
     <span class="text-base-300">•</span>
     <span class="font-medium">{pr.user_login}</span>
     <span class="text-base-300">•</span>
-    <span>{timeAgo(pr.created_at)}</span>
+    <span>{timeAgoFromSeconds(pr.created_at)}</span>
   </div>
 
   <div class="flex items-center gap-2 text-xs">
