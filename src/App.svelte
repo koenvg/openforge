@@ -9,9 +9,8 @@
   import TaskDetailView from './components/TaskDetailView.svelte'
    import PromptInput from './components/PromptInput.svelte'
   import Modal from './components/Modal.svelte'
-  import SettingsPanel from './components/SettingsPanel.svelte'
-  import GlobalSettingsPanel from './components/GlobalSettingsPanel.svelte'
-  import PrReviewView from './components/PrReviewView.svelte'
+   import SettingsView from './components/SettingsView.svelte'
+   import PrReviewView from './components/PrReviewView.svelte'
   import SkillsView from './components/SkillsView.svelte'
   import Toast from './components/Toast.svelte'
   import CheckpointToast from './components/CheckpointToast.svelte'
@@ -43,7 +42,7 @@
   })
   
   $effect(() => {
-    if ($currentView === 'settings' || $currentView === 'global_settings') {
+    if ($currentView === 'settings') {
       $selectedTaskId = null
     }
   })
@@ -636,30 +635,8 @@
     {/if}
 
     <main class="flex-1 overflow-hidden flex">
-      {#if $currentView === 'settings' || $currentView === 'global_settings'}
-        <div class="flex flex-col flex-1 overflow-hidden w-full">
-          <div class="flex bg-base-200 border-b border-base-300 px-6 shrink-0">
-            <button
-              class="btn btn-ghost btn-sm rounded-none border-b-2 {$currentView === 'settings' ? 'text-primary border-b-primary' : 'border-transparent'}"
-              onclick={() => { pushNavState(); $currentView = 'settings' }}
-            >
-              Project
-            </button>
-            <button
-              class="btn btn-ghost btn-sm rounded-none border-b-2 {$currentView === 'global_settings' ? 'text-primary border-b-primary' : 'border-transparent'}"
-              onclick={() => { pushNavState(); $currentView = 'global_settings' }}
-            >
-              Global
-            </button>
-          </div>
-          <div class="flex-1 overflow-hidden">
-            {#if $currentView === 'settings'}
-              <SettingsPanel onClose={() => { pushNavState(); $currentView = 'board' }} onProjectDeleted={loadProjects} />
-            {:else}
-              <GlobalSettingsPanel onClose={() => { pushNavState(); $currentView = 'board' }} />
-            {/if}
-          </div>
-        </div>
+      {#if $currentView === 'settings'}
+        <SettingsView onClose={() => { pushNavState(); $currentView = 'board' }} onProjectDeleted={loadProjects} />
       {:else if $currentView === 'pr_review'}
         <PrReviewView />
       {:else if $currentView === 'skills'}
