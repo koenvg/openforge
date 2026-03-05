@@ -12,6 +12,25 @@
 
 ![Open Forge — Board](docs/images/board.png)
 
+## Quick install
+
+Install the latest prebuilt release (macOS, no build tools required):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/koenvangeert/openforge/main/scripts/install.sh | sh
+```
+
+To install a specific version:
+
+```bash
+OPENFORGE_VERSION=0.0.5 curl -fsSL https://raw.githubusercontent.com/koenvangeert/openforge/main/scripts/install.sh | sh
+```
+
+> **Note:** The app is unsigned. The install script automatically removes the macOS quarantine flag. If you downloaded the DMG manually, run:
+> ```
+> xattr -rd com.apple.quarantine /Applications/Open\ Forge.app
+> ```
+
 ## What it does
 
 Open Forge is a command center for AI-assisted development. You define coding tasks, an AI agent (Claude Code or OpenCode) implements them in isolated git worktrees on dedicated branches, and the app tracks the full lifecycle: agent progress, CI status, PR reviews, and Jira sync.
