@@ -159,6 +159,52 @@
   animation: ci-pulse 2s ease-in-out infinite;
 }
 
+/* Creature animations */
+@keyframes creature-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes creature-sleep {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+@keyframes creature-exclaim {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.7; }
+}
+@keyframes creature-celebrate {
+  0%, 100% { transform: translateY(0) scaleX(1); }
+  25% { transform: translateY(-8px) scaleX(0.9); }
+  50% { transform: translateY(0) scaleX(1.1); }
+  75% { transform: translateY(-4px) scaleX(0.95); }
+}
+@keyframes creature-wobble {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-5deg); }
+  75% { transform: rotate(5deg); }
+}
+
+.creature-bounce {
+  animation: creature-bounce 2s ease-in-out infinite;
+  will-change: transform;
+}
+.creature-sleep {
+  animation: creature-sleep 3s ease-in-out infinite;
+  will-change: transform;
+}
+.creature-exclaim {
+  animation: creature-exclaim 1s ease-in-out infinite;
+  will-change: transform;
+}
+.creature-celebrate {
+  animation: creature-celebrate 1.5s ease-in-out infinite;
+  will-change: transform;
+}
+.creature-wobble {
+  animation: creature-wobble 1s ease-in-out infinite;
+  will-change: transform;
+}
+
 .markdown-body {
   font-size: 0.875rem;
   line-height: 1.6;
