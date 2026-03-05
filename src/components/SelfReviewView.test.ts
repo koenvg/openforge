@@ -380,7 +380,7 @@ describe('SelfReviewView — hide addressed comments', () => {
      })
 })
 
-  it('comments sidebar renders at 360px width', async () => {
+  it('comments sidebar renders inside ResizablePanel at 360px default width', async () => {
     const comments = [
       makeComment(1, 0), // unaddressed — triggers auto-open
     ]
@@ -401,11 +401,12 @@ describe('SelfReviewView — hide addressed comments', () => {
       expect(screen.getByText('Comment 1')).toBeTruthy()
     })
 
-    // Find the sidebar container by looking for the PR Comments tab button
+    // Find the sidebar ResizablePanel by locating the PR Comments tab and
+    // traversing up to the resizable-panel wrapper
     const prCommentsTab = screen.getByText('PR Comments')
-    const sidebarContainer = prCommentsTab.closest('div')?.parentElement
-    expect(sidebarContainer).toBeTruthy()
-    expect(sidebarContainer?.className).toContain('w-[360px]')
+    const resizablePanel = prCommentsTab.closest('[data-testid="resizable-panel"]') as HTMLElement
+    expect(resizablePanel).toBeTruthy()
+    expect(resizablePanel.style.width).toBe('360px')
   })
 
 })
