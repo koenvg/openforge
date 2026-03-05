@@ -56,9 +56,9 @@ describe('IconRail', () => {
   it('inactive buttons have muted color class when not the active view', () => {
     render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn() } })
     const buttons = screen.getAllByRole('button')
-    expect(buttons[1].className).toContain('text-[#666666]')
-    expect(buttons[2].className).toContain('text-[#666666]')
-    expect(buttons[3].className).toContain('text-[#666666]')
+    expect(buttons[1].className).toContain('text-neutral-content/40')
+    expect(buttons[2].className).toContain('text-neutral-content/40')
+    expect(buttons[3].className).toContain('text-neutral-content/40')
   })
 
   it('active pr_review button has text-primary class when currentView is "pr_review"', () => {
@@ -82,7 +82,7 @@ describe('IconRail', () => {
   it('board button is not primary when currentView is "pr_review"', () => {
     render(IconRail, { props: { currentView: 'pr_review' as AppView, onNavigate: vi.fn() } })
     const buttons = screen.getAllByRole('button')
-    expect(buttons[0].className).toContain('text-[#666666]')
+    expect(buttons[0].className).toContain('text-neutral-content/40')
   })
 
   it('shows review request count badge when reviewRequestCount > 0', () => {
