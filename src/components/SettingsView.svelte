@@ -260,7 +260,7 @@
   }
 </script>
 
-<div class="flex h-full">
+<div class="flex h-full w-full">
   <SettingsSidebar {activeSection} onNavigate={handleNavigate} {hasProject} />
 
   <div class="flex-1 overflow-y-auto bg-base-200">
