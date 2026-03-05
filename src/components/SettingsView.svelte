@@ -67,10 +67,12 @@
   // Scroll spy
   let scrollContainer = $state<HTMLDivElement | null>(null)
   let isNavigating = false
-  const sectionOrder = ['general', 'integrations', 'instructions', 'actions', 'ai', 'credentials']
+  const projectSections = ['general', 'integrations', 'instructions', 'actions']
+  const globalSections = ['ai', 'credentials']
 
   // Derived state
   const hasProject = $derived(!!$activeProjectId)
+  const activePage = $derived(globalSections.includes(activeSection) ? 'global' : 'project')
   const aiProviderInstalled = $derived(
     aiProvider === 'claude-code' ? claudeInstalled : opencodeInstalled
   )
@@ -111,6 +113,13 @@
       githubDefaultRepo = ''
       agentInstructions = ''
       actions = []
+    }
+  })
+
+  // Default to global page when no project is active
+  $effect(() => {
+    if (!hasProject && projectSections.includes(activeSection)) {
+      activeSection = 'ai'
     }
   })
 
@@ -161,6 +170,7 @@
   $effect(() => {
     const container = scrollContainer
     void hasProject
+    const sections = activePage === 'project' ? projectSections : globalSections
 
     if (!container || typeof IntersectionObserver === 'undefined') return
 
@@ -177,7 +187,7 @@
           }
         }
         if (isNavigating) return
-        for (const id of sectionOrder) {
+        for (const id of sections) {
           if (visible.has(id)) {
             activeSection = id
             return
@@ -296,8 +306,14 @@
     <div class="px-6 py-6 flex flex-col gap-6">
       <div class="flex items-center justify-between">
         <div>
-          <h1 class="text-lg font-semibold text-base-content m-0">Settings</h1>
-          <p class="text-xs text-base-content/50 mt-1">Configure your workspace and preferences</p>
+          <h1 class="text-lg font-semibold text-base-content m-0">
+            {activePage === 'project' ? 'Project Settings' : 'Global Settings'}
+          </h1>
+          <p class="text-xs text-base-content/50 mt-1">
+            {activePage === 'project'
+              ? 'Configure project-specific options'
+              : 'Configure global preferences and credentials'}
+          </p>
         </div>
         <button class="btn btn-primary btn-sm" onclick={save} disabled={isSaving}>
           {#if isSaving}
@@ -310,12 +326,7 @@
         </button>
       </div>
 
-      {#if hasProject}
-        <div class="flex items-center gap-3">
-          <div class="text-xs font-semibold text-base-content/40 uppercase tracking-wider">Project Settings</div>
-          <div class="flex-1 border-b border-base-300"></div>
-        </div>
-
+      {#if activePage === 'project'}
         <SettingsGeneralCard
           {projectName}
           {projectPath}
@@ -349,60 +360,55 @@
           onUpdateAction={updateAction}
           onResetActions={resetActions}
         />
-      {/if}
 
-      <div class="flex items-center gap-3">
-        <div class="text-xs font-semibold text-base-content/40 uppercase tracking-wider">Global Settings</div>
-        <div class="flex-1 border-b border-base-300"></div>
-      </div>
-
-      <SettingsAICard
-        {aiProvider}
-        {aiProviderInstalled}
-        aiProviderVersion={aiProviderVersion}
-        {claudeAuthenticated}
-        {opencodeInstalled}
-        {opencodeVersion}
-        {claudeInstalled}
-        {claudeVersion}
-        {modelStatuses}
-        activeModelSize={modelStatuses.find((m) => m.is_active)?.size ?? null}
-        {downloadingModel}
-        onAiProviderChange={(v) => (aiProvider = v)}
-        onWhisperModelSelect={handleModelChange}
-        onDownloadModel={handleDownloadModel}
-        onDownloadComplete={refreshModelStatuses}
-        onDownloadError={() => {
-          downloadingModel = null
-        }}
-      />
-
-      <SettingsCredentialsCard
-        {jiraBaseUrl}
-        {jiraUsername}
-        {jiraApiToken}
-        {githubToken}
-        onJiraBaseUrlChange={(v: string) => (jiraBaseUrl = v)}
-        onJiraUsernameChange={(v: string) => (jiraUsername = v)}
-        onJiraApiTokenChange={(v: string) => (jiraApiToken = v)}
-        onGithubTokenChange={(v: string) => (githubToken = v)}
-      />
-
-      {#if hasProject}
-        <div class="bg-base-100 rounded-lg border border-error/30 overflow-hidden">
-          <div class="px-5 py-3 border-b border-error/30">
-            <h3 class="text-sm font-semibold text-error m-0">Danger Zone</h3>
+        {#if hasProject}
+          <div class="bg-base-100 rounded-lg border border-error/30 overflow-hidden">
+            <div class="px-5 py-3 border-b border-error/30">
+              <h3 class="text-sm font-semibold text-error m-0">Danger Zone</h3>
+            </div>
+            <div class="p-5">
+              <button class="btn btn-error btn-sm" onclick={handleDelete} disabled={isDeleting}>
+                {#if isDeleting}
+                  Deleting...
+                {:else}
+                  Delete Project
+                {/if}
+              </button>
+            </div>
           </div>
-          <div class="p-5">
-            <button class="btn btn-error btn-sm" onclick={handleDelete} disabled={isDeleting}>
-              {#if isDeleting}
-                Deleting...
-              {:else}
-                Delete Project
-              {/if}
-            </button>
-          </div>
-        </div>
+        {/if}
+      {:else}
+        <SettingsAICard
+          {aiProvider}
+          {aiProviderInstalled}
+          aiProviderVersion={aiProviderVersion}
+          {claudeAuthenticated}
+          {opencodeInstalled}
+          {opencodeVersion}
+          {claudeInstalled}
+          {claudeVersion}
+          {modelStatuses}
+          activeModelSize={modelStatuses.find((m) => m.is_active)?.size ?? null}
+          {downloadingModel}
+          onAiProviderChange={(v) => (aiProvider = v)}
+          onWhisperModelSelect={handleModelChange}
+          onDownloadModel={handleDownloadModel}
+          onDownloadComplete={refreshModelStatuses}
+          onDownloadError={() => {
+            downloadingModel = null
+          }}
+        />
+
+        <SettingsCredentialsCard
+          {jiraBaseUrl}
+          {jiraUsername}
+          {jiraApiToken}
+          {githubToken}
+          onJiraBaseUrlChange={(v: string) => (jiraBaseUrl = v)}
+          onJiraUsernameChange={(v: string) => (jiraUsername = v)}
+          onJiraApiTokenChange={(v: string) => (jiraApiToken = v)}
+          onGithubTokenChange={(v: string) => (githubToken = v)}
+        />
       {/if}
     </div>
   </div>

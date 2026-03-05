@@ -173,32 +173,42 @@ describe('SettingsView', () => {
     ).toBeTruthy()
   })
 
-  it('renders JIRA base URL field', () => {
+  it('renders JIRA base URL field on global page', () => {
+    activeProjectId.set(null)
+    projects.set([])
     render(SettingsView, { props: defaultProps })
     expect(screen.getByPlaceholderText('https://your-domain.atlassian.net')).toBeTruthy()
   })
 
-  it('renders JIRA username field', () => {
+  it('renders JIRA username field on global page', () => {
+    activeProjectId.set(null)
+    projects.set([])
     render(SettingsView, { props: defaultProps })
     expect(screen.getByPlaceholderText('your@email.com')).toBeTruthy()
   })
 
-  it('renders JIRA API token field', () => {
+  it('renders JIRA API token field on global page', () => {
+    activeProjectId.set(null)
+    projects.set([])
     render(SettingsView, { props: defaultProps })
     expect(screen.getByPlaceholderText('Your JIRA API token')).toBeTruthy()
   })
 
-  it('renders GitHub PAT field', () => {
+  it('renders GitHub PAT field on global page', () => {
+    activeProjectId.set(null)
+    projects.set([])
     render(SettingsView, { props: defaultProps })
     expect(screen.getByPlaceholderText('ghp_...')).toBeTruthy()
   })
 
-  it('renders Project Settings section divider when project is active', () => {
+  it('shows Project Settings header when project is active', () => {
     render(SettingsView, { props: defaultProps })
     expect(screen.queryAllByText(/project settings/i).length).toBeGreaterThan(0)
   })
 
-  it('renders Global Settings section divider', () => {
+  it('shows Global Settings header when no project is active', () => {
+    activeProjectId.set(null)
+    projects.set([])
     render(SettingsView, { props: defaultProps })
     expect(screen.queryAllByText(/global settings/i).length).toBeGreaterThan(0)
   })
@@ -209,18 +219,16 @@ describe('SettingsView', () => {
     expect(screen.queryAllByText(/^global$/i).length).toBeGreaterThan(0)
   })
 
-  it('hides Project Settings divider when no project is active', () => {
-    activeProjectId.set(null)
-    projects.set([])
+  it('does not show global cards on project page', () => {
     render(SettingsView, { props: defaultProps })
-    expect(screen.queryByText(/project settings/i)).toBeNull()
+    expect(screen.queryByPlaceholderText('https://your-domain.atlassian.net')).toBeNull()
   })
 
-  it('still shows Global Settings divider when no project is active', () => {
+  it('does not show project cards on global page', () => {
     activeProjectId.set(null)
     projects.set([])
     render(SettingsView, { props: defaultProps })
-    expect(screen.queryAllByText(/global settings/i).length).toBeGreaterThan(0)
+    expect(screen.queryByPlaceholderText('My Project')).toBeNull()
   })
 
   it('renders a single Save Settings button', () => {
@@ -289,19 +297,25 @@ describe('SettingsView', () => {
     expect(checkboxes.length).toBeGreaterThan(0)
   })
 
-  it('JIRA API token field has type=password', () => {
+  it('JIRA API token field has type=password on global page', () => {
+    activeProjectId.set(null)
+    projects.set([])
     render(SettingsView, { props: defaultProps })
     const apiTokenInput = screen.getByPlaceholderText('Your JIRA API token') as HTMLInputElement
     expect(apiTokenInput.type).toBe('password')
   })
 
-  it('GitHub PAT field has type=password', () => {
+  it('GitHub PAT field has type=password on global page', () => {
+    activeProjectId.set(null)
+    projects.set([])
     render(SettingsView, { props: defaultProps })
     const patInput = screen.getByPlaceholderText('ghp_...') as HTMLInputElement
     expect(patInput.type).toBe('password')
   })
 
-  it('renders Whisper model selector', async () => {
+  it('renders Whisper model selector on global page', async () => {
+    activeProjectId.set(null)
+    projects.set([])
     vi.mocked(getAllWhisperModelStatuses).mockResolvedValue([
       {
         size: 'tiny',
@@ -328,21 +342,13 @@ describe('SettingsView', () => {
     expect(screen.getByRole('button', { name: /delete project/i })).toBeTruthy()
   })
 
-  it('hides project-specific fields when activeProjectId is null', () => {
+  it('defaults to global page when activeProjectId is null', () => {
     activeProjectId.set(null)
     projects.set([])
 
     render(SettingsView, { props: defaultProps })
 
     expect(screen.queryByPlaceholderText('My Project')).toBeNull()
-  })
-
-  it('still shows global credential fields when activeProjectId is null', () => {
-    activeProjectId.set(null)
-    projects.set([])
-
-    render(SettingsView, { props: defaultProps })
-
     expect(screen.getByPlaceholderText('https://your-domain.atlassian.net')).toBeTruthy()
   })
 })
