@@ -9,9 +9,8 @@
   import TaskDetailView from './components/TaskDetailView.svelte'
    import PromptInput from './components/PromptInput.svelte'
   import Modal from './components/Modal.svelte'
-  import SettingsPanel from './components/SettingsPanel.svelte'
-  import GlobalSettingsPanel from './components/GlobalSettingsPanel.svelte'
-  import PrReviewView from './components/PrReviewView.svelte'
+   import SettingsView from './components/SettingsView.svelte'
+   import PrReviewView from './components/PrReviewView.svelte'
   import SkillsView from './components/SkillsView.svelte'
   import Toast from './components/Toast.svelte'
   import CheckpointToast from './components/CheckpointToast.svelte'
@@ -637,7 +636,7 @@
 
     <main class="flex-1 overflow-hidden flex">
       {#if $currentView === 'settings'}
-        <SettingsPanel onClose={() => { pushNavState(); $currentView = 'board' }} onProjectDeleted={loadProjects} />
+        <SettingsView onClose={() => { pushNavState(); $currentView = 'board' }} onProjectDeleted={loadProjects} />
       {:else if $currentView === 'pr_review'}
         <PrReviewView />
       {:else if $currentView === 'skills'}
