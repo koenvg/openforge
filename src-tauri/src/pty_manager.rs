@@ -630,6 +630,233 @@ impl PtyManager {
         Ok(instance_id)
     }
 
+    pub async fn spawn_shell_pty(
+        &self,
+        task_id: &str,
+        cwd: &Path,
+        cols: u16,
+        rows: u16,
+        app_handle: tauri::AppHandle,
+    ) -> Result<u64, PtyError> {
+        let key = format!("{}-shell", task_id);
+        let mut sessions = self.sessions.lock().await;
+
+        if sessions.contains_key(&key) {
+            println!("[PTY] Replacing existing shell PTY for task {}", task_id);
+            if let Some(mut old_session) = sessions.remove(&key) {
+                let _ = old_session.child.kill();
+            }
+            if let Ok(pid_dir) = self.get_pid_dir() {
+                let _ = std::fs::remove_file(pid_dir.join(format!("{}-shell.pid", task_id)));
+            }
+        }
+
+        println!("Spawning shell PTY for task {} ({}x{})", task_id, cols, rows);
+
+        let pty_system = native_pty_system();
+        let size = PtySize {
+            rows,
+            cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        };
+
+        let pair = pty_system
+            .openpty(size)
+            .map_err(|e| PtyError::SpawnFailed(format!("Failed to create PTY pair: {}", e)))?;
+
+        let shell_path = get_shell_path();
+        let mut cmd = CommandBuilder::new(&shell_path);
+        cmd.cwd(cwd);
+
+        let user_env = get_user_environment();
+        for (k, v) in user_env {
+            cmd.env(k, v);
+        }
+
+        cmd.env("TERM", "xterm-256color");
+        cmd.env("COLORTERM", "truecolor");
+        cmd.env("TERM_PROGRAM", "vscode");
+
+        let child = pair
+            .slave
+            .spawn_command(cmd)
+            .map_err(|e| PtyError::SpawnFailed(format!("Failed to spawn command: {}", e)))?;
+
+        drop(pair.slave);
+
+        let pid = child.process_id().unwrap_or(0);
+        println!("Shell PTY for task {} started (PID: {})", task_id, pid);
+
+        let instance_id = NEXT_INSTANCE_ID.fetch_add(1, Ordering::Relaxed);
+
+        let reader = pair
+            .master
+            .try_clone_reader()
+            .map_err(|e| PtyError::SpawnFailed(format!("Failed to clone reader: {}", e)))?;
+
+        let writer = pair
+            .master
+            .take_writer()
+            .map_err(|e| PtyError::SpawnFailed(format!("Failed to take writer: {}", e)))?;
+
+        sessions.insert(
+            key.clone(),
+            PtySession {
+                instance_id,
+                child,
+                master: pair.master,
+                writer,
+            },
+        );
+
+        drop(sessions);
+
+        #[cfg(target_os = "macos")]
+        {
+            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        }
+
+        let pid_dir = self.get_pid_dir()?;
+        std::fs::create_dir_all(&pid_dir)?;
+        let pid_file = pid_dir.join(format!("{}-shell.pid", task_id));
+        std::fs::write(&pid_file, pid.to_string())?;
+
+        let last_output_time = Arc::new(AtomicU64::new(0));
+        {
+            let mut times = self.last_output.lock().await;
+            times.insert(key.clone(), Arc::clone(&last_output_time));
+        }
+        let last_output_time_reader = Arc::clone(&last_output_time);
+
+        let ring_buffer = Arc::new(std::sync::Mutex::new(RingBuffer::new(CLAUDE_BUFFER_CAPACITY)));
+        {
+            let mut buffers = self.output_buffers.lock().await;
+            buffers.insert(key.clone(), Arc::clone(&ring_buffer));
+        }
+        let ring_buffer_emitter = Arc::clone(&ring_buffer);
+
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Option<String>>();
+
+        let key_reader = key.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut reader = reader;
+            let mut buffer = [0u8; 8192];
+            let mut incomplete_utf8: Vec<u8> = Vec::new();
+
+            loop {
+                match reader.read(&mut buffer) {
+                    Ok(0) => {
+                        println!("[PTY] key={} closed (EOF)", key_reader);
+                        let _ = tx.send(None);
+                        break;
+                    }
+                    Ok(n) => {
+                        let now_ms = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis() as u64;
+                        last_output_time_reader.store(now_ms, Ordering::Relaxed);
+
+                        let mut data = if incomplete_utf8.is_empty() {
+                            buffer[..n].to_vec()
+                        } else {
+                            let mut combined = std::mem::take(&mut incomplete_utf8);
+                            combined.extend_from_slice(&buffer[..n]);
+                            combined
+                        };
+
+                        let valid_up_to = find_utf8_boundary(&data);
+                        if valid_up_to < data.len() {
+                            incomplete_utf8 = data[valid_up_to..].to_vec();
+                            data.truncate(valid_up_to);
+                        }
+
+                        if !data.is_empty() {
+                            let text = String::from_utf8_lossy(&data).to_string();
+                            if tx.send(Some(text)).is_err() {
+                                println!("[PTY] key={} channel closed, reader exiting", key_reader);
+                                break;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("[PTY] key={} read error: {}", key_reader, e);
+                        let _ = tx.send(None);
+                        break;
+                    }
+                }
+            }
+        });
+
+        const FLUSH_INTERVAL_MS: u64 = 16;
+        const MAX_BUFFER_SIZE: usize = 65536;
+
+        let key_emitter = key.clone();
+        let instance_id_emitter = instance_id;
+        tokio::spawn(async move {
+            let mut buffer = String::new();
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(FLUSH_INTERVAL_MS));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+            loop {
+                tokio::select! {
+                    msg = rx.recv() => {
+                        match msg {
+                            Some(Some(text)) => {
+                                buffer.push_str(&text);
+                                if buffer.len() >= MAX_BUFFER_SIZE {
+                                    if !buffer.is_empty() {
+                                        if let Ok(mut buf) = ring_buffer_emitter.lock() {
+                                            buf.push(buffer.as_bytes());
+                                        }
+                                        let event_name = format!("pty-output-{}", key_emitter);
+                                        let payload = serde_json::json!({ "task_id": &key_emitter, "data": &buffer });
+                                        if let Err(e) = app_handle.emit(&event_name, &payload) {
+                                            eprintln!("[PTY] Failed to emit {}: {}", event_name, e);
+                                        }
+                                        buffer.clear();
+                                    }
+                                }
+                            }
+                            Some(None) | None => {
+                                if !buffer.is_empty() {
+                                    if let Ok(mut buf) = ring_buffer_emitter.lock() {
+                                        buf.push(buffer.as_bytes());
+                                    }
+                                    let event_name = format!("pty-output-{}", key_emitter);
+                                    let payload = serde_json::json!({ "task_id": &key_emitter, "data": &buffer });
+                                    if let Err(e) = app_handle.emit(&event_name, &payload) {
+                                        eprintln!("[PTY] Failed to emit {}: {}", event_name, e);
+                                    }
+                                    buffer.clear();
+                                }
+                                println!("[PTY] key={} emitter received exit signal", key_emitter);
+                                let _ = app_handle.emit(&format!("pty-exit-{}", key_emitter), serde_json::json!({"instance_id": instance_id_emitter}));
+                                break;
+                            }
+                        }
+                    }
+                    _ = interval.tick() => {
+                        if !buffer.is_empty() {
+                            if let Ok(mut buf) = ring_buffer_emitter.lock() {
+                                buf.push(buffer.as_bytes());
+                            }
+                            let event_name = format!("pty-output-{}", key_emitter);
+                            let payload = serde_json::json!({ "task_id": &key_emitter, "data": &buffer });
+                            if let Err(e) = app_handle.emit(&event_name, &payload) {
+                                eprintln!("[PTY] Failed to emit {}: {}", event_name, e);
+                            }
+                            buffer.clear();
+                        }
+                    }
+                }
+            }
+        });
+
+        Ok(instance_id)
+    }
+
     pub async fn write_pty(&self, task_id: &str, data: &[u8]) -> Result<(), PtyError> {
         let mut sessions = self.sessions.lock().await;
 
@@ -786,9 +1013,9 @@ impl PtyManager {
             let entry = entry?;
             let path = entry.path();
 
-            // Only process files ending with -pty.pid
+            // Process files ending with -pty.pid, -claude.pid, or -shell.pid
             if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if !name.ends_with("-pty.pid") {
+                if !name.ends_with("-pty.pid") && !name.ends_with("-claude.pid") && !name.ends_with("-shell.pid") {
                     continue;
                 }
             } else {
@@ -1031,6 +1258,19 @@ pub(crate) fn build_claude_args(
     args.push("--settings".to_string());
     args.push(hooks_settings_path.to_string_lossy().to_string());
     args
+}
+
+pub(crate) fn get_shell_path() -> String {
+    let shell = std::env::var("SHELL").unwrap_or_default();
+    if !shell.is_empty() {
+        return shell;
+    }
+    for candidate in ["/bin/zsh", "/bin/bash", "/bin/sh"] {
+        if std::path::Path::new(candidate).exists() {
+            return candidate.to_string();
+        }
+    }
+    "/bin/sh".to_string()
 }
 
 #[cfg(test)]
@@ -1530,5 +1770,47 @@ mod tests {
 
         let result2 = manager.get_pty_buffer("opencode-task-123").await;
         assert_eq!(result2, Some("opencode output data".to_string()), "buffer must be replayable on re-attach");
+    }
+
+    #[test]
+    fn test_build_shell_command() {
+        let shell = get_shell_path();
+        assert!(!shell.is_empty(), "shell path should not be empty");
+        assert!(shell.starts_with('/'), "shell path should be absolute: {}", shell);
+
+        let original = std::env::var("SHELL").ok();
+        std::env::set_var("SHELL", "/usr/bin/env");
+        let shell_with_env = get_shell_path();
+        assert_eq!(shell_with_env, "/usr/bin/env", "should use SHELL env var when set");
+
+        match original {
+            Some(s) => std::env::set_var("SHELL", s),
+            None => std::env::remove_var("SHELL"),
+        }
+
+        let expected_term_vars: &[(&str, &str)] = &[
+            ("TERM", "xterm-256color"),
+            ("COLORTERM", "truecolor"),
+            ("TERM_PROGRAM", "vscode"),
+        ];
+        assert_eq!(expected_term_vars[0], ("TERM", "xterm-256color"));
+        assert_eq!(expected_term_vars[1], ("COLORTERM", "truecolor"));
+        assert_eq!(expected_term_vars[2], ("TERM_PROGRAM", "vscode"));
+    }
+
+    #[test]
+    fn test_shell_pid_file_naming() {
+        let task_id = "my-task-123";
+        let pid_file_name = format!("{}-shell.pid", task_id);
+        assert_eq!(pid_file_name, "my-task-123-shell.pid");
+        assert!(pid_file_name.ends_with("-shell.pid"));
+
+        let session_key = format!("{}-shell", task_id);
+        assert_eq!(session_key, "my-task-123-shell");
+
+        let output_event = format!("pty-output-{}", session_key);
+        let exit_event = format!("pty-exit-{}", session_key);
+        assert_eq!(output_event, "pty-output-my-task-123-shell");
+        assert_eq!(exit_event, "pty-exit-my-task-123-shell");
     }
 }
