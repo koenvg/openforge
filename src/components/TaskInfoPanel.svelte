@@ -10,9 +10,10 @@
   interface Props {
     task: Task
     worktreePath: string | null
+    jiraBaseUrl: string
   }
 
-  let { task, worktreePath }: Props = $props()
+  let { task, worktreePath, jiraBaseUrl }: Props = $props()
 
   let prCommentsByPr = $state<Map<number, PrComment[]>>(new Map())
 
@@ -78,6 +79,26 @@
       </div>
     </section>
   {/if}
+
+  <!-- Jira Section -->
+  {#if task.jira_key}
+    <section class="flex flex-col gap-2.5">
+      <h3 class="text-[10px] font-bold text-primary font-mono tracking-[1.2px] m-0" aria-label="Jira">// JIRA</h3>
+      <div class="bg-base-100 border border-base-300 rounded-md p-3 flex flex-col gap-2">
+        <span class="text-sm font-semibold text-base-content">{task.jira_key}</span>
+        {#if task.jira_title}
+          <span class="text-xs text-base-content/70 truncate" title={task.jira_title}>{task.jira_title}</span>
+        {/if}
+        {#if jiraBaseUrl}
+          <button
+            class="btn btn-link btn-xs p-0 h-auto min-h-0 text-primary no-underline hover:underline text-[0.7rem] text-left justify-start"
+            onclick={() => openUrl(`${jiraBaseUrl}/browse/${task.jira_key}`)}
+          >Open in Jira ↗</button>
+        {/if}
+      </div>
+    </section>
+  {/if}
+
   <!-- Merge Status Section -->
   {#if taskPrs.some(pr => pr.state === 'merged' || isReadyToMerge(pr))}
     <section class="flex flex-col gap-2.5">

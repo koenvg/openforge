@@ -43,6 +43,43 @@
   --noise: 0;
 }
 
+@plugin "daisyui/theme" {
+  name: "openforge-dark";
+  default: false;
+  prefersdark: true;
+  color-scheme: dark;
+
+  --color-base-100: #1E293B;
+  --color-base-200: #0A0F1C;
+  --color-base-300: #2A3A4E;
+  --color-base-content: #E2E8F0;
+  --color-primary: #00D084;
+  --color-primary-content: #000000;
+  --color-secondary: #94A3B8;
+  --color-secondary-content: #000000;
+  --color-accent: #00D084;
+  --color-accent-content: #000000;
+  --color-neutral: #0F172A;
+  --color-neutral-content: #FFFFFF;
+  --color-info: #3B82F6;
+  --color-info-content: #FFFFFF;
+  --color-success: #00D084;
+  --color-success-content: #000000;
+  --color-warning: #FFB800;
+  --color-warning-content: #000000;
+  --color-error: #FF4444;
+  --color-error-content: #FFFFFF;
+
+  --radius-selector: 0.25rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
 :root {
   font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
 }

@@ -85,6 +85,8 @@ vi.mock('../lib/ipc', () => ({
   getLatestSession: vi.fn().mockResolvedValue(null),
   getAgentLogs: vi.fn().mockResolvedValue([]),
   spawnPty: vi.fn().mockResolvedValue(1),
+  spawnShellPty: vi.fn().mockResolvedValue(1),
+  getPtyBuffer: vi.fn().mockResolvedValue(null),
   writePty: vi.fn().mockResolvedValue(undefined),
   resizePty: vi.fn().mockResolvedValue(undefined),
   killPty: vi.fn().mockResolvedValue(undefined),
@@ -95,6 +97,25 @@ vi.mock('../lib/ipc', () => ({
 
 vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn().mockResolvedValue(() => {}),
+}))
+
+vi.mock('../lib/terminalPool', () => ({
+  acquire: vi.fn().mockResolvedValue({
+    taskId: '',
+    terminal: { write: vi.fn(), dispose: vi.fn(), reset: vi.fn(), cols: 80, rows: 24, options: { theme: {} } },
+    fitAddon: { fit: vi.fn() },
+    hostDiv: document.createElement('div'),
+    ptyActive: false,
+    needsClear: false,
+    unlisteners: [],
+    resizeObserver: null,
+    visibilityObserver: null,
+    resizeTimeout: null,
+    attached: false,
+  }),
+  attach: vi.fn(),
+  detach: vi.fn(),
+  release: vi.fn(),
 }))
 
 vi.mock('../lib/actions', () => ({
@@ -261,15 +282,44 @@ describe('TaskDetailView', () => {
     expect(breadcrumbRoot?.textContent).toContain('T-42')
   })
 
-  it('does not render subtitle row when jira_title is null', () => {
+  it('shows terminal toggle when worktree exists', async () => {
+    const { getWorktreeForTask } = await import('../lib/ipc')
+    vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' } as any)
+
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
-    expect(screen.queryByTestId('subtitle-row')).toBeNull()
+    await waitFor(() => {
+      expect(screen.getByText('Info')).toBeTruthy()
+      expect(screen.getByText('Terminal')).toBeTruthy()
+    })
+    vi.mocked(getWorktreeForTask).mockResolvedValue(null)
   })
 
-  it('renders jira_title in subtitle when available', () => {
-    const taskWithJiraTitle = { ...baseTask, jira_title: 'Some Jira Title' }
-    render(TaskDetailView, { props: { task: taskWithJiraTitle, onRunAction: mockOnRunAction } })
-    expect(screen.getByText('Some Jira Title')).toBeTruthy()
+  it('hides terminal toggle when no worktree', async () => {
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    await waitFor(() => {
+      expect(screen.queryByText('Terminal')).toBeNull()
+    })
+  })
+
+  it('shows TaskInfoPanel by default', async () => {
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    expect(screen.getByText('// INITIAL_PROMPT')).toBeTruthy()
+  })
+
+  it('switches to terminal view when Terminal tab clicked', async () => {
+    const { getWorktreeForTask } = await import('../lib/ipc')
+    vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' } as any)
+
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    await waitFor(() => {
+      expect(screen.getByText('Terminal')).toBeTruthy()
+    })
+    await fireEvent.click(screen.getByText('Terminal'))
+    await waitFor(() => {
+      const shellWrapper = document.querySelector('.shell-terminal-wrapper')
+      expect(shellWrapper).toBeTruthy()
+    })
+    vi.mocked(getWorktreeForTask).mockResolvedValue(null)
   })
 
 })

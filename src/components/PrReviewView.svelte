@@ -8,6 +8,7 @@
   import { timeAgo } from '../lib/timeAgo'
   import ReviewPrCard from './ReviewPrCard.svelte'
   import FileTree from './FileTree.svelte'
+  import ResizablePanel from './ResizablePanel.svelte'
   import DiffViewer from './DiffViewer.svelte'
   import ReviewSubmitPanel from './ReviewSubmitPanel.svelte'
   import PrOverviewTab from './PrOverviewTab.svelte'
@@ -279,7 +280,9 @@
             </div>
           {:else}
             {#if fileTreeVisible}
-              <FileTree files={$prFileDiffs} onSelectFile={handleFileSelect} />
+              <ResizablePanel storageKey="pr-review-file-tree" defaultWidth={260} minWidth={160} maxWidth={500} side="left">
+                <FileTree files={$prFileDiffs} onSelectFile={handleFileSelect} />
+              </ResizablePanel>
             {/if}
             <DiffViewer
               bind:this={diffViewer}

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/svelte'
+import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
 import { writable } from 'svelte/store'
 import TaskInfoPanel from './TaskInfoPanel.svelte'
@@ -35,13 +35,13 @@ const baseTask: Task = {
 
 describe('TaskInfoPanel', () => {
   it('renders Initial Prompt section with task title', () => {
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
     expect(screen.getByText('// INITIAL_PROMPT')).toBeTruthy()
     expect(screen.getByText('Implement auth middleware')).toBeTruthy()
   })
 
   it('does not show Edit Task or Delete buttons', () => {
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
     expect(screen.queryByText('Edit Task')).toBeNull()
     expect(screen.queryByText('Delete')).toBeNull()
   })
@@ -70,7 +70,7 @@ describe('TaskInfoPanel', () => {
 
     ticketPrs.set(new Map([['T-42', [prWithCi]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
 
     await new Promise((r) => setTimeout(r, 10))
     expect(screen.getByText('// PIPELINE_STATUS')).toBeTruthy()
@@ -78,13 +78,48 @@ describe('TaskInfoPanel', () => {
 
 
   it('renders worktree path section when worktreePath is provided', () => {
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: '/home/user/worktrees/T-42' } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: '/home/user/worktrees/T-42', jiraBaseUrl: '' } })
     expect(screen.getByText('// WORKTREE')).toBeTruthy()
     expect(screen.getByText('/home/user/worktrees/T-42')).toBeTruthy()
   })
 
   it('does not render worktree section when worktreePath is null', () => {
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
     expect(screen.queryByText('// WORKTREE')).toBeNull()
+  })
+
+  it('renders // JIRA section when task has jira_key and jiraBaseUrl', () => {
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: 'https://jira.example.com' } })
+    expect(screen.getByText('// JIRA')).toBeTruthy()
+  })
+
+  it('does not render // JIRA section when jira_key is null', () => {
+    const taskWithoutJira = { ...baseTask, jira_key: null }
+    render(TaskInfoPanel, { props: { task: taskWithoutJira, worktreePath: null, jiraBaseUrl: 'https://jira.example.com' } })
+    expect(screen.queryByText('// JIRA')).toBeNull()
+  })
+
+  it('renders jira_title in Jira section when available', () => {
+    const taskWithJiraTitle = { ...baseTask, jira_title: 'Fix login bug' }
+    render(TaskInfoPanel, { props: { task: taskWithJiraTitle, worktreePath: null, jiraBaseUrl: 'https://jira.example.com' } })
+    expect(screen.getByText('Fix login bug')).toBeTruthy()
+  })
+
+  it('renders Open in Jira button when jiraBaseUrl provided', () => {
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: 'https://jira.example.com' } })
+    expect(screen.getByText('Open in Jira ↗')).toBeTruthy()
+  })
+
+  it('does not render Open in Jira button when jiraBaseUrl is empty', () => {
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+    expect(screen.queryByText('Open in Jira ↗')).toBeNull()
+  })
+
+  it('calls openUrl with correct Jira URL on click', async () => {
+    const { openUrl } = await import('../lib/ipc')
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: 'https://jira.example.com' } })
+    const button = screen.getByText('Open in Jira ↗')
+    await fireEvent.click(button)
+    expect(openUrl).toHaveBeenCalledWith('https://jira.example.com/browse/PROJ-123')
   })
 })

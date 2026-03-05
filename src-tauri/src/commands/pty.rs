@@ -61,3 +61,18 @@ pub async fn get_pty_buffer(
 ) -> Result<Option<String>, String> {
     Ok(pty_mgr.get_pty_buffer(&task_id).await)
 }
+
+#[tauri::command]
+pub async fn pty_spawn_shell(
+    pty_mgr: State<'_, PtyManager>,
+    app: tauri::AppHandle,
+    task_id: String,
+    cwd: String,
+    cols: u16,
+    rows: u16,
+) -> Result<u64, String> {
+    pty_mgr
+        .spawn_shell_pty(&task_id, std::path::Path::new(&cwd), cols, rows, app)
+        .await
+        .map_err(|e| format!("Failed to spawn shell PTY: {}", e))
+}

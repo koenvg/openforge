@@ -13,6 +13,7 @@
   import { createFileContentsFetcher } from '../lib/useFileContentsFetcher.svelte'
   import { sortFilesAsTree } from '../lib/fileSort'
   import { getFileStatusIcon, getFileStatusColor, getFileStatusLabel } from '../lib/fileStatus'
+  import { themeMode, getDiffTheme } from '../lib/theme'
   import type { Snippet } from 'svelte'
   interface Props {
     files?: PrFileDiff[]
@@ -222,7 +223,7 @@
               extendData={buildExtendData(file.filename, existingComments, $pendingManualComments, agentComments)}
               diffViewMode={diffViewMode}
               diffViewWrap={diffViewWrap}
-              diffViewTheme="light"
+              diffViewTheme={getDiffTheme($themeMode)}
               diffViewHighlight={true}
               diffViewAddWidget={true}
               diffViewFontSize={12}

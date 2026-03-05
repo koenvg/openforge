@@ -23,11 +23,11 @@
     <span class="text-black font-bold font-mono text-sm">&gt;_</span>
   </div>
 
-  <div class="w-9 h-px bg-[#333333]"></div>
+  <div class="w-9 h-px bg-neutral-content/20"></div>
 
   {#each navItems as { view, Icon }}
     <button
-      class="relative cursor-pointer {currentView === view ? 'text-primary' : 'text-[#666666]'}"
+      class="relative cursor-pointer {currentView === view ? 'text-primary' : 'text-neutral-content/40'}"
       onclick={() => onNavigate(view)}
     >
       <Icon size={24} />

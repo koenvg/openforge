@@ -8,6 +8,7 @@
   import type { Task, PrFileDiff } from '../lib/types'
   import type { FileContents } from '../lib/diffAdapter'
   import FileTree from './FileTree.svelte'
+  import ResizablePanel from './ResizablePanel.svelte'
   import DiffViewer from './DiffViewer.svelte'
   import GeneralCommentsSidebar from './GeneralCommentsSidebar.svelte'
   import SendToAgentPanel from './SendToAgentPanel.svelte'
@@ -108,7 +109,9 @@
     {:else}
       <div class="flex flex-1 overflow-hidden">
         {#if fileTreeVisible}
-          <FileTree files={$selfReviewDiffFiles} onSelectFile={handleFileSelect} />
+          <ResizablePanel storageKey="self-review-file-tree" defaultWidth={260} minWidth={160} maxWidth={500} side="left">
+            <FileTree files={$selfReviewDiffFiles} onSelectFile={handleFileSelect} />
+          </ResizablePanel>
         {/if}
           <DiffViewer
             bind:this={diffViewer}
