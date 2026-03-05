@@ -2,6 +2,8 @@ import { DiffFile } from '@git-diff-view/core'
 import { toGitDiffViewData, type FileContents } from './diffAdapter'
 import type { PrFileDiff } from './types'
 import type { DiffWorkerResponse } from './diffWorker'
+import { themeMode, getDiffTheme } from './theme'
+import { get } from 'svelte/store'
 
 export interface DiffWorkerState {
   getDiffFile(filename: string): DiffFile | undefined
@@ -14,8 +16,12 @@ export function createDiffWorker(deps: {
 }): DiffWorkerState {
   let diffFileMap = $state<Map<string, DiffFile>>(new Map())
   let pendingCount = $state(0)
+  let currentTheme = $state(get(themeMode))
+
+  themeMode.subscribe(m => { currentTheme = m })
 
   const sentKeys = new Map<string, FileContents | undefined>()
+  let lastSentTheme: string | null = null
 
   const worker = new Worker(
     new URL('./diffWorker.ts', import.meta.url),
@@ -39,6 +45,11 @@ export function createDiffWorker(deps: {
   $effect(() => {
     const files = deps.getFiles()
     const contentsMap = deps.getFileContentsMap()
+    const theme = getDiffTheme(currentTheme)
+
+    const themeChanged = lastSentTheme !== null && lastSentTheme !== theme
+    if (themeChanged) sentKeys.clear()
+    lastSentTheme = theme
 
     const currentFilenames = new Set(files.map(f => f.filename))
     for (const key of sentKeys.keys()) {
@@ -67,7 +78,7 @@ export function createDiffWorker(deps: {
         type: 'process',
         id: file.filename,
         data,
-        theme: 'light' as const,
+        theme,
       })
       pendingCount++
     }

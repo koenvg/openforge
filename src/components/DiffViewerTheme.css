@@ -79,7 +79,83 @@
   color: #22863a;
 }
 
-/* Search & occurrence highlighting (CSS Custom Highlight API) */
+/* Dark theme overrides for @git-diff-view */
+.diff-tailwindcss-wrapper[data-theme='dark'] .diff-style-root {
+  --diff-border--: #2A3A4E;
+  --diff-add-content--: rgba(22, 163, 74, 0.15);
+  --diff-del-content--: rgba(220, 38, 38, 0.15);
+  --diff-add-lineNumber--: rgba(22, 163, 74, 0.2);
+  --diff-del-lineNumber--: rgba(220, 38, 38, 0.2);
+  --diff-plain-content--: #1E293B;
+  --diff-expand-content--: #0F172A;
+  --diff-plain-lineNumber--: #0F172A;
+  --diff-expand-lineNumber--: #0F172A;
+  --diff-plain-lineNumber-color--: #64748B;
+  --diff-expand-lineNumber-color--: #64748B;
+  --diff-hunk-content--: rgba(59, 130, 246, 0.08);
+  --diff-hunk-lineNumber--: rgba(59, 130, 246, 0.1);
+  --diff-hunk-lineNumber-hover--: #3b82f6;
+  --diff-add-content-highlight--: rgba(22, 163, 74, 0.3);
+  --diff-del-content-highlight--: rgba(220, 38, 38, 0.3);
+  --diff-add-widget--: #3b82f6;
+  --diff-add-widget-color--: #ffffff;
+  --diff-empty-content--: #0F172A;
+  --diff-hunk-content-color--: #94A3B8;
+
+  color: #E2E8F0;
+}
+
+.diff-tailwindcss-wrapper[data-theme='dark'] .diff-style-root .btn-primary {
+  color: #000000;
+}
+
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs {
+  color: #E2E8F0;
+  background: #1E293B;
+}
+
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-keyword,
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-type,
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-variable.language_ {
+  color: #F472B6;
+}
+
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-title,
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-title.class_,
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-title.function_ {
+  color: #C084FC;
+}
+
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-string,
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-regexp {
+  color: #86EFAC;
+}
+
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-number,
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-literal {
+  color: #93C5FD;
+}
+
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-comment {
+  color: #64748B;
+  font-style: italic;
+}
+
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-built_in,
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-symbol {
+  color: #FDBA74;
+}
+
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-attr,
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-variable {
+  color: #93C5FD;
+}
+
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-name,
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-selector-tag {
+  color: #4ADE80;
+}
+
 ::highlight(diff-search-match) {
   background-color: #fde68a;
   color: #1f2937;
