@@ -98,7 +98,7 @@ pub(crate) fn build_start_response(
     task_id: &str,
 ) -> Result<(), String> {
     let (provider_name, session) = {
-        let db_lock = db.lock().unwrap();
+        let db_lock = crate::db::acquire_db(&db);
         let session = db_lock.get_latest_session_for_ticket(task_id).ok().flatten();
         let provider = session.as_ref().map(|s| s.provider.clone()).unwrap_or_else(|| "claude-code".to_string());
         (provider, session)
@@ -119,13 +119,13 @@ pub(crate) fn build_start_response(
     }
 
     if let Some(ref s) = session {
-        let db_lock = db.lock().unwrap();
+        let db_lock = crate::db::acquire_db(&db);
         let status = if provider_name == "claude-code" { "interrupted" } else { "failed" };
         let _ = db_lock.update_agent_session(&s.id, &s.stage, status, None, Some("Aborted by user"));
     }
 
     if provider_name != "claude-code" {
-        let db = db.lock().unwrap();
+        let db = crate::db::acquire_db(&db);
         let _ = db.update_worktree_status(task_id, "stopped");
     }
 
@@ -143,7 +143,7 @@ pub async fn start_implementation(
     repo_path: String,
 ) -> Result<serde_json::Value, String> {
     let (task, project_id_owned, additional_instructions) = {
-        let db = db.lock().unwrap();
+        let db = crate::db::acquire_db(&db);
         let task = db.get_task(&task_id)
             .map_err(|e| format!("Failed to get task: {}", e))?
             .ok_or("Task not found")?;
@@ -155,7 +155,7 @@ pub async fn start_implementation(
     };
 
     let provider_name = {
-        let db_lock = db.lock().unwrap();
+        let db_lock = crate::db::acquire_db(&db);
         db_lock.get_config("ai_provider").ok().flatten().unwrap_or_else(|| "claude-code".to_string())
     };
 
@@ -188,7 +188,7 @@ pub async fn start_implementation(
     .map_err(|e| e.to_string())?;
 
     {
-        let db = db.lock().unwrap();
+        let db = crate::db::acquire_db(&db);
         db.create_worktree_record(
             &task_id,
             &project_id_owned,
@@ -203,7 +203,7 @@ pub async fn start_implementation(
     let result = provider.start(&task_id, &worktree_path, &prompt, None, &app).await?;
 
     if provider_name != "claude-code" {
-        let db = db.lock().unwrap();
+        let db = crate::db::acquire_db(&db);
         db.update_worktree_server(&task_id, result.port as i64, 0)
             .map_err(|e| e.to_string())?;
     }
@@ -238,7 +238,7 @@ pub async fn run_action(
     agent: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let (task, project_id_owned, additional_instructions) = {
-        let db = db.lock().unwrap();
+        let db = crate::db::acquire_db(&db);
         let task = db.get_task(&task_id)
             .map_err(|e| format!("Failed to get task: {}", e))?
             .ok_or("Task not found")?;
@@ -250,7 +250,7 @@ pub async fn run_action(
     };
 
     let provider_name = {
-        let db_lock = db.lock().unwrap();
+        let db_lock = crate::db::acquire_db(&db);
         db_lock.get_config("ai_provider").ok().flatten().unwrap_or_else(|| "claude-code".to_string())
     };
 
@@ -262,7 +262,7 @@ pub async fn run_action(
     ).map_err(|e| format!("Unknown provider: {}", e))?;
 
     let existing_session = {
-        let db = db.lock().unwrap();
+        let db = crate::db::acquire_db(&db);
         db.get_latest_session_for_ticket(&task_id)
             .map_err(|e| format!("Failed to get latest session: {}", e))?
     };
@@ -273,14 +273,14 @@ pub async fn run_action(
             "paused" => return Err("Answer pending question first".to_string()),
             "completed" | "failed" | "interrupted" => {
                 let worktree = {
-                    let db = db.lock().unwrap();
+                    let db = crate::db::acquire_db(&db);
                     db.get_worktree_for_task(&task_id)
                         .map_err(|e| format!("Failed to get worktree: {}", e))?
                 };
 
                 if let Some(w) = worktree {
                     if provider.provider_session_id(session).is_some() {
-                        let db = db.lock().unwrap();
+                        let db = crate::db::acquire_db(&db);
                         let recheck = db.get_latest_session_for_ticket(&task_id)
                             .map_err(|e| format!("Failed to recheck session: {}", e))?;
                         if let Some(s) = recheck {
@@ -300,13 +300,13 @@ pub async fn run_action(
                     ).await?;
 
                     {
-                        let db = db.lock().unwrap();
+                        let db = crate::db::acquire_db(&db);
                         db.update_agent_session(&session.id, &session.stage, "running", None, None)
                             .map_err(|e| format!("Failed to update agent session: {}", e))?;
                     }
 
                     if provider_name != "claude-code" {
-                        let db = db.lock().unwrap();
+                        let db = crate::db::acquire_db(&db);
                         let _ = db.update_worktree_server(&task_id, result.port as i64, 0);
                     }
 
@@ -346,7 +346,7 @@ pub async fn run_action(
     .map_err(|e| e.to_string())?;
 
     {
-        let db = db.lock().unwrap();
+        let db = crate::db::acquire_db(&db);
         db.create_worktree_record(
             &task_id,
             &project_id_owned,
@@ -361,7 +361,7 @@ pub async fn run_action(
     let result = provider.start(&task_id, &worktree_path, &prompt, agent.as_deref(), &app).await?;
 
     if provider_name != "claude-code" {
-        let db = db.lock().unwrap();
+        let db = crate::db::acquire_db(&db);
         db.update_worktree_server(&task_id, result.port as i64, 0)
             .map_err(|e| e.to_string())?;
     }
@@ -403,7 +403,7 @@ pub async fn finalize_claude_session(
     app: tauri::AppHandle,
     task_id: String,
 ) -> Result<(), String> {
-    let db_lock = db.lock().unwrap();
+    let db_lock = crate::db::acquire_db(&db);
     if let Ok(Some(session)) = db_lock.get_latest_session_for_ticket(&task_id) {
         if session.provider == "claude-code" && session.status == "running" {
             let _ = db_lock.update_agent_session(&session.id, &session.stage, "interrupted", None, Some("PTY process exited"));

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Task } from '../lib/types'
   import { openUrl } from '../lib/ipc'
+  import { sanitizeHtml } from '../lib/sanitize'
   import Modal from './Modal.svelte'
 
   interface Props {
@@ -49,7 +50,7 @@
   <div class="flex-1 overflow-y-auto p-5">
     {#if task.jira_description}
       <div class="jira-content text-sm text-base-content leading-relaxed break-words" bind:this={contentEl}>
-        {@html task.jira_description}
+        {@html sanitizeHtml(task.jira_description)}
       </div>
     {:else}
       <div class="text-sm text-base-content/50 italic">No description available from Jira</div>

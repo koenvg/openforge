@@ -38,7 +38,7 @@ pub async fn download_whisper_model(
     let path = whisper.download_model(app, size).await
         .map_err(|e| format!("Model download failed: {}", e))?;
 
-    let db = db.lock().unwrap();
+    let db = crate::db::acquire_db(&db);
     db.set_config("whisper_model_path", &path)
         .map_err(|e| format!("Failed to save model path to config: {}", e))?;
 
@@ -56,7 +56,7 @@ pub async fn set_whisper_model(
 
     whisper.set_active_model(size);
 
-    let db = db.lock().unwrap();
+    let db = crate::db::acquire_db(&db);
     db.set_config("whisper_model_size", size.as_str())
         .map_err(|e| format!("Failed to save model size to config: {}", e))?;
 

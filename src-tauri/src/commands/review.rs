@@ -36,7 +36,7 @@ pub async fn get_github_username(
     github_client: State<'_, GitHubClient>,
 ) -> Result<String, String> {
     let cached_username = {
-        let db_lock = db.lock().unwrap();
+        let db_lock = crate::db::acquire_db(&db);
         db_lock.get_config("github_username")
             .map_err(|e| format!("Failed to get config: {}", e))?
     };
@@ -46,7 +46,7 @@ pub async fn get_github_username(
     }
 
     let token = {
-        let db_lock = db.lock().unwrap();
+        let db_lock = crate::db::acquire_db(&db);
         db_lock.get_config("github_token")
             .map_err(|e| format!("Failed to get config: {}", e))?
             .ok_or("github_token not configured")?
@@ -58,7 +58,7 @@ pub async fn get_github_username(
         .map_err(|e| format!("Failed to get authenticated user: {}", e))?;
 
     {
-        let db_lock = db.lock().unwrap();
+        let db_lock = crate::db::acquire_db(&db);
         db_lock.set_config("github_username", &username)
             .map_err(|e| format!("Failed to cache username: {}", e))?;
     }
@@ -72,7 +72,7 @@ pub async fn fetch_review_prs(
     github_client: State<'_, GitHubClient>,
 ) -> Result<Vec<db::ReviewPrRow>, String> {
     let cached_username = {
-        let db_lock = db.lock().unwrap();
+        let db_lock = crate::db::acquire_db(&db);
         db_lock.get_config("github_username")
             .map_err(|e| format!("Failed to get config: {}", e))?
     };
@@ -81,7 +81,7 @@ pub async fn fetch_review_prs(
         u
     } else {
         let token_temp = {
-            let db_lock = db.lock().unwrap();
+            let db_lock = crate::db::acquire_db(&db);
             db_lock.get_config("github_token")
                 .map_err(|e| format!("Failed to get config: {}", e))?
                 .ok_or("github_token not configured")?
@@ -91,7 +91,7 @@ pub async fn fetch_review_prs(
             .await
             .map_err(|e| format!("Failed to get authenticated user: {}", e))?;
         {
-            let db_lock = db.lock().unwrap();
+            let db_lock = crate::db::acquire_db(&db);
             db_lock.set_config("github_username", &u)
                 .map_err(|e| format!("Failed to cache username: {}", e))?;
         }
@@ -99,7 +99,7 @@ pub async fn fetch_review_prs(
     };
 
     let token = {
-        let db_lock = db.lock().unwrap();
+        let db_lock = crate::db::acquire_db(&db);
         db_lock.get_config("github_token")
             .map_err(|e| format!("Failed to get config: {}", e))?
             .ok_or("github_token not configured")?
@@ -113,7 +113,7 @@ pub async fn fetch_review_prs(
     let current_ids: Vec<i64> = prs.iter().map(|pr| pr.id).collect();
 
     {
-        let db_lock = db.lock().unwrap();
+        let db_lock = crate::db::acquire_db(&db);
         for pr in &prs {
             let created_at = chrono::DateTime::parse_from_rfc3339(&pr.created_at)
                 .map(|dt| dt.timestamp())
@@ -149,7 +149,7 @@ pub async fn fetch_review_prs(
             .map_err(|e| format!("Failed to delete stale review PRs: {}", e))?;
     }
 
-    let db_lock = db.lock().unwrap();
+    let db_lock = crate::db::acquire_db(&db);
     db_lock.get_all_review_prs()
         .map_err(|e| format!("Failed to get review PRs: {}", e))
 }
@@ -158,7 +158,7 @@ pub async fn fetch_review_prs(
 pub async fn get_review_prs(
     db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<Vec<db::ReviewPrRow>, String> {
-    let db_lock = db.lock().unwrap();
+    let db_lock = crate::db::acquire_db(&db);
     db_lock.get_all_review_prs()
         .map_err(|e| format!("Failed to get review PRs: {}", e))
 }
@@ -172,7 +172,7 @@ pub async fn get_pr_file_diffs(
     pr_number: i64,
 ) -> Result<Vec<crate::github_client::PrFileDiff>, String> {
     let token = {
-        let db_lock = db.lock().unwrap();
+        let db_lock = crate::db::acquire_db(&db);
         db_lock.get_config("github_token")
             .map_err(|e| format!("Failed to get config: {}", e))?
             .ok_or("github_token not configured")?
@@ -193,7 +193,7 @@ pub async fn get_file_content(
     sha: String,
 ) -> Result<String, String> {
     let token = {
-        let db_lock = db.lock().unwrap();
+        let db_lock = crate::db::acquire_db(&db);
         db_lock.get_config("github_token")
             .map_err(|e| format!("Failed to get config: {}", e))?
             .ok_or("github_token not configured")?
@@ -215,7 +215,7 @@ pub async fn get_file_at_ref(
     ref_sha: String,
 ) -> Result<String, String> {
     let token = {
-        let db_lock = db.lock().unwrap();
+        let db_lock = crate::db::acquire_db(&db);
         db_lock.get_config("github_token")
             .map_err(|e| format!("Failed to get config: {}", e))?
             .ok_or("github_token not configured")?
@@ -266,7 +266,7 @@ pub async fn get_review_comments(
     pr_number: i64,
 ) -> Result<Vec<FrontendReviewComment>, String> {
     let token = {
-        let db_lock = db.lock().unwrap();
+        let db_lock = crate::db::acquire_db(&db);
         db_lock.get_config("github_token")
             .map_err(|e| format!("Failed to get config: {}", e))?
             .ok_or("github_token not configured")?
@@ -311,7 +311,7 @@ pub async fn get_pr_overview_comments(
     pr_number: i64,
 ) -> Result<Vec<FrontendPrOverviewComment>, String> {
     let token = {
-        let db_lock = db.lock().unwrap();
+        let db_lock = crate::db::acquire_db(&db);
         db_lock.get_config("github_token")
             .map_err(|e| format!("Failed to get config: {}", e))?
             .ok_or("github_token not configured")?
@@ -352,7 +352,7 @@ pub async fn submit_pr_review(
     commit_id: String,
 ) -> Result<(), String> {
     let token = {
-        let db_lock = db.lock().unwrap();
+        let db_lock = crate::db::acquire_db(&db);
         db_lock.get_config("github_token")
             .map_err(|e| format!("Failed to get config: {}", e))?
             .ok_or("github_token not configured")?
@@ -371,7 +371,7 @@ pub async fn mark_review_pr_viewed(
     pr_id: i64,
     head_sha: String,
 ) -> Result<(), String> {
-    let db = db.lock().unwrap();
+    let db = crate::db::acquire_db(&db);
     db.mark_review_pr_viewed(pr_id, &head_sha)
         .map_err(|e| format!("Failed to mark review PR viewed: {}", e))
 }

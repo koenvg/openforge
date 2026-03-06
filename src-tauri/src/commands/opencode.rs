@@ -49,7 +49,7 @@ pub async fn list_opencode_commands(
 ) -> Result<Vec<crate::opencode_client::CommandInfo>, String> {
     // Get task IDs for the project
     let task_ids: Vec<String> = {
-        let db = db.lock().unwrap();
+        let db = crate::db::acquire_db(&db);
         db.get_tasks_for_project(&project_id)
             .map_err(|e| format!("Failed to get tasks: {}", e))?
             .into_iter()
@@ -79,7 +79,7 @@ pub async fn search_opencode_files(
 ) -> Result<Vec<String>, String> {
     // Get task IDs for the project
     let task_ids: Vec<String> = {
-        let db = db.lock().unwrap();
+        let db = crate::db::acquire_db(&db);
         db.get_tasks_for_project(&project_id)
             .map_err(|e| format!("Failed to get tasks: {}", e))?
             .into_iter()
@@ -108,7 +108,7 @@ pub async fn list_opencode_agents(
 ) -> Result<Vec<crate::opencode_client::AgentInfo>, String> {
     // Get task IDs for the project
     let task_ids: Vec<String> = {
-        let db = db.lock().unwrap();
+        let db = crate::db::acquire_db(&db);
         db.get_tasks_for_project(&project_id)
             .map_err(|e| format!("Failed to get tasks: {}", e))?
             .into_iter()
@@ -224,7 +224,7 @@ pub async fn list_opencode_skills(
 ) -> Result<Vec<crate::opencode_client::SkillInfo>, String> {
     // Get the project path for filesystem scanning and level detection
     let project_path = {
-        let db = db.lock().unwrap();
+        let db = crate::db::acquire_db(&db);
         db.get_project(&project_id)
             .map_err(|e| format!("Failed to get project: {}", e))?
             .map(|p| p.path)
@@ -232,7 +232,7 @@ pub async fn list_opencode_skills(
 
     // Get task IDs for the project
     let task_ids: Vec<String> = {
-        let db = db.lock().unwrap();
+        let db = crate::db::acquire_db(&db);
         db.get_tasks_for_project(&project_id)
             .map_err(|e| format!("Failed to get tasks: {}", e))?
             .into_iter()

@@ -10,7 +10,7 @@ pub async fn get_task_diff(
     db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<Vec<diff_parser::TaskFileDiff>, String> {
     let worktree_path = {
-        let db = db.lock().unwrap();
+        let db = crate::db::acquire_db(&db);
         let row = db
             .get_worktree_for_task(&task_id)
             .map_err(|e| format!("Failed to get worktree for task: {}", e))?;
@@ -193,7 +193,7 @@ pub async fn get_task_file_contents(
     db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<(String, String), String> {
     let worktree_path = {
-        let db = db.lock().unwrap();
+        let db = crate::db::acquire_db(&db);
         let row = db
             .get_worktree_for_task(&task_id)
             .map_err(|e| format!("Failed to get worktree for task: {}", e))?;
@@ -248,7 +248,7 @@ pub async fn get_task_batch_file_contents(
     db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<Vec<(String, String)>, String> {
     let worktree_path = {
-        let db = db.lock().unwrap();
+        let db = crate::db::acquire_db(&db);
         let row = db
             .get_worktree_for_task(&task_id)
             .map_err(|e| format!("Failed to get worktree for task: {}", e))?;
@@ -301,7 +301,7 @@ pub async fn add_self_review_comment(
     body: String,
     db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<i64, String> {
-    let db = db.lock().unwrap();
+    let db = crate::db::acquire_db(&db);
     db.insert_self_review_comment(
         &task_id,
         &comment_type,
@@ -317,7 +317,7 @@ pub async fn get_active_self_review_comments(
     task_id: String,
     db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<Vec<db::SelfReviewCommentRow>, String> {
-    let db = db.lock().unwrap();
+    let db = crate::db::acquire_db(&db);
     db.get_active_self_review_comments(&task_id)
         .map_err(|e| format!("Failed to get active self review comments: {}", e))
 }
@@ -327,7 +327,7 @@ pub async fn get_archived_self_review_comments(
     task_id: String,
     db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<Vec<db::SelfReviewCommentRow>, String> {
-    let db = db.lock().unwrap();
+    let db = crate::db::acquire_db(&db);
     db.get_archived_self_review_comments(&task_id)
         .map_err(|e| format!("Failed to get archived self review comments: {}", e))
 }
@@ -337,7 +337,7 @@ pub async fn delete_self_review_comment(
     comment_id: i64,
     db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<(), String> {
-    let db = db.lock().unwrap();
+    let db = crate::db::acquire_db(&db);
     db.delete_self_review_comment(comment_id)
         .map_err(|e| format!("Failed to delete self review comment: {}", e))
 }
@@ -347,7 +347,7 @@ pub async fn archive_self_review_comments(
     task_id: String,
     db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<(), String> {
-    let db = db.lock().unwrap();
+    let db = crate::db::acquire_db(&db);
     db.archive_self_review_comments(&task_id)
         .map_err(|e| format!("Failed to archive self review comments: {}", e))
 }

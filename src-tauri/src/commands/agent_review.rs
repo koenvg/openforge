@@ -19,7 +19,7 @@ pub async fn start_agent_review(
 ) -> Result<serde_json::Value, String> {
     // Step 1: Find project
     let project = {
-        let db = db.lock().unwrap();
+        let db = crate::db::acquire_db(&db);
         db.find_project_by_github_repo(&format!("{}/{}", repo_owner, repo_name))
             .map_err(|e| format!("Failed to find project: {}", e))?
     };
@@ -85,7 +85,7 @@ pub async fn start_agent_review(
 
     // Step 10: Delete existing comments (for re-review)
     {
-        let db = db.lock().unwrap();
+        let db = crate::db::acquire_db(&db);
         db.delete_agent_review_comments_for_pr(review_pr_id)
             .map_err(|e| format!("Failed to delete existing comments: {}", e))?;
     }
@@ -102,7 +102,7 @@ pub async fn get_agent_review_comments(
     db: State<'_, Arc<Mutex<db::Database>>>,
     review_pr_id: i64,
 ) -> Result<Vec<db::AgentReviewCommentRow>, String> {
-    let db = db.lock().unwrap();
+    let db = crate::db::acquire_db(&db);
     db.get_agent_review_comments_for_pr(review_pr_id)
         .map_err(|e| format!("Failed to get agent review comments: {}", e))
 }
@@ -113,7 +113,7 @@ pub async fn update_agent_review_comment_status(
     comment_id: i64,
     status: String,
 ) -> Result<(), String> {
-    let db = db.lock().unwrap();
+    let db = crate::db::acquire_db(&db);
     db.update_agent_review_comment_status(comment_id, &status)
         .map_err(|e| format!("Failed to update comment status: {}", e))
 }
@@ -123,7 +123,7 @@ pub async fn dismiss_all_agent_review_comments(
     db: State<'_, Arc<Mutex<db::Database>>>,
     review_pr_id: i64,
 ) -> Result<(), String> {
-    let db = db.lock().unwrap();
+    let db = crate::db::acquire_db(&db);
     db.delete_agent_review_comments_for_pr(review_pr_id)
         .map_err(|e| format!("Failed to dismiss all comments: {}", e))
 }

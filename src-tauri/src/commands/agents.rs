@@ -7,7 +7,7 @@ pub async fn get_session_status(
     db: State<'_, Arc<Mutex<db::Database>>>,
     session_id: String,
 ) -> Result<db::AgentSessionRow, String> {
-    let db_lock = db.lock().unwrap();
+    let db_lock = crate::db::acquire_db(&db);
     db_lock
         .get_agent_session(&session_id)
         .map_err(|e| format!("Failed to get session status: {}", e))?
@@ -25,7 +25,7 @@ pub async fn abort_session(
 ) -> Result<(), String> {
     // 1. Look up the session to get task_id and provider
     let session = {
-        let db_lock = db.lock().unwrap();
+        let db_lock = crate::db::acquire_db(&db);
         db_lock
             .get_agent_session(&session_id)
             .map_err(|e| format!("Failed to get session: {}", e))?
@@ -48,13 +48,13 @@ pub async fn abort_session(
     // Claude uses "interrupted", OpenCode uses "failed"
     let abort_status = if session.provider == "claude-code" { "interrupted" } else { "failed" };
     {
-        let db_lock = db.lock().unwrap();
+        let db_lock = crate::db::acquire_db(&db);
         let _ = db_lock.update_agent_session(&session.id, "implementing", abort_status, None, Some("Aborted by user"));
     }
 
     // 5. Update worktree status for OpenCode
     if session.provider != "claude-code" {
-        let db = db.lock().unwrap();
+        let db = crate::db::acquire_db(&db);
         let _ = db.update_worktree_status(task_id, "stopped");
     }
 
@@ -67,7 +67,7 @@ pub async fn get_agent_logs(
     db: State<'_, Arc<Mutex<db::Database>>>,
     session_id: String,
 ) -> Result<Vec<db::AgentLogRow>, String> {
-    let db_lock = db.lock().unwrap();
+    let db_lock = crate::db::acquire_db(&db);
     db_lock.get_agent_logs(&session_id)
         .map_err(|e| format!("Failed to get agent logs: {}", e))
 }
@@ -77,7 +77,7 @@ pub async fn get_latest_session(
     db: State<'_, Arc<Mutex<db::Database>>>,
     task_id: String,
 ) -> Result<Option<db::AgentSessionRow>, String> {
-    let db_lock = db.lock().unwrap();
+    let db_lock = crate::db::acquire_db(&db);
     db_lock
         .get_latest_session_for_ticket(&task_id)
         .map_err(|e| format!("Failed to get latest session: {}", e))
@@ -88,7 +88,7 @@ pub async fn get_latest_sessions(
     db: State<'_, Arc<Mutex<db::Database>>>,
     task_ids: Vec<String>,
 ) -> Result<Vec<db::AgentSessionRow>, String> {
-    let db_lock = db.lock().unwrap();
+    let db_lock = crate::db::acquire_db(&db);
     db_lock
         .get_latest_sessions_for_tickets(&task_ids)
         .map_err(|e| format!("Failed to get sessions: {}", e))
@@ -102,7 +102,7 @@ pub async fn get_session_output(
     task_id: String,
 ) -> Result<String, String> {
     let (opencode_session_id, worktree_path) = {
-        let db_lock = db.lock().unwrap();
+        let db_lock = crate::db::acquire_db(&db);
         let session = db_lock
             .get_latest_session_for_ticket(&task_id)
             .map_err(|e| format!("Failed to get session: {}", e))?

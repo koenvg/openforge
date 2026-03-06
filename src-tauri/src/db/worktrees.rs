@@ -302,8 +302,15 @@ mod tests {
 
         db.create_worktree_record("T-1", &project.id, "/tmp/repo", "/tmp/wt1", "branch-1")
             .expect("create wt1");
-        db.create_agent_session("sess-1", "T-1", None, "implementing", "interrupted", "claude-code")
-            .expect("create session 1");
+        db.create_agent_session(
+            "sess-1",
+            "T-1",
+            None,
+            "implementing",
+            "interrupted",
+            "claude-code",
+        )
+        .expect("create session 1");
 
         // Insert a "backlog" task with active worktree and agent session — should NOT be resumable
         let conn = db.connection();
@@ -316,8 +323,15 @@ mod tests {
 
         db.create_worktree_record("T-2", &project.id, "/tmp/repo", "/tmp/wt2", "branch-2")
             .expect("create wt2");
-        db.create_agent_session("sess-2", "T-2", None, "implementing", "interrupted", "claude-code")
-            .expect("create session 2");
+        db.create_agent_session(
+            "sess-2",
+            "T-2",
+            None,
+            "implementing",
+            "interrupted",
+            "claude-code",
+        )
+        .expect("create session 2");
 
         // Insert a "done" task with active worktree and agent session — should NOT be resumable
         let conn = db.connection();
@@ -330,8 +344,15 @@ mod tests {
 
         db.create_worktree_record("T-3", &project.id, "/tmp/repo", "/tmp/wt3", "branch-3")
             .expect("create wt3");
-        db.create_agent_session("sess-3", "T-3", None, "implementing", "completed", "claude-code")
-            .expect("create session 3");
+        db.create_agent_session(
+            "sess-3",
+            "T-3",
+            None,
+            "implementing",
+            "completed",
+            "claude-code",
+        )
+        .expect("create session 3");
 
         let resumable = db.get_resumable_worktrees().expect("get resumable");
 

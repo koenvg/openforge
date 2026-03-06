@@ -6,7 +6,7 @@ use crate::{db, server_manager::ServerManager, sse_bridge::SseBridgeManager, pty
 pub async fn get_tasks(
     db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<Vec<db::TaskRow>, String> {
-    let db = db.lock().unwrap();
+    let db = crate::db::acquire_db(&db);
     db.get_all_tasks()
         .map_err(|e| format!("Failed to get tasks: {}", e))
 }
@@ -16,7 +16,7 @@ pub async fn get_task_detail(
     db: State<'_, Arc<Mutex<db::Database>>>,
     task_id: String,
 ) -> Result<db::TaskRow, String> {
-    let db = db.lock().unwrap();
+    let db = crate::db::acquire_db(&db);
     db.get_task(&task_id)
         .map_err(|e| format!("Failed to get task: {}", e))?
         .ok_or_else(|| format!("Task {} not found", task_id))
@@ -31,7 +31,7 @@ pub async fn create_task(
     jira_key: Option<String>,
     project_id: Option<String>,
 ) -> Result<db::TaskRow, String> {
-    let db = db.lock().unwrap();
+    let db = crate::db::acquire_db(&db);
     let task = db.create_task(&title, &status, jira_key.as_deref(), project_id.as_deref())
         .map_err(|e| format!("Failed to create task: {}", e))?;
     let _ = app.emit("task-changed", serde_json::json!({ "action": "created", "task_id": task.id }));
@@ -46,7 +46,7 @@ pub async fn update_task(
     title: String,
     jira_key: Option<String>,
 ) -> Result<(), String> {
-    let db = db.lock().unwrap();
+    let db = crate::db::acquire_db(&db);
     db.update_task(&id, &title, jira_key.as_deref())
         .map_err(|e| format!("Failed to update task: {}", e))?;
     let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": id }));
@@ -64,7 +64,7 @@ pub async fn update_task_status(
     status: String,
 ) -> Result<(), String> {
     {
-        let db = db.lock().unwrap();
+        let db = crate::db::acquire_db(&db);
         db.update_task_status(&id, &status)
             .map_err(|e| format!("Failed to update task status: {}", e))?;
     }
@@ -77,7 +77,7 @@ pub async fn update_task_status(
         let _ = server_mgr.stop_server(&id).await;
 
         let worktree = {
-            let db_lock = db.lock().unwrap();
+            let db_lock = crate::db::acquire_db(&db);
             db_lock
                 .get_worktree_for_task(&id)
                 .map_err(|e| format!("Failed to get worktree: {}", e))?
@@ -93,7 +93,7 @@ pub async fn update_task_status(
                 );
             }
 
-            let db_lock = db.lock().unwrap();
+            let db_lock = crate::db::acquire_db(&db);
             if let Err(e) = db_lock.delete_worktree_record(&id) {
                 eprintln!(
                     "[update_task_status] Failed to delete worktree record for {}: {}",
@@ -121,7 +121,7 @@ pub async fn delete_task(
     let _ = server_mgr.stop_server(&id).await;
 
     let worktree = {
-        let db_lock = db.lock().unwrap();
+        let db_lock = crate::db::acquire_db(&db);
         db_lock
             .get_worktree_for_task(&id)
             .map_err(|e| format!("Failed to get worktree: {}", e))?
@@ -138,7 +138,7 @@ pub async fn delete_task(
         }
     }
 
-    let db_lock = db.lock().unwrap();
+    let db_lock = crate::db::acquire_db(&db);
     db_lock
         .delete_task(&id)
         .map_err(|e| format!("Failed to delete task: {}", e))?;
@@ -156,7 +156,7 @@ pub async fn clear_done_tasks(
     project_id: String,
 ) -> Result<u32, String> {
     let task_ids = {
-        let db_lock = db.lock().unwrap();
+        let db_lock = crate::db::acquire_db(&db);
         db_lock
             .get_task_ids_by_status(&project_id, "done")
             .map_err(|e| format!("Failed to get done tasks: {}", e))?
@@ -170,7 +170,7 @@ pub async fn clear_done_tasks(
         let _ = server_mgr.stop_server(id).await;
 
         let worktree = {
-            let db_lock = db.lock().unwrap();
+            let db_lock = crate::db::acquire_db(&db);
             db_lock
                 .get_worktree_for_task(id)
                 .map_err(|e| format!("Failed to get worktree: {}", e))?
@@ -193,7 +193,7 @@ pub async fn clear_done_tasks(
             }
         }
 
-        let db_lock = db.lock().unwrap();
+        let db_lock = crate::db::acquire_db(&db);
         db_lock
             .delete_task(id)
             .map_err(|e| format!("Failed to delete task {}: {}", id, e))?;

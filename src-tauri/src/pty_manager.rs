@@ -183,13 +183,11 @@ impl PtyManager {
         // Override with terminal-specific env vars
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
-        // Inform OpenTUI that this is a VSCode-compatible terminal. OpenTUI's Zig renderer
-        // (terminal.zig) checks TERM_PROGRAM and disables Kitty keyboard protocol and Kitty
-        // graphics queries when "vscode" is detected. xterm.js does not support these protocols,
-        // so this prevents unsupported escape sequences and startup delays.
         cmd.env("TERM_PROGRAM", "vscode");
+        if let Some(token) = crate::http_server::HTTP_TOKEN.get() {
+            cmd.env("OPENFORGE_HTTP_TOKEN", token);
+        }
 
-        // Spawn the command
         let child = pair
             .slave
             .spawn_command(cmd)
@@ -449,6 +447,9 @@ impl PtyManager {
         cmd.env("COLORTERM", "truecolor");
         cmd.env("TERM_PROGRAM", "vscode");
         cmd.env("CLAUDE_TASK_ID", task_id);
+        if let Some(token) = crate::http_server::HTTP_TOKEN.get() {
+            cmd.env("OPENFORGE_HTTP_TOKEN", token);
+        }
 
         let child = pair
             .slave
@@ -677,6 +678,9 @@ impl PtyManager {
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
         cmd.env("TERM_PROGRAM", "vscode");
+        if let Some(token) = crate::http_server::HTTP_TOKEN.get() {
+            cmd.env("OPENFORGE_HTTP_TOKEN", token);
+        }
 
         let child = pair
             .slave

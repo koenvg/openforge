@@ -64,6 +64,16 @@ impl Database {
     }
 }
 
+pub fn acquire_db(db: &std::sync::Mutex<Database>) -> std::sync::MutexGuard<'_, Database> {
+    match db.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            eprintln!("[db] Warning: recovering from poisoned mutex");
+            poisoned.into_inner()
+        }
+    }
+}
+
 /// Detects existing databases (created before the migration system) and sets
 /// user_version to skip V1 migration (which would be a no-op anyway since
 /// tables already exist with IF NOT EXISTS).
@@ -611,6 +621,17 @@ mod tests {
         drop(conn);
         drop(db);
         let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_acquire_db_with_healthy_mutex() {
+        let (db, db_path) = super::test_helpers::make_test_db("acquire_db_healthy");
+        let mutex = std::sync::Mutex::new(db);
+        let guard = super::acquire_db(&mutex);
+        assert!(guard.get_config("opencode_port").is_ok());
+        drop(guard);
+        drop(mutex);
+        let _ = fs::remove_file(&db_path);
     }
 
     #[test]

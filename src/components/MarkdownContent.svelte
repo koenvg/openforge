@@ -1,6 +1,7 @@
 <script lang="ts">
   import { marked } from 'marked'
   import { openUrl } from '../lib/ipc'
+  import { sanitizeHtml } from '../lib/sanitize'
 
   interface Props {
     content: string
@@ -13,7 +14,7 @@
     breaks: true,
   })
 
-  let html = $derived(marked.parse(content) as string)
+  let html = $derived(sanitizeHtml(marked.parse(content) as string))
 
   function handleClick(e: MouseEvent) {
     const anchor = (e.target as HTMLElement).closest('a')
