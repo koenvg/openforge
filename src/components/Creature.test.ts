@@ -123,6 +123,35 @@ describe('Creature', () => {
       expect(container.querySelector('[data-testid="alert-badge"]')).toBeNull()
     })
 
+    it('applies creature-work animation class for active state', () => {
+      const { container } = renderCreature('active', 'forge')
+      const svg = container.querySelector('svg')
+      expect(svg?.classList.contains('creature-work')).toBe(true)
+    })
+
+    it('applies creature-alert animation class for needs-input state', () => {
+      const { container } = renderCreature('needs-input', 'warRoom')
+      const svg = container.querySelector('svg')
+      expect(svg?.classList.contains('creature-alert')).toBe(true)
+    })
+
+    it('applies creature-alert animation class for sad state', () => {
+      const { container } = renderCreature('sad', 'warRoom')
+      const svg = container.querySelector('svg')
+      expect(svg?.classList.contains('creature-alert')).toBe(true)
+    })
+
+    it('applies creature-celebrate animation class for celebrating state', () => {
+      const { container } = renderCreature('celebrating', 'forge')
+      const svg = container.querySelector('svg')
+      expect(svg?.classList.contains('creature-celebrate')).toBe(true)
+    })
+
+    it('applies creature-sleep animation class for resting state', () => {
+      const { container } = renderCreature('resting', 'warRoom')
+      const svg = container.querySelector('svg')
+      expect(svg?.classList.contains('creature-sleep')).toBe(true)
+    })
   })
 
   describe('Assignee display', () => {
@@ -156,6 +185,12 @@ describe('Creature', () => {
     it('renders task ID label for nursery scene', () => {
       renderCreature('egg', 'nursery')
       expect(screen.getByText('T-99')).toBeTruthy()
+    })
+
+    it('applies creature-sleep animation class for nursery room', () => {
+      const { container } = renderCreature('egg', 'nursery')
+      const svg = container.querySelector('svg')
+      expect(svg?.classList.contains('creature-sleep')).toBe(true)
     })
 
     it('does not render pixel character in nursery', () => {

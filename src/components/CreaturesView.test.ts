@@ -312,5 +312,12 @@ describe('CreaturesView', () => {
       expect(nest).toBeTruthy()
     })
 
+    it('running forge creature has creature-work animation class', () => {
+      tasks.set([makeTask('T-active', 'doing')])
+      activeSessions.set(new Map([['T-active', makeSession('T-active', 'running')]]))
+      const { container } = render(CreaturesView, { props: { onCreatureClick: vi.fn() } })
+      const svg = container.querySelector('svg')
+      expect(svg?.classList.contains('creature-work')).toBe(true)
+    })
   })
 })
