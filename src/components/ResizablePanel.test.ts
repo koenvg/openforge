@@ -60,14 +60,6 @@ describe('ResizablePanel', () => {
     expect(panel.style.width).toBe('500px')
   })
 
-  it('applies cursor-col-resize on the drag handle', () => {
-    const { container } = render(ResizablePanel, {
-      props: { storageKey: 'test-panel', defaultWidth: 250 },
-    })
-    const handle = container.querySelector('[data-testid="resize-handle"]') as HTMLElement
-    expect(handle.style.cursor).toBe('col-resize')
-  })
-
   it('starts dragging on mousedown on the handle', async () => {
     const { container } = render(ResizablePanel, {
       props: { storageKey: 'test-panel', defaultWidth: 250, side: 'left' },

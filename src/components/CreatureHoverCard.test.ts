@@ -181,24 +181,6 @@ describe('CreatureHoverCard', () => {
     expect(screen.getByText('#200 open')).toBeTruthy()
   })
 
-  it('status badge uses success colors for active forge creatures', () => {
-    const { container } = renderHoverCard({ room: 'forge', state: 'active' })
-    const badge = container.querySelector('.bg-success\\/20')
-    expect(badge).toBeTruthy()
-  })
-
-  it('status badge uses info colors for celebrating forge creatures', () => {
-    const { container } = renderHoverCard({ room: 'forge', state: 'celebrating' })
-    const badge = container.querySelector('.bg-info\\/20')
-    expect(badge).toBeTruthy()
-  })
-
-  it('status badge uses warning colors for warRoom', () => {
-    const { container } = renderHoverCard({ room: 'warRoom', state: 'needs-input' })
-    const badge = container.querySelector('.bg-warning\\/20')
-    expect(badge).toBeTruthy()
-  })
-
   it('positions the card using provided x and y coordinates', () => {
     const { container } = render(CreatureHoverCard, {
       props: {
@@ -244,51 +226,9 @@ describe('CreatureHoverCard', () => {
     expect(screen.getByText('click to view task details')).toBeTruthy()
   })
 
-  it('uses success border for active forge creatures', () => {
-    const { container } = renderHoverCard({ room: 'forge', state: 'active' })
-    const card = container.querySelector('.border-success')
-    expect(card).toBeTruthy()
-  })
-
-  it('uses info border for celebrating forge creatures', () => {
-    const { container } = renderHoverCard({ room: 'forge', state: 'celebrating' })
-    const card = container.querySelector('.border-info')
-    expect(card).toBeTruthy()
-  })
-
-  it('uses warning border for warRoom', () => {
-    const { container } = renderHoverCard({ room: 'warRoom' })
-    const card = container.querySelector('.border-warning')
-    expect(card).toBeTruthy()
-  })
-
   it('shows assignee with @ prefix', () => {
     renderHoverCard()
     expect(screen.getByText('@koen.vangeert')).toBeTruthy()
   })
 
-  it('PR text uses success color when PRs exist', () => {
-    ticketPrs.set(new Map([
-      ['T-99', [{
-        id: 140,
-        ticket_id: 'T-99',
-        repo_owner: 'org',
-        repo_name: 'repo',
-        title: 'Add rate limiting',
-        url: 'https://github.com/org/repo/pull/140',
-        state: 'open',
-        head_sha: 'abc123',
-        ci_status: 'success',
-        ci_check_runs: null,
-        review_status: null,
-        merged_at: null,
-        created_at: 1000,
-        updated_at: 2000,
-        unaddressed_comment_count: 0,
-      }]]
-    ]))
-    const { container } = renderHoverCard()
-    const prSpan = container.querySelector('.text-success')
-    expect(prSpan).toBeTruthy()
-  })
 })

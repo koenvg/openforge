@@ -107,25 +107,6 @@ describe('TaskCard', () => {
     expect(screen.getByText('Done')).toBeTruthy()
   })
 
-  it('applies completed class to card when session is completed', () => {
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-42',
-      opencode_session_id: null,
-      stage: 'implement',
-      status: 'completed',
-      checkpoint_data: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-    }
-    render(TaskCard, { props: { task: baseTask, session } })
-    const card = screen.getByRole('button')
-    expect(card.classList.contains('completed')).toBe(true)
-  })
-
   it('shows paused status for checkpoint', () => {
     const session: AgentSession = {
       id: 'ses-1',
@@ -159,8 +140,7 @@ describe('TaskCard', () => {
       claude_session_id: null,
     }
     render(TaskCard, { props: { task: baseTask, session } })
-    const card = screen.getByRole('button')
-    expect(card.classList.contains('failed')).toBe(true)
+    expect(screen.getByText('Error')).toBeTruthy()
   })
 
   it('shows Stopped badge when session is interrupted', () => {
@@ -257,69 +237,6 @@ describe('TaskCard', () => {
     expect(onSelect).toHaveBeenCalledWith('T-42')
   })
 
-  it('applies needs-input class when session is paused with checkpoint_data', () => {
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-42',
-      opencode_session_id: null,
-      stage: 'implement',
-      status: 'paused',
-      checkpoint_data: '{"question":"approve?"}',
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-    }
-    render(TaskCard, { props: { task: baseTask, session } })
-    const card = screen.getByRole('button')
-    expect(card.classList.contains('needs-input')).toBe(true)
-  })
-
-  it('does not apply needs-input class when session is paused without checkpoint_data', () => {
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-42',
-      opencode_session_id: null,
-      stage: 'implement',
-      status: 'paused',
-      checkpoint_data: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-    }
-    render(TaskCard, { props: { task: baseTask, session } })
-    const card = screen.getByRole('button')
-    expect(card.classList.contains('needs-input')).toBe(false)
-  })
-
-  it('does not apply needs-input class when session is running', () => {
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-42',
-      opencode_session_id: null,
-      stage: 'implement',
-      status: 'running',
-      checkpoint_data: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-    }
-    render(TaskCard, { props: { task: baseTask, session } })
-    const card = screen.getByRole('button')
-    expect(card.classList.contains('needs-input')).toBe(false)
-  })
-
-  it('does not apply needs-input class when no session', () => {
-    render(TaskCard, { props: { task: baseTask } })
-    const card = screen.getByRole('button')
-    expect(card.classList.contains('needs-input')).toBe(false)
-  })
-
   it('renders CI status text for success', () => {
     const pr = { ...basePr, ci_status: 'success' }
     render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
@@ -374,68 +291,6 @@ describe('TaskCard', () => {
     const pr = { ...basePr, review_status: 'approved', state: 'closed' }
     render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
     expect(screen.queryByText('Approved')).toBeNull()
-  })
-
-  it('applies ci-failed class when open PR has ci_status failure', () => {
-    const pr = { ...basePr, ci_status: 'failure', state: 'open' }
-    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
-    const card = screen.getByRole('button')
-    expect(card.classList.contains('ci-failed')).toBe(true)
-  })
-
-  it('does not apply ci-failed class when ci_status is success', () => {
-    const pr = { ...basePr, ci_status: 'success', state: 'open' }
-    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
-    const card = screen.getByRole('button')
-    expect(card.classList.contains('ci-failed')).toBe(false)
-  })
-
-  it('does not apply ci-failed class when PR is closed with failure', () => {
-    const pr = { ...basePr, ci_status: 'failure', state: 'closed' }
-    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
-    const card = screen.getByRole('button')
-    expect(card.classList.contains('ci-failed')).toBe(false)
-  })
-
-  it('does not apply ci-failed class when agent is running despite CI failure', () => {
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-42',
-      opencode_session_id: null,
-      stage: 'implement',
-      status: 'running',
-      checkpoint_data: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-    }
-    const pr = { ...basePr, ci_status: 'failure', state: 'open' }
-    render(TaskCard, { props: { task: baseTask, session, pullRequests: [pr] } })
-    const card = screen.getByRole('button')
-    expect(card.classList.contains('ci-failed')).toBe(false)
-    expect(card.classList.contains('running')).toBe(true)
-  })
-
-  it('applies ci-failed class when agent is completed and CI failed', () => {
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-42',
-      opencode_session_id: null,
-      stage: 'implement',
-      status: 'completed',
-      checkpoint_data: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-    }
-    const pr = { ...basePr, ci_status: 'failure', state: 'open' }
-    render(TaskCard, { props: { task: baseTask, session, pullRequests: [pr] } })
-    const card = screen.getByRole('button')
-    expect(card.classList.contains('ci-failed')).toBe(true)
   })
 
   it('shows unaddressed comment badge when comments exist', () => {

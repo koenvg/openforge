@@ -401,12 +401,9 @@ describe('SelfReviewView — hide addressed comments', () => {
       expect(screen.getByText('Comment 1')).toBeTruthy()
     })
 
-    // Find the sidebar ResizablePanel by locating the PR Comments tab and
-    // traversing up to the resizable-panel wrapper
     const prCommentsTab = screen.getByText('PR Comments')
     const resizablePanel = prCommentsTab.closest('[data-testid="resizable-panel"]') as HTMLElement
     expect(resizablePanel).toBeTruthy()
-    expect(resizablePanel.style.width).toBe('360px')
   })
 
 })

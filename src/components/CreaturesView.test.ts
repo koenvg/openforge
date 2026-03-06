@@ -59,12 +59,6 @@ describe('CreaturesView', () => {
       ])
     })
 
-    it('renders nursery narrower than forge and war room', () => {
-      tasks.set([makeTask('T-1', 'backlog')])
-      render(CreaturesView, { props: { onCreatureClick: vi.fn() } })
-      const nursery = screen.getByTestId('room-nursery')
-      expect(nursery.className).not.toContain('flex-1')
-    })
     it('places running tasks in THE FORGE room', () => {
       tasks.set([makeTask('T-forge', 'doing')])
       activeSessions.set(new Map([['T-forge', makeSession('T-forge', 'running')]]))

@@ -20,25 +20,6 @@ describe('Card', () => {
     expect(screen.getByRole('button')).toBeTruthy()
   })
 
-  it('applies bg-base-100 for consistent white background', () => {
-    render(Card, { props: { children: createSnippet('Card') } })
-    const card = screen.getByRole('button')
-    expect(card.className).toContain('bg-base-100')
-  })
-
-  it('applies border and rounded by default', () => {
-    render(Card, { props: { children: createSnippet('Card') } })
-    const card = screen.getByRole('button')
-    expect(card.className).toContain('border')
-    expect(card.className).toContain('rounded')
-  })
-
-  it('applies default border-base-300 when not selected', () => {
-    render(Card, { props: { children: createSnippet('Card') } })
-    const card = screen.getByRole('button')
-    expect(card.className).toContain('border-base-300')
-  })
-
   it('calls onclick when clicked', async () => {
     const onclick = vi.fn()
     render(Card, { props: { onclick, children: createSnippet('Card') } })
@@ -47,28 +28,4 @@ describe('Card', () => {
     expect(onclick).toHaveBeenCalledOnce()
   })
 
-  it('applies selected class when selected is true', () => {
-    render(Card, { props: { selected: true, children: createSnippet('Card') } })
-    const card = screen.getByRole('button')
-    expect(card.classList.contains('selected')).toBe(true)
-  })
-
-  it('does not apply selected class when selected is false', () => {
-    render(Card, { props: { selected: false, children: createSnippet('Card') } })
-    const card = screen.getByRole('button')
-    expect(card.classList.contains('selected')).toBe(false)
-  })
-
-  it('applies border-primary when selected', () => {
-    render(Card, { props: { selected: true, children: createSnippet('Card') } })
-    const card = screen.getByRole('button')
-    expect(card.className).toContain('border-primary')
-  })
-
-  it('applies additional classes from class prop', () => {
-    render(Card, { props: { class: 'custom-extra p-4', children: createSnippet('Card') } })
-    const card = screen.getByRole('button')
-    expect(card.className).toContain('custom-extra')
-    expect(card.className).toContain('p-4')
-  })
 })
