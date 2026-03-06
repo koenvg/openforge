@@ -417,6 +417,15 @@ CREATE INDEX IF NOT EXISTS idx_agent_review_comments_session ON agent_review_com
             }
             Ok(())
         }),
+        M::up_with_hook("", |tx| {
+            tx.execute("ALTER TABLE tasks ADD COLUMN prompt TEXT", [])
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            tx.execute("ALTER TABLE tasks ADD COLUMN summary TEXT", [])
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            tx.execute("UPDATE tasks SET prompt = title WHERE prompt IS NULL", [])
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            Ok(())
+        }),
         M::up_with_hook(r#""#, |tx| {
             let config_exists: bool = tx
                 .query_row(
@@ -427,14 +436,12 @@ CREATE INDEX IF NOT EXISTS idx_agent_review_comments_session ON agent_review_com
                 .unwrap_or(false);
 
             if config_exists {
-                // Insert the config key with empty placeholder
                 tx.execute(
                     "INSERT OR IGNORE INTO config (key, value) VALUES ('task_id_prefix', '')",
                     [],
                 )
                 .map_err(rusqlite_migration::HookError::RusqliteError)?;
 
-                // Generate 3 random uppercase letters (A-Z)
                 use rand::Rng;
                 let mut rng = rand::thread_rng();
                 let prefix: String = (0..3)
@@ -444,7 +451,6 @@ CREATE INDEX IF NOT EXISTS idx_agent_review_comments_session ON agent_review_com
                     })
                     .collect();
 
-                // Only set the value if it's currently empty (don't overwrite user-set values)
                 tx.execute(
                     "UPDATE config SET value = ?1 WHERE key = 'task_id_prefix' AND value = ''",
                     rusqlite::params![prefix],
@@ -471,8 +477,8 @@ pub mod test_helpers {
         let conn = db.connection();
         let conn = conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO tasks (id, title, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-            rusqlite::params!["T-100", "Test task", "backlog", "PROJ-100", "Test task summary", "To Do", "alice", None::<String>, 1000, 1000, None::<String>],
+            "INSERT INTO tasks (id, title, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            rusqlite::params!["T-100", "Test task", "backlog", "PROJ-100", "Test task summary", "To Do", "alice", None::<String>, 1000, 1000, None::<String>, "Test task", None::<String>],
         ).expect("Failed to insert test task");
     }
 }
@@ -727,6 +733,101 @@ mod tests {
             uv, 6,
             "Fresh DB should have user_version=6 after migrations, got {}",
             uv
+        );
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_migration_v6_adds_prompt_and_summary() {
+        let path = std::env::temp_dir().join(format!("test_v6_columns_{}.db", std::process::id()));
+        let _ = fs::remove_file(&path);
+
+        let db = Database::new(path.clone()).expect("Database::new");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        // Check that prompt and summary columns exist via PRAGMA table_info
+        let prompt_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'prompt'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+        assert!(prompt_exists, "Column 'prompt' should exist in tasks table");
+
+        let summary_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'summary'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+        assert!(
+            summary_exists,
+            "Column 'summary' should exist in tasks table"
+        );
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_migration_v6_backfill() {
+        let path = std::env::temp_dir().join(format!("test_v6_backfill_{}.db", std::process::id()));
+        let _ = fs::remove_file(&path);
+
+        // Create a V5 database (without prompt/summary columns)
+        {
+            let conn = rusqlite::Connection::open(&path).expect("open raw db");
+            // Set user_version to 5 to simulate V5 database
+            conn.execute("PRAGMA user_version = 5", [])
+                .expect("set user_version");
+            // Create minimal V5 schema
+            conn.execute(
+                "CREATE TABLE tasks (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    jira_key TEXT,
+                    jira_status TEXT,
+                    jira_assignee TEXT,
+                    plan_text TEXT,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    project_id TEXT,
+                    jira_title TEXT,
+                    jira_description TEXT
+                )",
+                [],
+            )
+            .expect("create tasks table");
+            // Insert a test task (V5 schema — no prompt/summary columns yet)
+            conn.execute(
+                "INSERT INTO tasks (id, title, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+                rusqlite::params!["T-999", "Test Task Title", "backlog", 1000, 1000],
+            )
+            .expect("insert test task");
+        }
+
+        // Now open with Database::new() which will run the V6 migration
+        let db = Database::new(path.clone()).expect("Database::new on V5 db");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        // Verify the task's prompt was backfilled from title
+        let prompt: String = conn
+            .query_row("SELECT prompt FROM tasks WHERE id = 'T-999'", [], |r| {
+                r.get(0)
+            })
+            .expect("Failed to query prompt");
+        assert_eq!(
+            prompt, "Test Task Title",
+            "prompt should be backfilled from title"
         );
 
         drop(conn);

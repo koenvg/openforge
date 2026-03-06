@@ -138,6 +138,8 @@ const baseTask: Task = {
   jira_status: 'To Do',
   jira_assignee: 'Alice',
   jira_description: null,
+  prompt: null,
+  summary: null,
   project_id: null,
   created_at: 1000,
   updated_at: 2000,
@@ -320,6 +322,18 @@ describe('TaskDetailView', () => {
       expect(shellWrapper).toBeTruthy()
     })
     vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+  })
+
+  it('falls back to first line of prompt when title is empty', () => {
+    const taskNoTitle = { ...baseTask, title: '', prompt: 'First prompt line\nSecond line' }
+    render(TaskDetailView, { props: { task: taskNoTitle, onRunAction: mockOnRunAction } })
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('First prompt line')
+  })
+
+  it('falls back to task id when title and prompt are both empty/null', () => {
+    const taskNoTitleNoPrompt = { ...baseTask, title: '', prompt: null }
+    render(TaskDetailView, { props: { task: taskNoTitleNoPrompt, onRunAction: mockOnRunAction } })
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('T-42')
   })
 
 })

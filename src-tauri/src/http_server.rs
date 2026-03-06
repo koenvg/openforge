@@ -1,48 +1,13 @@
 use axum::{
-    extract::{State, Json},
-    middleware::Next,
-    routing::post,
+    extract::{State, Json, Path},
+    routing::{post, get},
     Router,
     http::StatusCode,
-    response::Response,
 };
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Mutex};
-use once_cell::sync::OnceCell;
 use crate::db;
 use tauri::Emitter;
-
-pub static HTTP_TOKEN: OnceCell<String> = OnceCell::new();
-
-pub fn generate_token() -> String {
-    use rand::Rng;
-    let bytes: [u8; 32] = rand::thread_rng().gen();
-    bytes.iter().map(|b| format!("{:02x}", b)).collect()
-}
-
-pub fn validate_bearer_token(headers: &axum::http::HeaderMap, expected: &str) -> bool {
-    headers
-        .get(axum::http::header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .map(|h| h == format!("Bearer {}", expected))
-        .unwrap_or(false)
-}
-
-pub(crate) async fn auth_middleware(
-    request: axum::extract::Request,
-    next: Next,
-) -> Result<Response, StatusCode> {
-    match HTTP_TOKEN.get() {
-        Some(token) if validate_bearer_token(request.headers(), token) => {
-            Ok(next.run(request).await)
-        }
-        Some(_) => Err(StatusCode::UNAUTHORIZED),
-        None => {
-            eprintln!("[auth] Warning: HTTP_TOKEN not initialized — rejecting request");
-            Err(StatusCode::UNAUTHORIZED)
-        }
-    }
-}
 
 /// Request to create a new task from OpenCode
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,7 +22,6 @@ pub struct CreateTaskRequest {
 pub struct AppState {
     pub app: tauri::AppHandle,
     pub db: std::sync::Arc<Mutex<db::Database>>,
-    pub token: String,
 }
 
 /// Response containing the created task ID
@@ -66,6 +30,31 @@ pub struct CreateTaskResponse {
     pub task_id: String,
     pub project_id: Option<String>,
     pub status: String,
+}
+
+/// Request to update a task's title and/or summary
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateTaskRequest {
+    pub task_id: String,
+    pub title: Option<String>,
+    pub summary: Option<String>,
+}
+
+/// Response containing the updated task ID
+#[derive(Debug, Clone, Serialize)]
+pub struct UpdateTaskResponse {
+    pub task_id: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct GetTaskInfoResponse {
+    pub id: String,
+    pub title: String,
+    pub prompt: Option<String>,
+    pub summary: Option<String>,
+    pub status: String,
+    pub jira_key: Option<String>,
 }
 
 /// Payload from Claude Code hooks
@@ -112,6 +101,7 @@ pub async fn create_task_handler(
         "backlog",
         None,
         project_id.as_deref(),
+        None,
     ).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     drop(db);
@@ -130,6 +120,57 @@ pub async fn create_task_handler(
         project_id: task.project_id,
         status: "created".to_string(),
     }))
+}
+
+pub async fn update_task_handler(
+    State(state): State<AppState>,
+    Json(request): Json<UpdateTaskRequest>,
+) -> Result<Json<UpdateTaskResponse>, StatusCode> {
+    if request.title.is_none() && request.summary.is_none() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let db = state.db.lock().unwrap();
+
+    db.update_task_title_and_summary(
+        &request.task_id,
+        request.title.as_deref(),
+        request.summary.as_deref(),
+    ).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    drop(db);
+
+    let _ = state.app.emit(
+        "task-changed",
+        serde_json::json!({
+            "action": "updated",
+            "task_id": request.task_id
+        })
+    );
+
+    Ok(Json(UpdateTaskResponse {
+        task_id: request.task_id,
+        status: "updated".to_string(),
+    }))
+}
+
+pub async fn get_task_info_handler(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<GetTaskInfoResponse>, StatusCode> {
+    let db = state.db.lock().unwrap();
+
+    match db.get_task(&id).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? {
+        Some(task) => Ok(Json(GetTaskInfoResponse {
+            id: task.id,
+            title: task.title,
+            prompt: task.prompt,
+            summary: task.summary,
+            status: task.status,
+            jira_key: task.jira_key,
+        })),
+        None => Err(StatusCode::NOT_FOUND),
+    }
 }
 
 pub(crate) fn map_hook_to_status(event_type: &str, current_status: &str) -> Option<String> {
@@ -263,13 +304,14 @@ pub async fn hook_notification_permission_handler(
 pub fn create_router(state: AppState) -> Router {
     Router::new()
         .route("/create_task", post(create_task_handler))
+        .route("/update_task", post(update_task_handler))
+        .route("/task/:id", get(get_task_info_handler))
         .route("/hooks/stop", post(hook_stop_handler))
         .route("/hooks/pre-tool-use", post(hook_pre_tool_use_handler))
         .route("/hooks/post-tool-use", post(hook_post_tool_use_handler))
         .route("/hooks/session-end", post(hook_session_end_handler))
         .route("/hooks/notification", post(hook_notification_handler))
         .route("/hooks/notification-permission", post(hook_notification_permission_handler))
-        .layer(axum::middleware::from_fn(auth_middleware))
         .with_state(state)
 }
 
@@ -290,11 +332,8 @@ pub async fn start_http_server(
         .parse::<u16>()
         .unwrap_or(17422);
 
-    let token = generate_token();
-    let _ = HTTP_TOKEN.set(token.clone());
-
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    let state = AppState { app, db, token };
+    let state = AppState { app, db };
     let router = create_router(state);
 
     println!("[http_server] Starting on {}", addr);
@@ -310,131 +349,6 @@ pub async fn start_http_server(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // ========================================================================
-    // Token generation and validation Tests
-    // ========================================================================
-
-    const TEST_HTTP_TOKEN: &str = "test_http_token_abc123def456_0000_1111";
-
-    fn init_test_token() -> &'static str {
-        HTTP_TOKEN.get_or_init(|| TEST_HTTP_TOKEN.to_string())
-    }
-
-    #[test]
-    fn test_generate_token_is_64_char_hex() {
-        let token = generate_token();
-        assert_eq!(token.len(), 64);
-        assert!(token.chars().all(|c| c.is_ascii_hexdigit()));
-    }
-
-    #[test]
-    fn test_generate_token_is_unique() {
-        let t1 = generate_token();
-        let t2 = generate_token();
-        assert_ne!(t1, t2);
-    }
-
-    #[test]
-    fn test_validate_bearer_token_no_header() {
-        let headers = axum::http::HeaderMap::new();
-        assert!(!validate_bearer_token(&headers, "mytoken"));
-    }
-
-    #[test]
-    fn test_validate_bearer_token_wrong_token() {
-        let mut headers = axum::http::HeaderMap::new();
-        headers.insert(
-            axum::http::header::AUTHORIZATION,
-            "Bearer wrongtoken".parse().unwrap(),
-        );
-        assert!(!validate_bearer_token(&headers, "mytoken"));
-    }
-
-    #[test]
-    fn test_validate_bearer_token_correct() {
-        let mut headers = axum::http::HeaderMap::new();
-        headers.insert(
-            axum::http::header::AUTHORIZATION,
-            "Bearer mytoken".parse().unwrap(),
-        );
-        assert!(validate_bearer_token(&headers, "mytoken"));
-    }
-
-    #[test]
-    fn test_validate_bearer_token_wrong_scheme() {
-        let mut headers = axum::http::HeaderMap::new();
-        headers.insert(
-            axum::http::header::AUTHORIZATION,
-            "Basic mytoken".parse().unwrap(),
-        );
-        assert!(!validate_bearer_token(&headers, "mytoken"));
-    }
-
-    fn create_test_app_with_auth() -> Router {
-        Router::new()
-            .route("/ping", axum::routing::get(|| async { StatusCode::OK }))
-            .layer(axum::middleware::from_fn(auth_middleware))
-    }
-
-    #[tokio::test]
-    async fn test_request_without_auth_header_returns_401() {
-        use axum::body::Body;
-        use axum::http::Request;
-        use tower::ServiceExt;
-
-        init_test_token();
-        let app = create_test_app_with_auth();
-
-        let request = Request::builder()
-            .method("GET")
-            .uri("/ping")
-            .body(Body::empty())
-            .unwrap();
-
-        let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    }
-
-    #[tokio::test]
-    async fn test_request_with_wrong_token_returns_401() {
-        use axum::body::Body;
-        use axum::http::Request;
-        use tower::ServiceExt;
-
-        init_test_token();
-        let app = create_test_app_with_auth();
-
-        let request = Request::builder()
-            .method("GET")
-            .uri("/ping")
-            .header("Authorization", "Bearer definitely_wrong_token")
-            .body(Body::empty())
-            .unwrap();
-
-        let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    }
-
-    #[tokio::test]
-    async fn test_request_with_correct_token_returns_200() {
-        use axum::body::Body;
-        use axum::http::Request;
-        use tower::ServiceExt;
-
-        let token = init_test_token().to_string();
-        let app = create_test_app_with_auth();
-
-        let request = Request::builder()
-            .method("GET")
-            .uri("/ping")
-            .header("Authorization", format!("Bearer {}", token))
-            .body(Body::empty())
-            .unwrap();
-
-        let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-    }
 
     // ========================================================================
     // CreateTaskRequest Tests
@@ -759,6 +673,209 @@ mod tests {
             status = s;
         }
         assert_eq!(status, "completed");
+    }
+
+    // ========================================================================
+    // UpdateTaskRequest Tests
+    // ========================================================================
+
+    #[test]
+    fn test_update_task_request_creation() {
+        let request = UpdateTaskRequest {
+            task_id: "T-123".to_string(),
+            title: Some("New Title".to_string()),
+            summary: Some("New Summary".to_string()),
+        };
+        assert_eq!(request.task_id, "T-123");
+        assert_eq!(request.title, Some("New Title".to_string()));
+        assert_eq!(request.summary, Some("New Summary".to_string()));
+    }
+
+    #[test]
+    fn test_update_task_request_deserialize_all_fields() {
+        let json = r#"{"task_id": "T-456", "title": "Updated Title", "summary": "Updated Summary"}"#;
+        let request: UpdateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
+        assert_eq!(request.task_id, "T-456");
+        assert_eq!(request.title, Some("Updated Title".to_string()));
+        assert_eq!(request.summary, Some("Updated Summary".to_string()));
+    }
+
+    #[test]
+    fn test_update_task_request_deserialize_title_only() {
+        let json = r#"{"task_id": "T-789", "title": "Only Title"}"#;
+        let request: UpdateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
+        assert_eq!(request.task_id, "T-789");
+        assert_eq!(request.title, Some("Only Title".to_string()));
+        assert!(request.summary.is_none());
+    }
+
+    #[test]
+    fn test_update_task_request_deserialize_summary_only() {
+        let json = r#"{"task_id": "T-999", "summary": "Only Summary"}"#;
+        let request: UpdateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
+        assert_eq!(request.task_id, "T-999");
+        assert!(request.title.is_none());
+        assert_eq!(request.summary, Some("Only Summary".to_string()));
+    }
+
+    #[test]
+    fn test_update_task_request_deserialize_neither_title_nor_summary() {
+        let json = r#"{"task_id": "T-111"}"#;
+        let request: UpdateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
+        assert_eq!(request.task_id, "T-111");
+        assert!(request.title.is_none());
+        assert!(request.summary.is_none());
+    }
+
+    #[test]
+    fn test_update_task_request_deserialize_missing_task_id_fails() {
+        let json = r#"{"title": "No Task ID"}"#;
+        let result: Result<UpdateTaskRequest, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "Should fail without required task_id field");
+    }
+
+    #[test]
+    fn test_update_task_request_serialize_roundtrip() {
+        let original = UpdateTaskRequest {
+            task_id: "T-555".to_string(),
+            title: Some("Roundtrip Title".to_string()),
+            summary: Some("Roundtrip Summary".to_string()),
+        };
+        let json = serde_json::to_string(&original).expect("Failed to serialize");
+        let deserialized: UpdateTaskRequest = serde_json::from_str(&json).expect("Failed to deserialize");
+        assert_eq!(deserialized.task_id, original.task_id);
+        assert_eq!(deserialized.title, original.title);
+        assert_eq!(deserialized.summary, original.summary);
+    }
+
+    // ========================================================================
+    // UpdateTaskResponse Tests
+    // ========================================================================
+
+    #[test]
+    fn test_update_task_response_creation() {
+        let response = UpdateTaskResponse {
+            task_id: "T-123".to_string(),
+            status: "updated".to_string(),
+        };
+        assert_eq!(response.task_id, "T-123");
+        assert_eq!(response.status, "updated");
+    }
+
+    #[test]
+    fn test_update_task_response_serialize() {
+        let response = UpdateTaskResponse {
+            task_id: "T-456".to_string(),
+            status: "updated".to_string(),
+        };
+        let json = serde_json::to_string(&response).expect("Failed to serialize");
+        assert!(json.contains("\"task_id\":\"T-456\""));
+        assert!(json.contains("\"status\":\"updated\""));
+    }
+
+    #[test]
+    fn test_update_task_response_json_structure() {
+        let response = UpdateTaskResponse {
+            task_id: "T-789".to_string(),
+            status: "updated".to_string(),
+        };
+        let json_value = serde_json::to_value(&response).expect("Failed to convert to JSON value");
+        assert_eq!(json_value["task_id"], "T-789");
+        assert_eq!(json_value["status"], "updated");
+    }
+
+    // ========================================================================
+    // GetTaskInfoResponse Tests
+    // ========================================================================
+
+    #[test]
+    fn test_get_task_info_response_creation_all_fields() {
+        let response = GetTaskInfoResponse {
+            id: "T-42".to_string(),
+            title: "My Task".to_string(),
+            prompt: Some("Do something cool".to_string()),
+            summary: Some("Did the thing".to_string()),
+            status: "doing".to_string(),
+            jira_key: Some("PROJ-1".to_string()),
+        };
+        assert_eq!(response.id, "T-42");
+        assert_eq!(response.title, "My Task");
+        assert_eq!(response.prompt, Some("Do something cool".to_string()));
+        assert_eq!(response.summary, Some("Did the thing".to_string()));
+        assert_eq!(response.status, "doing");
+        assert_eq!(response.jira_key, Some("PROJ-1".to_string()));
+    }
+
+    #[test]
+    fn test_get_task_info_response_creation_nullable_fields_none() {
+        let response = GetTaskInfoResponse {
+            id: "T-1".to_string(),
+            title: "Simple Task".to_string(),
+            prompt: None,
+            summary: None,
+            status: "backlog".to_string(),
+            jira_key: None,
+        };
+        assert!(response.prompt.is_none());
+        assert!(response.summary.is_none());
+        assert!(response.jira_key.is_none());
+    }
+
+    #[test]
+    fn test_get_task_info_response_serialize_all_fields() {
+        let response = GetTaskInfoResponse {
+            id: "T-99".to_string(),
+            title: "Full Task".to_string(),
+            prompt: Some("Implement X".to_string()),
+            summary: Some("Implemented X".to_string()),
+            status: "done".to_string(),
+            jira_key: Some("PROJ-99".to_string()),
+        };
+        let json = serde_json::to_string(&response).expect("Failed to serialize");
+        assert!(json.contains("\"id\":\"T-99\""));
+        assert!(json.contains("\"title\":\"Full Task\""));
+        assert!(json.contains("\"prompt\":\"Implement X\""));
+        assert!(json.contains("\"summary\":\"Implemented X\""));
+        assert!(json.contains("\"status\":\"done\""));
+        assert!(json.contains("\"jira_key\":\"PROJ-99\""));
+    }
+
+    #[test]
+    fn test_get_task_info_response_serialize_nulls() {
+        let response = GetTaskInfoResponse {
+            id: "T-1".to_string(),
+            title: "Minimal".to_string(),
+            prompt: None,
+            summary: None,
+            status: "backlog".to_string(),
+            jira_key: None,
+        };
+        let json_value = serde_json::to_value(&response).expect("Failed to serialize");
+        assert_eq!(json_value["id"], "T-1");
+        assert_eq!(json_value["title"], "Minimal");
+        assert!(json_value["prompt"].is_null());
+        assert!(json_value["summary"].is_null());
+        assert_eq!(json_value["status"], "backlog");
+        assert!(json_value["jira_key"].is_null());
+    }
+
+    #[test]
+    fn test_get_task_info_response_json_structure() {
+        let response = GetTaskInfoResponse {
+            id: "T-7".to_string(),
+            title: "Structure Test".to_string(),
+            prompt: Some("Test prompt".to_string()),
+            summary: None,
+            status: "doing".to_string(),
+            jira_key: None,
+        };
+        let json_value = serde_json::to_value(&response).expect("Failed to convert to JSON value");
+        assert_eq!(json_value["id"], "T-7");
+        assert_eq!(json_value["title"], "Structure Test");
+        assert_eq!(json_value["prompt"], "Test prompt");
+        assert!(json_value["summary"].is_null());
+        assert_eq!(json_value["status"], "doing");
+        assert!(json_value["jira_key"].is_null());
     }
 
 }

@@ -28,16 +28,50 @@ const baseTask: Task = {
   jira_status: 'To Do',
   jira_assignee: 'Alice',
   jira_description: null,
+  prompt: 'Build the auth middleware implementation with JWT support',
+  summary: null,
   project_id: null,
   created_at: 1000,
   updated_at: 2000,
 }
 
 describe('TaskInfoPanel', () => {
-  it('renders Initial Prompt section with task title', () => {
+  it('renders Initial Prompt section with task prompt', () => {
     render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
     expect(screen.getByText('// INITIAL_PROMPT')).toBeTruthy()
-    expect(screen.getByText('Implement auth middleware')).toBeTruthy()
+    expect(screen.getByText('Build the auth middleware implementation with JWT support')).toBeTruthy()
+  })
+
+  it('renders prompt as read-only text (no input elements in prompt section)', () => {
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+    const promptSection = screen.getByLabelText('Initial Prompt').closest('section')
+    expect(promptSection?.querySelector('input')).toBeNull()
+    expect(promptSection?.querySelector('textarea')).toBeNull()
+  })
+
+  it('renders // SUMMARY label', () => {
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+    expect(screen.getByText('// SUMMARY')).toBeTruthy()
+  })
+
+  it('renders "No summary yet" in muted text when summary is null', () => {
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+    expect(screen.getByText('No summary yet')).toBeTruthy()
+  })
+
+  it('renders summary content when summary is present', () => {
+    const taskWithSummary = { ...baseTask, summary: 'Implemented JWT auth with refresh token support.' }
+    render(TaskInfoPanel, { props: { task: taskWithSummary, worktreePath: null, jiraBaseUrl: '' } })
+    expect(screen.getByText('Implemented JWT auth with refresh token support.')).toBeTruthy()
+    expect(screen.queryByText('No summary yet')).toBeNull()
+  })
+
+  it('renders summary as read-only text (no input elements in summary section)', () => {
+    const taskWithSummary = { ...baseTask, summary: 'Done.' }
+    render(TaskInfoPanel, { props: { task: taskWithSummary, worktreePath: null, jiraBaseUrl: '' } })
+    const summarySection = screen.getByLabelText('Summary').closest('section')
+    expect(summarySection?.querySelector('input')).toBeNull()
+    expect(summarySection?.querySelector('textarea')).toBeNull()
   })
 
   it('does not show Edit Task or Delete buttons', () => {

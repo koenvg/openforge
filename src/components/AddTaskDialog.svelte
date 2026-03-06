@@ -67,12 +67,12 @@
   <form onsubmit={(e: SubmitEvent) => { e.preventDefault(); handleSubmit() }}>
     <div class="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
       <label class="flex flex-col gap-1.5">
-        <span class="text-xs text-base-content/60 font-medium">Title <span class="text-error">*</span></span>
+        <span class="text-xs text-base-content/60 font-medium">Prompt <span class="text-error">*</span></span>
         <input
           type="text"
           class="input input-bordered input-sm w-full"
           bind:value={title}
-          placeholder="Enter task title"
+          placeholder="Describe what you want the agent to do"
           required
           autofocus
         />

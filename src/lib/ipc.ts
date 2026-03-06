@@ -9,6 +9,10 @@ export async function updateTask(id: string, title: string, jiraKey: string | nu
   return invoke("update_task", { id, title, jiraKey });
 }
 
+export async function updateTaskTitleAndSummary(id: string, title: string | null, summary: string | null): Promise<void> {
+  return invoke("update_task_title_and_summary", { id, title, summary });
+}
+
 export async function updateTaskStatus(id: string, status: string): Promise<void> {
   return invoke("update_task_status", { id, status });
 }

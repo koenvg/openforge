@@ -71,11 +71,14 @@
     {/if}
   </div>
   <div class="font-mono text-sm font-medium leading-relaxed text-base-content mb-1">
-    {truncate(firstLine(task.title), 80)}
+    {truncate(firstLine(task.title || (task.prompt?.split('\n')[0]) || task.id), 80)}
     {#if task.title.includes('\n')}
       <span class="font-mono text-[0.6rem] text-base-content/40 ml-1">+{task.title.split('\n').length - 1} lines</span>
     {/if}
   </div>
+  {#if task.summary}
+    <div class="text-xs text-base-content/50 truncate mb-1">{task.summary}</div>
+  {/if}
   {#if task.jira_title}
     <div class="text-secondary font-mono text-[11px] leading-relaxed mb-1.5">// {truncate(task.jira_title, 80)}</div>
   {/if}

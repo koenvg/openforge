@@ -62,10 +62,20 @@
 </script>
 
 <div class="flex flex-col gap-5 p-5 overflow-y-auto bg-base-200 h-full">
-  <!-- Title / Initial Prompt Section -->
+  <!-- Initial Prompt Section -->
   <section class="flex flex-col gap-2.5">
     <h3 class="text-[10px] font-bold text-primary font-mono tracking-[1.2px] m-0" aria-label="Initial Prompt">// INITIAL_PROMPT</h3>
-    <div class="text-sm text-base-content leading-relaxed whitespace-pre-wrap break-words">{task.title}</div>
+    <div class="text-sm text-base-content leading-relaxed whitespace-pre-wrap break-words">{task.prompt ?? ''}</div>
+  </section>
+
+  <!-- Summary Section -->
+  <section class="flex flex-col gap-2.5">
+    <h3 class="text-[10px] font-bold text-primary font-mono tracking-[1.2px] m-0" aria-label="Summary">// SUMMARY</h3>
+    {#if task.summary}
+      <div class="text-sm text-base-content leading-relaxed whitespace-pre-wrap break-words">{task.summary}</div>
+    {:else}
+      <div class="text-xs text-base-content/50">No summary yet</div>
+    {/if}
   </section>
 
 

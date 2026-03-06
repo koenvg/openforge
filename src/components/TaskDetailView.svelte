@@ -27,6 +27,8 @@
   let lastTaskId = ''
   let actions = $state<Action[]>([])
 
+  let displayTitle = $derived(task.title || (task.prompt ? task.prompt.split('\n')[0] : '') || task.id)
+
   let currentSession = $derived($activeSessions.get(task.id))
   let agentStatus = $derived(currentSession?.status ?? null)
   let isSessionBusy = $derived(currentSession?.status === 'running' || currentSession?.status === 'paused')
@@ -90,7 +92,7 @@
       </button>
        <span class="text-base-content/20 select-none">|</span>
        <span class="text-[0.8125rem] font-semibold text-primary font-mono shrink-0">{task.jira_key || task.id}</span>
-       <h1 class="text-lg font-bold text-base-content m-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap min-w-0" title={task.title.split('\n')[0]}>{task.title.split('\n')[0]}</h1>
+       <h1 class="text-lg font-bold text-base-content m-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap min-w-0" title={displayTitle}>{displayTitle}</h1>
       {#if task.status !== 'done'}
         <button
           class="btn btn-success btn-sm shrink-0 shadow-sm hover:shadow-md transition-shadow"

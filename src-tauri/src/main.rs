@@ -17,6 +17,7 @@ mod diff_parser;
 mod whisper_manager;
 mod http_server;
 mod plugin_installer;
+mod mcp_installer;
 mod claude_hooks;
 mod commands;
 mod migration;
@@ -253,9 +254,8 @@ fn main() {
                 }
             }
 
-            // Install global OpenCode plugin for creating tasks
-            if let Err(e) = plugin_installer::install_create_task_plugin() {
-                eprintln!("[startup] Failed to install create-task plugin: {}", e);
+            if let Err(e) = mcp_installer::install_mcp_server() {
+                eprintln!("[startup] Failed to install MCP server: {}", e);
             }
             let whisper_model_pref = database.get_config("whisper_model_size")
                 .ok()
@@ -275,7 +275,15 @@ fn main() {
             });
             println!("HTTP server task started");
 
-            // Generate Claude hooks settings file with the HTTP server port
+            let port = std::env::var("AI_COMMAND_CENTER_PORT")
+                .unwrap_or_else(|_| "17422".to_string());
+            if let Err(e) = mcp_installer::configure_opencode_mcp(&port) {
+                eprintln!("[startup] Failed to configure OpenCode MCP: {}", e);
+            }
+            if let Err(e) = mcp_installer::configure_claude_mcp(&port) {
+                eprintln!("[startup] Failed to configure Claude Code MCP: {}", e);
+            }
+
             let hooks_port = claude_hooks::get_http_server_port();
             match claude_hooks::generate_hooks_settings(hooks_port) {
                 Ok(path) => println!("Claude hooks settings generated at: {:?}", path),
@@ -342,6 +350,7 @@ fn main() {
             commands::tasks::get_task_detail,
             commands::tasks::create_task,
             commands::tasks::update_task,
+            commands::tasks::update_task_title_and_summary,
             commands::tasks::update_task_status,
             commands::tasks::delete_task,
             commands::tasks::clear_done_tasks,
