@@ -224,38 +224,6 @@ fn main() {
 
             let database = db::Database::new(db_path).expect("Failed to initialize database");
 
-            let store_migrated = database
-                .get_config("secure_store_migrated")
-                .ok()
-                .flatten()
-                .map(|v| v == "1")
-                .unwrap_or(false);
-
-            if !store_migrated {
-                let svc_ok = match secure_store::migrate_service_name() {
-                    Ok(()) => true,
-                    Err(e) => {
-                        eprintln!("[startup] Secure store service name migration failed: {}", e);
-                        false
-                    }
-                };
-
-                let db_ok = match secure_store::migrate_from_db(&database) {
-                    Ok(()) => {
-                        println!("[startup] Secure store migration complete");
-                        true
-                    }
-                    Err(e) => {
-                        eprintln!("[startup] Secure store migration failed: {}", e);
-                        false
-                    }
-                };
-
-                if svc_ok && db_ok {
-                    let _ = database.set_config("secure_store_migrated", "1");
-                }
-            }
-
             match database.mark_running_sessions_interrupted() {
                 Ok(count) if count > 0 => {
                     println!("[startup] Marked {} stale running sessions as interrupted", count);
