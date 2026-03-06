@@ -4,9 +4,11 @@
 	interface Props {
 		taskIdPrefix: string
 		onTaskIdPrefixChange: (value: string) => void
+		isDarkMode: boolean
+		onThemeToggle: () => void
 	}
 
-	const { taskIdPrefix, onTaskIdPrefixChange }: Props = $props()
+	const { taskIdPrefix, onTaskIdPrefixChange, isDarkMode, onThemeToggle }: Props = $props()
 
 	// Sanitize input: strip non-alphanumeric, uppercase, max 5 chars
 	function handleInput(e: Event) {
@@ -30,6 +32,22 @@
 
 	<div class="p-5">
 		<div class="flex flex-col gap-4">
+			<label class="flex items-center justify-between cursor-pointer">
+				<div class="flex flex-col gap-0.5">
+					<span class="text-sm text-base-content">Dark Mode</span>
+					<span class="text-[0.7rem] text-base-content/50">Switch between light and dark theme</span>
+				</div>
+				<input
+					type="checkbox"
+					class="toggle toggle-primary toggle-sm"
+					checked={isDarkMode}
+					onchange={onThemeToggle}
+					data-testid="theme-toggle"
+				/>
+			</label>
+
+			<div class="border-b border-base-300"></div>
+
 			<label class="flex flex-col gap-1">
 				<span class="text-[0.7rem] text-base-content/50">Task ID Prefix</span>
 				<input

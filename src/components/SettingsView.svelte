@@ -15,6 +15,8 @@
     setWhisperModel,
   } from '../lib/ipc'
   import { loadActions, saveActions, createAction, DEFAULT_ACTIONS } from '../lib/actions'
+  import { themeMode, applyTheme } from '../lib/theme'
+  import type { ThemeMode } from '../lib/theme'
   import type { Action, AgentInfo, WhisperModelStatus, WhisperModelSizeId } from '../lib/types'
   import SettingsSidebar from './SettingsSidebar.svelte'
   import SettingsGeneralCard from './SettingsGeneralCard.svelte'
@@ -59,6 +61,18 @@
   // Actions state
   let actions = $state<Action[]>([])
   let availableAgents = $state<AgentInfo[]>([])
+
+  // Theme state
+  let isDarkMode = $state($themeMode === 'dark')
+
+  $effect(() => {
+    isDarkMode = $themeMode === 'dark'
+  })
+
+  function handleThemeToggle() {
+    const next: ThemeMode = isDarkMode ? 'light' : 'dark'
+    applyTheme(next)
+  }
 
   // UI state
   let isSaving = $state(false)
@@ -386,6 +400,8 @@
         <SettingsPreferencesCard
           {taskIdPrefix}
           onTaskIdPrefixChange={(v) => (taskIdPrefix = v)}
+          {isDarkMode}
+          onThemeToggle={handleThemeToggle}
         />
 
         <SettingsAICard
