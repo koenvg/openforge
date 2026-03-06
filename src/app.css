@@ -159,6 +159,79 @@
   animation: ci-pulse 2s ease-in-out infinite;
 }
 
+/* Creature animations */
+@keyframes creature-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes creature-sleep {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+}
+@keyframes creature-exclaim {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.85; }
+}
+@keyframes creature-celebrate {
+  0%, 100% { transform: translateY(0) scaleX(1); }
+  25% { transform: translateY(-3px) scaleX(0.97); }
+  50% { transform: translateY(0) scaleX(1.03); }
+  75% { transform: translateY(-2px) scaleX(0.98); }
+}
+@keyframes creature-wobble {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-2deg); }
+  75% { transform: rotate(2deg); }
+}
+@keyframes creature-work {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(3px, -1px); }
+  40% { transform: translate(-2px, -2px); }
+  60% { transform: translate(2px, 0); }
+  80% { transform: translate(-3px, -1px); }
+}
+@keyframes creature-alert {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+}
+@keyframes hover-card-fade {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.creature-bounce {
+  animation: creature-bounce 2s ease-in-out infinite;
+  will-change: transform;
+}
+.creature-sleep {
+  animation: creature-sleep 4s ease-in-out infinite;
+  will-change: transform;
+}
+.creature-exclaim {
+  animation: creature-exclaim 1.5s ease-in-out infinite;
+  will-change: transform;
+}
+.creature-celebrate {
+  animation: creature-celebrate 2s ease-in-out infinite;
+  will-change: transform;
+}
+.creature-wobble {
+  animation: creature-wobble 1.5s ease-in-out infinite;
+  will-change: transform;
+}
+.creature-work {
+  animation: creature-work 4s ease-in-out infinite;
+  will-change: transform;
+}
+.creature-alert {
+  animation: creature-alert 2s ease-in-out infinite;
+  will-change: transform;
+}
+.hover-card-fade {
+  animation: hover-card-fade 200ms ease-out forwards;
+  will-change: transform, opacity;
+}
+
 .markdown-body {
   font-size: 0.875rem;
   line-height: 1.6;
