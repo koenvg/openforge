@@ -82,7 +82,6 @@
   }
 
   function handleDelete() {
-    if (!confirm(`Delete task ${task.jira_key || task.id}?`)) return
     onDelete(task.id)
   }
 

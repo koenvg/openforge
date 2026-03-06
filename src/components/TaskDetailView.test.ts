@@ -328,24 +328,11 @@ describe('TaskDetailView', () => {
     expect(screen.getByTitle('Delete task')).toBeTruthy()
   })
 
-  it('calls onDelete with task id after confirmation', async () => {
+  it('calls onDelete with task id when clicked', async () => {
     const mockOnDelete = vi.fn()
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onDelete: mockOnDelete } })
     await fireEvent.click(screen.getByTitle('Delete task'))
-    expect(window.confirm).toHaveBeenCalled()
     expect(mockOnDelete).toHaveBeenCalledWith('T-42')
-    vi.mocked(window.confirm).mockRestore()
-  })
-
-  it('does not call onDelete when confirmation is cancelled', async () => {
-    const mockOnDelete = vi.fn()
-    vi.spyOn(window, 'confirm').mockReturnValue(false)
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onDelete: mockOnDelete } })
-    await fireEvent.click(screen.getByTitle('Delete task'))
-    expect(window.confirm).toHaveBeenCalled()
-    expect(mockOnDelete).not.toHaveBeenCalled()
-    vi.mocked(window.confirm).mockRestore()
   })
 
 })
