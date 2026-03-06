@@ -4,7 +4,28 @@ use crate::{db, server_manager::ServerManager, sse_bridge::SseBridgeManager, git
 
 pub fn build_task_prompt(task: &db::TaskRow, action_instruction: &str, additional_instructions: Option<&str>) -> String {
     let mut prompt = String::new();
-    
+
+    prompt.push_str(&format!(r#"<openforge_task_management>
+This task is {task_id}. You MUST call `openforge_update_task` at both points below — the task is not complete without these updates.
+
+<title_update trigger="after_initial_analysis">
+Once you understand the scope, call: openforge_update_task(task_id="{task_id}", title="...")
+Write a concise title reflecting the actual work, not the original request verbatim.
+Good: "Add JWT refresh token rotation to auth middleware" — Bad: "implement the auth thing"
+</title_update>
+
+<summary_update trigger="before_finalizing">
+Before reporting completion, call: openforge_update_task(task_id="{task_id}", summary="...")
+Cover: what changed, key decisions, and anything needing attention.
+</summary_update>
+
+<completeness_check>
+Task is incomplete unless both updates were made. If blocked or abandoned, still update the summary with status and what remains.
+</completeness_check>
+</openforge_task_management>
+
+"#, task_id = task.id));
+
     if let Some(instructions) = additional_instructions {
         if !instructions.is_empty() {
             prompt.push_str(instructions);
@@ -24,27 +45,6 @@ pub fn build_task_prompt(task: &db::TaskRow, action_instruction: &str, additiona
     prompt.push('\n');
     
     prompt.push_str(action_instruction);
-
-    prompt.push_str(&format!(r#"
-
-<openforge_task_management>
-This task is {task_id}. You MUST call `openforge_update_task` at both points below — the task is not complete without these updates.
-
-<title_update trigger="after_initial_analysis">
-Once you understand the scope, call: openforge_update_task(task_id="{task_id}", title="...")
-Write a concise title reflecting the actual work, not the original request verbatim.
-Good: "Add JWT refresh token rotation to auth middleware" — Bad: "implement the auth thing"
-</title_update>
-
-<summary_update trigger="before_finalizing">
-Before reporting completion, call: openforge_update_task(task_id="{task_id}", summary="...")
-Cover: what changed, key decisions, and anything needing attention.
-</summary_update>
-
-<completeness_check>
-Task is incomplete unless both updates were made. If blocked or abandoned, still update the summary with status and what remains.
-</completeness_check>
-</openforge_task_management>"#, task_id = task.id));
 
     prompt
 }
@@ -548,7 +548,8 @@ mod tests {
 
         let prompt = build_task_prompt(&task, "Do the thing!", Some("Always use TypeScript strict mode.\nFollow the project coding standards."));
         
-        assert!(prompt.starts_with("Always use TypeScript strict mode."));
+        assert!(prompt.starts_with("<openforge_task_management>"));
+        assert!(prompt.contains("Always use TypeScript strict mode."));
         assert!(prompt.contains("Instructions Task"));
         assert!(!prompt.contains("Plan:"));
         assert!(prompt.contains("Do the thing!"));
@@ -600,7 +601,7 @@ mod tests {
 
         let prompt = build_task_prompt(&task, "Do the thing!", None);
         
-        assert!(prompt.starts_with("None Instructions Task"));
+        assert!(prompt.starts_with("<openforge_task_management>"));
     }
 
     #[test]
@@ -769,7 +770,7 @@ mod tests {
 
         let mgmt_pos = prompt.find("<openforge_task_management>").unwrap();
         let action_pos = prompt.find("Implement this task.").unwrap();
-        assert!(mgmt_pos > action_pos, "Task management section should come after action instruction");
+        assert!(mgmt_pos < action_pos, "Task management section should come before action instruction");
     }
 
     #[test]
@@ -792,16 +793,16 @@ mod tests {
 
         let prompt = build_task_prompt(&task, "Execute!", Some("Project rules here"));
 
+        let mgmt_pos = prompt.find("<openforge_task_management>").unwrap();
         let instructions_pos = prompt.find("Project rules here").unwrap();
         let task_prompt_pos = prompt.find("Do the work").unwrap();
         let jira_pos = prompt.find("Jira: PROJ-10").unwrap();
         let action_pos = prompt.find("Execute!").unwrap();
-        let mgmt_pos = prompt.find("<openforge_task_management>").unwrap();
 
+        assert!(mgmt_pos < instructions_pos);
         assert!(instructions_pos < task_prompt_pos);
         assert!(task_prompt_pos < jira_pos);
         assert!(jira_pos < action_pos);
-        assert!(action_pos < mgmt_pos);
     }
 
     #[test]
