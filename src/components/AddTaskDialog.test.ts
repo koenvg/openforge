@@ -13,6 +13,8 @@ vi.mock('../lib/ipc', () => ({
     jira_status: null,
     jira_assignee: null,
     jira_description: null,
+    prompt: null,
+    summary: null,
     project_id: null,
     created_at: 1000,
     updated_at: 1000,
@@ -31,6 +33,8 @@ const mockTask: Task = {
   jira_status: 'In Progress',
   jira_assignee: 'Alice',
   jira_description: null,
+  prompt: null,
+  summary: null,
   project_id: null,
   created_at: 1000,
   updated_at: 2000,
@@ -45,8 +49,8 @@ describe('AddTaskDialog', () => {
     render(AddTaskDialog, { props: { mode: 'create' } })
     expect(screen.getByRole('heading', { name: 'Create Task' })).toBeTruthy()
     
-    const titleInput = screen.getByPlaceholderText('Enter task title') as HTMLInputElement
-    expect(titleInput.value).toBe('')
+    const promptInput = screen.getByPlaceholderText('Describe what you want the agent to do') as HTMLInputElement
+    expect(promptInput.value).toBe('')
   })
 
   it('disables submit button when title is empty', () => {
@@ -57,9 +61,9 @@ describe('AddTaskDialog', () => {
 
   it('enables submit button when title has text', async () => {
     render(AddTaskDialog, { props: { mode: 'create' } })
-    const titleInput = screen.getByPlaceholderText('Enter task title')
+    const promptInput = screen.getByPlaceholderText('Describe what you want the agent to do')
     
-    await fireEvent.input(titleInput, { target: { value: 'New task' } })
+    await fireEvent.input(promptInput, { target: { value: 'New task' } })
     
     const submitBtn = screen.getByRole('button', { name: 'Create Task' })
     expect(submitBtn.hasAttribute('disabled')).toBe(false)
@@ -68,10 +72,10 @@ describe('AddTaskDialog', () => {
   it('calls createTask with correct arguments on submit', async () => {
     render(AddTaskDialog, { props: { mode: 'create' } })
     
-    const titleInput = screen.getByPlaceholderText('Enter task title')
+    const promptInput = screen.getByPlaceholderText('Describe what you want the agent to do')
     const jiraInput = screen.getByPlaceholderText('e.g. PROJ-123')
     
-    await fireEvent.input(titleInput, { target: { value: 'My new task' } })
+    await fireEvent.input(promptInput, { target: { value: 'My new task' } })
     await fireEvent.input(jiraInput, { target: { value: 'PROJ-456' } })
     
     const submitBtn = screen.getByRole('button', { name: 'Create Task' })
@@ -85,8 +89,8 @@ describe('AddTaskDialog', () => {
     render(AddTaskDialog, { props: { mode: 'edit', task: mockTask } })
     expect(screen.getByText('Edit Task')).toBeTruthy()
     
-    const titleInput = screen.getByPlaceholderText('Enter task title') as HTMLInputElement
-    expect(titleInput.value).toBe('Existing Task')
+    const promptInput = screen.getByPlaceholderText('Describe what you want the agent to do') as HTMLInputElement
+    expect(promptInput.value).toBe('Existing Task')
     
     const jiraInput = screen.getByPlaceholderText('e.g. PROJ-123') as HTMLInputElement
     expect(jiraInput.value).toBe('PROJ-123')
@@ -111,5 +115,10 @@ describe('AddTaskDialog', () => {
     render(AddTaskDialog, { props: { mode: 'create' } })
     expect(screen.queryByText('Status')).toBeNull()
     expect(screen.queryByRole('combobox')).toBeNull()
+  })
+
+  it('shows Prompt label in create mode', () => {
+    render(AddTaskDialog, { props: { mode: 'create' } })
+    expect(screen.getByText('Prompt', { exact: false })).toBeTruthy()
   })
 })
