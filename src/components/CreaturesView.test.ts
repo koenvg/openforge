@@ -133,6 +133,15 @@ describe('CreaturesView', () => {
       expect(within(legend).getByText('(1)')).toBeTruthy()
     })
 
+    it('shows DONE label in legend bar with count', () => {
+      tasks.set([makeTask('T-1', 'doing')])
+      activeSessions.set(new Map([['T-1', makeSession('T-1', 'completed')]]))
+      render(CreaturesView, { props: { onCreatureClick: vi.fn() } })
+      const legend = screen.getByTestId('legend-bar')
+      expect(within(legend).getByText('DONE')).toBeTruthy()
+      expect(within(legend).getByText('(1)')).toBeTruthy()
+    })
+
     it('shows hint text in legend bar', () => {
       tasks.set([makeTask('T-1', 'backlog')])
       render(CreaturesView, { props: { onCreatureClick: vi.fn() } })

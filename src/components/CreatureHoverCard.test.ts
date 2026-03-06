@@ -181,9 +181,15 @@ describe('CreatureHoverCard', () => {
     expect(screen.getByText('#200 open')).toBeTruthy()
   })
 
-  it('status badge uses success colors for forge room', () => {
+  it('status badge uses success colors for active forge creatures', () => {
     const { container } = renderHoverCard({ room: 'forge', state: 'active' })
     const badge = container.querySelector('.bg-success\\/20')
+    expect(badge).toBeTruthy()
+  })
+
+  it('status badge uses info colors for celebrating forge creatures', () => {
+    const { container } = renderHoverCard({ room: 'forge', state: 'celebrating' })
+    const badge = container.querySelector('.bg-info\\/20')
     expect(badge).toBeTruthy()
   })
 
@@ -238,13 +244,19 @@ describe('CreatureHoverCard', () => {
     expect(screen.getByText('click to view task details')).toBeTruthy()
   })
 
-  it('uses room-colored border for forge', () => {
-    const { container } = renderHoverCard({ room: 'forge' })
+  it('uses success border for active forge creatures', () => {
+    const { container } = renderHoverCard({ room: 'forge', state: 'active' })
     const card = container.querySelector('.border-success')
     expect(card).toBeTruthy()
   })
 
-  it('uses room-colored border for warRoom', () => {
+  it('uses info border for celebrating forge creatures', () => {
+    const { container } = renderHoverCard({ room: 'forge', state: 'celebrating' })
+    const card = container.querySelector('.border-info')
+    expect(card).toBeTruthy()
+  })
+
+  it('uses warning border for warRoom', () => {
     const { container } = renderHoverCard({ room: 'warRoom' })
     const card = container.querySelector('.border-warning')
     expect(card).toBeTruthy()

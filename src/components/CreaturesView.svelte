@@ -49,6 +49,11 @@
     return s?.status === 'running'
   }).length)
 
+  let doneCount = $derived(forgeTasks.filter(t => {
+    const s = getSession(t.id)
+    return s?.status === 'completed'
+  }).length)
+
   let blockedCount = $derived(warRoomTasks.length)
   let backlogCount = $derived(nurseryTasks.length)
 
@@ -140,6 +145,11 @@
         <span class="w-2 h-2 bg-success rounded-sm"></span>
         <span class="font-mono text-[9px] text-base-content/60 font-semibold">RUNNING</span>
         <span class="font-mono text-[9px] text-base-content/40">({runningCount})</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <span class="w-2 h-2 bg-info rounded-sm"></span>
+        <span class="font-mono text-[9px] text-base-content/60 font-semibold">DONE</span>
+        <span class="font-mono text-[9px] text-base-content/40">({doneCount})</span>
       </div>
       <div class="flex items-center gap-1.5">
         <span class="w-2 h-2 bg-warning rounded-sm"></span>

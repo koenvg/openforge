@@ -35,12 +35,14 @@
   )
 
   let badgeColor = $derived(
+    state === 'celebrating' ? 'bg-info/20 text-info' :
     room === 'forge' ? 'bg-success/20 text-success' :
     room === 'warRoom' ? 'bg-warning/20 text-warning' :
     'bg-base-content/10 text-base-content/40'
   )
 
   let borderColor = $derived(
+    state === 'celebrating' ? 'border-info' :
     room === 'forge' ? 'border-success' :
     room === 'warRoom' ? 'border-warning' :
     'border-base-content/30'
@@ -69,6 +71,7 @@
   let cardStyle = $derived(`position: fixed; left: ${position.x}px; top: ${position.y}px; z-index: 50;`)
 
   let taskIdColor = $derived(
+    state === 'celebrating' ? 'text-info' :
     room === 'forge' ? 'text-success' :
     room === 'warRoom' ? 'text-warning' :
     'text-base-content/60'

@@ -28,6 +28,7 @@
   )
 
   let roomColor = $derived(
+    state === 'celebrating' ? 'text-info' :
     room === 'forge' ? 'text-success' :
     room === 'warRoom' ? 'text-warning' :
     'text-base-content/40'
@@ -43,6 +44,7 @@
   )
 
   let thoughtBorderClass = $derived(
+    state === 'celebrating' ? 'border-info/50' :
     room === 'forge' ? 'border-success/50' :
     room === 'warRoom' ? 'border-warning/50' :
     'border-base-content/20'
@@ -56,13 +58,14 @@
     task.title.length > 30 ? task.title.slice(0, 30) + '...' : task.title
   )
 
-  // Hash task ID to a hue rotation for color variation per creature
+  // Hash task ID to a hue rotation for subtle color variation per creature
+  // Constrained to ±25° so creatures stay within their color family (green/blue)
   let hueRotation = $derived(() => {
     let hash = 0
     for (let i = 0; i < task.id.length; i++) {
       hash = ((hash << 5) - hash + task.id.charCodeAt(i)) | 0
     }
-    return Math.abs(hash) % 360
+    return (Math.abs(hash) % 50) - 25
   })
 </script>
 
