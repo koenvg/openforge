@@ -66,6 +66,16 @@ describe('TaskInfoPanel', () => {
     expect(screen.queryByText('No summary yet')).toBeNull()
   })
 
+  it('renders literal \\n in summary as actual line breaks', () => {
+    const taskWithNewlines = { ...baseTask, summary: 'Added feature.\\n\\nChanges:\\n- New file added' }
+    render(TaskInfoPanel, { props: { task: taskWithNewlines, worktreePath: null, jiraBaseUrl: '' } })
+    const summarySection = screen.getByLabelText('Summary').closest('section')!
+    expect(summarySection.textContent).toContain('Added feature.')
+    expect(summarySection.textContent).toContain('Changes:')
+    expect(summarySection.textContent).toContain('New file added')
+    expect(summarySection.textContent).not.toContain('\\n')
+  })
+
   it('renders summary as read-only text (no input elements in summary section)', () => {
     const taskWithSummary = { ...baseTask, summary: 'Done.' }
     render(TaskInfoPanel, { props: { task: taskWithSummary, worktreePath: null, jiraBaseUrl: '' } })

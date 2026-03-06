@@ -77,7 +77,7 @@
     {/if}
   </div>
   {#if task.summary}
-    <div class="text-xs text-base-content/50 truncate mb-1">{task.summary}</div>
+    <div class="text-xs text-base-content/50 truncate mb-1">{task.summary.replace(/\\n/g, '\n')}</div>
   {/if}
   {#if task.jira_title}
     <div class="text-secondary font-mono text-[11px] leading-relaxed mb-1.5">// {truncate(task.jira_title, 80)}</div>
