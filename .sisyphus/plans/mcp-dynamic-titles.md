@@ -629,7 +629,7 @@ Max Concurrent: 6 (Wave 2)
   - Files: `src-tauri/src/mcp-server/index.js`
   - Pre-commit: MCP tools/list test
 
-- [ ] 7. MCP update_task + get_task_info Tools
+- [x] 7. MCP update_task + get_task_info Tools
 
   **What to do**:
   - Add `update_task` tool to MCP server:
@@ -792,7 +792,7 @@ Max Concurrent: 6 (Wave 2)
   - Files: `src/components/AddTaskDialog.svelte`, `src/components/AddTaskDialog.test.ts`, `src/lib/types.ts`, `src/lib/ipc.ts`
   - Pre-commit: `pnpm test -- --run`
 
-- [ ] 9. Frontend — TaskCard TLDR subtitle
+- [x] 9. Frontend — TaskCard TLDR subtitle
 
   **What to do**:
   - Update or create test: TaskCard renders summary as subtitle when present
@@ -861,7 +861,7 @@ Max Concurrent: 6 (Wave 2)
   - Files: `src/components/TaskCard.svelte`
   - Pre-commit: `pnpm test -- --run`
 
-- [ ] 10. Frontend — TaskInfoPanel summary + prompt display
+- [x] 10. Frontend — TaskInfoPanel summary + prompt display
 
   **What to do**:
   - In `TaskInfoPanel.svelte`:
