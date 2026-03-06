@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte'
   import type { Task, KanbanColumn } from '../lib/types'
   import { createTask, updateTask } from '../lib/ipc'
   import { activeProjectId } from '../lib/stores'
@@ -17,6 +18,14 @@
   let jiraKey = $state('')
   let status = $state<KanbanColumn>('backlog')
   let isSubmitting = $state(false)
+  let titleInputEl = $state<HTMLInputElement | null>(null)
+
+  // Focus the title input after Modal's own focus effect has run
+  $effect(() => {
+    if (titleInputEl) {
+      tick().then(() => titleInputEl?.focus())
+    }
+  })
 
   // Initialize form values from props
   $effect(() => {
@@ -71,10 +80,10 @@
         <input
           type="text"
           class="input input-bordered input-sm w-full"
+          bind:this={titleInputEl}
           bind:value={title}
           placeholder="Describe what you want the agent to do"
           required
-          autofocus
         />
       </label>
 
