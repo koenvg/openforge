@@ -18,6 +18,7 @@
   import CiFailureToast from './components/CiFailureToast.svelte'
   import TaskSpawnedToast from './components/TaskSpawnedToast.svelte'
   import ProjectSwitcher from './components/ProjectSwitcher.svelte'
+  import ProjectSwitcherModal from './components/ProjectSwitcherModal.svelte'
   import ProjectSetupDialog from './components/ProjectSetupDialog.svelte'
   import IconRail from './components/IconRail.svelte'
   import { RefreshCw } from 'lucide-svelte'
@@ -32,6 +33,7 @@
   let showProjectSetup = $state(false)
   let appMode = $state<string | null>(null)
   let showShortcutsDialog = $state(false)
+  let showProjectSwitcher = $state(false)
 
   let selectedTask = $derived($tasks.find(t => t.id === $selectedTaskId) || null)
 
@@ -198,6 +200,11 @@
     if (e.key === '?') {
       e.preventDefault()
       showShortcutsDialog = true
+      return
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'p') {
+      e.preventDefault()
+      showProjectSwitcher = !showProjectSwitcher
       return
     }
     if (e.metaKey && e.key === 't') {
@@ -722,6 +729,10 @@
 <CiFailureToast />
 <TaskSpawnedToast />
 
+{#if showProjectSwitcher}
+  <ProjectSwitcherModal onClose={() => showProjectSwitcher = false} />
+{/if}
+
 <!-- Keyboard shortcuts help dialog (global) -->
 {#if showShortcutsDialog}
   <Modal onClose={() => showShortcutsDialog = false} maxWidth="420px">
@@ -733,6 +744,10 @@
       <div>
         <div class="font-mono text-xs text-secondary mb-3">// global</div>
         <div class="flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-base-content">Switch project</span>
+            <kbd class="kbd kbd-sm">⌘P</kbd>
+          </div>
           <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">New task</span>
             <kbd class="kbd kbd-sm">⌘T</kbd>
