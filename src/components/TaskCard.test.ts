@@ -12,6 +12,8 @@ const baseTask: Task = {
   jira_status: 'To Do',
   jira_assignee: 'Alice',
   jira_description: null,
+  prompt: null,
+  summary: null,
   project_id: null,
   created_at: 1000,
   updated_at: 2000,
@@ -458,5 +460,23 @@ describe('TaskCard', () => {
   it('hides badge when no pull requests', () => {
     render(TaskCard, { props: { task: baseTask } })
     expect(screen.queryByText('unaddressed')).toBeNull()
+  })
+
+  it('shows summary subtitle when task has summary', () => {
+    const taskWithSummary = { ...baseTask, summary: 'Fixed auth bug, needs review' }
+    render(TaskCard, { props: { task: taskWithSummary } })
+    expect(screen.getByText('Fixed auth bug, needs review')).toBeTruthy()
+  })
+
+  it('hides subtitle when summary is null', () => {
+    const taskWithoutSummary = { ...baseTask, summary: null }
+    render(TaskCard, { props: { task: taskWithoutSummary } })
+    expect(screen.queryByText('Fixed auth bug, needs review')).toBeNull()
+  })
+
+  it('shows prompt first line as fallback title when title is empty', () => {
+    const taskWithPrompt = { ...baseTask, title: '', prompt: 'Fix the login bug\nMore details here' }
+    render(TaskCard, { props: { task: taskWithPrompt } })
+    expect(screen.getByText('Fix the login bug')).toBeTruthy()
   })
 })
