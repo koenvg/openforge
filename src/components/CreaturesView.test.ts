@@ -65,7 +65,6 @@ describe('CreaturesView', () => {
       const nursery = screen.getByTestId('room-nursery')
       expect(nursery.className).not.toContain('flex-1')
     })
-
     it('places running tasks in THE FORGE room', () => {
       tasks.set([makeTask('T-forge', 'doing')])
       activeSessions.set(new Map([['T-forge', makeSession('T-forge', 'running')]]))
@@ -207,6 +206,82 @@ describe('CreaturesView', () => {
       await fireEvent.click(button)
 
       expect(onCreatureClick).toHaveBeenCalledWith('T-click')
+    })
+
+    it('hover card flips to left when creature is near right viewport edge', async () => {
+      // Mock window.innerWidth to 800px
+      Object.defineProperty(window, 'innerWidth', { value: 800, writable: true, configurable: true })
+      
+      tasks.set([makeTask('T-right-edge', 'doing')])
+      activeSessions.set(new Map([['T-right-edge', makeSession('T-right-edge', 'running')]]))
+      render(CreaturesView, { props: { onCreatureClick: vi.fn() } })
+
+      const button = screen.getByText('T-right-edge').closest('button')
+      if (!button) throw new Error('Creature button not found')
+
+      // Mock getBoundingClientRect to return a rect near the right edge
+      // Creature is at x=700, width=160, so right edge is at 860 (beyond 800 viewport)
+      const mockRect = {
+        left: 700,
+        right: 860,
+        top: 100,
+        bottom: 132,
+        width: 160,
+        height: 32,
+        x: 700,
+        y: 100,
+        toJSON: () => ({})
+      } as DOMRect
+
+      vi.spyOn(button, 'getBoundingClientRect').mockReturnValue(mockRect)
+
+      await fireEvent.mouseEnter(button)
+
+      // Find the hover card element
+      const hoverCard = screen.getByRole('tooltip')
+      const style = window.getComputedStyle(hoverCard)
+      const leftValue = style.left
+
+      // Card should be positioned to the LEFT: left = 700 - 320 - 12 = 368
+      expect(leftValue).toBe('368px')
+    })
+
+    it('hover card Y-position clamped when creature is near bottom', async () => {
+      // Mock window.innerHeight to 400px
+      Object.defineProperty(window, 'innerHeight', { value: 400, writable: true, configurable: true })
+      
+      tasks.set([makeTask('T-bottom', 'doing')])
+      activeSessions.set(new Map([['T-bottom', makeSession('T-bottom', 'running')]]))
+      render(CreaturesView, { props: { onCreatureClick: vi.fn() } })
+
+      const button = screen.getByText('T-bottom').closest('button')
+      if (!button) throw new Error('Creature button not found')
+
+      // Mock getBoundingClientRect to return a rect near the bottom
+      // Creature is at y=350, and card height is 240, so it would overflow
+      const mockRect = {
+        left: 100,
+        right: 260,
+        top: 350,
+        bottom: 382,
+        width: 160,
+        height: 32,
+        x: 100,
+        y: 350,
+        toJSON: () => ({})
+      } as DOMRect
+
+      vi.spyOn(button, 'getBoundingClientRect').mockReturnValue(mockRect)
+
+      await fireEvent.mouseEnter(button)
+
+      // Find the hover card element
+      const hoverCard = screen.getByRole('tooltip')
+      const style = window.getComputedStyle(hoverCard)
+      const topValue = style.top
+
+      // Card Y should be clamped: 400 - 240 - 12 = 148
+      expect(topValue).toBe('148px')
     })
   })
 

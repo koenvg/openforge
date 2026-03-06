@@ -55,7 +55,7 @@
   )
 
   let truncatedTitle = $derived(
-    task.title.length > 30 ? task.title.slice(0, 30) + '...' : task.title
+    task.title.length > 45 ? task.title.slice(0, 45) + '...' : task.title
   )
 
   // Hash task ID to a hue rotation for subtle color variation per creature
@@ -78,14 +78,14 @@
   onmouseleave={() => onHoverEnd()}
 >
   <!-- Thought bubble -->
-  <div class="bg-base-200 border {thoughtBorderClass} rounded-lg px-2 py-1 text-xs max-w-[130px] text-left mb-1">
+  <div class="bg-base-200 border {thoughtBorderClass} rounded-lg px-2 py-1 text-xs max-w-[180px] text-left mb-1">
     <span class={thoughtTextClass}>{truncatedTitle}</span>
   </div>
 
   {#if room !== 'nursery'}
     <svg
       viewBox="0 0 140 120"
-      class="w-28 h-24 {roomColor} {animClass}"
+      class="w-40 h-32 {roomColor} {animClass}"
       style={room === 'forge' ? `filter: hue-rotate(${hueRotation()}deg)` : ''}
       xmlns="http://www.w3.org/2000/svg"
       role="img"
@@ -127,7 +127,7 @@
   {:else}
     <svg
       viewBox="0 0 120 100"
-      class="w-28 h-24 {roomColor} {animClass}"
+      class="w-40 h-32 {roomColor} {animClass}"
       xmlns="http://www.w3.org/2000/svg"
       role="img"
       aria-label="nest"
@@ -147,6 +147,6 @@
 
   <span class="font-mono text-[9px] {roomColor}">{task.id}</span>
   {#if task.jira_assignee}
-    <span class="font-mono text-[8px] text-base-content/40 truncate max-w-[100px]">{task.jira_assignee}</span>
+    <span class="font-mono text-[8px] text-base-content/40 truncate max-w-[140px]">{task.jira_assignee}</span>
   {/if}
 </button>

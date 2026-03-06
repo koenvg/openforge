@@ -278,4 +278,5 @@ describe('Creature', () => {
       expect(svg?.classList.contains('text-base-content/40')).toBe(true)
     })
   })
+
 })
