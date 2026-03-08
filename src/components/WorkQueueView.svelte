@@ -113,7 +113,9 @@
                   {task.title.length > 80 ? task.title.slice(0, 80) + '...' : task.title}
                 </div>
                 {#if task.summary}
-                  <div class="text-xs text-base-content/50 truncate">{task.summary}</div>
+                  <div class="tooltip w-full" data-tip={task.summary}>
+                    <div class="text-xs text-base-content/50 truncate" title={task.summary}>{task.summary}</div>
+                  </div>
                 {/if}
               </Card>
             {/each}

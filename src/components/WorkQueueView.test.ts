@@ -99,6 +99,20 @@ describe('WorkQueueView', () => {
     await waitFor(() => {
       expect(screen.getByText('Refactored the auth module')).toBeTruthy()
     })
+    expect(screen.getByTitle('Refactored the auth module')).toBeTruthy()
+  })
+
+  it('keeps full summary accessible via title when display text is truncated', async () => {
+    const longSummary = 'This is a very long summary that should be visually truncated in the card but remain fully accessible via hover title tooltip text for easy reading'
+    vi.mocked(getWorkQueueTasks).mockResolvedValue([
+      makeWorkQueueTask({ summary: longSummary }),
+    ])
+
+    render(WorkQueueView)
+
+    await waitFor(() => {
+      expect(screen.getByTitle(longSummary)).toBeTruthy()
+    })
   })
 
   it('handles null summary gracefully', async () => {
