@@ -99,10 +99,11 @@ describe('WorkQueueView', () => {
     await waitFor(() => {
       expect(screen.getByText('Refactored the auth module')).toBeTruthy()
     })
-    expect(screen.getByTitle('Refactored the auth module')).toBeTruthy()
+    expect(screen.getByTestId('summary-container-T-1')).toBeTruthy()
+    expect(screen.queryByTestId('summary-popover-T-1')).toBeNull()
   })
 
-  it('keeps full summary accessible via title when display text is truncated', async () => {
+  it('shows full summary in custom popover on hover and supports icon toggle', async () => {
     const longSummary = 'This is a very long summary that should be visually truncated in the card but remain fully accessible via hover title tooltip text for easy reading'
     vi.mocked(getWorkQueueTasks).mockResolvedValue([
       makeWorkQueueTask({ summary: longSummary }),
@@ -111,8 +112,20 @@ describe('WorkQueueView', () => {
     render(WorkQueueView)
 
     await waitFor(() => {
-      expect(screen.getByTitle(longSummary)).toBeTruthy()
+      expect(screen.getByTestId('summary-container-T-1')).toBeTruthy()
     })
+
+    expect(screen.queryByTestId('summary-popover-T-1')).toBeNull()
+
+    const toggleBtn = screen.getByLabelText('Show full summary')
+    await fireEvent.click(toggleBtn)
+    const openedPopover = screen.getByTestId('summary-popover-T-1')
+    expect(openedPopover).toBeTruthy()
+    expect(openedPopover.className).toContain('max-h-44')
+    expect(openedPopover.className).toContain('overflow-auto')
+
+    await fireEvent.click(toggleBtn)
+    expect(screen.queryByTestId('summary-popover-T-1')).toBeNull()
   })
 
   it('handles null summary gracefully', async () => {

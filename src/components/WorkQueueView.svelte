@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Eye } from 'lucide-svelte'
   import type { WorkQueueTask } from '../lib/types'
   import { getWorkQueueTasks } from '../lib/ipc'
   import { activeProjectId, currentView, selectedTaskId } from '../lib/stores'
@@ -14,6 +15,7 @@
 
   let tasks = $state<WorkQueueTask[]>([])
   let loading = $state(true)
+  let expandedSummaryTaskId = $state<string | null>(null)
 
   let grouped = $derived(groupByProject(tasks))
 
@@ -70,6 +72,11 @@
     $selectedTaskId = task.id
   }
 
+  function toggleSummary(taskId: string, e: MouseEvent | KeyboardEvent) {
+    e.stopPropagation()
+    expandedSummaryTaskId = expandedSummaryTaskId === taskId ? null : taskId
+  }
+
   $effect(() => {
     loadTasks()
   })
@@ -113,8 +120,32 @@
                   {task.title.length > 80 ? task.title.slice(0, 80) + '...' : task.title}
                 </div>
                 {#if task.summary}
-                  <div class="tooltip w-full" data-tip={task.summary}>
-                    <div class="text-xs text-base-content/50 truncate" title={task.summary}>{task.summary}</div>
+                  <div class="relative w-full" data-testid={`summary-container-${task.id}`}>
+                    <div class="flex items-center gap-1.5 min-w-0 text-xs text-base-content/50">
+                      <span class="truncate">{task.summary}</span>
+                      <button
+                        type="button"
+                        class="shrink-0 text-base-content/40 hover:text-base-content/70"
+                        aria-label="Show full summary"
+                        onclick={(e: MouseEvent) => toggleSummary(task.id, e)}
+                        onkeydown={(e: KeyboardEvent) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            toggleSummary(task.id, e)
+                          }
+                        }}
+                      >
+                        <Eye size={12} aria-hidden="true" />
+                      </button>
+                    </div>
+                    {#if expandedSummaryTaskId === task.id}
+                      <div
+                        class="absolute left-0 top-full mt-1 z-30 w-80 max-w-[min(24rem,calc(100vw-4rem))] max-h-44 overflow-auto rounded border border-base-300 bg-base-100 p-2 text-xs text-base-content shadow-lg whitespace-pre-wrap break-words"
+                        data-testid={`summary-popover-${task.id}`}
+                      >
+                        {task.summary}
+                      </div>
+                    {/if}
                   </div>
                 {/if}
               </Card>
