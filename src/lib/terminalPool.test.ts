@@ -43,7 +43,7 @@ vi.mock('./ipc', () => ({
   getPtyBuffer: vi.fn().mockResolvedValue(null),
 }))
 
-import { acquire, attach, detach, release, releaseAll, _getPool } from './terminalPool'
+import { acquire, attach, detach, release, releaseAll, _getPool, isPtyActive } from './terminalPool'
 
 // Stub browser APIs not available in jsdom
 globalThis.ResizeObserver = class {
@@ -227,6 +227,24 @@ describe('terminalPool', () => {
     attach(reacquired, wrapper2)
     expect(wrapper2.contains(entry.hostDiv)).toBe(true)
     expect(entry.attached).toBe(true)
+  })
+
+  describe('isPtyActive', () => {
+    it('returns true when pool entry has ptyActive true', async () => {
+      const entry = await acquire('task-pty-check')
+      entry.ptyActive = true
+      expect(isPtyActive('task-pty-check')).toBe(true)
+    })
+
+    it('returns false when pool entry has ptyActive false', async () => {
+      const entry = await acquire('task-pty-off')
+      entry.ptyActive = false
+      expect(isPtyActive('task-pty-off')).toBe(false)
+    })
+
+    it('returns false for unknown task', () => {
+      expect(isPtyActive('nonexistent')).toBe(false)
+    })
   })
 
   describe('shell-key independence', () => {

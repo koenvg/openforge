@@ -3,7 +3,7 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
   import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention, taskSpawned, searchQuery, selectedSkillName, runningTerminals, creaturesEnabled } from './lib/stores'
-  import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, getProjectAttention, getAppMode, finalizeClaudeSession, getRunningPtyTaskIds, getConfig, getAgents } from './lib/ipc'
+  import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, getProjectAttention, getAppMode, finalizeClaudeSession, getRunningPtyTaskIds, getConfig, getAgents, writePty } from './lib/ipc'
   import SearchableSelect from './components/SearchableSelect.svelte'
   import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
@@ -26,7 +26,7 @@
   import { RefreshCw } from 'lucide-svelte'
 
   import { pushNavState, navigateBack } from './lib/navigation'
-  import { release as releaseTerminal } from './lib/terminalPool'
+  import { release as releaseTerminal, isPtyActive } from './lib/terminalPool'
 
   let unlisteners: UnlistenFn[] = []
   let showAddDialog = $state(false)
@@ -214,6 +214,19 @@
       return
     }
     const { taskId, actionPrompt, agent } = data
+
+    // If Claude PTY is active, send the prompt directly to the terminal
+    // instead of starting a new session (like dictation does)
+    if (isPtyActive(taskId)) {
+      try {
+        await writePty(taskId, actionPrompt + '\n')
+      } catch (e) {
+        console.error('[session] Failed to write action to PTY:', taskId, e)
+        $error = String(e)
+      }
+      return
+    }
+
     try {
       const result = await runAction(taskId, activeProject.path, actionPrompt, agent)
 
