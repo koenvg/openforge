@@ -1,6 +1,8 @@
 <script lang="ts">
-  import type { AgentSession, PullRequestInfo } from '../lib/types'
-  import { tasks, activeSessions, ticketPrs } from '../lib/stores'
+  import type { AgentSession, PullRequestInfo, KanbanColumn } from '../lib/types'
+  import { COLUMNS, COLUMN_LABELS } from '../lib/types'
+  import { tasks, activeSessions, ticketPrs, error } from '../lib/stores'
+  import { updateTaskStatus, deleteTask } from '../lib/ipc'
   import { computeCreatureState, computeCreatureRoom } from '../lib/creatureState'
   import { parseCheckpointQuestion } from '../lib/parseCheckpoint'
   import Creature from './Creature.svelte'
@@ -8,9 +10,10 @@
 
   interface Props {
     onCreatureClick: (taskId: string) => void
+    onRunAction?: (data: { taskId: string; actionPrompt: string; agent: string | null }) => void
   }
 
-  let { onCreatureClick }: Props = $props()
+  let { onCreatureClick, onRunAction }: Props = $props()
 
   let hoveredTaskId = $state<string | null>(null)
   let hoverRect = $state<DOMRect | null>(null)
@@ -113,7 +116,54 @@
     hoveredTaskId = null
     hoverRect = null
   }
+
+  let contextMenu = $state({ visible: false, x: 0, y: 0, taskId: '', taskStatus: '' as KanbanColumn | '', showMoveSubmenu: false })
+
+  function handleContextMenu(event: MouseEvent, taskId: string) {
+    event.preventDefault()
+    const task = $tasks.find(t => t.id === taskId)
+    const taskStatus = (task?.status ?? '') as KanbanColumn | ''
+    contextMenu = { visible: true, x: event.clientX, y: event.clientY, taskId, taskStatus, showMoveSubmenu: false }
+  }
+
+  function closeContextMenu() {
+    contextMenu = { ...contextMenu, visible: false, showMoveSubmenu: false }
+  }
+
+  function handleStartTask() {
+    const taskId = contextMenu.taskId
+    closeContextMenu()
+    onRunAction?.({ taskId, actionPrompt: '', agent: null })
+  }
+
+  function toggleMoveSubmenu() {
+    contextMenu = { ...contextMenu, showMoveSubmenu: !contextMenu.showMoveSubmenu }
+  }
+
+  async function handleMoveTo(column: KanbanColumn) {
+    const taskId = contextMenu.taskId
+    closeContextMenu()
+    try {
+      await updateTaskStatus(taskId, column)
+    } catch (err: unknown) {
+      console.error('Failed to move task:', err)
+      $error = String(err)
+    }
+  }
+
+  async function handleDelete() {
+    const taskId = contextMenu.taskId
+    closeContextMenu()
+    try {
+      await deleteTask(taskId)
+    } catch (err: unknown) {
+      console.error('Failed to delete task:', err)
+      $error = String(err)
+    }
+  }
 </script>
+
+<svelte:window onclick={closeContextMenu} />
 
 <div class="flex flex-col h-full flex-1 bg-base-300">
   {#if !hasCreatures}
@@ -134,7 +184,10 @@
             {@const state = computeCreatureState(task, session, getPrs(task.id))}
             {@const room = computeCreatureRoom(task, session, getPrs(task.id))}
             {@const questionText = parseCheckpointQuestion(session?.checkpoint_data ?? null)}
-            <Creature {task} {state} {room} {questionText} onClick={onCreatureClick} onHover={handleHover} onHoverEnd={handleHoverEnd} />
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)}>
+              <Creature {task} {state} {room} {questionText} onClick={onCreatureClick} onHover={handleHover} onHoverEnd={handleHoverEnd} onStart={onRunAction ? (taskId: string) => onRunAction({ taskId, actionPrompt: '', agent: null }) : undefined} />
+            </div>
           {/each}
         </div>
       </div>
@@ -151,7 +204,10 @@
              {@const state = computeCreatureState(task, session, getPrs(task.id))}
              {@const room = computeCreatureRoom(task, session, getPrs(task.id))}
              {@const questionText = parseCheckpointQuestion(session?.checkpoint_data ?? null)}
-             <Creature {task} {state} {room} {questionText} onClick={onCreatureClick} onHover={handleHover} onHoverEnd={handleHoverEnd} />
+             <!-- svelte-ignore a11y_no_static_element_interactions -->
+             <div oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)}>
+               <Creature {task} {state} {room} {questionText} onClick={onCreatureClick} onHover={handleHover} onHoverEnd={handleHoverEnd} />
+             </div>
            {/each}
          </div>
       </div>
@@ -168,7 +224,10 @@
             {@const state = computeCreatureState(task, session, getPrs(task.id))}
             {@const room = computeCreatureRoom(task, session, getPrs(task.id))}
             {@const questionText = parseCheckpointQuestion(session?.checkpoint_data ?? null)}
-            <Creature {task} {state} {room} {questionText} onClick={onCreatureClick} onHover={handleHover} onHoverEnd={handleHoverEnd} />
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)}>
+              <Creature {task} {state} {room} {questionText} onClick={onCreatureClick} onHover={handleHover} onHoverEnd={handleHoverEnd} />
+            </div>
           {/each}
         </div>
       </div>
@@ -220,4 +279,27 @@
        onCardEnter={cancelHide}
      />
    {/if}
+
+  {#if contextMenu.visible}
+    <div class="fixed z-[100] bg-base-300 border border-base-300 rounded-lg shadow-xl min-w-[180px] p-1" style="left: {contextMenu.x}px; top: {contextMenu.y}px;">
+      {#if contextMenu.taskStatus === 'backlog'}
+        <button class="context-item block w-full text-left px-3 py-2 text-sm text-primary font-medium cursor-pointer rounded hover:bg-primary hover:text-primary-content" onclick={handleStartTask}>
+          Start Task
+        </button>
+      {/if}
+      <button class="context-item block w-full text-left px-3 py-2 text-sm text-base-content cursor-pointer rounded hover:bg-primary hover:text-primary-content" onclick={(e: MouseEvent) => { e.stopPropagation(); toggleMoveSubmenu() }}>
+        Move to... ›
+      </button>
+      {#if contextMenu.showMoveSubmenu}
+        <div class="border-t border-base-300 mt-0.5 pt-0.5">
+          {#each COLUMNS as col}
+            <button class="context-item block w-full text-left px-3 py-2 text-sm text-base-content cursor-pointer rounded hover:bg-primary hover:text-primary-content" onclick={() => handleMoveTo(col)}>
+              {COLUMN_LABELS[col]}
+            </button>
+          {/each}
+        </div>
+      {/if}
+      <button class="context-item block w-full text-left px-3 py-2 text-sm text-error cursor-pointer rounded hover:bg-error hover:text-error-content" onclick={handleDelete}>Delete</button>
+    </div>
+  {/if}
 </div>

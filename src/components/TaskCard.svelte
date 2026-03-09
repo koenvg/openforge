@@ -9,10 +9,11 @@
     session?: AgentSession | null
     pullRequests?: PullRequestInfo[]
     hasRunningTerminal?: boolean
+    isStarting?: boolean
     onSelect?: (taskId: string) => void
   }
 
-  let { task, session = null, pullRequests = [], hasRunningTerminal = false, onSelect }: Props = $props()
+  let { task, session = null, pullRequests = [], hasRunningTerminal = false, isStarting = false, onSelect }: Props = $props()
 
   function handleClick() {
     onSelect?.(task.id)
@@ -39,7 +40,7 @@
 </script>
 
 <Card
-  class="block px-3.5 py-3 {hasCiFailure && !hasPendingCi && statusClass !== 'running' && !needsInput ? 'ci-failed' : ''} {statusClass === 'running' ? 'running' : ''} {statusClass === 'paused' && !needsInput ? 'paused' : ''} {statusClass === 'failed' ? 'failed' : ''} {statusClass === 'interrupted' ? 'interrupted' : ''} {statusClass === 'completed' ? 'completed' : ''} {needsInput ? 'needs-input' : ''} {hasReadyToMerge && statusClass !== 'running' ? 'ready-to-merge' : ''}"
+  class="block px-3.5 py-3 {hasCiFailure && !hasPendingCi && statusClass !== 'running' && !needsInput ? 'ci-failed' : ''} {isStarting ? 'starting' : ''} {statusClass === 'running' ? 'running' : ''} {statusClass === 'paused' && !needsInput ? 'paused' : ''} {statusClass === 'failed' ? 'failed' : ''} {statusClass === 'interrupted' ? 'interrupted' : ''} {statusClass === 'completed' ? 'completed' : ''} {needsInput ? 'needs-input' : ''} {hasReadyToMerge && statusClass !== 'running' ? 'ready-to-merge' : ''}"
   onclick={handleClick}
 >
   <div class="flex items-center justify-between mb-1">
@@ -55,7 +56,14 @@
         <span class="badge badge-warning badge-xs font-mono animate-pulse">Needs Input</span>
       {/if}
     </div>
-    {#if hasVisibleStatus}
+    {#if isStarting}
+      <span
+        class="font-mono text-[0.6rem] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider whitespace-nowrap leading-tight bg-primary/15 text-primary"
+        style="animation: badge-pulse 2s ease-in-out infinite;"
+      >
+        Starting
+      </span>
+    {:else if hasVisibleStatus}
       <span
         class="font-mono text-[0.6rem] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider whitespace-nowrap leading-tight {statusClass === 'running' ? 'bg-success/15 text-success' : ''} {statusClass === 'completed' ? 'bg-info/20 text-info' : ''} {statusClass === 'paused' ? 'bg-warning/15 text-warning' : ''} {statusClass === 'failed' ? 'bg-error/15 text-error' : ''} {statusClass === 'interrupted' ? 'bg-base-content/15 text-base-content/50' : ''}"
         style={statusClass === 'running' ? 'animation: badge-pulse 2s ease-in-out infinite;' : ''}

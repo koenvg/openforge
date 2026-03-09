@@ -544,6 +544,34 @@ CREATE INDEX IF NOT EXISTS idx_agent_review_comments_session ON agent_review_com
 
             Ok(())
         }),
+        // V9: Copy global ai_provider to all existing projects' project_config
+        M::up_with_hook("", |tx| {
+            let has_table: bool = tx.query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='project_config'",
+                [],
+                |r| r.get(0),
+            ).unwrap_or(false);
+
+            if has_table {
+                let global_provider: String = tx
+                    .query_row(
+                        "SELECT value FROM config WHERE key = 'ai_provider'",
+                        [],
+                        |row| row.get(0),
+                    )
+                    .unwrap_or_else(|_| "claude-code".to_string());
+
+                tx.execute(
+                    "INSERT OR IGNORE INTO project_config (project_id, key, value)
+                     SELECT id, 'ai_provider', ?1 FROM projects",
+                    rusqlite::params![global_provider],
+                )
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            }
+
+            Ok(())
+        }),
+        // V10: Add draft column to pull_requests
         M::up_with_hook("", |tx| {
             let table_exists: bool = tx
                 .query_row(
@@ -841,8 +869,8 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(
-            uv, 9,
-            "Fresh DB should have user_version=9 after migrations, got {}",
+            uv, 10,
+            "Fresh DB should have user_version=10 after migrations, got {}",
             uv
         );
 

@@ -4,6 +4,11 @@ import CreaturesView from './CreaturesView.svelte'
 import type { Task, AgentSession } from '../lib/types'
 import { tasks, activeSessions, ticketPrs } from '../lib/stores'
 
+vi.mock('../lib/ipc', () => ({
+  updateTaskStatus: vi.fn(),
+  deleteTask: vi.fn(),
+}))
+
 const makeTask = (id: string, status: string, title: string = 'Test task'): Task => ({
   id,
   title,
@@ -16,6 +21,10 @@ const makeTask = (id: string, status: string, title: string = 'Test task'): Task
   project_id: null,
   created_at: 1000,
   updated_at: 2000,
+  prompt: '',
+  summary: null,
+  agent: null,
+  permission_mode: 'default',
 })
 
 const makeSession = (ticketId: string, status: string): AgentSession => ({
@@ -312,6 +321,28 @@ describe('CreaturesView', () => {
       expect(nest).toBeTruthy()
     })
 
+    it('nursery creatures show start button when onRunAction is provided', () => {
+      tasks.set([makeTask('T-nursery', 'backlog')])
+      render(CreaturesView, { props: { onCreatureClick: vi.fn(), onRunAction: vi.fn() } })
+      expect(screen.getByTitle('Start task')).toBeTruthy()
+    })
+
+    it('clicking start button on nursery creature calls onRunAction with task id and empty prompt', async () => {
+      const onRunAction = vi.fn()
+      tasks.set([makeTask('T-nursery', 'backlog')])
+      render(CreaturesView, { props: { onCreatureClick: vi.fn(), onRunAction } })
+      const startBtn = screen.getByTitle('Start task')
+      await fireEvent.click(startBtn)
+      expect(onRunAction).toHaveBeenCalledWith({ taskId: 'T-nursery', actionPrompt: '', agent: null })
+    })
+
+    it('forge creatures do not show start button even when onRunAction is provided', () => {
+      tasks.set([makeTask('T-forge', 'doing')])
+      activeSessions.set(new Map([['T-forge', makeSession('T-forge', 'running')]]))
+      render(CreaturesView, { props: { onCreatureClick: vi.fn(), onRunAction: vi.fn() } })
+      expect(screen.queryByTitle('Start task')).toBeNull()
+    })
+
     it('running forge creature has creature-work animation class', () => {
       tasks.set([makeTask('T-active', 'doing')])
       activeSessions.set(new Map([['T-active', makeSession('T-active', 'running')]]))
@@ -334,6 +365,103 @@ describe('CreaturesView', () => {
       const forgeRoom = screen.getByTestId('room-forge')
       const creatureList = forgeRoom.querySelector('[data-testid="creature-list"]')
       expect(creatureList).toBeTruthy()
+    })
+  })
+
+  describe('context menu', () => {
+    it('shows context menu on right-click of a nursery creature', async () => {
+      tasks.set([makeTask('T-nursery', 'backlog')])
+      render(CreaturesView, { props: { onCreatureClick: vi.fn(), onRunAction: vi.fn() } })
+
+      const button = screen.getByText('T-nursery').closest('button')!
+      await fireEvent.contextMenu(button)
+
+      expect(screen.getByText('Start Task')).toBeTruthy()
+      expect(screen.getByText('Move to... ›')).toBeTruthy()
+      expect(screen.getByText('Delete')).toBeTruthy()
+    })
+
+    it('shows Start Task option for nursery (backlog) creatures', async () => {
+      tasks.set([makeTask('T-nursery', 'backlog')])
+      render(CreaturesView, { props: { onCreatureClick: vi.fn(), onRunAction: vi.fn() } })
+
+      const button = screen.getByText('T-nursery').closest('button')!
+      await fireEvent.contextMenu(button)
+
+      expect(screen.getByText('Start Task')).toBeTruthy()
+    })
+
+    it('does not show Start Task option for doing creatures', async () => {
+      tasks.set([makeTask('T-forge', 'doing')])
+      activeSessions.set(new Map([['T-forge', makeSession('T-forge', 'running')]]))
+      render(CreaturesView, { props: { onCreatureClick: vi.fn(), onRunAction: vi.fn() } })
+
+      const button = screen.getByText('T-forge').closest('button')!
+      await fireEvent.contextMenu(button)
+
+      expect(screen.queryByText('Start Task')).toBeNull()
+    })
+
+    it('calls onRunAction when Start Task is clicked', async () => {
+      const onRunAction = vi.fn()
+      tasks.set([makeTask('T-nursery', 'backlog')])
+      render(CreaturesView, { props: { onCreatureClick: vi.fn(), onRunAction } })
+
+      const button = screen.getByText('T-nursery').closest('button')!
+      await fireEvent.contextMenu(button)
+      await fireEvent.click(screen.getByText('Start Task'))
+
+      expect(onRunAction).toHaveBeenCalledWith({ taskId: 'T-nursery', actionPrompt: '', agent: null })
+    })
+
+    it('shows move submenu when Move to is clicked', async () => {
+      tasks.set([makeTask('T-nursery', 'backlog')])
+      render(CreaturesView, { props: { onCreatureClick: vi.fn(), onRunAction: vi.fn() } })
+
+      const button = screen.getByText('T-nursery').closest('button')!
+      await fireEvent.contextMenu(button)
+      await fireEvent.click(screen.getByText('Move to... ›'))
+
+      expect(screen.getByText('Backlog')).toBeTruthy()
+      expect(screen.getByText('Doing')).toBeTruthy()
+      expect(screen.getByText('Done')).toBeTruthy()
+    })
+
+    it('calls updateTaskStatus when a move target is clicked', async () => {
+      const { updateTaskStatus } = await import('../lib/ipc')
+      tasks.set([makeTask('T-nursery', 'backlog')])
+      render(CreaturesView, { props: { onCreatureClick: vi.fn(), onRunAction: vi.fn() } })
+
+      const button = screen.getByText('T-nursery').closest('button')!
+      await fireEvent.contextMenu(button)
+      await fireEvent.click(screen.getByText('Move to... ›'))
+      await fireEvent.click(screen.getByText('Doing'))
+
+      expect(updateTaskStatus).toHaveBeenCalledWith('T-nursery', 'doing')
+    })
+
+    it('calls deleteTask when Delete is clicked', async () => {
+      const { deleteTask } = await import('../lib/ipc')
+      tasks.set([makeTask('T-nursery', 'backlog')])
+      render(CreaturesView, { props: { onCreatureClick: vi.fn(), onRunAction: vi.fn() } })
+
+      const button = screen.getByText('T-nursery').closest('button')!
+      await fireEvent.contextMenu(button)
+      await fireEvent.click(screen.getByText('Delete'))
+
+      expect(deleteTask).toHaveBeenCalledWith('T-nursery')
+    })
+
+    it('closes context menu when clicking outside', async () => {
+      tasks.set([makeTask('T-nursery', 'backlog')])
+      render(CreaturesView, { props: { onCreatureClick: vi.fn(), onRunAction: vi.fn() } })
+
+      const button = screen.getByText('T-nursery').closest('button')!
+      await fireEvent.contextMenu(button)
+      expect(screen.getByText('Start Task')).toBeTruthy()
+
+      await fireEvent.click(document.body)
+      expect(screen.queryByText('Start Task')).toBeNull()
     })
   })
 })

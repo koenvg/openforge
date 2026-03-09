@@ -68,6 +68,7 @@ vi.mock('../lib/stores', () => ({
   ticketPrs: writable(new Map()),
   tasks: writable([]),
   activeProjectId: writable('project-1'),
+  startingTasks: writable(new Set()),
 }))
 
 vi.mock('../lib/ipc', () => ({
@@ -255,7 +256,7 @@ describe('TaskDetailView', () => {
     expect(mockOnRunAction).toHaveBeenCalledWith({ taskId: 'T-42', actionPrompt: '', agent: null })
   })
 
-  it('disables action buttons when session is running', async () => {
+  it('action buttons stay enabled when session is running (prompt sent to active PTY)', async () => {
     const doingTask = { ...baseTask, status: 'doing' }
     activeSessions.set(new Map([['T-42', { ...baseSession, status: 'running' }]]))
     render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
@@ -263,8 +264,7 @@ describe('TaskDetailView', () => {
       expect(screen.getByText('Go')).toBeTruthy()
     })
     const button = screen.getByText('Go').closest('button')
-    expect(button?.disabled).toBe(true)
-    expect(button?.title).toBe('Agent is busy')
+    expect(button?.disabled).toBe(false)
     activeSessions.set(new Map())
   })
 

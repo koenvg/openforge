@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { Task, AgentSession, KanbanColumn } from '../lib/types'
-  import { COLUMNS, COLUMN_LABELS } from '../lib/types'
-  import { tasks, selectedTaskId, activeSessions, ticketPrs, error, activeProjectId, searchQuery, runningTerminals } from '../lib/stores'
+  import { tasks, selectedTaskId, activeSessions, ticketPrs, error, activeProjectId, searchQuery, runningTerminals, startingTasks } from '../lib/stores'
   import { updateTaskStatus, deleteTask, clearDoneTasks } from '../lib/ipc'
   import { pushNavState } from '../lib/navigation'
   import TaskCard from './TaskCard.svelte'
@@ -82,17 +81,17 @@
     $selectedTaskId = taskId
   }
 
-  let contextMenu = $state({ visible: false, x: 0, y: 0, taskId: '', taskStatus: '' as KanbanColumn | '', showMoveSubmenu: false })
+  let contextMenu = $state({ visible: false, x: 0, y: 0, taskId: '', taskStatus: '' as KanbanColumn | '' })
 
   function handleContextMenu(event: MouseEvent, taskId: string) {
     event.preventDefault()
     const task = $tasks.find(t => t.id === taskId)
     const taskStatus = (task?.status ?? '') as KanbanColumn | ''
-    contextMenu = { visible: true, x: event.clientX, y: event.clientY, taskId, taskStatus, showMoveSubmenu: false }
+    contextMenu = { visible: true, x: event.clientX, y: event.clientY, taskId, taskStatus }
   }
 
   function closeContextMenu() {
-    contextMenu = { ...contextMenu, visible: false, showMoveSubmenu: false }
+    contextMenu = { ...contextMenu, visible: false }
   }
 
   function handleStartTask() {
@@ -101,15 +100,11 @@
     onRunAction({ taskId, actionPrompt: '', agent: null })
   }
 
-  function toggleMoveSubmenu() {
-    contextMenu = { ...contextMenu, showMoveSubmenu: !contextMenu.showMoveSubmenu }
-  }
-
-  async function handleMoveTo(column: KanbanColumn) {
+  async function handleMoveToDone() {
     const taskId = contextMenu.taskId
     closeContextMenu()
     try {
-      await updateTaskStatus(taskId, column)
+      await updateTaskStatus(taskId, 'done')
     } catch (err: unknown) {
       console.error('Failed to move task:', err)
       $error = String(err)
@@ -187,7 +182,7 @@
         >
           {#each backlogTasks as task (task.id)}
             <div oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)}>
-              <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} hasRunningTerminal={$runningTerminals.has(task.id)} onSelect={handleSelect} />
+              <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} hasRunningTerminal={$runningTerminals.has(task.id)} isStarting={$startingTasks.has(task.id)} onSelect={handleSelect} />
             </div>
           {/each}
           {#if backlogTasks.length === 0}
@@ -212,7 +207,7 @@
       >
         {#each doingTasks as task (task.id)}
           <div oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)}>
-            <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} hasRunningTerminal={$runningTerminals.has(task.id)} onSelect={handleSelect} />
+            <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} hasRunningTerminal={$runningTerminals.has(task.id)} isStarting={$startingTasks.has(task.id)} onSelect={handleSelect} />
           </div>
         {/each}
         {#if doingTasks.length === 0}
@@ -270,7 +265,7 @@
     <div class="flex-1 flex flex-col gap-2 overflow-y-auto p-4">
       {#each doneTasks as task (task.id)}
         <div oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)}>
-          <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} hasRunningTerminal={$runningTerminals.has(task.id)} onSelect={handleSelect} />
+          <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} hasRunningTerminal={$runningTerminals.has(task.id)} isStarting={$startingTasks.has(task.id)} onSelect={handleSelect} />
         </div>
       {/each}
       {#if doneTasks.length === 0}
@@ -288,17 +283,10 @@
         Start Task
       </button>
     {/if}
-    <button class="context-item block w-full text-left px-3 py-2 text-sm text-base-content cursor-pointer rounded hover:bg-primary hover:text-primary-content" onclick={(e: MouseEvent) => { e.stopPropagation(); toggleMoveSubmenu() }}>
-      Move to... ›
-    </button>
-    {#if contextMenu.showMoveSubmenu}
-      <div class="border-t border-base-300 mt-0.5 pt-0.5">
-        {#each COLUMNS as col}
-          <button class="context-item block w-full text-left px-3 py-2 text-sm text-base-content cursor-pointer rounded hover:bg-primary hover:text-primary-content" onclick={() => handleMoveTo(col)}>
-            {COLUMN_LABELS[col]}
-          </button>
-        {/each}
-      </div>
+    {#if contextMenu.taskStatus === 'doing'}
+      <button class="context-item block w-full text-left px-3 py-2 text-sm text-base-content cursor-pointer rounded hover:bg-primary hover:text-primary-content" onclick={handleMoveToDone}>
+        Move to Done
+      </button>
     {/if}
     <button class="context-item block w-full text-left px-3 py-2 text-sm text-error cursor-pointer rounded hover:bg-error hover:text-error-content" onclick={handleDelete}>Delete</button>
   </div>

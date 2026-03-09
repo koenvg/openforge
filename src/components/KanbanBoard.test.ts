@@ -196,4 +196,67 @@ describe('KanbanBoard', () => {
     expect(mockOnRunAction).toHaveBeenCalledWith({ taskId: 'T-1', actionPrompt: '', agent: null })
   })
 
+  it('shows Move to Done in context menu for doing tasks', async () => {
+    const doingTask: Task = { ...baseTask, id: 'T-2', title: 'Active task', status: 'doing' }
+    tasks.set([doingTask])
+
+    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
+
+    const taskCard = screen.getByText('Active task')
+    await fireEvent.contextMenu(taskCard)
+
+    expect(screen.getByText('Move to Done')).toBeTruthy()
+  })
+
+  it('does not show Move to Done for backlog tasks', async () => {
+    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
+
+    const taskCard = screen.getByText('Test task')
+    await fireEvent.contextMenu(taskCard)
+
+    expect(screen.queryByText('Move to Done')).toBeNull()
+  })
+
+  it('does not show Move to Done for done tasks', async () => {
+    const doneTask: Task = { ...baseTask, id: 'T-3', title: 'Completed task', status: 'done' }
+    tasks.set([doneTask])
+
+    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
+
+    // Open the done drawer first
+    const doneToggle = screen.getByTitle('Toggle done drawer (c)')
+    await fireEvent.click(doneToggle)
+
+    const taskCard = screen.getByText('Completed task')
+    await fireEvent.contextMenu(taskCard)
+
+    expect(screen.queryByText('Move to Done')).toBeNull()
+  })
+
+  it('calls updateTaskStatus with done when Move to Done is clicked', async () => {
+    const { updateTaskStatus } = await import('../lib/ipc')
+    const doingTask: Task = { ...baseTask, id: 'T-2', title: 'Active task', status: 'doing' }
+    tasks.set([doingTask])
+
+    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
+
+    const taskCard = screen.getByText('Active task')
+    await fireEvent.contextMenu(taskCard)
+    await fireEvent.click(screen.getByText('Move to Done'))
+
+    expect(updateTaskStatus).toHaveBeenCalledWith('T-2', 'done')
+  })
+
+  it('does not show Move to submenu with all columns', async () => {
+    const doingTask: Task = { ...baseTask, id: 'T-2', title: 'Active task', status: 'doing' }
+    tasks.set([doingTask])
+
+    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
+
+    const taskCard = screen.getByText('Active task')
+    await fireEvent.contextMenu(taskCard)
+
+    expect(screen.queryByText('Move to... ›')).toBeNull()
+  })
+
 })

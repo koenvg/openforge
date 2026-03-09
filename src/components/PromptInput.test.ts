@@ -22,6 +22,32 @@ describe('PromptInput', () => {
     vi.clearAllMocks()
   })
 
+  it('focuses textarea when autofocus is true', async () => {
+    render(PromptInput, {
+      props: {
+        ...baseProps,
+        autofocus: true,
+      },
+    })
+
+    const textarea = screen.getByPlaceholderText('Describe what you want to implement...')
+    // The focus uses requestAnimationFrame, so we need to wait for it
+    await new Promise((resolve) => requestAnimationFrame(resolve))
+    expect(document.activeElement).toBe(textarea)
+  })
+
+  it('does not focus textarea when autofocus is false', () => {
+    render(PromptInput, {
+      props: {
+        ...baseProps,
+        autofocus: false,
+      },
+    })
+
+    const textarea = screen.getByPlaceholderText('Describe what you want to implement...')
+    expect(document.activeElement).not.toBe(textarea)
+  })
+
   it('renders textarea with placeholder', () => {
     const placeholder = 'Enter your prompt here'
     render(PromptInput, {

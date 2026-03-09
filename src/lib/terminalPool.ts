@@ -228,6 +228,10 @@ themeMode.subscribe((mode) => {
   }
 })
 
+export function isPtyActive(taskId: string): boolean {
+  return pool.get(taskId)?.ptyActive ?? false
+}
+
 export function _getPool(): Map<string, PoolEntry> {
   return pool
 }
