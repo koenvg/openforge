@@ -2,7 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import KanbanBoard from './KanbanBoard.svelte'
 import type { Task } from '../lib/types'
-import { tasks, activeSessions, activeProjectId, searchQuery } from '../lib/stores'
+import { tasks, activeSessions, activeProjectId } from '../lib/stores'
 
 // Mock IPC functions
 vi.mock('../lib/ipc', () => ({
@@ -40,7 +40,6 @@ describe('KanbanBoard', () => {
     tasks.set([baseTask])
     activeSessions.set(new Map())
     activeProjectId.set('proj-1')
-    searchQuery.set('')
   })
 
   it('renders backlog and doing columns by default', () => {
@@ -90,81 +89,6 @@ describe('KanbanBoard', () => {
     expect(screen.getByText('Test task')).toBeTruthy()
   })
 
-  it('filters tasks by title', async () => {
-    const taskA: Task = { ...baseTask, id: 'T-1', title: 'Fix auth bug', status: 'backlog' }
-    const taskB: Task = { ...baseTask, id: 'T-2', title: 'Add dashboard', status: 'backlog' }
-    tasks.set([taskA, taskB])
-
-    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
-
-    // Both visible initially
-    expect(screen.getByText('Fix auth bug')).toBeTruthy()
-    expect(screen.getByText('Add dashboard')).toBeTruthy()
-
-    searchQuery.set('auth')
-    await new Promise(resolve => setTimeout(resolve, 10))
-
-    expect(screen.getByText('Fix auth bug')).toBeTruthy()
-    expect(screen.queryByText('Add dashboard')).toBeNull()
-  })
-
-  it('filters tasks by task id', async () => {
-    const taskA: Task = { ...baseTask, id: 'T-100', title: 'First task', status: 'backlog' }
-    const taskB: Task = { ...baseTask, id: 'T-200', title: 'Second task', status: 'doing' }
-    tasks.set([taskA, taskB])
-
-    searchQuery.set('T-100')
-    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
-    await new Promise(resolve => setTimeout(resolve, 10))
-
-    expect(screen.getByText('First task')).toBeTruthy()
-    expect(screen.queryByText('Second task')).toBeNull()
-  })
-
-  it('filters tasks by jira key', async () => {
-    const taskA: Task = { ...baseTask, id: 'T-1', title: 'Task A', jira_key: 'PROJ-42', status: 'backlog' }
-    const taskB: Task = { ...baseTask, id: 'T-2', title: 'Task B', jira_key: 'OTHER-10', status: 'backlog' }
-    tasks.set([taskA, taskB])
-
-    searchQuery.set('PROJ')
-    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
-    await new Promise(resolve => setTimeout(resolve, 10))
-
-    expect(screen.getByText('Task A')).toBeTruthy()
-    expect(screen.queryByText('Task B')).toBeNull()
-  })
-
-  it('search is case insensitive', async () => {
-    const taskA: Task = { ...baseTask, id: 'T-1', title: 'Fix Auth Bug', status: 'backlog' }
-    tasks.set([taskA])
-
-    searchQuery.set('fix auth')
-    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
-    await new Promise(resolve => setTimeout(resolve, 10))
-
-    expect(screen.getByText('Fix Auth Bug')).toBeTruthy()
-  })
-
-  it('shows all tasks when search is cleared', async () => {
-    const taskA: Task = { ...baseTask, id: 'T-1', title: 'Task A', status: 'backlog' }
-    const taskB: Task = { ...baseTask, id: 'T-2', title: 'Task B', status: 'doing' }
-    tasks.set([taskA, taskB])
-
-    searchQuery.set('Task A')
-    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
-    await new Promise(resolve => setTimeout(resolve, 10))
-
-    expect(screen.getByText('Task A')).toBeTruthy()
-    expect(screen.queryByText('Task B')).toBeNull()
-
-    // Clear search
-    searchQuery.set('')
-    await new Promise(resolve => setTimeout(resolve, 10))
-
-    expect(screen.getByText('Task A')).toBeTruthy()
-    expect(screen.getByText('Task B')).toBeTruthy()
-  })
-
   it('shows Start Task in context menu for backlog tasks', async () => {
     render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
 
@@ -196,7 +120,7 @@ describe('KanbanBoard', () => {
     expect(mockOnRunAction).toHaveBeenCalledWith({ taskId: 'T-1', actionPrompt: '', agent: null })
   })
 
-  it('shows Move to Done in context menu for doing tasks', async () => {
+  it('shows Move to submenu in context menu', async () => {
     const doingTask: Task = { ...baseTask, id: 'T-2', title: 'Active task', status: 'doing' }
     tasks.set([doingTask])
 
@@ -205,35 +129,25 @@ describe('KanbanBoard', () => {
     const taskCard = screen.getByText('Active task')
     await fireEvent.contextMenu(taskCard)
 
-    expect(screen.getByText('Move to Done')).toBeTruthy()
+    expect(screen.getByText('Move to... ›')).toBeTruthy()
   })
 
-  it('does not show Move to Done for backlog tasks', async () => {
-    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
-
-    const taskCard = screen.getByText('Test task')
-    await fireEvent.contextMenu(taskCard)
-
-    expect(screen.queryByText('Move to Done')).toBeNull()
-  })
-
-  it('does not show Move to Done for done tasks', async () => {
-    const doneTask: Task = { ...baseTask, id: 'T-3', title: 'Completed task', status: 'done' }
-    tasks.set([doneTask])
+  it('shows all columns in Move to submenu when expanded', async () => {
+    const doingTask: Task = { ...baseTask, id: 'T-2', title: 'Active task', status: 'doing' }
+    tasks.set([doingTask])
 
     render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
 
-    // Open the done drawer first
-    const doneToggle = screen.getByTitle('Toggle done drawer (c)')
-    await fireEvent.click(doneToggle)
-
-    const taskCard = screen.getByText('Completed task')
+    const taskCard = screen.getByText('Active task')
     await fireEvent.contextMenu(taskCard)
+    await fireEvent.click(screen.getByText('Move to... ›'))
 
-    expect(screen.queryByText('Move to Done')).toBeNull()
+    expect(screen.getByText('Backlog')).toBeTruthy()
+    expect(screen.getByText('Doing')).toBeTruthy()
+    expect(screen.getByText('Done')).toBeTruthy()
   })
 
-  it('calls updateTaskStatus with done when Move to Done is clicked', async () => {
+  it('calls updateTaskStatus when a move target is clicked', async () => {
     const { updateTaskStatus } = await import('../lib/ipc')
     const doingTask: Task = { ...baseTask, id: 'T-2', title: 'Active task', status: 'doing' }
     tasks.set([doingTask])
@@ -242,21 +156,10 @@ describe('KanbanBoard', () => {
 
     const taskCard = screen.getByText('Active task')
     await fireEvent.contextMenu(taskCard)
-    await fireEvent.click(screen.getByText('Move to Done'))
+    await fireEvent.click(screen.getByText('Move to... ›'))
+    await fireEvent.click(screen.getByText('Done'))
 
     expect(updateTaskStatus).toHaveBeenCalledWith('T-2', 'done')
-  })
-
-  it('does not show Move to submenu with all columns', async () => {
-    const doingTask: Task = { ...baseTask, id: 'T-2', title: 'Active task', status: 'doing' }
-    tasks.set([doingTask])
-
-    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
-
-    const taskCard = screen.getByText('Active task')
-    await fireEvent.contextMenu(taskCard)
-
-    expect(screen.queryByText('Move to... ›')).toBeNull()
   })
 
 })
