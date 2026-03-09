@@ -1,12 +1,11 @@
 <script lang="ts">
-  import type { AgentSession, KanbanColumn } from '../lib/types'
-  import { COLUMNS, COLUMN_LABELS } from '../lib/types'
-  import { tasks, activeSessions, error } from '../lib/stores'
-  import { updateTaskStatus, deleteTask } from '../lib/ipc'
+  import type { AgentSession, PullRequestInfo } from '../lib/types'
+  import { tasks, activeSessions, ticketPrs } from '../lib/stores'
   import { computeCreatureState, computeCreatureRoom } from '../lib/creatureState'
   import { parseCheckpointQuestion } from '../lib/parseCheckpoint'
   import Creature from './Creature.svelte'
   import CreatureHoverCard from './CreatureHoverCard.svelte'
+  import TaskContextMenu from './TaskContextMenu.svelte'
 
   interface Props {
     onCreatureClick: (taskId: string) => void
@@ -23,29 +22,34 @@
     return $activeSessions.get(taskId) ?? null
   }
 
+  function getPrs(taskId: string): PullRequestInfo[] {
+    return $ticketPrs.get(taskId) ?? []
+  }
+
   let visibleTasks = $derived($tasks.filter(t => t.status !== 'done'))
 
   let forgeTasks = $derived(visibleTasks.filter(t => {
     const session = getSession(t.id)
-    return computeCreatureRoom(t, session) === 'forge'
+    return computeCreatureRoom(t, session, getPrs(t.id)) === 'forge'
   }))
 
   let warRoomTasks = $derived(visibleTasks.filter(t => {
     const session = getSession(t.id)
-    return computeCreatureRoom(t, session) === 'warRoom'
+    return computeCreatureRoom(t, session, getPrs(t.id)) === 'warRoom'
   }))
 
   let nurseryTasks = $derived(visibleTasks.filter(t => {
     const session = getSession(t.id)
-    return computeCreatureRoom(t, session) === 'nursery'
+    return computeCreatureRoom(t, session, getPrs(t.id)) === 'nursery'
   }))
 
   let hasCreatures = $derived(forgeTasks.length > 0 || warRoomTasks.length > 0 || nurseryTasks.length > 0)
 
   let hoveredTask = $derived(hoveredTaskId ? $tasks.find(t => t.id === hoveredTaskId) ?? null : null)
   let hoveredSession = $derived(hoveredTaskId ? getSession(hoveredTaskId) : null)
-  let hoveredState = $derived(hoveredTask ? computeCreatureState(hoveredTask, hoveredSession) : null)
-  let hoveredRoom = $derived(hoveredTask ? computeCreatureRoom(hoveredTask, hoveredSession) : null)
+  let hoveredPrs = $derived(hoveredTaskId ? getPrs(hoveredTaskId) : [])
+  let hoveredState = $derived(hoveredTask ? computeCreatureState(hoveredTask, hoveredSession, hoveredPrs) : null)
+  let hoveredRoom = $derived(hoveredTask ? computeCreatureRoom(hoveredTask, hoveredSession, hoveredPrs) : null)
 
   let hoverPosition = $derived.by(() => {
     if (!hoverRect) return { x: 0, y: 0 }
@@ -78,6 +82,14 @@
     return s?.status === 'completed'
   }).length)
 
+  let ciFailedCount = $derived(warRoomTasks.filter(t => {
+    return computeCreatureState(t, getSession(t.id), getPrs(t.id)) === 'ci-failed'
+  }).length)
+
+  let changesReqCount = $derived(warRoomTasks.filter(t => {
+    return computeCreatureState(t, getSession(t.id), getPrs(t.id)) === 'changes-requested'
+  }).length)
+
   let blockedCount = $derived(warRoomTasks.length)
   let backlogCount = $derived(nurseryTasks.length)
 
@@ -104,53 +116,18 @@
     hoverRect = null
   }
 
-  let contextMenu = $state({ visible: false, x: 0, y: 0, taskId: '', taskStatus: '' as KanbanColumn | '', showMoveSubmenu: false })
+  let contextMenu = $state({ visible: false, x: 0, y: 0, taskId: '' })
 
   function handleContextMenu(event: MouseEvent, taskId: string) {
     event.preventDefault()
-    const task = $tasks.find(t => t.id === taskId)
-    const taskStatus = (task?.status ?? '') as KanbanColumn | ''
-    contextMenu = { visible: true, x: event.clientX, y: event.clientY, taskId, taskStatus, showMoveSubmenu: false }
+    contextMenu = { visible: true, x: event.clientX, y: event.clientY, taskId }
   }
 
   function closeContextMenu() {
-    contextMenu = { ...contextMenu, visible: false, showMoveSubmenu: false }
-  }
-
-  function handleStartTask() {
-    const taskId = contextMenu.taskId
-    closeContextMenu()
-    onRunAction?.({ taskId, actionPrompt: '', agent: null })
-  }
-
-  function toggleMoveSubmenu() {
-    contextMenu = { ...contextMenu, showMoveSubmenu: !contextMenu.showMoveSubmenu }
-  }
-
-  async function handleMoveTo(column: KanbanColumn) {
-    const taskId = contextMenu.taskId
-    closeContextMenu()
-    try {
-      await updateTaskStatus(taskId, column)
-    } catch (err: unknown) {
-      console.error('Failed to move task:', err)
-      $error = String(err)
-    }
-  }
-
-  async function handleDelete() {
-    const taskId = contextMenu.taskId
-    closeContextMenu()
-    try {
-      await deleteTask(taskId)
-    } catch (err: unknown) {
-      console.error('Failed to delete task:', err)
-      $error = String(err)
-    }
+    contextMenu = { ...contextMenu, visible: false }
   }
 </script>
 
-<svelte:window onclick={closeContextMenu} />
 
 <div class="flex flex-col h-full flex-1 bg-base-300">
   {#if !hasCreatures}
@@ -168,8 +145,8 @@
         <div data-testid="creature-list" class="flex flex-col gap-1 p-2 flex-1 overflow-y-auto">
           {#each nurseryTasks as task (task.id)}
             {@const session = getSession(task.id)}
-            {@const state = computeCreatureState(task, session)}
-            {@const room = computeCreatureRoom(task, session)}
+            {@const state = computeCreatureState(task, session, getPrs(task.id))}
+            {@const room = computeCreatureRoom(task, session, getPrs(task.id))}
             {@const questionText = parseCheckpointQuestion(session?.checkpoint_data ?? null)}
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)}>
@@ -188,8 +165,8 @@
         <div data-testid="creature-list" class="flex flex-col gap-1 p-2 flex-1 overflow-y-auto">
            {#each forgeTasks as task (task.id)}
              {@const session = getSession(task.id)}
-             {@const state = computeCreatureState(task, session)}
-             {@const room = computeCreatureRoom(task, session)}
+             {@const state = computeCreatureState(task, session, getPrs(task.id))}
+             {@const room = computeCreatureRoom(task, session, getPrs(task.id))}
              {@const questionText = parseCheckpointQuestion(session?.checkpoint_data ?? null)}
              <!-- svelte-ignore a11y_no_static_element_interactions -->
              <div oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)}>
@@ -208,8 +185,8 @@
         <div data-testid="creature-list" class="flex flex-col gap-1 p-2 flex-1 overflow-y-auto">
           {#each warRoomTasks as task (task.id)}
             {@const session = getSession(task.id)}
-            {@const state = computeCreatureState(task, session)}
-            {@const room = computeCreatureRoom(task, session)}
+            {@const state = computeCreatureState(task, session, getPrs(task.id))}
+            {@const room = computeCreatureRoom(task, session, getPrs(task.id))}
             {@const questionText = parseCheckpointQuestion(session?.checkpoint_data ?? null)}
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)}>
@@ -230,6 +207,16 @@
         <span class="w-2 h-2 bg-info rounded-sm"></span>
         <span class="font-mono text-[9px] text-base-content/60 font-semibold">DONE</span>
         <span class="font-mono text-[9px] text-base-content/40">({doneCount})</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <span class="w-2 h-2 bg-error rounded-sm"></span>
+        <span class="font-mono text-[9px] text-base-content/60 font-semibold">CI FAILED</span>
+        <span class="font-mono text-[9px] text-base-content/40">({ciFailedCount})</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <span class="w-2 h-2 bg-error/60 rounded-sm"></span>
+        <span class="font-mono text-[9px] text-base-content/60 font-semibold">CHANGES REQ</span>
+        <span class="font-mono text-[9px] text-base-content/40">({changesReqCount})</span>
       </div>
       <div class="flex items-center gap-1.5">
         <span class="w-2 h-2 bg-warning rounded-sm"></span>
@@ -257,26 +244,12 @@
      />
    {/if}
 
-  {#if contextMenu.visible}
-    <div class="fixed z-[100] bg-base-300 border border-base-300 rounded-lg shadow-xl min-w-[180px] p-1" style="left: {contextMenu.x}px; top: {contextMenu.y}px;">
-      {#if contextMenu.taskStatus === 'backlog'}
-        <button class="context-item block w-full text-left px-3 py-2 text-sm text-primary font-medium cursor-pointer rounded hover:bg-primary hover:text-primary-content" onclick={handleStartTask}>
-          Start Task
-        </button>
-      {/if}
-      <button class="context-item block w-full text-left px-3 py-2 text-sm text-base-content cursor-pointer rounded hover:bg-primary hover:text-primary-content" onclick={(e: MouseEvent) => { e.stopPropagation(); toggleMoveSubmenu() }}>
-        Move to... ›
-      </button>
-      {#if contextMenu.showMoveSubmenu}
-        <div class="border-t border-base-300 mt-0.5 pt-0.5">
-          {#each COLUMNS as col}
-            <button class="context-item block w-full text-left px-3 py-2 text-sm text-base-content cursor-pointer rounded hover:bg-primary hover:text-primary-content" onclick={() => handleMoveTo(col)}>
-              {COLUMN_LABELS[col]}
-            </button>
-          {/each}
-        </div>
-      {/if}
-      <button class="context-item block w-full text-left px-3 py-2 text-sm text-error cursor-pointer rounded hover:bg-error hover:text-error-content" onclick={handleDelete}>Delete</button>
-    </div>
-  {/if}
+  <TaskContextMenu
+    visible={contextMenu.visible}
+    x={contextMenu.x}
+    y={contextMenu.y}
+    taskId={contextMenu.taskId}
+    onClose={closeContextMenu}
+    onStart={onRunAction ? (taskId) => onRunAction({ taskId, actionPrompt: '', agent: null }) : undefined}
+  />
 </div>

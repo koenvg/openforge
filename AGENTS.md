@@ -10,3 +10,4 @@ Rust commands: `Result<T, String>` with `.map_err(|e| format!(...))`. DB domain 
 `T-<number>` references (e.g. T-438) are this app's own task IDs — they are NOT Jira tickets. Do not use acli or any Jira tool to look them up.
 Always use TDD: write or update tests first, verify they fail, then implement the code to make them pass.
 Tests must cover business logic only — do not assert on CSS classes, Tailwind utilities, or visual styling. Keep visual aspects out of unit tests.
+Task context menus must use `TaskContextMenu` (`src/components/TaskContextMenu.svelte`) which provides Start Task, Move to, and Delete actions. For non-task context menus, use the lower-level `ContextMenu` + `ContextMenuItem` primitives — never build inline context menu markup.
