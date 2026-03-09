@@ -27,6 +27,8 @@
 
   import { pushNavState, navigateBack } from './lib/navigation'
   import { release as releaseTerminal, isPtyActive, focusTerminal } from './lib/terminalPool'
+  import { isInputFocused } from './lib/domUtils'
+  import { resolveGotoKey } from './lib/vimGoto'
 
   let unlisteners: UnlistenFn[] = []
   let showAddDialog = $state(false)
@@ -58,6 +60,20 @@
   let showProjectSwitcher = $state(false)
   let showCommandPalette = $state(false)
   let workQueueRefreshTrigger = $state(0)
+  let pendingGoto = $state(false)
+  let gotoTimer: ReturnType<typeof setTimeout> | null = null
+
+  function clearPendingGoto() {
+    pendingGoto = false
+    if (gotoTimer) {
+      clearTimeout(gotoTimer)
+      gotoTimer = null
+    }
+  }
+
+  function isAnyModalOpen(): boolean {
+    return showAddDialog || showShortcutsDialog || showProjectSwitcher || showCommandPalette || showProjectSetup
+  }
 
   let selectedTask = $derived($tasks.find(t => t.id === $selectedTaskId) || null)
 
@@ -310,6 +326,30 @@
       pushNavState()
       $currentView = 'workqueue'
       return
+    }
+
+    // Vim-style g-prefix view navigation (only when no input focused and no modals)
+    if (!isInputFocused() && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (pendingGoto) {
+        clearPendingGoto()
+        // Don't resolve 'g' here — gg is handled by board's useVimNavigation
+        if (e.key !== 'g') {
+          const target = resolveGotoKey(e.key)
+          if (target) {
+            e.preventDefault()
+            handleNavigate(target)
+            return
+          }
+        }
+        return
+      }
+
+      if (e.key === 'g' && !isAnyModalOpen()) {
+        e.preventDefault()
+        pendingGoto = true
+        gotoTimer = setTimeout(clearPendingGoto, 500)
+        return
+      }
     }
   }
 
@@ -904,6 +944,41 @@
           <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">Work queue</span>
             <kbd class="kbd kbd-sm">⌘R</kbd>
+          </div>
+        </div>
+      </div>
+
+      <!-- Vim navigation -->
+      <div>
+        <div class="font-mono text-xs text-secondary mb-3">// vim navigation</div>
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-base-content">Go to view</span>
+            <div class="flex gap-0.5"><kbd class="kbd kbd-sm">g</kbd><kbd class="kbd kbd-sm">b/p/s/c/w/,</kbd></div>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-base-content">Move down / up</span>
+            <div class="flex gap-0.5"><kbd class="kbd kbd-sm">j</kbd><kbd class="kbd kbd-sm">k</kbd></div>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-base-content">Left / right column</span>
+            <div class="flex gap-0.5"><kbd class="kbd kbd-sm">h</kbd><kbd class="kbd kbd-sm">l</kbd></div>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-base-content">Select / open</span>
+            <kbd class="kbd kbd-sm">Enter</kbd>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-base-content">Action on task</span>
+            <kbd class="kbd kbd-sm">x</kbd>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-base-content">First / last item</span>
+            <div class="flex gap-0.5"><kbd class="kbd kbd-sm">gg</kbd><kbd class="kbd kbd-sm">G</kbd></div>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-base-content">Back</span>
+            <div class="flex gap-0.5"><kbd class="kbd kbd-sm">Esc</kbd><kbd class="kbd kbd-sm">q</kbd></div>
           </div>
         </div>
       </div>

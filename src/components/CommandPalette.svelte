@@ -108,10 +108,10 @@
 
     if (count === 0) return
 
-    if (e.key === 'ArrowDown') {
+    if (e.key === 'ArrowDown' || (e.ctrlKey && e.key === 'j')) {
       e.preventDefault()
       selectedIndex = (selectedIndex + 1) % count
-    } else if (e.key === 'ArrowUp') {
+    } else if (e.key === 'ArrowUp' || (e.ctrlKey && e.key === 'k')) {
       e.preventDefault()
       selectedIndex = selectedIndex <= 0 ? count - 1 : selectedIndex - 1
     } else if (e.key === 'Enter') {

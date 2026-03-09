@@ -3,6 +3,8 @@
   import { skills, selectedSkillName, activeProjectId, currentView, selectedTaskId } from '../lib/stores'
   import { listOpenCodeSkills, createTask } from '../lib/ipc'
   import { pushNavState } from '../lib/navigation'
+  import { isInputFocused } from '../lib/domUtils'
+  import { useVimNavigation } from '../lib/useVimNavigation.svelte'
   import MarkdownContent from './MarkdownContent.svelte'
   import type { SkillInfo } from '../lib/types'
 
@@ -133,10 +135,34 @@ My question: ${askPrompt.trim()}`
     }
   }
 
+  const vimSkills = useVimNavigation({
+    getItemCount: () => filteredSkills.length,
+    onSelect: (index) => {
+      const skill = filteredSkills[index]
+      if (skill) selectSkill(skill)
+    },
+  })
+
+  function handleSkillsKeydown(e: KeyboardEvent) {
+    if (isInputFocused()) return
+    if (e.metaKey || e.ctrlKey || e.altKey) return
+    vimSkills.handleKeydown(e)
+  }
+
+  // Scroll focused skill into view
+  $effect(() => {
+    const idx = vimSkills.focusedIndex
+    const items = document.querySelectorAll('[data-vim-skill]')
+    const el = items[idx] as HTMLElement | undefined
+    el?.scrollIntoView?.({ block: 'nearest' })
+  })
+
   onMount(() => {
     loadSkills()
   })
 </script>
+
+<svelte:window onkeydown={handleSkillsKeydown} />
 
 <div class="flex flex-col h-full overflow-hidden">
   <!-- Header -->
@@ -194,8 +220,10 @@ My question: ${askPrompt.trim()}`
               <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Project</span>
             </div>
             {#each projectSkills as skill}
+              {@const flatIdx = filteredSkills.indexOf(skill)}
               <button
-                class="w-full text-left px-3 py-2.5 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {$selectedSkillName === skill.name ? 'bg-primary/10 border-l-2 border-l-primary' : ''}"
+                data-vim-skill
+                class="w-full text-left px-3 py-2.5 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {$selectedSkillName === skill.name ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'ring-2 ring-primary' : ''}"
                 onclick={() => selectSkill(skill)}
               >
                 <div class="flex items-center gap-2 min-w-0">
@@ -214,8 +242,10 @@ My question: ${askPrompt.trim()}`
               <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">User</span>
             </div>
             {#each userSkills as skill}
+              {@const flatIdx = filteredSkills.indexOf(skill)}
               <button
-                class="w-full text-left px-3 py-2.5 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {$selectedSkillName === skill.name ? 'bg-primary/10 border-l-2 border-l-primary' : ''}"
+                data-vim-skill
+                class="w-full text-left px-3 py-2.5 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {$selectedSkillName === skill.name ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'ring-2 ring-primary' : ''}"
                 onclick={() => selectSkill(skill)}
               >
                 <div class="flex items-center gap-2 min-w-0">

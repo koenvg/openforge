@@ -4,6 +4,8 @@
   import { clearDoneTasks } from '../lib/ipc'
   import { pushNavState } from '../lib/navigation'
   import { sortBySessionActivity } from '../lib/taskSort'
+  import { isInputFocused } from '../lib/domUtils'
+  import { useVimNavigation } from '../lib/useVimNavigation.svelte'
   import TaskCard from './TaskCard.svelte'
   import TaskContextMenu from './TaskContextMenu.svelte'
 
@@ -17,19 +19,69 @@
   let showBacklog = $state(true)
   let showDoneDrawer = $state(false)
 
+  // Vim navigation state
+  let focusedColumn = $state(0) // 0=backlog, 1=doing, 2=done
+
+  let columns = $derived.by(() => {
+    const cols: { key: string; tasks: Task[] }[] = []
+    if (showBacklog) cols.push({ key: 'backlog', tasks: backlogTasks })
+    cols.push({ key: 'doing', tasks: doingTasks })
+    return cols
+  })
+
+  function currentColumnTasks(): Task[] {
+    return columns[focusedColumn]?.tasks ?? []
+  }
+
+  const vim = useVimNavigation({
+    getItemCount: () => currentColumnTasks().length,
+    onSelect: (index) => {
+      const task = currentColumnTasks()[index]
+      if (task) handleSelect(task.id)
+    },
+    onAction: (index) => {
+      const task = currentColumnTasks()[index]
+      if (task) onRunAction({ taskId: task.id, actionPrompt: '', agent: null })
+    },
+    onLeft: () => {
+      if (focusedColumn > 0) {
+        focusedColumn--
+        vim.setFocusedIndex(0)
+      }
+    },
+    onRight: () => {
+      if (focusedColumn < columns.length - 1) {
+        focusedColumn++
+        vim.setFocusedIndex(0)
+      }
+    },
+  })
+
+  // Clamp focusedColumn when columns change (e.g. backlog hidden)
+  $effect(() => {
+    if (focusedColumn >= columns.length) {
+      focusedColumn = Math.max(0, columns.length - 1)
+    }
+  })
+
+  // Scroll focused item into view
+  $effect(() => {
+    const idx = vim.focusedIndex
+    const col = columns[focusedColumn]
+    if (!col) return
+    const container = document.querySelector(`[data-vim-column="${col.key}"]`)
+    if (!container) return
+    const items = container.querySelectorAll('[data-vim-item]')
+    const el = items[idx] as HTMLElement | undefined
+    el?.scrollIntoView?.({ block: 'nearest' })
+  })
+
   function toggleBacklog() {
     showBacklog = !showBacklog
   }
 
   function toggleDoneDrawer() {
     showDoneDrawer = !showDoneDrawer
-  }
-
-  function isInputFocused(): boolean {
-    const active = document.activeElement
-    if (!active) return false
-    const tagName = active.tagName.toLowerCase()
-    return tagName === 'input' || tagName === 'textarea' || (active as HTMLElement).isContentEditable
   }
 
   function handleBoardKeydown(e: KeyboardEvent) {
@@ -47,6 +99,8 @@
         toggleDoneDrawer()
         return
       }
+      // Vim navigation
+      vim.handleKeydown(e)
     }
   }
 
@@ -133,9 +187,11 @@
         <div
           class="flex-1 flex flex-col gap-2 overflow-y-auto"
           role="listbox"
+          data-vim-column="backlog"
         >
-          {#each backlogTasks as task (task.id)}
-            <div oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)}>
+          {#each backlogTasks as task, i (task.id)}
+            {@const isVimFocused = columns[focusedColumn]?.key === 'backlog' && vim.focusedIndex === i}
+            <div data-vim-item oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'ring-2 ring-primary rounded' : ''}>
               <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} hasRunningTerminal={$runningTerminals.has(task.id)} isStarting={$startingTasks.has(task.id)} onSelect={handleSelect} />
             </div>
           {/each}
@@ -158,9 +214,11 @@
       <div
         class="flex-1 flex flex-col gap-2 overflow-y-auto"
         role="listbox"
+        data-vim-column="doing"
       >
-        {#each doingTasks as task (task.id)}
-          <div oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)}>
+        {#each doingTasks as task, i (task.id)}
+          {@const isVimFocused = columns[focusedColumn]?.key === 'doing' && vim.focusedIndex === i}
+          <div data-vim-item oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'ring-2 ring-primary rounded' : ''}>
             <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} hasRunningTerminal={$runningTerminals.has(task.id)} isStarting={$startingTasks.has(task.id)} onSelect={handleSelect} />
           </div>
         {/each}

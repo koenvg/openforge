@@ -4,6 +4,7 @@
   import { selectedTaskId, activeSessions, activeProjectId, startingTasks } from '../lib/stores'
   import { getWorktreeForTask, updateTaskStatus, getConfig } from '../lib/ipc'
   import { navigateBack } from '../lib/navigation'
+  import { isInputFocused } from '../lib/domUtils'
   import { loadActions, getEnabledActions } from '../lib/actions'
   import AgentPanel from './AgentPanel.svelte'
   import TaskInfoPanel from './TaskInfoPanel.svelte'
@@ -79,7 +80,30 @@
     onRunAction({ taskId: task.id, actionPrompt: prompt, agent: null })
   }
 
+  function handleTaskDetailKeydown(e: KeyboardEvent) {
+    if (isInputFocused()) return
+    if (e.metaKey || e.ctrlKey || e.altKey) return
+
+    if (e.key === 'Escape' || e.key === 'q') {
+      e.preventDefault()
+      handleBack()
+      return
+    }
+    if (e.key === 'h' && worktreePath !== null) {
+      e.preventDefault()
+      reviewMode = false
+      return
+    }
+    if (e.key === 'l' && worktreePath !== null) {
+      e.preventDefault()
+      reviewMode = true
+      return
+    }
+  }
+
 </script>
+
+<svelte:window onkeydown={handleTaskDetailKeydown} />
 
 <div class="flex flex-col flex-1 h-full bg-base-100 overflow-hidden">
   <header class="flex flex-col bg-base-200 border-b border-base-300 shrink-0">

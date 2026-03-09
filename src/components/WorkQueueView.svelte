@@ -4,6 +4,8 @@
   import { getWorkQueueTasks, getConfig, setConfig } from '../lib/ipc'
   import { activeProjectId, currentView, selectedTaskId } from '../lib/stores'
   import { pushNavState } from '../lib/navigation'
+  import { isInputFocused } from '../lib/domUtils'
+  import { useVimNavigation } from '../lib/useVimNavigation.svelte'
   import { timeAgoFromSeconds } from '../lib/timeAgo'
   import Card from './Card.svelte'
 
@@ -156,6 +158,58 @@
     )
   }
 
+  // Vim navigation — column-based
+  let focusedCol = $state(0)
+
+  function currentColTasks(): WorkQueueTask[] {
+    return sortedColumns[focusedCol]?.[1] ?? []
+  }
+
+  const vimWq = useVimNavigation({
+    getItemCount: () => currentColTasks().length,
+    onSelect: (index) => {
+      const task = currentColTasks()[index]
+      if (task) handleTaskClick(task)
+    },
+    onLeft: () => {
+      if (focusedCol > 0) {
+        focusedCol--
+        vimWq.setFocusedIndex(0)
+      }
+    },
+    onRight: () => {
+      if (focusedCol < sortedColumns.length - 1) {
+        focusedCol++
+        vimWq.setFocusedIndex(0)
+      }
+    },
+  })
+
+  // Clamp focusedCol when columns change
+  $effect(() => {
+    if (focusedCol >= sortedColumns.length && sortedColumns.length > 0) {
+      focusedCol = sortedColumns.length - 1
+    }
+  })
+
+  function handleWorkQueueKeydown(e: KeyboardEvent) {
+    if (isInputFocused()) return
+    if (e.metaKey || e.ctrlKey || e.altKey) return
+    vimWq.handleKeydown(e)
+  }
+
+  // Scroll focused item into view
+  $effect(() => {
+    const idx = vimWq.focusedIndex
+    const col = sortedColumns[focusedCol]
+    if (!col) return
+    const container = document.querySelector(`[data-vim-wq-col="${col[0]}"]`)
+    if (!container) return
+    const items = container.querySelectorAll('[data-vim-wq-item]')
+    const el = items[idx] as HTMLElement | undefined
+    el?.scrollIntoView?.({ block: 'nearest' })
+  })
+
   $effect(() => {
     loadTasks()
   })
@@ -166,6 +220,8 @@
     }
   })
 </script>
+
+<svelte:window onkeydown={handleWorkQueueKeydown} />
 
 {#if loading}
   <div class="flex-1 overflow-hidden flex items-center justify-center">
@@ -182,6 +238,7 @@
         <div
           class="min-w-[340px] max-w-[400px] rounded-lg"
           data-testid={`workqueue-column-${projectName}`}
+          data-vim-wq-col={projectName}
           role="group"
           aria-label={`${projectName} column`}
         >
@@ -212,9 +269,11 @@
             </button>
           </div>
           <div class="flex flex-col gap-2">
-            {#each projectTasks as task}
+            {#each projectTasks as task, i}
               {@const isPinned = pinnedTaskIds.has(task.id)}
-              <div data-testid={`task-card-${task.id}`}>
+              {@const colIdx = sortedColumns.findIndex(([n]) => n === projectName)}
+              {@const isVimFocused = colIdx === focusedCol && vimWq.focusedIndex === i}
+              <div data-testid={`task-card-${task.id}`} data-vim-wq-item class={isVimFocused ? 'ring-2 ring-primary rounded' : ''}>
                 <Card onclick={() => handleTaskClick(task)} class="group/card block px-3.5 py-3 {isPinned ? 'border-primary/30' : ''}">
                   <div class="flex items-center justify-between mb-1">
                     <div class="flex items-center gap-1.5">

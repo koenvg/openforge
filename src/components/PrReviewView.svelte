@@ -5,6 +5,8 @@
   import { reviewPrs, selectedReviewPr, prFileDiffs, reviewRequestCount, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, agentReviewLoading, agentReviewError } from '../lib/stores'
   import { fetchReviewPrs, getReviewPrs, getPrFileDiffs, openUrl, getReviewComments, getFileContent, getFileAtRef, markReviewPrViewed, startAgentReview, getAgentReviewComments, abortAgentReview } from '../lib/ipc'
   import { pushNavState } from '../lib/navigation'
+  import { isInputFocused } from '../lib/domUtils'
+  import { useVimNavigation } from '../lib/useVimNavigation.svelte'
   import { timeAgoFromSeconds } from '../lib/timeAgo'
   import ReviewPrCard from './ReviewPrCard.svelte'
   import FileTree from './FileTree.svelte'
@@ -26,6 +28,57 @@
   let reviewSessionKey = $state<string | null>(null)
   let showOutputModal = $state(false)
   let unlisteners: UnlistenFn[] = []
+
+  // Flat PR list for vim navigation
+  let flatPrList = $derived($reviewPrs)
+
+  const vimList = useVimNavigation({
+    getItemCount: () => $selectedReviewPr ? 0 : flatPrList.length,
+    onSelect: (index) => {
+      const pr = flatPrList[index]
+      if (pr) selectPr(pr)
+    },
+    onBack: () => {
+      if ($selectedReviewPr) backToList()
+    },
+  })
+
+  function handlePrReviewKeydown(e: KeyboardEvent) {
+    if (isInputFocused()) return
+    if (e.metaKey || e.ctrlKey || e.altKey) return
+
+    // Detail mode
+    if ($selectedReviewPr) {
+      if (e.key === 'Escape' || e.key === 'q') {
+        e.preventDefault()
+        backToList()
+        return
+      }
+      if (e.key === '1') {
+        e.preventDefault()
+        activeTab = 'overview'
+        return
+      }
+      if (e.key === '2') {
+        e.preventDefault()
+        activeTab = 'files'
+        return
+      }
+      return
+    }
+
+    // List mode — delegate to vim navigation
+    vimList.handleKeydown(e)
+  }
+
+  // Scroll focused PR into view
+  $effect(() => {
+    if ($selectedReviewPr) return
+    const idx = vimList.focusedIndex
+    const items = document.querySelectorAll('[data-vim-pr-item]')
+    const el = items[idx] as HTMLElement | undefined
+    el?.scrollIntoView?.({ block: 'nearest' })
+  })
 
   let groupedPrs = $derived(groupByRepo($reviewPrs))
 
@@ -226,6 +279,8 @@
   })
 </script>
 
+<svelte:window onkeydown={handlePrReviewKeydown} />
+
 <div class="flex flex-col w-full h-full overflow-hidden">
   {#if $selectedReviewPr}
     <div class="flex flex-col h-full overflow-hidden">
@@ -382,11 +437,14 @@
               <h3 class="text-xs font-semibold text-base-content/50 m-0 mb-3 uppercase tracking-wider">{repo}</h3>
               <div class="grid grid-cols-[repeat(auto-fill,minmax(340px,1fr))] gap-5 max-w-6xl">
                 {#each prs as pr}
-                  <ReviewPrCard
-                    {pr}
-                    selected={false}
-                    onClick={() => selectPr(pr)}
-                  />
+                  {@const flatIdx = flatPrList.indexOf(pr)}
+                  <div data-vim-pr-item class={flatIdx === vimList.focusedIndex ? 'ring-2 ring-primary rounded' : ''}>
+                    <ReviewPrCard
+                      {pr}
+                      selected={false}
+                      onClick={() => selectPr(pr)}
+                    />
+                  </div>
                 {/each}
               </div>
             </div>

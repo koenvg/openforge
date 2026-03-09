@@ -4,6 +4,8 @@
   import { computeCreatureState, computeCreatureRoom } from '../lib/creatureState'
   import { parseCheckpointQuestion } from '../lib/parseCheckpoint'
   import { sortBySessionActivity } from '../lib/taskSort'
+  import { isInputFocused } from '../lib/domUtils'
+  import { useVimNavigation } from '../lib/useVimNavigation.svelte'
   import Creature from './Creature.svelte'
   import CreatureHoverCard from './CreatureHoverCard.svelte'
   import TaskContextMenu from './TaskContextMenu.svelte'
@@ -127,8 +129,65 @@
   function closeContextMenu() {
     contextMenu = { ...contextMenu, visible: false }
   }
+
+  // Vim navigation — room-based (0=nursery, 1=forge, 2=warRoom)
+  let focusedRoom = $state(0)
+
+  let rooms = $derived([
+    { key: 'nursery', tasks: nurseryTasks },
+    { key: 'forge', tasks: forgeTasks },
+    { key: 'warRoom', tasks: warRoomTasks },
+  ])
+
+  function currentRoomTasks() {
+    return rooms[focusedRoom]?.tasks ?? []
+  }
+
+  const vim = useVimNavigation({
+    getItemCount: () => currentRoomTasks().length,
+    onSelect: (index) => {
+      const task = currentRoomTasks()[index]
+      if (task) onCreatureClick(task.id)
+    },
+    onAction: (index) => {
+      const task = currentRoomTasks()[index]
+      if (task && onRunAction) onRunAction({ taskId: task.id, actionPrompt: '', agent: null })
+    },
+    onLeft: () => {
+      if (focusedRoom > 0) {
+        focusedRoom--
+        vim.setFocusedIndex(0)
+      }
+    },
+    onRight: () => {
+      if (focusedRoom < rooms.length - 1) {
+        focusedRoom++
+        vim.setFocusedIndex(0)
+      }
+    },
+  })
+
+  function handleCreaturesKeydown(e: KeyboardEvent) {
+    if (isInputFocused()) return
+    if (e.metaKey || e.ctrlKey || e.altKey) return
+    vim.handleKeydown(e)
+  }
+
+  // Scroll focused creature into view
+  $effect(() => {
+    const idx = vim.focusedIndex
+    const room = rooms[focusedRoom]
+    if (!room) return
+    const container = document.querySelector(`[data-vim-room="${room.key}"]`)
+    if (!container) return
+    const items = container.querySelectorAll('[data-vim-creature]')
+    const el = items[idx] as HTMLElement | undefined
+    el?.scrollIntoView?.({ block: 'nearest' })
+  })
 </script>
 
+
+<svelte:window onkeydown={handleCreaturesKeydown} />
 
 <div class="flex flex-col h-full flex-1 bg-base-300">
   {#if !hasCreatures}
@@ -143,14 +202,15 @@
           <p class="font-mono text-[9px] text-base-content/30">{nurseryTasks.length} tasks in backlog</p>
           <div class="border-b border-base-content/10 mt-2"></div>
         </div>
-        <div data-testid="creature-list" class="flex flex-col gap-1 p-2 flex-1 overflow-y-auto">
-          {#each nurseryTasks as task (task.id)}
+        <div data-testid="creature-list" data-vim-room="nursery" class="flex flex-col gap-1 p-2 flex-1 overflow-y-auto">
+          {#each nurseryTasks as task, i (task.id)}
             {@const session = getSession(task.id)}
             {@const state = computeCreatureState(task, session, getPrs(task.id))}
             {@const room = computeCreatureRoom(task, session, getPrs(task.id))}
             {@const questionText = parseCheckpointQuestion(session?.checkpoint_data ?? null)}
+            {@const isVimFocused = focusedRoom === 0 && vim.focusedIndex === i}
             <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)}>
+            <div data-vim-creature oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'ring-2 ring-primary rounded' : ''}>
               <Creature {task} {state} {room} {questionText} onClick={onCreatureClick} onHover={handleHover} onHoverEnd={handleHoverEnd} onStart={onRunAction ? (taskId: string) => onRunAction({ taskId, actionPrompt: '', agent: null }) : undefined} />
             </div>
           {/each}
@@ -163,14 +223,15 @@
           <p class="font-mono text-[9px] text-success/40">{forgeTasks.length} agents running</p>
           <div class="border-b border-success/20 mt-2"></div>
         </div>
-        <div data-testid="creature-list" class="flex flex-col gap-1 p-2 flex-1 overflow-y-auto">
-           {#each forgeTasks as task (task.id)}
+        <div data-testid="creature-list" data-vim-room="forge" class="flex flex-col gap-1 p-2 flex-1 overflow-y-auto">
+           {#each forgeTasks as task, i (task.id)}
              {@const session = getSession(task.id)}
              {@const state = computeCreatureState(task, session, getPrs(task.id))}
              {@const room = computeCreatureRoom(task, session, getPrs(task.id))}
              {@const questionText = parseCheckpointQuestion(session?.checkpoint_data ?? null)}
+             {@const isVimFocused = focusedRoom === 1 && vim.focusedIndex === i}
              <!-- svelte-ignore a11y_no_static_element_interactions -->
-             <div oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)}>
+             <div data-vim-creature oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'ring-2 ring-primary rounded' : ''}>
                <Creature {task} {state} {room} {questionText} onClick={onCreatureClick} onHover={handleHover} onHoverEnd={handleHoverEnd} />
              </div>
            {/each}
@@ -183,14 +244,15 @@
           <p class="font-mono text-[9px] text-warning/40">{warRoomTasks.length} tasks blocked</p>
           <div class="border-b border-warning/20 mt-2"></div>
         </div>
-        <div data-testid="creature-list" class="flex flex-col gap-1 p-2 flex-1 overflow-y-auto">
-          {#each warRoomTasks as task (task.id)}
+        <div data-testid="creature-list" data-vim-room="warRoom" class="flex flex-col gap-1 p-2 flex-1 overflow-y-auto">
+          {#each warRoomTasks as task, i (task.id)}
             {@const session = getSession(task.id)}
             {@const state = computeCreatureState(task, session, getPrs(task.id))}
             {@const room = computeCreatureRoom(task, session, getPrs(task.id))}
             {@const questionText = parseCheckpointQuestion(session?.checkpoint_data ?? null)}
+            {@const isVimFocused = focusedRoom === 2 && vim.focusedIndex === i}
             <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)}>
+            <div data-vim-creature oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'ring-2 ring-primary rounded' : ''}>
               <Creature {task} {state} {room} {questionText} onClick={onCreatureClick} onHover={handleHover} onHoverEnd={handleHoverEnd} />
             </div>
           {/each}
