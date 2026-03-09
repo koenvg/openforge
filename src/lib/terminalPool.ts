@@ -228,6 +228,13 @@ themeMode.subscribe((mode) => {
   }
 })
 
+export function focusTerminal(taskId: string): void {
+  const entry = pool.get(taskId)
+  if (entry?.attached) {
+    entry.terminal.focus()
+  }
+}
+
 export function isPtyActive(taskId: string): boolean {
   return pool.get(taskId)?.ptyActive ?? false
 }

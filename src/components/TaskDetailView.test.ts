@@ -361,6 +361,35 @@ describe('TaskDetailView', () => {
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('T-42')
   })
 
+  it('recreates agent panel terminal when switching tasks', async () => {
+    const { acquire, detach } = await import('../lib/terminalPool')
+    vi.mocked(acquire).mockClear()
+    vi.mocked(detach).mockClear()
+
+    const taskA = { ...baseTask, id: 'T-42' }
+    const { rerender } = render(TaskDetailView, { props: { task: taskA, onRunAction: mockOnRunAction } })
+
+    // Wait for AgentPanel to mount and acquire terminal for T-42
+    await vi.waitFor(() => {
+      expect(vi.mocked(acquire)).toHaveBeenCalledWith('T-42')
+    })
+
+    vi.mocked(acquire).mockClear()
+    vi.mocked(detach).mockClear()
+
+    // Switch to a different task
+    const taskB = { ...baseTask, id: 'T-99', title: 'Another task' }
+    await rerender({ task: taskB, onRunAction: mockOnRunAction })
+
+    // Agent panel should be recreated, acquiring terminal for the new task
+    await vi.waitFor(() => {
+      expect(vi.mocked(acquire)).toHaveBeenCalledWith('T-99')
+    })
+
+    // Old terminal should have been detached
+    expect(vi.mocked(detach)).toHaveBeenCalled()
+  })
+
   it('does not navigate away when task is moved to done', async () => {
     const doingTask: Task = { ...baseTask, status: 'doing' }
     selectedTaskId.set('T-42')

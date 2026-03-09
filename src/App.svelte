@@ -26,7 +26,7 @@
   import CommandPalette from './components/CommandPalette.svelte'
 
   import { pushNavState, navigateBack } from './lib/navigation'
-  import { release as releaseTerminal, isPtyActive } from './lib/terminalPool'
+  import { release as releaseTerminal, isPtyActive, focusTerminal } from './lib/terminalPool'
 
   let unlisteners: UnlistenFn[] = []
   let showAddDialog = $state(false)
@@ -221,6 +221,7 @@
     if (isPtyActive(taskId)) {
       try {
         await writePty(taskId, actionPrompt + '\n')
+        focusTerminal(taskId)
       } catch (e) {
         console.error('[session] Failed to write action to PTY:', taskId, e)
         $error = String(e)
@@ -245,6 +246,7 @@
       }
 
       await loadTasks()
+      focusTerminal(taskId)
     } catch (e) {
       console.error('[session] Failed to run action for task:', taskId, e)
       $error = String(e)
