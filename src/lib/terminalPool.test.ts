@@ -43,7 +43,7 @@ vi.mock('./ipc', () => ({
   getPtyBuffer: vi.fn().mockResolvedValue(null),
 }))
 
-import { acquire, attach, detach, release, releaseAll, _getPool, isPtyActive } from './terminalPool'
+import { acquire, attach, detach, release, releaseAll, _getPool, isPtyActive, focusTerminal } from './terminalPool'
 
 // Stub browser APIs not available in jsdom
 globalThis.ResizeObserver = class {
@@ -244,6 +244,34 @@ describe('terminalPool', () => {
 
     it('returns false for unknown task', () => {
       expect(isPtyActive('nonexistent')).toBe(false)
+    })
+  })
+
+  describe('focusTerminal', () => {
+    it('calls terminal.focus() for an attached entry', async () => {
+      const entry = await acquire('task-focus')
+      const wrapper = document.createElement('div')
+      attach(entry, wrapper)
+      const focusSpy = entry.terminal.focus as ReturnType<typeof vi.fn>
+      focusSpy.mockClear()
+
+      focusTerminal('task-focus')
+
+      expect(focusSpy).toHaveBeenCalled()
+    })
+
+    it('does nothing for unknown taskId', () => {
+      expect(() => focusTerminal('nonexistent')).not.toThrow()
+    })
+
+    it('does nothing for a detached entry', async () => {
+      const entry = await acquire('task-focus-detached')
+      const focusSpy = entry.terminal.focus as ReturnType<typeof vi.fn>
+      focusSpy.mockClear()
+
+      focusTerminal('task-focus-detached')
+
+      expect(focusSpy).not.toHaveBeenCalled()
     })
   })
 
