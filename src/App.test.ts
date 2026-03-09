@@ -106,7 +106,6 @@ vi.mock('./lib/ipc', () => ({
   getWorktreeForTask: vi.fn(),
   getSessionStatus: vi.fn(),
   abortSession: vi.fn(),
-  getAgentLogs: vi.fn(),
   forceGithubSync: vi.fn(),
   getPrComments: vi.fn(),
   markCommentAddressed: vi.fn(),

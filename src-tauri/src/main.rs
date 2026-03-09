@@ -366,7 +366,6 @@ fn main() {
             commands::github::mark_comment_addressed,
             commands::agents::get_session_status,
             commands::agents::abort_session,
-            commands::agents::get_agent_logs,
             commands::agents::get_latest_session,
             commands::agents::get_latest_sessions,
             commands::agents::get_session_output,

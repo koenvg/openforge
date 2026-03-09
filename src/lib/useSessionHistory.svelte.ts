@@ -1,11 +1,9 @@
 import { get } from 'svelte/store'
 import { activeSessions } from './stores'
-import { getLatestSession, getWorktreeForTask, getAgentLogs } from './ipc'
-import type { AgentLog } from './types'
+import { getLatestSession, getWorktreeForTask } from './ipc'
 
 export interface SessionHistoryHandle {
   readonly loadingHistory: boolean
-  readonly storedEvents: AgentLog[]
   loadSessionHistory(): Promise<void>
 }
 
@@ -16,7 +14,6 @@ export function createSessionHistory(deps: {
   onStatusUpdate: (status: 'complete' | 'error' | 'idle', errorMessage?: string | null) => void
 }): SessionHistoryHandle {
   let loadingHistory = $state(false)
-  let storedEvents = $state<AgentLog[]>([])
 
   async function loadSessionHistory(): Promise<void> {
     loadingHistory = true
@@ -39,14 +36,6 @@ export function createSessionHistory(deps: {
       }
 
       if (!existingSession) return
-
-      if (existingSession.provider === 'claude-code') {
-        try {
-          storedEvents = await getAgentLogs(existingSession.id)
-        } catch (e) {
-          console.error('[useSessionHistory] Failed to load agent logs:', e)
-        }
-      }
 
       if (!deps.getOpencodePort()) {
         const worktree = await getWorktreeForTask(deps.taskId)
@@ -76,7 +65,6 @@ export function createSessionHistory(deps: {
 
   return {
     get loadingHistory() { return loadingHistory },
-    get storedEvents() { return storedEvents },
     loadSessionHistory,
   }
 }

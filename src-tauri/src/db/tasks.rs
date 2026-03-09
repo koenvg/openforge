@@ -335,7 +335,7 @@ impl super::Database {
         Ok(())
     }
 
-    /// Delete a task and all associated data (sessions, logs, PRs, comments, worktrees, reviews).
+    /// Delete a task and all associated data (sessions, PRs, comments, worktrees, reviews).
     ///
     /// Wrapped in a transaction so all-or-nothing: if any step fails the DB stays consistent.
     ///
@@ -345,7 +345,6 @@ impl super::Database {
         let conn = self.conn.lock().unwrap();
         conn.execute_batch("BEGIN IMMEDIATE")?;
         let result = (|| -> Result<()> {
-            conn.execute("DELETE FROM agent_logs WHERE session_id IN (SELECT id FROM agent_sessions WHERE ticket_id = ?1)", rusqlite::params![id])?;
             conn.execute(
                 "DELETE FROM agent_sessions WHERE ticket_id = ?1",
                 rusqlite::params![id],
@@ -792,8 +791,6 @@ mod tests {
 
         db.create_agent_session("ses-del", "T-100", None, "implement", "running", "opencode")
             .expect("create session failed");
-        db.insert_agent_log("ses-del", "info", "log entry")
-            .expect("add log failed");
 
         db.insert_pull_request(
             99,

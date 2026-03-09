@@ -14,7 +14,7 @@ mod tasks;
 mod worktrees;
 
 pub use agent_review::AgentReviewCommentRow;
-pub use agents::{AgentLogRow, AgentSessionRow};
+pub use agents::AgentSessionRow;
 pub use projects::{ProjectAttentionRow, ProjectRow};
 pub use pull_requests::{PrCommentRow, PrRow};
 pub use review::ReviewPrRow;
@@ -598,6 +598,8 @@ CREATE INDEX IF NOT EXISTS idx_agent_review_comments_session ON agent_review_com
             }
             Ok(())
         }),
+        // V11: Drop unused agent_logs table
+        M::up("DROP TABLE IF EXISTS agent_logs;"),
     ])
 }
 #[cfg(test)]
@@ -645,13 +647,13 @@ mod tests {
 
         let table_count: i32 = conn
             .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('tasks', 'agent_sessions', 'agent_logs', 'pull_requests', 'pr_comments', 'config', 'projects', 'project_config', 'worktrees', 'review_prs', 'self_review_comments', 'agent_review_comments')",
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('tasks', 'agent_sessions', 'pull_requests', 'pr_comments', 'config', 'projects', 'project_config', 'worktrees', 'review_prs', 'self_review_comments', 'agent_review_comments')",
                 [],
                 |row| row.get(0),
             )
             .expect("Failed to count tables");
 
-        assert_eq!(table_count, 12, "All 12 tables should be created");
+        assert_eq!(table_count, 11, "All 11 tables should be created");
 
         let config_count: i32 = conn
             .query_row("SELECT COUNT(*) FROM config", [], |row| row.get(0))
@@ -869,8 +871,8 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(
-            uv, 10,
-            "Fresh DB should have user_version=10 after migrations, got {}",
+            uv, 11,
+            "Fresh DB should have user_version=11 after migrations, got {}",
             uv
         );
 

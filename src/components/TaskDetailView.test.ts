@@ -53,7 +53,6 @@ vi.mock('../lib/usePtyBridge.svelte', () => ({
 vi.mock('../lib/useSessionHistory.svelte', () => ({
   createSessionHistory: vi.fn(() => ({
     get loadingHistory() { return false },
-    get storedEvents() { return [] },
     loadSessionHistory: vi.fn().mockResolvedValue(undefined),
   })),
 }))
@@ -84,7 +83,6 @@ vi.mock('../lib/ipc', () => ({
   getProjectConfig: vi.fn().mockResolvedValue(null),
   setProjectConfig: vi.fn().mockResolvedValue(undefined),
   getLatestSession: vi.fn().mockResolvedValue(null),
-  getAgentLogs: vi.fn().mockResolvedValue([]),
   spawnPty: vi.fn().mockResolvedValue(1),
   spawnShellPty: vi.fn().mockResolvedValue(1),
   getPtyBuffer: vi.fn().mockResolvedValue(null),

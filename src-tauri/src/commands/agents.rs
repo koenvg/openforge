@@ -61,17 +61,6 @@ pub async fn abort_session(
     Ok(())
 }
 
-/// Get agent logs for a session
-#[tauri::command]
-pub async fn get_agent_logs(
-    db: State<'_, Arc<Mutex<db::Database>>>,
-    session_id: String,
-) -> Result<Vec<db::AgentLogRow>, String> {
-    let db_lock = crate::db::acquire_db(&db);
-    db_lock.get_agent_logs(&session_id)
-        .map_err(|e| format!("Failed to get agent logs: {}", e))
-}
-
 #[tauri::command]
 pub async fn get_latest_session(
     db: State<'_, Arc<Mutex<db::Database>>>,

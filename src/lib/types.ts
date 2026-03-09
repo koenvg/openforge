@@ -37,14 +37,6 @@ export interface ClaudeInstallStatus {
   authenticated: boolean;
 }
 
-export interface AgentLog {
-  id: number;
-  session_id: string;
-  timestamp: number;
-  log_type: string;
-  content: string;
-}
-
 export interface CheckpointNotification {
   ticketId: string;
   ticketKey: string | null;

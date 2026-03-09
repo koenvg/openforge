@@ -40,7 +40,6 @@ vi.mock('../lib/ipc', () => ({
   writePty: vi.fn().mockResolvedValue(undefined),
   resizePty: vi.fn().mockResolvedValue(undefined),
   killPty: vi.fn().mockResolvedValue(undefined),
-  getAgentLogs: vi.fn().mockResolvedValue([]),
   transcribeAudio: vi.fn(),
   getWhisperModelStatus: vi.fn(),
   downloadWhisperModel: vi.fn(),
@@ -83,7 +82,6 @@ vi.mock('../lib/terminalPool', () => ({
 vi.mock('../lib/useSessionHistory.svelte', () => ({
   createSessionHistory: vi.fn(() => ({
     get loadingHistory() { return false },
-    get storedEvents() { return [] },
     loadSessionHistory: vi.fn().mockResolvedValue(undefined),
   })),
 }))

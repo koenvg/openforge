@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Task, AgentSession, AgentLog, PrComment, PollResult, PullRequestInfo, AgentInfo, Project, ProjectAttention, WorktreeInfo, ImplementationStatus, ReviewPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus, WhisperModelSizeId, SkillInfo, WorkQueueTask } from "./types";
+import type { Task, AgentSession, PrComment, PollResult, PullRequestInfo, AgentInfo, Project, ProjectAttention, WorktreeInfo, ImplementationStatus, ReviewPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus, WhisperModelSizeId, SkillInfo, WorkQueueTask } from "./types";
 
 export async function createTask(title: string, status: string, jiraKey: string | null, projectId: string | null, agent: string | null, permissionMode: string | null): Promise<Task> {
   return invoke<Task>("create_task", { title, status, jiraKey, projectId, agent, permissionMode });
@@ -99,10 +99,6 @@ export async function getSessionStatus(sessionId: string): Promise<AgentSession>
 
 export async function abortSession(sessionId: string): Promise<void> {
   return invoke("abort_session", { sessionId });
-}
-
-export async function getAgentLogs(sessionId: string): Promise<AgentLog[]> {
-  return invoke<AgentLog[]>("get_agent_logs", { sessionId });
 }
 
 export async function forceGithubSync(): Promise<PollResult> {
