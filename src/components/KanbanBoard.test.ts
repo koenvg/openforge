@@ -15,7 +15,7 @@ vi.mock('../lib/ipc', () => ({
 
 // Mock actions module
 const mockActions: Action[] = [
-  { id: 'builtin-go', name: 'Go', prompt: '', agent: null, builtin: true, enabled: true },
+  { id: 'builtin-go', name: 'Go', description: 'Start implementation', prompt: '', agent: null, builtin: true, enabled: true },
 ]
 
 vi.mock('../lib/actions', () => ({
@@ -107,6 +107,25 @@ describe('KanbanBoard', () => {
     
     // Check that dynamic actions appear in context menu
     expect(screen.getByText('Go')).toBeTruthy()
+  })
+
+  it('shows action description as tooltip on context menu hover', async () => {
+    const { container } = render(KanbanBoard)
+
+    // Trigger context menu
+    const taskCard = screen.getByText('Test task').closest('div')
+    if (!taskCard) throw new Error('Task card not found')
+    await fireEvent.contextMenu(taskCard)
+
+    // Wait for reactive statements
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    // Check that the Go button has description as its title attribute
+    const actionButtons = container.querySelectorAll('.context-item')
+    const goButton = Array.from(actionButtons).find(btn => btn.textContent?.includes('Go')) as HTMLButtonElement
+
+    expect(goButton).toBeTruthy()
+    expect(goButton.title).toBe('Start implementation')
   })
 
   it('disables actions when session is running', async () => {

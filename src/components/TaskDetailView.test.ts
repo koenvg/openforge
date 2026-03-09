@@ -120,7 +120,7 @@ vi.mock('../lib/terminalPool', () => ({
 
 vi.mock('../lib/actions', () => ({
   loadActions: vi.fn(() => Promise.resolve([
-    { id: 'builtin-go', name: 'Go', prompt: '', agent: null, builtin: true, enabled: true },
+    { id: 'builtin-go', name: 'Go', description: null, prompt: '', agent: null, builtin: true, enabled: true },
   ])),
   getEnabledActions: vi.fn((actions: { enabled: boolean }[]) => actions.filter(a => a.enabled)),
 }))

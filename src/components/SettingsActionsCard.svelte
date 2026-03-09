@@ -95,6 +95,17 @@
 				</label>
 
 				<label class="flex flex-col gap-1">
+					<span class="text-[0.7rem] text-base-content/50">Description</span>
+					<input
+						type="text"
+						value={action.description ?? ''}
+						oninput={(e) => onUpdateAction(action.id, 'description', e.currentTarget.value)}
+						placeholder="Short description (shown as tooltip in context menu)"
+						class="input input-bordered input-sm w-full"
+					/>
+				</label>
+
+				<label class="flex flex-col gap-1">
 					<span class="text-[0.7rem] text-base-content/50">Prompt</span>
 					<textarea
 						value={action.prompt}

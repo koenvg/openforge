@@ -107,7 +107,7 @@
             <button
               class="btn btn-soft btn-sm shadow-sm hover:shadow-md hover:btn-primary transition-all duration-200"
               disabled={isSessionBusy}
-              title={isSessionBusy ? busyReason : action.name}
+              title={isSessionBusy ? busyReason : (action.description || action.name)}
               onclick={() => handleActionClick(action)}
             >
               {action.name}

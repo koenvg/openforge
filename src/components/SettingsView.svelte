@@ -294,7 +294,7 @@
 
   function updateAction(actionId: string, field: string, value: string) {
     actions = actions.map((a) =>
-      a.id === actionId ? { ...a, [field]: field === 'agent' ? value || null : value } : a
+      a.id === actionId ? { ...a, [field]: (field === 'agent' || field === 'description') ? value || null : value } : a
     )
   }
 

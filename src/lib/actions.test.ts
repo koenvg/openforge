@@ -53,6 +53,7 @@ describe('actions module', () => {
         {
           id: 'custom-1',
           name: 'Custom Action',
+          description: null,
           prompt: 'Do something custom',
           agent: null,
           builtin: false,
@@ -61,6 +62,7 @@ describe('actions module', () => {
         {
           id: 'custom-2',
           name: 'Another Custom',
+          description: null,
           prompt: 'Do another thing',
           agent: null,
           builtin: false,
@@ -114,6 +116,18 @@ describe('actions module', () => {
         JSON.stringify(DEFAULT_ACTIONS)
       )
     })
+
+    it('backfills description as null for old actions without description field', async () => {
+      const oldActions = [
+        { id: 'old-1', name: 'Legacy Action', prompt: 'do stuff', agent: null, builtin: false, enabled: true },
+      ]
+
+      vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify(oldActions))
+
+      const result = await loadActions('test-project-id')
+
+      expect(result[0].description).toBeNull()
+    })
   })
 
   describe('saveActions', () => {
@@ -122,6 +136,7 @@ describe('actions module', () => {
         {
           id: 'test-1',
           name: 'Test Action',
+          description: null,
           prompt: 'Test prompt',
           agent: null,
           builtin: false,
@@ -150,6 +165,12 @@ describe('actions module', () => {
       expect(action.enabled).toBe(true)
     })
 
+    it('creates action with null description', () => {
+      const action = createAction('My Action', 'My prompt text')
+
+      expect(action.description).toBeNull()
+    })
+
     it('generates unique IDs for multiple actions', () => {
       const action1 = createAction('Action 1', 'Prompt 1')
       const action2 = createAction('Action 2', 'Prompt 2')
@@ -164,6 +185,7 @@ describe('actions module', () => {
         {
           id: 'enabled-1',
           name: 'Enabled Action',
+          description: null,
           prompt: 'This is enabled',
           agent: null,
           builtin: true,
@@ -172,6 +194,7 @@ describe('actions module', () => {
         {
           id: 'disabled-1',
           name: 'Disabled Action',
+          description: null,
           prompt: 'This is disabled',
           agent: null,
           builtin: true,
@@ -180,6 +203,7 @@ describe('actions module', () => {
         {
           id: 'enabled-2',
           name: 'Another Enabled',
+          description: null,
           prompt: 'Also enabled',
           agent: null,
           builtin: false,
@@ -199,6 +223,7 @@ describe('actions module', () => {
         {
           id: 'z',
           name: 'Zebra',
+          description: null,
           prompt: 'Z',
           agent: null,
           builtin: true,
@@ -207,6 +232,7 @@ describe('actions module', () => {
         {
           id: 'a',
           name: 'Apple',
+          description: null,
           prompt: 'A',
           agent: null,
           builtin: true,
@@ -215,6 +241,7 @@ describe('actions module', () => {
         {
           id: 'm',
           name: 'Mango',
+          description: null,
           prompt: 'M',
           agent: null,
           builtin: true,
@@ -234,6 +261,7 @@ describe('actions module', () => {
         {
           id: 'disabled-1',
           name: 'Disabled 1',
+          description: null,
           prompt: 'Disabled',
           agent: null,
           builtin: true,
@@ -242,6 +270,7 @@ describe('actions module', () => {
         {
           id: 'disabled-2',
           name: 'Disabled 2',
+          description: null,
           prompt: 'Also disabled',
           agent: null,
           builtin: false,

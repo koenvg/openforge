@@ -351,6 +351,7 @@ export const COLUMNS: KanbanColumn[] = ["backlog", "doing", "done"];
 export interface Action {
   id: string;
   name: string;
+  description: string | null;
   prompt: string;
   agent: string | null;
   builtin: boolean;

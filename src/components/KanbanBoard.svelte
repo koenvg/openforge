@@ -298,7 +298,7 @@
       <button
         class="context-item block w-full text-left px-3 py-2 text-sm text-base-content cursor-pointer rounded {isSessionBusy ? 'opacity-40 cursor-not-allowed' : 'hover:bg-primary hover:text-primary-content'}"
         disabled={isSessionBusy}
-        title={isSessionBusy ? busyReason : action.name}
+        title={isSessionBusy ? busyReason : (action.description || action.name)}
         onclick={() => handleRunAction(action)}
       >
         {action.name}

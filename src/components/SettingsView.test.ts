@@ -21,7 +21,7 @@ vi.mock('../lib/actions', () => ({
   saveActions: vi.fn(),
   createAction: vi.fn(),
   DEFAULT_ACTIONS: [
-    { id: 'builtin-go', name: 'Go', prompt: '', agent: null, builtin: true, enabled: true },
+    { id: 'builtin-go', name: 'Go', description: null, prompt: '', agent: null, builtin: true, enabled: true },
   ],
 }))
 
@@ -257,11 +257,12 @@ describe('SettingsView', () => {
 
   it('clicking Add Action creates a new action entry', async () => {
     vi.mocked(loadActions).mockResolvedValue([
-      { id: 'builtin-go', name: 'Go', prompt: '', agent: null, builtin: true, enabled: true },
+      { id: 'builtin-go', name: 'Go', description: null, prompt: '', agent: null, builtin: true, enabled: true },
     ])
     vi.mocked(createAction).mockReturnValue({
       id: 'new-action-id',
       name: 'New Action',
+      description: null,
       prompt: '',
       agent: null,
       builtin: false,
@@ -284,7 +285,7 @@ describe('SettingsView', () => {
 
   it('renders action toggle checkboxes', async () => {
     vi.mocked(loadActions).mockResolvedValue([
-      { id: 'builtin-go', name: 'Go', prompt: '', agent: null, builtin: true, enabled: true },
+      { id: 'builtin-go', name: 'Go', description: null, prompt: '', agent: null, builtin: true, enabled: true },
     ])
 
     render(SettingsView, { props: defaultProps })
