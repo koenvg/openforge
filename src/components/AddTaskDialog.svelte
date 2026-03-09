@@ -1,7 +1,8 @@
 <script lang="ts">
   import { tick, onMount } from 'svelte'
   import type { Task, KanbanColumn, PermissionMode } from '../lib/types'
-  import { createTask, updateTask, getProjectConfig, getAgents } from '../lib/ipc'
+  import { createTask, updateTask, getProjectConfig } from '../lib/ipc'
+  import { getProvider } from '../lib/providers'
   import { activeProjectId } from '../lib/stores'
   import Modal from './Modal.svelte'
 
@@ -24,6 +25,8 @@
   let aiProvider = $state<string | null>(null)
   let availableAgents = $state<string[]>([])
 
+  let providerConfig = $derived(aiProvider ? getProvider(aiProvider) : undefined)
+
   // Focus the title input after Modal's own focus effect has run
   $effect(() => {
     if (titleInputEl) {
@@ -38,8 +41,9 @@
     } else {
       aiProvider = 'claude-code'
     }
-    if (aiProvider !== 'claude-code') {
-      const agents = await getAgents()
+    const provider = getProvider(aiProvider)
+    if (provider?.supportsAgentSelection && provider.loadAgents) {
+      const agents = await provider.loadAgents()
       availableAgents = agents.map(a => a.name)
     }
   })
@@ -116,8 +120,8 @@
         />
       </label>
 
-      {#if mode === 'create'}
-        {#if aiProvider === 'claude-code'}
+      {#if mode === 'create' && providerConfig}
+        {#if providerConfig.supportsPermissionMode}
           <label class="flex flex-col gap-1.5">
             <span class="text-xs text-base-content/60 font-medium">Permission Mode</span>
             <select
@@ -131,7 +135,7 @@
               <option value="dontAsk" class="text-error">Don't Ask (dangerous)</option>
             </select>
           </label>
-        {:else if aiProvider !== null}
+        {:else if providerConfig.supportsAgentSelection}
           <label class="flex flex-col gap-1.5">
             <span class="text-xs text-base-content/60 font-medium">Agent</span>
             <select

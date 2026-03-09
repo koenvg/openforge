@@ -24,6 +24,9 @@ vi.mock('../lib/ipc', () => ({
   updateTask: vi.fn().mockResolvedValue(undefined),
   getProjectConfig: vi.fn().mockResolvedValue('claude-code'),
   getAgents: vi.fn().mockResolvedValue([{ name: 'agent-1' }, { name: 'agent-2' }]),
+  getAgentLogs: vi.fn().mockResolvedValue([]),
+  checkClaudeInstalled: vi.fn().mockResolvedValue({ installed: false, path: null, version: null, authenticated: false }),
+  checkOpenCodeInstalled: vi.fn().mockResolvedValue({ installed: false, path: null, version: null }),
 }))
 
 vi.mock('../lib/stores', () => {

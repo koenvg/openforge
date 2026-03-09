@@ -9,11 +9,11 @@
     getAgents,
     getConfig,
     setConfig,
-    checkOpenCodeInstalled,
-    checkClaudeInstalled,
     getAllWhisperModelStatuses,
     setWhisperModel,
   } from '../lib/ipc'
+  import { getProvider, getAllProviders } from '../lib/providers'
+  import type { ProviderInstallStatus } from '../lib/providers'
   import { loadActions, saveActions, createAction, DEFAULT_ACTIONS } from '../lib/actions'
   import { themeMode, applyTheme } from '../lib/theme'
   import type { ThemeMode } from '../lib/theme'
@@ -52,11 +52,7 @@
   // AI state
   let modelStatuses = $state<WhisperModelStatus[]>([])
   let downloadingModel = $state<WhisperModelSizeId | null>(null)
-  let opencodeInstalled = $state(false)
-  let opencodeVersion = $state<string | null>(null)
-  let claudeInstalled = $state(false)
-  let claudeVersion = $state<string | null>(null)
-  let claudeAuthenticated = $state(false)
+  let providerInstallStatuses = $state<Map<string, ProviderInstallStatus>>(new Map())
 
   // Actions state
   let actions = $state<Action[]>([])
@@ -103,6 +99,9 @@
   // Derived state
   const hasProject = $derived(!!$activeProjectId)
   const activePage = $derived(globalSections.includes(activeSection) ? 'global' : 'project')
+  const aiProviderStatus = $derived(providerInstallStatuses.get(aiProvider))
+  const aiProviderInstalled = $derived(aiProviderStatus?.installed ?? false)
+  const aiProviderVersion = $derived(aiProviderStatus?.version ?? null)
 
   // Load project config on activeProjectId change
   $effect(() => {
@@ -174,22 +173,15 @@
     isCodeCleanupTasksEnabled = codeCleanupTasksEnabledVal === 'true'
     $codeCleanupTasksEnabled = isCodeCleanupTasksEnabled
 
-    // Check installations
-    const [opencodeResult, claudeResult] = await Promise.all([
-      checkOpenCodeInstalled().catch(() => ({ installed: false, path: null, version: null })),
-      checkClaudeInstalled().catch(() => ({
-        installed: false,
-        path: null,
-        version: null,
-        authenticated: false,
-      })),
-    ])
-
-    opencodeInstalled = opencodeResult.installed
-    opencodeVersion = opencodeResult.version
-    claudeInstalled = claudeResult.installed
-    claudeVersion = claudeResult.version
-    claudeAuthenticated = (claudeResult as { authenticated: boolean }).authenticated ?? false
+    // Check installations for all registered providers
+    const allProviders = getAllProviders()
+    const installResults = await Promise.all(
+      allProviders.map(async (p) => {
+        const status = await p.checkInstalled().catch(() => ({ installed: false, version: null }))
+        return [p.id, status] as [string, ProviderInstallStatus]
+      })
+    )
+    providerInstallStatuses = new Map(installResults)
 
     // Load model statuses
     modelStatuses = await getAllWhisperModelStatuses().catch(() => [])
@@ -365,11 +357,8 @@
           {projectPath}
           {aiProvider}
           disabled={!hasProject}
-          {opencodeInstalled}
-          {opencodeVersion}
-          {claudeInstalled}
-          {claudeVersion}
-          {claudeAuthenticated}
+          {aiProviderInstalled}
+          {providerInstallStatuses}
           onProjectNameChange={(v) => (projectName = v)}
           onProjectPathChange={(v) => (projectPath = v)}
           onAiProviderChange={(v) => (aiProvider = v)}

@@ -4,6 +4,7 @@
   import ClaudeAgentPanel from './ClaudeAgentPanel.svelte'
   import OpenCodeAgentPanel from './OpenCodeAgentPanel.svelte'
   import { onMount } from 'svelte'
+  import type { Component } from 'svelte'
 
   interface Props {
     taskId: string
@@ -11,17 +12,29 @@
 
   let { taskId }: Props = $props()
 
+  /**
+   * Map provider IDs to their panel components.
+   * To add a new provider, register it in providers.ts and add its panel here.
+   */
+  const panelComponents: Record<string, Component<{ taskId: string }>> = {
+    'claude-code': ClaudeAgentPanel,
+    'opencode': OpenCodeAgentPanel,
+  }
+
   // Check the store first; if absent, try loading from DB once on mount.
   let session = $derived($activeSessions.get(taskId) || null)
   let provider = $derived(session?.provider ?? null)
   let checkedDb = $state(false)
 
+  // Resolve the panel component from the provider, fallback to OpenCode
+  let PanelComponent = $derived(
+    provider ? (panelComponents[provider] ?? OpenCodeAgentPanel) : null
+  )
+
   onMount(async () => {
-    console.log(`[AgentPanel] onMount taskId=${taskId} session=${session ? `provider=${session.provider} status=${session.status}` : 'null'}`)
     if (!session) {
       try {
         const dbSession = await getLatestSession(taskId)
-        console.log(`[AgentPanel] DB lookup: ${dbSession ? `provider=${dbSession.provider} status=${dbSession.status}` : 'null'}`)
         if (dbSession) {
           const updated = new Map($activeSessions)
           updated.set(taskId, dbSession)
@@ -32,12 +45,11 @@
       }
     }
     checkedDb = true
-    console.log(`[AgentPanel] routing: provider=${provider} checkedDb=${checkedDb} → ${provider === 'claude-code' ? 'ClaudeAgentPanel' : 'OpenCodeAgentPanel'}`)
   })
 </script>
 
-{#if provider === 'claude-code'}
-  <ClaudeAgentPanel {taskId} />
-{:else if provider || checkedDb}
+{#if PanelComponent}
+  <PanelComponent {taskId} />
+{:else if checkedDb}
   <OpenCodeAgentPanel {taskId} />
 {/if}

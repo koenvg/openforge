@@ -42,6 +42,11 @@ vi.mock('./lib/stores', () => ({
   reviewPullRequestDiff: writable(null),
   skills: writable([]),
   selectedSkillName: writable(null),
+  runningTerminals: writable(new Set()),
+  startingTasks: writable(new Set()),
+  creaturesEnabled: writable(false),
+  codeCleanupTasksEnabled: writable(false),
+  searchQuery: writable(''),
 }))
 
 vi.mock('./lib/ipc', () => ({
@@ -132,24 +137,33 @@ vi.mock('./lib/ipc', () => ({
     callOrder.push('getReviewPrs')
     return []
   }),
+  getConfig: vi.fn(async () => null),
+  getRunningPtyTaskIds: vi.fn(async () => []),
+  getAgentLogs: vi.fn(async () => []),
+  checkClaudeInstalled: vi.fn(async () => ({ installed: false, path: null, version: null, authenticated: false })),
+  checkOpenCodeInstalled: vi.fn(async () => ({ installed: false, path: null, version: null })),
 }))
 
 vi.mock('./components/KanbanBoard.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/TaskDetailView.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/PrReviewView.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/SkillsView.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/ClaudeAgentPanel.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/CreaturesView.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/WorkQueueView.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/PromptInput.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/Modal.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/SettingsPanel.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/GlobalSettingsPanel.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/SettingsView.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/Toast.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/CheckpointToast.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/CiFailureToast.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/TaskSpawnedToast.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/ProjectSwitcher.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/ProjectSwitcherModal.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/ProjectSetupDialog.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/IconRail.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/CommandPalette.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/ActionPalette.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/SearchableSelect.svelte', () => ({ default: vi.fn() }))
 
 vi.mock('./lib/doingStatus', () => ({
   computeDoingStatus: vi.fn(() => 'idle'),
@@ -162,10 +176,29 @@ vi.mock('./lib/navigation', () => ({
 
 vi.mock('./lib/terminalPool', () => ({
   release: vi.fn(),
+  isPtyActive: vi.fn(() => false),
+  focusTerminal: vi.fn(),
+}))
+
+vi.mock('./lib/ptySubmit', () => ({
+  writePtyWithSubmit: vi.fn(),
 }))
 
 vi.mock('lucide-svelte', () => ({
   RefreshCw: vi.fn(),
+}))
+
+vi.mock('./lib/domUtils', () => ({
+  isInputFocused: vi.fn(() => false),
+}))
+
+vi.mock('./lib/vimGoto', () => ({
+  resolveGotoKey: vi.fn(() => null),
+}))
+
+vi.mock('./lib/actions', () => ({
+  loadActions: vi.fn(async () => []),
+  getEnabledActions: vi.fn(() => []),
 }))
 
 describe('App onMount initialization order', () => {

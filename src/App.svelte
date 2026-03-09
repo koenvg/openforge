@@ -3,8 +3,9 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
   import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention, taskSpawned, selectedSkillName, runningTerminals, startingTasks, creaturesEnabled, codeCleanupTasksEnabled } from './lib/stores'
-  import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getRunningPtyTaskIds, getConfig, getAgents, getReviewPrs } from './lib/ipc'
+  import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getRunningPtyTaskIds, getConfig, getReviewPrs } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
+  import { getProvider } from './lib/providers'
   import SearchableSelect from './components/SearchableSelect.svelte'
   import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView, PermissionMode } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
@@ -49,8 +50,9 @@
     try {
       const provider = await getConfig('ai_provider')
       dialogAiProvider = provider ?? 'claude-code'
-      if (dialogAiProvider !== 'claude-code') {
-        const agents = await getAgents()
+      const providerConfig = getProvider(dialogAiProvider)
+      if (providerConfig?.supportsAgentSelection && providerConfig.loadAgents) {
+        const agents = await providerConfig.loadAgents()
         dialogAgents = agents.map(a => a.name)
       } else {
         dialogAgents = []
@@ -952,7 +954,7 @@
               onCancel={() => { showAddDialog = false; editingTask = null }}
             >
               {#snippet extras()}
-                {#if !editingTask && dialogAiProvider === 'claude-code'}
+                {#if !editingTask && dialogAiProvider && getProvider(dialogAiProvider)?.supportsPermissionMode}
                   <div class="flex items-center gap-2">
                     <span class="text-xs text-base-content/50 font-medium shrink-0">Mode</span>
                     <select
@@ -966,7 +968,7 @@
                       <option value="dontAsk">Don't Ask (dangerous)</option>
                     </select>
                   </div>
-                {:else if !editingTask && dialogAiProvider !== 'claude-code' && dialogAgents.length > 0}
+                {:else if !editingTask && dialogAiProvider && getProvider(dialogAiProvider)?.supportsAgentSelection && dialogAgents.length > 0}
                   <div class="flex items-center gap-2">
                     <span class="text-xs text-base-content/50 font-medium shrink-0">Agent</span>
                     <div class="flex-1">

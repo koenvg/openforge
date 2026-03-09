@@ -1,16 +1,15 @@
 <script lang="ts">
   import { FolderOpen } from 'lucide-svelte'
+  import { getAllProviders } from '../lib/providers'
+  import type { ProviderInstallStatus } from '../lib/providers'
 
   interface Props {
     projectName: string
     projectPath: string
     aiProvider: string
     disabled: boolean
-    opencodeInstalled: boolean
-    opencodeVersion: string | null
-    claudeInstalled: boolean
-    claudeVersion: string | null
-    claudeAuthenticated: boolean
+    aiProviderInstalled: boolean
+    providerInstallStatuses: Map<string, ProviderInstallStatus>
     onProjectNameChange: (value: string) => void
     onProjectPathChange: (value: string) => void
     onAiProviderChange: (value: string) => void
@@ -21,15 +20,14 @@
     projectPath,
     aiProvider,
     disabled,
-    opencodeInstalled,
-    opencodeVersion,
-    claudeInstalled,
-    claudeVersion,
-    claudeAuthenticated,
+    aiProviderInstalled,
+    providerInstallStatuses,
     onProjectNameChange,
     onProjectPathChange,
     onAiProviderChange,
   }: Props = $props()
+
+  const registeredProviders = getAllProviders()
 </script>
 
 <div id="section-general" class="bg-base-100 rounded-lg border border-base-300 overflow-hidden">
@@ -72,38 +70,33 @@
           value={aiProvider}
           onchange={(e) => onAiProviderChange((e.currentTarget as HTMLSelectElement).value)}
         >
-          <option value="claude-code">Claude Code</option>
-          <option value="opencode">OpenCode</option>
+          {#each registeredProviders as provider}
+            <option value={provider.id}>{provider.displayName}</option>
+          {/each}
         </select>
       </label>
 
       <div class="flex flex-col gap-1 text-xs">
-        <div class="flex items-center gap-2">
-          {#if opencodeInstalled}
-            <span class="text-success">✓</span>
-            <span>OpenCode {opencodeVersion || ''}</span>
-          {:else}
-            <span class="text-error">✗</span>
-            <span class="text-base-content/50">OpenCode not installed</span>
-          {/if}
-        </div>
-        <div class="flex items-center gap-2">
-          {#if claudeInstalled}
-            <span class="text-success">✓</span>
-            <span>Claude Code {claudeVersion || ''}</span>
-            {#if claudeAuthenticated}
-              <span class="badge badge-xs badge-success">Authenticated</span>
+        {#each registeredProviders as provider}
+          {@const status = providerInstallStatuses.get(provider.id)}
+          <div class="flex items-center gap-2">
+            {#if status?.installed}
+              <span class="text-success">✓</span>
+              <span>{provider.displayName} {status.version || ''}</span>
+              {#if status.authenticated === true}
+                <span class="badge badge-xs badge-success">Authenticated</span>
+              {:else if status.authenticated === false}
+                <span class="badge badge-xs badge-warning">Not authenticated</span>
+              {/if}
             {:else}
-              <span class="badge badge-xs badge-warning">Not authenticated</span>
+              <span class="text-error">✗</span>
+              <span class="text-base-content/50">{provider.displayName} not installed</span>
             {/if}
-          {:else}
-            <span class="text-error">✗</span>
-            <span class="text-base-content/50">Claude Code not installed</span>
-          {/if}
-        </div>
+          </div>
+        {/each}
       </div>
 
-      {#if (aiProvider === 'opencode' && !opencodeInstalled) || (aiProvider === 'claude-code' && !claudeInstalled)}
+      {#if !aiProviderInstalled}
         <div class="alert alert-warning text-xs py-2">
           <span>Selected provider is not installed</span>
         </div>
