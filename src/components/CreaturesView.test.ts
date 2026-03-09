@@ -312,6 +312,28 @@ describe('CreaturesView', () => {
       expect(nest).toBeTruthy()
     })
 
+    it('nursery creatures show start button when onRunAction is provided', () => {
+      tasks.set([makeTask('T-nursery', 'backlog')])
+      render(CreaturesView, { props: { onCreatureClick: vi.fn(), onRunAction: vi.fn() } })
+      expect(screen.getByTitle('Start task')).toBeTruthy()
+    })
+
+    it('clicking start button on nursery creature calls onRunAction with task id and empty prompt', async () => {
+      const onRunAction = vi.fn()
+      tasks.set([makeTask('T-nursery', 'backlog')])
+      render(CreaturesView, { props: { onCreatureClick: vi.fn(), onRunAction } })
+      const startBtn = screen.getByTitle('Start task')
+      await fireEvent.click(startBtn)
+      expect(onRunAction).toHaveBeenCalledWith({ taskId: 'T-nursery', actionPrompt: '', agent: null })
+    })
+
+    it('forge creatures do not show start button even when onRunAction is provided', () => {
+      tasks.set([makeTask('T-forge', 'doing')])
+      activeSessions.set(new Map([['T-forge', makeSession('T-forge', 'running')]]))
+      render(CreaturesView, { props: { onCreatureClick: vi.fn(), onRunAction: vi.fn() } })
+      expect(screen.queryByTitle('Start task')).toBeNull()
+    })
+
     it('running forge creature has creature-work animation class', () => {
       tasks.set([makeTask('T-active', 'doing')])
       activeSessions.set(new Map([['T-active', makeSession('T-active', 'running')]]))

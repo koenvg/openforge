@@ -10,9 +10,10 @@
     onClick: (taskId: string) => void
     onHover: (taskId: string, rect: DOMRect) => void
     onHoverEnd: () => void
+    onStart?: (taskId: string) => void
   }
 
-  let { task, state, room, questionText, onClick, onHover, onHoverEnd }: Props = $props()
+  let { task, state, room, questionText, onClick, onHover, onHoverEnd, onStart }: Props = $props()
 
   let buttonEl: HTMLButtonElement
 
@@ -248,5 +249,18 @@
         <span class="font-mono text-[8px] text-base-content/40 truncate max-w-[200px]">{task.jira_assignee}</span>
       {/if}
     </div>
+
+    {#if onStart}
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs btn-square shrink-0 text-success hover:bg-success/20"
+        title="Start task"
+        onclick={(e: MouseEvent) => { e.stopPropagation(); onStart(task.id) }}
+      >
+        <svg viewBox="0 0 16 16" class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+          <path d="M4 2.5v11l9-5.5z" />
+        </svg>
+      </button>
+    {/if}
   {/if}
 </button>

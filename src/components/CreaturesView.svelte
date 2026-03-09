@@ -8,9 +8,10 @@
 
   interface Props {
     onCreatureClick: (taskId: string) => void
+    onRunAction?: (data: { taskId: string; actionPrompt: string; agent: string | null }) => void
   }
 
-  let { onCreatureClick }: Props = $props()
+  let { onCreatureClick, onRunAction }: Props = $props()
 
   let hoveredTaskId = $state<string | null>(null)
   let hoverRect = $state<DOMRect | null>(null)
@@ -121,7 +122,7 @@
             {@const state = computeCreatureState(task, session)}
             {@const room = computeCreatureRoom(task, session)}
             {@const questionText = parseCheckpointQuestion(session?.checkpoint_data ?? null)}
-            <Creature {task} {state} {room} {questionText} onClick={onCreatureClick} onHover={handleHover} onHoverEnd={handleHoverEnd} />
+            <Creature {task} {state} {room} {questionText} onClick={onCreatureClick} onHover={handleHover} onHoverEnd={handleHoverEnd} onStart={onRunAction ? (taskId: string) => onRunAction({ taskId, actionPrompt: '', agent: null }) : undefined} />
           {/each}
         </div>
       </div>

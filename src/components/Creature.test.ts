@@ -22,14 +22,15 @@ function renderCreature(
   state: CreatureState,
   room: CreatureRoom = 'forge',
   questionText: string | null = null,
-  taskOverrides: Partial<Task> = {}
+  taskOverrides: Partial<Task> = {},
+  onStart?: (taskId: string) => void
 ) {
   const onClick = vi.fn()
   const onHover = vi.fn()
   const onHoverEnd = vi.fn()
   const task = { ...baseTask, ...taskOverrides }
   const result = render(Creature, {
-    props: { task, state, room, questionText, onClick, onHover, onHoverEnd },
+    props: { task, state, room, questionText, onClick, onHover, onHoverEnd, onStart },
   })
   return { ...result, onClick, onHover, onHoverEnd }
 }
@@ -268,6 +269,39 @@ describe('Creature', () => {
       const button = screen.getByRole('button')
       await fireEvent.mouseLeave(button)
       expect(onHoverEnd).toHaveBeenCalled()
+    })
+  })
+
+  describe('Start button (nursery)', () => {
+    it('renders a start button for nursery creatures when onStart is provided', () => {
+      renderCreature('egg', 'nursery', null, {}, vi.fn())
+      expect(screen.getByTitle('Start task')).toBeTruthy()
+    })
+
+    it('does not render a start button when onStart is not provided', () => {
+      renderCreature('egg', 'nursery')
+      expect(screen.queryByTitle('Start task')).toBeNull()
+    })
+
+    it('does not render a start button for non-nursery creatures', () => {
+      renderCreature('active', 'forge', null, {}, vi.fn())
+      expect(screen.queryByTitle('Start task')).toBeNull()
+    })
+
+    it('calls onStart with task.id when start button is clicked', async () => {
+      const onStart = vi.fn()
+      renderCreature('egg', 'nursery', null, {}, onStart)
+      const startBtn = screen.getByTitle('Start task')
+      await fireEvent.click(startBtn)
+      expect(onStart).toHaveBeenCalledWith('T-99')
+    })
+
+    it('does not call onClick when start button is clicked', async () => {
+      const onStart = vi.fn()
+      const { onClick } = renderCreature('egg', 'nursery', null, {}, onStart)
+      const startBtn = screen.getByTitle('Start task')
+      await fireEvent.click(startBtn)
+      expect(onClick).not.toHaveBeenCalled()
     })
   })
 
