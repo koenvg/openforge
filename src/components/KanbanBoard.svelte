@@ -1,9 +1,10 @@
 <script lang="ts">
   import type { Task, AgentSession, KanbanColumn } from '../lib/types'
   import { tasks, selectedTaskId, activeSessions, ticketPrs, error, activeProjectId, searchQuery, runningTerminals, startingTasks } from '../lib/stores'
-  import { updateTaskStatus, deleteTask, clearDoneTasks } from '../lib/ipc'
+  import { clearDoneTasks } from '../lib/ipc'
   import { pushNavState } from '../lib/navigation'
   import TaskCard from './TaskCard.svelte'
+  import TaskContextMenu from './TaskContextMenu.svelte'
 
   interface Props {
     onRunAction: (data: { taskId: string; actionPrompt: string; agent: string | null }) => void
@@ -81,48 +82,15 @@
     $selectedTaskId = taskId
   }
 
-  let contextMenu = $state({ visible: false, x: 0, y: 0, taskId: '', taskStatus: '' as KanbanColumn | '' })
+  let contextMenu = $state({ visible: false, x: 0, y: 0, taskId: '' })
 
   function handleContextMenu(event: MouseEvent, taskId: string) {
     event.preventDefault()
-    const task = $tasks.find(t => t.id === taskId)
-    const taskStatus = (task?.status ?? '') as KanbanColumn | ''
-    contextMenu = { visible: true, x: event.clientX, y: event.clientY, taskId, taskStatus }
+    contextMenu = { visible: true, x: event.clientX, y: event.clientY, taskId }
   }
 
   function closeContextMenu() {
     contextMenu = { ...contextMenu, visible: false }
-  }
-
-  function handleStartTask() {
-    const taskId = contextMenu.taskId
-    closeContextMenu()
-    onRunAction({ taskId, actionPrompt: '', agent: null })
-  }
-
-  async function handleMoveToDone() {
-    const taskId = contextMenu.taskId
-    closeContextMenu()
-    try {
-      await updateTaskStatus(taskId, 'done')
-    } catch (err: unknown) {
-      console.error('Failed to move task:', err)
-      $error = String(err)
-    }
-  }
-
-  async function handleDelete() {
-    const taskId = contextMenu.taskId
-    closeContextMenu()
-    try {
-      await deleteTask(taskId)
-      if ($selectedTaskId === taskId) {
-        $selectedTaskId = null
-      }
-    } catch (err: unknown) {
-      console.error('Failed to delete task:', err)
-      $error = String(err)
-    }
   }
 
   let isClearing = $state(false)
@@ -142,7 +110,7 @@
 </script>
 
 
-<svelte:window onclick={closeContextMenu} onkeydown={handleBoardKeydown} />
+<svelte:window onkeydown={handleBoardKeydown} />
 
 <div class="flex flex-col h-full overflow-hidden">
   <!-- Toggle bar -->
@@ -275,19 +243,12 @@
   </div>
 {/if}
 
-<!-- Context menu -->
-{#if contextMenu.visible}
-  <div class="fixed z-[100] bg-base-300 border border-base-300 rounded-lg shadow-xl min-w-[180px] p-1" style="left: {contextMenu.x}px; top: {contextMenu.y}px;">
-    {#if contextMenu.taskStatus === 'backlog'}
-      <button class="context-item block w-full text-left px-3 py-2 text-sm text-primary font-medium cursor-pointer rounded hover:bg-primary hover:text-primary-content" onclick={handleStartTask}>
-        Start Task
-      </button>
-    {/if}
-    {#if contextMenu.taskStatus === 'doing'}
-      <button class="context-item block w-full text-left px-3 py-2 text-sm text-base-content cursor-pointer rounded hover:bg-primary hover:text-primary-content" onclick={handleMoveToDone}>
-        Move to Done
-      </button>
-    {/if}
-    <button class="context-item block w-full text-left px-3 py-2 text-sm text-error cursor-pointer rounded hover:bg-error hover:text-error-content" onclick={handleDelete}>Delete</button>
-  </div>
-{/if}
+<TaskContextMenu
+  visible={contextMenu.visible}
+  x={contextMenu.x}
+  y={contextMenu.y}
+  taskId={contextMenu.taskId}
+  onClose={closeContextMenu}
+  onStart={(taskId) => onRunAction({ taskId, actionPrompt: '', agent: null })}
+  onDelete={(taskId) => { if ($selectedTaskId === taskId) $selectedTaskId = null }}
+/>

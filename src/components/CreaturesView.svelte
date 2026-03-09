@@ -1,12 +1,11 @@
 <script lang="ts">
-  import type { AgentSession, KanbanColumn } from '../lib/types'
-  import { COLUMNS, COLUMN_LABELS } from '../lib/types'
-  import { tasks, activeSessions, error } from '../lib/stores'
-  import { updateTaskStatus, deleteTask } from '../lib/ipc'
+  import type { AgentSession } from '../lib/types'
+  import { tasks, activeSessions } from '../lib/stores'
   import { computeCreatureState, computeCreatureRoom } from '../lib/creatureState'
   import { parseCheckpointQuestion } from '../lib/parseCheckpoint'
   import Creature from './Creature.svelte'
   import CreatureHoverCard from './CreatureHoverCard.svelte'
+  import TaskContextMenu from './TaskContextMenu.svelte'
 
   interface Props {
     onCreatureClick: (taskId: string) => void
@@ -104,53 +103,18 @@
     hoverRect = null
   }
 
-  let contextMenu = $state({ visible: false, x: 0, y: 0, taskId: '', taskStatus: '' as KanbanColumn | '', showMoveSubmenu: false })
+  let contextMenu = $state({ visible: false, x: 0, y: 0, taskId: '' })
 
   function handleContextMenu(event: MouseEvent, taskId: string) {
     event.preventDefault()
-    const task = $tasks.find(t => t.id === taskId)
-    const taskStatus = (task?.status ?? '') as KanbanColumn | ''
-    contextMenu = { visible: true, x: event.clientX, y: event.clientY, taskId, taskStatus, showMoveSubmenu: false }
+    contextMenu = { visible: true, x: event.clientX, y: event.clientY, taskId }
   }
 
   function closeContextMenu() {
-    contextMenu = { ...contextMenu, visible: false, showMoveSubmenu: false }
-  }
-
-  function handleStartTask() {
-    const taskId = contextMenu.taskId
-    closeContextMenu()
-    onRunAction?.({ taskId, actionPrompt: '', agent: null })
-  }
-
-  function toggleMoveSubmenu() {
-    contextMenu = { ...contextMenu, showMoveSubmenu: !contextMenu.showMoveSubmenu }
-  }
-
-  async function handleMoveTo(column: KanbanColumn) {
-    const taskId = contextMenu.taskId
-    closeContextMenu()
-    try {
-      await updateTaskStatus(taskId, column)
-    } catch (err: unknown) {
-      console.error('Failed to move task:', err)
-      $error = String(err)
-    }
-  }
-
-  async function handleDelete() {
-    const taskId = contextMenu.taskId
-    closeContextMenu()
-    try {
-      await deleteTask(taskId)
-    } catch (err: unknown) {
-      console.error('Failed to delete task:', err)
-      $error = String(err)
-    }
+    contextMenu = { ...contextMenu, visible: false }
   }
 </script>
 
-<svelte:window onclick={closeContextMenu} />
 
 <div class="flex flex-col h-full flex-1 bg-base-300">
   {#if !hasCreatures}
@@ -257,26 +221,12 @@
      />
    {/if}
 
-  {#if contextMenu.visible}
-    <div class="fixed z-[100] bg-base-300 border border-base-300 rounded-lg shadow-xl min-w-[180px] p-1" style="left: {contextMenu.x}px; top: {contextMenu.y}px;">
-      {#if contextMenu.taskStatus === 'backlog'}
-        <button class="context-item block w-full text-left px-3 py-2 text-sm text-primary font-medium cursor-pointer rounded hover:bg-primary hover:text-primary-content" onclick={handleStartTask}>
-          Start Task
-        </button>
-      {/if}
-      <button class="context-item block w-full text-left px-3 py-2 text-sm text-base-content cursor-pointer rounded hover:bg-primary hover:text-primary-content" onclick={(e: MouseEvent) => { e.stopPropagation(); toggleMoveSubmenu() }}>
-        Move to... ›
-      </button>
-      {#if contextMenu.showMoveSubmenu}
-        <div class="border-t border-base-300 mt-0.5 pt-0.5">
-          {#each COLUMNS as col}
-            <button class="context-item block w-full text-left px-3 py-2 text-sm text-base-content cursor-pointer rounded hover:bg-primary hover:text-primary-content" onclick={() => handleMoveTo(col)}>
-              {COLUMN_LABELS[col]}
-            </button>
-          {/each}
-        </div>
-      {/if}
-      <button class="context-item block w-full text-left px-3 py-2 text-sm text-error cursor-pointer rounded hover:bg-error hover:text-error-content" onclick={handleDelete}>Delete</button>
-    </div>
-  {/if}
+  <TaskContextMenu
+    visible={contextMenu.visible}
+    x={contextMenu.x}
+    y={contextMenu.y}
+    taskId={contextMenu.taskId}
+    onClose={closeContextMenu}
+    onStart={onRunAction ? (taskId) => onRunAction({ taskId, actionPrompt: '', agent: null }) : undefined}
+  />
 </div>
