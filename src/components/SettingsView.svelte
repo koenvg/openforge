@@ -288,11 +288,8 @@
   }
 
   function removeAction(actionId: string) {
-    const action = actions.find((a) => a.id === actionId)
-    if (action?.builtin) {
-      if (!confirm(`Delete built-in action "${action.name}"?`)) return
-    }
     actions = actions.filter((a) => a.id !== actionId)
+    if ($activeProjectId) saveActions($activeProjectId, actions)
   }
 
   function toggleAction(actionId: string) {
@@ -306,8 +303,8 @@
   }
 
   function resetActions() {
-    if (!confirm('Reset all actions to defaults?')) return
     actions = [...DEFAULT_ACTIONS]
+    if ($activeProjectId) saveActions($activeProjectId, actions)
   }
 
   async function handleModelChange(newSize: string) {

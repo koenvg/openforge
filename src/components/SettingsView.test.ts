@@ -41,7 +41,7 @@ vi.mock('../lib/stores', () => ({
 
 import SettingsView from './SettingsView.svelte'
 import { getProjectConfig, setProjectConfig, updateProject, deleteProject, getConfig, setConfig, getAllWhisperModelStatuses } from '../lib/ipc'
-import { loadActions, createAction } from '../lib/actions'
+import { loadActions, saveActions, createAction } from '../lib/actions'
 import { activeProjectId, projects } from '../lib/stores'
 
 const defaultProps = {
@@ -351,5 +351,97 @@ describe('SettingsView', () => {
 
     expect(screen.queryByPlaceholderText('My Project')).toBeNull()
     expect(screen.getByPlaceholderText('https://your-domain.atlassian.net')).toBeTruthy()
+  })
+
+  it('reset to defaults shows only one confirm dialog', async () => {
+    vi.mocked(loadActions).mockResolvedValue([
+      { id: 'builtin-go', name: 'Go', prompt: '', builtin: true, enabled: true },
+    ])
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    render(SettingsView, { props: defaultProps })
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Go')).toBeTruthy()
+    })
+
+    const resetButton = screen.getByRole('button', { name: /reset to defaults/i })
+    await fireEvent.click(resetButton)
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1)
+
+    confirmSpy.mockRestore()
+  })
+
+  it('deleting a builtin action shows only one confirm dialog', async () => {
+    vi.mocked(loadActions).mockResolvedValue([
+      { id: 'builtin-go', name: 'Go', prompt: '', builtin: true, enabled: true },
+    ])
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    render(SettingsView, { props: defaultProps })
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Go')).toBeTruthy()
+    })
+
+    const deleteButton = screen.getByTitle('Delete action')
+    await fireEvent.click(deleteButton)
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1)
+
+    confirmSpy.mockRestore()
+  })
+
+  it('reset to defaults auto-saves actions', async () => {
+    vi.mocked(loadActions).mockResolvedValue([
+      { id: 'custom-1', name: 'Custom', prompt: 'test', builtin: false, enabled: true },
+    ])
+    vi.mocked(saveActions).mockResolvedValue(undefined)
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    render(SettingsView, { props: defaultProps })
+
+    await vi.waitFor(() => {
+      expect(screen.getByDisplayValue('Custom')).toBeTruthy()
+    })
+
+    const resetButton = screen.getByRole('button', { name: /reset to defaults/i })
+    await fireEvent.click(resetButton)
+
+    await vi.waitFor(() => {
+      expect(saveActions).toHaveBeenCalledWith('test-project-id', expect.any(Array))
+    })
+
+    window.confirm = globalThis.confirm
+  })
+
+  it('deleting a builtin action auto-saves actions', async () => {
+    vi.mocked(loadActions).mockResolvedValue([
+      { id: 'builtin-go', name: 'Go', prompt: '', builtin: true, enabled: true },
+    ])
+    vi.mocked(saveActions).mockResolvedValue(undefined)
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    render(SettingsView, { props: defaultProps })
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Go')).toBeTruthy()
+    })
+
+    vi.mocked(saveActions).mockClear()
+
+    const deleteButton = screen.getByTitle('Delete action')
+    await fireEvent.click(deleteButton)
+
+    await vi.waitFor(() => {
+      expect(saveActions).toHaveBeenCalledWith('test-project-id', [])
+    })
+
+    window.confirm = globalThis.confirm
   })
 })
