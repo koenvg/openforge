@@ -39,6 +39,7 @@
       lastTaskId = taskId
       reviewMode = false
       rightPanelMode = 'info'
+      worktreePath = null
       getWorktreeForTask(taskId).then((worktree) => {
         worktreePath = worktree?.worktree_path ?? null
       })
@@ -156,7 +157,9 @@
       <SelfReviewView {task} {agentStatus} onSendToAgent={handleSendToAgent} />
     {:else}
        <div class="flex-1 p-5 overflow-hidden max-[800px]:p-4">
-         <AgentPanel taskId={task.id} />
+         {#key task.id}
+           <AgentPanel taskId={task.id} />
+         {/key}
        </div>
        <ResizablePanel storageKey="task-detail-sidebar" defaultWidth={360} minWidth={200} maxWidth={600} side="right">
          <div class="overflow-hidden bg-base-200 border-l border-base-300 flex flex-col h-full">
