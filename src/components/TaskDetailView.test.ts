@@ -68,6 +68,7 @@ vi.mock('../lib/stores', () => ({
   ticketPrs: writable(new Map()),
   tasks: writable([]),
   activeProjectId: writable('project-1'),
+  startingTasks: writable(new Set()),
 }))
 
 vi.mock('../lib/ipc', () => ({

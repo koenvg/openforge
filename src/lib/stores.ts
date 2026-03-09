@@ -46,4 +46,7 @@ export const selectedSkillName = writable<string | null>(null);
 /** Set of task IDs that have a running shell terminal (PTY) */
 export const runningTerminals = writable<Set<string>>(new Set());
 
+/** Set of task IDs currently starting (worktree creation + agent spawn in progress) */
+export const startingTasks = writable<Set<string>>(new Set());
+
 export const creaturesEnabled = writable<boolean>(false);

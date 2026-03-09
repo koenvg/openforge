@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import type { Task, Action } from '../lib/types'
-  import { selectedTaskId, activeSessions, activeProjectId } from '../lib/stores'
+  import { selectedTaskId, activeSessions, activeProjectId, startingTasks } from '../lib/stores'
   import { getWorktreeForTask, updateTaskStatus, getConfig } from '../lib/ipc'
   import { navigateBack } from '../lib/navigation'
   import { loadActions, getEnabledActions } from '../lib/actions'
@@ -31,6 +31,7 @@
 
   let currentSession = $derived($activeSessions.get(task.id))
   let agentStatus = $derived(currentSession?.status ?? null)
+  let isStarting = $derived($startingTasks.has(task.id))
   let isSessionBusy = $derived(currentSession?.status === 'running' || currentSession?.status === 'paused')
   let busyReason = $derived(currentSession?.status === 'running' ? 'Agent is busy' : currentSession?.status === 'paused' ? 'Answer pending question first' : '')
 
@@ -93,9 +94,15 @@
       {#if task.status === 'backlog'}
         <button
           class="btn btn-primary btn-sm shrink-0 shadow-sm hover:shadow-md transition-shadow"
+          disabled={isStarting}
           onclick={() => onRunAction({ taskId: task.id, actionPrompt: '', agent: null })}
         >
-          Start Task
+          {#if isStarting}
+            <span class="loading loading-spinner loading-xs"></span>
+            Starting...
+          {:else}
+            Start Task
+          {/if}
         </button>
       {:else if task.status === 'doing'}
         <button
@@ -109,8 +116,8 @@
             {#each actions as action (action.id)}
               <button
                 class="btn btn-soft btn-sm shadow-sm hover:shadow-md hover:btn-primary transition-all duration-200"
-                disabled={isSessionBusy}
-                title={isSessionBusy ? busyReason : action.name}
+                disabled={isSessionBusy || isStarting}
+                title={isSessionBusy ? busyReason : isStarting ? 'Task is starting' : action.name}
                 onclick={() => handleActionClick(action)}
               >
                 {action.name}

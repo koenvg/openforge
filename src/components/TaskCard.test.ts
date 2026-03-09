@@ -349,4 +349,25 @@ describe('TaskCard', () => {
     render(TaskCard, { props: { task: baseTask } })
     expect(screen.queryByTitle('Terminal running')).toBeNull()
   })
+
+  it('shows Starting badge when isStarting is true', () => {
+    render(TaskCard, { props: { task: baseTask, isStarting: true } })
+    expect(screen.getByText('Starting')).toBeTruthy()
+  })
+
+  it('hides Starting badge when isStarting is false', () => {
+    render(TaskCard, { props: { task: baseTask, isStarting: false } })
+    expect(screen.queryByText('Starting')).toBeNull()
+  })
+
+  it('hides Starting badge by default', () => {
+    render(TaskCard, { props: { task: baseTask } })
+    expect(screen.queryByText('Starting')).toBeNull()
+  })
+
+  it('shows Starting badge instead of session status when isStarting is true', () => {
+    render(TaskCard, { props: { task: baseTask, isStarting: true, session: null } })
+    expect(screen.getByText('Starting')).toBeTruthy()
+    expect(screen.queryByText('Running')).toBeNull()
+  })
 })
