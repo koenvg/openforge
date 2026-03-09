@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount, tick } from 'svelte'
   import { selectedTaskId, activeSessions, currentView, projects, activeProjectId } from '../lib/stores'
   import { pushNavState } from '../lib/navigation'
   import { matchesSearch, sortTasks } from '../lib/commandPalette'
@@ -13,6 +14,7 @@
 
   let searchQuery = $state('')
   let selectedIndex = $state(0)
+  let inputEl = $state<HTMLInputElement | null>(null)
   let allTasks = $state<Task[]>([])
   let loading = $state(true)
 
@@ -141,6 +143,11 @@
     return text.length > max ? text.slice(0, max) + '...' : text
   }
 
+  onMount(async () => {
+    await tick()
+    inputEl?.focus()
+  })
+
   let listContainer: HTMLDivElement | null = $state(null)
 
   $effect(() => {
@@ -168,11 +175,11 @@
     <!-- Search input -->
     <div class="p-3 border-b border-base-300">
       <input
+        bind:this={inputEl}
         type="text"
         class="input input-sm w-full bg-base-100 border-base-300 focus:outline-none text-base-content placeholder:text-base-content/40 font-mono"
         placeholder="Search tasks across all projects..."
         bind:value={searchQuery}
-        autofocus
       />
     </div>
 

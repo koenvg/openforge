@@ -46,6 +46,16 @@ describe('ProjectSwitcherModal', () => {
       expect(input).toBeTruthy()
     })
 
+    it('auto-focuses the search input on mount', async () => {
+      const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
+      render(Modal, { props: { onClose: vi.fn() } })
+
+      await vi.waitFor(() => {
+        const input = screen.getByPlaceholderText('Switch project...')
+        expect(document.activeElement).toBe(input)
+      })
+    })
+
     it('renders all project names from store', async () => {
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
       render(Modal, { props: { onClose: vi.fn() } })

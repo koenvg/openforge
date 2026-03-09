@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import { projects, activeProjectId, projectAttention } from '../lib/stores'
   import { getProjectAttention } from '../lib/ipc'
   import type { ProjectAttention } from '../lib/types'
@@ -12,6 +12,7 @@
 
   let searchQuery = $state('')
   let selectedIndex = $state(-1)
+  let inputEl = $state<HTMLInputElement | null>(null)
 
   let filteredProjects = $derived.by(() => {
     const q = searchQuery.trim().toLowerCase()
@@ -72,6 +73,9 @@
   }
 
   onMount(async () => {
+    await tick()
+    inputEl?.focus()
+
     try {
       const summaries = await getProjectAttention()
       const map = new Map<string, ProjectAttention>()
@@ -103,11 +107,11 @@
     <!-- Search input -->
     <div class="p-3 border-b border-base-300">
       <input
+        bind:this={inputEl}
         type="text"
         class="input input-sm w-full bg-base-100 border-base-300 focus:outline-none text-base-content placeholder:text-base-content/40"
         placeholder="Switch project..."
         bind:value={searchQuery}
-        autofocus
       />
     </div>
 
