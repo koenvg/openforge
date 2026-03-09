@@ -3,6 +3,7 @@
   import { tasks, selectedTaskId, activeSessions, ticketPrs, error, activeProjectId, runningTerminals, startingTasks } from '../lib/stores'
   import { clearDoneTasks } from '../lib/ipc'
   import { pushNavState } from '../lib/navigation'
+  import { sortBySessionActivity } from '../lib/taskSort'
   import TaskCard from './TaskCard.svelte'
   import TaskContextMenu from './TaskContextMenu.svelte'
 
@@ -50,7 +51,8 @@
   }
 
   function tasksForColumn(allTasks: Task[], column: KanbanColumn): Task[] {
-    return allTasks.filter(t => t.status === column)
+    const filtered = allTasks.filter(t => t.status === column)
+    return sortBySessionActivity(filtered, $activeSessions)
   }
 
   let backlogTasks = $derived(tasksForColumn($tasks, 'backlog'))

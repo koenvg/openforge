@@ -3,6 +3,7 @@
   import { tasks, activeSessions, ticketPrs } from '../lib/stores'
   import { computeCreatureState, computeCreatureRoom } from '../lib/creatureState'
   import { parseCheckpointQuestion } from '../lib/parseCheckpoint'
+  import { sortBySessionActivity } from '../lib/taskSort'
   import Creature from './Creature.svelte'
   import CreatureHoverCard from './CreatureHoverCard.svelte'
   import TaskContextMenu from './TaskContextMenu.svelte'
@@ -28,20 +29,20 @@
 
   let visibleTasks = $derived($tasks.filter(t => t.status !== 'done'))
 
-  let forgeTasks = $derived(visibleTasks.filter(t => {
+  let forgeTasks = $derived(sortBySessionActivity(visibleTasks.filter(t => {
     const session = getSession(t.id)
     return computeCreatureRoom(t, session, getPrs(t.id)) === 'forge'
-  }))
+  }), $activeSessions))
 
-  let warRoomTasks = $derived(visibleTasks.filter(t => {
+  let warRoomTasks = $derived(sortBySessionActivity(visibleTasks.filter(t => {
     const session = getSession(t.id)
     return computeCreatureRoom(t, session, getPrs(t.id)) === 'warRoom'
-  }))
+  }), $activeSessions))
 
-  let nurseryTasks = $derived(visibleTasks.filter(t => {
+  let nurseryTasks = $derived(sortBySessionActivity(visibleTasks.filter(t => {
     const session = getSession(t.id)
     return computeCreatureRoom(t, session, getPrs(t.id)) === 'nursery'
-  }))
+  }), $activeSessions))
 
   let hasCreatures = $derived(forgeTasks.length > 0 || warRoomTasks.length > 0 || nurseryTasks.length > 0)
 

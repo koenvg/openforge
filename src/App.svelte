@@ -220,7 +220,7 @@
     // instead of starting a new session (like dictation does)
     if (isPtyActive(taskId)) {
       try {
-        await writePty(taskId, actionPrompt + '\n')
+        await writePty(taskId, actionPrompt + '\r')
         focusTerminal(taskId)
       } catch (e) {
         console.error('[session] Failed to write action to PTY:', taskId, e)
