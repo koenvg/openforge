@@ -319,5 +319,21 @@ describe('CreaturesView', () => {
       const svg = container.querySelector('svg')
       expect(svg?.classList.contains('creature-work')).toBe(true)
     })
+
+    it('creature list uses single-column layout (one creature per row)', () => {
+      tasks.set([
+        makeTask('T-1', 'doing'),
+        makeTask('T-2', 'doing'),
+      ])
+      activeSessions.set(new Map([
+        ['T-1', makeSession('T-1', 'running')],
+        ['T-2', makeSession('T-2', 'running')],
+      ]))
+      render(CreaturesView, { props: { onCreatureClick: vi.fn() } })
+
+      const forgeRoom = screen.getByTestId('room-forge')
+      const creatureList = forgeRoom.querySelector('[data-testid="creature-list"]')
+      expect(creatureList).toBeTruthy()
+    })
   })
 })

@@ -154,6 +154,48 @@ describe('Creature', () => {
     })
   })
 
+  describe('Status-specific scene elements', () => {
+    it('celebrating creature renders chair element', () => {
+      const { container } = renderCreature('celebrating', 'forge')
+      expect(container.querySelector('[data-testid="chair"]')).toBeTruthy()
+    })
+
+    it('active creature renders anvil element', () => {
+      const { container } = renderCreature('active', 'forge')
+      expect(container.querySelector('[data-testid="anvil"]')).toBeTruthy()
+    })
+
+    it('sad creature renders rain-cloud element', () => {
+      const { container } = renderCreature('sad', 'warRoom')
+      expect(container.querySelector('[data-testid="rain-cloud"]')).toBeTruthy()
+    })
+
+    it('frozen creature renders ice-block element', () => {
+      const { container } = renderCreature('frozen', 'warRoom')
+      expect(container.querySelector('[data-testid="ice-block"]')).toBeTruthy()
+    })
+
+    it('needs-input creature renders question-bubble element', () => {
+      const { container } = renderCreature('needs-input', 'warRoom')
+      expect(container.querySelector('[data-testid="question-bubble"]')).toBeTruthy()
+    })
+
+    it('resting creature renders sleep-bubble element', () => {
+      const { container } = renderCreature('resting', 'warRoom')
+      expect(container.querySelector('[data-testid="sleep-bubble"]')).toBeTruthy()
+    })
+
+    it('idle creature does not render any scene prop', () => {
+      const { container } = renderCreature('idle', 'forge')
+      expect(container.querySelector('[data-testid="chair"]')).toBeNull()
+      expect(container.querySelector('[data-testid="anvil"]')).toBeNull()
+      expect(container.querySelector('[data-testid="rain-cloud"]')).toBeNull()
+      expect(container.querySelector('[data-testid="ice-block"]')).toBeNull()
+      expect(container.querySelector('[data-testid="question-bubble"]')).toBeNull()
+      expect(container.querySelector('[data-testid="sleep-bubble"]')).toBeNull()
+    })
+  })
+
   describe('Assignee display', () => {
     it('displays assignee when jira_assignee is set', () => {
       renderCreature('active', 'forge', null, { jira_assignee: 'alice' })

@@ -115,7 +115,7 @@
           <p class="font-mono text-[9px] text-base-content/30">{nurseryTasks.length} tasks in backlog</p>
           <div class="border-b border-base-content/10 mt-2"></div>
         </div>
-        <div class="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-4 p-4 items-start content-start flex-1 overflow-y-auto">
+        <div data-testid="creature-list" class="flex flex-col gap-1 p-2 flex-1 overflow-y-auto">
           {#each nurseryTasks as task (task.id)}
             {@const session = getSession(task.id)}
             {@const state = computeCreatureState(task, session)}
@@ -132,7 +132,7 @@
           <p class="font-mono text-[9px] text-success/40">{forgeTasks.length} agents running</p>
           <div class="border-b border-success/20 mt-2"></div>
         </div>
-        <div class="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-4 p-4 items-start content-start flex-1 overflow-y-auto">
+        <div data-testid="creature-list" class="flex flex-col gap-1 p-2 flex-1 overflow-y-auto">
            {#each forgeTasks as task (task.id)}
              {@const session = getSession(task.id)}
              {@const state = computeCreatureState(task, session)}
@@ -149,7 +149,7 @@
           <p class="font-mono text-[9px] text-warning/40">{warRoomTasks.length} tasks blocked</p>
           <div class="border-b border-warning/20 mt-2"></div>
         </div>
-        <div class="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-4 p-4 items-start content-start flex-1 overflow-y-auto">
+        <div data-testid="creature-list" class="flex flex-col gap-1 p-2 flex-1 overflow-y-auto">
           {#each warRoomTasks as task (task.id)}
             {@const session = getSession(task.id)}
             {@const state = computeCreatureState(task, session)}
