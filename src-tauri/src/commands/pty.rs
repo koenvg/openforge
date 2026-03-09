@@ -63,6 +63,13 @@ pub async fn get_pty_buffer(
 }
 
 #[tauri::command]
+pub async fn get_running_pty_task_ids(
+    pty_mgr: State<'_, PtyManager>,
+) -> Result<Vec<String>, String> {
+    Ok(pty_mgr.get_session_keys().await)
+}
+
+#[tauri::command]
 pub async fn pty_spawn_shell(
     pty_mgr: State<'_, PtyManager>,
     app: tauri::AppHandle,

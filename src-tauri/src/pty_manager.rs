@@ -990,6 +990,12 @@ impl PtyManager {
         frozen_seconds(last_output_ms, now_ms)
     }
 
+    /// Returns the keys of all active PTY sessions.
+    pub async fn get_session_keys(&self) -> Vec<String> {
+        let sessions = self.sessions.lock().await;
+        sessions.keys().cloned().collect()
+    }
+
     pub async fn get_pty_buffer(&self, task_id: &str) -> Option<String> {
         let buffers = self.output_buffers.lock().await;
         let buffer = buffers.get(task_id)?;
@@ -1798,6 +1804,13 @@ mod tests {
         assert_eq!(expected_term_vars[0], ("TERM", "xterm-256color"));
         assert_eq!(expected_term_vars[1], ("COLORTERM", "truecolor"));
         assert_eq!(expected_term_vars[2], ("TERM_PROGRAM", "vscode"));
+    }
+
+    #[tokio::test]
+    async fn test_get_session_keys_empty() {
+        let manager = PtyManager::new();
+        let keys = manager.get_session_keys().await;
+        assert!(keys.is_empty());
     }
 
     #[test]
