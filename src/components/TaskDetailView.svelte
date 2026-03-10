@@ -140,7 +140,7 @@
               <button
                 class="btn btn-soft btn-sm shadow-sm hover:shadow-md hover:btn-primary transition-all duration-200"
                 disabled={isStarting}
-                title={isStarting ? 'Task is starting' : action.name}
+                title={isStarting ? 'Task is starting' : (action.prompt || action.name)}
                 onclick={() => handleActionClick(action)}
               >
                 {action.name}
