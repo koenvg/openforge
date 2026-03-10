@@ -11,6 +11,7 @@
   import { createDiffSearch } from '../lib/useDiffSearch.svelte'
   import { createDiffWorker } from '../lib/useDiffWorker.svelte'
   import { createFileContentsFetcher } from '../lib/useFileContentsFetcher.svelte'
+  import { createVirtualizer } from '../lib/useVirtualizer.svelte'
   import { sortFilesAsTree } from '../lib/fileSort'
   import { getFileStatusIcon, getFileStatusColor, getFileStatusLabel } from '../lib/fileStatus'
   import { themeMode, getDiffTheme } from '../lib/theme'
@@ -75,9 +76,14 @@
   })
 
   export function scrollToFile(filename: string) {
-    const el = document.querySelector(`[data-diff-file="${filename}"]`)
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    const index = sortedFiles.findIndex(f => f.filename === filename)
+    if (index >= 0) {
+      if (collapsedFiles.has(filename)) {
+        const next = new Set(collapsedFiles)
+        next.delete(filename)
+        collapsedFiles = next
+      }
+      virtualizer.scrollToIndex(index, { align: 'start', behavior: 'smooth' })
     }
   }
 
@@ -91,6 +97,20 @@
   const collapsedCount = $derived(collapsedFiles.size)
   const showLargeDiffWarning = $derived(totalChanges > 5000)
   const sortedFiles = $derived(sortFilesAsTree(files))
+
+  const virtualizer = createVirtualizer({
+    getCount: () => sortedFiles.length,
+    getScrollElement: () => search.scrollContainer,
+    estimateSize: (index) => {
+      const file = sortedFiles[index]
+      if (!file) return 300
+      if (collapsedFiles.has(file.filename)) return 60
+      const lineCount = file.patch_line_count ?? (file.additions + file.deletions) * 2
+      return 62 + Math.min(lineCount, 200) * 20
+    },
+    getOverscan: () => 2,
+    getEnabled: () => !search.isSearchActive,
+  })
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -186,167 +206,177 @@
           <span>Large diff — {totalFiles} files, {totalChanges} total changes. {collapsedCount} files auto-collapsed for performance.</span>
         </div>
       {/if}
-      {#each sortedFiles as file (file.filename)}
-        {@const truncated = isTruncated(file)}
-        {@const truncStats = getTruncationStats(file)}
-        <div data-diff-file={file.filename} class="border border-base-300 rounded-md overflow-hidden mb-3">
-          <button class="w-full flex items-center gap-2 px-4 py-3 bg-base-200 hover:bg-base-300 transition-colors cursor-pointer border-b border-base-300" onclick={() => toggleCollapse(file.filename)}>
-            <span class="text-xs text-base-content/50 flex-shrink-0">{collapsedFiles.has(file.filename) ? '▶' : '▼'}</span>
-            <span class="font-bold text-sm" style="color: {getFileStatusColor(file.status)}">
-              {getFileStatusIcon(file.status)}
-            </span>
-            <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-xs text-base-content" title={file.filename}>
-              {#if file.previous_filename}
-                <span class="text-base-content/50 line-through">{file.previous_filename}</span>
-                <span class="text-primary mx-1">→</span>
-              {/if}
-              {file.filename}
-            </span>
-            <span class="text-xs font-semibold uppercase tracking-wider flex-shrink-0" style="color: {getFileStatusColor(file.status)}">{getFileStatusLabel(file.status)}</span>
-            <span class="flex gap-2 text-xs flex-shrink-0">
-              {#if file.additions > 0}<span class="text-success">+{file.additions}</span>{/if}
-              {#if file.deletions > 0}<span class="text-error">−{file.deletions}</span>{/if}
-            </span>
-          </button>
-          {#if !collapsedFiles.has(file.filename)}
-            {#if truncated}
-              <div class="alert alert-info py-1.5 px-4 rounded-none border-x-0 text-xs">
-                <span>
-                  Diff truncated — {truncStats ? `${truncStats.total} lines total, showing first ${truncStats.shown}` : 'showing partial diff'}
+      <div style="height: {virtualizer.totalSize}px; width: 100%; position: relative;">
+        {#each virtualizer.virtualItems as row (row.key)}
+          {@const file = sortedFiles[row.index]}
+          {@const truncated = isTruncated(file)}
+          {@const truncStats = getTruncationStats(file)}
+          <div
+            data-diff-file={file.filename}
+            data-index={row.index}
+            style="position: absolute; top: {row.start}px; width: 100%; padding: 0 0 12px 0;"
+            use:virtualizer.measureAction
+          >
+            <div class="border border-base-300 rounded-md overflow-hidden">
+              <button class="w-full flex items-center gap-2 px-4 py-3 bg-base-200 hover:bg-base-300 transition-colors cursor-pointer border-b border-base-300" onclick={() => toggleCollapse(file.filename)}>
+                <span class="text-xs text-base-content/50 flex-shrink-0">{collapsedFiles.has(file.filename) ? '▶' : '▼'}</span>
+                <span class="font-bold text-sm" style="color: {getFileStatusColor(file.status)}">
+                  {getFileStatusIcon(file.status)}
                 </span>
-              </div>
-            {/if}
-            {@const workerDiffFile = diffWorker.getDiffFile(file.filename)}
-            {#if workerDiffFile}
-            <DiffView
-              diffFile={workerDiffFile}
-              extendData={buildExtendData(file.filename, existingComments, $pendingManualComments, agentComments)}
-              diffViewMode={diffViewMode}
-              diffViewWrap={diffViewWrap}
-              diffViewTheme={getDiffTheme($themeMode)}
-              diffViewHighlight={true}
-              diffViewAddWidget={true}
-              diffViewFontSize={12}
-              registerHighlighter={diffHighlighter}
-              onAddWidgetClick={(_lineNumber, _side) => {
-                commentText = ''
-              }}
-            >
-                {#snippet renderExtendLine({ lineNumber: _ln, side: _side, data, diffFile: _df, onUpdate: _ou }: { lineNumber: number; side: SplitSide; data: CommentDisplayData; diffFile: import('@git-diff-view/core').DiffFile; onUpdate: () => void })}
-                  <div class="w-full">
-                    {#each data.comments as comment}
-                      <div class="px-4 py-2.5 mx-4 my-1.5 bg-base-100 border border-base-300 rounded-md text-[0.8rem] {comment.type === 'pending' ? 'border-l-4 border-l-warning' : comment.type === 'existing' ? 'border-l-4 border-l-primary' : comment.type === 'agent' ? 'border-l-4 border-l-success' : ''}">
-                        <div class="flex items-center gap-2 mb-1.5">
-                          {#if comment.type === 'existing'}
-                            <strong class="text-base-content font-semibold text-xs">{comment.author}</strong>
-                            <span class="text-base-content/50 text-[0.7rem]">{comment.createdAt}</span>
-                          {:else if comment.type === 'agent'}
-                            <span class="badge badge-success badge-sm">AI Review</span>
-                            {#if comment.status === 'approved'}
-                              <span class="badge badge-info badge-sm">Approved</span>
-                            {/if}
-                            <div class="ml-auto flex gap-1">
-                              {#if comment.status !== 'approved'}
+                <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-xs text-base-content" title={file.filename}>
+                  {#if file.previous_filename}
+                    <span class="text-base-content/50 line-through">{file.previous_filename}</span>
+                    <span class="text-primary mx-1">→</span>
+                  {/if}
+                  {file.filename}
+                </span>
+                <span class="text-xs font-semibold uppercase tracking-wider flex-shrink-0" style="color: {getFileStatusColor(file.status)}">{getFileStatusLabel(file.status)}</span>
+                <span class="flex gap-2 text-xs flex-shrink-0">
+                  {#if file.additions > 0}<span class="text-success">+{file.additions}</span>{/if}
+                  {#if file.deletions > 0}<span class="text-error">−{file.deletions}</span>{/if}
+                </span>
+              </button>
+              {#if !collapsedFiles.has(file.filename)}
+                {#if truncated}
+                  <div class="alert alert-info py-1.5 px-4 rounded-none border-x-0 text-xs">
+                    <span>
+                      Diff truncated — {truncStats ? `${truncStats.total} lines total, showing first ${truncStats.shown}` : 'showing partial diff'}
+                    </span>
+                  </div>
+                {/if}
+                {@const workerDiffFile = diffWorker.getDiffFile(file.filename)}
+                {#if workerDiffFile}
+                <DiffView
+                  diffFile={workerDiffFile}
+                  extendData={buildExtendData(file.filename, existingComments, $pendingManualComments, agentComments)}
+                  diffViewMode={diffViewMode}
+                  diffViewWrap={diffViewWrap}
+                  diffViewTheme={getDiffTheme($themeMode)}
+                  diffViewHighlight={true}
+                  diffViewAddWidget={true}
+                  diffViewFontSize={12}
+                  registerHighlighter={diffHighlighter}
+                  onAddWidgetClick={(_lineNumber, _side) => {
+                    commentText = ''
+                  }}
+                >
+                    {#snippet renderExtendLine({ lineNumber: _ln, side: _side, data, diffFile: _df, onUpdate: _ou }: { lineNumber: number; side: SplitSide; data: CommentDisplayData; diffFile: import('@git-diff-view/core').DiffFile; onUpdate: () => void })}
+                      <div class="w-full">
+                        {#each data.comments as comment}
+                          <div class="px-4 py-2.5 mx-4 my-1.5 bg-base-100 border border-base-300 rounded-md text-[0.8rem] {comment.type === 'pending' ? 'border-l-4 border-l-warning' : comment.type === 'existing' ? 'border-l-4 border-l-primary' : comment.type === 'agent' ? 'border-l-4 border-l-success' : ''}">
+                            <div class="flex items-center gap-2 mb-1.5">
+                              {#if comment.type === 'existing'}
+                                <strong class="text-base-content font-semibold text-xs">{comment.author}</strong>
+                                <span class="text-base-content/50 text-[0.7rem]">{comment.createdAt}</span>
+                              {:else if comment.type === 'agent'}
+                                <span class="badge badge-success badge-sm">AI Review</span>
+                                {#if comment.status === 'approved'}
+                                  <span class="badge badge-info badge-sm">Approved</span>
+                                {/if}
+                                <div class="ml-auto flex gap-1">
+                                  {#if comment.status !== 'approved'}
+                                    <button
+                                      class="btn btn-ghost btn-xs text-success hover:text-success/80"
+                                      title="Approve — add to pending comments"
+                                      onclick={async () => {
+                                        if (comment.commentId === undefined) return
+                                        try {
+                                           await updateAgentReviewCommentStatus(comment.commentId, 'approved')
+                                           $pendingManualComments = [...$pendingManualComments, {
+                                             path: comment.filePath || file.filename,
+                                            line: comment.lineNumber || 0,
+                                            side: comment.commentSide || 'RIGHT',
+                                            body: comment.body
+                                          }]
+                                          $agentReviewComments = $agentReviewComments.map(c =>
+                                            c.id === comment.commentId ? { ...c, status: 'approved' } : c
+                                          )
+                                        } catch (e) {
+                                          console.error('[DiffViewer] Failed to approve comment:', e)
+                                        }
+                                      }}
+                                    >✓</button>
+                                  {/if}
+                                  <button
+                                    class="btn btn-ghost btn-xs text-base-content/50 hover:text-error"
+                                    title="Dismiss"
+                                    onclick={async () => {
+                                      if (comment.commentId === undefined) return
+                                      try {
+                                        await updateAgentReviewCommentStatus(comment.commentId, 'dismissed')
+                                        $agentReviewComments = $agentReviewComments.map(c =>
+                                          c.id === comment.commentId ? { ...c, status: 'dismissed' } : c
+                                        )
+                                      } catch (e) {
+                                        console.error('[DiffViewer] Failed to dismiss comment:', e)
+                                      }
+                                    }}
+                                  >✕</button>
+                                </div>
+                              {:else}
+                                <span class="badge badge-warning badge-sm">Pending</span>
                                 <button
-                                  class="btn btn-ghost btn-xs text-success hover:text-success/80"
-                                  title="Approve — add to pending comments"
-                                  onclick={async () => {
-                                    if (comment.commentId === undefined) return
-                                    try {
-                                       await updateAgentReviewCommentStatus(comment.commentId, 'approved')
-                                       $pendingManualComments = [...$pendingManualComments, {
-                                         path: comment.filePath || file.filename,
-                                        line: comment.lineNumber || 0,
-                                        side: comment.commentSide || 'RIGHT',
-                                        body: comment.body
-                                      }]
-                                      $agentReviewComments = $agentReviewComments.map(c =>
-                                        c.id === comment.commentId ? { ...c, status: 'approved' } : c
-                                      )
-                                    } catch (e) {
-                                      console.error('[DiffViewer] Failed to approve comment:', e)
-                                    }
-                                  }}
-                                >✓</button>
-                              {/if}
-                              <button
-                                class="btn btn-ghost btn-xs text-base-content/50 hover:text-error"
-                                title="Dismiss"
-                                onclick={async () => {
-                                  if (comment.commentId === undefined) return
-                                  try {
-                                    await updateAgentReviewCommentStatus(comment.commentId, 'dismissed')
-                                    $agentReviewComments = $agentReviewComments.map(c =>
-                                      c.id === comment.commentId ? { ...c, status: 'dismissed' } : c
+                                  class="btn btn-ghost btn-xs text-base-content/50 hover:text-error ml-auto"
+                                  onclick={() => {
+                                    $pendingManualComments = $pendingManualComments.filter(
+                                      (_, i) => i !== comment.index
                                     )
-                                  } catch (e) {
-                                    console.error('[DiffViewer] Failed to dismiss comment:', e)
-                                  }
-                                }}
-                              >✕</button>
+                                  }}
+                                >✕</button>
+                              {/if}
                             </div>
-                          {:else}
-                            <span class="badge badge-warning badge-sm">Pending</span>
-                            <button
-                              class="btn btn-ghost btn-xs text-base-content/50 hover:text-error ml-auto"
-                              onclick={() => {
-                                $pendingManualComments = $pendingManualComments.filter(
-                                  (_, i) => i !== comment.index
-                                )
-                              }}
-                            >✕</button>
-                          {/if}
-                        </div>
-                        <div class="text-base-content leading-relaxed whitespace-pre-wrap">{comment.body}</div>
+                            <div class="text-base-content leading-relaxed whitespace-pre-wrap">{comment.body}</div>
+                          </div>
+                        {/each}
                       </div>
-                    {/each}
+                    {/snippet}
+                    {#snippet renderWidgetLine({ lineNumber, side, diffFile, onClose }: { lineNumber: number; side: SplitSide; diffFile: import('@git-diff-view/core').DiffFile; onClose: () => void })}
+                      <div class="p-3 mx-4 my-2 bg-base-100 border border-base-300 rounded-md">
+                        <textarea
+                          class="textarea textarea-bordered w-full min-h-[60px] text-[0.8rem] resize-y"
+                          placeholder="Leave a comment..."
+                          rows="3"
+                          bind:value={commentText}
+                          use:autofocus
+                        ></textarea>
+                        <div class="flex justify-end gap-2 mt-2">
+                          <button
+                            class="btn btn-ghost btn-xs border border-base-300"
+                            onclick={() => {
+                              onClose()
+                            }}
+                          >Cancel</button>
+                           <button
+                             class="btn btn-primary btn-xs"
+                             onclick={() => {
+                               if (!commentText.trim()) return
+                               const path = file.filename
+                              const newComment: ReviewSubmissionComment = {
+                                path,
+                                line: lineNumber,
+                                side: side === SplitSide.old ? 'LEFT' : 'RIGHT',
+                                body: commentText.trim()
+                              }
+                              $pendingManualComments = [...$pendingManualComments, newComment]
+                              onClose()
+                              commentText = ''
+                            }}
+                          >Add Comment</button>
+                        </div>
+                      </div>
+                    {/snippet}
+                  </DiffView>
+                {:else}
+                  <div class="flex items-center justify-center py-8 text-base-content/40">
+                    <span class="loading loading-spinner loading-sm mr-2"></span>
+                    <span class="text-xs">Processing diff…</span>
                   </div>
-                {/snippet}
-                {#snippet renderWidgetLine({ lineNumber, side, diffFile, onClose }: { lineNumber: number; side: SplitSide; diffFile: import('@git-diff-view/core').DiffFile; onClose: () => void })}
-                  <div class="p-3 mx-4 my-2 bg-base-100 border border-base-300 rounded-md">
-                    <textarea
-                      class="textarea textarea-bordered w-full min-h-[60px] text-[0.8rem] resize-y"
-                      placeholder="Leave a comment..."
-                      rows="3"
-                      bind:value={commentText}
-                      use:autofocus
-                    ></textarea>
-                    <div class="flex justify-end gap-2 mt-2">
-                      <button
-                        class="btn btn-ghost btn-xs border border-base-300"
-                        onclick={() => {
-                          onClose()
-                        }}
-                      >Cancel</button>
-                       <button
-                         class="btn btn-primary btn-xs"
-                         onclick={() => {
-                           if (!commentText.trim()) return
-                           const path = file.filename
-                          const newComment: ReviewSubmissionComment = {
-                            path,
-                            line: lineNumber,
-                            side: side === SplitSide.old ? 'LEFT' : 'RIGHT',
-                            body: commentText.trim()
-                          }
-                          $pendingManualComments = [...$pendingManualComments, newComment]
-                          onClose()
-                          commentText = ''
-                        }}
-                      >Add Comment</button>
-                    </div>
-                  </div>
-                {/snippet}
-              </DiffView>
-            {:else}
-              <div class="flex items-center justify-center py-8 text-base-content/40">
-                <span class="loading loading-spinner loading-sm mr-2"></span>
-                <span class="text-xs">Processing diff…</span>
-              </div>
-            {/if}
-          {/if}
-        </div>
-      {/each}
+                {/if}
+              {/if}
+            </div>
+          </div>
+        {/each}
+      </div>
     {/if}
   </div>
 </div>

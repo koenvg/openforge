@@ -15,6 +15,7 @@ export interface DiffSearchState {
 
   readonly query: string
   readonly visible: boolean
+  readonly isSearchActive: boolean
   readonly matchCount: number
   readonly currentIndex: number
 
@@ -173,6 +174,7 @@ export function createDiffSearch(deps: {
 
     get query() { return query },
     get visible() { return visible },
+    get isSearchActive() { return visible },
     get matchCount() { return matches.length },
     get currentIndex() { return currentIndex },
 
