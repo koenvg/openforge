@@ -18,6 +18,20 @@ vi.mock('../lib/useDiffWorker.svelte', () => ({
   }),
 }))
 
+vi.mock('../lib/useVirtualizer.svelte', () => ({
+  createVirtualizer: vi.fn((opts: { getCount: () => number }) => ({
+    get virtualItems() {
+      const count = opts.getCount()
+      return Array.from({ length: count }, (_, i) => ({
+        key: i, index: i, start: i * 300, end: (i + 1) * 300, size: 300, lane: 0,
+      }))
+    },
+    totalSize: 0,
+    scrollToIndex: vi.fn(),
+    measureAction: () => ({ destroy() {} }),
+  })),
+}))
+
 vi.mock('../lib/ipc', () => ({
   getTaskDiff: vi.fn().mockResolvedValue([]),
   getTaskFileContents: vi.fn().mockResolvedValue(['', '']),

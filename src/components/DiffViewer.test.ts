@@ -49,6 +49,20 @@ vi.mock('../lib/diffHighlighter', () => ({
   diffHighlighter: vi.fn(),
 }))
 
+vi.mock('../lib/useVirtualizer.svelte', () => ({
+  createVirtualizer: vi.fn((opts: { getCount: () => number }) => ({
+    get virtualItems() {
+      const count = opts.getCount()
+      return Array.from({ length: count }, (_, i) => ({
+        key: i, index: i, start: i * 300, end: (i + 1) * 300, size: 300, lane: 0,
+      }))
+    },
+    totalSize: 0,
+    scrollToIndex: vi.fn(),
+    measureAction: () => ({ destroy() {} }),
+  })),
+}))
+
 // CSS Custom Highlight API — not available in jsdom
 const mockHighlights = new Map()
 Object.defineProperty(globalThis, 'CSS', {
