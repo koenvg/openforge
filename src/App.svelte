@@ -2,8 +2,9 @@
   import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
-  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention, taskSpawned, selectedSkillName, runningTerminals, startingTasks, creaturesEnabled } from './lib/stores'
-  import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getRunningPtyTaskIds, getConfig, getAgents, writePty, getReviewPrs } from './lib/ipc'
+  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention, taskSpawned, selectedSkillName, runningTerminals, startingTasks, creaturesEnabled, codeCleanupTasksEnabled } from './lib/stores'
+  import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getRunningPtyTaskIds, getConfig, getAgents, getReviewPrs } from './lib/ipc'
+  import { writePtyWithSubmit } from './lib/ptySubmit'
   import SearchableSelect from './components/SearchableSelect.svelte'
   import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
@@ -241,7 +242,7 @@
     // instead of starting a new session (like dictation does)
     if (isPtyActive(taskId)) {
       try {
-        await writePty(taskId, actionPrompt + '\r')
+        await writePtyWithSubmit(taskId, actionPrompt)
         focusTerminal(taskId)
       } catch (e) {
         console.error('[session] Failed to write action to PTY:', taskId, e)
@@ -794,6 +795,13 @@
       $creaturesEnabled = creaturesVal === 'true'
     } catch (e) {
       console.error('[App] Failed to load creatures_enabled config:', e)
+    }
+
+    try {
+      const codeCleanupVal = await getConfig('code_cleanup_tasks_enabled')
+      $codeCleanupTasksEnabled = codeCleanupVal === 'true'
+    } catch (e) {
+      console.error('[App] Failed to load code_cleanup_tasks_enabled config:', e)
     }
     loadProjectAttention()
 

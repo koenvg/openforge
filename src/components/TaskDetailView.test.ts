@@ -400,4 +400,30 @@ describe('TaskDetailView', () => {
     expect(currentValue).toBe('T-42')
   })
 
+  it('shows action prompt as tooltip when prompt is set', async () => {
+    const { loadActions } = await import('../lib/actions')
+    vi.mocked(loadActions).mockResolvedValue([
+      { id: 'builtin-go', name: 'Go', prompt: 'Implement the task', builtin: true, enabled: true },
+    ])
+    const doingTask = { ...baseTask, status: 'doing' }
+    render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
+    await vi.waitFor(() => {
+      const goButton = screen.getByText('Go')
+      expect(goButton.getAttribute('title')).toBe('Implement the task')
+    })
+  })
+
+  it('shows action name as tooltip when prompt is empty', async () => {
+    const { loadActions } = await import('../lib/actions')
+    vi.mocked(loadActions).mockResolvedValue([
+      { id: 'builtin-go', name: 'Go', prompt: '', builtin: true, enabled: true },
+    ])
+    const doingTask = { ...baseTask, status: 'doing' }
+    render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
+    await vi.waitFor(() => {
+      const goButton = screen.getByText('Go')
+      expect(goButton.getAttribute('title')).toBe('Go')
+    })
+  })
+
 })
