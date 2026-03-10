@@ -1,8 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte'
-  import { selectedTaskId, activeSessions, currentView, projects, activeProjectId } from '../lib/stores'
-  import { pushNavState } from '../lib/navigation'
-  import { matchesSearch, sortTasks } from '../lib/commandPalette'
+  import { activeSessions, projects, activeProjectId } from '../lib/stores'
+  import { matchesSearch, sortTasks, navigateToTask } from '../lib/commandPalette'
   import { getAllTasks, getLatestSessions } from '../lib/ipc'
   import type { Task } from '../lib/types'
 
@@ -89,13 +88,7 @@
   }
 
   function selectTask(task: Task) {
-    pushNavState()
-    // Switch to the task's project if it's different from the active one
-    if (task.project_id && task.project_id !== $activeProjectId) {
-      $activeProjectId = task.project_id
-    }
-    $currentView = 'board'
-    $selectedTaskId = task.id
+    navigateToTask(task)
     onClose()
   }
 

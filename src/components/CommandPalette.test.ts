@@ -1,6 +1,8 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
+import { get } from 'svelte/store'
 import type { Task, AgentSession, Project } from '../lib/types'
-import { matchesSearch, sortTasks } from '../lib/commandPalette'
+import { matchesSearch, sortTasks, navigateToTask } from '../lib/commandPalette'
+import { tasks, activeProjectId, currentView, selectedTaskId } from '../lib/stores'
 
 function makeProject(overrides: Partial<Project> & { id: string; name: string }): Project {
   return {
@@ -178,5 +180,59 @@ describe('CommandPalette search filtering', () => {
     const projectMap = new Map([['P-1', makeProject({ id: 'P-1', name: 'My App' })]])
     expect(matchesSearch(task, 'my app', projectMap)).toBe(false)
     expect(matchesSearch(task, 'T-1', projectMap)).toBe(true)
+  })
+})
+
+describe('navigateToTask', () => {
+  beforeEach(() => {
+    activeProjectId.set(null)
+    currentView.set('board')
+    selectedTaskId.set(null)
+    tasks.set([])
+  })
+
+  it('seeds tasks store with selected task when switching to a different project', () => {
+    activeProjectId.set('P-1')
+    tasks.set([makeTask({ id: 'T-old', project_id: 'P-1' })])
+
+    const task = makeTask({ id: 'T-new', project_id: 'P-2' })
+    navigateToTask(task)
+
+    expect(get(activeProjectId)).toBe('P-2')
+    expect(get(selectedTaskId)).toBe('T-new')
+    expect(get(currentView)).toBe('board')
+    // Task must be in the tasks store so selectedTask derivation resolves immediately
+    expect(get(tasks).find(t => t.id === 'T-new')).toBeTruthy()
+  })
+
+  it('does not replace tasks store when task is in the same project', () => {
+    activeProjectId.set('P-1')
+    const existing = [makeTask({ id: 'T-1', project_id: 'P-1' }), makeTask({ id: 'T-2', project_id: 'P-1' })]
+    tasks.set(existing)
+
+    navigateToTask(existing[1])
+
+    expect(get(activeProjectId)).toBe('P-1')
+    expect(get(selectedTaskId)).toBe('T-2')
+    // Tasks store should still have both tasks
+    expect(get(tasks)).toHaveLength(2)
+  })
+
+  it('sets currentView to board', () => {
+    activeProjectId.set('P-1')
+    currentView.set('workqueue')
+
+    navigateToTask(makeTask({ id: 'T-1', project_id: 'P-1' }))
+
+    expect(get(currentView)).toBe('board')
+  })
+
+  it('handles task with null project_id without changing active project', () => {
+    activeProjectId.set('P-1')
+
+    navigateToTask(makeTask({ id: 'T-1', project_id: null }))
+
+    expect(get(activeProjectId)).toBe('P-1')
+    expect(get(selectedTaskId)).toBe('T-1')
   })
 })

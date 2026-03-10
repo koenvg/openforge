@@ -1,4 +1,7 @@
+import { get } from 'svelte/store'
 import type { Task, AgentSession, Project } from './types'
+import { tasks, activeProjectId, currentView, selectedTaskId } from './stores'
+import { pushNavState } from './navigation'
 
 export function matchesSearch(task: Task, query: string, projectMap?: Map<string, Project>): boolean {
   if (!query) return true
@@ -21,8 +24,8 @@ function getTaskSortPriority(task: Task, sessionStatus: string | null): number {
   return 3
 }
 
-export function sortTasks(tasks: Task[], sessions: Map<string, AgentSession>): Task[] {
-  return [...tasks].sort((a, b) => {
+export function sortTasks(taskList: Task[], sessions: Map<string, AgentSession>): Task[] {
+  return [...taskList].sort((a, b) => {
     const sessionA = sessions.get(a.id)
     const sessionB = sessions.get(b.id)
     const priorityA = getTaskSortPriority(a, sessionA?.status ?? null)
@@ -30,4 +33,22 @@ export function sortTasks(tasks: Task[], sessions: Map<string, AgentSession>): T
     if (priorityA !== priorityB) return priorityA - priorityB
     return b.updated_at - a.updated_at
   })
+}
+
+/**
+ * Navigate to a task, switching projects if necessary.
+ * Seeds the tasks store with the selected task when crossing project boundaries
+ * so the task detail view renders immediately (before loadTasks() completes).
+ */
+export function navigateToTask(task: Task): void {
+  pushNavState()
+  const currentProjectId = get(activeProjectId)
+  if (task.project_id && task.project_id !== currentProjectId) {
+    activeProjectId.set(task.project_id)
+    // Seed tasks store so App.svelte's selectedTask derivation resolves immediately,
+    // rather than waiting for the async loadTasks() triggered by the project change.
+    tasks.set([task])
+  }
+  currentView.set('board')
+  selectedTaskId.set(task.id)
 }
