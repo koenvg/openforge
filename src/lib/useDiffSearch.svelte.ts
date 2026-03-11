@@ -7,11 +7,19 @@ import {
   clearOccurrenceHighlights,
   getWordAtSelection,
   scrollToMatch,
+  countMatchesInPatch,
 } from './diffSearch'
+import type { PrFileDiff } from './types'
+
+interface FileMatchInfo {
+  filename: string
+  fileIndex: number
+  matchCount: number
+  cumulativeStart: number
+}
 
 export interface DiffSearchState {
   inputEl: HTMLInputElement | null
-  scrollContainer: HTMLElement | null
 
   readonly query: string
   readonly visible: boolean
@@ -31,47 +39,104 @@ export interface DiffSearchState {
 }
 
 export function createDiffSearch(deps: {
-  getDiffViewMode: () => unknown
+  isSplitMode: () => boolean
   getDiffViewWrap: () => boolean
   getCollapsedFiles: () => Set<string>
+  getSortedFiles: () => PrFileDiff[]
+  getScrollContainer: () => HTMLElement | null
+  getVisibleItems: () => unknown[]
+  scrollToIndex: (index: number, opts?: { align?: string; behavior?: string }) => void
+  onUncollapseFile: (filename: string) => void
 }): DiffSearchState {
   let query = $state('')
-  let matches = $state<Range[]>([])
   let currentIndex = $state(-1)
   let visible = $state(false)
   let occurrenceWord = $state('')
   let inputEl = $state<HTMLInputElement | null>(null)
-  let scrollContainer = $state<HTMLElement | null>(null)
+
+  let totalMatchCount = $state(0)
+  let fileMatchInfos = $state<FileMatchInfo[]>([])
 
   let searchTimeout: ReturnType<typeof setTimeout> | null = null
   let clickClearTimeout: ReturnType<typeof setTimeout> | null = null
 
+  // ---------------------------------------------------------------------------
+  // Effect 1: Text-based counting (debounced 200ms)
+  // Searches patch strings — no DOM needed, works with virtualization enabled.
+  // ---------------------------------------------------------------------------
   $effect(() => {
     const q = query
-    void deps.getDiffViewMode()
-    void deps.getDiffViewWrap()
-    void deps.getCollapsedFiles()
+    const files = deps.getSortedFiles()
+    const splitMode = deps.isSplitMode()
 
     if (searchTimeout) clearTimeout(searchTimeout)
 
-    if (!q || !scrollContainer) {
-      matches = []
+    if (!q) {
+      totalMatchCount = 0
+      fileMatchInfos = []
       currentIndex = -1
       clearSearchHighlights()
       return
     }
 
-    const container = scrollContainer
-    searchTimeout = setTimeout(async () => {
-      await tick()
-      const found = findMatchesInContainer(container, q)
-      matches = found
-      currentIndex = found.length > 0 ? 0 : -1
-      applySearchHighlights(found, currentIndex)
-      if (found.length > 0) {
-        scrollToMatch(found[0])
+    searchTimeout = setTimeout(() => {
+      let cumulative = 0
+      const infos: FileMatchInfo[] = []
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+        const count = countMatchesInPatch(file.patch, q, { isSplitMode: splitMode })
+        if (count > 0) {
+          infos.push({
+            filename: file.filename,
+            fileIndex: i,
+            matchCount: count,
+            cumulativeStart: cumulative,
+          })
+          cumulative += count
+        }
+      }
+
+      totalMatchCount = cumulative
+      fileMatchInfos = infos
+      currentIndex = cumulative > 0 ? 0 : -1
+
+      if (cumulative > 0) {
+        navigateToCurrentMatch()
       }
     }, 200)
+  })
+
+  // ---------------------------------------------------------------------------
+  // Effect 2: DOM highlights for visible files (immediate, no debounce)
+  // Re-applies CSS highlights whenever visible content or navigation changes.
+  // Only searches the few files currently rendered by the virtualizer.
+  // ---------------------------------------------------------------------------
+  $effect(() => {
+    const q = query
+    const idx = currentIndex
+    void deps.getVisibleItems()
+    void deps.getDiffViewWrap()
+    void deps.getCollapsedFiles()
+    void deps.isSplitMode()
+
+    const container = deps.getScrollContainer()
+    if (!q || !container) {
+      clearSearchHighlights()
+      return
+    }
+
+    const visibleRanges = findMatchesInContainer(container, q)
+
+    let currentRange: Range | null = null
+    if (idx >= 0) {
+      const target = getTargetFileInfo(idx)
+      if (target) {
+        currentRange = resolveCurrentRange(container, target, q, idx)
+      }
+    }
+
+    applySearchHighlights(visibleRanges, currentRange)
   })
 
   $effect(() => {
@@ -81,6 +146,68 @@ export function createDiffSearch(deps: {
     }
   })
 
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
+  function getTargetFileInfo(matchIndex: number): FileMatchInfo | undefined {
+    for (let i = fileMatchInfos.length - 1; i >= 0; i--) {
+      if (matchIndex >= fileMatchInfos[i].cumulativeStart) {
+        return fileMatchInfos[i]
+      }
+    }
+    return undefined
+  }
+
+  function resolveCurrentRange(
+    container: HTMLElement,
+    target: FileMatchInfo,
+    q: string,
+    globalIndex: number,
+  ): Range | null {
+    const fileEls = container.querySelectorAll('[data-diff-file]')
+    for (const el of fileEls) {
+      if (el.getAttribute('data-diff-file') === target.filename) {
+        const fileRanges = findMatchesInContainer(el as HTMLElement, q)
+        const localIndex = globalIndex - target.cumulativeStart
+        if (localIndex >= 0 && localIndex < fileRanges.length) {
+          return fileRanges[localIndex]
+        }
+        break
+      }
+    }
+    return null
+  }
+
+  async function navigateToCurrentMatch() {
+    if (currentIndex < 0 || totalMatchCount === 0) return
+
+    const target = getTargetFileInfo(currentIndex)
+    if (!target) return
+
+    if (deps.getCollapsedFiles().has(target.filename)) {
+      deps.onUncollapseFile(target.filename)
+    }
+
+    deps.scrollToIndex(target.fileIndex, { align: 'start' })
+
+    await tick()
+    await new Promise<void>(r => requestAnimationFrame(() => r()))
+    await tick()
+
+    const container = deps.getScrollContainer()
+    if (!container) return
+
+    const range = resolveCurrentRange(container, target, query, currentIndex)
+    if (range) {
+      scrollToMatch(range)
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Public methods
+  // ---------------------------------------------------------------------------
+
   function open() {
     visible = true
     tick().then(() => inputEl?.focus())
@@ -89,23 +216,22 @@ export function createDiffSearch(deps: {
   function close() {
     visible = false
     query = ''
-    matches = []
+    totalMatchCount = 0
+    fileMatchInfos = []
     currentIndex = -1
     clearSearchHighlights()
   }
 
   function goToNext() {
-    if (matches.length === 0) return
-    currentIndex = (currentIndex + 1) % matches.length
-    applySearchHighlights(matches, currentIndex)
-    scrollToMatch(matches[currentIndex])
+    if (totalMatchCount === 0) return
+    currentIndex = (currentIndex + 1) % totalMatchCount
+    navigateToCurrentMatch()
   }
 
   function goToPrev() {
-    if (matches.length === 0) return
-    currentIndex = (currentIndex - 1 + matches.length) % matches.length
-    applySearchHighlights(matches, currentIndex)
-    scrollToMatch(matches[currentIndex])
+    if (totalMatchCount === 0) return
+    currentIndex = (currentIndex - 1 + totalMatchCount) % totalMatchCount
+    navigateToCurrentMatch()
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -136,8 +262,8 @@ export function createDiffSearch(deps: {
       clickClearTimeout = null
     }
 
-    const target = e.target as HTMLElement
-    if (!target.closest('.diff-line-content-item')) return
+    const clickTarget = e.target as HTMLElement
+    if (!clickTarget.closest('.diff-line-content-item')) return
 
     const word = getWordAtSelection()
     if (!word) {
@@ -146,15 +272,12 @@ export function createDiffSearch(deps: {
       return
     }
 
-    if (!scrollContainer) return
+    const container = deps.getScrollContainer()
+    if (!container) return
 
-    const found = findMatchesInContainer(scrollContainer, word)
+    const found = findMatchesInContainer(container, word)
     applyOccurrenceHighlights(found)
     occurrenceWord = word
-
-    if (matches.length > 0) {
-      applySearchHighlights(matches, currentIndex)
-    }
   }
 
   function handleContainerClick() {
@@ -169,13 +292,11 @@ export function createDiffSearch(deps: {
   return {
     get inputEl() { return inputEl },
     set inputEl(el: HTMLInputElement | null) { inputEl = el },
-    get scrollContainer() { return scrollContainer },
-    set scrollContainer(el: HTMLElement | null) { scrollContainer = el },
 
     get query() { return query },
     get visible() { return visible },
-    get isSearchActive() { return visible },
-    get matchCount() { return matches.length },
+    get isSearchActive() { return visible && query.length > 0 },
+    get matchCount() { return totalMatchCount },
     get currentIndex() { return currentIndex },
 
     open,

@@ -34,6 +34,7 @@
   let diffViewWrap = $state(false)
   let commentText = $state('')
   let collapsedFiles = $state(new Set<string>())
+  let scrollContainerEl = $state<HTMLElement | null>(null)
   let hasAutoCollapsed = false
   const fileContentsFetcher = createFileContentsFetcher({
     getFiles: () => files,
@@ -44,11 +45,6 @@
   const diffWorker = createDiffWorker({
     getFiles: () => files,
     getFileContentsMap: () => fileContentsFetcher.fileContentsMap,
-  })
-  const search = createDiffSearch({
-    getDiffViewMode: () => diffViewMode,
-    getDiffViewWrap: () => diffViewWrap,
-    getCollapsedFiles: () => collapsedFiles,
   })
   function toggleCollapse(filename: string) {
     const next = new Set(collapsedFiles)
@@ -113,7 +109,7 @@
 
   const virtualizer = createVirtualizer({
     getCount: () => sortedFiles.length,
-    getScrollElement: () => search.scrollContainer,
+    getScrollElement: () => scrollContainerEl,
     estimateSize: (index) => {
       const file = sortedFiles[index]
       if (!file) return 300
@@ -122,7 +118,20 @@
       return 62 + Math.min(lineCount, 200) * 20
     },
     getOverscan: () => 2,
-    getEnabled: () => !search.isSearchActive,
+  })
+  const search = createDiffSearch({
+    isSplitMode: () => diffViewMode === DiffModeEnum.Split,
+    getDiffViewWrap: () => diffViewWrap,
+    getCollapsedFiles: () => collapsedFiles,
+    getSortedFiles: () => sortedFiles,
+    getScrollContainer: () => scrollContainerEl,
+    getVisibleItems: () => virtualizer.virtualItems,
+    scrollToIndex: (index, opts) => virtualizer.scrollToIndex(index, opts),
+    onUncollapseFile: (filename) => {
+      const next = new Set(collapsedFiles)
+      next.delete(filename)
+      collapsedFiles = next
+    },
   })
 </script>
 
@@ -210,7 +219,7 @@
     {/if}
   </div>
 
-  <div class="flex-1 overflow-y-auto overflow-x-hidden bg-base-100" bind:this={search.scrollContainer} ondblclick={search.handleDoubleClick} onclick={search.handleContainerClick}>
+  <div class="flex-1 overflow-y-auto overflow-x-hidden bg-base-100" bind:this={scrollContainerEl} ondblclick={search.handleDoubleClick} onclick={search.handleContainerClick}>
     {#if files.length === 0}
       <div class="flex items-center justify-center h-full text-base-content/50 text-sm">No files to display</div>
     {:else}
