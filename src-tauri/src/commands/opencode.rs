@@ -48,6 +48,70 @@ pub async fn list_opencode_commands(
     server_mgr: State<'_, server_manager::ServerManager>,
     project_id: String,
 ) -> Result<Vec<crate::opencode_client::CommandInfo>, String> {
+    // Detect provider — branch to filesystem scanning for claude-code
+    let provider = {
+        let db = crate::db::acquire_db(&db);
+        db.resolve_ai_provider(&project_id)
+    };
+
+    if provider == "claude-code" {
+        let project_path = {
+            let db = crate::db::acquire_db(&db);
+            db.get_project(&project_id)
+                .map_err(|e| format!("Failed to get project: {}", e))?
+                .map(|p| p.path)
+        };
+
+        let mut commands_map = std::collections::HashMap::<String, crate::opencode_client::CommandInfo>::new();
+
+        // 1. Start with built-in commands (lowest priority)
+        for cmd in builtin_claude_commands() {
+            commands_map.insert(cmd.name.clone(), cmd);
+        }
+
+        // 2. Scan .claude/commands/ directories (override built-ins)
+        if let Some(ref proj_path) = project_path {
+            let proj = std::path::Path::new(proj_path);
+            for cmd in scan_commands_directory(&proj.join(".claude").join("commands")) {
+                commands_map.insert(cmd.name.clone(), cmd);
+            }
+        }
+        if let Some(home) = dirs::home_dir() {
+            for cmd in scan_commands_directory(&home.join(".claude").join("commands")) {
+                commands_map.entry(cmd.name.clone()).or_insert(cmd);
+            }
+        }
+
+        // 3. Scan .claude/skills/ directories (highest priority - override commands)
+        if let Some(ref proj_path) = project_path {
+            let proj = std::path::Path::new(proj_path);
+            for skill in scan_skills_directory(&proj.join(".claude").join("skills"), "project") {
+                commands_map.insert(skill.name.clone(), crate::opencode_client::CommandInfo {
+                    name: skill.name,
+                    description: skill.description,
+                    source: Some("skill".to_string()),
+                    agent: skill.agent,
+                    extra: serde_json::Map::new(),
+                });
+            }
+        }
+        if let Some(home) = dirs::home_dir() {
+            for skill in scan_skills_directory(&home.join(".claude").join("skills"), "user") {
+                commands_map.entry(skill.name.clone()).or_insert(crate::opencode_client::CommandInfo {
+                    name: skill.name.clone(),
+                    description: skill.description,
+                    source: Some("skill".to_string()),
+                    agent: skill.agent,
+                    extra: serde_json::Map::new(),
+                });
+            }
+        }
+
+        let mut result: Vec<_> = commands_map.into_values().collect();
+        result.sort_by(|a, b| a.name.cmp(&b.name));
+        return Ok(result);
+    }
+
     // Get task IDs for the project
     let task_ids: Vec<String> = {
         let db = crate::db::acquire_db(&db);
@@ -78,6 +142,26 @@ pub async fn search_opencode_files(
     project_id: String,
     query: String,
 ) -> Result<Vec<String>, String> {
+    // Detect provider — branch to git index search for claude-code
+    let provider = {
+        let db = crate::db::acquire_db(&db);
+        db.resolve_ai_provider(&project_id)
+    };
+
+    if provider == "claude-code" {
+        let project_path = {
+            let db = crate::db::acquire_db(&db);
+            db.get_project(&project_id)
+                .map_err(|e| format!("Failed to get project: {}", e))?
+                .map(|p| p.path)
+        };
+
+        if let Some(path) = project_path {
+            return Ok(search_project_files(&path, &query, 20));
+        }
+        return Ok(vec![]);
+    }
+
     // Get task IDs for the project
     let task_ids: Vec<String> = {
         let db = crate::db::acquire_db(&db);
@@ -107,6 +191,15 @@ pub async fn list_opencode_agents(
     server_mgr: State<'_, server_manager::ServerManager>,
     project_id: String,
 ) -> Result<Vec<crate::opencode_client::AgentInfo>, String> {
+    // Claude Code does not expose agents the same way — return empty
+    let provider = {
+        let db = crate::db::acquire_db(&db);
+        db.resolve_ai_provider(&project_id)
+    };
+    if provider == "claude-code" {
+        return Ok(vec![]);
+    }
+
     // Get task IDs for the project
     let task_ids: Vec<String> = {
         let db = crate::db::acquire_db(&db);
