@@ -374,6 +374,15 @@ export function parseCheckRuns(json: string | null): CheckRunInfo[] {
 
 export type KanbanColumn = "backlog" | "doing" | "done";
 
+import type { CreatureState } from './creatureState';
+
+export interface BoardColumnConfig {
+  id: string;
+  name: string;
+  statuses: CreatureState[];
+  underlyingStatus: KanbanColumn;
+}
+
 export const COLUMN_LABELS: Record<KanbanColumn, string> = {
   backlog: "Backlog",
   doing: "Doing",
