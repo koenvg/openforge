@@ -4,7 +4,7 @@
   import { clearDoneTasks } from '../lib/ipc'
   import { pushNavState } from '../lib/navigation'
   import { loadBoardColumns, DEFAULT_BOARD_COLUMNS } from '../lib/boardColumns'
-  import { computeCreatureState } from '../lib/creatureState'
+  import { computeTaskState } from '../lib/taskState'
   import { sortBySessionActivity } from '../lib/taskSort'
   import { isInputFocused } from '../lib/domUtils'
   import { useVimNavigation } from '../lib/useVimNavigation.svelte'
@@ -39,7 +39,7 @@
         $tasks.filter(t => {
           const session = $activeSessions.get(t.id) ?? null
           const prs = $ticketPrs.get(t.id) ?? []
-          const state = computeCreatureState(t, session, prs)
+           const state = computeTaskState(t, session, prs)
           return col.statuses.includes(state)
         }),
         $activeSessions,

@@ -7,10 +7,10 @@ vi.mock('../lib/ipc', () => ({
 }))
 
 import {
-  ALL_CREATURE_STATES,
-  CREATURE_STATE_LABELS,
+  ALL_TASK_STATES,
+  TASK_STATE_LABELS,
   DEFAULT_BOARD_COLUMNS,
-  getColumnForCreatureState,
+  getColumnForTaskState,
   loadBoardColumns,
   saveBoardColumns,
   validateBoardColumns,
@@ -23,9 +23,9 @@ describe('boardColumns', () => {
   })
 
   describe('constants', () => {
-    it('defines all 15 creature states', () => {
-      expect(ALL_CREATURE_STATES).toHaveLength(15)
-      expect(ALL_CREATURE_STATES).toEqual([
+    it('defines all 15 task states', () => {
+      expect(ALL_TASK_STATES).toHaveLength(15)
+      expect(ALL_TASK_STATES).toEqual([
         'egg',
         'idle',
         'active',
@@ -44,12 +44,12 @@ describe('boardColumns', () => {
       ])
     })
 
-    it('maps creature state labels to human readable names', () => {
-      expect(CREATURE_STATE_LABELS['egg']).toBe('Egg')
-      expect(CREATURE_STATE_LABELS['needs-input']).toBe('Needs Input')
-      expect(CREATURE_STATE_LABELS['pr-draft']).toBe('PR Draft')
-      expect(CREATURE_STATE_LABELS['ci-failed']).toBe('CI Failed')
-      expect(CREATURE_STATE_LABELS['ready-to-merge']).toBe('Ready to Merge')
+    it('maps task state labels to human readable names', () => {
+      expect(TASK_STATE_LABELS['egg']).toBe('Egg')
+      expect(TASK_STATE_LABELS['needs-input']).toBe('Needs Input')
+      expect(TASK_STATE_LABELS['pr-draft']).toBe('PR Draft')
+      expect(TASK_STATE_LABELS['ci-failed']).toBe('CI Failed')
+      expect(TASK_STATE_LABELS['ready-to-merge']).toBe('Ready to Merge')
     })
 
     it('defines default columns matching current behavior', () => {
@@ -152,9 +152,9 @@ describe('boardColumns', () => {
     })
   })
 
-  describe('getColumnForCreatureState', () => {
-    it('returns matching column for creature state', () => {
-      const column = getColumnForCreatureState('pr-open', DEFAULT_BOARD_COLUMNS)
+  describe('getColumnForTaskState', () => {
+    it('returns matching column for task state', () => {
+      const column = getColumnForTaskState('pr-open', DEFAULT_BOARD_COLUMNS)
       expect(column.id).toBe('col-doing')
     })
 
@@ -168,7 +168,7 @@ describe('boardColumns', () => {
         },
       ]
 
-      const column = getColumnForCreatureState('done', customColumns)
+      const column = getColumnForTaskState('done', customColumns)
       expect(column.id).toBe('first')
     })
   })

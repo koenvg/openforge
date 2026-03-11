@@ -1,10 +1,10 @@
-import type { CreatureState } from './creatureState'
+import type { TaskState } from './taskState'
 import type { BoardColumnConfig, KanbanColumn } from './types'
 import { getProjectConfig, setProjectConfig } from './ipc'
 
 const BOARD_COLUMNS_CONFIG_KEY = 'board_columns'
 
-export const ALL_CREATURE_STATES: CreatureState[] = [
+export const ALL_TASK_STATES: TaskState[] = [
   'egg',
   'idle',
   'active',
@@ -22,7 +22,7 @@ export const ALL_CREATURE_STATES: CreatureState[] = [
   'pr-merged',
 ]
 
-export const CREATURE_STATE_LABELS: Record<CreatureState, string> = {
+export const TASK_STATE_LABELS: Record<TaskState, string> = {
   egg: 'Egg',
   idle: 'Idle',
   active: 'Active',
@@ -84,7 +84,7 @@ export function validateBoardColumns(columns: BoardColumnConfig[]): { valid: boo
   }
 
   const allowedUnderlyingStatuses: KanbanColumn[] = ['backlog', 'doing', 'done']
-  const stateCounts = new Map<CreatureState, number>()
+  const stateCounts = new Map<TaskState, number>()
 
   for (const column of columns) {
     if (typeof column.name !== 'string' || column.name.trim().length === 0) {
@@ -96,8 +96,8 @@ export function validateBoardColumns(columns: BoardColumnConfig[]): { valid: boo
     }
 
     for (const state of column.statuses) {
-      if (!ALL_CREATURE_STATES.includes(state)) {
-        errors.push(`Unknown creature state: ${String(state)}.`)
+      if (!ALL_TASK_STATES.includes(state)) {
+        errors.push(`Unknown task state: ${String(state)}.`)
         continue
       }
 
@@ -105,12 +105,12 @@ export function validateBoardColumns(columns: BoardColumnConfig[]): { valid: boo
     }
   }
 
-  for (const state of ALL_CREATURE_STATES) {
+  for (const state of ALL_TASK_STATES) {
     const count = stateCounts.get(state) ?? 0
     if (count === 0) {
-      errors.push(`Creature state "${state}" is missing from all columns.`)
+      errors.push(`Task state "${state}" is missing from all columns.`)
     } else if (count > 1) {
-      errors.push(`Creature state "${state}" appears in multiple columns.`)
+      errors.push(`Task state "${state}" appears in multiple columns.`)
     }
   }
 
@@ -120,7 +120,7 @@ export function validateBoardColumns(columns: BoardColumnConfig[]): { valid: boo
   }
 }
 
-export function getColumnForCreatureState(state: CreatureState, columns: BoardColumnConfig[]): BoardColumnConfig {
+export function getColumnForTaskState(state: TaskState, columns: BoardColumnConfig[]): BoardColumnConfig {
   const match = columns.find((column) => column.statuses.includes(state))
   return match ?? columns[0] ?? DEFAULT_BOARD_COLUMNS[0]
 }

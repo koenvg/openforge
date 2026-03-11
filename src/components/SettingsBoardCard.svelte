@@ -2,10 +2,10 @@
 	import { LayoutGrid } from 'lucide-svelte';
 	import type { BoardColumnConfig, KanbanColumn } from '../lib/types';
 	import { COLUMN_LABELS } from '../lib/types';
-	import type { CreatureState } from '../lib/creatureState';
+	import type { TaskState } from '../lib/taskState';
 	import {
-		ALL_CREATURE_STATES,
-		CREATURE_STATE_LABELS,
+		ALL_TASK_STATES,
+		TASK_STATE_LABELS,
 		DEFAULT_BOARD_COLUMNS,
 		validateBoardColumns,
 	} from '../lib/boardColumns';
@@ -42,7 +42,7 @@
 		onColumnsChange(columns.map((c) => (c.id === id ? { ...c, underlyingStatus } : c)));
 	}
 
-	function toggleState(id: string, state: CreatureState, checked: boolean) {
+	function toggleState(id: string, state: TaskState, checked: boolean) {
 		onColumnsChange(
 			columns.map((c) => {
 				if (c.id !== id) return c;
@@ -108,11 +108,11 @@
 				<div class="collapse collapse-arrow bg-base-100 border border-base-300 rounded-md">
 					<input type="checkbox" />
 					<div class="collapse-title text-sm font-medium py-2 min-h-0">
-						Creature States
+						Task States
 						<span class="badge badge-sm ml-2">{column.statuses.length}</span>
 					</div>
 					<div class="collapse-content flex flex-col gap-1 pb-2">
-						{#each ALL_CREATURE_STATES as state}
+						{#each ALL_TASK_STATES as state}
 							<label class="flex items-center gap-2 cursor-pointer">
 								<input
 									type="checkbox"
@@ -120,7 +120,7 @@
 									onchange={(e) => toggleState(column.id, state, e.currentTarget.checked)}
 									class="checkbox checkbox-sm"
 								/>
-								<span class="text-sm text-base-content">{CREATURE_STATE_LABELS[state]}</span>
+								<span class="text-sm text-base-content">{TASK_STATE_LABELS[state]}</span>
 							</label>
 						{/each}
 					</div>

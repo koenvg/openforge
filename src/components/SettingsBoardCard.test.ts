@@ -7,8 +7,8 @@ vi.mock('../lib/boardColumns', () => ({
 		{ id: 'col-backlog', name: 'Backlog', statuses: ['egg'], underlyingStatus: 'backlog' },
 		{ id: 'col-doing', name: 'Doing', statuses: ['idle', 'active'], underlyingStatus: 'doing' },
 	],
-	ALL_CREATURE_STATES: ['egg', 'idle', 'active', 'done'],
-	CREATURE_STATE_LABELS: { egg: 'Egg', idle: 'Idle', active: 'Active', done: 'Done' },
+	ALL_TASK_STATES: ['egg', 'idle', 'active', 'done'],
+	TASK_STATE_LABELS: { egg: 'Egg', idle: 'Idle', active: 'Active', done: 'Done' },
 	validateBoardColumns: vi.fn(() => ({ valid: true, errors: [] })),
 }))
 
@@ -93,7 +93,7 @@ describe('SettingsBoardCard', () => {
 		expect(newColumns[0].name).toBe('Todo')
 	})
 
-	it('toggling creature state checkbox calls onColumnsChange with updated statuses', async () => {
+	it('toggling task state checkbox calls onColumnsChange with updated statuses', async () => {
 		const onColumnsChange = vi.fn()
 		render(SettingsBoardCard, { props: defaultProps({ onColumnsChange }) })
 		// Find the 'Idle' checkbox label and click it
@@ -106,8 +106,8 @@ describe('SettingsBoardCard', () => {
 
 	it('displays validation errors when config is invalid', async () => {
 		const { validateBoardColumns } = await import('../lib/boardColumns')
-		vi.mocked(validateBoardColumns).mockReturnValue({ valid: false, errors: ['Creature state "done" is missing from all columns.'] })
+		vi.mocked(validateBoardColumns).mockReturnValue({ valid: false, errors: ['Task state "done" is missing from all columns.'] })
 		render(SettingsBoardCard, { props: defaultProps() })
-		expect(screen.getByText('Creature state "done" is missing from all columns.')).toBeTruthy()
+		expect(screen.getByText('Task state "done" is missing from all columns.')).toBeTruthy()
 	})
 })

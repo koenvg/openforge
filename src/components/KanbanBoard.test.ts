@@ -73,7 +73,7 @@ describe('KanbanBoard', () => {
     expect(await screen.findByText('Test task')).toBeTruthy()
   })
 
-  it('groups tasks by creature state into correct columns', async () => {
+  it('groups tasks by task state into correct columns', async () => {
     const doingTask: Task = { ...baseTask, id: 'T-2', initial_prompt: 'Doing task', status: 'doing' }
     const doneTask: Task = { ...baseTask, id: 'T-3', initial_prompt: 'Done task', status: 'done' }
     tasks.set([baseTask, doingTask, doneTask])
