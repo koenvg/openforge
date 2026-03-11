@@ -157,7 +157,7 @@ pub async fn search_opencode_files(
         };
 
         if let Some(path) = project_path {
-            return Ok(search_project_files(&path, &query, 20));
+            return Ok(search_project_files(&path, &query, 10));
         }
         return Ok(vec![]);
     }
@@ -486,6 +486,7 @@ fn builtin_claude_commands() -> Vec<crate::opencode_client::CommandInfo> {
         ("permissions", "View and manage tool permissions"),
         ("memory", "Edit CLAUDE.md memory file"),
         ("doctor", "Check health of your Claude Code installation"),
+        ("terminal-setup", "Install shift+enter key binding for terminal"),
         ("login", "Login to your Anthropic account"),
         ("logout", "Logout from your Anthropic account"),
     ];
