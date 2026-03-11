@@ -3,7 +3,7 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
   import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention, taskSpawned, selectedSkillName, runningTerminals, startingTasks, creaturesEnabled, codeCleanupTasksEnabled } from './lib/stores'
-  import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getRunningPtyTaskIds, getConfig, getAgents, getReviewPrs } from './lib/ipc'
+  import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getRunningPtyTaskIds, getConfig, getProjectConfig, getAgents, getReviewPrs } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import SearchableSelect from './components/SearchableSelect.svelte'
   import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView, PermissionMode } from './lib/types'
@@ -47,7 +47,10 @@
     dialogSelectedAgent = ''
     dialogSelectedPermissionMode = 'default'
     try {
-      const provider = await getConfig('ai_provider')
+      let provider: string | null = null
+      if ($activeProjectId) {
+        provider = await getProjectConfig($activeProjectId, 'ai_provider')
+      }
       dialogAiProvider = provider ?? 'claude-code'
       if (dialogAiProvider !== 'claude-code') {
         const agents = await getAgents()
