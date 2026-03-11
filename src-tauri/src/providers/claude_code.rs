@@ -63,7 +63,7 @@ impl ClaudeCodeProvider {
         let resume_id = session.claude_session_id.as_deref();
 
         // Distinguish between two contexts:
-        // - Some(prompt) → run_action: user sending new prompt, never use --continue
+        // - Some(prompt) → caller sending new prompt, never use --continue
         // - None → startup resume: resume in-progress session, use --continue if no session ID
         let (actual_prompt, use_continue) = match prompt {
             Some(p) => (p, false),

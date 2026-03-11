@@ -11,7 +11,6 @@ vi.mock('../lib/ipc', () => ({
   updateTaskStatus: vi.fn(),
   deleteTask: vi.fn(),
   clearDoneTasks: vi.fn(),
-  runAction: vi.fn(),
 }))
 
 const baseTask: Task = {

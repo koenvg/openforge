@@ -67,7 +67,7 @@ impl Provider {
         }
     }
 
-    /// Resume an existing session (with optional new prompt for run_action).
+    /// Resume an existing session (used at startup to re-attach to in-progress agents).
     pub async fn resume(
         &self,
         task_id: &str,
