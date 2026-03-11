@@ -33,6 +33,7 @@ vi.mock('../lib/diffSearch', () => ({
   clearOccurrenceHighlights: vi.fn(),
   getWordAtSelection: vi.fn().mockReturnValue(null),
   scrollToMatch: vi.fn(),
+  countMatchesInPatch: vi.fn().mockReturnValue(0),
 }))
 
 vi.mock('../lib/diffAdapter', () => ({

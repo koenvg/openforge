@@ -3,7 +3,7 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
   import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention, taskSpawned, selectedSkillName, runningTerminals, startingTasks, creaturesEnabled, codeCleanupTasksEnabled } from './lib/stores'
-  import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getRunningPtyTaskIds, getConfig, getAgents, getReviewPrs } from './lib/ipc'
+  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getRunningPtyTaskIds, getConfig, getProjectConfig, getAgents, getReviewPrs } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import SearchableSelect from './components/SearchableSelect.svelte'
   import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView, PermissionMode } from './lib/types'
@@ -47,7 +47,10 @@
     dialogSelectedAgent = ''
     dialogSelectedPermissionMode = 'default'
     try {
-      const provider = await getConfig('ai_provider')
+      let provider: string | null = null
+      if ($activeProjectId) {
+        provider = await getProjectConfig($activeProjectId, 'ai_provider')
+      }
       dialogAiProvider = provider ?? 'claude-code'
       if (dialogAiProvider !== 'claude-code') {
         const agents = await getAgents()
@@ -238,10 +241,8 @@
       $error = 'No active project selected'
       return
     }
-    const { taskId, actionPrompt, agent } = data
+    const { taskId, actionPrompt } = data
 
-    // If Claude PTY is active, send the prompt directly to the terminal
-    // instead of starting a new session (like dictation does)
     if (isPtyActive(taskId)) {
       try {
         await writePtyWithSubmit(taskId, actionPrompt)
@@ -253,12 +254,10 @@
       return
     }
 
-    // Mark task as starting (worktree creation + agent spawn in progress)
     $startingTasks = new Set($startingTasks).add(taskId)
 
-
     try {
-      const result = await runAction(taskId, activeProject.path, actionPrompt, agent)
+      const result = await startImplementation(taskId, activeProject.path)
 
       try {
         const session = await getSessionStatus(result.session_id)
@@ -266,16 +265,15 @@
         updated.set(taskId, session)
         $activeSessions = updated
       } catch (sessionErr) {
-        console.error('[session] Failed to fetch session after action:', sessionErr)
+        console.error('[session] Failed to fetch session after start:', sessionErr)
       }
 
       await loadTasks()
       focusTerminal(taskId)
     } catch (e) {
-      console.error('[session] Failed to run action for task:', taskId, e)
+      console.error('[session] Failed to start task:', taskId, e)
       $error = String(e)
     } finally {
-      // Clear the starting state
       const next = new Set($startingTasks)
       next.delete(taskId)
       $startingTasks = next
@@ -341,13 +339,6 @@
         triggerGithubSync()
         break
       default:
-        if (actionId.startsWith('custom-action-') && task) {
-          const customId = actionId.replace('custom-action-', '')
-          const action = actionPaletteActions.find(a => a.id === customId)
-          if (action) {
-            await handleRunAction({ taskId: task.id, actionPrompt: action.prompt, agent: null })
-          }
-        }
         break
     }
   }

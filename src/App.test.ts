@@ -102,7 +102,6 @@ vi.mock('./lib/ipc', () => ({
   getProjectConfig: vi.fn(),
   setProjectConfig: vi.fn(),
   startImplementation: vi.fn(),
-  runAction: vi.fn(),
   getWorktreeForTask: vi.fn(),
   getSessionStatus: vi.fn(),
   abortSession: vi.fn(),

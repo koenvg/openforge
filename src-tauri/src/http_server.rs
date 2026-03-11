@@ -215,7 +215,7 @@ async fn handle_hook(
             let db = state.db.lock().unwrap();
             if let Ok(Some(session)) = db.get_latest_session_for_ticket(task_id) {
                 if session.provider == "claude-code" {
-                    // Persist the Claude session ID on first hook so run_action can resume it later
+                    // Persist the Claude session ID on first hook so session can be resumed later
                     if session.claude_session_id.is_none() {
                         if let Some(ref sid) = payload.session_id {
                             if !sid.is_empty() {
