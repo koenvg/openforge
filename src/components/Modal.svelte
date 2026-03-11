@@ -20,8 +20,11 @@
   })
 
   function handleKeydown(e: KeyboardEvent) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return
+
+    e.stopPropagation()
+
     if (e.key === 'Escape') {
-      e.stopPropagation()
       onClose()
     }
   }

@@ -63,16 +63,20 @@
     if (!open) return
     if (e.key === 'ArrowDown') {
       e.preventDefault()
+      e.stopPropagation()
       highlightedIndex = Math.min(highlightedIndex + 1, filtered.length - 1)
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
+      e.stopPropagation()
       highlightedIndex = Math.max(highlightedIndex - 1, 0)
     } else if (e.key === 'Enter') {
       e.preventDefault()
+      e.stopPropagation()
       const opt = filtered[highlightedIndex]
       if (opt) selectOption(opt)
     } else if (e.key === 'Escape') {
       e.preventDefault()
+      e.stopPropagation()
       closeDropdown()
     }
   }
@@ -84,7 +88,7 @@
   <div
     class="select select-{size} w-full cursor-pointer"
     onclick={openDropdown}
-    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDropdown() } }}
+    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openDropdown() } }}
     role="combobox"
     aria-expanded={open}
     tabindex="0"

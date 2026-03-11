@@ -78,4 +78,74 @@ describe('SearchableSelect', () => {
 
     expect(screen.getByText('No matches')).toBeTruthy()
   })
+
+  describe('keyboard event propagation', () => {
+    it('stops Enter propagation when dropdown is open', async () => {
+      render(SearchableSelect, { props: { options, value: '', onSelect: vi.fn() } })
+      await fireEvent.click(screen.getByRole('combobox'))
+
+      const input = screen.getByPlaceholderText('Search...')
+      const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })
+      const stopSpy = vi.spyOn(event, 'stopPropagation')
+
+      input.dispatchEvent(event)
+
+      expect(stopSpy).toHaveBeenCalled()
+    })
+
+    it('stops Escape propagation when dropdown is open', async () => {
+      render(SearchableSelect, { props: { options, value: '', onSelect: vi.fn() } })
+      await fireEvent.click(screen.getByRole('combobox'))
+
+      const input = screen.getByPlaceholderText('Search...')
+      const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+      const stopSpy = vi.spyOn(event, 'stopPropagation')
+
+      input.dispatchEvent(event)
+
+      expect(stopSpy).toHaveBeenCalled()
+    })
+
+    it('stops ArrowDown propagation when dropdown is open', async () => {
+      render(SearchableSelect, { props: { options, value: '', onSelect: vi.fn() } })
+      await fireEvent.click(screen.getByRole('combobox'))
+
+      const input = screen.getByPlaceholderText('Search...')
+      const event = new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })
+      const stopSpy = vi.spyOn(event, 'stopPropagation')
+
+      input.dispatchEvent(event)
+
+      expect(stopSpy).toHaveBeenCalled()
+    })
+
+    it('stops ArrowUp propagation when dropdown is open', async () => {
+      render(SearchableSelect, { props: { options, value: '', onSelect: vi.fn() } })
+      await fireEvent.click(screen.getByRole('combobox'))
+
+      const input = screen.getByPlaceholderText('Search...')
+      const event = new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true })
+      const stopSpy = vi.spyOn(event, 'stopPropagation')
+
+      input.dispatchEvent(event)
+
+      expect(stopSpy).toHaveBeenCalled()
+    })
+
+    it('stops Enter/Space propagation on the trigger combobox', async () => {
+      render(SearchableSelect, { props: { options, value: '', onSelect: vi.fn() } })
+
+      const trigger = screen.getByRole('combobox')
+
+      const enterEvent = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })
+      const enterSpy = vi.spyOn(enterEvent, 'stopPropagation')
+      trigger.dispatchEvent(enterEvent)
+      expect(enterSpy).toHaveBeenCalled()
+
+      const spaceEvent = new KeyboardEvent('keydown', { key: ' ', bubbles: true })
+      const spaceSpy = vi.spyOn(spaceEvent, 'stopPropagation')
+      trigger.dispatchEvent(spaceEvent)
+      expect(spaceSpy).toHaveBeenCalled()
+    })
+  })
 })
