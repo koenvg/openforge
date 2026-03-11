@@ -1,13 +1,17 @@
 <script lang="ts">
-  import type { Task, AgentSession, KanbanColumn } from '../lib/types'
+  import type { Task, AgentSession } from '../lib/types'
   import { tasks, selectedTaskId, activeSessions, ticketPrs, error, activeProjectId, startingTasks } from '../lib/stores'
   import { clearDoneTasks } from '../lib/ipc'
   import { pushNavState } from '../lib/navigation'
+  import { loadBoardColumns, DEFAULT_BOARD_COLUMNS } from '../lib/boardColumns'
+  import { computeCreatureState } from '../lib/creatureState'
   import { sortBySessionActivity } from '../lib/taskSort'
   import { isInputFocused } from '../lib/domUtils'
   import { useVimNavigation } from '../lib/useVimNavigation.svelte'
   import TaskCard from './TaskCard.svelte'
   import TaskContextMenu from './TaskContextMenu.svelte'
+
+  type BoardColumnConfig = (typeof DEFAULT_BOARD_COLUMNS)[number]
 
   interface Props {
     onRunAction: (data: { taskId: string; actionPrompt: string; agent: string | null }) => void
@@ -15,19 +19,37 @@
 
   let { onRunAction }: Props = $props()
 
-  // Column visibility state
-  let showBacklog = $state(true)
-  let showDoneDrawer = $state(false)
+  let boardColumns = $state<BoardColumnConfig[]>([])
 
-  // Vim navigation state — default to "doing" column (index 1 when backlog visible, 0 when hidden)
-  let focusedColumn = $state(showBacklog ? 1 : 0)
-
-  let columns = $derived.by(() => {
-    const cols: { key: string; tasks: Task[] }[] = []
-    if (showBacklog) cols.push({ key: 'backlog', tasks: backlogTasks })
-    cols.push({ key: 'doing', tasks: doingTasks })
-    return cols
+  $effect(() => {
+    const pid = $activeProjectId
+    if (pid) {
+      loadBoardColumns(pid).then(cols => {
+        boardColumns = cols
+      })
+    } else {
+      boardColumns = [...DEFAULT_BOARD_COLUMNS]
+    }
   })
+
+  let columnTasks = $derived.by(() => {
+    return boardColumns.map(col => ({
+      config: col,
+      tasks: sortBySessionActivity(
+        $tasks.filter(t => {
+          const session = $activeSessions.get(t.id) ?? null
+          const prs = $ticketPrs.get(t.id) ?? []
+          const state = computeCreatureState(t, session, prs)
+          return col.statuses.includes(state)
+        }),
+        $activeSessions,
+      ),
+    }))
+  })
+
+  let focusedColumn = $state(0)
+
+  let columns = $derived(columnTasks.map(ct => ({ key: ct.config.id, tasks: ct.tasks })))
 
   function currentColumnTasks(): Task[] {
     return columns[focusedColumn]?.tasks ?? []
@@ -57,7 +79,6 @@
     },
   })
 
-  // Clamp focusedColumn when columns change (e.g. backlog hidden)
   $effect(() => {
     if (focusedColumn >= columns.length) {
       focusedColumn = Math.max(0, columns.length - 1)
@@ -76,42 +97,11 @@
     el?.scrollIntoView?.({ block: 'nearest' })
   })
 
-  function toggleBacklog() {
-    showBacklog = !showBacklog
-  }
-
-  function toggleDoneDrawer() {
-    showDoneDrawer = !showDoneDrawer
-  }
-
   function handleBoardKeydown(e: KeyboardEvent) {
-    // Plain key shortcuts (only when not typing in input)
-    if (!isInputFocused()) {
-      // b — toggle backlog
-      if (e.key === 'b' && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        e.preventDefault()
-        toggleBacklog()
-        return
-      }
-      // c — toggle done drawer
-      if (e.key === 'c' && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        e.preventDefault()
-        toggleDoneDrawer()
-        return
-      }
-      // Vim navigation
-      vim.handleKeydown(e)
-    }
+    if (isInputFocused()) return
+    if (e.metaKey || e.ctrlKey || e.altKey) return
+    vim.handleKeydown(e)
   }
-
-  function tasksForColumn(allTasks: Task[], column: KanbanColumn): Task[] {
-    const filtered = allTasks.filter(t => t.status === column)
-    return sortBySessionActivity(filtered, $activeSessions)
-  }
-
-  let backlogTasks = $derived(tasksForColumn($tasks, 'backlog'))
-  let doingTasks = $derived(tasksForColumn($tasks, 'doing'))
-  let doneTasks = $derived(tasksForColumn($tasks, 'done'))
 
   function getSession(sessions: Map<string, AgentSession>, taskId: string): AgentSession | null {
     return sessions.get(taskId) || null
@@ -153,145 +143,46 @@
 <svelte:window onkeydown={handleBoardKeydown} />
 
 <div class="flex flex-col h-full overflow-hidden">
-  <!-- Toggle bar -->
-  <div class="flex items-center justify-between px-6 pt-4 pb-1">
-    <button
-      class="font-mono text-[11px] px-2.5 py-1 rounded cursor-pointer transition-colors {showBacklog ? 'bg-base-300 text-base-content' : 'text-secondary hover:text-base-content hover:bg-base-300/50'}"
-      onclick={toggleBacklog}
-      title="Toggle backlog (b)"
-    >
-      {showBacklog ? '▾' : '▸'} backlog
-      <span class="ml-1 text-[10px] text-secondary bg-base-300 px-1 py-0.5 rounded">{backlogTasks.length}</span>
-    </button>
-
-    <button
-      class="font-mono text-[11px] px-2.5 py-1 rounded cursor-pointer transition-colors {showDoneDrawer ? 'bg-base-300 text-base-content' : 'text-secondary hover:text-base-content hover:bg-base-300/50'}"
-      onclick={toggleDoneDrawer}
-      title="Toggle done drawer (c)"
-    >
-      done
-      <span class="ml-1 text-[10px] text-secondary bg-base-300 px-1 py-0.5 rounded">{doneTasks.length}</span>
-      {showDoneDrawer ? '✕' : '▸'}
-    </button>
-  </div>
-
-  <!-- Main columns area -->
   <div class="flex gap-4 px-6 py-4 flex-1 overflow-hidden">
-    <!-- Backlog column (inline, toggleable) -->
-    {#if showBacklog}
-      <div class="flex-1 min-w-0 flex flex-col max-w-[340px] transition-all duration-200">
+    {#each columnTasks as colData, colIdx (colData.config.id)}
+      <div class="flex-1 min-w-0 flex flex-col">
         <div class="flex items-center justify-between py-2 mb-2">
-          <span class="font-mono text-[11px] font-semibold text-secondary">// backlog</span>
-          <span class="font-mono text-[10px] text-secondary bg-base-300 px-1.5 py-0.5 rounded">{backlogTasks.length}</span>
+          <span class="font-mono text-[11px] font-semibold text-secondary">// {colData.config.name.toLowerCase()}</span>
+          <div class="flex items-center gap-2">
+            <span class="font-mono text-[10px] text-secondary bg-base-300 px-1.5 py-0.5 rounded">{colData.tasks.length}</span>
+            {#if colData.config.underlyingStatus === 'done' && colData.tasks.length > 0}
+              <button class="font-mono text-[11px] text-secondary hover:text-error cursor-pointer transition-colors" onclick={handleClearDone} disabled={isClearing} title="Clear done tasks">
+                {#if isClearing}<span class="loading loading-spinner loading-xs"></span>{:else}$ clear{/if}
+              </button>
+            {/if}
+          </div>
         </div>
-        <div
-          class="flex-1 flex flex-col gap-2 overflow-y-auto"
-          role="listbox"
-          data-vim-column="backlog"
-        >
-          {#each backlogTasks as task, i (task.id)}
-            {@const isVimFocused = columns[focusedColumn]?.key === 'backlog' && vim.focusedIndex === i}
+        <div class="flex-1 flex flex-col gap-2 overflow-y-auto" role="listbox" data-vim-column={colData.config.id}>
+          {#each colData.tasks as task, i (task.id)}
+            {@const isVimFocused = columns[focusedColumn]?.key === colData.config.id && vim.focusedIndex === i}
             <div data-vim-item oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'vim-focus' : ''}>
               <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} isStarting={$startingTasks.has(task.id)} onSelect={handleSelect} />
             </div>
           {/each}
-          {#if backlogTasks.length === 0}
+          {#if colData.tasks.length === 0}
             <div class="text-center font-mono text-xs text-secondary py-5">No tasks</div>
           {/if}
         </div>
       </div>
-
-      <!-- Divider between backlog and doing -->
-      <div class="w-px bg-base-300 self-stretch my-2"></div>
-    {/if}
-
-    <!-- Doing column (always visible, takes remaining space) -->
-    <div class="flex-1 min-w-0 flex flex-col">
-      <div class="flex items-center justify-between py-2 mb-2">
-        <span class="font-mono text-[11px] font-semibold text-secondary">// doing</span>
-        <span class="font-mono text-[10px] text-secondary bg-base-300 px-1.5 py-0.5 rounded">{doingTasks.length}</span>
-      </div>
-      <div
-        class="flex-1 flex flex-col gap-2 overflow-y-auto"
-        role="listbox"
-        data-vim-column="doing"
-      >
-        {#each doingTasks as task, i (task.id)}
-          {@const isVimFocused = columns[focusedColumn]?.key === 'doing' && vim.focusedIndex === i}
-          <div data-vim-item oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'vim-focus' : ''}>
-            <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} isStarting={$startingTasks.has(task.id)} onSelect={handleSelect} />
-          </div>
-        {/each}
-        {#if doingTasks.length === 0}
-          <div class="text-center font-mono text-xs text-secondary py-5">No tasks</div>
-        {/if}
-      </div>
-    </div>
+      {#if colIdx < columnTasks.length - 1}
+        <div class="w-px bg-base-300 self-stretch my-2"></div>
+      {/if}
+    {/each}
   </div>
 </div>
 
-<!-- Done drawer (slides in from the right, overlays the board) -->
-{#if showDoneDrawer}
-  <!-- Backdrop -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div
-    class="fixed inset-0 bg-black/30 z-40 transition-opacity duration-200"
-    onclick={toggleDoneDrawer}
-    onkeydown={(e: KeyboardEvent) => { if (e.key === 'Escape') toggleDoneDrawer() }}
-  ></div>
-
-  <!-- Drawer panel -->
-  <div class="fixed top-0 right-0 h-full w-[400px] max-w-[85vw] bg-base-100 border-l border-base-300 z-50 shadow-2xl flex flex-col animate-slide-in-right">
-    <!-- Drawer header -->
-    <div class="flex items-center justify-between px-5 py-4 border-b border-base-300">
-      <div class="flex items-center gap-3">
-        <span class="font-mono text-[11px] font-semibold text-secondary">// done</span>
-        <span class="font-mono text-[10px] text-secondary bg-base-300 px-1.5 py-0.5 rounded">{doneTasks.length}</span>
-      </div>
-      <div class="flex items-center gap-2">
-        {#if doneTasks.length > 0}
-          <button
-            class="font-mono text-[11px] text-secondary hover:text-error cursor-pointer transition-colors"
-            onclick={handleClearDone}
-            disabled={isClearing}
-            title="Clear all done tasks"
-          >
-            {#if isClearing}
-              <span class="loading loading-spinner loading-xs"></span>
-            {:else}
-              $ clear
-            {/if}
-          </button>
-        {/if}
-        <button
-          class="text-secondary hover:text-base-content cursor-pointer transition-colors text-lg leading-none"
-          onclick={toggleDoneDrawer}
-          title="Close (c)"
-        >
-          ✕
-        </button>
-      </div>
-    </div>
-
-    <!-- Drawer content -->
-    <div class="flex-1 flex flex-col gap-2 overflow-y-auto p-4">
-      {#each doneTasks as task (task.id)}
-        <div oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)}>
-          <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} isStarting={$startingTasks.has(task.id)} onSelect={handleSelect} />
-        </div>
-      {/each}
-      {#if doneTasks.length === 0}
-        <div class="text-center font-mono text-xs text-secondary py-10">No completed tasks</div>
-      {/if}
-    </div>
-  </div>
-{/if}
 
 <TaskContextMenu
   visible={contextMenu.visible}
   x={contextMenu.x}
   y={contextMenu.y}
   taskId={contextMenu.taskId}
+  {boardColumns}
   onClose={closeContextMenu}
   onStart={(taskId) => onRunAction({ taskId, actionPrompt: '', agent: null })}
   onDelete={(taskId) => { if ($selectedTaskId === taskId) $selectedTaskId = null }}
