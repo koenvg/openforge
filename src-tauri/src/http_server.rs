@@ -67,6 +67,45 @@ pub struct ClaudeHookPayload {
     pub claude_task_id: Option<String>,
 }
 
+/// Resolve project_id from request parameters, failing if no project can be determined.
+///
+/// Priority: explicit project_id > worktree deduction.
+/// If neither succeeds, returns an error message listing available projects
+/// so the calling agent can retry with the correct project_id.
+fn resolve_project_id(
+    db: &db::Database,
+    explicit_project_id: Option<&str>,
+    worktree: Option<&str>,
+) -> Result<String, String> {
+    if let Some(id) = explicit_project_id {
+        if !id.is_empty() {
+            return Ok(id.to_string());
+        }
+    }
+
+    if let Some(wt) = worktree {
+        if let Ok(Some(id)) = db.get_project_for_worktree(wt) {
+            return Ok(id);
+        }
+    }
+
+    let projects = db.get_all_projects().unwrap_or_default();
+    let project_list = if projects.is_empty() {
+        "  (none — create a project in Open Forge first)".to_string()
+    } else {
+        projects
+            .iter()
+            .map(|p| format!("  - {}: {} ({})", p.id, p.name, p.path))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+
+    Err(format!(
+        "Could not determine project for this task. project_id was not provided and could not be deduced from the worktree path.\n\nAvailable projects:\n{}\n\nPlease call create_task again with the correct project_id parameter.",
+        project_list
+    ))
+}
+
 /// Handle create_task requests from OpenCode sessions
 ///
 /// Creates a new task in the database with "backlog" status and
@@ -77,33 +116,25 @@ pub struct ClaudeHookPayload {
 pub async fn create_task_handler(
     State(state): State<AppState>,
     Json(request): Json<CreateTaskRequest>,
-) -> Result<Json<CreateTaskResponse>, StatusCode> {
+) -> Result<Json<CreateTaskResponse>, (StatusCode, String)> {
     let db = state.db.lock().unwrap();
 
-    // Deduce project_id from worktree if not explicitly provided
-    let project_id = match request.project_id {
-        Some(ref id) if !id.is_empty() => Some(id.clone()),
-        _ => {
-            // Try to deduce from worktree path
-            if let Some(ref worktree) = request.worktree {
-                db.get_project_for_worktree(worktree)
-                    .ok()
-                    .flatten()
-            } else {
-                None
-            }
-        }
-    };
+    let project_id = resolve_project_id(
+        &db,
+        request.project_id.as_deref(),
+        request.worktree.as_deref(),
+    )
+    .map_err(|msg| (StatusCode::UNPROCESSABLE_ENTITY, msg))?;
 
     let task = db.create_task(
         &request.initial_prompt,
         "backlog",
         None,
-        project_id.as_deref(),
+        Some(&project_id),
         None,
         None,
         None,
-    ).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    ).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create task: {}", e)))?;
 
     drop(db);
 
@@ -873,6 +904,91 @@ mod tests {
         assert!(json_value["summary"].is_null());
         assert_eq!(json_value["status"], "doing");
         assert!(json_value["jira_key"].is_null());
+    }
+
+    // ========================================================================
+    // resolve_project_id Tests
+    // ========================================================================
+
+    #[test]
+    fn test_resolve_project_id_with_explicit_id() {
+        let (db, _path) = crate::db::test_helpers::make_test_db("resolve_explicit");
+        let result = resolve_project_id(&db, Some("P-1"), None);
+        assert_eq!(result, Ok("P-1".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_project_id_empty_id_falls_through() {
+        let (db, _path) = crate::db::test_helpers::make_test_db("resolve_empty_id");
+        let result = resolve_project_id(&db, Some(""), None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_resolve_project_id_none_id_falls_through() {
+        let (db, _path) = crate::db::test_helpers::make_test_db("resolve_none_id");
+        let result = resolve_project_id(&db, None, None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_resolve_project_id_from_worktree() {
+        let (db, _path) = crate::db::test_helpers::make_test_db("resolve_worktree");
+        let project = db.create_project("Test Project", "/tmp/test").expect("create project");
+        crate::db::test_helpers::insert_test_task(&db);
+        db.create_worktree_record("T-100", &project.id, "/tmp/repo", "/tmp/wt1", "branch-1")
+            .expect("create worktree");
+
+        let result = resolve_project_id(&db, None, Some("/tmp/wt1"));
+        assert_eq!(result, Ok(project.id));
+    }
+
+    #[test]
+    fn test_resolve_project_id_no_match_lists_available_projects() {
+        let (db, _path) = crate::db::test_helpers::make_test_db("resolve_no_match");
+        db.create_project("My Project", "/path/to/project").expect("create project");
+
+        let result = resolve_project_id(&db, None, None);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("Could not determine project"), "Error: {err}");
+        assert!(err.contains("P-1"), "Should list project ID. Error: {err}");
+        assert!(err.contains("My Project"), "Should list project name. Error: {err}");
+        assert!(err.contains("/path/to/project"), "Should list project path. Error: {err}");
+        assert!(err.contains("create_task"), "Should tell caller to retry. Error: {err}");
+    }
+
+    #[test]
+    fn test_resolve_project_id_no_projects_at_all() {
+        let (db, _path) = crate::db::test_helpers::make_test_db("resolve_no_projects");
+        let result = resolve_project_id(&db, None, None);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("none"), "Should indicate no projects exist. Error: {err}");
+    }
+
+    #[test]
+    fn test_resolve_project_id_worktree_not_found_lists_projects() {
+        let (db, _path) = crate::db::test_helpers::make_test_db("resolve_wt_not_found");
+        db.create_project("Test", "/tmp/test").expect("create project");
+
+        let result = resolve_project_id(&db, None, Some("/unknown/path"));
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("Could not determine project"), "Error: {err}");
+        assert!(err.contains("P-1"), "Should list available project. Error: {err}");
+    }
+
+    #[test]
+    fn test_resolve_project_id_explicit_takes_priority_over_worktree() {
+        let (db, _path) = crate::db::test_helpers::make_test_db("resolve_priority");
+        let project = db.create_project("Test Project", "/tmp/test").expect("create project");
+        crate::db::test_helpers::insert_test_task(&db);
+        db.create_worktree_record("T-100", &project.id, "/tmp/repo", "/tmp/wt1", "branch-1")
+            .expect("create worktree");
+
+        let result = resolve_project_id(&db, Some("P-99"), Some("/tmp/wt1"));
+        assert_eq!(result, Ok("P-99".to_string()));
     }
 
 }
