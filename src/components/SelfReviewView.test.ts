@@ -9,6 +9,8 @@ vi.mock('../lib/stores', () => ({
   selfReviewArchivedComments: writable([]),
   pendingManualComments: writable([]),
   ticketPrs: writable(new Map()),
+  taskReviewModes: writable(new Map()),
+  taskDraftNotes: writable(new Map()),
 }))
 
 vi.mock('../lib/useDiffWorker.svelte', () => ({
