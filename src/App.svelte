@@ -71,10 +71,6 @@
   let actionPaletteActions = $state<Action[]>([])
   let workQueueRefreshTrigger = $state(0)
 
-  function isAnyModalOpen(): boolean {
-    return showAddDialog || showShortcutsDialog || showProjectSwitcher || showCommandPalette || showActionPalette || showProjectSetup
-  }
-
   let selectedTask = $derived($tasks.find(t => t.id === $selectedTaskId) || null)
 
 
