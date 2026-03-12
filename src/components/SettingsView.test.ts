@@ -36,7 +36,6 @@ vi.mock('../lib/stores', () => ({
       updated_at: Date.now(),
     },
   ]),
-  creaturesEnabled: writable(false),
   codeCleanupTasksEnabled: writable(false),
 }))
 

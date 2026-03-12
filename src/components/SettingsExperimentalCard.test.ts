@@ -4,8 +4,6 @@ import SettingsExperimentalCard from './SettingsExperimentalCard.svelte'
 
 function defaultProps(overrides: Record<string, unknown> = {}) {
 	return {
-		creaturesEnabled: false,
-		onCreaturesToggle: vi.fn(),
 		codeCleanupTasksEnabled: false,
 		onCodeCleanupTasksToggle: vi.fn(),
 		...overrides,
@@ -17,50 +15,6 @@ describe('SettingsExperimentalCard', () => {
 		render(SettingsExperimentalCard, { props: defaultProps() })
 
 		expect(screen.getByText('Experimental')).toBeTruthy()
-	})
-
-	describe('creatures experiment toggle', () => {
-		it('renders Creatures Experiment label', () => {
-			render(SettingsExperimentalCard, { props: defaultProps() })
-
-			expect(screen.getByText('Creatures Experiment')).toBeTruthy()
-		})
-
-		it('renders toggle unchecked when creaturesEnabled is false', () => {
-			render(SettingsExperimentalCard, {
-				props: defaultProps({ creaturesEnabled: false }),
-			})
-
-			const toggle = screen.getByTestId('creatures-toggle') as HTMLInputElement
-			expect(toggle.checked).toBe(false)
-		})
-
-		it('renders toggle checked when creaturesEnabled is true', () => {
-			render(SettingsExperimentalCard, {
-				props: defaultProps({ creaturesEnabled: true }),
-			})
-
-			const toggle = screen.getByTestId('creatures-toggle') as HTMLInputElement
-			expect(toggle.checked).toBe(true)
-		})
-
-		it('calls onCreaturesToggle when toggle is clicked', async () => {
-			const onCreaturesToggle = vi.fn()
-			render(SettingsExperimentalCard, {
-				props: defaultProps({ onCreaturesToggle }),
-			})
-
-			const toggle = screen.getByTestId('creatures-toggle')
-			await fireEvent.click(toggle)
-
-			expect(onCreaturesToggle).toHaveBeenCalledOnce()
-		})
-
-		it('renders description text for creatures toggle', () => {
-			render(SettingsExperimentalCard, { props: defaultProps() })
-
-			expect(screen.getByText('Show the Creatures view in the sidebar')).toBeTruthy()
-		})
 	})
 
 	describe('code cleanup tasks experiment toggle', () => {

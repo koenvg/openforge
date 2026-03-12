@@ -44,7 +44,6 @@ export const selectedSkillName = writable<string | null>(null);
 /** Set of task IDs currently starting (worktree creation + agent spawn in progress) */
 export const startingTasks = writable<Set<string>>(new Set());
 
-export const creaturesEnabled = writable<boolean>(false);
 export const codeCleanupTasksEnabled = writable<boolean>(false);
 
 /** Per-task review mode state — preserved across navigation */
