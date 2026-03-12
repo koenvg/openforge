@@ -85,8 +85,8 @@ vi.mock('../lib/useCommentSelection.svelte', () => ({
 }))
 
 import { render, screen, waitFor, fireEvent } from '@testing-library/svelte'
-import { describe, it, expect, vi } from 'vitest'
-import { writable } from 'svelte/store'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { writable, get } from 'svelte/store'
 
 vi.mock('../lib/stores', () => ({
   selectedTaskId: writable(null),
@@ -99,6 +99,8 @@ vi.mock('../lib/stores', () => ({
   selfReviewGeneralComments: writable([]),
   selfReviewArchivedComments: writable([]),
   pendingManualComments: writable([]),
+  taskReviewModes: writable(new Map()),
+  taskDraftNotes: writable(new Map()),
 }))
 
 vi.mock('../lib/ipc', () => ({
@@ -170,7 +172,7 @@ vi.mock('../lib/actions', () => ({
 
 import TaskDetailView from './TaskDetailView.svelte'
 import type { Task, AgentSession } from '../lib/types'
-import { activeSessions, selectedTaskId } from '../lib/stores'
+import { activeSessions, selectedTaskId, taskReviewModes } from '../lib/stores'
 
 const baseTask: Task = {
   id: 'T-42',
@@ -825,14 +827,85 @@ describe('TaskDetailView', () => {
       expect(navigateBack).toHaveBeenCalled()
     })
 
-    it('q triggers navigate back', async () => {
-      const { navigateBack } = await import('../lib/navigation')
-      vi.mocked(navigateBack).mockClear()
-      render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+     it('q triggers navigate back', async () => {
+       const { navigateBack } = await import('../lib/navigation')
+       vi.mocked(navigateBack).mockClear()
+       render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
 
-      await fireEvent.keyDown(window, { key: 'q' })
+       await fireEvent.keyDown(window, { key: 'q' })
 
-      expect(navigateBack).toHaveBeenCalled()
-    })
-  })
+       expect(navigateBack).toHaveBeenCalled()
+     })
+   })
+
+   describe('review mode persistence', () => {
+     beforeEach(() => {
+       taskReviewModes.set(new Map())
+     })
+
+     it('l key writes true to taskReviewModes store for the task', async () => {
+       const { getWorktreeForTask } = await import('../lib/ipc')
+       vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' } as any)
+
+       render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+       await waitFor(() => expect(screen.getByText('review_view')).toBeTruthy())
+
+       await fireEvent.keyDown(window, { key: 'l' })
+
+       await waitFor(() => {
+         expect(get(taskReviewModes).get('T-42')).toBe(true)
+       })
+
+       vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+     })
+
+     it('h key writes false to taskReviewModes store for the task', async () => {
+       const { getWorktreeForTask } = await import('../lib/ipc')
+       vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' } as any)
+
+       taskReviewModes.set(new Map([['T-42', true]]))
+       render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+       await waitFor(() => expect(screen.getByText('review_view')).toBeTruthy())
+
+       await fireEvent.keyDown(window, { key: 'h' })
+
+       await waitFor(() => {
+         expect(get(taskReviewModes).get('T-42')).toBe(false)
+       })
+
+       vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+     })
+
+     it('restores review mode from store when task is rendered', async () => {
+       const { getWorktreeForTask } = await import('../lib/ipc')
+       vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' } as any)
+
+       taskReviewModes.set(new Map([['T-42', true]]))
+       render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+
+       await waitFor(() => {
+         const breadcrumb = screen.getByText('$ cd board').closest('div')
+         expect(breadcrumb?.textContent).toContain('self_review')
+       })
+
+       vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+     })
+
+     it('review mode is task-scoped: Task A review does not affect Task B', async () => {
+       const { getWorktreeForTask } = await import('../lib/ipc')
+       vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' } as any)
+
+       taskReviewModes.set(new Map([['T-42', true]]))
+       const taskB = { ...baseTask, id: 'T-99', initial_prompt: 'Task B', jira_key: null }
+       render(TaskDetailView, { props: { task: taskB, onRunAction: mockOnRunAction } })
+
+       await waitFor(() => {
+         const breadcrumb = screen.getByText('$ cd board').closest('div')
+         expect(breadcrumb?.textContent).toContain('code')
+         expect(breadcrumb?.textContent).not.toContain('self_review')
+       })
+
+       vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+     })
+   })
 })

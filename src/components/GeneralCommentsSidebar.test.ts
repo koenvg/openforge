@@ -2,7 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { get } from 'svelte/store'
 import GeneralCommentsSidebar from './GeneralCommentsSidebar.svelte'
-import { selfReviewGeneralComments, selfReviewArchivedComments } from '../lib/stores'
+import { selfReviewGeneralComments, selfReviewArchivedComments, taskDraftNotes } from '../lib/stores'
 import type { SelfReviewComment } from '../lib/types'
 import {
   getActiveSelfReviewComments,
@@ -51,6 +51,7 @@ describe('GeneralCommentsSidebar', () => {
   beforeEach(() => {
     selfReviewGeneralComments.set([])
     selfReviewArchivedComments.set([])
+    taskDraftNotes.set(new Map())
     vi.clearAllMocks()
   })
 
@@ -167,5 +168,97 @@ describe('GeneralCommentsSidebar', () => {
 
     expect(screen.getByText('Test comment')).toBeTruthy()
     expect(screen.getByText('Previous Round (1)')).toBeTruthy()
+  })
+
+  describe('draft persistence', () => {
+    beforeEach(() => {
+      taskDraftNotes.set(new Map())
+      selfReviewGeneralComments.set([])
+      selfReviewArchivedComments.set([])
+      vi.clearAllMocks()
+      mockGetActiveSelfReviewComments.mockResolvedValue([])
+      mockGetArchivedSelfReviewComments.mockResolvedValue([])
+    })
+
+    it('restores draft from store on mount', async () => {
+      taskDraftNotes.set(new Map([['task-1', 'saved draft text']]))
+
+      const { unmount } = render(GeneralCommentsSidebar, { props: { taskId: 'task-1' } })
+      await new Promise((r) => setTimeout(r, 50))
+
+      const textarea = screen.getByPlaceholderText(/Add a testing note/) as HTMLTextAreaElement
+      expect(textarea.value).toBe('saved draft text')
+
+      unmount()
+    })
+
+    it('saves draft to store on unmount', async () => {
+      const { unmount } = render(GeneralCommentsSidebar, { props: { taskId: 'task-1' } })
+      await new Promise((r) => setTimeout(r, 50))
+
+      const textarea = screen.getByPlaceholderText(/Add a testing note/) as HTMLTextAreaElement
+      textarea.value = 'my draft note'
+      await fireEvent.input(textarea)
+
+      unmount()
+
+      expect(get(taskDraftNotes).get('task-1')).toBe('my draft note')
+    })
+
+    it('does not save empty draft to store on unmount', async () => {
+      const { unmount } = render(GeneralCommentsSidebar, { props: { taskId: 'task-1' } })
+      await new Promise((r) => setTimeout(r, 50))
+
+      // Leave textarea empty
+      unmount()
+
+      expect(get(taskDraftNotes).has('task-1')).toBe(false)
+    })
+
+    it('does not save whitespace-only draft to store', async () => {
+      const { unmount } = render(GeneralCommentsSidebar, { props: { taskId: 'task-1' } })
+      await new Promise((r) => setTimeout(r, 50))
+
+      const textarea = screen.getByPlaceholderText(/Add a testing note/) as HTMLTextAreaElement
+      textarea.value = '   '
+      await fireEvent.input(textarea)
+
+      unmount()
+
+      expect(get(taskDraftNotes).has('task-1')).toBe(false)
+    })
+
+    it('clears draft from store after successful comment submission', async () => {
+      taskDraftNotes.set(new Map([['task-1', 'draft to clear']]))
+      mockAddSelfReviewComment.mockResolvedValue(1)
+      mockGetActiveSelfReviewComments.mockResolvedValue([mockComment])
+      mockGetArchivedSelfReviewComments.mockResolvedValue([])
+
+      render(GeneralCommentsSidebar, { props: { taskId: 'task-1' } })
+      await new Promise((r) => setTimeout(r, 50))
+
+      const textarea = screen.getByPlaceholderText(/Add a testing note/) as HTMLTextAreaElement
+      textarea.value = 'new comment text'
+      await fireEvent.input(textarea)
+
+      const addButton = screen.getByText('Add')
+      await fireEvent.click(addButton)
+      await new Promise((r) => setTimeout(r, 150))
+
+      expect(textarea.value).toBe('')
+      expect(get(taskDraftNotes).has('task-1')).toBe(false)
+    })
+
+    it('is task-scoped: draft for task-1 does not appear for task-2', async () => {
+      taskDraftNotes.set(new Map([['task-1', 'task 1 draft']]))
+
+      const { unmount } = render(GeneralCommentsSidebar, { props: { taskId: 'task-2' } })
+      await new Promise((r) => setTimeout(r, 50))
+
+      const textarea = screen.getByPlaceholderText(/Add a testing note/) as HTMLTextAreaElement
+      expect(textarea.value).toBe('')
+
+      unmount()
+    })
   })
 })

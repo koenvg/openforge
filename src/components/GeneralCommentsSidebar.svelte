@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { selfReviewGeneralComments, selfReviewArchivedComments } from '../lib/stores'
+  import { onDestroy } from 'svelte'
+  import { get } from 'svelte/store'
+  import { selfReviewGeneralComments, selfReviewArchivedComments, taskDraftNotes } from '../lib/stores'
   import {
     addSelfReviewComment,
     deleteSelfReviewComment,
@@ -23,9 +25,20 @@
   let archivedExpanded = $state(false)
 
   let textareaEl = $state<HTMLTextAreaElement | null>(null)
+  let prevTaskId = ''
 
   let archivedCount = $derived($selfReviewArchivedComments.length)
   let canAdd = $derived(newCommentBody.trim().length > 0 && !isAdding)
+
+  function saveDraft(id: string, body: string) {
+    const updated = new Map(get(taskDraftNotes))
+    if (body.trim()) {
+      updated.set(id, body)
+    } else {
+      updated.delete(id)
+    }
+    taskDraftNotes.set(updated)
+  }
 
   function formatTimestamp(ts: number): string {
     const date = new Date(ts * 1000)
@@ -71,6 +84,7 @@
     try {
       await addSelfReviewComment(taskId, 'general', null, null, body)
       newCommentBody = ''
+      saveDraft(taskId, '')
       // Re-fetch to get the full comment object with id, round, created_at
       // Force reload to bypass the guard
       await loadComments(true)
@@ -126,11 +140,21 @@
   }
 
   $effect(() => {
-    // Re-run whenever taskId changes
     const id = taskId
-    if (id) {
+    if (id && id !== prevTaskId) {
+      // Save draft for previous task before switching
+      if (prevTaskId) {
+        saveDraft(prevTaskId, newCommentBody)
+      }
+      // Load draft for new task from store
+      newCommentBody = get(taskDraftNotes).get(id) ?? ''
+      prevTaskId = id
       loadComments()
     }
+  })
+
+  onDestroy(() => {
+    saveDraft(taskId, newCommentBody)
   })
 </script>
 

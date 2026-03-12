@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import { get } from 'svelte/store'
   import type { Task, Action } from '../lib/types'
-  import { selectedTaskId, activeSessions, activeProjectId, startingTasks } from '../lib/stores'
+  import { selectedTaskId, activeSessions, activeProjectId, startingTasks, taskReviewModes } from '../lib/stores'
   import { getWorktreeForTask, updateTaskStatus, getConfig } from '../lib/ipc'
   import { navigateBack } from '../lib/navigation'
   import { isInputFocused } from '../lib/domUtils'
@@ -32,6 +33,13 @@
 
   let displayTitle = $derived(task.initial_prompt || (task.prompt ? task.prompt.split('\n')[0] : '') || task.id)
 
+  function setReviewMode(value: boolean) {
+    reviewMode = value
+    const updated = new Map(get(taskReviewModes) as Map<string, boolean>)
+    updated.set(task.id, value)
+    taskReviewModes.set(updated)
+  }
+
   let currentSession = $derived($activeSessions.get(task.id))
   let agentStatus = $derived(currentSession?.status ?? null)
   let isStarting = $derived($startingTasks.has(task.id))
@@ -40,7 +48,7 @@
     const taskId = task.id
     if (taskId !== lastTaskId) {
       lastTaskId = taskId
-      reviewMode = false
+      reviewMode = (get(taskReviewModes) as Map<string, boolean>).get(taskId) ?? false
       rightPanelMode = 'info'
       terminalFullscreen = false
       worktreePath = null
@@ -95,12 +103,12 @@
     if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && worktreePath !== null) {
       if (e.key === '1') {
         e.preventDefault()
-        reviewMode = false
+        setReviewMode(false)
         return
       }
       if (e.key === '2') {
         e.preventDefault()
-        reviewMode = true
+        setReviewMode(true)
         return
       }
     }
@@ -134,12 +142,12 @@
     }
     if (e.key === 'h' && worktreePath !== null) {
       e.preventDefault()
-      reviewMode = false
+      setReviewMode(false)
       return
     }
     if (e.key === 'l' && worktreePath !== null) {
       e.preventDefault()
-      reviewMode = true
+      setReviewMode(true)
       return
     }
   }
@@ -207,14 +215,14 @@
     </div>
     {#if worktreePath !== null}
       <div class="flex items-center gap-1">
-        <button
-          class="btn btn-ghost btn-xs gap-1.5 {!reviewMode ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
-          onclick={() => reviewMode = false}
-        >code_view <kbd class="kbd kbd-xs opacity-50">⌘1</kbd></button>
-        <button
-          class="btn btn-ghost btn-xs gap-1.5 {reviewMode ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
-          onclick={() => reviewMode = true}
-        >review_view <kbd class="kbd kbd-xs opacity-50">⌘2</kbd></button>
+       <button
+           class="btn btn-ghost btn-xs gap-1.5 {!reviewMode ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
+           onclick={() => setReviewMode(false)}
+         >code_view <kbd class="kbd kbd-xs opacity-50">⌘1</kbd></button>
+         <button
+           class="btn btn-ghost btn-xs gap-1.5 {reviewMode ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
+           onclick={() => setReviewMode(true)}
+         >review_view <kbd class="kbd kbd-xs opacity-50">⌘2</kbd></button>
       </div>
     {/if}
   </div>
