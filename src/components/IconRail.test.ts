@@ -9,16 +9,16 @@ describe('IconRail', () => {
     expect(screen.getByText('>_')).toBeTruthy()
   })
 
-  it('renders 6 navigation buttons when creatures is disabled', () => {
+  it('renders 5 navigation buttons when creatures is disabled', () => {
     render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), creaturesEnabled: false, authoredPrCount: 0 } })
     const buttons = screen.getAllByRole('button')
-    expect(buttons).toHaveLength(6)
+    expect(buttons).toHaveLength(5)
   })
 
-  it('renders 7 navigation buttons when creatures is enabled', () => {
+  it('renders 6 navigation buttons when creatures is enabled', () => {
     render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), creaturesEnabled: true, authoredPrCount: 0 } })
     const buttons = screen.getAllByRole('button')
-    expect(buttons).toHaveLength(7)
+    expect(buttons).toHaveLength(6)
   })
 
   it('clicking first button (dashboard) calls onNavigate with "board"', () => {
@@ -37,19 +37,11 @@ describe('IconRail', () => {
     expect(onNavigate).toHaveBeenCalledWith('pr_review')
   })
 
-  it('clicking third button (my_prs) calls onNavigate with "my_prs"', () => {
+  it('clicking third button (skills) calls onNavigate with "skills"', () => {
     const onNavigate = vi.fn()
     render(IconRail, { props: { currentView: 'board' as AppView, onNavigate, creaturesEnabled: false, authoredPrCount: 0 } })
     const buttons = screen.getAllByRole('button')
     fireEvent.click(buttons[2])
-    expect(onNavigate).toHaveBeenCalledWith('my_prs')
-  })
-
-  it('clicking fourth button (skills) calls onNavigate with "skills"', () => {
-    const onNavigate = vi.fn()
-    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate, creaturesEnabled: false, authoredPrCount: 0 } })
-    const buttons = screen.getAllByRole('button')
-    fireEvent.click(buttons[3])
     expect(onNavigate).toHaveBeenCalledWith('skills')
   })
 
@@ -57,7 +49,7 @@ describe('IconRail', () => {
     const onNavigate = vi.fn()
     render(IconRail, { props: { currentView: 'board' as AppView, onNavigate, creaturesEnabled: true, authoredPrCount: 0 } })
     const buttons = screen.getAllByRole('button')
-    fireEvent.click(buttons[4])
+    fireEvent.click(buttons[3])
     expect(onNavigate).toHaveBeenCalledWith('creatures')
   })
 
@@ -65,7 +57,7 @@ describe('IconRail', () => {
     const onNavigate = vi.fn()
     render(IconRail, { props: { currentView: 'board' as AppView, onNavigate, creaturesEnabled: false, authoredPrCount: 0 } })
     const buttons = screen.getAllByRole('button')
-    fireEvent.click(buttons[4])
+    fireEvent.click(buttons[3])
     expect(onNavigate).toHaveBeenCalledWith('workqueue')
   })
 
@@ -73,7 +65,7 @@ describe('IconRail', () => {
     const onNavigate = vi.fn()
     render(IconRail, { props: { currentView: 'board' as AppView, onNavigate, creaturesEnabled: true, authoredPrCount: 0 } })
     const buttons = screen.getAllByRole('button')
-    fireEvent.click(buttons[5])
+    fireEvent.click(buttons[4])
     expect(onNavigate).toHaveBeenCalledWith('workqueue')
   })
 
@@ -81,7 +73,7 @@ describe('IconRail', () => {
     const onNavigate = vi.fn()
     render(IconRail, { props: { currentView: 'board' as AppView, onNavigate, creaturesEnabled: false, authoredPrCount: 0 } })
     const buttons = screen.getAllByRole('button')
-    fireEvent.click(buttons[5])
+    fireEvent.click(buttons[4])
     expect(onNavigate).toHaveBeenCalledWith('settings')
   })
 
@@ -89,7 +81,7 @@ describe('IconRail', () => {
     const onNavigate = vi.fn()
     render(IconRail, { props: { currentView: 'board' as AppView, onNavigate, creaturesEnabled: true, authoredPrCount: 0 } })
     const buttons = screen.getAllByRole('button')
-    fireEvent.click(buttons[6])
+    fireEvent.click(buttons[5])
     expect(onNavigate).toHaveBeenCalledWith('settings')
   })
 
