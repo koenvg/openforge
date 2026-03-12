@@ -13,7 +13,6 @@
   import Modal from './components/Modal.svelte'
    import SettingsView from './components/SettingsView.svelte'
    import PrReviewView from './components/PrReviewView.svelte'
-   import MyPullRequestsView from './components/MyPullRequestsView.svelte'
    import SkillsView from './components/SkillsView.svelte'
    import CreaturesView from './components/CreaturesView.svelte'
    import WorkQueueView from './components/WorkQueueView.svelte'
@@ -97,12 +96,6 @@
     }
   })
 
-  $effect(() => {
-    if ($currentView === 'my_prs') {
-      $selectedTaskId = null
-    }
-  })
-  
   $effect(() => {
     if ($currentView === 'settings') {
       $selectedTaskId = null
@@ -868,8 +861,6 @@
         <SettingsView onClose={() => { pushNavState(); $currentView = 'board' }} onProjectDeleted={loadProjects} />
       {:else if $currentView === 'pr_review'}
         <PrReviewView />
-       {:else if $currentView === 'my_prs'}
-         <MyPullRequestsView />
        {:else if $currentView === 'skills'}
          <SkillsView onRunAction={handleRunAction} />
        {:else if $currentView === 'creatures'}
