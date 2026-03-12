@@ -5,6 +5,7 @@
     projectName: string
     projectPath: string
     aiProvider: string
+    useWorktrees: boolean
     disabled: boolean
     opencodeInstalled: boolean
     opencodeVersion: string | null
@@ -14,12 +15,14 @@
     onProjectNameChange: (value: string) => void
     onProjectPathChange: (value: string) => void
     onAiProviderChange: (value: string) => void
+    onUseWorktreesChange: () => void
   }
 
   let {
     projectName,
     projectPath,
     aiProvider,
+    useWorktrees,
     disabled,
     opencodeInstalled,
     opencodeVersion,
@@ -29,6 +32,7 @@
     onProjectNameChange,
     onProjectPathChange,
     onAiProviderChange,
+    onUseWorktreesChange,
   }: Props = $props()
 </script>
 
@@ -109,5 +113,21 @@
         </div>
       {/if}
     </div>
+
+    <div class="border-b border-base-300"></div>
+
+    <label class="flex items-center justify-between cursor-pointer">
+      <div class="flex flex-col gap-0.5">
+        <span class="text-sm text-base-content">Git Worktrees</span>
+        <span class="text-[0.7rem] text-base-content/50">Run agents in isolated git worktrees. When disabled, agents work directly in the project directory.</span>
+      </div>
+      <input
+        type="checkbox"
+        class="toggle toggle-primary toggle-sm"
+        checked={useWorktrees}
+        onchange={onUseWorktreesChange}
+        data-testid="use-worktrees-toggle"
+      />
+    </label>
   </div>
 </div>

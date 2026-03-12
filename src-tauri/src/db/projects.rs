@@ -193,6 +193,18 @@ impl super::Database {
             .unwrap_or_else(|| "claude-code".to_string())
     }
 
+    /// Resolve whether worktrees are enabled for a project.
+    /// Checks project_config for "use_worktrees". Defaults to true (worktrees enabled).
+    /// Only returns false when explicitly set to "false".
+    pub fn resolve_use_worktrees(&self, project_id: &str) -> bool {
+        if !project_id.is_empty() {
+            if let Ok(Some(value)) = self.get_project_config(project_id, "use_worktrees") {
+                return value != "false";
+            }
+        }
+        true
+    }
+
     /// Find a project by its github_default_repo config value.
     /// Returns the project that has github_default_repo set to the given repo_full_name (e.g. "owner/repo").
     pub fn find_project_by_github_repo(&self, repo_full_name: &str) -> Result<Option<ProjectRow>> {
@@ -586,6 +598,64 @@ mod tests {
         // Empty project ID should fall back to global
         let provider = db.resolve_ai_provider("");
         assert_eq!(provider, "claude-code");
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_resolve_use_worktrees_defaults_to_true() {
+        let (db, path) = make_test_db("worktrees_default");
+
+        let project = db
+            .create_project("Test Project", "/tmp/test")
+            .expect("create failed");
+
+        assert!(db.resolve_use_worktrees(&project.id));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_resolve_use_worktrees_false_when_disabled() {
+        let (db, path) = make_test_db("worktrees_disabled");
+
+        let project = db
+            .create_project("Test Project", "/tmp/test")
+            .expect("create failed");
+
+        db.set_project_config(&project.id, "use_worktrees", "false")
+            .expect("set config failed");
+
+        assert!(!db.resolve_use_worktrees(&project.id));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_resolve_use_worktrees_true_when_explicitly_enabled() {
+        let (db, path) = make_test_db("worktrees_enabled");
+
+        let project = db
+            .create_project("Test Project", "/tmp/test")
+            .expect("create failed");
+
+        db.set_project_config(&project.id, "use_worktrees", "true")
+            .expect("set config failed");
+
+        assert!(db.resolve_use_worktrees(&project.id));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_resolve_use_worktrees_empty_project_id() {
+        let (db, path) = make_test_db("worktrees_empty_id");
+
+        assert!(db.resolve_use_worktrees(""));
 
         drop(db);
         let _ = fs::remove_file(&path);

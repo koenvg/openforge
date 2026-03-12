@@ -42,6 +42,7 @@
   let githubDefaultRepo = $state('')
   let agentInstructions = $state('')
   let aiProvider = $state('claude-code')
+  let useWorktrees = $state(true)
 
   // Global state
   let taskIdPrefix = $state('')
@@ -122,11 +123,13 @@
         getProjectConfig(pid, 'github_default_repo'),
         getProjectConfig(pid, 'additional_instructions'),
         getProjectConfig(pid, 'ai_provider'),
-      ]).then(([boardId, repo, instructions, provider]) => {
+        getProjectConfig(pid, 'use_worktrees'),
+      ]).then(([boardId, repo, instructions, provider, worktrees]) => {
         jiraBoardId = boardId ?? ''
         githubDefaultRepo = repo ?? ''
         agentInstructions = instructions ?? ''
         aiProvider = provider ?? 'claude-code'
+        useWorktrees = worktrees !== 'false'
       })
 
       // Load actions
@@ -140,6 +143,7 @@
       githubDefaultRepo = ''
       agentInstructions = ''
       aiProvider = 'claude-code'
+      useWorktrees = true
       actions = []
     }
   })
@@ -258,6 +262,7 @@
         await setProjectConfig($activeProjectId, 'github_default_repo', githubDefaultRepo)
         await setProjectConfig($activeProjectId, 'additional_instructions', agentInstructions)
         await setProjectConfig($activeProjectId, 'ai_provider', aiProvider)
+        await setProjectConfig($activeProjectId, 'use_worktrees', useWorktrees ? 'true' : 'false')
         await saveActions($activeProjectId, actions)
       }
       await setConfig('task_id_prefix', taskIdPrefix)
@@ -365,6 +370,7 @@
           {projectName}
           {projectPath}
           {aiProvider}
+          {useWorktrees}
           disabled={!hasProject}
           {opencodeInstalled}
           {opencodeVersion}
@@ -374,6 +380,7 @@
           onProjectNameChange={(v) => (projectName = v)}
           onProjectPathChange={(v) => (projectPath = v)}
           onAiProviderChange={(v) => (aiProvider = v)}
+          onUseWorktreesChange={() => (useWorktrees = !useWorktrees)}
         />
 
         <SettingsIntegrationsCard

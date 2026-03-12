@@ -187,7 +187,7 @@ pub async fn start_implementation(
     task_id: String,
     repo_path: String,
 ) -> Result<serde_json::Value, String> {
-    let (task, project_id_owned, additional_instructions, code_cleanup_enabled) = {
+    let (task, project_id_owned, additional_instructions, code_cleanup_enabled, use_worktrees) = {
         let db = crate::db::acquire_db(&db);
         let task = db.get_task(&task_id)
             .map_err(|e| format!("Failed to get task: {}", e))?
@@ -201,7 +201,8 @@ pub async fn start_implementation(
             .flatten()
             .map(|v| v == "true")
             .unwrap_or(false);
-        (task, project_id, instructions, cleanup)
+        let worktrees = db.resolve_use_worktrees(&project_id);
+        (task, project_id, instructions, cleanup, worktrees)
     };
 
     let provider_name = {
@@ -216,43 +217,49 @@ pub async fn start_implementation(
         sse_mgr.inner().clone(),
     ).map_err(|e| format!("Unknown provider: {}", e))?;
 
-    let branch = git_worktree::slugify_branch_name(&task_id, task.prompt.as_deref().unwrap_or(&task.initial_prompt));
-    let home = dirs::home_dir().ok_or("Failed to get home directory")?;
-    let repo_name = std::path::Path::new(&repo_path)
-        .file_name()
-        .and_then(|n| n.to_str())
-        .ok_or("Invalid repo path")?;
-    let worktree_path = home
-        .join(".openforge")
-        .join("worktrees")
-        .join(repo_name)
-        .join(&task_id);
+    let working_dir = if use_worktrees {
+        let branch = git_worktree::slugify_branch_name(&task_id, task.prompt.as_deref().unwrap_or(&task.initial_prompt));
+        let home = dirs::home_dir().ok_or("Failed to get home directory")?;
+        let repo_name = std::path::Path::new(&repo_path)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or("Invalid repo path")?;
+        let worktree_path = home
+            .join(".openforge")
+            .join("worktrees")
+            .join(repo_name)
+            .join(&task_id);
 
-    git_worktree::create_worktree(
-        std::path::Path::new(&repo_path),
-        &worktree_path,
-        &branch,
-        "origin/main",
-    )
-    .await
-    .map_err(|e| e.to_string())?;
-
-    {
-        let db = crate::db::acquire_db(&db);
-        db.create_worktree_record(
-            &task_id,
-            &project_id_owned,
-            &repo_path,
-            worktree_path.to_str().unwrap(),
+        git_worktree::create_worktree(
+            std::path::Path::new(&repo_path),
+            &worktree_path,
             &branch,
+            "origin/main",
         )
+        .await
         .map_err(|e| e.to_string())?;
-    }
+
+        {
+            let db = crate::db::acquire_db(&db);
+            db.create_worktree_record(
+                &task_id,
+                &project_id_owned,
+                &repo_path,
+                worktree_path.to_str().unwrap(),
+                &branch,
+            )
+            .map_err(|e| e.to_string())?;
+        }
+
+        worktree_path
+    } else {
+        std::path::PathBuf::from(&repo_path)
+    };
 
     let prompt = build_task_prompt(&task, "Implement this task. Create a branch, make the changes, and create a pull request when done.", additional_instructions.as_deref(), code_cleanup_enabled);
-    let result = provider.start(&task_id, &worktree_path, &prompt, task.agent.as_deref(), task.permission_mode.as_deref(), &app).await?;
+    let result = provider.start(&task_id, &working_dir, &prompt, task.agent.as_deref(), task.permission_mode.as_deref(), &app).await?;
 
-    if provider_name != "claude-code" {
+    if use_worktrees && provider_name != "claude-code" {
         let db = crate::db::acquire_db(&db);
         db.update_worktree_server(&task_id, result.port as i64, 0)
             .map_err(|e| e.to_string())?;
@@ -270,7 +277,7 @@ pub async fn start_implementation(
     Ok(build_start_response(
         &task_id,
         &agent_session_id,
-        worktree_path.to_str().unwrap(),
+        working_dir.to_str().unwrap(),
         result.port,
     ))
 }
