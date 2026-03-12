@@ -47,5 +47,11 @@ export const startingTasks = writable<Set<string>>(new Set());
 export const creaturesEnabled = writable<boolean>(false);
 export const codeCleanupTasksEnabled = writable<boolean>(false);
 
+/** Per-task review mode state — preserved across navigation */
+export const taskReviewModes = writable<Map<string, boolean>>(new Map());
+
+/** Per-task draft note text — preserved across navigation */
+export const taskDraftNotes = writable<Map<string, string>>(new Map());
+
 export const authoredPrs = writable<AuthoredPullRequest[]>([]);
 export const authoredPrCount = writable<number>(0);
