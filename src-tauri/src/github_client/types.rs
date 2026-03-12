@@ -203,6 +203,10 @@ pub struct PrReview {
     pub id: i64,
     pub user: GitHubUser,
     pub state: String,
+    /// Review body text (the top-level summary comment).
+    /// Present when a reviewer submits a review with a body message.
+    #[serde(default)]
+    pub body: Option<String>,
     #[serde(default)]
     pub submitted_at: Option<String>,
     #[serde(flatten)]
@@ -580,8 +584,14 @@ mod tests {
         let resp = RequiredStatusChecksResponse {
             contexts: vec!["ci/build".to_string(), "ci/test".to_string()],
             checks: vec![
-                RequiredCheckEntry { context: "ci/build".to_string(), extra: serde_json::json!({}) },
-                RequiredCheckEntry { context: "ci/lint".to_string(), extra: serde_json::json!({}) },
+                RequiredCheckEntry {
+                    context: "ci/build".to_string(),
+                    extra: serde_json::json!({}),
+                },
+                RequiredCheckEntry {
+                    context: "ci/lint".to_string(),
+                    extra: serde_json::json!({}),
+                },
             ],
             extra: serde_json::json!({}),
         };
@@ -598,8 +608,14 @@ mod tests {
         let resp = RequiredStatusChecksResponse {
             contexts: vec![],
             checks: vec![
-                RequiredCheckEntry { context: "ci/build".to_string(), extra: serde_json::json!({}) },
-                RequiredCheckEntry { context: "ci/test".to_string(), extra: serde_json::json!({}) },
+                RequiredCheckEntry {
+                    context: "ci/build".to_string(),
+                    extra: serde_json::json!({}),
+                },
+                RequiredCheckEntry {
+                    context: "ci/test".to_string(),
+                    extra: serde_json::json!({}),
+                },
             ],
             extra: serde_json::json!({}),
         };
@@ -690,5 +706,123 @@ mod tests {
         }"#;
         let resp: RequiredPullRequestReviewsResponse = serde_json::from_str(json).unwrap();
         assert_eq!(resp.required_approving_review_count, 1);
+    }
+
+    #[test]
+    fn test_pr_review_deserialization_with_body() {
+        let json = r#"{
+            "id": 80,
+            "user": { "login": "copilot[bot]", "id": 198982749, "type": "Bot" },
+            "body": "Copilot Review\n\nI found several issues.",
+            "state": "COMMENTED",
+            "submitted_at": "2024-01-15T10:30:00Z",
+            "commit_id": "abc123"
+        }"#;
+        let review: PrReview = serde_json::from_str(json).unwrap();
+        assert_eq!(review.id, 80);
+        assert_eq!(review.user.login, "copilot[bot]");
+        assert_eq!(review.state, "COMMENTED");
+        assert_eq!(
+            review.body,
+            Some("Copilot Review\n\nI found several issues.".to_string())
+        );
+        assert_eq!(
+            review.submitted_at,
+            Some("2024-01-15T10:30:00Z".to_string())
+        );
+    }
+
+    #[test]
+    fn test_pr_review_deserialization_empty_body() {
+        let json = r#"{
+            "id": 81,
+            "user": { "login": "reviewer" },
+            "body": "",
+            "state": "APPROVED",
+            "submitted_at": "2024-01-15T11:00:00Z"
+        }"#;
+        let review: PrReview = serde_json::from_str(json).unwrap();
+        assert_eq!(review.id, 81);
+        assert_eq!(review.body, Some("".to_string()));
+        assert_eq!(review.state, "APPROVED");
+    }
+
+    #[test]
+    fn test_pr_review_deserialization_null_body() {
+        let json = r#"{
+            "id": 82,
+            "user": { "login": "reviewer" },
+            "body": null,
+            "state": "PENDING"
+        }"#;
+        let review: PrReview = serde_json::from_str(json).unwrap();
+        assert_eq!(review.id, 82);
+        assert_eq!(review.body, None);
+    }
+
+    #[test]
+    fn test_pr_review_deserialization_missing_body() {
+        let json = r#"{
+            "id": 83,
+            "user": { "login": "reviewer" },
+            "state": "DISMISSED"
+        }"#;
+        let review: PrReview = serde_json::from_str(json).unwrap();
+        assert_eq!(review.id, 83);
+        assert_eq!(review.body, None);
+    }
+
+    #[test]
+    fn test_copilot_suggested_change_review_comment_deserialization() {
+        let json = r#"{
+            "id": 1234567890,
+            "path": "src/main.rs",
+            "line": 15,
+            "side": "RIGHT",
+            "body": "```suggestion\nlet x = 42;\n```",
+            "user": { "login": "copilot[bot]", "id": 198982749, "type": "Bot" },
+            "created_at": "2024-01-15T10:30:00Z",
+            "in_reply_to_id": null,
+            "diff_hunk": "@@ -10,6 +10,8 @@\n context",
+            "subject_type": "line",
+            "start_line": null,
+            "original_line": 15,
+            "pull_request_review_id": 987654321
+        }"#;
+        let comment: PrReviewComment = serde_json::from_str(json).unwrap();
+        assert_eq!(comment.id, 1234567890);
+        assert_eq!(comment.path, "src/main.rs");
+        assert_eq!(comment.line, Some(15));
+        assert_eq!(comment.side, Some("RIGHT".to_string()));
+        assert!(comment.body.contains("suggestion"));
+        assert_eq!(comment.user.login, "copilot[bot]");
+        assert!(comment.in_reply_to_id.is_none());
+    }
+
+    #[test]
+    fn test_copilot_multiline_suggested_change_deserialization() {
+        let json = r#"{
+            "id": 1234567891,
+            "path": "src/lib.rs",
+            "line": 20,
+            "side": "RIGHT",
+            "body": "```suggestion\nfn new_impl() {\n    // fixed\n}\n```",
+            "user": { "login": "copilot[bot]" },
+            "created_at": "2024-01-15T10:35:00Z",
+            "in_reply_to_id": null,
+            "start_line": 15,
+            "original_start_line": 15,
+            "original_line": 20,
+            "start_side": "RIGHT",
+            "subject_type": "line"
+        }"#;
+        let comment: PrReviewComment = serde_json::from_str(json).unwrap();
+        assert_eq!(comment.id, 1234567891);
+        assert_eq!(comment.line, Some(20));
+        // start_line captured in extra via serde flatten
+        assert_eq!(
+            comment.extra.get("start_line").and_then(|v| v.as_i64()),
+            Some(15)
+        );
     }
 }

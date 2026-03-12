@@ -62,11 +62,11 @@ impl GitHubClient {
         since: Option<&str>,
     ) -> Result<Vec<PrComment>, GitHubError> {
         let mut review_comments_url = format!(
-            "https://api.github.com/repos/{}/{}/pulls/{}/comments",
+            "https://api.github.com/repos/{}/{}/pulls/{}/comments?per_page=100",
             owner, repo, pr_number
         );
         if let Some(ts) = since {
-            review_comments_url.push_str(&format!("?since={}", ts));
+            review_comments_url.push_str(&format!("&since={}", ts));
         }
 
         let review_cached_etag = {
@@ -139,11 +139,11 @@ impl GitHubClient {
             };
 
         let mut issue_comments_url = format!(
-            "https://api.github.com/repos/{}/{}/issues/{}/comments",
+            "https://api.github.com/repos/{}/{}/issues/{}/comments?per_page=100",
             owner, repo, pr_number
         );
         if let Some(ts) = since {
-            issue_comments_url.push_str(&format!("?since={}", ts));
+            issue_comments_url.push_str(&format!("&since={}", ts));
         }
 
         let issue_cached_etag = {
@@ -238,6 +238,41 @@ impl GitHubClient {
                 line: None,
                 comment_type: "issue_comment".to_string(),
                 created_at: comment.created_at,
+            });
+        }
+
+        // Fetch review bodies (top-level summary comments from PR reviews).
+        // These are only accessible via /pulls/{number}/reviews and are NOT
+        // included in the review comments or issue comments endpoints.
+        let reviews = self
+            .get_pr_reviews(owner, repo, pr_number, token)
+            .await
+            .unwrap_or_else(|e| {
+                eprintln!("[GitHub] Failed to fetch reviews for PR #{}: {}", pr_number, e);
+                vec![]
+            });
+
+        for review in reviews {
+            let body = match &review.body {
+                Some(b) if !b.is_empty() => b.clone(),
+                _ => continue,
+            };
+            let submitted_at = review.submitted_at.unwrap_or_default();
+            if !submitted_at.is_empty() {
+                if let Some(ts) = since {
+                    if submitted_at.as_str() < ts {
+                        continue;
+                    }
+                }
+            }
+            all_comments.push(PrComment {
+                id: -review.id,
+                body,
+                user: review.user,
+                path: None,
+                line: None,
+                comment_type: "review_body".to_string(),
+                created_at: submitted_at,
             });
         }
 

@@ -41,8 +41,15 @@
 
 
   function commentIcon(comment: PrOverviewComment): string {
+    if (comment.comment_type === 'review_body') return '📋'
     if (comment.comment_type === 'review_comment') return '💬'
     return '🗨'
+  }
+
+  function commentTypeLabel(comment: PrOverviewComment): string {
+    if (comment.comment_type === 'review_body') return 'Review summary'
+    if (comment.comment_type === 'review_comment') return 'Code review comment'
+    return 'General comment'
   }
 
   onMount(() => {
@@ -100,17 +107,17 @@
     {:else}
       <div class="flex flex-col gap-4">
         {#each $prOverviewComments as comment (comment.id)}
-          <div class="bg-base-100 border border-base-300 rounded-lg overflow-hidden {comment.comment_type === 'review_comment' ? 'border-l-4 border-l-primary/40' : ''}">
+          <div class="bg-base-100 border border-base-300 rounded-lg overflow-hidden {comment.comment_type === 'review_comment' ? 'border-l-4 border-l-primary/40' : comment.comment_type === 'review_body' ? 'border-l-4 border-l-accent/40' : ''}">
             <div class="flex items-center gap-3 px-5 py-3 bg-base-200 border-b border-base-300">
               <div class="w-7 h-7 rounded-full bg-base-300 flex items-center justify-center text-xs font-bold text-base-content/70 shrink-0">
                 {comment.author.charAt(0).toUpperCase()}
               </div>
               <div class="flex items-center gap-2 text-sm flex-wrap flex-1 min-w-0">
                 <span class="font-semibold text-base-content">{comment.author}</span>
-                <span class="text-base-content/50">commented</span>
+                <span class="text-base-content/50">{comment.comment_type === 'review_body' ? 'submitted a review' : 'commented'}</span>
                 <span class="text-base-content/50" title={formatDate(comment.created_at)}>{timeAgo(new Date(comment.created_at).getTime())}</span>
               </div>
-              <span class="text-xs shrink-0" title={comment.comment_type === 'review_comment' ? 'Code review comment' : 'General comment'}>
+              <span class="text-xs shrink-0" title={commentTypeLabel(comment)}>
                 {commentIcon(comment)}
               </span>
             </div>

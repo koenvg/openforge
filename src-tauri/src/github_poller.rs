@@ -779,6 +779,51 @@ async fn poll_prs_for_project(
             new_comment_count += 1;
         }
 
+        if let Some(reviews) = &result.reviews {
+            for review in reviews {
+                let body = match &review.body {
+                    Some(b) if !b.is_empty() => b,
+                    _ => continue,
+                };
+                let comment_id = -review.id;
+                if existing_ids.contains(&comment_id) {
+                    continue;
+                }
+                let created_at = review
+                    .submitted_at
+                    .as_deref()
+                    .and_then(|ts| parse_github_timestamp(ts))
+                    .unwrap_or(now);
+
+                if let Err(e) = db_lock.insert_pr_comment(
+                    comment_id,
+                    result.pr_id,
+                    &review.user.login,
+                    body,
+                    "review_body",
+                    None,
+                    None,
+                    false,
+                    created_at,
+                ) {
+                    eprintln!("[GitHub Poller] Failed to insert review body {}: {}", review.id, e);
+                    continue;
+                }
+
+                if let Err(e) = app.emit(
+                    "new-pr-comment",
+                    serde_json::json!({
+                        "ticket_id": result.ticket_id,
+                        "comment_id": comment_id
+                    }),
+                ) {
+                    eprintln!("[GitHub Poller] Failed to emit new-pr-comment event: {}", e);
+                }
+
+                new_comment_count += 1;
+            }
+        }
+
         if let (Some(check_runs), Some(combined_status)) =
             (&result.check_runs, &result.combined_status)
         {

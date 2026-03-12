@@ -287,6 +287,7 @@ mod tests {
                 extra: serde_json::json!({}),
             },
             state: state.to_string(),
+            body: None,
             submitted_at: None,
             extra: serde_json::json!({}),
         }
