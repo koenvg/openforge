@@ -6,9 +6,6 @@ on:
   push:
     branches: [main]
 
-permissions:
-  pull-requests: write
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -46,73 +43,31 @@ jobs:
           pnpm test 2>&1 | tee /tmp/tests.log
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
 
-      - name: Comment on PR with failures
-        if: github.event_name == 'pull_request' && (steps.typecheck.outputs.exit_code != '0' || steps.tests.outputs.exit_code != '0')
-        uses: actions/github-script@v7
+      - name: Upload failure logs
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          script: |
-            const fs = require('fs');
+          name: frontend-logs
+          path: |
+            /tmp/typecheck.log
+            /tmp/tests.log
+          retention-days: 1
+          if-no-files-found: ignore
 
-            let body = '## ❌ Frontend CI Failures\n\n';
+      - name: Save results
+        if: always()
+        run: |
+          mkdir -p /tmp/ci-results
+          echo "${{ steps.typecheck.outputs.exit_code }}" > /tmp/ci-results/typecheck-exit-code
+          echo "${{ steps.tests.outputs.exit_code }}" > /tmp/ci-results/tests-exit-code
 
-            if ('${{ steps.typecheck.outputs.exit_code }}' !== '0') {
-              const log = fs.readFileSync('/tmp/typecheck.log', 'utf8');
-              const errors = log.split('\n').filter(l => l.includes('error TS')).join('\n');
-              body += '### Type Check\n\n```\n' + (errors || log).slice(0, 30000) + '\n```\n\n';
-            }
-
-            if ('${{ steps.tests.outputs.exit_code }}' !== '0') {
-              const log = fs.readFileSync('/tmp/tests.log', 'utf8');
-              const lines = log.split('\n');
-              const tail = lines.slice(Math.max(0, lines.length - 200)).join('\n');
-              body += '### Tests\n\n```\n' + tail.slice(0, 30000) + '\n```\n\n';
-            }
-
-            const marker = '<!-- ci-frontend-failures -->';
-            body = marker + '\n' + body;
-
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-            const existing = comments.find(c => c.body.startsWith(marker));
-
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body,
-              });
-            }
-
-      - name: Delete success comment
-        if: github.event_name == 'pull_request' && steps.typecheck.outputs.exit_code == '0' && steps.tests.outputs.exit_code == '0'
-        uses: actions/github-script@v7
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          script: |
-            const marker = '<!-- ci-frontend-failures -->';
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-            const existing = comments.find(c => c.body.startsWith(marker));
-            if (existing) {
-              await github.rest.issues.deleteComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-              });
-            }
+          name: frontend-results
+          path: /tmp/ci-results/
+          retention-days: 1
 
       - name: Fail if checks failed
         if: steps.typecheck.outputs.exit_code != '0' || steps.tests.outputs.exit_code != '0'
@@ -140,67 +95,28 @@ jobs:
           cargo test 2>&1 | tee /tmp/rust-tests.log
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
 
-      - name: Comment on PR with failures
-        if: github.event_name == 'pull_request' && steps.tests.outputs.exit_code != '0'
-        uses: actions/github-script@v7
+      - name: Upload failure logs
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          script: |
-            const fs = require('fs');
-            const log = fs.readFileSync('/tmp/rust-tests.log', 'utf8');
+          name: rust-logs
+          path: /tmp/rust-tests.log
+          retention-days: 1
+          if-no-files-found: ignore
 
-            const lines = log.split('\n');
-            const errorLines = lines.filter(l =>
-              l.includes('error[') || l.includes('error:') ||
-              l.includes('FAILED') || l.includes('panicked')
-            );
-            const tail = lines.slice(Math.max(0, lines.length - 100)).join('\n');
-            const errors = errorLines.length > 0 ? errorLines.join('\n') + '\n\n---\n\n' + tail : tail;
+      - name: Save results
+        if: always()
+        run: |
+          mkdir -p /tmp/ci-results
+          echo "${{ steps.tests.outputs.exit_code }}" > /tmp/ci-results/tests-exit-code
 
-            const marker = '<!-- ci-rust-failures -->';
-            let body = marker + '\n## ❌ Rust CI Failures\n\n```\n' + errors.slice(0, 30000) + '\n```\n';
-
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-            const existing = comments.find(c => c.body.startsWith(marker));
-
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body,
-              });
-            }
-
-      - name: Delete success comment
-        if: github.event_name == 'pull_request' && steps.tests.outputs.exit_code == '0'
-        uses: actions/github-script@v7
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          script: |
-            const marker = '<!-- ci-rust-failures -->';
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-            const existing = comments.find(c => c.body.startsWith(marker));
-            if (existing) {
-              await github.rest.issues.deleteComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-              });
-            }
+          name: rust-results
+          path: /tmp/ci-results/
+          retention-days: 1
 
       - name: Fail if tests failed
         if: steps.tests.outputs.exit_code != '0'
