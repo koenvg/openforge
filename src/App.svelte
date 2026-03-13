@@ -764,8 +764,16 @@
   {/if}
 
   <div class="flex flex-col flex-1 min-w-0">
-    <header class="bg-neutral text-neutral-content h-12 flex items-center justify-between px-6 shrink-0">
-      <div class="flex items-center gap-4">
+    <header class="bg-neutral text-neutral-content h-12 grid grid-cols-3 items-center px-6 shrink-0">
+      <div class="flex items-center gap-3">
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm btn-square {showProjectSidebar ? 'text-primary' : 'text-neutral-content/40 hover:text-neutral-content'}"
+          onclick={() => { showProjectSidebar = !showProjectSidebar; localStorage.setItem('projectSidebarVisible', String(showProjectSidebar)) }}
+          title={showProjectSidebar ? 'Hide project sidebar (⌘B)' : 'Show project sidebar (⌘B)'}
+        >
+          <PanelLeft size={16} />
+        </button>
         <span class="flex items-center gap-1.5 font-mono text-sm">
           <span class="text-primary font-bold">&gt;</span>
           <span class="font-semibold">open_forge</span>
@@ -786,33 +794,26 @@
         </button>
       </div>
 
-      <div class="flex items-center gap-2">
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm btn-square {showProjectSidebar ? 'text-primary' : 'text-neutral-content/40 hover:text-neutral-content'}"
-          onclick={() => { showProjectSidebar = !showProjectSidebar; localStorage.setItem('projectSidebarVisible', String(showProjectSidebar)) }}
-          title={showProjectSidebar ? 'Hide project sidebar (⌘B)' : 'Show project sidebar (⌘B)'}
-        >
-          <PanelLeft size={16} />
-        </button>
+      <button
+        type="button"
+        class="btn btn-ghost btn-sm text-neutral-content/60 hover:text-neutral-content font-mono text-xs gap-1 justify-self-center"
+        onclick={() => showProjectSwitcher = true}
+      >
+        {#if activeProject}
+          <span class="text-neutral-content/80">{activeProject.name}</span>
+        {:else}
+          projects
+        {/if}
+        <kbd class="kbd kbd-xs bg-neutral-content/10 text-neutral-content/50 border-neutral-content/20">&#8984;P</kbd>
+      </button>
+
+      <div class="flex items-center gap-2 justify-end">
         <button
           type="button"
           class="btn btn-ghost btn-sm text-neutral-content/60 hover:text-neutral-content font-mono text-xs gap-1"
           onclick={() => showCommandPalette = true}
         >
           search <kbd class="kbd kbd-xs bg-neutral-content/10 text-neutral-content/50 border-neutral-content/20">&#8984;K</kbd>
-        </button>
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm text-neutral-content/60 hover:text-neutral-content font-mono text-xs gap-1"
-          onclick={() => showProjectSwitcher = true}
-        >
-          {#if activeProject}
-            <span class="text-neutral-content/80">{activeProject.name}</span>
-          {:else}
-            projects
-          {/if}
-          <kbd class="kbd kbd-xs bg-neutral-content/10 text-neutral-content/50 border-neutral-content/20">&#8984;P</kbd>
         </button>
       </div>
     </header>
