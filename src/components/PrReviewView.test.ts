@@ -16,6 +16,7 @@ vi.mock('../lib/stores', () => ({
   agentReviewError: writable(null),
   authoredPrs: writable([]),
   authoredPrCount: writable(0),
+  activeProjectId: writable('P-1'),
 }))
 
 vi.mock('../lib/navigation', () => ({
@@ -41,11 +42,13 @@ vi.mock('../lib/ipc', () => ({
   submitPrReview: vi.fn(),
   markReviewPrViewed: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn(),
+  getProjectConfig: vi.fn().mockResolvedValue(null),
+  setProjectConfig: vi.fn().mockResolvedValue(undefined),
 }))
 
 import PrReviewView from './PrReviewView.svelte'
-import { reviewPrs, selectedReviewPr, prFileDiffs, reviewComments, pendingManualComments, reviewRequestCount, agentReviewComments, agentReviewLoading, agentReviewError, authoredPrs } from '../lib/stores'
-import { getReviewPrs, fetchReviewPrs, getAuthoredPrs, getPrFileDiffs, getReviewComments, markReviewPrViewed } from '../lib/ipc'
+import { reviewPrs, selectedReviewPr, prFileDiffs, reviewComments, pendingManualComments, reviewRequestCount, agentReviewComments, agentReviewLoading, agentReviewError, authoredPrs, activeProjectId } from '../lib/stores'
+import { getReviewPrs, fetchReviewPrs, getAuthoredPrs, getPrFileDiffs, getReviewComments, markReviewPrViewed, getProjectConfig, setProjectConfig } from '../lib/ipc'
 
 const basePr: ReviewPullRequest = {
   id: 12345,
@@ -468,6 +471,200 @@ describe('PrReviewView', () => {
 
     await waitFor(() => {
       expect(screen.getByText('No open pull requests')).toBeTruthy()
+    })
+  })
+
+  describe('repository filtering', () => {
+    const prRepo1 = { ...basePr, id: 1, number: 1, title: 'PR in repo1', repo_owner: 'acme', repo_name: 'repo1' }
+    const prRepo2 = { ...basePr, id: 2, number: 2, title: 'PR in repo2', repo_owner: 'acme', repo_name: 'repo2' }
+    const prRepo3 = { ...basePr, id: 3, number: 3, title: 'PR in repo3', repo_owner: 'other', repo_name: 'repo3' }
+
+    const authoredRepo1: AuthoredPullRequest = {
+      ...basePr, id: 10, number: 10, title: 'My PR in repo1',
+      repo_owner: 'acme', repo_name: 'repo1',
+      ci_status: 'success', ci_check_runs: null, review_status: 'approved',
+      merged_at: null, task_id: null,
+    }
+    const authoredRepo2: AuthoredPullRequest = {
+      ...basePr, id: 11, number: 11, title: 'My PR in repo2',
+      repo_owner: 'acme', repo_name: 'repo2',
+      ci_status: 'success', ci_check_runs: null, review_status: 'approved',
+      merged_at: null, task_id: null,
+    }
+
+    it('hides review PRs from excluded repos', async () => {
+      vi.mocked(getProjectConfig).mockImplementation(async (_pid: string, key: string) => {
+        if (key === 'pr_excluded_repos') return JSON.stringify(['acme/repo2'])
+        return null
+      })
+      vi.mocked(getReviewPrs).mockResolvedValue([prRepo1, prRepo2, prRepo3])
+      vi.mocked(getAuthoredPrs).mockResolvedValue([])
+      activeProjectId.set('P-1')
+      reviewPrs.set([prRepo1, prRepo2, prRepo3])
+
+      render(PrReviewView)
+
+      await waitFor(() => {
+        expect(screen.getByText('PR in repo1')).toBeTruthy()
+        expect(screen.getByText('PR in repo3')).toBeTruthy()
+        expect(screen.queryByText('PR in repo2')).toBeNull()
+      })
+    })
+
+    it('hides authored PRs from excluded repos', async () => {
+      vi.mocked(getProjectConfig).mockImplementation(async (_pid: string, key: string) => {
+        if (key === 'pr_excluded_repos') return JSON.stringify(['acme/repo1'])
+        return null
+      })
+      vi.mocked(getReviewPrs).mockResolvedValue([])
+      vi.mocked(getAuthoredPrs).mockResolvedValue([authoredRepo1, authoredRepo2])
+      activeProjectId.set('P-1')
+      authoredPrs.set([authoredRepo1, authoredRepo2])
+
+      render(PrReviewView)
+
+      await waitFor(() => {
+        expect(screen.getByText('My PR in repo2')).toBeTruthy()
+        expect(screen.queryByText('My PR in repo1')).toBeNull()
+      })
+    })
+
+    it('shows all PRs when no repos are excluded', async () => {
+      vi.mocked(getProjectConfig).mockResolvedValue(null)
+      vi.mocked(getReviewPrs).mockResolvedValue([prRepo1, prRepo2])
+      vi.mocked(getAuthoredPrs).mockResolvedValue([])
+      activeProjectId.set('P-1')
+      reviewPrs.set([prRepo1, prRepo2])
+
+      render(PrReviewView)
+
+      await waitFor(() => {
+        expect(screen.getByText('PR in repo1')).toBeTruthy()
+        expect(screen.getByText('PR in repo2')).toBeTruthy()
+      })
+    })
+
+    it('shows all PRs when no project is active', async () => {
+      vi.mocked(getProjectConfig).mockResolvedValue(null)
+      vi.mocked(getReviewPrs).mockResolvedValue([prRepo1, prRepo2])
+      vi.mocked(getAuthoredPrs).mockResolvedValue([])
+      activeProjectId.set(null)
+      reviewPrs.set([prRepo1, prRepo2])
+
+      render(PrReviewView)
+
+      await waitFor(() => {
+        expect(screen.getByText('PR in repo1')).toBeTruthy()
+        expect(screen.getByText('PR in repo2')).toBeTruthy()
+      })
+    })
+
+    it('shows filter button in the PR list header', async () => {
+      vi.mocked(getReviewPrs).mockResolvedValue([])
+      vi.mocked(getAuthoredPrs).mockResolvedValue([])
+      activeProjectId.set('P-1')
+
+      render(PrReviewView)
+
+      await waitFor(() => {
+        expect(screen.getByTitle('Filter repositories')).toBeTruthy()
+      })
+    })
+
+    it('persists excluded repos via setProjectConfig when using quick-add', async () => {
+      const mockSetConfig = vi.mocked(setProjectConfig).mockResolvedValue(undefined)
+      vi.mocked(getProjectConfig).mockResolvedValue(null)
+      vi.mocked(getReviewPrs).mockResolvedValue([prRepo1, prRepo2])
+      vi.mocked(getAuthoredPrs).mockResolvedValue([])
+      activeProjectId.set('P-1')
+      reviewPrs.set([prRepo1, prRepo2])
+
+      render(PrReviewView)
+
+      await waitFor(() => {
+        expect(screen.getByTitle('Filter repositories')).toBeTruthy()
+      })
+
+      // Open filter dropdown
+      await fireEvent.click(screen.getByTitle('Filter repositories'))
+
+      await waitFor(() => {
+        // Should show quick-add suggestions for repos from open PRs
+        expect(screen.getByText('+ acme/repo1')).toBeTruthy()
+        expect(screen.getByText('+ acme/repo2')).toBeTruthy()
+      })
+
+      // Click quick-add button for repo2
+      await fireEvent.click(screen.getByText('+ acme/repo2'))
+
+      await waitFor(() => {
+        expect(mockSetConfig).toHaveBeenCalledWith('P-1', 'pr_excluded_repos', JSON.stringify(['acme/repo2']))
+      })
+    })
+
+    it('allows manually adding a repo via text input', async () => {
+      const mockSetConfig = vi.mocked(setProjectConfig).mockResolvedValue(undefined)
+      vi.mocked(getProjectConfig).mockResolvedValue(null)
+      vi.mocked(getReviewPrs).mockResolvedValue([])
+      vi.mocked(getAuthoredPrs).mockResolvedValue([])
+      activeProjectId.set('P-1')
+
+      render(PrReviewView)
+
+      // Open filter dropdown
+      await fireEvent.click(screen.getByTitle('Filter repositories'))
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('owner/repo')).toBeTruthy()
+      })
+
+      // Type a repo name and submit
+      const input = screen.getByPlaceholderText('owner/repo')
+      await fireEvent.input(input, { target: { value: 'org/secret-repo' } })
+      await fireEvent.submit(input.closest('form')!)
+
+      await waitFor(() => {
+        expect(mockSetConfig).toHaveBeenCalledWith('P-1', 'pr_excluded_repos', JSON.stringify(['org/secret-repo']))
+      })
+    })
+
+    it('shows excluded repos with remove buttons', async () => {
+      vi.mocked(getProjectConfig).mockImplementation(async (_pid: string, key: string) => {
+        if (key === 'pr_excluded_repos') return JSON.stringify(['acme/repo2', 'org/hidden'])
+        return null
+      })
+      vi.mocked(getReviewPrs).mockResolvedValue([])
+      vi.mocked(getAuthoredPrs).mockResolvedValue([])
+      activeProjectId.set('P-1')
+
+      render(PrReviewView)
+
+      // Open filter dropdown
+      await fireEvent.click(screen.getByTitle('Filter repositories'))
+
+      await waitFor(() => {
+        expect(screen.getByText('acme/repo2')).toBeTruthy()
+        expect(screen.getByText('org/hidden')).toBeTruthy()
+      })
+    })
+
+    it('updates review request count excluding filtered repos', async () => {
+      vi.mocked(getProjectConfig).mockImplementation(async (_pid: string, key: string) => {
+        if (key === 'pr_excluded_repos') return JSON.stringify(['acme/repo2'])
+        return null
+      })
+      const unviewedPr1 = { ...prRepo1, viewed_at: null }
+      const unviewedPr2 = { ...prRepo2, viewed_at: null }
+      vi.mocked(getReviewPrs).mockResolvedValue([unviewedPr1, unviewedPr2])
+      vi.mocked(getAuthoredPrs).mockResolvedValue([])
+      activeProjectId.set('P-1')
+
+      render(PrReviewView)
+
+      await waitFor(() => {
+        // Only 1 unviewed PR should be counted (repo2 is excluded)
+        expect(get(reviewRequestCount)).toBe(1)
+      })
     })
   })
 
