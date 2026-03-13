@@ -319,7 +319,7 @@
 
   function handleKeydown(e: KeyboardEvent) {
     // ? — show keyboard shortcuts help (global)
-    if (e.key === '?') {
+    if (e.key === '?' && !isInputFocused()) {
       e.preventDefault()
       showShortcutsDialog = true
       return

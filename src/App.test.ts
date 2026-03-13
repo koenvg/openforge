@@ -283,6 +283,36 @@ describe('App onMount initialization order', () => {
       expect(get(stores.currentView)).toBe('settings')
     })
 
+    it('? does NOT open dialog when input is focused', async () => {
+      const App = (await import('./App.svelte')).default
+      render(App)
+
+      // Create and focus an input element
+      const input = document.createElement('input')
+      document.body.appendChild(input)
+      input.focus()
+
+      // Dispatch ? key and check if preventDefault was called
+      const event = new KeyboardEvent('keydown', { key: '?', bubbles: true })
+      const preventDefaultSpy = vi.spyOn(event, 'preventDefault')
+      window.dispatchEvent(event)
+
+      // preventDefault should NOT be called (handler should not run)
+      expect(preventDefaultSpy).not.toHaveBeenCalled()
+    })
+
+    it('? opens dialog when input is NOT focused', async () => {
+      const App = (await import('./App.svelte')).default
+      render(App)
+
+      // Dispatch ? key and check if preventDefault was called
+      const event = new KeyboardEvent('keydown', { key: '?', bubbles: true })
+      const preventDefaultSpy = vi.spyOn(event, 'preventDefault')
+      window.dispatchEvent(event)
+
+      // preventDefault should be called (handler should run)
+      expect(preventDefaultSpy).toHaveBeenCalled()
+    })
 
   })
 })
