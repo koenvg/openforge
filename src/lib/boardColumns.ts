@@ -15,6 +15,8 @@ export const ALL_TASK_STATES: TaskState[] = [
   'frozen',
   'pr-draft',
   'pr-open',
+  'ci-running',
+  'review-pending',
   'ci-failed',
   'changes-requested',
   'ready-to-merge',
@@ -49,6 +51,8 @@ export const TASK_STATE_LABELS: Record<TaskState, string> = {
   done: 'Done',
   'pr-draft': 'PR Draft',
   'pr-open': 'PR Open',
+  'ci-running': 'CI Running',
+  'review-pending': 'Awaiting Review',
   'ci-failed': 'CI Failed',
   'changes-requested': 'Changes Requested',
   'ready-to-merge': 'Ready to Merge',
@@ -69,6 +73,8 @@ export const DEFAULT_BOARD_COLUMNS: BoardColumnConfig[] = [
       'frozen',
       'pr-draft',
       'pr-open',
+      'ci-running',
+      'review-pending',
       'ci-failed',
       'changes-requested',
       'ready-to-merge',
@@ -123,6 +129,39 @@ export function getColumnForTaskState(state: TaskState, columns: BoardColumnConf
   return match ?? columns[0] ?? DEFAULT_BOARD_COLUMNS[0]
 }
 
+function normalizeBoardColumns(columns: BoardColumnConfig[]): BoardColumnConfig[] {
+  const normalized = columns.map((column) => ({
+    ...column,
+    statuses: [...column.statuses],
+  }))
+
+  const primaryDoingColumn = normalized.find((column) => column.underlyingStatus === 'doing')
+  if (!primaryDoingColumn) {
+    return normalized
+  }
+
+  for (const state of ALL_TASK_STATES) {
+    const exists = normalized.some((column) => column.statuses.includes(state))
+    if (!exists) {
+      primaryDoingColumn.statuses.push(state)
+    }
+  }
+
+  return normalized
+}
+
+function normalizeAndValidateBoardColumns(columns: BoardColumnConfig[]): {
+  normalized: BoardColumnConfig[]
+  validation: { valid: boolean; errors: string[] }
+} {
+  const normalized = normalizeBoardColumns(columns)
+
+  return {
+    normalized,
+    validation: validateBoardColumns(normalized),
+  }
+}
+
 export async function loadBoardColumns(projectId: string): Promise<BoardColumnConfig[]> {
   const stored = await getProjectConfig(projectId, BOARD_COLUMNS_CONFIG_KEY)
 
@@ -135,12 +174,14 @@ export async function loadBoardColumns(projectId: string): Promise<BoardColumnCo
     const parsed = JSON.parse(stored)
 
     if (Array.isArray(parsed)) {
-      const validation = validateBoardColumns(parsed as BoardColumnConfig[])
+      const { normalized, validation } = normalizeAndValidateBoardColumns(parsed as BoardColumnConfig[])
       if (validation.valid) {
-        return parsed as BoardColumnConfig[]
+        return normalized
       }
     }
   } catch {
+    await saveBoardColumns(projectId, DEFAULT_BOARD_COLUMNS)
+    return DEFAULT_BOARD_COLUMNS
   }
 
   await saveBoardColumns(projectId, DEFAULT_BOARD_COLUMNS)
@@ -148,5 +189,11 @@ export async function loadBoardColumns(projectId: string): Promise<BoardColumnCo
 }
 
 export async function saveBoardColumns(projectId: string, columns: BoardColumnConfig[]): Promise<void> {
-  await setProjectConfig(projectId, BOARD_COLUMNS_CONFIG_KEY, JSON.stringify(columns))
+  const { normalized, validation } = normalizeAndValidateBoardColumns(columns)
+
+  if (!validation.valid) {
+    throw new Error(validation.errors.join(' '))
+  }
+
+  await setProjectConfig(projectId, BOARD_COLUMNS_CONFIG_KEY, JSON.stringify(normalized))
 }

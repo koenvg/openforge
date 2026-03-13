@@ -54,3 +54,5 @@ export const taskDraftNotes = writable<Map<string, string>>(new Map());
 
 export const authoredPrs = writable<AuthoredPullRequest[]>([]);
 export const authoredPrCount = writable<number>(0);
+
+export const commandHeld = writable<boolean>(false);

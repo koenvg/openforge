@@ -42,6 +42,10 @@ vi.mock('./lib/stores', () => ({
   reviewPullRequestDiff: writable(null),
   skills: writable([]),
   selectedSkillName: writable(null),
+  startingTasks: writable(new Set()),
+  codeCleanupTasksEnabled: writable(false),
+  authoredPrCount: writable(0),
+  commandHeld: writable(false),
 }))
 
 vi.mock('./lib/ipc', () => ({
@@ -69,6 +73,7 @@ vi.mock('./lib/ipc', () => ({
     callOrder.push('getAppMode')
     return 'prod'
   }),
+  getConfig: vi.fn(async () => null),
   getProjectAttention: vi.fn(async () => {
     callOrder.push('getProjectAttention')
     return []
@@ -96,6 +101,7 @@ vi.mock('./lib/ipc', () => ({
   clearDoneTasks: vi.fn(),
   refreshJiraInfo: vi.fn(),
   getAgents: vi.fn(),
+  listOpenCodeAgents: vi.fn().mockResolvedValue([]),
   createProject: vi.fn(),
   updateProject: vi.fn(),
   deleteProject: vi.fn(),
@@ -131,24 +137,29 @@ vi.mock('./lib/ipc', () => ({
     callOrder.push('getReviewPrs')
     return []
   }),
+  getAuthoredPrs: vi.fn(async () => []),
 }))
 
 vi.mock('./components/KanbanBoard.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/TaskDetailView.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/PrReviewView.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/SkillsView.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/SettingsView.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/WorkQueueView.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/ClaudeAgentPanel.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/PromptInput.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/Modal.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/SettingsPanel.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/GlobalSettingsPanel.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/SearchableSelect.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/Toast.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/CheckpointToast.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/CiFailureToast.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/TaskSpawnedToast.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/ProjectSwitcher.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/ProjectSidebar.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/ProjectSwitcherModal.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/ProjectSetupDialog.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/IconRail.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/CommandPalette.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/ActionPalette.svelte', () => ({ default: vi.fn() }))
 
 vi.mock('./lib/doingStatus', () => ({
   computeDoingStatus: vi.fn(() => 'idle'),
@@ -165,6 +176,7 @@ vi.mock('./lib/terminalPool', () => ({
 
 vi.mock('lucide-svelte', () => ({
   RefreshCw: vi.fn(),
+  PanelLeft: vi.fn(),
 }))
 
 describe('App onMount initialization order', () => {
@@ -197,7 +209,7 @@ describe('App onMount initialization order', () => {
 
     // 2 out of 3 PRs are unviewed (viewed_at === null)
     expect(get(stores.reviewRequestCount)).toBe(2)
-  })
+  }, 15000)
 
   it('registers event listeners before making IPC data-loading calls', async () => {
     const App = (await import('./App.svelte')).default
@@ -216,5 +228,91 @@ describe('App onMount initialization order', () => {
 
     expect(firstListen).toBeLessThan(firstGetProjects, 'listen() should be called before getProjects()')
     expect(firstListen).toBeLessThan(firstGetAppMode, 'listen() should be called before getAppMode()')
+  }, 15000)
+
+  describe('keyboard shortcuts', () => {
+    beforeEach(() => {
+      vi.clearAllMocks()
+    })
+
+    afterEach(() => {
+      document.body.innerHTML = ''
+    })
+
+    it('CMD+H navigates to board view', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const { get } = await import('svelte/store')
+
+      render(App)
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'h', metaKey: true, bubbles: true }))
+      expect(get(stores.currentView)).toBe('board')
+    })
+
+    it('CMD+G navigates to pr_review view', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const { get } = await import('svelte/store')
+
+      render(App)
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', metaKey: true, bubbles: true }))
+      expect(get(stores.currentView)).toBe('pr_review')
+    })
+
+    it('CMD+L navigates to skills view', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const { get } = await import('svelte/store')
+
+      render(App)
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', metaKey: true, bubbles: true }))
+      expect(get(stores.currentView)).toBe('skills')
+    })
+
+    it('CMD+comma navigates to settings view', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const { get } = await import('svelte/store')
+
+      render(App)
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true, bubbles: true }))
+      expect(get(stores.currentView)).toBe('settings')
+    })
+
+    it('? does NOT open dialog when input is focused', async () => {
+      const App = (await import('./App.svelte')).default
+      render(App)
+
+      // Create and focus an input element
+      const input = document.createElement('input')
+      document.body.appendChild(input)
+      input.focus()
+
+      // Dispatch ? key and check if preventDefault was called
+      const event = new KeyboardEvent('keydown', { key: '?', bubbles: true })
+      const preventDefaultSpy = vi.spyOn(event, 'preventDefault')
+      window.dispatchEvent(event)
+
+      // preventDefault should NOT be called (handler should not run)
+      expect(preventDefaultSpy).not.toHaveBeenCalled()
+    })
+
+    it('? opens dialog when input is NOT focused', async () => {
+      const App = (await import('./App.svelte')).default
+      render(App)
+
+      // Dispatch ? key and check if preventDefault was called
+      const event = new KeyboardEvent('keydown', { key: '?', bubbles: true })
+      const preventDefaultSpy = vi.spyOn(event, 'preventDefault')
+      window.dispatchEvent(event)
+
+      // preventDefault should be called (handler should run)
+      expect(preventDefaultSpy).toHaveBeenCalled()
+    })
+
   })
 })

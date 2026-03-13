@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Task, AgentSession } from '../lib/types'
   import { tasks, selectedTaskId, activeSessions, ticketPrs, error, activeProjectId, startingTasks } from '../lib/stores'
-  import { clearDoneTasks } from '../lib/ipc'
+  import { clearDoneTasks, getConfig, setConfig } from '../lib/ipc'
   import { pushNavState } from '../lib/navigation'
   import { loadBoardColumns, DEFAULT_BOARD_COLUMNS, BACKLOG_COLUMN, DONE_COLUMN } from '../lib/boardColumns'
   import { computeTaskState } from '../lib/taskState'
@@ -34,6 +34,16 @@
 
   let showBacklog = $state(true)
   let showDoneDrawer = $state(false)
+
+  $effect(() => {
+    getConfig('backlog_visible').then(stored => {
+      if (stored === 'false') {
+        showBacklog = false
+      }
+    }).catch(() => {
+      // fallthrough: keep default (open)
+    })
+  })
 
   const backlogColumn = BACKLOG_COLUMN
   const doneColumn = DONE_COLUMN
@@ -140,6 +150,9 @@
       showBacklog = true
       focusedColumn = focusedColumn + 1
     }
+    setConfig('backlog_visible', String(showBacklog)).catch(e =>
+      console.error('Failed to persist backlog state:', e)
+    )
   }
 
   function toggleDoneDrawer() {

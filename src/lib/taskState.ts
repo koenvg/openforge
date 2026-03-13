@@ -2,7 +2,7 @@ import type { Task, AgentSession, PullRequestInfo } from './types'
 
 export type TaskState =
   | 'egg' | 'idle' | 'active' | 'needs-input' | 'resting' | 'celebrating' | 'sad' | 'frozen' | 'done'
-  | 'pr-draft' | 'pr-open' | 'ci-failed' | 'changes-requested' | 'ready-to-merge' | 'pr-merged'
+  | 'pr-draft' | 'pr-open' | 'ci-failed' | 'changes-requested' | 'ready-to-merge' | 'pr-merged' | 'ci-running' | 'review-pending'
 
 function getPrState(prs: PullRequestInfo[]): TaskState | null {
   // Find the most relevant PR: prefer open, then merged, then closed
@@ -19,6 +19,8 @@ function getPrState(prs: PullRequestInfo[]): TaskState | null {
   if (pr.review_status === 'changes_requested') return 'changes-requested'
   if (pr.ci_status === 'success' && pr.review_status === 'approved') return 'ready-to-merge'
   if (pr.draft) return 'pr-draft'
+  if (pr.ci_status === 'pending') return 'ci-running'
+  if (pr.ci_status === 'success' && pr.review_status === 'review_required') return 'review-pending'
   return 'pr-open'
 }
 

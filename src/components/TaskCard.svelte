@@ -3,6 +3,7 @@
   import type { Task, AgentSession, PullRequestInfo } from '../lib/types'
   import { isReadyToMerge } from '../lib/types'
   import { openUrl } from '../lib/ipc'
+  import { timeAgoFromSeconds } from '../lib/timeAgo'
   import Card from './Card.svelte'
 
   interface Props {
@@ -36,13 +37,14 @@
   let hasCiFailure = $derived(pullRequests.some(pr => pr.ci_status === 'failure' && pr.state === 'open'))
   let hasPendingCi = $derived(pullRequests.some(pr => pr.ci_status === 'pending' && pr.state === 'open'))
   let hasReadyToMerge = $derived(pullRequests.some(pr => isReadyToMerge(pr)))
+  let hasReviewPending = $derived(pullRequests.some(pr => pr.ci_status === 'success' && pr.review_status === 'review_required' && pr.state === 'open'))
   let totalUnaddressed = $derived(
     pullRequests.reduce((sum, pr) => sum + (pr.unaddressed_comment_count || 0), 0)
   )
 </script>
 
 <Card
-  class="group/card block px-3.5 py-3 {hasCiFailure && !hasPendingCi && statusClass !== 'running' && !needsInput ? 'ci-failed' : ''} {isStarting ? 'starting' : ''} {statusClass === 'running' ? 'running' : ''} {statusClass === 'paused' && !needsInput ? 'paused' : ''} {statusClass === 'failed' ? 'failed' : ''} {statusClass === 'interrupted' ? 'interrupted' : ''} {statusClass === 'completed' ? 'completed' : ''} {needsInput ? 'needs-input' : ''} {hasReadyToMerge && statusClass !== 'running' ? 'ready-to-merge' : ''} {isPinned ? 'border-primary/30' : ''}"
+  class="group/card block px-3.5 py-3 {hasCiFailure && !hasPendingCi && statusClass !== 'running' && !needsInput ? 'ci-failed' : ''} {isStarting ? 'starting' : ''} {statusClass === 'running' ? 'running' : ''} {statusClass === 'paused' && !needsInput ? 'paused' : ''} {statusClass === 'failed' ? 'failed' : ''} {statusClass === 'interrupted' ? 'interrupted' : ''} {statusClass === 'completed' ? 'completed' : ''} {needsInput ? 'needs-input' : ''} {hasReadyToMerge && statusClass !== 'running' ? 'ready-to-merge' : ''} {hasPendingCi && statusClass !== 'running' && !needsInput && !hasCiFailure ? 'ci-running' : ''} {hasReviewPending && statusClass !== 'running' && !needsInput && !hasCiFailure && !hasPendingCi ? 'review-pending' : ''} {isPinned ? 'border-primary/30' : ''}"
   onclick={handleClick}
 >
   <div class="flex items-center justify-between mb-1">
@@ -74,31 +76,32 @@
           <Pin size={12} aria-hidden="true" class={isPinned ? 'fill-primary' : ''} />
         </button>
       {/if}
-    {#if isStarting}
-      <span
-        class="font-mono text-[0.6rem] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider whitespace-nowrap leading-tight bg-primary/15 text-primary"
-        style="animation: badge-pulse 2s ease-in-out infinite;"
-      >
-        Starting
-      </span>
-    {:else if hasVisibleStatus}
-      <span
-        class="font-mono text-[0.6rem] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider whitespace-nowrap leading-tight {statusClass === 'running' ? 'bg-success/15 text-success' : ''} {statusClass === 'completed' ? 'bg-info/20 text-info' : ''} {statusClass === 'paused' ? 'bg-warning/15 text-warning' : ''} {statusClass === 'failed' ? 'bg-error/15 text-error' : ''} {statusClass === 'interrupted' ? 'bg-base-content/15 text-base-content/50' : ''}"
-        style={statusClass === 'running' ? 'animation: badge-pulse 2s ease-in-out infinite;' : ''}
-      >
-        {#if statusClass === 'running'}
-          Running
-        {:else if statusClass === 'completed'}
-          Done
-        {:else if statusClass === 'paused'}
-          Paused
-        {:else if statusClass === 'failed'}
-          Error
-        {:else if statusClass === 'interrupted'}
-          Stopped
-        {/if}
-      </span>
-    {/if}
+      {#if isStarting}
+        <span
+          class="font-mono text-[0.6rem] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider whitespace-nowrap leading-tight bg-primary/15 text-primary"
+          style="animation: badge-pulse 2s ease-in-out infinite;"
+        >
+          Starting
+        </span>
+      {:else if hasVisibleStatus}
+        <span
+          class="font-mono text-[0.6rem] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider whitespace-nowrap leading-tight {statusClass === 'running' ? 'bg-success/15 text-success' : ''} {statusClass === 'completed' ? 'bg-info/20 text-info' : ''} {statusClass === 'paused' ? 'bg-warning/15 text-warning' : ''} {statusClass === 'failed' ? 'bg-error/15 text-error' : ''} {statusClass === 'interrupted' ? 'bg-base-content/15 text-base-content/50' : ''}"
+          style={statusClass === 'running' ? 'animation: badge-pulse 2s ease-in-out infinite;' : ''}
+        >
+          {#if statusClass === 'running'}
+            Running
+          {:else if statusClass === 'completed'}
+            Done
+          {:else if statusClass === 'paused'}
+            Paused
+          {:else if statusClass === 'failed'}
+            Error
+          {:else if statusClass === 'interrupted'}
+            Stopped
+          {/if}
+        </span>
+      {/if}
+      <span class="font-mono text-[0.6rem] text-base-content/40">{timeAgoFromSeconds(task.updated_at)}</span>
     </div>
   </div>
   <div class="font-mono text-sm font-medium leading-relaxed text-base-content mb-1">
