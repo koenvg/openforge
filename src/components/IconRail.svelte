@@ -11,13 +11,21 @@
 
   let { currentView, onNavigate, reviewRequestCount = 0, authoredPrCount = 0 }: Props = $props()
 
-  const navItems: { view: AppView; Icon: typeof LayoutDashboard }[] = [
+  const projectItems: { view: AppView; Icon: typeof LayoutDashboard }[] = [
     { view: 'board', Icon: LayoutDashboard },
     { view: 'pr_review', Icon: GitPullRequest },
     { view: 'skills', Icon: Sparkles },
-    { view: 'workqueue', Icon: ListChecks },
     { view: 'settings', Icon: Settings },
   ]
+
+  const globalItems: { view: AppView; Icon: typeof LayoutDashboard }[] = [
+    { view: 'workqueue', Icon: ListChecks },
+    { view: 'global_settings', Icon: Settings },
+  ]
+
+  function isActive(view: AppView): boolean {
+    return currentView === view
+  }
 </script>
 
 <div class="w-16 h-full bg-neutral flex flex-col items-center py-4 gap-5">
@@ -27,9 +35,9 @@
 
   <div class="w-9 h-px bg-neutral-content/20"></div>
 
-  {#each navItems as { view, Icon }}
+  {#each projectItems as { view, Icon }}
     <button
-      class="relative cursor-pointer {currentView === view ? 'text-primary' : 'text-neutral-content/40'}"
+      class="relative cursor-pointer {isActive(view) ? 'text-primary' : 'text-neutral-content/40'}"
       onclick={() => onNavigate(view)}
     >
       <Icon size={24} />
@@ -41,4 +49,16 @@
       {/if}
     </button>
   {/each}
+
+  <div class="mt-auto flex flex-col items-center gap-5">
+    <div class="w-9 h-px bg-neutral-content/20"></div>
+    {#each globalItems as { view, Icon }}
+      <button
+        class="relative cursor-pointer {isActive(view) ? 'text-primary' : 'text-neutral-content/40'}"
+        onclick={() => onNavigate(view)}
+      >
+        <Icon size={24} />
+      </button>
+    {/each}
+  </div>
 </div>
