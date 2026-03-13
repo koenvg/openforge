@@ -113,9 +113,6 @@ pub(crate) struct ReviewComment {
     pub path: String,
     pub line: Option<i32>,
     pub created_at: String,
-    #[allow(dead_code)]
-    #[serde(flatten)]
-    pub extra: serde_json::Value,
 }
 
 /// Issue comment (general comment) from GitHub API
@@ -125,16 +122,6 @@ pub(crate) struct IssueComment {
     pub body: String,
     pub user: GitHubUser,
     pub created_at: String,
-    #[allow(dead_code)]
-    #[serde(flatten)]
-    pub extra: serde_json::Value,
-}
-
-/// Request body for posting a comment
-#[allow(dead_code)]
-#[derive(Debug, Serialize)]
-pub(crate) struct CommentRequest {
-    pub body: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -156,17 +143,11 @@ pub struct ReviewSubmitComment {
 #[derive(Debug, Deserialize)]
 pub(crate) struct AuthenticatedUser {
     pub login: String,
-    #[allow(dead_code)]
-    #[serde(flatten)]
-    pub extra: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct SearchResponse {
     pub items: Vec<SearchItem>,
-    #[allow(dead_code)]
-    #[serde(flatten)]
-    pub extra: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -182,28 +163,17 @@ pub(crate) struct SearchItem {
     pub repository_url: String,
     pub created_at: String,
     pub updated_at: String,
-    #[allow(dead_code)]
-    #[serde(flatten)]
-    pub extra: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct SearchUser {
     pub login: String,
     pub avatar_url: Option<String>,
-    #[allow(dead_code)]
-    #[serde(flatten)]
-    pub extra: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct BlobResponse {
     pub content: String,
-    #[allow(dead_code)]
-    pub encoding: String,
-    #[allow(dead_code)]
-    #[serde(flatten)]
-    pub extra: serde_json::Value,
 }
 
 /// PR review from GitHub API
@@ -289,9 +259,6 @@ pub(crate) struct RequiredStatusChecksResponse {
     /// Required checks with context name and optional app_id
     #[serde(default)]
     pub checks: Vec<RequiredCheckEntry>,
-    #[allow(dead_code)]
-    #[serde(flatten)]
-    pub extra: serde_json::Value,
 }
 
 /// Individual required check entry from branch protection API
@@ -299,9 +266,6 @@ pub(crate) struct RequiredStatusChecksResponse {
 pub(crate) struct RequiredCheckEntry {
     /// Check context name (matches CheckRun.name or CommitStatusEntry.context)
     pub context: String,
-    #[allow(dead_code)]
-    #[serde(flatten)]
-    pub extra: serde_json::Value,
 }
 
 impl RequiredStatusChecksResponse {
@@ -323,24 +287,11 @@ pub(crate) struct RequiredPullRequestReviewsResponse {
     /// Number of approving reviews required
     #[serde(default)]
     pub required_approving_review_count: usize,
-    #[allow(dead_code)]
-    #[serde(flatten)]
-    pub extra: serde_json::Value,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_comment_request_serialization() {
-        let request = CommentRequest {
-            body: "Test comment".to_string(),
-        };
-        let json = serde_json::to_string(&request).unwrap();
-        assert!(json.contains("\"body\""));
-        assert!(json.contains("\"Test comment\""));
-    }
 
     #[test]
     fn test_pr_comment_serialization() {
@@ -540,7 +491,6 @@ mod tests {
             "size": 11
         }"#;
         let blob: BlobResponse = serde_json::from_str(json).unwrap();
-        assert_eq!(blob.encoding, "base64");
         assert!(!blob.content.is_empty());
     }
 
@@ -598,14 +548,11 @@ mod tests {
             checks: vec![
                 RequiredCheckEntry {
                     context: "ci/build".to_string(),
-                    extra: serde_json::json!({}),
                 },
                 RequiredCheckEntry {
                     context: "ci/lint".to_string(),
-                    extra: serde_json::json!({}),
                 },
             ],
-            extra: serde_json::json!({}),
         };
 
         let names = resp.into_context_names();
@@ -622,14 +569,11 @@ mod tests {
             checks: vec![
                 RequiredCheckEntry {
                     context: "ci/build".to_string(),
-                    extra: serde_json::json!({}),
                 },
                 RequiredCheckEntry {
                     context: "ci/test".to_string(),
-                    extra: serde_json::json!({}),
                 },
             ],
-            extra: serde_json::json!({}),
         };
 
         let names = resp.into_context_names();
@@ -643,7 +587,6 @@ mod tests {
         let resp = RequiredStatusChecksResponse {
             contexts: vec!["ci/build".to_string(), "ci/test".to_string()],
             checks: vec![],
-            extra: serde_json::json!({}),
         };
 
         let names = resp.into_context_names();
@@ -657,7 +600,6 @@ mod tests {
         let resp = RequiredStatusChecksResponse {
             contexts: vec![],
             checks: vec![],
-            extra: serde_json::json!({}),
         };
 
         let names = resp.into_context_names();
