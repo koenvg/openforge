@@ -12,6 +12,8 @@ vi.mock('../lib/ipc', () => ({
   clearDoneTasks: vi.fn(),
   getProjectConfig: vi.fn(() => Promise.resolve(null)),
   setProjectConfig: vi.fn(() => Promise.resolve()),
+  getConfig: vi.fn(() => Promise.resolve(null)),
+  setConfig: vi.fn(() => Promise.resolve()),
 }))
 
 vi.mock('../lib/boardColumns', () => ({
@@ -251,5 +253,70 @@ describe('KanbanBoard', () => {
     expect(screen.getByText('// done')).toBeTruthy()
     await fireEvent.keyDown(window, { key: 'c' })
     expect(screen.queryByText('// done')).toBeNull()
+  })
+
+  describe('backlog state persistence', () => {
+    it('loads saved backlog state on mount (collapsed)', async () => {
+      const { getConfig } = await import('../lib/ipc')
+      vi.mocked(getConfig).mockResolvedValue('false')
+
+      render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
+      await screen.findByText('// doing')
+
+      expect(screen.queryByText('// backlog')).toBeNull()
+    })
+
+    it('defaults to open when no saved state', async () => {
+      const { getConfig } = await import('../lib/ipc')
+      vi.mocked(getConfig).mockResolvedValue(null)
+
+      render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
+      expect(await screen.findByText('// backlog')).toBeTruthy()
+    })
+
+    it('persists collapsed state when backlog is toggled via click', async () => {
+      const { setConfig } = await import('../lib/ipc')
+
+      render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
+      await screen.findByText('// backlog')
+
+      await fireEvent.click(screen.getByTitle('Toggle backlog (b)'))
+
+      expect(setConfig).toHaveBeenCalledWith('backlog_visible', 'false')
+    })
+
+    it('persists open state when backlog is toggled back open', async () => {
+      const { getConfig, setConfig } = await import('../lib/ipc')
+      vi.mocked(getConfig).mockResolvedValue('false')
+
+      render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
+      await screen.findByText('// doing')
+
+      await fireEvent.click(screen.getByTitle('Toggle backlog (b)'))
+
+      expect(setConfig).toHaveBeenCalledWith('backlog_visible', 'true')
+    })
+
+    it('persists state when toggled via b keyboard shortcut', async () => {
+      const { getConfig, setConfig } = await import('../lib/ipc')
+      vi.mocked(getConfig).mockResolvedValue(null)
+
+      render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
+      await screen.findByText('// backlog')
+
+      await fireEvent.keyDown(window, { key: 'b' })
+
+      expect(setConfig).toHaveBeenCalledWith('backlog_visible', 'false')
+    })
+
+    it('reads config with correct key', async () => {
+      const { getConfig } = await import('../lib/ipc')
+      vi.mocked(getConfig).mockResolvedValue(null)
+
+      render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
+      await screen.findByText('// doing')
+
+      expect(getConfig).toHaveBeenCalledWith('backlog_visible')
+    })
   })
 })
