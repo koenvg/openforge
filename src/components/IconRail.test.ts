@@ -2,6 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
 import IconRail from './IconRail.svelte'
 import type { AppView } from '../lib/types'
+import { commandHeld } from '../lib/stores'
 
 describe('IconRail', () => {
   it('renders the logo text ">_"', () => {
@@ -68,6 +69,42 @@ describe('IconRail', () => {
   it('shows authored PR count badge when authoredPrCount > 0', () => {
     render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), reviewRequestCount: 0, authoredPrCount: 5 } })
     expect(screen.getByText('5')).toBeTruthy()
+  })
+
+  describe('shortcut badges', () => {
+    it('shows shortcut key badges for all nav items when commandHeld is true', () => {
+      commandHeld.set(true)
+      render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), authoredPrCount: 0 } })
+
+      expect(screen.getByText('B')).toBeTruthy()
+      expect(screen.getByText('G')).toBeTruthy()
+      expect(screen.getByText('L')).toBeTruthy()
+      expect(screen.getByText('R')).toBeTruthy()
+      expect(screen.getByText(',')).toBeTruthy()
+
+      commandHeld.set(false)
+    })
+
+    it('hides shortcut badges when commandHeld is false', () => {
+      commandHeld.set(false)
+      render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), authoredPrCount: 0 } })
+
+      expect(screen.queryByText('B')).toBeNull()
+      expect(screen.queryByText('G')).toBeNull()
+    })
+
+    it('shows correct shortcut letter for each view', () => {
+      commandHeld.set(true)
+      render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), authoredPrCount: 0 } })
+
+      expect(screen.getByText('B')).toBeTruthy()  // board
+      expect(screen.getByText('G')).toBeTruthy()  // pr_review (Git)
+      expect(screen.getByText('L')).toBeTruthy()  // skiLLs
+      expect(screen.getByText('R')).toBeTruthy()  // woRkqueue
+      expect(screen.getByText(',')).toBeTruthy()  // settings (macOS standard ⌘,)
+
+      commandHeld.set(false)
+    })
   })
 
 })
