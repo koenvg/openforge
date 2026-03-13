@@ -1,12 +1,15 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { writable } from 'svelte/store'
-import type { WorkQueueEntry } from '../lib/types'
+import type { WorkQueueEntry, AgentSession, PullRequestInfo } from '../lib/types'
 
 vi.mock('../lib/stores', () => ({
   activeProjectId: writable<string | null>(null),
   currentView: writable('workqueue'),
   selectedTaskId: writable<string | null>(null),
+  activeSessions: writable<Map<string, AgentSession>>(new Map()),
+  ticketPrs: writable<Map<string, PullRequestInfo[]>>(new Map()),
+  startingTasks: writable<Set<string>>(new Set()),
 }))
 
 vi.mock('../lib/navigation', () => ({
@@ -18,6 +21,8 @@ vi.mock('../lib/ipc', () => ({
   getConfig: vi.fn().mockResolvedValue(null),
   setConfig: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn(),
+  updateTaskStatus: vi.fn().mockResolvedValue(undefined),
+  deleteTask: vi.fn().mockResolvedValue(undefined),
 }))
 
 import WorkQueueView from './WorkQueueView.svelte'

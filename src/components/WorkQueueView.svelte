@@ -3,17 +3,19 @@
   import type { WorkQueueEntry } from '../lib/types'
   import type { AgentSession } from '../lib/types'
   import { getWorkQueueTasks, getConfig, setConfig } from '../lib/ipc'
-  import { activeProjectId, currentView, selectedTaskId } from '../lib/stores'
+  import { activeProjectId, currentView, selectedTaskId, activeSessions, ticketPrs, startingTasks } from '../lib/stores'
   import { pushNavState } from '../lib/navigation'
   import { isInputFocused } from '../lib/domUtils'
   import { useVimNavigation } from '../lib/useVimNavigation.svelte'
   import TaskCard from './TaskCard.svelte'
+  import TaskContextMenu from './TaskContextMenu.svelte'
 
   interface Props {
     refreshTrigger?: number
+    onRunAction?: (data: { taskId: string; actionPrompt: string; agent: string | null }) => void
   }
 
-  let { refreshTrigger = 0 }: Props = $props()
+  let { refreshTrigger = 0, onRunAction }: Props = $props()
 
   let entries = $state<WorkQueueEntry[]>([])
   let loading = $state(true)
@@ -116,7 +118,10 @@
     )
   }
 
-  function buildSession(entry: WorkQueueEntry): AgentSession | null {
+  function getSession(entry: WorkQueueEntry): AgentSession | null {
+    // Prefer live session from store (updated via Tauri events) over static backend data
+    const liveSession = $activeSessions.get(entry.task.id)
+    if (liveSession) return liveSession
     if (!entry.session_status) return null
     return {
       id: '',
@@ -133,6 +138,13 @@
     }
   }
 
+  function getPullRequests(entry: WorkQueueEntry) {
+    // Prefer live PR data from store (updated via Tauri events) over static backend data
+    const livePrs = $ticketPrs.get(entry.task.id)
+    if (livePrs && livePrs.length > 0) return livePrs
+    return entry.pull_requests
+  }
+
   function moveColumn(projectName: string, direction: -1 | 1) {
     const currentOrder = sortedColumns.map(([name]) => name)
     const index = currentOrder.indexOf(projectName)
@@ -147,6 +159,18 @@
     setConfig('workqueue_column_order', JSON.stringify(newOrder)).catch((err) =>
       console.error('Failed to save column order:', err)
     )
+  }
+
+  // Context menu
+  let contextMenu = $state({ visible: false, x: 0, y: 0, taskId: '' })
+
+  function handleContextMenu(event: MouseEvent, taskId: string) {
+    event.preventDefault()
+    contextMenu = { visible: true, x: event.clientX, y: event.clientY, taskId }
+  }
+
+  function closeContextMenu() {
+    contextMenu = { ...contextMenu, visible: false }
   }
 
   // Vim navigation — column-based
@@ -263,11 +287,12 @@
             {#each projectEntries as entry, i}
               {@const colIdx = sortedColumns.findIndex(([n]) => n === projectName)}
               {@const isVimFocused = colIdx === focusedCol && vimWq.focusedIndex === i}
-              <div data-testid={`task-card-${entry.task.id}`} data-vim-wq-item class={isVimFocused ? 'vim-focus' : ''}>
+              <div data-testid={`task-card-${entry.task.id}`} data-vim-wq-item class={isVimFocused ? 'vim-focus' : ''} oncontextmenu={(e: MouseEvent) => handleContextMenu(e, entry.task.id)}>
                 <TaskCard
                   task={entry.task}
-                  session={buildSession(entry)}
-                  pullRequests={entry.pull_requests}
+                  session={getSession(entry)}
+                  pullRequests={getPullRequests(entry)}
+                  isStarting={$startingTasks.has(entry.task.id)}
                   isPinned={pinnedTaskIds.has(entry.task.id)}
                   onTogglePin={togglePin}
                   onSelect={handleSelect}
@@ -280,3 +305,13 @@
     </div>
   </div>
 {/if}
+
+<TaskContextMenu
+  visible={contextMenu.visible}
+  x={contextMenu.x}
+  y={contextMenu.y}
+  taskId={contextMenu.taskId}
+  onClose={closeContextMenu}
+  onStart={(taskId) => onRunAction?.({ taskId, actionPrompt: '', agent: null })}
+  onDelete={(taskId) => { if ($selectedTaskId === taskId) $selectedTaskId = null }}
+/>
