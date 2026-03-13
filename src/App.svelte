@@ -31,6 +31,8 @@
   import { loadActions, getEnabledActions } from './lib/actions'
   import type { Action } from './lib/types'
   import { release as releaseTerminal, isPtyActive, focusTerminal } from './lib/terminalPool'
+  import { isInputFocused } from './lib/domUtils'
+  import { useCommandHeld } from './lib/useCommandHeld.svelte'
 
   let unlisteners: UnlistenFn[] = []
   let showAddDialog = $state(false)
@@ -70,6 +72,8 @@
   let showActionPalette = $state(false)
   let actionPaletteActions = $state<Action[]>([])
   let workQueueRefreshTrigger = $state(0)
+
+  useCommandHeld()
 
   let selectedTask = $derived($tasks.find(t => t.id === $selectedTaskId) || null)
 
@@ -365,6 +369,26 @@
       e.preventDefault()
       pushNavState()
       $currentView = 'workqueue'
+      return
+    }
+    if (e.metaKey && !e.shiftKey && e.key === 'b') {
+      e.preventDefault()
+      handleNavigate('board')
+      return
+    }
+    if (e.metaKey && !e.shiftKey && e.key === 'g') {
+      e.preventDefault()
+      handleNavigate('pr_review')
+      return
+    }
+    if (e.metaKey && !e.shiftKey && e.key === 'l') {
+      e.preventDefault()
+      handleNavigate('skills')
+      return
+    }
+    if (e.metaKey && e.key === ',') {
+      e.preventDefault()
+      handleNavigate('settings')
       return
     }
   }

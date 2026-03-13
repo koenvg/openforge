@@ -45,6 +45,7 @@ vi.mock('./lib/stores', () => ({
   startingTasks: writable(new Set()),
   codeCleanupTasksEnabled: writable(false),
   authoredPrCount: writable(0),
+  commandHeld: writable(false),
 }))
 
 vi.mock('./lib/ipc', () => ({
@@ -228,4 +229,60 @@ describe('App onMount initialization order', () => {
     expect(firstListen).toBeLessThan(firstGetProjects, 'listen() should be called before getProjects()')
     expect(firstListen).toBeLessThan(firstGetAppMode, 'listen() should be called before getAppMode()')
   }, 15000)
+
+  describe('keyboard shortcuts', () => {
+    beforeEach(() => {
+      vi.clearAllMocks()
+    })
+
+    afterEach(() => {
+      document.body.innerHTML = ''
+    })
+
+    it('CMD+B navigates to board view', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const { get } = await import('svelte/store')
+
+      render(App)
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', metaKey: true, bubbles: true }))
+      expect(get(stores.currentView)).toBe('board')
+    })
+
+    it('CMD+G navigates to pr_review view', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const { get } = await import('svelte/store')
+
+      render(App)
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', metaKey: true, bubbles: true }))
+      expect(get(stores.currentView)).toBe('pr_review')
+    })
+
+    it('CMD+L navigates to skills view', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const { get } = await import('svelte/store')
+
+      render(App)
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', metaKey: true, bubbles: true }))
+      expect(get(stores.currentView)).toBe('skills')
+    })
+
+    it('CMD+comma navigates to settings view', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const { get } = await import('svelte/store')
+
+      render(App)
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true, bubbles: true }))
+      expect(get(stores.currentView)).toBe('settings')
+    })
+
+
+  })
 })
