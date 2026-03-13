@@ -571,7 +571,7 @@ describe('PrReviewView', () => {
       })
     })
 
-    it('persists excluded repos via setProjectConfig', async () => {
+    it('persists excluded repos via setProjectConfig when using quick-add', async () => {
       const mockSetConfig = vi.mocked(setProjectConfig).mockResolvedValue(undefined)
       vi.mocked(getProjectConfig).mockResolvedValue(null)
       vi.mocked(getReviewPrs).mockResolvedValue([prRepo1, prRepo2])
@@ -589,19 +589,62 @@ describe('PrReviewView', () => {
       await fireEvent.click(screen.getByTitle('Filter repositories'))
 
       await waitFor(() => {
-        // Filter dropdown should show checkboxes for each repo
-        const checkboxes = screen.getAllByRole('checkbox')
-        expect(checkboxes.length).toBeGreaterThanOrEqual(2)
+        // Should show quick-add suggestions for repos from open PRs
+        expect(screen.getByText('+ acme/repo1')).toBeTruthy()
+        expect(screen.getByText('+ acme/repo2')).toBeTruthy()
       })
 
-      // Click the checkbox for repo2 to exclude it
-      const checkboxes = screen.getAllByRole('checkbox')
-      // Find the one next to acme/repo2 - checkboxes are in order of allRepos (sorted)
-      const repo2Checkbox = checkboxes[1] // acme/repo2 is second alphabetically
-      await fireEvent.click(repo2Checkbox)
+      // Click quick-add button for repo2
+      await fireEvent.click(screen.getByText('+ acme/repo2'))
 
       await waitFor(() => {
         expect(mockSetConfig).toHaveBeenCalledWith('P-1', 'pr_excluded_repos', JSON.stringify(['acme/repo2']))
+      })
+    })
+
+    it('allows manually adding a repo via text input', async () => {
+      const mockSetConfig = vi.mocked(setProjectConfig).mockResolvedValue(undefined)
+      vi.mocked(getProjectConfig).mockResolvedValue(null)
+      vi.mocked(getReviewPrs).mockResolvedValue([])
+      vi.mocked(getAuthoredPrs).mockResolvedValue([])
+      activeProjectId.set('P-1')
+
+      render(PrReviewView)
+
+      // Open filter dropdown
+      await fireEvent.click(screen.getByTitle('Filter repositories'))
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('owner/repo')).toBeTruthy()
+      })
+
+      // Type a repo name and submit
+      const input = screen.getByPlaceholderText('owner/repo')
+      await fireEvent.input(input, { target: { value: 'org/secret-repo' } })
+      await fireEvent.submit(input.closest('form')!)
+
+      await waitFor(() => {
+        expect(mockSetConfig).toHaveBeenCalledWith('P-1', 'pr_excluded_repos', JSON.stringify(['org/secret-repo']))
+      })
+    })
+
+    it('shows excluded repos with remove buttons', async () => {
+      vi.mocked(getProjectConfig).mockImplementation(async (_pid: string, key: string) => {
+        if (key === 'pr_excluded_repos') return JSON.stringify(['acme/repo2', 'org/hidden'])
+        return null
+      })
+      vi.mocked(getReviewPrs).mockResolvedValue([])
+      vi.mocked(getAuthoredPrs).mockResolvedValue([])
+      activeProjectId.set('P-1')
+
+      render(PrReviewView)
+
+      // Open filter dropdown
+      await fireEvent.click(screen.getByTitle('Filter repositories'))
+
+      await waitFor(() => {
+        expect(screen.getByText('acme/repo2')).toBeTruthy()
+        expect(screen.getByText('org/hidden')).toBeTruthy()
       })
     })
 
