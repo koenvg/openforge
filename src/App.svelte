@@ -6,7 +6,7 @@
   import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, listOpenCodeAgents, getReviewPrs, getAuthoredPrs } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import SearchableSelect from './components/SearchableSelect.svelte'
-  import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView, PermissionMode } from './lib/types'
+  import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView, PermissionMode, AgentSession } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
   import TaskDetailView from './components/TaskDetailView.svelte'
    import PromptInput from './components/PromptInput.svelte'
@@ -33,6 +33,7 @@
   import { release as releaseTerminal, isPtyActive, focusTerminal } from './lib/terminalPool'
   import { isInputFocused } from './lib/domUtils'
   import { useCommandHeld } from './lib/useCommandHeld.svelte'
+  import { getOpenCodeSessionUpdate } from './lib/opencodeSessionEvents'
 
   let unlisteners: UnlistenFn[] = []
   let showAddDialog = $state(false)
@@ -154,6 +155,23 @@
       $activeSessions = updated
     } catch (e) {
       console.error('Failed to load sessions:', e)
+    }
+  }
+
+  async function getOrLoadActiveSession(taskId: string): Promise<AgentSession | null> {
+    const existing = $activeSessions.get(taskId)
+    if (existing) return existing
+
+    try {
+      const fetched = await getLatestSession(taskId)
+      if (!fetched) return null
+
+      const updated = new Map($activeSessions)
+      updated.set(taskId, fetched)
+      $activeSessions = updated
+      return fetched
+    } catch {
+      return null
     }
   }
 
@@ -424,14 +442,12 @@
     )
 
     unlisteners.push(
-      await listen<{ task_id: string }>('action-complete', (event: Event<{ task_id: string }>) => {
+      await listen<{ task_id: string }>('action-complete', async (event: Event<{ task_id: string }>) => {
         const taskId = event.payload.task_id
-        const session = $activeSessions.get(taskId)
-        if (session) {
-          // Guard: only update if status is not already 'completed'
-          if (session.status === 'completed') return
+        const session = await getOrLoadActiveSession(taskId)
+        if (session && session.status !== 'completed') {
           const updated = new Map($activeSessions)
-          updated.set(taskId, { ...session, status: 'completed' })
+          updated.set(taskId, { ...session, status: 'completed', checkpoint_data: null })
           $activeSessions = updated
         }
         if ($checkpointNotification?.ticketId === taskId) {
@@ -522,74 +538,24 @@
     )
 
     unlisteners.push(
-      await listen<AgentEvent>('agent-event', (event: Event<AgentEvent>) => {
+      await listen<AgentEvent>('agent-event', async (event: Event<AgentEvent>) => {
         const { task_id: taskId, event_type: eventType } = event.payload
-        const session = $activeSessions.get(taskId)
+        const session = await getOrLoadActiveSession(taskId)
         if (!session) return
 
-        if (eventType === 'session.idle' || eventType === 'session.status') {
-          try {
-            const parsed = JSON.parse(event.payload.data)
-            const statusType = parsed.properties?.status?.type
-            if (eventType === 'session.idle' || statusType === 'idle') {
-              // Guard: only update if status is not already 'completed'
-              if (session.status === 'completed') return
-              const updated = new Map($activeSessions)
-              updated.set(taskId, { ...session, status: 'completed' })
-              $activeSessions = updated
-              // Clear stale checkpoint notification for this task
-              if ($checkpointNotification?.ticketId === taskId) {
-                $checkpointNotification = null
-              }
-            } else if (statusType === 'busy') {
-              // Guard: only update if status is not already 'running'
-              if (session.status === 'running') return
-              console.log('[session] SSE session busy for task:', taskId)
-              const updated = new Map($activeSessions)
-              updated.set(taskId, { ...session, status: 'running', checkpoint_data: null })
-              $activeSessions = updated
-              if ($checkpointNotification?.ticketId === taskId) {
-                $checkpointNotification = null
-              }
-            } else if (statusType === 'retry') {
-              // Guard: only update if status is not already 'running'
-              if (session.status === 'running') return
-              console.log('[session] SSE session retry for task:', taskId)
-              const updated = new Map($activeSessions)
-              updated.set(taskId, { ...session, status: 'running', checkpoint_data: null })
-              $activeSessions = updated
-              if ($checkpointNotification?.ticketId === taskId) {
-                $checkpointNotification = null
-              }
-            }
-          } catch {
-            if (eventType === 'session.idle') {
-              // Guard: only update if status is not already 'completed'
-              if (session.status === 'completed') return
-              const updated = new Map($activeSessions)
-              updated.set(taskId, { ...session, status: 'completed' })
-              $activeSessions = updated
-              if ($checkpointNotification?.ticketId === taskId) {
-                $checkpointNotification = null
-              }
-            }
-          }
-        } else if (eventType === 'session.error') {
-          // Guard: only update if status is not already 'failed'
-          if (session.status === 'failed') return
+        const sessionUpdate = getOpenCodeSessionUpdate(eventType, event.payload.data)
+        if (!sessionUpdate) {
+          loadProjectAttention()
+          return
+        }
+
+        if (sessionUpdate.status === 'paused') {
+          if (session.status === 'paused' && session.checkpoint_data === sessionUpdate.checkpoint_data) return
+
           const updated = new Map($activeSessions)
-          updated.set(taskId, { ...session, status: 'failed', error_message: event.payload.data })
+          updated.set(taskId, { ...session, ...sessionUpdate })
           $activeSessions = updated
-          // Clear stale checkpoint notification for this task
-          if ($checkpointNotification?.ticketId === taskId) {
-            $checkpointNotification = null
-          }
-        } else if (eventType === 'permission.updated' || eventType === 'question.asked') {
-          // Guard: only update if status is not already 'paused'
-          if (session.status === 'paused') return
-          const updated = new Map($activeSessions)
-          updated.set(taskId, { ...session, status: 'paused', checkpoint_data: event.payload.data })
-          $activeSessions = updated
+
           const task = $tasks.find(t => t.id === taskId)
           $checkpointNotification = {
             ticketId: taskId,
@@ -599,16 +565,25 @@
             message: 'Agent needs input',
             timestamp: Date.now(),
           }
-        } else if (eventType === 'permission.replied' || eventType === 'question.answered') {
-          // Guard: only update if status is not already 'running'
-          if (session.status === 'running') return
+        } else {
+          if (
+            session.status === sessionUpdate.status &&
+            session.checkpoint_data === sessionUpdate.checkpoint_data &&
+            session.error_message === sessionUpdate.error_message
+          ) {
+            loadProjectAttention()
+            return
+          }
+
           const updated = new Map($activeSessions)
-          updated.set(taskId, { ...session, status: 'running', checkpoint_data: null })
+          updated.set(taskId, { ...session, ...sessionUpdate })
           $activeSessions = updated
+
           if ($checkpointNotification?.ticketId === taskId) {
             $checkpointNotification = null
           }
         }
+
         loadProjectAttention()
       })
     )
@@ -777,7 +752,9 @@
   })
 
   onDestroy(() => {
-    unlisteners.forEach(fn => fn())
+    unlisteners.forEach((fn) => {
+      fn()
+    })
   })
 </script>
 

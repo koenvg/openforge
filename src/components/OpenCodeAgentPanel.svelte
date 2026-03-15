@@ -2,9 +2,8 @@
   import { onMount, onDestroy, untrack } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn } from '@tauri-apps/api/event'
-  import type { AgentEvent } from '../lib/types'
   import { activeSessions } from '../lib/stores'
-  import { writePty, killPty, spawnPty, abortImplementation, getLatestSession } from '../lib/ipc'
+  import { writePty, killPty, spawnPty, abortImplementation } from '../lib/ipc'
   import '@xterm/xterm/css/xterm.css'
   import { parseCheckpointQuestion } from '../lib/parseCheckpoint'
   import VoiceInput from './VoiceInput.svelte'
@@ -19,7 +18,6 @@
   let { taskId, isStarting = false }: Props = $props()
 
   let status = $state<'idle' | 'running' | 'complete' | 'error'>('idle')
-  let errorMessage = $state<string | null>(null)
   let opencodePort = $state<number | null>(null)
   let unlisten: UnlistenFn | null = null
   let terminalEl: HTMLDivElement
@@ -29,9 +27,8 @@
     taskId: untrack(() => taskId),
     getOpencodePort: () => opencodePort,
     setOpencodePort: (port) => { opencodePort = port },
-    onStatusUpdate: (s, msg) => {
+    onStatusUpdate: (s) => {
       status = s
-      if (msg !== undefined) errorMessage = msg ?? null
     },
   })
 
@@ -42,12 +39,36 @@
   let questionText = $derived(session ? parseCheckpointQuestion(session.checkpoint_data) : null)
 
   $effect(() => {
+    if (session?.status === 'running' || session?.status === 'paused') {
+      status = 'running'
+      if (session.status === 'running') {
+        void tryAttachPty()
+      }
+      return
+    }
+
+    if (session?.status === 'completed') {
+      status = 'complete'
+      return
+    }
+
+    if (session?.status === 'failed' || session?.status === 'interrupted') {
+      status = 'error'
+      return
+    }
+
+    if (!session) {
+      status = 'idle'
+    }
+  })
+
+  $effect(() => {
     if (questionText !== undefined && poolEntry) {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           if (poolEntry) {
             const proposed = poolEntry.fitAddon.proposeDimensions()
-            if (proposed && !isNaN(proposed.cols) && !isNaN(proposed.rows)) {
+            if (proposed && !Number.isNaN(proposed.cols) && !Number.isNaN(proposed.rows)) {
               poolEntry.fitAddon.fit()
             }
           }
@@ -86,45 +107,10 @@
     await sessionHistory.loadSessionHistory()
     await tryAttachPty()
 
-    unlisten = await listen<AgentEvent>('agent-event', (event) => {
+    unlisten = await listen<{ task_id: string }>('action-complete', async (event) => {
       if (event.payload.task_id !== taskId) return
-
-      const eventType = event.payload.event_type
-      const data = event.payload.data
-
-      if (eventType === 'session.idle') {
-        status = 'complete'
-      } else if (eventType === 'session.status') {
-        try {
-          const parsed = JSON.parse(data)
-          const statusType = parsed.properties?.status?.type
-          if (statusType === 'idle') {
-            status = 'complete'
-          } else if (statusType === 'busy') {
-            status = 'running'
-            tryAttachPty()
-          } else if (statusType === 'retry') {
-            status = 'running'
-            tryAttachPty()
-          }
-        } catch { /* ignore parse errors */ }
-      } else if (eventType === 'session.error') {
-        status = 'error'
-        errorMessage = data
-      }
-    })
-
-    const unlistenComplete = await listen<{ task_id: string }>('action-complete', async (event) => {
-      if (event.payload.task_id !== taskId) return
-      status = 'complete'
       await tryAttachPty()
     })
-
-    const originalUnlisten = unlisten
-    unlisten = () => {
-      originalUnlisten?.()
-      unlistenComplete()
-    }
   })
 
   onDestroy(() => {
@@ -145,7 +131,6 @@
       }
       await abortImplementation(taskId)
       status = 'error'
-      errorMessage = 'Implementation aborted by user'
     } catch (e) {
       console.error('[OpenCodeAgentPanel] Failed to abort implementation:', e)
     }
