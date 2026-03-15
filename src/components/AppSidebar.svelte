@@ -70,13 +70,27 @@
     </div>
   {/if}
 
-  <div class="h-12 px-3 flex items-center {collapsed ? 'justify-center' : 'gap-2'} border-b border-base-content/10">
-    <div class="w-7 h-7 bg-primary flex items-center justify-center rounded shrink-0">
-      <span class="text-black font-bold font-mono text-xs">&gt;_</span>
+  <div class="h-12 px-2 flex items-center border-b border-base-content/10">
+    <div class="flex items-center gap-2 min-w-0 flex-1 {collapsed ? 'justify-center' : ''}">
+      <div class="w-7 h-7 bg-primary flex items-center justify-center rounded shrink-0">
+        <span class="text-black font-bold font-mono text-xs">&gt;_</span>
+      </div>
+      {#if !collapsed}
+        <span class="font-mono text-xs font-semibold text-base-content truncate">open_forge</span>
+      {/if}
     </div>
-    {#if !collapsed}
-      <span class="font-mono text-xs font-semibold text-base-content truncate">open_forge</span>
-    {/if}
+    <button
+      type="button"
+      class="btn btn-ghost btn-xs text-base-content/30 hover:text-base-content/60"
+      aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      onclick={onToggleCollapse}
+    >
+      {#if collapsed}
+        <ChevronRight size={16} />
+      {:else}
+        <ChevronLeft size={16} />
+      {/if}
+    </button>
   </div>
 
   <div class="h-10 px-3 flex items-center {collapsed ? 'justify-center' : 'justify-between'}">
@@ -142,18 +156,4 @@
     {/each}
   </div>
 
-  <div class="border-t border-base-content/10 py-1">
-    <button
-      type="button"
-      class="w-full flex items-center {collapsed ? 'justify-center' : 'justify-end px-3'} py-1.5 text-base-content/30 hover:text-base-content/60 transition-colors"
-      aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-      onclick={onToggleCollapse}
-    >
-      {#if collapsed}
-        <ChevronRight size={16} />
-      {:else}
-        <ChevronLeft size={16} />
-      {/if}
-    </button>
-  </div>
 </div>

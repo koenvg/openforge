@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { LayoutDashboard, GitPullRequest, Sparkles } from 'lucide-svelte'
+  import { LayoutDashboard, GitPullRequest, Sparkles, Settings } from 'lucide-svelte'
   import type { AppView } from '../lib/types'
   import { commandHeld } from '../lib/stores'
 
@@ -9,18 +9,20 @@
     reviewRequestCount?: number
     authoredPrCount?: number
     modalsOpen?: boolean
+    railBg?: string
   }
 
-  let { currentView, onNavigate, reviewRequestCount = 0, authoredPrCount = 0, modalsOpen = false }: Props = $props()
+  let { currentView, onNavigate, reviewRequestCount = 0, authoredPrCount = 0, modalsOpen = false, railBg = 'oklch(var(--b2))' }: Props = $props()
 
   const navItems: { view: AppView; Icon: typeof LayoutDashboard; shortcut: string; label: string }[] = [
     { view: 'board', Icon: LayoutDashboard, shortcut: 'H', label: 'Board' },
     { view: 'pr_review', Icon: GitPullRequest, shortcut: 'G', label: 'Pull Requests' },
     { view: 'skills', Icon: Sparkles, shortcut: 'L', label: 'Skills' },
+    { view: 'settings', Icon: Settings, shortcut: ',', label: 'Settings' },
   ]
 </script>
 
-<div class="w-16 h-full bg-base-200 border-r border-base-content/10 flex flex-col items-center py-4 gap-5">
+<div class="w-16 h-full border-r border-base-content/10 flex flex-col items-center py-4 gap-5" style="background-color: {railBg}">
   {#each navItems as { view, Icon, shortcut, label }}
     <button
       class="relative cursor-pointer {currentView === view ? 'text-primary' : 'text-base-content/40'}"

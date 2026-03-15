@@ -28,6 +28,8 @@
 
   import { pushNavState, navigateBack } from './lib/navigation'
   import { loadActions, getEnabledActions } from './lib/actions'
+  import { getProjectColor } from './lib/projectColors'
+  import { themeMode } from './lib/theme'
   import type { Action } from './lib/types'
   import { release as releaseTerminal, isPtyActive, focusTerminal } from './lib/terminalPool'
   import { isInputFocused } from './lib/domUtils'
@@ -119,6 +121,34 @@
 
   // Find active project
   let activeProject = $derived($projects.find(p => p.id === $activeProjectId) || null)
+
+  let activeProjectColorId = $state<string | null>(null)
+  $effect(() => {
+    const pid = $activeProjectId
+    void $currentView
+    if (pid) {
+      getProjectConfig(pid, 'project_color').then((val) => {
+        activeProjectColorId = val
+      })
+    } else {
+      activeProjectColorId = null
+    }
+  })
+  let contentBg = $derived.by(() => {
+    const color = getProjectColor(activeProjectColorId)
+    return $themeMode === 'dark' ? color.dark : color.light
+  })
+  let contentBgAlt = $derived.by(() => {
+    const color = getProjectColor(activeProjectColorId)
+    return $themeMode === 'dark' ? color.darkAlt : color.lightAlt
+  })
+  let iconRailBg = $derived.by(() => {
+    const color = getProjectColor(activeProjectColorId)
+    if ($themeMode === 'dark') {
+      return color.darkAlt
+    }
+    return color.lightAlt
+  })
 
   async function loadProjects() {
     try {
@@ -814,7 +844,7 @@
   })
 </script>
 
-<div class="flex h-screen overflow-hidden bg-base-100">
+<div class="flex h-screen overflow-hidden bg-base-100" style="--project-bg: {contentBg}; --project-bg-alt: {contentBgAlt}">
   <AppSidebar
     collapsed={appSidebarCollapsed}
     currentView={$currentView}
@@ -824,10 +854,10 @@
     onNavigate={handleNavigate}
   />
   {#if $currentView !== 'workqueue' && $currentView !== 'global_settings'}
-    <IconRail currentView={$currentView} onNavigate={handleNavigate} reviewRequestCount={$reviewRequestCount} authoredPrCount={$authoredPrCount} modalsOpen={showCommandPalette || showProjectSwitcher || showActionPalette || showAddDialog} />
+    <IconRail currentView={$currentView} onNavigate={handleNavigate} reviewRequestCount={$reviewRequestCount} authoredPrCount={$authoredPrCount} modalsOpen={showCommandPalette || showProjectSwitcher || showActionPalette || showAddDialog} railBg={iconRailBg} />
   {/if}
 
-  <div class="flex flex-col flex-1 min-w-0 relative">
+  <div class="flex flex-col flex-1 min-w-0 relative" style="background: linear-gradient(180deg, var(--project-bg-alt) 0%, var(--project-bg) 100%)">
     <main class="flex-1 overflow-hidden flex flex-col">
       {#if $currentView === 'settings'}
         <SettingsView mode="project" onClose={() => { pushNavState(); $currentView = 'board' }} onProjectDeleted={loadProjects} />

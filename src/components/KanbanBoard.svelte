@@ -11,6 +11,7 @@
   import { useVimNavigation } from '../lib/useVimNavigation.svelte'
   import TaskCard from './TaskCard.svelte'
   import TaskContextMenu from './TaskContextMenu.svelte'
+  import ProjectPageHeader from './ProjectPageHeader.svelte'
 
   type BoardColumnConfig = (typeof DEFAULT_BOARD_COLUMNS)[number]
 
@@ -213,9 +214,10 @@
 <svelte:window onkeydown={handleBoardKeydown} />
 
 <div class="flex flex-col h-full overflow-hidden">
-  <div class="flex items-center justify-between px-6 py-4 bg-base-200 border-b border-base-300 shrink-0">
-    <h2 class="text-xl font-semibold text-base-content m-0">{projectName} — Board</h2>
-  </div>
+  <ProjectPageHeader
+    title={`${projectName} — Board`}
+    subtitle="Manage and prioritize project tasks"
+  />
 
   <div class="flex items-center justify-between px-6 pt-4 pb-1">
     <button
