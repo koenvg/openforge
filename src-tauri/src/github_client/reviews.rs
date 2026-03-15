@@ -170,7 +170,9 @@ impl GitHubClient {
 
         if response.status() == reqwest::StatusCode::NOT_MODIFIED {
             if let Some(cached) = self.etag_cache.lock().unwrap().get(&url) {
-                if let Ok(result) = serde_json::from_str::<RequiredPullRequestReviewsResponse>(&cached.body) {
+                if let Ok(result) =
+                    serde_json::from_str::<RequiredPullRequestReviewsResponse>(&cached.body)
+                {
                     return Some(result.required_approving_review_count);
                 }
             }
@@ -180,7 +182,10 @@ impl GitHubClient {
         if !response.status().is_success() {
             eprintln!(
                 "[GitHub] Unexpected status {} fetching required reviews for {}/{} branch {}",
-                response.status(), owner, repo, branch
+                response.status(),
+                owner,
+                repo,
+                branch
             );
             return None;
         }
@@ -313,7 +318,10 @@ mod tests {
     #[test]
     fn test_changes_requested() {
         let reviews = vec![make_review("alice", "CHANGES_REQUESTED")];
-        assert_eq!(aggregate_review_status(&reviews, false, None), "changes_requested");
+        assert_eq!(
+            aggregate_review_status(&reviews, false, None),
+            "changes_requested"
+        );
     }
 
     #[test]
@@ -322,13 +330,19 @@ mod tests {
             make_review("alice", "APPROVED"),
             make_review("bob", "CHANGES_REQUESTED"),
         ];
-        assert_eq!(aggregate_review_status(&reviews, false, None), "changes_requested");
+        assert_eq!(
+            aggregate_review_status(&reviews, false, None),
+            "changes_requested"
+        );
     }
 
     #[test]
     fn test_approval_with_pending_reviewers_no_required_count() {
         let reviews = vec![make_review("alice", "APPROVED")];
-        assert_eq!(aggregate_review_status(&reviews, true, None), "review_required");
+        assert_eq!(
+            aggregate_review_status(&reviews, true, None),
+            "review_required"
+        );
     }
 
     #[test]
@@ -349,7 +363,10 @@ mod tests {
     #[test]
     fn test_not_enough_approvals_for_required_count() {
         let reviews = vec![make_review("alice", "APPROVED")];
-        assert_eq!(aggregate_review_status(&reviews, true, Some(2)), "review_required");
+        assert_eq!(
+            aggregate_review_status(&reviews, true, Some(2)),
+            "review_required"
+        );
     }
 
     #[test]
@@ -367,18 +384,27 @@ mod tests {
             make_review("alice", "APPROVED"),
             make_review("bob", "CHANGES_REQUESTED"),
         ];
-        assert_eq!(aggregate_review_status(&reviews, true, Some(1)), "changes_requested");
+        assert_eq!(
+            aggregate_review_status(&reviews, true, Some(1)),
+            "changes_requested"
+        );
     }
 
     #[test]
     fn test_required_count_zero() {
-        assert_eq!(aggregate_review_status(&[], true, Some(0)), "review_required");
+        assert_eq!(
+            aggregate_review_status(&[], true, Some(0)),
+            "review_required"
+        );
     }
 
     #[test]
     fn test_only_commented_reviews() {
         let reviews = vec![make_review("alice", "COMMENTED")];
-        assert_eq!(aggregate_review_status(&reviews, false, None), "review_required");
+        assert_eq!(
+            aggregate_review_status(&reviews, false, None),
+            "review_required"
+        );
     }
 
     #[test]
@@ -396,6 +422,9 @@ mod tests {
             make_review("alice", "CHANGES_REQUESTED"),
             make_review("alice", "DISMISSED"),
         ];
-        assert_eq!(aggregate_review_status(&reviews, false, None), "review_required");
+        assert_eq!(
+            aggregate_review_status(&reviews, false, None),
+            "review_required"
+        );
     }
 }

@@ -344,7 +344,9 @@ impl GitHubClient {
 
         if response.status() == reqwest::StatusCode::NOT_MODIFIED {
             if let Some(cached) = self.etag_cache.lock().unwrap().get(&url) {
-                if let Ok(result) = serde_json::from_str::<RequiredStatusChecksResponse>(&cached.body) {
+                if let Ok(result) =
+                    serde_json::from_str::<RequiredStatusChecksResponse>(&cached.body)
+                {
                     return result.into_context_names();
                 }
             }
@@ -354,7 +356,10 @@ impl GitHubClient {
         if !response.status().is_success() {
             eprintln!(
                 "[GitHub] Unexpected status {} fetching required checks for {}/{} branch {}",
-                response.status(), owner, repo, branch
+                response.status(),
+                owner,
+                repo,
+                branch
             );
             return vec![];
         }
@@ -490,7 +495,10 @@ pub fn filter_to_required(
     // Recompute the combined state based on only the required statuses
     let filtered_state = if filtered_statuses.is_empty() {
         combined_status.state.clone()
-    } else if filtered_statuses.iter().any(|s| s.state == "failure" || s.state == "error") {
+    } else if filtered_statuses
+        .iter()
+        .any(|s| s.state == "failure" || s.state == "error")
+    {
         "failure".to_string()
     } else if filtered_statuses.iter().any(|s| s.state == "pending") {
         "pending".to_string()
@@ -520,40 +528,52 @@ mod tests {
     fn make_check_runs(runs: Vec<(&str, &str, Option<&str>)>) -> CheckRunsResponse {
         CheckRunsResponse {
             total_count: runs.len(),
-            check_runs: runs.into_iter().map(|(name, status, conclusion)| CheckRun {
-                id: 1,
-                name: name.to_string(),
-                status: status.to_string(),
-                conclusion: conclusion.map(|c| c.to_string()),
-                html_url: "https://example.com".to_string(),
-            }).collect(),
+            check_runs: runs
+                .into_iter()
+                .map(|(name, status, conclusion)| CheckRun {
+                    id: 1,
+                    name: name.to_string(),
+                    status: status.to_string(),
+                    conclusion: conclusion.map(|c| c.to_string()),
+                    html_url: "https://example.com".to_string(),
+                })
+                .collect(),
         }
     }
 
     fn make_combined(state: &str, statuses: Vec<&str>) -> CombinedStatusResponse {
         CombinedStatusResponse {
             state: state.to_string(),
-            statuses: statuses.into_iter().map(|s| CommitStatusEntry {
-                state: s.to_string(),
-                context: "ci".to_string(),
-                description: None,
-                target_url: None,
-            }).collect(),
+            statuses: statuses
+                .into_iter()
+                .map(|s| CommitStatusEntry {
+                    state: s.to_string(),
+                    context: "ci".to_string(),
+                    description: None,
+                    target_url: None,
+                })
+                .collect(),
             sha: "abc".to_string(),
             total_count: 0,
             extra: serde_json::Value::Object(serde_json::Map::new()),
         }
     }
 
-    fn make_combined_with_contexts(state: &str, statuses: Vec<(&str, &str)>) -> CombinedStatusResponse {
+    fn make_combined_with_contexts(
+        state: &str,
+        statuses: Vec<(&str, &str)>,
+    ) -> CombinedStatusResponse {
         CombinedStatusResponse {
             state: state.to_string(),
-            statuses: statuses.into_iter().map(|(state, context)| CommitStatusEntry {
-                state: state.to_string(),
-                context: context.to_string(),
-                description: None,
-                target_url: None,
-            }).collect(),
+            statuses: statuses
+                .into_iter()
+                .map(|(state, context)| CommitStatusEntry {
+                    state: state.to_string(),
+                    context: context.to_string(),
+                    description: None,
+                    target_url: None,
+                })
+                .collect(),
             sha: "abc123".to_string(),
             total_count: 0,
             extra: serde_json::Value::Object(serde_json::Map::new()),
@@ -581,51 +601,98 @@ mod tests {
 
         assert_eq!(aggregate_ci_status(&empty_runs, &empty_combined), "none");
 
-        let success_runs = make_check_runs(vec![("build", "completed", Some("success")), ("test", "completed", Some("success"))]);
+        let success_runs = make_check_runs(vec![
+            ("build", "completed", Some("success")),
+            ("test", "completed", Some("success")),
+        ]);
         let success_combined = make_combined("success", vec!["success"]);
-        assert_eq!(aggregate_ci_status(&success_runs, &success_combined), "success");
+        assert_eq!(
+            aggregate_ci_status(&success_runs, &success_combined),
+            "success"
+        );
 
-        let failure_runs = make_check_runs(vec![("build", "completed", Some("failure")), ("test", "completed", Some("success"))]);
-        assert_eq!(aggregate_ci_status(&failure_runs, &empty_combined), "failure");
+        let failure_runs = make_check_runs(vec![
+            ("build", "completed", Some("failure")),
+            ("test", "completed", Some("success")),
+        ]);
+        assert_eq!(
+            aggregate_ci_status(&failure_runs, &empty_combined),
+            "failure"
+        );
 
         let timed_out_runs = make_check_runs(vec![("build", "completed", Some("timed_out"))]);
-        assert_eq!(aggregate_ci_status(&timed_out_runs, &empty_combined), "failure");
+        assert_eq!(
+            aggregate_ci_status(&timed_out_runs, &empty_combined),
+            "failure"
+        );
 
         let cancelled_runs = make_check_runs(vec![("build", "completed", Some("cancelled"))]);
-        assert_eq!(aggregate_ci_status(&cancelled_runs, &empty_combined), "success");
+        assert_eq!(
+            aggregate_ci_status(&cancelled_runs, &empty_combined),
+            "success"
+        );
 
-        let action_required_runs = make_check_runs(vec![("build", "completed", Some("action_required"))]);
-        assert_eq!(aggregate_ci_status(&action_required_runs, &empty_combined), "pending");
+        let action_required_runs =
+            make_check_runs(vec![("build", "completed", Some("action_required"))]);
+        assert_eq!(
+            aggregate_ci_status(&action_required_runs, &empty_combined),
+            "pending"
+        );
 
         let failure_combined = make_combined("failure", vec!["failure"]);
-        assert_eq!(aggregate_ci_status(&empty_runs, &failure_combined), "failure");
+        assert_eq!(
+            aggregate_ci_status(&empty_runs, &failure_combined),
+            "failure"
+        );
 
         let error_combined = make_combined("error", vec!["error"]);
         assert_eq!(aggregate_ci_status(&empty_runs, &error_combined), "failure");
 
-        let pending_runs = make_check_runs(vec![("build", "in_progress", None), ("test", "completed", Some("success"))]);
-        assert_eq!(aggregate_ci_status(&pending_runs, &empty_combined), "pending");
+        let pending_runs = make_check_runs(vec![
+            ("build", "in_progress", None),
+            ("test", "completed", Some("success")),
+        ]);
+        assert_eq!(
+            aggregate_ci_status(&pending_runs, &empty_combined),
+            "pending"
+        );
 
         let pending_combined = make_combined("pending", vec!["pending"]);
-        assert_eq!(aggregate_ci_status(&empty_runs, &pending_combined), "pending");
+        assert_eq!(
+            aggregate_ci_status(&empty_runs, &pending_combined),
+            "pending"
+        );
 
-        let neutral_runs = make_check_runs(vec![("build", "completed", Some("neutral")), ("lint", "completed", Some("skipped"))]);
-        assert_eq!(aggregate_ci_status(&neutral_runs, &empty_combined), "success");
+        let neutral_runs = make_check_runs(vec![
+            ("build", "completed", Some("neutral")),
+            ("lint", "completed", Some("skipped")),
+        ]);
+        assert_eq!(
+            aggregate_ci_status(&neutral_runs, &empty_combined),
+            "success"
+        );
 
         let null_conclusion_runs = make_check_runs(vec![("build", "completed", None)]);
-        assert_eq!(aggregate_ci_status(&null_conclusion_runs, &empty_combined), "success");
+        assert_eq!(
+            aggregate_ci_status(&null_conclusion_runs, &empty_combined),
+            "success"
+        );
 
         let mixed_failure_pending = make_check_runs(vec![
             ("build", "completed", Some("failure")),
             ("test", "in_progress", None),
         ]);
-        assert_eq!(aggregate_ci_status(&mixed_failure_pending, &empty_combined), "pending");
+        assert_eq!(
+            aggregate_ci_status(&mixed_failure_pending, &empty_combined),
+            "pending"
+        );
 
-        let all_done_failure_runs = make_check_runs(vec![
-            ("build", "completed", Some("failure")),
-        ]);
+        let all_done_failure_runs = make_check_runs(vec![("build", "completed", Some("failure"))]);
         let pending_combined_with_statuses = make_combined("pending", vec!["pending"]);
-        assert_eq!(aggregate_ci_status(&all_done_failure_runs, &pending_combined_with_statuses), "pending");
+        assert_eq!(
+            aggregate_ci_status(&all_done_failure_runs, &pending_combined_with_statuses),
+            "pending"
+        );
     }
 
     // ========================================================================
@@ -639,13 +706,14 @@ mod tests {
             ("test", "completed", Some("failure")),
             ("lint", "completed", Some("success")),
         ]);
-        let combined = make_combined_with_contexts("success", vec![
-            ("success", "ci/deploy"),
-            ("failure", "ci/security"),
-        ]);
+        let combined = make_combined_with_contexts(
+            "success",
+            vec![("success", "ci/deploy"), ("failure", "ci/security")],
+        );
         let required = vec!["build".to_string(), "ci/security".to_string()];
 
-        let (filtered_runs, filtered_combined) = filter_to_required(&check_runs, &combined, &required);
+        let (filtered_runs, filtered_combined) =
+            filter_to_required(&check_runs, &combined, &required);
 
         assert_eq!(filtered_runs.check_runs.len(), 1);
         assert_eq!(filtered_runs.check_runs[0].name, "build");
@@ -664,7 +732,8 @@ mod tests {
         let combined = make_combined_with_contexts("success", vec![("success", "ci/deploy")]);
         let required: Vec<String> = vec![];
 
-        let (filtered_runs, filtered_combined) = filter_to_required(&check_runs, &combined, &required);
+        let (filtered_runs, filtered_combined) =
+            filter_to_required(&check_runs, &combined, &required);
 
         assert!(filtered_runs.check_runs.is_empty());
         assert_eq!(filtered_runs.total_count, 0);
@@ -680,7 +749,8 @@ mod tests {
         let combined = make_combined_with_contexts("pending", vec![]);
         let required = vec!["build".to_string(), "deploy".to_string()];
 
-        let (filtered_runs, filtered_combined) = filter_to_required(&check_runs, &combined, &required);
+        let (filtered_runs, filtered_combined) =
+            filter_to_required(&check_runs, &combined, &required);
 
         assert_eq!(filtered_runs.check_runs.len(), 1);
         assert_eq!(filtered_runs.check_runs[0].name, "build");
@@ -690,10 +760,10 @@ mod tests {
     #[test]
     fn test_filter_to_required_recomputes_combined_state() {
         let check_runs = make_check_runs(vec![]);
-        let combined = make_combined_with_contexts("failure", vec![
-            ("success", "required-check"),
-            ("failure", "optional-check"),
-        ]);
+        let combined = make_combined_with_contexts(
+            "failure",
+            vec![("success", "required-check"), ("failure", "optional-check")],
+        );
         let required = vec!["required-check".to_string()];
 
         let (_, filtered_combined) = filter_to_required(&check_runs, &combined, &required);
@@ -732,10 +802,18 @@ mod tests {
         let deduped = deduplicate_check_runs(&response);
         assert_eq!(deduped.total_count, 2);
         assert_eq!(deduped.check_runs.len(), 2);
-        let prelim = deduped.check_runs.iter().find(|r| r.name == "preliminary-checks").unwrap();
+        let prelim = deduped
+            .check_runs
+            .iter()
+            .find(|r| r.name == "preliminary-checks")
+            .unwrap();
         assert_eq!(prelim.id, 400, "should keep the newest run (highest ID)");
         assert_eq!(prelim.conclusion.as_deref(), Some("success"));
-        let build = deduped.check_runs.iter().find(|r| r.name == "build").unwrap();
+        let build = deduped
+            .check_runs
+            .iter()
+            .find(|r| r.name == "build")
+            .unwrap();
         assert_eq!(build.id, 200);
     }
 
@@ -781,6 +859,9 @@ mod tests {
         let ci = &deduped.check_runs[0];
         assert_eq!(ci.id, 500);
         assert_eq!(ci.status, "in_progress");
-        assert_eq!(ci.conclusion, None, "in-progress run should have no conclusion");
+        assert_eq!(
+            ci.conclusion, None,
+            "in-progress run should have no conclusion"
+        );
     }
 }

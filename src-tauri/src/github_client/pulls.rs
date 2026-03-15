@@ -93,12 +93,7 @@ impl GitHubClient {
 
         let mut review_comments: Vec<ReviewComment> =
             if review_response.status() == reqwest::StatusCode::NOT_MODIFIED {
-                if let Some(cached) = self
-                    .etag_cache
-                    .lock()
-                    .unwrap()
-                    .get(&review_comments_url)
-                {
+                if let Some(cached) = self.etag_cache.lock().unwrap().get(&review_comments_url) {
                     serde_json::from_str(&cached.body)
                         .map_err(|e| GitHubError::ParseError(e.to_string()))?
                 } else {
@@ -134,8 +129,7 @@ impl GitHubClient {
                         },
                     );
                 }
-                serde_json::from_str(&body)
-                    .map_err(|e| GitHubError::ParseError(e.to_string()))?
+                serde_json::from_str(&body).map_err(|e| GitHubError::ParseError(e.to_string()))?
             };
 
         let mut issue_comments_url = format!(
@@ -170,12 +164,7 @@ impl GitHubClient {
 
         let mut issue_comments: Vec<IssueComment> =
             if issue_response.status() == reqwest::StatusCode::NOT_MODIFIED {
-                if let Some(cached) = self
-                    .etag_cache
-                    .lock()
-                    .unwrap()
-                    .get(&issue_comments_url)
-                {
+                if let Some(cached) = self.etag_cache.lock().unwrap().get(&issue_comments_url) {
                     serde_json::from_str(&cached.body)
                         .map_err(|e| GitHubError::ParseError(e.to_string()))?
                 } else {
@@ -211,8 +200,7 @@ impl GitHubClient {
                         },
                     );
                 }
-                serde_json::from_str(&body)
-                    .map_err(|e| GitHubError::ParseError(e.to_string()))?
+                serde_json::from_str(&body).map_err(|e| GitHubError::ParseError(e.to_string()))?
             };
 
         let mut all_comments = Vec::new();
@@ -248,7 +236,10 @@ impl GitHubClient {
             .get_pr_reviews(owner, repo, pr_number, token)
             .await
             .unwrap_or_else(|e| {
-                eprintln!("[GitHub] Failed to fetch reviews for PR #{}: {}", pr_number, e);
+                eprintln!(
+                    "[GitHub] Failed to fetch reviews for PR #{}: {}",
+                    pr_number, e
+                );
                 vec![]
             });
 
@@ -354,9 +345,7 @@ impl GitHubClient {
         let detail_results = join_all(detail_futures).await;
 
         let mut results = Vec::new();
-        for ((item, owner, repo), pr_result) in
-            items_with_coords.into_iter().zip(detail_results)
-        {
+        for ((item, owner, repo), pr_result) in items_with_coords.into_iter().zip(detail_results) {
             match pr_result {
                 Ok(pr_details) => {
                     results.push(SearchPrResult {
@@ -372,19 +361,27 @@ impl GitHubClient {
                         repo_owner: owner,
                         repo_name: repo,
                         head_ref: pr_details.head.ref_name,
-                        base_ref: pr_details.extra.get("base")
+                        base_ref: pr_details
+                            .extra
+                            .get("base")
                             .and_then(|b| b.get("ref"))
                             .and_then(|r| r.as_str())
                             .unwrap_or("main")
                             .to_string(),
                         head_sha: pr_details.head.sha,
-                        additions: pr_details.extra.get("additions")
+                        additions: pr_details
+                            .extra
+                            .get("additions")
                             .and_then(|a| a.as_i64())
                             .unwrap_or(0),
-                        deletions: pr_details.extra.get("deletions")
+                        deletions: pr_details
+                            .extra
+                            .get("deletions")
                             .and_then(|d| d.as_i64())
                             .unwrap_or(0),
-                        changed_files: pr_details.extra.get("changed_files")
+                        changed_files: pr_details
+                            .extra
+                            .get("changed_files")
                             .and_then(|c| c.as_i64())
                             .unwrap_or(0),
                         created_at: item.created_at,
@@ -481,19 +478,27 @@ impl GitHubClient {
                         repo_owner: owner,
                         repo_name: repo,
                         head_ref: pr_details.head.ref_name,
-                        base_ref: pr_details.extra.get("base")
+                        base_ref: pr_details
+                            .extra
+                            .get("base")
                             .and_then(|b| b.get("ref"))
                             .and_then(|r| r.as_str())
                             .unwrap_or("main")
                             .to_string(),
                         head_sha: pr_details.head.sha,
-                        additions: pr_details.extra.get("additions")
+                        additions: pr_details
+                            .extra
+                            .get("additions")
                             .and_then(|a| a.as_i64())
                             .unwrap_or(0),
-                        deletions: pr_details.extra.get("deletions")
+                        deletions: pr_details
+                            .extra
+                            .get("deletions")
                             .and_then(|d| d.as_i64())
                             .unwrap_or(0),
-                        changed_files: pr_details.extra.get("changed_files")
+                        changed_files: pr_details
+                            .extra
+                            .get("changed_files")
                             .and_then(|c| c.as_i64())
                             .unwrap_or(0),
                         created_at: item.created_at,
