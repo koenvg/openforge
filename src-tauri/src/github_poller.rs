@@ -28,14 +28,18 @@
 //! - Skips projects with missing GitHub config
 
 use crate::db::{Database, PrRow};
-use crate::github_client::{aggregate_ci_status, aggregate_review_status, deduplicate_check_runs, filter_to_required, CheckRunsResponse, CombinedStatusResponse, GitHubClient, PrComment, PrReview};
+use crate::github_client::{
+    CheckRunsResponse, CombinedStatusResponse, GitHubClient, PrComment, PrReview,
+    aggregate_ci_status, aggregate_review_status, deduplicate_check_runs, filter_to_required,
+    parse_repo_event_changes,
+};
 use futures::future::join_all;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tauri::{AppHandle, Emitter, Manager};
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 
 // ============================================================================
 // PollResult
@@ -137,7 +141,10 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
         };
     }
 
-    println!("[GitHub Poller] Polling {} projects for PR updates...", projects.len());
+    println!(
+        "[GitHub Poller] Polling {} projects for PR updates...",
+        projects.len()
+    );
 
     let project_count = projects.len();
     let mut total_new_comments = 0;
@@ -153,7 +160,10 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
                 continue;
             }
             Err(e) => {
-                eprintln!("[GitHub Poller] Failed to read config for project {}: {}", project.id, e);
+                eprintln!(
+                    "[GitHub Poller] Failed to read config for project {}: {}",
+                    project.id, e
+                );
                 total_errors += 1;
                 continue;
             }
@@ -203,9 +213,30 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
             }
         };
 
+        let activity_pr_numbers = match github_client
+            .list_repo_events(parts[0], parts[1], &github_token)
+            .await
+        {
+            Ok(events) => parse_repo_event_changes(&events).touched_pr_numbers,
+            Err(e) => {
+                eprintln!(
+                    "[GitHub Poller] Failed to fetch repo events for {}/{}: {}",
+                    parts[0], parts[1], e
+                );
+                Vec::new()
+            }
+        };
+
         let poll_start = Instant::now();
-        let (new_comments, ci_changes, review_changes, errors) =
-            poll_prs_for_project(github_client, &db, app, &github_token, open_prs).await;
+        let (new_comments, ci_changes, review_changes, errors) = poll_prs_for_project(
+            github_client,
+            &db,
+            app,
+            &github_token,
+            open_prs,
+            &activity_pr_numbers,
+        )
+        .await;
         println!(
             "[GitHub Poller] PR polling for project {} took {:.1}s",
             project.id,
@@ -304,9 +335,12 @@ pub async fn start_github_poller(app: AppHandle) {
         }
 
         if result.rate_limited {
-            if let Err(e) = app.emit("github-rate-limited", serde_json::json!({
-                "reset_at": result.rate_limit_reset_at
-            })) {
+            if let Err(e) = app.emit(
+                "github-rate-limited",
+                serde_json::json!({
+                    "reset_at": result.rate_limit_reset_at
+                }),
+            ) {
                 eprintln!("[GitHub Poller] Failed to emit github-rate-limited: {}", e);
             }
         }
@@ -342,23 +376,24 @@ fn read_project_config(
     }))
 }
 
-fn get_open_prs_for_project(
-    db: &Mutex<Database>,
-    project_id: &str,
-) -> Result<Vec<PrRow>, String> {
+fn get_open_prs_for_project(db: &Mutex<Database>, project_id: &str) -> Result<Vec<PrRow>, String> {
     let db_lock = db.lock().unwrap();
     let all_open_prs = db_lock.get_open_prs().map_err(|e| e.to_string())?;
-    
+
     let tasks = db_lock
         .get_tasks_for_project(project_id)
         .map_err(|e| e.to_string())?;
-    
+
     let task_ids: HashSet<String> = tasks.into_iter().map(|t| t.id).collect();
-    
+
     Ok(all_open_prs
         .into_iter()
         .filter(|pr| task_ids.contains(&pr.ticket_id))
         .collect())
+}
+
+fn should_fetch_comments_for_pr(pr_id: i64, changed_pr_numbers: &HashSet<i64>) -> bool {
+    changed_pr_numbers.is_empty() || changed_pr_numbers.contains(&pr_id)
 }
 
 async fn sync_open_prs(
@@ -394,7 +429,7 @@ async fn sync_open_prs(
     let closed_prs = {
         let db_lock = db.lock().unwrap();
         let all_open_prs = db_lock.get_open_prs().map_err(|e| e.to_string())?;
-        
+
         all_open_prs
             .into_iter()
             .filter(|pr| {
@@ -417,17 +452,24 @@ async fn sync_open_prs(
             async move {
                 match client.get_pr_details(&owner, &name, pr_id, &token).await {
                     Ok(details) => {
-                        let merged = details.extra.get("merged")
+                        let merged = details
+                            .extra
+                            .get("merged")
                             .and_then(|v| v.as_bool())
                             .unwrap_or(false);
-                        let merged_at = details.extra.get("merged_at")
+                        let merged_at = details
+                            .extra
+                            .get("merged_at")
                             .and_then(|v| v.as_str())
                             .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
                             .map(|dt| dt.timestamp());
                         (pr_id, merged, merged_at)
                     }
                     Err(e) => {
-                        eprintln!("[GitHub Poller] Failed to check merge status for PR #{}: {}", pr_id, e);
+                        eprintln!(
+                            "[GitHub Poller] Failed to check merge status for PR #{}: {}",
+                            pr_id, e
+                        );
                         (pr_id, false, None)
                     }
                 }
@@ -444,7 +486,10 @@ async fn sync_open_prs(
                 merged_pr_ids.insert(*pr_id);
                 if let Some(ts) = merged_at {
                     if let Err(e) = db_lock.update_pr_merged(*pr_id, *ts) {
-                        eprintln!("[GitHub Poller] Failed to update merged status for PR #{}: {}", pr_id, e);
+                        eprintln!(
+                            "[GitHub Poller] Failed to update merged status for PR #{}: {}",
+                            pr_id, e
+                        );
                     }
                 }
             }
@@ -468,8 +513,7 @@ async fn sync_open_prs(
 
     let mut synced = 0;
     for pr in &github_prs {
-        let matched_tasks =
-            find_matching_task_ids(&pr.title, &pr.head.ref_name, &task_ids);
+        let matched_tasks = find_matching_task_ids(&pr.title, &pr.head.ref_name, &task_ids);
         for task_id in matched_tasks {
             let db_lock = db.lock().unwrap();
             let _ = db_lock.insert_pull_request(
@@ -517,26 +561,22 @@ fn contains_task_id(text: &str, task_id: &str) -> bool {
     false
 }
 
-pub fn find_matching_task_ids(
-    pr_title: &str,
-    pr_branch: &str,
-    task_ids: &[String],
-) -> Vec<String> {
+pub fn find_matching_task_ids(pr_title: &str, pr_branch: &str, task_ids: &[String]) -> Vec<String> {
     let mut matched = Vec::new();
     let mut seen = HashSet::new();
 
     for task_id in task_ids {
-        if (contains_task_id(pr_title, task_id.as_str()) || contains_task_id(pr_branch, task_id.as_str()))
-            && seen.insert(task_id.clone())
+        if contains_task_id(pr_title, task_id.as_str())
+            || contains_task_id(pr_branch, task_id.as_str())
         {
-            matched.push(task_id.clone());
+            if seen.insert(task_id.clone()) {
+                matched.push(task_id.clone());
+            }
         }
     }
 
     matched
 }
-
-
 
 struct PollSinglePrResult {
     pr_id: i64,
@@ -563,34 +603,45 @@ async fn poll_single_pr(
     since: Option<String>,
     old_ci_status: Option<String>,
     old_review_status: Option<String>,
+    fetch_comments: bool,
 ) -> PollSinglePrResult {
     let since_ref = since.as_deref();
 
-    let comments_result = github_client
-        .get_pr_comments(&pr.repo_owner, &pr.repo_name, pr.id, &github_token, since_ref)
-        .await;
+    let comments = if fetch_comments {
+        let comments_result = github_client
+            .get_pr_comments(
+                &pr.repo_owner,
+                &pr.repo_name,
+                pr.id,
+                &github_token,
+                since_ref,
+            )
+            .await;
 
-    let comments = match comments_result {
-        Ok(c) => c,
-        Err(e) => {
-            return PollSinglePrResult {
-                pr_id: pr.id,
-                ticket_id: pr.ticket_id,
-                pr_title: pr.title,
-                head_sha: pr.head_sha,
-                old_ci_status,
-                old_review_status,
-                comments: vec![],
-                check_runs: None,
-                combined_status: None,
-                reviews: None,
-                has_requested_reviewers: false,
-                is_queued: false,
-                required_check_names: vec![],
-                required_approving_count: None,
-                error: Some(format!("Failed to fetch comments: {}", e)),
-            };
+        match comments_result {
+            Ok(c) => c,
+            Err(e) => {
+                return PollSinglePrResult {
+                    pr_id: pr.id,
+                    ticket_id: pr.ticket_id,
+                    pr_title: pr.title,
+                    head_sha: pr.head_sha,
+                    old_ci_status,
+                    old_review_status,
+                    comments: vec![],
+                    check_runs: None,
+                    combined_status: None,
+                    reviews: None,
+                    has_requested_reviewers: false,
+                    is_queued: false,
+                    required_check_names: vec![],
+                    required_approving_count: None,
+                    error: Some(format!("Failed to fetch comments: {}", e)),
+                };
+            }
         }
+    } else {
+        Vec::new()
     };
 
     // Fetch CI status, reviews, and PR details in parallel
@@ -599,15 +650,27 @@ async fn poll_single_pr(
             (None, None)
         } else {
             let (cr, cs) = tokio::join!(
-                github_client.get_check_runs(&pr.repo_owner, &pr.repo_name, &pr.head_sha, &github_token),
-                github_client.get_combined_status(&pr.repo_owner, &pr.repo_name, &pr.head_sha, &github_token)
+                github_client.get_check_runs(
+                    &pr.repo_owner,
+                    &pr.repo_name,
+                    &pr.head_sha,
+                    &github_token
+                ),
+                github_client.get_combined_status(
+                    &pr.repo_owner,
+                    &pr.repo_name,
+                    &pr.head_sha,
+                    &github_token
+                )
             );
             (Some(cr), Some(cs))
         }
     };
 
-    let reviews_future = github_client.get_pr_reviews(&pr.repo_owner, &pr.repo_name, pr.id, &github_token);
-    let pr_details_future = github_client.get_pr_details(&pr.repo_owner, &pr.repo_name, pr.id, &github_token);
+    let reviews_future =
+        github_client.get_pr_reviews(&pr.repo_owner, &pr.repo_name, pr.id, &github_token);
+    let pr_details_future =
+        github_client.get_pr_details(&pr.repo_owner, &pr.repo_name, pr.id, &github_token);
 
     let ((check_runs_result, combined_status_result), reviews_result, pr_details_result) =
         tokio::join!(ci_future, reviews_future, pr_details_future);
@@ -615,7 +678,10 @@ async fn poll_single_pr(
     let check_runs = check_runs_result.and_then(|r| match r {
         Ok(cr) => Some(cr),
         Err(e) => {
-            eprintln!("[GitHub Poller] Failed to fetch check runs for PR #{}: {}", pr.id, e);
+            eprintln!(
+                "[GitHub Poller] Failed to fetch check runs for PR #{}: {}",
+                pr.id, e
+            );
             None
         }
     });
@@ -623,7 +689,10 @@ async fn poll_single_pr(
     let combined_status = combined_status_result.and_then(|r| match r {
         Ok(cs) => Some(cs),
         Err(e) => {
-            eprintln!("[GitHub Poller] Failed to fetch combined status for PR #{}: {}", pr.id, e);
+            eprintln!(
+                "[GitHub Poller] Failed to fetch combined status for PR #{}: {}",
+                pr.id, e
+            );
             None
         }
     });
@@ -631,24 +700,34 @@ async fn poll_single_pr(
     let reviews = match reviews_result {
         Ok(r) => Some(r),
         Err(e) => {
-            eprintln!("[GitHub Poller] Failed to fetch reviews for PR #{}: {}", pr.id, e);
+            eprintln!(
+                "[GitHub Poller] Failed to fetch reviews for PR #{}: {}",
+                pr.id, e
+            );
             None
         }
     };
 
     let has_requested_reviewers = match &pr_details_result {
         Ok(details) => {
-            details.extra.get("requested_reviewers")
+            details
+                .extra
+                .get("requested_reviewers")
                 .and_then(|r| r.as_array())
                 .map(|a| !a.is_empty())
                 .unwrap_or(false)
-            || details.extra.get("requested_teams")
-                .and_then(|r| r.as_array())
-                .map(|a| !a.is_empty())
-                .unwrap_or(false)
+                || details
+                    .extra
+                    .get("requested_teams")
+                    .and_then(|r| r.as_array())
+                    .map(|a| !a.is_empty())
+                    .unwrap_or(false)
         }
         Err(e) => {
-            eprintln!("[GitHub Poller] Failed to fetch PR details for PR #{}: {}", pr.id, e);
+            eprintln!(
+                "[GitHub Poller] Failed to fetch PR details for PR #{}: {}",
+                pr.id, e
+            );
             false
         }
     };
@@ -665,16 +744,24 @@ async fn poll_single_pr(
     // Fetch required status check names and required review count from branch protection
     let (required_check_names, required_approving_count) = match &pr_details_result {
         Ok(details) => {
-            let base_ref = details.extra.get("base")
+            let base_ref = details
+                .extra
+                .get("base")
                 .and_then(|b| b.get("ref"))
                 .and_then(|r| r.as_str())
                 .unwrap_or("main");
             let (checks, reviews_count) = tokio::join!(
                 github_client.get_required_status_checks(
-                    &pr.repo_owner, &pr.repo_name, base_ref, &github_token
+                    &pr.repo_owner,
+                    &pr.repo_name,
+                    base_ref,
+                    &github_token
                 ),
                 github_client.get_required_approving_review_count(
-                    &pr.repo_owner, &pr.repo_name, base_ref, &github_token
+                    &pr.repo_owner,
+                    &pr.repo_name,
+                    base_ref,
+                    &github_token
                 )
             );
             (checks, reviews_count)
@@ -707,6 +794,7 @@ async fn poll_prs_for_project(
     app: &AppHandle,
     github_token: &str,
     open_prs: Vec<PrRow>,
+    changed_pr_numbers: &[i64],
 ) -> (usize, usize, usize, usize) {
     if open_prs.is_empty() {
         return (0, 0, 0, 0);
@@ -748,6 +836,8 @@ async fn poll_prs_for_project(
         .map(|(pr_id, _, _, old_review)| (pr_id, old_review))
         .collect();
 
+    let changed_pr_numbers: HashSet<i64> = changed_pr_numbers.iter().copied().collect();
+
     let futures: Vec<_> = open_prs
         .into_iter()
         .map(|pr| {
@@ -756,7 +846,8 @@ async fn poll_prs_for_project(
             let since = since_map.get(&pr.id).cloned().flatten();
             let old_ci = old_ci_map.get(&pr.id).cloned().flatten();
             let old_review = old_review_map.get(&pr.id).cloned().flatten();
-            poll_single_pr(client, token, pr, since, old_ci, old_review)
+            let fetch_comments = should_fetch_comments_for_pr(pr.id, &changed_pr_numbers);
+            poll_single_pr(client, token, pr, since, old_ci, old_review, fetch_comments)
         })
         .collect();
 
@@ -811,10 +902,13 @@ async fn poll_prs_for_project(
                 &comment.comment_type,
                 comment.path.as_deref(),
                 comment.line,
-                    false,
+                false,
                 created_at,
             ) {
-                eprintln!("[GitHub Poller] Failed to insert comment {}: {}", comment.id, e);
+                eprintln!(
+                    "[GitHub Poller] Failed to insert comment {}: {}",
+                    comment.id, e
+                );
                 continue;
             }
 
@@ -858,7 +952,10 @@ async fn poll_prs_for_project(
                     false,
                     created_at,
                 ) {
-                    eprintln!("[GitHub Poller] Failed to insert review body {}: {}", review.id, e);
+                    eprintln!(
+                        "[GitHub Poller] Failed to insert review body {}: {}",
+                        review.id, e
+                    );
                     continue;
                 }
 
@@ -884,10 +981,11 @@ async fn poll_prs_for_project(
             let check_runs = &deduplicate_check_runs(check_runs);
             // Filter to required checks only when branch protection is configured
             let (display_runs, new_status) = if !result.required_check_names.is_empty() {
-                let (filtered_runs, filtered_combined) = filter_to_required(
-                    check_runs, combined_status, &result.required_check_names
-                );
-                let status = if filtered_runs.check_runs.is_empty() && filtered_combined.statuses.is_empty() {
+                let (filtered_runs, filtered_combined) =
+                    filter_to_required(check_runs, combined_status, &result.required_check_names);
+                let status = if filtered_runs.check_runs.is_empty()
+                    && filtered_combined.statuses.is_empty()
+                {
                     // Required checks haven't run yet
                     "pending".to_string()
                 } else {
@@ -895,15 +993,24 @@ async fn poll_prs_for_project(
                 };
                 (filtered_runs.check_runs, status)
             } else {
-                (check_runs.check_runs.clone(), aggregate_ci_status(check_runs, combined_status))
+                (
+                    check_runs.check_runs.clone(),
+                    aggregate_ci_status(check_runs, combined_status),
+                )
             };
-            let check_runs_json = serde_json::to_string(&display_runs)
-                .unwrap_or_else(|_| "[]".to_string());
+            let check_runs_json =
+                serde_json::to_string(&display_runs).unwrap_or_else(|_| "[]".to_string());
 
-            if let Err(e) =
-                db_lock.update_pr_ci_status(result.pr_id, &result.head_sha, &new_status, &check_runs_json)
-            {
-                eprintln!("[GitHub Poller] Failed to update CI status for PR #{}: {}", result.pr_id, e);
+            if let Err(e) = db_lock.update_pr_ci_status(
+                result.pr_id,
+                &result.head_sha,
+                &new_status,
+                &check_runs_json,
+            ) {
+                eprintln!(
+                    "[GitHub Poller] Failed to update CI status for PR #{}: {}",
+                    result.pr_id, e
+                );
             } else if result.old_ci_status.as_deref() != Some(new_status.as_str()) {
                 if let Err(e) = app.emit(
                     "ci-status-changed",
@@ -915,16 +1022,26 @@ async fn poll_prs_for_project(
                         "timestamp": now
                     }),
                 ) {
-                    eprintln!("[GitHub Poller] Failed to emit ci-status-changed event: {}", e);
+                    eprintln!(
+                        "[GitHub Poller] Failed to emit ci-status-changed event: {}",
+                        e
+                    );
                 }
                 ci_change_count += 1;
             }
         }
 
         if let Some(reviews) = &result.reviews {
-            let review_status = aggregate_review_status(reviews, result.has_requested_reviewers, result.required_approving_count);
+            let review_status = aggregate_review_status(
+                reviews,
+                result.has_requested_reviewers,
+                result.required_approving_count,
+            );
             if let Err(e) = db_lock.update_pr_review_status(result.pr_id, &review_status) {
-                eprintln!("[GitHub Poller] Failed to update review status for PR #{}: {}", result.pr_id, e);
+                eprintln!(
+                    "[GitHub Poller] Failed to update review status for PR #{}: {}",
+                    result.pr_id, e
+                );
             } else if result.old_review_status.as_deref() != Some(review_status.as_str()) {
                 if let Err(e) = app.emit(
                     "review-status-changed",
@@ -936,7 +1053,10 @@ async fn poll_prs_for_project(
                         "timestamp": now
                     }),
                 ) {
-                    eprintln!("[GitHub Poller] Failed to emit review-status-changed event: {}", e);
+                    eprintln!(
+                        "[GitHub Poller] Failed to emit review-status-changed event: {}",
+                        e
+                    );
                 }
                 review_change_count += 1;
             }
@@ -950,13 +1070,21 @@ async fn poll_prs_for_project(
         }
 
         if let Err(e) = db_lock.set_pr_last_polled(result.pr_id, now) {
-            eprintln!("[GitHub Poller] Failed to set last_polled_at for PR #{}: {}", result.pr_id, e);
+            eprintln!(
+                "[GitHub Poller] Failed to set last_polled_at for PR #{}: {}",
+                result.pr_id, e
+            );
         }
     }
 
     drop(db_lock);
 
-    (new_comment_count, ci_change_count, review_change_count, error_count)
+    (
+        new_comment_count,
+        ci_change_count,
+        review_change_count,
+        error_count,
+    )
 }
 
 async fn poll_review_prs(
@@ -967,7 +1095,8 @@ async fn poll_review_prs(
 ) -> Result<(), String> {
     let username = {
         let db_lock = db.lock().unwrap();
-        db_lock.get_config("github_username")
+        db_lock
+            .get_config("github_username")
             .map_err(|e| e.to_string())?
     };
 
@@ -1016,7 +1145,8 @@ async fn poll_review_prs(
         if !all_search_ids.is_empty() || prs.is_empty() {
             let _ = db_lock.delete_stale_review_prs(&all_search_ids);
         }
-        let count = db_lock.get_all_review_prs()
+        let count = db_lock
+            .get_all_review_prs()
             .map(|prs| prs.iter().filter(|p| p.viewed_at.is_none()).count())
             .unwrap_or(0);
         let _ = app.emit("review-pr-count-changed", count);
@@ -1033,7 +1163,8 @@ async fn poll_authored_prs(
 ) -> Result<(), String> {
     let username = {
         let db_lock = db.lock().unwrap();
-        db_lock.get_config("github_username")
+        db_lock
+            .get_config("github_username")
             .map_err(|e| e.to_string())?
     };
 
@@ -1047,8 +1178,7 @@ async fn poll_authored_prs(
         .map_err(|e| format!("Failed to search authored PRs: {}", e))?;
 
     type EnrichedPrData = (i64, Option<String>, Option<String>, Option<String>, bool);
-    let mut enriched: HashMap<i64, EnrichedPrData> =
-        HashMap::with_capacity(prs.len());
+    let mut enriched: HashMap<i64, EnrichedPrData> = HashMap::with_capacity(prs.len());
 
     for pr in &prs {
         let created_at = chrono::DateTime::parse_from_rfc3339(&pr.created_at)
@@ -1056,14 +1186,20 @@ async fn poll_authored_prs(
             .unwrap_or(0);
         let (check_runs_result, combined_status_result, reviews_result, pr_details_result) = tokio::join!(
             github_client.get_check_runs(&pr.repo_owner, &pr.repo_name, &pr.head_sha, github_token),
-            github_client.get_combined_status(&pr.repo_owner, &pr.repo_name, &pr.head_sha, github_token),
+            github_client.get_combined_status(
+                &pr.repo_owner,
+                &pr.repo_name,
+                &pr.head_sha,
+                github_token
+            ),
             github_client.get_pr_reviews(&pr.repo_owner, &pr.repo_name, pr.number, github_token),
             github_client.get_pr_details(&pr.repo_owner, &pr.repo_name, pr.number, github_token)
         );
 
         let (ci_status, ci_check_runs) = match (check_runs_result, combined_status_result) {
             (Ok(check_runs), Ok(combined_status)) => {
-                let status = crate::github_client::aggregate_ci_status(&check_runs, &combined_status);
+                let status =
+                    crate::github_client::aggregate_ci_status(&check_runs, &combined_status);
                 let check_runs_json = serde_json::to_string(&check_runs.check_runs)
                     .unwrap_or_else(|_| "[]".to_string());
                 (Some(status), Some(check_runs_json))
@@ -1080,25 +1216,32 @@ async fn poll_authored_prs(
             .and_then(|details| details.extra.get("merge_queue_entry").map(|v| !v.is_null()))
             .unwrap_or(false);
 
-        enriched.insert(pr.id, (created_at, ci_status, ci_check_runs, review_status, is_queued));
+        enriched.insert(
+            pr.id,
+            (
+                created_at,
+                ci_status,
+                ci_check_runs,
+                review_status,
+                is_queued,
+            ),
+        );
     }
 
     {
         let db_lock = db.lock().unwrap();
         for pr in &prs {
-            let (created_at, ci_status, ci_check_runs, review_status, is_queued) = match enriched.get(&pr.id) {
-                Some(data) => data,
-                None => continue,
-            };
+            let (created_at, ci_status, ci_check_runs, review_status, is_queued) =
+                match enriched.get(&pr.id) {
+                    Some(data) => data,
+                    None => continue,
+                };
 
             let updated_at = chrono::DateTime::parse_from_rfc3339(&pr.updated_at)
                 .map(|dt| dt.timestamp())
                 .unwrap_or(0);
 
-            let task_id = db_lock
-                .get_task_id_for_pr(pr.id)
-                .ok()
-                .flatten();
+            let task_id = db_lock.get_task_id_for_pr(pr.id).ok().flatten();
 
             let _ = db_lock.upsert_authored_pr(
                 pr.id,
@@ -1298,17 +1441,32 @@ mod tests {
     #[test]
     fn test_find_matching_task_ids_boundary_cases() {
         let task_ids = vec!["T-42".to_string()];
-        
+
         // Start of string
-        assert_eq!(find_matching_task_ids("T-42 fix auth", "", &task_ids).len(), 1);
+        assert_eq!(
+            find_matching_task_ids("T-42 fix auth", "", &task_ids).len(),
+            1
+        );
         // End of string
-        assert_eq!(find_matching_task_ids("fix auth T-42", "", &task_ids).len(), 1);
+        assert_eq!(
+            find_matching_task_ids("fix auth T-42", "", &task_ids).len(),
+            1
+        );
         // Slash-delimited
-        assert_eq!(find_matching_task_ids("", "feature/T-42/auth", &task_ids).len(), 1);
+        assert_eq!(
+            find_matching_task_ids("", "feature/T-42/auth", &task_ids).len(),
+            1
+        );
         // Hyphen after number (OK — not a digit)
-        assert_eq!(find_matching_task_ids("", "feature/T-42-auth", &task_ids).len(), 1);
+        assert_eq!(
+            find_matching_task_ids("", "feature/T-42-auth", &task_ids).len(),
+            1
+        );
         // Colon-delimited
-        assert_eq!(find_matching_task_ids("T-42: fix auth", "", &task_ids).len(), 1);
+        assert_eq!(
+            find_matching_task_ids("T-42: fix auth", "", &task_ids).len(),
+            1
+        );
         // Alphanumeric before T — should NOT match
         assert_eq!(find_matching_task_ids("fixT-42bug", "", &task_ids).len(), 0);
     }
@@ -1378,5 +1536,21 @@ mod tests {
 
         drop(db_mutex);
         let _ = fs::remove_file(&db_path);
+    }
+
+    #[test]
+    fn test_should_fetch_comments_for_pr_uses_changed_pr_subset() {
+        let changed_pr_numbers = HashSet::from([11]);
+
+        assert!(!should_fetch_comments_for_pr(10, &changed_pr_numbers));
+        assert!(should_fetch_comments_for_pr(11, &changed_pr_numbers));
+    }
+
+    #[test]
+    fn test_should_fetch_comments_for_pr_falls_back_to_all_prs_without_events() {
+        let changed_pr_numbers = HashSet::new();
+
+        assert!(should_fetch_comments_for_pr(20, &changed_pr_numbers));
+        assert!(should_fetch_comments_for_pr(21, &changed_pr_numbers));
     }
 }
