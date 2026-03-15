@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, within } from '@testing-library/svelte'
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import KanbanBoard from './KanbanBoard.svelte'
 import type { Task } from '../lib/types'
@@ -53,6 +53,7 @@ const mockOnRunAction = vi.fn()
 
 describe('KanbanBoard', () => {
   beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn()
     vi.clearAllMocks()
     tasks.set([baseTask])
     activeSessions.set(new Map())
@@ -206,6 +207,63 @@ describe('KanbanBoard', () => {
     await fireEvent.keyDown(window, { key: 'l' })
     await fireEvent.keyDown(window, { key: 'l' })
     await fireEvent.keyDown(window, { key: 'h' })
+  })
+
+  it('does not scroll focused board items into view on task store updates alone', async () => {
+    const doingTask: Task = { ...baseTask, id: 'T-2', initial_prompt: 'Doing task', status: 'doing' }
+    tasks.set([baseTask, doingTask])
+
+    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
+
+    await screen.findByText('// backlog')
+    await waitFor(() => {
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    })
+
+    vi.mocked(Element.prototype.scrollIntoView).mockClear()
+
+    tasks.set([
+      baseTask,
+      doingTask,
+      { ...baseTask, id: 'T-3', initial_prompt: 'Another doing task', status: 'doing' },
+    ])
+
+    await waitFor(() => {
+      expect(screen.getByText('Another doing task')).toBeTruthy()
+    })
+
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled()
+  })
+
+  it('does not scroll when a task moves columns during a store update', async () => {
+    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
+
+    await screen.findByText('// backlog')
+    vi.mocked(Element.prototype.scrollIntoView).mockClear()
+
+    tasks.set([{ ...baseTask, status: 'doing' }])
+
+    await waitFor(() => {
+      const doingColumn = document.querySelector('[data-vim-column="col-doing"]')
+      expect(doingColumn).toBeTruthy()
+      expect(within(doingColumn as HTMLElement).getByText('Test task')).toBeTruthy()
+    })
+
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled()
+  })
+
+  it('scrolls the focused board item into view on vim navigation', async () => {
+    const doingTask: Task = { ...baseTask, id: 'T-2', initial_prompt: 'Doing task', status: 'doing' }
+    tasks.set([baseTask, doingTask])
+
+    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
+
+    await screen.findByText('// backlog')
+    vi.mocked(Element.prototype.scrollIntoView).mockClear()
+
+    await fireEvent.keyDown(window, { key: 'l' })
+
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
   })
 
   it('shows toggle bar with backlog and done controls', async () => {

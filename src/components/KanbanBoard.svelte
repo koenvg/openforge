@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
   import type { Task, AgentSession } from '../lib/types'
   import { tasks, selectedTaskId, activeSessions, ticketPrs, error, activeProjectId, startingTasks } from '../lib/stores'
   import { clearDoneTasks, getConfig, setConfig } from '../lib/ipc'
@@ -133,13 +134,17 @@
 
   $effect(() => {
     const idx = vim.focusedIndex
-    const col = columns[focusedColumn]
-    if (!col) return
-    const container = document.querySelector(`[data-vim-column="${col.key}"]`)
-    if (!container) return
-    const items = container.querySelectorAll('[data-vim-item]')
-    const el = items[idx] as HTMLElement | undefined
-    el?.scrollIntoView?.({ block: 'nearest' })
+    const columnIndex = focusedColumn
+
+    untrack(() => {
+      const col = columns[columnIndex]
+      if (!col) return
+      const container = document.querySelector(`[data-vim-column="${col.key}"]`)
+      if (!container) return
+      const items = container.querySelectorAll('[data-vim-item]')
+      const el = items[idx] as HTMLElement | undefined
+      el?.scrollIntoView?.({ block: 'nearest' })
+    })
   })
 
   function toggleBacklog() {
