@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte'
   import type { Snippet } from 'svelte'
 
   interface Props {
@@ -12,31 +13,44 @@
   let tooltipX = $state(0)
   let tooltipY = $state(0)
   let hoverTimer: ReturnType<typeof setTimeout> | null = $state(null)
+  let portalEl: HTMLDivElement | null = null
+
+  onMount(() => {
+    portalEl = document.createElement('div')
+    document.body.appendChild(portalEl)
+    return () => {
+      portalEl?.remove()
+    }
+  })
+
+  $effect(() => {
+    if (!portalEl) return
+    if (visible) {
+      portalEl.innerHTML = `<div style="position:fixed;left:${tooltipX}px;top:${tooltipY}px;z-index:9999;max-width:280px;pointer-events:none;" class="px-3 py-2 bg-base-100 border border-base-300 rounded-lg shadow-xl text-xs text-base-content/70 whitespace-pre-wrap break-words" role="tooltip"></div>`
+      const inner = portalEl.firstElementChild as HTMLElement
+      if (inner) inner.textContent = text
+    } else {
+      portalEl.innerHTML = ''
+    }
+  })
 
   function show(e: MouseEvent | FocusEvent) {
     if (hoverTimer) clearTimeout(hoverTimer)
-    
-    // Get the actual element to position relative to
-    // If currentTarget has firstElementChild, use that (ContextMenuItem case)
-    // Otherwise use currentTarget itself (button case in PromptInput)
+
     const wrapper = e.currentTarget as HTMLElement
     const targetElement = (wrapper.firstElementChild as HTMLElement) || wrapper
-    
-    // Store the rect immediately while the element is definitely in the DOM
     const rect = targetElement.getBoundingClientRect()
-    
+
     hoverTimer = setTimeout(() => {
       const tooltipWidth = 280
       const margin = 8
 
-      // Try right side first, fall back to left
       if (rect.right + margin + tooltipWidth < window.innerWidth) {
         tooltipX = rect.right + margin
       } else {
         tooltipX = rect.left - margin - tooltipWidth
       }
 
-      // Align top of tooltip with top of trigger, clamp to viewport
       tooltipY = Math.max(8, Math.min(rect.top, window.innerHeight - 200))
       visible = true
     }, 200)
@@ -61,19 +75,3 @@
 >
   {@render children()}
 </div>
-
-{#if visible}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div
-    class="fixed top-0 left-0 w-full h-full pointer-events-none z-[9999]"
-    onmouseout={hide}
-  >
-    <div
-      class="absolute max-w-[280px] px-3 py-2 bg-base-100 border border-base-300 rounded-lg shadow-xl text-xs text-base-content/70 whitespace-pre-wrap break-words"
-      style="left: {tooltipX}px; top: {tooltipY}px;"
-      role="tooltip"
-    >
-      {text}
-    </div>
-  </div>
-{/if}
