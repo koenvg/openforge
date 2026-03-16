@@ -84,6 +84,8 @@ export interface PollResult {
   review_changes: number;
   pr_changes: number;
   errors: number;
+  rate_limited: boolean;
+  rate_limit_reset_at: number | null;
 }
 
 /** Check if a PR is ready to merge (open + CI green + approved) */
@@ -112,6 +114,11 @@ export interface CiFailureNotification {
   pr_title: string;
   ci_status: string;
   timestamp: number;
+}
+
+export interface RateLimitNotification {
+  reset_at: number | null;  // Unix timestamp (seconds) when limit resets
+  timestamp: number;        // When the notification was created (ms)
 }
 
 export interface AgentInfo {

@@ -30,7 +30,7 @@
 use crate::db::{Database, PrRow};
 use crate::github_client::{aggregate_ci_status, aggregate_review_status, deduplicate_check_runs, filter_to_required, CheckRunsResponse, CombinedStatusResponse, GitHubClient, PrComment, PrReview};
 use futures::future::join_all;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -45,7 +45,7 @@ use tokio::time::{sleep, Duration};
 ///
 /// Returned by `poll_github_once()` and used by callers to observe what
 /// happened during the cycle (e.g. for IPC responses or logging).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PollResult {
     /// Number of new PR comments inserted into the database this cycle.
     pub new_comments: usize,
@@ -57,6 +57,12 @@ pub struct PollResult {
     pub pr_changes: usize,
     /// Number of errors encountered during this cycle.
     pub errors: usize,
+    /// Whether the GitHub API rate limit was exceeded during this cycle.
+    #[serde(default)]
+    pub rate_limited: bool,
+    /// Unix timestamp when the rate limit resets, if rate_limited is true.
+    #[serde(default)]
+    pub rate_limit_reset_at: Option<i64>,
 }
 
 // ============================================================================
@@ -92,6 +98,8 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
             review_changes: 0,
             pr_changes: 0,
             errors: 0,
+            rate_limited: false,
+            rate_limit_reset_at: None,
         };
     }
 
@@ -110,6 +118,8 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
                 review_changes: 0,
                 pr_changes: 0,
                 errors: 1,
+                rate_limited: false,
+                rate_limit_reset_at: None,
             };
         }
     };
@@ -121,6 +131,8 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
             review_changes: 0,
             pr_changes: 0,
             errors: 0,
+            rate_limited: false,
+            rate_limit_reset_at: None,
         };
     }
 
@@ -131,6 +143,7 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
     let mut total_ci_changes = 0;
     let mut total_review_changes = 0;
     let mut total_errors = 0;
+    let mut rate_limit_count = 0;
 
     for project in projects {
         let config = match read_project_config(&db, &project.id) {
@@ -166,6 +179,9 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
                 project.id, e
             );
             total_errors += 1;
+            if e.contains("status 403)") || e.contains("status 429)") {
+                rate_limit_count += 1;
+            }
             continue;
         }
         println!(
@@ -235,12 +251,17 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
         total_errors
     );
 
+    let rate_limit_reset = github_client.get_last_rate_limit_reset();
+    let rate_limited = rate_limit_reset.is_some() || rate_limit_count > 0;
+
     PollResult {
         new_comments: total_new_comments,
         ci_changes: total_ci_changes,
         review_changes: total_review_changes,
         pr_changes: 0,
         errors: total_errors,
+        rate_limited,
+        rate_limit_reset_at: rate_limit_reset,
     }
 }
 
@@ -278,6 +299,14 @@ pub async fn start_github_poller(app: AppHandle) {
         if has_changes {
             if let Err(e) = app.emit("github-sync-complete", &result) {
                 eprintln!("[GitHub Poller] Failed to emit github-sync-complete: {}", e);
+            }
+        }
+
+        if result.rate_limited {
+            if let Err(e) = app.emit("github-rate-limited", serde_json::json!({
+                "reset_at": result.rate_limit_reset_at
+            })) {
+                eprintln!("[GitHub Poller] Failed to emit github-rate-limited: {}", e);
             }
         }
 
@@ -1128,6 +1157,8 @@ mod tests {
             review_changes: 0,
             pr_changes: 0,
             errors: 1,
+            rate_limited: false,
+            rate_limit_reset_at: None,
         };
 
         assert_eq!(result.new_comments, 3);
@@ -1135,6 +1166,61 @@ mod tests {
         assert_eq!(result.review_changes, 0);
         assert_eq!(result.pr_changes, 0);
         assert_eq!(result.errors, 1);
+        assert_eq!(result.rate_limited, false);
+        assert_eq!(result.rate_limit_reset_at, None);
+    }
+
+    #[test]
+    fn test_poll_result_rate_limit_fields_default() {
+        let result = PollResult {
+            new_comments: 0,
+            ci_changes: 0,
+            review_changes: 0,
+            pr_changes: 0,
+            errors: 0,
+            rate_limited: false,
+            rate_limit_reset_at: None,
+        };
+
+        assert_eq!(result.rate_limited, false);
+        assert_eq!(result.rate_limit_reset_at, None);
+    }
+
+    #[test]
+    fn test_poll_result_serialization_includes_rate_limit() {
+        let result = PollResult {
+            new_comments: 5,
+            ci_changes: 2,
+            review_changes: 1,
+            pr_changes: 0,
+            errors: 0,
+            rate_limited: true,
+            rate_limit_reset_at: Some(1704067200),
+        };
+
+        let json = serde_json::to_string(&result).expect("serialization failed");
+        assert!(json.contains("\"rate_limited\":true"));
+        assert!(json.contains("\"rate_limit_reset_at\":1704067200"));
+    }
+
+    #[test]
+    fn test_poll_result_deserialization_backward_compat() {
+        let old_json = r#"{
+            "new_comments": 3,
+            "ci_changes": 1,
+            "review_changes": 0,
+            "pr_changes": 0,
+            "errors": 0
+        }"#;
+
+        let result: PollResult = serde_json::from_str(old_json).expect("deserialization failed");
+        assert_eq!(result.new_comments, 3);
+        assert_eq!(result.ci_changes, 1);
+        assert_eq!(result.review_changes, 0);
+        assert_eq!(result.pr_changes, 0);
+        assert_eq!(result.errors, 0);
+        assert_eq!(result.rate_limited, false);
+        assert_eq!(result.rate_limit_reset_at, None);
     }
 
     #[test]
