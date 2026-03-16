@@ -37,6 +37,10 @@ export async function getAppMode(): Promise<string> {
   return invoke<string>("get_app_mode");
 }
 
+export async function getGitBranch(): Promise<string> {
+  return invoke<string>("get_git_branch");
+}
+
 
 export async function getAgents(): Promise<AgentInfo[]> {
   return invoke<AgentInfo[]>("get_agents");

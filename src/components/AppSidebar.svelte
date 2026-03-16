@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { projects, activeProjectId, projectAttention } from '../lib/stores'
-  import { getProjectAttention } from '../lib/ipc'
+  import { getProjectAttention, getGitBranch } from '../lib/ipc'
   import { ChevronLeft, ChevronRight, ListChecks, Settings, Plus } from 'lucide-svelte'
   import type { ProjectAttention, AppView } from '../lib/types'
 
@@ -16,6 +16,8 @@
 
   let { collapsed, currentView, appMode, onToggleCollapse, onNewProject, onNavigate }: Props = $props()
 
+  let branchName = $state<string | null>(null)
+
   onMount(async () => {
     try {
       const summaries = await getProjectAttention()
@@ -26,6 +28,14 @@
       $projectAttention = map
     } catch (e) {
       console.error('Failed to load project attention:', e)
+    }
+
+    if (appMode === 'dev') {
+      try {
+        branchName = await getGitBranch()
+      } catch (e) {
+        console.error('Failed to get git branch:', e)
+      }
     }
   })
 
@@ -65,8 +75,11 @@
 
 <div class="{collapsed ? 'w-16' : 'w-48'} shrink-0 h-full bg-base-300 border-r border-base-content/10 flex flex-col font-mono transition-all duration-200">
   {#if appMode === 'dev'}
-    <div class="w-full h-12 dev-badge-gradient flex items-center justify-center">
+    <div class="w-full dev-badge-gradient flex flex-col items-center justify-center {branchName && !collapsed ? 'py-1.5' : 'h-12'}">
       <span class="font-mono text-sm font-black text-white tracking-[0.25em] uppercase">{collapsed ? 'D' : 'DEV MODE'}</span>
+      {#if branchName && !collapsed}
+        <span class="font-mono text-[10px] text-white/80 truncate max-w-full px-2" title={branchName}>{branchName}</span>
+      {/if}
     </div>
   {/if}
 

@@ -373,6 +373,7 @@ fn main() {
             commands::config::set_config,
             commands::config::check_opencode_installed,
             commands::config::get_app_mode,
+            commands::config::get_git_branch,
             commands::config::check_claude_installed,
             commands::review::get_github_username,
             commands::authored_prs::fetch_authored_prs,

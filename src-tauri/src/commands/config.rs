@@ -129,3 +129,17 @@ pub async fn get_app_mode() -> Result<String, String> {
         Ok("prod".to_string())
     }
 }
+
+#[tauri::command]
+pub async fn get_git_branch() -> Result<String, String> {
+    let output = std::process::Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .output()
+        .map_err(|e| format!("Failed to run git: {}", e))?;
+
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    } else {
+        Err("Not a git repository".to_string())
+    }
+}
