@@ -2,9 +2,9 @@
   import { onMount } from 'svelte'
   import { get } from 'svelte/store'
   import type { Task, Action } from '../lib/types'
-  import { selectedTaskId, activeSessions, activeProjectId, startingTasks, taskReviewModes } from '../lib/stores'
+  import { activeSessions, activeProjectId, startingTasks, taskReviewModes } from '../lib/stores'
   import { getWorktreeForTask, updateTaskStatus, getConfig } from '../lib/ipc'
-  import { navigateBack } from '../lib/navigation'
+  import { resetToBoard } from '../lib/navigation'
   import { isInputFocused } from '../lib/domUtils'
   import { loadActions, getEnabledActions } from '../lib/actions'
   import { commandHeld } from '../lib/stores'
@@ -71,9 +71,7 @@
   })
 
   function handleBack() {
-    if (!navigateBack()) {
-      $selectedTaskId = null
-    }
+    resetToBoard()
   }
 
   async function handleStatusChange(newStatus: string) {

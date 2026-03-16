@@ -19,6 +19,12 @@ vi.mock('../lib/ipc', () => ({
   getProjectAttention: mockGetProjectAttention,
 }))
 
+const mockResetToBoard = vi.fn()
+
+vi.mock('../lib/navigation', () => ({
+  resetToBoard: mockResetToBoard,
+}))
+
 const sampleProjects: Project[] = [
   { id: 'proj-1', name: 'Alpha Project', path: '/users/alice/alpha', created_at: 0, updated_at: 0 },
   { id: 'proj-2', name: 'Beta Project', path: '/users/bob/beta', created_at: 0, updated_at: 0 },
@@ -209,7 +215,7 @@ describe('ProjectSwitcherModal', () => {
   })
 
   describe('Selection via Enter', () => {
-    it('Enter on highlighted item sets activeProjectId and calls onClose', async () => {
+    it('Enter on highlighted item sets activeProjectId, resets to board and calls onClose', async () => {
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
       const onClose = vi.fn()
       render(Modal, { props: { onClose } })
@@ -219,6 +225,7 @@ describe('ProjectSwitcherModal', () => {
       await fireEvent.keyDown(dialog, { key: 'Enter' })
 
       expect(get(mockActiveProjectId)).toBe('proj-1')
+      expect(mockResetToBoard).toHaveBeenCalled()
       expect(onClose).toHaveBeenCalledOnce()
     })
 
@@ -235,7 +242,7 @@ describe('ProjectSwitcherModal', () => {
   })
 
   describe('Selection via click', () => {
-    it('clicking a project row sets activeProjectId and calls onClose', async () => {
+    it('clicking a project row sets activeProjectId, resets to board and calls onClose', async () => {
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
       const onClose = vi.fn()
       render(Modal, { props: { onClose } })
@@ -243,6 +250,7 @@ describe('ProjectSwitcherModal', () => {
       await fireEvent.click(screen.getByText('Beta Project'))
 
       expect(get(mockActiveProjectId)).toBe('proj-2')
+      expect(mockResetToBoard).toHaveBeenCalled()
       expect(onClose).toHaveBeenCalledOnce()
     })
   })

@@ -30,6 +30,14 @@ export function pushNavState(): void {
   }
 }
 
+export function resetToBoard(): void {
+  history.length = 0
+  currentView.set('board')
+  selectedTaskId.set(null)
+  selectedReviewPr.set(null)
+  selectedSkillName.set(null)
+}
+
 export function navigateBack(): boolean {
   const prev = history.pop()
   if (!prev) return false

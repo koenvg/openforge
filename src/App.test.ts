@@ -168,6 +168,7 @@ vi.mock('./lib/doingStatus', () => ({
 vi.mock('./lib/navigation', () => ({
   pushNavState: vi.fn(),
   navigateBack: vi.fn(),
+  resetToBoard: vi.fn(),
 }))
 
 vi.mock('./lib/terminalPool', () => ({
@@ -293,10 +294,11 @@ describe('App onMount initialization order', () => {
       expect(get(stores.currentView)).toBe('settings')
     })
 
-    it('pressing 2 cycles to next project', async () => {
+    it('pressing 2 cycles to next project and resets to board', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
       const ipc = await import('./lib/ipc')
+      const nav = await import('./lib/navigation')
       const { get } = await import('svelte/store')
 
       const projectList: Project[] = [
@@ -311,10 +313,12 @@ describe('App onMount initialization order', () => {
         expect(get(stores.projects)).toHaveLength(2)
       })
 
+      vi.mocked(nav.resetToBoard).mockClear()
       stores.activeProjectId.set('proj-1')
       window.dispatchEvent(new KeyboardEvent('keydown', { key: '2', bubbles: true }))
 
       expect(get(stores.activeProjectId)).toBe('proj-2')
+      expect(nav.resetToBoard).toHaveBeenCalled()
     })
 
     it('pressing 1 cycles to previous project', async () => {

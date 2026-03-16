@@ -161,7 +161,7 @@ vi.mock('../lib/terminalPool', () => ({
 }))
 
 vi.mock('../lib/navigation', () => ({
-  navigateBack: vi.fn(() => false),
+  resetToBoard: vi.fn(),
   pushNavState: vi.fn(),
 }))
 
@@ -845,24 +845,24 @@ describe('TaskDetailView', () => {
       vi.mocked(getWorktreeForTask).mockResolvedValue(null)
     })
 
-    it('Escape triggers navigate back', async () => {
-      const { navigateBack } = await import('../lib/navigation')
-      vi.mocked(navigateBack).mockClear()
+    it('Escape triggers reset to board', async () => {
+      const { resetToBoard } = await import('../lib/navigation')
+      vi.mocked(resetToBoard).mockClear()
       render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
 
       await fireEvent.keyDown(window, { key: 'Escape' })
 
-      expect(navigateBack).toHaveBeenCalled()
+      expect(resetToBoard).toHaveBeenCalled()
     })
 
-     it('q triggers navigate back', async () => {
-       const { navigateBack } = await import('../lib/navigation')
-       vi.mocked(navigateBack).mockClear()
+     it('q triggers reset to board', async () => {
+       const { resetToBoard } = await import('../lib/navigation')
+       vi.mocked(resetToBoard).mockClear()
        render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
 
        await fireEvent.keyDown(window, { key: 'q' })
 
-       expect(navigateBack).toHaveBeenCalled()
+       expect(resetToBoard).toHaveBeenCalled()
      })
    })
 

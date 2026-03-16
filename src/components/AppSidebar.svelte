@@ -2,6 +2,7 @@
   import { onMount } from 'svelte'
   import { projects, activeProjectId, projectAttention } from '../lib/stores'
   import { getProjectAttention, getGitBranch } from '../lib/ipc'
+  import { resetToBoard } from '../lib/navigation'
   import { ChevronLeft, ChevronRight, ListChecks, Settings, Plus } from 'lucide-svelte'
   import type { ProjectAttention, AppView } from '../lib/types'
 
@@ -41,10 +42,7 @@
 
   function selectProject(projectId: string) {
     $activeProjectId = projectId
-    // Switch back to board view when selecting a project (e.g. from workqueue/global_settings)
-    if (currentView === 'workqueue' || currentView === 'global_settings') {
-      onNavigate('board')
-    }
+    resetToBoard()
   }
 
   function getAttentionStatus(projectId: string): { dot: string; text: string; color: string } {

@@ -26,7 +26,7 @@
   import CommandPalette from './components/CommandPalette.svelte'
   import ActionPalette from './components/ActionPalette.svelte'
 
-  import { pushNavState, navigateBack } from './lib/navigation'
+  import { pushNavState, navigateBack, resetToBoard } from './lib/navigation'
   import { loadActions, getEnabledActions } from './lib/actions'
   import { getProjectColor } from './lib/projectColors'
   import { themeMode } from './lib/theme'
@@ -488,10 +488,7 @@
         nextIndex = currentIndex <= 0 ? projectList.length - 1 : currentIndex - 1
       }
       $activeProjectId = projectList[nextIndex].id
-      // If on workqueue/global_settings, switch to board
-      if ($currentView === 'workqueue' || $currentView === 'global_settings') {
-        handleNavigate('board')
-      }
+      resetToBoard()
       return
     }
   }

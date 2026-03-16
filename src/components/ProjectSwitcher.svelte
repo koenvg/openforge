@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte'
   import { projects, activeProjectId, projectAttention } from '../lib/stores'
   import { getProjectAttention } from '../lib/ipc'
+  import { resetToBoard } from '../lib/navigation'
   import type { Project, ProjectAttention } from '../lib/types'
 
   interface Props {
@@ -52,6 +53,7 @@
 
   function selectProject(project: Project) {
     $activeProjectId = project.id
+    resetToBoard()
     isOpen = false
   }
 

@@ -19,6 +19,10 @@ vi.mock('../lib/ipc', () => ({
   getProjectAttention: vi.fn(async () => []),
 }))
 
+vi.mock('../lib/navigation', () => ({
+  resetToBoard: vi.fn(),
+}))
+
 vi.mock('lucide-svelte', () => {
   const stub = vi.fn()
   return {
@@ -109,20 +113,22 @@ describe('AppSidebar', () => {
     expect(get(activeProjectId)).toBe('proj-2')
   })
 
-  it('clicking a project while on workqueue navigates to board', async () => {
-    const onNavigate = vi.fn()
-    renderSidebar({ currentView: 'workqueue', onNavigate })
+  it('clicking a project while on workqueue resets to board', async () => {
+    const { resetToBoard } = await import('../lib/navigation')
+    vi.mocked(resetToBoard).mockClear()
+    renderSidebar({ currentView: 'workqueue' })
 
     await fireEvent.click(screen.getByRole('button', { name: /beta project/i }))
-    expect(onNavigate).toHaveBeenCalledWith('board')
+    expect(resetToBoard).toHaveBeenCalled()
   })
 
-  it('clicking a project while on global_settings navigates to board', async () => {
-    const onNavigate = vi.fn()
-    renderSidebar({ currentView: 'global_settings', onNavigate })
+  it('clicking a project while on global_settings resets to board', async () => {
+    const { resetToBoard } = await import('../lib/navigation')
+    vi.mocked(resetToBoard).mockClear()
+    renderSidebar({ currentView: 'global_settings' })
 
     await fireEvent.click(screen.getByRole('button', { name: /beta project/i }))
-    expect(onNavigate).toHaveBeenCalledWith('board')
+    expect(resetToBoard).toHaveBeenCalled()
   })
 
   it('renders Work Queue nav button', () => {
