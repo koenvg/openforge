@@ -1,7 +1,7 @@
 import { render } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { writable } from 'svelte/store'
-import type { Task, AgentSession, Project, ProjectAttention, PullRequestInfo, CheckpointNotification, CiFailureNotification, ShepherdMessage, ShepherdStatus } from './lib/types'
+import type { Task, AgentSession, Project, ProjectAttention, PullRequestInfo, CheckpointNotification, CiFailureNotification, RateLimitNotification, ShepherdMessage, ShepherdStatus } from './lib/types'
 
 const callOrder: string[] = []
 
@@ -23,6 +23,7 @@ vi.mock('./lib/stores', () => ({
   activeSessions: writable<Map<string, AgentSession>>(new Map()),
   checkpointNotification: writable<CheckpointNotification | null>(null),
   ciFailureNotification: writable<CiFailureNotification | null>(null),
+  rateLimitNotification: writable<RateLimitNotification | null>(null),
   taskSpawned: writable<{ taskId: string; initial_prompt: string } | null>(null),
   ticketPrs: writable<Map<string, PullRequestInfo[]>>(new Map()),
   isLoading: writable(false),

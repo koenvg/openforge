@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
-  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, taskSpawned, startingTasks, codeCleanupTasksEnabled, shepherdEnabled, shepherdMessages, shepherdStatus } from './lib/stores'
+  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, taskSpawned, startingTasks, codeCleanupTasksEnabled, rateLimitNotification, shepherdEnabled, shepherdMessages, shepherdStatus } from './lib/stores'
   import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, listOpenCodeAgents, getReviewPrs, getAuthoredPrs, notifyShepherdEvent, getShepherdEnabled } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import SearchableSelect from './components/SearchableSelect.svelte'
@@ -18,6 +18,7 @@
   import CheckpointToast from './components/CheckpointToast.svelte'
   import CiFailureToast from './components/CiFailureToast.svelte'
   import TaskSpawnedToast from './components/TaskSpawnedToast.svelte'
+  import RateLimitToast from './components/RateLimitToast.svelte'
   import AppSidebar from './components/AppSidebar.svelte'
   import ProjectSwitcherModal from './components/ProjectSwitcherModal.svelte'
   import ProjectSetupDialog from './components/ProjectSetupDialog.svelte'
@@ -814,6 +815,15 @@
     )
 
     unlisteners.push(
+      await listen<{ reset_at: number | null }>('github-rate-limited', (event) => {
+        $rateLimitNotification = {
+          reset_at: event.payload.reset_at,
+          timestamp: Date.now(),
+        }
+      })
+    )
+
+    unlisteners.push(
       await listen<{ action: string; task_id: string }>('task-changed', (event) => {
         if (event.payload.action === 'deleted') {
           const taskId = event.payload.task_id
@@ -1024,6 +1034,7 @@
 <CheckpointToast />
 <CiFailureToast />
 <TaskSpawnedToast />
+<RateLimitToast />
 
 {#if showProjectSwitcher}
   <ProjectSwitcherModal onClose={() => showProjectSwitcher = false} />
