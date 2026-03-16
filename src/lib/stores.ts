@@ -1,5 +1,5 @@
 import { writable } from "svelte/store";
-import type { Task, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, CiFailureNotification, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, PrOverviewComment, ProjectAttention, ClaudeSessionState, SkillInfo } from "./types";
+import type { Task, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, CiFailureNotification, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, PrOverviewComment, ProjectAttention, ClaudeSessionState, SkillInfo, ShepherdMessage, ShepherdStatus } from "./types";
 
 export const tasks = writable<Task[]>([]);
 // selectedTaskId serves as both selection state and navigation:
@@ -45,6 +45,7 @@ export const selectedSkillName = writable<string | null>(null);
 export const startingTasks = writable<Set<string>>(new Set());
 
 export const codeCleanupTasksEnabled = writable<boolean>(false);
+export const shepherdEnabled = writable<boolean>(false);
 
 /** Per-task review mode state — preserved across navigation */
 export const taskReviewModes = writable<Map<string, boolean>>(new Map());
@@ -54,5 +55,7 @@ export const taskDraftNotes = writable<Map<string, string>>(new Map());
 
 export const authoredPrs = writable<AuthoredPullRequest[]>([]);
 export const authoredPrCount = writable<number>(0);
-
 export const commandHeld = writable<boolean>(false);
+
+export const shepherdMessages = writable<ShepherdMessage[]>([]);
+export const shepherdStatus = writable<ShepherdStatus>('disabled');

@@ -1,5 +1,5 @@
 use axum::{
-    extract::{State, Json, Path},
+    extract::{State, Json, Path, Query},
     routing::{post, get},
     Router,
     http::StatusCode,
@@ -19,7 +19,7 @@ pub struct CreateTaskRequest {
 
 #[derive(Clone)]
 pub struct AppState {
-    pub app: tauri::AppHandle,
+    pub app: Option<tauri::AppHandle>,
     pub db: std::sync::Arc<Mutex<db::Database>>,
 }
 
@@ -54,6 +54,17 @@ pub struct GetTaskInfoResponse {
     pub summary: Option<String>,
     pub status: String,
     pub jira_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TasksQuery {
+    pub project_id: String,
+    pub state: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct WorkQueueQuery {
+    pub project_id: String,
 }
 
 /// Payload from Claude Code hooks
@@ -138,14 +149,16 @@ pub async fn create_task_handler(
 
     drop(db);
 
-    let _ = state.app.emit(
-        "task-changed",
-        serde_json::json!({
-            "action": "created",
-            "task_id": task.id,
-            "project_id": task.project_id
-        })
-    );
+    if let Some(app) = &state.app {
+        let _ = app.emit(
+            "task-changed",
+            serde_json::json!({
+                "action": "created",
+                "task_id": task.id,
+                "project_id": task.project_id
+            })
+        );
+    }
 
     Ok(Json(CreateTaskResponse {
         task_id: task.id,
@@ -172,13 +185,15 @@ pub async fn update_task_handler(
 
     drop(db);
 
-    let _ = state.app.emit(
-        "task-changed",
-        serde_json::json!({
-            "action": "updated",
-            "task_id": request.task_id
-        })
-    );
+    if let Some(app) = &state.app {
+        let _ = app.emit(
+            "task-changed",
+            serde_json::json!({
+                "action": "updated",
+                "task_id": request.task_id
+            })
+        );
+    }
 
     Ok(Json(UpdateTaskResponse {
         task_id: request.task_id,
@@ -203,6 +218,92 @@ pub async fn get_task_info_handler(
         })),
         None => Err(StatusCode::NOT_FOUND),
     }
+}
+
+pub async fn get_tasks_handler(
+    State(state): State<AppState>,
+    Query(query): Query<TasksQuery>,
+) -> Result<Json<Vec<db::TaskRow>>, (StatusCode, String)> {
+    if let Some(task_state) = query.state.as_deref() {
+        if !matches!(task_state, "backlog" | "doing" | "done") {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!("Invalid state '{task_state}'. Expected one of: backlog, doing, done"),
+            ));
+        }
+    }
+
+    let db = state.db.lock().unwrap();
+    let tasks = match query.state.as_deref() {
+        Some(task_state) => db
+            .get_tasks_for_project_by_state(&query.project_id, task_state)
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to get tasks by state: {e}"),
+                )
+            })?,
+        None => db.get_tasks_for_project(&query.project_id).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get tasks: {e}"),
+            )
+        })?,
+    };
+
+    Ok(Json(tasks))
+}
+
+pub async fn get_project_attention_handler(
+    State(state): State<AppState>,
+    Path(project_id): Path<String>,
+) -> Result<Json<db::ProjectAttentionRow>, (StatusCode, String)> {
+    let db = state.db.lock().unwrap();
+
+    let project = db
+        .get_project(&project_id)
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get project: {e}"),
+            )
+        })?
+        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Project not found: {project_id}")))?;
+
+    let attention = db
+        .get_project_attention_for_project(&project_id)
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get project attention: {e}"),
+            )
+        })?
+        .unwrap_or(db::ProjectAttentionRow {
+            project_id: project.id,
+            needs_input: 0,
+            running_agents: 0,
+            ci_failures: 0,
+            unaddressed_comments: 0,
+            completed_agents: 0,
+        });
+
+    Ok(Json(attention))
+}
+
+pub async fn get_work_queue_handler(
+    State(state): State<AppState>,
+    Query(query): Query<WorkQueueQuery>,
+) -> Result<Json<Vec<db::WorkQueueTaskRow>>, (StatusCode, String)> {
+    let db = state.db.lock().unwrap();
+    let rows = db
+        .get_work_queue_tasks_for_project(&query.project_id)
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get work queue tasks: {e}"),
+            )
+        })?;
+    Ok(Json(rows))
 }
 
 pub(crate) fn map_hook_to_status(event_type: &str, current_status: &str) -> Option<String> {
@@ -233,14 +334,16 @@ async fn handle_hook(
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     if let Some(task_id) = &payload.claude_task_id {
         let payload_value = serde_json::to_value(&payload).unwrap_or(serde_json::json!({}));
-        let _ = state.app.emit(
-            "claude-hook-event",
-            serde_json::json!({
-                "task_id": task_id,
-                "event_type": event_type,
-                "payload": payload_value
-            })
-        );
+        if let Some(app) = &state.app {
+            let _ = app.emit(
+                "claude-hook-event",
+                serde_json::json!({
+                    "task_id": task_id,
+                    "event_type": event_type,
+                    "payload": payload_value
+                })
+            );
+        }
 
         let status_update: Option<String> = {
             let db = state.db.lock().unwrap();
@@ -274,14 +377,16 @@ async fn handle_hook(
         };
 
         if let Some(new_status) = status_update {
-            let _ = state.app.emit(
-                "agent-status-changed",
-                serde_json::json!({
-                    "task_id": task_id,
-                    "status": new_status,
-                    "provider": "claude-code"
-                })
-            );
+            if let Some(app) = &state.app {
+                let _ = app.emit(
+                    "agent-status-changed",
+                    serde_json::json!({
+                        "task_id": task_id,
+                        "status": new_status,
+                        "provider": "claude-code"
+                    })
+                );
+            }
         }
     } else {
         eprintln!("[http_server] Warning: Hook event '{}' received without CLAUDE_TASK_ID", event_type);
@@ -338,6 +443,9 @@ pub fn create_router(state: AppState) -> Router {
         .route("/create_task", post(create_task_handler))
         .route("/update_task", post(update_task_handler))
         .route("/task/:id", get(get_task_info_handler))
+        .route("/tasks", get(get_tasks_handler))
+        .route("/project/:id/attention", get(get_project_attention_handler))
+        .route("/work_queue", get(get_work_queue_handler))
         .route("/hooks/stop", post(hook_stop_handler))
         .route("/hooks/pre-tool-use", post(hook_pre_tool_use_handler))
         .route("/hooks/post-tool-use", post(hook_post_tool_use_handler))
@@ -365,7 +473,7 @@ pub async fn start_http_server(
         .unwrap_or(17422);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    let state = AppState { app, db };
+    let state = AppState { app: Some(app), db };
     let router = create_router(state);
 
     println!("[http_server] Starting on {}", addr);
@@ -381,6 +489,28 @@ pub async fn start_http_server(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::body::{to_bytes, Body};
+    use axum::http::Request;
+    use std::sync::{Arc, Mutex};
+    use tower::util::ServiceExt;
+
+    async fn response_body_json(response: axum::response::Response) -> serde_json::Value {
+        let bytes = to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .expect("read response body");
+        serde_json::from_slice(&bytes).expect("parse response JSON")
+    }
+
+    fn test_state(name: &str) -> (AppState, std::path::PathBuf) {
+        let (db, path) = crate::db::test_helpers::make_test_db(name);
+        (
+            AppState {
+                app: None,
+                db: Arc::new(Mutex::new(db)),
+            },
+            path,
+        )
+    }
 
     // ========================================================================
     // CreateTaskRequest Tests
@@ -391,6 +521,233 @@ mod tests {
         let json = r#"{"initial_prompt": "Test", "description": "old field still sent"}"#;
         let req: CreateTaskRequest = serde_json::from_str(json).unwrap();
         assert_eq!(req.initial_prompt, "Test");
+    }
+
+    #[tokio::test]
+    async fn test_get_tasks_handler_returns_tasks_for_project() {
+        let (state, path) = test_state("http_get_tasks_handler_returns_tasks");
+        {
+            let db = state.db.lock().expect("lock db");
+            let project = db
+                .create_project("Project", "/tmp/project")
+                .expect("create project");
+            db.create_task("Task A", "backlog", None, Some(&project.id), None, None, None)
+                .expect("create task a");
+            db.create_task("Task B", "doing", None, Some(&project.id), None, None, None)
+                .expect("create task b");
+        }
+
+        let router = create_router(state);
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/tasks?project_id=P-1")
+                    .method("GET")
+                    .body(Body::empty())
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let json = response_body_json(response).await;
+        let tasks = json.as_array().expect("array response");
+        assert_eq!(tasks.len(), 2);
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn test_get_tasks_handler_filters_by_state() {
+        let (state, path) = test_state("http_get_tasks_handler_filters_by_state");
+        {
+            let db = state.db.lock().expect("lock db");
+            let project = db
+                .create_project("Project", "/tmp/project")
+                .expect("create project");
+            db.create_task(
+                "Task backlog",
+                "backlog",
+                None,
+                Some(&project.id),
+                None,
+                None,
+                None,
+            )
+            .expect("create backlog task");
+            db.create_task("Task doing", "doing", None, Some(&project.id), None, None, None)
+                .expect("create doing task");
+        }
+
+        let router = create_router(state);
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/tasks?project_id=P-1&state=doing")
+                    .method("GET")
+                    .body(Body::empty())
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let json = response_body_json(response).await;
+        let tasks = json.as_array().expect("array response");
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0]["status"], "doing");
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn test_get_tasks_handler_rejects_invalid_state() {
+        let (state, path) = test_state("http_get_tasks_handler_rejects_invalid_state");
+        {
+            let db = state.db.lock().expect("lock db");
+            let _ = db
+                .create_project("Project", "/tmp/project")
+                .expect("create project");
+        }
+
+        let router = create_router(state);
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/tasks?project_id=P-1&state=blocked")
+                    .method("GET")
+                    .body(Body::empty())
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn test_get_project_attention_handler_returns_zeroed_row_when_no_attention() {
+        let (state, path) = test_state("http_get_project_attention_handler_zeroed_row");
+        {
+            let db = state.db.lock().expect("lock db");
+            let _ = db
+                .create_project("Project", "/tmp/project")
+                .expect("create project");
+        }
+
+        let router = create_router(state);
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/project/P-1/attention")
+                    .method("GET")
+                    .body(Body::empty())
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let json = response_body_json(response).await;
+        assert_eq!(json["project_id"], "P-1");
+        assert_eq!(json["needs_input"], 0);
+        assert_eq!(json["running_agents"], 0);
+        assert_eq!(json["ci_failures"], 0);
+        assert_eq!(json["unaddressed_comments"], 0);
+        assert_eq!(json["completed_agents"], 0);
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn test_get_project_attention_handler_returns_not_found_for_unknown_project() {
+        let (state, path) = test_state("http_get_project_attention_handler_not_found");
+
+        let router = create_router(state);
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/project/P-999/attention")
+                    .method("GET")
+                    .body(Body::empty())
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn test_get_work_queue_handler_filters_by_project() {
+        let (state, path) = test_state("http_get_work_queue_handler_filters_by_project");
+        {
+            let db = state.db.lock().expect("lock db");
+
+            let project1 = db
+                .create_project("Project 1", "/tmp/project1")
+                .expect("create project 1");
+            let project2 = db
+                .create_project("Project 2", "/tmp/project2")
+                .expect("create project 2");
+
+            let task1 = db
+                .create_task(
+                    "Task P1",
+                    "doing",
+                    None,
+                    Some(&project1.id),
+                    None,
+                    None,
+                    None,
+                )
+                .expect("create task p1");
+            let _task2 = db
+                .create_task(
+                    "Task P2",
+                    "doing",
+                    None,
+                    Some(&project2.id),
+                    None,
+                    None,
+                    None,
+                )
+                .expect("create task p2");
+
+            db.create_agent_session(
+                "ses-http-work-queue",
+                &task1.id,
+                None,
+                "implement",
+                "completed",
+                "opencode",
+            )
+            .expect("create agent session");
+        }
+
+        let router = create_router(state);
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/work_queue?project_id=P-1")
+                    .method("GET")
+                    .body(Body::empty())
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let json = response_body_json(response).await;
+        let tasks = json.as_array().expect("array response");
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0]["project_id"], "P-1");
+
+        let _ = std::fs::remove_file(path);
     }
 
     // ========================================================================

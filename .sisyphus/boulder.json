@@ -1,7 +1,7 @@
 {
-  "active_plan": "/Users/koen.vangeert/.openforge/worktrees/my-command-center/KVG-646/.sisyphus/plans/remove-vim-goto.md",
-  "started_at": "2026-03-12T17:13:28.355Z",
-  "session_ids": ["ses_31d0ecfecffedC73SBhdzLZqgC"],
-  "plan_name": "remove-vim-goto",
-  "worktree_path": "/Users/koen.vangeert/.openforge/worktrees/my-command-center/KVG-646"
+  "active_plan": "/Users/koen.vangeert/.openforge/worktrees/my-command-center/KVG-633/.sisyphus/plans/task-shepherd.md",
+  "started_at": "2026-03-13T10:09:18.164Z",
+  "session_ids": ["ses_31d0ec957ffeSmfSeVywpKM7LK"],
+  "plan_name": "task-shepherd",
+  "worktree_path": "/Users/koen.vangeert/.openforge/worktrees/my-command-center/KVG-633"
 }

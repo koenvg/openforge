@@ -66,60 +66,169 @@ impl super::Database {
         Ok(result)
     }
 
-    pub fn get_work_queue_tasks(&self) -> std::result::Result<Vec<WorkQueueTaskRow>, String> {
+    pub fn get_tasks_for_project_by_state(
+        &self,
+        project_id: &str,
+        state: &str,
+    ) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();
-
-        // Step 1: Fetch tasks with their latest session info
-        let mut task_stmt = conn
-            .prepare(
-                "SELECT
-                    t.id, t.initial_prompt, t.status, t.jira_key, t.jira_title,
-                    t.jira_status, t.jira_assignee, t.project_id, t.created_at, t.updated_at,
-                    t.jira_description, t.prompt, t.summary, t.agent, t.permission_mode,
-                    p.name,
-                    ls.status,
-                    ls.checkpoint_data
-                FROM tasks t
-                JOIN projects p ON p.id = t.project_id
-                LEFT JOIN (
-                    SELECT ticket_id, MAX(created_at) AS latest_at, MAX(rowid) AS latest_rowid
-                    FROM agent_sessions
-                    GROUP BY ticket_id
-                ) latest_session ON latest_session.ticket_id = t.id
-                LEFT JOIN agent_sessions ls ON ls.ticket_id = latest_session.ticket_id AND ls.created_at = latest_session.latest_at AND ls.rowid = latest_session.latest_rowid
-                WHERE t.status = 'doing' AND t.project_id IS NOT NULL AND (ls.status IS NULL OR ls.status != 'running')
-                ORDER BY ls.updated_at DESC",
-            )
-            .map_err(|e| format!("Failed to prepare get_work_queue_tasks query: {e}"))?;
-
-        let task_rows: Vec<(TaskRow, String, Option<String>, Option<String>)> = task_stmt
-            .query_map([], |row| {
-                Ok((
-                    TaskRow {
-                        id: row.get(0)?,
-                        initial_prompt: row.get(1)?,
-                        status: row.get(2)?,
-                        jira_key: row.get(3)?,
-                        jira_title: row.get(4)?,
-                        jira_status: row.get(5)?,
-                        jira_assignee: row.get(6)?,
-                        project_id: row.get(7)?,
-                        created_at: row.get(8)?,
-                        updated_at: row.get(9)?,
-                        jira_description: row.get(10)?,
-                        prompt: row.get(11)?,
-                        summary: row.get(12)?,
-                        agent: row.get(13)?,
-                        permission_mode: row.get(14)?,
-                    },
-                    row.get::<_, String>(15)?,         // project_name
-                    row.get::<_, Option<String>>(16)?, // session_status
-                    row.get::<_, Option<String>>(17)?, // session_checkpoint_data
-                ))
+        let mut stmt = conn.prepare(
+            "SELECT id, initial_prompt, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary, agent, permission_mode
+             FROM tasks WHERE project_id = ?1 AND status = ?2 ORDER BY updated_at DESC",
+        )?;
+        let tasks = stmt.query_map([project_id, state], |row| {
+            Ok(TaskRow {
+                id: row.get(0)?,
+                initial_prompt: row.get(1)?,
+                status: row.get(2)?,
+                jira_key: row.get(3)?,
+                jira_title: row.get(4)?,
+                jira_status: row.get(5)?,
+                jira_assignee: row.get(6)?,
+                project_id: row.get(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
+                jira_description: row.get(10)?,
+                prompt: row.get(11)?,
+                summary: row.get(12)?,
+                agent: row.get(13)?,
+                permission_mode: row.get(14)?,
             })
-            .map_err(|e| format!("Failed to execute get_work_queue_tasks query: {e}"))?
-            .collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(|e| format!("Failed to map work queue task rows: {e}"))?;
+        })?;
+
+        let mut result = Vec::new();
+        for task in tasks {
+            result.push(task?);
+        }
+        Ok(result)
+    }
+
+    pub fn get_work_queue_tasks(&self) -> std::result::Result<Vec<WorkQueueTaskRow>, String> {
+        self.get_work_queue_tasks_internal(None)
+    }
+
+    pub fn get_work_queue_tasks_for_project(
+        &self,
+        project_id: &str,
+    ) -> std::result::Result<Vec<WorkQueueTaskRow>, String> {
+        self.get_work_queue_tasks_internal(Some(project_id))
+    }
+
+    fn get_work_queue_tasks_internal(
+        &self,
+        project_id: Option<&str>,
+    ) -> std::result::Result<Vec<WorkQueueTaskRow>, String> {
+        let conn = self.conn.lock().unwrap();
+        // Step 1: Fetch tasks with their latest session info
+        let task_rows: Vec<(TaskRow, String, Option<String>, Option<String>)> = if let Some(pid) =
+            project_id
+        {
+            let mut task_stmt = conn
+                .prepare(
+                    "SELECT
+                        t.id, t.initial_prompt, t.status, t.jira_key, t.jira_title,
+                        t.jira_status, t.jira_assignee, t.project_id, t.created_at, t.updated_at,
+                        t.jira_description, t.prompt, t.summary, t.agent, t.permission_mode,
+                        p.name,
+                        ls.status,
+                        ls.checkpoint_data
+                    FROM tasks t
+                    JOIN projects p ON p.id = t.project_id
+                    LEFT JOIN (
+                        SELECT ticket_id, MAX(created_at) AS latest_at, MAX(rowid) AS latest_rowid
+                        FROM agent_sessions
+                        GROUP BY ticket_id
+                    ) latest_session ON latest_session.ticket_id = t.id
+                    LEFT JOIN agent_sessions ls ON ls.ticket_id = latest_session.ticket_id AND ls.created_at = latest_session.latest_at AND ls.rowid = latest_session.latest_rowid
+                    WHERE t.status = 'doing' AND t.project_id = ?1 AND (ls.status IS NULL OR ls.status != 'running')
+                    ORDER BY ls.updated_at DESC",
+                )
+                .map_err(|e| format!("Failed to prepare get_work_queue_tasks query: {e}"))?;
+
+            let rows = task_stmt
+                .query_map([pid], |row| {
+                    Ok((
+                        TaskRow {
+                            id: row.get(0)?,
+                            initial_prompt: row.get(1)?,
+                            status: row.get(2)?,
+                            jira_key: row.get(3)?,
+                            jira_title: row.get(4)?,
+                            jira_status: row.get(5)?,
+                            jira_assignee: row.get(6)?,
+                            project_id: row.get(7)?,
+                            created_at: row.get(8)?,
+                            updated_at: row.get(9)?,
+                            jira_description: row.get(10)?,
+                            prompt: row.get(11)?,
+                            summary: row.get(12)?,
+                            agent: row.get(13)?,
+                            permission_mode: row.get(14)?,
+                        },
+                        row.get::<_, String>(15)?,
+                        row.get::<_, Option<String>>(16)?,
+                        row.get::<_, Option<String>>(17)?,
+                    ))
+                })
+                .map_err(|e| format!("Failed to execute get_work_queue_tasks query: {e}"))?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|e| format!("Failed to map work queue task rows: {e}"))?;
+
+            rows
+        } else {
+            let mut task_stmt = conn
+                .prepare(
+                    "SELECT
+                        t.id, t.initial_prompt, t.status, t.jira_key, t.jira_title,
+                        t.jira_status, t.jira_assignee, t.project_id, t.created_at, t.updated_at,
+                        t.jira_description, t.prompt, t.summary, t.agent, t.permission_mode,
+                        p.name,
+                        ls.status,
+                        ls.checkpoint_data
+                    FROM tasks t
+                    JOIN projects p ON p.id = t.project_id
+                    LEFT JOIN (
+                        SELECT ticket_id, MAX(created_at) AS latest_at, MAX(rowid) AS latest_rowid
+                        FROM agent_sessions
+                        GROUP BY ticket_id
+                    ) latest_session ON latest_session.ticket_id = t.id
+                    LEFT JOIN agent_sessions ls ON ls.ticket_id = latest_session.ticket_id AND ls.created_at = latest_session.latest_at AND ls.rowid = latest_session.latest_rowid
+                    WHERE t.status = 'doing' AND t.project_id IS NOT NULL AND (ls.status IS NULL OR ls.status != 'running')
+                    ORDER BY ls.updated_at DESC",
+                )
+                .map_err(|e| format!("Failed to prepare get_work_queue_tasks query: {e}"))?;
+
+            let rows = task_stmt
+                .query_map([], |row| {
+                    Ok((
+                        TaskRow {
+                            id: row.get(0)?,
+                            initial_prompt: row.get(1)?,
+                            status: row.get(2)?,
+                            jira_key: row.get(3)?,
+                            jira_title: row.get(4)?,
+                            jira_status: row.get(5)?,
+                            jira_assignee: row.get(6)?,
+                            project_id: row.get(7)?,
+                            created_at: row.get(8)?,
+                            updated_at: row.get(9)?,
+                            jira_description: row.get(10)?,
+                            prompt: row.get(11)?,
+                            summary: row.get(12)?,
+                            agent: row.get(13)?,
+                            permission_mode: row.get(14)?,
+                        },
+                        row.get::<_, String>(15)?,
+                        row.get::<_, Option<String>>(16)?,
+                        row.get::<_, Option<String>>(17)?,
+                    ))
+                })
+                .map_err(|e| format!("Failed to execute get_work_queue_tasks query: {e}"))?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|e| format!("Failed to map work queue task rows: {e}"))?;
+
+            rows
+        };
 
         if task_rows.is_empty() {
             return Ok(Vec::new());

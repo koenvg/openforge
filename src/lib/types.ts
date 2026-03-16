@@ -350,7 +350,7 @@ export interface AgentReviewComment {
 }
 
 /** App-level view for top-bar navigation */
-export type AppView = "board" | "pr_review" | "skills" | "settings" | "workqueue" | "global_settings";
+export type AppView = "board" | "pr_review" | "skills" | "settings" | "workqueue" | "global_settings" | "shepherd";
 
 export interface WorkQueueEntry {
   task: Task;
@@ -479,4 +479,19 @@ export interface ClaudeSessionState {
   pendingApprovals: SDKToolApprovalRequest[];
   totalCost: number | null;
   permissionMode?: PermissionMode;
+}
+
+// ============================================================================
+// Shepherd Types
+// ============================================================================
+
+export type ShepherdStatus = 'idle' | 'thinking' | 'disabled' | 'error';
+
+export interface ShepherdMessage {
+  id: number;
+  project_id: string;
+  role: 'shepherd' | 'user' | 'system';
+  content: string;
+  event_context: string | null;
+  created_at: number;
 }

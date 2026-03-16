@@ -14,6 +14,10 @@ vi.mock('../lib/ipc', () => ({
   checkClaudeInstalled: vi.fn(() => Promise.resolve({ installed: false, path: null, version: null, authenticated: false })),
   getAllWhisperModelStatuses: vi.fn(() => Promise.resolve([])),
   setWhisperModel: vi.fn(),
+  getShepherdEnabled: vi.fn(() => Promise.resolve(false)),
+  setShepherdEnabled: vi.fn(() => Promise.resolve(undefined)),
+  startShepherd: vi.fn(() => Promise.resolve(undefined)),
+  stopShepherd: vi.fn(() => Promise.resolve(undefined)),
 }))
 
 vi.mock('../lib/actions', () => ({
@@ -37,6 +41,7 @@ vi.mock('../lib/stores', () => ({
     },
   ]),
   codeCleanupTasksEnabled: writable(false),
+  shepherdEnabled: writable(false),
 }))
 
 import SettingsView from './SettingsView.svelte'
