@@ -142,7 +142,7 @@
   border-left: 3px solid var(--color-info);
 }
 .review-pending {
-  border-left: 3px solid var(--color-success);
+  border-left: 3px solid var(--color-info);
 }
 .ready-to-merge {
   border-left: 3px solid var(--color-info);
