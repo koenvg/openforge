@@ -8,17 +8,20 @@
 
   let { text, children }: Props = $props()
 
-  let triggerEl: HTMLDivElement | null = $state(null)
   let visible = $state(false)
   let tooltipX = $state(0)
   let tooltipY = $state(0)
   let hoverTimer: ReturnType<typeof setTimeout> | null = $state(null)
+  let hoveredTarget: HTMLElement | null = $state(null)
 
-  function show() {
+  function show(e: MouseEvent | FocusEvent) {
+    hoveredTarget = e.currentTarget as HTMLElement
     if (hoverTimer) clearTimeout(hoverTimer)
     hoverTimer = setTimeout(() => {
-      if (!triggerEl) return
-      const rect = triggerEl.getBoundingClientRect()
+      if (!hoveredTarget) return
+      const firstChild = hoveredTarget.firstElementChild as HTMLElement
+      if (!firstChild) return
+      const rect = firstChild.getBoundingClientRect()
       const tooltipWidth = 280
       const margin = 8
 
@@ -45,7 +48,6 @@
 </script>
 
 <div
-  bind:this={triggerEl}
   onmouseover={show}
   onmouseout={hide}
   onfocus={show}
