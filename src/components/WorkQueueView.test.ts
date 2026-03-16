@@ -70,6 +70,7 @@ function makeEntry(overrides: {
 
 describe('WorkQueueView', () => {
   beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn()
     activeProjectId.set(null)
     currentView.set('workqueue')
     selectedTaskId.set(null)
@@ -225,6 +226,110 @@ describe('WorkQueueView', () => {
     await waitFor(() => {
       expect(getWorkQueueTasks).toHaveBeenCalledTimes(2)
     })
+  })
+
+  it('keeps existing task cards mounted during refresh-trigger reloads', async () => {
+    let resolveRefresh: ((value: WorkQueueEntry[]) => void) | null = null
+
+    vi.mocked(getWorkQueueTasks)
+      .mockResolvedValueOnce([makeEntry({ id: 'T-1' })])
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveRefresh = resolve
+      }))
+
+    const { rerender } = render(WorkQueueView, { props: { refreshTrigger: 0 } })
+
+    await waitFor(() => {
+      expect(screen.getByText('T-1')).toBeTruthy()
+    })
+
+    await rerender({ refreshTrigger: 1 })
+
+    expect(screen.getByText('T-1')).toBeTruthy()
+    expect(screen.queryByText('Loading...')).toBeNull()
+
+    resolveRefresh?.([makeEntry({ id: 'T-1' }), makeEntry({ id: 'T-2', initial_prompt: 'New task' })])
+
+    await waitFor(() => {
+      expect(screen.getByText('T-2')).toBeTruthy()
+    })
+  })
+
+  it('does not scroll focused work queue item into view on refresh-trigger reloads', async () => {
+    vi.mocked(getWorkQueueTasks)
+      .mockResolvedValueOnce([
+        makeEntry({ id: 'T-1', project_name: 'Frontend App' }),
+        makeEntry({ id: 'T-2', project_name: 'Frontend App', initial_prompt: 'Second task' }),
+      ])
+      .mockResolvedValueOnce([
+        makeEntry({ id: 'T-1', project_name: 'Frontend App' }),
+        makeEntry({ id: 'T-2', project_name: 'Frontend App', initial_prompt: 'Second task' }),
+        makeEntry({ id: 'T-3', project_name: 'Frontend App', initial_prompt: 'Third task' }),
+      ])
+
+    const { rerender } = render(WorkQueueView, { props: { refreshTrigger: 0 } })
+
+    await waitFor(() => {
+      expect(screen.getByText('T-1')).toBeTruthy()
+    })
+
+    vi.mocked(Element.prototype.scrollIntoView).mockClear()
+
+    await rerender({ refreshTrigger: 1 })
+
+    await waitFor(() => {
+      expect(screen.getByText('T-3')).toBeTruthy()
+    })
+
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled()
+  })
+
+  it('does not scroll when a refresh removes the focused project column', async () => {
+    vi.mocked(getWorkQueueTasks)
+      .mockResolvedValueOnce([
+        makeEntry({ id: 'T-1', project_name: 'Frontend App', project_id: 'proj-1' }),
+        makeEntry({ id: 'T-2', project_name: 'Backend API', project_id: 'proj-2', initial_prompt: 'Backend task' }),
+      ])
+      .mockResolvedValueOnce([
+        makeEntry({ id: 'T-1', project_name: 'Frontend App', project_id: 'proj-1' }),
+      ])
+
+    const { rerender } = render(WorkQueueView, { props: { refreshTrigger: 0 } })
+
+    await waitFor(() => {
+      expect(screen.getByText('Backend API')).toBeTruthy()
+    })
+
+    await fireEvent.keyDown(window, { key: 'l' })
+    vi.mocked(Element.prototype.scrollIntoView).mockClear()
+
+    await rerender({ refreshTrigger: 1 })
+
+    await waitFor(() => {
+      expect(screen.queryByText('Backend API')).toBeNull()
+      expect(screen.getByText('Frontend App')).toBeTruthy()
+    })
+
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled()
+  })
+
+  it('scrolls the focused work queue item into view on vim navigation', async () => {
+    vi.mocked(getWorkQueueTasks).mockResolvedValue([
+      makeEntry({ id: 'T-1', project_name: 'Frontend App' }),
+      makeEntry({ id: 'T-2', project_name: 'Frontend App', initial_prompt: 'Second task' }),
+    ])
+
+    render(WorkQueueView)
+
+    await waitFor(() => {
+      expect(screen.getByText('T-2')).toBeTruthy()
+    })
+
+    vi.mocked(Element.prototype.scrollIntoView).mockClear()
+
+    await fireEvent.keyDown(window, { key: 'j' })
+
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
   })
 
   describe('column reordering', () => {

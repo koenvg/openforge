@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
   import { ChevronLeft, ChevronRight } from 'lucide-svelte'
   import type { WorkQueueEntry } from '../lib/types'
   import type { AgentSession } from '../lib/types'
@@ -69,8 +70,10 @@
     })
   }
 
-  async function loadTasks() {
-    loading = true
+  async function loadTasks(showLoadingState: boolean) {
+    if (showLoadingState) {
+      loading = true
+    }
     try {
       const [fetchedEntries, savedOrder, savedPins] = await Promise.all([
         getWorkQueueTasks(),
@@ -175,6 +178,7 @@
 
   // Vim navigation — column-based
   let focusedCol = $state(0)
+  let suppressNextAutoScroll = false
 
   function currentColEntries(): WorkQueueEntry[] {
     return sortedColumns[focusedCol]?.[1] ?? []
@@ -203,6 +207,7 @@
   // Clamp focusedCol when columns change
   $effect(() => {
     if (focusedCol >= sortedColumns.length && sortedColumns.length > 0) {
+      suppressNextAutoScroll = true
       focusedCol = sortedColumns.length - 1
     }
   })
@@ -216,22 +221,31 @@
   // Scroll focused item into view
   $effect(() => {
     const idx = vimWq.focusedIndex
-    const col = sortedColumns[focusedCol]
-    if (!col) return
-    const container = document.querySelector(`[data-vim-wq-col="${col[0]}"]`)
-    if (!container) return
-    const items = container.querySelectorAll('[data-vim-wq-item]')
-    const el = items[idx] as HTMLElement | undefined
-    el?.scrollIntoView?.({ block: 'nearest' })
+    const colIndex = focusedCol
+
+    if (suppressNextAutoScroll) {
+      suppressNextAutoScroll = false
+      return
+    }
+
+    untrack(() => {
+      const col = sortedColumns[colIndex]
+      if (!col) return
+      const container = document.querySelector(`[data-vim-wq-col="${col[0]}"]`)
+      if (!container) return
+      const items = container.querySelectorAll('[data-vim-wq-item]')
+      const el = items[idx] as HTMLElement | undefined
+      el?.scrollIntoView?.({ block: 'nearest' })
+    })
   })
 
   $effect(() => {
-    loadTasks()
+    loadTasks(true)
   })
 
   $effect(() => {
     if (refreshTrigger > 0) {
-      loadTasks()
+      loadTasks(false)
     }
   })
 </script>
@@ -249,7 +263,7 @@
 {:else}
   <div class="flex-1 overflow-auto p-6">
     <div class="flex gap-6 items-start">
-      {#each sortedColumns as [projectName, projectEntries]}
+      {#each sortedColumns as [projectName, projectEntries] (projectName)}
         <div
           class="min-w-[340px] max-w-[400px] rounded-lg"
           data-testid={`workqueue-column-${projectName}`}
@@ -284,7 +298,7 @@
             </button>
           </div>
           <div class="flex flex-col gap-2">
-            {#each projectEntries as entry, i}
+            {#each projectEntries as entry, i (entry.task.id)}
               {@const colIdx = sortedColumns.findIndex(([n]) => n === projectName)}
               {@const isVimFocused = colIdx === focusedCol && vimWq.focusedIndex === i}
               <div data-testid={`task-card-${entry.task.id}`} data-vim-wq-item class={isVimFocused ? 'vim-focus' : ''} oncontextmenu={(e: MouseEvent) => handleContextMenu(e, entry.task.id)}>
