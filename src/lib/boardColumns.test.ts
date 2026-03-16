@@ -25,8 +25,8 @@ describe('boardColumns', () => {
   })
 
   describe('constants', () => {
-    it('defines all 15 task states', () => {
-      expect(ALL_TASK_STATES).toHaveLength(15)
+    it('defines all 16 task states', () => {
+      expect(ALL_TASK_STATES).toHaveLength(16)
       expect(ALL_TASK_STATES).toEqual([
         'idle',
         'active',
@@ -42,6 +42,7 @@ describe('boardColumns', () => {
         'ci-failed',
         'changes-requested',
         'ready-to-merge',
+        'pr-queued',
         'pr-merged',
       ])
     })
@@ -72,6 +73,7 @@ describe('boardColumns', () => {
       expect(TASK_STATE_LABELS['review-pending']).toBe('Awaiting Review')
       expect(TASK_STATE_LABELS['ci-failed']).toBe('CI Failed')
       expect(TASK_STATE_LABELS['ready-to-merge']).toBe('Ready to Merge')
+      expect(TASK_STATE_LABELS['pr-queued']).toBe('In Merge Queue')
     })
 
     it('defines default columns matching current behavior', () => {
@@ -95,6 +97,7 @@ describe('boardColumns', () => {
             'ci-failed',
             'changes-requested',
             'ready-to-merge',
+            'pr-queued',
             'pr-merged',
           ],
           underlyingStatus: 'doing',
@@ -210,6 +213,7 @@ describe('boardColumns', () => {
             'ci-failed',
             'changes-requested',
             'ready-to-merge',
+            'pr-queued',
             'pr-merged',
           ],
           underlyingStatus: 'doing',
@@ -287,9 +291,10 @@ describe('boardColumns', () => {
       const result = await loadBoardColumns('project-1')
 
       expect(result).toHaveLength(1)
-      expect(result[0].statuses).toHaveLength(15)
+      expect(result[0].statuses).toHaveLength(16)
       expect(result[0].statuses).toContain('ci-running')
       expect(result[0].statuses).toContain('review-pending')
+      expect(result[0].statuses).toContain('pr-queued')
       expect(result[0].name).toBe('Doing')
       expect(setProjectConfig).not.toHaveBeenCalled()
     })
@@ -314,6 +319,7 @@ describe('boardColumns', () => {
             'ci-failed',
             'changes-requested',
             'ready-to-merge',
+            'pr-queued',
             'pr-merged',
           ],
           underlyingStatus: 'doing',
@@ -366,7 +372,7 @@ describe('boardColumns', () => {
       const normalizedColumns: BoardColumnConfig[] = [
         {
           ...oldColumns[0],
-          statuses: [...oldColumns[0].statuses, 'ci-running', 'review-pending'],
+          statuses: [...oldColumns[0].statuses, 'ci-running', 'review-pending', 'pr-queued'],
         },
       ]
 

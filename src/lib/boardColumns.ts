@@ -20,6 +20,7 @@ export const ALL_TASK_STATES: TaskState[] = [
   'ci-failed',
   'changes-requested',
   'ready-to-merge',
+  'pr-queued',
   'pr-merged',
 ]
 
@@ -56,6 +57,7 @@ export const TASK_STATE_LABELS: Record<TaskState, string> = {
   'ci-failed': 'CI Failed',
   'changes-requested': 'Changes Requested',
   'ready-to-merge': 'Ready to Merge',
+  'pr-queued': 'In Merge Queue',
   'pr-merged': 'PR Merged',
 }
 
@@ -78,6 +80,7 @@ export const DEFAULT_BOARD_COLUMNS: BoardColumnConfig[] = [
       'ci-failed',
       'changes-requested',
       'ready-to-merge',
+      'pr-queued',
       'pr-merged',
     ],
     underlyingStatus: 'doing',
