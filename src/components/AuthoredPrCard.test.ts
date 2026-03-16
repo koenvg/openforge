@@ -25,6 +25,7 @@ const basePr: AuthoredPullRequest = {
   ci_check_runs: null,
   review_status: null,
   merged_at: null,
+  is_queued: false,
   task_id: null,
   created_at: Math.floor(Date.now() / 1000) - 3600,
   updated_at: Math.floor(Date.now() / 1000),

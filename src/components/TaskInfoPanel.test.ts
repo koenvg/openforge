@@ -90,28 +90,29 @@ describe('TaskInfoPanel', () => {
     expect(screen.queryByText('Delete')).toBeNull()
   })
 
-  it('renders pipeline status section when PRs have CI data', async () => {
-    const prWithCi: PullRequestInfo = {
-      id: 42,
-      ticket_id: 'T-42',
-      repo_owner: 'owner',
-      repo_name: 'repo',
-      title: 'Test PR',
-      url: 'https://github.com/owner/repo/pull/42',
-      state: 'open',
-      head_sha: 'abc123',
-      ci_status: 'failure',
-      ci_check_runs: JSON.stringify([
-        { id: 1, name: 'build', status: 'completed', conclusion: 'failure', html_url: 'https://example.com' },
-        { id: 2, name: 'lint', status: 'completed', conclusion: 'success', html_url: 'https://example.com' }
-      ]),
-      review_status: null,
-      merged_at: null,
-      created_at: 1000,
-      updated_at: 2000,
-      draft: false,
-      unaddressed_comment_count: 0,
-    }
+   it('renders pipeline status section when PRs have CI data', async () => {
+     const prWithCi: PullRequestInfo = {
+       id: 42,
+       ticket_id: 'T-42',
+       repo_owner: 'owner',
+       repo_name: 'repo',
+       title: 'Test PR',
+       url: 'https://github.com/owner/repo/pull/42',
+       state: 'open',
+       head_sha: 'abc123',
+       ci_status: 'failure',
+       ci_check_runs: JSON.stringify([
+         { id: 1, name: 'build', status: 'completed', conclusion: 'failure', html_url: 'https://example.com' },
+         { id: 2, name: 'lint', status: 'completed', conclusion: 'success', html_url: 'https://example.com' }
+       ]),
+       review_status: null,
+       merged_at: null,
+       created_at: 1000,
+       updated_at: 2000,
+       draft: false,
+       is_queued: false,
+       unaddressed_comment_count: 0,
+     }
 
     ticketPrs.set(new Map([['T-42', [prWithCi]]]))
 
@@ -122,25 +123,26 @@ describe('TaskInfoPanel', () => {
   })
 
 
-  it('renders Draft badge when PR is draft', async () => {
-    const draftPr: PullRequestInfo = {
-      id: 42,
-      ticket_id: 'T-42',
-      repo_owner: 'owner',
-      repo_name: 'repo',
-      title: 'Test PR',
-      url: 'https://github.com/owner/repo/pull/42',
-      state: 'open',
-      head_sha: 'abc123',
-      ci_status: null,
-      ci_check_runs: null,
-      review_status: null,
-      merged_at: null,
-      created_at: 1000,
-      updated_at: 2000,
-      draft: true,
-      unaddressed_comment_count: 0,
-    }
+   it('renders Draft badge when PR is draft', async () => {
+     const draftPr: PullRequestInfo = {
+       id: 42,
+       ticket_id: 'T-42',
+       repo_owner: 'owner',
+       repo_name: 'repo',
+       title: 'Test PR',
+       url: 'https://github.com/owner/repo/pull/42',
+       state: 'open',
+       head_sha: 'abc123',
+       ci_status: null,
+       ci_check_runs: null,
+       review_status: null,
+       merged_at: null,
+       created_at: 1000,
+       updated_at: 2000,
+       draft: true,
+       is_queued: false,
+       unaddressed_comment_count: 0,
+     }
 
     ticketPrs.set(new Map([['T-42', [draftPr]]]))
 
@@ -150,25 +152,26 @@ describe('TaskInfoPanel', () => {
     expect(screen.getByText('Draft')).toBeTruthy()
   })
 
-  it('hides Draft badge when PR is not draft', async () => {
-    const openPr: PullRequestInfo = {
-      id: 42,
-      ticket_id: 'T-42',
-      repo_owner: 'owner',
-      repo_name: 'repo',
-      title: 'Test PR',
-      url: 'https://github.com/owner/repo/pull/42',
-      state: 'open',
-      head_sha: 'abc123',
-      ci_status: null,
-      ci_check_runs: null,
-      review_status: null,
-      merged_at: null,
-      created_at: 1000,
-      updated_at: 2000,
-      draft: false,
-      unaddressed_comment_count: 0,
-    }
+   it('hides Draft badge when PR is not draft', async () => {
+     const openPr: PullRequestInfo = {
+       id: 42,
+       ticket_id: 'T-42',
+       repo_owner: 'owner',
+       repo_name: 'repo',
+       title: 'Test PR',
+       url: 'https://github.com/owner/repo/pull/42',
+       state: 'open',
+       head_sha: 'abc123',
+       ci_status: null,
+       ci_check_runs: null,
+       review_status: null,
+       merged_at: null,
+       created_at: 1000,
+       updated_at: 2000,
+       draft: false,
+       is_queued: false,
+       unaddressed_comment_count: 0,
+     }
 
     ticketPrs.set(new Map([['T-42', [openPr]]]))
 

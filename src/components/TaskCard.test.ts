@@ -37,6 +37,7 @@ const basePr: PullRequestInfo = {
   created_at: 1000,
   updated_at: 2000,
   draft: false,
+  is_queued: false,
   unaddressed_comment_count: 0,
 }
 

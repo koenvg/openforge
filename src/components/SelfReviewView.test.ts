@@ -261,23 +261,25 @@ describe('SelfReviewView — hide addressed comments', () => {
     created_at: 1000 + id,
   })
 
-  const mockPr: PullRequestInfo = {
-    id: 1,
-    ticket_id: 'task-1',
-    repo_owner: 'acme',
-    repo_name: 'repo',
-    title: 'Test PR',
-    url: 'https://github.com/acme/repo/pull/1',
-    state: 'open',
-    head_sha: 'abc',
-    ci_status: null,
-    ci_check_runs: null,
-    review_status: null,
-    merged_at: null,
-    created_at: 1000,
-    updated_at: 2000,
-    unaddressed_comment_count: 0,
-  }
+   const mockPr: PullRequestInfo = {
+     id: 1,
+     ticket_id: 'task-1',
+     repo_owner: 'acme',
+     repo_name: 'repo',
+     title: 'Test PR',
+     url: 'https://github.com/acme/repo/pull/1',
+     state: 'open',
+     head_sha: 'abc',
+     ci_status: null,
+     ci_check_runs: null,
+     review_status: null,
+     merged_at: null,
+     created_at: 1000,
+     updated_at: 2000,
+     draft: false,
+     is_queued: false,
+     unaddressed_comment_count: 0,
+   }
 
   it('addressed comments hidden by default', async () => {
     const comments = [

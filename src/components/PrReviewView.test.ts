@@ -425,32 +425,33 @@ describe('PrReviewView', () => {
   })
 
   it('shows authored PR cards when authoredPrs store has data', async () => {
-    const authoredPr: AuthoredPullRequest = {
-      id: 99999,
-      number: 100,
-      title: 'Add new feature',
-      body: null,
-      state: 'open',
-      draft: false,
-      html_url: 'https://github.com/acme/repo/pull/100',
-      user_login: 'me',
-      user_avatar_url: null,
-      repo_owner: 'acme',
-      repo_name: 'repo',
-      head_ref: 'feature/new',
-      base_ref: 'main',
-      head_sha: 'def456',
-      additions: 20,
-      deletions: 5,
-      changed_files: 2,
-      ci_status: 'success',
-      ci_check_runs: null,
-      review_status: 'approved',
-      merged_at: null,
-      task_id: null,
-      created_at: Math.floor(Date.now() / 1000) - 3600,
-      updated_at: Math.floor(Date.now() / 1000),
-    }
+   const authoredPr: AuthoredPullRequest = {
+       id: 99999,
+       number: 100,
+       title: 'Add new feature',
+       body: null,
+       state: 'open',
+       draft: false,
+       html_url: 'https://github.com/acme/repo/pull/100',
+       user_login: 'me',
+       user_avatar_url: null,
+       repo_owner: 'acme',
+       repo_name: 'repo',
+       head_ref: 'feature/new',
+       base_ref: 'main',
+       head_sha: 'def456',
+       additions: 20,
+       deletions: 5,
+       changed_files: 2,
+       ci_status: 'success',
+       ci_check_runs: null,
+       review_status: 'approved',
+       merged_at: null,
+       is_queued: false,
+       task_id: null,
+       created_at: Math.floor(Date.now() / 1000) - 3600,
+       updated_at: Math.floor(Date.now() / 1000),
+     }
 
     vi.mocked(getReviewPrs).mockResolvedValue([])
     vi.mocked(getAuthoredPrs).mockResolvedValue([authoredPr])
@@ -479,18 +480,18 @@ describe('PrReviewView', () => {
     const prRepo2 = { ...basePr, id: 2, number: 2, title: 'PR in repo2', repo_owner: 'acme', repo_name: 'repo2' }
     const prRepo3 = { ...basePr, id: 3, number: 3, title: 'PR in repo3', repo_owner: 'other', repo_name: 'repo3' }
 
-    const authoredRepo1: AuthoredPullRequest = {
-      ...basePr, id: 10, number: 10, title: 'My PR in repo1',
-      repo_owner: 'acme', repo_name: 'repo1',
-      ci_status: 'success', ci_check_runs: null, review_status: 'approved',
-      merged_at: null, task_id: null,
-    }
-    const authoredRepo2: AuthoredPullRequest = {
-      ...basePr, id: 11, number: 11, title: 'My PR in repo2',
-      repo_owner: 'acme', repo_name: 'repo2',
-      ci_status: 'success', ci_check_runs: null, review_status: 'approved',
-      merged_at: null, task_id: null,
-    }
+     const authoredRepo1: AuthoredPullRequest = {
+       ...basePr, id: 10, number: 10, title: 'My PR in repo1',
+       repo_owner: 'acme', repo_name: 'repo1',
+       ci_status: 'success', ci_check_runs: null, review_status: 'approved',
+       merged_at: null, is_queued: false, task_id: null,
+     }
+     const authoredRepo2: AuthoredPullRequest = {
+       ...basePr, id: 11, number: 11, title: 'My PR in repo2',
+       repo_owner: 'acme', repo_name: 'repo2',
+       ci_status: 'success', ci_check_runs: null, review_status: 'approved',
+       merged_at: null, is_queued: false, task_id: null,
+     }
 
     it('hides review PRs from excluded repos', async () => {
       vi.mocked(getProjectConfig).mockImplementation(async (_pid: string, key: string) => {
