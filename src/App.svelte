@@ -2,8 +2,8 @@
   import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
-  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, taskSpawned, startingTasks, codeCleanupTasksEnabled } from './lib/stores'
-  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, listOpenCodeAgents, getReviewPrs, getAuthoredPrs } from './lib/ipc'
+  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, taskSpawned, startingTasks, codeCleanupTasksEnabled, shepherdEnabled, shepherdMessages, shepherdStatus } from './lib/stores'
+  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, listOpenCodeAgents, getReviewPrs, getAuthoredPrs, notifyShepherdEvent, getShepherdEnabled } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import SearchableSelect from './components/SearchableSelect.svelte'
   import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView, PermissionMode, AgentSession } from './lib/types'
@@ -13,7 +13,6 @@
   import Modal from './components/Modal.svelte'
    import SettingsView from './components/SettingsView.svelte'
    import PrReviewView from './components/PrReviewView.svelte'
-   import SkillsView from './components/SkillsView.svelte'
    import WorkQueueView from './components/WorkQueueView.svelte'
    import Toast from './components/Toast.svelte'
   import CheckpointToast from './components/CheckpointToast.svelte'
@@ -25,6 +24,7 @@
   import IconRail from './components/IconRail.svelte'
   import CommandPalette from './components/CommandPalette.svelte'
   import ActionPalette from './components/ActionPalette.svelte'
+  import ShepherdView from './components/ShepherdView.svelte'
 
   import { pushNavState, navigateBack, resetToBoard } from './lib/navigation'
   import { loadActions, getEnabledActions } from './lib/actions'
@@ -35,6 +35,7 @@
   import { isInputFocused } from './lib/domUtils'
   import { useCommandHeld } from './lib/useCommandHeld.svelte'
   import { getOpenCodeSessionUpdate } from './lib/opencodeSessionEvents'
+  import SkillsView from './components/SkillsView.svelte'
 
   let unlisteners: UnlistenFn[] = []
   let showAddDialog = $state(false)
@@ -73,6 +74,7 @@
   let showCommandPalette = $state(false)
   let showActionPalette = $state(false)
   let actionPaletteActions = $state<Action[]>([])
+  let workQueueRefreshTrigger = $state(0)
 
   useCommandHeld()
 
@@ -92,13 +94,12 @@
     }
   })
    $effect(() => {
-     if ($currentView === 'skills') {
+     if ($currentView === 'workqueue') {
        $selectedTaskId = null
      }
    })
-   
    $effect(() => {
-     if ($currentView === 'workqueue') {
+     if ($currentView === 'shepherd') {
        $selectedTaskId = null
      }
    })
@@ -115,6 +116,12 @@
       loadTasks()
       loadPullRequests()
       refreshPrCounts()
+      getShepherdEnabled($activeProjectId).then(enabled => {
+        $shepherdEnabled = enabled
+      }).catch(e => {
+        console.error('[App] Failed to load shepherd enabled state:', e)
+        $shepherdEnabled = false
+      })
     }
   })
 
@@ -399,7 +406,7 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    // ? — show keyboard shortcuts help (global)
+    // ? — show keyboard shortcuts help (global, but not when typing in an input)
     if (e.key === '?' && !isInputFocused()) {
       e.preventDefault()
       showShortcutsDialog = true
@@ -491,6 +498,13 @@
       resetToBoard()
       return
     }
+
+    if (e.metaKey && e.key === 'a' && $shepherdEnabled) {
+      e.preventDefault()
+      pushNavState()
+      $currentView = 'shepherd'
+      return
+    }
   }
 
   onMount(async () => {
@@ -512,14 +526,11 @@
     )
 
     unlisteners.push(
-      await listen('ci-status-changed', () => {
+      await listen('review-status-changed', (event) => {
         loadPullRequests()
-      })
-    )
-
-    unlisteners.push(
-      await listen('review-status-changed', () => {
-        loadPullRequests()
+        if ($shepherdEnabled) {
+          notifyShepherdEvent('review-status-changed', event.payload).catch(console.error)
+        }
       })
     )
 
@@ -537,6 +548,10 @@
         }
         loadTasks()
         loadProjectAttention()
+        workQueueRefreshTrigger++
+        if ($shepherdEnabled) {
+          notifyShepherdEvent('action-complete', event.payload).catch(console.error)
+        }
       })
     )
 
@@ -582,10 +597,13 @@
     )
 
     unlisteners.push(
-      await listen('new-pr-comment', () => {
+      await listen('new-pr-comment', (event) => {
         loadTasks()
         loadPullRequests()
         loadProjectAttention()
+        if ($shepherdEnabled) {
+          notifyShepherdEvent('new-pr-comment', event.payload).catch(console.error)
+        }
       })
     )
 
@@ -597,10 +615,31 @@
     )
 
     unlisteners.push(
+      await listen<{ role: string; content: string; event_context: string | null; created_at: number }>('shepherd-message', (event) => {
+        shepherdMessages.update(msgs => [...msgs, {
+          id: Date.now(),
+          project_id: $activeProjectId ?? '',
+          role: event.payload.role as 'shepherd' | 'user' | 'system',
+          content: event.payload.content,
+          event_context: event.payload.event_context,
+          created_at: event.payload.created_at,
+        }])
+        shepherdStatus.set('idle')
+      })
+    )
+
+    unlisteners.push(
+      await listen<string>('shepherd-status-changed', (event: Event<string>) => {
+        const status = event.payload
+        if (status === 'idle' || status === 'thinking' || status === 'disabled' || status === 'error') {
+          shepherdStatus.set(status)
+        }
+      })
+    )
+
+    unlisteners.push(
       await listen<{ task_id: string, pr_id: number, pr_title: string, ci_status: string, timestamp: number }>('ci-status-changed', (event) => {
         if (event.payload.ci_status === 'failure') {
-          // Suppress CI failure toast when the task's agent is still running —
-          // the agent may push more code that fixes CI.
           const session = $activeSessions.get(event.payload.task_id)
           if (!session || session.status !== 'running') {
             $ciFailureNotification = {
@@ -612,9 +651,11 @@
             }
           }
         }
-        // Always refresh PR data to update CI dots on cards
         loadPullRequests()
         loadProjectAttention()
+        if ($shepherdEnabled) {
+          notifyShepherdEvent('ci-status-changed', event.payload).catch(console.error)
+        }
       })
     )
 
@@ -848,7 +889,7 @@
     onNavigate={handleNavigate}
   />
   {#if $currentView !== 'workqueue' && $currentView !== 'global_settings'}
-    <IconRail currentView={$currentView} onNavigate={handleNavigate} reviewRequestCount={$reviewRequestCount} authoredPrCount={$authoredPrCount} modalsOpen={showCommandPalette || showProjectSwitcher || showActionPalette || showAddDialog} railBg={iconRailBg} />
+    <IconRail currentView={$currentView} onNavigate={handleNavigate} reviewRequestCount={$reviewRequestCount} authoredPrCount={$authoredPrCount} shepherdEnabled={$shepherdEnabled} modalsOpen={showCommandPalette || showProjectSwitcher || showActionPalette || showAddDialog} railBg={iconRailBg} />
   {/if}
 
   <div class="flex flex-col flex-1 min-w-0 relative" style="background: linear-gradient(180deg, var(--project-bg-alt) 0%, var(--project-bg) 100%)">
@@ -863,6 +904,8 @@
          <SkillsView projectName={activeProject?.name ?? ''} />
        {:else if $currentView === 'workqueue'}
          <WorkQueueView onRunAction={handleRunAction} />
+       {:else if $currentView === 'shepherd'}
+         <ShepherdView />
        {:else if selectedTask}
         <TaskDetailView task={selectedTask} onRunAction={handleRunAction} />
       {:else}
@@ -1045,6 +1088,10 @@
           <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">Work queue</span>
             <kbd class="kbd kbd-sm">⌘R</kbd>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-base-content">Task Shepherd</span>
+            <kbd class="kbd kbd-sm">⌘A</kbd>
           </div>
         </div>
       </div>

@@ -1,18 +1,19 @@
 <script lang="ts">
-  import { LayoutDashboard, GitPullRequest, Sparkles, Settings } from 'lucide-svelte'
+  import { LayoutDashboard, GitPullRequest, Settings, Sparkles, Bot } from 'lucide-svelte'
   import type { AppView } from '../lib/types'
   import { commandHeld } from '../lib/stores'
 
   interface Props {
     currentView: AppView
     onNavigate: (view: AppView) => void
-    reviewRequestCount?: number
-    authoredPrCount?: number
+    reviewRequestCount: number
+    authoredPrCount: number
+    shepherdEnabled: boolean
     modalsOpen?: boolean
     railBg?: string
   }
 
-  let { currentView, onNavigate, reviewRequestCount = 0, authoredPrCount = 0, modalsOpen = false, railBg = 'oklch(var(--b2))' }: Props = $props()
+  let { currentView, onNavigate, reviewRequestCount = 0, authoredPrCount = 0, shepherdEnabled = false, modalsOpen = false, railBg = 'oklch(var(--b2))' }: Props = $props()
 
   const navItems: { view: AppView; Icon: typeof LayoutDashboard; shortcut: string; label: string }[] = [
     { view: 'board', Icon: LayoutDashboard, shortcut: 'H', label: 'Board' },
@@ -41,4 +42,15 @@
       {/if}
     </button>
   {/each}
+
+  {#if shepherdEnabled}
+    <button
+      class="relative cursor-pointer {currentView === 'shepherd' ? 'text-primary' : 'text-base-content/40'}"
+      onclick={() => onNavigate('shepherd')}
+      aria-label="Task Shepherd"
+      title="Task Shepherd (⌘A)"
+    >
+      <Bot size={24} />
+    </button>
+  {/if}
 </div>

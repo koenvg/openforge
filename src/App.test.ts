@@ -1,7 +1,7 @@
 import { render } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { writable } from 'svelte/store'
-import type { Task, AgentSession, Project, ProjectAttention, PullRequestInfo, CheckpointNotification, CiFailureNotification } from './lib/types'
+import type { Task, AgentSession, Project, ProjectAttention, PullRequestInfo, CheckpointNotification, CiFailureNotification, ShepherdMessage, ShepherdStatus } from './lib/types'
 
 const callOrder: string[] = []
 
@@ -40,12 +40,13 @@ vi.mock('./lib/stores', () => ({
   pendingManualComments: writable([]),
   selectedReviewPrDetails: writable(null),
   reviewPullRequestDiff: writable(null),
-  skills: writable([]),
-  selectedSkillName: writable(null),
-  startingTasks: writable(new Set()),
-  codeCleanupTasksEnabled: writable(false),
   authoredPrCount: writable(0),
   commandHeld: writable(false),
+  startingTasks: writable<Set<string>>(new Set()),
+  codeCleanupTasksEnabled: writable(false),
+  shepherdEnabled: writable(false),
+  shepherdMessages: writable<ShepherdMessage[]>([]),
+  shepherdStatus: writable<ShepherdStatus>('disabled'),
 }))
 
 vi.mock('./lib/ipc', () => ({
@@ -137,7 +138,15 @@ vi.mock('./lib/ipc', () => ({
     callOrder.push('getReviewPrs')
     return []
   }),
-  getAuthoredPrs: vi.fn(async () => []),
+  getAuthoredPrs: vi.fn(async () => {
+    callOrder.push('getAuthoredPrs')
+    return []
+  }),
+  notifyShepherdEvent: vi.fn(async () => {}),
+  getShepherdMessages: vi.fn(async () => []),
+  sendShepherdMessage: vi.fn(async () => {}),
+  clearShepherdMessages: vi.fn(async () => {}),
+  getShepherdEnabled: vi.fn(async () => false),
 }))
 
 vi.mock('./components/KanbanBoard.svelte', () => ({ default: vi.fn() }))

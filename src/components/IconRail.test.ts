@@ -93,4 +93,23 @@ describe('IconRail', () => {
     })
   })
 
+  it('shows shepherd button when shepherdEnabled is true', () => {
+    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), authoredPrCount: 0, shepherdEnabled: true, modalsOpen: false } })
+    const buttons = screen.getAllByRole('button')
+    expect(buttons).toHaveLength(5)
+  })
+
+  it('clicking shepherd button calls onNavigate with "shepherd"', () => {
+    const onNavigate = vi.fn()
+    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate, authoredPrCount: 0, shepherdEnabled: true, modalsOpen: false } })
+    const buttons = screen.getAllByRole('button')
+    fireEvent.click(buttons[4])
+    expect(onNavigate).toHaveBeenCalledWith('shepherd')
+  })
+
+  it('does not show shepherd button when shepherdEnabled is false', () => {
+    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), authoredPrCount: 0, shepherdEnabled: false, modalsOpen: false } })
+    const buttons = screen.getAllByRole('button')
+    expect(buttons).toHaveLength(4)
+  })
 })

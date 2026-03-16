@@ -13,6 +13,9 @@ mod sse_bridge;
 mod pty_manager;
 pub mod review_parser;
 mod review_prompt;
+mod shepherd_prompt;
+mod shepherd_agent;
+mod shepherd_events;
 mod diff_parser;
 mod whisper_manager;
 mod http_server;
@@ -24,11 +27,14 @@ mod secure_store;
 pub mod providers;
 pub mod command_discovery;
 use std::sync::{Mutex, Arc};
+use std::time::Duration;
 use tauri::{Manager, Emitter};
 use jira_client::JiraClient;
 use github_client::GitHubClient;
 use opencode_client::OpenCodeClient;
 use pty_manager::PtyManager;
+use shepherd_agent::{resolve_startup_project_id, shepherd_flush_loop, start_shepherd_if_enabled, ShepherdManager};
+use shepherd_events::ShepherdEventCollector;
 use whisper_manager::{WhisperManager, WhisperModelSize};
 
 // ============================================================================
@@ -299,6 +305,9 @@ fn main() {
             app.manage(sse_bridge_manager);
             app.manage(pty_manager);
             app.manage(whisper_manager);
+            app.manage(Arc::new(tokio::sync::Mutex::new(ShepherdManager::new(app.handle().clone()))));
+            app.manage(Arc::new(Mutex::new(ShepherdEventCollector::new(Duration::from_secs(30)))));
+            app.manage(Arc::new(tokio::sync::Notify::new()));
 
             if let Err(e) = server_manager::ServerManager::new().cleanup_stale_pids() {
                 eprintln!("Failed to cleanup stale server PIDs: {}", e);
@@ -331,6 +340,37 @@ fn main() {
 
             println!("Server resume task started");
 
+            let app_handle_shepherd = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                shepherd_flush_loop(app_handle_shepherd).await;
+            });
+
+            let app_handle_shepherd_init = app.handle().clone();
+            let db_for_shepherd = db_arc.clone();
+            tauri::async_runtime::spawn(async move {
+                let startup_project_id = {
+                    match db_for_shepherd.lock() {
+                        Ok(db) => match resolve_startup_project_id(&db) {
+                            Ok(project_id) => project_id,
+                            Err(e) => {
+                                eprintln!("[shepherd] Failed to resolve startup project: {}", e);
+                                None
+                            }
+                        },
+                        Err(e) => {
+                            eprintln!("[shepherd] database lock error during startup: {}", e);
+                            None
+                        }
+                    }
+                };
+
+                if let Some(project_id) = startup_project_id {
+                    if let Err(e) = start_shepherd_if_enabled(&app_handle_shepherd_init, &project_id).await {
+                        eprintln!("[shepherd] auto-start failed for {}: {}", project_id, e);
+                    }
+                }
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -352,6 +392,8 @@ fn main() {
             commands::projects::delete_project,
             commands::projects::get_project_config,
             commands::projects::set_project_config,
+            commands::projects::get_shepherd_enabled,
+            commands::projects::set_shepherd_enabled,
             commands::projects::get_tasks_for_project,
             commands::projects::get_worktree_for_task,
             commands::projects::get_project_attention,
@@ -417,6 +459,14 @@ fn main() {
             commands::agent_review::update_agent_review_comment_status,
             commands::agent_review::dismiss_all_agent_review_comments,
             commands::agent_review::abort_agent_review,
+            commands::shepherd::get_shepherd_messages,
+            commands::shepherd::clear_shepherd_messages,
+            commands::shepherd::insert_shepherd_message,
+            commands::shepherd::send_shepherd_message,
+            commands::shepherd::start_shepherd,
+            commands::shepherd::stop_shepherd,
+            commands::shepherd::get_shepherd_status,
+            commands::shepherd::notify_shepherd_event,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
