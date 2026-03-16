@@ -56,6 +56,10 @@
       <span class="inline-flex items-center px-1.5 py-0.5 font-semibold text-base-content/50 bg-base-content/10 rounded">Pending Review</span>
     {/if}
 
+    {#if pr.is_queued && pr.state === 'open'}
+      <span class="inline-flex items-center px-1.5 py-0.5 font-semibold text-info bg-info/15 rounded">Queued</span>
+    {/if}
+
     <span class="flex-1"></span>
     <span class="font-medium text-base-content/50">{pr.changed_files} {pr.changed_files === 1 ? 'file' : 'files'}</span>
     <span class="text-base-300">•</span>

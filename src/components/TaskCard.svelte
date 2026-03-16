@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Pin } from 'lucide-svelte'
   import type { Task, AgentSession, PullRequestInfo } from '../lib/types'
-  import { isReadyToMerge } from '../lib/types'
+  import { isReadyToMerge, isQueuedForMerge } from '../lib/types'
   import { openUrl } from '../lib/ipc'
   import { timeAgoFromSeconds } from '../lib/timeAgo'
   import Card from './Card.svelte'
@@ -37,6 +37,7 @@
   let hasCiFailure = $derived(pullRequests.some(pr => pr.ci_status === 'failure' && pr.state === 'open'))
   let hasPendingCi = $derived(pullRequests.some(pr => pr.ci_status === 'pending' && pr.state === 'open'))
   let hasReadyToMerge = $derived(pullRequests.some(pr => isReadyToMerge(pr)))
+  let hasQueuedForMerge = $derived(pullRequests.some(pr => isQueuedForMerge(pr)))
   let hasReviewPending = $derived(pullRequests.some(pr => pr.ci_status === 'success' && pr.review_status === 'review_required' && pr.state === 'open'))
   let totalUnaddressed = $derived(
     pullRequests.reduce((sum, pr) => sum + (pr.unaddressed_comment_count || 0), 0)
@@ -44,7 +45,7 @@
 </script>
 
 <Card
-  class="group/card block px-3.5 py-3 {hasCiFailure && !hasPendingCi && statusClass !== 'running' && !needsInput ? 'ci-failed' : ''} {isStarting ? 'starting' : ''} {statusClass === 'running' ? 'running' : ''} {statusClass === 'paused' && !needsInput ? 'paused' : ''} {statusClass === 'failed' ? 'failed' : ''} {statusClass === 'interrupted' ? 'interrupted' : ''} {statusClass === 'completed' ? 'completed' : ''} {needsInput ? 'needs-input' : ''} {hasReadyToMerge && statusClass !== 'running' ? 'ready-to-merge' : ''} {hasPendingCi && statusClass !== 'running' && !needsInput && !hasCiFailure ? 'ci-running' : ''} {hasReviewPending && statusClass !== 'running' && !needsInput && !hasCiFailure && !hasPendingCi ? 'review-pending' : ''} {isPinned ? 'border-primary/30' : ''}"
+  class="group/card block px-3.5 py-3 {hasCiFailure && !hasPendingCi && statusClass !== 'running' && !needsInput ? 'ci-failed' : ''} {isStarting ? 'starting' : ''} {statusClass === 'running' ? 'running' : ''} {statusClass === 'paused' && !needsInput ? 'paused' : ''} {statusClass === 'failed' ? 'failed' : ''} {statusClass === 'interrupted' ? 'interrupted' : ''} {statusClass === 'completed' ? 'completed' : ''} {needsInput ? 'needs-input' : ''} {hasQueuedForMerge && statusClass !== 'running' ? 'ready-to-merge' : ''} {hasReadyToMerge && !hasQueuedForMerge && statusClass !== 'running' ? 'ready-to-merge' : ''} {hasPendingCi && statusClass !== 'running' && !needsInput && !hasCiFailure ? 'ci-running' : ''} {hasReviewPending && statusClass !== 'running' && !needsInput && !hasCiFailure && !hasPendingCi ? 'review-pending' : ''} {isPinned ? 'border-primary/30' : ''}"
   onclick={handleClick}
 >
   <div class="flex items-center justify-between mb-1">
@@ -150,6 +151,8 @@
     {#each pullRequests as pr}
       {#if pr.state === 'merged'}
         <div class="font-mono text-[10px] font-semibold px-2 py-0.5 rounded mt-1 text-center text-secondary">// merged</div>
+      {:else if isQueuedForMerge(pr)}
+        <div class="font-mono text-[10px] font-semibold px-2 py-0.5 rounded mt-1 w-fit text-info bg-info/10 border border-info/30">$ queued for merge</div>
       {:else if isReadyToMerge(pr)}
         <div class="font-mono text-[10px] font-semibold px-2 py-0.5 rounded mt-1 w-fit text-info bg-info/10 border border-info/30">$ ready to merge</div>
       {/if}

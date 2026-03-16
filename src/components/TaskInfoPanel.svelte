@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Task, PrComment } from '../lib/types'
-  import { parseCheckRuns, isReadyToMerge } from '../lib/types'
+  import { parseCheckRuns, isReadyToMerge, isQueuedForMerge } from '../lib/types'
   import { ticketPrs } from '../lib/stores'
   import { getPrComments, markCommentAddressed, openUrl } from '../lib/ipc'
   import { timeAgo } from '../lib/timeAgo'
@@ -127,6 +127,13 @@
                 Merged on {formatDate(pr.merged_at)}
               </div>
             {/if}
+          </div>
+        {:else if isQueuedForMerge(pr)}
+          <div class="mb-3">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs text-base-content/50">{pr.title}</span>
+              <span class="text-[0.65rem] font-semibold px-1.5 py-0.5 rounded bg-info/15 text-info merge-ready">&#x25CF; In Merge Queue</span>
+            </div>
           </div>
         {:else if isReadyToMerge(pr)}
           <div class="mb-3">
