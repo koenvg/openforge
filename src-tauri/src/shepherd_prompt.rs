@@ -7,6 +7,7 @@ pub struct ProjectSnapshot {
     pub completed_agents: i64,
     pub doing_tasks: Vec<SnapshotTask>,
     pub work_queue: Vec<SnapshotTask>,
+    pub active_action_items: Vec<SnapshotActionItem>,
 }
 
 #[derive(Debug, Clone)]
@@ -15,6 +16,13 @@ pub struct SnapshotTask {
     pub prompt: String,
     pub status: String,
     pub session_status: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SnapshotActionItem {
+    pub id: i64,
+    pub title: String,
+    pub task_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -89,6 +97,13 @@ pub fn build_shepherd_system_prompt(project_name: &str, project_id: &str) -> Str
     prompt.push_str("3. **Completed agents** — An agent has finished its work and the task needs developer review before moving to done.\n");
     prompt
         .push_str("4. **Backlog** — Only suggest starting new work when the above are clear.\n\n");
+
+    prompt.push_str("=== ACTION ITEMS ===\n");
+    prompt.push_str("You have access to MCP tools for creating action items that the developer sees in the app:\n");
+    prompt.push_str("- Use `create_action_item` to surface things requiring developer action (CI failures, PRs to review, agents needing sign-off).\n");
+    prompt.push_str("- Use `list_action_items` BEFORE creating to check for duplicates — the developer can dismiss items.\n");
+    prompt.push_str("- Use `dismiss_action_item` if an item is no longer relevant.\n");
+    prompt.push_str("- Only create action items for things requiring developer action, not for informational updates.\n\n");
 
     prompt.push_str("=== RESPONSE FORMAT ===\n");
     prompt.push_str("Keep responses short and actionable. Lead with the most urgent item.\n");
@@ -206,6 +221,17 @@ pub fn build_event_summary_prompt(events: &[ShepherdEvent], snapshot: &ProjectSn
         }
     }
 
+    if !snapshot.active_action_items.is_empty() {
+        prompt.push_str("\nActive action items (do not duplicate):\n");
+        for item in &snapshot.active_action_items {
+            let task = item.task_id.as_deref().unwrap_or("no task");
+            prompt.push_str(&format!(
+                "- [{}] {} (task: {})\n",
+                item.id, item.title, task
+            ));
+        }
+    }
+
     prompt.push_str("\nAdvise on what needs attention.");
     prompt
 }
@@ -225,10 +251,6 @@ mod tests {
         assert!(prompt.contains("P-1"));
         assert!(
             prompt.contains("pushes data directly to you") || prompt.contains("app pushes data")
-        );
-        assert!(
-            !prompt.contains("MCP tools"),
-            "Prompt must NOT reference MCP tools"
         );
     }
 
@@ -496,5 +518,84 @@ mod tests {
         let summary = build_event_summary_prompt(&events, &empty_snapshot());
         assert!(summary.contains("T-105"));
         assert!(summary.contains("waiting"));
+    }
+
+    #[test]
+    fn test_shepherd_system_prompt_includes_action_items_section() {
+        let prompt = build_shepherd_system_prompt("Test Project", "P-1");
+        assert!(
+            prompt.contains("ACTION ITEMS"),
+            "Prompt must include ACTION ITEMS section"
+        );
+        assert!(
+            prompt.contains("create_action_item"),
+            "Prompt must mention create_action_item tool"
+        );
+    }
+
+    #[test]
+    fn test_shepherd_system_prompt_action_items_no_shepherd_prefix() {
+        let prompt = build_shepherd_system_prompt("Test Project", "P-1");
+        if let Some(action_items_pos) = prompt.find("ACTION ITEMS") {
+            let section_end = prompt[action_items_pos..]
+                .find("===")
+                .map(|p| action_items_pos + p)
+                .unwrap_or(prompt.len());
+            let section = &prompt[action_items_pos..section_end];
+            assert!(
+                !section.contains("shepherd_create_action_item"),
+                "Tool names must not have shepherd prefix"
+            );
+        }
+    }
+
+    #[test]
+    fn test_shepherd_event_summary_includes_active_action_items() {
+        let snapshot = ProjectSnapshot {
+            active_action_items: vec![
+                SnapshotActionItem {
+                    id: 1,
+                    title: "Fix CI failure".to_string(),
+                    task_id: Some("T-42".to_string()),
+                },
+                SnapshotActionItem {
+                    id: 2,
+                    title: "Review PR".to_string(),
+                    task_id: None,
+                },
+            ],
+            ..Default::default()
+        };
+
+        let events = vec![ShepherdEvent::AgentCompleted {
+            task_id: "T-1".to_string(),
+        }];
+
+        let summary = build_event_summary_prompt(&events, &snapshot);
+        assert!(
+            summary.contains("Active action items"),
+            "Summary must include active action items section"
+        );
+        assert!(summary.contains("Fix CI failure"));
+        assert!(summary.contains("T-42"));
+        assert!(summary.contains("Review PR"));
+    }
+
+    #[test]
+    fn test_shepherd_event_summary_excludes_action_items_when_empty() {
+        let snapshot = ProjectSnapshot {
+            active_action_items: vec![],
+            ..Default::default()
+        };
+
+        let events = vec![ShepherdEvent::AgentCompleted {
+            task_id: "T-1".to_string(),
+        }];
+
+        let summary = build_event_summary_prompt(&events, &snapshot);
+        assert!(
+            !summary.contains("Active action items"),
+            "Summary must not include action items section when empty"
+        );
     }
 }

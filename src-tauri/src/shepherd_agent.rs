@@ -12,7 +12,7 @@ use crate::providers::Provider;
 use crate::pty_manager::PtyManager;
 use crate::server_manager::ServerManager;
 use crate::shepherd_events::ShepherdEventCollector;
-use crate::shepherd_prompt::{build_event_summary_prompt, build_shepherd_system_prompt, ProjectSnapshot, SnapshotTask};
+use crate::shepherd_prompt::{build_event_summary_prompt, build_shepherd_system_prompt, ProjectSnapshot, SnapshotTask, SnapshotActionItem};
 use crate::sse_bridge::SseBridgeManager;
 
 #[derive(Debug, Clone)]
@@ -337,6 +337,17 @@ fn build_snapshot_from_db(app: &AppHandle, project_id: &str) -> ProjectSnapshot 
         })
         .collect();
 
+    let active_action_items = db
+        .get_active_action_items(project_id, 20)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|a| SnapshotActionItem {
+            id: a.id,
+            title: a.title,
+            task_id: a.task_id,
+        })
+        .collect();
+
     ProjectSnapshot {
         needs_input: attention.as_ref().map_or(0, |a| a.needs_input),
         running_agents: attention.as_ref().map_or(0, |a| a.running_agents),
@@ -345,6 +356,7 @@ fn build_snapshot_from_db(app: &AppHandle, project_id: &str) -> ProjectSnapshot 
         completed_agents: attention.as_ref().map_or(0, |a| a.completed_agents),
         doing_tasks,
         work_queue,
+        active_action_items,
     }
 }
 

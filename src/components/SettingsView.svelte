@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
-  import { activeProjectId, projects, codeCleanupTasksEnabled, shepherdEnabled, error } from '../lib/stores'
+  import { activeProjectId, projects, codeCleanupTasksEnabled, shepherdEnabled, actionItemCount, error } from '../lib/stores'
   import {
     getProjectConfig,
     setProjectConfig,
@@ -16,6 +16,7 @@
     setShepherdEnabled,
     startShepherd,
     stopShepherd,
+    getActionItemCount,
   } from '../lib/ipc'
   import { loadActions, saveActions, createAction, DEFAULT_ACTIONS } from '../lib/actions'
   import { loadBoardColumns, saveBoardColumns } from '../lib/boardColumns'
@@ -102,8 +103,12 @@
       await setShepherdEnabled($activeProjectId, isShepherdEnabled)
       if (isShepherdEnabled) {
         startShepherd($activeProjectId).catch(console.error)
+        getActionItemCount($activeProjectId).then((count: number) => {
+          $actionItemCount = count
+        }).catch(console.error)
       } else {
         stopShepherd().catch(console.error)
+        $actionItemCount = 0
       }
     }
   }
