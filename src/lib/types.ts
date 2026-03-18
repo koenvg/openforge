@@ -70,6 +70,8 @@ export interface PullRequestInfo {
   ci_status: string | null;
   ci_check_runs: string | null;
   review_status: string | null;
+  mergeable: boolean | null;
+  mergeable_state: string | null;
   merged_at: number | null;
   created_at: number;
   updated_at: number;
@@ -88,11 +90,25 @@ export interface PollResult {
   rate_limit_reset_at: number | null;
 }
 
+interface MergeStatusInfo {
+  state: string;
+  mergeable: boolean | null;
+  mergeable_state: string | null;
+}
+
+export function hasMergeConflicts(pr: MergeStatusInfo): boolean {
+  if (pr.state !== 'open') return false
+
+  const mergeableState = pr.mergeable_state?.toLowerCase() ?? null
+  return mergeableState === 'dirty' || mergeableState === 'conflicting'
+}
+
 /** Check if a PR is ready to merge (open + CI green + approved) */
 export function isReadyToMerge(pr: PullRequestInfo): boolean {
   return pr.state === 'open'
     && pr.ci_status === 'success'
-    && pr.review_status === 'approved';
+    && pr.review_status === 'approved'
+    && !hasMergeConflicts(pr);
 }
 
 /** Check if a PR is queued in a merge queue (ready to merge + is_queued) */
@@ -246,6 +262,8 @@ export interface AuthoredPullRequest {
   ci_status: string | null;
   ci_check_runs: string | null;
   review_status: string | null;
+  mergeable: boolean | null;
+  mergeable_state: string | null;
   merged_at: number | null;
   is_queued: boolean;
   task_id: string | null;
@@ -272,6 +290,8 @@ export interface ReviewPullRequest {
   additions: number;
   deletions: number;
   changed_files: number;
+  mergeable: boolean | null;
+  mergeable_state: string | null;
   created_at: number;
   updated_at: number;
   viewed_at: number | null;

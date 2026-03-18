@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Pin } from 'lucide-svelte'
   import type { Task, AgentSession, PullRequestInfo } from '../lib/types'
-  import { isReadyToMerge, isQueuedForMerge } from '../lib/types'
+  import { hasMergeConflicts, isReadyToMerge, isQueuedForMerge } from '../lib/types'
   import { computeTaskState, taskStateToBorderClass } from '../lib/taskState'
   import { openUrl } from '../lib/ipc'
   import { timeAgoFromSeconds } from '../lib/timeAgo'
@@ -143,6 +143,10 @@
             <span
               class="font-mono {pr.review_status === 'approved' ? 'text-success' : ''} {pr.review_status === 'changes_requested' ? 'text-warning' : ''} {pr.review_status === 'review_required' ? 'text-base-content/50 review-pending-text' : ''}"
             >{pr.review_status === 'approved' ? 'Approved' : pr.review_status === 'changes_requested' ? 'Changes req.' : 'Needs review'}</span>
+          {/if}
+          {#if hasMergeConflicts(pr)}
+            <span class="text-base-content/30 mx-px">::</span>
+            <span class="font-mono text-error">Merge Conflict</span>
           {/if}
         </span>
       {/each}
