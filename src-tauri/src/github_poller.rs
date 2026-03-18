@@ -590,6 +590,8 @@ struct PollSinglePrResult {
     combined_status: Option<CombinedStatusResponse>,
     reviews: Option<Vec<PrReview>>,
     has_requested_reviewers: bool,
+    mergeable: Option<bool>,
+    mergeable_state: Option<String>,
     is_queued: bool,
     required_check_names: Vec<String>,
     required_approving_count: Option<usize>,
@@ -603,6 +605,8 @@ async fn poll_single_pr(
     since: Option<String>,
     old_ci_status: Option<String>,
     old_review_status: Option<String>,
+    old_mergeable: Option<bool>,
+    old_mergeable_state: Option<String>,
     fetch_comments: bool,
 ) -> PollSinglePrResult {
     let since_ref = since.as_deref();
@@ -633,6 +637,8 @@ async fn poll_single_pr(
                     combined_status: None,
                     reviews: None,
                     has_requested_reviewers: false,
+                    mergeable: old_mergeable,
+                    mergeable_state: old_mergeable_state,
                     is_queued: false,
                     required_check_names: vec![],
                     required_approving_count: None,
@@ -741,6 +747,12 @@ async fn poll_single_pr(
         Err(_) => false,
     };
 
+    let (mergeable, mergeable_state) = mergeability_after_pr_details(
+        &pr_details_result,
+        old_mergeable,
+        old_mergeable_state,
+    );
+
     // Fetch required status check names and required review count from branch protection
     let (required_check_names, required_approving_count) = match &pr_details_result {
         Ok(details) => {
@@ -781,6 +793,8 @@ async fn poll_single_pr(
         combined_status,
         reviews,
         has_requested_reviewers,
+        mergeable,
+        mergeable_state,
         is_queued,
         required_check_names,
         required_approving_count,
@@ -800,7 +814,14 @@ async fn poll_prs_for_project(
         return (0, 0, 0, 0);
     }
 
-    type PrMetadata = (i64, Option<i64>, Option<String>, Option<String>);
+    type PrMetadata = (
+        i64,
+        Option<i64>,
+        Option<String>,
+        Option<String>,
+        Option<bool>,
+        Option<String>,
+    );
     let pr_metadata: Vec<PrMetadata> = {
         let db_lock = db.lock().unwrap();
         open_prs
@@ -809,14 +830,21 @@ async fn poll_prs_for_project(
                 let last_polled = db_lock.get_pr_last_polled(pr.id).ok().flatten();
                 let old_ci = db_lock.get_pr_ci_status(pr.id).ok().flatten();
                 let old_review = db_lock.get_pr_review_status(pr.id).ok().flatten();
-                (pr.id, last_polled, old_ci, old_review)
+                (
+                    pr.id,
+                    last_polled,
+                    old_ci,
+                    old_review,
+                    pr.mergeable,
+                    pr.mergeable_state.clone(),
+                )
             })
             .collect()
     };
 
     let since_map: HashMap<i64, Option<String>> = pr_metadata
         .iter()
-        .map(|(pr_id, last_polled, _, _)| {
+        .map(|(pr_id, last_polled, _, _, _, _)| {
             let since = last_polled.map(|ts| {
                 chrono::DateTime::from_timestamp(ts, 0)
                     .map(|dt| dt.format("%Y-%m-%dT%H:%M:%SZ").to_string())
@@ -828,12 +856,19 @@ async fn poll_prs_for_project(
 
     let old_ci_map: HashMap<i64, Option<String>> = pr_metadata
         .iter()
-        .map(|(pr_id, _, old_ci, _)| (*pr_id, old_ci.clone()))
+        .map(|(pr_id, _, old_ci, _, _, _)| (*pr_id, old_ci.clone()))
         .collect();
 
     let old_review_map: HashMap<i64, Option<String>> = pr_metadata
+        .iter()
+        .map(|(pr_id, _, _, old_review, _, _)| (*pr_id, old_review.clone()))
+        .collect();
+
+    let old_mergeability_map: HashMap<i64, (Option<bool>, Option<String>)> = pr_metadata
         .into_iter()
-        .map(|(pr_id, _, _, old_review)| (pr_id, old_review))
+        .map(|(pr_id, _, _, _, old_mergeable, old_mergeable_state)| {
+            (pr_id, (old_mergeable, old_mergeable_state))
+        })
         .collect();
 
     let changed_pr_numbers: HashSet<i64> = changed_pr_numbers.iter().copied().collect();
@@ -846,8 +881,20 @@ async fn poll_prs_for_project(
             let since = since_map.get(&pr.id).cloned().flatten();
             let old_ci = old_ci_map.get(&pr.id).cloned().flatten();
             let old_review = old_review_map.get(&pr.id).cloned().flatten();
+            let (old_mergeable, old_mergeable_state) =
+                old_mergeability_map.get(&pr.id).cloned().unwrap_or((None, None));
             let fetch_comments = should_fetch_comments_for_pr(pr.id, &changed_pr_numbers);
-            poll_single_pr(client, token, pr, since, old_ci, old_review, fetch_comments)
+            poll_single_pr(
+                client,
+                token,
+                pr,
+                since,
+                old_ci,
+                old_review,
+                old_mergeable,
+                old_mergeable_state,
+                fetch_comments,
+            )
         })
         .collect();
 
@@ -1069,6 +1116,17 @@ async fn poll_prs_for_project(
             );
         }
 
+        if let Err(e) = db_lock.update_pr_mergeability(
+            result.pr_id,
+            result.mergeable,
+            result.mergeable_state.as_deref(),
+        ) {
+            eprintln!(
+                "[GitHub Poller] Failed to update mergeability for PR #{}: {}",
+                result.pr_id, e
+            );
+        }
+
         if let Err(e) = db_lock.set_pr_last_polled(result.pr_id, now) {
             eprintln!(
                 "[GitHub Poller] Failed to set last_polled_at for PR #{}: {}",
@@ -1140,6 +1198,11 @@ async fn poll_review_prs(
                 created_at,
                 updated_at,
             );
+            let _ = db_lock.update_review_pr_mergeability(
+                pr.id,
+                pr.mergeable,
+                pr.mergeable_state.as_deref(),
+            );
         }
 
         if !all_search_ids.is_empty() || prs.is_empty() {
@@ -1177,7 +1240,15 @@ async fn poll_authored_prs(
         .await
         .map_err(|e| format!("Failed to search authored PRs: {}", e))?;
 
-    type EnrichedPrData = (i64, Option<String>, Option<String>, Option<String>, bool);
+    type EnrichedPrData = (
+        i64,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<bool>,
+        Option<String>,
+        bool,
+    );
     let mut enriched: HashMap<i64, EnrichedPrData> = HashMap::with_capacity(prs.len());
 
     for pr in &prs {
@@ -1211,8 +1282,10 @@ async fn poll_authored_prs(
             .ok()
             .map(|reviews| crate::github_client::aggregate_review_status(&reviews, false, None));
 
-        let is_queued = pr_details_result
-            .ok()
+        let pr_details = pr_details_result.ok();
+
+        let is_queued = pr_details
+            .as_ref()
             .and_then(|details| details.extra.get("merge_queue_entry").map(|v| !v.is_null()))
             .unwrap_or(false);
 
@@ -1223,6 +1296,10 @@ async fn poll_authored_prs(
                 ci_status,
                 ci_check_runs,
                 review_status,
+                pr_details.as_ref().and_then(|details| details.mergeable),
+                pr_details
+                    .as_ref()
+                    .and_then(|details| details.mergeable_state.clone()),
                 is_queued,
             ),
         );
@@ -1231,7 +1308,15 @@ async fn poll_authored_prs(
     {
         let db_lock = db.lock().unwrap();
         for pr in &prs {
-            let (created_at, ci_status, ci_check_runs, review_status, is_queued) =
+            let (
+                created_at,
+                ci_status,
+                ci_check_runs,
+                review_status,
+                mergeable,
+                mergeable_state,
+                is_queued,
+            ) =
                 match enriched.get(&pr.id) {
                     Some(data) => data,
                     None => continue,
@@ -1270,6 +1355,11 @@ async fn poll_authored_prs(
                 *created_at,
                 updated_at,
             );
+            let _ = db_lock.update_authored_pr_mergeability(
+                pr.id,
+                *mergeable,
+                mergeable_state.as_deref(),
+            );
         }
 
         if !all_search_ids.is_empty() || prs.is_empty() {
@@ -1287,6 +1377,17 @@ fn parse_github_timestamp(timestamp: &str) -> Option<i64> {
     DateTime::parse_from_rfc3339(timestamp)
         .ok()
         .map(|dt| dt.with_timezone(&Utc).timestamp())
+}
+
+fn mergeability_after_pr_details(
+    pr_details_result: &Result<crate::github_client::PullRequest, crate::github_client::GitHubError>,
+    old_mergeable: Option<bool>,
+    old_mergeable_state: Option<String>,
+) -> (Option<bool>, Option<String>) {
+    match pr_details_result {
+        Ok(details) => (details.mergeable, details.mergeable_state.clone()),
+        Err(_) => (old_mergeable, old_mergeable_state),
+    }
 }
 
 #[cfg(test)]
@@ -1380,6 +1481,48 @@ mod tests {
         let timestamp = "invalid";
         let result = parse_github_timestamp(timestamp);
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_mergeability_after_pr_details_preserves_previous_values_on_error() {
+        let result = mergeability_after_pr_details(
+            &Err(crate::github_client::GitHubError::NetworkError("boom".to_string())),
+            Some(false),
+            Some("dirty".to_string()),
+        );
+
+        assert_eq!(result, (Some(false), Some("dirty".to_string())));
+    }
+
+    #[test]
+    fn test_mergeability_after_pr_details_uses_fetched_unknown_state() {
+        let details = crate::github_client::PullRequest {
+            number: 1,
+            title: "Test PR".to_string(),
+            state: "open".to_string(),
+            html_url: "https://github.com/acme/repo/pull/1".to_string(),
+            user: crate::github_client::GitHubUser {
+                login: "octocat".to_string(),
+                extra: serde_json::json!({}),
+            },
+            head: crate::github_client::GitHubHead {
+                ref_name: "feature/test".to_string(),
+                sha: "abc123".to_string(),
+                extra: serde_json::json!({}),
+            },
+            draft: Some(false),
+            mergeable: None,
+            mergeable_state: Some("unknown".to_string()),
+            extra: serde_json::json!({}),
+        };
+
+        let result = mergeability_after_pr_details(
+            &Ok(details),
+            Some(false),
+            Some("dirty".to_string()),
+        );
+
+        assert_eq!(result, (None, Some("unknown".to_string())));
     }
 
     #[test]

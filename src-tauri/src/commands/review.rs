@@ -132,6 +132,9 @@ pub async fn fetch_review_prs(
                 created_at,
                 updated_at,
             ).map_err(|e| format!("Failed to upsert review PR: {}", e))?;
+            db_lock
+                .update_review_pr_mergeability(pr.id, pr.mergeable, pr.mergeable_state.as_deref())
+                .map_err(|e| format!("Failed to update review PR mergeability: {}", e))?;
         }
 
         if !all_search_ids.is_empty() || prs.is_empty() {
