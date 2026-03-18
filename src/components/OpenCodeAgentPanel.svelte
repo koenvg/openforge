@@ -36,27 +36,23 @@
   let questionText = $derived(session ? parseCheckpointQuestion(session.checkpoint_data) : null)
 
   $effect(() => {
-    if (session?.status === 'running' || session?.status === 'paused') {
-      status = 'running'
-      if (session.status === 'running') {
-        void tryAttachPty()
-      }
-      return
-    }
-
-    if (session?.status === 'completed') {
-      status = 'complete'
-      return
-    }
-
-    if (session?.status === 'failed' || session?.status === 'interrupted') {
-      status = 'error'
-      return
-    }
-
     if (!session) {
       status = 'idle'
+      return
     }
+
+    // Map session status to local UI status
+    if (session.status === 'running' || session.status === 'paused') {
+      status = 'running'
+    } else if (session.status === 'completed') {
+      status = 'complete'
+    } else if (session.status === 'failed' || session.status === 'interrupted') {
+      status = 'error'
+    }
+
+    // Attach TTY for any existing session — show terminal output
+    // unless the task never started
+    void tryAttachPty()
   })
 
   $effect(() => {
@@ -80,7 +76,6 @@
 
     const currentSession = $activeSessions.get(taskId)
     if (!currentSession) return
-    if (currentSession.status !== 'running' && currentSession.status !== 'paused' && currentSession.status !== 'completed') return
     if (!currentSession.opencode_session_id) return
 
     // Get port from session history or worktree

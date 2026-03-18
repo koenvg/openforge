@@ -37,7 +37,7 @@
       ptyActive = true
     } else if (session?.status === 'completed') {
       status = 'complete'
-    } else if (session?.status === 'failed') {
+    } else if (session?.status === 'failed' || session?.status === 'interrupted') {
       status = 'error'
     }
 

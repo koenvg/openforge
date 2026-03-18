@@ -159,6 +159,26 @@ describe('ClaudeAgentPanel', () => {
     expect(screen.getByText('FAILED')).toBeTruthy()
   })
 
+  it('shows interrupted badge when session is interrupted', () => {
+    const sessions = new Map<string, AgentSession>()
+    sessions.set('T-1', { ...baseSession, status: 'interrupted' })
+    activeSessions.set(sessions)
+
+    render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
+    expect(screen.getByText('INTERRUPTED')).toBeTruthy()
+  })
+
+  it('shows error status text when session is interrupted', async () => {
+    const sessions = new Map<string, AgentSession>()
+    sessions.set('T-1', { ...baseSession, status: 'interrupted' })
+    activeSessions.set(sessions)
+
+    render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
+    await vi.waitFor(() => {
+      expect(screen.getByText('Error occurred')).toBeTruthy()
+    })
+  })
+
   it('shows claude session id when available', () => {
     const sessions = new Map<string, AgentSession>()
     sessions.set('T-1', baseSession)

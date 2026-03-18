@@ -339,6 +339,58 @@ describe('OpenCodeAgentPanel (via router)', () => {
     })
   })
 
+  it('attaches a PTY for interrupted sessions when mounted', async () => {
+    mockSessionHistoryPort.value = 4173
+
+    const session: AgentSession = {
+      id: 'ses-1',
+      ticket_id: 'T-1',
+      opencode_session_id: 'oc-sess-1',
+      stage: 'implement',
+      status: 'interrupted',
+      checkpoint_data: null,
+      error_message: 'App restarted',
+      created_at: 1000,
+      updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
+    }
+
+    activeSessions.set(new Map([['T-1', session]]))
+
+    render(AgentPanel, { props: { taskId: 'T-1' } })
+
+    await vi.waitFor(() => {
+      expect(spawnPty).toHaveBeenCalledWith('T-1', 4173, 'oc-sess-1', 80, 24)
+    })
+  })
+
+  it('attaches a PTY for failed sessions when mounted', async () => {
+    mockSessionHistoryPort.value = 4173
+
+    const session: AgentSession = {
+      id: 'ses-1',
+      ticket_id: 'T-1',
+      opencode_session_id: 'oc-sess-1',
+      stage: 'implement',
+      status: 'failed',
+      checkpoint_data: null,
+      error_message: 'Agent crashed',
+      created_at: 1000,
+      updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
+    }
+
+    activeSessions.set(new Map([['T-1', session]]))
+
+    render(AgentPanel, { props: { taskId: 'T-1' } })
+
+    await vi.waitFor(() => {
+      expect(spawnPty).toHaveBeenCalledWith('T-1', 4173, 'oc-sess-1', 80, 24)
+    })
+  })
+
   it('does not reattach a PTY when action-complete fires', async () => {
     mockSessionHistoryPort.value = 4173
 
