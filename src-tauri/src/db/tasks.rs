@@ -242,7 +242,7 @@ impl super::Database {
             .map(|(i, _)| format!("?{}", i + 1))
             .collect();
         let pr_sql = format!(
-            "SELECT id, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, merged_at, created_at, updated_at, draft, is_queued,
+            "SELECT id, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, mergeable, mergeable_state, merged_at, created_at, updated_at, draft, is_queued,
                     (SELECT COUNT(*) FROM pr_comments WHERE pr_id = pull_requests.id AND addressed = 0) as unaddressed_comment_count
              FROM pull_requests
              WHERE ticket_id IN ({})
@@ -272,12 +272,14 @@ impl super::Database {
                     ci_status: row.get(8)?,
                     ci_check_runs: row.get(9)?,
                     review_status: row.get(10)?,
-                    merged_at: row.get(11)?,
-                    created_at: row.get(12)?,
-                    updated_at: row.get(13)?,
-                    draft: row.get(14)?,
-                    is_queued: row.get(15)?,
-                    unaddressed_comment_count: row.get(16)?,
+                    mergeable: row.get(11)?,
+                    mergeable_state: row.get(12)?,
+                    merged_at: row.get(13)?,
+                    created_at: row.get(14)?,
+                    updated_at: row.get(15)?,
+                    draft: row.get(16)?,
+                    is_queued: row.get(17)?,
+                    unaddressed_comment_count: row.get(18)?,
                 })
             })
             .map_err(|e| format!("Failed to execute work queue PRs query: {e}"))?;

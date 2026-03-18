@@ -384,6 +384,8 @@ impl GitHubClient {
                             .get("changed_files")
                             .and_then(|c| c.as_i64())
                             .unwrap_or(0),
+                        mergeable: pr_details.mergeable,
+                        mergeable_state: pr_details.mergeable_state,
                         created_at: item.created_at,
                         updated_at: item.updated_at,
                     });
@@ -501,6 +503,8 @@ impl GitHubClient {
                             .get("changed_files")
                             .and_then(|c| c.as_i64())
                             .unwrap_or(0),
+                        mergeable: pr_details.mergeable,
+                        mergeable_state: pr_details.mergeable_state,
                         created_at: item.created_at,
                         updated_at: item.updated_at,
                     });
