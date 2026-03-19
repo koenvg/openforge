@@ -39,6 +39,10 @@ pub struct PullRequest {
     pub user: GitHubUser,
     pub head: GitHubHead,
     pub draft: Option<bool>,
+    #[serde(default)]
+    pub mergeable: Option<bool>,
+    #[serde(default)]
+    pub mergeable_state: Option<String>,
     #[serde(flatten)]
     pub extra: serde_json::Value,
 }
@@ -63,6 +67,8 @@ pub struct SearchPrResult {
     pub additions: i64,
     pub deletions: i64,
     pub changed_files: i64,
+    pub mergeable: Option<bool>,
+    pub mergeable_state: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -368,6 +374,8 @@ mod tests {
         assert_eq!(pr.state, "open");
         assert_eq!(pr.user.login, "testuser");
         assert_eq!(pr.head.ref_name, "feature/PROJ-123-fix-bug");
+        assert_eq!(pr.mergeable, None);
+        assert_eq!(pr.mergeable_state, None);
     }
 
     #[test]

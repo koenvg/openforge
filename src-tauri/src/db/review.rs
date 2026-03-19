@@ -21,6 +21,8 @@ pub struct ReviewPrRow {
     pub additions: i64,
     pub deletions: i64,
     pub changed_files: i64,
+    pub mergeable: Option<bool>,
+    pub mergeable_state: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
     pub viewed_at: Option<i64>,
@@ -68,14 +70,14 @@ impl super::Database {
                  repo_name = excluded.repo_name,
                  head_ref = excluded.head_ref,
                  base_ref = excluded.base_ref,
-                 head_sha = excluded.head_sha,
-                 additions = excluded.additions,
-                 deletions = excluded.deletions,
-                 changed_files = excluded.changed_files,
-                 created_at = excluded.created_at,
-                 updated_at = excluded.updated_at,
-                 viewed_at = CASE WHEN review_prs.viewed_head_sha IS NOT NULL AND review_prs.viewed_head_sha != excluded.head_sha THEN NULL ELSE review_prs.viewed_at END,
-                 viewed_head_sha = CASE WHEN review_prs.viewed_head_sha IS NOT NULL AND review_prs.viewed_head_sha != excluded.head_sha THEN NULL ELSE review_prs.viewed_head_sha END",
+                  head_sha = excluded.head_sha,
+                  additions = excluded.additions,
+                  deletions = excluded.deletions,
+                  changed_files = excluded.changed_files,
+                  created_at = excluded.created_at,
+                  updated_at = excluded.updated_at,
+                  viewed_at = CASE WHEN review_prs.viewed_head_sha IS NOT NULL AND review_prs.viewed_head_sha != excluded.head_sha THEN NULL ELSE review_prs.viewed_at END,
+                  viewed_head_sha = CASE WHEN review_prs.viewed_head_sha IS NOT NULL AND review_prs.viewed_head_sha != excluded.head_sha THEN NULL ELSE review_prs.viewed_head_sha END",
             rusqlite::params![
                 id, number, title, body, state, draft as i32, html_url, user_login, user_avatar_url,
                 repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions, changed_files,
@@ -85,12 +87,26 @@ impl super::Database {
         Ok(())
     }
 
+    pub fn update_review_pr_mergeability(
+        &self,
+        id: i64,
+        mergeable: Option<bool>,
+        mergeable_state: Option<&str>,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE review_prs SET mergeable = ?1, mergeable_state = ?2 WHERE id = ?3",
+            rusqlite::params![mergeable, mergeable_state, id],
+        )?;
+        Ok(())
+    }
+
     pub fn get_all_review_prs(&self) -> Result<Vec<ReviewPrRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT id, number, title, body, state, draft, html_url, user_login, user_avatar_url,
                     repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions,
-                    changed_files, created_at, updated_at, viewed_at, viewed_head_sha
+                    changed_files, mergeable, mergeable_state, created_at, updated_at, viewed_at, viewed_head_sha
              FROM review_prs
              ORDER BY CASE WHEN viewed_at IS NULL THEN 0 ELSE 1 END, updated_at DESC",
         )?;
@@ -113,10 +129,12 @@ impl super::Database {
                 additions: row.get(14)?,
                 deletions: row.get(15)?,
                 changed_files: row.get(16)?,
-                created_at: row.get(17)?,
-                updated_at: row.get(18)?,
-                viewed_at: row.get(19)?,
-                viewed_head_sha: row.get(20)?,
+                mergeable: row.get(17)?,
+                mergeable_state: row.get(18)?,
+                created_at: row.get(19)?,
+                updated_at: row.get(20)?,
+                viewed_at: row.get(21)?,
+                viewed_head_sha: row.get(22)?,
             })
         })?;
         let mut result = Vec::new();

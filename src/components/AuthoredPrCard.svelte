@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { AuthoredPullRequest } from '../lib/types'
+  import { hasMergeConflicts } from '../lib/types'
   import Card from './Card.svelte'
   import { timeAgoFromSeconds } from '../lib/timeAgo'
 
@@ -10,6 +11,8 @@
   }
 
   let { pr, selected = false, onClick }: Props = $props()
+
+  let hasConflict = $derived(hasMergeConflicts(pr))
 </script>
 
 <Card
@@ -58,6 +61,10 @@
 
     {#if pr.is_queued && pr.state === 'open'}
       <span class="inline-flex items-center px-1.5 py-0.5 font-semibold text-info bg-info/15 rounded">Queued</span>
+    {/if}
+
+    {#if hasConflict}
+      <span class="inline-flex items-center px-1.5 py-0.5 font-semibold text-error bg-error/15 rounded">Merge Conflict</span>
     {/if}
 
     <span class="flex-1"></span>

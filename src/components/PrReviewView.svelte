@@ -17,6 +17,7 @@
   import ReviewSubmitPanel from './ReviewSubmitPanel.svelte'
   import PrOverviewTab from './PrOverviewTab.svelte'
   import AgentReviewOutputModal from './AgentReviewOutputModal.svelte'
+  import { hasMergeConflicts } from '../lib/types'
   import type { ReviewPullRequest, AuthoredPullRequest, PrFileDiff } from '../lib/types'
   import type { FileContents } from '../lib/diffAdapter'
 
@@ -189,7 +190,9 @@
   }
 
   function updateAuthoredCount() {
-    $authoredPrCount = filteredAuthoredPrs.filter(p => p.ci_status === 'failure' || p.review_status === 'changes_requested').length
+    $authoredPrCount = filteredAuthoredPrs.filter(
+      (p) => p.ci_status === 'failure' || p.review_status === 'changes_requested' || hasMergeConflicts(p),
+    ).length
   }
 
   // Update authored PR count whenever filtered authored PRs change
@@ -422,7 +425,9 @@
   })
 
   onDestroy(() => {
-    unlisteners.forEach(fn => fn())
+    unlisteners.forEach((fn) => {
+      fn()
+    })
   })
 </script>
 

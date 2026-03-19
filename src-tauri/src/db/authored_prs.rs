@@ -23,6 +23,8 @@ pub struct AuthoredPrRow {
     pub ci_status: Option<String>,
     pub ci_check_runs: Option<String>,
     pub review_status: Option<String>,
+    pub mergeable: Option<bool>,
+    pub mergeable_state: Option<String>,
     pub merged_at: Option<i64>,
     pub is_queued: bool,
     pub task_id: Option<String>,
@@ -81,12 +83,12 @@ impl super::Database {
                  additions = excluded.additions,
                  deletions = excluded.deletions,
                  changed_files = excluded.changed_files,
-                 ci_status = excluded.ci_status,
-                  ci_check_runs = excluded.ci_check_runs,
-                  review_status = excluded.review_status,
-                  merged_at = excluded.merged_at,
-                  is_queued = excluded.is_queued,
-                  task_id = excluded.task_id,
+                  ci_status = excluded.ci_status,
+                   ci_check_runs = excluded.ci_check_runs,
+                   review_status = excluded.review_status,
+                   merged_at = excluded.merged_at,
+                   is_queued = excluded.is_queued,
+                   task_id = excluded.task_id,
                   created_at = excluded.created_at,
                   updated_at = excluded.updated_at",
             rusqlite::params![
@@ -120,12 +122,26 @@ impl super::Database {
         Ok(())
     }
 
+    pub fn update_authored_pr_mergeability(
+        &self,
+        id: i64,
+        mergeable: Option<bool>,
+        mergeable_state: Option<&str>,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE authored_prs SET mergeable = ?1, mergeable_state = ?2 WHERE id = ?3",
+            rusqlite::params![mergeable, mergeable_state, id],
+        )?;
+        Ok(())
+    }
+
     pub fn get_all_authored_prs(&self) -> Result<Vec<AuthoredPrRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT id, number, title, body, state, draft, html_url, user_login, user_avatar_url,
                     repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions,
-                    changed_files, ci_status, ci_check_runs, review_status, merged_at, is_queued,
+                    changed_files, ci_status, ci_check_runs, review_status, mergeable, mergeable_state, merged_at, is_queued,
                     task_id, created_at, updated_at
              FROM authored_prs
              ORDER BY updated_at DESC",
@@ -152,11 +168,13 @@ impl super::Database {
                 ci_status: row.get(17)?,
                 ci_check_runs: row.get(18)?,
                 review_status: row.get(19)?,
-                merged_at: row.get(20)?,
-                is_queued: row.get::<_, i32>(21)? != 0,
-                task_id: row.get(22)?,
-                created_at: row.get(23)?,
-                updated_at: row.get(24)?,
+                mergeable: row.get(20)?,
+                mergeable_state: row.get(21)?,
+                merged_at: row.get(22)?,
+                is_queued: row.get::<_, i32>(23)? != 0,
+                task_id: row.get(24)?,
+                created_at: row.get(25)?,
+                updated_at: row.get(26)?,
             })
         })?;
         let mut result = Vec::new();

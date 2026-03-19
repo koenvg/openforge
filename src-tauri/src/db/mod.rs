@@ -58,6 +58,7 @@ impl Database {
         // Safety net: ensure critical columns exist even if user_version is past V6
         // (handles edge cases where schema and version get out of sync)
         ensure_tasks_columns(&conn)?;
+        ensure_mergeability_columns(&conn)?;
 
         // Enable foreign keys AFTER migrations (pragma is a no-op inside transactions)
         conn.execute("PRAGMA foreign_keys = ON", [])?;
@@ -119,6 +120,69 @@ fn ensure_tasks_columns(conn: &Connection) -> Result<()> {
             }
         }
     }
+    Ok(())
+}
+
+fn ensure_mergeability_columns(conn: &Connection) -> Result<()> {
+    for (table, column, sql) in [
+        (
+            "pull_requests",
+            "mergeable",
+            "ALTER TABLE pull_requests ADD COLUMN mergeable INTEGER",
+        ),
+        (
+            "pull_requests",
+            "mergeable_state",
+            "ALTER TABLE pull_requests ADD COLUMN mergeable_state TEXT",
+        ),
+        (
+            "review_prs",
+            "mergeable",
+            "ALTER TABLE review_prs ADD COLUMN mergeable INTEGER",
+        ),
+        (
+            "review_prs",
+            "mergeable_state",
+            "ALTER TABLE review_prs ADD COLUMN mergeable_state TEXT",
+        ),
+        (
+            "authored_prs",
+            "mergeable",
+            "ALTER TABLE authored_prs ADD COLUMN mergeable INTEGER",
+        ),
+        (
+            "authored_prs",
+            "mergeable_state",
+            "ALTER TABLE authored_prs ADD COLUMN mergeable_state TEXT",
+        ),
+    ] {
+        let has_table: bool = conn.query_row(
+            &format!(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='{}'",
+                table
+            ),
+            [],
+            |r| r.get(0),
+        )?;
+
+        if !has_table {
+            continue;
+        }
+
+        let exists: bool = conn.query_row(
+            &format!(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('{}') WHERE name = '{}'",
+                table, column
+            ),
+            [],
+            |r| r.get(0),
+        )?;
+
+        if !exists {
+            conn.execute(sql, [])?;
+        }
+    }
+
     Ok(())
 }
 
@@ -204,6 +268,8 @@ CREATE TABLE IF NOT EXISTS pull_requests (
     ci_check_runs TEXT,
     last_polled_at INTEGER DEFAULT 0,
     review_status TEXT,
+    mergeable INTEGER,
+    mergeable_state TEXT,
     merged_at INTEGER,
     FOREIGN KEY (ticket_id) REFERENCES tasks(id)
 );
@@ -273,6 +339,8 @@ CREATE TABLE IF NOT EXISTS review_prs (
     additions INTEGER NOT NULL DEFAULT 0,
     deletions INTEGER NOT NULL DEFAULT 0,
     changed_files INTEGER NOT NULL DEFAULT 0,
+    mergeable INTEGER,
+    mergeable_state TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     viewed_at INTEGER,
@@ -635,6 +703,8 @@ CREATE TABLE IF NOT EXISTS authored_prs (
     ci_status TEXT,
     ci_check_runs TEXT,
     review_status TEXT,
+    mergeable INTEGER,
+    mergeable_state TEXT,
     merged_at INTEGER,
     task_id TEXT,
     created_at INTEGER NOT NULL,
@@ -707,6 +777,73 @@ CREATE TABLE IF NOT EXISTS shepherd_messages (
 CREATE INDEX IF NOT EXISTS idx_shepherd_messages_project_created ON shepherd_messages(project_id, created_at DESC);
             "#,
         ),
+        M::up_with_hook("SELECT 1;", |tx| {
+            for (table, column, sql) in [
+                (
+                    "pull_requests",
+                    "mergeable",
+                    "ALTER TABLE pull_requests ADD COLUMN mergeable INTEGER",
+                ),
+                (
+                    "pull_requests",
+                    "mergeable_state",
+                    "ALTER TABLE pull_requests ADD COLUMN mergeable_state TEXT",
+                ),
+                (
+                    "review_prs",
+                    "mergeable",
+                    "ALTER TABLE review_prs ADD COLUMN mergeable INTEGER",
+                ),
+                (
+                    "review_prs",
+                    "mergeable_state",
+                    "ALTER TABLE review_prs ADD COLUMN mergeable_state TEXT",
+                ),
+                (
+                    "authored_prs",
+                    "mergeable",
+                    "ALTER TABLE authored_prs ADD COLUMN mergeable INTEGER",
+                ),
+                (
+                    "authored_prs",
+                    "mergeable_state",
+                    "ALTER TABLE authored_prs ADD COLUMN mergeable_state TEXT",
+                ),
+            ] {
+                let has_table: bool = tx
+                    .query_row(
+                        &format!(
+                            "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='{}'",
+                            table
+                        ),
+                        [],
+                        |r| r.get(0),
+                    )
+                    .unwrap_or(false);
+
+                if !has_table {
+                    continue;
+                }
+
+                let exists: bool = tx
+                    .query_row(
+                        &format!(
+                            "SELECT COUNT(*) > 0 FROM pragma_table_info('{}') WHERE name = '{}'",
+                            table, column
+                        ),
+                        [],
+                        |r| r.get(0),
+                    )
+                    .unwrap_or(false);
+
+                if !exists {
+                    tx.execute(sql, [])
+                        .map_err(rusqlite_migration::HookError::RusqliteError)?;
+                }
+            }
+
+            Ok(())
+        }),
     ])
 }
 #[cfg(test)]
@@ -1000,8 +1137,8 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(
-            uv, 16,
-            "Fresh DB should have user_version=16 after migrations, got {}",
+            uv, 17,
+            "Fresh DB should have user_version=17 after migrations, got {}",
             uv
         );
 
@@ -1178,10 +1315,88 @@ mod tests {
             "V14 migration should add is_queued to authored_prs on the upgrade path"
         );
 
+        let has_pull_request_mergeable: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('pull_requests') WHERE name = 'mergeable'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("query pull_requests mergeable column");
+        assert!(
+            has_pull_request_mergeable,
+            "latest migration should add mergeable to pull_requests on the upgrade path"
+        );
+        let has_pull_request_mergeable_state: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('pull_requests') WHERE name = 'mergeable_state'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("query pull_requests mergeable_state column");
+        assert!(
+            has_pull_request_mergeable_state,
+            "latest migration should add mergeable_state to pull_requests on the upgrade path"
+        );
+
+        let has_review_prs: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='review_prs'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("query sqlite_master for review_prs");
+        if has_review_prs {
+            let has_review_pr_mergeable: bool = conn
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM pragma_table_info('review_prs') WHERE name = 'mergeable'",
+                    [],
+                    |r| r.get(0),
+                )
+                .expect("query review_prs mergeable column");
+            assert!(
+                has_review_pr_mergeable,
+                "latest migration should add mergeable to review_prs on the upgrade path"
+            );
+            let has_review_pr_mergeable_state: bool = conn
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM pragma_table_info('review_prs') WHERE name = 'mergeable_state'",
+                    [],
+                    |r| r.get(0),
+                )
+                .expect("query review_prs mergeable_state column");
+            assert!(
+                has_review_pr_mergeable_state,
+                "latest migration should add mergeable_state to review_prs on the upgrade path"
+            );
+        }
+
+        let has_authored_pr_mergeable: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('authored_prs') WHERE name = 'mergeable'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("query authored_prs mergeable column");
+        assert!(
+            has_authored_pr_mergeable,
+            "latest migration should add mergeable to authored_prs on the upgrade path"
+        );
+        let has_authored_pr_mergeable_state: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('authored_prs') WHERE name = 'mergeable_state'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("query authored_prs mergeable_state column");
+        assert!(
+            has_authored_pr_mergeable_state,
+            "latest migration should add mergeable_state to authored_prs on the upgrade path"
+        );
+
         let uv: i32 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .expect("read repaired user_version");
-        assert_eq!(uv, 16, "V13 database should upgrade to schema version 16");
+        assert_eq!(uv, 17, "V13 database should upgrade to schema version 17");
 
         drop(conn);
         drop(db);

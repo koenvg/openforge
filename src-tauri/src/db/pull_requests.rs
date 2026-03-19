@@ -16,6 +16,8 @@ pub struct PrRow {
     pub ci_status: Option<String>,
     pub ci_check_runs: Option<String>,
     pub review_status: Option<String>,
+    pub mergeable: Option<bool>,
+    pub mergeable_state: Option<String>,
     pub merged_at: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
@@ -43,7 +45,7 @@ impl super::Database {
     pub fn get_open_prs(&self) -> Result<Vec<PrRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, merged_at, created_at, updated_at, draft, is_queued,
+            "SELECT id, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, mergeable, mergeable_state, merged_at, created_at, updated_at, draft, is_queued,
                     (SELECT COUNT(*) FROM pr_comments WHERE pr_id = pull_requests.id AND addressed = 0) as unaddressed_comment_count
              FROM pull_requests
              WHERE state = 'open'
@@ -63,12 +65,14 @@ impl super::Database {
                 ci_status: row.get(8)?,
                 ci_check_runs: row.get(9)?,
                 review_status: row.get(10)?,
-                merged_at: row.get(11)?,
-                created_at: row.get(12)?,
-                updated_at: row.get(13)?,
-                draft: row.get(14)?,
-                is_queued: row.get(15)?,
-                unaddressed_comment_count: row.get(16)?,
+                mergeable: row.get(11)?,
+                mergeable_state: row.get(12)?,
+                merged_at: row.get(13)?,
+                created_at: row.get(14)?,
+                updated_at: row.get(15)?,
+                draft: row.get(16)?,
+                is_queued: row.get(17)?,
+                unaddressed_comment_count: row.get(18)?,
             })
         })?;
 
@@ -82,7 +86,7 @@ impl super::Database {
     pub fn get_all_pull_requests(&self) -> Result<Vec<PrRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, merged_at, created_at, updated_at, draft, is_queued,
+            "SELECT id, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, mergeable, mergeable_state, merged_at, created_at, updated_at, draft, is_queued,
                     (SELECT COUNT(*) FROM pr_comments WHERE pr_id = pull_requests.id AND addressed = 0) as unaddressed_comment_count
              FROM pull_requests
              ORDER BY updated_at DESC",
@@ -101,12 +105,14 @@ impl super::Database {
                 ci_status: row.get(8)?,
                 ci_check_runs: row.get(9)?,
                 review_status: row.get(10)?,
-                merged_at: row.get(11)?,
-                created_at: row.get(12)?,
-                updated_at: row.get(13)?,
-                draft: row.get(14)?,
-                is_queued: row.get(15)?,
-                unaddressed_comment_count: row.get(16)?,
+                mergeable: row.get(11)?,
+                mergeable_state: row.get(12)?,
+                merged_at: row.get(13)?,
+                created_at: row.get(14)?,
+                updated_at: row.get(15)?,
+                draft: row.get(16)?,
+                is_queued: row.get(17)?,
+                unaddressed_comment_count: row.get(18)?,
             })
         })?;
 
@@ -250,6 +256,20 @@ impl super::Database {
         } else {
             Ok(None)
         }
+    }
+
+    pub fn update_pr_mergeability(
+        &self,
+        pr_id: i64,
+        mergeable: Option<bool>,
+        mergeable_state: Option<&str>,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE pull_requests SET mergeable = ?1, mergeable_state = ?2 WHERE id = ?3",
+            rusqlite::params![mergeable, mergeable_state, pr_id],
+        )?;
+        Ok(())
     }
 
     pub fn get_task_id_for_pr(&self, pr_id: i64) -> Result<Option<String>> {
@@ -808,6 +828,34 @@ mod tests {
         db.update_pr_is_queued(1, false).unwrap();
         let prs = db.get_open_prs().unwrap();
         assert!(!prs[0].is_queued);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_update_pr_mergeability() {
+        let (db, path) = make_test_db("update_pr_mergeability");
+        insert_test_task(&db);
+        let _ = db.insert_pull_request(
+            1,
+            "T-100",
+            "owner",
+            "repo",
+            "Test PR",
+            "https://url",
+            "open",
+            1000,
+            1000,
+            false,
+        );
+
+        db.update_pr_mergeability(1, Some(false), Some("dirty"))
+            .unwrap();
+
+        let prs = db.get_open_prs().unwrap();
+        assert_eq!(prs.len(), 1);
+        assert_eq!(prs[0].mergeable, Some(false));
+        assert_eq!(prs[0].mergeable_state.as_deref(), Some("dirty"));
+
         let _ = std::fs::remove_file(&path);
     }
 

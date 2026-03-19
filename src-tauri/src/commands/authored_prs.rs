@@ -119,6 +119,8 @@ async fn fetch_event_signal_prs(
                         .get("changed_files")
                         .and_then(|c| c.as_i64())
                         .unwrap_or(0),
+                    mergeable: pr_details.mergeable,
+                    mergeable_state: pr_details.mergeable_state,
                     created_at: pr_details
                         .extra
                         .get("created_at")
@@ -337,6 +339,9 @@ pub async fn fetch_authored_prs(
                     updated_at,
                 )
                 .map_err(|e| format!("Failed to upsert authored PR: {}", e))?;
+            db_lock
+                .update_authored_pr_mergeability(pr.id, pr.mergeable, pr.mergeable_state.as_deref())
+                .map_err(|e| format!("Failed to update authored PR mergeability: {}", e))?;
         }
 
         if can_delete_stale && (!all_search_ids.is_empty() || prs.is_empty()) {

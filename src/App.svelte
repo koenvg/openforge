@@ -6,6 +6,7 @@
   import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, listOpenCodeAgents, getReviewPrs, getAuthoredPrs, notifyShepherdEvent, getShepherdEnabled, getActionItemCount } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import SearchableSelect from './components/SearchableSelect.svelte'
+  import { hasMergeConflicts } from './lib/types'
   import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView, PermissionMode, AgentSession } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
   import TaskDetailView from './components/TaskDetailView.svelte'
@@ -272,7 +273,9 @@
 
       const authoredPrList = await getAuthoredPrs()
       const filteredAuthored = authoredPrList.filter(p => !isExcluded(p.repo_owner, p.repo_name))
-      $authoredPrCount = filteredAuthored.filter(p => p.ci_status === 'failure' || p.review_status === 'changes_requested').length
+      $authoredPrCount = filteredAuthored.filter(
+        (p) => p.ci_status === 'failure' || p.review_status === 'changes_requested' || hasMergeConflicts(p),
+      ).length
     } catch (e) {
       console.error('Failed to refresh PR counts:', e)
     }
@@ -870,6 +873,12 @@
 
     unlisteners.push(
       await listen<number>('review-pr-count-changed', () => {
+        refreshPrCounts()
+      })
+    )
+
+    unlisteners.push(
+      await listen('authored-prs-updated', () => {
         refreshPrCounts()
       })
     )

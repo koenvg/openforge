@@ -319,6 +319,8 @@ describe('SelfReviewView — hide addressed comments', () => {
     ci_status: null,
     ci_check_runs: null,
     review_status: null,
+    mergeable: null,
+    mergeable_state: null,
     merged_at: null,
     created_at: 1000,
     updated_at: 2000,
