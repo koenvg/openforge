@@ -49,6 +49,7 @@ vi.mock('../lib/ipc', () => ({
 import PrReviewView from './PrReviewView.svelte'
 import { reviewPrs, selectedReviewPr, prFileDiffs, reviewComments, pendingManualComments, reviewRequestCount, agentReviewComments, agentReviewLoading, agentReviewError, authoredPrs, authoredPrCount, activeProjectId } from '../lib/stores'
 import { getReviewPrs, fetchReviewPrs, getAuthoredPrs, getPrFileDiffs, getReviewComments, markReviewPrViewed, getProjectConfig, setProjectConfig } from '../lib/ipc'
+import { listen } from '@tauri-apps/api/event'
 
 const basePr: ReviewPullRequest = {
   id: 12345,
@@ -713,6 +714,105 @@ describe('PrReviewView', () => {
         // Only 1 unviewed PR should be counted (repo2 is excluded)
         expect(get(reviewRequestCount)).toBe(1)
       })
+    })
+  })
+
+  describe('background sync events', () => {
+    function getListenCallback(eventName: string): ((event?: unknown) => void) | undefined {
+      const calls = vi.mocked(listen).mock.calls
+      const match = calls.find(([name]) => name === eventName)
+      return match ? (match[1] as (event?: unknown) => void) : undefined
+    }
+
+    it('review-pr-count-changed updates store without showing loading state', async () => {
+      const updatedPr = { ...basePr, title: 'Updated PR title' }
+      vi.mocked(getReviewPrs).mockResolvedValue([basePr])
+      vi.mocked(getAuthoredPrs).mockResolvedValue([])
+
+      render(PrReviewView)
+
+      // Wait for initial load to complete
+      await waitFor(() => {
+        reviewPrs.set([basePr])
+        expect(screen.getByText('Fix authentication middleware')).toBeTruthy()
+      })
+      vi.mocked(getReviewPrs).mockClear()
+
+      // Simulate background sync returning updated data
+      vi.mocked(getReviewPrs).mockResolvedValue([updatedPr])
+
+      const callback = getListenCallback('review-pr-count-changed')
+      expect(callback).toBeDefined()
+      callback!()
+
+      // Store should update without the loading spinner ever appearing
+      await waitFor(() => {
+        expect(vi.mocked(getReviewPrs)).toHaveBeenCalled()
+      })
+
+      // Loading spinner should NOT have appeared (no "Loading PRs..." text)
+      expect(screen.queryByText('Loading PRs...')).toBeNull()
+    })
+
+    it('authored-prs-updated updates store without showing loading state', async () => {
+      vi.mocked(getReviewPrs).mockResolvedValue([])
+      vi.mocked(getAuthoredPrs).mockResolvedValue([])
+
+      render(PrReviewView)
+
+      // Wait for initial load
+      await waitFor(() => {
+        expect(screen.getByText('Review Requests')).toBeTruthy()
+      })
+      vi.mocked(getAuthoredPrs).mockClear()
+
+      // Simulate background sync
+      vi.mocked(getAuthoredPrs).mockResolvedValue([])
+
+      const callback = getListenCallback('authored-prs-updated')
+      expect(callback).toBeDefined()
+      callback!()
+
+      await waitFor(() => {
+        expect(vi.mocked(getAuthoredPrs)).toHaveBeenCalled()
+      })
+
+      // Loading spinner should NOT have appeared
+      expect(screen.queryByText('Loading PRs...')).toBeNull()
+    })
+
+    it('review-pr-count-changed does not disrupt detail view', async () => {
+      vi.mocked(getReviewPrs).mockResolvedValue([basePr])
+      vi.mocked(getAuthoredPrs).mockResolvedValue([])
+      vi.mocked(getPrFileDiffs).mockResolvedValue([])
+      vi.mocked(getReviewComments).mockResolvedValue([])
+
+      render(PrReviewView)
+
+      // Select a PR to enter detail view
+      reviewPrs.set([basePr])
+      selectedReviewPr.set(basePr)
+
+      await waitFor(() => {
+        expect(screen.getByText('← Back')).toBeTruthy()
+      })
+      vi.mocked(getReviewPrs).mockClear()
+
+      // Simulate background sync while in detail view
+      vi.mocked(getReviewPrs).mockResolvedValue([basePr])
+
+      const callback = getListenCallback('review-pr-count-changed')
+      expect(callback).toBeDefined()
+      callback!()
+
+      await waitFor(() => {
+        expect(vi.mocked(getReviewPrs)).toHaveBeenCalled()
+      })
+
+      // Detail view should still be shown, NOT disrupted by loading state
+      expect(screen.getByText('← Back')).toBeTruthy()
+      expect(screen.getByText('Fix authentication middleware')).toBeTruthy()
+      expect(screen.queryByText('Loading diffs...')).toBeNull()
     })
   })
 

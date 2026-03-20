@@ -233,6 +233,16 @@
     }
   }
 
+  /** Silently update PR store from DB without showing loading state. Used by background sync events. */
+  async function silentRefreshPrs() {
+    try {
+      const prs = await getReviewPrs()
+      $reviewPrs = prs
+    } catch (e) {
+      console.error('Failed to silently refresh PRs:', e)
+    }
+  }
+
   async function loadAuthoredPrs() {
     isLoadingAuthored = true
     authoredError = null
@@ -260,6 +270,16 @@
       authoredError = 'Failed to refresh pull requests. Please try again.'
     } finally {
       isLoadingAuthored = false
+    }
+  }
+
+  /** Silently update authored PR store from DB without showing loading state. Used by background sync events. */
+  async function silentRefreshAuthoredPrs() {
+    try {
+      const prs = await getAuthoredPrs()
+      $authoredPrs = prs
+    } catch (e) {
+      console.error('Failed to silently refresh authored PRs:', e)
     }
   }
 
@@ -377,12 +397,12 @@
     loadAuthoredPrs()
     unlisteners.push(
       await listen('authored-prs-updated', () => {
-        loadAuthoredPrs()
+        silentRefreshAuthoredPrs()
       })
     )
     unlisteners.push(
       await listen('review-pr-count-changed', () => {
-        loadPrs()
+        silentRefreshPrs()
       })
     )
     unlisteners.push(
