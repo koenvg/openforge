@@ -1,7 +1,33 @@
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { WebLinksAddon } from '@xterm/addon-web-links'
+import { WebglAddon } from '@xterm/addon-webgl'
+import { openUrl } from './ipc'
 import { themeMode, getTerminalTheme } from './theme'
 import { get } from 'svelte/store'
+
+function loadWebLinksAddon(terminal: Terminal): void {
+  const webLinksAddon = new WebLinksAddon((event, uri) => {
+    event.preventDefault()
+    openUrl(uri).catch(error => {
+      console.error('[useTerminal] Failed to open terminal link:', error)
+    })
+  })
+
+  terminal.loadAddon(webLinksAddon)
+}
+
+function loadWebglAddon(terminal: Terminal): void {
+  try {
+    const webglAddon = new WebglAddon()
+    webglAddon.onContextLoss(() => {
+      webglAddon.dispose()
+    })
+    terminal.loadAddon(webglAddon)
+  } catch (error) {
+    console.warn('[useTerminal] WebGL addon unavailable, falling back to default renderer:', error)
+  }
+}
 
 export interface TerminalHandle {
   terminalEl: HTMLDivElement | null
@@ -50,6 +76,7 @@ export function createTerminal(deps: {
     })
     fitAddon = new FitAddon()
     terminal.loadAddon(fitAddon)
+    loadWebLinksAddon(terminal)
 
     // Wait for fonts to load so CharSizeService measures correctly
     await Promise.race([
@@ -58,6 +85,7 @@ export function createTerminal(deps: {
     ])
 
     terminal.open(terminalEl)
+    loadWebglAddon(terminal)
     terminal.focus()
     terminalMounted = true
     requestAnimationFrame(() => safeFit())
