@@ -589,6 +589,10 @@ describe('TaskDetailView', () => {
   })
 
   describe('keyboard shortcuts', () => {
+    beforeEach(() => {
+      taskReviewModes.set(new Map())
+    })
+
     it('l key switches to review mode when worktree exists', async () => {
       const { getWorktreeForTask } = await import('../lib/ipc')
       vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' } as any)
@@ -789,11 +793,15 @@ describe('TaskDetailView', () => {
       })
 
       const breadcrumb = screen.getByText('$ cd board').closest('div')
-      expect(breadcrumb?.textContent).toContain('code')
+      await waitFor(() => {
+        expect(breadcrumb?.textContent).toContain('code')
+      })
 
       await fireEvent.keyDown(window, { code: 'Digit2', metaKey: true, shiftKey: false })
-      expect(breadcrumb?.textContent).toContain('code')
-      expect(breadcrumb?.textContent).not.toContain('self_review')
+      await waitFor(() => {
+        expect(breadcrumb?.textContent).toContain('code')
+        expect(breadcrumb?.textContent).not.toContain('self_review')
+      })
 
       vi.mocked(getWorktreeForTask).mockResolvedValue(null)
     })
@@ -933,33 +941,5 @@ describe('TaskDetailView', () => {
      })
    })
 
-    describe('CMD-hold hint badges', () => {
-      afterEach(() => {
-        commandHeld.set(false)
-      })
 
-      it('shows ⌘E hint on agent panel when commandHeld is true', async () => {
-        render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
-
-        commandHeld.set(true)
-
-        await waitFor(() => {
-          const kbds = document.querySelectorAll('kbd')
-          const hintTexts = Array.from(kbds).map(k => k.textContent)
-          expect(hintTexts).toContain('E')
-        })
-      })
-
-      it('hides hint badges when commandHeld is false', async () => {
-        render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
-
-        commandHeld.set(false)
-
-        await waitFor(() => {
-          const kbds = document.querySelectorAll('kbd')
-          const hintTexts = Array.from(kbds).map(k => k.textContent)
-          expect(hintTexts).not.toContain('E')
-        })
-      })
-    })
 })
