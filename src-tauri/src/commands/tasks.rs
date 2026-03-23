@@ -100,7 +100,7 @@ pub async fn update_task_status(
 
     if status == "done" {
         let _ = pty_mgr.kill_pty(&id).await;
-        let _ = pty_mgr.kill_pty(&format!("{}-shell", id)).await;
+        pty_mgr.kill_shells_for_task(&id).await;
         sse_mgr.stop_bridge(&id).await;
         let _ = server_mgr.stop_server(&id).await;
 
@@ -144,7 +144,7 @@ pub async fn delete_task(
     id: String,
 ) -> Result<(), String> {
     let _ = pty_mgr.kill_pty(&id).await;
-    let _ = pty_mgr.kill_pty(&format!("{}-shell", id)).await;
+    pty_mgr.kill_shells_for_task(&id).await;
     sse_mgr.stop_bridge(&id).await;
     let _ = server_mgr.stop_server(&id).await;
 
@@ -193,7 +193,7 @@ pub async fn clear_done_tasks(
     let mut deleted = 0u32;
     for id in &task_ids {
         let _ = pty_mgr.kill_pty(id).await;
-        let _ = pty_mgr.kill_pty(&format!("{}-shell", id)).await;
+        pty_mgr.kill_shells_for_task(id).await;
         sse_mgr.stop_bridge(id).await;
         let _ = server_mgr.stop_server(id).await;
 

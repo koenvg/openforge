@@ -77,9 +77,19 @@ pub async fn pty_spawn_shell(
     cwd: String,
     cols: u16,
     rows: u16,
+    terminal_index: Option<u32>,
 ) -> Result<u64, String> {
     pty_mgr
-        .spawn_shell_pty(&task_id, std::path::Path::new(&cwd), cols, rows, app)
+        .spawn_shell_pty(&task_id, std::path::Path::new(&cwd), cols, rows, terminal_index, app)
         .await
         .map_err(|e| format!("Failed to spawn shell PTY: {}", e))
+}
+
+#[tauri::command]
+pub async fn pty_kill_shells_for_task(
+    pty_mgr: State<'_, PtyManager>,
+    task_id: String,
+) -> Result<(), String> {
+    pty_mgr.kill_shells_for_task(&task_id).await;
+    Ok(())
 }

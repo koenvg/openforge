@@ -152,8 +152,7 @@ pub(crate) fn build_start_response(
         sse_mgr.inner().clone(),
     ).map_err(|e| format!("Unknown provider: {}", e))?;
 
-    // Kill shell PTY (not provider-specific — always needed during abort)
-    let _ = pty_mgr.kill_pty(&format!("{}-shell", task_id)).await;
+    pty_mgr.kill_shells_for_task(task_id).await;
 
     if let Some(ref s) = session {
         let _ = provider.abort(task_id, s).await;

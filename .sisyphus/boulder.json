@@ -1,23 +1,10 @@
 {
-<<<<<<< Updated upstream
-  "active_plan": "/Users/koen.vangeert/.openforge/worktrees/my-command-center/KVG-686/.sisyphus/plans/shepherd-visibility.md",
-  "started_at": "2026-03-17T12:36:11.082Z",
-  "session_ids": ["ses_304f41975ffeoZ0qm8I1642d3c"],
-  "plan_name": "shepherd-visibility",
-  "worktree_path": "/Users/koen.vangeert/.openforge/worktrees/my-command-center/KVG-686"
-||||||| Stash base
-  "active_plan": "/Users/koen.vangeert/.ai-command-center/worktrees/my-command-center/T-392/.sisyphus/plans/claude-pty-terminal.md",
-  "started_at": "2026-03-03T07:26:00.000Z",
-  "session_ids": ["ses_35131d074ffePFn5X6Qk2LJeuC"],
-  "plan_name": "claude-pty-terminal",
-  "agent": "atlas",
-  "worktree_path": "/Users/koen.vangeert/.ai-command-center/worktrees/my-command-center/T-392"
-=======
-  "active_plan": "/Users/koen.vangeert/.openforge/worktrees/my-command-center/T-463/.sisyphus/plans/dashboard-redesign.md",
-  "started_at": "2026-03-04T07:17:18.078Z",
-  "session_ids": ["ses_3485bf369ffelCDClOtAijLqZz"],
-  "plan_name": "dashboard-redesign",
-  "agent": "atlas",
-  "worktree_path": "/Users/koen.vangeert/.openforge/worktrees/my-command-center/T-463"
->>>>>>> Stashed changes
+  "active_plan": "/Users/koen.vangeert/.openforge/worktrees/my-command-center/KVG-747/.sisyphus/plans/multi-terminal.md",
+  "started_at": "2026-03-23T13:07:24.766Z",
+  "session_ids": [
+    "ses_2e616106effeuTAlUr7mcTKf0s"
+  ],
+  "plan_name": "multi-terminal",
+  "worktree_path": "/Users/koen.vangeert/.openforge/worktrees/my-command-center/KVG-747",
+  "agent": "atlas"
 }

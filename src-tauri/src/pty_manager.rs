@@ -624,9 +624,14 @@ impl PtyManager {
         cwd: &Path,
         cols: u16,
         rows: u16,
+        terminal_index: Option<u32>,
         app_handle: tauri::AppHandle,
     ) -> Result<u64, PtyError> {
-        let key = format!("{}-shell", task_id);
+        let key = if let Some(idx) = terminal_index {
+            format!("{}-shell-{}", task_id, idx)
+        } else {
+            format!("{}-shell-0", task_id)
+        };
         let mut sessions = self.sessions.lock().await;
 
         if sessions.contains_key(&key) {
@@ -920,6 +925,35 @@ impl PtyManager {
         }
 
         Ok(())
+    }
+
+    pub async fn kill_shells_for_task(&self, task_id: &str) {
+        let keys_to_kill: Vec<String> = {
+            let sessions = self.sessions.lock().await;
+            sessions
+                .keys()
+                .filter(|k| k.starts_with(&format!("{}-shell-", task_id)))
+                .cloned()
+                .collect()
+        };
+
+        for key in keys_to_kill {
+            let mut sessions = self.sessions.lock().await;
+            if let Some(mut session) = sessions.remove(&key) {
+                info!("Killing shell PTY for key {}", key);
+                let _ = session.child.kill();
+            }
+            drop(sessions);
+
+            {
+                let mut buffers = self.output_buffers.lock().await;
+                buffers.remove(&key);
+            }
+            {
+                let mut times = self.last_output.lock().await;
+                times.remove(&key);
+            }
+        }
     }
 
     /// Kills all running PTY processes
@@ -1784,5 +1818,67 @@ mod tests {
             !args.contains(&"--permission-mode".to_string()),
             "--permission-mode should not be present when None"
         );
+    }
+
+    #[test]
+    fn test_spawn_shell_with_index() {
+        let task_id = "t1";
+        let key_0 = format!("{}-shell-{}", task_id, 0);
+        let key_1 = format!("{}-shell-{}", task_id, 1);
+        let key_2 = format!("{}-shell-{}", task_id, 2);
+        
+        assert_eq!(key_0, "t1-shell-0");
+        assert_eq!(key_1, "t1-shell-1");
+        assert_eq!(key_2, "t1-shell-2");
+    }
+
+    #[test]
+    fn test_kill_shells_for_task_key_matching() {
+        let task_id = "t1";
+        let keys = vec![
+            "t1-shell-0",
+            "t1-shell-1",
+            "t1",
+            "t2-shell-0",
+        ];
+        
+        let prefix = format!("{}-shell-", task_id);
+        let matching: Vec<_> = keys.iter()
+            .filter(|k| k.starts_with(&prefix))
+            .collect();
+        
+        assert_eq!(matching.len(), 2);
+        assert!(matching.contains(&&"t1-shell-0"));
+        assert!(matching.contains(&&"t1-shell-1"));
+        assert!(!matching.contains(&&"t1"));
+        assert!(!matching.contains(&&"t2-shell-0"));
+    }
+
+    #[test]
+    fn test_spawn_shell_no_index() {
+        let task_id = "my-task";
+        let terminal_index: Option<u32> = None;
+        
+        let key = if let Some(idx) = terminal_index {
+            format!("{}-shell-{}", task_id, idx)
+        } else {
+            format!("{}-shell-0", task_id)
+        };
+        
+        assert_eq!(key, "my-task-shell-0");
+    }
+}
+
+#[cfg(test)]
+struct MockWriter;
+
+#[cfg(test)]
+impl std::io::Write for MockWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 }
