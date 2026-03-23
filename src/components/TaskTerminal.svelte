@@ -9,9 +9,11 @@
   interface Props {
     taskId: string
     worktreePath: string
+    terminalKey: string
+    terminalIndex: number
   }
 
-  let { taskId, worktreePath }: Props = $props()
+  let { taskId, worktreePath, terminalKey, terminalIndex }: Props = $props()
 
   let terminalEl: HTMLDivElement
   let unlisteners: UnlistenFn[] = []
@@ -20,7 +22,7 @@
   let shellExited = $state(false)
 
   onMount(async () => {
-    poolEntry = await acquire(taskId + '-shell')
+    poolEntry = await acquire(terminalKey)
 
     attach(poolEntry, terminalEl)
 
@@ -29,12 +31,12 @@
 
     // If PTY is not yet active, spawn the shell
     if (!poolEntry.ptyActive) {
-      await spawnShellPty(taskId, worktreePath, poolEntry.terminal.cols, poolEntry.terminal.rows)
+      await spawnShellPty(taskId, worktreePath, poolEntry.terminal.cols, poolEntry.terminal.rows, terminalIndex)
       ptyActive = true
     }
 
     // Listen for shell exit event
-    unlisteners.push(await listen(`pty-exit-${taskId}-shell`, () => {
+    unlisteners.push(await listen(`pty-exit-${terminalKey}`, () => {
       shellExited = true
       ptyActive = false
     }))
@@ -50,10 +52,10 @@
   async function handleRestart() {
     if (!poolEntry || ptyActive) return
     try {
-      await killPty(taskId + '-shell').catch(e => {
+      await killPty(terminalKey).catch(e => {
         console.error('[TaskTerminal] Failed to kill PTY on restart:', e)
       })
-      await spawnShellPty(taskId, worktreePath, poolEntry.terminal.cols, poolEntry.terminal.rows)
+      await spawnShellPty(taskId, worktreePath, poolEntry.terminal.cols, poolEntry.terminal.rows, terminalIndex)
       poolEntry.needsClear = true
       shellExited = false
       ptyActive = true
