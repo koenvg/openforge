@@ -489,7 +489,7 @@
     }
     if (e.metaKey && !e.shiftKey && e.key === 'h') {
       e.preventDefault()
-      handleNavigate('board')
+      resetToBoard()
       return
     }
     if (e.metaKey && !e.shiftKey && e.key === 'g') {

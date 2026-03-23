@@ -403,15 +403,21 @@ describe('App onMount initialization order', () => {
       document.body.innerHTML = ''
     })
 
-    it('CMD+H navigates to board view', async () => {
+    it('CMD+H resets to board view and clears selectedTaskId', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
-      const { get } = await import('svelte/store')
+      const nav = await import('./lib/navigation')
 
       render(App)
 
+      // Simulate being on a task detail view
+      stores.selectedTaskId.set('task-123')
+      stores.currentView.set('settings')
+
+      vi.mocked(nav.resetToBoard).mockClear()
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'h', metaKey: true, bubbles: true }))
-      expect(get(stores.currentView)).toBe('board')
+
+      expect(nav.resetToBoard).toHaveBeenCalled()
     })
 
     it('CMD+G navigates to pr_review view', async () => {
