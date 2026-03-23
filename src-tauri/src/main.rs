@@ -470,6 +470,7 @@ fn main() {
             commands::pty::pty_kill,
             commands::pty::get_pty_buffer,
             commands::pty::pty_spawn_shell,
+            commands::pty::pty_kill_shells_for_task,
             commands::pty::get_running_pty_task_ids,
             commands::self_review::get_task_diff,
             commands::self_review::get_task_file_contents,
