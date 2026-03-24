@@ -12,7 +12,7 @@
 
   let variantClasses = $derived(
     variant === 'primary'
-      ? 'text-primary font-medium hover:bg-primary hover:text-primary-content'
+      ? 'text-base-content font-semibold hover:bg-primary hover:text-primary-content'
       : variant === 'danger'
         ? 'text-error hover:bg-error hover:text-error-content'
         : 'text-base-content hover:bg-primary hover:text-primary-content'

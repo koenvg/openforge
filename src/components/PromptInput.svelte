@@ -251,7 +251,7 @@
           placeholder="e.g. PROJ-123"
         />
         <span
-          class="text-xs text-base-content/40 cursor-pointer"
+          class="text-xs text-base-content opacity-70 cursor-pointer"
           role="button"
           tabindex="0"
           onclick={clearJiraKeyField}
@@ -275,16 +275,16 @@
           disabled={!textValue.trim()}
           onclick={handleSubmit}
           title="⇧Enter"
-        >Add to Backlog <kbd class="kbd kbd-xs ml-1 opacity-50">⇧↵</kbd></button>
+        >Add to Backlog <kbd class="kbd kbd-xs ml-1 bg-base-content/5 text-base-content/50 border-base-content/10">⇧↵</kbd></button>
         <button
           class="btn btn-primary btn-sm"
           type="button"
           disabled={!textValue.trim()}
           onclick={handleStart}
           title="⌘Enter"
-        >Start Task <kbd class="kbd kbd-xs ml-1 opacity-50">⌘↵</kbd></button>
+        >Start Task <kbd class="kbd kbd-xs ml-1 bg-primary-content text-primary border-primary-content/30">⌘↵</kbd></button>
       {:else}
-        <span class="text-xs text-base-content/40">⌘Enter to submit</span>
+        <span class="text-xs text-base-content opacity-70">⌘Enter to submit</span>
         <button
           class="btn btn-primary btn-sm"
           type="button"
