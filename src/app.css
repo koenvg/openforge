@@ -12,30 +12,30 @@
   prefersdark: false;
   color-scheme: light;
 
-  --color-base-100: #FFFFFF;
-  --color-base-200: #F8F9FB;
-  --color-base-300: #E5E7EB;
-  --color-base-content: #374151;
-  --color-primary: #34D399;
-  --color-primary-content: #064E3B;
-  --color-secondary: #9CA3AF;
+  --color-base-100: #FAF8F5;
+  --color-base-200: #F0EDE6;
+  --color-base-300: #E8E4DF;
+  --color-base-content: #2D2D3F;
+  --color-primary: #6C63C9;
+  --color-primary-content: #FFFFFF;
+  --color-secondary: #8A8AA0;
   --color-secondary-content: #FFFFFF;
-  --color-accent: #34D399;
-  --color-accent-content: #064E3B;
-  --color-neutral: #374151;
-  --color-neutral-content: #F9FAFB;
-  --color-info: #60A5FA;
+  --color-accent: #6C63C9;
+  --color-accent-content: #FFFFFF;
+  --color-neutral: #2D2D3F;
+  --color-neutral-content: #FAF8F5;
+  --color-info: #6C63C9;
   --color-info-content: #FFFFFF;
-  --color-success: #34D399;
-  --color-success-content: #064E3B;
-  --color-warning: #FBBF24;
-  --color-warning-content: #78350F;
-  --color-error: #F87171;
+  --color-success: #4CAF50;
+  --color-success-content: #166534;
+  --color-warning: #E8A820;
+  --color-warning-content: #7C4A00;
+  --color-error: #DC2626;
   --color-error-content: #FFFFFF;
 
-  --radius-selector: 0.5rem;
-  --radius-field: 0.5rem;
-  --radius-box: 0.75rem;
+  --radius-selector: 0.625rem;
+  --radius-field: 0.625rem;
+  --radius-box: 1.125rem;
   --size-selector: 0.25rem;
   --size-field: 0.25rem;
   --border: 1px;
@@ -49,30 +49,30 @@
   prefersdark: true;
   color-scheme: dark;
 
-  --color-base-100: #1A1D23;
-  --color-base-200: #13151A;
-  --color-base-300: #2A2E37;
-  --color-base-content: #D1D5DB;
-  --color-primary: #34D399;
-  --color-primary-content: #064E3B;
-  --color-secondary: #9CA3AF;
-  --color-secondary-content: #1F2937;
-  --color-accent: #34D399;
-  --color-accent-content: #064E3B;
-  --color-neutral: #111318;
-  --color-neutral-content: #F3F4F6;
-  --color-info: #60A5FA;
-  --color-info-content: #1E3A5F;
-  --color-success: #34D399;
-  --color-success-content: #064E3B;
-  --color-warning: #FBBF24;
-  --color-warning-content: #78350F;
-  --color-error: #F87171;
-  --color-error-content: #7F1D1D;
+  --color-base-100: #1C1A1F;
+  --color-base-200: #14121A;
+  --color-base-300: #2E2A34;
+  --color-base-content: #D8D4DE;
+  --color-primary: #8B82E0;
+  --color-primary-content: #FFFFFF;
+  --color-secondary: #9A98AE;
+  --color-secondary-content: #1C1A1F;
+  --color-accent: #8B82E0;
+  --color-accent-content: #FFFFFF;
+  --color-neutral: #14121A;
+  --color-neutral-content: #E8E4EE;
+  --color-info: #8B82E0;
+  --color-info-content: #FFFFFF;
+  --color-success: #4CAF50;
+  --color-success-content: #166534;
+  --color-warning: #E8A820;
+  --color-warning-content: #7C4A00;
+  --color-error: #DC2626;
+  --color-error-content: #FFFFFF;
 
-  --radius-selector: 0.5rem;
-  --radius-field: 0.5rem;
-  --radius-box: 0.75rem;
+  --radius-selector: 0.625rem;
+  --radius-field: 0.625rem;
+  --radius-box: 1.125rem;
   --size-selector: 0.25rem;
   --size-field: 0.25rem;
   --border: 1px;
@@ -341,7 +341,7 @@
   100% { background-position: 0% 50%; }
 }
 .dev-badge-gradient {
-  background: linear-gradient(270deg, #34D399, #3B82F6, #A855F7, #34D399);
+  background: linear-gradient(270deg, #6C63C9, #3B82F6, #A855F7, #6C63C9);
   background-size: 300% 300%;
   animation: gradient-shift 4s ease infinite;
 }
