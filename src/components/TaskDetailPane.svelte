@@ -1,11 +1,10 @@
 <script lang="ts">
-  import type { Task, AgentSession, PullRequestInfo, PrComment } from '../lib/types'
+  import type { Task, PullRequestInfo, PrComment } from '../lib/types'
   import { parseCheckRuns } from '../lib/types'
   import { getPrComments, markCommentAddressed, openUrl } from '../lib/ipc'
 
   interface Props {
     task: Task | null
-    session: AgentSession | null
     pullRequests: PullRequestInfo[]
     onOpenFullView: () => void
   }

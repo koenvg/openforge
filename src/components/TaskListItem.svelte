@@ -73,6 +73,7 @@
   tabindex="0"
   data-vim-item
   data-selected={isSelected ? 'true' : undefined}
+  data-focused={isFocused ? 'true' : undefined}
   class:vim-focus={isFocused}
   class="{isSelected
     ? 'rounded-2xl bg-base-100 border border-base-300/70 shadow-sm p-4 gap-2.5'

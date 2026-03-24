@@ -193,7 +193,6 @@
     <div class="flex-1 min-w-0" onfocusin={() => paneHasFocus = true} onfocusout={() => paneHasFocus = false}>
       <TaskDetailPane
         task={selectedTask}
-        session={selectedTask ? activeSessions.get(selectedTask.id) ?? null : null}
         pullRequests={selectedTask ? ticketPrs.get(selectedTask.id) ?? [] : []}
         onOpenFullView={() => {
           if (selectedTaskIdLocal) onOpenTask(selectedTaskIdLocal)

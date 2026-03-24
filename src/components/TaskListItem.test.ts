@@ -125,16 +125,16 @@ describe('TaskListItem', () => {
     expect(item.getAttribute('data-selected')).toBeNull()
   })
 
-  it('adds vim-focus class when isFocused is true', () => {
+  it('sets data-focused when isFocused is true', () => {
     render(TaskListItem, { props: { ...baseProps, isFocused: true } })
     const item = screen.getByRole('button')
-    expect(item.classList.contains('vim-focus')).toBe(true)
+    expect(item.getAttribute('data-focused')).toBe('true')
   })
 
-  it('does not add vim-focus class when isFocused is false', () => {
+  it('does not set data-focused when isFocused is false', () => {
     render(TaskListItem, { props: { ...baseProps, isFocused: false } })
     const item = screen.getByRole('button')
-    expect(item.classList.contains('vim-focus')).toBe(false)
+    expect(item.getAttribute('data-focused')).toBeNull()
   })
 
   it('renders PR chip showing PR number when pullRequests are given', () => {
