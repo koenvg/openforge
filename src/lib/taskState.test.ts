@@ -45,6 +45,12 @@ function createSession(overrides: Partial<AgentSession> = {}): AgentSession {
 }
 
 function createPr(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
+  const {
+    mergeable = null,
+    mergeable_state = null,
+    ...restOverrides
+  } = overrides
+
   return {
     id: 1,
     ticket_id: 'task-1',
@@ -57,13 +63,15 @@ function createPr(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
     ci_status: null,
     ci_check_runs: null,
     review_status: null,
+    mergeable,
+    mergeable_state,
     merged_at: null,
     created_at: 1000,
     updated_at: 2000,
     draft: false,
     is_queued: false,
     unaddressed_comment_count: 0,
-    ...overrides,
+    ...restOverrides,
   }
 }
 
