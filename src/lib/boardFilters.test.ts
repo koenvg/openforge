@@ -1,6 +1,11 @@
+import { vi } from 'vitest'
+
+vi.mock('./ipc', () => ({ getProjectConfig: vi.fn(), setProjectConfig: vi.fn() }))
+
 import { describe, it, expect } from 'vitest'
 import type { Task, AgentSession, PullRequestInfo } from './types'
-import { isFocusTask, filterTasks, getFilterCounts } from './boardFilters'
+import { isFocusTask, filterTasks, getFilterCounts, DEFAULT_FOCUS_STATES, loadFocusFilterStates, saveFocusFilterStates } from './boardFilters'
+import { getProjectConfig, setProjectConfig } from './ipc'
 
 function makeTask(overrides: Partial<Task> & { id: string }): Task {
   return {
@@ -121,6 +126,12 @@ describe('isFocusTask', () => {
     const result = isFocusTask(task, 'active', [])
     expect(result).toBe(false)
   })
+
+  it('respects custom focusStates parameter', () => {
+    const task = makeTask({ id: 'T-1' })
+    expect(isFocusTask(task, 'idle', [], ['idle'])).toBe(true)
+    expect(isFocusTask(task, 'idle', [], ['active'])).toBe(false)
+  })
 })
 
 describe('filterTasks', () => {
@@ -154,17 +165,17 @@ describe('filterTasks', () => {
     expect(filtered.map((t: Task) => t.id)).toEqual(['T-1', 'T-3'])
   })
 
-  it('filters done tasks (status === done)', () => {
+  it('filters backlog tasks (status === backlog)', () => {
     const sessions = new Map<string, AgentSession>()
     const prs = new Map<string, PullRequestInfo[]>()
 
     const tasks = [
       makeTask({ id: 'T-1', status: 'doing' }),
-      makeTask({ id: 'T-2', status: 'done' }),
-      makeTask({ id: 'T-3', status: 'done' }),
+      makeTask({ id: 'T-2', status: 'backlog' }),
+      makeTask({ id: 'T-3', status: 'backlog' }),
     ]
 
-    const filtered = filterTasks(tasks, 'done', sessions, prs)
+    const filtered = filterTasks(tasks, 'backlog', sessions, prs)
     expect(filtered.map((t: Task) => t.id)).toEqual(['T-2', 'T-3'])
   })
 
@@ -211,14 +222,14 @@ describe('getFilterCounts', () => {
     const tasks = [
       makeTask({ id: 'T-1' }),
       makeTask({ id: 'T-2' }),
-      makeTask({ id: 'T-3', status: 'done' }),
+      makeTask({ id: 'T-3', status: 'backlog' }),
     ]
 
     const counts = getFilterCounts(tasks, sessions, prs)
     expect(counts).toEqual({
       focus: 1,
       'in-progress': 2,
-      done: 1,
+      backlog: 1,
     })
   })
 
@@ -230,24 +241,24 @@ describe('getFilterCounts', () => {
     expect(counts).toEqual({
       focus: 0,
       'in-progress': 0,
-      done: 0,
+      backlog: 0,
     })
   })
 
-  it('counts all tasks as done when all have done status', () => {
+  it('counts backlog tasks correctly', () => {
     const sessions = new Map<string, AgentSession>()
     const prs = new Map<string, PullRequestInfo[]>()
 
     const tasks = [
-      makeTask({ id: 'T-1', status: 'done' }),
-      makeTask({ id: 'T-2', status: 'done' }),
+      makeTask({ id: 'T-1', status: 'backlog' }),
+      makeTask({ id: 'T-2', status: 'backlog' }),
     ]
 
     const counts = getFilterCounts(tasks, sessions, prs)
     expect(counts).toEqual({
       focus: 0,
       'in-progress': 0,
-      done: 2,
+      backlog: 2,
     })
   })
 
@@ -275,7 +286,36 @@ describe('getFilterCounts', () => {
     ]
 
     const counts = getFilterCounts(tasks, sessions, prs)
-    expect(counts['in-progress']).toBe(2)
+    expect(counts['in-progress']).toBe(1)
+    expect(counts.backlog).toBe(1)
     expect(counts.focus).toBe(0)
+  })
+})
+
+describe('loadFocusFilterStates', () => {
+  it('returns DEFAULT_FOCUS_STATES when no config stored', async () => {
+    vi.mocked(getProjectConfig).mockResolvedValue(null)
+    const result = await loadFocusFilterStates('proj-1')
+    expect(result).toEqual(DEFAULT_FOCUS_STATES)
+  })
+
+  it('returns parsed states when valid config stored', async () => {
+    vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify(['idle', 'active']))
+    const result = await loadFocusFilterStates('proj-1')
+    expect(result).toEqual(['idle', 'active'])
+  })
+
+  it('returns defaults when invalid JSON stored', async () => {
+    vi.mocked(getProjectConfig).mockResolvedValue('not-json')
+    const result = await loadFocusFilterStates('proj-1')
+    expect(result).toEqual(DEFAULT_FOCUS_STATES)
+  })
+})
+
+describe('saveFocusFilterStates', () => {
+  it('calls setProjectConfig with serialized states', async () => {
+    vi.mocked(setProjectConfig).mockResolvedValue(undefined)
+    await saveFocusFilterStates('proj-1', ['idle', 'active'])
+    expect(setProjectConfig).toHaveBeenCalledWith('proj-1', 'focus_filter_states', JSON.stringify(['idle', 'active']))
   })
 })
