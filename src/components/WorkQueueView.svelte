@@ -337,6 +337,7 @@
                   pullRequests={getPullRequests(entry)}
                   isStarting={$startingTasks.has(entry.task.id)}
                   isPinned={pinnedTaskIds.has(entry.task.id)}
+                  isFeatured={isVimFocused}
                   onTogglePin={togglePin}
                   onSelect={handleSelect}
                 />

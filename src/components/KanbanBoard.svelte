@@ -265,11 +265,11 @@
          <div class="flex-1 flex flex-col gap-3 overflow-y-auto" role="listbox" data-vim-column={backlogColumn.id}>
           {#each backlogTasks as task, i (task.id)}
             {@const isVimFocused = columns[focusedColumn]?.key === backlogColumn.id && vim.focusedIndex === i}
-            <div role="presentation" data-vim-item oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'vim-focus' : ''}>
-              <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} isStarting={$startingTasks.has(task.id)} onSelect={handleSelect} />
-            </div>
-          {/each}
-           {#if backlogTasks.length === 0}
+             <div role="presentation" data-vim-item oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'vim-focus' : ''}>
+               <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} isStarting={$startingTasks.has(task.id)} onSelect={handleSelect} isFeatured={isVimFocused} />
+             </div>
+           {/each}
+            {#if backlogTasks.length === 0}
              <div class="text-center text-xs text-secondary py-5">No tasks</div>
            {/if}
         </div>
@@ -286,11 +286,11 @@
          <div class="flex-1 flex flex-col gap-3 overflow-y-auto" role="listbox" data-vim-column={colData.config.id}>
           {#each colData.tasks as task, i (task.id)}
             {@const isVimFocused = columns[focusedColumn]?.key === colData.config.id && vim.focusedIndex === i}
-            <div role="presentation" data-vim-item oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'vim-focus' : ''}>
-              <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} isStarting={$startingTasks.has(task.id)} onSelect={handleSelect} />
-            </div>
-          {/each}
-           {#if colData.tasks.length === 0}
+             <div role="presentation" data-vim-item oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'vim-focus' : ''}>
+               <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} isStarting={$startingTasks.has(task.id)} onSelect={handleSelect} isFeatured={isVimFocused} />
+             </div>
+           {/each}
+            {#if colData.tasks.length === 0}
              <div class="text-center text-xs text-secondary py-5">No tasks</div>
            {/if}
         </div>
