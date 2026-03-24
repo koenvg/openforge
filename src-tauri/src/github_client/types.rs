@@ -169,8 +169,11 @@ pub(crate) struct ReviewSubmitRequest {
 
 #[derive(Debug, Serialize)]
 pub(crate) struct MergePrRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub commit_title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub commit_message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub merge_method: Option<String>,
 }
 
@@ -519,6 +522,25 @@ mod tests {
         let json = serde_json::to_string(&request).unwrap();
 
         assert!(json.contains("\"commit_title\":\"Merge feature branch\""));
+        assert!(json.contains("\"merge_method\":\"squash\""));
+        // Verify None fields are omitted, not serialized as null
+        assert!(!json.contains("commit_message"));
+        assert!(!json.contains("null"));
+    }
+
+    #[test]
+    fn test_merge_pr_request_omits_none_fields() {
+        let request = MergePrRequest {
+            commit_title: None,
+            commit_message: None,
+            merge_method: Some("squash".to_string()),
+        };
+
+        let json = serde_json::to_string(&request).unwrap();
+
+        // None fields should be omitted, not serialized as null
+        assert!(!json.contains("commit_title"));
+        assert!(!json.contains("commit_message"));
         assert!(json.contains("\"merge_method\":\"squash\""));
     }
 
