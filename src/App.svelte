@@ -429,6 +429,11 @@
   }
 
   function handleNavigate(view: AppView) {
+    if (view === 'board') {
+      resetToBoard()
+      return
+    }
+
     pushNavState()
     $currentView = view
   }

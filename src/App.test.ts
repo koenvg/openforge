@@ -453,6 +453,53 @@ describe('App onMount initialization order', () => {
       expect(get(stores.currentView)).toBe('settings')
     })
 
+    it('dashboard icon resets to board when a task view is open', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const nav = await import('./lib/navigation')
+      const iconRailModule = await import('./components/IconRail.svelte')
+
+      stores.selectedTaskId.set('task-123')
+      stores.currentView.set('board')
+
+      render(App)
+
+      await vi.waitFor(() => {
+        expect(iconRailModule.default).toHaveBeenCalled()
+      })
+
+      const lastCall = vi.mocked(iconRailModule.default).mock.calls.at(-1)
+      expect(lastCall).toBeTruthy()
+
+      if (!lastCall) {
+        throw new Error('Expected IconRail to receive props')
+      }
+
+      const propsCandidate = lastCall
+        .flatMap((arg) => {
+          if (typeof arg !== 'object' || arg === null) {
+            return []
+          }
+
+          if ('props' in arg && typeof arg.props === 'object' && arg.props !== null) {
+            return [arg, arg.props]
+          }
+
+          return [arg]
+        })
+        .find((arg): arg is { onNavigate: (view: string) => void } => 'onNavigate' in arg && typeof arg.onNavigate === 'function')
+
+      if (!propsCandidate) {
+        throw new Error('Expected IconRail props to include onNavigate')
+      }
+
+      vi.mocked(nav.resetToBoard).mockClear()
+
+      propsCandidate.onNavigate('board')
+
+      expect(nav.resetToBoard).toHaveBeenCalled()
+    })
+
     it('CMD+K opens the action palette', async () => {
       const App = (await import('./App.svelte')).default
       const actionPaletteModule = await import('./components/ActionPalette.svelte')
