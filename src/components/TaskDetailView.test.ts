@@ -455,7 +455,8 @@ describe('TaskDetailView', () => {
 
     await fireEvent.keyDown(window, { code: 'KeyJ', metaKey: true })
     await waitFor(() => {
-      expect(screen.queryByTestId('resizable-bottom-panel')).toBeNull()
+      const panel = screen.getByTestId('resizable-bottom-panel')
+      expect(panel.closest('.hidden')).not.toBeNull()
     })
     vi.mocked(getWorktreeForTask).mockResolvedValue(null)
   })

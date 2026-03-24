@@ -27,6 +27,7 @@
   let reviewMode = $state(false)
   let bottomPanelOpen = $state(false)
   let terminalFullscreen = $state(false)
+  let terminalEverOpened = $state(false)
   let worktreePath = $state<string | null>(null)
   let jiraBaseUrl = $state('')
   let lastTaskId = ''
@@ -53,6 +54,7 @@
       reviewMode = (get(taskReviewModes) as Map<string, boolean>).get(taskId) ?? false
       bottomPanelOpen = false
       terminalFullscreen = false
+      terminalEverOpened = false
       worktreePath = null
       getWorktreeForTask(taskId).then((worktree) => {
         worktreePath = worktree?.worktree_path ?? null
@@ -64,6 +66,10 @@
     if ($activeProjectId) {
       loadActions($activeProjectId).then(a => { actions = getEnabledActions(a) })
     }
+  })
+
+  $effect(() => {
+    if (bottomPanelOpen) terminalEverOpened = true
   })
 
   $effect(() => {
@@ -272,10 +278,10 @@
       </div>
     {/if}
 
-    <!-- Bottom panel: ONE instance, uses fillParent when fullscreen -->
-    {#if bottomPanelOpen}
-      <ResizableBottomPanel storageKey="terminal-panel-height" defaultHeight={300} minHeight={100} maxHeight={null} fillParent={terminalFullscreen}>
-        {#if worktreePath !== null}
+    <!-- Bottom panel: stays mounted once opened so tabs survive ⌘J toggle -->
+    {#if terminalEverOpened && worktreePath !== null}
+      <div class="{bottomPanelOpen ? (terminalFullscreen ? 'flex flex-col flex-1 min-h-0' : 'shrink-0') : 'hidden'}">
+        <ResizableBottomPanel storageKey="terminal-panel-height" defaultHeight={300} minHeight={100} maxHeight={null} fillParent={terminalFullscreen}>
           <TerminalTabs
             bind:this={terminalTabsRef}
             taskId={task.id}
@@ -285,8 +291,8 @@
             onTabChange={null}
             onTabCountChange={null}
           />
-        {/if}
-      </ResizableBottomPanel>
+        </ResizableBottomPanel>
+      </div>
     {/if}
   </div>
 </div>
