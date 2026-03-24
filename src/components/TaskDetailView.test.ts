@@ -174,7 +174,7 @@ vi.mock('../lib/actions', () => ({
 
 import TaskDetailView from './TaskDetailView.svelte'
 import type { Task, AgentSession } from '../lib/types'
-import { activeSessions, selectedTaskId, taskReviewModes, commandHeld } from '../lib/stores'
+import { activeSessions, taskReviewModes, commandHeld } from '../lib/stores'
 
 const baseTask: Task = {
   id: 'T-42',
@@ -595,16 +595,14 @@ describe('TaskDetailView', () => {
     expect(screen.queryByText('Terminal')).toBeNull()
   })
 
-  it('does not navigate away when task is moved to done', async () => {
+  it('navigates to board when task is moved to done', async () => {
     const doingTask: Task = { ...baseTask, status: 'doing' }
-    selectedTaskId.set('T-42')
     render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
     await fireEvent.click(screen.getByText('Move to Done'))
     const { updateTaskStatus } = await import('../lib/ipc')
+    const { resetToBoard } = await import('../lib/navigation')
     expect(updateTaskStatus).toHaveBeenCalledWith('T-42', 'done')
-    let currentValue: string | null = null
-    selectedTaskId.subscribe(v => { currentValue = v })()
-    expect(currentValue).toBe('T-42')
+    expect(resetToBoard).toHaveBeenCalled()
   })
 
   it('shows action buttons in dropdown when actions exist', async () => {

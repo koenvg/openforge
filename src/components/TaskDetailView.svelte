@@ -79,6 +79,9 @@
     if (newStatus === task.status) return
     try {
       await updateTaskStatus(task.id, newStatus)
+      if (newStatus === 'done') {
+        resetToBoard()
+      }
     } catch (e) {
       console.error('Failed to update status:', e)
     }
