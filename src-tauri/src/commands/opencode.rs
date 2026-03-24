@@ -4,6 +4,8 @@ use crate::opencode_client::OpenCodeClient;
 use crate::server_manager;
 use crate::db;
 use crate::command_discovery::{
+    scan_agents_directory,
+    scan_commands_directory,
     scan_skills_directory,
     search_project_files,
 };
@@ -71,6 +73,48 @@ pub async fn list_opencode_commands(
         return Ok(provider.list_commands(project_path.as_deref()));
     }
 
+    if provider == "opencode" {
+        use std::collections::HashMap;
+
+        let project_path = {
+            let db = crate::db::acquire_db(&db);
+            db.get_project(&project_id)
+                .map_err(|e| format!("Failed to get project: {}", e))?
+                .map(|p| p.path)
+        };
+
+        let mut commands_map = HashMap::<String, crate::opencode_client::CommandInfo>::new();
+
+        // User-level commands
+        if let Some(home) = dirs::home_dir() {
+            for commands_dir in &[
+                home.join(".opencode").join("commands"),
+                home.join(".agents").join("commands"),
+            ] {
+                for cmd in scan_commands_directory(commands_dir) {
+                    commands_map.insert(cmd.name.clone(), cmd);
+                }
+            }
+        }
+
+        // Project-level commands (wins over user-level)
+        if let Some(proj_path) = project_path {
+            let proj = std::path::Path::new(&proj_path);
+            for commands_dir in &[
+                proj.join(".opencode").join("commands"),
+                proj.join(".agents").join("commands"),
+            ] {
+                for cmd in scan_commands_directory(commands_dir) {
+                    commands_map.insert(cmd.name.clone(), cmd);
+                }
+            }
+        }
+
+        if !commands_map.is_empty() {
+            return Ok(commands_map.into_values().collect());
+        }
+    }
+
     // Get task IDs for the project
     let task_ids: Vec<String> = {
         let db = crate::db::acquire_db(&db);
@@ -121,6 +165,22 @@ pub async fn search_opencode_files(
         return Ok(vec![]);
     }
 
+    if provider == "opencode" {
+        let project_path = {
+            let db = crate::db::acquire_db(&db);
+            db.get_project(&project_id)
+                .map_err(|e| format!("Failed to get project: {}", e))?
+                .map(|p| p.path)
+        };
+
+        if let Some(path) = project_path {
+            let results = search_project_files(&path, &query, 10);
+            if !results.is_empty() {
+                return Ok(results);
+            }
+        }
+    }
+
     // Get task IDs for the project
     let task_ids: Vec<String> = {
         let db = crate::db::acquire_db(&db);
@@ -168,6 +228,49 @@ pub async fn list_opencode_agents(
             crate::pty_manager::PtyManager::new()
         );
         return Ok(provider.list_agents(project_path.as_deref()));
+    }
+
+    // Scan agents directories on the filesystem (opencode provider)
+    {
+        let project_path = {
+            let db = crate::db::acquire_db(&db);
+            db.get_project(&project_id)
+                .map_err(|e| format!("Failed to get project: {}", e))?
+                .map(|p| p.path)
+        };
+
+        let mut agents_map = std::collections::HashMap::<String, crate::opencode_client::AgentInfo>::new();
+
+        // User-level directories first (project-level wins on conflict)
+        if let Some(home) = dirs::home_dir() {
+            for dir in &[
+                home.join(".opencode").join("agents"),
+                home.join(".agents").join("agents"),
+            ] {
+                for agent in scan_agents_directory(dir) {
+                    agents_map.entry(agent.name.clone()).or_insert(agent);
+                }
+            }
+        }
+
+        // Project-level directories (overwrite user-level on conflict)
+        if let Some(ref proj_path) = project_path {
+            let proj = std::path::Path::new(proj_path);
+            for dir in &[
+                proj.join(".opencode").join("agents"),
+                proj.join(".agents").join("agents"),
+            ] {
+                for agent in scan_agents_directory(dir) {
+                    agents_map.insert(agent.name.clone(), agent);
+                }
+            }
+        }
+
+        if !agents_map.is_empty() {
+            let mut agents: Vec<_> = agents_map.into_values().collect();
+            agents.sort_by(|a, b| a.name.cmp(&b.name));
+            return Ok(agents);
+        }
     }
 
     // Get task IDs for the project
