@@ -4,16 +4,17 @@ import type { AgentSession } from './types'
 
 vi.mock('./stores', () => ({
   activeSessions: writable(new Map()),
+  taskRuntimeInfo: writable(new Map()),
 }))
 
 vi.mock('./ipc', () => ({
   getLatestSession: vi.fn().mockResolvedValue(null),
-  getWorktreeForTask: vi.fn().mockResolvedValue(null),
+  getTaskWorkspace: vi.fn().mockResolvedValue(null),
 }))
 
 import { createSessionHistory } from './useSessionHistory.svelte'
-import { activeSessions } from './stores'
-import { getLatestSession } from './ipc'
+import { activeSessions, taskRuntimeInfo } from './stores'
+import { getLatestSession, getTaskWorkspace } from './ipc'
 
 const baseSession: AgentSession = {
   id: 'ses-1',
@@ -41,7 +42,9 @@ describe('createSessionHistory', () => {
     setOpencodePort = vi.fn<(port: number) => void>()
     onStatusUpdate = vi.fn<(status: 'complete' | 'error' | 'idle', errorMessage?: string | null) => void>()
     activeSessions.set(new Map())
+    taskRuntimeInfo.set(new Map())
     vi.mocked(getLatestSession).mockResolvedValue(null)
+    vi.mocked(getTaskWorkspace).mockResolvedValue(null)
   })
 
   it('starts with loadingHistory = false', () => {
@@ -102,5 +105,17 @@ describe('createSessionHistory', () => {
     await history.loadSessionHistory()
     // Existing session should trigger status update without needing DB lookup
     expect(onStatusUpdate).toHaveBeenCalledWith('complete')
+  })
+
+  it('uses runtime opencode port before worktree lookup', async () => {
+    const completedSession = { ...baseSession, status: 'completed' }
+    activeSessions.set(new Map([['T-1', completedSession as AgentSession]]))
+    taskRuntimeInfo.set(new Map([['T-1', { workspacePath: '/repo', opencodePort: 4312 }]]))
+
+    const history = createSessionHistory({ taskId, getOpencodePort, setOpencodePort, onStatusUpdate })
+    await history.loadSessionHistory()
+
+    expect(setOpencodePort).toHaveBeenCalledWith(4312)
+    expect(getTaskWorkspace).not.toHaveBeenCalled()
   })
 })
