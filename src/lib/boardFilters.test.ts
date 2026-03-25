@@ -86,6 +86,12 @@ describe('isFocusTask', () => {
     expect(result).toBe(true)
   })
 
+  it('returns true for unaddressed-comments state', () => {
+    const task = makeTask({ id: 'T-1' })
+    const result = isFocusTask(task, 'unaddressed-comments' as any, [])
+    expect(result).toBe(true)
+  })
+
   it('returns true for sad state', () => {
     const task = makeTask({ id: 'T-1' })
     const result = isFocusTask(task, 'sad', [])
@@ -323,5 +329,11 @@ describe('saveFocusFilterStates', () => {
     vi.mocked(setProjectConfig).mockResolvedValue(undefined)
     await saveFocusFilterStates('proj-1', ['idle', 'active'])
     expect(setProjectConfig).toHaveBeenCalledWith('proj-1', 'focus_filter_states', JSON.stringify(['idle', 'active']))
+  })
+})
+
+describe('DEFAULT_FOCUS_STATES', () => {
+  it('includes unaddressed-comments', () => {
+    expect(DEFAULT_FOCUS_STATES).toContain('unaddressed-comments')
   })
 })

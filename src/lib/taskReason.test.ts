@@ -241,4 +241,30 @@ describe('getTaskReasonText', () => {
       expect(reason).toBe('Status: unknown-state')
     })
   })
+
+  describe('getTaskReasonText - unaddressed-comments state', () => {
+    it('returns reason text for unaddressed-comments state with no PRs', () => {
+      const task = makeTask({ id: 'T-1' })
+      const reason = getTaskReasonText(task, 'unaddressed-comments' as any, null, [])
+      expect(reason).toBeTruthy()
+      expect(typeof reason).toBe('string')
+      expect(reason).not.toBe('Status: unaddressed-comments')
+    })
+
+    it('does not double-count when state is unaddressed-comments and PR has comments', () => {
+      const task = makeTask({ id: 'T-1' })
+      const pr = makePr({ id: 1, unaddressed_comment_count: 3 })
+      const reason = getTaskReasonText(task, 'unaddressed-comments' as any, null, [pr])
+      const countMatches = (reason.match(/3/g) ?? []).length
+      expect(countMatches).toBeLessThanOrEqual(1)
+    })
+
+    it('still prepends unaddressed count for non-unaddressed-comments state (combo case)', () => {
+      const task = makeTask({ id: 'T-1' })
+      const pr = makePr({ id: 1, unaddressed_comment_count: 3 })
+      const reason = getTaskReasonText(task, 'ci-failed', null, [pr])
+      expect(reason).toContain('3 unaddressed comment(s)')
+      expect(reason).toContain('CI pipeline failed')
+    })
+  })
 })

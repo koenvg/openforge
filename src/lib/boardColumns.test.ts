@@ -26,7 +26,7 @@ describe('boardColumns', () => {
 
   describe('constants', () => {
     it('defines all 16 task states', () => {
-      expect(ALL_TASK_STATES).toHaveLength(16)
+      expect(ALL_TASK_STATES).toHaveLength(17)
       expect(ALL_TASK_STATES).toEqual([
         'idle',
         'active',
@@ -41,6 +41,7 @@ describe('boardColumns', () => {
         'review-pending',
         'ci-failed',
         'changes-requested',
+        'unaddressed-comments',
         'ready-to-merge',
         'pr-queued',
         'pr-merged',
@@ -72,6 +73,7 @@ describe('boardColumns', () => {
       expect(TASK_STATE_LABELS['ci-running']).toBe('CI Running')
       expect(TASK_STATE_LABELS['review-pending']).toBe('Awaiting Review')
       expect(TASK_STATE_LABELS['ci-failed']).toBe('CI Failed')
+      expect((TASK_STATE_LABELS as Record<string, string>)['unaddressed-comments']).toBe('Unaddressed Comments')
       expect(TASK_STATE_LABELS['ready-to-merge']).toBe('Ready to Merge')
       expect(TASK_STATE_LABELS['pr-queued']).toBe('In Merge Queue')
     })
@@ -212,6 +214,7 @@ describe('boardColumns', () => {
             'review-pending',
             'ci-failed',
             'changes-requested',
+            'unaddressed-comments' as any,
             'ready-to-merge',
             'pr-queued',
             'pr-merged',
@@ -262,7 +265,7 @@ describe('boardColumns', () => {
       )
     })
 
-    it('migrates old config with 13 states to 15 states', async () => {
+    it('migrates old config with 13 states to current states', async () => {
       const oldColumns: BoardColumnConfig[] = [
         {
           id: 'col-doing',
@@ -291,10 +294,11 @@ describe('boardColumns', () => {
       const result = await loadBoardColumns('project-1')
 
       expect(result).toHaveLength(1)
-      expect(result[0].statuses).toHaveLength(16)
+      expect(result[0].statuses).toHaveLength(17)
       expect(result[0].statuses).toContain('ci-running')
       expect(result[0].statuses).toContain('review-pending')
       expect(result[0].statuses).toContain('pr-queued')
+      expect(result[0].statuses).toContain('unaddressed-comments')
       expect(result[0].name).toBe('Doing')
       expect(setProjectConfig).not.toHaveBeenCalled()
     })
@@ -331,6 +335,27 @@ describe('boardColumns', () => {
       const result = await loadBoardColumns('project-1')
 
       expect(result).toEqual(migratedColumns)
+      expect(setProjectConfig).not.toHaveBeenCalled()
+    })
+
+    it('migrates 16-state config missing unaddressed-comments to 17 states', async () => {
+      const sixteenStateColumns: BoardColumnConfig[] = [
+        {
+          id: 'col-doing',
+          name: 'Doing',
+          statuses: [
+            'idle', 'active', 'needs-input', 'resting', 'celebrating', 'sad', 'frozen',
+            'pr-draft', 'pr-open', 'ci-running', 'review-pending', 'ci-failed',
+            'changes-requested', 'ready-to-merge', 'pr-queued', 'pr-merged',
+          ],
+          underlyingStatus: 'doing',
+        },
+      ]
+      vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify(sixteenStateColumns))
+      const result = await loadBoardColumns('project-1')
+      expect(result).toHaveLength(1)
+      expect(result[0].statuses).toHaveLength(17)
+      expect(result[0].statuses).toContain('unaddressed-comments')
       expect(setProjectConfig).not.toHaveBeenCalled()
     })
   })
@@ -372,7 +397,7 @@ describe('boardColumns', () => {
       const normalizedColumns: BoardColumnConfig[] = [
         {
           ...oldColumns[0],
-          statuses: [...oldColumns[0].statuses, 'ci-running', 'review-pending', 'pr-queued'],
+          statuses: [...oldColumns[0].statuses, 'ci-running', 'review-pending', 'unaddressed-comments' as any, 'pr-queued'],
         },
       ]
 

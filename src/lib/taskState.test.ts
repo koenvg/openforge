@@ -424,6 +424,75 @@ describe('taskStateToBorderClass', () => {
   it('returns empty string for changes-requested', () => {
     expect(taskStateToBorderClass('changes-requested')).toBe('')
   })
+
+  it('maps unaddressed-comments to unaddressed-comments', () => {
+    expect(taskStateToBorderClass('unaddressed-comments' as any)).toBe('unaddressed-comments')
+  })
+})
+
+describe('computeTaskState - unaddressed-comments (PART 5)', () => {
+  it('test 1: open PR with unaddressed comments → unaddressed-comments', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', unaddressed_comment_count: 2 })]
+
+    const state = computeTaskState(task, session, prs)
+    expect(state).toBe('unaddressed-comments')
+  })
+
+  it('test 2: ci-failed takes priority over unaddressed-comments', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', ci_status: 'failure', unaddressed_comment_count: 2 })]
+
+    const state = computeTaskState(task, session, prs)
+    expect(state).toBe('ci-failed')
+  })
+
+  it('test 3: changes-requested takes priority over unaddressed-comments', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', review_status: 'changes_requested', unaddressed_comment_count: 2 })]
+
+    const state = computeTaskState(task, session, prs)
+    expect(state).toBe('changes-requested')
+  })
+
+  it('test 4: ready-to-merge takes priority over unaddressed-comments', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', ci_status: 'success', review_status: 'approved', unaddressed_comment_count: 2 })]
+
+    const state = computeTaskState(task, session, prs)
+    expect(state).toBe('ready-to-merge')
+  })
+
+  it('test 5: unaddressed-comments takes priority over pr-draft', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', draft: true, unaddressed_comment_count: 2 })]
+
+    const state = computeTaskState(task, session, prs)
+    expect(state).toBe('unaddressed-comments')
+  })
+
+  it('test 6: unaddressed-comments takes priority over ci-running', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', ci_status: 'pending', unaddressed_comment_count: 2 })]
+
+    const state = computeTaskState(task, session, prs)
+    expect(state).toBe('unaddressed-comments')
+  })
+
+  it('test 7: zero unaddressed comments does not trigger state', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', unaddressed_comment_count: 0 })]
+
+    const state = computeTaskState(task, session, prs)
+    expect(state).toBe('pr-open')
+  })
 })
 
 // ============================================================================
