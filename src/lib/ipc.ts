@@ -226,7 +226,7 @@ export async function spawnPty(taskId: string, serverPort: number, opencodeSessi
 }
 
 export async function spawnShellPty(taskId: string, cwd: string, cols: number, rows: number, terminalIndex: number): Promise<number> {
-  return invoke<number>("pty_spawn_shell", { taskId, cwd, cols, rows, terminal_index: terminalIndex });
+  return invoke<number>("pty_spawn_shell", { taskId, cwd, cols, rows, terminalIndex });
 }
 
 export async function writePty(taskId: string, data: string): Promise<void> {

@@ -310,7 +310,7 @@ impl PtyManager {
                                     // Early flush: buffer exceeded threshold
                                     if !buffer.is_empty() {
                                         let event_name = format!("pty-output-{}", task_id_emitter);
-                                        let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer });
+                                        let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer, "instance_id": instance_id_emitter });
                                         if let Err(e) = app_handle.emit(&event_name, &payload) {
                                             warn!("[PTY] Failed to emit {}: {}", event_name, e);
                                         }
@@ -324,7 +324,7 @@ impl PtyManager {
                             Some(None) | None => {
                                 if !buffer.is_empty() {
                                     let event_name = format!("pty-output-{}", task_id_emitter);
-                                    let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer });
+                                    let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer, "instance_id": instance_id_emitter });
                                     if let Err(e) = app_handle.emit(&event_name, &payload) {
                                         warn!("[PTY] Failed to emit {}: {}", event_name, e);
                                     }
@@ -342,7 +342,7 @@ impl PtyManager {
                     _ = interval.tick() => {
                         if !buffer.is_empty() {
                             let event_name = format!("pty-output-{}", task_id_emitter);
-                            let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer });
+                            let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer, "instance_id": instance_id_emitter });
                             if let Err(e) = app_handle.emit(&event_name, &payload) {
                                 warn!("[PTY] Failed to emit {}: {}", event_name, e);
                             }
@@ -572,7 +572,7 @@ impl PtyManager {
                                         buf.push(buffer.as_bytes());
                                     }
                                     let event_name = format!("pty-output-{}", task_id_emitter);
-                                    let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer });
+                                     let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer, "instance_id": instance_id_emitter });
                                     if let Err(e) = app_handle.emit(&event_name, &payload) {
                                         warn!("[PTY] Failed to emit {}: {}", event_name, e);
                                     }
@@ -585,7 +585,7 @@ impl PtyManager {
                                         buf.push(buffer.as_bytes());
                                     }
                                     let event_name = format!("pty-output-{}", task_id_emitter);
-                                    let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer });
+                                     let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer, "instance_id": instance_id_emitter });
                                     if let Err(e) = app_handle.emit(&event_name, &payload) {
                                         warn!("[PTY] Failed to emit {}: {}", event_name, e);
                                     }
@@ -604,7 +604,7 @@ impl PtyManager {
                                 buf.push(buffer.as_bytes());
                             }
                             let event_name = format!("pty-output-{}", task_id_emitter);
-                            let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer });
+                             let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer, "instance_id": instance_id_emitter });
                             if let Err(e) = app_handle.emit(&event_name, &payload) {
                                 warn!("[PTY] Failed to emit {}: {}", event_name, e);
                             }
@@ -627,11 +627,7 @@ impl PtyManager {
         terminal_index: Option<u32>,
         app_handle: tauri::AppHandle,
     ) -> Result<u64, PtyError> {
-        let key = if let Some(idx) = terminal_index {
-            format!("{}-shell-{}", task_id, idx)
-        } else {
-            format!("{}-shell-0", task_id)
-        };
+        let key = shell_session_key(task_id, terminal_index);
         let mut sessions = self.sessions.lock().await;
 
         if sessions.contains_key(&key) {
@@ -640,7 +636,7 @@ impl PtyManager {
                 let _ = old_session.child.kill();
             }
             if let Ok(pid_dir) = self.get_pid_dir() {
-                let _ = std::fs::remove_file(pid_dir.join(format!("{}-shell.pid", task_id)));
+                let _ = std::fs::remove_file(pid_dir.join(shell_pid_file_name(task_id, terminal_index)));
             }
         }
 
@@ -711,7 +707,7 @@ impl PtyManager {
 
         let pid_dir = self.get_pid_dir()?;
         std::fs::create_dir_all(&pid_dir)?;
-        let pid_file = pid_dir.join(format!("{}-shell.pid", task_id));
+        let pid_file = pid_dir.join(shell_pid_file_name(task_id, terminal_index));
         std::fs::write(&pid_file, pid.to_string())?;
 
         let last_output_time = Arc::new(AtomicU64::new(0));
@@ -802,7 +798,7 @@ impl PtyManager {
                                         buf.push(buffer.as_bytes());
                                     }
                                     let event_name = format!("pty-output-{}", key_emitter);
-                                    let payload = serde_json::json!({ "task_id": &key_emitter, "data": &buffer });
+                                     let payload = serde_json::json!({ "task_id": &key_emitter, "data": &buffer, "instance_id": instance_id_emitter });
                                     if let Err(e) = app_handle.emit(&event_name, &payload) {
                                         warn!("[PTY] Failed to emit {}: {}", event_name, e);
                                     }
@@ -815,7 +811,7 @@ impl PtyManager {
                                         buf.push(buffer.as_bytes());
                                     }
                                     let event_name = format!("pty-output-{}", key_emitter);
-                                    let payload = serde_json::json!({ "task_id": &key_emitter, "data": &buffer });
+                                     let payload = serde_json::json!({ "task_id": &key_emitter, "data": &buffer, "instance_id": instance_id_emitter });
                                     if let Err(e) = app_handle.emit(&event_name, &payload) {
                                         warn!("[PTY] Failed to emit {}: {}", event_name, e);
                                     }
@@ -833,7 +829,7 @@ impl PtyManager {
                                 buf.push(buffer.as_bytes());
                             }
                             let event_name = format!("pty-output-{}", key_emitter);
-                            let payload = serde_json::json!({ "task_id": &key_emitter, "data": &buffer });
+                             let payload = serde_json::json!({ "task_id": &key_emitter, "data": &buffer, "instance_id": instance_id_emitter });
                             if let Err(e) = app_handle.emit(&event_name, &payload) {
                                 warn!("[PTY] Failed to emit {}: {}", event_name, e);
                             }
@@ -1258,6 +1254,18 @@ fn get_user_environment() -> HashMap<String, String> {
     }
 
     env_map
+}
+
+fn shell_session_key(task_id: &str, terminal_index: Option<u32>) -> String {
+    if let Some(idx) = terminal_index {
+        format!("{}-shell-{}", task_id, idx)
+    } else {
+        format!("{}-shell-0", task_id)
+    }
+}
+
+fn shell_pid_file_name(task_id: &str, terminal_index: Option<u32>) -> String {
+    format!("{}.pid", shell_session_key(task_id, terminal_index))
 }
 
 // ============================================================================
@@ -1778,17 +1786,21 @@ mod tests {
     #[test]
     fn test_shell_pid_file_naming() {
         let task_id = "my-task-123";
-        let pid_file_name = format!("{}-shell.pid", task_id);
-        assert_eq!(pid_file_name, "my-task-123-shell.pid");
-        assert!(pid_file_name.ends_with("-shell.pid"));
+        let shell0_key = shell_session_key(task_id, Some(0));
+        let shell1_key = shell_session_key(task_id, Some(1));
+        let shell0_pid_file = shell_pid_file_name(task_id, Some(0));
+        let shell1_pid_file = shell_pid_file_name(task_id, Some(1));
 
-        let session_key = format!("{}-shell", task_id);
-        assert_eq!(session_key, "my-task-123-shell");
+        assert_eq!(shell0_key, "my-task-123-shell-0");
+        assert_eq!(shell1_key, "my-task-123-shell-1");
+        assert_eq!(shell0_pid_file, "my-task-123-shell-0.pid");
+        assert_eq!(shell1_pid_file, "my-task-123-shell-1.pid");
+        assert_ne!(shell0_pid_file, shell1_pid_file);
 
-        let output_event = format!("pty-output-{}", session_key);
-        let exit_event = format!("pty-exit-{}", session_key);
-        assert_eq!(output_event, "pty-output-my-task-123-shell");
-        assert_eq!(exit_event, "pty-exit-my-task-123-shell");
+        let output_event = format!("pty-output-{}", shell1_key);
+        let exit_event = format!("pty-exit-{}", shell1_key);
+        assert_eq!(output_event, "pty-output-my-task-123-shell-1");
+        assert_eq!(exit_event, "pty-exit-my-task-123-shell-1");
     }
 
     #[test]
