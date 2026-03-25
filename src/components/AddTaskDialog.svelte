@@ -23,6 +23,7 @@
   let selectedPermissionMode = $state<PermissionMode>('default')
   let aiProvider = $state<string | null>(null)
   let availableAgents = $state<AutocompleteAgentInfo[]>([])
+  let hasJiraConfigured = $state(false)
 
   const providerDisplayNames: Record<string, string> = {
     'claude-code': 'Claude Code',
@@ -43,6 +44,10 @@
     if ($activeProjectId) {
       const provider = await getProjectConfig($activeProjectId, 'ai_provider')
       aiProvider = provider ?? 'claude-code'
+      
+      const boardId = await getProjectConfig($activeProjectId, 'jira_board_id')
+      hasJiraConfigured = !!boardId
+
       try {
         const agents = await listOpenCodeAgents($activeProjectId)
         availableAgents = agents.filter(a => !a.hidden)
@@ -116,6 +121,7 @@
         />
       </label>
 
+      {#if hasJiraConfigured || (mode === 'edit' && task?.jira_key)}
       <label class="flex flex-col gap-1.5">
         <span class="text-xs text-base-content/60 font-medium">JIRA Key</span>
         <input
@@ -125,6 +131,7 @@
           placeholder="e.g. PROJ-123"
         />
       </label>
+      {/if}
 
       {#if mode === 'create'}
         {#if aiProvider === 'claude-code'}

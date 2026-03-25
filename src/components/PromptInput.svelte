@@ -6,6 +6,8 @@
   import ModelDownloadProgress from './ModelDownloadProgress.svelte'
   import ActionDropdown from './ActionDropdown.svelte'
   import { useAutocomplete } from '../lib/useAutocomplete.svelte'
+  import { getProjectConfig } from '../lib/ipc'
+  import { onMount } from 'svelte'
 
   interface Props {
     value?: string
@@ -45,6 +47,18 @@
   let jiraKeyValue = $state(getInitialJiraKeyValue())
   let showJiraKey = $state(getInitialShowJiraKey())
   let showModelDownload = $state(false)
+  let hasJiraConfigured = $state(false)
+
+  onMount(async () => {
+    if (projectId) {
+      try {
+        const boardId = await getProjectConfig(projectId, 'jira_board_id')
+        hasJiraConfigured = !!boardId
+      } catch (e) {
+        hasJiraConfigured = false
+      }
+    }
+  })
 
   let textareaEl = $state<HTMLTextAreaElement | null>(null)
 
@@ -243,28 +257,30 @@
   <div class="flex items-center justify-between px-3 pb-2">
     <div class="flex items-center gap-2">
       <VoiceInput onTranscription={handleTranscription} listenToHotkey />
-      {#if showJiraKey}
-        <input
-          type="text"
-          class="input input-bordered input-xs w-48"
-          bind:value={jiraKeyValue}
-          placeholder="e.g. PROJ-123"
-        />
-        <span
-          class="text-xs text-base-content opacity-70 cursor-pointer"
-          role="button"
-          tabindex="0"
-          onclick={clearJiraKeyField}
-          onkeydown={(e: KeyboardEvent) => handleJiraKeyControlKeydown(e, clearJiraKeyField)}
-        >✕</span>
-      {:else}
-        <span
-          class="text-xs text-primary cursor-pointer"
-          role="button"
-          tabindex="0"
-          onclick={showJiraKeyField}
-          onkeydown={(e: KeyboardEvent) => handleJiraKeyControlKeydown(e, showJiraKeyField)}
-        >+ Add JIRA key</span>
+      {#if hasJiraConfigured || initialJiraKey}
+        {#if showJiraKey}
+          <input
+            type="text"
+            class="input input-bordered input-xs w-48"
+            bind:value={jiraKeyValue}
+            placeholder="e.g. PROJ-123"
+          />
+          <span
+            class="text-xs text-base-content opacity-70 cursor-pointer"
+            role="button"
+            tabindex="0"
+            onclick={clearJiraKeyField}
+            onkeydown={(e: KeyboardEvent) => handleJiraKeyControlKeydown(e, clearJiraKeyField)}
+          >✕</span>
+        {:else}
+          <span
+            class="text-xs text-primary cursor-pointer"
+            role="button"
+            tabindex="0"
+            onclick={showJiraKeyField}
+            onkeydown={(e: KeyboardEvent) => handleJiraKeyControlKeydown(e, showJiraKeyField)}
+          >+ Add JIRA key</span>
+        {/if}
       {/if}
     </div>
     <div class="flex items-center gap-2">

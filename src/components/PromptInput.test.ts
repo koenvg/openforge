@@ -1,5 +1,6 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
+import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { getProjectConfig } from '../lib/ipc'
 import PromptInput from './PromptInput.svelte'
 
 // Mock IPC functions
@@ -9,6 +10,7 @@ vi.mock('../lib/ipc', () => ({
   listOpenCodeAgents: vi.fn().mockResolvedValue([]),
   createTask: vi.fn(),
   updateTask: vi.fn(),
+  getProjectConfig: vi.fn().mockResolvedValue('test-board'),
 }))
 
 describe('PromptInput', () => {
@@ -117,6 +119,7 @@ describe('PromptInput', () => {
       },
     })
 
+    await waitFor(() => expect(screen.getByText('+ Add JIRA key')).toBeTruthy())
     const addJiraLink = screen.getByText('+ Add JIRA key')
     await fireEvent.click(addJiraLink)
 
@@ -131,6 +134,7 @@ describe('PromptInput', () => {
       },
     })
 
+    await waitFor(() => expect(screen.getByRole('button', { name: '+ Add JIRA key' })).toBeTruthy())
     const addJiraButton = screen.getByRole('button', { name: '+ Add JIRA key' })
     await fireEvent.keyDown(addJiraButton, { key: ' ' })
 
@@ -145,6 +149,7 @@ describe('PromptInput', () => {
       },
     })
 
+    await waitFor(() => expect(screen.getByRole('button', { name: '✕' })).toBeTruthy())
     const clearJiraButton = screen.getByRole('button', { name: '✕' })
     await fireEvent.keyDown(clearJiraButton, { key: 'Enter' })
 
@@ -215,6 +220,33 @@ describe('PromptInput', () => {
 
     const jiraInput = screen.getByPlaceholderText('e.g. PROJ-123')
     expect((jiraInput as HTMLInputElement).value).toBe('PROJ-42')
+  })
+
+  
+  describe('Jira Key Visibility', () => {
+    it('shows + Add JIRA key when jira_board_id is configured', async () => {
+      vi.mocked(getProjectConfig).mockResolvedValue('board-123')
+      render(PromptInput, { props: { ...baseProps } })
+      await waitFor(() => {
+        expect(screen.queryByText('+ Add JIRA key')).toBeTruthy()
+      })
+    })
+
+    it('hides + Add JIRA key when jira_board_id is not configured', async () => {
+      vi.mocked(getProjectConfig).mockResolvedValue(null)
+      render(PromptInput, { props: { ...baseProps } })
+      await new Promise(r => setTimeout(r, 50)) // give onMount time
+      expect(screen.queryByText('+ Add JIRA key')).toBeNull()
+    })
+
+    it('shows JIRA key field if initialJiraKey is provided even if not configured', async () => {
+      vi.mocked(getProjectConfig).mockResolvedValue(null)
+      render(PromptInput, { props: { ...baseProps, jiraKey: 'PROJ-999' } })
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('e.g. PROJ-123')).toBeTruthy()
+      })
+      expect((screen.getByPlaceholderText('e.g. PROJ-123') as HTMLInputElement).value).toBe('PROJ-999')
+    })
   })
 
   describe('dual buttons (onStartTask provided)', () => {
