@@ -5,7 +5,7 @@
   import { activeSessions } from '../lib/stores'
   import { writePty, killPty, abortImplementation } from '../lib/ipc'
   import '@xterm/xterm/css/xterm.css'
-  import { acquire, attach, detach, type PoolEntry } from '../lib/terminalPool'
+  import { acquire, attach, detach, isPtyActive, type PoolEntry } from '../lib/terminalPool'
   import VoiceInput from './VoiceInput.svelte'
 
   interface Props {
@@ -18,8 +18,8 @@
   let terminalEl: HTMLDivElement
   let unlisteners: UnlistenFn[] = []
   let poolEntry: PoolEntry | null = null
-  let ptyActive = $state(false)
   let status = $state<'idle' | 'running' | 'complete' | 'error'>('idle')
+  let terminalActive = $state(false)
 
   // Derived state from activeSessions store
   let session = $derived($activeSessions.get(taskId) || null)
@@ -28,13 +28,12 @@
     poolEntry = await acquire(taskId)
     attach(poolEntry, terminalEl)
 
-    // Sync local ptyActive from pool entry
-    ptyActive = poolEntry.ptyActive
+    terminalActive = isPtyActive(taskId)
 
     // If session already exists and is running, PTY is already spawned
     if (session?.status === 'running') {
       status = 'running'
-      ptyActive = true
+      terminalActive = isPtyActive(taskId)
     } else if (session?.status === 'completed') {
       status = 'complete'
     } else if (session?.status === 'failed' || session?.status === 'interrupted') {
@@ -47,7 +46,7 @@
       const s = event.payload.status
       if (s === 'running') {
         status = 'running'
-        ptyActive = true
+        terminalActive = isPtyActive(taskId)
       } else if (s === 'completed') {
         status = 'complete'
       } else if (s === 'failed' || s === 'interrupted') {
@@ -65,7 +64,7 @@
 
   async function handleAbort() {
     try {
-      if (poolEntry?.ptyActive) {
+      if (isPtyActive(taskId)) {
         await killPty(taskId).catch(e => {
           console.error('[ClaudeAgentPanel] Failed to kill PTY on abort:', e)
         })
@@ -78,7 +77,7 @@
   }
 
   function handleTranscription(text: string) {
-    if (poolEntry?.ptyActive) writePty(taskId, text).catch(e => console.error('[ClaudeAgentPanel] transcription write failed:', e))
+    if (isPtyActive(taskId)) writePty(taskId, text).catch(e => console.error('[ClaudeAgentPanel] transcription write failed:', e))
   }
 
   function getStatusText(): string {
@@ -146,7 +145,7 @@
 
   <div class="flex-1 overflow-hidden min-h-0 bg-base-100 border border-base-300 rounded-md relative">
     <div class="terminal-wrapper" bind:this={terminalEl}></div>
-    {#if !session && !ptyActive}
+    {#if !session && !terminalActive}
       <div class="absolute inset-0 flex flex-col items-center justify-center p-16 gap-4 bg-base-100 z-[1] pointer-events-none">
         {#if isStarting}
           <span class="loading loading-spinner loading-lg text-primary"></span>

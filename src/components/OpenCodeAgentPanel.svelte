@@ -5,7 +5,14 @@
   import '@xterm/xterm/css/xterm.css'
   import { parseCheckpointQuestion } from '../lib/parseCheckpoint'
   import VoiceInput from './VoiceInput.svelte'
-  import { acquire, attach, detach, type PoolEntry } from '../lib/terminalPool'
+  import {
+    acquire,
+    attach,
+    detach,
+    getShellLifecycleState,
+    updateShellLifecycleState,
+    type PoolEntry,
+  } from '../lib/terminalPool'
   import { createSessionHistory } from '../lib/useSessionHistory.svelte'
 
   interface Props {
@@ -72,7 +79,7 @@
 
   async function tryAttachPty(): Promise<void> {
     if (!poolEntry) return
-    if (poolEntry.ptyActive) return  // PTY survived from pool — no need to re-spawn
+    if (getShellLifecycleState(taskId).ptyActive) return
 
     const currentSession = $activeSessions.get(taskId)
     if (!currentSession) return
@@ -86,7 +93,11 @@
 
     try {
       await spawnPty(taskId, opencodePort, currentSession.opencode_session_id, poolEntry.terminal.cols, poolEntry.terminal.rows)
-      poolEntry.ptyActive = true
+      updateShellLifecycleState(taskId, {
+        ptyActive: true,
+        shellExited: false,
+        currentPtyInstance: getShellLifecycleState(taskId).currentPtyInstance,
+      })
       if (currentSession.status === 'running') status = 'running'
     } catch (e) {
       console.error('[OpenCodeAgentPanel] Failed to spawn PTY:', e)
@@ -109,12 +120,16 @@
 
   async function handleAbort() {
     try {
-      if (poolEntry?.ptyActive) {
+      const lifecycle = getShellLifecycleState(taskId)
+      if (lifecycle.ptyActive) {
         await killPty(taskId).catch((e) => {
           console.error('[OpenCodeAgentPanel] Failed to kill PTY on abort:', e)
         })
-        poolEntry.ptyActive = false
-        poolEntry.needsClear = true
+        updateShellLifecycleState(taskId, {
+          ptyActive: false,
+          shellExited: true,
+          currentPtyInstance: lifecycle.currentPtyInstance,
+        })
       }
       await abortImplementation(taskId)
       status = 'error'
@@ -124,7 +139,9 @@
   }
 
   function handleTranscription(text: string) {
-    if (poolEntry?.ptyActive) writePty(taskId, text).catch(e => console.error('[OpenCodeAgentPanel] transcription write failed:', e))
+    if (getShellLifecycleState(taskId).ptyActive) {
+      writePty(taskId, text).catch(e => console.error('[OpenCodeAgentPanel] transcription write failed:', e))
+    }
   }
 
   function getStatusText(): string {

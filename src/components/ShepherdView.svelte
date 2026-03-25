@@ -5,7 +5,7 @@
   import { activeProjectId, shepherdStatus, actionItemCount, selectedTaskId, currentView } from '../lib/stores'
   import { writePty, getActionItems, dismissActionItem, getActionItemCount } from '../lib/ipc'
   import '@xterm/xterm/css/xterm.css'
-  import { acquire, attach, detach, type PoolEntry } from '../lib/terminalPool'
+  import { acquire, attach, detach, isPtyActive, type PoolEntry } from '../lib/terminalPool'
   import VoiceInput from './VoiceInput.svelte'
   import ActionItemPanel from './ActionItemPanel.svelte'
   import type { ShepherdStatus, ActionItem } from '../lib/types'
@@ -14,7 +14,7 @@
   let terminalEl: HTMLDivElement
   let unlisteners: UnlistenFn[] = []
   let poolEntry: PoolEntry | null = null
-  let ptyActive = $state(false)
+  let terminalActive = $state(false)
   let actionItems = $state<ActionItem[]>([])
   let panelOpen = $state(true)
 
@@ -74,13 +74,13 @@
     try {
       poolEntry = await acquire(taskId)
       attach(poolEntry, terminalEl)
-      ptyActive = poolEntry.ptyActive
+      terminalActive = isPtyActive(taskId)
 
       unlisteners.push(await listen<{ data?: string }>(`pty-output-${taskId}`, () => {
-        ptyActive = true
+        terminalActive = isPtyActive(taskId)
       }))
       unlisteners.push(await listen(`pty-exit-${taskId}`, () => {
-        ptyActive = false
+        terminalActive = isPtyActive(taskId)
       }))
     } catch (e) {
       console.error('[ShepherdView] Failed to initialize terminal:', e)
@@ -104,7 +104,7 @@
   })
 
   function handleTranscription(text: string) {
-    if (taskId && poolEntry?.ptyActive) {
+    if (taskId && isPtyActive(taskId)) {
       writePty(taskId, text).catch(e => console.error('[ShepherdView] transcription write failed:', e))
     }
   }
@@ -135,7 +135,7 @@
   <div class="flex flex-row flex-1 overflow-hidden min-h-0">
     <div class="flex-1 overflow-hidden min-h-0 relative">
       <div class="terminal-wrapper" bind:this={terminalEl}></div>
-      {#if !ptyActive}
+      {#if !terminalActive}
         <div class="absolute inset-0 flex flex-col items-center justify-center p-16 gap-4 bg-base-100 z-[1] pointer-events-none">
           {#if status === 'disabled'}
             <svg class="w-16 h-16 text-base-content/40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">

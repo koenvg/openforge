@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/svelte'
+import { fireEvent, render, screen } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { writable } from 'svelte/store'
 import type { AgentSession } from '../lib/types'
@@ -52,7 +52,7 @@ vi.mock('../lib/audioRecorder', () => ({
 }))
 
 // Mock terminalPool to avoid xterm constructor issues in test environment
-const { listenCallbacks, mockPoolEntry, mockSessionHistoryPort } = vi.hoisted(() => ({
+const { listenCallbacks, mockPoolEntry, mockSessionHistoryPort, mockShellLifecycleState } = vi.hoisted(() => ({
   listenCallbacks: new Map<string, TauriEventCallback[]>(),
   mockPoolEntry: {
     taskId: '',
@@ -68,6 +68,11 @@ const { listenCallbacks, mockPoolEntry, mockSessionHistoryPort } = vi.hoisted(()
     attached: false,
   },
   mockSessionHistoryPort: { value: null as number | null },
+  mockShellLifecycleState: {
+    ptyActive: false,
+    shellExited: false,
+    currentPtyInstance: null as number | null,
+  },
 }))
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -85,6 +90,13 @@ vi.mock('../lib/terminalPool', () => ({
   detach: vi.fn(),
   release: vi.fn(),
   releaseAll: vi.fn(),
+  getShellLifecycleState: vi.fn().mockImplementation(() => ({ ...mockShellLifecycleState })),
+  isPtyActive: vi.fn().mockImplementation(() => mockShellLifecycleState.ptyActive),
+  updateShellLifecycleState: vi.fn().mockImplementation((_taskId: string, state: typeof mockShellLifecycleState) => {
+    mockShellLifecycleState.ptyActive = state.ptyActive
+    mockShellLifecycleState.shellExited = state.shellExited
+    mockShellLifecycleState.currentPtyInstance = state.currentPtyInstance
+  }),
   _getPool: vi.fn().mockReturnValue(new Map()),
 }))
 
@@ -101,7 +113,8 @@ vi.mock('../lib/useSessionHistory.svelte', () => ({
 
 import AgentPanel from './AgentPanel.svelte'
 import { activeSessions } from '../lib/stores'
-import { spawnPty } from '../lib/ipc'
+import { killPty, spawnPty } from '../lib/ipc'
+import { updateShellLifecycleState } from '../lib/terminalPool'
 
 function emitTauriEvent(eventName: string, payload: unknown = {}) {
   const callbacks = listenCallbacks.get(eventName) || []
@@ -116,6 +129,10 @@ describe('AgentPanel (router)', () => {
     listenCallbacks.clear()
     mockSessionHistoryPort.value = null
     mockPoolEntry.ptyActive = false
+    mockPoolEntry.needsClear = false
+    mockShellLifecycleState.ptyActive = false
+    mockShellLifecycleState.shellExited = false
+    mockShellLifecycleState.currentPtyInstance = null
     vi.clearAllMocks()
   })
 
@@ -190,6 +207,10 @@ describe('AgentPanel starting animation', () => {
     listenCallbacks.clear()
     mockSessionHistoryPort.value = null
     mockPoolEntry.ptyActive = false
+    mockPoolEntry.needsClear = false
+    mockShellLifecycleState.ptyActive = false
+    mockShellLifecycleState.shellExited = false
+    mockShellLifecycleState.currentPtyInstance = null
     vi.clearAllMocks()
   })
 
@@ -240,6 +261,10 @@ describe('OpenCodeAgentPanel (via router)', () => {
     listenCallbacks.clear()
     mockSessionHistoryPort.value = null
     mockPoolEntry.ptyActive = false
+    mockPoolEntry.needsClear = false
+    mockShellLifecycleState.ptyActive = false
+    mockShellLifecycleState.shellExited = false
+    mockShellLifecycleState.currentPtyInstance = null
     vi.clearAllMocks()
   })
 
@@ -391,6 +416,36 @@ describe('OpenCodeAgentPanel (via router)', () => {
     })
   })
 
+  it('does not respawn a PTY when lifecycle state is already active', async () => {
+    mockSessionHistoryPort.value = 4173
+    mockPoolEntry.ptyActive = false
+    mockShellLifecycleState.ptyActive = true
+
+    const session: AgentSession = {
+      id: 'ses-1',
+      ticket_id: 'T-1',
+      opencode_session_id: 'oc-sess-1',
+      stage: 'implement',
+      status: 'running',
+      checkpoint_data: null,
+      error_message: null,
+      created_at: 1000,
+      updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
+    }
+
+    activeSessions.set(new Map([['T-1', session]]))
+
+    render(AgentPanel, { props: { taskId: 'T-1' } })
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('running')).toBeTruthy()
+    })
+
+    expect(spawnPty).not.toHaveBeenCalled()
+  })
+
   it('does not reattach a PTY when action-complete fires', async () => {
     mockSessionHistoryPort.value = 4173
 
@@ -422,6 +477,39 @@ describe('OpenCodeAgentPanel (via router)', () => {
     emitTauriEvent('action-complete', { task_id: 'T-1' })
 
     expect(spawnPty).not.toHaveBeenCalled()
+  })
+
+  it('updates lifecycle state through terminalPool when aborting', async () => {
+    mockShellLifecycleState.ptyActive = true
+    mockShellLifecycleState.currentPtyInstance = 42
+
+    const session: AgentSession = {
+      id: 'ses-1',
+      ticket_id: 'T-1',
+      opencode_session_id: 'oc-sess-1',
+      stage: 'implement',
+      status: 'running',
+      checkpoint_data: null,
+      error_message: null,
+      created_at: 1000,
+      updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
+    }
+
+    activeSessions.set(new Map([['T-1', session]]))
+
+    render(AgentPanel, { props: { taskId: 'T-1' } })
+
+    const abortButton = await screen.findByRole('button', { name: 'Abort' })
+    await fireEvent.click(abortButton)
+
+    expect(killPty).toHaveBeenCalledWith('T-1')
+    expect(updateShellLifecycleState).toHaveBeenCalledWith('T-1', {
+      ptyActive: false,
+      shellExited: true,
+      currentPtyInstance: 42,
+    })
   })
 
   it('shows question banner when session is paused with checkpoint_data', () => {
