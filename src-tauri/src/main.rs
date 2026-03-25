@@ -201,6 +201,44 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
     let _ = app.emit("startup-resume-complete", ());
     info!("[startup] Resume complete, emitted startup-resume-complete event");
 }
+
+fn should_start_project_root_server(
+    provider: &str,
+    project_path: Option<&str>,
+    existing_port: Option<u16>,
+) -> bool {
+    provider == "opencode" && project_path.is_some() && existing_port.is_none()
+}
+
+async fn start_project_root_server(app: &tauri::AppHandle, project_id: &str) -> Result<(), String> {
+    let (provider, project_path) = {
+        let db = app.state::<Arc<Mutex<db::Database>>>();
+        let db_lock = db.lock().map_err(|e| format!("database lock error: {}", e))?;
+        let provider = db_lock.resolve_ai_provider(project_id);
+        let project_path = db_lock
+            .get_project(project_id)
+            .map_err(|e| format!("Failed to load project {}: {}", project_id, e))?
+            .map(|project| project.path);
+
+        (provider, project_path)
+    };
+
+    let discovery_task_id = server_manager::discovery_server_task_id(project_id);
+    let server_mgr = app.state::<server_manager::ServerManager>();
+    let existing_port = server_mgr.get_server_port(&discovery_task_id).await;
+
+    if !should_start_project_root_server(&provider, project_path.as_deref(), existing_port) {
+        return Ok(());
+    }
+
+    let project_path = project_path.ok_or_else(|| format!("Project {} has no path", project_id))?;
+
+    server_mgr
+        .spawn_server(&discovery_task_id, std::path::Path::new(&project_path))
+        .await
+        .map(|_| ())
+        .map_err(|e| format!("Failed to start root OpenCode server: {}", e))
+}
 // ============================================================================
 // Main
 // ============================================================================
@@ -405,6 +443,32 @@ fn main() {
                 }
             });
 
+            let app_handle_root_server = app.handle().clone();
+            let db_for_root_server = db_arc.clone();
+            tauri::async_runtime::spawn(async move {
+                let startup_project_id = {
+                    match db_for_root_server.lock() {
+                        Ok(db) => match resolve_startup_project_id(&db) {
+                            Ok(project_id) => project_id,
+                            Err(e) => {
+                                warn!("[startup] Failed to resolve root server project: {}", e);
+                                None
+                            }
+                        },
+                        Err(e) => {
+                            error!("[startup] database lock error during root server startup: {}", e);
+                            None
+                        }
+                    }
+                };
+
+                if let Some(project_id) = startup_project_id {
+                    if let Err(e) = start_project_root_server(&app_handle_root_server, &project_id).await {
+                        warn!("[startup] root OpenCode server auto-start failed for {}: {}", project_id, e);
+                    }
+                }
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -543,4 +607,29 @@ fn main() {
             });
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_should_start_project_root_server_for_opencode_project() {
+        assert!(should_start_project_root_server("opencode", Some("/tmp/project"), None));
+    }
+
+    #[test]
+    fn test_should_not_start_project_root_server_for_claude_project() {
+        assert!(!should_start_project_root_server("claude-code", Some("/tmp/project"), None));
+    }
+
+    #[test]
+    fn test_should_not_start_project_root_server_without_project_path() {
+        assert!(!should_start_project_root_server("opencode", None, None));
+    }
+
+    #[test]
+    fn test_should_not_start_project_root_server_when_already_running() {
+        assert!(!should_start_project_root_server("opencode", Some("/tmp/project"), Some(4100)));
+    }
 }
