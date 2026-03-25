@@ -17,7 +17,7 @@ vi.mock('../lib/boardFilters', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/boardFilters')>()
   return {
     ...actual,
-    loadFocusFilterStates: vi.fn().mockResolvedValue(['needs-input', 'ci-failed', 'changes-requested', 'sad']),
+    loadFocusFilterStates: vi.fn().mockResolvedValue(['needs-input', 'ci-failed', 'changes-requested', 'unaddressed-comments', 'sad']),
   }
 })
 

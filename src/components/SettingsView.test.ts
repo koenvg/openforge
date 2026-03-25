@@ -33,21 +33,21 @@ vi.mock('../lib/boardColumns', () => ({
   loadBoardColumns: vi.fn(() => Promise.resolve([])),
   saveBoardColumns: vi.fn(() => Promise.resolve(undefined)),
   validateBoardColumns: vi.fn(() => ({ valid: true, errors: [] })),
-  ALL_TASK_STATES: ['idle', 'active', 'needs-input', 'resting', 'celebrating', 'sad', 'frozen', 'pr-draft', 'pr-open', 'ci-running', 'review-pending', 'ci-failed', 'changes-requested', 'ready-to-merge', 'pr-queued', 'pr-merged'],
+  ALL_TASK_STATES: ['idle', 'active', 'needs-input', 'resting', 'celebrating', 'sad', 'frozen', 'pr-draft', 'pr-open', 'ci-running', 'review-pending', 'ci-failed', 'changes-requested', 'unaddressed-comments', 'ready-to-merge', 'pr-queued', 'pr-merged'],
   TASK_STATE_LABELS: {
     idle: 'Idle', active: 'Running', 'needs-input': 'Needs Input', resting: 'Paused',
     celebrating: 'Agent Done', sad: 'Failed', frozen: 'Interrupted', 'pr-draft': 'PR Draft',
     'pr-open': 'PR Open', 'ci-running': 'CI Running', 'review-pending': 'Awaiting Review',
-    'ci-failed': 'CI Failed', 'changes-requested': 'Changes Requested',
+    'ci-failed': 'CI Failed', 'changes-requested': 'Changes Requested', 'unaddressed-comments': 'Unaddressed Comments',
     'ready-to-merge': 'Ready to Merge', 'pr-queued': 'In Merge Queue', 'pr-merged': 'PR Merged',
   },
   DEFAULT_BOARD_COLUMNS: [],
 }))
 
 vi.mock('../lib/boardFilters', () => ({
-  loadFocusFilterStates: vi.fn(() => Promise.resolve(['needs-input', 'ci-failed', 'changes-requested', 'sad'])),
+  loadFocusFilterStates: vi.fn(() => Promise.resolve(['needs-input', 'ci-failed', 'changes-requested', 'unaddressed-comments', 'sad'])),
   saveFocusFilterStates: vi.fn(() => Promise.resolve(undefined)),
-  DEFAULT_FOCUS_STATES: ['needs-input', 'ci-failed', 'changes-requested', 'sad'],
+  DEFAULT_FOCUS_STATES: ['needs-input', 'ci-failed', 'changes-requested', 'unaddressed-comments', 'sad'],
 }))
 
 vi.mock('../lib/stores', () => ({
