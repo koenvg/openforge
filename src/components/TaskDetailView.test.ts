@@ -100,6 +100,7 @@ vi.mock('../lib/stores', () => ({
   selfReviewArchivedComments: writable([]),
   pendingManualComments: writable([]),
   taskReviewModes: writable(new Map()),
+  taskTerminalOpen: writable(new Map()),
   taskDraftNotes: writable(new Map()),
   commandHeld: writable(false),
 }))
@@ -218,7 +219,7 @@ vi.mock('../lib/actions', () => ({
 
 import TaskDetailView from './TaskDetailView.svelte'
 import type { Task, AgentSession } from '../lib/types'
-import { activeSessions, taskReviewModes, commandHeld } from '../lib/stores'
+import { activeSessions, taskReviewModes, taskTerminalOpen, commandHeld } from '../lib/stores'
 
 const baseTask: Task = {
   id: 'T-42',
@@ -255,6 +256,10 @@ const baseSession: AgentSession = {
 }
 
 describe('TaskDetailView', () => {
+  beforeEach(() => {
+    taskTerminalOpen.set(new Map())
+  })
+
   it('renders back button with "back" text', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     expect(screen.getByText('back')).toBeTruthy()
@@ -989,6 +994,76 @@ describe('TaskDetailView', () => {
          expect(breadcrumb?.textContent).toContain('code')
          expect(breadcrumb?.textContent).not.toContain('self_review')
        })
+
+        vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+      })
+    })
+
+    describe('terminal panel persistence', () => {
+      beforeEach(() => {
+        taskTerminalOpen.set(new Map())
+      })
+
+      it('⌘J writes true to taskTerminalOpen store when opening', async () => {
+        const { getWorktreeForTask } = await import('../lib/ipc')
+        vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' } as any)
+
+        render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+        await waitFor(() => expect(screen.getByText('code_view')).toBeTruthy())
+
+        await fireEvent.keyDown(window, { code: 'KeyJ', metaKey: true })
+
+        await waitFor(() => {
+          expect(get(taskTerminalOpen).get('T-42')).toBe(true)
+        })
+
+        vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+      })
+
+      it('⌘J writes false to taskTerminalOpen store when closing', async () => {
+        const { getWorktreeForTask } = await import('../lib/ipc')
+        vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' } as any)
+
+        taskTerminalOpen.set(new Map([['T-42', true]]))
+        render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+        await waitFor(() => expect(screen.getByText('code_view')).toBeTruthy())
+
+        await waitFor(() => expect(screen.getByTestId('resizable-bottom-panel')).toBeTruthy())
+
+        await fireEvent.keyDown(window, { code: 'KeyJ', metaKey: true })
+
+        await waitFor(() => {
+          expect(get(taskTerminalOpen).get('T-42')).toBe(false)
+        })
+
+        vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+      })
+
+      it('restores terminal open state from store when task is rendered', async () => {
+        const { getWorktreeForTask } = await import('../lib/ipc')
+        vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' } as any)
+
+        taskTerminalOpen.set(new Map([['T-42', true]]))
+        render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+
+        await waitFor(() => {
+          expect(screen.getByTestId('resizable-bottom-panel')).toBeTruthy()
+        })
+
+        vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+      })
+
+      it('terminal open state is task-scoped: Task A open does not affect Task B', async () => {
+        const { getWorktreeForTask } = await import('../lib/ipc')
+        vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' } as any)
+
+        taskTerminalOpen.set(new Map([['T-42', true]]))
+        const taskB = { ...baseTask, id: 'T-99', initial_prompt: 'Task B', jira_key: null }
+        render(TaskDetailView, { props: { task: taskB, onRunAction: mockOnRunAction } })
+
+        await waitFor(() => {
+          expect(screen.queryByTestId('resizable-bottom-panel')).toBeNull()
+        })
 
         vi.mocked(getWorktreeForTask).mockResolvedValue(null)
       })

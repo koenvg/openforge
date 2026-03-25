@@ -2,7 +2,7 @@
   import { onMount } from 'svelte'
   import { get } from 'svelte/store'
   import type { Task, Action } from '../lib/types'
-  import { activeSessions, activeProjectId, startingTasks, taskReviewModes } from '../lib/stores'
+  import { activeSessions, activeProjectId, startingTasks, taskReviewModes, taskTerminalOpen } from '../lib/stores'
   import { getWorktreeForTask, updateTaskStatus, getConfig } from '../lib/ipc'
   import { resetToBoard } from '../lib/navigation'
   import { isInputFocused } from '../lib/domUtils'
@@ -43,6 +43,13 @@
     taskReviewModes.set(updated)
   }
 
+  function setBottomPanelOpen(value: boolean) {
+    bottomPanelOpen = value
+    const updated = new Map(get(taskTerminalOpen) as Map<string, boolean>)
+    updated.set(task.id, value)
+    taskTerminalOpen.set(updated)
+  }
+
   let currentSession = $derived($activeSessions.get(task.id))
   let agentStatus = $derived(currentSession?.status ?? null)
   let isStarting = $derived($startingTasks.has(task.id))
@@ -52,9 +59,10 @@
     if (taskId !== lastTaskId) {
       lastTaskId = taskId
       reviewMode = (get(taskReviewModes) as Map<string, boolean>).get(taskId) ?? false
-      bottomPanelOpen = false
+      const wasOpen = (get(taskTerminalOpen) as Map<string, boolean>).get(taskId) ?? false
+      bottomPanelOpen = wasOpen
       terminalFullscreen = false
-      terminalEverOpened = false
+      terminalEverOpened = wasOpen
       worktreePath = null
       getWorktreeForTask(taskId).then((worktree) => {
         worktreePath = worktree?.worktree_path ?? null
@@ -111,13 +119,13 @@
     if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && e.code === 'KeyJ') {
       e.preventDefault()
       if (terminalFullscreen) { terminalFullscreen = false; return }
-      bottomPanelOpen = !bottomPanelOpen
+      setBottomPanelOpen(!bottomPanelOpen)
       return
     }
 
     if (e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey && e.code === 'KeyT') {
       e.preventDefault()
-      if (!bottomPanelOpen) bottomPanelOpen = true
+      if (!bottomPanelOpen) setBottomPanelOpen(true)
       return
     }
 
@@ -144,7 +152,7 @@
       e.preventDefault()
       setReviewMode(false)
       terminalFullscreen = false
-      if (!bottomPanelOpen) bottomPanelOpen = true
+      if (!bottomPanelOpen) setBottomPanelOpen(true)
       if (terminalTabsRef) {
         terminalTabsRef.focusActiveTab()
       } else {
