@@ -71,6 +71,11 @@ pub struct ServerManager {
     servers: Arc<Mutex<HashMap<String, ManagedServer>>>,
     pid_dir_override: Option<PathBuf>,
 }
+
+pub fn discovery_server_task_id(project_id: &str) -> String {
+    format!("opencode-discovery-{}", project_id)
+}
+
 impl ServerManager {
     /// Creates a new ServerManager with an empty server map
     pub fn new() -> Self {
@@ -367,6 +372,11 @@ mod tests {
     fn test_server_manager_new() {
         let manager = ServerManager::new();
         assert!(manager.servers.try_lock().is_ok());
+    }
+
+    #[test]
+    fn test_discovery_server_task_id() {
+        assert_eq!(discovery_server_task_id("P-1"), "opencode-discovery-P-1");
     }
 
     #[tokio::test]
