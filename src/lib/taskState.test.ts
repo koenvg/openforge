@@ -461,7 +461,7 @@ describe('computeTaskState - unaddressed-comments (PART 5)', () => {
   it('test 4: ready-to-merge takes priority over unaddressed-comments', () => {
     const task = createTask({ status: 'doing' })
     const session = createSession({ status: 'completed' })
-    const prs = [createPr({ state: 'open', ci_status: 'success', review_status: 'approved', unaddressed_comment_count: 2 })]
+    const prs = [createPr({ state: 'open', ci_status: 'success', review_status: 'approved', mergeable_state: 'clean', unaddressed_comment_count: 2 })]
 
     const state = computeTaskState(task, session, prs)
     expect(state).toBe('ready-to-merge')

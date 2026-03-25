@@ -17,6 +17,7 @@ const STATE_REASONS: Record<TaskState, string> = {
   'review-pending': 'Waiting on code review.',
   'ci-failed': 'CI pipeline failed — check the logs.',
   'changes-requested': 'Changes requested on the pull request.',
+  'unaddressed-comments': 'Unaddressed comments on the pull request.',
   'ready-to-merge': 'Ready to merge — all checks passed.',
   'pr-queued': 'Pull request is queued for merge.',
   'pr-merged': 'Pull request merged.',
@@ -32,6 +33,10 @@ export function getTaskReasonText(
 
   // Calculate total unaddressed comments across all PRs
   const totalUnaddressed = prs.reduce((sum, pr) => sum + (pr.unaddressed_comment_count ?? 0), 0)
+
+  if (state === 'unaddressed-comments' && totalUnaddressed > 0) {
+    return `${totalUnaddressed} unaddressed comment(s) on the pull request.`
+  }
 
   if (totalUnaddressed > 0) {
     return `${totalUnaddressed} unaddressed comment(s) need attention. ${baseReason}`

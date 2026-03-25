@@ -3,7 +3,7 @@ import { isReadyToMerge } from './types'
 
 export type TaskState =
   | 'egg' | 'idle' | 'active' | 'needs-input' | 'resting' | 'celebrating' | 'sad' | 'frozen' | 'done'
-  | 'pr-draft' | 'pr-open' | 'ci-failed' | 'changes-requested' | 'ready-to-merge' | 'pr-queued' | 'pr-merged' | 'ci-running' | 'review-pending'
+  | 'pr-draft' | 'pr-open' | 'ci-failed' | 'changes-requested' | 'ready-to-merge' | 'pr-queued' | 'pr-merged' | 'ci-running' | 'review-pending' | 'unaddressed-comments'
 
 function getPrState(prs: PullRequestInfo[]): TaskState | null {
   // Find the most relevant PR: prefer open, then merged, then closed
@@ -22,6 +22,7 @@ function getPrState(prs: PullRequestInfo[]): TaskState | null {
   // Open PR checks in priority order (when not merge-ready)
   if (pr.ci_status === 'failure') return 'ci-failed'
   if (pr.review_status === 'changes_requested') return 'changes-requested'
+  if ((pr.unaddressed_comment_count ?? 0) > 0) return 'unaddressed-comments'
   if (pr.draft) return 'pr-draft'
   if (pr.ci_status === 'pending') return 'ci-running'
   if (pr.ci_status === 'success' && pr.review_status === 'review_required') return 'review-pending'
@@ -38,6 +39,7 @@ const BORDER_CLASS: Record<string, string> = {
   'ci-failed': 'ci-failed',
   'ci-running': 'ci-running',
   'review-pending': 'review-pending',
+  'unaddressed-comments': 'unaddressed-comments',
   'ready-to-merge': 'ready-to-merge',
   'pr-queued': 'ready-to-merge',
 }
