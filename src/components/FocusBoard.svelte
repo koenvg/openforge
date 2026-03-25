@@ -203,7 +203,12 @@
             isSelected={selectedTaskIdLocal === task.id}
             isFocused={vim.focusedIndex === i}
             onSelect={() => {
-              onOpenTask(task.id)
+              if (selectedTaskIdLocal === task.id) {
+                onOpenTask(task.id)
+              } else {
+                selectedTaskIdLocal = task.id
+                vim.setFocusedIndex(i)
+              }
             }}
             onContextMenu={(e) => handleContextMenu(e, task.id)}
           />

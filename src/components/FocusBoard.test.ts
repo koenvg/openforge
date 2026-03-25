@@ -310,4 +310,50 @@ describe('FocusBoard', () => {
     const chip = screen.getByRole('button', { name: /Backlog 1/i })
     expect(chip.getAttribute('aria-pressed')).toBe('true')
   })
+
+  it('clicking an unselected task selects it without navigating', async () => {
+    renderBoard({
+      tasks: [taskFocus, taskDoing],
+      sessions: new Map([
+        [taskFocus.id, makeSession(taskFocus.id, 'paused', 'needs-review')],
+        [taskDoing.id, makeSession(taskDoing.id, 'failed', null)],
+      ]),
+    })
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('[data-vim-item]').length).toBe(2)
+    })
+
+    const items = document.querySelectorAll('[data-vim-item]')
+    await fireEvent.click(items[1])
+
+    expect(onOpenTask).not.toHaveBeenCalled()
+
+    await waitFor(() => {
+      const updatedItems = document.querySelectorAll('[data-vim-item]')
+      expect(updatedItems[1].getAttribute('data-selected')).toBe('true')
+    })
+  })
+
+  it('clicking an already-selected task navigates to it', async () => {
+    renderBoard({
+      tasks: [taskFocus, taskDoing],
+      sessions: new Map([
+        [taskFocus.id, makeSession(taskFocus.id, 'paused', 'needs-review')],
+        [taskDoing.id, makeSession(taskDoing.id, 'failed', null)],
+      ]),
+    })
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('[data-vim-item]').length).toBe(2)
+    })
+
+    const items = document.querySelectorAll('[data-vim-item]')
+
+    await fireEvent.click(items[1])
+    expect(onOpenTask).not.toHaveBeenCalled()
+
+    await fireEvent.click(items[1])
+    expect(onOpenTask).toHaveBeenCalledWith(taskDoing.id)
+  })
 })
