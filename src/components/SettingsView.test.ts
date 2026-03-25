@@ -29,6 +29,27 @@ vi.mock('../lib/actions', () => ({
   ],
 }))
 
+vi.mock('../lib/boardColumns', () => ({
+  loadBoardColumns: vi.fn(() => Promise.resolve([])),
+  saveBoardColumns: vi.fn(() => Promise.resolve(undefined)),
+  validateBoardColumns: vi.fn(() => ({ valid: true, errors: [] })),
+  ALL_TASK_STATES: ['idle', 'active', 'needs-input', 'resting', 'celebrating', 'sad', 'frozen', 'pr-draft', 'pr-open', 'ci-running', 'review-pending', 'ci-failed', 'changes-requested', 'ready-to-merge', 'pr-queued', 'pr-merged'],
+  TASK_STATE_LABELS: {
+    idle: 'Idle', active: 'Running', 'needs-input': 'Needs Input', resting: 'Paused',
+    celebrating: 'Agent Done', sad: 'Failed', frozen: 'Interrupted', 'pr-draft': 'PR Draft',
+    'pr-open': 'PR Open', 'ci-running': 'CI Running', 'review-pending': 'Awaiting Review',
+    'ci-failed': 'CI Failed', 'changes-requested': 'Changes Requested',
+    'ready-to-merge': 'Ready to Merge', 'pr-queued': 'In Merge Queue', 'pr-merged': 'PR Merged',
+  },
+  DEFAULT_BOARD_COLUMNS: [],
+}))
+
+vi.mock('../lib/boardFilters', () => ({
+  loadFocusFilterStates: vi.fn(() => Promise.resolve(['needs-input', 'ci-failed', 'changes-requested', 'sad'])),
+  saveFocusFilterStates: vi.fn(() => Promise.resolve(undefined)),
+  DEFAULT_FOCUS_STATES: ['needs-input', 'ci-failed', 'changes-requested', 'sad'],
+}))
+
 vi.mock('../lib/stores', () => ({
   activeProjectId: writable('test-project-id'),
   projects: writable([
@@ -506,5 +527,89 @@ describe('SettingsView', () => {
     })
 
     window.confirm = globalThis.confirm
+  })
+
+  describe('Board layout setting', () => {
+    it('renders board layout select with Kanban as default', async () => {
+      vi.mocked(getProjectConfig).mockResolvedValue(null)
+      render(SettingsView, { props: defaultProps })
+
+      await vi.waitFor(() => {
+        const select = screen.getByTestId('board-layout-select') as HTMLSelectElement
+        expect(select).toBeTruthy()
+        expect(select.value).toBe('kanban')
+      })
+    })
+
+    it('renders board layout select with Focus Flow option', async () => {
+      vi.mocked(getProjectConfig).mockResolvedValue(null)
+      render(SettingsView, { props: defaultProps })
+
+      await vi.waitFor(() => {
+        const options = screen.getAllByRole('option')
+        const focusOption = options.find((opt) => opt.textContent?.includes('Focus Flow'))
+        expect(focusOption).toBeTruthy()
+      })
+    })
+
+    it('saves focus layout when changed to Focus Flow', async () => {
+      vi.useFakeTimers()
+      vi.mocked(getProjectConfig).mockResolvedValue(null)
+      render(SettingsView, { props: defaultProps })
+
+      await vi.advanceTimersByTimeAsync(50)
+      vi.mocked(setProjectConfig).mockClear()
+
+      const select = screen.getByTestId('board-layout-select') as HTMLSelectElement
+      await fireEvent.change(select, { target: { value: 'focus' } })
+
+      await vi.advanceTimersByTimeAsync(600)
+
+      expect(vi.mocked(setProjectConfig)).toHaveBeenCalledWith(
+        'test-project-id',
+        'board_layout',
+        'focus'
+      )
+
+      vi.useRealTimers()
+    })
+
+    it('saves kanban layout when changed back to Kanban', async () => {
+      vi.useFakeTimers()
+      vi.mocked(getProjectConfig).mockImplementation((_pid, key) => {
+        if (key === 'board_layout') return Promise.resolve('focus')
+        return Promise.resolve(null)
+      })
+      render(SettingsView, { props: defaultProps })
+
+      await vi.advanceTimersByTimeAsync(50)
+      vi.mocked(setProjectConfig).mockClear()
+
+      const select = screen.getByTestId('board-layout-select') as HTMLSelectElement
+      await fireEvent.change(select, { target: { value: 'kanban' } })
+
+      await vi.advanceTimersByTimeAsync(600)
+
+      expect(vi.mocked(setProjectConfig)).toHaveBeenCalledWith(
+        'test-project-id',
+        'board_layout',
+        'kanban'
+      )
+
+      vi.useRealTimers()
+    })
+
+    it('loads focus layout from config', async () => {
+      vi.mocked(getProjectConfig).mockImplementation((_pid, key) => {
+        if (key === 'board_layout') return Promise.resolve('focus')
+        return Promise.resolve(null)
+      })
+      render(SettingsView, { props: defaultProps })
+
+      await vi.waitFor(() => {
+        const select = screen.getByTestId('board-layout-select') as HTMLSelectElement
+        expect(select.value).toBe('focus')
+      })
+    })
   })
 })

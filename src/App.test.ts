@@ -158,6 +158,7 @@ vi.mock('./lib/ipc', () => ({
  }))
 
 vi.mock('./components/KanbanBoard.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/FocusBoard.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/TaskDetailView.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/PrReviewView.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/SkillsView.svelte', () => ({ default: vi.fn() }))
@@ -1075,23 +1076,60 @@ describe('Shepherd event wiring', () => {
       expect(get(stores.activeProjectId)).toBe('proj-1')
     })
 
-    it('resets activeProjectId to null when all projects were deleted', async () => {
-      const App = (await import('./App.svelte')).default
-      const stores = await import('./lib/stores')
-      const ipc = await import('./lib/ipc')
-      const { get } = await import('svelte/store')
+     it('resets activeProjectId to null when all projects were deleted', async () => {
+       const App = (await import('./App.svelte')).default
+       const stores = await import('./lib/stores')
+       const ipc = await import('./lib/ipc')
+       const { get } = await import('svelte/store')
 
-      stores.activeProjectId.set('proj-deleted')
+       stores.activeProjectId.set('proj-deleted')
 
-      vi.mocked(ipc.getProjects).mockResolvedValue([])
+       vi.mocked(ipc.getProjects).mockResolvedValue([])
 
-      render(App)
+       render(App)
 
-      await vi.waitFor(() => {
-        expect(get(stores.projects)).toHaveLength(0)
-      })
+       await vi.waitFor(() => {
+         expect(get(stores.projects)).toHaveLength(0)
+       })
 
-      expect(get(stores.activeProjectId)).toBeNull()
-    })
-  })
+       expect(get(stores.activeProjectId)).toBeNull()
+     })
+   })
+
+   describe('board_layout feature flag', () => {
+     it('defaults to kanban layout when board_layout config is null', async () => {
+       const { getProjectConfig } = await import('./lib/ipc')
+       const stores = await import('./lib/stores')
+
+       vi.mocked(getProjectConfig).mockResolvedValue(null)
+
+       const App = (await import('./App.svelte')).default
+       render(App)
+
+       stores.activeProjectId.set('proj-1')
+
+       await vi.waitFor(() => {
+         expect(getProjectConfig).toHaveBeenCalledWith('proj-1', 'board_layout')
+       })
+     }, 15000)
+
+     it('reads board_layout config from project settings', async () => {
+       const { getProjectConfig } = await import('./lib/ipc')
+       const stores = await import('./lib/stores')
+
+       vi.mocked(getProjectConfig).mockImplementation(async (_projectId: string, key: string) => {
+         if (key === 'board_layout') return 'focus'
+         return null
+       })
+
+       const App = (await import('./App.svelte')).default
+       render(App)
+
+       stores.activeProjectId.set('proj-1')
+
+       await vi.waitFor(() => {
+         expect(getProjectConfig).toHaveBeenCalledWith('proj-1', 'board_layout')
+       })
+     }, 15000)
+   })
 })

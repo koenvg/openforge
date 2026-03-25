@@ -9,6 +9,7 @@
   import { hasMergeConflicts } from './lib/types'
   import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView, PermissionMode, AgentSession } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
+  import FocusBoard from './components/FocusBoard.svelte'
   import TaskDetailView from './components/TaskDetailView.svelte'
    import PromptInput from './components/PromptInput.svelte'
   import Modal from './components/Modal.svelte'
@@ -82,6 +83,7 @@
   let showActionPalette = $state(false)
   let actionPaletteActions = $state<Action[]>([])
   let workQueueRefreshTrigger = $state(0)
+  let boardLayout = $state<'kanban' | 'focus'>('kanban')
 
   useCommandHeld()
 
@@ -151,6 +153,17 @@
       })
     } else {
       activeProjectColorId = null
+    }
+  })
+
+  $effect(() => {
+    const pid = $activeProjectId
+    if (pid) {
+      getProjectConfig(pid, 'board_layout').then((val) => {
+        boardLayout = (val === 'focus' ? 'focus' : 'kanban')
+      })
+    } else {
+      boardLayout = 'kanban'
     }
   })
   let contentBg = $derived.by(() => {
@@ -437,6 +450,11 @@
 
     pushNavState()
     $currentView = view
+  }
+
+  function handleOpenTask(taskId: string) {
+    pushNavState()
+    $selectedTaskId = taskId
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -991,18 +1009,26 @@
          <ShepherdView />
        {:else if selectedTask}
         <TaskDetailView task={selectedTask} onRunAction={handleRunAction} />
-      {:else}
-        <div class="flex-1 overflow-hidden">
-          {#if $isLoading && $tasks.length === 0}
-            <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm">
-              <span class="loading loading-spinner loading-md text-primary"></span>
-              <span>Loading tasks...</span>
-            </div>
-          {:else}
-            <KanbanBoard onRunAction={handleRunAction} projectName={activeProject?.name ?? ''} />
-          {/if}
-        </div>
-      {/if}
+       {:else}
+         <div class="flex-1 overflow-hidden">
+           {#if $isLoading && $tasks.length === 0}
+             <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm">
+               <span class="loading loading-spinner loading-md text-primary"></span>
+               <span>Loading tasks...</span>
+             </div>
+           {:else if boardLayout === 'focus'}
+             <FocusBoard
+               tasks={$tasks}
+               activeSessions={$activeSessions}
+               ticketPrs={$ticketPrs}
+               onOpenTask={handleOpenTask}
+               onRunAction={handleRunAction}
+             />
+           {:else}
+             <KanbanBoard onRunAction={handleRunAction} projectName={activeProject?.name ?? ''} />
+           {/if}
+         </div>
+       {/if}
 
       {#if showAddDialog && $activeProjectId}
         <Modal onClose={() => { showAddDialog = false; editingTask = null }} maxWidth="640px" overflowVisible>

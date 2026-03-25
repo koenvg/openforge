@@ -7,6 +7,7 @@
     projectPath: string
     aiProvider: string
     useWorktrees: boolean
+    boardLayout: 'kanban' | 'focus'
     projectColor: string
     disabled: boolean
     opencodeInstalled: boolean
@@ -18,6 +19,7 @@
     onProjectPathChange: (value: string) => void
     onAiProviderChange: (value: string) => void
     onUseWorktreesChange: () => void
+    onBoardLayoutChange: (value: 'kanban' | 'focus') => void
     onProjectColorChange: (value: string) => void
   }
 
@@ -26,6 +28,7 @@
     projectPath,
     aiProvider,
     useWorktrees,
+    boardLayout,
     projectColor,
     disabled,
     opencodeInstalled,
@@ -37,6 +40,7 @@
     onProjectPathChange,
     onAiProviderChange,
     onUseWorktreesChange,
+    onBoardLayoutChange,
     onProjectColorChange,
   }: Props = $props()
 </script>
@@ -133,6 +137,21 @@
         onchange={onUseWorktreesChange}
         data-testid="use-worktrees-toggle"
       />
+    </label>
+
+    <div class="border-b border-base-300"></div>
+
+    <label class="flex flex-col gap-1">
+      <span class="text-[0.7rem] text-base-content/50 uppercase tracking-wider">Board Layout</span>
+      <select
+        class="select select-bordered select-sm w-full max-w-xs"
+        value={boardLayout}
+        onchange={(e) => onBoardLayoutChange((e.currentTarget as HTMLSelectElement).value as 'kanban' | 'focus')}
+        data-testid="board-layout-select"
+      >
+        <option value="kanban">Kanban (classic columns)</option>
+        <option value="focus">Focus Flow (list + detail pane)</option>
+      </select>
     </label>
 
     <div class="border-b border-base-300"></div>

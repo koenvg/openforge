@@ -20,11 +20,14 @@
   } from '../lib/ipc'
   import { loadActions, saveActions, createAction, DEFAULT_ACTIONS } from '../lib/actions'
   import { loadBoardColumns, saveBoardColumns } from '../lib/boardColumns'
+  import { loadFocusFilterStates, saveFocusFilterStates, DEFAULT_FOCUS_STATES } from '../lib/boardFilters'
   import { themeMode, applyTheme } from '../lib/theme'
   import type { ThemeMode } from '../lib/theme'
   import type { Action, WhisperModelStatus, WhisperModelSizeId, BoardColumnConfig } from '../lib/types'
+  import type { TaskState } from '../lib/taskState'
   import SettingsGeneralCard from './SettingsGeneralCard.svelte'
   import SettingsBoardCard from './SettingsBoardCard.svelte'
+  import SettingsFocusFilterCard from './SettingsFocusFilterCard.svelte'
   import SettingsIntegrationsCard from './SettingsIntegrationsCard.svelte'
   import SettingsPreferencesCard from './SettingsPreferencesCard.svelte'
   import SettingsAICard from './SettingsAICard.svelte'
@@ -51,6 +54,7 @@
   let agentInstructions = $state('')
   let aiProvider = $state('claude-code')
   let useWorktrees = $state(true)
+  let boardLayout = $state<'kanban' | 'focus'>('kanban')
   let projectColor = $state('')
 
   // Global state
@@ -74,6 +78,8 @@
   let actions = $state<Action[]>([])
   // Board state
   let boardColumns = $state<BoardColumnConfig[]>([])
+  // Focus filter state
+  let focusFilterStates = $state<TaskState[]>([...DEFAULT_FOCUS_STATES])
 
   // Feature flag state
   let isCodeCleanupTasksEnabled = $state($codeCleanupTasksEnabled)
@@ -146,22 +152,24 @@
         projectPath = proj.path
       }
 
-      // Load project-level config keys
-      Promise.all([
-        getProjectConfig(pid, 'jira_board_id'),
-        getProjectConfig(pid, 'github_default_repo'),
-        getProjectConfig(pid, 'additional_instructions'),
-        getProjectConfig(pid, 'ai_provider'),
-        getProjectConfig(pid, 'use_worktrees'),
-        getProjectConfig(pid, 'project_color'),
-      ]).then(([boardId, repo, instructions, provider, worktrees, color]) => {
-        jiraBoardId = boardId ?? ''
-        githubDefaultRepo = repo ?? ''
-        agentInstructions = instructions ?? ''
-        aiProvider = provider ?? 'claude-code'
-        useWorktrees = worktrees !== 'false'
-        projectColor = color ?? ''
-      })
+       // Load project-level config keys
+       Promise.all([
+         getProjectConfig(pid, 'jira_board_id'),
+         getProjectConfig(pid, 'github_default_repo'),
+         getProjectConfig(pid, 'additional_instructions'),
+         getProjectConfig(pid, 'ai_provider'),
+         getProjectConfig(pid, 'use_worktrees'),
+         getProjectConfig(pid, 'board_layout'),
+         getProjectConfig(pid, 'project_color'),
+       ]).then(([boardId, repo, instructions, provider, worktrees, layout, color]) => {
+         jiraBoardId = boardId ?? ''
+         githubDefaultRepo = repo ?? ''
+         agentInstructions = instructions ?? ''
+         aiProvider = provider ?? 'claude-code'
+         useWorktrees = worktrees !== 'false'
+         boardLayout = (layout === 'focus') ? 'focus' : 'kanban'
+         projectColor = color ?? ''
+       })
 
       getShepherdEnabled(pid).then((enabled) => { isShepherdEnabled = enabled })
 
@@ -174,18 +182,25 @@
       loadBoardColumns(pid).then((cols) => {
         boardColumns = cols
       })
+
+      // Load focus filter states
+      loadFocusFilterStates(pid).then((states) => {
+        focusFilterStates = states
+      })
     } else {
-      projectName = ''
-      projectPath = ''
-      jiraBoardId = ''
-      githubDefaultRepo = ''
-      agentInstructions = ''
-      aiProvider = 'claude-code'
-      useWorktrees = true
-      projectColor = ''
-      actions = []
-      boardColumns = []
-    }
+       projectName = ''
+       projectPath = ''
+       jiraBoardId = ''
+       githubDefaultRepo = ''
+       agentInstructions = ''
+       aiProvider = 'claude-code'
+       useWorktrees = true
+       boardLayout = 'kanban'
+       projectColor = ''
+       actions = []
+       boardColumns = []
+       focusFilterStates = [...DEFAULT_FOCUS_STATES]
+     }
   })
 
   // Default to correct page based on mode
@@ -289,17 +304,19 @@
   async function save() {
     isSaving = true
     try {
-      if (hasProject && $activeProjectId) {
-        await updateProject($activeProjectId, projectName, projectPath)
-        await setProjectConfig($activeProjectId, 'jira_board_id', jiraBoardId)
-        await setProjectConfig($activeProjectId, 'github_default_repo', githubDefaultRepo)
-        await setProjectConfig($activeProjectId, 'additional_instructions', agentInstructions)
-        await setProjectConfig($activeProjectId, 'ai_provider', aiProvider)
-        await setProjectConfig($activeProjectId, 'use_worktrees', useWorktrees ? 'true' : 'false')
-        await setProjectConfig($activeProjectId, 'project_color', projectColor)
-        await saveActions($activeProjectId, actions)
-        await saveBoardColumns($activeProjectId, boardColumns)
-      }
+       if (hasProject && $activeProjectId) {
+         await updateProject($activeProjectId, projectName, projectPath)
+         await setProjectConfig($activeProjectId, 'jira_board_id', jiraBoardId)
+         await setProjectConfig($activeProjectId, 'github_default_repo', githubDefaultRepo)
+         await setProjectConfig($activeProjectId, 'additional_instructions', agentInstructions)
+         await setProjectConfig($activeProjectId, 'ai_provider', aiProvider)
+         await setProjectConfig($activeProjectId, 'use_worktrees', useWorktrees ? 'true' : 'false')
+         await setProjectConfig($activeProjectId, 'board_layout', boardLayout)
+         await setProjectConfig($activeProjectId, 'project_color', projectColor)
+         await saveActions($activeProjectId, actions)
+         await saveBoardColumns($activeProjectId, boardColumns)
+         await saveFocusFilterStates($activeProjectId, focusFilterStates)
+       }
        await setConfig('task_id_prefix', taskIdPrefix)
        await setConfig('jira_base_url', jiraBaseUrl)
        await setConfig('jira_username', jiraUsername)
@@ -419,6 +436,7 @@
           {projectPath}
           {aiProvider}
           {useWorktrees}
+          {boardLayout}
           {projectColor}
           disabled={!hasProject}
           {opencodeInstalled}
@@ -430,12 +448,19 @@
           onProjectPathChange={(v) => { projectPath = v; scheduleSave() }}
           onAiProviderChange={(v) => { aiProvider = v; scheduleSave() }}
           onUseWorktreesChange={() => { useWorktrees = !useWorktrees; scheduleSave() }}
+          onBoardLayoutChange={(v) => { boardLayout = v; scheduleSave() }}
           onProjectColorChange={(v) => { projectColor = v; scheduleSave() }}
         />
 
         <SettingsBoardCard
           columns={boardColumns}
           onColumnsChange={(cols) => { boardColumns = cols; scheduleSave() }}
+          disabled={!hasProject}
+        />
+
+        <SettingsFocusFilterCard
+          focusStates={focusFilterStates}
+          onFocusStatesChange={(states) => { focusFilterStates = states; scheduleSave() }}
           disabled={!hasProject}
         />
 
