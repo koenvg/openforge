@@ -125,6 +125,7 @@ describe('computeTaskState - getPrState behavior (PART 1)', () => {
           state: 'open',
           ci_status: 'success',
           review_status: 'approved',
+          mergeable_state: 'clean',
         }),
       ]
 
@@ -273,6 +274,7 @@ describe('computeTaskState - pr-queued (PART 3)', () => {
         ci_status: 'success',
         review_status: 'approved',
         is_queued: true,
+        mergeable_state: 'clean',
       }),
     ]
 
@@ -289,6 +291,7 @@ describe('computeTaskState - pr-queued (PART 3)', () => {
         ci_status: 'success',
         review_status: 'approved',
         is_queued: false,
+        mergeable_state: 'clean',
       }),
     ]
 
@@ -336,6 +339,7 @@ describe('computeTaskState - pr-queued (PART 3)', () => {
         ci_status: 'success',
         review_status: 'approved',
         is_queued: true,
+        mergeable_state: 'clean',
       }),
     ]
 
@@ -419,5 +423,98 @@ describe('taskStateToBorderClass', () => {
 
   it('returns empty string for changes-requested', () => {
     expect(taskStateToBorderClass('changes-requested')).toBe('')
+  })
+})
+
+// ============================================================================
+// PART 5: mergeable_state-based ready-to-merge (new behavior)
+// ============================================================================
+
+describe('computeTaskState - mergeable_state based ready-to-merge (PART 5)', () => {
+  it('test 1: mergeable_state clean → ready-to-merge (without ci_status/review_status)', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', mergeable_state: 'clean' })]
+    expect(computeTaskState(task, session, prs)).toBe('ready-to-merge')
+  })
+
+  it('test 2: mergeable_state unstable → ready-to-merge', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', mergeable_state: 'unstable' })]
+    expect(computeTaskState(task, session, prs)).toBe('ready-to-merge')
+  })
+
+  it('test 3: mergeable_state clean + is_queued → pr-queued', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', mergeable_state: 'clean', is_queued: true })]
+    expect(computeTaskState(task, session, prs)).toBe('pr-queued')
+  })
+
+  it('test 4: mergeable_state unstable + is_queued → pr-queued', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', mergeable_state: 'unstable', is_queued: true })]
+    expect(computeTaskState(task, session, prs)).toBe('pr-queued')
+  })
+
+  it('test 5: ISOLATION — mergeable_state clean with ci_status failure → ready-to-merge (trusts GitHub)', () => {
+    // ci_status failure with mergeable_state clean = non-required check failing
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', mergeable_state: 'clean', ci_status: 'failure' })]
+    expect(computeTaskState(task, session, prs)).toBe('ready-to-merge')
+  })
+
+  it('test 6: ISOLATION — mergeable_state clean with review_status review_required → ready-to-merge (trusts GitHub)', () => {
+    // review_required with mergeable_state clean = review not needed per branch protection
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', mergeable_state: 'clean', review_status: 'review_required' })]
+    expect(computeTaskState(task, session, prs)).toBe('ready-to-merge')
+  })
+
+  it('test 7: mergeable_state null — old ci+review conditions NO LONGER trigger ready-to-merge', () => {
+    // This proves the old "ci_status: success + review_status: approved" is no longer sufficient
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', mergeable_state: null, ci_status: 'success', review_status: 'approved' })]
+    expect(computeTaskState(task, session, prs)).not.toBe('ready-to-merge')
+  })
+
+  it('test 8: mergeable_state blocked — ci-failed when ci failing', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', mergeable_state: 'blocked', ci_status: 'failure' })]
+    expect(computeTaskState(task, session, prs)).toBe('ci-failed')
+  })
+
+  it('test 9: mergeable_state blocked — changes-requested when review says so', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', mergeable_state: 'blocked', review_status: 'changes_requested' })]
+    expect(computeTaskState(task, session, prs)).toBe('changes-requested')
+  })
+
+  it('test 10: mergeable_state unknown → falls to pr-open (conservative)', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', mergeable_state: 'unknown' })]
+    expect(computeTaskState(task, session, prs)).toBe('pr-open')
+  })
+
+  it('test 11: mergeable_state dirty → falls to intermediate states (ci-failed if failing)', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', mergeable_state: 'dirty', ci_status: 'failure' })]
+    expect(computeTaskState(task, session, prs)).toBe('ci-failed')
+  })
+
+  it('test 12: UPPERCASE mergeable_state CLEAN is handled (case normalization)', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', mergeable_state: 'CLEAN' })]
+    expect(computeTaskState(task, session, prs)).toBe('ready-to-merge')
   })
 })
