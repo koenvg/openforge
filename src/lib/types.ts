@@ -107,7 +107,7 @@ export function hasMergeConflicts(pr: MergeStatusInfo): boolean {
 export function isReadyToMerge(pr: PullRequestInfo): boolean {
   if (pr.state !== 'open') return false
   const mergeableState = pr.mergeable_state?.toLowerCase() ?? null
-  return mergeableState === 'clean' || mergeableState === 'unstable'
+  return mergeableState === 'clean' || mergeableState === 'unstable' || mergeableState === 'behind'
 }
 
 /** Check if a PR is queued in a merge queue (ready to merge + is_queued) */

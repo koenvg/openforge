@@ -517,4 +517,18 @@ describe('computeTaskState - mergeable_state based ready-to-merge (PART 5)', () 
     const prs = [createPr({ state: 'open', mergeable_state: 'CLEAN' })]
     expect(computeTaskState(task, session, prs)).toBe('ready-to-merge')
   })
+
+  it('test 13: mergeable_state behind → ready-to-merge (branch out of date but not blocked)', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', mergeable_state: 'behind' })]
+    expect(computeTaskState(task, session, prs)).toBe('ready-to-merge')
+  })
+
+  it('test 14: mergeable_state behind + is_queued → pr-queued', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', mergeable_state: 'behind', is_queued: true })]
+    expect(computeTaskState(task, session, prs)).toBe('pr-queued')
+  })
 })

@@ -110,8 +110,8 @@ describe('pull request merge conflict helpers', () => {
     expect(isReadyToMerge(createPullRequest({ mergeable_state: 'blocked', ci_status: 'success' }))).toBe(false)
   })
 
-  it('does not consider a PR ready to merge if mergeable_state is behind', () => {
-    expect(isReadyToMerge(createPullRequest({ mergeable_state: 'behind', ci_status: 'success' }))).toBe(false)
+  it('considers a PR ready to merge if mergeable_state is behind (branch out of date but not blocked)', () => {
+    expect(isReadyToMerge(createPullRequest({ mergeable_state: 'behind', ci_status: 'success' }))).toBe(true)
   })
 
   it('does not consider a PR ready to merge if mergeable_state is null', () => {

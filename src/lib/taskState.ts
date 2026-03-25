@@ -16,7 +16,7 @@ function getPrState(prs: PullRequestInfo[]): TaskState | null {
 
   // GitHub's source of truth: mergeable_state tells us if all requirements are met
   const mergeableState = pr.mergeable_state?.toLowerCase() ?? null
-  if (mergeableState === 'clean' || mergeableState === 'unstable')
+  if (mergeableState === 'clean' || mergeableState === 'unstable' || mergeableState === 'behind')
     return pr.is_queued ? 'pr-queued' : 'ready-to-merge'
 
   // Open PR checks in priority order (when not merge-ready)
