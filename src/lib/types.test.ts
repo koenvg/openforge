@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type PullRequestInfo, hasMergeConflicts, isReadyToMerge } from './types'
+import { type PullRequestInfo, hasMergeConflicts, isReadyToMerge, isQueuedForMerge } from './types'
 
 function createPullRequest(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
   return {
@@ -120,5 +120,27 @@ describe('pull request merge conflict helpers', () => {
 
   it('does not consider a closed PR ready to merge even if mergeable_state is clean', () => {
     expect(isReadyToMerge(createPullRequest({ state: 'closed', mergeable_state: 'clean' }))).toBe(false)
+  })
+})
+
+describe('isQueuedForMerge', () => {
+  it('returns true when state is open and is_queued is true with mergeable null', () => {
+    const pr = createPullRequest({ state: 'open', is_queued: true, mergeable: null, mergeable_state: null })
+    expect(isQueuedForMerge(pr)).toBe(true)
+  })
+
+  it('returns true when state is open and is_queued is true even if mergeable is false (PR queued despite conflicts)', () => {
+    const pr = createPullRequest({ state: 'open', is_queued: true, mergeable: false, mergeable_state: 'dirty' })
+    expect(isQueuedForMerge(pr)).toBe(true)
+  })
+
+  it('returns false when state is open and is_queued is false', () => {
+    const pr = createPullRequest({ state: 'open', is_queued: false, mergeable: null })
+    expect(isQueuedForMerge(pr)).toBe(false)
+  })
+
+  it('returns false when state is merged even if is_queued is true', () => {
+    const pr = createPullRequest({ state: 'merged', is_queued: true, mergeable: true })
+    expect(isQueuedForMerge(pr)).toBe(false)
   })
 })

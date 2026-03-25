@@ -146,4 +146,11 @@ describe('TaskListItem', () => {
     render(TaskListItem, { props: baseProps })
     expect(screen.queryByText(/PR #/)).toBeNull()
   })
+
+  it('renders badge-info class on the state badge for pr-queued state', () => {
+    render(TaskListItem, { props: { ...baseProps, state: 'pr-queued' as TaskState } })
+    // The state badge renders with text "Queued" for pr-queued state
+    const badge = screen.getByText('Queued')
+    expect(badge.classList.contains('badge-info')).toBe(true)
+  })
 })

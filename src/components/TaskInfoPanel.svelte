@@ -175,7 +175,7 @@
   {/if}
 
   <!-- Merge Status Section -->
-  {#if taskPrs.some(pr => pr.state === 'merged' || isReadyToMerge(pr))}
+  {#if taskPrs.some(pr => pr.state === 'merged' || isReadyToMerge(pr) || isQueuedForMerge(pr))}
     <section class="flex flex-col gap-2.5">
       <h3 class="text-[10px] font-bold text-primary font-mono tracking-[1.2px] m-0" aria-label="Merge Status">// MERGE_STATUS</h3>
       {#each taskPrs as pr (pr.id)}

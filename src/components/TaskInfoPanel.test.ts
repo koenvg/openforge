@@ -338,6 +338,25 @@ describe('TaskInfoPanel', () => {
 
     await new Promise((r) => setTimeout(r, 10))
     expect(screen.queryByRole('button', { name: 'Merge' })).toBeNull()
+    expect(screen.getByText(/In Merge Queue/)).toBeTruthy()
+  })
+
+  it('shows "In Merge Queue" badge when PR is queued with mergeable null (not hidden)', async () => {
+    const queuedPr = createPullRequest({
+      ci_status: 'success',
+      review_status: 'approved',
+      mergeable: null,
+      mergeable_state: null,
+      is_queued: true,
+    })
+
+    ticketPrs.set(new Map([['T-42', [queuedPr]]]))
+
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+
+    await new Promise((r) => setTimeout(r, 10))
+    expect(screen.getByText(/In Merge Queue/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Merge' })).toBeNull()
   })
 
   it('calls mergePullRequest with repo coordinates when Merge is clicked', async () => {

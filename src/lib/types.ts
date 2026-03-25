@@ -112,7 +112,7 @@ export function isReadyToMerge(pr: PullRequestInfo): boolean {
 
 /** Check if a PR is queued in a merge queue (ready to merge + is_queued) */
 export function isQueuedForMerge(pr: PullRequestInfo): boolean {
-  return isReadyToMerge(pr) && pr.is_queued;
+  return pr.state === 'open' && pr.is_queued;
 }
 
 export interface CheckRunInfo {

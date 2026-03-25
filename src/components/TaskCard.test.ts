@@ -458,4 +458,10 @@ describe('TaskCard', () => {
     expect(screen.queryByText('Approved')).toBeNull()
     expect(screen.queryByText('PR #42')).toBeNull()
   })
+
+  it('shows "Queued for merge" chip when PR is queued and mergeable is null', () => {
+    const pr: PullRequestInfo = { ...basePr, state: 'open', ci_status: 'success', review_status: 'approved', is_queued: true, mergeable: null, mergeable_state: null }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: true } })
+    expect(screen.getByText('Queued for merge')).toBeTruthy()
+  })
 })
