@@ -34,6 +34,7 @@
       case 'changes-requested': return 'badge-error'
       case 'celebrating': return 'badge-success'
       case 'ready-to-merge': return 'badge-info'
+      case 'pr-queued': return 'badge-info'
       case 'egg': return 'badge-ghost'
       default: return ''
     }
