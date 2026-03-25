@@ -12,6 +12,7 @@
   let { task, pullRequests, onOpenFullView }: Props = $props()
 
   let comments = $state<PrComment[]>([])
+  let unaddressedComments = $derived(comments.filter(c => c.addressed === 0))
 
   async function fetchComments() {
     if (!task || pullRequests.length === 0) {
@@ -130,15 +131,15 @@
     <section class="flex flex-col gap-2">
       <div class="flex items-center gap-2">
         <span class="font-mono text-[10px] font-bold text-primary">// PR_COMMENTS</span>
-        {#if comments.length > 0}
-          <span class="badge badge-error badge-sm text-[10px] font-mono">{comments.length}</span>
+        {#if unaddressedComments.length > 0}
+          <span class="badge badge-error badge-sm text-[10px] font-mono">{unaddressedComments.length}</span>
         {/if}
       </div>
-      {#if comments.length === 0}
+      {#if unaddressedComments.length === 0}
         <p class="text-xs text-base-content/40">No comments.</p>
       {:else}
         <div class="flex flex-col gap-2">
-          {#each comments as comment (comment.id)}
+          {#each unaddressedComments as comment (comment.id)}
             <div class="rounded-xl bg-base-200/50 border border-base-300/40 p-3 flex flex-col gap-1.5">
               <div class="flex items-center justify-between gap-2">
                 <span class="text-[0.65rem] font-semibold text-base-content/60">{comment.author}</span>

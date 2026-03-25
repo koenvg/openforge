@@ -427,7 +427,7 @@ describe('TaskDetailPane', () => {
       })
     })
 
-    it('does not render "Mark addressed" for addressed comments', async () => {
+    it('hides addressed comments from display entirely', async () => {
       const comment = makeComment({ addressed: 1 })
       vi.mocked(ipc.getPrComments).mockResolvedValue([comment])
       render(TaskDetailPane, {
@@ -439,13 +439,38 @@ describe('TaskDetailPane', () => {
         },
       })
       await waitFor(() => {
-        expect(screen.getByText('reviewer')).toBeTruthy()
+        expect(ipc.getPrComments).toHaveBeenCalled()
       })
-      expect(screen.queryByRole('button', { name: /mark addressed/i })).toBeNull()
+      expect(screen.queryByText('reviewer')).toBeNull()
+      expect(screen.queryByText('Please fix this.')).toBeNull()
     })
 
-    it('shows comment count badge', async () => {
-      const comments = [makeComment({ id: 1 }), makeComment({ id: 2 })]
+    it('shows only unaddressed comments when both types exist', async () => {
+      const unaddressed = makeComment({ id: 1, body: 'Fix this bug', author: 'alice', addressed: 0 })
+      const addressed = makeComment({ id: 2, body: 'Old feedback', author: 'bob', addressed: 1 })
+      vi.mocked(ipc.getPrComments).mockResolvedValue([unaddressed, addressed])
+      render(TaskDetailPane, {
+        props: {
+          task: baseTask,
+          session: null,
+          pullRequests: [basePr],
+          onOpenFullView: vi.fn(),
+        },
+      })
+      await waitFor(() => {
+        expect(screen.getByText('alice')).toBeTruthy()
+        expect(screen.getByText('Fix this bug')).toBeTruthy()
+      })
+      expect(screen.queryByText('bob')).toBeNull()
+      expect(screen.queryByText('Old feedback')).toBeNull()
+    })
+
+    it('shows comment count badge with only unaddressed count', async () => {
+      const comments = [
+        makeComment({ id: 1, addressed: 0 }),
+        makeComment({ id: 2, addressed: 0 }),
+        makeComment({ id: 3, addressed: 1 }),
+      ]
       vi.mocked(ipc.getPrComments).mockResolvedValue(comments)
       render(TaskDetailPane, {
         props: {
@@ -458,6 +483,7 @@ describe('TaskDetailPane', () => {
       await waitFor(() => {
         expect(screen.getByText('2')).toBeTruthy()
       })
+      expect(screen.queryByText('3')).toBeNull()
     })
   })
 })
