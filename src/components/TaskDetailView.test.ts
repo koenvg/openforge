@@ -140,6 +140,10 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn().mockResolvedValue(() => {}),
 }))
 
+const { taskTabSessions } = vi.hoisted(() => ({
+  taskTabSessions: new Map<string, { tabs: Array<{ index: number, key: string, label: string }>, activeTabIndex: number, nextIndex: number }>(),
+}))
+
 vi.mock('../lib/terminalPool', () => ({
   acquire: vi.fn().mockResolvedValue({
     taskId: '',
@@ -153,12 +157,51 @@ vi.mock('../lib/terminalPool', () => ({
     visibilityObserver: null,
     resizeTimeout: null,
     attached: false,
+    spawnPending: false,
+    currentPtyInstance: null,
   }),
   attach: vi.fn(),
   detach: vi.fn(),
   release: vi.fn(),
   releaseAllForTask: vi.fn().mockReturnValue(0),
   focusTerminal: vi.fn(),
+  shouldSpawnPty: vi.fn((entry) => !entry.ptyActive && !entry.spawnPending && !entry.needsClear),
+  markPtySpawnPending: vi.fn((entry) => {
+    entry.spawnPending = true
+  }),
+  clearPtySpawnPending: vi.fn((entry) => {
+    entry.spawnPending = false
+  }),
+  setCurrentPtyInstance: vi.fn((entry, instanceId) => {
+    entry.currentPtyInstance = instanceId
+  }),
+  getShellLifecycleState: vi.fn((taskId: string) => ({
+    ptyActive: false,
+    shellExited: false,
+    currentPtyInstance: null,
+    taskId,
+  })),
+  updateShellLifecycleState: vi.fn(),
+  isShellExited: vi.fn((taskId: string) => {
+    return taskId.endsWith('-shell-0') ? false : false
+  }),
+  getTaskTerminalTabsSession: vi.fn((taskId: string) => {
+    const existing = taskTabSessions.get(taskId)
+    if (existing) return existing
+    const session = {
+      tabs: [{ index: 0, key: `${taskId}-shell-0`, label: 'Shell 1' }],
+      activeTabIndex: 0,
+      nextIndex: 1,
+    }
+    taskTabSessions.set(taskId, session)
+    return session
+  }),
+  updateTaskTerminalTabsSession: vi.fn((taskId: string, session) => {
+    taskTabSessions.set(taskId, session)
+  }),
+  clearTaskTerminalTabsSession: vi.fn((taskId: string) => {
+    taskTabSessions.delete(taskId)
+  }),
 }))
 
 vi.mock('../lib/navigation', () => ({
@@ -440,6 +483,21 @@ describe('TaskDetailView', () => {
     await waitFor(() => {
       expect(screen.getByTestId('resizable-bottom-panel')).toBeTruthy()
     })
+    vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+  })
+
+  it('⌘E focuses the first shell tab when terminal panel has never been opened', async () => {
+    const { getWorktreeForTask } = await import('../lib/ipc')
+    const { focusTerminal } = await import('../lib/terminalPool')
+    vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' } as any)
+    vi.mocked(focusTerminal).mockClear()
+
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    await waitFor(() => expect(screen.getByText('code_view')).toBeTruthy())
+
+    await fireEvent.keyDown(window, { key: 'e', metaKey: true })
+
+    expect(focusTerminal).toHaveBeenCalledWith('T-42-shell-0')
     vi.mocked(getWorktreeForTask).mockResolvedValue(null)
   })
 

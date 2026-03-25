@@ -155,7 +155,12 @@
       e.preventDefault()
       setReviewMode(false)
       terminalFullscreen = false
-      focusTerminal(task.id)
+      if (!bottomPanelOpen) bottomPanelOpen = true
+      if (terminalTabsRef) {
+        terminalTabsRef.focusActiveTab()
+      } else {
+        focusTerminal(`${task.id}-shell-0`)
+      }
       return
     }
 
