@@ -39,7 +39,13 @@ export function filterTasks(
   }
 
   if (filter === 'in-progress') {
-    return tasks.filter(task => task.status !== 'done')
+    return tasks.filter(task => {
+      if (task.status === 'done' || task.status === 'backlog') return false
+      const session = sessions.get(task.id) ?? null
+      const taskPrs = prs.get(task.id) ?? []
+      const state = computeTaskState(task, session, taskPrs)
+      return !isFocusTask(task, state, taskPrs, focusStates)
+    })
   }
 
   if (filter === 'backlog') {
@@ -64,15 +70,19 @@ export function getFilterCounts(
   for (const task of tasks) {
     if (task.status === 'backlog') {
       counts.backlog++
-    } else if (task.status !== 'done') {
-      counts['in-progress']++
+      continue
     }
-
+    if (task.status === 'done') {
+      continue
+    }
+    // task is doing — check if it's a focus task
     const session = sessions.get(task.id) ?? null
     const taskPrs = prs.get(task.id) ?? []
     const state = computeTaskState(task, session, taskPrs)
     if (isFocusTask(task, state, taskPrs, focusStates)) {
       counts.focus++
+    } else {
+      counts['in-progress']++
     }
   }
 

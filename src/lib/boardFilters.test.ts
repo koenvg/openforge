@@ -151,18 +151,22 @@ describe('filterTasks', () => {
     expect(filtered.map((t: Task) => t.id)).toEqual(['T-1'])
   })
 
-  it('filters in-progress tasks (status !== done)', () => {
-    const sessions = new Map<string, AgentSession>()
+  it('filters in-progress tasks (excludes backlog and focus tasks)', () => {
+    const sessions = new Map<string, AgentSession>([
+      ['T-1', makeSession({ id: 's-1', ticket_id: 'T-1', status: 'running' })],
+      ['T-2', makeSession({ id: 's-2', ticket_id: 'T-2', status: 'paused', checkpoint_data: '{}' })],
+    ])
     const prs = new Map<string, PullRequestInfo[]>()
 
     const tasks = [
       makeTask({ id: 'T-1', status: 'doing' }),
-      makeTask({ id: 'T-2', status: 'done' }),
-      makeTask({ id: 'T-3', status: 'backlog' }),
+      makeTask({ id: 'T-2', status: 'doing' }),
+      makeTask({ id: 'T-3', status: 'done' }),
+      makeTask({ id: 'T-4', status: 'backlog' }),
     ]
 
     const filtered = filterTasks(tasks, 'in-progress', sessions, prs)
-    expect(filtered.map((t: Task) => t.id)).toEqual(['T-1', 'T-3'])
+    expect(filtered.map((t: Task) => t.id)).toEqual(['T-1'])
   })
 
   it('filters backlog tasks (status === backlog)', () => {
@@ -228,7 +232,7 @@ describe('getFilterCounts', () => {
     const counts = getFilterCounts(tasks, sessions, prs)
     expect(counts).toEqual({
       focus: 1,
-      'in-progress': 2,
+      'in-progress': 1,
       backlog: 1,
     })
   })
@@ -286,9 +290,11 @@ describe('getFilterCounts', () => {
     ]
 
     const counts = getFilterCounts(tasks, sessions, prs)
-    expect(counts['in-progress']).toBe(1)
-    expect(counts.backlog).toBe(1)
-    expect(counts.focus).toBe(0)
+    expect(counts).toEqual({
+      focus: 0,
+      'in-progress': 1,
+      backlog: 1,
+    })
   })
 })
 

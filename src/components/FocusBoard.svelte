@@ -121,6 +121,20 @@
 
   function handleKeydown(e: KeyboardEvent) {
     if (isInputFocused()) return
+
+    // CMD+1/2/3 filter chip shortcuts (works even when pane has focus)
+    if (e.metaKey && !e.shiftKey && !e.altKey) {
+      const filterMap: Record<string, BoardFilter> = { '1': 'focus', '2': 'in-progress', '3': 'backlog' }
+      const filter = filterMap[e.key]
+      if (filter) {
+        e.preventDefault()
+        activeFilter = filter
+        selectedTaskIdLocal = null
+        vim.setFocusedIndex(0)
+        return
+      }
+    }
+
     if (paneHasFocus) return
     vim.handleKeydown(e)
   }

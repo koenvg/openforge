@@ -121,11 +121,11 @@ describe('FocusBoard', () => {
   it('changes list when In progress chip is clicked', async () => {
     renderBoard()
 
-    await fireEvent.click(await screen.findByRole('button', { name: /In progress 2/i }))
+    await fireEvent.click(await screen.findByRole('button', { name: /In progress 1/i }))
 
-    expect(screen.getAllByText('Focus task').length).toBeGreaterThan(0)
-    expect(screen.getByText('Doing task')).toBeTruthy()
-    expect(screen.getByText('Backlog task')).toBeTruthy()
+    expect(screen.getAllByText('Doing task').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Focus task')).toBeNull()
+    expect(screen.queryByText('Backlog task')).toBeNull()
     expect(screen.queryByText('Done task')).toBeNull()
   })
 
@@ -255,8 +255,9 @@ describe('FocusBoard', () => {
   it('opens task context menu on right click', async () => {
     renderBoard()
 
-    await fireEvent.click(await screen.findByRole('button', { name: /In progress 2/i }))
-    await fireEvent.contextMenu(screen.getByText('Doing task'))
+    await fireEvent.click(await screen.findByRole('button', { name: /In progress 1/i }))
+    const doingTaskElements = screen.getAllByText('Doing task')
+    await fireEvent.contextMenu(doingTaskElements[0])
 
     expect(screen.getByRole('menu')).toBeTruthy()
     expect(screen.getByText('Delete')).toBeTruthy()
@@ -277,12 +278,36 @@ describe('FocusBoard', () => {
 
   it('computes focus count with unaddressed PR comments', async () => {
     renderBoard({
-      tasks: [taskBacklog],
+      tasks: [taskDoing],
       sessions: new Map(),
-      prs: new Map([[taskBacklog.id, [makePr(taskBacklog.id, 2)]]]),
+      prs: new Map([[taskDoing.id, [makePr(taskDoing.id, 2)]]]),
     })
 
     expect(await screen.findByRole('button', { name: /Focus now 1/i })).toBeTruthy()
-    expect(screen.getAllByText('Backlog task').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Doing task').length).toBeGreaterThan(0)
+  })
+
+  it('CMD+1 activates Focus now filter', async () => {
+    renderBoard()
+    // First switch away from focus
+    await fireEvent.click(await screen.findByRole('button', { name: /In progress/i }))
+    // Now CMD+1 should switch back
+    await fireEvent.keyDown(window, { key: '1', metaKey: true })
+    const focusChip = screen.getByRole('button', { name: /Focus now/i })
+    expect(focusChip.getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('CMD+2 activates In progress filter', async () => {
+    renderBoard()
+    await fireEvent.keyDown(window, { key: '2', metaKey: true })
+    const chip = screen.getByRole('button', { name: /In progress/i })
+    expect(chip.getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('CMD+3 activates Backlog filter', async () => {
+    renderBoard()
+    await fireEvent.keyDown(window, { key: '3', metaKey: true })
+    const chip = screen.getByRole('button', { name: /Backlog 1/i })
+    expect(chip.getAttribute('aria-pressed')).toBe('true')
   })
 })
