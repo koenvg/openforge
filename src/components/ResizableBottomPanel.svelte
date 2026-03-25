@@ -71,7 +71,7 @@
 
     function onMouseMove(e: MouseEvent) {
       const delta = e.clientY - startY
-      height = clamp(startHeight + delta)
+      height = clamp(startHeight - delta)
     }
 
     function onMouseUp() {
@@ -93,9 +93,9 @@
   function onKeyDown(e: KeyboardEvent) {
     let delta = 0
     if (e.key === 'ArrowUp') {
-      delta = -10
-    } else if (e.key === 'ArrowDown') {
       delta = 10
+    } else if (e.key === 'ArrowDown') {
+      delta = -10
     } else if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
       onDblClick()

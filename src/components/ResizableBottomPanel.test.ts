@@ -60,7 +60,7 @@ describe('ResizableBottomPanel', () => {
     expect(panel.style.height).toBe('500px')
   })
 
-  it('decreases height when dragging handle up (negative Y delta)', async () => {
+  it('increases height when dragging handle up (negative Y delta)', async () => {
     const { container } = render(ResizableBottomPanel, {
       props: { storageKey: 'test-panel', defaultHeight: 250, minHeight: null, maxHeight: null, fillParent: false },
     })
@@ -74,12 +74,12 @@ describe('ResizableBottomPanel', () => {
 
     await fireEvent.mouseDown(handle, { clientY: 250 })
     await fireEvent.mouseMove(document, { clientY: 200 })
-    expect(panel.style.height).toBe('200px')
+    expect(panel.style.height).toBe('300px')
 
     await fireEvent.mouseUp(document)
   })
 
-  it('increases height when dragging handle down (positive Y delta)', async () => {
+  it('decreases height when dragging handle down (positive Y delta)', async () => {
     const { container } = render(ResizableBottomPanel, {
       props: { storageKey: 'test-panel', defaultHeight: 250, minHeight: null, maxHeight: null, fillParent: false },
     })
@@ -93,7 +93,7 @@ describe('ResizableBottomPanel', () => {
 
     await fireEvent.mouseDown(handle, { clientY: 250 })
     await fireEvent.mouseMove(document, { clientY: 300 })
-    expect(panel.style.height).toBe('300px')
+    expect(panel.style.height).toBe('200px')
 
     await fireEvent.mouseUp(document)
   })
@@ -114,7 +114,7 @@ describe('ResizableBottomPanel', () => {
     await fireEvent.mouseMove(document, { clientY: 300 })
     await fireEvent.mouseUp(document)
 
-    expect(localStorage.getItem('resizable-panel:test-persist')).toBe('300')
+    expect(localStorage.getItem('resizable-panel:test-persist')).toBe('200')
   })
 
   it('respects minHeight during drag', async () => {
@@ -131,7 +131,7 @@ describe('ResizableBottomPanel', () => {
 
     await fireEvent.mouseDown(handle, { clientY: 250 })
     await fireEvent.mouseMove(document, { clientY: 50 })
-    expect(panel.style.height).toBe('150px')
+    expect(panel.style.height).toBe('450px')
 
     await fireEvent.mouseUp(document)
   })
@@ -150,7 +150,7 @@ describe('ResizableBottomPanel', () => {
 
     await fireEvent.mouseDown(handle, { clientY: 250 })
     await fireEvent.mouseMove(document, { clientY: 600 })
-    expect(panel.style.height).toBe('400px')
+    expect(panel.style.height).toBe('100px')
 
     await fireEvent.mouseUp(document)
   })
@@ -169,7 +169,7 @@ describe('ResizableBottomPanel', () => {
     expect(localStorage.getItem('resizable-panel:test-reset')).toBeNull()
   })
 
-  it('decreases height with ArrowUp key', async () => {
+  it('increases height with ArrowUp key', async () => {
     const { container } = render(ResizableBottomPanel, {
       props: { storageKey: 'test-keys-up', defaultHeight: 250, minHeight: null, maxHeight: null, fillParent: false },
     })
@@ -177,10 +177,10 @@ describe('ResizableBottomPanel', () => {
     const panel = container.querySelector('[data-testid="resizable-bottom-panel"]') as HTMLElement
 
     await fireEvent.keyDown(handle, { key: 'ArrowUp' })
-    expect(panel.style.height).toBe('240px')
+    expect(panel.style.height).toBe('260px')
   })
 
-  it('increases height with ArrowDown key', async () => {
+  it('decreases height with ArrowDown key', async () => {
     const { container } = render(ResizableBottomPanel, {
       props: { storageKey: 'test-keys-down', defaultHeight: 250, minHeight: null, maxHeight: null, fillParent: false },
     })
@@ -188,7 +188,7 @@ describe('ResizableBottomPanel', () => {
     const panel = container.querySelector('[data-testid="resizable-bottom-panel"]') as HTMLElement
 
     await fireEvent.keyDown(handle, { key: 'ArrowDown' })
-    expect(panel.style.height).toBe('260px')
+    expect(panel.style.height).toBe('240px')
   })
 
   it('resets to default height on Enter key', async () => {
