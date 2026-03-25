@@ -208,9 +208,7 @@
   box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-base-content) 25%, transparent);
   border-radius: var(--radius-box);
 }
-.vim-focus > * {
-  background-image: linear-gradient(to right, color-mix(in oklch, var(--color-base-content) 5%, transparent), transparent 40%);
-}
+
 @keyframes border-glow-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
