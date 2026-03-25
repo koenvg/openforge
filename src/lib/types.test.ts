@@ -80,4 +80,45 @@ describe('pull request merge conflict helpers', () => {
   it('does not consider a PR ready to merge if mergeable is null or false, even without conflicts', () => {
     expect(isReadyToMerge(createPullRequest({ mergeable: null, mergeable_state: 'unknown' }))).toBe(false)
   })
+
+  // ISOLATION: mergeable_state: 'clean' WITHOUT ci_status: 'success' — currently FAILS
+  it('considers a PR ready to merge based on clean mergeable_state regardless of ci_status', () => {
+    expect(isReadyToMerge(createPullRequest({ ci_status: 'failure', mergeable_state: 'clean' }))).toBe(true)
+  })
+
+  // ISOLATION: mergeable_state: 'unstable' — currently FAILS
+  it('considers a PR with unstable mergeable_state ready to merge (non-required checks failing)', () => {
+    expect(isReadyToMerge(createPullRequest({ mergeable_state: 'unstable' }))).toBe(true)
+  })
+
+  // ISOLATION: mergeable_state: 'clean' with mergeable: false — currently FAILS
+  it('considers a PR ready to merge based on mergeable_state even when mergeable boolean is false', () => {
+    expect(isReadyToMerge(createPullRequest({ mergeable: false, mergeable_state: 'clean' }))).toBe(true)
+  })
+
+  // CASE NORMALIZATION: uppercase — currently FAILS (string comparison will fail)
+  it('handles uppercase mergeable_state values for clean', () => {
+    expect(isReadyToMerge(createPullRequest({ mergeable_state: 'CLEAN' }))).toBe(true)
+  })
+
+  it('handles uppercase mergeable_state values for unstable', () => {
+    expect(isReadyToMerge(createPullRequest({ mergeable_state: 'UNSTABLE' }))).toBe(true)
+  })
+
+  // NOT READY cases — explicit documentation
+  it('does not consider a PR ready to merge if mergeable_state is blocked', () => {
+    expect(isReadyToMerge(createPullRequest({ mergeable_state: 'blocked', ci_status: 'success' }))).toBe(false)
+  })
+
+  it('does not consider a PR ready to merge if mergeable_state is behind', () => {
+    expect(isReadyToMerge(createPullRequest({ mergeable_state: 'behind', ci_status: 'success' }))).toBe(false)
+  })
+
+  it('does not consider a PR ready to merge if mergeable_state is null', () => {
+    expect(isReadyToMerge(createPullRequest({ mergeable_state: null, ci_status: 'success' }))).toBe(false)
+  })
+
+  it('does not consider a closed PR ready to merge even if mergeable_state is clean', () => {
+    expect(isReadyToMerge(createPullRequest({ state: 'closed', mergeable_state: 'clean' }))).toBe(false)
+  })
 })

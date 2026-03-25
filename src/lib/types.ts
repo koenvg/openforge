@@ -103,12 +103,11 @@ export function hasMergeConflicts(pr: MergeStatusInfo): boolean {
   return mergeableState === 'dirty' || mergeableState === 'conflicting'
 }
 
-/** Check if a PR is ready to merge (open + CI green + positive mergeability + no conflicts) */
+/** Check if a PR is ready to merge based on GitHub's mergeable_state field */
 export function isReadyToMerge(pr: PullRequestInfo): boolean {
-  return pr.state === 'open'
-    && pr.ci_status === 'success'
-    && pr.mergeable === true
-    && !hasMergeConflicts(pr);
+  if (pr.state !== 'open') return false
+  const mergeableState = pr.mergeable_state?.toLowerCase() ?? null
+  return mergeableState === 'clean' || mergeableState === 'unstable'
 }
 
 /** Check if a PR is queued in a merge queue (ready to merge + is_queued) */
