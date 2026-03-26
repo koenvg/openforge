@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte'
   import { get } from 'svelte/store'
   import type { Task, Action } from '../lib/types'
-  import { activeSessions, activeProjectId, startingTasks, taskReviewModes, taskTerminalOpen } from '../lib/stores'
+  import { activeSessions, activeProjectId, startingTasks, taskReviewModes, taskTerminalOpen, error } from '../lib/stores'
   import { getWorktreeForTask, updateTaskStatus, getConfig } from '../lib/ipc'
   import { resetToBoard } from '../lib/navigation'
   import { isInputFocused } from '../lib/domUtils'
@@ -106,14 +106,20 @@
 
   async function handleStatusChange(newStatus: string) {
     if (newStatus === task.status) return
-    const taskId = task.id
     if (newStatus === 'done') {
       resetToBoard()
+      void updateTaskStatus(task.id, newStatus).catch((e) => {
+        console.error('Failed to update status:', e)
+        $error = 'Task completion may have succeeded, but background cleanup failed.'
+      })
+      return
     }
+
     try {
-      await updateTaskStatus(taskId, newStatus)
+      await updateTaskStatus(task.id, newStatus)
     } catch (e) {
       console.error('Failed to update status:', e)
+      $error = String(e)
     }
   }
 

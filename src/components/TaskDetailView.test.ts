@@ -686,6 +686,30 @@ describe('TaskDetailView', () => {
     vi.mocked(updateTaskStatus).mockResolvedValue(undefined)
   })
 
+  it('navigates to board immediately when moving task to done', async () => {
+    const doingTask: Task = { ...baseTask, status: 'doing' }
+    const { updateTaskStatus } = await import('../lib/ipc')
+    const { resetToBoard } = await import('../lib/navigation')
+
+    let resolveUpdate: (() => void) | undefined
+    vi.mocked(updateTaskStatus).mockImplementationOnce(
+      () => new Promise<void>((resolve) => {
+        resolveUpdate = resolve
+      }),
+    )
+
+    render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
+
+    vi.mocked(resetToBoard).mockClear()
+
+    await fireEvent.click(screen.getByText('Move to Done'))
+
+    expect(updateTaskStatus).toHaveBeenCalledWith('T-42', 'done')
+    expect(resetToBoard).toHaveBeenCalled()
+
+    resolveUpdate?.()
+  })
+
   it('shows action buttons in dropdown when actions exist', async () => {
     const { loadActions } = await import('../lib/actions')
     vi.mocked(loadActions).mockResolvedValue([
