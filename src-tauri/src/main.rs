@@ -13,9 +13,6 @@ mod sse_bridge;
 mod pty_manager;
 pub mod review_parser;
 mod review_prompt;
-mod shepherd_prompt;
-mod shepherd_agent;
-mod shepherd_events;
 mod diff_parser;
 mod whisper_manager;
 mod http_server;
@@ -28,15 +25,12 @@ pub mod providers;
 pub mod command_discovery;
 use std::sync::{Mutex, Arc};
 use std::collections::HashSet;
-use std::time::Duration;
 use log::{info, warn, error, debug};
 use tauri::{Manager, Emitter};
 use jira_client::JiraClient;
 use github_client::GitHubClient;
 use opencode_client::OpenCodeClient;
 use pty_manager::PtyManager;
-use shepherd_agent::{resolve_startup_project_id, shepherd_flush_loop, start_shepherd_if_enabled, ShepherdManager};
-use shepherd_events::ShepherdEventCollector;
 use whisper_manager::{WhisperManager, WhisperModelSize};
 
 // ============================================================================
@@ -284,6 +278,22 @@ async fn start_project_root_server(app: &tauri::AppHandle, project_id: &str) -> 
         .map_err(|e| format!("Failed to start root OpenCode server: {}", e))
 }
 
+fn resolve_startup_project_id(db: &db::Database) -> Result<Option<String>, String> {
+    if let Some(project_id) = db
+        .get_config("active_project_id")
+        .map_err(|e| format!("Failed to read active project config: {}", e))?
+        .filter(|id| !id.is_empty())
+    {
+        return Ok(Some(project_id));
+    }
+
+    let projects = db
+        .get_all_projects()
+        .map_err(|e| format!("Failed to load projects: {}", e))?;
+
+    Ok(projects.first().map(|project| project.id.clone()))
+}
+
 fn restore_resumed_session_state(
     db: &db::Database,
     latest_session: Option<&db::AgentSessionRow>,
@@ -482,8 +492,6 @@ fn main() {
             app.manage(sse_bridge_manager);
             app.manage(pty_manager);
             app.manage(whisper_manager);
-            app.manage(Arc::new(tokio::sync::Mutex::new(ShepherdManager::new(app.handle().clone()))));
-            app.manage(Arc::new(Mutex::new(ShepherdEventCollector::new(Duration::from_secs(30)))));
             app.manage(Arc::new(tokio::sync::Notify::new()));
 
             if let Err(e) = server_manager::ServerManager::new().cleanup_stale_pids() {
@@ -516,37 +524,6 @@ fn main() {
             });
 
             debug!("Server resume task started");
-
-            let app_handle_shepherd = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                shepherd_flush_loop(app_handle_shepherd).await;
-            });
-
-            let app_handle_shepherd_init = app.handle().clone();
-            let db_for_shepherd = db_arc.clone();
-            tauri::async_runtime::spawn(async move {
-                let startup_project_id = {
-                    match db_for_shepherd.lock() {
-                        Ok(db) => match resolve_startup_project_id(&db) {
-                            Ok(project_id) => project_id,
-                            Err(e) => {
-                                warn!("[shepherd] Failed to resolve startup project: {}", e);
-                                None
-                            }
-                        },
-                        Err(e) => {
-                            error!("[shepherd] database lock error during startup: {}", e);
-                            None
-                        }
-                    }
-                };
-
-                if let Some(project_id) = startup_project_id {
-                    if let Err(e) = start_shepherd_if_enabled(&app_handle_shepherd_init, &project_id).await {
-                        warn!("[shepherd] auto-start failed for {}: {}", project_id, e);
-                    }
-                }
-            });
 
             let app_handle_root_server = app.handle().clone();
             let db_for_root_server = db_arc.clone();
@@ -595,8 +572,6 @@ fn main() {
             commands::projects::delete_project,
             commands::projects::get_project_config,
             commands::projects::set_project_config,
-            commands::projects::get_shepherd_enabled,
-            commands::projects::set_shepherd_enabled,
             commands::projects::get_tasks_for_project,
             commands::projects::get_worktree_for_task,
             commands::projects::get_task_workspace,
@@ -660,24 +635,12 @@ fn main() {
             commands::whisper::get_all_whisper_model_statuses,
             commands::whisper::set_whisper_model,
             commands::opencode::list_opencode_agents,
-            commands::opencode::list_shepherd_agents,
             commands::opencode::list_opencode_models,
             commands::agent_review::start_agent_review,
             commands::agent_review::get_agent_review_comments,
             commands::agent_review::update_agent_review_comment_status,
             commands::agent_review::dismiss_all_agent_review_comments,
             commands::agent_review::abort_agent_review,
-            commands::shepherd::get_shepherd_messages,
-            commands::shepherd::clear_shepherd_messages,
-            commands::shepherd::insert_shepherd_message,
-            commands::shepherd::send_shepherd_message,
-            commands::shepherd::start_shepherd,
-            commands::shepherd::stop_shepherd,
-            commands::shepherd::get_shepherd_status,
-            commands::shepherd::notify_shepherd_event,
-            commands::action_items::get_action_items,
-            commands::action_items::dismiss_action_item,
-            commands::action_items::get_action_item_count,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

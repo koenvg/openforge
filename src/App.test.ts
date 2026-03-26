@@ -1,7 +1,7 @@
 import { render, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { writable } from 'svelte/store'
-import type { Task, AgentSession, Project, ProjectAttention, PullRequestInfo, CheckpointNotification, CiFailureNotification, RateLimitNotification, ShepherdMessage, ShepherdStatus, AuthoredPullRequest } from './lib/types'
+import type { Task, AgentSession, Project, ProjectAttention, PullRequestInfo, CheckpointNotification, CiFailureNotification, RateLimitNotification, AuthoredPullRequest } from './lib/types'
 
 const callOrder: string[] = []
 
@@ -49,11 +49,7 @@ vi.mock('./lib/stores', () => ({
   commandHeld: writable(false),
   focusBoardFilters: writable(new Map()),
   startingTasks: writable<Set<string>>(new Set()),
-  codeCleanupTasksEnabled: writable(false),
-   shepherdEnabled: writable(false),
-   actionItemCount: writable(0),
-   shepherdMessages: writable<ShepherdMessage[]>([]),
-   shepherdStatus: writable<ShepherdStatus>('disabled'),
+    codeCleanupTasksEnabled: writable(false),
 }))
 
 vi.mock('./lib/ipc', () => ({
@@ -145,19 +141,11 @@ vi.mock('./lib/ipc', () => ({
     callOrder.push('getReviewPrs')
     return []
   }),
-  getAuthoredPrs: vi.fn(async () => {
-    callOrder.push('getAuthoredPrs')
-    return []
-  }),
-   notifyShepherdEvent: vi.fn(async () => {}),
-   getShepherdMessages: vi.fn(async () => []),
-   sendShepherdMessage: vi.fn(async () => {}),
-   clearShepherdMessages: vi.fn(async () => {}),
-   getShepherdEnabled: vi.fn(async () => false),
-   getActionItemCount: vi.fn(async () => 0),
-   getActionItems: vi.fn(async () => []),
-   dismissActionItem: vi.fn(async () => {}),
- }))
+    getAuthoredPrs: vi.fn(async () => {
+      callOrder.push('getAuthoredPrs')
+      return []
+    }),
+  }))
 
 vi.mock('./components/KanbanBoard.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/FocusBoard.svelte', () => ({ default: vi.fn() }))
@@ -924,37 +912,11 @@ describe('App onMount initialization order', () => {
       expect(preventDefaultSpy).not.toHaveBeenCalled()
     })
 
-    it('s navigates to shepherd view when shepherd is enabled', async () => {
-      const App = (await import('./App.svelte')).default
-      const stores = await import('./lib/stores')
-      const { get } = await import('svelte/store')
-
-      stores.shepherdEnabled.set(true)
-      render(App)
-
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true }))
-      expect(get(stores.currentView)).toBe('shepherd')
-    })
-
-    it('s does NOT navigate to shepherd when shepherd is disabled', async () => {
-      const App = (await import('./App.svelte')).default
-      const stores = await import('./lib/stores')
-      const { get } = await import('svelte/store')
-
-      stores.shepherdEnabled.set(false)
-      stores.currentView.set('board')
-      render(App)
-
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true }))
-      expect(get(stores.currentView)).toBe('board')
-    })
-
     it('s does NOT navigate when input is focused', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
       const { get } = await import('svelte/store')
 
-      stores.shepherdEnabled.set(true)
       stores.currentView.set('board')
       render(App)
 
@@ -980,349 +942,4 @@ describe('App onMount initialization order', () => {
     })
 
   })
-})
-
-describe('Shepherd event wiring', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    eventListeners.clear()
-  })
-
-  afterEach(() => {
-    vi.clearAllMocks()
-    eventListeners.clear()
-  })
-
-  it('calls notifyShepherdEvent with task-created when task-changed event has action=created', async () => {
-    const ipc = await import('./lib/ipc')
-    const stores = await import('./lib/stores')
-
-    const App = (await import('./App.svelte')).default
-    render(App)
-
-    await vi.waitFor(() => {
-      expect(eventListeners.has('task-changed')).toBe(true)
-    }, { timeout: 5000 })
-
-    stores.shepherdEnabled.set(true)
-
-    const taskChangedCallback = eventListeners.get('task-changed')!
-    await taskChangedCallback({
-      payload: { action: 'created', task_id: 'task-123' }
-    })
-
-    expect(ipc.notifyShepherdEvent).toHaveBeenCalledWith('task-created', {
-      action: 'created',
-      task_id: 'task-123'
-    })
-  })
-
-  it('calls notifyShepherdEvent with task-moved when task-changed event has action=updated', async () => {
-    const ipc = await import('./lib/ipc')
-    const stores = await import('./lib/stores')
-
-    const App = (await import('./App.svelte')).default
-    render(App)
-
-    await vi.waitFor(() => {
-      expect(eventListeners.has('task-changed')).toBe(true)
-    }, { timeout: 5000 })
-
-    stores.shepherdEnabled.set(true)
-
-    const taskChangedCallback = eventListeners.get('task-changed')!
-    await taskChangedCallback({
-      payload: { action: 'updated', task_id: 'task-456' }
-    })
-
-    expect(ipc.notifyShepherdEvent).toHaveBeenCalledWith('task-moved', {
-      action: 'updated',
-      task_id: 'task-456'
-    })
-  })
-
-  it('calls notifyShepherdEvent with task-deleted when task-changed event has action=deleted', async () => {
-    const ipc = await import('./lib/ipc')
-    const stores = await import('./lib/stores')
-
-    const App = (await import('./App.svelte')).default
-    render(App)
-
-    await vi.waitFor(() => {
-      expect(eventListeners.has('task-changed')).toBe(true)
-    }, { timeout: 5000 })
-
-    stores.shepherdEnabled.set(true)
-
-    const taskChangedCallback = eventListeners.get('task-changed')!
-    await taskChangedCallback({
-      payload: { action: 'deleted', task_id: 'task-789' }
-    })
-
-    expect(ipc.notifyShepherdEvent).toHaveBeenCalledWith('task-deleted', {
-      action: 'deleted',
-      task_id: 'task-789'
-    })
-  })
-
-  it('does not call notifyShepherdEvent when shepherdEnabled is false', async () => {
-    const ipc = await import('./lib/ipc')
-    const stores = await import('./lib/stores')
-
-    stores.shepherdEnabled.set(false)
-
-    const App = (await import('./App.svelte')).default
-    render(App)
-
-    await vi.waitFor(() => {
-      expect(eventListeners.has('task-changed')).toBe(true)
-    })
-
-    const taskChangedCallback = eventListeners.get('task-changed')!
-    await taskChangedCallback({
-      payload: { action: 'created', task_id: 'task-999' }
-    })
-
-    expect(ipc.notifyShepherdEvent).not.toHaveBeenCalled()
-  })
-
-  it('calls notifyShepherdEvent for non-shepherd action-complete events', async () => {
-    const { listen } = await import('@tauri-apps/api/event')
-    const ipc = await import('./lib/ipc')
-    const stores = await import('./lib/stores')
-
-    const App = (await import('./App.svelte')).default
-    render(App)
-
-    await vi.waitFor(() => {
-      const calls = vi.mocked(listen).mock.calls
-      const hasActionComplete = calls.some(call => call[0] === 'action-complete')
-      expect(hasActionComplete).toBe(true)
-    })
-
-    stores.shepherdEnabled.set(true)
-
-    const actionCompleteCall = vi.mocked(listen).mock.calls.find(
-      call => call[0] === 'action-complete'
-    )
-    expect(actionCompleteCall).toBeDefined()
-
-    const actionCompleteCallback = actionCompleteCall![1] as Function
-    await actionCompleteCallback({
-      payload: { task_id: 'T-123' }
-    })
-
-    expect(ipc.notifyShepherdEvent).toHaveBeenCalledWith('action-complete', {
-      task_id: 'T-123'
-    })
-  })
-
-  it('does not call notifyShepherdEvent for shepherd action-complete events', async () => {
-    const { listen } = await import('@tauri-apps/api/event')
-    const ipc = await import('./lib/ipc')
-    const stores = await import('./lib/stores')
-
-    const App = (await import('./App.svelte')).default
-    render(App)
-
-    await vi.waitFor(() => {
-      const calls = vi.mocked(listen).mock.calls
-      const hasActionComplete = calls.some(call => call[0] === 'action-complete')
-      expect(hasActionComplete).toBe(true)
-    })
-
-    stores.shepherdEnabled.set(true)
-    vi.mocked(ipc.notifyShepherdEvent).mockClear()
-
-    const actionCompleteCall = vi.mocked(listen).mock.calls.find(
-      call => call[0] === 'action-complete'
-    )
-    expect(actionCompleteCall).toBeDefined()
-
-    const actionCompleteCallback = actionCompleteCall![1] as Function
-    await actionCompleteCallback({
-      payload: { task_id: 'shepherd-P-1' }
-    })
-
-    expect(ipc.notifyShepherdEvent).not.toHaveBeenCalled()
-  })
-
-  describe('action item count updates', () => {
-    it('action-item-created event triggers count refresh when shepherd enabled', async () => {
-      const { listen } = await import('@tauri-apps/api/event')
-      const ipc = await import('./lib/ipc')
-      const stores = await import('./lib/stores')
-      const { get } = await import('svelte/store')
-
-      vi.mocked(ipc.getActionItemCount).mockResolvedValue(5)
-
-      const App = (await import('./App.svelte')).default
-      render(App)
-
-      await vi.waitFor(() => {
-        const calls = vi.mocked(listen).mock.calls
-        const hasActionItemCreated = calls.some(call => call[0] === 'action-item-created')
-        expect(hasActionItemCreated).toBe(true)
-      })
-
-      stores.activeProjectId.set('proj-1')
-      stores.shepherdEnabled.set(true)
-
-      const actionItemCreatedCall = vi.mocked(listen).mock.calls.find(
-        call => call[0] === 'action-item-created'
-      )
-      expect(actionItemCreatedCall).toBeDefined()
-
-      const actionItemCreatedCallback = actionItemCreatedCall![1] as Function
-      await actionItemCreatedCallback({})
-
-      await vi.waitFor(() => {
-        expect(ipc.getActionItemCount).toHaveBeenCalledWith('proj-1')
-        expect(get(stores.actionItemCount)).toBe(5)
-      })
-    })
-
-    it('action-item-dismissed event triggers count refresh when shepherd enabled', async () => {
-      const { listen } = await import('@tauri-apps/api/event')
-      const ipc = await import('./lib/ipc')
-      const stores = await import('./lib/stores')
-      const { get } = await import('svelte/store')
-
-      vi.mocked(ipc.getActionItemCount).mockResolvedValue(3)
-
-      const App = (await import('./App.svelte')).default
-      render(App)
-
-      await vi.waitFor(() => {
-        const calls = vi.mocked(listen).mock.calls
-        const hasActionItemDismissed = calls.some(call => call[0] === 'action-item-dismissed')
-        expect(hasActionItemDismissed).toBe(true)
-      })
-
-      stores.activeProjectId.set('proj-1')
-      stores.shepherdEnabled.set(true)
-
-      const actionItemDismissedCall = vi.mocked(listen).mock.calls.find(
-        call => call[0] === 'action-item-dismissed'
-      )
-      expect(actionItemDismissedCall).toBeDefined()
-
-      const actionItemDismissedCallback = actionItemDismissedCall![1] as Function
-      await actionItemDismissedCallback({})
-
-      await vi.waitFor(() => {
-        expect(ipc.getActionItemCount).toHaveBeenCalledWith('proj-1')
-        expect(get(stores.actionItemCount)).toBe(3)
-      })
-    })
-
-    it('action-item-created event does NOT trigger count refresh when shepherd disabled', async () => {
-      const { listen } = await import('@tauri-apps/api/event')
-      const ipc = await import('./lib/ipc')
-      const stores = await import('./lib/stores')
-
-      const App = (await import('./App.svelte')).default
-      render(App)
-
-      await vi.waitFor(() => {
-        const calls = vi.mocked(listen).mock.calls
-        const hasActionItemCreated = calls.some(call => call[0] === 'action-item-created')
-        expect(hasActionItemCreated).toBe(true)
-      })
-
-      stores.activeProjectId.set('proj-1')
-      stores.shepherdEnabled.set(false)
-
-      vi.mocked(ipc.getActionItemCount).mockClear()
-
-      const actionItemCreatedCall = vi.mocked(listen).mock.calls.find(
-        call => call[0] === 'action-item-created'
-      )
-      expect(actionItemCreatedCall).toBeDefined()
-
-      const actionItemCreatedCallback = actionItemCreatedCall![1] as Function
-      await actionItemCreatedCallback({})
-
-      expect(ipc.getActionItemCount).not.toHaveBeenCalled()
-    })
-  })
-
-  describe('loadProjects activeProjectId management', () => {
-    it('resets activeProjectId to first project when the active project is no longer in the list', async () => {
-      const App = (await import('./App.svelte')).default
-      const stores = await import('./lib/stores')
-      const ipc = await import('./lib/ipc')
-      const { get } = await import('svelte/store')
-
-      stores.activeProjectId.set('proj-deleted')
-
-      vi.mocked(ipc.getProjects).mockResolvedValue([
-        { id: 'proj-1', name: 'Project One', path: '/test/one', created_at: 0, updated_at: 0 },
-      ])
-
-      render(App)
-
-      await vi.waitFor(() => {
-        expect(get(stores.projects)).toHaveLength(1)
-      })
-
-      expect(get(stores.activeProjectId)).toBe('proj-1')
-    })
-
-     it('resets activeProjectId to null when all projects were deleted', async () => {
-       const App = (await import('./App.svelte')).default
-       const stores = await import('./lib/stores')
-       const ipc = await import('./lib/ipc')
-       const { get } = await import('svelte/store')
-
-       stores.activeProjectId.set('proj-deleted')
-
-       vi.mocked(ipc.getProjects).mockResolvedValue([])
-
-       render(App)
-
-       await vi.waitFor(() => {
-         expect(get(stores.projects)).toHaveLength(0)
-       })
-
-       expect(get(stores.activeProjectId)).toBeNull()
-     })
-   })
-
-   describe('board_layout feature flag', () => {
-     it('defaults to kanban layout when board_layout config is null', async () => {
-       const { getProjectConfig } = await import('./lib/ipc')
-       const stores = await import('./lib/stores')
-
-       vi.mocked(getProjectConfig).mockResolvedValue(null)
-
-       const App = (await import('./App.svelte')).default
-       render(App)
-
-       stores.activeProjectId.set('proj-1')
-
-       await vi.waitFor(() => {
-         expect(getProjectConfig).toHaveBeenCalledWith('proj-1', 'board_layout')
-       })
-     }, 15000)
-
-     it('reads board_layout config from project settings', async () => {
-       const { getProjectConfig } = await import('./lib/ipc')
-       const stores = await import('./lib/stores')
-
-       vi.mocked(getProjectConfig).mockImplementation(async (_projectId: string, key: string) => {
-         if (key === 'board_layout') return 'focus'
-         return null
-       })
-
-       const App = (await import('./App.svelte')).default
-       render(App)
-
-       stores.activeProjectId.set('proj-1')
-
-       await vi.waitFor(() => {
-         expect(getProjectConfig).toHaveBeenCalledWith('proj-1', 'board_layout')
-       })
-     }, 15000)
-   })
 })

@@ -181,24 +181,6 @@ pub async fn list_opencode_agents(
 }
 
 #[tauri::command]
-pub async fn list_shepherd_agents(
-    db: State<'_, Arc<Mutex<db::Database>>>,
-    server_mgr: State<'_, server_manager::ServerManager>,
-    project_id: String,
-) -> Result<Vec<crate::opencode_client::AgentInfo>, String> {
-    let port = match ensure_project_discovery_server(&db, &server_mgr, &project_id).await? {
-        Some(port) => port,
-        None => return Ok(vec![]),
-    };
-
-    let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
-    client
-        .list_agents()
-        .await
-        .map_err(|e| format!("Failed to list shepherd agents: {}", e))
-}
-
-#[tauri::command]
 pub async fn list_opencode_models(
     db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, server_manager::ServerManager>,

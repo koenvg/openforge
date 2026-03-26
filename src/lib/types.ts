@@ -169,7 +169,7 @@ export interface AutocompleteAgentInfo {
   mode: string | null;
 }
 
-/** Model option from OpenCode GET /provider endpoint — used for shepherd model selection */
+/** Model option from OpenCode GET /provider endpoint */
 export interface ProviderModelInfo {
   provider_id: string;
   model_id: string;
@@ -399,7 +399,7 @@ export interface AgentReviewComment {
 }
 
 /** App-level view for top-bar navigation */
-export type AppView = "board" | "pr_review" | "skills" | "settings" | "workqueue" | "global_settings" | "shepherd";
+export type AppView = "board" | "pr_review" | "skills" | "settings" | "workqueue" | "global_settings";
 
 export interface WorkQueueEntry {
   task: Task;
@@ -542,31 +542,4 @@ export interface ClaudeSessionState {
   pendingApprovals: SDKToolApprovalRequest[];
   totalCost: number | null;
   permissionMode?: PermissionMode;
-}
-
-// ============================================================================
-// Shepherd Types
-// ============================================================================
-
-export type ShepherdStatus = 'idle' | 'thinking' | 'disabled' | 'error';
-
-export interface ShepherdMessage {
-  id: number;
-  project_id: string;
-  role: 'shepherd' | 'user' | 'system';
-  content: string;
-  event_context: string | null;
-  created_at: number;
-}
-
-export interface ActionItem {
-  id: number;
-  project_id: string;
-  source: string;
-  title: string;
-  description: string;
-  task_id: string | null;
-  status: string;
-  created_at: number;
-  dismissed_at: number | null;
 }

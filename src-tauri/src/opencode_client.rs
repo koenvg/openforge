@@ -775,7 +775,7 @@ mod tests {
                 r#type: "text".to_string(),
                 text: "Hello".to_string(),
             }],
-            agent: Some("shepherd".to_string()),
+            agent: Some("coder".to_string()),
             model: Some(PromptModel {
                 provider_id: "anthropic".to_string(),
                 model_id: "claude-sonnet".to_string(),
@@ -794,7 +794,7 @@ mod tests {
                 r#type: "text".to_string(),
                 text: "Hello".to_string(),
             }],
-            agent: Some("shepherd".to_string()),
+            agent: Some("coder".to_string()),
             model: None,
         };
 

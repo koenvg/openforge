@@ -6,7 +6,7 @@ import type { AgentSession, Project, Task } from '../lib/types'
 const mockActiveSessions = writable<Map<string, AgentSession>>(new Map())
 const mockProjects = writable<Project[]>([])
 const mockActiveProjectId = writable<string | null>(null)
-const mockCurrentView = writable<'board' | 'pr_review' | 'settings' | 'shepherd' | 'skills' | 'workqueue'>('board')
+const mockCurrentView = writable<'board' | 'pr_review' | 'settings' | 'skills' | 'workqueue'>('board')
 const mockSelectedTaskId = writable<string | null>(null)
 const mockTasks = writable<Task[]>([])
 

@@ -4,7 +4,6 @@ use rusqlite_migration::{Migrations, M};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-pub mod action_items;
 mod agent_review;
 mod agents;
 mod authored_prs;
@@ -13,13 +12,10 @@ mod projects;
 mod pull_requests;
 mod review;
 mod self_review;
-mod shepherd;
 mod task_workspaces;
 mod tasks;
 mod worktrees;
 
-#[allow(unused_imports)]
-pub use action_items::ActionItemRow;
 pub use agent_review::AgentReviewCommentRow;
 pub use agents::AgentSessionRow;
 pub use authored_prs::AuthoredPrRow;
@@ -27,7 +23,6 @@ pub use projects::{ProjectAttentionRow, ProjectRow};
 pub use pull_requests::{PrCommentRow, PrRow};
 pub use review::ReviewPrRow;
 pub use self_review::SelfReviewCommentRow;
-pub use shepherd::ShepherdMessageRow;
 pub use task_workspaces::TaskWorkspaceRow;
 pub use tasks::{TaskRow, WorkQueueTaskRow};
 pub use worktrees::WorktreeRow;

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
-  import { activeProjectId, projects, codeCleanupTasksEnabled, shepherdEnabled, actionItemCount, error } from '../lib/stores'
+  import { activeProjectId, projects, codeCleanupTasksEnabled, error } from '../lib/stores'
   import {
     getProjectConfig,
     setProjectConfig,
@@ -12,11 +12,6 @@
     checkClaudeInstalled,
     getAllWhisperModelStatuses,
     setWhisperModel,
-    getShepherdEnabled,
-    setShepherdEnabled,
-    startShepherd,
-    stopShepherd,
-    getActionItemCount,
   } from '../lib/ipc'
   import { loadActions, saveActions, createAction, DEFAULT_ACTIONS } from '../lib/actions'
   import { loadBoardColumns, saveBoardColumns } from '../lib/boardColumns'
@@ -36,7 +31,6 @@
   import SettingsActionsCard from './SettingsActionsCard.svelte'
   import SettingsExperimentalCard from './SettingsExperimentalCard.svelte'
   import ProjectPageHeader from './ProjectPageHeader.svelte'
-  import SettingsShepherdCard from './SettingsShepherdCard.svelte'
 
   interface Props {
     onClose: () => void
@@ -83,8 +77,6 @@
 
   // Feature flag state
   let isCodeCleanupTasksEnabled = $state($codeCleanupTasksEnabled)
-  let isShepherdEnabled = $state(false)
-
   // Theme state
   let isDarkMode = $state($themeMode === 'dark')
 
@@ -102,23 +94,6 @@
     $codeCleanupTasksEnabled = isCodeCleanupTasksEnabled
   }
 
-  async function handleShepherdToggle() {
-    isShepherdEnabled = !isShepherdEnabled
-    $shepherdEnabled = isShepherdEnabled
-    if ($activeProjectId) {
-      await setShepherdEnabled($activeProjectId, isShepherdEnabled)
-      if (isShepherdEnabled) {
-        startShepherd($activeProjectId).catch(console.error)
-        getActionItemCount($activeProjectId).then((count: number) => {
-          $actionItemCount = count
-        }).catch(console.error)
-      } else {
-        stopShepherd().catch(console.error)
-        $actionItemCount = 0
-      }
-    }
-  }
-
   // UI state
   let isSaving = $state(false)
   let saved = $state(false)
@@ -134,7 +109,7 @@
   // Scroll spy
   let scrollContainer = $state<HTMLDivElement | null>(null)
   let isNavigating = false
-  const projectSections = ['general', 'board', 'integrations', 'instructions', 'actions', 'shepherd']
+  const projectSections = ['general', 'board', 'integrations', 'instructions', 'actions']
   const globalSections = ['preferences', 'ai', 'credentials', 'experimental']
 
   // Derived state
@@ -170,8 +145,6 @@
          boardLayout = (layout === 'focus') ? 'focus' : 'kanban'
          projectColor = color ?? ''
        })
-
-      getShepherdEnabled(pid).then((enabled) => { isShepherdEnabled = enabled })
 
       // Load actions
       loadActions(pid).then((loaded) => {
@@ -489,11 +462,6 @@
         />
 
         {#if hasProject}
-          <SettingsShepherdCard
-            shepherdEnabled={isShepherdEnabled}
-            onShepherdToggle={handleShepherdToggle}
-          />
-
           <div class="bg-base-100 rounded-lg border border-error/30 overflow-hidden">
             <div class="px-5 py-3 border-b border-error/30">
               <h3 class="text-sm font-semibold text-error m-0">Danger Zone</h3>

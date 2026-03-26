@@ -166,28 +166,3 @@ pub async fn get_project_attention(
     db.get_project_attention_summaries()
         .map_err(|e| format!("Failed to get project attention: {}", e))
 }
-
-#[tauri::command]
-pub async fn get_shepherd_enabled(
-    db: State<'_, Arc<Mutex<db::Database>>>,
-    project_id: String,
-) -> Result<bool, String> {
-    let db = crate::db::acquire_db(&db);
-    match db.get_project_config(&project_id, "task_shepherd_enabled") {
-        Ok(Some(value)) => Ok(value == "true"),
-        Ok(None) => Ok(false),
-        Err(e) => Err(format!("Failed to get shepherd enabled: {}", e)),
-    }
-}
-
-#[tauri::command]
-pub async fn set_shepherd_enabled(
-    db: State<'_, Arc<Mutex<db::Database>>>,
-    project_id: String,
-    enabled: bool,
-) -> Result<(), String> {
-    let value = if enabled { "true" } else { "false" };
-    let db = crate::db::acquire_db(&db);
-    db.set_project_config(&project_id, "task_shepherd_enabled", value)
-        .map_err(|e| format!("Failed to set shepherd enabled: {}", e))
-}

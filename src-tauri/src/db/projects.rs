@@ -148,14 +148,6 @@ impl super::Database {
             rusqlite::params![id],
         )?;
         conn.execute(
-            "DELETE FROM shepherd_messages WHERE project_id = ?1",
-            rusqlite::params![id],
-        )?;
-        conn.execute(
-            "DELETE FROM action_items WHERE project_id = ?1",
-            rusqlite::params![id],
-        )?;
-        conn.execute(
             "DELETE FROM tasks WHERE project_id = ?1",
             rusqlite::params![id],
         )?;
@@ -761,54 +753,6 @@ mod tests {
             .find_project_by_github_repo("unknown/repo")
             .expect("find failed");
         assert!(not_found.is_none());
-
-        drop(db);
-        let _ = std::fs::remove_file(&path);
-    }
-
-    #[test]
-    fn test_shepherd_enabled_default_false() {
-        let (db, path) = make_test_db("shepherd_enabled_default");
-
-        let project = db
-            .create_project("Test Project", "/tmp/test")
-            .expect("Failed to create project");
-
-        // When not set, should default to false
-        let enabled = db
-            .get_project_config(&project.id, "task_shepherd_enabled")
-            .expect("Failed to get shepherd enabled");
-        assert_eq!(enabled, None);
-
-        drop(db);
-        let _ = std::fs::remove_file(&path);
-    }
-
-    #[test]
-    fn test_shepherd_enabled_toggle() {
-        let (db, path) = make_test_db("shepherd_enabled_toggle");
-
-        let project = db
-            .create_project("Test Project", "/tmp/test")
-            .expect("Failed to create project");
-
-        // Set to true
-        db.set_project_config(&project.id, "task_shepherd_enabled", "true")
-            .expect("Failed to set shepherd enabled to true");
-
-        let enabled = db
-            .get_project_config(&project.id, "task_shepherd_enabled")
-            .expect("Failed to get shepherd enabled");
-        assert_eq!(enabled, Some("true".to_string()));
-
-        // Set to false
-        db.set_project_config(&project.id, "task_shepherd_enabled", "false")
-            .expect("Failed to set shepherd enabled to false");
-
-        let enabled = db
-            .get_project_config(&project.id, "task_shepherd_enabled")
-            .expect("Failed to get shepherd enabled");
-        assert_eq!(enabled, Some("false".to_string()));
 
         drop(db);
         let _ = std::fs::remove_file(&path);

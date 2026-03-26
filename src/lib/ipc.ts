@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Task, AgentSession, PrComment, PollResult, PullRequestInfo, AgentInfo, Project, ProjectAttention, WorktreeInfo, TaskWorkspaceInfo, ImplementationStatus, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus, WhisperModelSizeId, SkillInfo, WorkQueueEntry, ShepherdMessage, ShepherdStatus, ActionItem, ProviderModelInfo } from "./types";
+import type { Task, AgentSession, PrComment, PollResult, PullRequestInfo, AgentInfo, Project, ProjectAttention, WorktreeInfo, TaskWorkspaceInfo, ImplementationStatus, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus, WhisperModelSizeId, SkillInfo, WorkQueueEntry, ProviderModelInfo } from "./types";
 
 export async function createTask(initialPrompt: string, status: string, jiraKey: string | null, projectId: string | null, agent: string | null, permissionMode: string | null): Promise<Task> {
   return invoke<Task>("create_task", { initialPrompt, status, jiraKey, projectId, agent, permissionMode });
@@ -73,29 +73,6 @@ export async function getProjectConfig(projectId: string, key: string): Promise<
 export async function setProjectConfig(projectId: string, key: string, value: string): Promise<void> {
   return invoke("set_project_config", { projectId, key, value });
 }
-
-export async function getShepherdEnabled(projectId: string): Promise<boolean> {
-  return invoke<boolean>("get_shepherd_enabled", { projectId });
-}
-
-export async function setShepherdEnabled(projectId: string, enabled: boolean): Promise<void> {
-  return invoke("set_shepherd_enabled", { projectId, enabled });
-}
-
-// Action Item Commands
-export async function getActionItems(projectId: string, limit: number): Promise<ActionItem[]> {
-  return invoke<ActionItem[]>("get_action_items", { projectId, limit });
-}
-
-export async function dismissActionItem(id: number): Promise<void> {
-  return invoke("dismiss_action_item", { id });
-}
-
-export async function getActionItemCount(projectId: string): Promise<number> {
-  return invoke<number>("get_action_item_count", { projectId });
-}
-
-
 
 export async function getAllTasks(): Promise<Task[]> {
   return invoke<Task[]>("get_tasks");
@@ -337,10 +314,6 @@ export async function listOpenCodeAgents(projectId: string): Promise<Autocomplet
   return invoke<AutocompleteAgentInfo[]>("list_opencode_agents", { projectId });
 }
 
-export async function listShepherdAgents(projectId: string): Promise<AutocompleteAgentInfo[]> {
-  return invoke<AutocompleteAgentInfo[]>("list_shepherd_agents", { projectId });
-}
-
 export async function listOpenCodeModels(projectId: string): Promise<ProviderModelInfo[]> {
   return invoke<ProviderModelInfo[]>("list_opencode_models", { projectId });
 }
@@ -375,36 +348,4 @@ export async function fetchAuthoredPrs(): Promise<AuthoredPullRequest[]> {
 
 export async function getAuthoredPrs(): Promise<AuthoredPullRequest[]> {
   return invoke<AuthoredPullRequest[]>("get_authored_prs");
-}
-
-// ============================================================================
-// Shepherd Commands
-// ============================================================================
-
-export async function getShepherdMessages(projectId: string, limit: number): Promise<ShepherdMessage[]> {
-  return invoke<ShepherdMessage[]>("get_shepherd_messages", { projectId, limit });
-}
-
-export async function clearShepherdMessages(projectId: string): Promise<void> {
-  return invoke<void>("clear_shepherd_messages", { projectId });
-}
-
-export async function sendShepherdMessage(projectId: string, content: string): Promise<void> {
-  return invoke<void>("send_shepherd_message", { projectId, content });
-}
-
-export async function startShepherd(projectId: string): Promise<void> {
-  return invoke<void>("start_shepherd", { projectId });
-}
-
-export async function stopShepherd(): Promise<void> {
-  return invoke<void>("stop_shepherd");
-}
-
-export async function getShepherdStatus(): Promise<ShepherdStatus> {
-  return invoke<ShepherdStatus>("get_shepherd_status");
-}
-
-export async function notifyShepherdEvent(eventType: string, payload: unknown): Promise<void> {
-  return invoke("notify_shepherd_event", { eventType, payload });
 }

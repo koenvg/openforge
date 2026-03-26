@@ -68,26 +68,6 @@ pub struct WorkQueueQuery {
     pub project_id: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreateActionItemRequest {
-    pub project_id: String,
-    pub source: Option<String>,
-    pub title: String,
-    pub description: String,
-    pub task_id: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct CreateActionItemResponse {
-    pub id: i64,
-    pub status: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct ActionItemsQuery {
-    pub project_id: String,
-}
-
 /// Payload from Claude Code hooks
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClaudeHookPayload {
@@ -458,87 +438,6 @@ pub async fn hook_notification_permission_handler(
     handle_hook(State(state), Json(payload), "notification-permission").await
 }
 
-pub async fn create_action_item_handler(
-    State(state): State<AppState>,
-    Json(request): Json<CreateActionItemRequest>,
-) -> Result<(StatusCode, Json<CreateActionItemResponse>), (StatusCode, String)> {
-    let db = state.db.lock().unwrap();
-
-    let row = db.insert_action_item(
-        &request.project_id,
-        &request.source.unwrap_or_else(|| "shepherd".to_string()),
-        &request.title,
-        &request.description,
-        request.task_id.as_deref(),
-    ).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create action item: {}", e)))?;
-
-    drop(db);
-
-    if let Some(app) = &state.app {
-        let _ = app.emit(
-            "action-item-created",
-            serde_json::json!({
-                "id": row.id,
-                "project_id": row.project_id,
-                "title": row.title
-            })
-        );
-    }
-
-    Ok((
-        StatusCode::CREATED,
-        Json(CreateActionItemResponse {
-            id: row.id,
-            status: "created".to_string(),
-        })
-    ))
-}
-
-pub async fn get_action_items_handler(
-    State(state): State<AppState>,
-    Query(query): Query<ActionItemsQuery>,
-) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, String)> {
-    let db = state.db.lock().unwrap();
-
-    let items = db.get_active_action_items(&query.project_id, 50)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get action items: {}", e)))?;
-
-    drop(db);
-
-    Ok((
-        StatusCode::OK,
-        Json(serde_json::json!(items))
-    ))
-}
-
-pub async fn dismiss_action_item_handler(
-    State(state): State<AppState>,
-    Path(id): Path<i64>,
-) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, String)> {
-    let db = state.db.lock().unwrap();
-
-    db.dismiss_action_item(id)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to dismiss action item: {}", e)))?;
-
-    drop(db);
-
-    if let Some(app) = &state.app {
-        let _ = app.emit(
-            "action-item-dismissed",
-            serde_json::json!({
-                "id": id
-            })
-        );
-    }
-
-    Ok((
-        StatusCode::OK,
-        Json(serde_json::json!({
-            "status": "dismissed"
-        }))
-    ))
-}
-
 /// Create the HTTP router with all available routes
 pub fn create_router(state: AppState) -> Router {
     Router::new()
@@ -548,8 +447,6 @@ pub fn create_router(state: AppState) -> Router {
         .route("/tasks", get(get_tasks_handler))
         .route("/project/:id/attention", get(get_project_attention_handler))
         .route("/work_queue", get(get_work_queue_handler))
-        .route("/action_items", post(create_action_item_handler).get(get_action_items_handler))
-        .route("/action_items/:id/dismiss", post(dismiss_action_item_handler))
         .route("/hooks/stop", post(hook_stop_handler))
         .route("/hooks/pre-tool-use", post(hook_pre_tool_use_handler))
         .route("/hooks/post-tool-use", post(hook_post_tool_use_handler))
@@ -1450,113 +1347,6 @@ mod tests {
 
         let result = resolve_project_id(&db, Some("P-99"), Some("/tmp/wt1"));
         assert_eq!(result, Ok("P-99".to_string()));
-    }
-
-    // ========================================================================
-    // Action Item Handler Tests
-    // ========================================================================
-
-    #[tokio::test]
-    async fn test_create_action_item_handler_creates_item() {
-        let (state, _path) = test_state("http_create_action_item");
-        {
-            let db = state.db.lock().expect("lock db");
-            db.create_project("Project", "/tmp/project")
-                .expect("create project");
-        }
-
-        let router = create_router(state);
-        let request_body = serde_json::json!({
-            "project_id": "P-1",
-            "source": Some("shepherd"),
-            "title": "Fix bug",
-            "description": "There is a bug",
-            "task_id": None::<String>
-        });
-
-        let response = router
-            .oneshot(
-                Request::builder()
-                    .uri("/action_items")
-                    .method("POST")
-                    .header("content-type", "application/json")
-                    .body(Body::from(serde_json::to_string(&request_body).unwrap()))
-                    .expect("build request"),
-            )
-            .await
-            .expect("request");
-
-        assert_eq!(response.status(), StatusCode::CREATED);
-        let body = response_body_json(response).await;
-        assert_eq!(body["status"], "created");
-        assert!(body["id"].is_number());
-    }
-
-    #[tokio::test]
-    async fn test_get_action_items_handler_returns_items() {
-        let (state, _path) = test_state("http_get_action_items");
-        {
-            let db = state.db.lock().expect("lock db");
-            let project = db
-                .create_project("Project", "/tmp/project")
-                .expect("create project");
-            db.insert_action_item(&project.id, "shepherd", "Item 1", "Description 1", None)
-                .expect("insert item 1");
-            db.insert_action_item(&project.id, "shepherd", "Item 2", "Description 2", None)
-                .expect("insert item 2");
-        }
-
-        let router = create_router(state);
-        let response = router
-            .oneshot(
-                Request::builder()
-                    .uri("/action_items?project_id=P-1")
-                    .method("GET")
-                    .body(Body::empty())
-                    .expect("build request"),
-            )
-            .await
-            .expect("request");
-
-        assert_eq!(response.status(), StatusCode::OK);
-        let body = response_body_json(response).await;
-        assert!(body.is_array());
-        let items = body.as_array().expect("is array");
-        assert_eq!(items.len(), 2);
-        assert_eq!(items[0]["title"], "Item 2");
-        assert_eq!(items[1]["title"], "Item 1");
-    }
-
-    #[tokio::test]
-    async fn test_dismiss_action_item_handler_dismisses_item() {
-        let (state, _path) = test_state("http_dismiss_action_item");
-        let item_id: i64;
-        {
-            let db = state.db.lock().expect("lock db");
-            let project = db
-                .create_project("Project", "/tmp/project")
-                .expect("create project");
-            let item = db
-                .insert_action_item(&project.id, "shepherd", "Item", "Description", None)
-                .expect("insert item");
-            item_id = item.id;
-        }
-
-        let router = create_router(state);
-        let response = router
-            .oneshot(
-                Request::builder()
-                    .uri(&format!("/action_items/{}/dismiss", item_id))
-                    .method("POST")
-                    .body(Body::empty())
-                    .expect("build request"),
-            )
-            .await
-            .expect("request");
-
-        assert_eq!(response.status(), StatusCode::OK);
-        let body = response_body_json(response).await;
-        assert_eq!(body["status"], "dismissed");
     }
 
 }
