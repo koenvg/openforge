@@ -31,6 +31,21 @@ OPENFORGE_VERSION=0.0.5 curl -fsSL https://raw.githubusercontent.com/koenvangeer
 > xattr -rd com.apple.quarantine /Applications/Open\ Forge.app
 > ```
 
+## Manual install (build from source)
+
+If you prefer to build from source or want to run the latest unreleased changes:
+
+**Prerequisites:** [Rust](https://rustup.rs/) (1.77+), [Node.js](https://nodejs.org/) (20+), [pnpm](https://pnpm.io/) (10+), and macOS with Xcode Command Line Tools.
+
+```bash
+git clone https://github.com/koenvangeert/openforge.git
+cd openforge
+pnpm install
+pnpm tauri:install
+```
+
+This builds a production release, copies `Open Forge.app` to `/Applications`, and removes the macOS quarantine flag. If an existing instance is running it will be closed automatically before the install.
+
 ## What it does
 
 Open Forge is a command center for AI-assisted development. You define coding tasks, an AI agent (Claude Code or OpenCode) implements them in isolated git worktrees on dedicated branches, and the app tracks the full lifecycle: agent progress, CI status, PR reviews, and Jira sync.
