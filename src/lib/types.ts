@@ -219,6 +219,21 @@ export interface WorktreeInfo {
   updated_at: number;
 }
 
+export interface TaskWorkspaceInfo {
+  id: number;
+  task_id: string;
+  project_id: string;
+  workspace_path: string;
+  repo_path: string;
+  kind: string;
+  branch_name: string | null;
+  provider_name: string;
+  opencode_port: number | null;
+  status: string;
+  created_at: number;
+  updated_at: number;
+}
+
 
 
 export interface AgentEvent {
@@ -231,6 +246,7 @@ export interface AgentEvent {
 export interface ImplementationStatus {
   task_id: string;
   worktree_path: string;
+  workspace_path: string;
   port: number;
   session_id: string;
 }

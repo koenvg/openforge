@@ -35,6 +35,7 @@ vi.mock('./lib/stores', () => ({
   activeProjectId: writable<string | null>(null),
   projectAttention: writable<Map<string, ProjectAttention>>(new Map()),
   agentEvents: writable<Map<string, any>>(new Map()),
+  taskRuntimeInfo: writable(new Map()),
   currentView: writable('board'),
   reviewPrs: writable([]),
   selectedReviewPr: writable(null),

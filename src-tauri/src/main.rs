@@ -27,6 +27,7 @@ mod secure_store;
 pub mod providers;
 pub mod command_discovery;
 use std::sync::{Mutex, Arc};
+use std::collections::HashSet;
 use std::time::Duration;
 use log::{info, warn, error, debug};
 use tauri::{Manager, Emitter};
@@ -42,6 +43,50 @@ use whisper_manager::{WhisperManager, WhisperModelSize};
 // Startup: Resume OpenCode Servers
 // ============================================================================
 
+#[derive(Debug, Clone)]
+struct ResumeTarget {
+    task_id: String,
+    project_id: String,
+    repo_path: String,
+    workspace_path: String,
+    kind: String,
+    branch_name: Option<String>,
+}
+
+fn load_resume_targets(db: &db::Database) -> rusqlite::Result<Vec<ResumeTarget>> {
+    let mut targets: Vec<ResumeTarget> = db
+        .get_resumable_task_workspaces()?
+        .into_iter()
+        .map(|workspace| ResumeTarget {
+            task_id: workspace.task_id,
+            project_id: workspace.project_id,
+            repo_path: workspace.repo_path,
+            workspace_path: workspace.workspace_path,
+            kind: workspace.kind,
+            branch_name: workspace.branch_name,
+        })
+        .collect();
+
+    let existing_task_ids: HashSet<String> = targets.iter().map(|target| target.task_id.clone()).collect();
+
+    for worktree in db.get_resumable_worktrees()? {
+        if existing_task_ids.contains(&worktree.task_id) {
+            continue;
+        }
+
+        targets.push(ResumeTarget {
+            task_id: worktree.task_id,
+            project_id: worktree.project_id,
+            repo_path: worktree.repo_path,
+            workspace_path: worktree.worktree_path,
+            kind: "git_worktree".to_string(),
+            branch_name: Some(worktree.branch_name),
+        });
+    }
+
+    Ok(targets)
+}
+
 async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::oneshot::Receiver<()>) {
     // Wait for the HTTP server to be listening so Claude Code hooks don't get connection-refused
     match http_ready.await {
@@ -51,32 +96,32 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
         }
     }
 
-    let worktrees = {
+    let resume_targets = {
         let db = app.state::<Arc<Mutex<db::Database>>>();
         let db_lock = db.lock().unwrap();
-        match db_lock.get_resumable_worktrees() {
-            Ok(wts) => wts,
+        match load_resume_targets(&db_lock) {
+            Ok(targets) => targets,
             Err(e) => {
-                error!("[startup] Failed to get resumable worktrees: {}", e);
+                error!("[startup] Failed to get resumable task workspaces: {}", e);
                 let _ = app.emit("startup-resume-complete", ());
                 return;
             }
         }
     };
 
-    if worktrees.is_empty() {
+    if resume_targets.is_empty() {
         let _ = app.emit("startup-resume-complete", ());
         return;
     }
 
-    info!("[startup] Resuming servers for {} task(s)", worktrees.len());
+    info!("[startup] Resuming servers for {} task(s)", resume_targets.len());
 
-    for worktree in worktrees {
-        let worktree_path = std::path::Path::new(&worktree.worktree_path);
-        if !worktree_path.exists() {
+    for target in resume_targets {
+        let workspace_path = std::path::Path::new(&target.workspace_path);
+        if !workspace_path.exists() {
             warn!(
-                "[startup] Worktree path missing for task {}, skipping: {}",
-                worktree.task_id, worktree.worktree_path
+                "[startup] Workspace path missing for task {}, skipping: {}",
+                target.task_id, target.workspace_path
             );
             continue;
         }
@@ -85,7 +130,7 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
         let latest_session = {
             let db = app.state::<Arc<Mutex<db::Database>>>();
             let db_lock = db.lock().unwrap();
-            db_lock.get_latest_session_for_ticket(&worktree.task_id).ok().flatten()
+            db_lock.get_latest_session_for_ticket(&target.task_id).ok().flatten()
         };
         let provider_name = latest_session.as_ref()
             .map(|s| s.provider.as_str())
@@ -99,7 +144,7 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
             None => {
                 dummy_session = db::AgentSessionRow {
                     id: String::new(),
-                    ticket_id: worktree.task_id.clone(),
+                    ticket_id: target.task_id.clone(),
                     opencode_session_id: None,
                     stage: "implementing".to_string(),
                     status: "running".to_string(),
@@ -122,15 +167,15 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
         ) {
             Ok(p) => p,
             Err(e) => {
-                warn!("[startup] Unknown provider for task {}: {}", worktree.task_id, e);
+                warn!("[startup] Unknown provider for task {}: {}", target.task_id, e);
                 continue;
             }
         };
 
         match provider.resume(
-            &worktree.task_id,
+            &target.task_id,
             session_ref,
-            worktree_path,
+            workspace_path,
             None,
             None,
             None,
@@ -138,38 +183,36 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
             &app,
         ).await {
             Ok(result) => {
-                if provider_name != "claude-code" {
+                {
                     let db = app.state::<Arc<Mutex<db::Database>>>();
                     let db_lock = db.lock().unwrap();
-                    if let Err(e) = db_lock.update_worktree_server(
-                        &worktree.task_id,
-                        result.port as i64,
-                        0,
-                    ) {
-                        warn!(
-                            "[startup] Failed to update worktree server for {}: {}",
-                            worktree.task_id, e
-                        );
-                    }
+                    restore_resumed_session_state(
+                        &db_lock,
+                        latest_session.as_ref(),
+                        &target,
+                        provider_name,
+                        result.port,
+                    );
                 }
 
                 let _ = app.emit(
                     "server-resumed",
                     serde_json::json!({
-                        "task_id": worktree.task_id,
+                        "task_id": target.task_id,
                         "port": result.port,
+                        "workspace_path": target.workspace_path,
                     }),
                 );
 
                 info!(
                     "[startup] Resumed {} for task {} (port {})",
-                    provider_name, worktree.task_id, result.port
+                    provider_name, target.task_id, result.port
                 );
             }
             Err(e) => {
                 error!(
                     "[startup] Failed to resume {} for task {}: {}",
-                    provider_name, worktree.task_id, e
+                    provider_name, target.task_id, e
                 );
 
                 // Mark Claude sessions as interrupted on failure
@@ -190,8 +233,9 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
                 let _ = app.emit(
                     "server-resumed",
                     serde_json::json!({
-                        "task_id": worktree.task_id,
+                        "task_id": target.task_id,
                         "port": 0,
+                        "workspace_path": target.workspace_path,
                     }),
                 );
             }
@@ -238,6 +282,57 @@ async fn start_project_root_server(app: &tauri::AppHandle, project_id: &str) -> 
         .await
         .map(|_| ())
         .map_err(|e| format!("Failed to start root OpenCode server: {}", e))
+}
+
+fn restore_resumed_session_state(
+    db: &db::Database,
+    latest_session: Option<&db::AgentSessionRow>,
+    target: &ResumeTarget,
+    provider_name: &str,
+    port: u16,
+) {
+    if let Err(e) = db.upsert_task_workspace_record(
+        &target.task_id,
+        &target.project_id,
+        &target.workspace_path,
+        &target.repo_path,
+        &target.kind,
+        target.branch_name.as_deref(),
+        provider_name,
+        if provider_name == "claude-code" { None } else { Some(port as i64) },
+        "active",
+    ) {
+        warn!(
+            "[startup] Failed to update task workspace for {}: {}",
+            target.task_id, e
+        );
+    }
+
+    if provider_name != "claude-code" && target.kind == "git_worktree" {
+        if let Err(e) = db.update_worktree_server(&target.task_id, port as i64, 0) {
+            warn!(
+                "[startup] Failed to update worktree server for {}: {}",
+                target.task_id, e
+            );
+        }
+    }
+
+    if let Some(session) = latest_session {
+        if matches!(session.status.as_str(), "interrupted" | "running") {
+            if let Err(e) = db.update_agent_session(
+                &session.id,
+                &session.stage,
+                "running",
+                session.checkpoint_data.as_deref(),
+                None,
+            ) {
+                warn!(
+                    "[startup] Failed to restore session {} for task {}: {}",
+                    session.id, target.task_id, e
+                );
+            }
+        }
+    }
 }
 // ============================================================================
 // Main
@@ -320,6 +415,16 @@ fn main() {
                 Ok(_) => {}
                 Err(e) => {
                     warn!("[startup] Failed to clear stale worktree servers: {}", e);
+                }
+            }
+
+            match database.clear_stale_task_workspace_ports() {
+                Ok(count) if count > 0 => {
+                    info!("[startup] Cleared stale server info from {} task workspace(s)", count);
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    warn!("[startup] Failed to clear stale task workspace ports: {}", e);
                 }
             }
 
@@ -494,6 +599,7 @@ fn main() {
             commands::projects::set_shepherd_enabled,
             commands::projects::get_tasks_for_project,
             commands::projects::get_worktree_for_task,
+            commands::projects::get_task_workspace,
             commands::projects::get_project_attention,
             commands::orchestration::start_implementation,
             commands::orchestration::abort_implementation,
@@ -612,7 +718,12 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        load_resume_targets, restore_resumed_session_state, should_start_project_root_server,
+        ResumeTarget,
+    };
+    use crate::db::test_helpers::make_test_db;
+    use std::fs;
 
     #[test]
     fn test_should_start_project_root_server_for_opencode_project() {
@@ -632,5 +743,154 @@ mod tests {
     #[test]
     fn test_should_not_start_project_root_server_when_already_running() {
         assert!(!should_start_project_root_server("opencode", Some("/tmp/project"), Some(4100)));
+    }
+
+    #[test]
+    fn restore_resumed_session_state_marks_interrupted_opencode_session_running() {
+        let (db, path) = make_test_db("restore_resumed_session_state");
+
+        let project = db
+            .create_project("Test Project", "/tmp/test-repo")
+            .expect("create project failed");
+
+        let task = db
+            .create_task(
+                "Resume me",
+                "backlog",
+                None,
+                Some(&project.id),
+                Some("Resume me"),
+                None,
+                None,
+            )
+            .expect("create task failed");
+        db.update_task_status(&task.id, "doing")
+            .expect("update task status failed");
+        db.create_worktree_record(
+            &task.id,
+            &project.id,
+            "/tmp/test-repo",
+            "/tmp/test-repo/.worktrees/T-100",
+            "t-100",
+        )
+        .expect("create worktree failed");
+        db.create_agent_session(
+            "ses-100",
+            &task.id,
+            Some("oc-ses-100"),
+            "implement",
+            "running",
+            "opencode",
+        )
+        .expect("create agent session failed");
+        db.mark_running_sessions_interrupted()
+            .expect("mark interrupted failed");
+
+        let session = db
+            .get_latest_session_for_ticket(&task.id)
+            .expect("get latest session failed")
+            .expect("missing latest session");
+        assert_eq!(session.status, "interrupted");
+
+        let target = ResumeTarget {
+            task_id: task.id.clone(),
+            project_id: project.id.clone(),
+            repo_path: "/tmp/test-repo".to_string(),
+            workspace_path: "/tmp/test-repo/.worktrees/T-100".to_string(),
+            kind: "git_worktree".to_string(),
+            branch_name: Some("t-100".to_string()),
+        };
+
+        restore_resumed_session_state(&db, Some(&session), &target, "opencode", 4312);
+
+        let restored = db
+            .get_latest_session_for_ticket(&task.id)
+            .expect("get restored session failed")
+            .expect("missing restored session");
+        assert_eq!(restored.status, "running");
+        assert_eq!(restored.stage, "implement");
+        assert_eq!(restored.error_message, None);
+
+        let worktree = db
+            .get_worktree_for_task(&task.id)
+            .expect("get worktree failed")
+            .expect("missing worktree");
+        assert_eq!(worktree.opencode_port, Some(4312));
+
+        let workspace = db
+            .get_task_workspace_for_task(&task.id)
+            .expect("get task workspace failed")
+            .expect("missing task workspace");
+        assert_eq!(workspace.workspace_path, "/tmp/test-repo/.worktrees/T-100");
+        assert_eq!(workspace.opencode_port, Some(4312));
+        assert_eq!(workspace.kind, "git_worktree");
+
+        drop(db);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn load_resume_targets_prefers_task_workspaces_and_falls_back_to_worktrees() {
+        let (db, path) = make_test_db("load_resume_targets");
+
+        let project = db
+            .create_project("Test Project", "/tmp/test-repo")
+            .expect("create project failed");
+
+        let task_with_workspace = db
+            .create_task("Workspace-backed", "doing", None, Some(&project.id), None, None, None)
+            .expect("create workspace-backed task failed");
+        let task_with_legacy_worktree = db
+            .create_task("Legacy worktree", "doing", None, Some(&project.id), None, None, None)
+            .expect("create legacy worktree task failed");
+
+        db.upsert_task_workspace_record(
+            &task_with_workspace.id,
+            &project.id,
+            "/tmp/test-repo",
+            "/tmp/test-repo",
+            "project_dir",
+            None,
+            "opencode",
+            Some(4001),
+            "active",
+        )
+        .expect("upsert task workspace failed");
+
+        db.create_worktree_record(
+            &task_with_legacy_worktree.id,
+            &project.id,
+            "/tmp/test-repo",
+            "/tmp/test-repo/.worktrees/legacy",
+            "legacy-branch",
+        )
+        .expect("create legacy worktree failed");
+
+        db.create_agent_session(
+            "ses-workspace",
+            &task_with_workspace.id,
+            Some("oc-workspace"),
+            "implement",
+            "running",
+            "opencode",
+        )
+        .expect("create workspace session failed");
+        db.create_agent_session(
+            "ses-legacy",
+            &task_with_legacy_worktree.id,
+            Some("oc-legacy"),
+            "implement",
+            "running",
+            "opencode",
+        )
+        .expect("create legacy session failed");
+
+        let targets = load_resume_targets(&db).expect("load resume targets failed");
+        assert_eq!(targets.len(), 2);
+        assert!(targets.iter().any(|target| target.task_id == task_with_workspace.id && target.workspace_path == "/tmp/test-repo"));
+        assert!(targets.iter().any(|target| target.task_id == task_with_legacy_worktree.id && target.workspace_path == "/tmp/test-repo/.worktrees/legacy"));
+
+        drop(db);
+        let _ = fs::remove_file(path);
     }
 }

@@ -1,6 +1,11 @@
 import { writable } from "svelte/store";
 import type { Task, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, CiFailureNotification, RateLimitNotification, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, PrOverviewComment, ProjectAttention, ClaudeSessionState, SkillInfo, ShepherdMessage, ShepherdStatus } from "./types";
 
+export interface TaskRuntimeInfo {
+  workspacePath: string;
+  opencodePort: number | null;
+}
+
 export const tasks = writable<Task[]>([]);
 // selectedTaskId serves as both selection state and navigation:
 // - null = show Kanban board
@@ -18,6 +23,7 @@ export const projects = writable<Project[]>([]);
 export const activeProjectId = writable<string | null>(null);
 export const projectAttention = writable<Map<string, ProjectAttention>>(new Map());
 export const agentEvents = writable<Map<string, AgentEvent[]>>(new Map());
+export const taskRuntimeInfo = writable<Map<string, TaskRuntimeInfo>>(new Map());
 
 export const currentView = writable<AppView>("board");
 export const reviewPrs = writable<ReviewPullRequest[]>([]);

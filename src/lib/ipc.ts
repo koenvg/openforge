@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Task, AgentSession, PrComment, PollResult, PullRequestInfo, AgentInfo, Project, ProjectAttention, WorktreeInfo, ImplementationStatus, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus, WhisperModelSizeId, SkillInfo, WorkQueueEntry, ShepherdMessage, ShepherdStatus, ActionItem, ProviderModelInfo } from "./types";
+import type { Task, AgentSession, PrComment, PollResult, PullRequestInfo, AgentInfo, Project, ProjectAttention, WorktreeInfo, TaskWorkspaceInfo, ImplementationStatus, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus, WhisperModelSizeId, SkillInfo, WorkQueueEntry, ShepherdMessage, ShepherdStatus, ActionItem, ProviderModelInfo } from "./types";
 
 export async function createTask(initialPrompt: string, status: string, jiraKey: string | null, projectId: string | null, agent: string | null, permissionMode: string | null): Promise<Task> {
   return invoke<Task>("create_task", { initialPrompt, status, jiraKey, projectId, agent, permissionMode });
@@ -115,6 +115,10 @@ export async function abortImplementation(taskId: string): Promise<void> {
 
 export async function getWorktreeForTask(taskId: string): Promise<WorktreeInfo | null> {
   return invoke<WorktreeInfo | null>("get_worktree_for_task", { taskId });
+}
+
+export async function getTaskWorkspace(taskId: string): Promise<TaskWorkspaceInfo | null> {
+  return invoke<TaskWorkspaceInfo | null>("get_task_workspace", { taskId });
 }
 
 export async function getSessionStatus(sessionId: string): Promise<AgentSession> {

@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
-  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, taskSpawned, startingTasks, codeCleanupTasksEnabled, rateLimitNotification, shepherdEnabled, shepherdMessages, shepherdStatus, actionItemCount } from './lib/stores'
+  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, taskSpawned, startingTasks, codeCleanupTasksEnabled, rateLimitNotification, shepherdEnabled, shepherdMessages, shepherdStatus, actionItemCount, taskRuntimeInfo } from './lib/stores'
   import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, listOpenCodeAgents, getReviewPrs, getAuthoredPrs, notifyShepherdEvent, getShepherdEnabled, getActionItemCount } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import SearchableSelect from './components/SearchableSelect.svelte'
@@ -345,6 +345,13 @@
     try {
       const result = await startImplementation(taskId, activeProject.path)
 
+      const updatedRuntimeInfo = new Map($taskRuntimeInfo)
+      updatedRuntimeInfo.set(taskId, {
+        workspacePath: result.workspace_path,
+        opencodePort: result.port,
+      })
+      $taskRuntimeInfo = updatedRuntimeInfo
+
       try {
         const session = await getSessionStatus(result.session_id)
         const updated = new Map($activeSessions)
@@ -635,8 +642,15 @@
     )
 
     unlisteners.push(
-      await listen<{ task_id: string; port: number }>('server-resumed', async (event: Event<{ task_id: string; port: number }>) => {
+      await listen<{ task_id: string; port: number; workspace_path: string }>('server-resumed', async (event: Event<{ task_id: string; port: number; workspace_path: string }>) => {
         const taskId = event.payload.task_id
+        const updatedRuntimeInfo = new Map($taskRuntimeInfo)
+        updatedRuntimeInfo.set(taskId, {
+          workspacePath: event.payload.workspace_path,
+          opencodePort: event.payload.port || null,
+        })
+        $taskRuntimeInfo = updatedRuntimeInfo
+
         try {
           const session = await getLatestSession(taskId)
           if (session) {

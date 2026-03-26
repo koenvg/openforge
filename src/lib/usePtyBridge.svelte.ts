@@ -1,7 +1,7 @@
 import { listen } from '@tauri-apps/api/event'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import type { PtyEvent } from './types'
-import { getWorktreeForTask, spawnPty, writePty, killPty as killPtyIpc } from './ipc'
+import { getTaskWorkspace, spawnPty, writePty, killPty as killPtyIpc } from './ipc'
 
 export interface AttachPtyContext {
   provider?: string
@@ -61,8 +61,8 @@ export function createPtyBridge(deps: {
       const rows = term?.rows ?? 24
 
       // OpenCode path: existing logic unchanged
-      const worktree = await getWorktreeForTask(deps.taskId)
-      const port = worktree?.opencode_port
+      const workspace = await getTaskWorkspace(deps.taskId)
+      const port = workspace?.opencode_port
       if (!port) {
         console.error('[usePtyBridge] No opencode_port found for task:', deps.taskId)
         ptySpawned = false

@@ -1,6 +1,6 @@
 import { get } from 'svelte/store'
-import { activeSessions } from './stores'
-import { getLatestSession, getWorktreeForTask } from './ipc'
+import { activeSessions, taskRuntimeInfo } from './stores'
+import { getLatestSession, getTaskWorkspace } from './ipc'
 
 export interface SessionHistoryHandle {
   readonly loadingHistory: boolean
@@ -38,8 +38,13 @@ export function createSessionHistory(deps: {
       if (!existingSession) return
 
       if (!deps.getOpencodePort()) {
-        const worktree = await getWorktreeForTask(deps.taskId)
-        if (worktree?.opencode_port) deps.setOpencodePort(worktree.opencode_port)
+        const runtimeInfo = get(taskRuntimeInfo).get(deps.taskId)
+        if (runtimeInfo?.opencodePort) {
+          deps.setOpencodePort(runtimeInfo.opencodePort)
+        } else {
+          const workspace = await getTaskWorkspace(deps.taskId)
+          if (workspace?.opencode_port) deps.setOpencodePort(workspace.opencode_port)
+        }
       }
 
       if (
