@@ -21,9 +21,16 @@
   let poolEntry: PoolEntry | null = null
   let mounted = false
   let lifecycle = $state({ ptyActive: false, shellExited: false, currentPtyInstance: null as number | null })
+  let previousIsActive: boolean | null = null
 
   function syncLifecycleState() {
     lifecycle = getShellLifecycleState(terminalKey)
+  }
+
+  async function activateTerminal(entry: PoolEntry) {
+    await attach(entry, terminalEl)
+    if (!mounted || poolEntry !== entry) return
+    await ensureShellStarted(entry)
   }
 
   async function ensureShellStarted(entry: PoolEntry) {
@@ -47,13 +54,16 @@
   onMount(async () => {
     mounted = true
     poolEntry = await acquire(terminalKey)
+    if (!mounted || !poolEntry) return
 
     syncLifecycleState()
 
     if (isActive) {
-      attach(poolEntry, terminalEl)
-      await ensureShellStarted(poolEntry)
+      await activateTerminal(poolEntry)
+      if (!mounted) return
     }
+
+    previousIsActive = isActive
 
     // Listen for shell exit event
     unlisteners.push(await listen(`pty-exit-${terminalKey}`, (event) => {
@@ -77,15 +87,20 @@
 
     syncLifecycleState()
 
-    if (isActive) {
-      attach(entry, terminalEl)
-      void ensureShellStarted(entry)
+    if (previousIsActive === null) return
+
+    if (!previousIsActive && isActive) {
+      void activateTerminal(entry)
     }
+
+    previousIsActive = isActive
   })
 
   onDestroy(() => {
     mounted = false
-    unlisteners.forEach(fn => fn())
+    unlisteners.forEach((fn) => {
+      fn()
+    })
     if (poolEntry) {
       detach(poolEntry)
     }
