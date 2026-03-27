@@ -1,13 +1,12 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { get } from 'svelte/store'
+import { getConfig, setConfig } from './ipc'
+import { applyTheme, getDiffTheme, getTerminalTheme, initTheme, themeMode } from './theme'
 
 vi.mock('./ipc', () => ({
   getConfig: vi.fn().mockResolvedValue(null),
   setConfig: vi.fn().mockResolvedValue(undefined),
 }))
-
-import { themeMode, applyTheme, initTheme, getTerminalTheme, getDiffTheme } from './theme'
-import { getConfig, setConfig } from './ipc'
 
 describe('theme', () => {
   beforeEach(() => {
@@ -74,16 +73,65 @@ describe('theme', () => {
   })
 
   describe('getTerminalTheme', () => {
-    it('returns light terminal theme by default', () => {
+    let getComputedStyleSpy: ReturnType<typeof vi.spyOn>
+
+    beforeEach(() => {
+      const originalGetComputedStyle = window.getComputedStyle.bind(window)
+
+      getComputedStyleSpy = vi.spyOn(window, 'getComputedStyle').mockImplementation((elt) => {
+        const style = originalGetComputedStyle(elt)
+        const theme = elt.getAttribute('data-theme')
+
+        return new Proxy(style, {
+          get(target, property, receiver) {
+            if (property === 'getPropertyValue') {
+              return (prop: string) => {
+                if (theme === 'openforge' && prop === '--term-background') return '#111111'
+                if (theme === 'openforge' && prop === '--term-foreground') return '#222222'
+                if (theme === 'openforge-dark' && prop === '--term-background') return '#333333'
+                if (theme === 'openforge-dark' && prop === '--term-foreground') return '#444444'
+                return target.getPropertyValue(prop)
+              }
+            }
+
+            return Reflect.get(target, property, receiver)
+          },
+        })
+      })
+    })
+
+    afterEach(() => {
+      getComputedStyleSpy.mockRestore()
+    })
+
+    it('resolves light terminal theme from CSS variables', () => {
+      const theme = getTerminalTheme('light')
+      expect(theme.background).toBe('#111111')
+      expect(theme.foreground).toBe('#222222')
+    })
+
+    it('resolves dark terminal theme from CSS variables', () => {
+      const theme = getTerminalTheme('dark')
+      expect(theme.background).toBe('#333333')
+      expect(theme.foreground).toBe('#444444')
+    })
+
+    it('falls back to hardcoded light theme if CSS variables are not present', () => {
+      getComputedStyleSpy.mockRestore()
       const theme = getTerminalTheme('light')
       expect(theme.background).toBe('#FAF8F5')
       expect(theme.foreground).toBe('#2D2D3F')
     })
 
-    it('returns dark terminal theme', () => {
+    it('falls back to hardcoded dark theme if CSS variables are not present', () => {
+      getComputedStyleSpy.mockRestore()
       const theme = getTerminalTheme('dark')
       expect(theme.background).toBe('#1C1A1F')
       expect(theme.foreground).toBe('#D8D4DE')
+    })
+
+    it('returns a fresh theme object on each call', () => {
+      expect(getTerminalTheme('light')).not.toBe(getTerminalTheme('light'))
     })
   })
 
