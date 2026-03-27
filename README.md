@@ -5,7 +5,7 @@
 <h1 align="center">Open Forge</h1>
 
 <p align="center">
-  A desktop app that orchestrates AI coding agents. Manage tasks on a kanban board, launch agents in isolated git worktrees, and review their work — all from one place.
+  A desktop app that orchestrates AI coding agents. Manage tasks on a focused board, launch agents in isolated git worktrees, and review their work — all from one place.
 </p>
 
 ---
@@ -52,7 +52,7 @@ Open Forge is a command center for AI-assisted development. You define coding ta
 
 | | |
 |---|---|
-| **Kanban board** | Organize tasks across Backlog, Doing, and Done columns. Search, create, and manage tasks with keyboard shortcuts. |
+| **Flow board** | Prioritize work from a focused list with an always-visible detail pane. Search, create, and manage tasks with keyboard shortcuts. |
 | **AI agents** | Launch Claude Code or OpenCode agents per task. Each runs in its own git worktree and branch with a live embedded terminal. |
 | **Self-review** | Review agent changes with a syntax-highlighted diff viewer. Leave inline comments and send feedback back to the agent. |
 | **PR review** | Review pull requests assigned to you. Browse diffs, leave comments, and submit reviews directly from the app. |
