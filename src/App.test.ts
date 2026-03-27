@@ -151,7 +151,6 @@ vi.mock('./lib/ipc', () => ({
     }),
   }))
 
-vi.mock('./components/KanbanBoard.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/FocusBoard.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/TaskDetailView.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/PrReviewView.svelte', () => ({ default: vi.fn() }))

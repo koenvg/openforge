@@ -10,7 +10,7 @@ export interface TaskRuntimeInfo {
 export const tasks = writable<Task[]>([]);
 export const pendingTask = writable<Task | null>(null);
 // selectedTaskId serves as both selection state and navigation:
-// - null = show Kanban board
+// - null = show Flow board
 // - non-null = show full-page detail view for that task
 export const selectedTaskId = writable<string | null>(null);
 export const activeSessions = writable<Map<string, AgentSession>>(new Map());

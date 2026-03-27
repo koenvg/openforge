@@ -8,7 +8,6 @@
   import SearchableSelect from './components/SearchableSelect.svelte'
   import { hasMergeConflicts } from './lib/types'
   import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView, PermissionMode, AgentSession } from './lib/types'
-  import KanbanBoard from './components/KanbanBoard.svelte'
   import FocusBoard from './components/FocusBoard.svelte'
   import TaskDetailView from './components/TaskDetailView.svelte'
    import PromptInput from './components/PromptInput.svelte'
@@ -81,7 +80,6 @@
   let showActionPalette = $state(false)
   let actionPaletteActions = $state<Action[]>([])
   let workQueueRefreshTrigger = $state(0)
-  let boardLayout = $state<'kanban' | 'focus'>('kanban')
   let router = useAppRouter()
 
   useCommandHeld()
@@ -135,16 +133,6 @@
     }
   })
 
-  $effect(() => {
-    const pid = $activeProjectId
-    if (pid) {
-      getProjectConfig(pid, 'board_layout').then((val) => {
-        boardLayout = (val === 'focus' ? 'focus' : 'kanban')
-      })
-    } else {
-      boardLayout = 'kanban'
-    }
-  })
   let contentBg = $derived.by(() => {
     const color = getProjectColor(activeProjectColorId)
     return $themeMode === 'dark' ? color.dark : color.light
@@ -905,7 +893,7 @@
               <span class="loading loading-spinner loading-md text-primary"></span>
               <span>Loading tasks...</span>
             </div>
-          {:else if boardLayout === 'focus'}
+          {:else}
             <FocusBoard
               projectId={$activeProjectId}
               projectName={activeProject?.name ?? ''}
@@ -915,8 +903,6 @@
               onOpenTask={handleOpenTask}
               onRunAction={handleRunAction}
             />
-          {:else}
-            <KanbanBoard onRunAction={handleRunAction} projectName={activeProject?.name ?? ''} />
           {/if}
         </div>
       {/if}
