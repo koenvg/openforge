@@ -1,36 +1,36 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod claude_hooks;
+pub mod command_discovery;
+mod commands;
 mod db;
-mod opencode_client;
-mod jira_client;
-mod jira_sync;
+mod diff_parser;
+mod git_worktree;
 mod github_client;
 mod github_poller;
-mod git_worktree;
-mod server_manager;
-mod sse_bridge;
+mod http_server;
+mod jira_client;
+mod jira_sync;
+mod mcp_installer;
+mod migration;
+mod opencode_client;
+pub mod providers;
 mod pty_manager;
 pub mod review_parser;
 mod review_prompt;
-mod diff_parser;
-mod whisper_manager;
-mod http_server;
-mod mcp_installer;
-mod claude_hooks;
-mod commands;
-mod migration;
 mod secure_store;
-pub mod providers;
-pub mod command_discovery;
-use std::sync::{Mutex, Arc};
-use std::collections::HashSet;
-use log::{info, warn, error, debug};
-use tauri::{Manager, Emitter};
-use jira_client::JiraClient;
+mod server_manager;
+mod sse_bridge;
+mod whisper_manager;
 use github_client::GitHubClient;
+use jira_client::JiraClient;
+use log::{debug, error, info, warn};
 use opencode_client::OpenCodeClient;
 use pty_manager::PtyManager;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
+use tauri::{Emitter, Manager};
 use whisper_manager::{WhisperManager, WhisperModelSize};
 
 // ============================================================================
@@ -47,6 +47,68 @@ struct ResumeTarget {
     branch_name: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ResumeSessionPersistence {
+    LeaveExisting,
+    Running,
+    Completed,
+}
+
+fn opencode_resume_persistence(
+    opencode_session_id: Option<&str>,
+    statuses: &HashMap<String, opencode_client::SessionStatusInfo>,
+) -> ResumeSessionPersistence {
+    let Some(session_id) = opencode_session_id else {
+        return ResumeSessionPersistence::LeaveExisting;
+    };
+
+    match statuses
+        .get(session_id)
+        .map(|status| status.status_type.as_str())
+    {
+        Some("busy") | Some("retry") => ResumeSessionPersistence::Running,
+        Some("idle") => ResumeSessionPersistence::Completed,
+        _ => ResumeSessionPersistence::LeaveExisting,
+    }
+}
+
+async fn resolve_resume_session_persistence(
+    provider_name: &str,
+    latest_session: Option<&db::AgentSessionRow>,
+    port: u16,
+) -> ResumeSessionPersistence {
+    if provider_name != "opencode" {
+        return ResumeSessionPersistence::Running;
+    }
+
+    let Some(session) = latest_session else {
+        return ResumeSessionPersistence::LeaveExisting;
+    };
+
+    let Some(opencode_session_id) = session.opencode_session_id.as_deref() else {
+        return ResumeSessionPersistence::LeaveExisting;
+    };
+
+    let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
+
+    for attempt in 1..=3 {
+        match client.get_all_session_statuses().await {
+            Ok(statuses) => {
+                return opencode_resume_persistence(Some(opencode_session_id), &statuses);
+            }
+            Err(e) => {
+                warn!(
+                    "[startup] Failed to fetch OpenCode session status for {} on attempt {}: {}",
+                    session.ticket_id, attempt, e
+                );
+                tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+            }
+        }
+    }
+
+    ResumeSessionPersistence::LeaveExisting
+}
+
 fn load_resume_targets(db: &db::Database) -> rusqlite::Result<Vec<ResumeTarget>> {
     let mut targets: Vec<ResumeTarget> = db
         .get_resumable_task_workspaces()?
@@ -61,7 +123,10 @@ fn load_resume_targets(db: &db::Database) -> rusqlite::Result<Vec<ResumeTarget>>
         })
         .collect();
 
-    let existing_task_ids: HashSet<String> = targets.iter().map(|target| target.task_id.clone()).collect();
+    let existing_task_ids: HashSet<String> = targets
+        .iter()
+        .map(|target| target.task_id.clone())
+        .collect();
 
     for worktree in db.get_resumable_worktrees()? {
         if existing_task_ids.contains(&worktree.task_id) {
@@ -81,7 +146,10 @@ fn load_resume_targets(db: &db::Database) -> rusqlite::Result<Vec<ResumeTarget>>
     Ok(targets)
 }
 
-async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::oneshot::Receiver<()>) {
+async fn resume_task_servers(
+    app: tauri::AppHandle,
+    http_ready: tokio::sync::oneshot::Receiver<()>,
+) {
     // Wait for the HTTP server to be listening so Claude Code hooks don't get connection-refused
     match http_ready.await {
         Ok(()) => debug!("[startup] HTTP server ready, proceeding with session resume"),
@@ -108,7 +176,10 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
         return;
     }
 
-    info!("[startup] Resuming servers for {} task(s)", resume_targets.len());
+    info!(
+        "[startup] Resuming servers for {} task(s)",
+        resume_targets.len()
+    );
 
     for target in resume_targets {
         let workspace_path = std::path::Path::new(&target.workspace_path);
@@ -124,9 +195,13 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
         let latest_session = {
             let db = app.state::<Arc<Mutex<db::Database>>>();
             let db_lock = db.lock().unwrap();
-            db_lock.get_latest_session_for_ticket(&target.task_id).ok().flatten()
+            db_lock
+                .get_latest_session_for_ticket(&target.task_id)
+                .ok()
+                .flatten()
         };
-        let provider_name = latest_session.as_ref()
+        let provider_name = latest_session
+            .as_ref()
             .map(|s| s.provider.as_str())
             .unwrap_or("claude-code");
 
@@ -161,23 +236,36 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
         ) {
             Ok(p) => p,
             Err(e) => {
-                warn!("[startup] Unknown provider for task {}: {}", target.task_id, e);
+                warn!(
+                    "[startup] Unknown provider for task {}: {}",
+                    target.task_id, e
+                );
                 continue;
             }
         };
 
-        match provider.resume(
-            &target.task_id,
-            session_ref,
-            workspace_path,
-            None,
-            None,
-            None,
-            None,
-            &app,
-        ).await {
+        match provider
+            .resume(
+                &target.task_id,
+                session_ref,
+                workspace_path,
+                None,
+                None,
+                None,
+                None,
+                &app,
+            )
+            .await
+        {
             Ok(result) => {
                 {
+                    let resume_persistence = resolve_resume_session_persistence(
+                        provider_name,
+                        latest_session.as_ref(),
+                        result.port,
+                    )
+                    .await;
+
                     let db = app.state::<Arc<Mutex<db::Database>>>();
                     let db_lock = db.lock().unwrap();
                     restore_resumed_session_state(
@@ -186,6 +274,7 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
                         &target,
                         provider_name,
                         result.port,
+                        resume_persistence,
                     );
                 }
 
@@ -251,7 +340,9 @@ fn should_start_project_root_server(
 async fn start_project_root_server(app: &tauri::AppHandle, project_id: &str) -> Result<(), String> {
     let (provider, project_path) = {
         let db = app.state::<Arc<Mutex<db::Database>>>();
-        let db_lock = db.lock().map_err(|e| format!("database lock error: {}", e))?;
+        let db_lock = db
+            .lock()
+            .map_err(|e| format!("database lock error: {}", e))?;
         let provider = db_lock.resolve_ai_provider(project_id);
         let project_path = db_lock
             .get_project(project_id)
@@ -300,6 +391,7 @@ fn restore_resumed_session_state(
     target: &ResumeTarget,
     provider_name: &str,
     port: u16,
+    resume_persistence: ResumeSessionPersistence,
 ) {
     if let Err(e) = db.upsert_task_workspace_record(
         &target.task_id,
@@ -309,7 +401,11 @@ fn restore_resumed_session_state(
         &target.kind,
         target.branch_name.as_deref(),
         provider_name,
-        if provider_name == "claude-code" { None } else { Some(port as i64) },
+        if provider_name == "claude-code" {
+            None
+        } else {
+            Some(port as i64)
+        },
         "active",
     ) {
         warn!(
@@ -328,14 +424,28 @@ fn restore_resumed_session_state(
     }
 
     if let Some(session) = latest_session {
-        if matches!(session.status.as_str(), "interrupted" | "running") {
-            if let Err(e) = db.update_agent_session(
-                &session.id,
-                &session.stage,
-                "running",
-                session.checkpoint_data.as_deref(),
-                None,
-            ) {
+        let persisted_status = if provider_name == "opencode" {
+            match resume_persistence {
+                ResumeSessionPersistence::LeaveExisting => None,
+                ResumeSessionPersistence::Running => Some("running"),
+                ResumeSessionPersistence::Completed => Some("completed"),
+            }
+        } else if matches!(session.status.as_str(), "interrupted" | "running") {
+            Some("running")
+        } else {
+            None
+        };
+
+        if let Some(status) = persisted_status {
+            let checkpoint_data = if status == "running" {
+                session.checkpoint_data.as_deref()
+            } else {
+                None
+            };
+
+            if let Err(e) =
+                db.update_agent_session(&session.id, &session.stage, status, checkpoint_data, None)
+            {
                 warn!(
                     "[startup] Failed to restore session {} for task {}: {}",
                     session.id, target.task_id, e
@@ -404,13 +514,24 @@ fn main() {
             };
             let db_path = app_data_dir.join(db_filename);
 
-            info!("Initializing database at: {:?} (mode: {})", db_path, if cfg!(debug_assertions) { "dev" } else { "prod" });
+            info!(
+                "Initializing database at: {:?} (mode: {})",
+                db_path,
+                if cfg!(debug_assertions) {
+                    "dev"
+                } else {
+                    "prod"
+                }
+            );
 
             let database = db::Database::new(db_path).expect("Failed to initialize database");
 
             match database.mark_running_sessions_interrupted() {
                 Ok(count) if count > 0 => {
-                    info!("[startup] Marked {} stale running sessions as interrupted", count);
+                    info!(
+                        "[startup] Marked {} stale running sessions as interrupted",
+                        count
+                    );
                 }
                 Ok(_) => {}
                 Err(e) => {
@@ -420,7 +541,10 @@ fn main() {
 
             match database.clear_stale_worktree_servers() {
                 Ok(count) if count > 0 => {
-                    info!("[startup] Cleared stale server info from {} worktree(s)", count);
+                    info!(
+                        "[startup] Cleared stale server info from {} worktree(s)",
+                        count
+                    );
                 }
                 Ok(_) => {}
                 Err(e) => {
@@ -430,18 +554,25 @@ fn main() {
 
             match database.clear_stale_task_workspace_ports() {
                 Ok(count) if count > 0 => {
-                    info!("[startup] Cleared stale server info from {} task workspace(s)", count);
+                    info!(
+                        "[startup] Cleared stale server info from {} task workspace(s)",
+                        count
+                    );
                 }
                 Ok(_) => {}
                 Err(e) => {
-                    warn!("[startup] Failed to clear stale task workspace ports: {}", e);
+                    warn!(
+                        "[startup] Failed to clear stale task workspace ports: {}",
+                        e
+                    );
                 }
             }
 
             if let Err(e) = mcp_installer::install_mcp_server() {
                 warn!("[startup] Failed to install MCP server: {}", e);
             }
-            let whisper_model_pref = database.get_config("whisper_model_size")
+            let whisper_model_pref = database
+                .get_config("whisper_model_size")
                 .ok()
                 .flatten()
                 .and_then(|s| WhisperModelSize::from_str(&s))
@@ -453,14 +584,17 @@ fn main() {
             let app_handle_http = app.handle().clone();
             let db_for_http = db_arc.clone();
             tauri::async_runtime::spawn(async move {
-                if let Err(e) = http_server::start_http_server(app_handle_http, db_for_http, http_ready_tx).await {
+                if let Err(e) =
+                    http_server::start_http_server(app_handle_http, db_for_http, http_ready_tx)
+                        .await
+                {
                     error!("[http_server] Failed to start: {}", e);
                 }
             });
             debug!("HTTP server task started");
 
-            let port = std::env::var("AI_COMMAND_CENTER_PORT")
-                .unwrap_or_else(|_| "17422".to_string());
+            let port =
+                std::env::var("AI_COMMAND_CENTER_PORT").unwrap_or_else(|_| "17422".to_string());
             if let Err(e) = mcp_installer::configure_opencode_mcp(&port) {
                 warn!("[startup] Failed to configure OpenCode MCP: {}", e);
             }
@@ -479,7 +613,8 @@ fn main() {
             info!("Database initialized successfully");
             let jira_client = JiraClient::new();
             let github_client = GitHubClient::new();
-            let opencode_client = OpenCodeClient::with_base_url("http://127.0.0.1:4096".to_string());
+            let opencode_client =
+                OpenCodeClient::with_base_url("http://127.0.0.1:4096".to_string());
             let server_manager = server_manager::ServerManager::new();
             let sse_bridge_manager = sse_bridge::SseBridgeManager::new();
             let pty_manager = PtyManager::new();
@@ -538,15 +673,23 @@ fn main() {
                             }
                         },
                         Err(e) => {
-                            error!("[startup] database lock error during root server startup: {}", e);
+                            error!(
+                                "[startup] database lock error during root server startup: {}",
+                                e
+                            );
                             None
                         }
                     }
                 };
 
                 if let Some(project_id) = startup_project_id {
-                    if let Err(e) = start_project_root_server(&app_handle_root_server, &project_id).await {
-                        warn!("[startup] root OpenCode server auto-start failed for {}: {}", project_id, e);
+                    if let Err(e) =
+                        start_project_root_server(&app_handle_root_server, &project_id).await
+                    {
+                        warn!(
+                            "[startup] root OpenCode server auto-start failed for {}: {}",
+                            project_id, e
+                        );
                     }
                 }
             });
@@ -654,7 +797,8 @@ fn main() {
     ctrlc::set_handler(move || {
         info!("[shutdown] Ctrl+C received, triggering exit...");
         ctrlc_handle.exit(0);
-    }).ok();
+    })
+    .ok();
 
     app.run(|app_handle, event| {
         if let tauri::RunEvent::Exit = event {
@@ -671,7 +815,6 @@ fn main() {
                 info!("[shutdown] Stopping all SSE bridges...");
                 sse_mgr.stop_all().await;
 
-
                 info!("[shutdown] Stopping all OpenCode servers...");
                 if let Err(e) = server_mgr.stop_all().await {
                     error!("[shutdown] Error stopping servers: {}", e);
@@ -686,20 +829,30 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{
-        load_resume_targets, restore_resumed_session_state, should_start_project_root_server,
-        ResumeTarget,
+        load_resume_targets, opencode_resume_persistence, restore_resumed_session_state,
+        should_start_project_root_server, ResumeSessionPersistence, ResumeTarget,
     };
     use crate::db::test_helpers::make_test_db;
+    use crate::opencode_client::SessionStatusInfo;
+    use std::collections::HashMap;
     use std::fs;
 
     #[test]
     fn test_should_start_project_root_server_for_opencode_project() {
-        assert!(should_start_project_root_server("opencode", Some("/tmp/project"), None));
+        assert!(should_start_project_root_server(
+            "opencode",
+            Some("/tmp/project"),
+            None
+        ));
     }
 
     #[test]
     fn test_should_not_start_project_root_server_for_claude_project() {
-        assert!(!should_start_project_root_server("claude-code", Some("/tmp/project"), None));
+        assert!(!should_start_project_root_server(
+            "claude-code",
+            Some("/tmp/project"),
+            None
+        ));
     }
 
     #[test]
@@ -709,11 +862,46 @@ mod tests {
 
     #[test]
     fn test_should_not_start_project_root_server_when_already_running() {
-        assert!(!should_start_project_root_server("opencode", Some("/tmp/project"), Some(4100)));
+        assert!(!should_start_project_root_server(
+            "opencode",
+            Some("/tmp/project"),
+            Some(4100)
+        ));
     }
 
     #[test]
-    fn restore_resumed_session_state_marks_interrupted_opencode_session_running() {
+    fn opencode_resume_persistence_marks_busy_status_running() {
+        let statuses = HashMap::from([(
+            "oc-ses-100".to_string(),
+            SessionStatusInfo {
+                status_type: "busy".to_string(),
+            },
+        )]);
+
+        assert_eq!(
+            opencode_resume_persistence(Some("oc-ses-100"), &statuses),
+            ResumeSessionPersistence::Running
+        );
+    }
+
+    #[test]
+    fn opencode_resume_persistence_marks_idle_status_completed() {
+        let statuses = HashMap::from([(
+            "oc-ses-100".to_string(),
+            SessionStatusInfo {
+                status_type: "idle".to_string(),
+            },
+        )]);
+
+        assert_eq!(
+            opencode_resume_persistence(Some("oc-ses-100"), &statuses),
+            ResumeSessionPersistence::Completed
+        );
+    }
+
+    #[test]
+    fn restore_resumed_session_state_keeps_interrupted_opencode_session_without_confirmed_running_status(
+    ) {
         let (db, path) = make_test_db("restore_resumed_session_state");
 
         let project = db
@@ -768,15 +956,25 @@ mod tests {
             branch_name: Some("t-100".to_string()),
         };
 
-        restore_resumed_session_state(&db, Some(&session), &target, "opencode", 4312);
+        restore_resumed_session_state(
+            &db,
+            Some(&session),
+            &target,
+            "opencode",
+            4312,
+            ResumeSessionPersistence::LeaveExisting,
+        );
 
         let restored = db
             .get_latest_session_for_ticket(&task.id)
             .expect("get restored session failed")
             .expect("missing restored session");
-        assert_eq!(restored.status, "running");
+        assert_eq!(restored.status, "interrupted");
         assert_eq!(restored.stage, "implement");
-        assert_eq!(restored.error_message, None);
+        assert_eq!(
+            restored.error_message,
+            Some("Session interrupted by app restart".to_string())
+        );
 
         let worktree = db
             .get_worktree_for_task(&task.id)
@@ -805,10 +1003,26 @@ mod tests {
             .expect("create project failed");
 
         let task_with_workspace = db
-            .create_task("Workspace-backed", "doing", None, Some(&project.id), None, None, None)
+            .create_task(
+                "Workspace-backed",
+                "doing",
+                None,
+                Some(&project.id),
+                None,
+                None,
+                None,
+            )
             .expect("create workspace-backed task failed");
         let task_with_legacy_worktree = db
-            .create_task("Legacy worktree", "doing", None, Some(&project.id), None, None, None)
+            .create_task(
+                "Legacy worktree",
+                "doing",
+                None,
+                Some(&project.id),
+                None,
+                None,
+                None,
+            )
             .expect("create legacy worktree task failed");
 
         db.upsert_task_workspace_record(
@@ -854,8 +1068,14 @@ mod tests {
 
         let targets = load_resume_targets(&db).expect("load resume targets failed");
         assert_eq!(targets.len(), 2);
-        assert!(targets.iter().any(|target| target.task_id == task_with_workspace.id && target.workspace_path == "/tmp/test-repo"));
-        assert!(targets.iter().any(|target| target.task_id == task_with_legacy_worktree.id && target.workspace_path == "/tmp/test-repo/.worktrees/legacy"));
+        assert!(targets
+            .iter()
+            .any(|target| target.task_id == task_with_workspace.id
+                && target.workspace_path == "/tmp/test-repo"));
+        assert!(targets
+            .iter()
+            .any(|target| target.task_id == task_with_legacy_worktree.id
+                && target.workspace_path == "/tmp/test-repo/.worktrees/legacy"));
 
         drop(db);
         let _ = fs::remove_file(path);
