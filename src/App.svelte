@@ -38,6 +38,7 @@
   import { useCommandHeld } from './lib/useCommandHeld.svelte'
   import { getOpenCodeSessionUpdate } from './lib/opencodeSessionEvents'
   import SkillsView from './components/SkillsView.svelte'
+  import { useShortcutRegistry } from './lib/shortcuts.svelte'
 
   let unlisteners: UnlistenFn[] = []
   let showAddDialog = $state(false)
@@ -48,6 +49,7 @@
   let dialogSelectedAgent = $state('')
   let dialogSelectedPermissionMode = $state<PermissionMode>('default')
   let dialogActions = $state<Action[]>([])
+  let shortcuts: ReturnType<typeof useShortcutRegistry> | null = null
 
   async function loadDialogAgentInfo() {
     dialogSelectedAgent = ''
@@ -455,104 +457,101 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    // ? — show keyboard shortcuts help (global, but not when typing in an input)
-    if (e.key === '?' && !isInputFocused()) {
-      e.preventDefault()
+    if (shortcuts) {
+      shortcuts.handleKeydown(e)
+    }
+  }
+
+  onMount(async () => {
+    shortcuts = useShortcutRegistry()
+
+    window.addEventListener('keydown', handleKeydown)
+    unlisteners.push(() => window.removeEventListener('keydown', handleKeydown))
+
+    shortcuts.register('?', () => {
       showShortcutsDialog = true
-      return
-    }
-    if (e.metaKey && !e.shiftKey && e.key === 'k') {
-      e.preventDefault()
-      openActionPalette()
-      return
-    }
-    if (e.metaKey && !e.shiftKey && e.key === 'p') {
-      e.preventDefault()
+    })
+
+    shortcuts.register('⌘k', openActionPalette)
+
+    shortcuts.register('⌘p', () => {
       showProjectSwitcher = !showProjectSwitcher
-      return
-    }
-    if (e.metaKey && e.key === 'b') {
-      e.preventDefault()
+    })
+
+    shortcuts.register('⌘b', () => {
       appSidebarCollapsed = !appSidebarCollapsed
       localStorage.setItem('appSidebarCollapsed', String(appSidebarCollapsed))
-      return
-    }
-    if (e.metaKey && e.key === 't') {
-      e.preventDefault()
+    })
+
+    shortcuts.register('⌘t', () => {
       if (!showAddDialog) {
         editingTask = null
         showAddDialog = true
         loadDialogAgentInfo()
       }
-    }
-    if ((e.metaKey || e.ctrlKey) && (e.key === '[' || e.key === 'ArrowLeft')) {
-      e.preventDefault()
-      navigateBack()
-    }
-    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'R') {
-      e.preventDefault()
-      triggerGithubSync()
-    }
-    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'd') {
-      e.preventDefault()
+    })
+
+    shortcuts.register('⌘[', navigateBack)
+    shortcuts.register('⌘arrowleft', navigateBack)
+    shortcuts.register('⌃[', navigateBack)
+    shortcuts.register('⌃arrowleft', navigateBack)
+
+    shortcuts.register('⌘⇧r', triggerGithubSync)
+    shortcuts.register('⌃⇧r', triggerGithubSync)
+
+    shortcuts.register('⌘d', () => {
       window.dispatchEvent(new CustomEvent('toggle-voice-recording'))
-    }
-    if (e.metaKey && e.shiftKey && (e.key === 'F' || e.key === 'f')) {
-      e.preventDefault()
+    })
+    shortcuts.register('⌃d', () => {
+      window.dispatchEvent(new CustomEvent('toggle-voice-recording'))
+    })
+
+    shortcuts.register('⌘⇧f', () => {
       showCommandPalette = !showCommandPalette
-      return
-    }
-    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'r') {
-      e.preventDefault()
+    })
+
+    shortcuts.register('⌘r', () => {
       pushNavState()
       $currentView = 'workqueue'
-      return
-    }
-    if (e.metaKey && !e.shiftKey && e.key === 'h') {
-      e.preventDefault()
-      resetToBoard()
-      return
-    }
-    if (e.metaKey && !e.shiftKey && e.key === 'g') {
-      e.preventDefault()
-      handleNavigate('pr_review')
-      return
-    }
-    if (e.metaKey && !e.shiftKey && e.key === 'l') {
-      e.preventDefault()
-      handleNavigate('skills')
-      return
-    }
-    if (e.metaKey && e.key === ',') {
-      e.preventDefault()
-      handleNavigate('settings')
-      return
-    }
+    })
+    shortcuts.register('⌃r', () => {
+      pushNavState()
+      $currentView = 'workqueue'
+    })
 
-    // 1/2 — cycle through projects (plain keys, no modifier)
-    if ((e.key === '1' || e.key === '2') && !e.metaKey && !e.ctrlKey && !e.altKey && !isInputFocused()) {
+    shortcuts.register('⌘h', () => {
+      resetToBoard()
+    })
+
+    shortcuts.register('⌘g', () => {
+      handleNavigate('pr_review')
+    })
+
+    shortcuts.register('⌘l', () => {
+      handleNavigate('skills')
+    })
+
+    shortcuts.register('⌘,', () => {
+      handleNavigate('settings')
+    })
+
+    shortcuts.register('1', () => {
       const projectList = $projects
       if (projectList.length === 0) return
-      e.preventDefault()
       const currentIndex = projectList.findIndex((p) => p.id === $activeProjectId)
-      let nextIndex: number
-      if (e.key === '2') {
-        // Next project
-        nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % projectList.length
-      } else {
-        // Previous project
-        nextIndex = currentIndex <= 0 ? projectList.length - 1 : currentIndex - 1
-      }
+      const nextIndex = currentIndex <= 0 ? projectList.length - 1 : currentIndex - 1
       $activeProjectId = projectList[nextIndex].id
       resetToBoard()
-      return
-    }
+    })
 
-  }
-
-  onMount(async () => {
-    window.addEventListener('keydown', handleKeydown)
-    unlisteners.push(() => window.removeEventListener('keydown', handleKeydown))
+    shortcuts.register('2', () => {
+      const projectList = $projects
+      if (projectList.length === 0) return
+      const currentIndex = projectList.findIndex((p) => p.id === $activeProjectId)
+      const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % projectList.length
+      $activeProjectId = projectList[nextIndex].id
+      resetToBoard()
+    })
 
     // Phase 1: Register ALL event listeners
     unlisteners.push(
