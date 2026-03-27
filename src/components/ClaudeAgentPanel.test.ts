@@ -109,7 +109,7 @@ describe('ClaudeAgentPanel', () => {
   it('renders the terminal container element', async () => {
     render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
     await vi.waitFor(() => {
-      const termWrapper = document.querySelector('.terminal-wrapper')
+      const termWrapper = document.querySelector('.shell-terminal-wrapper')
       expect(termWrapper).toBeTruthy()
     })
   })

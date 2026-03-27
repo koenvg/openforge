@@ -228,7 +228,7 @@
   {/if}
 
   <div class="flex-1 overflow-hidden min-h-0 bg-base-100 border border-base-300 rounded-md relative">
-    <div class="terminal-wrapper" bind:this={terminalEl}></div>
+    <div class="shell-terminal-wrapper w-full h-full p-3" bind:this={terminalEl}></div>
     {#if sessionHistory.loadingHistory}
       <div class="absolute inset-0 flex flex-col items-center justify-center p-16 gap-4 bg-base-100 z-[1] pointer-events-none">
         <span class="loading loading-spinner loading-md text-primary"></span>
@@ -253,28 +253,3 @@
     {/if}
   </div>
 </div>
-
-<style>
-  .terminal-wrapper {
-    width: 100%;
-    height: 100%;
-    padding: 12px;
-  }
-
-  :global(.terminal-wrapper .xterm-viewport::-webkit-scrollbar) {
-    width: 6px;
-  }
-
-  :global(.terminal-wrapper .xterm-viewport::-webkit-scrollbar-track) {
-    background: var(--color-base-200);
-  }
-
-  :global(.terminal-wrapper .xterm-viewport::-webkit-scrollbar-thumb) {
-    background: var(--color-base-300);
-    border-radius: 3px;
-  }
-
-  :global(.terminal-wrapper .xterm-viewport::-webkit-scrollbar-thumb:hover) {
-    background: color-mix(in oklch, var(--color-base-content) 40%, transparent);
-  }
-</style>
