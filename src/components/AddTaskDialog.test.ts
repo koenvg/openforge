@@ -252,7 +252,7 @@ describe('AddTaskDialog', () => {
   })
 
   it('does not call listOpenCodeAgents when ai_provider is claude-code', async () => {
-    vi.mocked(getProjectConfig).mockImplementation(async (projectId, key) => {
+    vi.mocked(getProjectConfig).mockImplementation(async (_projectId, key) => {
       if (key === 'jira_board_id') return 'board-123'
       return 'claude-code'
     })
