@@ -6,6 +6,23 @@ const unlistenFns: Array<ReturnType<typeof vi.fn>> = []
 let webLinksHandler: ((event: MouseEvent, uri: string) => void) | null = null
 let webglContextLossHandler: (() => void) | null = null
 
+interface TerminalMockOptions {
+  fontFamily?: string
+}
+
+function getTerminalFontFamily(terminal: unknown): string | undefined {
+  if (typeof terminal !== 'object' || terminal === null || !('options' in terminal)) {
+    return undefined
+  }
+
+  const options = terminal.options
+  if (typeof options !== 'object' || options === null || !('fontFamily' in options)) {
+    return undefined
+  }
+
+  return typeof options.fontFamily === 'string' ? options.fontFamily : undefined
+}
+
 vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(async (eventName: string, cb: (event: unknown) => void) => {
     listenCallbacks.set(eventName, cb)
@@ -17,6 +34,10 @@ vi.mock('@tauri-apps/api/event', () => ({
 
 vi.mock('@xterm/xterm', () => {
   class Terminal {
+    options: TerminalMockOptions
+    constructor(options: TerminalMockOptions = {}) {
+      this.options = options
+    }
     open = vi.fn()
     write = vi.fn()
     dispose = vi.fn()
@@ -88,6 +109,20 @@ globalThis.IntersectionObserver = class {
   disconnect = vi.fn()
 } as unknown as typeof IntersectionObserver
 
+Object.defineProperty(HTMLDivElement.prototype, 'clientWidth', {
+  configurable: true,
+  get() {
+    return 800
+  },
+})
+
+Object.defineProperty(HTMLDivElement.prototype, 'clientHeight', {
+  configurable: true,
+  get() {
+    return 600
+  },
+})
+
 describe('terminalPool', () => {
   beforeEach(() => {
     releaseAll()
@@ -111,6 +146,11 @@ describe('terminalPool', () => {
     expect(entry.hostDiv).toBeInstanceOf(HTMLDivElement)
     expect(entry.attached).toBe(false)
     expect(_getPool().has('task-1')).toBe(true)
+  })
+
+  it('initializes terminal with the correct font family stack including JetBrains Mono and Nerd Font fallback', async () => {
+    const entry = await acquire('task-font-check')
+    expect(getTerminalFontFamily(entry.terminal)).toBe("'JetBrains Mono', 'Symbols Nerd Font', 'Symbols Nerd Font Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace")
   })
 
   it('acquire returns existing entry on second call', async () => {
@@ -140,7 +180,7 @@ describe('terminalPool', () => {
     const entry = await acquire('task-4')
     const wrapper = document.createElement('div')
 
-    attach(entry, wrapper)
+    await attach(entry, wrapper)
 
     expect(wrapper.contains(entry.hostDiv)).toBe(true)
     expect(entry.attached).toBe(true)
@@ -150,7 +190,7 @@ describe('terminalPool', () => {
     const entry = await acquire('task-webgl')
     const wrapper = document.createElement('div')
 
-    attach(entry, wrapper)
+    await attach(entry, wrapper)
 
     const openSpy = entry.terminal.open as ReturnType<typeof vi.fn>
     const loadAddonSpy = entry.terminal.loadAddon as ReturnType<typeof vi.fn>
@@ -164,7 +204,7 @@ describe('terminalPool', () => {
     const entry = await acquire('task-webgl-context-loss')
     const wrapper = document.createElement('div')
 
-    attach(entry, wrapper)
+    await attach(entry, wrapper)
 
     const loadAddonSpy = entry.terminal.loadAddon as ReturnType<typeof vi.fn>
     const webglAddon = loadAddonSpy.mock.calls[2][0] as { dispose: ReturnType<typeof vi.fn> }
@@ -180,17 +220,72 @@ describe('terminalPool', () => {
     const entry = await acquire('task-5')
     const wrapper = document.createElement('div')
 
-    attach(entry, wrapper)
-    attach(entry, wrapper)
+    await attach(entry, wrapper)
+    await attach(entry, wrapper)
 
     expect(wrapper.childElementCount).toBe(1)
+  })
+
+  it('retries the initial fit until the host div has real dimensions', async () => {
+    const entry = await acquire('task-delayed-fit')
+    const wrapper = document.createElement('div')
+    const fitSpy = entry.fitAddon.fit as ReturnType<typeof vi.fn>
+    const refreshSpy = entry.terminal.refresh as ReturnType<typeof vi.fn>
+    const focusSpy = entry.terminal.focus as ReturnType<typeof vi.fn>
+    const originalRaf = globalThis.requestAnimationFrame
+
+    let frame = 0
+    const rafCallbacks: FrameRequestCallback[] = []
+
+    globalThis.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback)
+      return rafCallbacks.length
+    })
+
+    Object.defineProperty(entry.hostDiv, 'clientWidth', {
+      configurable: true,
+      get: () => frame >= 6 ? 800 : 0,
+    })
+    Object.defineProperty(entry.hostDiv, 'clientHeight', {
+      configurable: true,
+      get: () => frame >= 6 ? 600 : 0,
+    })
+
+    const flushFrame = () => {
+      frame += 1
+      const callbacks = rafCallbacks.splice(0)
+      callbacks.forEach((callback) => {
+        callback(frame * 16)
+      })
+    }
+
+    try {
+      const attachPromise = attach(entry, wrapper)
+
+      for (let index = 0; index < 5; index += 1) {
+        flushFrame()
+        await Promise.resolve()
+      }
+
+      expect(fitSpy).not.toHaveBeenCalled()
+      expect(refreshSpy).not.toHaveBeenCalled()
+
+      flushFrame()
+      await attachPromise
+
+      expect(fitSpy).toHaveBeenCalledTimes(1)
+      expect(refreshSpy).toHaveBeenCalled()
+      expect(focusSpy).toHaveBeenCalled()
+    } finally {
+      globalThis.requestAnimationFrame = originalRaf
+    }
   })
 
   it('detach removes hostDiv from DOM', async () => {
     const entry = await acquire('task-6')
     const wrapper = document.createElement('div')
 
-    attach(entry, wrapper)
+    await attach(entry, wrapper)
     expect(wrapper.contains(entry.hostDiv)).toBe(true)
 
     detach(entry)
@@ -302,7 +397,7 @@ describe('terminalPool', () => {
     const wrapper1 = document.createElement('div')
     const wrapper2 = document.createElement('div')
 
-    attach(entry, wrapper1)
+    await attach(entry, wrapper1)
     expect(entry.attached).toBe(true)
 
     // Simulate pty output while attached
@@ -321,7 +416,7 @@ describe('terminalPool', () => {
     expect(reacquired).toBe(entry)
 
     // Re-attach to different wrapper
-    attach(reacquired, wrapper2)
+    await attach(reacquired, wrapper2)
     expect(wrapper2.contains(entry.hostDiv)).toBe(true)
     expect(entry.attached).toBe(true)
   })
@@ -460,7 +555,7 @@ describe('terminalPool', () => {
     it('calls terminal.focus() for an attached entry', async () => {
       const entry = await acquire('task-focus')
       const wrapper = document.createElement('div')
-      attach(entry, wrapper)
+      await attach(entry, wrapper)
       const focusSpy = entry.terminal.focus as ReturnType<typeof vi.fn>
       focusSpy.mockClear()
 
@@ -503,7 +598,7 @@ describe('terminalPool', () => {
       const focusSpy = entry.terminal.focus as ReturnType<typeof vi.fn>
       focusSpy.mockClear()
 
-      attach(entry, wrapper)
+      await attach(entry, wrapper)
 
       // Flush the requestAnimationFrame callback
       await new Promise(resolve => requestAnimationFrame(resolve))
@@ -526,7 +621,7 @@ describe('terminalPool', () => {
       const focusSpy = entry.terminal.focus as ReturnType<typeof vi.fn>
       focusSpy.mockClear()
 
-      attach(entry, wrapper)
+      await attach(entry, wrapper)
 
       // Flush the requestAnimationFrame callback
       await new Promise(resolve => requestAnimationFrame(resolve))

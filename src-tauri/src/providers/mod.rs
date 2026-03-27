@@ -42,7 +42,9 @@ impl Provider {
     ) -> Result<Self, String> {
         match name {
             "claude-code" => Ok(Provider::ClaudeCode(ClaudeCodeProvider::new(pty_mgr))),
-            "opencode" => Ok(Provider::OpenCode(OpenCodeProvider::new(server_mgr, sse_mgr))),
+            "opencode" => Ok(Provider::OpenCode(OpenCodeProvider::new(
+                server_mgr, sse_mgr,
+            ))),
             other => Err(format!("Unknown provider: {}", other)),
         }
     }
@@ -52,6 +54,7 @@ impl Provider {
     // ------------------------------------------------------------------
 
     /// Start a new provider session in the given worktree with a prompt.
+    #[allow(clippy::too_many_arguments)]
     pub async fn start(
         &self,
         task_id: &str,
@@ -63,8 +66,30 @@ impl Provider {
         app: &AppHandle,
     ) -> Result<ProviderSessionResult, String> {
         match self {
-            Provider::ClaudeCode(p) => p.start(task_id, worktree_path, prompt, agent, permission_mode, model, app).await,
-            Provider::OpenCode(p) => p.start(task_id, worktree_path, prompt, agent, permission_mode, model, app).await,
+            Provider::ClaudeCode(p) => {
+                p.start(
+                    task_id,
+                    worktree_path,
+                    prompt,
+                    agent,
+                    permission_mode,
+                    model,
+                    app,
+                )
+                .await
+            }
+            Provider::OpenCode(p) => {
+                p.start(
+                    task_id,
+                    worktree_path,
+                    prompt,
+                    agent,
+                    permission_mode,
+                    model,
+                    app,
+                )
+                .await
+            }
         }
     }
 
@@ -82,17 +107,37 @@ impl Provider {
         app: &AppHandle,
     ) -> Result<ProviderSessionResult, String> {
         match self {
-            Provider::ClaudeCode(p) => p.resume(task_id, session, worktree_path, prompt, agent, permission_mode, model, app).await,
-            Provider::OpenCode(p) => p.resume(task_id, session, worktree_path, prompt, agent, permission_mode, model, app).await,
+            Provider::ClaudeCode(p) => {
+                p.resume(
+                    task_id,
+                    session,
+                    worktree_path,
+                    prompt,
+                    agent,
+                    permission_mode,
+                    model,
+                    app,
+                )
+                .await
+            }
+            Provider::OpenCode(p) => {
+                p.resume(
+                    task_id,
+                    session,
+                    worktree_path,
+                    prompt,
+                    agent,
+                    permission_mode,
+                    model,
+                    app,
+                )
+                .await
+            }
         }
     }
 
     /// Abort a running session.
-    pub async fn abort(
-        &self,
-        task_id: &str,
-        session: &AgentSessionRow,
-    ) -> Result<(), String> {
+    pub async fn abort(&self, task_id: &str, session: &AgentSessionRow) -> Result<(), String> {
         match self {
             Provider::ClaudeCode(p) => p.abort(task_id, session).await,
             Provider::OpenCode(p) => p.abort(task_id, session).await,
@@ -124,7 +169,10 @@ impl Provider {
     }
 
     /// List available commands for the project (provider-specific discovery).
-    pub fn list_commands(&self, project_path: Option<&str>) -> Vec<crate::opencode_client::CommandInfo> {
+    pub fn list_commands(
+        &self,
+        project_path: Option<&str>,
+    ) -> Vec<crate::opencode_client::CommandInfo> {
         match self {
             Provider::ClaudeCode(p) => p.list_commands(project_path),
             Provider::OpenCode(p) => p.list_commands(project_path),
@@ -132,7 +180,10 @@ impl Provider {
     }
 
     /// List available agents for the project (provider-specific discovery).
-    pub fn list_agents(&self, project_path: Option<&str>) -> Vec<crate::opencode_client::AgentInfo> {
+    pub fn list_agents(
+        &self,
+        project_path: Option<&str>,
+    ) -> Vec<crate::opencode_client::AgentInfo> {
         match self {
             Provider::ClaudeCode(p) => p.list_agents(project_path),
             Provider::OpenCode(p) => p.list_agents(project_path),
@@ -238,7 +289,9 @@ mod tests {
 
     #[test]
     fn test_provider_enum_claude_code_name() {
-        let p = Provider::ClaudeCode(ClaudeCodeProvider::new(crate::pty_manager::PtyManager::new()));
+        let p = Provider::ClaudeCode(ClaudeCodeProvider::new(
+            crate::pty_manager::PtyManager::new(),
+        ));
         assert_eq!(p.provider_name(), "claude-code");
     }
 
@@ -253,9 +306,14 @@ mod tests {
 
     #[test]
     fn test_provider_enum_claude_code_session_id() {
-        let p = Provider::ClaudeCode(ClaudeCodeProvider::new(crate::pty_manager::PtyManager::new()));
+        let p = Provider::ClaudeCode(ClaudeCodeProvider::new(
+            crate::pty_manager::PtyManager::new(),
+        ));
         let session = make_session(Some("claude-abc"), None, "claude-code");
-        assert_eq!(p.provider_session_id(&session), Some("claude-abc".to_string()));
+        assert_eq!(
+            p.provider_session_id(&session),
+            Some("claude-abc".to_string())
+        );
     }
 
     #[test]
@@ -306,15 +364,26 @@ mod tests {
 
     #[test]
     fn test_provider_enum_list_commands_claude_code() {
-        let p = Provider::ClaudeCode(ClaudeCodeProvider::new(crate::pty_manager::PtyManager::new()));
+        let p = Provider::ClaudeCode(ClaudeCodeProvider::new(
+            crate::pty_manager::PtyManager::new(),
+        ));
         let commands = p.list_commands(None);
-        assert!(commands.len() >= 10, "Expected built-in commands, got {}", commands.len());
-        assert!(commands.iter().any(|c| c.name == "compact"), "Should include 'compact' built-in");
+        assert!(
+            commands.len() >= 10,
+            "Expected built-in commands, got {}",
+            commands.len()
+        );
+        assert!(
+            commands.iter().any(|c| c.name == "compact"),
+            "Should include 'compact' built-in"
+        );
     }
 
     #[test]
     fn test_provider_enum_list_agents_claude_code() {
-        let p = Provider::ClaudeCode(ClaudeCodeProvider::new(crate::pty_manager::PtyManager::new()));
+        let p = Provider::ClaudeCode(ClaudeCodeProvider::new(
+            crate::pty_manager::PtyManager::new(),
+        ));
         let agents = p.list_agents(None);
         let _ = agents;
     }
@@ -326,7 +395,10 @@ mod tests {
             crate::sse_bridge::SseBridgeManager::new(),
         ));
         let commands = p.list_commands(None);
-        assert!(commands.is_empty(), "OpenCode list_commands should return empty vec");
+        assert!(
+            commands.is_empty(),
+            "OpenCode list_commands should return empty vec"
+        );
     }
 
     #[test]
@@ -336,6 +408,9 @@ mod tests {
             crate::sse_bridge::SseBridgeManager::new(),
         ));
         let agents = p.list_agents(None);
-        assert!(agents.is_empty(), "OpenCode list_agents should return empty vec");
+        assert!(
+            agents.is_empty(),
+            "OpenCode list_agents should return empty vec"
+        );
     }
 }

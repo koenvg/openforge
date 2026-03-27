@@ -2,6 +2,7 @@
   import type { Task, PullRequestInfo, PrComment } from '../lib/types'
   import { parseCheckRuns, splitCheckRuns } from '../lib/types'
   import { getPrComments, markCommentAddressed, openUrl } from '../lib/ipc'
+  import MarkdownContent from './MarkdownContent.svelte'
 
   interface Props {
     task: Task | null
@@ -158,7 +159,9 @@
                   </button>
                 {/if}
               </div>
-              <p class="text-xs text-base-content/70 leading-relaxed">{comment.body}</p>
+              <div class="text-xs text-base-content/70 leading-relaxed [&_.markdown-body]:text-xs [&_.markdown-body_pre]:text-[10px] [&_.markdown-body_code]:text-[10px] [&_.markdown-body_p]:m-0">
+                <MarkdownContent content={comment.body} />
+              </div>
             </div>
           {/each}
         </div>

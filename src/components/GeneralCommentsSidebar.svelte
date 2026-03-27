@@ -11,6 +11,7 @@
   import type { SelfReviewComment } from '../lib/types'
 
   import VoiceInput from './VoiceInput.svelte'
+  import MarkdownContent from './MarkdownContent.svelte'
   interface Props {
     taskId: string
   }
@@ -176,7 +177,9 @@
                 <span class="text-[0.7rem] font-semibold text-primary/70 tabular-nums">#{comment.id}</span>
                 <span class="text-[0.7rem] text-base-content/50 ml-auto">{formatTimestamp(comment.created_at)}</span>
               </div>
-              <div class="text-xs text-base-content/50 leading-relaxed whitespace-pre-wrap break-words">{comment.body}</div>
+              <div class="text-xs text-base-content/50 leading-relaxed [&_.markdown-body]:text-xs [&_.markdown-body_pre]:text-[10px] [&_.markdown-body_code]:text-[10px] [&_.markdown-body_p]:m-0">
+                <MarkdownContent content={comment.body} />
+              </div>
             </div>
           {/each}
         </div>
@@ -210,7 +213,9 @@
               {isDeleting === comment.id ? '…' : '✕'}
             </button>
           </div>
-          <div class="text-xs text-base-content leading-relaxed whitespace-pre-wrap break-words">{comment.body}</div>
+          <div class="text-xs text-base-content leading-relaxed [&_.markdown-body]:text-xs [&_.markdown-body_pre]:text-[10px] [&_.markdown-body_code]:text-[10px] [&_.markdown-body_p]:m-0">
+            <MarkdownContent content={comment.body} />
+          </div>
         </div>
       {/each}
     {/if}

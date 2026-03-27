@@ -1,11 +1,11 @@
 use std::path::Path;
 use tauri::AppHandle;
 
+use super::ProviderSessionResult;
 use crate::db::AgentSessionRow;
 use crate::opencode_client::OpenCodeClient;
 use crate::server_manager::ServerManager;
 use crate::sse_bridge::SseBridgeManager;
-use super::ProviderSessionResult;
 
 pub struct OpenCodeProvider {
     pub server_mgr: ServerManager,
@@ -14,9 +14,13 @@ pub struct OpenCodeProvider {
 
 impl OpenCodeProvider {
     pub fn new(server_mgr: ServerManager, sse_mgr: SseBridgeManager) -> Self {
-        Self { server_mgr, sse_mgr }
+        Self {
+            server_mgr,
+            sse_mgr,
+        }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn start(
         &self,
         task_id: &str,
@@ -27,7 +31,8 @@ impl OpenCodeProvider {
         model: Option<&crate::opencode_client::PromptModel>,
         app: &AppHandle,
     ) -> Result<ProviderSessionResult, String> {
-        let port = self.server_mgr
+        let port = self
+            .server_mgr
             .spawn_server(task_id, worktree_path)
             .await
             .map_err(|e| e.to_string())?;
@@ -40,7 +45,12 @@ impl OpenCodeProvider {
             .map_err(|e| format!("Failed to create session: {}", e))?;
 
         self.sse_mgr
-            .start_bridge(app.clone(), task_id.to_string(), Some(opencode_session_id.clone()), port)
+            .start_bridge(
+                app.clone(),
+                task_id.to_string(),
+                Some(opencode_session_id.clone()),
+                port,
+            )
             .await
             .map_err(|e| e.to_string())?;
 
@@ -76,7 +86,8 @@ impl OpenCodeProvider {
             Some(action_prompt) => {
                 let port = match self.server_mgr.get_server_port(task_id).await {
                     Some(p) => p,
-                    None => self.server_mgr
+                    None => self
+                        .server_mgr
                         .spawn_server(task_id, worktree_path)
                         .await
                         .map_err(|e| e.to_string())?,
@@ -102,8 +113,14 @@ impl OpenCodeProvider {
                     .await
                     .map_err(|e| format!("Failed to send prompt: {}", e))?;
 
-                match self.sse_mgr
-                    .start_bridge(app.clone(), task_id.to_string(), Some(opencode_session_id.clone()), port)
+                match self
+                    .sse_mgr
+                    .start_bridge(
+                        app.clone(),
+                        task_id.to_string(),
+                        Some(opencode_session_id.clone()),
+                        port,
+                    )
                     .await
                 {
                     Ok(_) => {}
@@ -117,14 +134,20 @@ impl OpenCodeProvider {
                 })
             }
             None => {
-                let port = self.server_mgr
+                let port = self
+                    .server_mgr
                     .spawn_server(task_id, worktree_path)
                     .await
                     .map_err(|e| e.to_string())?;
 
                 if let Some(bridge_session_id) = resume_bridge_session_id(session) {
                     self.sse_mgr
-                        .start_bridge(app.clone(), task_id.to_string(), Some(bridge_session_id), port)
+                        .start_bridge(
+                            app.clone(),
+                            task_id.to_string(),
+                            Some(bridge_session_id),
+                            port,
+                        )
                         .await
                         .map_err(|e| e.to_string())?;
                 }
@@ -137,11 +160,7 @@ impl OpenCodeProvider {
         }
     }
 
-    pub async fn abort(
-        &self,
-        task_id: &str,
-        session: &AgentSessionRow,
-    ) -> Result<(), String> {
+    pub async fn abort(&self, task_id: &str, session: &AgentSessionRow) -> Result<(), String> {
         if let Some(port) = self.server_mgr.get_server_port(task_id).await {
             if let Some(ref opencode_session_id) = session.opencode_session_id {
                 let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
@@ -169,11 +188,17 @@ impl OpenCodeProvider {
         session.opencode_session_id.clone()
     }
 
-    pub fn list_commands(&self, _project_path: Option<&str>) -> Vec<crate::opencode_client::CommandInfo> {
+    pub fn list_commands(
+        &self,
+        _project_path: Option<&str>,
+    ) -> Vec<crate::opencode_client::CommandInfo> {
         vec![]
     }
 
-    pub fn list_agents(&self, _project_path: Option<&str>) -> Vec<crate::opencode_client::AgentInfo> {
+    pub fn list_agents(
+        &self,
+        _project_path: Option<&str>,
+    ) -> Vec<crate::opencode_client::AgentInfo> {
         vec![]
     }
 }
@@ -238,7 +263,10 @@ mod tests {
     #[test]
     fn test_resume_bridge_session_id_uses_existing_session_id() {
         let session = make_session(Some("oc-xyz789"));
-        assert_eq!(resume_bridge_session_id(&session), Some("oc-xyz789".to_string()));
+        assert_eq!(
+            resume_bridge_session_id(&session),
+            Some("oc-xyz789".to_string())
+        );
     }
 
     #[test]

@@ -109,6 +109,8 @@ describe('TaskTerminal', () => {
     mockPoolEntry.attached = false
     mockPoolEntry.needsClear = false
     mockPoolEntry.currentPtyInstance = null
+    mockPoolEntry.terminal.cols = 80
+    mockPoolEntry.terminal.rows = 24
     listenCallback = null
   })
 
@@ -216,6 +218,53 @@ describe('TaskTerminal', () => {
     await vi.waitFor(() => {
       expect(document.querySelector('.shell-terminal-wrapper')).toBeTruthy()
     })
+
+    expect(spawnShellPty).not.toHaveBeenCalled()
+  })
+
+  it('waits for pooled attach sizing before spawning the shell PTY', async () => {
+    const { spawnShellPty } = await import('../lib/ipc')
+    const { attach } = await import('../lib/terminalPool')
+
+    let resolveAttach!: () => void
+    const attachPromise = new Promise<void>((resolve) => {
+      resolveAttach = () => {
+        mockPoolEntry.terminal.cols = 132
+        mockPoolEntry.terminal.rows = 40
+        resolve()
+      }
+    })
+
+    vi.mocked(attach).mockImplementationOnce(() => attachPromise)
+
+    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true } })
+
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(spawnShellPty).not.toHaveBeenCalled()
+
+    resolveAttach()
+
+    await vi.waitFor(() => {
+      expect(spawnShellPty).toHaveBeenCalledWith('T-1', '/path/to/worktree', 132, 40, 0)
+    })
+  })
+
+  it('does not spawn a shell after unmount when attach resolves late', async () => {
+    const { spawnShellPty } = await import('../lib/ipc')
+    const { attach } = await import('../lib/terminalPool')
+
+    let resolveAttach!: () => void
+    const attachPromise = new Promise<void>((resolve) => {
+      resolveAttach = resolve
+    })
+
+    vi.mocked(attach).mockImplementationOnce(() => attachPromise)
+
+    const view = render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true } })
+
+    view.unmount()
+    resolveAttach()
+    await Promise.resolve()
 
     expect(spawnShellPty).not.toHaveBeenCalled()
   })

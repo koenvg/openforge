@@ -170,6 +170,31 @@ describe('GeneralCommentsSidebar', () => {
     expect(screen.getByText('Previous Round (1)')).toBeTruthy()
   })
 
+  
+  it('renders comment bodies using MarkdownContent', async () => {
+    mockGetActiveSelfReviewComments.mockResolvedValue([
+      {
+        id: 1,
+        task_id: 'task-1',
+        comment_type: 'general',
+        file_path: null,
+        line_number: null,
+        body: '**Bold markdown** and `inline code`',
+        created_at: Math.floor(Date.now() / 1000),
+        round: 1,
+        archived_at: null,
+      }
+    ])
+    mockGetArchivedSelfReviewComments.mockResolvedValue([])
+    
+    const { container } = render(GeneralCommentsSidebar, { props: { taskId: 'task-1' } })
+    await new Promise((r) => setTimeout(r, 50))
+    
+    // Check that Markdown was actually rendered
+    expect(container.querySelector('strong')?.textContent).toBe('Bold markdown')
+    expect(container.querySelector('code')?.textContent).toBe('inline code')
+  })
+
   describe('draft persistence', () => {
     beforeEach(() => {
       taskDraftNotes.set(new Map())

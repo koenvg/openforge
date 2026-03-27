@@ -329,6 +329,25 @@ describe('TaskDetailPane', () => {
   })
 
   describe('PR comments section', () => {
+
+    it('renders comment bodies using MarkdownContent', async () => {
+      vi.mocked(ipc.getPrComments).mockResolvedValue([
+        makeComment({ body: '**Bold PR comment** and `inline code`' })
+      ])
+      const { container } = render(TaskDetailPane, {
+        props: {
+          task: baseTask,
+          session: null,
+          pullRequests: [basePr],
+          onOpenFullView: vi.fn(),
+        },
+      })
+      await new Promise((r) => setTimeout(r, 50))
+      
+      expect(container.querySelector('strong')?.textContent).toBe('Bold PR comment')
+      expect(container.querySelector('code')?.textContent).toBe('inline code')
+    })
+
     it('renders // PR_COMMENTS label when task is provided', () => {
       render(TaskDetailPane, {
         props: {

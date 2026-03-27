@@ -20,13 +20,16 @@
   let poolEntry: PoolEntry | null = null
   let status = $state<'idle' | 'running' | 'complete' | 'error'>('idle')
   let terminalActive = $state(false)
+  let destroyed = false
 
   // Derived state from activeSessions store
   let session = $derived($activeSessions.get(taskId) || null)
 
   onMount(async () => {
     poolEntry = await acquire(taskId)
-    attach(poolEntry, terminalEl)
+    if (destroyed || !poolEntry) return
+    await attach(poolEntry, terminalEl)
+    if (destroyed) return
 
     terminalActive = isPtyActive(taskId)
 
@@ -56,6 +59,7 @@
   })
 
   onDestroy(() => {
+    destroyed = true
     unlisteners.forEach((fn) => {
       fn()
     })
