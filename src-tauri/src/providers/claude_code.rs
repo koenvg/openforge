@@ -2,9 +2,9 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use tauri::AppHandle;
 
+use super::ProviderSessionResult;
 use crate::db::AgentSessionRow;
 use crate::pty_manager::PtyManager;
-use super::ProviderSessionResult;
 
 pub struct ClaudeCodeProvider {
     pub pty_mgr: PtyManager,
@@ -19,6 +19,7 @@ impl ClaudeCodeProvider {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn start(
         &self,
         task_id: &str,
@@ -30,8 +31,8 @@ impl ClaudeCodeProvider {
         app: &AppHandle,
     ) -> Result<ProviderSessionResult, String> {
         let port = crate::claude_hooks::get_http_server_port();
-        let hooks_path = crate::claude_hooks::generate_hooks_settings(port)
-            .map_err(|e| e.to_string())?;
+        let hooks_path =
+            crate::claude_hooks::generate_hooks_settings(port).map_err(|e| e.to_string())?;
 
         self.pty_mgr
             .spawn_claude_pty(
@@ -49,7 +50,10 @@ impl ClaudeCodeProvider {
             .await
             .map_err(|e| e.to_string())?;
 
-        Ok(ProviderSessionResult { port: 0, opencode_session_id: None })
+        Ok(ProviderSessionResult {
+            port: 0,
+            opencode_session_id: None,
+        })
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -65,8 +69,8 @@ impl ClaudeCodeProvider {
         app: &AppHandle,
     ) -> Result<ProviderSessionResult, String> {
         let port = crate::claude_hooks::get_http_server_port();
-        let hooks_path = crate::claude_hooks::generate_hooks_settings(port)
-            .map_err(|e| e.to_string())?;
+        let hooks_path =
+            crate::claude_hooks::generate_hooks_settings(port).map_err(|e| e.to_string())?;
 
         let resume_id = session.claude_session_id.as_deref();
 
@@ -94,14 +98,13 @@ impl ClaudeCodeProvider {
             .await
             .map_err(|e| e.to_string())?;
 
-        Ok(ProviderSessionResult { port: 0, opencode_session_id: None })
+        Ok(ProviderSessionResult {
+            port: 0,
+            opencode_session_id: None,
+        })
     }
 
-    pub async fn abort(
-        &self,
-        task_id: &str,
-        _session: &AgentSessionRow,
-    ) -> Result<(), String> {
+    pub async fn abort(&self, task_id: &str, _session: &AgentSessionRow) -> Result<(), String> {
         self.pty_mgr
             .kill_pty(task_id)
             .await
@@ -123,17 +126,20 @@ impl ClaudeCodeProvider {
         session.claude_session_id.clone()
     }
 
-    pub fn list_commands(&self, project_path: Option<&str>) -> Vec<crate::opencode_client::CommandInfo> {
+    pub fn list_commands(
+        &self,
+        project_path: Option<&str>,
+    ) -> Vec<crate::opencode_client::CommandInfo> {
         let mut cache = self.discovery_cache.lock().unwrap();
         if let Some(ref cached) = *cache {
             return cached.commands.clone();
         }
 
-        use std::collections::HashMap;
         use crate::command_discovery::{
-            builtin_claude_commands, scan_commands_directory, scan_skills_directory,
-            resolve_active_plugins, scan_plugin_commands, scan_plugin_agents,
+            builtin_claude_commands, resolve_active_plugins, scan_commands_directory,
+            scan_plugin_agents, scan_plugin_commands, scan_skills_directory,
         };
+        use std::collections::HashMap;
 
         let mut commands_map = HashMap::<String, crate::opencode_client::CommandInfo>::new();
 
@@ -182,13 +188,15 @@ impl ClaudeCodeProvider {
                 (home.join(".opencode").join("skills"), ".opencode"),
             ] {
                 for skill in scan_skills_directory(dir, "user", source) {
-                    commands_map.entry(skill.name.clone()).or_insert(crate::opencode_client::CommandInfo {
-                        name: skill.name,
-                        description: skill.description,
-                        source: Some("skill".to_string()),
-                        agent: skill.agent,
-                        extra: serde_json::Map::new(),
-                    });
+                    commands_map.entry(skill.name.clone()).or_insert(
+                        crate::opencode_client::CommandInfo {
+                            name: skill.name,
+                            description: skill.description,
+                            source: Some("skill".to_string()),
+                            agent: skill.agent,
+                            extra: serde_json::Map::new(),
+                        },
+                    );
                 }
             }
         }
@@ -202,13 +210,16 @@ impl ClaudeCodeProvider {
                 (proj.join(".opencode").join("skills"), ".opencode"),
             ] {
                 for skill in scan_skills_directory(dir, "project", source) {
-                    commands_map.insert(skill.name.clone(), crate::opencode_client::CommandInfo {
-                        name: skill.name,
-                        description: skill.description,
-                        source: Some("skill".to_string()),
-                        agent: skill.agent,
-                        extra: serde_json::Map::new(),
-                    });
+                    commands_map.insert(
+                        skill.name.clone(),
+                        crate::opencode_client::CommandInfo {
+                            name: skill.name,
+                            description: skill.description,
+                            source: Some("skill".to_string()),
+                            agent: skill.agent,
+                            extra: serde_json::Map::new(),
+                        },
+                    );
                 }
             }
         }
@@ -224,7 +235,10 @@ impl ClaudeCodeProvider {
         result
     }
 
-    pub fn list_agents(&self, project_path: Option<&str>) -> Vec<crate::opencode_client::AgentInfo> {
+    pub fn list_agents(
+        &self,
+        project_path: Option<&str>,
+    ) -> Vec<crate::opencode_client::AgentInfo> {
         // Populate cache via list_commands (which scans both commands and agents together),
         // then return agents from the now-populated cache.
         let _ = self.list_commands(project_path);
@@ -284,7 +298,10 @@ mod tests {
         assert!(provider.discovery_cache.lock().unwrap().is_none());
 
         let first_result = provider.list_commands(None);
-        assert!(!first_result.is_empty(), "built-in commands should always be present");
+        assert!(
+            !first_result.is_empty(),
+            "built-in commands should always be present"
+        );
 
         assert!(provider.discovery_cache.lock().unwrap().is_some());
 
