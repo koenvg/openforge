@@ -14,14 +14,12 @@
     setWhisperModel,
   } from '../lib/ipc'
   import { loadActions, saveActions, createAction, DEFAULT_ACTIONS } from '../lib/actions'
-  import { loadBoardColumns, saveBoardColumns } from '../lib/boardColumns'
   import { loadFocusFilterStates, saveFocusFilterStates, DEFAULT_FOCUS_STATES } from '../lib/boardFilters'
   import { themeMode, applyTheme } from '../lib/theme'
   import type { ThemeMode } from '../lib/theme'
-  import type { Action, WhisperModelStatus, WhisperModelSizeId, BoardColumnConfig } from '../lib/types'
+  import type { Action, WhisperModelStatus, WhisperModelSizeId } from '../lib/types'
   import type { TaskState } from '../lib/taskState'
   import SettingsGeneralCard from './SettingsGeneralCard.svelte'
-  import SettingsBoardCard from './SettingsBoardCard.svelte'
   import SettingsFocusFilterCard from './SettingsFocusFilterCard.svelte'
   import SettingsIntegrationsCard from './SettingsIntegrationsCard.svelte'
   import SettingsPreferencesCard from './SettingsPreferencesCard.svelte'
@@ -48,7 +46,6 @@
   let agentInstructions = $state('')
   let aiProvider = $state('claude-code')
   let useWorktrees = $state(true)
-  let boardLayout = $state<'kanban' | 'focus'>('kanban')
   let projectColor = $state('')
 
   // Global state
@@ -70,8 +67,6 @@
 
   // Actions state
   let actions = $state<Action[]>([])
-  // Board state
-  let boardColumns = $state<BoardColumnConfig[]>([])
   // Focus filter state
   let focusFilterStates = $state<TaskState[]>([...DEFAULT_FOCUS_STATES])
 
@@ -109,7 +104,7 @@
   // Scroll spy
   let scrollContainer = $state<HTMLDivElement | null>(null)
   let isNavigating = false
-  const projectSections = ['general', 'board', 'integrations', 'instructions', 'actions']
+  const projectSections = ['general', 'integrations', 'instructions', 'actions']
   const globalSections = ['preferences', 'ai', 'credentials', 'experimental']
 
   // Derived state
@@ -134,26 +129,19 @@
          getProjectConfig(pid, 'additional_instructions'),
          getProjectConfig(pid, 'ai_provider'),
          getProjectConfig(pid, 'use_worktrees'),
-         getProjectConfig(pid, 'board_layout'),
          getProjectConfig(pid, 'project_color'),
-       ]).then(([boardId, repo, instructions, provider, worktrees, layout, color]) => {
+       ]).then(([boardId, repo, instructions, provider, worktrees, color]) => {
          jiraBoardId = boardId ?? ''
          githubDefaultRepo = repo ?? ''
          agentInstructions = instructions ?? ''
          aiProvider = provider ?? 'claude-code'
          useWorktrees = worktrees !== 'false'
-         boardLayout = (layout === 'focus') ? 'focus' : 'kanban'
          projectColor = color ?? ''
        })
 
       // Load actions
       loadActions(pid).then((loaded) => {
         actions = loaded
-      })
-
-      // Load board columns
-      loadBoardColumns(pid).then((cols) => {
-        boardColumns = cols
       })
 
       // Load focus filter states
@@ -168,10 +156,8 @@
        agentInstructions = ''
        aiProvider = 'claude-code'
        useWorktrees = true
-       boardLayout = 'kanban'
        projectColor = ''
        actions = []
-       boardColumns = []
        focusFilterStates = [...DEFAULT_FOCUS_STATES]
      }
   })
@@ -287,10 +273,8 @@
          await setProjectConfig($activeProjectId, 'additional_instructions', agentInstructions)
          await setProjectConfig($activeProjectId, 'ai_provider', aiProvider)
          await setProjectConfig($activeProjectId, 'use_worktrees', useWorktrees ? 'true' : 'false')
-         await setProjectConfig($activeProjectId, 'board_layout', boardLayout)
          await setProjectConfig($activeProjectId, 'project_color', projectColor)
          await saveActions($activeProjectId, actions)
-         await saveBoardColumns($activeProjectId, boardColumns)
          await saveFocusFilterStates($activeProjectId, focusFilterStates)
        }
        await setConfig('task_id_prefix', taskIdPrefix)
@@ -412,7 +396,6 @@
           {projectPath}
           {aiProvider}
           {useWorktrees}
-          {boardLayout}
           {projectColor}
           disabled={!hasProject}
           {opencodeInstalled}
@@ -424,14 +407,7 @@
           onProjectPathChange={(v) => { projectPath = v; scheduleSave() }}
           onAiProviderChange={(v) => { aiProvider = v; scheduleSave() }}
           onUseWorktreesChange={() => { useWorktrees = !useWorktrees; scheduleSave() }}
-          onBoardLayoutChange={(v) => { boardLayout = v; scheduleSave() }}
           onProjectColorChange={(v) => { projectColor = v; scheduleSave() }}
-        />
-
-        <SettingsBoardCard
-          columns={boardColumns}
-          onColumnsChange={(cols) => { boardColumns = cols; scheduleSave() }}
-          disabled={!hasProject}
         />
 
         <SettingsFocusFilterCard
