@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { ListFilter } from 'lucide-svelte';
-	import type { TaskState } from '../lib/taskState';
-	import { ALL_TASK_STATES, TASK_STATE_LABELS } from '../lib/boardColumns';
+	import { ALL_TASK_STATES, TASK_STATE_LABELS, type TaskState } from '../lib/taskState';
 	import { DEFAULT_FOCUS_STATES } from '../lib/boardFilters';
 
 	interface Props {

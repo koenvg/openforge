@@ -1,7 +1,6 @@
 import type { Task, AgentSession, PullRequestInfo } from './types'
 import type { TaskState } from './taskState'
-import { computeTaskState } from './taskState'
-import { ALL_TASK_STATES } from './boardColumns'
+import { computeTaskState, ALL_TASK_STATES } from './taskState'
 import { getProjectConfig, setProjectConfig } from './ipc'
 
 export type BoardFilter = 'focus' | 'in-progress' | 'backlog'
