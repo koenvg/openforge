@@ -26,6 +26,7 @@
   let opencodePort = $state<number | null>(null)
   let terminalEl: HTMLDivElement
   let poolEntry: PoolEntry | null = null
+  let destroyed = false
 
   const sessionHistory = createSessionHistory({
     taskId: untrack(() => taskId),
@@ -106,13 +107,17 @@
 
   onMount(async () => {
     poolEntry = await acquire(taskId)
-    attach(poolEntry, terminalEl)
+    if (destroyed || !poolEntry) return
+    await attach(poolEntry, terminalEl)
+    if (destroyed) return
 
     await sessionHistory.loadSessionHistory()
+    if (destroyed) return
     await tryAttachPty()
   })
 
   onDestroy(() => {
+    destroyed = true
     if (poolEntry) {
       detach(poolEntry)
     }
