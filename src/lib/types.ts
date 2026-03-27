@@ -458,23 +458,6 @@ export function splitCheckRuns(checks: CheckRunInfo[]): { visible: CheckRunInfo[
 
 export type KanbanColumn = "backlog" | "doing" | "done";
 
-import type { TaskState } from './taskState';
-
-export interface BoardColumnConfig {
-  id: string;
-  name: string;
-  statuses: TaskState[];
-  underlyingStatus: KanbanColumn;
-}
-
-export const COLUMN_LABELS: Record<KanbanColumn, string> = {
-  backlog: "Backlog",
-  doing: "Doing",
-  done: "Done",
-};
-
-export const COLUMNS: KanbanColumn[] = ["backlog", "doing", "done"];
-
 export interface Action {
   id: string;
   name: string;

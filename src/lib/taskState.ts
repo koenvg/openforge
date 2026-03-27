@@ -5,6 +5,48 @@ export type TaskState =
   | 'egg' | 'idle' | 'active' | 'needs-input' | 'paused' | 'agent-done' | 'failed' | 'interrupted' | 'done'
   | 'pr-draft' | 'pr-open' | 'ci-failed' | 'changes-requested' | 'ready-to-merge' | 'pr-queued' | 'pr-merged' | 'ci-running' | 'review-pending' | 'unaddressed-comments'
 
+export const ALL_TASK_STATES: TaskState[] = [
+  'idle',
+  'active',
+  'needs-input',
+  'paused',
+  'agent-done',
+  'failed',
+  'interrupted',
+  'pr-draft',
+  'pr-open',
+  'ci-running',
+  'review-pending',
+  'ci-failed',
+  'changes-requested',
+  'unaddressed-comments',
+  'ready-to-merge',
+  'pr-queued',
+  'pr-merged',
+]
+
+export const TASK_STATE_LABELS: Record<TaskState, string> = {
+  egg: 'New',
+  idle: 'Idle',
+  active: 'Running',
+  'needs-input': 'Needs Input',
+  'paused': 'Paused',
+  'agent-done': 'Agent Done',
+  'failed': 'Failed',
+  'interrupted': 'Interrupted',
+  done: 'Done',
+  'pr-draft': 'PR Draft',
+  'pr-open': 'PR Open',
+  'ci-running': 'CI Running',
+  'review-pending': 'Awaiting Review',
+  'ci-failed': 'CI Failed',
+  'changes-requested': 'Changes Requested',
+  'unaddressed-comments': 'Unaddressed Comments',
+  'ready-to-merge': 'Ready to Merge',
+  'pr-queued': 'In Merge Queue',
+  'pr-merged': 'PR Merged',
+}
+
 function getPrState(prs: PullRequestInfo[]): TaskState | null {
   // Find the most relevant PR: prefer open, then merged, then closed
   const openPr = prs.find(pr => pr.state === 'open')
