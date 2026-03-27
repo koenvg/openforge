@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick, onMount } from 'svelte'
-  import type { Task, KanbanColumn, PermissionMode, AutocompleteAgentInfo } from '../lib/types'
+  import type { Task, BoardStatus, PermissionMode, AutocompleteAgentInfo } from '../lib/types'
   import { createTask, updateTask, getProjectConfig, listOpenCodeAgents } from '../lib/ipc'
   import { activeProjectId } from '../lib/stores'
   import Modal from './Modal.svelte'
@@ -16,7 +16,7 @@
 
   let initialPrompt = $state('')
   let jiraKey = $state('')
-  let status = $state<KanbanColumn>('backlog')
+  let status = $state<BoardStatus>('backlog')
   let isSubmitting = $state(false)
   let inputEl = $state<HTMLInputElement | null>(null)
   let selectedAgent = $state('')
@@ -65,7 +65,7 @@
   $effect(() => {
     initialPrompt = mode === 'edit' && task ? task.initial_prompt : ''
     jiraKey = mode === 'edit' && task ? (task.jira_key || '') : ''
-    status = mode === 'edit' && task ? (task.status as KanbanColumn) : 'backlog'
+    status = mode === 'edit' && task ? (task.status as BoardStatus) : 'backlog'
   })
 
   async function handleSubmit() {

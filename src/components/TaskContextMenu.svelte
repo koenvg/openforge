@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { KanbanColumn, Action } from '../lib/types'
+  import type { BoardStatus, Action } from '../lib/types'
   import { tasks, error } from '../lib/stores'
   import { updateTaskStatus, deleteTask } from '../lib/ipc'
   import ContextMenu from './ContextMenu.svelte'
@@ -19,7 +19,7 @@
 
   let { visible, x, y, taskId, onClose, onStart, onDelete, actions = [], onRunAction }: Props = $props()
 
-  let taskStatus = $derived(($tasks.find(t => t.id === taskId)?.status ?? '') as KanbanColumn | '')
+  let taskStatus = $derived(($tasks.find(t => t.id === taskId)?.status ?? '') as BoardStatus | '')
 
   function handleStart() {
     onClose()
