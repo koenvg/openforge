@@ -22,6 +22,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 
 vi.mock('./lib/stores', () => ({
   tasks: writable<Task[]>([]),
+  pendingTask: writable<Task | null>(null),
   selectedTaskId: writable<string | null>(null),
   activeSessions: writable<Map<string, AgentSession>>(new Map()),
   checkpointNotification: writable<CheckpointNotification | null>(null),
