@@ -29,9 +29,9 @@
 
 use crate::db::{Database, PrRow};
 use crate::github_client::{
-    CheckRunsResponse, CombinedStatusResponse, GitHubClient, PrComment, PrReview,
     aggregate_ci_status, aggregate_review_status, deduplicate_check_runs, filter_to_required,
-    parse_repo_event_changes,
+    parse_repo_event_changes, CheckRunsResponse, CombinedStatusResponse, GitHubClient, PrComment,
+    PrReview,
 };
 use futures::future::join_all;
 use log::{debug, error, info, warn};
@@ -40,7 +40,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tauri::{AppHandle, Emitter, Manager};
-use tokio::time::{Duration, sleep};
+use tokio::time::{sleep, Duration};
 
 // ============================================================================
 // PollResult
@@ -567,12 +567,11 @@ pub fn find_matching_task_ids(pr_title: &str, pr_branch: &str, task_ids: &[Strin
     let mut seen = HashSet::new();
 
     for task_id in task_ids {
-        if contains_task_id(pr_title, task_id.as_str())
-            || contains_task_id(pr_branch, task_id.as_str())
+        if (contains_task_id(pr_title, task_id.as_str())
+            || contains_task_id(pr_branch, task_id.as_str()))
+            && seen.insert(task_id.clone())
         {
-            if seen.insert(task_id.clone()) {
-                matched.push(task_id.clone());
-            }
+            matched.push(task_id.clone());
         }
     }
 
@@ -599,6 +598,7 @@ struct PollSinglePrResult {
     error: Option<String>,
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn poll_single_pr(
     github_client: GitHubClient,
     github_token: String,
@@ -748,11 +748,8 @@ async fn poll_single_pr(
         Err(_) => false,
     };
 
-    let (mergeable, mergeable_state) = mergeability_after_pr_details(
-        &pr_details_result,
-        old_mergeable,
-        old_mergeable_state,
-    );
+    let (mergeable, mergeable_state) =
+        mergeability_after_pr_details(&pr_details_result, old_mergeable, old_mergeable_state);
 
     // Fetch required status check names and required review count from branch protection
     let (required_check_names, required_approving_count) = match &pr_details_result {
@@ -882,8 +879,10 @@ async fn poll_prs_for_project(
             let since = since_map.get(&pr.id).cloned().flatten();
             let old_ci = old_ci_map.get(&pr.id).cloned().flatten();
             let old_review = old_review_map.get(&pr.id).cloned().flatten();
-            let (old_mergeable, old_mergeable_state) =
-                old_mergeability_map.get(&pr.id).cloned().unwrap_or((None, None));
+            let (old_mergeable, old_mergeable_state) = old_mergeability_map
+                .get(&pr.id)
+                .cloned()
+                .unwrap_or((None, None));
             let fetch_comments = should_fetch_comments_for_pr(pr.id, &changed_pr_numbers);
             poll_single_pr(
                 client,
@@ -1317,11 +1316,10 @@ async fn poll_authored_prs(
                 mergeable,
                 mergeable_state,
                 is_queued,
-            ) =
-                match enriched.get(&pr.id) {
-                    Some(data) => data,
-                    None => continue,
-                };
+            ) = match enriched.get(&pr.id) {
+                Some(data) => data,
+                None => continue,
+            };
 
             let updated_at = chrono::DateTime::parse_from_rfc3339(&pr.updated_at)
                 .map(|dt| dt.timestamp())
@@ -1381,7 +1379,10 @@ fn parse_github_timestamp(timestamp: &str) -> Option<i64> {
 }
 
 fn mergeability_after_pr_details(
-    pr_details_result: &Result<crate::github_client::PullRequest, crate::github_client::GitHubError>,
+    pr_details_result: &Result<
+        crate::github_client::PullRequest,
+        crate::github_client::GitHubError,
+    >,
     old_mergeable: Option<bool>,
     old_mergeable_state: Option<String>,
 ) -> (Option<bool>, Option<String>) {
@@ -1412,7 +1413,7 @@ mod tests {
         assert_eq!(result.review_changes, 0);
         assert_eq!(result.pr_changes, 0);
         assert_eq!(result.errors, 1);
-        assert_eq!(result.rate_limited, false);
+        assert!(!result.rate_limited);
         assert_eq!(result.rate_limit_reset_at, None);
     }
 
@@ -1428,7 +1429,7 @@ mod tests {
             rate_limit_reset_at: None,
         };
 
-        assert_eq!(result.rate_limited, false);
+        assert!(!result.rate_limited);
         assert_eq!(result.rate_limit_reset_at, None);
     }
 
@@ -1465,7 +1466,7 @@ mod tests {
         assert_eq!(result.review_changes, 0);
         assert_eq!(result.pr_changes, 0);
         assert_eq!(result.errors, 0);
-        assert_eq!(result.rate_limited, false);
+        assert!(!result.rate_limited);
         assert_eq!(result.rate_limit_reset_at, None);
     }
 
@@ -1487,7 +1488,9 @@ mod tests {
     #[test]
     fn test_mergeability_after_pr_details_preserves_previous_values_on_error() {
         let result = mergeability_after_pr_details(
-            &Err(crate::github_client::GitHubError::NetworkError("boom".to_string())),
+            &Err(crate::github_client::GitHubError::NetworkError(
+                "boom".to_string(),
+            )),
             Some(false),
             Some("dirty".to_string()),
         );
@@ -1517,11 +1520,8 @@ mod tests {
             extra: serde_json::json!({}),
         };
 
-        let result = mergeability_after_pr_details(
-            &Ok(details),
-            Some(false),
-            Some("dirty".to_string()),
-        );
+        let result =
+            mergeability_after_pr_details(&Ok(details), Some(false), Some("dirty".to_string()));
 
         assert_eq!(result, (None, Some("unknown".to_string())));
     }
