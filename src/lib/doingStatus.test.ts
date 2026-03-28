@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { computeDoingStatus } from './doingStatus'
-import type { Task, AgentSession } from './types'
+import type { Task, AgentSession, BoardStatus } from './types'
 
-const makeTask = (id: string, status: string): Task => ({
+const makeTask = (id: string, status: BoardStatus): Task => ({
   id,
   initial_prompt: `Task ${id}`,
   status,

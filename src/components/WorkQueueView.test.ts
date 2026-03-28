@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { writable } from 'svelte/store'
-import type { WorkQueueEntry, AgentSession, PullRequestInfo } from '../lib/types'
+import type { WorkQueueEntry, AgentSession, PullRequestInfo, BoardStatus } from '../lib/types'
 
 vi.mock('../lib/stores', () => ({
   activeProjectId: writable<string | null>(null),
@@ -52,7 +52,7 @@ const now = Math.floor(Date.now() / 1000)
 function makeEntry(overrides: {
   id?: string
   initial_prompt?: string
-  status?: string
+  status?: BoardStatus
   summary?: string | null
   project_id?: string
   project_name?: string
