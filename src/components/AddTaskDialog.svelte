@@ -65,7 +65,7 @@
   $effect(() => {
     initialPrompt = mode === 'edit' && task ? task.initial_prompt : ''
     jiraKey = mode === 'edit' && task ? (task.jira_key || '') : ''
-    status = mode === 'edit' && task ? (task.status as BoardStatus) : 'backlog'
+    status = mode === 'edit' && task ? task.status : 'backlog'
   })
 
   async function handleSubmit() {

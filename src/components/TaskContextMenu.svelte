@@ -20,7 +20,7 @@
 
   let { visible, x, y, taskId, onClose, onStart, onDelete, actions = [], onRunAction }: Props = $props()
 
-  let taskStatus = $derived(($tasks.find(t => t.id === taskId)?.status ?? '') as BoardStatus | '')
+  let taskStatus = $derived<BoardStatus | ''>($tasks.find(t => t.id === taskId)?.status ?? '')
 
   function handleStart() {
     onClose()
