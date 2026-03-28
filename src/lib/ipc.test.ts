@@ -8,7 +8,7 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: invokeMock,
 }))
 
-import { spawnShellPty } from './ipc'
+import { createTask, getAllTasks, getWorkQueueTasks, spawnShellPty } from './ipc'
 
 describe('ipc spawnShellPty', () => {
   beforeEach(() => {
@@ -26,5 +26,113 @@ describe('ipc spawnShellPty', () => {
       rows: 24,
       terminalIndex: 1,
     })
+  })
+
+  it('normalizes legacy board statuses in task responses', async () => {
+    invokeMock.mockResolvedValueOnce([
+      {
+        id: 'T-1',
+        initial_prompt: 'Legacy task',
+        status: 'todo',
+        jira_key: null,
+        jira_title: null,
+        jira_status: null,
+        jira_assignee: null,
+        jira_description: null,
+        prompt: null,
+        summary: null,
+        agent: null,
+        permission_mode: null,
+        project_id: null,
+        created_at: 1000,
+        updated_at: 1000,
+      },
+    ])
+
+    await expect(getAllTasks()).resolves.toEqual([
+      expect.objectContaining({ id: 'T-1', status: 'backlog' }),
+    ])
+  })
+
+  it('rejects unknown task statuses from the backend boundary', async () => {
+    invokeMock.mockResolvedValueOnce([
+      {
+        id: 'T-2',
+        initial_prompt: 'Broken task',
+        status: 'wat',
+        jira_key: null,
+        jira_title: null,
+        jira_status: null,
+        jira_assignee: null,
+        jira_description: null,
+        prompt: null,
+        summary: null,
+        agent: null,
+        permission_mode: null,
+        project_id: null,
+        created_at: 1000,
+        updated_at: 1000,
+      },
+    ])
+
+    await expect(getAllTasks()).rejects.toThrow('Invalid board status: wat')
+  })
+
+  it('normalizes task status inside work queue responses', async () => {
+    invokeMock.mockResolvedValueOnce([
+      {
+        task: {
+          id: 'T-3',
+          initial_prompt: 'Queue task',
+          status: 'in_progress',
+          jira_key: null,
+          jira_title: null,
+          jira_status: null,
+          jira_assignee: null,
+          jira_description: null,
+          prompt: null,
+          summary: null,
+          agent: null,
+          permission_mode: null,
+          project_id: null,
+          created_at: 1000,
+          updated_at: 1000,
+        },
+        project_name: 'Test Project',
+        session_status: null,
+        session_checkpoint_data: null,
+        pull_requests: [],
+      },
+    ])
+
+    await expect(getWorkQueueTasks()).resolves.toEqual([
+      expect.objectContaining({
+        task: expect.objectContaining({ id: 'T-3', status: 'doing' }),
+      }),
+    ])
+  })
+
+  it('normalizes createTask responses before returning to the UI', async () => {
+    invokeMock.mockResolvedValueOnce({
+      id: 'T-4',
+      initial_prompt: 'Created task',
+      status: 'testing',
+      jira_key: null,
+      jira_title: null,
+      jira_status: null,
+      jira_assignee: null,
+      jira_description: null,
+      prompt: null,
+      summary: null,
+      agent: null,
+      permission_mode: null,
+      project_id: null,
+      created_at: 1000,
+      updated_at: 1000,
+    })
+
+    await expect(
+      createTask('Created task', 'doing', null, null, null, null),
+    ).resolves.toEqual(expect.objectContaining({ id: 'T-4', status: 'doing' }))
   })
 })

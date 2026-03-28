@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import { get } from 'svelte/store'
-  import type { Task, Action } from '../lib/types'
+  import type { Task, Action, BoardStatus } from '../lib/types'
   import { activeSessions, activeProjectId, startingTasks, taskReviewModes, taskTerminalOpen, error } from '../lib/stores'
   import { getWorktreeForTask, updateTaskStatus, getConfig } from '../lib/ipc'
   import { useAppRouter } from '../lib/router.svelte'
@@ -106,7 +106,7 @@
     router.resetToBoard()
   }
 
-  async function handleStatusChange(newStatus: string) {
+  async function handleStatusChange(newStatus: BoardStatus) {
     if (newStatus === task.status) return
     if (newStatus === 'done') {
       await moveTaskToComplete(task.id)

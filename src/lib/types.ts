@@ -1,7 +1,9 @@
+export type BoardStatus = 'backlog' | 'doing' | 'done'
+
 export interface Task {
   id: string;
   initial_prompt: string;
-  status: string;
+  status: BoardStatus;
   jira_key: string | null;
   jira_title: string | null;
   jira_status: string | null;
@@ -455,8 +457,6 @@ export function splitCheckRuns(checks: CheckRunInfo[]): { visible: CheckRunInfo[
   }
   return { visible, passingCount };
 }
-
-export type BoardStatus = "backlog" | "doing" | "done";
 
 export interface Action {
   id: string;

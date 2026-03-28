@@ -1,8 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Task, AgentSession, PrComment, PollResult, PullRequestInfo, AgentInfo, Project, ProjectAttention, WorktreeInfo, TaskWorkspaceInfo, ImplementationStatus, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus, WhisperModelSizeId, SkillInfo, WorkQueueEntry, ProviderModelInfo, CommitInfo } from "./types";
+import type { Task, AgentSession, PrComment, PollResult, PullRequestInfo, AgentInfo, Project, ProjectAttention, WorktreeInfo, TaskWorkspaceInfo, ImplementationStatus, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus, WhisperModelSizeId, SkillInfo, WorkQueueEntry, ProviderModelInfo, CommitInfo, BoardStatus } from "./types";
+import { normalizeTask, normalizeWorkQueueEntry } from './boardStatus'
 
-export async function createTask(initialPrompt: string, status: string, jiraKey: string | null, projectId: string | null, agent: string | null, permissionMode: string | null): Promise<Task> {
-  return invoke<Task>("create_task", { initialPrompt, status, jiraKey, projectId, agent, permissionMode });
+type RawTask = Omit<Task, 'status'> & { status: string }
+type RawWorkQueueEntry = Omit<WorkQueueEntry, 'task'> & { task: RawTask }
+
+export async function createTask(initialPrompt: string, status: BoardStatus, jiraKey: string | null, projectId: string | null, agent: string | null, permissionMode: string | null): Promise<Task> {
+  const task = await invoke<RawTask>("create_task", { initialPrompt, status, jiraKey, projectId, agent, permissionMode });
+  return normalizeTask(task)
 }
 
 export async function updateTask(id: string, initialPrompt: string, jiraKey: string | null): Promise<void> {
@@ -13,7 +18,7 @@ export async function updateTaskInitialPromptAndSummary(id: string, initialPromp
   return invoke("update_task_initial_prompt_and_summary", { id, initialPrompt, summary });
 }
 
-export async function updateTaskStatus(id: string, status: string): Promise<void> {
+export async function updateTaskStatus(id: string, status: BoardStatus): Promise<void> {
   return invoke("update_task_status", { id, status });
 }
 
@@ -26,7 +31,8 @@ export async function clearDoneTasks(projectId: string): Promise<number> {
 }
 
 export async function getWorkQueueTasks(): Promise<WorkQueueEntry[]> {
-  return invoke<WorkQueueEntry[]>("get_work_queue_tasks");
+  const entries = await invoke<RawWorkQueueEntry[]>("get_work_queue_tasks");
+  return entries.map(normalizeWorkQueueEntry)
 }
 
 export async function refreshJiraInfo(): Promise<number> {
@@ -75,11 +81,13 @@ export async function setProjectConfig(projectId: string, key: string, value: st
 }
 
 export async function getAllTasks(): Promise<Task[]> {
-  return invoke<Task[]>("get_tasks");
+  const tasks = await invoke<RawTask[]>("get_tasks");
+  return tasks.map(normalizeTask)
 }
 
 export async function getTasksForProject(projectId: string): Promise<Task[]> {
-  return invoke<Task[]>("get_tasks_for_project", { projectId });
+  const tasks = await invoke<RawTask[]>("get_tasks_for_project", { projectId });
+  return tasks.map(normalizeTask)
 }
 
 export async function startImplementation(taskId: string, repoPath: string): Promise<ImplementationStatus> {
@@ -147,7 +155,8 @@ export async function setConfig(key: string, value: string): Promise<void> {
 }
 
 export async function getTaskDetail(taskId: string): Promise<Task> {
-  return invoke<Task>("get_task_detail", { taskId });
+  const task = await invoke<RawTask>("get_task_detail", { taskId });
+  return normalizeTask(task)
 }
 
 export async function getLatestSession(taskId: string): Promise<AgentSession | null> {

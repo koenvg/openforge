@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import TaskContextMenu from './TaskContextMenu.svelte'
-import type { Task } from '../lib/types'
+import type { Task, BoardStatus } from '../lib/types'
 import { tasks, error } from '../lib/stores'
 
 vi.mock('../lib/ipc', () => ({
@@ -13,7 +13,7 @@ vi.mock('../lib/moveToComplete', () => ({
   moveTaskToComplete: vi.fn().mockResolvedValue(undefined),
 }))
 
-const makeTask = (id: string, status: string): Task => ({
+const makeTask = (id: string, status: BoardStatus): Task => ({
   id,
   initial_prompt: 'Test task',
   status,

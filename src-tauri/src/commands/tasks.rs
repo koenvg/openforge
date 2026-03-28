@@ -1,5 +1,8 @@
 use crate::{
-    db, git_worktree, pty_manager::PtyManager, server_manager::ServerManager,
+    db::{self, BoardStatus},
+    git_worktree,
+    pty_manager::PtyManager,
+    server_manager::ServerManager,
     sse_bridge::SseBridgeManager,
 };
 use log::error;
@@ -40,7 +43,7 @@ pub async fn create_task(
     db: State<'_, Arc<Mutex<db::Database>>>,
     app: tauri::AppHandle,
     initial_prompt: String,
-    status: String,
+    status: BoardStatus,
     jira_key: Option<String>,
     project_id: Option<String>,
     prompt: Option<String>,
@@ -51,7 +54,7 @@ pub async fn create_task(
     let task = db
         .create_task(
             &initial_prompt,
-            &status,
+            status.as_str(),
             jira_key.as_deref(),
             project_id.as_deref(),
             prompt.as_deref(),
@@ -110,13 +113,13 @@ pub async fn update_task_status(
     pty_mgr: State<'_, PtyManager>,
     app: tauri::AppHandle,
     id: String,
-    status: String,
+    status: BoardStatus,
 ) -> Result<(), String> {
     {
         let db = crate::db::acquire_db(&db);
-        db.update_task_status(&id, &status)
+        db.update_task_status(&id, status.as_str())
             .map_err(|e| format!("Failed to update task status: {}", e))?;
-        if status == "done" {
+        if status == BoardStatus::Done {
             let _ = db.update_task_workspace_status(&id, "completed");
         }
     }
@@ -125,7 +128,7 @@ pub async fn update_task_status(
         serde_json::json!({ "action": "updated", "task_id": id }),
     );
 
-    if status == "done" {
+    if status == BoardStatus::Done {
         let _ = pty_mgr.kill_pty(&id).await;
         pty_mgr.kill_shells_for_task(&id).await;
         sse_mgr.stop_bridge(&id).await;
@@ -222,7 +225,7 @@ pub async fn clear_done_tasks(
     let task_ids = {
         let db_lock = crate::db::acquire_db(&db);
         db_lock
-            .get_task_ids_by_status(&project_id, "done")
+            .get_task_ids_by_status(&project_id, BoardStatus::Done.as_str())
             .map_err(|e| format!("Failed to get done tasks: {}", e))?
     };
 

@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import FocusBoard from './FocusBoard.svelte'
-import type { Task, AgentSession, PullRequestInfo } from '../lib/types'
+import type { Task, AgentSession, PullRequestInfo, BoardStatus } from '../lib/types'
 import { focusBoardFilters } from '../lib/stores'
 
 vi.mock('../lib/ipc', () => ({
@@ -22,7 +22,7 @@ vi.mock('../lib/boardFilters', async (importOriginal) => {
   }
 })
 
-const makeTask = (id: string, status: string, prompt: string): Task => ({
+const makeTask = (id: string, status: BoardStatus, prompt: string): Task => ({
   id,
   initial_prompt: prompt,
   status,
