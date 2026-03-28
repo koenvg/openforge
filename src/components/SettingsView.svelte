@@ -2,20 +2,20 @@
   import { onMount, onDestroy, tick } from 'svelte'
   import { activeProjectId, projects, codeCleanupTasksEnabled, error } from '../lib/stores'
   import {
-    getProjectConfig,
-    setProjectConfig,
-    updateProject,
     deleteProject,
-    getConfig,
-    setConfig,
-    checkOpenCodeInstalled,
-    checkClaudeInstalled,
-    getAllWhisperModelStatuses,
     setWhisperModel,
   } from '../lib/ipc'
-  import { loadActions, saveActions, createAction, DEFAULT_ACTIONS } from '../lib/actions'
-  import { loadFocusFilterStates, saveFocusFilterStates, DEFAULT_FOCUS_STATES } from '../lib/boardFilters'
+  import { createAction, DEFAULT_ACTIONS } from '../lib/actions'
+  import { DEFAULT_FOCUS_STATES } from '../lib/boardFilters'
   import { createTrackedDebouncedSave } from '../lib/createTrackedDebouncedSave'
+  import {
+    loadGlobalSettings,
+    loadInstallationStatus,
+    loadProjectSettings,
+    loadWhisperModelStatuses,
+  } from '../lib/settingsConfig'
+  import { mergeUpdatedProject, getProjectIdentity } from '../lib/settingsProjectSync'
+  import { saveGlobalSettings, saveProjectSettings } from '../lib/settingsSaver'
   import { themeMode, applyTheme } from '../lib/theme'
   import type { ThemeMode } from '../lib/theme'
   import type { Action, WhisperModelStatus, WhisperModelSizeId } from '../lib/types'
@@ -117,49 +117,24 @@
 
   // Sync project name/path from project list
   $effect(() => {
-    const pid = $activeProjectId
-    if (pid) {
-      const proj = $projects.find((p) => p.id === pid)
-      if (proj) {
-        projectName = proj.name
-        projectPath = proj.path
-      }
-    } else {
-      projectName = ''
-      projectPath = ''
-    }
+    const { projectName: nextProjectName, projectPath: nextProjectPath } = getProjectIdentity($activeProjectId, $projects)
+    projectName = nextProjectName
+    projectPath = nextProjectPath
   })
 
   // Load project config on activeProjectId change
   $effect(() => {
     const pid = $activeProjectId
     if (pid) {
-
-      // Load project-level config keys
-      Promise.all([
-        getProjectConfig(pid, 'jira_board_id'),
-        getProjectConfig(pid, 'github_default_repo'),
-        getProjectConfig(pid, 'additional_instructions'),
-        getProjectConfig(pid, 'ai_provider'),
-        getProjectConfig(pid, 'use_worktrees'),
-        getProjectConfig(pid, 'project_color'),
-      ]).then(([boardId, repo, instructions, provider, worktrees, color]) => {
-        jiraBoardId = boardId ?? ''
-        githubDefaultRepo = repo ?? ''
-        agentInstructions = instructions ?? ''
-        aiProvider = provider ?? 'claude-code'
-        useWorktrees = worktrees !== 'false'
-        projectColor = color ?? ''
-      })
-
-      // Load actions
-      loadActions(pid).then((loaded) => {
-        actions = loaded
-      })
-
-      // Load focus filter states
-      loadFocusFilterStates(pid).then((states) => {
-        focusFilterStates = states
+      loadProjectSettings(pid).then((settings) => {
+        jiraBoardId = settings.jiraBoardId
+        githubDefaultRepo = settings.githubDefaultRepo
+        agentInstructions = settings.agentInstructions
+        aiProvider = settings.aiProvider
+        useWorktrees = settings.useWorktrees
+        projectColor = settings.projectColor
+        actions = settings.actions
+        focusFilterStates = settings.focusFilterStates
       })
     } else {
       jiraBoardId = ''
@@ -186,46 +161,28 @@
 
   // Load global config once on mount
   onMount(async () => {
-    // Global config
-    const [taskIdPrefixVal, jiraBaseUrlVal, jiraUsernameVal, jiraApiTokenVal, githubTokenVal, codeCleanupTasksEnabledVal, githubPollIntervalVal] =
-      await Promise.all([
-        getConfig('task_id_prefix'),
-        getConfig('jira_base_url'),
-        getConfig('jira_username'),
-        getConfig('jira_api_token'),
-        getConfig('github_token'),
-        getConfig('code_cleanup_tasks_enabled'),
-        getConfig('github_poll_interval'),
-      ])
-
-    if (taskIdPrefixVal) taskIdPrefix = taskIdPrefixVal
-    if (jiraBaseUrlVal) jiraBaseUrl = jiraBaseUrlVal
-    if (jiraUsernameVal) jiraUsername = jiraUsernameVal
-    if (jiraApiTokenVal) jiraApiToken = jiraApiTokenVal
-    if (githubTokenVal) githubToken = githubTokenVal
-    isCodeCleanupTasksEnabled = codeCleanupTasksEnabledVal === 'true'
-    $codeCleanupTasksEnabled = isCodeCleanupTasksEnabled
-    githubPollInterval = parseInt(githubPollIntervalVal ?? '30', 10) || 30
-
-    // Check installations
-    const [opencodeResult, claudeResult] = await Promise.all([
-      checkOpenCodeInstalled().catch(() => ({ installed: false, path: null, version: null })),
-      checkClaudeInstalled().catch(() => ({
-        installed: false,
-        path: null,
-        version: null,
-        authenticated: false,
-      })),
+    const [globalSettings, installationStatus, whisperStatuses] = await Promise.all([
+      loadGlobalSettings(),
+      loadInstallationStatus(),
+      loadWhisperModelStatuses(),
     ])
 
-    opencodeInstalled = opencodeResult.installed
-    opencodeVersion = opencodeResult.version
-    claudeInstalled = claudeResult.installed
-    claudeVersion = claudeResult.version
-    claudeAuthenticated = (claudeResult as { authenticated: boolean }).authenticated ?? false
+    taskIdPrefix = globalSettings.taskIdPrefix
+    jiraBaseUrl = globalSettings.jiraBaseUrl
+    jiraUsername = globalSettings.jiraUsername
+    jiraApiToken = globalSettings.jiraApiToken
+    githubToken = globalSettings.githubToken
+    isCodeCleanupTasksEnabled = globalSettings.codeCleanupTasksEnabled
+    $codeCleanupTasksEnabled = isCodeCleanupTasksEnabled
+    githubPollInterval = globalSettings.githubPollInterval
 
-    // Load model statuses
-    modelStatuses = await getAllWhisperModelStatuses().catch(() => [])
+    opencodeInstalled = installationStatus.opencodeInstalled
+    opencodeVersion = installationStatus.opencodeVersion
+    claudeInstalled = installationStatus.claudeInstalled
+    claudeVersion = installationStatus.claudeVersion
+    claudeAuthenticated = installationStatus.claudeAuthenticated
+
+    modelStatuses = whisperStatuses
 
   })
 
@@ -274,38 +231,46 @@
   async function save() {
     isSaving = true
     try {
-       if (hasProject && $activeProjectId) {
-          await updateProject($activeProjectId, projectName, projectPath)
-          $projects = $projects.map(p =>
-            p.id === $activeProjectId ? { ...p, name: projectName, path: projectPath } : p
-          )
-          await setProjectConfig($activeProjectId, 'jira_board_id', jiraBoardId)
-         await setProjectConfig($activeProjectId, 'github_default_repo', githubDefaultRepo)
-         await setProjectConfig($activeProjectId, 'additional_instructions', agentInstructions)
-         await setProjectConfig($activeProjectId, 'ai_provider', aiProvider)
-         await setProjectConfig($activeProjectId, 'use_worktrees', useWorktrees ? 'true' : 'false')
-         await setProjectConfig($activeProjectId, 'project_color', projectColor)
-         await saveActions($activeProjectId, actions)
-         await saveFocusFilterStates($activeProjectId, focusFilterStates)
-       }
-       await setConfig('task_id_prefix', taskIdPrefix)
-       await setConfig('jira_base_url', jiraBaseUrl)
-       await setConfig('jira_username', jiraUsername)
-       await setConfig('jira_api_token', jiraApiToken)
-       await setConfig('github_token', githubToken)
-       await setConfig('code_cleanup_tasks_enabled', isCodeCleanupTasksEnabled ? 'true' : 'false')
-       await setConfig('github_poll_interval', String(githubPollInterval))
+      if (hasProject && $activeProjectId) {
+        await saveProjectSettings({
+          projectId: $activeProjectId,
+          projectName,
+          projectPath,
+          jiraBoardId,
+          githubDefaultRepo,
+          agentInstructions,
+          aiProvider,
+          useWorktrees,
+          projectColor,
+          actions,
+          focusFilterStates,
+        })
+        $projects = mergeUpdatedProject($projects, {
+          id: $activeProjectId,
+          name: projectName,
+          path: projectPath,
+        })
+      }
+      await saveGlobalSettings({
+        taskIdPrefix,
+        jiraBaseUrl,
+        jiraUsername,
+        jiraApiToken,
+        githubToken,
+        codeCleanupTasksEnabled: isCodeCleanupTasksEnabled,
+        githubPollInterval,
+      })
       saved = true
       setTimeout(() => {
         saved = false
-       }, 2000)
-     } catch (e) {
-       console.error('Failed to save settings:', e)
-       $error = e instanceof Error ? e.message : String(e)
-       throw e
-     } finally {
-       isSaving = false
-     }
+      }, 2000)
+    } catch (e) {
+      console.error('Failed to save settings:', e)
+      $error = e instanceof Error ? e.message : String(e)
+      throw e
+    } finally {
+      isSaving = false
+    }
   }
 
   function scheduleSave() {
@@ -373,7 +338,7 @@
 
   async function handleModelChange(newSize: string) {
     await setWhisperModel(newSize as WhisperModelSizeId)
-    modelStatuses = await getAllWhisperModelStatuses().catch(() => [])
+    modelStatuses = await loadWhisperModelStatuses()
   }
 
   function handleDownloadModel(modelSize: string) {
@@ -382,7 +347,7 @@
 
   async function refreshModelStatuses() {
     downloadingModel = null
-    modelStatuses = await getAllWhisperModelStatuses().catch(() => [])
+    modelStatuses = await loadWhisperModelStatuses()
   }
 </script>
 
