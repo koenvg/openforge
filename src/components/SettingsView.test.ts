@@ -298,6 +298,45 @@ describe('SettingsView', () => {
       expect(get(projects).length).toBe(1)
     })
 
+    it('keeps newer input while a previous save is still in flight and reruns with the latest value', async () => {
+      let resolveFirstSave: (() => void) | null = null
+      vi.mocked(updateProject)
+        .mockImplementationOnce(() => new Promise<void>((resolve) => {
+          resolveFirstSave = resolve
+        }))
+        .mockResolvedValueOnce(undefined)
+
+      render(SettingsView, { props: defaultProps })
+
+      await vi.advanceTimersByTimeAsync(50)
+
+      const nameInput = screen.getByPlaceholderText('My Project') as HTMLInputElement
+      await fireEvent.input(nameInput, { target: { value: 'First Name' } })
+
+      await vi.advanceTimersByTimeAsync(600)
+      await vi.waitFor(() => {
+        expect(updateProject).toHaveBeenCalledTimes(1)
+        expect(screen.getByText('Saving…')).toBeTruthy()
+      })
+
+      await fireEvent.input(nameInput, { target: { value: 'Second Name' } })
+
+      expect(nameInput.value).toBe('Second Name')
+
+      if (resolveFirstSave) {
+        resolveFirstSave()
+      }
+      await vi.advanceTimersByTimeAsync(0)
+      await vi.waitFor(() => {
+        expect(updateProject).toHaveBeenCalledTimes(2)
+      })
+
+      expect(nameInput.value).toBe('Second Name')
+
+      const updatedProject = get(projects).find(p => p.id === 'test-project-id')
+      expect(updatedProject?.name).toBe('Second Name')
+    })
+
     it('saves global settings after debounce when a field changes', async () => {
       activeProjectId.set(null)
       projects.set([])
@@ -372,7 +411,9 @@ describe('SettingsView', () => {
 
       expect(saveActions).toHaveBeenCalledTimes(1)
 
-      resolveSaveActions?.()
+      if (resolveSaveActions) {
+        resolveSaveActions()
+      }
 
       await vi.advanceTimersByTimeAsync(0)
       await vi.waitFor(() => {
@@ -415,7 +456,9 @@ describe('SettingsView', () => {
 
       expect(saveActions).toHaveBeenCalledTimes(1)
 
-      resolveSaveActions?.()
+      if (resolveSaveActions) {
+        resolveSaveActions()
+      }
 
       await vi.advanceTimersByTimeAsync(0)
       await vi.waitFor(() => {
