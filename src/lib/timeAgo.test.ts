@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { timeAgo, timeAgoFromSeconds } from './timeAgo'
+import { timeAgo, timeAgoFromSeconds, relativeTimeWithFallback } from './timeAgo'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -84,5 +84,51 @@ describe('timeAgoFromSeconds', () => {
     if (match) {
       expect(Number(match[1])).toBeLessThan(365)
     }
+  })
+})
+
+describe('relativeTimeWithFallback', () => {
+  it('returns "just now" for timestamps within 60 seconds', () => {
+    const thirtySecondsAgoSeconds = Math.floor(Date.now() / 1000) - 30
+    expect(relativeTimeWithFallback(thirtySecondsAgoSeconds)).toBe('just now')
+  })
+
+  it('returns "5m ago" for 5 minutes ago', () => {
+    const fiveMinutesAgoSeconds = Math.floor(Date.now() / 1000) - 300
+    expect(relativeTimeWithFallback(fiveMinutesAgoSeconds)).toBe('5m ago')
+  })
+
+  it('returns "2h ago" for 2 hours ago', () => {
+    const twoHoursAgoSeconds = Math.floor(Date.now() / 1000) - 7200
+    expect(relativeTimeWithFallback(twoHoursAgoSeconds)).toBe('2h ago')
+  })
+
+  it('returns "6d ago" for 6 days ago', () => {
+    const sixDaysAgoSeconds = Math.floor(Date.now() / 1000) - 518400
+    expect(relativeTimeWithFallback(sixDaysAgoSeconds)).toBe('6d ago')
+  })
+
+  it('returns "Mar 21" (date format) for exactly 7 days ago', () => {
+    const sevenDaysAgoSeconds = Math.floor(Date.now() / 1000) - 604800
+    const result = relativeTimeWithFallback(sevenDaysAgoSeconds)
+    expect(result).toMatch(/^[A-Z][a-z]{2} \d{1,2}$/)
+    expect(result).toBe('Mar 21')
+  })
+
+  it('returns "Mar 14" (date format) for 14 days ago', () => {
+    const fourteenDaysAgoSeconds = Math.floor(Date.now() / 1000) - 1209600
+    const result = relativeTimeWithFallback(fourteenDaysAgoSeconds)
+    expect(result).toMatch(/^[A-Z][a-z]{2} \d{1,2}$/)
+    expect(result).toBe('Mar 14')
+  })
+
+  it('switches to date format (no year) at exactly 7-day boundary', () => {
+    const almostSevenDaysSeconds = Math.floor(Date.now() / 1000) - 604799
+    const almostSevenResult = relativeTimeWithFallback(almostSevenDaysSeconds)
+    expect(almostSevenResult).toBe('6d ago')
+
+    const sevenDaysSeconds = Math.floor(Date.now() / 1000) - 604800
+    const sevenDaysResult = relativeTimeWithFallback(sevenDaysSeconds)
+    expect(sevenDaysResult).toMatch(/^[A-Z][a-z]{2} \d{1,2}$/)
   })
 })

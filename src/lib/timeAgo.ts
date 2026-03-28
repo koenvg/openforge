@@ -23,3 +23,14 @@ export function timeAgo(timestampMs: number): string {
 export function timeAgoFromSeconds(timestampSeconds: number): string {
   return timeAgo(timestampSeconds * 1000)
 }
+
+const RELATIVE_TIME_DATE_FALLBACK_MS = 7 * 86_400_000
+
+export function relativeTimeWithFallback(timestampSeconds: number): string {
+  const timestampMs = timestampSeconds * 1000
+  if (Date.now() - timestampMs < RELATIVE_TIME_DATE_FALLBACK_MS) {
+    return timeAgo(timestampMs)
+  }
+
+  return new Date(timestampMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}

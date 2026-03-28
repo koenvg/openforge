@@ -8,6 +8,7 @@
     getActiveSelfReviewComments,
     getArchivedSelfReviewComments
   } from '../lib/ipc'
+  import { relativeTimeWithFallback } from '../lib/timeAgo'
   import type { SelfReviewComment } from '../lib/types'
 
   import VoiceInput from './VoiceInput.svelte'
@@ -39,21 +40,6 @@
       updated.delete(id)
     }
     taskDraftNotes.set(updated)
-  }
-
-  function formatTimestamp(ts: number): string {
-    const date = new Date(ts * 1000)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
-    const diffHours = Math.floor(diffMins / 60)
-    const diffDays = Math.floor(diffHours / 24)
-
-    if (diffMins < 1) return 'just now'
-    if (diffMins < 60) return `${diffMins}m ago`
-    if (diffHours < 24) return `${diffHours}h ago`
-    if (diffDays < 7) return `${diffDays}d ago`
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
   }
 
   async function loadComments(force = false) {
@@ -175,7 +161,7 @@
             <div class="flex flex-col gap-1.5 px-1 py-2 border-b border-base-300 opacity-50 last:border-b-0">
               <div class="flex items-center gap-2">
                 <span class="text-[0.7rem] font-semibold text-primary/70 tabular-nums">#{comment.id}</span>
-                <span class="text-[0.7rem] text-base-content/50 ml-auto">{formatTimestamp(comment.created_at)}</span>
+                <span class="text-[0.7rem] text-base-content/50 ml-auto">{relativeTimeWithFallback(comment.created_at)}</span>
               </div>
               <div class="text-xs text-base-content/50 leading-relaxed [&_.markdown-body]:text-xs [&_.markdown-body_pre]:text-[10px] [&_.markdown-body_code]:text-[10px] [&_.markdown-body_p]:m-0">
                 <MarkdownContent content={comment.body} />
@@ -203,7 +189,7 @@
         <div class="flex flex-col gap-1.5 px-3 py-2.5 bg-base-100 border border-base-300 rounded-lg mb-2 last:mb-0">
           <div class="flex items-center gap-2">
             <span class="text-[0.7rem] font-semibold text-primary/70 tabular-nums">#{i + 1}</span>
-            <span class="flex-1 text-right text-[0.7rem] text-base-content/50">{formatTimestamp(comment.created_at)}</span>
+            <span class="flex-1 text-right text-[0.7rem] text-base-content/50">{relativeTimeWithFallback(comment.created_at)}</span>
             <button
               class="btn btn-ghost btn-xs shrink-0 text-base-content/50 hover:text-error hover:bg-error/10"
               onclick={() => handleDelete(comment.id)}
