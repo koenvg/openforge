@@ -1,5 +1,14 @@
-import { describe, it, expect } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { timeAgo, timeAgoFromSeconds } from './timeAgo'
+
+beforeEach(() => {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date('2026-03-28T09:30:00.000Z'))
+})
+
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 describe('timeAgo', () => {
   it('returns "just now" for timestamps within 60 seconds', () => {
