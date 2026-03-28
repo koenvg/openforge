@@ -1,7 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const listenCallbacks = new Map<string, (event: { payload?: { instance_id?: number } }) => void>()
 
 vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn().mockResolvedValue(() => {}),
+  listen: vi.fn(async (eventName: string, callback: (event: { payload?: { instance_id?: number } }) => void) => {
+    listenCallbacks.set(eventName, callback)
+    return () => {
+      listenCallbacks.delete(eventName)
+    }
+  }),
 }))
 
 vi.mock('./ipc', () => ({
@@ -22,6 +29,7 @@ describe('createPtyBridge', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    listenCallbacks.clear()
     getTerminal = vi.fn<() => { cols: number; rows: number; write: (data: string) => void; focus: () => void } | null>().mockReturnValue({ cols: 80, rows: 24, write: vi.fn(), focus: vi.fn() })
     setOpencodePort = vi.fn<(port: number) => void>()
     onAttached = vi.fn<(sessionStatus?: string) => void>()
@@ -75,6 +83,90 @@ describe('createPtyBridge', () => {
     await bridge.killPty()
     expect(killPty).toHaveBeenCalledWith(taskId)
     expect(bridge.ptySpawned).toBe(false)
+  })
+
+  it('accepts a legitimate early pty-exit before spawnPty resolves', async () => {
+    vi.mocked(getTaskWorkspace).mockResolvedValue({ opencode_port: 9000 } as never)
+
+    let resolveSpawn: ((instanceId: number) => void) | null = null
+    vi.mocked(spawnPty).mockImplementation(() => new Promise<number>((resolve) => {
+      resolveSpawn = resolve
+    }))
+
+    const bridge = createPtyBridge({ taskId, getTerminal, setOpencodePort, onAttached })
+    const attachPromise = bridge.attachPty({ opencodeSessionId: 'ses-1' })
+
+    await vi.waitFor(() => {
+      expect(listenCallbacks.has(`pty-exit-${taskId}`)).toBe(true)
+    })
+
+    const exitCb = listenCallbacks.get(`pty-exit-${taskId}`)
+    expect(exitCb).toBeDefined()
+
+    exitCb?.({ payload: { instance_id: 7 } })
+    resolveSpawn?.(7)
+    await attachPromise
+
+    expect(bridge.ptySpawned).toBe(false)
+    expect(onAttached).not.toHaveBeenCalled()
+  })
+
+  it('keeps the PTY spawned when an early pty-exit is for a different instance', async () => {
+    vi.mocked(getTaskWorkspace).mockResolvedValue({ opencode_port: 9000 } as never)
+
+    let resolveSpawn: ((instanceId: number) => void) | null = null
+    vi.mocked(spawnPty).mockImplementation(() => new Promise<number>((resolve) => {
+      resolveSpawn = resolve
+    }))
+
+    const bridge = createPtyBridge({ taskId, getTerminal, setOpencodePort, onAttached })
+    const attachPromise = bridge.attachPty({ opencodeSessionId: 'ses-1' })
+
+    await vi.waitFor(() => {
+      expect(listenCallbacks.has(`pty-exit-${taskId}`)).toBe(true)
+    })
+
+    const exitCb = listenCallbacks.get(`pty-exit-${taskId}`)
+    expect(exitCb).toBeDefined()
+
+    exitCb?.({ payload: { instance_id: 6 } })
+    resolveSpawn?.(7)
+    await attachPromise
+
+    expect(bridge.ptySpawned).toBe(true)
+    expect(onAttached).toHaveBeenCalled()
+  })
+
+  it('ignores late pty-exit events once the active attach cycle has ended', async () => {
+    vi.mocked(getTaskWorkspace).mockResolvedValue({ opencode_port: 9000 } as never)
+    vi.mocked(spawnPty).mockResolvedValue(7)
+
+    const bridge = createPtyBridge({ taskId, getTerminal, setOpencodePort, onAttached })
+    await bridge.attachPty({ opencodeSessionId: 'ses-1' })
+
+    const exitCb = listenCallbacks.get(`pty-exit-${taskId}`)
+    expect(exitCb).toBeDefined()
+
+    await bridge.killPty()
+    exitCb?.({ payload: { instance_id: 7 } })
+    await bridge.attachPty({ opencodeSessionId: 'ses-2' })
+
+    expect(bridge.ptySpawned).toBe(true)
+    expect(onAttached).toHaveBeenCalledTimes(2)
+  })
+
+  it('ignores pty-exit events without an instance_id', async () => {
+    vi.mocked(getTaskWorkspace).mockResolvedValue({ opencode_port: 9000 } as never)
+
+    const bridge = createPtyBridge({ taskId, getTerminal, setOpencodePort, onAttached })
+    await bridge.attachPty({ opencodeSessionId: 'ses-1' })
+
+    const exitCb = listenCallbacks.get(`pty-exit-${taskId}`)
+    expect(exitCb).toBeDefined()
+
+    exitCb?.({ payload: {} })
+
+    expect(bridge.ptySpawned).toBe(true)
   })
 
   it('writeToPty does not throw', () => {
