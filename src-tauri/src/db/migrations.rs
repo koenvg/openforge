@@ -1,17 +1,34 @@
 use rusqlite::{Connection, Result};
 use rusqlite_migration::{Migrations, M};
 
-#[allow(dead_code)]
-/// The user_version that a fully-migrated fresh database will have.
-/// Equals the number of migrations returned by [`get_migrations`].
-pub const LATEST_USER_VERSION: i32 = 18;
+macro_rules! define_migrations {
+    ($($migration:expr),+ $(,)?) => {
+        const MIGRATION_COUNT: usize = [$(define_migrations!(@count $migration)),+].len();
 
-/// Returns the complete migration set for this application.
-/// This is the single source of truth for schema version management.
-pub fn get_migrations() -> Migrations<'static> {
-    Migrations::new(vec![
-        M::up_with_hook(
-            r#"
+        #[allow(dead_code)]
+        /// The user_version that a fully-migrated fresh database will have.
+        /// Equals the number of migrations returned by [`get_migrations`].
+        pub const LATEST_USER_VERSION: i32 = MIGRATION_COUNT as i32;
+
+        #[cfg(test)]
+        fn migration_count() -> i32 {
+            MIGRATION_COUNT as i32
+        }
+
+        /// Returns the complete migration set for this application.
+        /// This is the single source of truth for schema version management.
+        pub fn get_migrations() -> Migrations<'static> {
+            Migrations::new(vec![$($migration),+])
+        }
+    };
+    (@count $_migration:expr) => {
+        ()
+    };
+}
+
+define_migrations!(
+    M::up_with_hook(
+        r#"
 DROP TABLE IF EXISTS agent_logs;
 DROP TABLE IF EXISTS pr_comments;
 DROP TABLE IF EXISTS agent_sessions;
@@ -182,107 +199,91 @@ INSERT OR IGNORE INTO config (key, value) VALUES ('github_poll_interval', '15');
 INSERT OR IGNORE INTO config (key, value) VALUES ('next_task_id', '1');
 INSERT OR IGNORE INTO config (key, value) VALUES ('next_project_id', '1')
             "#,
-            |tx| {
-                // One-time migration: Copy per-project credentials to global config
-                let global_token: String = tx
-                    .query_row(
-                        "SELECT value FROM config WHERE key = 'jira_api_token'",
-                        [],
-                        |row| row.get(0),
-                    )
-                    .unwrap_or_default();
+        |tx| {
+            // One-time migration: Copy per-project credentials to global config
+            let global_token: String = tx
+                .query_row(
+                    "SELECT value FROM config WHERE key = 'jira_api_token'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or_default();
 
-                if global_token.is_empty() {
-                    let source_project: Option<String> = tx.query_row(
+            if global_token.is_empty() {
+                let source_project: Option<String> = tx.query_row(
                         "SELECT project_id FROM project_config WHERE key = 'jira_api_token' AND value != '' LIMIT 1",
                         [],
                         |row| row.get(0),
                     ).ok();
 
-                    if let Some(project_id) = source_project {
-                        let keys = [
-                            "jira_base_url",
-                            "jira_username",
-                            "jira_api_token",
-                            "github_token",
-                        ];
-                        for key in &keys {
-                            let value: String = tx
+                if let Some(project_id) = source_project {
+                    let keys = [
+                        "jira_base_url",
+                        "jira_username",
+                        "jira_api_token",
+                        "github_token",
+                    ];
+                    for key in &keys {
+                        let value: String = tx
                                 .query_row(
                                     "SELECT value FROM project_config WHERE project_id = ?1 AND key = ?2",
                                     rusqlite::params![project_id, key],
                                     |row| row.get(0),
                                 )
                                 .unwrap_or_default();
-                            if !value.is_empty() {
-                                tx.execute(
-                                    "UPDATE config SET value = ?1 WHERE key = ?2",
-                                    rusqlite::params![value, key],
-                                )
-                                .map_err(rusqlite_migration::HookError::RusqliteError)?;
-                            }
+                        if !value.is_empty() {
+                            tx.execute(
+                                "UPDATE config SET value = ?1 WHERE key = ?2",
+                                rusqlite::params![value, key],
+                            )
+                            .map_err(rusqlite_migration::HookError::RusqliteError)?;
                         }
                     }
                 }
+            }
 
-                // One-time migration: Simplify kanban columns from 5 to 3
-                tx.execute(
-                    "UPDATE tasks SET status = 'backlog' WHERE status = 'todo'",
-                    [],
-                )
-                .map_err(rusqlite_migration::HookError::RusqliteError)?;
-                tx.execute(
+            // One-time migration: Simplify kanban columns from 5 to 3
+            tx.execute(
+                "UPDATE tasks SET status = 'backlog' WHERE status = 'todo'",
+                [],
+            )
+            .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            tx.execute(
                     "UPDATE tasks SET status = 'doing' WHERE status IN ('in_progress', 'in_review', 'testing')",
                     [],
                 ).map_err(rusqlite_migration::HookError::RusqliteError)?;
-                tx.execute(
+            tx.execute(
                     "UPDATE tasks SET status = 'backlog' WHERE status NOT IN ('backlog', 'doing', 'done')",
                     [],
                 ).map_err(rusqlite_migration::HookError::RusqliteError)?;
 
-                Ok(())
-            },
-        ),
-        M::up_with_hook(
-            r#"
+            Ok(())
+        },
+    ),
+    M::up_with_hook(
+        r#"
             "#,
-            |tx| {
-                // Only add columns if the table exists (for fresh databases)
-                let table_exists: bool = tx.query_row(
+        |tx| {
+            // Only add columns if the table exists (for fresh databases)
+            let table_exists: bool = tx.query_row(
                     "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='agent_sessions'",
                     [],
                     |r| r.get(0),
                 ).unwrap_or(false);
 
-                if table_exists {
-                    tx.execute(
+            if table_exists {
+                tx.execute(
                         "ALTER TABLE agent_sessions ADD COLUMN provider TEXT NOT NULL DEFAULT 'opencode'",
                         [],
                     ).ok();
-                    tx.execute(
-                        "ALTER TABLE agent_sessions ADD COLUMN claude_session_id TEXT",
-                        [],
-                    )
-                    .ok();
-                }
-
-                // Only insert config if the table exists
-                let config_exists: bool = tx.query_row(
-                    "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='config'",
+                tx.execute(
+                    "ALTER TABLE agent_sessions ADD COLUMN claude_session_id TEXT",
                     [],
-                    |r| r.get(0),
-                ).unwrap_or(false);
+                )
+                .ok();
+            }
 
-                if config_exists {
-                    tx.execute(
-                        "INSERT OR IGNORE INTO config (key, value) VALUES ('ai_provider', 'opencode')",
-                        [],
-                    ).ok();
-                }
-                Ok(())
-            },
-        ),
-        M::up_with_hook(r#""#, |tx| {
+            // Only insert config if the table exists
             let config_exists: bool = tx
                 .query_row(
                     "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='config'",
@@ -293,14 +294,33 @@ INSERT OR IGNORE INTO config (key, value) VALUES ('next_project_id', '1')
 
             if config_exists {
                 tx.execute(
+                    "INSERT OR IGNORE INTO config (key, value) VALUES ('ai_provider', 'opencode')",
+                    [],
+                )
+                .ok();
+            }
+            Ok(())
+        },
+    ),
+    M::up_with_hook(r#""#, |tx| {
+        let config_exists: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='config'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+
+        if config_exists {
+            tx.execute(
                         "UPDATE config SET value = 'claude-code' WHERE key = 'ai_provider' AND value = 'opencode'",
                         [],
                     ).map_err(rusqlite_migration::HookError::RusqliteError)?;
-            }
-            Ok(())
-        }),
-        M::up(
-            r#"
+        }
+        Ok(())
+    }),
+    M::up(
+        r#"
 CREATE TABLE IF NOT EXISTS agent_review_comments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     review_pr_id INTEGER NOT NULL,
@@ -320,170 +340,170 @@ CREATE TABLE IF NOT EXISTS agent_review_comments (
 CREATE INDEX IF NOT EXISTS idx_agent_review_comments_pr ON agent_review_comments(review_pr_id);
 CREATE INDEX IF NOT EXISTS idx_agent_review_comments_session ON agent_review_comments(review_session_key);
             "#,
-        ),
-        M::up_with_hook("", |tx| {
-            let has_column: bool = tx
-                .query_row(
-                    "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'plan_text'",
-                    [],
-                    |r| r.get(0),
-                )
-                .unwrap_or(false);
-            if has_column {
-                tx.execute("ALTER TABLE tasks DROP COLUMN plan_text", [])
-                    .map_err(rusqlite_migration::HookError::RusqliteError)?;
-            }
-            Ok(())
-        }),
-        M::up_with_hook("", |tx| {
-            let has_prompt: bool = tx
-                .query_row(
-                    "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'prompt'",
-                    [],
-                    |r| r.get(0),
-                )
-                .unwrap_or(false);
-            if !has_prompt {
-                tx.execute("ALTER TABLE tasks ADD COLUMN prompt TEXT", [])
-                    .map_err(rusqlite_migration::HookError::RusqliteError)?;
-            }
-
-            let has_summary: bool = tx
-                .query_row(
-                    "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'summary'",
-                    [],
-                    |r| r.get(0),
-                )
-                .unwrap_or(false);
-            if !has_summary {
-                tx.execute("ALTER TABLE tasks ADD COLUMN summary TEXT", [])
-                    .map_err(rusqlite_migration::HookError::RusqliteError)?;
-            }
-
-            tx.execute("UPDATE tasks SET prompt = title WHERE prompt IS NULL", [])
+    ),
+    M::up_with_hook("", |tx| {
+        let has_column: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'plan_text'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+        if has_column {
+            tx.execute("ALTER TABLE tasks DROP COLUMN plan_text", [])
                 .map_err(rusqlite_migration::HookError::RusqliteError)?;
-            Ok(())
-        }),
-        M::up_with_hook(r#""#, |tx| {
-            let config_exists: bool = tx
-                .query_row(
-                    "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='config'",
-                    [],
-                    |r| r.get(0),
-                )
-                .unwrap_or(false);
-
-            if config_exists {
-                tx.execute(
-                    "INSERT OR IGNORE INTO config (key, value) VALUES ('task_id_prefix', '')",
-                    [],
-                )
+        }
+        Ok(())
+    }),
+    M::up_with_hook("", |tx| {
+        let has_prompt: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'prompt'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+        if !has_prompt {
+            tx.execute("ALTER TABLE tasks ADD COLUMN prompt TEXT", [])
                 .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
 
-                use rand::Rng;
-                let mut rng = rand::thread_rng();
-                let prefix: String = (0..3)
-                    .map(|_| {
-                        let idx = rng.gen_range(0..26);
-                        (b'A' + idx as u8) as char
-                    })
-                    .collect();
-
-                tx.execute(
-                    "UPDATE config SET value = ?1 WHERE key = 'task_id_prefix' AND value = ''",
-                    rusqlite::params![prefix],
-                )
+        let has_summary: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'summary'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+        if !has_summary {
+            tx.execute("ALTER TABLE tasks ADD COLUMN summary TEXT", [])
                 .map_err(rusqlite_migration::HookError::RusqliteError)?;
-            }
-            Ok(())
-        }),
-        M::up_with_hook("", |tx| {
-            let has_agent: bool = tx
-                .query_row(
-                    "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'agent'",
-                    [],
-                    |r| r.get(0),
-                )
-                .unwrap_or(false);
-            if !has_agent {
-                tx.execute("ALTER TABLE tasks ADD COLUMN agent TEXT", [])
-                    .map_err(rusqlite_migration::HookError::RusqliteError)?;
-            }
+        }
 
-            let has_permission_mode: bool = tx
+        tx.execute("UPDATE tasks SET prompt = title WHERE prompt IS NULL", [])
+            .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        Ok(())
+    }),
+    M::up_with_hook(r#""#, |tx| {
+        let config_exists: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='config'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+
+        if config_exists {
+            tx.execute(
+                "INSERT OR IGNORE INTO config (key, value) VALUES ('task_id_prefix', '')",
+                [],
+            )
+            .map_err(rusqlite_migration::HookError::RusqliteError)?;
+
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+            let prefix: String = (0..3)
+                .map(|_| {
+                    let idx = rng.gen_range(0..26);
+                    (b'A' + idx as u8) as char
+                })
+                .collect();
+
+            tx.execute(
+                "UPDATE config SET value = ?1 WHERE key = 'task_id_prefix' AND value = ''",
+                rusqlite::params![prefix],
+            )
+            .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
+        Ok(())
+    }),
+    M::up_with_hook("", |tx| {
+        let has_agent: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'agent'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+        if !has_agent {
+            tx.execute("ALTER TABLE tasks ADD COLUMN agent TEXT", [])
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
+
+        let has_permission_mode: bool = tx
                 .query_row(
                     "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'permission_mode'",
                     [],
                     |r| r.get(0),
                 )
                 .unwrap_or(false);
-            if !has_permission_mode {
-                tx.execute("ALTER TABLE tasks ADD COLUMN permission_mode TEXT", [])
-                    .map_err(rusqlite_migration::HookError::RusqliteError)?;
-            }
+        if !has_permission_mode {
+            tx.execute("ALTER TABLE tasks ADD COLUMN permission_mode TEXT", [])
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
 
-            Ok(())
-        }),
-        // V9: Copy global ai_provider to all existing projects' project_config
-        M::up_with_hook("", |tx| {
-            let has_table: bool = tx.query_row(
+        Ok(())
+    }),
+    // V9: Copy global ai_provider to all existing projects' project_config
+    M::up_with_hook("", |tx| {
+        let has_table: bool = tx.query_row(
                 "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='project_config'",
                 [],
                 |r| r.get(0),
             ).unwrap_or(false);
 
-            if has_table {
-                let global_provider: String = tx
-                    .query_row(
-                        "SELECT value FROM config WHERE key = 'ai_provider'",
-                        [],
-                        |row| row.get(0),
-                    )
-                    .unwrap_or_else(|_| "claude-code".to_string());
-
-                tx.execute(
-                    "INSERT OR IGNORE INTO project_config (project_id, key, value)
-                     SELECT id, 'ai_provider', ?1 FROM projects",
-                    rusqlite::params![global_provider],
+        if has_table {
+            let global_provider: String = tx
+                .query_row(
+                    "SELECT value FROM config WHERE key = 'ai_provider'",
+                    [],
+                    |row| row.get(0),
                 )
-                .map_err(rusqlite_migration::HookError::RusqliteError)?;
-            }
+                .unwrap_or_else(|_| "claude-code".to_string());
 
-            Ok(())
-        }),
-        // V10: Add draft column to pull_requests
-        M::up_with_hook("", |tx| {
-            let table_exists: bool = tx
+            tx.execute(
+                "INSERT OR IGNORE INTO project_config (project_id, key, value)
+                     SELECT id, 'ai_provider', ?1 FROM projects",
+                rusqlite::params![global_provider],
+            )
+            .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
+
+        Ok(())
+    }),
+    // V10: Add draft column to pull_requests
+    M::up_with_hook("", |tx| {
+        let table_exists: bool = tx
                 .query_row(
                     "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='pull_requests'",
                     [],
                     |r| r.get(0),
                 )
                 .unwrap_or(false);
-            if table_exists {
-                let has_draft: bool = tx
+        if table_exists {
+            let has_draft: bool = tx
                     .query_row(
                         "SELECT COUNT(*) > 0 FROM pragma_table_info('pull_requests') WHERE name = 'draft'",
                         [],
                         |r| r.get(0),
                     )
                     .unwrap_or(false);
-                if !has_draft {
-                    tx.execute(
-                        "ALTER TABLE pull_requests ADD COLUMN draft INTEGER NOT NULL DEFAULT 0",
-                        [],
-                    )
-                    .map_err(rusqlite_migration::HookError::RusqliteError)?;
-                }
+            if !has_draft {
+                tx.execute(
+                    "ALTER TABLE pull_requests ADD COLUMN draft INTEGER NOT NULL DEFAULT 0",
+                    [],
+                )
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
             }
-            Ok(())
-        }),
-        // V11: Drop unused agent_logs table
-        M::up("DROP TABLE IF EXISTS agent_logs;"),
-        // V12: Rename tasks.title → tasks.initial_prompt
-        M::up("ALTER TABLE tasks RENAME COLUMN title TO initial_prompt;"),
-        M::up(
-            r#"
+        }
+        Ok(())
+    }),
+    // V11: Drop unused agent_logs table
+    M::up("DROP TABLE IF EXISTS agent_logs;"),
+    // V12: Rename tasks.title → tasks.initial_prompt
+    M::up("ALTER TABLE tasks RENAME COLUMN title TO initial_prompt;"),
+    M::up(
+        r#"
 CREATE TABLE IF NOT EXISTS authored_prs (
     id INTEGER PRIMARY KEY,
     number INTEGER NOT NULL,
@@ -541,14 +561,14 @@ CREATE TABLE IF NOT EXISTS action_items (
 );
 CREATE INDEX IF NOT EXISTS idx_action_items_project_status ON action_items(project_id, status);
             "#,
-        ),
-        // V14: Add is_queued for merge queue detection
-        M::up(
-            "ALTER TABLE pull_requests ADD COLUMN is_queued INTEGER NOT NULL DEFAULT 0;
+    ),
+    // V14: Add is_queued for merge queue detection
+    M::up(
+        "ALTER TABLE pull_requests ADD COLUMN is_queued INTEGER NOT NULL DEFAULT 0;
              ALTER TABLE authored_prs ADD COLUMN is_queued INTEGER NOT NULL DEFAULT 0;",
-        ),
-        M::up(
-            r#"
+    ),
+    M::up(
+        r#"
 CREATE TABLE IF NOT EXISTS action_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id TEXT NOT NULL,
@@ -563,10 +583,10 @@ CREATE TABLE IF NOT EXISTS action_items (
 );
 CREATE INDEX IF NOT EXISTS idx_action_items_project_status ON action_items(project_id, status);
             "#,
-        ),
-        // V16: Backfill shepherd_messages for databases where V13 ran before it was added.
-        M::up(
-            r#"
+    ),
+    // V16: Backfill shepherd_messages for databases where V13 ran before it was added.
+    M::up(
+        r#"
 CREATE TABLE IF NOT EXISTS shepherd_messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id TEXT NOT NULL,
@@ -578,76 +598,76 @@ CREATE TABLE IF NOT EXISTS shepherd_messages (
 );
 CREATE INDEX IF NOT EXISTS idx_shepherd_messages_project_created ON shepherd_messages(project_id, created_at DESC);
             "#,
-        ),
-        M::up_with_hook("SELECT 1;", |tx| {
-            for (table, column, sql) in [
-                (
-                    "pull_requests",
-                    "mergeable",
-                    "ALTER TABLE pull_requests ADD COLUMN mergeable INTEGER",
-                ),
-                (
-                    "pull_requests",
-                    "mergeable_state",
-                    "ALTER TABLE pull_requests ADD COLUMN mergeable_state TEXT",
-                ),
-                (
-                    "review_prs",
-                    "mergeable",
-                    "ALTER TABLE review_prs ADD COLUMN mergeable INTEGER",
-                ),
-                (
-                    "review_prs",
-                    "mergeable_state",
-                    "ALTER TABLE review_prs ADD COLUMN mergeable_state TEXT",
-                ),
-                (
-                    "authored_prs",
-                    "mergeable",
-                    "ALTER TABLE authored_prs ADD COLUMN mergeable INTEGER",
-                ),
-                (
-                    "authored_prs",
-                    "mergeable_state",
-                    "ALTER TABLE authored_prs ADD COLUMN mergeable_state TEXT",
-                ),
-            ] {
-                let has_table: bool = tx
-                    .query_row(
-                        &format!(
-                            "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='{}'",
-                            table
-                        ),
-                        [],
-                        |r| r.get(0),
-                    )
-                    .unwrap_or(false);
+    ),
+    M::up_with_hook("SELECT 1;", |tx| {
+        for (table, column, sql) in [
+            (
+                "pull_requests",
+                "mergeable",
+                "ALTER TABLE pull_requests ADD COLUMN mergeable INTEGER",
+            ),
+            (
+                "pull_requests",
+                "mergeable_state",
+                "ALTER TABLE pull_requests ADD COLUMN mergeable_state TEXT",
+            ),
+            (
+                "review_prs",
+                "mergeable",
+                "ALTER TABLE review_prs ADD COLUMN mergeable INTEGER",
+            ),
+            (
+                "review_prs",
+                "mergeable_state",
+                "ALTER TABLE review_prs ADD COLUMN mergeable_state TEXT",
+            ),
+            (
+                "authored_prs",
+                "mergeable",
+                "ALTER TABLE authored_prs ADD COLUMN mergeable INTEGER",
+            ),
+            (
+                "authored_prs",
+                "mergeable_state",
+                "ALTER TABLE authored_prs ADD COLUMN mergeable_state TEXT",
+            ),
+        ] {
+            let has_table: bool = tx
+                .query_row(
+                    &format!(
+                        "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='{}'",
+                        table
+                    ),
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap_or(false);
 
-                if !has_table {
-                    continue;
-                }
-
-                let exists: bool = tx
-                    .query_row(
-                        &format!(
-                            "SELECT COUNT(*) > 0 FROM pragma_table_info('{}') WHERE name = '{}'",
-                            table, column
-                        ),
-                        [],
-                        |r| r.get(0),
-                    )
-                    .unwrap_or(false);
-
-                if !exists {
-                    tx.execute(sql, [])
-                        .map_err(rusqlite_migration::HookError::RusqliteError)?;
-                }
+            if !has_table {
+                continue;
             }
 
-            Ok(())
-        }),
-        M::up(
-            r#"
+            let exists: bool = tx
+                .query_row(
+                    &format!(
+                        "SELECT COUNT(*) > 0 FROM pragma_table_info('{}') WHERE name = '{}'",
+                        table, column
+                    ),
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap_or(false);
+
+            if !exists {
+                tx.execute(sql, [])
+                    .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            }
+        }
+
+        Ok(())
+    }),
+    M::up(
+        r#"
 CREATE TABLE IF NOT EXISTS task_workspaces (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     task_id TEXT NOT NULL UNIQUE REFERENCES tasks(id) ON DELETE CASCADE,
@@ -665,9 +685,8 @@ CREATE TABLE IF NOT EXISTS task_workspaces (
 CREATE INDEX IF NOT EXISTS idx_task_workspaces_status ON task_workspaces(status);
 CREATE INDEX IF NOT EXISTS idx_task_workspaces_project ON task_workspaces(project_id, updated_at DESC);
             "#,
-        ),
-    ])
-}
+    ),
+);
 
 /// Detects existing databases (created before the migration system) and sets
 /// user_version to skip V1 migration (which would be a no-op anyway since
@@ -798,6 +817,15 @@ mod tests {
     fn test_migrations_validate() {
         let migrations = get_migrations();
         migrations.validate().expect("migrations should be valid");
+    }
+
+    #[test]
+    fn test_latest_user_version_matches_migration_count() {
+        assert_eq!(
+            LATEST_USER_VERSION,
+            migration_count(),
+            "LATEST_USER_VERSION must stay aligned with the number of declared migrations"
+        );
     }
 
     #[test]
