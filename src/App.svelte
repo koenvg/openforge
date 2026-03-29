@@ -79,6 +79,7 @@
   let appSidebarCollapsed = $state(localStorage.getItem('appSidebarCollapsed') === 'true')
   let showCommandPalette = $state(false)
   let showActionPalette = $state(false)
+  let actionPaletteTask = $state<Task | null>(null)
   let actionPaletteActions = $state<Action[]>([])
   let workQueueRefreshTrigger = $state(0)
   let router = useAppRouter()
@@ -344,11 +345,19 @@
     }
   }
 
+  function closeActionPalette() {
+    showActionPalette = false
+    actionPaletteTask = null
+  }
+
   async function openActionPalette() {
     if (showActionPalette) {
-      showActionPalette = false
+      closeActionPalette()
       return
     }
+
+    actionPaletteTask = selectedTask
+
     if ($activeProjectId) {
       try {
         const all = await loadActions($activeProjectId)
@@ -361,8 +370,8 @@
   }
 
   async function executeAction(actionId: string) {
-    showActionPalette = false
-    const task = selectedTask
+    const task = actionPaletteTask
+    closeActionPalette()
 
     switch (actionId) {
       case 'start-task':
@@ -1051,9 +1060,9 @@
 
 {#if showActionPalette}
   <ActionPalette
-    task={selectedTask}
+    task={actionPaletteTask}
     customActions={actionPaletteActions}
-    onClose={() => showActionPalette = false}
+    onClose={closeActionPalette}
     onExecute={executeAction}
   />
 {/if}
