@@ -99,6 +99,8 @@ pnpm test
 cd src-tauri && cargo test
 ```
 
+Rust tests use Tauri's mock runtime and do not require a prebuilt `dist/` frontend bundle.
+
 ## Building
 
 ```bash

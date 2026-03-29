@@ -91,7 +91,6 @@ jobs:
         id: tests
         working-directory: src-tauri
         run: |
-          mkdir -p ../dist
           set +e -o pipefail
           cargo test 2>&1 | tee /tmp/rust-tests.log
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
