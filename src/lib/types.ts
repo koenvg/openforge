@@ -117,6 +117,30 @@ export function isQueuedForMerge(pr: PullRequestInfo): boolean {
   return pr.state === 'open' && pr.is_queued;
 }
 
+/** Preserves optimistic and definitive states across transient background syncs */
+export function preservePullRequestState(oldPr: PullRequestInfo | undefined, newPr: PullRequestInfo): PullRequestInfo {
+  if (!oldPr) return newPr;
+
+  const result = { ...newPr };
+
+  // Preserve optimistic 'merged' state if new PR hasn't caught up
+  if (oldPr.state === 'merged' && result.state === 'open') {
+    result.state = 'merged';
+    result.merged_at = oldPr.merged_at;
+  }
+
+  // Preserve definitive mergeability if new state is transient
+  const isTransient = result.mergeable === null || result.mergeable_state === 'unknown' || result.mergeable_state === null;
+  const oldIsDefinitive = oldPr.mergeable_state !== 'unknown' && oldPr.mergeable_state !== null;
+  
+  if (isTransient && oldIsDefinitive) {
+    result.mergeable = oldPr.mergeable;
+    result.mergeable_state = oldPr.mergeable_state;
+  }
+
+  return result;
+}
+
 export interface CheckRunInfo {
   id: number;
   name: string;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type PullRequestInfo, type CheckRunInfo, hasMergeConflicts, isReadyToMerge, isQueuedForMerge, splitCheckRuns } from './types'
+import { type PullRequestInfo, type CheckRunInfo, hasMergeConflicts, isReadyToMerge, isQueuedForMerge, splitCheckRuns, preservePullRequestState } from './types'
 
 function createPullRequest(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
   return {
@@ -142,6 +142,53 @@ describe('isQueuedForMerge', () => {
   it('returns false when state is merged even if is_queued is true', () => {
     const pr = createPullRequest({ state: 'merged', is_queued: true, mergeable: true })
     expect(isQueuedForMerge(pr)).toBe(false)
+  })
+})
+
+describe('preservePullRequestState', () => {
+  it('returns new PR unmodified if there is no old PR', () => {
+    const newPr = createPullRequest({ mergeable_state: 'unknown' })
+    expect(preservePullRequestState(undefined, newPr)).toEqual(newPr)
+  })
+
+  it('preserves merged state when new PR is transiently open', () => {
+    const oldPr = createPullRequest({ state: 'merged', merged_at: 12345 })
+    const newPr = createPullRequest({ state: 'open' })
+    const result = preservePullRequestState(oldPr, newPr)
+    expect(result.state).toBe('merged')
+    expect(result.merged_at).toBe(12345)
+  })
+
+  it('preserves definitive clean mergeability when new PR state is unknown', () => {
+    const oldPr = createPullRequest({ mergeable: true, mergeable_state: 'clean' })
+    const newPr = createPullRequest({ mergeable: null, mergeable_state: 'unknown' })
+    const result = preservePullRequestState(oldPr, newPr)
+    expect(result.mergeable).toBe(true)
+    expect(result.mergeable_state).toBe('clean')
+  })
+
+  it('preserves definitive dirty mergeability when new PR state is null', () => {
+    const oldPr = createPullRequest({ mergeable: false, mergeable_state: 'dirty' })
+    const newPr = createPullRequest({ mergeable: null, mergeable_state: null })
+    const result = preservePullRequestState(oldPr, newPr)
+    expect(result.mergeable).toBe(false)
+    expect(result.mergeable_state).toBe('dirty')
+  })
+
+  it('does not preserve mergeability if old PR was also unknown', () => {
+    const oldPr = createPullRequest({ mergeable: null, mergeable_state: 'unknown' })
+    const newPr = createPullRequest({ mergeable: null, mergeable_state: 'unknown' })
+    const result = preservePullRequestState(oldPr, newPr)
+    expect(result.mergeable).toBe(null)
+    expect(result.mergeable_state).toBe('unknown')
+  })
+
+  it('does not preserve mergeability if new PR is definitive', () => {
+    const oldPr = createPullRequest({ mergeable: true, mergeable_state: 'clean' })
+    const newPr = createPullRequest({ mergeable: false, mergeable_state: 'dirty' })
+    const result = preservePullRequestState(oldPr, newPr)
+    expect(result.mergeable).toBe(false)
+    expect(result.mergeable_state).toBe('dirty')
   })
 })
 
