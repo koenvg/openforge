@@ -195,29 +195,7 @@ describe('getTaskReasonText', () => {
     })
   })
 
-  describe('Unaddressed comments prepending', () => {
-    it('prepends single unaddressed comment count', () => {
-      const task = makeTask({ id: 'T-1' })
-      const pr = makePr({ id: 1, unaddressed_comment_count: 1 })
-      const reason = getTaskReasonText(task, 'pr-open', null, [pr])
-      expect(reason).toBe('1 unaddressed comment(s) need attention. Pull request is open — awaiting review.')
-    })
-
-    it('prepends multiple unaddressed comment count', () => {
-      const task = makeTask({ id: 'T-1' })
-      const pr = makePr({ id: 1, unaddressed_comment_count: 3 })
-      const reason = getTaskReasonText(task, 'pr-open', null, [pr])
-      expect(reason).toBe('3 unaddressed comment(s) need attention. Pull request is open — awaiting review.')
-    })
-
-    it('sums unaddressed comments across multiple PRs', () => {
-      const task = makeTask({ id: 'T-1' })
-      const pr1 = makePr({ id: 1, unaddressed_comment_count: 2 })
-      const pr2 = makePr({ id: 2, unaddressed_comment_count: 3 })
-      const reason = getTaskReasonText(task, 'pr-open', null, [pr1, pr2])
-      expect(reason).toBe('5 unaddressed comment(s) need attention. Pull request is open — awaiting review.')
-    })
-
+  describe('State-driven PR reason text', () => {
     it('does not prepend when unaddressed_comment_count is 0', () => {
       const task = makeTask({ id: 'T-1' })
       const pr = makePr({ id: 1, unaddressed_comment_count: 0 })
@@ -233,11 +211,12 @@ describe('getTaskReasonText', () => {
       expect(reason).toBe('Pull request is open — awaiting review.')
     })
 
-    it('prepends unaddressed comments even for non-PR states', () => {
+    it('does not surface comments from a different PR than the state-driving PR', () => {
       const task = makeTask({ id: 'T-1' })
-      const pr = makePr({ id: 1, unaddressed_comment_count: 2 })
-      const reason = getTaskReasonText(task, 'idle', null, [pr])
-      expect(reason).toBe('2 unaddressed comment(s) need attention. No agent running. Start when ready.')
+      const firstOpen = makePr({ id: 1, unaddressed_comment_count: 0 })
+      const laterOpen = makePr({ id: 2, unaddressed_comment_count: 3 })
+      const reason = getTaskReasonText(task, 'pr-open', null, [firstOpen, laterOpen])
+      expect(reason).toBe('Pull request is open — awaiting review.')
     })
   })
 
@@ -266,12 +245,19 @@ describe('getTaskReasonText', () => {
       expect(countMatches).toBeLessThanOrEqual(1)
     })
 
-    it('still prepends unaddressed count for non-unaddressed-comments state (combo case)', () => {
+    it('uses the state-driving PR count instead of summing all PR comments', () => {
+      const task = makeTask({ id: 'T-1' })
+      const mergedPr = makePr({ id: 1, state: 'merged', merged_at: 2000, unaddressed_comment_count: 5 })
+      const openPr = makePr({ id: 2, state: 'open', unaddressed_comment_count: 3 })
+      const reason = getTaskReasonText(task, 'unaddressed-comments', null, [mergedPr, openPr])
+      expect(reason).toBe('3 unaddressed comment(s) on the pull request.')
+    })
+
+    it('does not prepend unaddressed count for non-unaddressed-comments states', () => {
       const task = makeTask({ id: 'T-1' })
       const pr = makePr({ id: 1, unaddressed_comment_count: 3 })
       const reason = getTaskReasonText(task, 'ci-failed', null, [pr])
-      expect(reason).toContain('3 unaddressed comment(s)')
-      expect(reason).toContain('CI pipeline failed')
+      expect(reason).toBe('CI pipeline failed — check the logs.')
     })
   })
 })

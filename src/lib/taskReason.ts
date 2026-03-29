@@ -1,5 +1,6 @@
 import type { Task, AgentSession, PullRequestInfo } from './types'
 import type { TaskState } from './taskState'
+import { getStateDrivingPr } from './taskState'
 
 const STATE_REASONS: Record<TaskState, string> = {
   'egg': 'In backlog — not started yet.',
@@ -32,15 +33,11 @@ export function getTaskReasonText(
 ): string {
   const baseReason = STATE_REASONS[state] ?? `Status: ${state}`
 
-  // Calculate total unaddressed comments across all PRs
-  const totalUnaddressed = prs.reduce((sum, pr) => sum + (pr.unaddressed_comment_count ?? 0), 0)
+  const drivingPr = getStateDrivingPr(prs)
+  const drivingPrUnaddressed = drivingPr?.unaddressed_comment_count ?? 0
 
-  if (state === 'unaddressed-comments' && totalUnaddressed > 0) {
-    return `${totalUnaddressed} unaddressed comment(s) on the pull request.`
-  }
-
-  if (totalUnaddressed > 0) {
-    return `${totalUnaddressed} unaddressed comment(s) need attention. ${baseReason}`
+  if (state === 'unaddressed-comments' && drivingPrUnaddressed > 0) {
+    return `${drivingPrUnaddressed} unaddressed comment(s) on the pull request.`
   }
 
   return baseReason

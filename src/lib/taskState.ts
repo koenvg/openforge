@@ -49,11 +49,14 @@ export const TASK_STATE_LABELS: Record<TaskState, string> = {
   'merge-conflict': 'Merge Conflict',
 }
 
-function getPrState(prs: PullRequestInfo[]): TaskState | null {
-  // Find the most relevant PR: prefer open, then merged, then closed
+export function getStateDrivingPr(prs: PullRequestInfo[]): PullRequestInfo | null {
   const openPr = prs.find(pr => pr.state === 'open')
   const mergedPr = prs.find(pr => pr.state === 'merged')
-  const pr = openPr ?? mergedPr
+  return openPr ?? mergedPr ?? null
+}
+
+function getPrState(prs: PullRequestInfo[]): TaskState | null {
+  const pr = getStateDrivingPr(prs)
 
   if (!pr) return null
 

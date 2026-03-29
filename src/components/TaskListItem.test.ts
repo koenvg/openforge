@@ -165,4 +165,12 @@ describe('TaskListItem', () => {
     const badge = screen.getByText('Merge Conflict')
     expect(badge.classList.contains('badge-error')).toBe(true)
   })
+
+  it('with multiple PRs, shows the state-driving PR (open preferred over merged)', () => {
+    const mergedPr: PullRequestInfo = { ...basePr, id: 7, state: 'merged', merged_at: 5000 }
+    const openPr: PullRequestInfo = { ...basePr, id: 42, state: 'open' }
+    render(TaskListItem, { props: { ...baseProps, pullRequests: [mergedPr, openPr] } })
+    expect(screen.getByText(/PR #42/)).toBeTruthy()
+    expect(screen.queryByText(/PR #7/)).toBeNull()
+  })
 })

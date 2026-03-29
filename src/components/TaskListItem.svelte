@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Task, AgentSession, PullRequestInfo } from '../lib/types'
   import type { TaskState } from '../lib/taskState'
+  import { getStateDrivingPr } from '../lib/taskState'
   import { timeAgoFromSeconds } from '../lib/timeAgo'
 
   interface Props {
@@ -70,7 +71,7 @@
   let title = $derived(truncate(firstLine(task.jira_title ?? task.initial_prompt), 80))
   let badgeClass = $derived(stateToBadgeClass(state))
   let stateLabel = $derived(stateToLabel(state))
-  let firstPr = $derived(pullRequests[0] ?? null)
+  let firstPr = $derived(getStateDrivingPr(pullRequests))
 </script>
 
 <div

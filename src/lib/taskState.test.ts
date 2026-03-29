@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { Task, AgentSession, PullRequestInfo } from './types'
-import { computeTaskState, taskStateToBorderClass } from './taskState'
+import { computeTaskState, taskStateToBorderClass, getStateDrivingPr } from './taskState'
 
 // ============================================================================
 // Factory Helpers
@@ -737,5 +737,48 @@ describe('computeTaskState - merge-conflict (PART 6)', () => {
     const session = createSession({ status: 'completed' })
     const prs = [createPr({ state: 'closed', mergeable_state: 'dirty' })]
     expect(computeTaskState(task, session, prs)).toBe('agent-done') // fallback since no open PR
+  })
+})
+
+// ============================================================================
+// PART 7: getStateDrivingPr — exported PR selection helper
+// ============================================================================
+
+describe('getStateDrivingPr', () => {
+  it('returns null for empty array', () => {
+    expect(getStateDrivingPr([])).toBeNull()
+  })
+
+  it('returns null when all PRs are closed (not merged)', () => {
+    const prs = [createPr({ state: 'closed' })]
+    expect(getStateDrivingPr(prs)).toBeNull()
+  })
+
+  it('returns the open PR', () => {
+    const pr = createPr({ state: 'open', id: 5 })
+    expect(getStateDrivingPr([pr])).toBe(pr)
+  })
+
+  it('returns the merged PR when no open PR exists', () => {
+    const merged = createPr({ state: 'merged', id: 3, merged_at: 9000 })
+    expect(getStateDrivingPr([merged])).toBe(merged)
+  })
+
+  it('prefers open PR over merged PR when both present', () => {
+    const merged = createPr({ state: 'merged', id: 1, merged_at: 9000 })
+    const open = createPr({ state: 'open', id: 2 })
+    expect(getStateDrivingPr([merged, open])).toBe(open)
+  })
+
+  it('with multiple open PRs returns the first open PR (array order)', () => {
+    const first = createPr({ state: 'open', id: 10 })
+    const second = createPr({ state: 'open', id: 20 })
+    expect(getStateDrivingPr([first, second])).toBe(first)
+  })
+
+  it('ignores closed PRs and returns open PR later in array', () => {
+    const closed = createPr({ state: 'closed', id: 1 })
+    const open = createPr({ state: 'open', id: 2 })
+    expect(getStateDrivingPr([closed, open])).toBe(open)
   })
 })
