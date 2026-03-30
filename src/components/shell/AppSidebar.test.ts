@@ -1,10 +1,11 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/svelte'
 import { get } from 'svelte/store'
-import AppSidebar from './AppSidebar.svelte'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { getProjectAttention, setConfig } from '../../lib/ipc'
+import { activeProjectId, projectAttention, projects } from '../../lib/stores'
 import type { AppView, Project, ProjectAttention } from '../../lib/types'
-import { projects, activeProjectId, projectAttention } from '../../lib/stores'
-import { getProjectAttention, setConfig, getGitBranch } from '../../lib/ipc'
+import AppSidebar from './AppSidebar.svelte'
 
 vi.mock('../../lib/stores', async () => {
   const { writable } = await import('svelte/store')
@@ -175,6 +176,34 @@ describe('AppSidebar', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: /collapse sidebar/i }))
     expect(onToggleCollapse).toHaveBeenCalledOnce()
+  })
+
+  it('calls onNewProject when add project button is clicked', async () => {
+    const onNewProject = vi.fn()
+    renderSidebar({ onNewProject })
+
+    await fireEvent.click(screen.getByRole('button', { name: /add project/i }))
+    expect(onNewProject).toHaveBeenCalledOnce()
+  })
+
+  it('shows attention status from store data', () => {
+    projectAttention.set(new Map([
+      ['proj-1', { project_id: 'proj-1', needs_input: 0, running_agents: 2, ci_failures: 0, unaddressed_comments: 0, completed_agents: 0 }],
+      ['proj-2', { project_id: 'proj-2', needs_input: 1, running_agents: 0, ci_failures: 0, unaddressed_comments: 0, completed_agents: 0 }],
+    ]))
+
+    renderSidebar({ collapsed: false })
+
+    expect(screen.getByText('2 running')).toBeTruthy()
+    expect(screen.getByText('1 needs input')).toBeTruthy()
+  })
+
+  it('calls getProjectAttention on mount', async () => {
+    renderSidebar()
+
+    await vi.waitFor(() => {
+      expect(getProjectAttention).toHaveBeenCalledOnce()
+    })
   })
 
   it('project is NOT visually active (aria-current) when on workqueue view', () => {
