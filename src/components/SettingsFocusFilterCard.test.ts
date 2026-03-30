@@ -1,6 +1,16 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+vi.mock('../lib/taskStatePresentation', () => ({
+	TASK_STATE_LABELS: {
+		idle: 'Idle',
+		active: 'Running',
+		'needs-input': 'Needs Input',
+		'ci-failed': 'CI Failed',
+		'changes-requested': 'Changes Requested',
+		failed: 'Failed',
+	}
+}))
 vi.mock('../lib/taskState', () => ({
 	ALL_TASK_STATES: ['idle', 'active', 'needs-input', 'ci-failed', 'changes-requested', 'failed'],
 	TASK_STATE_LABELS: {

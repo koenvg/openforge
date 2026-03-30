@@ -223,6 +223,12 @@ describe('TaskCard', () => {
     expect(screen.queryByText('Fixed auth bug, needs review')).toBeNull()
   })
 
+  it('shows shared task state reason when summary is null', () => {
+    const taskWithoutSummary = { ...baseTask, summary: null, status: 'backlog' as const }
+    render(TaskCard, { props: { task: taskWithoutSummary } })
+    expect(screen.getByText('In backlog — not started yet.')).toBeTruthy()
+  })
+
   it('shows prompt first line as fallback title when title is empty', () => {
     const taskWithPrompt = { ...baseTask, initial_prompt: '', prompt: 'Fix the login bug\nMore details here' }
     render(TaskCard, { props: { task: taskWithPrompt } })

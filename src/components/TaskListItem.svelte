@@ -2,6 +2,7 @@
   import type { Task, AgentSession, PullRequestInfo } from '../lib/types'
   import type { TaskState } from '../lib/taskState'
   import { getStateDrivingPr } from '../lib/taskState'
+  import { TASK_STATE_COMPACT_LABELS, getTaskStateBadgeClass } from '../lib/taskStatePresentation'
   import { timeAgoFromSeconds } from '../lib/timeAgo'
 
   interface Props {
@@ -26,51 +27,13 @@
     return text.split('\n')[0]
   }
 
-  function stateToBadgeClass(s: TaskState): string {
-    switch (s) {
-      case 'active': return 'badge-success'
-      case 'needs-input': return 'badge-warning'
-      case 'unaddressed-comments': return 'badge-warning'
-      case 'ci-failed':
-      case 'failed':
-      case 'changes-requested':
-      case 'merge-conflict': return 'badge-error'
-      case 'agent-done': return 'badge-success'
-      case 'ready-to-merge': return 'badge-info'
-      case 'pr-queued': return 'badge-info'
-      case 'egg': return 'badge-ghost'
-      default: return ''
-    }
-  }
+  
 
-  function stateToLabel(s: TaskState): string {
-    switch (s) {
-      case 'active': return 'Active'
-      case 'needs-input': return 'Needs Input'
-      case 'unaddressed-comments': return 'Unaddressed Comments'
-      case 'ci-failed': return 'CI Failed'
-      case 'failed': return 'Failed'
-      case 'changes-requested': return 'Changes Req.'
-      case 'merge-conflict': return 'Merge Conflict'
-      case 'agent-done': return 'Done'
-      case 'ready-to-merge': return 'Ready to Merge'
-      case 'egg': return 'Backlog'
-      case 'idle': return 'Idle'
-      case 'paused': return 'Paused'
-      case 'interrupted': return 'Stopped'
-      case 'pr-draft': return 'PR Draft'
-      case 'pr-open': return 'PR Open'
-      case 'ci-running': return 'CI Running'
-      case 'review-pending': return 'Review Pending'
-      case 'pr-queued': return 'Queued'
-      case 'pr-merged': return 'Merged'
-      default: return s
-    }
-  }
+  
 
   let title = $derived(truncate(firstLine(task.initial_prompt), 80))
-  let badgeClass = $derived(stateToBadgeClass(state))
-  let stateLabel = $derived(stateToLabel(state))
+  let badgeClass = $derived(getTaskStateBadgeClass(state))
+  let stateLabel = $derived(TASK_STATE_COMPACT_LABELS[state] ?? state)
   let firstPr = $derived(getStateDrivingPr(pullRequests))
 </script>
 
