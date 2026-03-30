@@ -785,6 +785,8 @@ fn main() {
             commands::agent_review::update_agent_review_comment_status,
             commands::agent_review::dismiss_all_agent_review_comments,
             commands::agent_review::abort_agent_review,
+            commands::files::fs_read_dir,
+            commands::files::fs_read_file,
         ])
         .build(tauri_context())
         .expect("error while building tauri application");

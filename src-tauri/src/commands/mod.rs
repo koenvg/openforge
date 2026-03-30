@@ -2,6 +2,7 @@ pub mod agent_review;
 pub mod agents;
 pub mod authored_prs;
 pub mod config;
+pub mod files;
 pub mod github;
 pub mod opencode;
 pub mod orchestration;
