@@ -3,6 +3,7 @@
   import type { Task, AgentSession, PullRequestInfo } from '../lib/types'
   import { hasMergeConflicts, isReadyToMerge, isQueuedForMerge } from '../lib/types'
   import { computeTaskState, taskStateToBorderClass } from '../lib/taskState'
+  import { getTaskReasonText } from '../lib/taskStatePresentation'
   import { openUrl } from '../lib/ipc'
   import { timeAgoFromSeconds } from '../lib/timeAgo'
   import Card from './Card.svelte'
@@ -55,7 +56,7 @@
 
   let reasonText = $derived.by(() => {
     if (task.summary) return task.summary.replace(/\\n/g, ' ')
-    return null
+    return getTaskReasonText(taskState, pullRequests)
   })
 </script>
 

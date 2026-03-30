@@ -3,7 +3,7 @@
   import { focusBoardFilters } from '../lib/stores'
   import { filterTasks, getFilterCounts, DEFAULT_FOCUS_STATES, loadFocusFilterStates } from '../lib/boardFilters'
   import type { BoardFilter } from '../lib/boardFilters'
-  import { getTaskReasonText } from '../lib/taskReason'
+  import { getTaskReasonText } from '../lib/taskStatePresentation'
   import { computeTaskState } from '../lib/taskState'
   import type { TaskState } from '../lib/taskState'
   import { sortBySessionActivity } from '../lib/taskSort'
@@ -218,7 +218,7 @@
             {state}
             {session}
             {pullRequests}
-            reasonText={getTaskReasonText(task, state, session, pullRequests)}
+            reasonText={getTaskReasonText(state, pullRequests)}
             isSelected={selectedTaskIdLocal === task.id}
             isFocused={vim.focusedIndex === i}
             onSelect={() => {

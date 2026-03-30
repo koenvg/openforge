@@ -26,28 +26,6 @@ export const ALL_TASK_STATES: TaskState[] = [
   'merge-conflict',
 ]
 
-export const TASK_STATE_LABELS: Record<TaskState, string> = {
-  egg: 'New',
-  idle: 'Idle',
-  active: 'Running',
-  'needs-input': 'Needs Input',
-  'paused': 'Paused',
-  'agent-done': 'Agent Done',
-  'failed': 'Failed',
-  'interrupted': 'Interrupted',
-  done: 'Done',
-  'pr-draft': 'PR Draft',
-  'pr-open': 'PR Open',
-  'ci-running': 'CI Running',
-  'review-pending': 'Awaiting Review',
-  'ci-failed': 'CI Failed',
-  'changes-requested': 'Changes Requested',
-  'unaddressed-comments': 'Unaddressed Comments',
-  'ready-to-merge': 'Ready to Merge',
-  'pr-queued': 'In Merge Queue',
-  'pr-merged': 'PR Merged',
-  'merge-conflict': 'Merge Conflict',
-}
 
 export function getStateDrivingPr(prs: PullRequestInfo[]): PullRequestInfo | null {
   const openPr = prs.find(pr => pr.state === 'open')
