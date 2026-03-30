@@ -5,10 +5,10 @@ import type { AppView } from '../lib/types'
 import { commandHeld } from '../lib/stores'
 
 describe('IconRail', () => {
-  it('renders 3 navigation buttons', () => {
+  it('renders 5 navigation buttons', () => {
     render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn() } })
     const buttons = screen.getAllByRole('button')
-    expect(buttons).toHaveLength(4)
+    expect(buttons).toHaveLength(5)
   })
 
   it('clicking first button (board) calls onNavigate with "board"', () => {
@@ -19,20 +19,20 @@ describe('IconRail', () => {
     expect(onNavigate).toHaveBeenCalledWith('board')
   })
 
-  it('clicking second button (pr_review) calls onNavigate with "pr_review"', () => {
+  it('clicking second button (files) calls onNavigate with "files"', () => {
     const onNavigate = vi.fn()
     render(IconRail, { props: { currentView: 'board' as AppView, onNavigate } })
     const buttons = screen.getAllByRole('button')
     fireEvent.click(buttons[1])
-    expect(onNavigate).toHaveBeenCalledWith('pr_review')
+    expect(onNavigate).toHaveBeenCalledWith('files')
   })
 
-  it('clicking third button (skills) calls onNavigate with "skills"', () => {
+  it('clicking third button (pr_review) calls onNavigate with "pr_review"', () => {
     const onNavigate = vi.fn()
     render(IconRail, { props: { currentView: 'board' as AppView, onNavigate } })
     const buttons = screen.getAllByRole('button')
     fireEvent.click(buttons[2])
-    expect(onNavigate).toHaveBeenCalledWith('skills')
+    expect(onNavigate).toHaveBeenCalledWith('pr_review')
   })
 
   it('shows review request count badge when reviewRequestCount > 0', () => {
@@ -56,6 +56,7 @@ describe('IconRail', () => {
       render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn() } })
 
       expect(screen.getByText('H')).toBeTruthy()
+      expect(screen.getByText('F')).toBeTruthy()
       expect(screen.getByText('G')).toBeTruthy()
       expect(screen.getByText('L')).toBeTruthy()
 
@@ -75,6 +76,7 @@ describe('IconRail', () => {
       render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn() } })
 
       expect(screen.getByText('H')).toBeTruthy()  // board (Home)
+      expect(screen.getByText('F')).toBeTruthy()  // files (Files)
       expect(screen.getByText('G')).toBeTruthy()  // pr_review (Git)
       expect(screen.getByText('L')).toBeTruthy()  // skills (skiLLs)
 
@@ -86,6 +88,7 @@ describe('IconRail', () => {
       render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), modalsOpen: true } })
 
       expect(screen.queryByText('H')).toBeNull()
+      expect(screen.queryByText('F')).toBeNull()
       expect(screen.queryByText('G')).toBeNull()
       expect(screen.queryByText('L')).toBeNull()
 

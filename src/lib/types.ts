@@ -428,7 +428,7 @@ export interface AgentReviewComment {
 }
 
 /** App-level view for top-bar navigation */
-export type AppView = "board" | "pr_review" | "skills" | "settings" | "workqueue" | "global_settings";
+export type AppView = "board" | "pr_review" | "skills" | "settings" | "workqueue" | "global_settings" | "files";
 
 export interface WorkQueueEntry {
   task: Task;
@@ -452,6 +452,22 @@ export interface PtyEvent {
   instance_id?: number;
 }
 
+/** File entry metadata */
+export interface FileEntry {
+  name: string;
+  path: string;          // relative to project root
+  isDir: boolean;
+  size: number | null;   // file size in bytes (null for dirs)
+  modifiedAt: number | null; // unix timestamp ms
+}
+
+/** File content with type information */
+export interface FileContent {
+  type: 'text' | 'image' | 'binary';
+  content: string;       // text content, base64 for images, empty for binary
+  mimeType: string | null;
+  size: number;
+}
 
 export function parseCheckRuns(json: string | null): CheckRunInfo[] {
   if (!json) return [];

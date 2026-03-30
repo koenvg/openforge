@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Task, AgentSession, PrComment, PollResult, PullRequestInfo, AgentInfo, Project, ProjectAttention, WorktreeInfo, TaskWorkspaceInfo, ImplementationStatus, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus, WhisperModelSizeId, SkillInfo, WorkQueueEntry, ProviderModelInfo, CommitInfo, BoardStatus } from "./types";
+import type { Task, AgentSession, PrComment, PollResult, PullRequestInfo, AgentInfo, Project, ProjectAttention, WorktreeInfo, TaskWorkspaceInfo, ImplementationStatus, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus, WhisperModelSizeId, SkillInfo, WorkQueueEntry, ProviderModelInfo, CommitInfo, BoardStatus, FileEntry, FileContent } from "./types";
 import { normalizeTask, normalizeWorkQueueEntry } from './boardStatus'
 
 type RawTask = Omit<Task, 'status'> & { status: string }
@@ -370,4 +370,12 @@ export async function fetchAuthoredPrs(): Promise<AuthoredPullRequest[]> {
 
 export async function getAuthoredPrs(): Promise<AuthoredPullRequest[]> {
   return invoke<AuthoredPullRequest[]>("get_authored_prs");
+}
+
+export async function fsReadDir(projectId: string, dirPath: string | null): Promise<FileEntry[]> {
+  return invoke<FileEntry[]>("fs_read_dir", { projectId, dirPath });
+}
+
+export async function fsReadFile(projectId: string, filePath: string): Promise<FileContent> {
+  return invoke<FileContent>("fs_read_file", { projectId, filePath });
 }

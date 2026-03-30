@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { LayoutDashboard, GitPullRequest, Settings, Sparkles } from 'lucide-svelte'
+  import { LayoutDashboard, GitPullRequest, Settings, Sparkles, FolderOpen } from 'lucide-svelte'
   import type { AppView } from '../lib/types'
   import { commandHeld } from '../lib/stores'
 
@@ -16,6 +16,7 @@
 
   const navItems: { view: AppView; Icon: typeof LayoutDashboard; shortcut: string; label: string }[] = [
     { view: 'board', Icon: LayoutDashboard, shortcut: 'H', label: 'Board' },
+    { view: 'files', Icon: FolderOpen, shortcut: 'F', label: 'Files' },
     { view: 'pr_review', Icon: GitPullRequest, shortcut: 'G', label: 'Pull Requests' },
     { view: 'skills', Icon: Sparkles, shortcut: 'L', label: 'Skills' },
     { view: 'settings', Icon: Settings, shortcut: ',', label: 'Settings' },
