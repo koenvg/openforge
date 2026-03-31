@@ -5,6 +5,7 @@ import type { FileEntry, FileContent } from '../lib/types'
 
 vi.mock('../lib/stores', () => ({
   activeProjectId: writable<string | null>('test-project-id'),
+  pendingFileReveal: writable<string | null>(null),
 }))
 
 vi.mock('../lib/ipc', () => ({
@@ -13,7 +14,7 @@ vi.mock('../lib/ipc', () => ({
 }))
 
 import FilesView from './FilesView.svelte'
-import { activeProjectId } from '../lib/stores'
+import { activeProjectId, pendingFileReveal } from '../lib/stores'
 import { fsReadDir, fsReadFile } from '../lib/ipc'
 
 function makeFileEntry(overrides: Partial<FileEntry> = {}): FileEntry {
@@ -42,6 +43,7 @@ const sampleFileContent: FileContent = {
 describe('FilesView', () => {
   beforeEach(() => {
     activeProjectId.set('test-project-id')
+    pendingFileReveal.set(null)
     vi.clearAllMocks()
     vi.mocked(fsReadDir).mockResolvedValue([])
     vi.mocked(fsReadFile).mockResolvedValue(sampleFileContent)
@@ -131,5 +133,111 @@ describe('FilesView', () => {
     await new Promise(resolve => setTimeout(resolve, 50))
 
     expect(fsReadDir).not.toHaveBeenCalled()
+  })
+})
+
+describe('revealPath', () => {
+  beforeEach(() => {
+    activeProjectId.set('test-project-id')
+    pendingFileReveal.set(null)
+    vi.clearAllMocks()
+    vi.mocked(fsReadDir).mockResolvedValue([])
+    vi.mocked(fsReadFile).mockResolvedValue(sampleFileContent)
+  })
+
+  it('expands all parent directories for deeply nested file', async () => {
+    const srcEntry = makeFileEntry({ name: 'src', path: 'src', isDir: true, size: null })
+    vi.mocked(fsReadDir)
+      .mockResolvedValueOnce([srcEntry])
+      .mockResolvedValueOnce([makeFileEntry({ name: 'components', path: 'src/components', isDir: true, size: null })])
+      .mockResolvedValueOnce([makeFileEntry({ name: 'Button.tsx', path: 'src/components/Button.tsx' })])
+
+    render(FilesView, { props: { projectName: 'My Project' } })
+
+    await waitFor(() => {
+      expect(fsReadDir).toHaveBeenCalledWith('test-project-id', null)
+    })
+
+    pendingFileReveal.set('src/components/Button.tsx')
+
+    await waitFor(() => {
+      expect(fsReadDir).toHaveBeenCalledWith('test-project-id', 'src')
+      expect(fsReadDir).toHaveBeenCalledWith('test-project-id', 'src/components')
+      expect(fsReadFile).toHaveBeenCalledWith('test-project-id', 'src/components/Button.tsx')
+    })
+  })
+
+  it('skips already-expanded parent directories', async () => {
+    const srcEntry = makeFileEntry({ name: 'src', path: 'src', isDir: true, size: null })
+    vi.mocked(fsReadDir)
+      .mockResolvedValueOnce([srcEntry])
+      .mockResolvedValueOnce([makeFileEntry({ name: 'utils.ts', path: 'src/utils.ts' })])
+      .mockResolvedValueOnce([])
+
+    render(FilesView, { props: { projectName: 'My Project' } })
+
+    await waitFor(() => {
+      expect(fsReadDir).toHaveBeenCalledWith('test-project-id', null)
+    })
+
+    const srcButton = screen.getByRole('button', { name: /src\// })
+    await fireEvent.click(srcButton)
+
+    await waitFor(() => {
+      expect(fsReadDir).toHaveBeenCalledWith('test-project-id', 'src')
+    })
+
+    vi.clearAllMocks()
+    vi.mocked(fsReadFile).mockResolvedValue(sampleFileContent)
+
+    pendingFileReveal.set('src/utils.ts')
+
+    await waitFor(() => {
+      expect(fsReadDir).not.toHaveBeenCalled()
+      expect(fsReadFile).toHaveBeenCalledWith('test-project-id', 'src/utils.ts')
+    })
+  })
+
+  it('clears pendingFileReveal after processing', async () => {
+    vi.mocked(fsReadDir).mockResolvedValue([])
+    vi.mocked(fsReadFile).mockResolvedValue(sampleFileContent)
+
+    render(FilesView, { props: { projectName: 'My Project' } })
+
+    await waitFor(() => {
+      expect(fsReadDir).toHaveBeenCalledWith('test-project-id', null)
+    })
+
+    const rootFile = makeFileEntry({ name: 'README.md', path: 'README.md' })
+    vi.mocked(fsReadDir).mockResolvedValue([rootFile])
+
+    render(FilesView, { props: { projectName: 'My Project' } })
+
+    await waitFor(() => {
+      expect(fsReadDir).toHaveBeenCalled()
+    })
+
+    pendingFileReveal.set('README.md')
+
+    await waitFor(() => {
+      expect(fsReadFile).toHaveBeenCalled()
+    })
+
+    let cleared = false
+    pendingFileReveal.subscribe(v => { if (v === null) cleared = true })()
+    expect(cleared).toBe(true)
+  })
+
+  it('does not reveal when hasLoaded is false', async () => {
+    vi.mocked(fsReadDir).mockReturnValue(new Promise(() => {}))
+
+    render(FilesView, { props: { projectName: 'My Project' } })
+
+    pendingFileReveal.set('some/file.ts')
+
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    expect(fsReadDir).toHaveBeenCalledTimes(1)
+    expect(fsReadFile).not.toHaveBeenCalled()
   })
 })

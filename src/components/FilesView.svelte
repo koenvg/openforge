@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { activeProjectId } from '../lib/stores'
+  import { activeProjectId, pendingFileReveal } from '../lib/stores'
   import { fsReadDir, fsReadFile } from '../lib/ipc'
   import type { FileEntry, FileContent } from '../lib/types'
   import ProjectFileTree from './ProjectFileTree.svelte'
@@ -94,8 +94,30 @@
 
   const flatEntries = $derived(flattenEntries(rootEntries))
 
+  async function revealPath(targetPath: string) {
+    const parts = targetPath.split('/')
+    const parentPaths: string[] = []
+    for (let i = 1; i < parts.length; i++) {
+      parentPaths.push(parts.slice(0, i).join('/'))
+    }
+    for (const parent of parentPaths) {
+      if (!expandedPaths.has(parent)) {
+        await toggleDir(parent)
+      }
+    }
+    await selectFile(targetPath)
+    $pendingFileReveal = null
+  }
+
   onMount(() => {
     loadRoot()
+  })
+
+  $effect(() => {
+    const path = $pendingFileReveal
+    if (path !== null && hasLoaded) {
+      revealPath(path)
+    }
   })
 </script>
 
