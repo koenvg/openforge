@@ -1,5 +1,5 @@
 import { writable } from "svelte/store";
-import type { Task, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, CiFailureNotification, RateLimitNotification, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, PrOverviewComment, ProjectAttention, ClaudeSessionState, SkillInfo } from "./types";
+import type { Task, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, CiFailureNotification, RateLimitNotification, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, PrOverviewComment, ProjectAttention, SkillInfo } from "./types";
 import type { BoardFilter } from './boardFilters'
 
 export interface TaskRuntimeInfo {
@@ -43,8 +43,6 @@ export const selfReviewDiffFiles = writable<PrFileDiff[]>([]);
 export const agentReviewComments = writable<AgentReviewComment[]>([]);
 export const agentReviewLoading = writable(false);
 export const agentReviewError = writable<string | null>(null);
-
-export const claudeSessionStates = writable<Map<string, ClaudeSessionState>>(new Map())
 
 export const skills = writable<SkillInfo[]>([]);
 export const selectedSkillName = writable<string | null>(null);
