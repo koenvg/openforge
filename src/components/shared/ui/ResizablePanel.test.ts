@@ -1,6 +1,15 @@
 import { render, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { requireElement } from '../../../test-utils/dom'
 import ResizablePanel from './ResizablePanel.svelte'
+
+function getPanel(container: HTMLElement) {
+  return requireElement(container.querySelector('[data-testid="resizable-panel"]'), HTMLElement)
+}
+
+function getHandle(container: HTMLElement) {
+  return requireElement(container.querySelector('[data-testid="resize-handle"]'), HTMLElement)
+}
 
 beforeEach(() => {
   localStorage.clear()
@@ -11,7 +20,7 @@ describe('ResizablePanel', () => {
     const { container } = render(ResizablePanel, {
       props: { storageKey: 'test-panel', defaultWidth: 250 },
     })
-    const panel = container.querySelector('[data-testid="resizable-panel"]') as HTMLElement
+    const panel = getPanel(container)
     expect(panel).toBeTruthy()
     expect(panel.style.width).toBe('250px')
   })
@@ -29,7 +38,7 @@ describe('ResizablePanel', () => {
     const { container } = render(ResizablePanel, {
       props: { storageKey: 'test-panel', defaultWidth: 250 },
     })
-    const panel = container.querySelector('[data-testid="resizable-panel"]') as HTMLElement
+    const panel = getPanel(container)
     expect(panel.style.width).toBe('320px')
   })
 
@@ -38,7 +47,7 @@ describe('ResizablePanel', () => {
     const { container } = render(ResizablePanel, {
       props: { storageKey: 'test-panel', defaultWidth: 250 },
     })
-    const panel = container.querySelector('[data-testid="resizable-panel"]') as HTMLElement
+    const panel = getPanel(container)
     expect(panel.style.width).toBe('250px')
   })
 
@@ -47,7 +56,7 @@ describe('ResizablePanel', () => {
     const { container } = render(ResizablePanel, {
       props: { storageKey: 'test-panel', defaultWidth: 250, minWidth: 150 },
     })
-    const panel = container.querySelector('[data-testid="resizable-panel"]') as HTMLElement
+    const panel = getPanel(container)
     expect(panel.style.width).toBe('150px')
   })
 
@@ -56,7 +65,7 @@ describe('ResizablePanel', () => {
     const { container } = render(ResizablePanel, {
       props: { storageKey: 'test-panel', defaultWidth: 250, maxWidth: 500 },
     })
-    const panel = container.querySelector('[data-testid="resizable-panel"]') as HTMLElement
+    const panel = getPanel(container)
     expect(panel.style.width).toBe('500px')
   })
 
@@ -64,8 +73,8 @@ describe('ResizablePanel', () => {
     const { container } = render(ResizablePanel, {
       props: { storageKey: 'test-panel', defaultWidth: 250, side: 'left' },
     })
-    const handle = container.querySelector('[data-testid="resize-handle"]') as HTMLElement
-    const panel = container.querySelector('[data-testid="resizable-panel"]') as HTMLElement
+    const handle = getHandle(container)
+    const panel = getPanel(container)
 
     vi.spyOn(panel, 'getBoundingClientRect').mockReturnValue({
       left: 0, right: 250, top: 0, bottom: 500,
@@ -83,8 +92,8 @@ describe('ResizablePanel', () => {
     const { container } = render(ResizablePanel, {
       props: { storageKey: 'test-persist', defaultWidth: 250, side: 'left' },
     })
-    const handle = container.querySelector('[data-testid="resize-handle"]') as HTMLElement
-    const panel = container.querySelector('[data-testid="resizable-panel"]') as HTMLElement
+    const handle = getHandle(container)
+    const panel = getPanel(container)
 
     vi.spyOn(panel, 'getBoundingClientRect').mockReturnValue({
       left: 0, right: 250, top: 0, bottom: 500,
@@ -102,8 +111,8 @@ describe('ResizablePanel', () => {
     const { container } = render(ResizablePanel, {
       props: { storageKey: 'test-min', defaultWidth: 250, minWidth: 150, side: 'left' },
     })
-    const handle = container.querySelector('[data-testid="resize-handle"]') as HTMLElement
-    const panel = container.querySelector('[data-testid="resizable-panel"]') as HTMLElement
+    const handle = getHandle(container)
+    const panel = getPanel(container)
 
     vi.spyOn(panel, 'getBoundingClientRect').mockReturnValue({
       left: 0, right: 250, top: 0, bottom: 500,
@@ -121,8 +130,8 @@ describe('ResizablePanel', () => {
     const { container } = render(ResizablePanel, {
       props: { storageKey: 'test-max', defaultWidth: 250, maxWidth: 400, side: 'left' },
     })
-    const handle = container.querySelector('[data-testid="resize-handle"]') as HTMLElement
-    const panel = container.querySelector('[data-testid="resizable-panel"]') as HTMLElement
+    const handle = getHandle(container)
+    const panel = getPanel(container)
 
     vi.spyOn(panel, 'getBoundingClientRect').mockReturnValue({
       left: 0, right: 250, top: 0, bottom: 500,
@@ -140,8 +149,8 @@ describe('ResizablePanel', () => {
     const { container } = render(ResizablePanel, {
       props: { storageKey: 'test-right', defaultWidth: 300, side: 'right' },
     })
-    const handle = container.querySelector('[data-testid="resize-handle"]') as HTMLElement
-    const panel = container.querySelector('[data-testid="resizable-panel"]') as HTMLElement
+    const handle = getHandle(container)
+    const panel = getPanel(container)
 
     vi.spyOn(panel, 'getBoundingClientRect').mockReturnValue({
       left: 700, right: 1000, top: 0, bottom: 500,
@@ -160,8 +169,8 @@ describe('ResizablePanel', () => {
     const { container } = render(ResizablePanel, {
       props: { storageKey: 'test-reset', defaultWidth: 250 },
     })
-    const handle = container.querySelector('[data-testid="resize-handle"]') as HTMLElement
-    const panel = container.querySelector('[data-testid="resizable-panel"]') as HTMLElement
+    const handle = getHandle(container)
+    const panel = getPanel(container)
     expect(panel.style.width).toBe('400px')
 
     await fireEvent.dblClick(handle)
@@ -173,8 +182,8 @@ describe('ResizablePanel', () => {
     const { container } = render(ResizablePanel, {
       props: { storageKey: 'test-keys-left', defaultWidth: 250, side: 'left' },
     })
-    const handle = container.querySelector('[data-testid="resize-handle"]') as HTMLElement
-    const panel = container.querySelector('[data-testid="resizable-panel"]') as HTMLElement
+    const handle = getHandle(container)
+    const panel = getPanel(container)
 
     await fireEvent.keyDown(handle, { key: 'ArrowRight' })
     expect(panel.style.width).toBe('260px')
@@ -187,8 +196,8 @@ describe('ResizablePanel', () => {
     const { container } = render(ResizablePanel, {
       props: { storageKey: 'test-keys-right', defaultWidth: 250, side: 'right' },
     })
-    const handle = container.querySelector('[data-testid="resize-handle"]') as HTMLElement
-    const panel = container.querySelector('[data-testid="resizable-panel"]') as HTMLElement
+    const handle = getHandle(container)
+    const panel = getPanel(container)
 
     await fireEvent.keyDown(handle, { key: 'ArrowLeft' })
     expect(panel.style.width).toBe('260px')
@@ -202,8 +211,8 @@ describe('ResizablePanel', () => {
     const { container } = render(ResizablePanel, {
       props: { storageKey: 'test-key-reset', defaultWidth: 250 },
     })
-    const handle = container.querySelector('[data-testid="resize-handle"]') as HTMLElement
-    const panel = container.querySelector('[data-testid="resizable-panel"]') as HTMLElement
+    const handle = getHandle(container)
+    const panel = getPanel(container)
     expect(panel.style.width).toBe('400px')
 
     await fireEvent.keyDown(handle, { key: 'Enter' })
@@ -216,8 +225,8 @@ describe('ResizablePanel', () => {
     const { container } = render(ResizablePanel, {
       props: { storageKey: 'test-space-reset', defaultWidth: 250 },
     })
-    const handle = container.querySelector('[data-testid="resize-handle"]') as HTMLElement
-    const panel = container.querySelector('[data-testid="resizable-panel"]') as HTMLElement
+    const handle = getHandle(container)
+    const panel = getPanel(container)
     expect(panel.style.width).toBe('400px')
 
     await fireEvent.keyDown(handle, { key: ' ' })
