@@ -1,5 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { requireElement } from '../../test-utils/dom'
 
 vi.mock('../../lib/taskStatePresentation', () => ({
 	TASK_STATE_LABELS: {
@@ -58,9 +59,9 @@ describe('SettingsFocusFilterCard', () => {
 
 	it('checked states match focusStates prop', () => {
 		render(SettingsFocusFilterCard, { props: defaultProps({ focusStates: ['needs-input', 'ci-failed'] }) })
-		const needsInputBox = screen.getByLabelText('Needs Input') as HTMLInputElement
-		const ciFailedBox = screen.getByLabelText('CI Failed') as HTMLInputElement
-		const idleBox = screen.getByLabelText('Idle') as HTMLInputElement
+		const needsInputBox = requireElement(screen.getByLabelText('Needs Input'), HTMLInputElement)
+		const ciFailedBox = requireElement(screen.getByLabelText('CI Failed'), HTMLInputElement)
+		const idleBox = requireElement(screen.getByLabelText('Idle'), HTMLInputElement)
 		expect(needsInputBox.checked).toBe(true)
 		expect(ciFailedBox.checked).toBe(true)
 		expect(idleBox.checked).toBe(false)

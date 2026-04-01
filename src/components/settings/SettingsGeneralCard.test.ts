@@ -1,5 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
+import { requireElement } from '../../test-utils/dom'
 import SettingsGeneralCard from './SettingsGeneralCard.svelte'
 
 function defaultProps(overrides: Record<string, unknown> = {}) {
@@ -41,7 +42,7 @@ describe('SettingsGeneralCard', () => {
         props: defaultProps({ useWorktrees: true }),
       })
 
-      const toggle = screen.getByTestId('use-worktrees-toggle') as HTMLInputElement
+      const toggle = requireElement(screen.getByTestId('use-worktrees-toggle'), HTMLInputElement)
       expect(toggle.checked).toBe(true)
     })
 
@@ -50,7 +51,7 @@ describe('SettingsGeneralCard', () => {
         props: defaultProps({ useWorktrees: false }),
       })
 
-      const toggle = screen.getByTestId('use-worktrees-toggle') as HTMLInputElement
+      const toggle = requireElement(screen.getByTestId('use-worktrees-toggle'), HTMLInputElement)
       expect(toggle.checked).toBe(false)
     })
 
