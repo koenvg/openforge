@@ -87,7 +87,7 @@ export interface PollResult {
   rate_limit_reset_at: number | null;
 }
 
-interface MergeStatusInfo {
+export interface MergeStatusInfo {
   state: string;
   mergeable: boolean | null;
   mergeable_state: string | null;
@@ -101,14 +101,19 @@ export function hasMergeConflicts(pr: MergeStatusInfo): boolean {
 }
 
 /** Check if a PR is ready to merge based on GitHub's mergeable_state field */
-export function isReadyToMerge(pr: PullRequestInfo): boolean {
+export function isReadyToMerge(pr: MergeStatusInfo): boolean {
   if (pr.state !== 'open') return false
   const mergeableState = pr.mergeable_state?.toLowerCase() ?? null
   return mergeableState === 'clean' || mergeableState === 'behind'
 }
 
+export interface QueuedStatusInfo {
+  state: string;
+  is_queued: boolean;
+}
+
 /** Check if a PR is queued in a merge queue (ready to merge + is_queued) */
-export function isQueuedForMerge(pr: PullRequestInfo): boolean {
+export function isQueuedForMerge(pr: QueuedStatusInfo): boolean {
   return pr.state === 'open' && pr.is_queued;
 }
 
