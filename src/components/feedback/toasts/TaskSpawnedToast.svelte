@@ -7,7 +7,7 @@
 
   taskSpawned.subscribe((data) => {
     if (data) {
-      message = `New task created: ${data.initial_prompt}`
+      message = `New task created: ${data.promptText}`
       visible = true
       clearTimeout(timer)
       timer = setTimeout(() => {

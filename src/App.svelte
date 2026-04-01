@@ -3,13 +3,14 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
   import { tasks, pendingTask, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, taskSpawned, startingTasks, codeCleanupTasksEnabled, rateLimitNotification, taskRuntimeInfo, focusBoardFilters } from './lib/stores'
-  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, listOpenCodeAgents, getReviewPrs, getAuthoredPrs } from './lib/ipc'
+  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, listOpenCodeAgents, getReviewPrs, getAuthoredPrs, getTaskDetail } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import SearchableSelect from './components/shared/ui/SearchableSelect.svelte'
   import { applyProjectOrder } from './lib/projectOrder'
   import { hasMergeConflicts, preservePullRequestState } from './lib/types'
   import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView, PermissionMode, AgentSession } from './lib/types'
   import { moveTaskToComplete } from './lib/moveToComplete'
+  import { getTaskPromptText } from './lib/taskPrompt'
   import FocusBoard from './components/focus-board/FocusBoard.svelte'
   import TaskDetailView from './components/task-detail/TaskDetailView.svelte'
    import PromptInput from './components/prompt/PromptInput.svelte'
@@ -852,7 +853,7 @@
     )
 
     unlisteners.push(
-      await listen<{ action: string; task_id: string }>('task-changed', (event) => {
+      await listen<{ action: string; task_id: string }>('task-changed', async (event) => {
         if (event.payload.action === 'deleted') {
           const taskId = event.payload.task_id
           const updated = new Map($activeSessions)
@@ -863,10 +864,14 @@
             $checkpointNotification = null
           }
         } else if (event.payload.action === 'created') {
-          // Trigger toast for newly created task (spawned by agent)
-          $taskSpawned = { taskId: event.payload.task_id, initial_prompt: event.payload.task_id }
+          try {
+            const task = await getTaskDetail(event.payload.task_id)
+            $taskSpawned = { taskId: task.id, promptText: getTaskPromptText(task) }
+          } catch (e) {
+            console.error('Failed to load created task for toast:', e)
+          }
         }
-        loadTasks()
+        await loadTasks()
       })
     )
 
@@ -958,7 +963,7 @@
           <div class="p-4 overflow-visible">
             <PromptInput
               projectId={$activeProjectId}
-              value={editingTask ? editingTask.initial_prompt : ''}
+               value={editingTask ? getTaskPromptText(editingTask) : ''}
               autofocus={true}
               actions={editingTask ? [] : dialogActions}
               onSubmit={async (prompt) => {

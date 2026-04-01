@@ -2,6 +2,7 @@
   import { tick, onMount } from 'svelte'
   import type { Task, BoardStatus, PermissionMode, AutocompleteAgentInfo } from '../lib/types'
   import { createTask, updateTask, getProjectConfig, listOpenCodeAgents } from '../lib/ipc'
+  import { getTaskPromptText } from '../lib/taskPrompt'
   import { activeProjectId } from '../lib/stores'
   import Modal from './shared/ui/Modal.svelte'
 
@@ -58,7 +59,7 @@
 
   // Initialize form values from props
   $effect(() => {
-    initialPrompt = mode === 'edit' && task ? task.initial_prompt : ''
+    initialPrompt = mode === 'edit' && task ? getTaskPromptText(task) : ''
     status = mode === 'edit' && task ? task.status : 'backlog'
   })
 

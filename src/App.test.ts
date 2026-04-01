@@ -31,7 +31,7 @@ vi.mock('./lib/stores', () => ({
   checkpointNotification: writable<CheckpointNotification | null>(null),
   ciFailureNotification: writable<CiFailureNotification | null>(null),
   rateLimitNotification: writable<RateLimitNotification | null>(null),
-  taskSpawned: writable<{ taskId: string; initial_prompt: string } | null>(null),
+  taskSpawned: writable<{ taskId: string; promptText: string } | null>(null),
   ticketPrs: writable<Map<string, PullRequestInfo[]>>(new Map()),
   isLoading: writable(false),
   error: writable<string | null>(null),
@@ -104,6 +104,7 @@ vi.mock('./lib/ipc', () => ({
   downloadWhisperModel: vi.fn(),
   getPtyBuffer: vi.fn(),
   createTask: vi.fn(),
+  getTaskDetail: vi.fn(),
   updateTask: vi.fn(),
   updateTaskStatus: vi.fn(async () => undefined),
   deleteTask: vi.fn(),
@@ -1318,6 +1319,39 @@ describe('App onMount initialization order', () => {
 
       expect(newPrB?.mergeable).toBe(false)
       expect(newPrB?.mergeable_state).toBe('dirty')
+    })
+  })
+
+  describe('task-changed created events', () => {
+    it('stores the created task prompt text for the spawned-task toast', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const { getTaskDetail } = await import('./lib/ipc')
+      const { get } = await import('svelte/store')
+
+      vi.mocked(getTaskDetail).mockResolvedValue({
+        id: 'T-99',
+        initial_prompt: '',
+        prompt: 'Prompt from task detail',
+        summary: null,
+        status: 'backlog',
+        agent: null,
+        permission_mode: null,
+        project_id: 'proj-1',
+        created_at: 1000,
+        updated_at: 1000,
+      })
+
+      render(App)
+
+      const callback = eventListeners.get('task-changed')
+      expect(callback).toBeDefined()
+
+      await callback?.({ payload: { action: 'created', task_id: 'T-99' } })
+
+      await vi.waitFor(() => {
+        expect(get(stores.taskSpawned)).toEqual({ taskId: 'T-99', promptText: 'Prompt from task detail' })
+      })
     })
   })
 })

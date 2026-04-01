@@ -105,6 +105,18 @@ describe('AddTaskDialog', () => {
     expect(promptInput.value).toBe('Existing Task')
   })
 
+  it('falls back to prompt when pre-filling edit mode and initial_prompt is empty', async () => {
+    render(AddTaskDialog, {
+      props: {
+        mode: 'edit',
+        task: { ...mockTask, initial_prompt: '', prompt: 'Prompt fallback text' },
+      },
+    })
+
+    const promptInput = screen.getByPlaceholderText('Describe what you want the agent to do') as HTMLInputElement
+    expect(promptInput.value).toBe('Prompt fallback text')
+  })
+
   it('calls updateTask when submitted in edit mode', async () => {
     render(AddTaskDialog, { props: { mode: 'edit', task: mockTask } })
     
