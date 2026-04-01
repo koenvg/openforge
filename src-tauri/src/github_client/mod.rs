@@ -255,4 +255,37 @@ mod tests {
         let client = GitHubClient::new();
         assert_eq!(client.get_last_rate_limit_reset(), None);
     }
+
+    #[test]
+    fn test_cloned_clients_share_etag_cache() {
+        let client1 = GitHubClient::new();
+        let client2 = client1.clone();
+
+        assert!(client1.shares_cache_with(&client2));
+        assert!(client2.shares_cache_with(&client1));
+    }
+
+    #[test]
+    fn test_cloned_clients_share_rate_limit_state() {
+        let client1 = GitHubClient::new();
+        let client2 = client1.clone();
+
+        *client1.last_rate_limit_reset.lock().unwrap() = Some(12345);
+        assert_eq!(client2.get_last_rate_limit_reset(), Some(12345));
+
+        client2.clear_rate_limit_reset();
+        assert_eq!(client1.get_last_rate_limit_reset(), None);
+    }
+
+    #[test]
+    fn test_cloned_client_mutation_persists_across_clones() {
+        let client_original = GitHubClient::new();
+        let client_clone = client_original.clone();
+
+        *client_clone.last_rate_limit_reset.lock().unwrap() = Some(99999);
+        assert_eq!(client_original.get_last_rate_limit_reset(), Some(99999));
+
+        client_original.clear_rate_limit_reset();
+        assert_eq!(client_clone.get_last_rate_limit_reset(), None);
+    }
 }

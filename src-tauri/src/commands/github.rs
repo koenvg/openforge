@@ -3,14 +3,12 @@ use crate::{db, github_poller};
 use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager, State};
 
-fn managed_github_client<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> GitHubClient {
-    app.state::<GitHubClient>().inner().clone()
-}
-
 #[tauri::command]
-pub async fn force_github_sync(app: tauri::AppHandle) -> Result<github_poller::PollResult, String> {
-    let github_client = managed_github_client(&app);
-    let result = github_poller::poll_github_once(&app, &github_client).await;
+pub async fn force_github_sync(
+    app: tauri::AppHandle,
+    github_client: State<'_, GitHubClient>,
+) -> Result<github_poller::PollResult, String> {
+    let result = github_poller::poll_github_once(&app, github_client.inner()).await;
     Ok(result)
 }
 
@@ -191,8 +189,9 @@ mod tests {
             .build(mock_context(noop_assets()))
             .expect("mock app should build");
 
-        let sync_client = managed_github_client(&app.handle());
+        let state_client = app.state::<GitHubClient>();
+        let state_instance = state_client.inner();
 
-        assert!(sync_client.shares_cache_with(&managed_client));
+        assert!(state_instance.shares_cache_with(&managed_client));
     }
 }
