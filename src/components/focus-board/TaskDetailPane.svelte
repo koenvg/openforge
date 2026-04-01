@@ -1,8 +1,10 @@
 <script lang="ts">
   import type { Task, PullRequestInfo, PrComment } from '../../lib/types'
-  import { parseCheckRuns, splitCheckRuns, hasMergeConflicts } from '../../lib/types'
+  import { parseCheckRuns, splitCheckRuns } from '../../lib/types'
   import { getPrComments, markCommentAddressed, openUrl } from '../../lib/ipc'
   import MarkdownContent from '../shared/content/MarkdownContent.svelte'
+  import { getPrStatusChips } from '../../lib/prStatusPresentation'
+  import PrStatusChip from '../shared/ui/PrStatusChip.svelte'
 
   interface Props {
     task: Task | null
@@ -76,12 +78,9 @@
               <span class="text-[0.65rem] font-semibold uppercase px-1.5 py-0.5 rounded tracking-wider {pr.state === 'open' ? 'bg-success/15 text-success' : pr.state === 'merged' ? 'bg-secondary/15 text-secondary' : 'bg-error/15 text-error'}">
                 {pr.state}
               </span>
-              {#if hasMergeConflicts(pr)}
-                <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-[var(--chip-error-bg)]">
-                  <span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-error-dot)]"></span>
-                  <span class="text-[10px] font-medium text-[var(--chip-error-text)]">Merge Conflict</span>
-                </span>
-              {/if}
+              {#each getPrStatusChips(pr, 'compact').filter(c => c.type === 'merge' && c.variant === 'error') as chip}
+                <PrStatusChip {chip} />
+              {/each}
               <span class="text-xs text-base-content font-medium">{pr.title}</span>
             </div>
             <button
@@ -102,15 +101,20 @@
           {#if pr.ci_status}
             {@const checkRuns = parseCheckRuns(pr.ci_check_runs)}
             {@const { visible, passingCount } = splitCheckRuns(checkRuns)}
+            {@const ciChip = getPrStatusChips(pr, 'detail').find(c => c.type === 'ci')}
             <div class="flex flex-col gap-1.5">
               <div class="flex items-center justify-between gap-2">
                 <span class="text-xs text-base-content/50">{pr.title}</span>
-                <span class="text-[0.65rem] font-semibold px-1.5 py-0.5 rounded {pr.ci_status === 'success' ? 'bg-success/15 text-success' : pr.ci_status === 'failure' ? 'bg-error/15 text-error' : pr.ci_status === 'pending' ? 'bg-warning/15 text-warning' : 'bg-base-content/15 text-base-content/50'}">
-                  {#if pr.ci_status === 'success'}✓ Passing
-                  {:else if pr.ci_status === 'failure'}✗ Failing
-                  {:else if pr.ci_status === 'pending'}⏳ Running
-                  {:else}— No CI{/if}
-                </span>
+                {#if ciChip}
+                  <PrStatusChip chip={ciChip} />
+                {:else if pr.ci_status}
+                  <span class="text-[0.65rem] font-semibold px-1.5 py-0.5 rounded {pr.ci_status === 'success' ? 'bg-success/15 text-success' : pr.ci_status === 'failure' ? 'bg-error/15 text-error' : pr.ci_status === 'pending' ? 'bg-warning/15 text-warning' : 'bg-base-content/15 text-base-content/50'} flex items-center gap-1 w-fit">
+                    {#if pr.ci_status === 'success'}Passing
+                    {:else if pr.ci_status === 'failure'}Failing
+                    {:else if pr.ci_status === 'pending'}Running
+                    {:else}— No CI{/if}
+                  </span>
+                {/if}
               </div>
               {#if visible.length > 0 || passingCount > 0}
                 <div class="flex flex-col gap-1 pl-1">

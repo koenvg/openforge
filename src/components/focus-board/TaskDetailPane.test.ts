@@ -294,7 +294,7 @@ describe('TaskDetailPane', () => {
           onOpenFullView: vi.fn(),
         },
       })
-      expect(screen.getByText(/✓ Passing/)).toBeTruthy()
+      expect(screen.getByText('Passing')).toBeTruthy()
     })
 
     it('does not render pipeline section when no PR has ci_status', () => {
