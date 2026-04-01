@@ -1,6 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, beforeEach } from 'vitest'
 import { get } from 'svelte/store'
+import { requireElement } from '../../../test-utils/dom'
 import CheckpointToast from './CheckpointToast.svelte'
 import { checkpointNotification, selectedTaskId } from '../../../lib/stores'
 import type { CheckpointNotification } from '../../../lib/types'
@@ -38,7 +39,7 @@ describe('CheckpointToast', () => {
     checkpointNotification.set(baseNotification)
 
     await new Promise((r) => setTimeout(r, 10))
-    const toast = screen.getByText(/PROJ-42/).closest('[role="button"]') as HTMLElement
+    const toast = requireElement(screen.getByText(/PROJ-42/).closest('[role="button"]'), HTMLElement)
     await fireEvent.click(toast)
 
     expect(get(selectedTaskId)).toBe('t-1')
