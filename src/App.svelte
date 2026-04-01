@@ -3,7 +3,7 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
   import { tasks, pendingTask, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, taskSpawned, startingTasks, codeCleanupTasksEnabled, rateLimitNotification, taskRuntimeInfo, focusBoardFilters } from './lib/stores'
-  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, listOpenCodeAgents, getReviewPrs, getAuthoredPrs } from './lib/ipc'
+  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, listOpenCodeAgents, getReviewPrs, getAuthoredPrs, getTaskDetail } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import SearchableSelect from './components/shared/ui/SearchableSelect.svelte'
   import { applyProjectOrder } from './lib/projectOrder'
@@ -853,7 +853,7 @@
     )
 
     unlisteners.push(
-      await listen<{ action: string; task_id: string }>('task-changed', (event) => {
+      await listen<{ action: string; task_id: string }>('task-changed', async (event) => {
         if (event.payload.action === 'deleted') {
           const taskId = event.payload.task_id
           const updated = new Map($activeSessions)
@@ -863,8 +863,15 @@
           if ($checkpointNotification?.ticketId === taskId) {
             $checkpointNotification = null
           }
+        } else if (event.payload.action === 'created') {
+          try {
+            const task = await getTaskDetail(event.payload.task_id)
+            $taskSpawned = { taskId: task.id, promptText: getTaskPromptText(task) }
+          } catch (e) {
+            console.error('Failed to load created task for toast:', e)
+          }
         }
-        loadTasks()
+        await loadTasks()
       })
     )
 
