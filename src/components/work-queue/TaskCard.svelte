@@ -8,6 +8,8 @@
   import { timeAgoFromSeconds } from '../../lib/timeAgo'
   import Card from '../shared/ui/Card.svelte'
   import { getTaskTitle } from '../../lib/taskTitle'
+  import { getPrStatusChips } from '../../lib/prStatusPresentation'
+  import PrStatusChip from '../shared/ui/PrStatusChip.svelte'
 
   interface Props {
     task: Task
@@ -157,42 +159,9 @@
           </button>
         {/each}
         {#each pullRequests as pr}
-          {#if pr.draft && pr.state === 'open'}
-            <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 bg-[var(--chip-soft-bg)] text-[10px] font-medium text-[var(--chip-soft-text)]">Draft</span>
-          {/if}
-          {#if pr.ci_status && pr.ci_status !== 'none' && pr.state === 'open'}
-            <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 {pr.ci_status === 'success' ? 'bg-[var(--chip-running-bg)]' : pr.ci_status === 'failure' ? 'bg-[var(--chip-error-bg)]' : 'bg-[var(--chip-paused-bg)]'}">
-              <span class="w-1.5 h-1.5 rounded-full {pr.ci_status === 'success' ? 'bg-[var(--chip-running-dot)]' : pr.ci_status === 'failure' ? 'bg-[var(--chip-error-dot)]' : 'bg-[var(--chip-paused-dot)]'}"></span>
-              <span class="text-[10px] font-medium {pr.ci_status === 'success' ? 'text-[var(--chip-running-text)]' : pr.ci_status === 'failure' ? 'text-[var(--chip-error-text)] ci-failure-text' : 'text-[var(--chip-paused-text)] ci-pending-text'}">{pr.ci_status === 'success' ? 'Passed' : pr.ci_status === 'failure' ? 'Failed' : 'Pending'}</span>
-            </span>
-          {/if}
-          {#if pr.review_status && pr.review_status !== 'none' && pr.state === 'open'}
-            <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 {pr.review_status === 'approved' ? 'bg-[var(--chip-running-bg)]' : pr.review_status === 'changes_requested' ? 'bg-[var(--chip-paused-bg)]' : 'bg-[var(--chip-stopped-bg)]'}">
-              <span class="w-1.5 h-1.5 rounded-full {pr.review_status === 'approved' ? 'bg-[var(--chip-running-dot)]' : pr.review_status === 'changes_requested' ? 'bg-[var(--chip-paused-dot)]' : 'bg-[var(--chip-stopped-dot)]'}"></span>
-              <span class="text-[10px] font-medium {pr.review_status === 'approved' ? 'text-[var(--chip-running-text)]' : pr.review_status === 'changes_requested' ? 'text-[var(--chip-paused-text)]' : 'text-[var(--chip-stopped-text)] review-pending-text'}">{pr.review_status === 'approved' ? 'Approved' : pr.review_status === 'changes_requested' ? 'Changes req.' : 'Needs review'}</span>
-            </span>
-          {/if}
-          {#if hasMergeConflicts(pr)}
-            <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 bg-[var(--chip-error-bg)]">
-              <span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-error-dot)]"></span>
-              <span class="text-[10px] font-medium text-[var(--chip-error-text)]">Merge Conflict</span>
-            </span>
-          {/if}
-        {/each}
-        {#each pullRequests as pr}
-          {#if pr.state === 'merged'}
-            <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 bg-[var(--chip-soft-bg)] text-[10px] font-medium text-secondary">merged</span>
-          {:else if isQueuedForMerge(pr)}
-            <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 bg-[var(--chip-done-bg)]">
-              <span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-done-dot)]"></span>
-              <span class="text-[10px] font-medium text-[var(--chip-done-text)]">Queued for merge</span>
-            </span>
-          {:else if isReadyToMerge(pr)}
-            <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 bg-[var(--chip-done-bg)]">
-              <span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-done-dot)]"></span>
-              <span class="text-[10px] font-medium text-[var(--chip-done-text)]">Ready to merge</span>
-            </span>
-          {/if}
+          {#each getPrStatusChips(pr, 'compact') as chip}
+            <PrStatusChip {chip} />
+          {/each}
         {/each}
         {#if totalUnaddressed > 0}
           <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 bg-[var(--chip-error-bg)]">

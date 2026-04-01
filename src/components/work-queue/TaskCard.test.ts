@@ -273,38 +273,38 @@ describe('TaskCard', () => {
   it('shows CI status chip when isFeatured and PR has CI status', () => {
     const pr = { ...basePr, ci_status: 'success' }
     render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: true } })
-    expect(screen.getByText('Passed')).toBeTruthy()
+    expect(screen.getByText('CI Passed')).toBeTruthy()
   })
 
   it('hides CI status chip when not featured even with PR data', () => {
     const pr = { ...basePr, ci_status: 'success' }
     render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: false } })
-    expect(screen.queryByText('Passed')).toBeNull()
+    expect(screen.queryByText('CI Passed')).toBeNull()
   })
 
   it('hides CI status chip by default (not featured)', () => {
     const pr = { ...basePr, ci_status: 'success' }
     render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
-    expect(screen.queryByText('Passed')).toBeNull()
+    expect(screen.queryByText('CI Passed')).toBeNull()
   })
 
   it('shows CI failure chip when featured', () => {
     const pr = { ...basePr, ci_status: 'failure' }
     render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: true } })
-    expect(screen.getByText('Failed')).toBeTruthy()
+    expect(screen.getByText('CI Failed')).toBeTruthy()
   })
 
   it('shows CI pending chip when featured', () => {
     const pr = { ...basePr, ci_status: 'pending' }
     render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: true } })
-    expect(screen.getByText('Pending')).toBeTruthy()
+    expect(screen.getByText('CI Pending')).toBeTruthy()
   })
 
   it('no CI text when ci_status is null even when featured', () => {
     render(TaskCard, { props: { task: baseTask, pullRequests: [basePr], isFeatured: true } })
-    expect(screen.queryByText('Passed')).toBeNull()
-    expect(screen.queryByText('Failed')).toBeNull()
-    expect(screen.queryByText('Pending')).toBeNull()
+    expect(screen.queryByText('CI Passed')).toBeNull()
+    expect(screen.queryByText('CI Failed')).toBeNull()
+    expect(screen.queryByText('CI Pending')).toBeNull()
   })
 
   it('shows review status chip when featured', () => {
@@ -322,20 +322,20 @@ describe('TaskCard', () => {
   it('shows changes requested chip when featured', () => {
     const pr = { ...basePr, review_status: 'changes_requested' }
     render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: true } })
-    expect(screen.getByText('Changes req.')).toBeTruthy()
+    expect(screen.getByText('Changes Req.')).toBeTruthy()
   })
 
   it('shows needs review chip when featured', () => {
     const pr = { ...basePr, review_status: 'review_required' }
     render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: true } })
-    expect(screen.getByText('Needs review')).toBeTruthy()
+    expect(screen.getByText('Needs Review')).toBeTruthy()
   })
 
   it('no review chip when review_status is null even when featured', () => {
     render(TaskCard, { props: { task: baseTask, pullRequests: [basePr], isFeatured: true } })
     expect(screen.queryByText('Approved')).toBeNull()
-    expect(screen.queryByText('Changes req.')).toBeNull()
-    expect(screen.queryByText('Needs review')).toBeNull()
+    expect(screen.queryByText('Changes Req.')).toBeNull()
+    expect(screen.queryByText('Needs Review')).toBeNull()
   })
 
   it('no review chip when PR is closed even when featured', () => {
@@ -433,10 +433,10 @@ describe('TaskCard', () => {
     expect(screen.queryByText('PR #42')).toBeNull()
   })
 
-  it('shows "Queued for merge" chip when PR is queued and mergeable is null', () => {
+  it('shows "Queued" chip when PR is queued and mergeable is null', () => {
     const pr: PullRequestInfo = { ...basePr, state: 'open', ci_status: 'success', review_status: 'approved', is_queued: true, mergeable: null, mergeable_state: null }
     render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: true } })
-    expect(screen.getByText('Queued for merge')).toBeTruthy()
+    expect(screen.getByText('Queued')).toBeTruthy()
   })
 
   it('shows prompt first line as fallback title when initial_prompt is only whitespace', () => {
