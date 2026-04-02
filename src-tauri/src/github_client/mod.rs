@@ -30,7 +30,7 @@ pub use events::{
 pub use reviews::aggregate_review_status;
 pub use types::*;
 
-use reqwest::{header::HeaderMap, Client, RequestBuilder, Response, StatusCode};
+use reqwest::{header::HeaderMap, Client, Method, RequestBuilder, Response, StatusCode};
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -82,13 +82,17 @@ impl GitHubClient {
             && Arc::ptr_eq(&self.last_rate_limit_reset, &other.last_rate_limit_reset)
     }
 
-    fn github_get(&self, url: &str, token: &str) -> reqwest::RequestBuilder {
+    fn github_request(&self, method: Method, url: &str, token: &str) -> RequestBuilder {
         self.client
-            .get(url)
+            .request(method, url)
             .header("Authorization", format!("token {}", token))
             .header("User-Agent", "openforge")
             .header("Accept", "application/vnd.github+json")
             .header("X-GitHub-Api-Version", "2026-03-10")
+    }
+
+    fn github_get(&self, url: &str, token: &str) -> reqwest::RequestBuilder {
+        self.github_request(Method::GET, url, token)
     }
 
     fn cached_etag_for_url(&self, url: &str) -> Option<String> {
@@ -255,7 +259,8 @@ impl Default for GitHubClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use reqwest::header::{HeaderMap, HeaderValue, IF_NONE_MATCH};
+    use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, IF_NONE_MATCH, USER_AGENT};
+    use reqwest::Method;
 
     #[test]
     fn test_client_creation() {
@@ -368,6 +373,45 @@ mod tests {
             .expect("request should build");
 
         assert!(request.headers().get(IF_NONE_MATCH).is_none());
+    }
+
+    #[test]
+    fn test_github_request_sets_standard_github_headers() {
+        let client = GitHubClient::new();
+
+        let request = client
+            .github_request(Method::POST, "https://example.com/resource", "token")
+            .build()
+            .expect("request should build");
+
+        assert_eq!(
+            request.headers().get(AUTHORIZATION),
+            Some(&HeaderValue::from_static("token token"))
+        );
+        assert_eq!(
+            request.headers().get(USER_AGENT),
+            Some(&HeaderValue::from_static("openforge"))
+        );
+        assert_eq!(
+            request.headers().get(ACCEPT),
+            Some(&HeaderValue::from_static("application/vnd.github+json"))
+        );
+        assert_eq!(
+            request.headers().get("X-GitHub-Api-Version"),
+            Some(&HeaderValue::from_static("2026-03-10"))
+        );
+    }
+
+    #[test]
+    fn test_github_request_preserves_http_method() {
+        let client = GitHubClient::new();
+
+        let request = client
+            .github_request(Method::PUT, "https://example.com/resource", "token")
+            .build()
+            .expect("request should build");
+
+        assert_eq!(request.method(), Method::PUT);
     }
 
     #[test]

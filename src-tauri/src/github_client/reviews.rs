@@ -63,10 +63,7 @@ impl GitHubClient {
 
         let response = self
             .send_github(
-                self.client
-                    .post(&url)
-                    .header("Authorization", format!("token {}", token))
-                    .header("User-Agent", "openforge")
+                self.github_request(reqwest::Method::POST, &url, token)
                     .json(&request_body),
             )
             .await?;
