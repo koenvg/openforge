@@ -8,7 +8,7 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: invokeMock,
 }))
 
-import { createTask, getAllTasks, getWorkQueueTasks, spawnShellPty } from './ipc'
+import { createTask, getAllTasks, getWorkQueueTasks, spawnShellPty, fsSearchFiles } from './ipc'
 
 describe('ipc spawnShellPty', () => {
   beforeEach(() => {
@@ -114,5 +114,35 @@ describe('ipc spawnShellPty', () => {
     await expect(
       createTask('Created task', 'doing', null, null, null),
     ).resolves.toEqual(expect.objectContaining({ id: 'T-4', status: 'doing' }))
+  })
+})
+
+describe('ipc fsSearchFiles', () => {
+  beforeEach(() => {
+    invokeMock.mockReset()
+    invokeMock.mockResolvedValue(['src/lib/ipc.ts', 'src/lib/types.ts'])
+  })
+
+  it('calls fs_search_files with correct payload including limit', async () => {
+    await fsSearchFiles('P-1', 'ipc', 30)
+    expect(invokeMock).toHaveBeenCalledWith('fs_search_files', {
+      projectId: 'P-1',
+      query: 'ipc',
+      limit: 30,
+    })
+  })
+
+  it('defaults limit to 50 when not specified', async () => {
+    await fsSearchFiles('P-1', 'foo')
+    expect(invokeMock).toHaveBeenCalledWith('fs_search_files', {
+      projectId: 'P-1',
+      query: 'foo',
+      limit: 50,
+    })
+  })
+
+  it('returns string array from invoke', async () => {
+    const result = await fsSearchFiles('P-1', 'test')
+    expect(result).toEqual(['src/lib/ipc.ts', 'src/lib/types.ts'])
   })
 })

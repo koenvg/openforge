@@ -5,6 +5,7 @@ import type { FileEntry, FileContent } from '../lib/types'
 
 vi.mock('../lib/stores', () => ({
   activeProjectId: writable<string | null>('test-project-id'),
+  pendingFileReveal: writable<string | null>(null),
 }))
 
 vi.mock('../lib/ipc', () => ({

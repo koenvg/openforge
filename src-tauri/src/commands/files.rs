@@ -316,6 +316,35 @@ pub async fn fs_read_file(
     })
 }
 
+#[tauri::command]
+pub async fn fs_search_files(
+    db: State<'_, Arc<Mutex<db::Database>>>,
+    project_id: String,
+    query: String,
+    limit: Option<usize>,
+) -> Result<Vec<String>, String> {
+    let project = {
+        let db_guard = crate::db::acquire_db(&db);
+        match db_guard
+            .get_project(&project_id)
+            .map_err(|e| format!("Database error: {}", e))?
+        {
+            Some(p) => p,
+            None => return Ok(vec![]),
+        }
+    };
+
+    if project.path.is_empty() {
+        return Ok(vec![]);
+    }
+
+    Ok(crate::command_discovery::search_project_files(
+        &project.path,
+        &query,
+        limit.unwrap_or(50),
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -647,5 +676,125 @@ mod tests {
         assert!(resolved.starts_with(&canonical_root));
         // Verify it resolves to the nested directory
         assert!(resolved.ends_with("src/lib"));
+    }
+
+    fn init_git_repo_with_files(root: &std::path::Path, files: &[&str]) -> git2::Repository {
+        let repo = git2::Repository::init(root).expect("Failed to init git repo");
+        let mut index = repo.index().expect("Failed to open index");
+
+        for file in files {
+            let parts: Vec<&str> = file.rsplitn(2, '/').collect();
+            let parent = if parts.len() == 2 {
+                root.join(parts[1])
+            } else {
+                root.to_path_buf()
+            };
+            fs::create_dir_all(&parent).expect("Failed to create dir");
+            fs::write(root.join(file), "content").expect("Failed to write file");
+            index.add_path(std::path::Path::new(file)).expect("Failed to add to index");
+        }
+
+        index.write().expect("Failed to write index");
+        repo
+    }
+
+    #[test]
+    fn test_search_project_files_returns_matches() {
+        let temp = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp.path();
+
+        init_git_repo_with_files(root, &[
+            "src/components/Button.tsx",
+            "src/components/Modal.tsx",
+            "src/lib/utils.ts",
+            "README.md",
+        ]);
+
+        let results = crate::command_discovery::search_project_files(
+            root.to_str().unwrap(),
+            "button",
+            50,
+        );
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].to_lowercase().contains("button"));
+    }
+
+    #[test]
+    fn test_search_project_files_case_insensitive() {
+        let temp = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp.path();
+
+        init_git_repo_with_files(root, &[
+            "src/Button.tsx",
+            "src/modal.tsx",
+        ]);
+
+        let results_upper = crate::command_discovery::search_project_files(
+            root.to_str().unwrap(),
+            "BUTTON",
+            50,
+        );
+        let results_lower = crate::command_discovery::search_project_files(
+            root.to_str().unwrap(),
+            "button",
+            50,
+        );
+
+        assert_eq!(results_upper.len(), 1);
+        assert_eq!(results_lower.len(), 1);
+        assert_eq!(results_upper[0], results_lower[0]);
+    }
+
+    #[test]
+    fn test_search_project_files_limit_respected() {
+        let temp = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp.path();
+
+        init_git_repo_with_files(root, &[
+            "src/a.ts",
+            "src/b.ts",
+            "src/c.ts",
+            "src/d.ts",
+            "src/e.ts",
+        ]);
+
+        let results = crate::command_discovery::search_project_files(
+            root.to_str().unwrap(),
+            ".ts",
+            3,
+        );
+
+        assert_eq!(results.len(), 3, "Limit of 3 should be respected");
+    }
+
+    #[test]
+    fn test_search_project_files_missing_project_returns_empty_vec() {
+        let results = crate::command_discovery::search_project_files(
+            "/nonexistent/path/that/does/not/exist",
+            "anything",
+            50,
+        );
+
+        assert!(results.is_empty(), "Missing project path should return empty vec");
+    }
+
+    #[test]
+    fn test_search_project_files_no_matches_returns_empty_vec() {
+        let temp = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp.path();
+
+        init_git_repo_with_files(root, &[
+            "src/Button.tsx",
+            "src/Modal.tsx",
+        ]);
+
+        let results = crate::command_discovery::search_project_files(
+            root.to_str().unwrap(),
+            "zzznomatch",
+            50,
+        );
+
+        assert!(results.is_empty(), "Non-matching query should return empty vec");
     }
 }

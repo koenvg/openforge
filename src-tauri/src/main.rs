@@ -789,6 +789,7 @@ fn main() {
             commands::agent_review::abort_agent_review,
             commands::files::fs_read_dir,
             commands::files::fs_read_file,
+            commands::files::fs_search_files,
         ])
         .build(tauri_context())
         .expect("error while building tauri application");
