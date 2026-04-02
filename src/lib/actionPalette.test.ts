@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { filterActions, getAvailableActions, getGlobalActions, getTaskActions } from './actionPalette'
-import type { Action, Task } from './types'
+import type { Action, Task, PullRequestInfo } from './types'
 
 function makeTask(overrides: Partial<Task> = {}): Task {
   return {
@@ -29,10 +29,35 @@ function makeAction(overrides: Partial<Action> = {}): Action {
   }
 }
 
+function makePR(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
+  return {
+    id: 1,
+    ticket_id: 'T-100',
+    repo_owner: 'test',
+    repo_name: 'test',
+    title: 'Test PR',
+    url: 'https://github.com/test/test/pull/1',
+    state: 'open',
+    head_sha: 'abc',
+    ci_status: 'success',
+    ci_check_runs: null,
+    review_status: 'APPROVED',
+    mergeable: true,
+    mergeable_state: 'clean',
+    merged_at: null,
+    created_at: 0,
+    updated_at: 0,
+    draft: false,
+    is_queued: false,
+    unaddressed_comment_count: 0,
+    ...overrides,
+  }
+}
+
 describe('getTaskActions', () => {
   it('returns Start Task and Delete for backlog task', () => {
     const task = makeTask({ status: 'backlog' })
-    const actions = getTaskActions(task, [])
+    const actions = getTaskActions(task, [], [])
     const ids = actions.map(a => a.id)
     expect(ids).toContain('start-task')
     expect(ids).not.toContain('move-to-done')
@@ -42,7 +67,7 @@ describe('getTaskActions', () => {
   it('returns Move to Done, Delete + custom actions for doing task', () => {
     const task = makeTask({ status: 'doing' })
     const custom = makeAction({ id: 'custom-1', name: 'Deploy' })
-    const actions = getTaskActions(task, [custom])
+    const actions = getTaskActions(task, [custom], [])
     const ids = actions.map(a => a.id)
     expect(ids).not.toContain('start-task')
     expect(ids).toContain('move-to-done')
@@ -52,11 +77,44 @@ describe('getTaskActions', () => {
 
   it('returns Delete only for done task', () => {
     const task = makeTask({ status: 'done' })
-    const actions = getTaskActions(task, [])
+    const actions = getTaskActions(task, [], [])
     const ids = actions.map(a => a.id)
     expect(ids).toContain('delete-task')
     expect(ids).not.toContain('move-to-done')
     expect(ids).not.toContain('start-task')
+  })
+
+  it('returns Merge Pull Request action when there is a ready-to-merge PR', () => {
+    const task = makeTask({ status: 'doing' })
+    const pr = makePR({ mergeable: true, mergeable_state: 'clean', state: 'open', draft: false, review_status: 'APPROVED', ci_status: 'success' })
+    const actions = getTaskActions(task, [], [pr])
+    const ids = actions.map(a => a.id)
+    expect(ids).toContain('merge-pr')
+  })
+
+  it('does not return Merge Pull Request action when PR has merge conflicts', () => {
+    const task = makeTask({ status: 'doing' })
+    const pr = makePR({ mergeable: false, mergeable_state: 'dirty' })
+    const actions = getTaskActions(task, [], [pr])
+    const ids = actions.map(a => a.id)
+    expect(ids).not.toContain('merge-pr')
+  })
+
+  it('does not return Merge Pull Request action when PR is already queued', () => {
+    const task = makeTask({ status: 'doing' })
+    const pr = makePR({ is_queued: true })
+    const actions = getTaskActions(task, [], [pr])
+    const ids = actions.map(a => a.id)
+    expect(ids).not.toContain('merge-pr')
+  })
+
+  it('does not return Merge Pull Request action when multiple PRs are ready to merge', () => {
+    const task = makeTask({ status: 'doing' })
+    const firstPr = makePR({ id: 1, title: 'First ready PR' })
+    const secondPr = makePR({ id: 2, title: 'Second ready PR', head_sha: 'def' })
+    const actions = getTaskActions(task, [], [firstPr, secondPr])
+    const ids = actions.map(a => a.id)
+    expect(ids).not.toContain('merge-pr')
   })
 })
 
@@ -91,7 +149,7 @@ describe('getGlobalActions', () => {
 describe('getAvailableActions', () => {
   it('returns task actions + global actions when task is provided', () => {
     const task = makeTask({ status: 'doing' })
-    const actions = getAvailableActions(task, [])
+    const actions = getAvailableActions(task, [], [])
     const ids = actions.map(a => a.id)
     expect(ids).toContain('move-to-done')
     expect(ids).toContain('delete-task')
@@ -100,7 +158,7 @@ describe('getAvailableActions', () => {
   })
 
   it('returns global actions only when task is null', () => {
-    const actions = getAvailableActions(null, [])
+    const actions = getAvailableActions(null, [], [])
     const ids = actions.map(a => a.id)
     expect(ids).not.toContain('move-to-done')
     expect(ids).not.toContain('delete-task')

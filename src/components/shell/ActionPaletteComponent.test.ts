@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
-import type { Task } from '../../lib/types'
+import type { PullRequestInfo, Task } from '../../lib/types'
 
 Element.prototype.scrollIntoView = vi.fn()
 
@@ -19,6 +19,31 @@ function makeTask(overrides: Partial<Task> & { id: string }): Task {
   }
 }
 
+function makePullRequest(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
+  return {
+    id: 42,
+    ticket_id: 'T-100',
+    repo_owner: 'owner',
+    repo_name: 'repo',
+    title: 'Ready PR',
+    url: 'https://github.com/owner/repo/pull/42',
+    state: 'open',
+    head_sha: 'abc123',
+    ci_status: 'success',
+    ci_check_runs: null,
+    review_status: 'approved',
+    mergeable: true,
+    mergeable_state: 'clean',
+    merged_at: null,
+    created_at: 1000,
+    updated_at: 1000,
+    draft: false,
+    is_queued: false,
+    unaddressed_comment_count: 0,
+    ...overrides,
+  }
+}
+
 describe('ActionPalette component', () => {
   it('preserves keyboard selection when available actions reorder', async () => {
     const { default: ActionPalette } = await import('./ActionPalette.svelte')
@@ -30,6 +55,7 @@ describe('ActionPalette component', () => {
       props: {
         task,
         customActions: [],
+        taskPrs: [],
         onClose,
         onExecute,
       },
@@ -48,6 +74,7 @@ describe('ActionPalette component', () => {
     await rerender({
       task: makeTask({ id: 'T-100', status: 'done' }),
       customActions: [],
+      taskPrs: [],
       onClose,
       onExecute,
     })
@@ -64,6 +91,7 @@ describe('ActionPalette component', () => {
       props: {
         task: makeTask({ id: 'T-100', status: 'backlog' }),
         customActions: [],
+        taskPrs: [],
         onClose: vi.fn(),
         onExecute: vi.fn(),
       },
@@ -72,5 +100,21 @@ describe('ActionPalette component', () => {
     expect(screen.getByText('⌘K')).toBeTruthy()
     expect(screen.getByText('⌘⇧F')).toBeTruthy()
     expect(screen.queryByText('⌘⇧P')).toBeNull()
+  })
+
+  it('shows Merge Pull Request when the selected task has a merge-ready PR', async () => {
+    const { default: ActionPalette } = await import('./ActionPalette.svelte')
+
+    render(ActionPalette, {
+      props: {
+        task: makeTask({ id: 'T-100', status: 'doing' }),
+        customActions: [],
+        taskPrs: [makePullRequest()],
+        onClose: vi.fn(),
+        onExecute: vi.fn(),
+      },
+    })
+
+    expect(screen.getByText('Merge Pull Request')).toBeTruthy()
   })
 })

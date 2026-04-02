@@ -1,4 +1,5 @@
-import type { Action, Task } from './types'
+import { isQueuedForMerge, isReadyToMerge } from './types'
+import type { Action, PullRequestInfo, Task } from './types'
 
 export interface PaletteAction {
   id: string
@@ -8,7 +9,7 @@ export interface PaletteAction {
   keywords: string[]
 }
 
-export function getTaskActions(task: Task, customActions: Action[]): PaletteAction[] {
+export function getTaskActions(task: Task, customActions: Action[], taskPrs: PullRequestInfo[] = []): PaletteAction[] {
   const actions: PaletteAction[] = []
 
   if (task.status === 'backlog') {
@@ -28,6 +29,17 @@ export function getTaskActions(task: Task, customActions: Action[]): PaletteActi
       shortcut: null,
       category: 'task',
       keywords: ['complete', 'finish', 'close', 'done'],
+    })
+  }
+
+  const readyToMergePrs = taskPrs.filter(pr => isReadyToMerge(pr) && !isQueuedForMerge(pr))
+  if (readyToMergePrs.length === 1) {
+    actions.push({
+      id: 'merge-pr',
+      label: 'Merge Pull Request',
+      shortcut: null,
+      category: 'task',
+      keywords: ['merge', 'pull request', 'pr', 'github'],
     })
   }
 
@@ -99,8 +111,8 @@ export function getGlobalActions(): PaletteAction[] {
   ]
 }
 
-export function getAvailableActions(task: Task | null, customActions: Action[]): PaletteAction[] {
-  const taskActions = task ? getTaskActions(task, customActions) : []
+export function getAvailableActions(task: Task | null, customActions: Action[], taskPrs: PullRequestInfo[] = []): PaletteAction[] {
+  const taskActions = task ? getTaskActions(task, customActions, taskPrs) : []
   return [...taskActions, ...getGlobalActions()]
 }
 

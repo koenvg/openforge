@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte'
-  import type { Task, Action } from '../../lib/types'
+  import type { Task, Action, PullRequestInfo } from '../../lib/types'
   import { getAvailableActions, filterActions, type PaletteAction } from '../../lib/actionPalette'
   import { useListNavigation } from '../../lib/useListNavigation.svelte'
   import HoverTooltip from '../shared/ui/HoverTooltip.svelte'
@@ -8,17 +8,18 @@
   interface Props {
     task: Task | null
     customActions: Action[]
+    taskPrs: PullRequestInfo[]
     onClose: () => void
     onExecute: (actionId: string) => void
   }
 
-  let { task, customActions, onClose, onExecute }: Props = $props()
+  let { task, customActions, taskPrs, onClose, onExecute }: Props = $props()
 
   let searchQuery = $state('')
   let selectedActionId = $state<string | null>(null)
   let inputEl = $state<HTMLInputElement | null>(null)
 
-  let allActions = $derived(getAvailableActions(task, customActions))
+  let allActions = $derived(getAvailableActions(task, customActions, taskPrs))
   let filtered = $derived(filterActions(allActions, searchQuery))
 
   // Group by category
