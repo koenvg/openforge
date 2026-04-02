@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte'
   import { get } from 'svelte/store'
   import type { Task, Action, BoardStatus } from '../../lib/types'
-  import { activeSessions, activeProjectId, startingTasks, taskReviewModes, taskTerminalOpen, error } from '../../lib/stores'
+  import { activeSessions, activeProjectId, startingTasks, taskActiveView, error } from '../../lib/stores'
   import { getWorktreeForTask, updateTaskStatus } from '../../lib/ipc'
   import { useAppRouter } from '../../lib/router.svelte'
   import { moveTaskToComplete } from '../../lib/moveToComplete'
@@ -13,7 +13,6 @@
   import AgentPanel from './AgentPanel.svelte'
   import TaskInfoPanel from './TaskInfoPanel.svelte'
   import ResizablePanel from '../shared/ui/ResizablePanel.svelte'
-  import ResizableBottomPanel from '../shared/ui/ResizableBottomPanel.svelte'
   import SelfReviewView from './SelfReviewView.svelte'
   import TerminalTabs from './TerminalTabs.svelte'
   import ActionDropdown from '../shared/ui/ActionDropdown.svelte'
@@ -26,9 +25,7 @@
   let { task, onRunAction }: Props = $props()
   const router = useAppRouter()
 
-  let reviewMode = $state(false)
-  let bottomPanelOpen = $state(false)
-  let terminalFullscreen = $state(false)
+  let activeView = $state<'code' | 'review' | 'terminal'>('code')
   let terminalEverOpened = $state(false)
   let workspacePath = $state<string | null>(null)
   let lastTaskId = ''
@@ -37,18 +34,11 @@
 
   let displayTitle = $derived(task.initial_prompt || (task.prompt ? task.prompt.split('\n')[0] : '') || task.id)
 
-  function setReviewMode(value: boolean) {
-    reviewMode = value
-    const updated = new Map(get(taskReviewModes) as Map<string, boolean>)
-    updated.set(task.id, value)
-    taskReviewModes.set(updated)
-  }
-
-  function setBottomPanelOpen(value: boolean) {
-    bottomPanelOpen = value
-    const updated = new Map(get(taskTerminalOpen) as Map<string, boolean>)
-    updated.set(task.id, value)
-    taskTerminalOpen.set(updated)
+  function setActiveView(view: 'code' | 'review' | 'terminal') {
+    activeView = view
+    const updated = new Map(get(taskActiveView) as Map<string, 'code' | 'review' | 'terminal'>)
+    updated.set(task.id, view)
+    taskActiveView.set(updated)
   }
 
   let currentSession = $derived($activeSessions.get(task.id))
@@ -59,14 +49,15 @@
     const taskId = task.id
     if (taskId !== lastTaskId) {
       lastTaskId = taskId
-      reviewMode = (get(taskReviewModes) as Map<string, boolean>).get(taskId) ?? false
-      const wasOpen = (get(taskTerminalOpen) as Map<string, boolean>).get(taskId) ?? false
-      bottomPanelOpen = wasOpen
-      terminalFullscreen = false
-      terminalEverOpened = wasOpen
+      const stored = (get(taskActiveView) as Map<string, 'code' | 'review' | 'terminal'>).get(taskId) ?? 'code'
+      activeView = stored
+      terminalEverOpened = stored === 'terminal'
       workspacePath = null
       getWorktreeForTask(taskId).then((worktree) => {
         workspacePath = worktree?.worktree_path ?? null
+        if (activeView === 'terminal' && workspacePath === null) {
+          activeView = 'code'
+        }
       })
     }
   })
@@ -78,7 +69,7 @@
   })
 
   $effect(() => {
-    if (bottomPanelOpen) terminalEverOpened = true
+    if (activeView === 'terminal') terminalEverOpened = true
   })
 
   let prevTerminalTaskId: string | null = null
@@ -125,54 +116,41 @@
   }
 
   function handleTaskDetailKeydown(e: KeyboardEvent) {
-    if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && e.code === 'KeyJ') {
-      e.preventDefault()
-      if (terminalFullscreen) { terminalFullscreen = false; return }
-      setBottomPanelOpen(!bottomPanelOpen)
-      return
+    if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && workspacePath !== null) {
+      if (e.code === 'Digit3') {
+        e.preventDefault()
+        setActiveView('terminal')
+        return
+      }
     }
 
     if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && e.code === 'KeyT') {
       e.preventDefault()
-      if (!bottomPanelOpen) setBottomPanelOpen(true)
-      return
-    }
-
-    if ((e.metaKey || e.ctrlKey) && e.code === 'KeyF' && bottomPanelOpen && !reviewMode) {
-      e.preventDefault()
-      terminalFullscreen = !terminalFullscreen
+      setActiveView('terminal')
       return
     }
 
     if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && workspacePath !== null) {
       if (e.code === 'Digit1') {
         e.preventDefault()
-        setReviewMode(false)
+        setActiveView('code')
         return
       }
       if (e.code === 'Digit2') {
         e.preventDefault()
-        setReviewMode(true)
+        setActiveView('review')
         return
       }
     }
 
     if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && e.key === 'e') {
       e.preventDefault()
-      setReviewMode(false)
-      terminalFullscreen = false
-      if (!bottomPanelOpen) setBottomPanelOpen(true)
+      setActiveView('terminal')
       if (terminalTabsRef) {
         terminalTabsRef.focusActiveTab()
       } else {
         focusTerminal(`${task.id}-shell-0`)
       }
-      return
-    }
-
-    if (e.key === 'Escape' && terminalFullscreen) {
-      e.preventDefault()
-      terminalFullscreen = false
       return
     }
 
@@ -186,12 +164,12 @@
     }
     if (e.key === 'h' && workspacePath !== null) {
       e.preventDefault()
-      setReviewMode(false)
+      setActiveView('code')
       return
     }
     if (e.key === 'l' && workspacePath !== null) {
       e.preventDefault()
-      setReviewMode(true)
+      setActiveView('review')
       return
     }
   }
@@ -247,27 +225,30 @@
       <span class="text-base-content/20 mx-1">/</span>
       <span class="text-primary font-semibold">{task.id}</span>
       <span class="text-base-content/20 mx-1">/</span>
-      <span class="text-primary font-semibold">{reviewMode ? 'self_review' : 'code'}</span>
+      <span class="text-primary font-semibold">{activeView === 'review' ? 'self_review' : activeView}</span>
     </div>
     {#if workspacePath !== null}
        <div class="flex items-center gap-1">
-        <button
-            class="btn btn-ghost btn-xs gap-1.5 {!reviewMode ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
-            onclick={() => setReviewMode(false)}
+         <button
+            class="btn btn-ghost btn-xs gap-1.5 {activeView === 'code' ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
+            onclick={() => setActiveView('code')}
            >code_view {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘1</kbd>{/if}</button>
           <button
-            class="btn btn-ghost btn-xs gap-1.5 {reviewMode ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
-            onclick={() => setReviewMode(true)}
+            class="btn btn-ghost btn-xs gap-1.5 {activeView === 'review' ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
+            onclick={() => setActiveView('review')}
            >review_view {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘2</kbd>{/if}</button>
-       </div>
+          <button
+            class="btn btn-ghost btn-xs gap-1.5 {activeView === 'terminal' ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
+            onclick={() => setActiveView('terminal')}
+           >terminal {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘3</kbd>{/if}</button>
+        </div>
     {/if}
   </div>
 
   <div class="flex flex-col flex-1 overflow-hidden">
-    <!-- Upper area: hidden when fullscreen -->
-    {#if !(terminalFullscreen && bottomPanelOpen)}
+    {#if activeView === 'code' || activeView === 'review'}
       <div data-testid="upper-area" class="flex flex-1 overflow-hidden max-[800px]:flex-col">
-        {#if reviewMode}
+        {#if activeView === 'review'}
           <SelfReviewView {task} {agentStatus} onSendToAgent={handleSendToAgent} />
         {:else}
           <div class="relative flex-1 p-5 overflow-hidden max-[800px]:p-4">
@@ -289,20 +270,17 @@
       </div>
     {/if}
 
-    <!-- Bottom panel: stays mounted once opened so tabs survive ⌘J toggle -->
     {#if terminalEverOpened && workspacePath !== null}
-      <div class="{bottomPanelOpen ? (terminalFullscreen ? 'flex flex-col flex-1 min-h-0' : 'shrink-0') : 'hidden'}">
-        <ResizableBottomPanel storageKey="terminal-panel-height" defaultHeight={300} minHeight={100} maxHeight={null} fillParent={terminalFullscreen}>
-          <TerminalTabs
-            bind:this={terminalTabsRef}
-            taskId={task.id}
-            {workspacePath}
-            isFullscreen={terminalFullscreen}
-            onFullscreenToggle={() => { terminalFullscreen = !terminalFullscreen }}
-            onTabChange={null}
-            onTabCountChange={null}
-          />
-        </ResizableBottomPanel>
+      <div class="flex flex-col flex-1 overflow-hidden {activeView === 'terminal' ? '' : 'hidden'}">
+        <TerminalTabs
+          bind:this={terminalTabsRef}
+          taskId={task.id}
+          {workspacePath}
+          isFullscreen={false}
+          onFullscreenToggle={null}
+          onTabChange={null}
+          onTabCountChange={null}
+        />
       </div>
     {/if}
   </div>
