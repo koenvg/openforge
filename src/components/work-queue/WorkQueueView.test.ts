@@ -251,7 +251,9 @@ describe('WorkQueueView', () => {
   })
 
   it('keeps existing task cards mounted during event-triggered reloads', async () => {
-    let resolveRefresh: ((value: WorkQueueEntry[]) => void) | null = null
+    let resolveRefresh: (value: WorkQueueEntry[]) => void = () => {
+      throw new Error('Expected refresh callback to be registered')
+    }
 
     vi.mocked(getWorkQueueTasks)
       .mockResolvedValueOnce([makeEntry({ id: 'T-1' })])
@@ -269,10 +271,6 @@ describe('WorkQueueView', () => {
 
     expect(screen.getByText('T-1')).toBeTruthy()
     expect(screen.queryByText('Loading...')).toBeNull()
-
-    if (!resolveRefresh) {
-      throw new Error('Expected refresh callback to be registered')
-    }
 
     resolveRefresh([makeEntry({ id: 'T-1' }), makeEntry({ id: 'T-2', initial_prompt: 'New task' })])
 
