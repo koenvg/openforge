@@ -107,6 +107,15 @@ describe('getTaskActions', () => {
     const ids = actions.map(a => a.id)
     expect(ids).not.toContain('merge-pr')
   })
+
+  it('does not return Merge Pull Request action when multiple PRs are ready to merge', () => {
+    const task = makeTask({ status: 'doing' })
+    const firstPr = makePR({ id: 1, title: 'First ready PR' })
+    const secondPr = makePR({ id: 2, title: 'Second ready PR', head_sha: 'def' })
+    const actions = getTaskActions(task, [], [firstPr, secondPr])
+    const ids = actions.map(a => a.id)
+    expect(ids).not.toContain('merge-pr')
+  })
 })
 
 describe('getGlobalActions', () => {

@@ -32,8 +32,8 @@ export function getTaskActions(task: Task, customActions: Action[], taskPrs: Pul
     })
   }
 
-  const readyToMergePr = taskPrs.find(pr => isReadyToMerge(pr) && !isQueuedForMerge(pr))
-  if (readyToMergePr) {
+  const readyToMergePrs = taskPrs.filter(pr => isReadyToMerge(pr) && !isQueuedForMerge(pr))
+  if (readyToMergePrs.length === 1) {
     actions.push({
       id: 'merge-pr',
       label: 'Merge Pull Request',
