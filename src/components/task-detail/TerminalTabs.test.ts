@@ -1,5 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { requireDefined, requireElement } from '../../test-utils/dom'
 
 // Mock xterm and addons (required by TaskTerminal)
 vi.mock('@xterm/xterm', () => {
@@ -306,7 +307,7 @@ describe('TerminalTabs', () => {
     // With only 1 tab, close button should be disabled or hidden
     const closeButtons = screen.queryAllByRole('button', { name: '×' })
     if (closeButtons.length > 0) {
-      expect((closeButtons[0] as HTMLButtonElement).disabled).toBe(true)
+      expect(requireElement(requireDefined(closeButtons[0]), HTMLButtonElement).disabled).toBe(true)
     } else {
       expect(closeButtons.length).toBe(0)
     }
@@ -339,7 +340,7 @@ describe('TerminalTabs', () => {
     const closeButtons = screen.getAllByRole('button', { name: '×' })
     expect(closeButtons.length).toBeGreaterThanOrEqual(1)
     closeButtons.forEach(btn => {
-      expect((btn as HTMLButtonElement).disabled).toBe(false)
+      expect(requireElement(btn, HTMLButtonElement).disabled).toBe(false)
     })
   })
 

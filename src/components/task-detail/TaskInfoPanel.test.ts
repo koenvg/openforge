@@ -1,6 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
 import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { writable } from 'svelte/store'
+import { requireElement } from '../../test-utils/dom'
 import TaskInfoPanel from './TaskInfoPanel.svelte'
 import type { Task, PullRequestInfo } from '../../lib/types'
 import { ticketPrs } from '../../lib/stores'
@@ -376,8 +377,8 @@ describe('TaskInfoPanel', () => {
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Merge' }))
 
-    const mergeButton = await screen.findByRole('button', { name: 'Merging...' })
-    expect((mergeButton as HTMLButtonElement).disabled).toBe(true)
+    const mergeButton = requireElement(await screen.findByRole('button', { name: 'Merging...' }), HTMLButtonElement)
+    expect(mergeButton.disabled).toBe(true)
     resolveMerge?.()
   })
 
@@ -411,11 +412,11 @@ describe('TaskInfoPanel', () => {
     const [firstMergeButton] = await screen.findAllByRole('button', { name: 'Merge' })
     await fireEvent.click(firstMergeButton)
 
-    const mergingButton = await screen.findByRole('button', { name: 'Merging...' })
-    const remainingMergeButton = screen.getByRole('button', { name: 'Merge' })
+    const mergingButton = requireElement(await screen.findByRole('button', { name: 'Merging...' }), HTMLButtonElement)
+    const remainingMergeButton = requireElement(screen.getByRole('button', { name: 'Merge' }), HTMLButtonElement)
 
-    expect((mergingButton as HTMLButtonElement).disabled).toBe(true)
-    expect((remainingMergeButton as HTMLButtonElement).disabled).toBe(true)
+    expect(mergingButton.disabled).toBe(true)
+    expect(remainingMergeButton.disabled).toBe(true)
     expect(mergePullRequest).toHaveBeenCalledTimes(1)
 
     resolveMerge?.()

@@ -1,6 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { get } from 'svelte/store'
+import { requireElement } from '../../../test-utils/dom'
 import GeneralCommentsSidebar from './GeneralCommentsSidebar.svelte'
 import { selfReviewGeneralComments, selfReviewArchivedComments, taskDraftNotes } from '../../../lib/stores'
 import type { SelfReviewComment } from '../../../lib/types'
@@ -105,7 +106,10 @@ describe('GeneralCommentsSidebar', () => {
 
     expect(mockGetActiveSelfReviewComments).not.toHaveBeenCalled()
 
-    const textarea = screen.getByPlaceholderText('Add a testing note… (⇧Enter to submit)') as HTMLTextAreaElement
+    const textarea = requireElement(
+      screen.getByPlaceholderText('Add a testing note… (⇧Enter to submit)'),
+      HTMLTextAreaElement,
+    )
     textarea.value = 'New comment'
     await fireEvent.input(textarea)
 
@@ -147,7 +151,7 @@ describe('GeneralCommentsSidebar', () => {
 
     await new Promise((r) => setTimeout(r, 50))
 
-    const textarea = screen.getByPlaceholderText(/Add a testing note/) as HTMLTextAreaElement
+    const textarea = requireElement(screen.getByPlaceholderText(/Add a testing note/), HTMLTextAreaElement)
     textarea.value = 'Shift enter comment'
     await fireEvent.input(textarea)
 
@@ -211,7 +215,7 @@ describe('GeneralCommentsSidebar', () => {
       const { unmount } = render(GeneralCommentsSidebar, { props: { taskId: 'task-1' } })
       await new Promise((r) => setTimeout(r, 50))
 
-      const textarea = screen.getByPlaceholderText(/Add a testing note/) as HTMLTextAreaElement
+      const textarea = requireElement(screen.getByPlaceholderText(/Add a testing note/), HTMLTextAreaElement)
       expect(textarea.value).toBe('saved draft text')
 
       unmount()
@@ -221,7 +225,7 @@ describe('GeneralCommentsSidebar', () => {
       const { unmount } = render(GeneralCommentsSidebar, { props: { taskId: 'task-1' } })
       await new Promise((r) => setTimeout(r, 50))
 
-      const textarea = screen.getByPlaceholderText(/Add a testing note/) as HTMLTextAreaElement
+      const textarea = requireElement(screen.getByPlaceholderText(/Add a testing note/), HTMLTextAreaElement)
       textarea.value = 'my draft note'
       await fireEvent.input(textarea)
 
@@ -244,7 +248,7 @@ describe('GeneralCommentsSidebar', () => {
       const { unmount } = render(GeneralCommentsSidebar, { props: { taskId: 'task-1' } })
       await new Promise((r) => setTimeout(r, 50))
 
-      const textarea = screen.getByPlaceholderText(/Add a testing note/) as HTMLTextAreaElement
+      const textarea = requireElement(screen.getByPlaceholderText(/Add a testing note/), HTMLTextAreaElement)
       textarea.value = '   '
       await fireEvent.input(textarea)
 
@@ -262,7 +266,7 @@ describe('GeneralCommentsSidebar', () => {
       render(GeneralCommentsSidebar, { props: { taskId: 'task-1' } })
       await new Promise((r) => setTimeout(r, 50))
 
-      const textarea = screen.getByPlaceholderText(/Add a testing note/) as HTMLTextAreaElement
+      const textarea = requireElement(screen.getByPlaceholderText(/Add a testing note/), HTMLTextAreaElement)
       textarea.value = 'new comment text'
       await fireEvent.input(textarea)
 
@@ -280,7 +284,7 @@ describe('GeneralCommentsSidebar', () => {
       const { unmount } = render(GeneralCommentsSidebar, { props: { taskId: 'task-2' } })
       await new Promise((r) => setTimeout(r, 50))
 
-      const textarea = screen.getByPlaceholderText(/Add a testing note/) as HTMLTextAreaElement
+      const textarea = requireElement(screen.getByPlaceholderText(/Add a testing note/), HTMLTextAreaElement)
       expect(textarea.value).toBe('')
 
       unmount()

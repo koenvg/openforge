@@ -3,6 +3,7 @@ import path from 'node:path'
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { get, writable } from 'svelte/store'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { requireElement } from '../../test-utils/dom'
 
 vi.mock('../../lib/ipc', () => ({
   getProjectConfig: vi.fn(),
@@ -288,7 +289,7 @@ describe('SettingsView', () => {
 
       await vi.advanceTimersByTimeAsync(50)
 
-      const nameInput = screen.getByPlaceholderText('My Project') as HTMLInputElement
+      const nameInput = requireElement(screen.getByPlaceholderText('My Project'), HTMLInputElement)
       await fireEvent.input(nameInput, { target: { value: 'First Name' } })
 
       await vi.advanceTimersByTimeAsync(600)
@@ -489,7 +490,7 @@ describe('SettingsView', () => {
     activeProjectId.set(null)
     projects.set([])
     render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
-    const patInput = screen.getByPlaceholderText('ghp_...') as HTMLInputElement
+    const patInput = requireElement(screen.getByPlaceholderText('ghp_...'), HTMLInputElement)
     expect(patInput.type).toBe('password')
   })
 

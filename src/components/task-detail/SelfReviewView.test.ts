@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { writable } from "svelte/store";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { requireElement } from "../../test-utils/dom";
 import type {
 	PrComment,
 	PrFileDiff,
@@ -141,8 +142,8 @@ describe("SelfReviewView uncommitted toggle", () => {
 		});
 
 		await waitFor(() => {
-			const checkbox = screen.getByRole("checkbox");
-			expect((checkbox as HTMLInputElement).checked).toBe(false);
+			const checkbox = requireElement(screen.getByRole("checkbox"), HTMLInputElement);
+			expect(checkbox.checked).toBe(false);
 		});
 	});
 
@@ -178,7 +179,7 @@ describe("SelfReviewView uncommitted toggle", () => {
 		await waitFor(() => {
 			const checkbox = screen.getByRole("checkbox");
 			expect(checkbox).toBeTruthy();
-			expect((checkbox as HTMLInputElement).checked).toBe(true);
+			expect(requireElement(checkbox, HTMLInputElement).checked).toBe(true);
 		});
 	});
 
@@ -195,7 +196,7 @@ describe("SelfReviewView uncommitted toggle", () => {
 		});
 
 		await waitFor(() => {
-			const checkbox = screen.getByRole("checkbox") as HTMLInputElement;
+			const checkbox = requireElement(screen.getByRole("checkbox"), HTMLInputElement);
 			expect(checkbox.checked).toBe(true);
 			expect(mockGetTaskDiff).toHaveBeenCalledTimes(2);
 			expect(mockGetTaskDiff).toHaveBeenNthCalledWith(1, "task-1", false);
@@ -217,7 +218,7 @@ describe("SelfReviewView uncommitted toggle", () => {
 		});
 
 		await waitFor(() => {
-			const checkbox = screen.getByRole("checkbox") as HTMLInputElement;
+			const checkbox = requireElement(screen.getByRole("checkbox"), HTMLInputElement);
 			expect(checkbox.checked).toBe(false);
 			expect(mockGetTaskDiff).toHaveBeenCalledTimes(1);
 			expect(mockGetTaskDiff).toHaveBeenCalledWith("task-1", false);
@@ -244,7 +245,7 @@ describe("SelfReviewView uncommitted toggle", () => {
 			expect(screen.getByRole("checkbox").isConnected).toBe(true);
 		});
 
-		const cb = screen.getByRole("checkbox") as HTMLInputElement;
+		const cb = requireElement(screen.getByRole("checkbox"), HTMLInputElement);
 		cb.click();
 		cb.dispatchEvent(new Event("change", { bubbles: true }));
 
@@ -358,7 +359,7 @@ describe("SelfReviewView integration — performance fixes", () => {
 			expect(screen.getByTitle("Search (\u2318F)")).toBeTruthy();
 		});
 
-		const cb = screen.getByRole("checkbox") as HTMLInputElement;
+		const cb = requireElement(screen.getByRole("checkbox"), HTMLInputElement);
 		cb.click();
 		cb.dispatchEvent(new Event("change", { bubbles: true }));
 
@@ -634,9 +635,10 @@ describe("SelfReviewView — hide addressed comments", () => {
 		});
 
 		const prCommentsTab = screen.getByText("PR Comments");
-		const resizablePanel = prCommentsTab.closest(
-			'[data-testid="resizable-panel"]',
-		) as HTMLElement;
+		const resizablePanel = requireElement(
+			prCommentsTab.closest('[data-testid="resizable-panel"]'),
+			HTMLElement,
+		);
 		expect(resizablePanel).toBeTruthy();
 	});
 });

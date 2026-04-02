@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { toGitDiffViewData } from '../../../../lib/diffAdapter'
 import type { PrFileDiff } from '../../../../lib/types'
+import { requireElement } from '../../../../test-utils/dom'
 import DiffViewer from './DiffViewer.svelte'
 
 const { mockDiffView, mockDiffHighlighter } = vi.hoisted(() => ({
@@ -158,7 +159,7 @@ describe('DiffViewer Search', () => {
     it('Cmd+F opens the search bar', async () => {
       const { container } = render(DiffViewer, { props: { files: [] } })
 
-      const rootDiv = container.firstElementChild as HTMLElement
+      const rootDiv = requireElement(container.firstElementChild, HTMLElement)
       await fireEvent.keyDown(rootDiv, { key: 'f', metaKey: true })
       await new Promise(resolve => setTimeout(resolve, 10))
 
@@ -168,7 +169,7 @@ describe('DiffViewer Search', () => {
     it('Ctrl+F opens the search bar', async () => {
       const { container } = render(DiffViewer, { props: { files: [] } })
 
-      const rootDiv = container.firstElementChild as HTMLElement
+      const rootDiv = requireElement(container.firstElementChild, HTMLElement)
       await fireEvent.keyDown(rootDiv, { key: 'f', ctrlKey: true })
       await new Promise(resolve => setTimeout(resolve, 10))
 
@@ -236,7 +237,7 @@ describe('DiffViewer Search', () => {
       await fireEvent.click(searchBtn)
       await new Promise(resolve => setTimeout(resolve, 10))
 
-      const input = screen.getByPlaceholderText('Search diff...') as HTMLInputElement
+      const input = requireElement(screen.getByPlaceholderText('Search diff...'), HTMLInputElement)
       await fireEvent.input(input, { target: { value: 'hello' } })
 
       expect(input.value).toBe('hello')
@@ -249,7 +250,7 @@ describe('DiffViewer Search', () => {
       await fireEvent.click(searchBtn)
       await new Promise(resolve => setTimeout(resolve, 10))
 
-      const input = screen.getByPlaceholderText('Search diff...') as HTMLInputElement
+      const input = requireElement(screen.getByPlaceholderText('Search diff...'), HTMLInputElement)
       await fireEvent.input(input, { target: { value: 'xyz' } })
 
       // Wait for debounce (200ms) + rendering microtasks
@@ -281,8 +282,8 @@ describe('DiffViewer Search', () => {
       await fireEvent.click(searchBtn)
       await new Promise(resolve => setTimeout(resolve, 10))
 
-      const prevBtn = screen.getByTitle('Previous match (Shift+Enter)') as HTMLButtonElement
-      const nextBtn = screen.getByTitle('Next match (Enter)') as HTMLButtonElement
+      const prevBtn = requireElement(screen.getByTitle('Previous match (Shift+Enter)'), HTMLButtonElement)
+      const nextBtn = requireElement(screen.getByTitle('Next match (Enter)'), HTMLButtonElement)
 
       expect(prevBtn.disabled).toBe(true)
       expect(nextBtn.disabled).toBe(true)
@@ -302,7 +303,7 @@ describe('DiffViewer Search', () => {
 
     it('search icon button has correct title attribute', () => {
       render(DiffViewer, { props: { files: [] } })
-      const searchBtn = screen.getByTitle('Search (⌘F)') as HTMLButtonElement
+      const searchBtn = requireElement(screen.getByTitle('Search (⌘F)'), HTMLButtonElement)
       expect(searchBtn.title).toBe('Search (⌘F)')
     })
 

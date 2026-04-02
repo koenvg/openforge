@@ -1,5 +1,6 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { requireElement } from '../../test-utils/dom'
 import FocusBoard from './FocusBoard.svelte'
 import type { Task, AgentSession, PullRequestInfo, BoardStatus } from '../../lib/types'
 import { focusBoardFilters } from '../../lib/stores'
@@ -171,9 +172,9 @@ describe('FocusBoard', () => {
 
     await fireEvent.keyDown(window, { key: 'j' })
 
-    const focused = document.querySelector('.vim-focus') as HTMLElement | null
+    const focused = requireElement(document.querySelector('.vim-focus'), HTMLElement)
     expect(focused).toBeTruthy()
-    expect(within(focused as HTMLElement).getByText('Doing task')).toBeTruthy()
+    expect(within(focused).getByText('Doing task')).toBeTruthy()
   })
 
   it('moves vim focus up on k key', async () => {
@@ -188,9 +189,9 @@ describe('FocusBoard', () => {
     await fireEvent.keyDown(window, { key: 'j' })
     await fireEvent.keyDown(window, { key: 'k' })
 
-    const focused = document.querySelector('.vim-focus') as HTMLElement | null
+    const focused = requireElement(document.querySelector('.vim-focus'), HTMLElement)
     expect(focused).toBeTruthy()
-    expect(within(focused as HTMLElement).getByText('Focus task')).toBeTruthy()
+    expect(within(focused).getByText('Focus task')).toBeTruthy()
   })
 
   it('opens focused task on Enter', async () => {
@@ -308,11 +309,11 @@ describe('FocusBoard', () => {
     })
 
     expect(await screen.findByRole('button', { name: /Focus now 1/i })).toBeTruthy()
-    const [boardCard] = document.querySelectorAll('[data-vim-item]')
+    const boardCard = requireElement(document.querySelector('[data-vim-item]'), HTMLElement)
     expect(boardCard).toBeTruthy()
-    expect(within(boardCard as HTMLElement).getByText('Doing task')).toBeTruthy()
-    expect(within(boardCard as HTMLElement).getByText('Merge Conflict')).toBeTruthy()
-    expect(within(boardCard as HTMLElement).getByText('Pull request has merge conflicts that must be resolved.')).toBeTruthy()
+    expect(within(boardCard).getByText('Doing task')).toBeTruthy()
+    expect(within(boardCard).getByText('Merge Conflict')).toBeTruthy()
+    expect(within(boardCard).getByText('Pull request has merge conflicts that must be resolved.')).toBeTruthy()
   })
 
   it('CMD+1 activates Focus now filter', async () => {

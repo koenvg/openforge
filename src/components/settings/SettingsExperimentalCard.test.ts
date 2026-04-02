@@ -1,5 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
+import { requireElement } from '../../test-utils/dom'
 import SettingsExperimentalCard from './SettingsExperimentalCard.svelte'
 
 function defaultProps(overrides: Record<string, unknown> = {}) {
@@ -29,7 +30,7 @@ describe('SettingsExperimentalCard', () => {
 				props: defaultProps({ codeCleanupTasksEnabled: false }),
 			})
 
-			const toggle = screen.getByTestId('code-cleanup-tasks-toggle') as HTMLInputElement
+			const toggle = requireElement(screen.getByTestId('code-cleanup-tasks-toggle'), HTMLInputElement)
 			expect(toggle.checked).toBe(false)
 		})
 
@@ -38,7 +39,7 @@ describe('SettingsExperimentalCard', () => {
 				props: defaultProps({ codeCleanupTasksEnabled: true }),
 			})
 
-			const toggle = screen.getByTestId('code-cleanup-tasks-toggle') as HTMLInputElement
+			const toggle = requireElement(screen.getByTestId('code-cleanup-tasks-toggle'), HTMLInputElement)
 			expect(toggle.checked).toBe(true)
 		})
 

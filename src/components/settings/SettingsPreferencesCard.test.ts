@@ -1,5 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
+import { requireElement } from '../../test-utils/dom'
 import SettingsPreferencesCard from './SettingsPreferencesCard.svelte'
 
 function defaultProps(overrides: Record<string, unknown> = {}) {
@@ -20,7 +21,7 @@ describe('SettingsPreferencesCard', () => {
 			props: defaultProps({ taskIdPrefix: 'ABC' }),
 		})
 
-		const input = screen.getByDisplayValue('ABC') as HTMLInputElement
+		const input = requireElement(screen.getByDisplayValue('ABC'), HTMLInputElement)
 		expect(input).toBeTruthy()
 		expect(input.value).toBe('ABC')
 	})
@@ -63,7 +64,7 @@ describe('SettingsPreferencesCard', () => {
 	it('renders input with placeholder', () => {
 		render(SettingsPreferencesCard, { props: defaultProps() })
 
-		const input = screen.getByPlaceholderText('e.g. ABC') as HTMLInputElement
+		const input = requireElement(screen.getByPlaceholderText('e.g. ABC'), HTMLInputElement)
 		expect(input).toBeTruthy()
 	})
 
@@ -79,7 +80,7 @@ describe('SettingsPreferencesCard', () => {
 				props: defaultProps({ isDarkMode: false }),
 			})
 
-			const toggle = screen.getByTestId('theme-toggle') as HTMLInputElement
+			const toggle = requireElement(screen.getByTestId('theme-toggle'), HTMLInputElement)
 			expect(toggle.checked).toBe(false)
 		})
 
@@ -88,7 +89,7 @@ describe('SettingsPreferencesCard', () => {
 				props: defaultProps({ isDarkMode: true }),
 			})
 
-			const toggle = screen.getByTestId('theme-toggle') as HTMLInputElement
+			const toggle = requireElement(screen.getByTestId('theme-toggle'), HTMLInputElement)
 			expect(toggle.checked).toBe(true)
 		})
 
@@ -123,7 +124,7 @@ describe('SettingsPreferencesCard', () => {
 				props: defaultProps({ githubPollInterval: 60 }),
 			})
 
-			const input = screen.getByTestId('poll-interval-input') as HTMLInputElement
+			const input = requireElement(screen.getByTestId('poll-interval-input'), HTMLInputElement)
 			expect(input).toBeTruthy()
 			expect(input.value).toBe('60')
 		})
@@ -131,7 +132,7 @@ describe('SettingsPreferencesCard', () => {
 		it('input has min=30 and max=300 attributes', () => {
 			render(SettingsPreferencesCard, { props: defaultProps() })
 
-			const input = screen.getByTestId('poll-interval-input') as HTMLInputElement
+			const input = requireElement(screen.getByTestId('poll-interval-input'), HTMLInputElement)
 			expect(input.min).toBe('30')
 			expect(input.max).toBe('300')
 		})
@@ -142,7 +143,7 @@ describe('SettingsPreferencesCard', () => {
 				props: defaultProps({ onGithubPollIntervalChange }),
 			})
 
-			const input = screen.getByTestId('poll-interval-input') as HTMLInputElement
+			const input = requireElement(screen.getByTestId('poll-interval-input'), HTMLInputElement)
 			await fireEvent.input(input, { target: { value: '90' } })
 
 			expect(onGithubPollIntervalChange).toHaveBeenCalled()

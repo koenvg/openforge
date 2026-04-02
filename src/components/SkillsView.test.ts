@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { writable } from 'svelte/store'
 import type { SkillInfo } from '../lib/types'
+import { requireElement } from '../test-utils/dom'
 
 vi.mock('../lib/stores', () => ({
   skills: writable<SkillInfo[]>([]),
@@ -165,7 +166,7 @@ describe('SkillsView', () => {
     })
 
     vi.mocked(listOpenCodeSkills).mockClear()
-    const refreshBtn = screen.getByText(/Refresh/).closest('button')!
+    const refreshBtn = requireElement(screen.getByText(/Refresh/).closest('button'), HTMLButtonElement)
     await fireEvent.click(refreshBtn)
 
     await waitFor(() => {
@@ -182,7 +183,7 @@ describe('SkillsView', () => {
     })
 
     const skillBtns = screen.getAllByText('creating-skills')
-    await fireEvent.click(skillBtns[0].closest('button')!)
+    await fireEvent.click(requireElement(skillBtns[0]?.closest('button'), HTMLButtonElement))
 
     await waitFor(() => {
       expect(screen.getAllByText('Guides creation of effective agent skills').length).toBeGreaterThanOrEqual(1)

@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { writable } from 'svelte/store'
 import type { WorkQueueEntry, AgentSession, PullRequestInfo, BoardStatus } from '../../lib/types'
+import { requireDefined, requireElement } from '../../test-utils/dom'
 
 vi.mock('../../lib/stores', () => ({
   activeProjectId: writable<string | null>(null),
@@ -200,7 +201,7 @@ describe('WorkQueueView', () => {
 
     const taskCard = screen.getByText('T-5').closest('button')
     expect(taskCard).toBeTruthy()
-    await fireEvent.click(taskCard!)
+    await fireEvent.click(requireElement(taskCard, HTMLButtonElement))
 
     // Verify stores were updated — read current values
     const { get } = await import('svelte/store')
@@ -250,7 +251,9 @@ describe('WorkQueueView', () => {
   })
 
   it('keeps existing task cards mounted during event-triggered reloads', async () => {
-    let resolveRefresh: ((value: WorkQueueEntry[]) => void) | null = null
+    let resolveRefresh: (value: WorkQueueEntry[]) => void = () => {
+      throw new Error('Expected refresh callback to be registered')
+    }
 
     vi.mocked(getWorkQueueTasks)
       .mockResolvedValueOnce([makeEntry({ id: 'T-1' })])
@@ -269,7 +272,7 @@ describe('WorkQueueView', () => {
     expect(screen.getByText('T-1')).toBeTruthy()
     expect(screen.queryByText('Loading...')).toBeNull()
 
-    resolveRefresh!([makeEntry({ id: 'T-1' }), makeEntry({ id: 'T-2', initial_prompt: 'New task' })])
+    resolveRefresh([makeEntry({ id: 'T-1' }), makeEntry({ id: 'T-2', initial_prompt: 'New task' })])
 
     await waitFor(() => {
       expect(screen.getByText('T-2')).toBeTruthy()
@@ -427,7 +430,7 @@ describe('WorkQueueView', () => {
 
       const orderCall = vi.mocked(setConfig).mock.calls.find(c => c[0] === 'workqueue_column_order')
       expect(orderCall).toBeTruthy()
-      const savedOrder = JSON.parse(orderCall![1])
+      const savedOrder = JSON.parse(requireDefined(orderCall)[1])
       expect(savedOrder).toEqual(['Backend API', 'Frontend App', 'Mobile App'])
     })
 
@@ -496,7 +499,7 @@ describe('WorkQueueView', () => {
       })
 
       const savedPins = JSON.parse(
-        vi.mocked(setConfig).mock.calls.find(c => c[0] === 'workqueue_pinned_tasks')![1]
+        requireDefined(vi.mocked(setConfig).mock.calls.find(c => c[0] === 'workqueue_pinned_tasks'))[1]
       )
       expect(savedPins).toContain('T-2')
     })
@@ -527,7 +530,7 @@ describe('WorkQueueView', () => {
       })
 
       const savedPins = JSON.parse(
-        vi.mocked(setConfig).mock.calls.find(c => c[0] === 'workqueue_pinned_tasks')![1]
+        requireDefined(vi.mocked(setConfig).mock.calls.find(c => c[0] === 'workqueue_pinned_tasks'))[1]
       )
       expect(savedPins).not.toContain('T-1')
     })
