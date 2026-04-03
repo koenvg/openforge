@@ -3,7 +3,7 @@
   import { get } from 'svelte/store'
   import type { Task, Action, BoardStatus } from '../../lib/types'
   import { activeSessions, activeProjectId, startingTasks, taskActiveView, error } from '../../lib/stores'
-  import { getWorktreeForTask, updateTaskStatus } from '../../lib/ipc'
+  import { getTaskWorkspace, updateTaskStatus } from '../../lib/ipc'
   import { useAppRouter } from '../../lib/router.svelte'
   import { moveTaskToComplete } from '../../lib/moveToComplete'
   import { isInputFocused } from '../../lib/domUtils'
@@ -53,8 +53,8 @@
       activeView = stored
       terminalEverOpened = stored === 'terminal'
       workspacePath = null
-      getWorktreeForTask(taskId).then((worktree) => {
-        workspacePath = worktree?.worktree_path ?? null
+      getTaskWorkspace(taskId).then((workspace) => {
+        workspacePath = workspace?.workspace_path ?? null
         if (activeView === 'terminal' && workspacePath === null) {
           activeView = 'code'
         }

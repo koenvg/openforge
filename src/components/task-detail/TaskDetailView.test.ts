@@ -103,7 +103,7 @@ vi.mock('../../lib/ipc', () => ({
   getPrComments: vi.fn().mockResolvedValue([]),
   markCommentAddressed: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn().mockResolvedValue(undefined),
-  getWorktreeForTask: vi.fn().mockResolvedValue(null),
+  getTaskWorkspace: vi.fn().mockResolvedValue(null),
   getConfig: vi.fn().mockResolvedValue(''),
   getProjectConfig: vi.fn().mockResolvedValue(null),
   setProjectConfig: vi.fn().mockResolvedValue(undefined),
@@ -217,7 +217,7 @@ vi.mock('../../lib/actions', () => ({
 }))
 
 import { activeSessions, taskActiveView, commandHeld } from '../../lib/stores'
-import type { Task, AgentSession, WorktreeInfo } from '../../lib/types'
+import type { Task, AgentSession, TaskWorkspaceInfo } from '../../lib/types'
 import TaskDetailView from './TaskDetailView.svelte'
 
 const baseTask: Task = {
@@ -255,16 +255,17 @@ const baseSession: AgentSession = {
   claude_session_id: null,
 }
 
-function createWorktreeInfo(overrides: Partial<WorktreeInfo> = {}): WorktreeInfo {
+function createTaskWorkspaceInfo(overrides: Partial<TaskWorkspaceInfo> = {}): TaskWorkspaceInfo {
   return {
     id: 1,
     task_id: 'T-42',
     project_id: 'project-1',
     repo_path: '/repo',
-    worktree_path: '/path/to/worktree',
+    workspace_path: '/path/to/worktree',
+    kind: 'worktree',
     branch_name: 'branch',
+    provider_name: 'opencode',
     opencode_port: null,
-    opencode_pid: null,
     status: 'ready',
     created_at: 1000,
     updated_at: 2000,
@@ -272,12 +273,12 @@ function createWorktreeInfo(overrides: Partial<WorktreeInfo> = {}): WorktreeInfo
   }
 }
 
-describe('createWorktreeInfo', () => {
-  it('applies overrides while keeping a valid typed worktree shape', () => {
-    expect(createWorktreeInfo({ worktree_path: '/tmp/wt', branch_name: 'feature/task' })).toMatchObject({
+describe('createTaskWorkspaceInfo', () => {
+  it('applies overrides while keeping a valid typed workspace shape', () => {
+    expect(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', branch_name: 'feature/task' })).toMatchObject({
       task_id: 'T-42',
       repo_path: '/repo',
-      worktree_path: '/tmp/wt',
+      workspace_path: '/tmp/wt',
       branch_name: 'feature/task',
       status: 'ready',
     })
@@ -432,15 +433,15 @@ describe('TaskDetailView', () => {
   })
 
   it('Info panel always visible in code_view mode (no tab toggle)', async () => {
-    const { getWorktreeForTask } = await import('../../lib/ipc')
-    vi.mocked(getWorktreeForTask).mockResolvedValue(createWorktreeInfo({ worktree_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' }))
+    const { getTaskWorkspace } = await import('../../lib/ipc')
+    vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' }))
 
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     await waitFor(() => {
       expect(screen.getByText('// INITIAL_PROMPT')).toBeTruthy()
     })
     expect(screen.queryByRole('button', { name: /^Info$/ })).toBeNull()
-    vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+    vi.mocked(getTaskWorkspace).mockResolvedValue(null)
   })
 
   it('rightPanelMode state does NOT exist — Info always visible', async () => {
@@ -449,8 +450,8 @@ describe('TaskDetailView', () => {
   })
 
   it('renders three tab buttons when worktree exists', async () => {
-    const { getWorktreeForTask } = await import('../../lib/ipc')
-    vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' } as any)
+    const { getTaskWorkspace } = await import('../../lib/ipc')
+    vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' }))
 
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
 
@@ -460,7 +461,7 @@ describe('TaskDetailView', () => {
       expect(screen.getByRole('button', { name: /^terminal\b/i })).toBeTruthy()
     })
 
-    vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+    vi.mocked(getTaskWorkspace).mockResolvedValue(null)
   })
 
   it('terminal tab hidden when no worktree', async () => {
@@ -512,8 +513,8 @@ describe('TaskDetailView', () => {
   })
 
   it('⌘3 switches to terminal tab', async () => {
-    const { getWorktreeForTask } = await import('../../lib/ipc')
-    vi.mocked(getWorktreeForTask).mockResolvedValue(createWorktreeInfo({ worktree_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' }))
+    const { getTaskWorkspace } = await import('../../lib/ipc')
+    vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' }))
 
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     await waitFor(() => expect(screen.getByText('code_view')).toBeTruthy())
@@ -524,12 +525,12 @@ describe('TaskDetailView', () => {
       const breadcrumb = screen.getByText('$ cd board').closest('div')
       expect(breadcrumb?.textContent).toContain('terminal')
     })
-    vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+    vi.mocked(getTaskWorkspace).mockResolvedValue(null)
   })
 
   it('⌘T switches to terminal tab', async () => {
-    const { getWorktreeForTask } = await import('../../lib/ipc')
-    vi.mocked(getWorktreeForTask).mockResolvedValue(createWorktreeInfo({ worktree_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' }))
+    const { getTaskWorkspace } = await import('../../lib/ipc')
+    vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' }))
 
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     await waitFor(() => expect(screen.getByText('code_view')).toBeTruthy())
@@ -540,13 +541,13 @@ describe('TaskDetailView', () => {
       const breadcrumb = screen.getByText('$ cd board').closest('div')
       expect(breadcrumb?.textContent).toContain('terminal')
     })
-    vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+    vi.mocked(getTaskWorkspace).mockResolvedValue(null)
   })
 
   it('⌘E switches to terminal tab and focuses the first shell tab when terminal has never been opened', async () => {
-    const { getWorktreeForTask } = await import('../../lib/ipc')
+    const { getTaskWorkspace } = await import('../../lib/ipc')
     const { focusTerminal } = await import('../../lib/terminalPool')
-    vi.mocked(getWorktreeForTask).mockResolvedValue(createWorktreeInfo({ worktree_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' }))
+    vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' }))
     vi.mocked(focusTerminal).mockClear()
 
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
@@ -557,12 +558,12 @@ describe('TaskDetailView', () => {
     const breadcrumb = screen.getByText('$ cd board').closest('div')
     expect(breadcrumb?.textContent).toContain('terminal')
     expect(focusTerminal).toHaveBeenCalledWith('T-42-shell-0')
-    vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+    vi.mocked(getTaskWorkspace).mockResolvedValue(null)
   })
 
   it('⌘+1 switches to code_view', async () => {
-    const { getWorktreeForTask } = await import('../../lib/ipc')
-    vi.mocked(getWorktreeForTask).mockResolvedValue(createWorktreeInfo({ worktree_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' }))
+    const { getTaskWorkspace } = await import('../../lib/ipc')
+    vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' }))
 
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     await waitFor(() => expect(screen.getByText('code_view')).toBeTruthy())
@@ -578,12 +579,12 @@ describe('TaskDetailView', () => {
       expect(breadcrumb?.textContent).toContain('code')
       expect(breadcrumb?.textContent).not.toContain('self_review')
     })
-    vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+    vi.mocked(getTaskWorkspace).mockResolvedValue(null)
   })
 
   it('⌘+1 → code_view', async () => {
-    const { getWorktreeForTask } = await import('../../lib/ipc')
-    vi.mocked(getWorktreeForTask).mockResolvedValue(createWorktreeInfo({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+    const { getTaskWorkspace } = await import('../../lib/ipc')
+    vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
 
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     await waitFor(() => expect(screen.getByText('review_view')).toBeTruthy())
@@ -597,12 +598,12 @@ describe('TaskDetailView', () => {
       expect(breadcrumb?.textContent).toContain('code')
       expect(breadcrumb?.textContent).not.toContain('self_review')
     })
-    vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+    vi.mocked(getTaskWorkspace).mockResolvedValue(null)
   })
 
   it('⌘+2 → review_view', async () => {
-    const { getWorktreeForTask } = await import('../../lib/ipc')
-    vi.mocked(getWorktreeForTask).mockResolvedValue(createWorktreeInfo({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+    const { getTaskWorkspace } = await import('../../lib/ipc')
+    vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
 
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     await waitFor(() => expect(screen.getByText('review_view')).toBeTruthy())
@@ -612,13 +613,13 @@ describe('TaskDetailView', () => {
 
     await fireEvent.keyDown(window, { code: 'Digit2', metaKey: true, shiftKey: false })
     await waitFor(() => expect(breadcrumb?.textContent).toContain('self_review'))
-    vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+    vi.mocked(getTaskWorkspace).mockResolvedValue(null)
   })
 
 
   it('terminal tab button shows active styling when selected', async () => {
-    const { getWorktreeForTask } = await import('../../lib/ipc')
-    vi.mocked(getWorktreeForTask).mockResolvedValue(createWorktreeInfo({ worktree_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' }))
+    const { getTaskWorkspace } = await import('../../lib/ipc')
+    vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' }))
 
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     await waitFor(() => expect(screen.getByRole('button', { name: /^terminal\b/i })).toBeTruthy())
@@ -631,12 +632,12 @@ describe('TaskDetailView', () => {
       expect(terminalButton?.className).toContain('border-primary')
     })
 
-    vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+    vi.mocked(getTaskWorkspace).mockResolvedValue(null)
   })
 
   it('breadcrumb shows terminal when terminal tab active', async () => {
-    const { getWorktreeForTask } = await import('../../lib/ipc')
-    vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' } as any)
+    const { getTaskWorkspace } = await import('../../lib/ipc')
+    vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
 
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     await waitFor(() => expect(screen.getByRole('button', { name: /^terminal\b/i })).toBeTruthy())
@@ -648,7 +649,7 @@ describe('TaskDetailView', () => {
       expect(breadcrumb?.textContent).toContain('terminal')
     })
 
-    vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+    vi.mocked(getTaskWorkspace).mockResolvedValue(null)
   })
 
 
@@ -741,8 +742,8 @@ describe('TaskDetailView', () => {
     })
 
     it('l key switches to review mode when worktree exists', async () => {
-      const { getWorktreeForTask } = await import('../../lib/ipc')
-      vi.mocked(getWorktreeForTask).mockResolvedValue(createWorktreeInfo({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+      const { getTaskWorkspace } = await import('../../lib/ipc')
+      vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
 
       render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
       await waitFor(() => {
@@ -758,12 +759,12 @@ describe('TaskDetailView', () => {
         expect(breadcrumb?.textContent).toContain('self_review')
       })
 
-      vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+      vi.mocked(getTaskWorkspace).mockResolvedValue(null)
     })
 
     it('h key switches back to code mode from review', async () => {
-      const { getWorktreeForTask } = await import('../../lib/ipc')
-      vi.mocked(getWorktreeForTask).mockResolvedValue(createWorktreeInfo({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+      const { getTaskWorkspace } = await import('../../lib/ipc')
+      vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
 
       render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
       await waitFor(() => {
@@ -782,7 +783,7 @@ describe('TaskDetailView', () => {
         expect(breadcrumb?.textContent).not.toContain('self_review')
       })
 
-      vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+      vi.mocked(getTaskWorkspace).mockResolvedValue(null)
     })
 
     it('h and l keys are ignored when no worktree exists', async () => {
@@ -797,8 +798,8 @@ describe('TaskDetailView', () => {
     })
 
     it('h and l keys are ignored when modifier keys are held', async () => {
-      const { getWorktreeForTask } = await import('../../lib/ipc')
-      vi.mocked(getWorktreeForTask).mockResolvedValue(createWorktreeInfo({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+      const { getTaskWorkspace } = await import('../../lib/ipc')
+      vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
 
       render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
       await waitFor(() => {
@@ -816,12 +817,12 @@ describe('TaskDetailView', () => {
       await fireEvent.keyDown(window, { key: 'l', altKey: true })
       expect(breadcrumb?.textContent).toContain('code')
 
-      vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+      vi.mocked(getTaskWorkspace).mockResolvedValue(null)
     })
 
     it('Cmd+2 switches to review mode when worktree exists', async () => {
-      const { getWorktreeForTask } = await import('../../lib/ipc')
-      vi.mocked(getWorktreeForTask).mockResolvedValue(createWorktreeInfo({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+      const { getTaskWorkspace } = await import('../../lib/ipc')
+      vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
 
       render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
       await waitFor(() => {
@@ -837,12 +838,12 @@ describe('TaskDetailView', () => {
         expect(breadcrumb?.textContent).toContain('self_review')
       })
 
-      vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+      vi.mocked(getTaskWorkspace).mockResolvedValue(null)
     })
 
     it('Cmd+1 switches back to code mode from review', async () => {
-      const { getWorktreeForTask } = await import('../../lib/ipc')
-      vi.mocked(getWorktreeForTask).mockResolvedValue(createWorktreeInfo({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+      const { getTaskWorkspace } = await import('../../lib/ipc')
+      vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
 
       render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
       await waitFor(() => {
@@ -861,12 +862,12 @@ describe('TaskDetailView', () => {
         expect(breadcrumb?.textContent).not.toContain('self_review')
       })
 
-      vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+      vi.mocked(getTaskWorkspace).mockResolvedValue(null)
     })
 
     it('Cmd+1/2 work even when an input element is focused', async () => {
-      const { getWorktreeForTask } = await import('../../lib/ipc')
-      vi.mocked(getWorktreeForTask).mockResolvedValue(createWorktreeInfo({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+      const { getTaskWorkspace } = await import('../../lib/ipc')
+      vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
 
       render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
       await waitFor(() => {
@@ -892,7 +893,7 @@ describe('TaskDetailView', () => {
         })
       } finally {
         document.body.removeChild(input)
-        vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+        vi.mocked(getTaskWorkspace).mockResolvedValue(null)
       }
     })
 
@@ -920,8 +921,8 @@ describe('TaskDetailView', () => {
     })
 
     it('shows shortcut hints on view toggle buttons when CMD is held', async () => {
-      const { getWorktreeForTask } = await import('../../lib/ipc')
-      vi.mocked(getWorktreeForTask).mockResolvedValue(createWorktreeInfo({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+      const { getTaskWorkspace } = await import('../../lib/ipc')
+      vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
 
       render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
       await waitFor(() => {
@@ -940,12 +941,12 @@ describe('TaskDetailView', () => {
       })
 
       commandHeld.set(false)
-      vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+      vi.mocked(getTaskWorkspace).mockResolvedValue(null)
     })
 
     it('hides shortcut hints on view toggle buttons when CMD is not held', async () => {
-      const { getWorktreeForTask } = await import('../../lib/ipc')
-      vi.mocked(getWorktreeForTask).mockResolvedValue(createWorktreeInfo({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+      const { getTaskWorkspace } = await import('../../lib/ipc')
+      vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
 
       render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
       await waitFor(() => {
@@ -963,7 +964,7 @@ describe('TaskDetailView', () => {
         expect(terminalBtn?.textContent).not.toContain('⌘3')
       })
 
-      vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+      vi.mocked(getTaskWorkspace).mockResolvedValue(null)
     })
 
     it('Escape triggers reset to board', async () => {
@@ -993,8 +994,8 @@ describe('TaskDetailView', () => {
      })
 
      it('l key writes review to taskActiveView store for the task', async () => {
-       const { getWorktreeForTask } = await import('../../lib/ipc')
-       vi.mocked(getWorktreeForTask).mockResolvedValue(createWorktreeInfo({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+       const { getTaskWorkspace } = await import('../../lib/ipc')
+       vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
 
        render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
        await waitFor(() => expect(screen.getByText('review_view')).toBeTruthy())
@@ -1005,12 +1006,12 @@ describe('TaskDetailView', () => {
          expect(get(taskActiveView).get('T-42')).toBe('review')
        })
 
-       vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+       vi.mocked(getTaskWorkspace).mockResolvedValue(null)
      })
 
      it('h key writes code to taskActiveView store for the task', async () => {
-       const { getWorktreeForTask } = await import('../../lib/ipc')
-       vi.mocked(getWorktreeForTask).mockResolvedValue(createWorktreeInfo({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+       const { getTaskWorkspace } = await import('../../lib/ipc')
+       vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
 
        taskActiveView.set(new Map([['T-42', 'review']]))
        render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
@@ -1022,12 +1023,12 @@ describe('TaskDetailView', () => {
          expect(get(taskActiveView).get('T-42')).toBe('code')
        })
 
-       vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+       vi.mocked(getTaskWorkspace).mockResolvedValue(null)
      })
 
      it('restores terminal mode from taskActiveView when task is rendered', async () => {
-       const { getWorktreeForTask } = await import('../../lib/ipc')
-       vi.mocked(getWorktreeForTask).mockResolvedValue(createWorktreeInfo({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+       const { getTaskWorkspace } = await import('../../lib/ipc')
+       vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
 
        taskActiveView.set(new Map([['T-42', 'terminal']]))
        render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
@@ -1037,12 +1038,12 @@ describe('TaskDetailView', () => {
          expect(breadcrumb?.textContent).toContain('terminal')
        })
 
-       vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+       vi.mocked(getTaskWorkspace).mockResolvedValue(null)
      })
 
      it('active tab persists per task via taskActiveView store', async () => {
-       const { getWorktreeForTask } = await import('../../lib/ipc')
-       vi.mocked(getWorktreeForTask).mockResolvedValue(createWorktreeInfo({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+       const { getTaskWorkspace } = await import('../../lib/ipc')
+       vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
 
        taskActiveView.set(new Map([['T-42', 'review']]))
        render(TaskDetailView, { props: { task: secondaryTask, onRunAction: mockOnRunAction } })
@@ -1053,11 +1054,11 @@ describe('TaskDetailView', () => {
          expect(breadcrumb?.textContent).not.toContain('self_review')
        })
 
-        vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+        vi.mocked(getTaskWorkspace).mockResolvedValue(null)
       })
       it('falls back to code tab when stored tab is terminal but no worktree', async () => {
-        const { getWorktreeForTask } = await import('../../lib/ipc')
-        vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+        const { getTaskWorkspace } = await import('../../lib/ipc')
+        vi.mocked(getTaskWorkspace).mockResolvedValue(null)
 
         taskActiveView.set(new Map([['T-42', 'terminal']]))
         render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
@@ -1072,10 +1073,10 @@ describe('TaskDetailView', () => {
 
     describe('terminal cleanup on navigate-away', () => {
       it('calls releaseAllForTask when component unmounts', async () => {
-        const { getWorktreeForTask } = await import('../../lib/ipc')
+        const { getTaskWorkspace } = await import('../../lib/ipc')
         const { releaseAllForTask } = await import('../../lib/terminalPool')
         
-        vi.mocked(getWorktreeForTask).mockResolvedValue(createWorktreeInfo({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+        vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
         vi.mocked(releaseAllForTask).mockClear()
         
         const { unmount } = render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
@@ -1086,14 +1087,14 @@ describe('TaskDetailView', () => {
         
         expect(releaseAllForTask).toHaveBeenCalledWith('T-42')
         
-        vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+        vi.mocked(getTaskWorkspace).mockResolvedValue(null)
       })
 
       it('calls releaseAllForTask when task prop changes', async () => {
-        const { getWorktreeForTask } = await import('../../lib/ipc')
+        const { getTaskWorkspace } = await import('../../lib/ipc')
         const { releaseAllForTask } = await import('../../lib/terminalPool')
         
-        vi.mocked(getWorktreeForTask).mockResolvedValue(createWorktreeInfo({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+        vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
         vi.mocked(releaseAllForTask).mockClear()
         
         const { rerender } = render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
@@ -1107,14 +1108,14 @@ describe('TaskDetailView', () => {
           expect(releaseAllForTask).toHaveBeenCalledWith('T-42')
         })
         
-        vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+        vi.mocked(getTaskWorkspace).mockResolvedValue(null)
       })
 
       it('does NOT call releaseAllForTask when task prop changes with same ID', async () => {
-        const { getWorktreeForTask } = await import('../../lib/ipc')
+        const { getTaskWorkspace } = await import('../../lib/ipc')
         const { releaseAllForTask } = await import('../../lib/terminalPool')
         
-        vi.mocked(getWorktreeForTask).mockResolvedValue(createWorktreeInfo({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+        vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
         vi.mocked(releaseAllForTask).mockClear()
         
         const { rerender } = render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
@@ -1128,14 +1129,14 @@ describe('TaskDetailView', () => {
         
         expect(releaseAllForTask).not.toHaveBeenCalled()
         
-        vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+        vi.mocked(getTaskWorkspace).mockResolvedValue(null)
       })
 
       it('cleanup only releases shell entries, not agent terminal', async () => {
-        const { getWorktreeForTask } = await import('../../lib/ipc')
+        const { getTaskWorkspace } = await import('../../lib/ipc')
         const { releaseAllForTask } = await import('../../lib/terminalPool')
         
-        vi.mocked(getWorktreeForTask).mockResolvedValue(createWorktreeInfo({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+        vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
         vi.mocked(releaseAllForTask).mockClear()
         
         const { unmount } = render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
@@ -1146,7 +1147,7 @@ describe('TaskDetailView', () => {
         
         expect(releaseAllForTask).toHaveBeenCalledWith('T-42')
         
-        vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+        vi.mocked(getTaskWorkspace).mockResolvedValue(null)
       })
     })
 
