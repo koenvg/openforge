@@ -540,7 +540,7 @@
       handleNavigate('skills')
     })
 
-    shortcuts.register('⌘f', () => {
+    shortcuts.register('⌘o', () => {
       handleNavigate('files')
     })
 
@@ -1043,6 +1043,10 @@
           <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">Voice input</span>
             <kbd class="kbd kbd-sm">⌘D</kbd>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-base-content">Files</span>
+            <kbd class="kbd kbd-sm">⌘O</kbd>
           </div>
           <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">Search tasks</span>
