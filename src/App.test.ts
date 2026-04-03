@@ -8,7 +8,7 @@ const callOrder: string[] = []
 
 const eventListeners = new Map<string, Function>()
 const mockSelectedTaskIdStore = writable<string | null>(null)
-const mockCurrentViewStore = writable<'board' | 'pr_review' | 'settings' | 'skills' | 'workqueue' | 'global_settings'>('board')
+const mockCurrentViewStore = writable<'board' | 'files' | 'pr_review' | 'settings' | 'skills' | 'workqueue' | 'global_settings'>('board')
 const mockSelectedReviewPrStore = writable(null)
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -52,6 +52,7 @@ vi.mock('./lib/stores', () => ({
   reviewPullRequestDiff: writable(null),
   authoredPrCount: writable(0),
   commandHeld: writable(false),
+  pendingFileReveal: writable<string | null>(null),
   focusBoardFilters: writable(new Map()),
   startingTasks: writable<Set<string>>(new Set()),
     codeCleanupTasksEnabled: writable(false),
@@ -601,6 +602,17 @@ describe('App onMount initialization order', () => {
 
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', metaKey: true, bubbles: true }))
       expect(get(stores.currentView)).toBe('pr_review')
+    })
+
+    it('CMD+O navigates to files view', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const { get } = await import('svelte/store')
+
+      render(App)
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'o', metaKey: true, bubbles: true }))
+      expect(get(stores.currentView)).toBe('files')
     })
 
     it('CMD+L navigates to skills view', async () => {

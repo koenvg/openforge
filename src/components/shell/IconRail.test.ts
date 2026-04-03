@@ -56,7 +56,7 @@ describe('IconRail', () => {
       render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn() } })
 
       expect(screen.getByText('H')).toBeTruthy()
-      expect(screen.getByText('F')).toBeTruthy()
+      expect(screen.getByText('O')).toBeTruthy()
       expect(screen.getByText('G')).toBeTruthy()
       expect(screen.getByText('L')).toBeTruthy()
 
@@ -76,7 +76,7 @@ describe('IconRail', () => {
       render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn() } })
 
       expect(screen.getByText('H')).toBeTruthy()  // board (Home)
-      expect(screen.getByText('F')).toBeTruthy()  // files (Files)
+      expect(screen.getByText('O')).toBeTruthy()
       expect(screen.getByText('G')).toBeTruthy()  // pr_review (Git)
       expect(screen.getByText('L')).toBeTruthy()  // skills (skiLLs)
 
@@ -88,7 +88,7 @@ describe('IconRail', () => {
       render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), modalsOpen: true } })
 
       expect(screen.queryByText('H')).toBeNull()
-      expect(screen.queryByText('F')).toBeNull()
+      expect(screen.queryByText('O')).toBeNull()
       expect(screen.queryByText('G')).toBeNull()
       expect(screen.queryByText('L')).toBeNull()
 
