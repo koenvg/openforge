@@ -1,5 +1,6 @@
-import type { Component } from 'svelte'
+import type { Component, ComponentType, SvelteComponent } from 'svelte'
 import { FolderOpen, GitPullRequest, LayoutDashboard, Settings, Sparkles } from 'lucide-svelte'
+import type { IconProps } from 'lucide-svelte'
 import SettingsView from '../components/settings/SettingsView.svelte'
 import PrReviewView from '../components/review/pr/PrReviewView.svelte'
 import SkillsView from '../components/SkillsView.svelte'
@@ -21,7 +22,7 @@ export interface ViewEntry {
   getProps: (context: ViewContext) => Record<string, unknown>
 }
 
-type LucideIcon = Component<{ size?: string | number }>
+type LucideIcon = ComponentType<SvelteComponent<IconProps>>
 type ShortcutNavigableView = 'board' | 'files' | 'pr_review' | 'skills' | 'settings' | 'workqueue'
 
 interface NavigationItem {
