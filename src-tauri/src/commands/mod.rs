@@ -12,3 +12,4 @@ pub mod review;
 pub mod self_review;
 pub mod tasks;
 pub mod whisper;
+pub mod plugins;

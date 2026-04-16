@@ -790,6 +790,12 @@ fn main() {
             commands::files::fs_read_dir,
             commands::files::fs_read_file,
             commands::files::fs_search_files,
+            commands::plugins::install_plugin,
+            commands::plugins::uninstall_plugin,
+            commands::plugins::get_plugin,
+            commands::plugins::list_plugins,
+            commands::plugins::set_plugin_enabled,
+            commands::plugins::get_enabled_plugins,
         ])
         .build(tauri_context())
         .expect("error while building tauri application");
