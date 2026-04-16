@@ -266,6 +266,11 @@ export async function attach(entry: PoolEntry, wrapperEl: HTMLDivElement): Promi
   await waitForInitialFit(entry)
 }
 
+export async function recoverActiveTerminal(entry: PoolEntry): Promise<void> {
+  if (!entry.attached) return
+  await waitForInitialFit(entry)
+}
+
 export function detach(entry: PoolEntry): void {
   if (!entry.attached) return
 

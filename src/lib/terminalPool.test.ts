@@ -22,6 +22,7 @@ import {
 	isPtyActive,
 	isShellExited,
 	markPtySpawnPending,
+	recoverActiveTerminal,
 	release,
 	releaseAll,
 	releaseAllForTask,
@@ -568,6 +569,24 @@ describe("terminalPool", () => {
 		await attach(reacquired, wrapper2);
 		expect(wrapper2.contains(entry.hostDiv)).toBe(true);
 		expect(entry.attached).toBe(true);
+	});
+
+	it("recoverActiveTerminal refits, refreshes, and focuses an attached entry", async () => {
+		const entry = await acquire("task-reactivate");
+		const wrapper = document.createElement("div");
+		await attach(entry, wrapper);
+
+		const { fit: fitSpy } = getFitAddonMocks(entry);
+		const { refresh: refreshSpy, focus: focusSpy } = getTerminalMocks(entry);
+		fitSpy.mockClear();
+		refreshSpy.mockClear();
+		focusSpy.mockClear();
+
+		await recoverActiveTerminal(entry);
+
+		expect(fitSpy).toHaveBeenCalledTimes(1);
+		expect(refreshSpy).toHaveBeenCalled();
+		expect(focusSpy).toHaveBeenCalled();
 	});
 
 	describe("isPtyActive", () => {
