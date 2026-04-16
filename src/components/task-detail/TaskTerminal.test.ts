@@ -69,8 +69,11 @@ vi.mock('../../lib/terminalPool', () => ({
     mockPoolEntry.taskId = taskId
     return mockPoolEntry
   }),
-  attach: vi.fn(),
+  attach: vi.fn(async (entry) => {
+    entry.attached = true
+  }),
   detach: vi.fn(),
+  recoverActiveTerminal: vi.fn(),
   release: vi.fn(),
   shouldSpawnPty: vi.fn((entry) => !entry.ptyActive && !entry.spawnPending && !entry.needsClear),
   markPtySpawnPending: vi.fn((entry) => {
@@ -208,6 +211,18 @@ describe('TaskTerminal', () => {
     await rerender({ taskId: 'T-1', workspacePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: false })
 
     expect(detach).not.toHaveBeenCalled()
+  })
+
+  it('runs pooled recovery when activating an already attached terminal', async () => {
+    const { attach, recoverActiveTerminal } = await import('../../lib/terminalPool')
+    mockPoolEntry.attached = true
+
+    render(TaskTerminal, { props: { taskId: 'T-1', workspacePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true } })
+
+    await vi.waitFor(() => {
+      expect(attach).toHaveBeenCalled()
+      expect(recoverActiveTerminal).toHaveBeenCalledWith(mockPoolEntry)
+    })
   })
 
   it('calls detach on component destroy', async () => {

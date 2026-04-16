@@ -4,7 +4,7 @@
   import type { UnlistenFn } from '@tauri-apps/api/event'
   import { spawnShellPty, killPty } from '../../lib/ipc'
   import '@xterm/xterm/css/xterm.css'
-  import { acquire, attach, detach, markPtySpawnPending, clearPtySpawnPending, shouldSpawnPty, setCurrentPtyInstance, getShellLifecycleState, updateShellLifecycleState, type PoolEntry } from '../../lib/terminalPool'
+  import { acquire, attach, detach, recoverActiveTerminal, markPtySpawnPending, clearPtySpawnPending, shouldSpawnPty, setCurrentPtyInstance, getShellLifecycleState, updateShellLifecycleState, type PoolEntry } from '../../lib/terminalPool'
 
   interface Props {
     taskId: string
@@ -29,8 +29,13 @@
   }
 
   async function activateTerminal(entry: PoolEntry) {
+    const wasAttached = entry.attached
     await attach(entry, terminalEl)
     if (!mounted || poolEntry !== entry) return
+    if (wasAttached) {
+      await recoverActiveTerminal(entry)
+      if (!mounted || poolEntry !== entry) return
+    }
     await ensureShellStarted(entry)
   }
 
