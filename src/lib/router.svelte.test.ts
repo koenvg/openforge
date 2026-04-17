@@ -154,8 +154,8 @@ describe('useAppRouter', () => {
     expect(get(currentView)).toBe('board')
   })
 
-  it('resetToBoard resets from skills view', () => {
-    currentView.set('skills')
+  it('resetToBoard resets from plugin skills view', () => {
+    currentView.set('plugin:com.openforge.skills-viewer:skills')
 
     resetToBoard()
 

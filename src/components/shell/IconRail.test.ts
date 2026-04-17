@@ -5,10 +5,10 @@ import type { AppView } from '../../lib/types'
 import { commandHeld } from '../../lib/stores'
 
 describe('IconRail', () => {
-  it('renders 4 static navigation buttons', () => {
+  it('renders 3 static navigation buttons', () => {
     render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn() } })
     const buttons = screen.getAllByRole('button')
-    expect(buttons).toHaveLength(4)
+    expect(buttons).toHaveLength(3)
   })
 
   it('clicking first button (board) calls onNavigate with "board"', () => {
@@ -45,9 +45,9 @@ describe('IconRail', () => {
     })
 
     const buttons = screen.getAllByRole('button')
-    expect(buttons).toHaveLength(5)
+    expect(buttons).toHaveLength(4)
 
-    fireEvent.click(buttons[4])
+    fireEvent.click(buttons[3])
     expect(onNavigate).toHaveBeenCalledWith('plugin:com.openforge.file-viewer:files')
   })
 
@@ -73,7 +73,6 @@ describe('IconRail', () => {
 
       expect(screen.getByText('H')).toBeTruthy()
       expect(screen.getByText('G')).toBeTruthy()
-      expect(screen.getByText('L')).toBeTruthy()
 
       commandHeld.set(false)
     })
@@ -92,7 +91,6 @@ describe('IconRail', () => {
 
       expect(screen.getByText('H')).toBeTruthy()  // board (Home)
       expect(screen.getByText('G')).toBeTruthy()  // pr_review (Git)
-      expect(screen.getByText('L')).toBeTruthy()  // skills (skiLLs)
 
       commandHeld.set(false)
     })
@@ -103,7 +101,6 @@ describe('IconRail', () => {
 
       expect(screen.queryByText('H')).toBeNull()
       expect(screen.queryByText('G')).toBeNull()
-      expect(screen.queryByText('L')).toBeNull()
 
       commandHeld.set(false)
     })

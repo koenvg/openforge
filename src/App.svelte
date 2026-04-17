@@ -29,6 +29,7 @@
   import PluginSlot from './components/plugin/PluginSlot.svelte'
 
   import { FILE_VIEWER_PLUGIN_ID, FILE_VIEWER_PLUGIN_MANIFEST } from './lib/fileViewerPlugin'
+  import { SKILLS_VIEWER_PLUGIN_ID, SKILLS_VIEWER_PLUGIN_MANIFEST } from './lib/skillsViewerPlugin'
   import { resolveContributions } from './lib/plugin/contributionResolver'
   import { enabledPluginIds, installedPlugins, loadEnabledForProject, loadInstalledPlugins } from './lib/plugin/pluginStore'
   import { isPluginViewKey, makePluginViewKey } from './lib/plugin/types'
@@ -144,6 +145,7 @@
     if (projectId && projectId !== previousPluginProjectId) {
       void loadEnabledForProject(projectId).then(() => {
         ensureBuiltinPluginEnabled(FILE_VIEWER_PLUGIN_ID)
+        ensureBuiltinPluginEnabled(SKILLS_VIEWER_PLUGIN_ID)
       })
     } else if (!projectId && previousPluginProjectId !== null) {
       enabledPluginIds.set(new Set())
@@ -620,10 +622,6 @@
       handleNavigate('pr_review')
     })
 
-    shortcuts.register('⌘l', () => {
-      handleNavigate('skills')
-    })
-
     shortcuts.register('⌘,', () => {
       handleNavigate('settings')
     })
@@ -954,7 +952,9 @@
     // Phase 2: Load data
     await loadInstalledPlugins()
     ensureBuiltinPluginInstalled(FILE_VIEWER_PLUGIN_MANIFEST)
+    ensureBuiltinPluginInstalled(SKILLS_VIEWER_PLUGIN_MANIFEST)
     ensureBuiltinPluginEnabled(FILE_VIEWER_PLUGIN_ID)
+    ensureBuiltinPluginEnabled(SKILLS_VIEWER_PLUGIN_ID)
     await loadProjects()
 
     try {

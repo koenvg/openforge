@@ -23,7 +23,6 @@ describe('views registry', () => {
       'global_settings',
       'pr_review',
       'settings',
-      'skills',
       'workqueue',
     ])
   })
@@ -126,5 +125,28 @@ describe('views registry', () => {
 
     expect(pluginViews['plugin:com.openforge.file-viewer:files']).toBeDefined()
     expect('files' in pluginViews).toBe(false)
+  })
+
+  it('resolves the skills viewer view through plugin entries', () => {
+    const pluginViews = getViews([
+      makeManifest({
+        id: 'com.openforge.skills-viewer',
+        contributes: {
+          views: [
+            {
+              id: 'skills',
+              title: 'Skills',
+              icon: 'sparkles',
+              shortcut: 'Cmd+L',
+              showInRail: true,
+              railOrder: 30,
+            },
+          ],
+        },
+      }),
+    ])
+
+    expect(pluginViews['plugin:com.openforge.skills-viewer:skills']).toBeDefined()
+    expect('skills' in pluginViews).toBe(false)
   })
 })

@@ -8,7 +8,7 @@ const callOrder: string[] = []
 
 const eventListeners = new Map<string, Function>()
 const mockSelectedTaskIdStore = writable<string | null>(null)
-const mockCurrentViewStore = writable<'board' | 'files' | 'pr_review' | 'settings' | 'skills' | 'workqueue' | 'global_settings' | 'plugin:com.openforge.file-viewer:files'>('board')
+const mockCurrentViewStore = writable<'board' | 'files' | 'pr_review' | 'settings' | 'workqueue' | 'global_settings' | 'plugin:com.openforge.file-viewer:files' | 'plugin:com.openforge.skills-viewer:skills'>('board')
 const mockSelectedReviewPrStore = writable(null)
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -625,15 +625,22 @@ describe('App onMount initialization order', () => {
     })
   })
 
-    it('CMD+L navigates to skills view', async () => {
+    it('CMD+L navigates to plugin skills view', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
+      const pluginStore = await import('./lib/plugin/pluginStore')
+      const { SKILLS_VIEWER_PLUGIN_ID } = await import('./lib/skillsViewerPlugin')
       const { get } = await import('svelte/store')
 
+      stores.currentView.set('board')
       render(App)
 
+      await vi.waitFor(() => {
+        expect(get(pluginStore.enabledPluginIds).has(SKILLS_VIEWER_PLUGIN_ID)).toBe(true)
+      })
+
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', metaKey: true, bubbles: true }))
-      expect(get(stores.currentView)).toBe('skills')
+      expect(get(stores.currentView)).toBe('plugin:com.openforge.skills-viewer:skills')
     })
 
     it('CMD+comma navigates to settings view', async () => {

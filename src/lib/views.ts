@@ -1,13 +1,14 @@
 import type { Component } from 'svelte'
 import SettingsView from '../components/settings/SettingsView.svelte'
 import PrReviewView from '../components/review/pr/PrReviewView.svelte'
-import SkillsView from '../components/SkillsView.svelte'
 import WorkQueueView from '../components/work-queue/WorkQueueView.svelte'
 import PluginSlot from '../components/plugin/PluginSlot.svelte'
 import { FilesViewComponent } from '../../plugins/file-viewer/src/index'
+import { SkillsViewComponent } from '../../plugins/skills-viewer/src/index'
 import { resolveContributions } from './plugin/contributionResolver'
 import { makePluginViewKey } from './plugin/types'
 import { FILE_VIEWER_PLUGIN_ID, FILE_VIEWER_VIEW_ID } from './fileViewerPlugin'
+import { SKILLS_VIEWER_PLUGIN_ID, SKILLS_VIEWER_VIEW_ID } from './skillsViewerPlugin'
 import type { PluginManifest, PluginViewKey } from './plugin/types'
 import type { AppView, CoreAppView } from './types'
 
@@ -30,7 +31,7 @@ export interface PluginViewEntry {
   entry: ViewEntry
 }
 
-export type StaticViewKey = Exclude<CoreAppView, 'board' | 'files'>
+export type StaticViewKey = Exclude<CoreAppView, 'board' | 'files' | 'skills'>
 export type ViewRegistry = Record<StaticViewKey, ViewEntry> & Partial<Record<PluginViewKey, ViewEntry>>
 
 export const TASK_CLEARING_VIEWS: ReadonlySet<AppView> = new Set([
@@ -67,10 +68,6 @@ export const VIEWS: Record<StaticViewKey, ViewEntry> = {
     component: PrReviewView,
     getProps: ({ projectName }) => ({ projectName }),
   },
-  skills: {
-    component: SkillsView,
-    getProps: ({ projectName }) => ({ projectName }),
-  },
   workqueue: {
     component: WorkQueueView,
     getProps: ({ onRunAction }) => ({ onRunAction }),
@@ -83,12 +80,11 @@ export function getPluginViewEntries(manifests: PluginManifest[]): PluginViewEnt
   return contributions.views.map((view) => ({
     key: makePluginViewKey(view.pluginId, view.contributionId),
     entry: {
-      component:
-        view.pluginId === FILE_VIEWER_PLUGIN_ID && view.contributionId === FILE_VIEWER_VIEW_ID
-          ? FilesViewComponent
-          : PluginSlot,
+      component: isBuiltinHostView(view.pluginId, view.contributionId)
+        ? getBuiltinHostViewComponent(view.pluginId, view.contributionId)
+        : PluginSlot,
       getProps: ({ projectName }) =>
-        view.pluginId === FILE_VIEWER_PLUGIN_ID && view.contributionId === FILE_VIEWER_VIEW_ID
+        isBuiltinHostView(view.pluginId, view.contributionId)
           ? { projectName }
           : {
               slotType: 'views' as const,
@@ -96,6 +92,21 @@ export function getPluginViewEntries(manifests: PluginManifest[]): PluginViewEnt
             },
     },
   }))
+}
+
+function isBuiltinHostView(pluginId: string, contributionId: string): boolean {
+  return (
+    (pluginId === FILE_VIEWER_PLUGIN_ID && contributionId === FILE_VIEWER_VIEW_ID) ||
+    (pluginId === SKILLS_VIEWER_PLUGIN_ID && contributionId === SKILLS_VIEWER_VIEW_ID)
+  )
+}
+
+function getBuiltinHostViewComponent(pluginId: string, contributionId: string): Component<Record<string, unknown>> {
+  if (pluginId === FILE_VIEWER_PLUGIN_ID && contributionId === FILE_VIEWER_VIEW_ID) {
+    return FilesViewComponent
+  }
+
+  return SkillsViewComponent
 }
 
 export function getViews(manifests: PluginManifest[]): ViewRegistry {
