@@ -182,7 +182,7 @@ INSERT OR IGNORE INTO config (key, value) VALUES ('github_token', '');
 INSERT OR IGNORE INTO config (key, value) VALUES ('github_default_repo', '');
 INSERT OR IGNORE INTO config (key, value) VALUES ('opencode_port', '4096');
 INSERT OR IGNORE INTO config (key, value) VALUES ('opencode_auto_start', 'true');
-INSERT OR IGNORE INTO config (key, value) VALUES ('github_poll_interval', '15');
+INSERT OR IGNORE INTO config (key, value) VALUES ('github_poll_interval', '60');
 INSERT OR IGNORE INTO config (key, value) VALUES ('next_task_id', '1');
 INSERT OR IGNORE INTO config (key, value) VALUES ('next_project_id', '1')
             "#,
@@ -1536,6 +1536,33 @@ mod tests {
             "task_id_prefix should contain only uppercase letters, got: {}",
             prefix
         );
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_github_poll_interval_seeded() {
+        let path = std::env::temp_dir().join(format!(
+            "test_github_poll_interval_mig_{}.db",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+
+        let db = Database::new(path.clone()).expect("Database::new");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        let poll_interval: String = conn
+            .query_row(
+                "SELECT value FROM config WHERE key = 'github_poll_interval'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("github_poll_interval should exist in config");
+
+        assert_eq!(poll_interval, "60");
 
         drop(conn);
         drop(db);
