@@ -1,5 +1,10 @@
 <script lang="ts">
 	import { Settings2 } from 'lucide-svelte'
+	import {
+		DEFAULT_GITHUB_POLL_INTERVAL_SECONDS,
+		MAX_GITHUB_POLL_INTERVAL_SECONDS,
+		MIN_GITHUB_POLL_INTERVAL_SECONDS,
+	} from '../../lib/settingsConfig'
 
 	interface Props {
 		taskIdPrefix: string
@@ -23,7 +28,13 @@
 	function handlePollIntervalInput(e: Event) {
 		if (!(e.currentTarget instanceof HTMLInputElement)) return
 		const raw = parseInt(e.currentTarget.value, 10)
-		const clamped = Math.max(30, Math.min(300, isNaN(raw) ? 30 : raw))
+		const clamped = Math.max(
+			MIN_GITHUB_POLL_INTERVAL_SECONDS,
+			Math.min(
+				MAX_GITHUB_POLL_INTERVAL_SECONDS,
+				isNaN(raw) ? DEFAULT_GITHUB_POLL_INTERVAL_SECONDS : raw,
+			),
+		)
 		onGithubPollIntervalChange(clamped)
 	}
 
@@ -92,8 +103,8 @@
 			<span class="text-[0.7rem] text-base-content/50">How often to check GitHub for updates (seconds)</span>
 			<input
 				type="number"
-				min="30"
-				max="300"
+				min={String(MIN_GITHUB_POLL_INTERVAL_SECONDS)}
+				max={String(MAX_GITHUB_POLL_INTERVAL_SECONDS)}
 				step="5"
 				value={githubPollInterval}
 				data-testid="poll-interval-input"
