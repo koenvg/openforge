@@ -1,6 +1,6 @@
 //! GitHub PR Comment Poller
 //!
-//! Background Tokio task that polls GitHub every 30-60s for new PR comments,
+//! Background Tokio task that polls GitHub at a configurable interval for new PR comments,
 //! inserts them into SQLite, and emits Tauri events.
 //!
 //! ## Architecture
@@ -42,6 +42,8 @@ use std::time::Instant;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::time::{sleep, Duration};
 
+const DEFAULT_GITHUB_POLL_INTERVAL_SECS: u64 = 60;
+
 // ============================================================================
 // PollResult
 // ============================================================================
@@ -68,6 +70,11 @@ pub struct PollResult {
     /// Unix timestamp when the rate limit resets, if rate_limited is true.
     #[serde(default)]
     pub rate_limit_reset_at: Option<i64>,
+}
+
+fn parse_poll_interval_seconds(raw: Option<String>) -> u64 {
+    raw.and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(DEFAULT_GITHUB_POLL_INTERVAL_SECS)
 }
 
 // ============================================================================
@@ -347,12 +354,7 @@ pub async fn start_github_poller(app: AppHandle) {
 
         let poll_interval = {
             let db_lock = db.lock().unwrap();
-            db_lock
-                .get_config("github_poll_interval")
-                .ok()
-                .flatten()
-                .and_then(|s| s.parse::<u64>().ok())
-                .unwrap_or(30)
+            parse_poll_interval_seconds(db_lock.get_config("github_poll_interval").ok().flatten())
         };
 
         let result = poll_github_once(&app, &github_client).await;
@@ -1824,5 +1826,20 @@ mod tests {
         count_poll_phase_error("review PRs", Ok(()), &mut total_errors);
 
         assert_eq!(total_errors, 3);
+    }
+
+    #[test]
+    fn test_parse_poll_interval_seconds_defaults_to_seed_value_when_missing() {
+        assert_eq!(parse_poll_interval_seconds(None), 60);
+    }
+
+    #[test]
+    fn test_parse_poll_interval_seconds_defaults_to_seed_value_when_invalid() {
+        assert_eq!(parse_poll_interval_seconds(Some("not-a-number".to_string())), 60);
+    }
+
+    #[test]
+    fn test_parse_poll_interval_seconds_uses_configured_value_when_valid() {
+        assert_eq!(parse_poll_interval_seconds(Some("45".to_string())), 45);
     }
 }

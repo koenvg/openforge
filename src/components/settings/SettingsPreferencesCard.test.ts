@@ -9,7 +9,7 @@ function defaultProps(overrides: Record<string, unknown> = {}) {
 		onTaskIdPrefixChange: vi.fn(),
 		isDarkMode: false,
 		onThemeToggle: vi.fn(),
-		githubPollInterval: 30,
+		githubPollInterval: 60,
 		onGithubPollIntervalChange: vi.fn(),
 		...overrides,
 	}
@@ -129,11 +129,11 @@ describe('SettingsPreferencesCard', () => {
 			expect(input.value).toBe('60')
 		})
 
-		it('input has min=30 and max=300 attributes', () => {
+		it('input has min=15 and max=300 attributes', () => {
 			render(SettingsPreferencesCard, { props: defaultProps() })
 
 			const input = requireElement(screen.getByTestId('poll-interval-input'), HTMLInputElement)
-			expect(input.min).toBe('30')
+			expect(input.min).toBe('15')
 			expect(input.max).toBe('300')
 		})
 
@@ -147,6 +147,18 @@ describe('SettingsPreferencesCard', () => {
 			await fireEvent.input(input, { target: { value: '90' } })
 
 			expect(onGithubPollIntervalChange).toHaveBeenCalled()
+		})
+
+		it('clamps values below 15 seconds to 15', async () => {
+			const onGithubPollIntervalChange = vi.fn()
+			render(SettingsPreferencesCard, {
+				props: defaultProps({ onGithubPollIntervalChange }),
+			})
+
+			const input = requireElement(screen.getByTestId('poll-interval-input'), HTMLInputElement)
+			await fireEvent.input(input, { target: { value: '10' } })
+
+			expect(onGithubPollIntervalChange).toHaveBeenCalledWith(15)
 		})
 
 		it('shows helper text with current interval', () => {

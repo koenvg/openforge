@@ -9,6 +9,7 @@
   import { DEFAULT_FOCUS_STATES } from '../../lib/boardFilters'
   import { createTrackedDebouncedSave } from '../../lib/createTrackedDebouncedSave'
   import {
+    DEFAULT_GITHUB_POLL_INTERVAL_SECONDS,
     loadGlobalSettings,
     loadInstallationStatus,
     loadProjectSettings,
@@ -51,7 +52,7 @@
   // Global state
   let taskIdPrefix = $state('')
   let githubToken = $state('')
-  let githubPollInterval = $state(30)
+  let githubPollInterval = $state(DEFAULT_GITHUB_POLL_INTERVAL_SECONDS)
 
   // AI state
   let modelStatuses = $state<WhisperModelStatus[]>([])

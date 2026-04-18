@@ -36,6 +36,10 @@ export interface InstallationStatus {
   claudeAuthenticated: boolean
 }
 
+export const DEFAULT_GITHUB_POLL_INTERVAL_SECONDS = 60
+export const MIN_GITHUB_POLL_INTERVAL_SECONDS = 15
+export const MAX_GITHUB_POLL_INTERVAL_SECONDS = 300
+
 interface OpenCodeInstallStatus {
   installed: boolean
   path: string | null
@@ -54,7 +58,7 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettingsConfig = {
   taskIdPrefix: '',
   githubToken: '',
   codeCleanupTasksEnabled: false,
-  githubPollInterval: 30,
+  githubPollInterval: DEFAULT_GITHUB_POLL_INTERVAL_SECONDS,
 }
 
 export async function loadProjectSettings(projectId: string): Promise<ProjectSettingsConfig> {

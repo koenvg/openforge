@@ -130,7 +130,7 @@ describe('settingsConfig', () => {
         taskIdPrefix: '',
         githubToken: '',
         codeCleanupTasksEnabled: false,
-        githubPollInterval: 30,
+        githubPollInterval: 60,
       })
     })
   })
