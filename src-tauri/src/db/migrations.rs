@@ -731,6 +731,25 @@ CREATE INDEX IF NOT EXISTS idx_task_workspaces_project ON task_workspaces(projec
 
         Ok(())
     }),
+    M::up_with_hook("", |tx| {
+        let has_config_table: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='config'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+
+        if has_config_table {
+            tx.execute(
+                "UPDATE config SET value = '60' WHERE key = 'github_poll_interval' AND value = '15'",
+                [],
+            )
+            .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
+
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -1563,6 +1582,98 @@ mod tests {
             .expect("github_poll_interval should exist in config");
 
         assert_eq!(poll_interval, "60");
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_github_poll_interval_upgrade_updates_legacy_default() {
+        let path = std::env::temp_dir().join(format!(
+            "test_github_poll_interval_upgrade_mig_{}.db",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+
+        {
+            let conn = rusqlite::Connection::open(&path).expect("open raw db");
+            conn.execute(
+                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 1),
+                [],
+            )
+            .expect("set pre-upgrade user_version");
+            conn.execute(
+                "CREATE TABLE config (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+                [],
+            )
+            .expect("create config table");
+            conn.execute(
+                "INSERT INTO config (key, value) VALUES ('github_poll_interval', '15')",
+                [],
+            )
+            .expect("insert legacy poll interval");
+        }
+
+        let db = Database::new(path.clone()).expect("Database::new");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        let poll_interval: String = conn
+            .query_row(
+                "SELECT value FROM config WHERE key = 'github_poll_interval'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("github_poll_interval should exist in config");
+
+        assert_eq!(poll_interval, "60");
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_github_poll_interval_upgrade_preserves_custom_value() {
+        let path = std::env::temp_dir().join(format!(
+            "test_github_poll_interval_custom_upgrade_mig_{}.db",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+
+        {
+            let conn = rusqlite::Connection::open(&path).expect("open raw db");
+            conn.execute(
+                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 1),
+                [],
+            )
+            .expect("set pre-upgrade user_version");
+            conn.execute(
+                "CREATE TABLE config (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+                [],
+            )
+            .expect("create config table");
+            conn.execute(
+                "INSERT INTO config (key, value) VALUES ('github_poll_interval', '120')",
+                [],
+            )
+            .expect("insert custom poll interval");
+        }
+
+        let db = Database::new(path.clone()).expect("Database::new");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        let poll_interval: String = conn
+            .query_row(
+                "SELECT value FROM config WHERE key = 'github_poll_interval'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("github_poll_interval should exist in config");
+
+        assert_eq!(poll_interval, "120");
 
         drop(conn);
         drop(db);
