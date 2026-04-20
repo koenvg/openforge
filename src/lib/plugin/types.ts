@@ -1,98 +1,23 @@
-export interface PluginManifest {
-  id: string
-  name: string
-  version: string
-  apiVersion: number
-  description: string
-  permissions: string[]
-  contributes: PluginContributionPoints
-  frontend: string
-  backend: string | null
-}
-
-export interface PluginContributionPoints {
-  views?: PluginViewContribution[]
-  taskPaneTabs?: PluginTaskPaneTabContribution[]
-  sidebarPanels?: PluginSidebarPanelContribution[]
-  commands?: PluginCommandContribution[]
-  settingsSections?: PluginSettingsSection[]
-  backgroundServices?: PluginBackgroundService[]
-}
-
-export interface PluginViewContribution {
-  id: string
-  title: string
-  icon: string
-  shortcut?: string
-  showInRail?: boolean
-  railOrder?: number
-}
-
-export interface PluginTaskPaneTabContribution {
-  id: string
-  title: string
-  icon?: string
-  order?: number
-}
-
-export interface PluginSidebarPanelContribution {
-  id: string
-  title: string
-  side: 'left' | 'right'
-  order?: number
-}
-
-export interface PluginCommandContribution {
-  id: string
-  title: string
-  shortcut?: string
-}
-
-export interface PluginSettingsSection {
-  id: string
-  title: string
-}
-
-export interface PluginBackgroundService {
-  id: string
-  name: string
-}
-
-export type PluginViewKey = `plugin:${string}:${string}`
-
-export function makePluginViewKey(pluginId: string, viewId: string): PluginViewKey {
-  return `plugin:${pluginId}:${viewId}`
-}
-
-export function isPluginViewKey(value: string): value is PluginViewKey {
-  return value.startsWith('plugin:') && value.match(/^plugin:[^:]+:[^:]+$/) !== null
-}
-
-export function parsePluginViewKey(key: PluginViewKey): { pluginId: string; viewId: string } {
-  const parts = key.split(':')
-  return { pluginId: parts[1], viewId: parts[2] }
-}
-
-export interface PluginContext {
-  invokeHost(command: string, payload: Record<string, unknown>): Promise<unknown>
-  invokeBackend(method: string, payload: Record<string, unknown>): Promise<unknown>
-  onEvent(event: string, handler: (payload: unknown) => void): () => void
-  storage: {
-    get(key: string): Promise<string | null>
-    set(key: string, value: string): Promise<void>
-  }
-}
-
-export interface PluginActivationResult {
-  contributions: PluginContributionPoints
-}
-
-export type PluginState = 'installed' | 'active' | 'error' | 'disabled'
-
-export interface PluginEntry {
-  manifest: PluginManifest
-  state: PluginState
-  error: string | null
-}
-
-export const MAX_SUPPORTED_API_VERSION = 1
+export {
+  MAX_SUPPORTED_API_VERSION,
+  makePluginViewKey,
+  isPluginViewKey,
+  parsePluginViewKey,
+  type PluginActivatedViewContribution,
+  type PluginActivationResult,
+  type PluginBackgroundService,
+  type PluginCommandContribution,
+  type PluginContext,
+  type PluginContributionPoints,
+  type PluginEntry,
+  type PluginManifest,
+  type PluginSettingsSection,
+  type PluginSidebarPanelContribution,
+  type PluginState,
+  type PluginStorage,
+  type PluginTaskPaneProps,
+  type PluginTaskPaneTabContribution,
+  type PluginViewContribution,
+  type PluginViewKey,
+  type PluginViewProps,
+} from '@openforge/plugin-sdk'
