@@ -41,20 +41,46 @@ type PluginHostContextSnapshot = {
 type PluginHostListener = (payload: unknown) => void
 
 const pluginHostListeners = new Map<PluginHostEventName, Set<PluginHostListener>>()
+const pluginHostUnsubscribers = new Map<string, Set<() => void>>()
 
-function subscribeToPluginHostEvent(event: string, handler: PluginHostListener): () => void {
+function subscribeToPluginHostEvent(pluginId: string, event: string, handler: PluginHostListener): () => void {
   const typedEvent = event as PluginHostEventName
   const listeners = pluginHostListeners.get(typedEvent) ?? new Set<PluginHostListener>()
   listeners.add(handler)
   pluginHostListeners.set(typedEvent, listeners)
 
-  return () => {
+  const unsubscribe = () => {
     const currentListeners = pluginHostListeners.get(typedEvent)
     currentListeners?.delete(handler)
     if (currentListeners && currentListeners.size === 0) {
       pluginHostListeners.delete(typedEvent)
     }
   }
+
+  const cleanupCallbacks = pluginHostUnsubscribers.get(pluginId) ?? new Set<() => void>()
+  const cleanup = () => {
+    unsubscribe()
+    cleanupCallbacks.delete(cleanup)
+    if (cleanupCallbacks.size === 0) {
+      pluginHostUnsubscribers.delete(pluginId)
+    }
+  }
+
+  cleanupCallbacks.add(cleanup)
+  pluginHostUnsubscribers.set(pluginId, cleanupCallbacks)
+
+  return cleanup
+}
+
+function clearPluginHostSubscriptions(pluginId: string): void {
+  const cleanupCallbacks = pluginHostUnsubscribers.get(pluginId)
+  if (!cleanupCallbacks) return
+
+  for (const cleanup of Array.from(cleanupCallbacks)) {
+    cleanup()
+  }
+
+  pluginHostUnsubscribers.delete(pluginId)
 }
 
 function getContextSnapshot(): PluginHostContextSnapshot {
@@ -190,6 +216,7 @@ export async function uninstallPlugin(pluginId: string): Promise<void> {
   if (isPluginLoaded(pluginId)) {
     await deactivatePluginLoader(pluginId)
   }
+  clearPluginHostSubscriptions(pluginId)
   await uninstallPluginIpc(pluginId)
   installedPlugins.update(map => {
     const next = new Map(map)
@@ -231,7 +258,7 @@ function makePluginContextForPlugin(pluginId: string): PluginContext {
     pluginId,
     invokeHost: async (command: string, payload?: unknown) => invokePluginHostCommand(command, payload),
     invokeBackend: async (method: string, payload?: unknown) => pluginInvoke(pluginId, method, payload ?? null),
-    onEvent: (event: string, handler: (payload: unknown) => void) => subscribeToPluginHostEvent(event, handler),
+    onEvent: (event: string, handler: (payload: unknown) => void) => subscribeToPluginHostEvent(pluginId, event, handler),
     storage: {
       get: async (key: string) => getPluginStorage(pluginId, key),
       set: async (key: string, value: string) => setPluginStorage(pluginId, key, value),
@@ -241,6 +268,7 @@ function makePluginContextForPlugin(pluginId: string): PluginContext {
 
 export async function deactivatePluginById(pluginId: string): Promise<void> {
   await deactivatePluginLoader(pluginId)
+  clearPluginHostSubscriptions(pluginId)
 }
 
 export async function installFromLocal(pluginPath: string, projectId: string): Promise<void> {
