@@ -1,11 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { get } from 'svelte/store'
 
-const { installPluginMock, uninstallPluginIpcMock, getEnabledPluginsMock, fsReadFileMock } = vi.hoisted(() => ({
+const {
+  installPluginMock,
+  uninstallPluginIpcMock,
+  getEnabledPluginsMock,
+  fsReadFileMock,
+  pluginInvokeMock,
+  getPluginStorageMock,
+  setPluginStorageMock,
+} = vi.hoisted(() => ({
   installPluginMock: vi.fn(),
   uninstallPluginIpcMock: vi.fn(),
   getEnabledPluginsMock: vi.fn(),
   fsReadFileMock: vi.fn(),
+  pluginInvokeMock: vi.fn(),
+  getPluginStorageMock: vi.fn(),
+  setPluginStorageMock: vi.fn(),
 }))
 
 vi.mock('../ipc', () => ({
@@ -15,6 +26,9 @@ vi.mock('../ipc', () => ({
   listPlugins: vi.fn().mockResolvedValue([]),
   setPluginEnabled: vi.fn(),
   fsReadFile: fsReadFileMock,
+  pluginInvoke: pluginInvokeMock,
+  getPluginStorage: getPluginStorageMock,
+  setPluginStorage: setPluginStorageMock,
 }))
 
 const {
@@ -37,6 +51,7 @@ vi.mock('./pluginLoader', () => ({
 }))
 
 import {
+  emitPluginHostEvent,
   installPluginFromManifest,
   installPluginFromNpm,
   uninstallPlugin,
@@ -86,6 +101,9 @@ describe('pluginRegistry', () => {
     uninstallPluginIpcMock.mockReset()
     getEnabledPluginsMock.mockReset()
     fsReadFileMock.mockReset()
+    pluginInvokeMock.mockReset()
+    getPluginStorageMock.mockReset()
+    setPluginStorageMock.mockReset()
     loadPluginFrontendMock.mockReset()
     activatePluginLoaderMock.mockReset()
     deactivatePluginLoaderMock.mockReset()
@@ -140,6 +158,9 @@ describe('pluginRegistry', () => {
     installedPlugins.set(new Map([['test-plugin', { manifest, state: 'installed', error: null }]]))
     loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: {}, activationResult: null })
     activatePluginLoaderMock.mockResolvedValue({ contributions: {} })
+    pluginInvokeMock.mockResolvedValue('backend-result')
+    getPluginStorageMock.mockResolvedValue('stored-value')
+    setPluginStorageMock.mockResolvedValue(undefined)
 
     const result = await activatePlugin('test-plugin')
 
@@ -149,6 +170,49 @@ describe('pluginRegistry', () => {
     const [calledId, calledCtx] = activatePluginLoaderMock.mock.calls[0]
     expect(calledId).toBe('test-plugin')
     expect(calledCtx).toBeDefined()
+
+    await expect(calledCtx.invokeBackend('ping', { ok: true })).resolves.toBe('backend-result')
+    expect(pluginInvokeMock).toHaveBeenCalledWith('test-plugin', 'ping', { ok: true })
+
+    await expect(calledCtx.storage.get('plugin-key')).resolves.toBe('stored-value')
+    expect(getPluginStorageMock).toHaveBeenCalledWith('test-plugin', 'plugin-key')
+
+    await calledCtx.storage.set('plugin-key', 'plugin-value')
+    expect(setPluginStorageMock).toHaveBeenCalledWith('test-plugin', 'plugin-key', 'plugin-value')
+  })
+
+  it('activatePlugin exposes a host context command surface and real event subscription', async () => {
+    const manifest = makeManifest()
+    installedPlugins.set(new Map([['test-plugin', { manifest, state: 'installed', error: null }]]))
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: {}, activationResult: null })
+
+    let capturedContext: {
+      invokeHost(command: string, payload?: Record<string, unknown>): Promise<unknown>
+      onEvent(event: string, handler: (payload: unknown) => void): () => void
+    } | null = null
+
+    activatePluginLoaderMock.mockImplementation(async (_pluginId, context) => {
+      capturedContext = context
+      return { contributions: {} }
+    })
+
+    await activatePlugin('test-plugin')
+
+    expect(capturedContext).not.toBeNull()
+    await expect(capturedContext?.invokeHost('getContext')).resolves.toEqual({
+      activeProjectId: null,
+      currentView: 'board',
+      selectedTaskId: null,
+    })
+
+    const handler = vi.fn()
+    const unsubscribe = capturedContext?.onEvent('selection-changed', handler)
+    emitPluginHostEvent('selection-changed', { selectedTaskId: 'T-123' })
+    expect(handler).toHaveBeenCalledWith({ selectedTaskId: 'T-123' })
+
+    unsubscribe?.()
+    emitPluginHostEvent('selection-changed', { selectedTaskId: 'T-456' })
+    expect(handler).toHaveBeenCalledTimes(1)
   })
 
   it('activatePlugin returns false for plugin not in store', async () => {

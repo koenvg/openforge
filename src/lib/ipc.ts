@@ -484,6 +484,14 @@ export async function getEnabledPlugins(projectId: string): Promise<NormalizedPl
   return rows.map(normalizePluginRow);
 }
 
+export async function getPluginStorage(pluginId: string, key: string): Promise<string | null> {
+  return invoke<string | null>('get_plugin_storage', { pluginId, key })
+}
+
+export async function setPluginStorage(pluginId: string, key: string, value: string): Promise<void> {
+  return invoke('set_plugin_storage', { pluginId, key, value })
+}
+
 export async function pluginInvoke(pluginId: string, command: string, payload: unknown): Promise<unknown> {
   return invoke("plugin_invoke", { pluginId, command, payload: payload ?? null })
 }
