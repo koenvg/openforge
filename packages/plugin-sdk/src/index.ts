@@ -1,7 +1,9 @@
-// Re-export all plugin types from the host
-export { isValidShortcutFormat, normalizeShortcut, validatePluginManifest } from '../../../src/lib/plugin/manifest'
 export {
   MAX_SUPPORTED_API_VERSION,
+  makePluginViewKey,
+  isPluginViewKey,
+  parsePluginViewKey,
+  type PluginActivatedViewContribution,
   type PluginActivationResult,
   type PluginBackgroundService,
   type PluginCommandContribution,
@@ -12,11 +14,14 @@ export {
   type PluginSettingsSection,
   type PluginSidebarPanelContribution,
   type PluginState,
+  type PluginStorage,
+  type PluginTaskPaneProps,
   type PluginTaskPaneTabContribution,
   type PluginViewContribution,
   type PluginViewKey,
-} from '../../../src/lib/plugin/types'
+  type PluginViewProps,
+} from './types'
 
-// SDK-specific exports
+export { isValidShortcutFormat, normalizeShortcut, validatePluginManifest, isPluginManifest, ALLOWED_ICON_KEYS } from './manifest'
 export { PluginContextImpl } from './context'
-export { isPluginCommandContribution, isPluginViewContribution } from './helpers'
+export { isPluginCommandContribution, isPluginViewContribution, getViewContributions, getCommandContributions } from './helpers'
