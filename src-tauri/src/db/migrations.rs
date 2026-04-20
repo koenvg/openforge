@@ -731,6 +731,31 @@ CREATE INDEX IF NOT EXISTS idx_task_workspaces_project ON task_workspaces(projec
 
         Ok(())
     }),
+    M::up(
+        r#"
+CREATE TABLE IF NOT EXISTS plugins (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    version TEXT NOT NULL,
+    api_version INTEGER NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    permissions TEXT NOT NULL DEFAULT '[]',
+    contributes TEXT NOT NULL DEFAULT '{}',
+    frontend_entry TEXT NOT NULL,
+    backend_entry TEXT,
+    install_path TEXT NOT NULL,
+    installed_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    is_builtin INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS project_plugins (
+    project_id TEXT NOT NULL,
+    plugin_id TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (project_id, plugin_id),
+    FOREIGN KEY (plugin_id) REFERENCES plugins(id) ON DELETE CASCADE
+);
+        "#,
+    ),
     M::up_with_hook("", |tx| {
         let has_config_table: bool = tx
             .query_row(

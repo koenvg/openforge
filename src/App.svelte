@@ -26,7 +26,16 @@
   import CommandPalette from './components/shell/CommandPalette.svelte'
   import ActionPalette from './components/shell/ActionPalette.svelte'
   import FileQuickOpen from './components/shell/FileQuickOpen.svelte'
+  import PluginSlot from './components/plugin/PluginSlot.svelte'
 
+  import { FILE_VIEWER_PLUGIN_ID, FILE_VIEWER_PLUGIN_MANIFEST } from './lib/fileViewerPlugin'
+  import { GITHUB_SYNC_PLUGIN_ID, GITHUB_SYNC_PLUGIN_MANIFEST } from './lib/githubSyncPlugin'
+  import { SKILLS_VIEWER_PLUGIN_ID, SKILLS_VIEWER_PLUGIN_MANIFEST } from './lib/skillsViewerPlugin'
+  import { TERMINAL_PLUGIN_ID, TERMINAL_PLUGIN_MANIFEST } from './lib/terminalPlugin'
+  import { resolveContributions } from './lib/plugin/contributionResolver'
+  import { enabledPluginIds, installedPlugins, loadEnabledForProject, loadInstalledPlugins } from './lib/plugin/pluginStore'
+  import { isPluginViewKey, makePluginViewKey } from './lib/plugin/types'
+  import type { PluginManifest } from './lib/plugin/types'
   import { useAppRouter } from './lib/router.svelte'
   import { loadActions, getEnabledActions } from './lib/actions'
   import { getProjectColor } from './lib/projectColors'
@@ -37,13 +46,13 @@
   import { useCommandHeld } from './lib/useCommandHeld.svelte'
   import { getOpenCodeSessionUpdate } from './lib/opencodeSessionEvents'
   import { useShortcutRegistry } from './lib/shortcuts.svelte'
-  import { ICON_RAIL_HIDDEN_VIEWS, NAVIGATION_SHORTCUT_ITEMS, VIEWS } from './lib/views'
+  import { ICON_RAIL_HIDDEN_VIEWS, VIEWS, getViews } from './lib/views'
   
   let unlisteners: UnlistenFn[] = []
   let showAddDialog = $state(false)
   let isSyncing = $state(false)
   let editingTask = $state<Task | null>(null)
-  let shortcuts: ReturnType<typeof useShortcutRegistry> | null = null
+  let shortcuts: ReturnType<typeof useShortcutRegistry> | null = $state(null)
 
   let showProjectSetup = $state(false)
   let appMode = $state<string | null>(null)
@@ -57,6 +66,8 @@
   let actionPaletteActions = $state<Action[]>([])
   let workQueueRefreshTrigger = $state(0)
   let router = useAppRouter()
+  let registeredPluginShortcuts = new Set<string>()
+  let previousPluginProjectId = $state<string | null>(null)
 
   useCommandHeld()
 
@@ -65,7 +76,47 @@
       ($pendingTask?.id === $selectedTaskId ? $pendingTask : null)
   )
   let previousActiveProjectId: string | null = $state(null)
-  let activeView = $derived($currentView === 'board' ? null : VIEWS[$currentView])
+  let enabledPluginManifests = $derived(
+    Array.from($enabledPluginIds)
+      .map((id) => $installedPlugins.get(id)?.manifest)
+      .filter((manifest): manifest is PluginManifest => manifest !== undefined)
+  )
+  let resolvedPluginContributions = $derived(resolveContributions(enabledPluginManifests))
+  let resolvedViews = $derived(getViews(enabledPluginManifests))
+  let pluginNavItems = $derived(
+    [...resolvedPluginContributions.views]
+      .filter((view) => view.showInRail)
+      .sort((a, b) => a.railOrder - b.railOrder || a.title.localeCompare(b.title))
+      .map((view) => ({
+        viewKey: makePluginViewKey(view.pluginId, view.contributionId),
+        icon: view.icon,
+        title: view.title,
+        shortcut: view.shortcut,
+      }))
+  )
+  let activeView = $derived($currentView === 'board' ? null : resolvedViews[$currentView])
+  let pluginViewActive = $derived(isPluginViewKey($currentView) && !activeView)
+
+  function ensureBuiltinPluginInstalled(manifest: PluginManifest) {
+    installedPlugins.update((map) => {
+      const existing = map.get(manifest.id)
+      const next = new Map(map)
+      next.set(manifest.id, {
+        manifest,
+        state: existing?.state ?? 'installed',
+        error: existing?.error ?? null,
+      })
+      return next
+    })
+  }
+
+  function ensureBuiltinPluginEnabled(pluginId: string) {
+    enabledPluginIds.update((set) => {
+      const next = new Set(set)
+      next.add(pluginId)
+      return next
+    })
+  }
 
   $effect(() => {
     const pending = $pendingTask
@@ -89,6 +140,45 @@
       focusBoardFilters.set(nextFilters)
     }
     previousActiveProjectId = projectId
+  })
+
+  $effect(() => {
+    const projectId = $activeProjectId
+    if (projectId && projectId !== previousPluginProjectId) {
+      void loadEnabledForProject(projectId).then(() => {
+        ensureBuiltinPluginEnabled(FILE_VIEWER_PLUGIN_ID)
+        ensureBuiltinPluginEnabled(GITHUB_SYNC_PLUGIN_ID)
+        ensureBuiltinPluginEnabled(SKILLS_VIEWER_PLUGIN_ID)
+        ensureBuiltinPluginEnabled(TERMINAL_PLUGIN_ID)
+      })
+    } else if (!projectId && previousPluginProjectId !== null) {
+      enabledPluginIds.set(new Set())
+    }
+
+    previousPluginProjectId = projectId
+  })
+
+  $effect(() => {
+    if (!shortcuts) return
+
+    const nextShortcutKeys = new Set<string>()
+
+    for (const view of resolvedPluginContributions.views) {
+      if (!view.shortcut) continue
+
+      nextShortcutKeys.add(view.shortcut)
+      shortcuts.register(view.shortcut, () => {
+        handleNavigate(makePluginViewKey(view.pluginId, view.contributionId))
+      })
+    }
+
+    for (const key of registeredPluginShortcuts) {
+      if (!nextShortcutKeys.has(key)) {
+        shortcuts.unregister(key)
+      }
+    }
+
+    registeredPluginShortcuts = nextShortcutKeys
   })
 
   // Reload tasks when active project changes
@@ -521,23 +611,20 @@
       showFileQuickOpen = !showFileQuickOpen
     })
 
-    for (const { view, shortcutBindings } of NAVIGATION_SHORTCUT_ITEMS) {
-      for (const shortcut of shortcutBindings) {
-        shortcuts.register(shortcut, () => {
-          if (view === 'board') {
-            router.resetToBoard()
-            return
-          }
+    shortcuts.register('⌘r', () => {
+      router.navigate('workqueue')
+    })
+    shortcuts.register('⌃r', () => {
+      router.navigate('workqueue')
+    })
 
-          if (view === 'workqueue') {
-            router.navigate('workqueue')
-            return
-          }
+    shortcuts.register('⌘h', () => {
+      router.resetToBoard()
+    })
 
-          handleNavigate(view)
-        })
-      }
-    }
+    shortcuts.register('⌘,', () => {
+      handleNavigate('settings')
+    })
 
     shortcuts.register('⌃n', () => {
       cycleActiveProject('next', { boardOnly: true })
@@ -863,6 +950,15 @@
     )
 
     // Phase 2: Load data
+    await loadInstalledPlugins()
+    ensureBuiltinPluginInstalled(FILE_VIEWER_PLUGIN_MANIFEST)
+    ensureBuiltinPluginInstalled(GITHUB_SYNC_PLUGIN_MANIFEST)
+    ensureBuiltinPluginInstalled(SKILLS_VIEWER_PLUGIN_MANIFEST)
+    ensureBuiltinPluginInstalled(TERMINAL_PLUGIN_MANIFEST)
+    ensureBuiltinPluginEnabled(FILE_VIEWER_PLUGIN_ID)
+    ensureBuiltinPluginEnabled(GITHUB_SYNC_PLUGIN_ID)
+    ensureBuiltinPluginEnabled(SKILLS_VIEWER_PLUGIN_ID)
+    ensureBuiltinPluginEnabled(TERMINAL_PLUGIN_ID)
     await loadProjects()
 
     try {
@@ -889,6 +985,12 @@
   })
 
   onDestroy(() => {
+    if (shortcuts) {
+      for (const key of registeredPluginShortcuts) {
+        shortcuts.unregister(key)
+      }
+    }
+
     unlisteners.forEach((fn) => {
       fn()
     })
@@ -905,7 +1007,7 @@
     onNavigate={handleNavigate}
   />
   {#if !ICON_RAIL_HIDDEN_VIEWS.has($currentView)}
-    <IconRail currentView={$currentView} onNavigate={handleNavigate} reviewRequestCount={$reviewRequestCount} authoredPrCount={$authoredPrCount} modalsOpen={showCommandPalette || showProjectSwitcher || showActionPalette || showAddDialog || showFileQuickOpen} railBg={iconRailBg} />
+    <IconRail currentView={$currentView} onNavigate={handleNavigate} reviewRequestCount={$reviewRequestCount} authoredPrCount={$authoredPrCount} pluginNavItems={pluginNavItems} modalsOpen={showCommandPalette || showProjectSwitcher || showActionPalette || showAddDialog || showFileQuickOpen} railBg={iconRailBg} />
   {/if}
 
   <div class="flex flex-col flex-1 min-w-0 relative" style="background: linear-gradient(180deg, var(--project-bg-alt) 0%, var(--project-bg) 100%)">
@@ -919,6 +1021,8 @@
             onRunAction: handleRunAction,
           })}
         />
+      {:else if pluginViewActive}
+        <PluginSlot slotType="views" slotId={$currentView} />
       {:else if selectedTask}
         <TaskDetailView task={selectedTask} onRunAction={handleRunAction} />
       {:else}

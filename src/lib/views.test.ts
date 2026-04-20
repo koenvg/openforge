@@ -1,14 +1,27 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ICON_RAIL_HIDDEN_VIEWS, ICON_RAIL_NAV_ITEMS, NAVIGATION_SHORTCUT_ITEMS, TASK_CLEARING_VIEWS, VIEWS } from './views'
+import type { PluginManifest } from './plugin/types'
+import { ICON_RAIL_HIDDEN_VIEWS, TASK_CLEARING_VIEWS, VIEWS, getPluginViewEntries, getViews } from './views'
+
+function makeManifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
+  return {
+    id: 'plugin.example',
+    name: 'Example Plugin',
+    version: '1.0.0',
+    apiVersion: 1,
+    description: 'Example plugin',
+    permissions: [],
+    contributes: {},
+    frontend: 'dist/index.js',
+    backend: null,
+    ...overrides,
+  }
+}
 
 describe('views registry', () => {
   it('registers all non-board top-level views', () => {
     expect(Object.keys(VIEWS).sort()).toEqual([
-      'files',
       'global_settings',
-      'pr_review',
       'settings',
-      'skills',
       'workqueue',
     ])
   })
@@ -47,7 +60,6 @@ describe('views registry', () => {
     expect([...TASK_CLEARING_VIEWS].sort()).toEqual([
       'files',
       'global_settings',
-      'pr_review',
       'settings',
       'workqueue',
     ])
@@ -58,22 +70,104 @@ describe('views registry', () => {
     ])
   })
 
-  it('exposes shared navigation metadata for icon rail items and app shortcuts', () => {
-    expect(ICON_RAIL_NAV_ITEMS.map(({ view, label, shortcutHint }) => ({ view, label, shortcutHint }))).toEqual([
-      { view: 'board', label: 'Board', shortcutHint: 'H' },
-      { view: 'files', label: 'Files', shortcutHint: 'O' },
-      { view: 'pr_review', label: 'Pull Requests', shortcutHint: 'G' },
-      { view: 'skills', label: 'Skills', shortcutHint: 'L' },
-      { view: 'settings', label: 'Settings', shortcutHint: ',' },
+  it('preserves the static views map when resolving all views', () => {
+    const resolvedViews = getViews([])
+
+    expect(Object.keys(resolvedViews).sort()).toEqual(Object.keys(VIEWS).sort())
+    expect(resolvedViews.settings).toBe(VIEWS.settings)
+    expect('files' in resolvedViews).toBe(false)
+  })
+
+  it('returns no plugin view entries when no manifests are enabled', () => {
+    expect(getPluginViewEntries([])).toEqual([])
+  })
+
+  it('merges plugin views with the static registry', () => {
+    const pluginViews = getViews([
+      makeManifest({
+        id: 'plugin.analytics',
+        contributes: {
+          views: [
+            {
+              id: 'dashboard',
+              title: 'Analytics',
+              icon: 'plug',
+              showInRail: true,
+            },
+          ],
+        },
+      }),
     ])
 
-    expect(NAVIGATION_SHORTCUT_ITEMS.map(({ view, shortcutKey }) => ({ view, shortcutKey }))).toEqual([
-      { view: 'board', shortcutKey: 'h' },
-      { view: 'files', shortcutKey: 'o' },
-      { view: 'pr_review', shortcutKey: 'g' },
-      { view: 'skills', shortcutKey: 'l' },
-      { view: 'settings', shortcutKey: ',' },
-      { view: 'workqueue', shortcutKey: 'r' },
+    expect(pluginViews['plugin:plugin.analytics:dashboard']).toBeDefined()
+  })
+
+  it('resolves the file viewer view through plugin entries', () => {
+    const pluginViews = getViews([
+      makeManifest({
+        id: 'com.openforge.file-viewer',
+        contributes: {
+          views: [
+            {
+              id: 'files',
+              title: 'Files',
+              icon: 'folder-open',
+              shortcut: 'Cmd+O',
+              showInRail: true,
+              railOrder: 10,
+            },
+          ],
+        },
+      }),
     ])
+
+    expect(pluginViews['plugin:com.openforge.file-viewer:files']).toBeDefined()
+    expect('files' in pluginViews).toBe(false)
+  })
+
+  it('resolves the skills viewer view through plugin entries', () => {
+    const pluginViews = getViews([
+      makeManifest({
+        id: 'com.openforge.skills-viewer',
+        contributes: {
+          views: [
+            {
+              id: 'skills',
+              title: 'Skills',
+              icon: 'sparkles',
+              shortcut: 'Cmd+L',
+              showInRail: true,
+              railOrder: 30,
+            },
+          ],
+        },
+      }),
+    ])
+
+    expect(pluginViews['plugin:com.openforge.skills-viewer:skills']).toBeDefined()
+    expect('skills' in pluginViews).toBe(false)
+  })
+
+  it('resolves the github sync PR review view through plugin entries', () => {
+    const pluginViews = getViews([
+      makeManifest({
+        id: 'com.openforge.github-sync',
+        contributes: {
+          views: [
+            {
+              id: 'pr_review',
+              title: 'Pull Requests',
+              icon: 'git-pull-request',
+              shortcut: 'Cmd+G',
+              showInRail: true,
+              railOrder: 20,
+            },
+          ],
+        },
+      }),
+    ])
+
+    expect(pluginViews['plugin:com.openforge.github-sync:pr_review']).toBeDefined()
+    expect('pr_review' in pluginViews).toBe(false)
   })
 })

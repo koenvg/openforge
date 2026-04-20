@@ -5,10 +5,10 @@ import type { AppView } from '../../lib/types'
 import { commandHeld } from '../../lib/stores'
 
 describe('IconRail', () => {
-  it('renders 5 navigation buttons', () => {
+  it('renders 2 static navigation buttons', () => {
     render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn() } })
     const buttons = screen.getAllByRole('button')
-    expect(buttons).toHaveLength(5)
+    expect(buttons).toHaveLength(2)
   })
 
   it('clicking first button (board) calls onNavigate with "board"', () => {
@@ -19,24 +19,54 @@ describe('IconRail', () => {
     expect(onNavigate).toHaveBeenCalledWith('board')
   })
 
-  it('clicking second button (files) calls onNavigate with "files"', () => {
+  it('clicking second button (settings) calls onNavigate with "settings"', () => {
     const onNavigate = vi.fn()
     render(IconRail, { props: { currentView: 'board' as AppView, onNavigate } })
     const buttons = screen.getAllByRole('button')
     fireEvent.click(buttons[1])
-    expect(onNavigate).toHaveBeenCalledWith('files')
+    expect(onNavigate).toHaveBeenCalledWith('settings')
   })
 
-  it('clicking third button (pr_review) calls onNavigate with "pr_review"', () => {
+  it('renders plugin navigation items after the static entries', () => {
     const onNavigate = vi.fn()
-    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate } })
+    render(IconRail, {
+      props: {
+        currentView: 'board' as AppView,
+        onNavigate,
+        pluginNavItems: [
+          {
+            viewKey: 'plugin:com.openforge.file-viewer:files',
+            icon: 'folder-open',
+            title: 'Files',
+            shortcut: '⌘O',
+          },
+        ],
+      },
+    })
+
     const buttons = screen.getAllByRole('button')
+    expect(buttons).toHaveLength(3)
+
     fireEvent.click(buttons[2])
-    expect(onNavigate).toHaveBeenCalledWith('pr_review')
+    expect(onNavigate).toHaveBeenCalledWith('plugin:com.openforge.file-viewer:files')
   })
 
   it('shows review request count badge when reviewRequestCount > 0', () => {
-    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), reviewRequestCount: 3 } })
+    render(IconRail, {
+      props: {
+        currentView: 'board' as AppView,
+        onNavigate: vi.fn(),
+        reviewRequestCount: 3,
+        pluginNavItems: [
+          {
+            viewKey: 'plugin:com.openforge.github-sync:pr_review',
+            icon: 'git-pull-request',
+            title: 'Pull Requests',
+            shortcut: '⌘G',
+          },
+        ],
+      },
+    })
     expect(screen.getByText('3')).toBeTruthy()
   })
 
@@ -46,7 +76,22 @@ describe('IconRail', () => {
   })
 
   it('shows authored PR count badge when authoredPrCount > 0', () => {
-    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), reviewRequestCount: 0, authoredPrCount: 5 } })
+    render(IconRail, {
+      props: {
+        currentView: 'board' as AppView,
+        onNavigate: vi.fn(),
+        reviewRequestCount: 0,
+        authoredPrCount: 5,
+        pluginNavItems: [
+          {
+            viewKey: 'plugin:com.openforge.github-sync:pr_review',
+            icon: 'git-pull-request',
+            title: 'Pull Requests',
+            shortcut: '⌘G',
+          },
+        ],
+      },
+    })
     expect(screen.getByText('5')).toBeTruthy()
   })
 
@@ -56,9 +101,7 @@ describe('IconRail', () => {
       render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn() } })
 
       expect(screen.getByText('H')).toBeTruthy()
-      expect(screen.getByText('O')).toBeTruthy()
-      expect(screen.getByText('G')).toBeTruthy()
-      expect(screen.getByText('L')).toBeTruthy()
+      expect(screen.getByText(',')).toBeTruthy()
 
       commandHeld.set(false)
     })
@@ -68,17 +111,15 @@ describe('IconRail', () => {
       render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn() } })
 
       expect(screen.queryByText('H')).toBeNull()
-      expect(screen.queryByText('G')).toBeNull()
+      expect(screen.queryByText(',')).toBeNull()
     })
 
     it('shows correct shortcut letter for each view', () => {
       commandHeld.set(true)
       render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn() } })
 
-      expect(screen.getByText('H')).toBeTruthy()  // board (Home)
-      expect(screen.getByText('O')).toBeTruthy()
-      expect(screen.getByText('G')).toBeTruthy()  // pr_review (Git)
-      expect(screen.getByText('L')).toBeTruthy()  // skills (skiLLs)
+      expect(screen.getByText('H')).toBeTruthy()
+      expect(screen.getByText(',')).toBeTruthy()
 
       commandHeld.set(false)
     })
@@ -88,10 +129,51 @@ describe('IconRail', () => {
       render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), modalsOpen: true } })
 
       expect(screen.queryByText('H')).toBeNull()
-      expect(screen.queryByText('O')).toBeNull()
-      expect(screen.queryByText('G')).toBeNull()
-      expect(screen.queryByText('L')).toBeNull()
+      expect(screen.queryByText(',')).toBeNull()
 
+      commandHeld.set(false)
+    })
+
+    it('shows PR badges on the github sync plugin item', () => {
+      render(IconRail, {
+        props: {
+          currentView: 'board' as AppView,
+          onNavigate: vi.fn(),
+          reviewRequestCount: 3,
+          authoredPrCount: 5,
+          pluginNavItems: [
+            {
+              viewKey: 'plugin:com.openforge.github-sync:pr_review',
+              icon: 'git-pull-request',
+              title: 'Pull Requests',
+              shortcut: '⌘G',
+            },
+          ],
+        },
+      })
+
+      expect(screen.getByText('3')).toBeTruthy()
+      expect(screen.getByText('5')).toBeTruthy()
+    })
+
+    it('shows plugin shortcut badges when commandHeld is true', () => {
+      commandHeld.set(true)
+      render(IconRail, {
+        props: {
+          currentView: 'board' as AppView,
+          onNavigate: vi.fn(),
+          pluginNavItems: [
+            {
+              viewKey: 'plugin:com.openforge.file-viewer:files',
+              icon: 'folder-open',
+              title: 'Files',
+              shortcut: '⌘O',
+            },
+          ],
+        },
+      })
+
+      expect(screen.getByText('O')).toBeTruthy()
       commandHeld.set(false)
     })
   })

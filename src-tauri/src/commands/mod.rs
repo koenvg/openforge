@@ -6,6 +6,7 @@ pub mod files;
 pub mod github;
 pub mod opencode;
 pub mod orchestration;
+pub mod plugins;
 pub mod projects;
 pub mod pty;
 pub mod review;

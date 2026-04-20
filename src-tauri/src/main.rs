@@ -13,6 +13,8 @@ mod http_server;
 mod mcp_installer;
 mod migration;
 mod opencode_client;
+mod plugin_host;
+mod plugin_rpc;
 pub mod providers;
 mod pty_manager;
 pub mod review_parser;
@@ -26,6 +28,7 @@ use log::{debug, error, info, warn};
 use opencode_client::OpenCodeClient;
 use pty_manager::PtyManager;
 use std::collections::{HashMap, HashSet};
+use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager};
 use whisper_manager::{WhisperManager, WhisperModelSize};
@@ -79,6 +82,36 @@ fn opencode_resume_persistence(
         Some("idle") => ResumeSessionPersistence::Completed,
         _ => ResumeSessionPersistence::LeaveExisting,
     }
+}
+
+fn validate_plugin_id(plugin_id: &str) -> Result<(), String> {
+    if plugin_id.is_empty() {
+        return Err("Invalid plugin id: empty".to_string());
+    }
+
+    if plugin_id.contains('/') || plugin_id.contains('\\') {
+        return Err("Invalid plugin id: path separators are not allowed".to_string());
+    }
+
+    let mut components = Path::new(plugin_id).components();
+    match (components.next(), components.next()) {
+        (Some(Component::Normal(_)), None) => Ok(()),
+        _ => Err("Invalid plugin id".to_string()),
+    }
+}
+
+fn resolve_plugin_asset_path(
+    app_data_dir: &Path,
+    plugin_id: &str,
+    rel_path: &str,
+) -> Result<PathBuf, String> {
+    validate_plugin_id(plugin_id)?;
+
+    if rel_path.contains("..") {
+        return Err("Forbidden".to_string());
+    }
+
+    Ok(app_data_dir.join("plugins").join(plugin_id).join(rel_path))
 }
 
 async fn resolve_resume_session_persistence(
@@ -626,6 +659,8 @@ fn main() {
             let server_manager = server_manager::ServerManager::new();
             let sse_bridge_manager = sse_bridge::SseBridgeManager::new();
             let pty_manager = PtyManager::new();
+            let plugin_host = plugin_host::PluginHost::new(app.handle().clone());
+            let plugin_host_startup = plugin_host.clone();
             let whisper_manager = WhisperManager::with_active_model(whisper_model_pref);
 
             app.manage(opencode_client);
@@ -633,8 +668,15 @@ fn main() {
             app.manage(server_manager);
             app.manage(sse_bridge_manager);
             app.manage(pty_manager);
+            app.manage(plugin_host);
             app.manage(whisper_manager);
             app.manage(Arc::new(tokio::sync::Notify::new()));
+
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = plugin_host_startup.start_sidecar().await {
+                    warn!("[startup] Plugin sidecar auto-start skipped: {}", e);
+                }
+            });
 
             if let Err(e) = server_manager::ServerManager::new().cleanup_stale_pids() {
                 warn!("Failed to cleanup stale server PIDs: {}", e);
@@ -790,7 +832,82 @@ fn main() {
             commands::files::fs_read_dir,
             commands::files::fs_read_file,
             commands::files::fs_search_files,
+            commands::plugins::install_plugin,
+            commands::plugins::uninstall_plugin,
+            commands::plugins::get_plugin,
+            commands::plugins::list_plugins,
+            commands::plugins::set_plugin_enabled,
+            commands::plugins::get_enabled_plugins,
+            commands::plugins::plugin_invoke,
         ])
+        .register_uri_scheme_protocol("plugin", |app, request| {
+            let uri = request.uri().to_string();
+            let path = uri.strip_prefix("plugin://").unwrap_or(&uri);
+
+            if path.starts_with("host-runtime/") {
+                return tauri::http::Response::builder()
+                    .status(404)
+                    .header("Content-Type", "application/javascript")
+                    .body(b"// host-runtime not implemented yet".to_vec())
+                    .unwrap();
+            }
+
+            let mut parts = path.splitn(2, '/');
+            let plugin_id = parts.next().unwrap_or("");
+            let rel_path = parts.next().unwrap_or("");
+
+            let app_data_dir = match app.app_handle().path().app_data_dir() {
+                Ok(dir) => dir,
+                Err(_) => {
+                    return tauri::http::Response::builder()
+                        .status(500)
+                        .body(b"Failed to get app_data_dir".to_vec())
+                        .unwrap()
+                }
+            };
+
+            let file_path = match resolve_plugin_asset_path(&app_data_dir, plugin_id, rel_path) {
+                Ok(path) => path,
+                Err(error) if error == "Forbidden" => {
+                    return tauri::http::Response::builder()
+                        .status(403)
+                        .body(b"Forbidden".to_vec())
+                        .unwrap();
+                }
+                Err(error) => {
+                    return tauri::http::Response::builder()
+                        .status(403)
+                        .body(error.into_bytes())
+                        .unwrap();
+                }
+            };
+
+            match std::fs::read(&file_path) {
+                Ok(content) => {
+                    let ext = file_path
+                        .extension()
+                        .and_then(|e: &std::ffi::OsStr| e.to_str())
+                        .unwrap_or("");
+                    let mime_type = match ext {
+                        "js" | "mjs" => "application/javascript",
+                        "json" => "application/json",
+                        "css" => "text/css",
+                        "html" => "text/html",
+                        _ => "application/octet-stream",
+                    };
+                    tauri::http::Response::builder()
+                        .status(200)
+                        .header("Content-Type", mime_type)
+                        .header("Access-Control-Allow-Origin", "*")
+                        .body(content)
+                        .unwrap()
+                }
+                Err(_) => tauri::http::Response::builder()
+                    .status(404)
+                    .body(b"File not found".to_vec())
+                    .unwrap(),
+            }
+        })
         .build(tauri_context())
         .expect("error while building tauri application");
 
@@ -808,6 +925,7 @@ fn main() {
             let sse_mgr = app_handle.state::<sse_bridge::SseBridgeManager>();
             let server_mgr = app_handle.state::<server_manager::ServerManager>();
             let pty_mgr = app_handle.state::<pty_manager::PtyManager>();
+            let plugin_host = app_handle.state::<plugin_host::PluginHost>();
 
             tauri::async_runtime::block_on(async {
                 info!("[shutdown] Killing all PTY sessions...");
@@ -822,6 +940,11 @@ fn main() {
                     error!("[shutdown] Error stopping servers: {}", e);
                 }
 
+                info!("[shutdown] Stopping plugin sidecar...");
+                if let Err(e) = plugin_host.stop_sidecar().await {
+                    error!("[shutdown] Error stopping plugin sidecar: {}", e);
+                }
+
                 info!("[shutdown] Cleanup complete");
             });
         }
@@ -831,13 +954,15 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{
-        load_resume_targets, opencode_resume_persistence, restore_resumed_session_state,
-        should_start_project_root_server, ResumeSessionPersistence, ResumeTarget,
+        load_resume_targets, opencode_resume_persistence, resolve_plugin_asset_path,
+        restore_resumed_session_state, should_start_project_root_server,
+        ResumeSessionPersistence, ResumeTarget,
     };
     use crate::db::test_helpers::make_test_db;
     use crate::opencode_client::SessionStatusInfo;
     use std::collections::HashMap;
     use std::fs;
+    use std::path::Path;
     use tauri::test::{mock_builder, mock_context, noop_assets};
 
     #[test]
@@ -1089,5 +1214,26 @@ mod tests {
 
         drop(db);
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn resolve_plugin_asset_path_rejects_invalid_plugin_ids() {
+        let app_data_dir = Path::new("/tmp/app-data");
+
+        for plugin_id in ["", "..", "foo/bar", "foo\\bar"] {
+            let err = resolve_plugin_asset_path(app_data_dir, plugin_id, "assets/index.js")
+                .expect_err("invalid plugin id should be rejected");
+            assert!(err.contains("plugin id"), "unexpected error: {err}");
+        }
+    }
+
+    #[test]
+    fn resolve_plugin_asset_path_allows_valid_plugin_id() {
+        let app_data_dir = Path::new("/tmp/app-data");
+
+        let path = resolve_plugin_asset_path(app_data_dir, "my-plugin", "assets/index.js")
+            .expect("valid plugin id should be accepted");
+
+        assert_eq!(path, Path::new("/tmp/app-data/plugins/my-plugin/assets/index.js"));
     }
 }

@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Task, AgentSession, PrComment, PollResult, PullRequestInfo, AgentInfo, Project, ProjectAttention, WorktreeInfo, TaskWorkspaceInfo, ImplementationStatus, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus, WhisperModelSizeId, SkillInfo, WorkQueueEntry, ProviderModelInfo, CommitInfo, BoardStatus, FileEntry, FileContent } from "./types";
-import { normalizeTask, normalizeWorkQueueEntry } from './boardStatus'
+import { normalizeTask, normalizeWorkQueueEntry } from "./boardStatus"
+import type { AgentInfo, AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, FileContent, FileEntry, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, SkillInfo, Task, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorkQueueEntry, WorktreeInfo } from "./types";
 
 type RawTask = Omit<Task, 'status'> & { status: string }
 type RawWorkQueueEntry = Omit<WorkQueueEntry, 'task'> & { task: RawTask }
@@ -382,4 +382,108 @@ export async function fsReadFile(projectId: string, filePath: string): Promise<F
 
 export async function fsSearchFiles(projectId: string, query: string, limit: number = 50): Promise<string[]> {
   return invoke<string[]>("fs_search_files", { projectId, query, limit });
+}
+
+type PluginRowSnake = {
+  id: string;
+  name: string;
+  version: string;
+  api_version: number;
+  description: string;
+  permissions: string;
+  contributes: string;
+  frontend_entry: string;
+  backend_entry: string | null;
+  install_path: string;
+  installed_at: number;
+  is_builtin: boolean;
+}
+
+export type NormalizedPluginRow = {
+  id: string;
+  name: string;
+  version: string;
+  apiVersion: number;
+  description: string;
+  permissions: string;
+  contributes: string;
+  frontendEntry: string;
+  backendEntry: string | null;
+  installPath: string;
+  installedAt: number;
+  isBuiltin: boolean;
+}
+
+function normalizePluginRow(raw: PluginRowSnake): NormalizedPluginRow {
+  return {
+    id: raw.id,
+    name: raw.name,
+    version: raw.version,
+    apiVersion: raw.api_version,
+    description: raw.description,
+    permissions: raw.permissions,
+    contributes: raw.contributes,
+    frontendEntry: raw.frontend_entry,
+    backendEntry: raw.backend_entry,
+    installPath: raw.install_path,
+    installedAt: raw.installed_at,
+    isBuiltin: raw.is_builtin,
+  };
+}
+
+export async function installPlugin(plugin: {
+  id: string;
+  name: string;
+  version: string;
+  apiVersion: number;
+  description: string;
+  permissions: string;
+  contributes: string;
+  frontendEntry: string;
+  backendEntry: string | null;
+  installPath: string;
+  installedAt: number;
+  isBuiltin: boolean;
+}): Promise<void> {
+  return invoke("install_plugin", {
+    id: plugin.id,
+    name: plugin.name,
+    version: plugin.version,
+    apiVersion: plugin.apiVersion,
+    description: plugin.description,
+    permissions: plugin.permissions,
+    contributes: plugin.contributes,
+    frontendEntry: plugin.frontendEntry,
+    backendEntry: plugin.backendEntry,
+    installPath: plugin.installPath,
+    installedAt: plugin.installedAt,
+    isBuiltin: plugin.isBuiltin,
+  });
+}
+
+export async function uninstallPlugin(pluginId: string): Promise<void> {
+  return invoke("uninstall_plugin", { pluginId });
+}
+
+export async function getPlugin(pluginId: string): Promise<NormalizedPluginRow | null> {
+  const raw = await invoke<PluginRowSnake | null>("get_plugin", { pluginId });
+  return raw ? normalizePluginRow(raw) : null;
+}
+
+export async function listPlugins(): Promise<NormalizedPluginRow[]> {
+  const rows = await invoke<PluginRowSnake[]>("list_plugins");
+  return rows.map(normalizePluginRow);
+}
+
+export async function setPluginEnabled(projectId: string, pluginId: string, enabled: boolean): Promise<void> {
+  return invoke("set_plugin_enabled", { projectId, pluginId, enabled });
+}
+
+export async function getEnabledPlugins(projectId: string): Promise<NormalizedPluginRow[]> {
+  const rows = await invoke<PluginRowSnake[]>("get_enabled_plugins", { projectId });
+  return rows.map(normalizePluginRow);
+}
+
+export async function pluginInvoke(pluginId: string, command: string, payload: unknown): Promise<unknown> {
+  return invoke("plugin_invoke", { pluginId, command, payload: payload ?? null })
 }

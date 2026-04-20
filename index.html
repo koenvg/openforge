@@ -5,6 +5,16 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Open Forge</title>
+    <script type="importmap">
+    {
+      "imports": {
+        "svelte": "plugin://host-runtime/svelte/index.js",
+        "svelte/internal": "plugin://host-runtime/svelte/internal.js",
+        "svelte/store": "plugin://host-runtime/svelte/store.js",
+        "@openforge/plugin-sdk": "plugin://host-runtime/plugin-sdk/index.js"
+      }
+    }
+    </script>
   </head>
   <body>
     <div id="app"></div>

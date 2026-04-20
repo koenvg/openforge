@@ -1,0 +1,19 @@
+{
+  "name": "@openforge/plugin-demo-hello-world",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "svelte": "^5.0.0",
+    "typescript": "^5.3.3",
+    "vite": "^8.0.0",
+    "vitest": "^4.1.0"
+  }
+}

@@ -3,6 +3,7 @@
   import { listOpenCodeSkills, saveSkillContent } from '../lib/ipc'
   import { useAppRouter } from '../lib/router.svelte'
   import { getHTMLElementAt, isInputFocused } from '../lib/domUtils'
+  import { SKILLS_VIEWER_VIEW_KEY } from '../lib/skillsViewerPlugin'
 
   interface Props {
     projectName: string
@@ -91,7 +92,7 @@
   }
 
   function selectSkill(skill: SkillInfo) {
-    router.navigate('skills')
+    router.navigate(SKILLS_VIEWER_VIEW_KEY)
     $selectedSkillName = skill.name
     editMode = false
     saveError = null
