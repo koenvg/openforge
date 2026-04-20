@@ -267,5 +267,5 @@ export function resolveContributionsForSlot<TSlot extends ResolvedSlot>(
   slotId: string
 ): ResolvedSlotItems[TSlot] {
   const slotContributions = contributions[slotType]
-  return slotContributions.filter((item) => matchesSlotId(item, slotId))
+  return slotContributions.filter((item): item is ResolvedSlotItems[TSlot][number] => matchesSlotId(item, slotId)) as ResolvedSlotItems[TSlot]
 }

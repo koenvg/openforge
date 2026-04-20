@@ -2,7 +2,7 @@ import { render } from '@testing-library/svelte'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import PluginSlot from './PluginSlot.svelte'
 import { installedPlugins, enabledPluginIds } from '../../lib/plugin/pluginStore'
-import type { PluginEntry } from '../../lib/plugin/types'
+import type { PluginEntry, PluginManifest } from '../../lib/plugin/types'
 
 vi.mock('../../lib/plugin/pluginLoader', () => ({
   mountPluginComponent: vi.fn(),
@@ -33,13 +33,25 @@ describe('PluginSlot', () => {
   })
 
   it('handles slot with no contributions', async () => {
-    installedPlugins.set(new Map([
-      ['test-plugin', {
-        manifest: { id: 'test-plugin', name: 'Test', version: '1', apiVersion: '1', description: '', contributes: {} },
-        state: 'installed',
-        error: null
-      } as PluginEntry]
-    ]))
+    const manifest: PluginManifest = {
+      id: 'test-plugin',
+      name: 'Test',
+      version: '1.0.0',
+      apiVersion: 1,
+      description: 'Test plugin',
+      permissions: [],
+      contributes: {},
+      frontend: 'index.js',
+      backend: null,
+    }
+
+    const entry: PluginEntry = {
+      manifest,
+      state: 'installed',
+      error: null,
+    }
+
+    installedPlugins.set(new Map([['test-plugin', entry]]))
     enabledPluginIds.set(new Set(['test-plugin']))
 
     const { container } = render(PluginSlot, { props: { slotType: 'views' } })

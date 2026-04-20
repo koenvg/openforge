@@ -42,7 +42,6 @@ import {
   uninstallPlugin,
   loadEnabledForProject as registryLoadEnabledForProject,
   activatePlugin,
-  deactivatePluginById,
   installFromLocal,
 } from './pluginRegistry'
 import { installedPlugins, enabledPluginIds } from './pluginStore'
