@@ -14,10 +14,10 @@ vi.mock('./boardFilters', () => ({
   saveFocusFilterStates: vi.fn(),
 }))
 
-import { saveGlobalSettings, saveProjectSettings } from './settingsSaver'
 import { saveActions } from './actions'
 import { saveFocusFilterStates } from './boardFilters'
 import { setConfig, setProjectConfig, updateProject } from './ipc'
+import { saveGlobalSettings, saveProjectSettings } from './settingsSaver'
 
 describe('settingsSaver', () => {
   beforeEach(() => {
@@ -67,5 +67,49 @@ describe('settingsSaver', () => {
     expect(setConfig).toHaveBeenCalledWith('github_token', 'gh-token')
     expect(setConfig).toHaveBeenCalledWith('code_cleanup_tasks_enabled', 'true')
     expect(setConfig).toHaveBeenCalledWith('github_poll_interval', '45')
+  })
+
+  it('clamps persisted global GitHub poll interval of 0 seconds to the minimum supported value', async () => {
+    await saveGlobalSettings({
+      taskIdPrefix: 'T-',
+      githubToken: 'gh-token',
+      codeCleanupTasksEnabled: true,
+      githubPollInterval: 0,
+    })
+
+    expect(setConfig).toHaveBeenCalledWith('github_poll_interval', '15')
+  })
+
+  it('clamps persisted global GitHub poll interval below the minimum supported value', async () => {
+    await saveGlobalSettings({
+      taskIdPrefix: 'T-',
+      githubToken: 'gh-token',
+      codeCleanupTasksEnabled: true,
+      githubPollInterval: 10,
+    })
+
+    expect(setConfig).toHaveBeenCalledWith('github_poll_interval', '15')
+  })
+
+  it('clamps persisted global GitHub poll interval above the maximum supported value', async () => {
+    await saveGlobalSettings({
+      taskIdPrefix: 'T-',
+      githubToken: 'gh-token',
+      codeCleanupTasksEnabled: true,
+      githubPollInterval: 301,
+    })
+
+    expect(setConfig).toHaveBeenCalledWith('github_poll_interval', '300')
+  })
+
+  it('falls back to the current default when the poll interval payload is not a finite integer', async () => {
+    await saveGlobalSettings({
+      taskIdPrefix: 'T-',
+      githubToken: 'gh-token',
+      codeCleanupTasksEnabled: true,
+      githubPollInterval: Number.NaN,
+    })
+
+    expect(setConfig).toHaveBeenCalledWith('github_poll_interval', '60')
   })
 })

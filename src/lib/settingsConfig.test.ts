@@ -16,12 +16,8 @@ vi.mock('./boardFilters', () => ({
   loadFocusFilterStates: vi.fn(),
 }))
 
-import {
-  loadGlobalSettings,
-  loadInstallationStatus,
-  loadProjectSettings,
-  loadWhisperModelStatuses,
-} from './settingsConfig'
+import { loadActions } from './actions'
+import { loadFocusFilterStates } from './boardFilters'
 import {
   checkClaudeInstalled,
   checkOpenCodeInstalled,
@@ -29,8 +25,12 @@ import {
   getConfig,
   getProjectConfig,
 } from './ipc'
-import { loadActions } from './actions'
-import { loadFocusFilterStates } from './boardFilters'
+import {
+  loadGlobalSettings,
+  loadInstallationStatus,
+  loadProjectSettings,
+  loadWhisperModelStatuses,
+} from './settingsConfig'
 
 describe('settingsConfig', () => {
   beforeEach(() => {
@@ -132,6 +132,66 @@ describe('settingsConfig', () => {
         codeCleanupTasksEnabled: false,
         githubPollInterval: 60,
       })
+    })
+
+    it('clamps persisted GitHub poll interval of 0 seconds to the minimum supported value', async () => {
+      vi.mocked(getConfig)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce('0')
+
+      const result = await loadGlobalSettings()
+
+      expect(result.githubPollInterval).toBe(15)
+    })
+
+    it('clamps persisted GitHub poll interval below the minimum supported value', async () => {
+      vi.mocked(getConfig)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce('10')
+
+      const result = await loadGlobalSettings()
+
+      expect(result.githubPollInterval).toBe(15)
+    })
+
+    it('clamps persisted GitHub poll interval above the maximum supported value', async () => {
+      vi.mocked(getConfig)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce('301')
+
+      const result = await loadGlobalSettings()
+
+      expect(result.githubPollInterval).toBe(300)
+    })
+
+    it('defaults malformed persisted GitHub poll interval strings to the current default', async () => {
+      vi.mocked(getConfig)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce('45abc')
+
+      const result = await loadGlobalSettings()
+
+      expect(result.githubPollInterval).toBe(60)
+    })
+
+    it('defaults decimal persisted GitHub poll interval strings to the current default', async () => {
+      vi.mocked(getConfig)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce('45.5')
+
+      const result = await loadGlobalSettings()
+
+      expect(result.githubPollInterval).toBe(60)
     })
   })
 

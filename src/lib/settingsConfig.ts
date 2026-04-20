@@ -7,9 +7,8 @@ import {
   getConfig,
   getProjectConfig,
 } from './ipc'
-import type { WhisperModelStatus, ClaudeInstallStatus } from './types'
-import type { Action } from './types'
 import type { TaskState } from './taskState'
+import type { Action, ClaudeInstallStatus, WhisperModelStatus } from './types'
 
 export interface ProjectSettingsConfig {
   githubDefaultRepo: string
@@ -39,6 +38,29 @@ export interface InstallationStatus {
 export const DEFAULT_GITHUB_POLL_INTERVAL_SECONDS = 60
 export const MIN_GITHUB_POLL_INTERVAL_SECONDS = 15
 export const MAX_GITHUB_POLL_INTERVAL_SECONDS = 300
+
+export function clampGitHubPollIntervalSeconds(value: number): number {
+  return Math.min(
+    MAX_GITHUB_POLL_INTERVAL_SECONDS,
+    Math.max(MIN_GITHUB_POLL_INTERVAL_SECONDS, value),
+  )
+}
+
+export function normalizeGitHubPollIntervalSeconds(value: number): number {
+  if (!Number.isFinite(value) || !Number.isInteger(value)) {
+    return DEFAULT_GITHUB_POLL_INTERVAL_SECONDS
+  }
+
+  return clampGitHubPollIntervalSeconds(value)
+}
+
+export function parseGitHubPollIntervalSeconds(value: string | null | undefined): number {
+  if (!value || !/^\d+$/.test(value)) {
+    return DEFAULT_GITHUB_POLL_INTERVAL_SECONDS
+  }
+
+  return normalizeGitHubPollIntervalSeconds(Number(value))
+}
 
 interface OpenCodeInstallStatus {
   installed: boolean
@@ -95,7 +117,7 @@ export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
     taskIdPrefix: taskIdPrefix ?? DEFAULT_GLOBAL_SETTINGS.taskIdPrefix,
     githubToken: githubToken ?? DEFAULT_GLOBAL_SETTINGS.githubToken,
     codeCleanupTasksEnabled: codeCleanupTasksEnabled === 'true',
-    githubPollInterval: parseInt(githubPollInterval ?? String(DEFAULT_GLOBAL_SETTINGS.githubPollInterval), 10) || DEFAULT_GLOBAL_SETTINGS.githubPollInterval,
+    githubPollInterval: parseGitHubPollIntervalSeconds(githubPollInterval),
   }
 }
 

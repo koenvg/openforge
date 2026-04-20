@@ -1,8 +1,9 @@
 import { saveActions } from './actions'
 import { saveFocusFilterStates } from './boardFilters'
 import { setConfig, setProjectConfig, updateProject } from './ipc'
-import type { Action } from './types'
+import { normalizeGitHubPollIntervalSeconds } from './settingsConfig'
 import type { TaskState } from './taskState'
+import type { Action } from './types'
 
 export interface ProjectSettingsSavePayload {
   projectId: string
@@ -39,5 +40,5 @@ export async function saveGlobalSettings(payload: GlobalSettingsSavePayload): Pr
   await setConfig('task_id_prefix', payload.taskIdPrefix)
   await setConfig('github_token', payload.githubToken)
   await setConfig('code_cleanup_tasks_enabled', payload.codeCleanupTasksEnabled ? 'true' : 'false')
-  await setConfig('github_poll_interval', String(payload.githubPollInterval))
+  await setConfig('github_poll_interval', String(normalizeGitHubPollIntervalSeconds(payload.githubPollInterval)))
 }
