@@ -15,7 +15,7 @@ export default defineConfig({
         'svelte/internal',
         'svelte/store',
         '../../../src/components/SkillsView.svelte',
-        '../../../src/lib/plugin/types',
+        '@openforge/plugin-sdk',
       ],
     },
   },

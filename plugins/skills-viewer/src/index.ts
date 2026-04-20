@@ -1,4 +1,4 @@
-import type { PluginActivationResult, PluginContext } from '../../../src/lib/plugin/types'
+import type { PluginActivationResult, PluginContext } from '@openforge/plugin-sdk'
 import SkillsView from '../../../src/components/SkillsView.svelte'
 
 interface ActivatedViewContribution {
@@ -6,11 +6,7 @@ interface ActivatedViewContribution {
   component: typeof SkillsView
 }
 
-interface SkillsViewerActivationResult {
-  contributions: Omit<PluginActivationResult['contributions'], 'views'> & {
-    views: ActivatedViewContribution[]
-  }
-}
+type SkillsViewerActivationResult = PluginActivationResult
 
 export const SkillsViewComponent = SkillsView
 
