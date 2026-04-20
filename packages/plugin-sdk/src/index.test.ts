@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('../../../src/lib/ipc', () => ({
-  pluginInvoke: vi.fn(async () => 'backend-result'),
-}))
-
 import { PluginContextImpl } from './context'
 import { getViewContributions, isPluginCommandContribution, isPluginViewContribution } from './helpers'
 import { MAX_SUPPORTED_API_VERSION, validatePluginManifest } from './index'
@@ -14,11 +10,17 @@ describe('Plugin SDK', () => {
       return new PluginContextImpl({
         pluginId: 'test-plugin',
         invokeHost: vi.fn(async () => 'host-result'),
+        invokeBackend: vi.fn(async () => 'backend-result'),
         onEvent: vi.fn(() => () => {}),
         storageGet: vi.fn(async () => null),
         storageSet: vi.fn(async () => {}),
       })
     }
+
+    it('exposes pluginId', () => {
+      const ctx = makeContext()
+      expect(ctx.pluginId).toBe('test-plugin')
+    })
 
     it('calls invokeHostFn for invokeHost', async () => {
       const ctx = makeContext()
@@ -26,9 +28,19 @@ describe('Plugin SDK', () => {
       expect(result).toBe('host-result')
     })
 
-    it('calls pluginInvoke for invokeBackend', async () => {
-      const ctx = makeContext()
-      expect(typeof ctx.invokeBackend).toBe('function')
+    it('calls invokeBackendFn for invokeBackend', async () => {
+      const invokeBackend = vi.fn(async () => 'backend-result')
+      const ctx = new PluginContextImpl({
+        pluginId: 'test-plugin',
+        invokeHost: vi.fn(async () => null),
+        invokeBackend,
+        onEvent: vi.fn(() => () => {}),
+        storageGet: vi.fn(async () => null),
+        storageSet: vi.fn(async () => {}),
+      })
+      const result = await ctx.invokeBackend('myMethod', {})
+      expect(result).toBe('backend-result')
+      expect(invokeBackend).toHaveBeenCalledWith('myMethod', {})
     })
 
     it('returns unsubscribe from onEvent', () => {
@@ -37,30 +49,38 @@ describe('Plugin SDK', () => {
       expect(typeof unsub).toBe('function')
     })
 
-    it('calls storageGetFn for storageGet', async () => {
-      const ctx = makeContext()
-      const result = await ctx.storageGet('my-key')
-      expect(result).toBeNull()
+    it('storage.get delegates to storageGet', async () => {
+      const storageGet = vi.fn(async () => 'stored-value')
+      const ctx = new PluginContextImpl({
+        pluginId: 'test-plugin',
+        invokeHost: vi.fn(async () => null),
+        invokeBackend: vi.fn(async () => null),
+        onEvent: vi.fn(() => () => {}),
+        storageGet,
+        storageSet: vi.fn(async () => {}),
+      })
+      const result = await ctx.storage.get('my-key')
+      expect(result).toBe('stored-value')
+      expect(storageGet).toHaveBeenCalledWith('my-key')
     })
 
-    it('calls storageSetFn with both key and value', async () => {
+    it('storage.set delegates to storageSet', async () => {
       const storageSet = vi.fn(async () => {})
       const ctx = new PluginContextImpl({
         pluginId: 'test-plugin',
-        invokeHost: vi.fn(async () => 'host-result'),
+        invokeHost: vi.fn(async () => null),
+        invokeBackend: vi.fn(async () => null),
         onEvent: vi.fn(() => () => {}),
         storageGet: vi.fn(async () => null),
         storageSet,
       })
-
-      await ctx.storageSet('my-key', 'my-value')
-
+      await ctx.storage.set('my-key', 'my-value')
       expect(storageSet).toHaveBeenCalledWith('my-key', 'my-value')
     })
   })
 
   describe('index re-exports', () => {
-    it('re-exports host plugin helpers from the app source tree', () => {
+    it('re-exports plugin helpers from the SDK', () => {
       expect(typeof validatePluginManifest).toBe('function')
       expect(MAX_SUPPORTED_API_VERSION).toBeGreaterThan(0)
     })
