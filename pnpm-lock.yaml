@@ -33,7 +33,7 @@ importers:
         version: 4.2.2(vite@8.0.9(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1))
       '@tanstack/virtual-core':
         specifier: ^3.13.21
-        version: 3.13.21
+        version: 3.14.0
       '@xterm/addon-fit':
         specifier: ^0.11.0
         version: 0.11.0
@@ -702,8 +702,8 @@ packages:
     peerDependencies:
       vite: ^5.2.0 || ^6 || ^7 || ^8
 
-  '@tanstack/virtual-core@3.13.21':
-    resolution: {integrity: sha512-ww+fmLHyCbPSf7JNbWZP3g7wl6SdNo3ah5Aiw+0e9FDErkVHLKprYUrwTm7dF646FtEkN/KkAKPYezxpmvOjxw==}
+  '@tanstack/virtual-core@3.14.0':
+    resolution: {integrity: sha512-JLANqGy/D6k4Ujmh8Tr25lGimuOXNiaVyXaCAZS0W+1390sADdGnyUdSWNIfd49gebtIxGMij4IktRVzrdr12Q==}
 
   '@tauri-apps/api@2.10.1':
     resolution: {integrity: sha512-hKL/jWf293UDSUN09rR69hrToyIXBb8CjGaWC7gfinvnQrBVvnLr08FeFi38gxtugAVyVcTa5/FD/Xnkb1siBw==}
@@ -1780,7 +1780,7 @@ snapshots:
       tailwindcss: 4.2.2
       vite: 8.0.9(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1)
 
-  '@tanstack/virtual-core@3.13.21': {}
+  '@tanstack/virtual-core@3.14.0': {}
 
   '@tauri-apps/api@2.10.1': {}
 
