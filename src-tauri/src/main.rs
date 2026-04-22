@@ -13,6 +13,7 @@ mod http_server;
 mod mcp_installer;
 mod migration;
 mod opencode_client;
+mod plugin_installation;
 mod plugin_host;
 mod plugin_rpc;
 pub mod providers;
@@ -902,6 +903,8 @@ fn main() {
             commands::files::fs_read_file,
             commands::files::fs_search_files,
             commands::plugins::install_plugin,
+            commands::plugins::install_plugin_from_local,
+            commands::plugins::install_plugin_from_npm,
             commands::plugins::uninstall_plugin,
             commands::plugins::get_plugin,
             commands::plugins::list_plugins,
