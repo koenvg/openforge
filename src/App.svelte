@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
+  import { getCurrentWindow } from '@tauri-apps/api/window'
   import { tasks, pendingTask, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, taskSpawned, startingTasks, codeCleanupTasksEnabled, rateLimitNotification, taskRuntimeInfo, focusBoardFilters } from './lib/stores'
   import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, getReviewPrs, getAuthoredPrs, getTaskDetail, installPlugin, mergePullRequest } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
@@ -57,6 +58,7 @@
   let showProjectSetup = $state(false)
   let appMode = $state<string | null>(null)
   let showShortcutsDialog = $state(false)
+  let showCloseConfirm = $state(false)
   let showProjectSwitcher = $state(false)
   let appSidebarCollapsed = $state(localStorage.getItem('appSidebarCollapsed') === 'true')
   let showCommandPalette = $state(false)
@@ -68,6 +70,7 @@
   let router = useAppRouter()
   let registeredPluginShortcuts = new Set<string>()
   let previousPluginProjectId = $state<string | null>(null)
+  let appWindow: ReturnType<typeof getCurrentWindow> | null = null
 
   useCommandHeld()
 
@@ -542,6 +545,28 @@
     }
   }
 
+  function handleCloseRequested(event: { preventDefault: () => void }) {
+    event.preventDefault()
+    showCloseConfirm = true
+  }
+
+  async function handleCloseConfirm() {
+    if (!appWindow) return
+
+    showCloseConfirm = false
+
+    try {
+      await appWindow.destroy()
+    } catch (e) {
+      showCloseConfirm = true
+      console.error('[App] Failed to close window:', e)
+    }
+  }
+
+  function handleCloseCancel() {
+    showCloseConfirm = false
+  }
+
   function cycleActiveProject(direction: 'previous' | 'next', options?: { boardOnly?: boolean }) {
     if (options?.boardOnly && ($currentView !== 'board' || selectedTask !== null)) {
       return
@@ -560,6 +585,7 @@
   }
 
   onMount(async () => {
+    appWindow = getCurrentWindow()
     shortcuts = useShortcutRegistry()
 
     window.addEventListener('keydown', handleKeydown)
@@ -645,6 +671,10 @@
     shortcuts.register('2', () => {
       cycleActiveProject('next')
     })
+
+    unlisteners.push(
+      await appWindow.onCloseRequested(handleCloseRequested)
+    )
 
     // Phase 1: Register ALL event listeners
 
@@ -1113,6 +1143,21 @@
 
 {#if showFileQuickOpen}
   <FileQuickOpen onClose={() => { showFileQuickOpen = false }} />
+{/if}
+
+{#if showCloseConfirm}
+  <Modal onClose={handleCloseCancel} maxWidth="360px">
+    {#snippet header()}
+      <h2 class="text-[0.95rem] font-semibold text-base-content m-0">Quit Open Forge?</h2>
+    {/snippet}
+    <div class="p-5 flex flex-col gap-4">
+      <p class="text-sm text-base-content/70 m-0">Are you sure you want to quit Open Forge?</p>
+      <div class="flex justify-end gap-2">
+        <button class="btn btn-ghost btn-sm" type="button" onclick={handleCloseCancel}>Cancel</button>
+        <button class="btn btn-error btn-sm" type="button" onclick={handleCloseConfirm}>Quit</button>
+      </div>
+    </div>
+  </Modal>
 {/if}
 
 <!-- Keyboard shortcuts help dialog (global) -->
