@@ -1,4 +1,4 @@
-import { render, fireEvent } from '@testing-library/svelte'
+import { render, fireEvent, screen } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { get, writable } from 'svelte/store'
 import type { Task, AgentSession, Project, ProjectAttention, PullRequestInfo, CheckpointNotification, CiFailureNotification, RateLimitNotification, AuthoredPullRequest } from './lib/types'
@@ -21,6 +21,19 @@ const installedPluginRows: Array<{
 }> = []
 
 const eventListeners = new Map<string, Function>()
+type MockCloseRequestEvent = {
+  preventDefault: () => void
+}
+
+let closeRequestedHandler: ((event: MockCloseRequestEvent) => void | Promise<void>) | null = null
+const mockWindowOnCloseRequested = vi.fn(async (callback: (event: MockCloseRequestEvent) => void | Promise<void>) => {
+  closeRequestedHandler = callback
+  return () => {
+    closeRequestedHandler = null
+  }
+})
+const mockWindowDestroy = vi.fn(async () => undefined)
+
 const mockSelectedTaskIdStore = writable<string | null>(null)
 const mockCurrentViewStore = writable<'board' | 'files' | 'settings' | 'workqueue' | 'global_settings' | 'plugin:com.openforge.file-viewer:files' | 'plugin:com.openforge.github-sync:pr_review' | 'plugin:com.openforge.skills-viewer:skills'>('board')
 const mockSelectedReviewPrStore = writable(null)
@@ -36,6 +49,13 @@ vi.mock('@tauri-apps/api/event', () => ({
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
+}))
+
+vi.mock('@tauri-apps/api/window', () => ({
+  getCurrentWindow: vi.fn(() => ({
+    onCloseRequested: mockWindowOnCloseRequested,
+    destroy: mockWindowDestroy,
+  })),
 }))
 
 vi.mock('./lib/stores', () => ({
@@ -201,7 +221,6 @@ vi.mock('./components/settings/SettingsView.svelte', () => ({ default: vi.fn() }
 vi.mock('./components/work-queue/WorkQueueView.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/task-detail/ClaudeAgentPanel.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/prompt/PromptInput.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/shared/ui/Modal.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/shared/ui/SearchableSelect.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/feedback/toasts/Toast.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/feedback/toasts/CheckpointToast.svelte', () => ({ default: vi.fn() }))
@@ -285,6 +304,7 @@ describe('App onMount initialization order', () => {
   beforeEach(() => {
     callOrder.length = 0
     installedPluginRows.length = 0
+    closeRequestedHandler = null
     vi.clearAllMocks()
   })
 
@@ -1251,13 +1271,74 @@ describe('App onMount initialization order', () => {
 
     it('Shift+/ opens the keyboard shortcuts dialog', async () => {
       const App = (await import('./App.svelte')).default
-      const modalModule = await import('./components/shared/ui/Modal.svelte')
 
       render(App)
 
       await fireEvent.keyDown(window, { key: '?', shiftKey: true, bubbles: true })
 
-      expect(modalModule.default).toHaveBeenCalled()
+      expect(screen.getByRole('dialog')).toBeTruthy()
+      expect(screen.getByText('Keyboard Shortcuts')).toBeTruthy()
+    })
+
+    it('prevents window close requests and shows a confirmation modal', async () => {
+      const App = (await import('./App.svelte')).default
+
+      render(App)
+
+      await vi.waitFor(() => {
+        expect(mockWindowOnCloseRequested).toHaveBeenCalled()
+      })
+
+      const preventDefault = vi.fn()
+      if (!closeRequestedHandler) {
+        throw new Error('Expected close request handler to be registered')
+      }
+
+      await closeRequestedHandler({ preventDefault })
+
+      expect(preventDefault).toHaveBeenCalled()
+      expect(screen.getByRole('dialog')).toBeTruthy()
+      expect(screen.getByText('Quit Open Forge?')).toBeTruthy()
+      expect(mockWindowDestroy).not.toHaveBeenCalled()
+    })
+
+    it('destroys the window after the user confirms close', async () => {
+      const App = (await import('./App.svelte')).default
+
+      render(App)
+
+      await vi.waitFor(() => {
+        expect(mockWindowOnCloseRequested).toHaveBeenCalled()
+      })
+
+      if (!closeRequestedHandler) {
+        throw new Error('Expected close request handler to be registered')
+      }
+
+      await closeRequestedHandler({ preventDefault: vi.fn() })
+      await fireEvent.click(screen.getByRole('button', { name: 'Quit' }))
+
+      expect(mockWindowDestroy).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps the app open when the user cancels close', async () => {
+      const App = (await import('./App.svelte')).default
+
+      render(App)
+
+      await vi.waitFor(() => {
+        expect(mockWindowOnCloseRequested).toHaveBeenCalled()
+      })
+
+      if (!closeRequestedHandler) {
+        throw new Error('Expected close request handler to be registered')
+      }
+
+      await closeRequestedHandler({ preventDefault: vi.fn() })
+      await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+      expect(screen.queryByText('Quit Open Forge?')).toBeNull()
+      expect(mockWindowDestroy).not.toHaveBeenCalled()
     })
 
     it('pressing 2 cycles to next project and resets to board', async () => {
