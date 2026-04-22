@@ -605,8 +605,9 @@ async fn sync_open_prs(
 
     let mut synced = 0;
     for pr in &github_prs {
-        let matched_tasks = find_matching_task_ids(&pr.title, &pr.head.ref_name, &task_ids);
-        for task_id in matched_tasks {
+        if let Some(task_id) =
+            find_authoritative_task_id(&pr.title, &pr.head.ref_name, &task_ids)
+        {
             let db_lock = db.lock().unwrap();
             let _ = db_lock.insert_pull_request(
                 pr.number,
@@ -629,12 +630,12 @@ async fn sync_open_prs(
     Ok(synced)
 }
 
-fn contains_task_id(text: &str, task_id: &str) -> bool {
+fn find_task_id_position(text: &str, task_id: &str) -> Option<usize> {
     let bytes = text.as_bytes();
     let pattern = task_id.as_bytes();
     let pat_len = pattern.len();
     if pat_len > bytes.len() {
-        return false;
+        return None;
     }
     for i in 0..=(bytes.len() - pat_len) {
         if &bytes[i..i + pat_len] == pattern {
@@ -647,10 +648,52 @@ fn contains_task_id(text: &str, task_id: &str) -> bool {
             if after < bytes.len() && (bytes[after] as char).is_ascii_digit() {
                 continue;
             }
-            return true;
+            return Some(i);
         }
     }
-    false
+    None
+}
+
+fn contains_task_id(text: &str, task_id: &str) -> bool {
+    find_task_id_position(text, task_id).is_some()
+}
+
+enum TaskMatchOutcome {
+    None,
+    Unique(String),
+    Ambiguous,
+}
+
+fn classify_task_matches(text: &str, task_ids: &[String]) -> TaskMatchOutcome {
+    let mut matched_task_ids = task_ids
+        .iter()
+        .filter(|task_id| contains_task_id(text, task_id.as_str()))
+        .cloned();
+
+    let Some(first_match) = matched_task_ids.next() else {
+        return TaskMatchOutcome::None;
+    };
+
+    if matched_task_ids.next().is_some() {
+        TaskMatchOutcome::Ambiguous
+    } else {
+        TaskMatchOutcome::Unique(first_match)
+    }
+}
+
+fn find_authoritative_task_id(
+    pr_title: &str,
+    pr_branch: &str,
+    task_ids: &[String],
+) -> Option<String> {
+    match classify_task_matches(pr_branch, task_ids) {
+        TaskMatchOutcome::Unique(task_id) => Some(task_id),
+        TaskMatchOutcome::Ambiguous => None,
+        TaskMatchOutcome::None => match classify_task_matches(pr_title, task_ids) {
+            TaskMatchOutcome::Unique(task_id) => Some(task_id),
+            TaskMatchOutcome::Ambiguous | TaskMatchOutcome::None => None,
+        },
+    }
 }
 
 pub fn find_matching_task_ids(pr_title: &str, pr_branch: &str, task_ids: &[String]) -> Vec<String> {
@@ -1725,6 +1768,33 @@ mod tests {
         assert_eq!(matched.len(), 2);
         assert!(matched.contains(&"T-1".to_string()));
         assert!(matched.contains(&"T-2".to_string()));
+    }
+
+    #[test]
+    fn test_find_authoritative_task_id_prefers_branch_match_over_title_match() {
+        let task_ids = vec!["T-2".to_string(), "T-1".to_string()];
+
+        let matched = find_authoritative_task_id("Fix T-2", "feature/T-1-auth", &task_ids);
+
+        assert_eq!(matched.as_deref(), Some("T-1"));
+    }
+
+    #[test]
+    fn test_find_authoritative_task_id_uses_unique_title_match_when_branch_has_none() {
+        let task_ids = vec!["T-2".to_string(), "T-1".to_string(), "T-3".to_string()];
+
+        let matched = find_authoritative_task_id("Fix T-3", "feature/auth", &task_ids);
+
+        assert_eq!(matched.as_deref(), Some("T-3"));
+    }
+
+    #[test]
+    fn test_find_authoritative_task_id_rejects_ambiguous_title_matches() {
+        let task_ids = vec!["T-2".to_string(), "T-1".to_string()];
+
+        let matched = find_authoritative_task_id("Fix T-1 before T-2", "feature/auth", &task_ids);
+
+        assert_eq!(matched, None);
     }
 
     #[test]
