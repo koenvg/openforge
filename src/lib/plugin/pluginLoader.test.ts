@@ -48,7 +48,7 @@ function makeContext(): PluginContext {
 function makeActivationResult(id: string): PluginActivationResult {
   return {
     contributions: {
-      commands: [{ id, title: `Command ${id}` }],
+      commands: [{ id, title: `Command ${id}`, execute: vi.fn(async () => undefined) }],
     },
   }
 }

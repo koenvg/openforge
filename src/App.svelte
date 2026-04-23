@@ -4,7 +4,7 @@
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
   import { getCurrentWindow } from '@tauri-apps/api/window'
   import { tasks, pendingTask, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, taskSpawned, startingTasks, codeCleanupTasksEnabled, rateLimitNotification, taskRuntimeInfo, focusBoardFilters } from './lib/stores'
-  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, getReviewPrs, getAuthoredPrs, getTaskDetail, installPlugin, mergePullRequest } from './lib/ipc'
+  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, getReviewPrs, getAuthoredPrs, getTaskDetail, mergePullRequest } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import { applyProjectOrder } from './lib/projectOrder'
   import { hasMergeConflicts, preservePullRequestState, isQueuedForMerge, isReadyToMerge } from './lib/types'
@@ -29,14 +29,11 @@
   import FileQuickOpen from './components/shell/FileQuickOpen.svelte'
   import PluginSlot from './components/plugin/PluginSlot.svelte'
 
-  import { FILE_VIEWER_PLUGIN_ID, FILE_VIEWER_PLUGIN_MANIFEST } from './lib/fileViewerPlugin'
-  import { GITHUB_SYNC_PLUGIN_ID, GITHUB_SYNC_PLUGIN_MANIFEST } from './lib/githubSyncPlugin'
-  import { SKILLS_VIEWER_PLUGIN_ID, SKILLS_VIEWER_PLUGIN_MANIFEST } from './lib/skillsViewerPlugin'
-  import { TERMINAL_PLUGIN_ID, TERMINAL_PLUGIN_MANIFEST } from './lib/terminalPlugin'
   import { resolveContributions } from './lib/plugin/contributionResolver'
-  import { enabledPluginIds, installedPlugins, loadEnabledForProject, loadInstalledPlugins } from './lib/plugin/pluginStore'
+  import { enabledPluginIds, installedPlugins, loadEnabledForProject } from './lib/plugin/pluginStore'
   import { isPluginViewKey, makePluginViewKey } from './lib/plugin/types'
   import type { PluginManifest } from './lib/plugin/types'
+  import { activatePlugin, executePluginCommand, initializePluginRuntime } from './lib/plugin/pluginRegistry'
   import { useAppRouter } from './lib/router.svelte'
   import { loadActions, getEnabledActions } from './lib/actions'
   import { getProjectColor } from './lib/projectColors'
@@ -84,6 +81,7 @@
       .map((id) => $installedPlugins.get(id)?.manifest)
       .filter((manifest): manifest is PluginManifest => manifest !== undefined)
   )
+  let activeProject = $derived($projects.find(p => p.id === $activeProjectId) || null)
   let resolvedPluginContributions = $derived(resolveContributions(enabledPluginManifests))
   let resolvedViews = $derived(getViews(enabledPluginManifests))
   let pluginNavItems = $derived(
@@ -97,48 +95,23 @@
         shortcut: view.shortcut,
       }))
   )
-  let activeView = $derived($currentView === 'board' ? null : resolvedViews[$currentView])
-  let pluginViewActive = $derived(isPluginViewKey($currentView) && !activeView)
+  let activeViewEntry = $derived($currentView === 'board' ? null : resolvedViews[$currentView] ?? null)
+  let renderedActiveView = $derived.by(() => {
+    if (activeViewEntry === null) {
+      return null
+    }
 
-  function registerBuiltinPluginManifest(manifest: PluginManifest) {
-    installedPlugins.update((map) => {
-      const existing = map.get(manifest.id)
-      const next = new Map(map)
-      next.set(manifest.id, {
-        manifest,
-        state: existing?.state ?? 'installed',
-        error: existing?.error ?? null,
-        installPath: existing?.installPath ?? `builtin:${manifest.id}`,
-        isBuiltin: true,
-      })
-      return next
-    })
-  }
-
-  async function ensureBuiltinPluginInstalled(manifest: PluginManifest): Promise<void> {
-    await installPlugin({
-      id: manifest.id,
-      name: manifest.name,
-      version: manifest.version,
-      apiVersion: manifest.apiVersion,
-      description: manifest.description,
-      permissions: JSON.stringify(manifest.permissions),
-      contributes: JSON.stringify(manifest.contributes),
-      frontendEntry: manifest.frontend,
-      backendEntry: manifest.backend,
-      installPath: `builtin:${manifest.id}`,
-      installedAt: Date.now(),
-      isBuiltin: true,
-    })
-  }
-
-  function ensureBuiltinPluginEnabled(pluginId: string) {
-    enabledPluginIds.update((set) => {
-      const next = new Set(set)
-      next.add(pluginId)
-      return next
-    })
-  }
+    return {
+      component: activeViewEntry.component,
+      props: activeViewEntry.getProps({
+        projectName: activeProject?.name ?? '',
+        onCloseSettings: () => { router.navigate('board') },
+        onProjectDeleted: loadProjects,
+        onRunAction: handleRunAction,
+      }),
+    }
+  })
+  let pluginViewActive = $derived(isPluginViewKey($currentView) && activeViewEntry === null)
 
   $effect(() => {
     const pending = $pendingTask
@@ -167,12 +140,7 @@
   $effect(() => {
     const projectId = $activeProjectId
     if (projectId && projectId !== previousPluginProjectId) {
-      void loadEnabledForProject(projectId).then(() => {
-        ensureBuiltinPluginEnabled(FILE_VIEWER_PLUGIN_ID)
-        ensureBuiltinPluginEnabled(GITHUB_SYNC_PLUGIN_ID)
-        ensureBuiltinPluginEnabled(SKILLS_VIEWER_PLUGIN_ID)
-        ensureBuiltinPluginEnabled(TERMINAL_PLUGIN_ID)
-      })
+      void loadEnabledForProject(projectId)
     } else if (!projectId && previousPluginProjectId !== null) {
       enabledPluginIds.set(new Set())
     }
@@ -194,6 +162,15 @@
       })
     }
 
+    for (const command of resolvedPluginContributions.commands) {
+      if (!command.shortcut) continue
+
+      nextShortcutKeys.add(command.shortcut)
+      shortcuts.register(command.shortcut, () => {
+        void executePluginCommand(command.pluginId, command.contributionId)
+      })
+    }
+
     for (const key of registeredPluginShortcuts) {
       if (!nextShortcutKeys.has(key)) {
         shortcuts.unregister(key)
@@ -201,6 +178,12 @@
     }
 
     registeredPluginShortcuts = nextShortcutKeys
+  })
+
+  $effect(() => {
+    for (const service of resolvedPluginContributions.backgroundServices) {
+      void activatePlugin(service.pluginId)
+    }
   })
 
   // Reload tasks when active project changes
@@ -211,9 +194,6 @@
       refreshPrCounts()
     }
   })
-
-  // Find active project
-  let activeProject = $derived($projects.find(p => p.id === $activeProjectId) || null)
 
   let activeProjectColorId = $state<string | null>(null)
   $effect(() => {
@@ -633,9 +613,6 @@
     shortcuts.register('⌃[', () => { router.back() })
     shortcuts.register('⌃arrowleft', () => { router.back() })
 
-    shortcuts.register('⌘⇧r', triggerGithubSync)
-    shortcuts.register('⌃⇧r', triggerGithubSync)
-
     shortcuts.register('⌘d', () => {
       window.dispatchEvent(new CustomEvent('toggle-voice-recording'))
     })
@@ -997,26 +974,7 @@
     )
 
     // Phase 2: Load data
-    await loadInstalledPlugins()
-    try {
-      await Promise.all([
-        ensureBuiltinPluginInstalled(FILE_VIEWER_PLUGIN_MANIFEST),
-        ensureBuiltinPluginInstalled(GITHUB_SYNC_PLUGIN_MANIFEST),
-        ensureBuiltinPluginInstalled(SKILLS_VIEWER_PLUGIN_MANIFEST),
-        ensureBuiltinPluginInstalled(TERMINAL_PLUGIN_MANIFEST),
-      ])
-      await loadInstalledPlugins()
-    } catch (e) {
-      console.error('[App] Failed to persist builtin plugins:', e)
-      registerBuiltinPluginManifest(FILE_VIEWER_PLUGIN_MANIFEST)
-      registerBuiltinPluginManifest(GITHUB_SYNC_PLUGIN_MANIFEST)
-      registerBuiltinPluginManifest(SKILLS_VIEWER_PLUGIN_MANIFEST)
-      registerBuiltinPluginManifest(TERMINAL_PLUGIN_MANIFEST)
-    }
-    ensureBuiltinPluginEnabled(FILE_VIEWER_PLUGIN_ID)
-    ensureBuiltinPluginEnabled(GITHUB_SYNC_PLUGIN_ID)
-    ensureBuiltinPluginEnabled(SKILLS_VIEWER_PLUGIN_ID)
-    ensureBuiltinPluginEnabled(TERMINAL_PLUGIN_ID)
+    await initializePluginRuntime()
     await loadProjects()
 
     try {
@@ -1069,57 +1027,55 @@
   {/if}
 
   <div class="flex flex-col flex-1 min-w-0 relative" style="background: linear-gradient(180deg, var(--project-bg-alt) 0%, var(--project-bg) 100%)">
-    <main class="flex-1 overflow-hidden flex flex-col">
-      {#if activeView}
-        <activeView.component
-          {...activeView.getProps({
-            projectName: activeProject?.name ?? '',
-            onCloseSettings: () => { router.navigate('board') },
-            onProjectDeleted: loadProjects,
-            onRunAction: handleRunAction,
-          })}
-        />
-      {:else if pluginViewActive}
-        <PluginSlot slotType="views" slotId={$currentView} />
-      {:else if selectedTask}
-        <TaskDetailView task={selectedTask} onRunAction={handleRunAction} />
-      {:else}
-        <div class="flex-1 overflow-hidden">
-          {#if $isLoading && $tasks.length === 0}
-            <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm">
-              <span class="loading loading-spinner loading-md text-primary"></span>
-              <span>Loading tasks...</span>
-            </div>
-          {:else}
-            <FocusBoard
-              projectId={$activeProjectId}
-              projectName={activeProject?.name ?? ''}
-              tasks={$tasks}
-              activeSessions={$activeSessions}
-              ticketPrs={$ticketPrs}
-              onOpenTask={handleOpenTask}
-              onRunAction={handleRunAction}
-            />
-          {/if}
-        </div>
-      {/if}
+    <main class="flex-1 overflow-hidden flex">
+      <PluginSlot slotType="sidebarPanels" panelSide="left" projectId={$activeProjectId} projectName={activeProject?.name ?? ''} />
+      <div class="flex-1 overflow-hidden flex flex-col">
+        {#if renderedActiveView !== null}
+          <renderedActiveView.component {...(renderedActiveView?.props ?? {})} />
+        {:else if pluginViewActive}
+          <PluginSlot slotType="views" slotId={$currentView} />
+        {:else if selectedTask}
+          <TaskDetailView task={selectedTask} onRunAction={handleRunAction} />
+        {:else}
+          <div class="flex-1 overflow-hidden">
+            {#if $isLoading && $tasks.length === 0}
+              <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm">
+                <span class="loading loading-spinner loading-md text-primary"></span>
+                <span>Loading tasks...</span>
+              </div>
+            {:else}
+              <FocusBoard
+                projectId={$activeProjectId}
+                projectName={activeProject?.name ?? ''}
+                tasks={$tasks}
+                activeSessions={$activeSessions}
+                ticketPrs={$ticketPrs}
+                onOpenTask={handleOpenTask}
+                onRunAction={handleRunAction}
+              />
+            {/if}
+          </div>
+        {/if}
 
-      {#if showAddDialog && $activeProjectId}
-        <AddTaskDialog
-          mode={editingTask ? 'edit' : 'create'}
-          task={editingTask}
-          onClose={() => { showAddDialog = false; editingTask = null }}
-          onTaskSaved={async () => { await loadTasks() }}
-          onRunAction={async (taskId, actionPrompt, agent) => {
-            await loadTasks()
-            await handleRunAction({ taskId, actionPrompt, agent })
-          }}
-        />
-      {/if}
+        {#if showAddDialog && $activeProjectId}
+          <AddTaskDialog
+            mode={editingTask ? 'edit' : 'create'}
+            task={editingTask}
+            onClose={() => { showAddDialog = false; editingTask = null }}
+            onTaskSaved={async () => { await loadTasks() }}
+            onRunAction={async (taskId, actionPrompt, agent) => {
+              await loadTasks()
+              await handleRunAction({ taskId, actionPrompt, agent })
+            }}
+          />
+        {/if}
 
-      {#if showProjectSetup}
-        <ProjectSetupDialog onClose={() => showProjectSetup = false} onProjectCreated={handleProjectCreated} />
-      {/if}
+        {#if showProjectSetup}
+          <ProjectSetupDialog onClose={() => showProjectSetup = false} onProjectCreated={handleProjectCreated} />
+        {/if}
+      </div>
+      <PluginSlot slotType="sidebarPanels" panelSide="right" projectId={$activeProjectId} projectName={activeProject?.name ?? ''} />
+
     </main>
 
     {#if $activeProjectId && $currentView !== 'global_settings'}

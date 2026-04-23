@@ -97,11 +97,15 @@ export function getContributions(contributionType: string): unknown[] {
 
 export async function loadEnabledForProject(projectId: string): Promise<void> {
   const getEnabledPlugins = getOptionalIpcMethod(() => ipc.getEnabledPlugins)
+  const builtinIds = Array.from(get(installedPlugins).entries())
+    .filter(([, entry]) => entry.isBuiltin)
+    .map(([pluginId]) => pluginId)
+
   if (!getEnabledPlugins) {
-    enabledPluginIds.set(new Set())
+    enabledPluginIds.set(new Set(builtinIds))
     return
   }
 
   const rows = await getEnabledPlugins(projectId)
-  enabledPluginIds.set(new Set(rows.map(r => r.id)))
+  enabledPluginIds.set(new Set([...builtinIds, ...rows.map(r => r.id)]))
 }

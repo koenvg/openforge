@@ -3,7 +3,7 @@ import { MAX_SUPPORTED_API_VERSION } from './types'
 import { isPluginViewKey } from './types'
 import { makePluginViewKey } from './types'
 import {
-  getEnabledPlugins,
+  forceGithubSync,
   getPluginStorage,
   installPlugin,
   installPluginFromLocal as installPluginFromLocalIpc,
@@ -12,7 +12,12 @@ import {
   setPluginStorage,
   uninstallPlugin as uninstallPluginIpc,
 } from '../ipc'
-import { installedPlugins, enabledPluginIds } from './pluginStore'
+import {
+  installedPlugins,
+  enabledPluginIds,
+  loadEnabledForProject as loadEnabledPluginIdsForProject,
+  loadInstalledPlugins,
+} from './pluginStore'
 import { get } from 'svelte/store'
 import {
   loadPluginFrontend,
@@ -21,6 +26,15 @@ import {
   isPluginLoaded,
 } from './pluginLoader'
 import type { PluginContext } from './types'
+import type {
+  PluginActivatedBackgroundService,
+  PluginActivatedCommandContribution,
+  PluginActivatedSettingsSectionContribution,
+  PluginActivatedSidebarPanelContribution,
+  PluginActivatedTaskPaneTabContribution,
+} from './types'
+import { BUILTIN_PLUGIN_MANIFESTS } from './builtinPlugins'
+import { registerRenderableContributionComponent } from './componentRegistry'
 import { registerViewComponent } from './componentRegistry'
 import { unregisterViewComponentsForPlugin } from './componentRegistry'
 import { activeProjectId, currentView, selectedTaskId } from '../stores'
@@ -45,6 +59,79 @@ type PluginHostListener = (payload: unknown) => void
 const pluginHostListeners = new Map<PluginHostEventName, Set<PluginHostListener>>()
 const pluginHostUnsubscribers = new Map<string, Set<() => void>>()
 const activationPromises = new Map<string, Promise<boolean>>()
+const pluginCommandHandlers = new Map<string, PluginActivatedCommandContribution['execute']>()
+const backgroundServiceStops = new Map<string, () => Promise<void>>()
+
+function normalizeErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function setPluginRuntimeError(pluginId: string, error: unknown): void {
+  installedPlugins.update(map => {
+    const entry = map.get(pluginId)
+    if (!entry) {
+      return map
+    }
+
+    const next = new Map(map)
+    next.set(pluginId, {
+      ...entry,
+      state: 'error',
+      error: normalizeErrorMessage(error),
+    })
+    return next
+  })
+}
+
+function toNamespacedContributionId(pluginId: string, contributionId: string): string {
+  return `${pluginId}:${contributionId}`
+}
+
+function clearPluginRuntimeContributions(pluginId: string): void {
+  unregisterViewComponentsForPlugin(pluginId)
+
+  for (const key of Array.from(pluginCommandHandlers.keys())) {
+    if (key.startsWith(`${pluginId}:`)) {
+      pluginCommandHandlers.delete(key)
+    }
+  }
+}
+
+async function stopPluginBackgroundServices(pluginId: string): Promise<void> {
+  const stopEntries = Array.from(backgroundServiceStops.entries()).filter(([key]) => key.startsWith(`${pluginId}:`))
+  for (const [key, stop] of stopEntries) {
+    await stop()
+    backgroundServiceStops.delete(key)
+  }
+}
+
+function registerRenderableContributions<T extends PluginActivatedTaskPaneTabContribution | PluginActivatedSidebarPanelContribution | PluginActivatedSettingsSectionContribution>(
+  pluginId: string,
+  slotType: 'taskPaneTabs' | 'sidebarPanels' | 'settingsSections',
+  contributions: T[] | undefined
+): void {
+  for (const contribution of contributions ?? []) {
+    registerRenderableContributionComponent(slotType, toNamespacedContributionId(pluginId, contribution.id), contribution.component)
+  }
+}
+
+function registerCommandContributions(pluginId: string, contributions: PluginActivatedCommandContribution[] | undefined): void {
+  for (const contribution of contributions ?? []) {
+    pluginCommandHandlers.set(toNamespacedContributionId(pluginId, contribution.id), contribution.execute)
+  }
+}
+
+async function startBackgroundServices(pluginId: string, contributions: PluginActivatedBackgroundService[] | undefined): Promise<void> {
+  for (const contribution of contributions ?? []) {
+    await contribution.start()
+    backgroundServiceStops.set(
+      toNamespacedContributionId(pluginId, contribution.id),
+      async () => {
+        await contribution.stop?.()
+      }
+    )
+  }
+}
 
 function subscribeToPluginHostEvent(pluginId: string, event: string, handler: PluginHostListener): () => void {
   const typedEvent = event as PluginHostEventName
@@ -179,6 +266,8 @@ async function invokePluginHostCommand(command: string, payload: unknown): Promi
 
       return getContextSnapshot()
     }
+    case 'forceGithubSync':
+      return forceGithubSync()
     default:
       throw new Error(`Unknown plugin host command: ${command}`)
   }
@@ -254,12 +343,31 @@ export async function installPluginFromManifest(manifest: PluginManifest, instal
   })
 }
 
-export async function uninstallPlugin(pluginId: string): Promise<void> {
-  if (isPluginLoaded(pluginId)) {
-    await deactivatePluginLoader(pluginId)
+export async function initializePluginRuntime(): Promise<void> {
+  await loadInstalledPlugins()
+
+  for (const manifest of BUILTIN_PLUGIN_MANIFESTS) {
+    await installPlugin({
+      id: manifest.id,
+      name: manifest.name,
+      version: manifest.version,
+      apiVersion: manifest.apiVersion,
+      description: manifest.description,
+      permissions: JSON.stringify(manifest.permissions),
+      contributes: JSON.stringify(manifest.contributes),
+      frontendEntry: manifest.frontend,
+      backendEntry: manifest.backend,
+      installPath: `builtin:${manifest.id}`,
+      installedAt: Date.now(),
+      isBuiltin: true,
+    })
   }
-  unregisterViewComponentsForPlugin(pluginId)
-  clearPluginHostSubscriptions(pluginId)
+
+  await loadInstalledPlugins()
+}
+
+export async function uninstallPlugin(pluginId: string): Promise<void> {
+  await deactivatePluginById(pluginId)
   await uninstallPluginIpc(pluginId)
   installedPlugins.update(map => {
     const next = new Map(map)
@@ -269,8 +377,7 @@ export async function uninstallPlugin(pluginId: string): Promise<void> {
 }
 
 export async function loadEnabledForProject(projectId: string): Promise<void> {
-  const rows = await getEnabledPlugins(projectId)
-  enabledPluginIds.set(new Set(rows.map(r => r.id)))
+  await loadEnabledPluginIdsForProject(projectId)
 }
 
 export async function activatePlugin(pluginId: string): Promise<boolean> {
@@ -294,13 +401,30 @@ export async function activatePlugin(pluginId: string): Promise<boolean> {
     const result = await activatePluginLoader(pluginId, context)
     if (result === null) return false
 
-    for (const view of result.contributions.views ?? []) {
-      if (view.component) {
-        registerViewComponent(makePluginViewKey(pluginId, view.id), view.component)
-      }
-    }
+    try {
+      clearPluginRuntimeContributions(pluginId)
+      await stopPluginBackgroundServices(pluginId)
 
-    return true
+      for (const view of result.contributions.views ?? []) {
+        if (view.component) {
+          registerViewComponent(makePluginViewKey(pluginId, view.id), view.component)
+        }
+      }
+
+      registerRenderableContributions(pluginId, 'taskPaneTabs', result.contributions.taskPaneTabs)
+      registerRenderableContributions(pluginId, 'sidebarPanels', result.contributions.sidebarPanels)
+      registerRenderableContributions(pluginId, 'settingsSections', result.contributions.settingsSections)
+      registerCommandContributions(pluginId, result.contributions.commands)
+      await startBackgroundServices(pluginId, result.contributions.backgroundServices)
+
+      return true
+    } catch (error) {
+      clearPluginRuntimeContributions(pluginId)
+      await stopPluginBackgroundServices(pluginId)
+      await deactivatePluginLoader(pluginId)
+      setPluginRuntimeError(pluginId, error)
+      return false
+    }
   })()
 
   activationPromises.set(pluginId, activation)
@@ -310,6 +434,25 @@ export async function activatePlugin(pluginId: string): Promise<boolean> {
   } finally {
     activationPromises.delete(pluginId)
   }
+}
+
+export async function executePluginCommand(pluginId: string, commandId: string, payload?: unknown): Promise<boolean> {
+  const commandKey = toNamespacedContributionId(pluginId, commandId)
+
+  if (!pluginCommandHandlers.has(commandKey)) {
+    const activated = await activatePlugin(pluginId)
+    if (!activated) {
+      return false
+    }
+  }
+
+  const handler = pluginCommandHandlers.get(commandKey)
+  if (!handler) {
+    return false
+  }
+
+  await handler(payload)
+  return true
 }
 
 function makePluginContextForPlugin(pluginId: string): PluginContext {
@@ -329,7 +472,8 @@ function makePluginContextForPlugin(pluginId: string): PluginContext {
 
 export async function deactivatePluginById(pluginId: string): Promise<void> {
   await deactivatePluginLoader(pluginId)
-  unregisterViewComponentsForPlugin(pluginId)
+  clearPluginRuntimeContributions(pluginId)
+  await stopPluginBackgroundServices(pluginId)
   clearPluginHostSubscriptions(pluginId)
 }
 

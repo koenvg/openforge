@@ -117,6 +117,7 @@ vi.mock('./lib/ipc', () => ({
     }
   }),
   listPlugins: vi.fn(async () => installedPluginRows.map((row) => ({ ...row }))),
+  getEnabledPlugins: vi.fn(async () => installedPluginRows.map((row) => ({ ...row }))),
   getSessions: vi.fn(),
   getProjects: vi.fn(async () => {
     callOrder.push('getProjects')
@@ -1280,6 +1281,33 @@ describe('App onMount initialization order', () => {
       await fireEvent.keyDown(window, { key: 'F', metaKey: true, shiftKey: true, bubbles: true })
 
       expect(commandPaletteModule.default).toHaveBeenCalled()
+    })
+
+    it('CMD+SHIFT+R triggers GitHub refresh through the plugin command shortcut', async () => {
+      const App = (await import('./App.svelte')).default
+      const ipc = await import('./lib/ipc')
+
+      vi.mocked(ipc.forceGithubSync).mockResolvedValue({
+        new_comments: 0,
+        ci_changes: 0,
+        review_changes: 0,
+        pr_changes: 0,
+        errors: 0,
+        rate_limited: false,
+        rate_limit_reset_at: null,
+      })
+
+      render(App)
+
+      await vi.waitFor(() => {
+        expect(installedPluginRows.some((row) => row.id === 'com.openforge.github-sync')).toBe(true)
+      })
+
+      await fireEvent.keyDown(window, { key: 'R', metaKey: true, shiftKey: true, bubbles: true })
+
+      await vi.waitFor(() => {
+        expect(ipc.forceGithubSync).toHaveBeenCalled()
+      })
     })
 
     it('Shift+/ opens the keyboard shortcuts dialog', async () => {

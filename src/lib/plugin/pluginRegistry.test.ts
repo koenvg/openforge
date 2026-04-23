@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { get } from 'svelte/store'
 
 const {
+  forceGithubSyncMock,
   installPluginMock,
   installPluginFromLocalIpcMock,
   installPluginFromNpmIpcMock,
@@ -11,6 +12,7 @@ const {
   getPluginStorageMock,
   setPluginStorageMock,
 } = vi.hoisted(() => ({
+  forceGithubSyncMock: vi.fn(),
   installPluginMock: vi.fn(),
   installPluginFromLocalIpcMock: vi.fn(),
   installPluginFromNpmIpcMock: vi.fn(),
@@ -22,6 +24,7 @@ const {
 }))
 
 vi.mock('../ipc', () => ({
+  forceGithubSync: forceGithubSyncMock,
   installPlugin: installPluginMock,
   uninstallPlugin: uninstallPluginIpcMock,
   getEnabledPlugins: getEnabledPluginsMock,
@@ -56,6 +59,8 @@ vi.mock('./pluginLoader', () => ({
 import {
   deactivatePluginById,
   emitPluginHostEvent,
+  executePluginCommand,
+  initializePluginRuntime,
   installPluginFromManifest,
   installPluginFromNpm,
   uninstallPlugin,
@@ -66,7 +71,7 @@ import {
 import { installedPlugins, enabledPluginIds } from './pluginStore'
 import type { PluginManifest } from './types'
 import type { NormalizedPluginRow } from '../ipc'
-import { clearComponentRegistry, getRegisteredComponent } from './componentRegistry'
+import { clearComponentRegistry, getRegisteredComponent, getRegisteredRenderableComponent } from './componentRegistry'
 
 function makeManifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
   return {
@@ -103,6 +108,7 @@ function makeNormalized(id: string): NormalizedPluginRow {
 describe('pluginRegistry', () => {
   beforeEach(() => {
     installPluginMock.mockReset()
+    forceGithubSyncMock.mockReset()
     installPluginFromLocalIpcMock.mockReset()
     installPluginFromNpmIpcMock.mockReset()
     uninstallPluginIpcMock.mockReset()
@@ -193,6 +199,74 @@ describe('pluginRegistry', () => {
     expect(setPluginStorageMock).toHaveBeenCalledWith('test-plugin', 'plugin-key', 'plugin-value')
   })
 
+  it('activates runtime implementations for every supported contribution type', async () => {
+    const tabComponent = {} as never
+    const sidebarComponent = {} as never
+    const settingsComponent = {} as never
+    const commandHandler = vi.fn(async () => undefined)
+    const startService = vi.fn(async () => undefined)
+    const stopService = vi.fn(async () => undefined)
+
+    installedPlugins.set(new Map([['test-plugin', { manifest: makeManifest(), state: 'installed', error: null }]]))
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: {}, activationResult: null })
+    activatePluginLoaderMock.mockResolvedValue({
+      contributions: {
+        views: [{ id: 'main', component: {} as never }],
+        taskPaneTabs: [{ id: 'activity', component: tabComponent }],
+        sidebarPanels: [{ id: 'inspector', component: sidebarComponent }],
+        settingsSections: [{ id: 'preferences', component: settingsComponent }],
+        commands: [{ id: 'open-demo', execute: commandHandler }],
+        backgroundServices: [{ id: 'sync', start: startService, stop: stopService }],
+      },
+    })
+
+    await expect(activatePlugin('test-plugin')).resolves.toBe(true)
+
+    expect(getRegisteredComponent('plugin:test-plugin:main')).toBeDefined()
+    expect(getRegisteredRenderableComponent('taskPaneTabs', 'test-plugin:activity')).toBe(tabComponent)
+    expect(getRegisteredRenderableComponent('sidebarPanels', 'test-plugin:inspector')).toBe(sidebarComponent)
+    expect(getRegisteredRenderableComponent('settingsSections', 'test-plugin:preferences')).toBe(settingsComponent)
+    expect(startService).toHaveBeenCalledOnce()
+
+    await expect(executePluginCommand('test-plugin', 'open-demo', { source: 'shortcut' })).resolves.toBe(true)
+    expect(commandHandler).toHaveBeenCalledWith({ source: 'shortcut' })
+
+    await deactivatePluginById('test-plugin')
+
+    expect(stopService).toHaveBeenCalledOnce()
+    expect(getRegisteredRenderableComponent('taskPaneTabs', 'test-plugin:activity')).toBeUndefined()
+    expect(getRegisteredRenderableComponent('sidebarPanels', 'test-plugin:inspector')).toBeUndefined()
+    expect(getRegisteredRenderableComponent('settingsSections', 'test-plugin:preferences')).toBeUndefined()
+  })
+
+  it('rolls back runtime state when background service startup fails', async () => {
+    const commandHandler = vi.fn(async () => undefined)
+    const startService = vi.fn(async () => {
+      throw new Error('service failed to start')
+    })
+
+    installedPlugins.set(new Map([['test-plugin', { manifest: makeManifest(), state: 'installed', error: null }]]))
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: {}, activationResult: null })
+    deactivatePluginLoaderMock.mockResolvedValue(undefined)
+    activatePluginLoaderMock.mockResolvedValue({
+      contributions: {
+        views: [{ id: 'main', component: {} as never }],
+        commands: [{ id: 'open-demo', execute: commandHandler }],
+        backgroundServices: [{ id: 'sync', start: startService }],
+      },
+    })
+
+    await expect(activatePlugin('test-plugin')).resolves.toBe(false)
+
+    expect(deactivatePluginLoaderMock).toHaveBeenCalledWith('test-plugin')
+    expect(getRegisteredComponent('plugin:test-plugin:main')).toBeUndefined()
+    await expect(executePluginCommand('test-plugin', 'open-demo')).resolves.toBe(false)
+    expect(get(installedPlugins).get('test-plugin')).toMatchObject({
+      state: 'error',
+      error: 'service failed to start',
+    })
+  })
+
   it('activatePlugin exposes a host context command surface and real event subscription', async () => {
     const manifest = makeManifest()
     installedPlugins.set(new Map([['test-plugin', { manifest, state: 'installed', error: null }]]))
@@ -216,6 +290,9 @@ describe('pluginRegistry', () => {
       currentView: 'board',
       selectedTaskId: null,
     })
+    forceGithubSyncMock.mockResolvedValue({ ok: true })
+    await expect(context.invokeHost('forceGithubSync')).resolves.toEqual({ ok: true })
+    expect(forceGithubSyncMock).toHaveBeenCalledOnce()
 
     const handler = vi.fn()
     const unsubscribe = context.onEvent('selection-changed', handler)
@@ -287,6 +364,31 @@ describe('pluginRegistry', () => {
     emitPluginHostEvent('selection-changed', { selectedTaskId: 'T-456' })
 
     expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('uninstallPlugin tears down runtime contributions and background services', async () => {
+    const stopService = vi.fn(async () => undefined)
+    uninstallPluginIpcMock.mockResolvedValue(undefined)
+    isPluginLoadedMock.mockReturnValue(true)
+    deactivatePluginLoaderMock.mockResolvedValue(undefined)
+    installedPlugins.set(new Map([['test-plugin', { manifest: makeManifest(), state: 'installed', error: null }]]))
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: {}, activationResult: null })
+    activatePluginLoaderMock.mockResolvedValue({
+      contributions: {
+        taskPaneTabs: [{ id: 'activity', component: {} as never }],
+        commands: [{ id: 'open-demo', execute: vi.fn(async () => undefined) }],
+        backgroundServices: [{ id: 'sync', start: async () => undefined, stop: stopService }],
+      },
+    })
+
+    await expect(activatePlugin('test-plugin')).resolves.toBe(true)
+    expect(getRegisteredRenderableComponent('taskPaneTabs', 'test-plugin:activity')).toBeDefined()
+
+    await uninstallPlugin('test-plugin')
+
+    expect(stopService).toHaveBeenCalledOnce()
+    expect(getRegisteredRenderableComponent('taskPaneTabs', 'test-plugin:activity')).toBeUndefined()
+    await expect(executePluginCommand('test-plugin', 'open-demo')).resolves.toBe(false)
   })
 
   it('activatePlugin returns false for plugin not in store', async () => {
@@ -364,5 +466,14 @@ describe('pluginRegistry', () => {
 
     expect(deactivatePluginLoaderMock).toHaveBeenCalledWith('test-plugin')
     expect(getRegisteredComponent('plugin:test-plugin:main')).toBeUndefined()
+  })
+
+  it('initializePluginRuntime installs builtin manifests through the same registry path', async () => {
+    installPluginMock.mockResolvedValue(undefined)
+
+    await initializePluginRuntime()
+
+    expect(installPluginMock).toHaveBeenCalled()
+    expect(installPluginMock.mock.calls.every(([row]) => row.isBuiltin === true)).toBe(true)
   })
 })

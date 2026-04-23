@@ -218,7 +218,13 @@ vi.mock('../../lib/actions', () => ({
 
 import { activeSessions, taskActiveView, commandHeld } from '../../lib/stores'
 import type { Task, AgentSession, TaskWorkspaceInfo } from '../../lib/types'
+import PluginSlotTestView from '../plugin/PluginSlotTestView.svelte'
+import TerminalTaskPane from './TerminalTaskPane.svelte'
+import { clearComponentRegistry, registerRenderableContributionComponent } from '../../lib/plugin/componentRegistry'
+import { enabledPluginIds, installedPlugins } from '../../lib/plugin/pluginStore'
 import TaskDetailView from './TaskDetailView.svelte'
+
+const TERMINAL_VIEW_ID = 'com.openforge.terminal:terminal'
 
 const baseTask: Task = {
   id: 'T-42',
@@ -291,6 +297,29 @@ describe('TaskDetailView', () => {
     taskActiveView.set(new Map())
     commandHeld.set(false)
     taskTabSessions.clear()
+    installedPlugins.set(new Map([[
+      'com.openforge.terminal',
+      {
+        manifest: {
+          id: 'com.openforge.terminal',
+          name: 'Terminal',
+          version: '1.0.0',
+          apiVersion: 1,
+          description: 'Embedded terminal plugin',
+          permissions: [],
+          contributes: {
+            taskPaneTabs: [{ id: 'terminal', title: 'Terminal', icon: 'terminal', order: 10 }],
+          },
+          frontend: 'index.js',
+          backend: null,
+        },
+        state: 'active',
+        error: null,
+      },
+    ]]))
+    enabledPluginIds.set(new Set(['com.openforge.terminal']))
+    clearComponentRegistry()
+    registerRenderableContributionComponent('taskPaneTabs', TERMINAL_VIEW_ID, TerminalTaskPane)
   })
 
   it('renders back button with "back" text', () => {
@@ -364,6 +393,137 @@ describe('TaskDetailView', () => {
     render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
     await waitFor(() => {
       expect(screen.getByText('Go')).toBeTruthy()
+    })
+  })
+
+  it('renders plugin task pane tab buttons from enabled manifests', async () => {
+    const { getTaskWorkspace } = await import('../../lib/ipc')
+    vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo())
+
+    installedPlugins.set(new Map([[
+      'plugin.task-pane',
+      {
+        manifest: {
+          id: 'plugin.task-pane',
+          name: 'Task Pane Plugin',
+          version: '1.0.0',
+          apiVersion: 1,
+          description: 'Adds a task tab',
+          permissions: [],
+          contributes: {
+            taskPaneTabs: [{ id: 'activity', title: 'Activity', icon: 'sparkles', order: 5 }],
+          },
+          frontend: 'index.js',
+          backend: null,
+        },
+        state: 'active',
+        error: null,
+      },
+    ]]))
+    enabledPluginIds.set(new Set(['plugin.task-pane']))
+    registerRenderableContributionComponent('taskPaneTabs', 'plugin.task-pane:activity', PluginSlotTestView)
+
+    render(TaskDetailView, { props: { task: { ...baseTask, status: 'doing' }, onRunAction: mockOnRunAction } })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^activity\b/i })).toBeTruthy()
+    })
+  })
+
+  it('uses namespaced task-pane tab ids to avoid collisions across plugins', async () => {
+    const { getTaskWorkspace } = await import('../../lib/ipc')
+    vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo())
+
+    installedPlugins.set(new Map([
+      ['plugin.a', {
+        manifest: {
+          id: 'plugin.a',
+          name: 'Plugin A',
+          version: '1.0.0',
+          apiVersion: 1,
+          description: 'Plugin A tab',
+          permissions: [],
+          contributes: { taskPaneTabs: [{ id: 'activity', title: 'Activity A', order: 1 }] },
+          frontend: 'index.js',
+          backend: null,
+        },
+        state: 'active',
+        error: null,
+      }],
+      ['plugin.b', {
+        manifest: {
+          id: 'plugin.b',
+          name: 'Plugin B',
+          version: '1.0.0',
+          apiVersion: 1,
+          description: 'Plugin B tab',
+          permissions: [],
+          contributes: { taskPaneTabs: [{ id: 'activity', title: 'Activity B', order: 2 }] },
+          frontend: 'index.js',
+          backend: null,
+        },
+        state: 'active',
+        error: null,
+      }],
+    ]))
+    enabledPluginIds.set(new Set(['plugin.a', 'plugin.b']))
+    registerRenderableContributionComponent('taskPaneTabs', 'plugin.a:activity', PluginSlotTestView)
+    registerRenderableContributionComponent('taskPaneTabs', 'plugin.b:activity', PluginSlotTestView)
+
+    render(TaskDetailView, { props: { task: { ...baseTask, status: 'doing' }, onRunAction: mockOnRunAction } })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Activity A' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Activity B' })).toBeTruthy()
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Activity B' }))
+
+    await waitFor(() => {
+      const slotHost = document.querySelector('[data-slot-type="taskPaneTabs"]')
+      expect(slotHost?.getAttribute('data-slot-id')).toBe('plugin.b:activity')
+    })
+
+    expect(get(taskActiveView).get('T-42')).toBe('plugin.b:activity')
+  })
+
+  it('renders the terminal pane through the plugin task-pane slot path', async () => {
+    const { getTaskWorkspace } = await import('../../lib/ipc')
+    vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo())
+
+    installedPlugins.set(new Map([[
+      'com.openforge.terminal',
+      {
+        manifest: {
+          id: 'com.openforge.terminal',
+          name: 'Terminal',
+          version: '1.0.0',
+          apiVersion: 1,
+          description: 'Terminal plugin',
+          permissions: [],
+          contributes: { taskPaneTabs: [{ id: 'terminal', title: 'Terminal', icon: 'terminal', order: 1 }] },
+          frontend: 'index.js',
+          backend: null,
+        },
+        state: 'active',
+        error: null,
+      },
+    ]]))
+    enabledPluginIds.set(new Set(['com.openforge.terminal']))
+    registerRenderableContributionComponent('taskPaneTabs', 'com.openforge.terminal:terminal', PluginSlotTestView)
+
+    render(TaskDetailView, { props: { task: { ...baseTask, status: 'doing' }, onRunAction: mockOnRunAction } })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^terminal\b/i })).toBeTruthy()
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: /^terminal\b/i }))
+
+    await waitFor(() => {
+      const slotHost = document.querySelector('[data-slot-type="taskPaneTabs"]')
+      expect(slotHost?.getAttribute('data-slot-id')).toBe('com.openforge.terminal:terminal')
+      expect(screen.getByTestId('plugin-slot-view')).toBeTruthy()
     })
   })
 
@@ -575,7 +735,7 @@ describe('TaskDetailView', () => {
     vi.mocked(killPty).mockClear()
     vi.mocked(focusTerminal).mockClear()
 
-    taskActiveView.set(new Map([['T-42', 'terminal']]))
+    taskActiveView.set(new Map([['T-42', TERMINAL_VIEW_ID]]))
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
 
     await waitFor(() => expect(screen.getByText('Shell 1')).toBeTruthy())
@@ -619,7 +779,7 @@ describe('TaskDetailView', () => {
     vi.mocked(killPty).mockClear()
     vi.mocked(focusTerminal).mockClear()
 
-    taskActiveView.set(new Map([['T-42', 'terminal']]))
+    taskActiveView.set(new Map([['T-42', TERMINAL_VIEW_ID]]))
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
 
     await waitFor(() => expect(screen.getByText('Shell 1')).toBeTruthy())
@@ -1371,7 +1531,7 @@ describe('TaskDetailView', () => {
        const { getTaskWorkspace } = await import('../../lib/ipc')
        vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
 
-       taskActiveView.set(new Map([['T-42', 'terminal']]))
+    taskActiveView.set(new Map([['T-42', TERMINAL_VIEW_ID]]))
        render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
 
        await waitFor(() => {
@@ -1401,7 +1561,7 @@ describe('TaskDetailView', () => {
         const { getTaskWorkspace } = await import('../../lib/ipc')
         vi.mocked(getTaskWorkspace).mockResolvedValue(null)
 
-        taskActiveView.set(new Map([['T-42', 'terminal']]))
+    taskActiveView.set(new Map([['T-42', TERMINAL_VIEW_ID]]))
         render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
 
         await waitFor(() => {

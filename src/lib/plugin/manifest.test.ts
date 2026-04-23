@@ -35,6 +35,18 @@ describe('validatePluginManifest', () => {
     expect(errors).toEqual([])
   })
 
+  it('accepts sidebar panel, command, and settings section contributions', () => {
+    const errors = validatePluginManifest(createValidManifest({
+      contributes: {
+        sidebarPanels: [{ id: 'inspector', title: 'Inspector', side: 'right', order: 20 }],
+        commands: [{ id: 'open-demo', title: 'Open Demo', shortcut: 'Cmd+Shift+O' }],
+        settingsSections: [{ id: 'demo-settings', title: 'Demo Settings' }],
+      },
+    }))
+
+    expect(errors).toEqual([])
+  })
+
   it('rejects invalid task pane tab icon key', () => {
     const errors = validatePluginManifest(createValidManifest({
       contributes: {
@@ -53,6 +65,36 @@ describe('validatePluginManifest', () => {
     }))
 
     expect(errors).toContainEqual(expect.objectContaining({ path: 'contributes.backgroundServices[0].name' }))
+  })
+
+  it('rejects sidebar panels with invalid side values', () => {
+    const errors = validatePluginManifest(createValidManifest({
+      contributes: {
+        sidebarPanels: [{ id: 'inspector', title: 'Inspector', side: 'center' }],
+      },
+    }))
+
+    expect(errors).toContainEqual(expect.objectContaining({ path: 'contributes.sidebarPanels[0].side' }))
+  })
+
+  it('rejects commands with invalid shortcut format', () => {
+    const errors = validatePluginManifest(createValidManifest({
+      contributes: {
+        commands: [{ id: 'open-demo', title: 'Open Demo', shortcut: 'BAD+FORMAT+!!!' }],
+      },
+    }))
+
+    expect(errors).toContainEqual(expect.objectContaining({ path: 'contributes.commands[0].shortcut' }))
+  })
+
+  it('rejects settings sections without a title', () => {
+    const errors = validatePluginManifest(createValidManifest({
+      contributes: {
+        settingsSections: [{ id: 'demo-settings' }],
+      },
+    }))
+
+    expect(errors).toContainEqual(expect.objectContaining({ path: 'contributes.settingsSections[0].title' }))
   })
 
   it('rejects manifest without id', () => {
