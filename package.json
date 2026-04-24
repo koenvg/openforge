@@ -4,6 +4,7 @@
   "type": "module",
   "packageManager": "pnpm@10.25.0",
   "scripts": {
+    "build:plugins": "pnpm -r --filter './plugins/*' build",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
