@@ -54,6 +54,7 @@ impl Database {
         migrations::ensure_tasks_columns(&conn)?;
         migrations::ensure_mergeability_columns(&conn)?;
         migrations::ensure_plugin_tables(&conn)?;
+        migrations::ensure_github_poll_interval(&conn)?;
 
         conn.execute("PRAGMA foreign_keys = ON", [])?;
 

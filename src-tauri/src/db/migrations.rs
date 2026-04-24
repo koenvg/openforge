@@ -786,6 +786,37 @@ CREATE TABLE IF NOT EXISTS plugin_storage (
 );
         "#,
     ),
+    M::up_with_hook("", |tx| {
+        let table_exists: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='agent_sessions'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+
+        if !table_exists {
+            return Ok(());
+        }
+
+        let has_pi_session_id: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('agent_sessions') WHERE name = 'pi_session_id'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+
+        if !has_pi_session_id {
+            tx.execute(
+                "ALTER TABLE agent_sessions ADD COLUMN pi_session_id TEXT",
+                [],
+            )
+            .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
+
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -937,8 +968,25 @@ CREATE TABLE IF NOT EXISTS plugin_storage (
     PRIMARY KEY (plugin_id, key),
     FOREIGN KEY (plugin_id) REFERENCES plugins(id) ON DELETE CASCADE
 );
-        "#,
+         "#,
     )?;
+
+    Ok(())
+}
+
+pub(super) fn ensure_github_poll_interval(conn: &Connection) -> Result<()> {
+    let has_config_table: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='config'",
+        [],
+        |r| r.get(0),
+    )?;
+
+    if has_config_table {
+        conn.execute(
+            "UPDATE config SET value = '60' WHERE key = 'github_poll_interval' AND value = '15'",
+            [],
+        )?;
+    }
 
     Ok(())
 }
@@ -963,6 +1011,36 @@ mod tests {
             migration_count(),
             "LATEST_USER_VERSION must stay aligned with the number of declared migrations"
         );
+    }
+
+    #[test]
+    fn test_pi_session_column_exists() {
+        let path = std::env::temp_dir().join(format!(
+            "test_pi_session_column_exists_{}.db",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+
+        let db = Database::new(path.clone()).expect("Database::new");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        let has_pi_session_id: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('agent_sessions') WHERE name = 'pi_session_id'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("check pi_session_id column");
+
+        assert!(
+            has_pi_session_id,
+            "agent_sessions must include pi_session_id column"
+        );
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(&path);
     }
 
     #[test]
@@ -1744,7 +1822,7 @@ mod tests {
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
             conn.execute(
-                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 2),
+                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 3),
                 [],
             )
             .expect("set pre-upgrade user_version");
@@ -1790,7 +1868,7 @@ mod tests {
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
             conn.execute(
-                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 2),
+                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 3),
                 [],
             )
             .expect("set pre-upgrade user_version");

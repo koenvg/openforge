@@ -605,9 +605,7 @@ async fn sync_open_prs(
 
     let mut synced = 0;
     for pr in &github_prs {
-        if let Some(task_id) =
-            find_authoritative_task_id(&pr.title, &pr.head.ref_name, &task_ids)
-        {
+        if let Some(task_id) = find_authoritative_task_id(&pr.title, &pr.head.ref_name, &task_ids) {
             let db_lock = db.lock().unwrap();
             let _ = db_lock.insert_pull_request(
                 pr.number,
@@ -2051,24 +2049,14 @@ mod tests {
         let first_existing_ids = db
             .get_existing_comment_ids(84)
             .expect("get initial existing ids failed");
-        let first_persist = persist_polled_comments(
-            &app_handle,
-            &db,
-            &result,
-            &first_existing_ids,
-            1000,
-        );
+        let first_persist =
+            persist_polled_comments(&app_handle, &db, &result, &first_existing_ids, 1000);
 
         let second_existing_ids = db
             .get_existing_comment_ids(84)
             .expect("get second existing ids failed");
-        let second_persist = persist_polled_comments(
-            &app_handle,
-            &db,
-            &result,
-            &second_existing_ids,
-            1000,
-        );
+        let second_persist =
+            persist_polled_comments(&app_handle, &db, &result, &second_existing_ids, 1000);
 
         let comments = db.get_comments_for_pr(84).expect("get comments failed");
 

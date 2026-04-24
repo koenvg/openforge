@@ -15,6 +15,7 @@ pub struct AgentSessionRow {
     pub updated_at: i64,
     pub provider: String,
     pub claude_session_id: Option<String>,
+    pub pi_session_id: Option<String>,
 }
 
 impl super::Database {
@@ -33,9 +34,20 @@ impl super::Database {
             .expect("time went backwards")
             .as_secs() as i64;
         conn.execute(
-            "INSERT INTO agent_sessions (id, ticket_id, opencode_session_id, stage, status, provider, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            rusqlite::params![id, ticket_id, opencode_session_id, stage, status, provider, now, now],
+            "INSERT INTO agent_sessions (id, ticket_id, opencode_session_id, stage, status, provider, claude_session_id, pi_session_id, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            rusqlite::params![
+                id,
+                ticket_id,
+                opencode_session_id,
+                stage,
+                status,
+                provider,
+                Option::<&str>::None,
+                Option::<&str>::None,
+                now,
+                now
+            ],
         )?;
         Ok(())
     }
@@ -78,11 +90,20 @@ impl super::Database {
         Ok(())
     }
 
+    pub fn set_agent_session_pi_id(&self, id: &str, pi_session_id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE agent_sessions SET pi_session_id = ?1 WHERE id = ?2",
+            [pi_session_id, id],
+        )?;
+        Ok(())
+    }
+
     pub fn get_agent_session(&self, id: &str) -> Result<Option<AgentSessionRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, ticket_id, opencode_session_id, stage, status, checkpoint_data, error_message, created_at, updated_at, provider, claude_session_id
-             FROM agent_sessions WHERE id = ?1",
+            "SELECT id, ticket_id, opencode_session_id, stage, status, checkpoint_data, error_message, created_at, updated_at, provider, claude_session_id, pi_session_id
+              FROM agent_sessions WHERE id = ?1",
         )?;
         let mut rows = stmt.query([id])?;
         if let Some(row) = rows.next()? {
@@ -98,6 +119,7 @@ impl super::Database {
                 updated_at: row.get(8)?,
                 provider: row.get(9)?,
                 claude_session_id: row.get(10)?,
+                pi_session_id: row.get(11)?,
             }))
         } else {
             Ok(None)
@@ -110,8 +132,8 @@ impl super::Database {
     ) -> Result<Option<AgentSessionRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, ticket_id, opencode_session_id, stage, status, checkpoint_data, error_message, created_at, updated_at, provider, claude_session_id
-             FROM agent_sessions WHERE ticket_id = ?1 ORDER BY created_at DESC, rowid DESC LIMIT 1",
+            "SELECT id, ticket_id, opencode_session_id, stage, status, checkpoint_data, error_message, created_at, updated_at, provider, claude_session_id, pi_session_id
+              FROM agent_sessions WHERE ticket_id = ?1 ORDER BY created_at DESC, rowid DESC LIMIT 1",
         )?;
         let mut rows = stmt.query([ticket_id])?;
         if let Some(row) = rows.next()? {
@@ -127,6 +149,7 @@ impl super::Database {
                 updated_at: row.get(8)?,
                 provider: row.get(9)?,
                 claude_session_id: row.get(10)?,
+                pi_session_id: row.get(11)?,
             }))
         } else {
             Ok(None)
@@ -147,8 +170,8 @@ impl super::Database {
             .map(|(i, _)| format!("?{}", i + 1))
             .collect();
         let sql = format!(
-            "SELECT s.id, s.ticket_id, s.opencode_session_id, s.stage, s.status, s.checkpoint_data, s.error_message, s.created_at, s.updated_at, s.provider, s.claude_session_id
-             FROM agent_sessions s
+            "SELECT s.id, s.ticket_id, s.opencode_session_id, s.stage, s.status, s.checkpoint_data, s.error_message, s.created_at, s.updated_at, s.provider, s.claude_session_id, s.pi_session_id
+              FROM agent_sessions s
              INNER JOIN (
                  SELECT ticket_id, MAX(created_at) as max_created
                  FROM agent_sessions
@@ -175,6 +198,7 @@ impl super::Database {
                 updated_at: row.get(8)?,
                 provider: row.get(9)?,
                 claude_session_id: row.get(10)?,
+                pi_session_id: row.get(11)?,
             })
         })?;
         let mut result = Vec::new();
@@ -187,8 +211,8 @@ impl super::Database {
     pub fn get_sessions_by_provider(&self, provider: &str) -> Result<Vec<AgentSessionRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, ticket_id, opencode_session_id, stage, status, checkpoint_data, error_message, created_at, updated_at, provider, claude_session_id
-             FROM agent_sessions WHERE provider = ?1 ORDER BY created_at DESC",
+            "SELECT id, ticket_id, opencode_session_id, stage, status, checkpoint_data, error_message, created_at, updated_at, provider, claude_session_id, pi_session_id
+              FROM agent_sessions WHERE provider = ?1 ORDER BY created_at DESC",
         )?;
         let rows = stmt.query_map([provider], |row| {
             Ok(AgentSessionRow {
@@ -203,6 +227,7 @@ impl super::Database {
                 updated_at: row.get(8)?,
                 provider: row.get(9)?,
                 claude_session_id: row.get(10)?,
+                pi_session_id: row.get(11)?,
             })
         })?;
         let mut result = Vec::new();
@@ -215,8 +240,8 @@ impl super::Database {
     pub fn get_running_claude_sessions(&self) -> Result<Vec<AgentSessionRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, ticket_id, opencode_session_id, stage, status, checkpoint_data, error_message, created_at, updated_at, provider, claude_session_id
-             FROM agent_sessions WHERE provider = 'claude-code' AND status = 'running' ORDER BY created_at DESC",
+            "SELECT id, ticket_id, opencode_session_id, stage, status, checkpoint_data, error_message, created_at, updated_at, provider, claude_session_id, pi_session_id
+              FROM agent_sessions WHERE provider = 'claude-code' AND status = 'running' ORDER BY created_at DESC",
         )?;
         let rows = stmt.query_map([], |row| {
             Ok(AgentSessionRow {
@@ -231,6 +256,7 @@ impl super::Database {
                 updated_at: row.get(8)?,
                 provider: row.get(9)?,
                 claude_session_id: row.get(10)?,
+                pi_session_id: row.get(11)?,
             })
         })?;
         let mut result = Vec::new();
