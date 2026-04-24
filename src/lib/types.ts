@@ -25,6 +25,7 @@ export interface AgentSession {
   updated_at: number;
   provider: string;
   claude_session_id: string | null;
+  pi_session_id: string | null;
 }
 
 export interface ClaudeInstallStatus {

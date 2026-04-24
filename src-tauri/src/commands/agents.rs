@@ -1,6 +1,6 @@
 use crate::{
-    db, opencode_client::OpenCodeClient, pty_manager::PtyManager, server_manager::ServerManager,
-    sse_bridge::SseBridgeManager,
+    db, opencode_client::OpenCodeClient, pi_manager::PiManager, pty_manager::PtyManager,
+    server_manager::ServerManager, sse_bridge::SseBridgeManager,
 };
 use std::sync::{Arc, Mutex};
 use tauri::State;
@@ -23,6 +23,7 @@ pub async fn abort_session(
     server_mgr: State<'_, ServerManager>,
     sse_mgr: State<'_, SseBridgeManager>,
     pty_mgr: State<'_, PtyManager>,
+    pi_mgr: State<'_, PiManager>,
     _app: tauri::AppHandle,
     session_id: String,
 ) -> Result<(), String> {
@@ -42,6 +43,7 @@ pub async fn abort_session(
         pty_mgr.inner().clone(),
         server_mgr.inner().clone(),
         sse_mgr.inner().clone(),
+        pi_mgr.inner().clone(),
     )
     .map_err(|e| format!("Unknown provider: {}", e))?;
 

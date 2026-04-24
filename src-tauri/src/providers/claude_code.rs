@@ -53,6 +53,7 @@ impl ClaudeCodeProvider {
         Ok(ProviderSessionResult {
             port: 0,
             opencode_session_id: None,
+            pi_session_id: None,
         })
     }
 
@@ -101,6 +102,7 @@ impl ClaudeCodeProvider {
         Ok(ProviderSessionResult {
             port: 0,
             opencode_session_id: None,
+            pi_session_id: None,
         })
     }
 
@@ -265,6 +267,7 @@ mod tests {
             updated_at: 0,
             provider: "claude-code".to_string(),
             claude_session_id: claude_session_id.map(str::to_string),
+            pi_session_id: None,
         }
     }
 

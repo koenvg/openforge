@@ -937,18 +937,16 @@
       })
     )
 
-    // Claude PTY exit fallback — if hooks didn't fire, mark session interrupted
+    // PTY exit fallback for terminal-backed agents — if no status hook fired, mark session interrupted
     unlisteners.push(
-      await listen<{ task_id: string }>('claude-pty-exited', (event: Event<{ task_id: string }>) => {
+      await listen<{ task_id: string; success: boolean }>('agent-pty-exited', (event: Event<{ task_id: string; success: boolean }>) => {
         const taskId = event.payload.task_id
+        const success = event.payload.success
         setTimeout(async () => {
-          const session = $activeSessions.get(taskId)
-          if (session && session.status === 'running') {
-            try {
-              await finalizeClaudeSession(taskId)
-            } catch (e) {
-              console.error('[pty-exit] Failed to finalize session for task:', taskId, e)
-            }
+          try {
+            await finalizeClaudeSession(taskId, success)
+          } catch (e) {
+            console.error('[pty-exit] Failed to finalize session for task:', taskId, e)
           }
         }, 1500)
       })

@@ -14,6 +14,7 @@ mod mcp_installer;
 mod migration;
 mod opencode_client;
 mod plugin_installation;
+mod pi_manager;
 mod plugin_host;
 mod plugin_rpc;
 pub mod providers;
@@ -364,6 +365,7 @@ async fn resume_task_servers(
                     updated_at: 0,
                     provider: provider_name.to_string(),
                     claude_session_id: None,
+                    pi_session_id: None,
                 };
                 &dummy_session
             }
@@ -374,6 +376,7 @@ async fn resume_task_servers(
             app.state::<PtyManager>().inner().clone(),
             app.state::<server_manager::ServerManager>().inner().clone(),
             app.state::<sse_bridge::SseBridgeManager>().inner().clone(),
+            app.state::<pi_manager::PiManager>().inner().clone(),
         ) {
             Ok(p) => p,
             Err(e) => {
@@ -409,6 +412,22 @@ async fn resume_task_servers(
 
                     let db = app.state::<Arc<Mutex<db::Database>>>();
                     let db_lock = db.lock().unwrap();
+
+                    if provider_name == "pi" {
+                        if let (Some(session), Some(pi_session_id)) =
+                            (latest_session.as_ref(), result.pi_session_id.as_deref())
+                        {
+                            if session.pi_session_id.as_deref() != Some(pi_session_id) {
+                                if let Err(e) = db_lock.set_agent_session_pi_id(&session.id, pi_session_id) {
+                                    warn!(
+                                        "[startup] Failed to persist resumed Pi session id for {}: {}",
+                                        target.task_id, e
+                                    );
+                                }
+                            }
+                        }
+                    }
+
                     restore_resumed_session_state(
                         &db_lock,
                         latest_session.as_ref(),
@@ -439,8 +458,9 @@ async fn resume_task_servers(
                     provider_name, target.task_id, e
                 );
 
-                // Mark Claude sessions as interrupted on failure
-                if provider_name == "claude-code" {
+                // Mark provider sessions as interrupted on failure for providers that do not
+                // have an external status source to reconcile against after startup.
+                if matches!(provider_name, "claude-code" | "pi") {
                     if let Some(ref session) = latest_session {
                         let db = app.state::<Arc<Mutex<db::Database>>>();
                         let db_lock = db.lock().unwrap();
@@ -758,6 +778,7 @@ fn main() {
             let server_manager = server_manager::ServerManager::new();
             let sse_bridge_manager = sse_bridge::SseBridgeManager::new();
             let pty_manager = PtyManager::new();
+            let pi_manager = crate::pi_manager::PiManager::new();
             let plugin_host = plugin_host::PluginHost::new(app.handle().clone());
             let plugin_host_startup = plugin_host.clone();
             let whisper_manager = WhisperManager::with_active_model(whisper_model_pref);
@@ -767,6 +788,7 @@ fn main() {
             app.manage(server_manager);
             app.manage(sse_bridge_manager);
             app.manage(pty_manager);
+            app.manage(pi_manager);
             app.manage(plugin_host);
             app.manage(whisper_manager);
             app.manage(Arc::new(tokio::sync::Notify::new()));
@@ -877,6 +899,7 @@ fn main() {
             commands::config::get_config,
             commands::config::set_config,
             commands::config::check_opencode_installed,
+            commands::config::check_pi_installed,
             commands::config::get_app_mode,
             commands::config::get_git_branch,
             commands::config::check_claude_installed,
@@ -1034,12 +1057,18 @@ fn main() {
             let sse_mgr = app_handle.state::<sse_bridge::SseBridgeManager>();
             let server_mgr = app_handle.state::<server_manager::ServerManager>();
             let pty_mgr = app_handle.state::<pty_manager::PtyManager>();
+            let pi_mgr = app_handle.state::<crate::pi_manager::PiManager>();
             let plugin_host = app_handle.state::<plugin_host::PluginHost>();
 
             tauri::async_runtime::block_on(async {
                 info!("[shutdown] Killing all PTY sessions...");
 
                 pty_mgr.kill_all().await;
+
+                info!("[shutdown] Killing all Pi processes...");
+                if let Err(e) = pi_mgr.kill_all().await {
+                    error!("[shutdown] Error killing Pi processes: {}", e);
+                }
 
                 info!("[shutdown] Stopping all SSE bridges...");
                 sse_mgr.stop_all().await;

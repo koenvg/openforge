@@ -67,6 +67,7 @@ impl OpenCodeProvider {
         Ok(ProviderSessionResult {
             port,
             opencode_session_id: Some(opencode_session_id),
+            pi_session_id: None,
         })
     }
 
@@ -131,6 +132,7 @@ impl OpenCodeProvider {
                 Ok(ProviderSessionResult {
                     port,
                     opencode_session_id: Some(opencode_session_id),
+                    pi_session_id: None,
                 })
             }
             None => {
@@ -155,6 +157,7 @@ impl OpenCodeProvider {
                 Ok(ProviderSessionResult {
                     port,
                     opencode_session_id: resume_bridge_session_id(session),
+                    pi_session_id: None,
                 })
             }
         }
@@ -225,6 +228,7 @@ mod tests {
             updated_at: 0,
             provider: "opencode".to_string(),
             claude_session_id: None,
+            pi_session_id: None,
         }
     }
 

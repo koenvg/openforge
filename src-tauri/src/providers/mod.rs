@@ -1,5 +1,6 @@
 pub mod claude_code;
 pub mod opencode;
+pub mod pi;
 
 use std::path::Path;
 use tauri::AppHandle;
@@ -7,6 +8,7 @@ use tauri::AppHandle;
 use crate::db::AgentSessionRow;
 use claude_code::ClaudeCodeProvider;
 use opencode::OpenCodeProvider;
+use pi::PiProvider;
 
 // ============================================================================
 // Shared Types
@@ -18,6 +20,7 @@ pub struct ProviderSessionResult {
     /// The port the provider session is listening on (0 if not applicable)
     pub port: u16,
     pub opencode_session_id: Option<String>,
+    pub pi_session_id: Option<String>,
 }
 
 // ============================================================================
@@ -28,6 +31,7 @@ pub struct ProviderSessionResult {
 pub enum Provider {
     ClaudeCode(ClaudeCodeProvider),
     OpenCode(OpenCodeProvider),
+    Pi(PiProvider),
 }
 
 impl Provider {
@@ -39,12 +43,14 @@ impl Provider {
         pty_mgr: crate::pty_manager::PtyManager,
         server_mgr: crate::server_manager::ServerManager,
         sse_mgr: crate::sse_bridge::SseBridgeManager,
+        _pi_mgr: crate::pi_manager::PiManager,
     ) -> Result<Self, String> {
         match name {
             "claude-code" => Ok(Provider::ClaudeCode(ClaudeCodeProvider::new(pty_mgr))),
             "opencode" => Ok(Provider::OpenCode(OpenCodeProvider::new(
                 server_mgr, sse_mgr,
             ))),
+            "pi" => Ok(Provider::Pi(PiProvider::new(pty_mgr))),
             other => Err(format!("Unknown provider: {}", other)),
         }
     }
@@ -79,6 +85,18 @@ impl Provider {
                 .await
             }
             Provider::OpenCode(p) => {
+                p.start(
+                    task_id,
+                    worktree_path,
+                    prompt,
+                    agent,
+                    permission_mode,
+                    model,
+                    app,
+                )
+                .await
+            }
+            Provider::Pi(p) => {
                 p.start(
                     task_id,
                     worktree_path,
@@ -133,6 +151,19 @@ impl Provider {
                 )
                 .await
             }
+            Provider::Pi(p) => {
+                p.resume(
+                    task_id,
+                    session,
+                    worktree_path,
+                    prompt,
+                    agent,
+                    permission_mode,
+                    model,
+                    app,
+                )
+                .await
+            }
         }
     }
 
@@ -141,6 +172,7 @@ impl Provider {
         match self {
             Provider::ClaudeCode(p) => p.abort(task_id, session).await,
             Provider::OpenCode(p) => p.abort(task_id, session).await,
+            Provider::Pi(p) => p.abort(task_id, session).await,
         }
     }
 
@@ -149,6 +181,7 @@ impl Provider {
         match self {
             Provider::ClaudeCode(p) => p.cleanup(task_id).await,
             Provider::OpenCode(p) => p.cleanup(task_id).await,
+            Provider::Pi(p) => p.cleanup(task_id).await,
         }
     }
 
@@ -157,6 +190,7 @@ impl Provider {
         match self {
             Provider::ClaudeCode(p) => p.provider_name(),
             Provider::OpenCode(p) => p.provider_name(),
+            Provider::Pi(p) => p.provider_name(),
         }
     }
 
@@ -165,6 +199,7 @@ impl Provider {
         match self {
             Provider::ClaudeCode(p) => p.provider_session_id(session),
             Provider::OpenCode(p) => p.provider_session_id(session),
+            Provider::Pi(p) => p.provider_session_id(session),
         }
     }
 
@@ -176,6 +211,7 @@ impl Provider {
         match self {
             Provider::ClaudeCode(p) => p.list_commands(project_path),
             Provider::OpenCode(p) => p.list_commands(project_path),
+            Provider::Pi(p) => p.list_commands(project_path),
         }
     }
 
@@ -187,6 +223,7 @@ impl Provider {
         match self {
             Provider::ClaudeCode(p) => p.list_agents(project_path),
             Provider::OpenCode(p) => p.list_agents(project_path),
+            Provider::Pi(p) => p.list_agents(project_path),
         }
     }
 }
@@ -199,10 +236,12 @@ impl Provider {
 mod tests {
     use super::*;
     use crate::db::AgentSessionRow;
+    use crate::providers::pi::PiProvider;
 
     fn make_session(
         claude_session_id: Option<&str>,
         opencode_session_id: Option<&str>,
+        pi_session_id: Option<&str>,
         provider: &str,
     ) -> AgentSessionRow {
         AgentSessionRow {
@@ -217,7 +256,19 @@ mod tests {
             updated_at: 0,
             provider: provider.to_string(),
             claude_session_id: claude_session_id.map(str::to_string),
+            pi_session_id: pi_session_id.map(str::to_string),
         }
+    }
+
+    #[test]
+    fn test_provider_session_result_pi_session_id() {
+        let result = ProviderSessionResult {
+            port: 0,
+            opencode_session_id: None,
+            pi_session_id: Some("pi-session-123".to_string()),
+        };
+
+        assert_eq!(result.pi_session_id, Some("pi-session-123".to_string()));
     }
 
     // ------------------------------------------------------------------
@@ -233,7 +284,7 @@ mod tests {
     #[test]
     fn test_claude_code_provider_session_id_some() {
         let provider = ClaudeCodeProvider::new(crate::pty_manager::PtyManager::new());
-        let session = make_session(Some("claude-abc123"), None, "claude-code");
+        let session = make_session(Some("claude-abc123"), None, None, "claude-code");
         assert_eq!(
             provider.provider_session_id(&session),
             Some("claude-abc123".to_string())
@@ -243,7 +294,7 @@ mod tests {
     #[test]
     fn test_claude_code_provider_session_id_none() {
         let provider = ClaudeCodeProvider::new(crate::pty_manager::PtyManager::new());
-        let session = make_session(None, None, "claude-code");
+        let session = make_session(None, None, None, "claude-code");
         assert_eq!(provider.provider_session_id(&session), None);
     }
 
@@ -266,7 +317,7 @@ mod tests {
             crate::server_manager::ServerManager::new(),
             crate::sse_bridge::SseBridgeManager::new(),
         );
-        let session = make_session(None, Some("oc-xyz789"), "opencode");
+        let session = make_session(None, Some("oc-xyz789"), None, "opencode");
         assert_eq!(
             provider.provider_session_id(&session),
             Some("oc-xyz789".to_string())
@@ -279,8 +330,28 @@ mod tests {
             crate::server_manager::ServerManager::new(),
             crate::sse_bridge::SseBridgeManager::new(),
         );
-        let session = make_session(None, None, "opencode");
+        let session = make_session(None, None, None, "opencode");
         assert_eq!(provider.provider_session_id(&session), None);
+    }
+
+    // ------------------------------------------------------------------
+    // PiProvider tests
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_pi_provider_name() {
+        let provider = PiProvider::new(crate::pty_manager::PtyManager::new());
+        assert_eq!(provider.provider_name(), "pi");
+    }
+
+    #[test]
+    fn test_pi_provider_session_id() {
+        let provider = PiProvider::new(crate::pty_manager::PtyManager::new());
+        let session = make_session(None, None, Some("pi-session-123"), "pi");
+        assert_eq!(
+            provider.provider_session_id(&session),
+            Some("pi-session-123".to_string())
+        );
     }
 
     // ------------------------------------------------------------------
@@ -309,7 +380,7 @@ mod tests {
         let p = Provider::ClaudeCode(ClaudeCodeProvider::new(
             crate::pty_manager::PtyManager::new(),
         ));
-        let session = make_session(Some("claude-abc"), None, "claude-code");
+        let session = make_session(Some("claude-abc"), None, None, "claude-code");
         assert_eq!(
             p.provider_session_id(&session),
             Some("claude-abc".to_string())
@@ -322,8 +393,21 @@ mod tests {
             crate::server_manager::ServerManager::new(),
             crate::sse_bridge::SseBridgeManager::new(),
         ));
-        let session = make_session(None, Some("oc-abc"), "opencode");
+        let session = make_session(None, Some("oc-abc"), None, "opencode");
         assert_eq!(p.provider_session_id(&session), Some("oc-abc".to_string()));
+    }
+
+    #[test]
+    fn test_provider_enum_pi_name() {
+        let p = Provider::Pi(PiProvider::new(crate::pty_manager::PtyManager::new()));
+        assert_eq!(p.provider_name(), "pi");
+    }
+
+    #[test]
+    fn test_provider_enum_pi_session_id() {
+        let p = Provider::Pi(PiProvider::new(crate::pty_manager::PtyManager::new()));
+        let session = make_session(None, None, Some("pi-abc"), "pi");
+        assert_eq!(p.provider_session_id(&session), Some("pi-abc".to_string()));
     }
 
     #[test]
@@ -333,6 +417,7 @@ mod tests {
             crate::pty_manager::PtyManager::new(),
             crate::server_manager::ServerManager::new(),
             crate::sse_bridge::SseBridgeManager::new(),
+            crate::pi_manager::PiManager::new(),
         );
         assert!(result.is_ok());
         assert_eq!(result.unwrap().provider_name(), "claude-code");
@@ -345,9 +430,23 @@ mod tests {
             crate::pty_manager::PtyManager::new(),
             crate::server_manager::ServerManager::new(),
             crate::sse_bridge::SseBridgeManager::new(),
+            crate::pi_manager::PiManager::new(),
         );
         assert!(result.is_ok());
         assert_eq!(result.unwrap().provider_name(), "opencode");
+    }
+
+    #[test]
+    fn test_pi_provider_from_name() {
+        let result = Provider::from_name(
+            "pi",
+            crate::pty_manager::PtyManager::new(),
+            crate::server_manager::ServerManager::new(),
+            crate::sse_bridge::SseBridgeManager::new(),
+            crate::pi_manager::PiManager::new(),
+        );
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().provider_name(), "pi");
     }
 
     #[test]
@@ -357,6 +456,7 @@ mod tests {
             crate::pty_manager::PtyManager::new(),
             crate::server_manager::ServerManager::new(),
             crate::sse_bridge::SseBridgeManager::new(),
+            crate::pi_manager::PiManager::new(),
         );
         assert!(result.is_err());
         assert!(result.err().unwrap().contains("Unknown provider"));

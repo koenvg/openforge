@@ -144,9 +144,8 @@ impl super::Database {
 
     pub fn get_plugin_storage(&self, plugin_id: &str, key: &str) -> Result<Option<String>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT value FROM plugin_storage WHERE plugin_id = ?1 AND key = ?2",
-        )?;
+        let mut stmt =
+            conn.prepare("SELECT value FROM plugin_storage WHERE plugin_id = ?1 AND key = ?2")?;
         let mut rows = stmt.query(rusqlite::params![plugin_id, key])?;
 
         match rows.next()? {

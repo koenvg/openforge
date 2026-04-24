@@ -1,6 +1,6 @@
 use crate::{
-    db, git_worktree, pty_manager::PtyManager, server_manager::ServerManager,
-    sse_bridge::SseBridgeManager,
+    db, git_worktree, pi_manager::PiManager, pty_manager::PtyManager,
+    server_manager::ServerManager, sse_bridge::SseBridgeManager,
 };
 use std::sync::{Arc, Mutex};
 use tauri::{Emitter, State};
@@ -72,7 +72,7 @@ Only create tasks for genuine issues worth addressing. Do not create tasks for m
 pub(crate) fn create_and_record_session(
     db: &std::sync::Arc<std::sync::Mutex<crate::db::Database>>,
     task_id: &str,
-    provider_session_id: Option<&str>,
+    provider_session: &crate::providers::ProviderSessionResult,
     provider_name: &str,
 ) -> Result<String, String> {
     let agent_session_id = uuid::Uuid::new_v4().to_string();
@@ -81,12 +81,20 @@ pub(crate) fn create_and_record_session(
         .create_agent_session(
             &agent_session_id,
             task_id,
-            provider_session_id,
+            provider_session.opencode_session_id.as_deref(),
             "implementing",
             "running",
             provider_name,
         )
         .map_err(|e| format!("Failed to create agent session: {}", e))?;
+
+    if let Some(pi_session_id) = provider_session.pi_session_id.as_deref() {
+        db.lock()
+            .unwrap()
+            .set_agent_session_pi_id(&agent_session_id, pi_session_id)
+            .map_err(|e| format!("Failed to store Pi session ID: {}", e))?;
+    }
+
     Ok(agent_session_id)
 }
 
@@ -140,6 +148,7 @@ pub(crate) async fn abort_task_agent(
     server_mgr: &State<'_, ServerManager>,
     sse_mgr: &State<'_, SseBridgeManager>,
     pty_mgr: &State<'_, PtyManager>,
+    pi_mgr: &State<'_, PiManager>,
     task_id: &str,
 ) -> Result<(), String> {
     let (provider_name, session) = {
@@ -160,6 +169,7 @@ pub(crate) async fn abort_task_agent(
         pty_mgr.inner().clone(),
         server_mgr.inner().clone(),
         sse_mgr.inner().clone(),
+        pi_mgr.inner().clone(),
     )
     .map_err(|e| format!("Unknown provider: {}", e))?;
 
@@ -171,7 +181,7 @@ pub(crate) async fn abort_task_agent(
 
     if let Some(ref s) = session {
         let db_lock = crate::db::acquire_db(db);
-        let status = if provider_name == "claude-code" {
+        let status = if provider_name == "claude-code" || provider_name == "pi" {
             "interrupted"
         } else {
             "failed"
@@ -195,6 +205,7 @@ pub async fn start_implementation(
     server_mgr: State<'_, ServerManager>,
     sse_mgr: State<'_, SseBridgeManager>,
     pty_mgr: State<'_, PtyManager>,
+    pi_mgr: State<'_, PiManager>,
     app: tauri::AppHandle,
     task_id: String,
     repo_path: String,
@@ -230,6 +241,7 @@ pub async fn start_implementation(
         pty_mgr.inner().clone(),
         server_mgr.inner().clone(),
         sse_mgr.inner().clone(),
+        pi_mgr.inner().clone(),
     )
     .map_err(|e| format!("Unknown provider: {}", e))?;
 
@@ -318,12 +330,8 @@ pub async fn start_implementation(
             .map_err(|e| e.to_string())?;
     }
 
-    let agent_session_id = create_and_record_session(
-        db.inner(),
-        &task_id,
-        result.opencode_session_id.as_deref(),
-        provider.provider_name(),
-    )?;
+    let agent_session_id =
+        create_and_record_session(db.inner(), &task_id, &result, provider.provider_name())?;
 
     activate_task(db.inner(), &app, &task_id, &task.status)?;
 
@@ -341,10 +349,11 @@ pub async fn abort_implementation(
     server_mgr: State<'_, ServerManager>,
     sse_mgr: State<'_, SseBridgeManager>,
     pty_mgr: State<'_, PtyManager>,
+    pi_mgr: State<'_, PiManager>,
     app: tauri::AppHandle,
     task_id: String,
 ) -> Result<(), String> {
-    abort_task_agent(&db, &server_mgr, &sse_mgr, &pty_mgr, &task_id).await?;
+    abort_task_agent(&db, &server_mgr, &sse_mgr, &pty_mgr, &pi_mgr, &task_id).await?;
     let _ = app.emit(
         "task-changed",
         serde_json::json!({ "action": "updated", "task_id": task_id }),
@@ -357,24 +366,35 @@ pub async fn finalize_claude_session(
     db: State<'_, Arc<Mutex<db::Database>>>,
     app: tauri::AppHandle,
     task_id: String,
+    success: bool,
 ) -> Result<(), String> {
     let db_lock = crate::db::acquire_db(&db);
     if let Ok(Some(session)) = db_lock.get_latest_session_for_ticket(&task_id) {
-        if session.provider == "claude-code" && session.status == "running" {
+        if matches!(session.provider.as_str(), "claude-code" | "pi") && session.status == "running" {
+            let next_status = if session.provider == "pi" && success {
+                "completed"
+            } else {
+                "interrupted"
+            };
+            let error_message = if next_status == "completed" {
+                None
+            } else {
+                Some("PTY process exited")
+            };
             let _ = db_lock.update_agent_session(
                 &session.id,
                 &session.stage,
-                "interrupted",
+                next_status,
                 None,
-                Some("PTY process exited"),
+                error_message,
             );
             drop(db_lock);
             let _ = app.emit(
                 "agent-status-changed",
                 serde_json::json!({
                     "task_id": task_id,
-                    "status": "interrupted",
-                    "provider": "claude-code"
+                    "status": next_status,
+                    "provider": session.provider
                 }),
             );
         }
@@ -450,7 +470,16 @@ mod tests {
         insert_test_task(&db);
         let db_arc = std::sync::Arc::new(std::sync::Mutex::new(db));
 
-        let result = create_and_record_session(&db_arc, "T-100", None, "claude-code");
+        let result = create_and_record_session(
+            &db_arc,
+            "T-100",
+            &crate::providers::ProviderSessionResult {
+                port: 0,
+                opencode_session_id: None,
+                pi_session_id: None,
+            },
+            "claude-code",
+        );
         assert!(result.is_ok());
         let session_id = result.unwrap();
 
@@ -468,8 +497,15 @@ mod tests {
         insert_test_task(&db);
         let db_arc = std::sync::Arc::new(std::sync::Mutex::new(db));
 
-        let id1 = create_and_record_session(&db_arc, "T-100", None, "claude-code").unwrap();
-        let id2 = create_and_record_session(&db_arc, "T-100", None, "claude-code").unwrap();
+        let provider_session = crate::providers::ProviderSessionResult {
+            port: 0,
+            opencode_session_id: None,
+            pi_session_id: None,
+        };
+        let id1 =
+            create_and_record_session(&db_arc, "T-100", &provider_session, "claude-code").unwrap();
+        let id2 =
+            create_and_record_session(&db_arc, "T-100", &provider_session, "claude-code").unwrap();
         assert_ne!(id1, id2);
 
         drop(db_arc);
@@ -483,8 +519,16 @@ mod tests {
         insert_test_task(&db);
         let db_arc = std::sync::Arc::new(std::sync::Mutex::new(db));
 
-        let result =
-            create_and_record_session(&db_arc, "T-100", Some("opencode-sess-xyz"), "opencode");
+        let result = create_and_record_session(
+            &db_arc,
+            "T-100",
+            &crate::providers::ProviderSessionResult {
+                port: 0,
+                opencode_session_id: Some("opencode-sess-xyz".to_string()),
+                pi_session_id: None,
+            },
+            "opencode",
+        );
         assert!(result.is_ok());
 
         drop(db_arc);

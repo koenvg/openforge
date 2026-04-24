@@ -81,7 +81,7 @@ vi.mock('../../lib/terminalPool', () => ({
   isPtyActive: vi.fn().mockImplementation(() => mockShellLifecycleState.ptyActive),
 }))
 
-import ClaudeAgentPanel from './ClaudeAgentPanel.svelte'
+import PiAgentPanel from './PiAgentPanel.svelte'
 import { activeSessions } from '../../lib/stores'
 
 const baseSession: AgentSession = {
@@ -94,12 +94,12 @@ const baseSession: AgentSession = {
   error_message: null,
   created_at: 1000,
   updated_at: 2000,
-  provider: 'claude-code',
-  claude_session_id: 'claude-sess-abc123',
-  pi_session_id: null,
+  provider: 'pi-code',
+  claude_session_id: null,
+  pi_session_id: 'pi-sess-abc123',
 }
 
-describe('ClaudeAgentPanel', () => {
+describe('PiAgentPanel', () => {
   beforeEach(() => {
     activeSessions.set(new Map())
     mockPoolEntry.ptyActive = false
@@ -108,7 +108,7 @@ describe('ClaudeAgentPanel', () => {
   })
 
   it('renders the terminal container element', async () => {
-    render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
+    render(PiAgentPanel, { props: { taskId: 'T-1' } })
     await vi.waitFor(() => {
       const termWrapper = document.querySelector('.shell-terminal-wrapper')
       expect(termWrapper).toBeTruthy()
@@ -116,14 +116,14 @@ describe('ClaudeAgentPanel', () => {
   })
 
   it('shows "No active agent session" when no session exists', async () => {
-    render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
+    render(PiAgentPanel, { props: { taskId: 'T-1' } })
     await vi.waitFor(() => {
       expect(screen.getByText('No active agent session')).toBeTruthy()
     })
   })
 
   it('shows guidance text when no session exists', async () => {
-    render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
+    render(PiAgentPanel, { props: { taskId: 'T-1' } })
     await vi.waitFor(() => {
       expect(screen.getByText('Use the action buttons in the header to get started')).toBeTruthy()
     })
@@ -134,7 +134,7 @@ describe('ClaudeAgentPanel', () => {
     sessions.set('T-1', baseSession)
     activeSessions.set(sessions)
 
-    render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
+    render(PiAgentPanel, { props: { taskId: 'T-1' } })
     expect(screen.getByText('RUNNING')).toBeTruthy()
   })
 
@@ -143,7 +143,7 @@ describe('ClaudeAgentPanel', () => {
     sessions.set('T-1', baseSession)
     activeSessions.set(sessions)
 
-    render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
+    render(PiAgentPanel, { props: { taskId: 'T-1' } })
     expect(screen.getByText('// implementing')).toBeTruthy()
   })
 
@@ -152,7 +152,7 @@ describe('ClaudeAgentPanel', () => {
     sessions.set('T-1', { ...baseSession, status: 'completed' })
     activeSessions.set(sessions)
 
-    render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
+    render(PiAgentPanel, { props: { taskId: 'T-1' } })
     expect(screen.getByText('COMPLETED')).toBeTruthy()
   })
 
@@ -161,7 +161,7 @@ describe('ClaudeAgentPanel', () => {
     sessions.set('T-1', { ...baseSession, status: 'failed' })
     activeSessions.set(sessions)
 
-    render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
+    render(PiAgentPanel, { props: { taskId: 'T-1' } })
     expect(screen.getByText('FAILED')).toBeTruthy()
   })
 
@@ -170,7 +170,7 @@ describe('ClaudeAgentPanel', () => {
     sessions.set('T-1', { ...baseSession, status: 'interrupted' })
     activeSessions.set(sessions)
 
-    render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
+    render(PiAgentPanel, { props: { taskId: 'T-1' } })
     expect(screen.getByText('INTERRUPTED')).toBeTruthy()
   })
 
@@ -179,23 +179,23 @@ describe('ClaudeAgentPanel', () => {
     sessions.set('T-1', { ...baseSession, status: 'interrupted' })
     activeSessions.set(sessions)
 
-    render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
+    render(PiAgentPanel, { props: { taskId: 'T-1' } })
     await vi.waitFor(() => {
       expect(screen.getByText('Error occurred')).toBeTruthy()
     })
   })
 
-  it('shows claude session id when available', () => {
+  it('shows pi session id when available', () => {
     const sessions = new Map<string, AgentSession>()
     sessions.set('T-1', baseSession)
     activeSessions.set(sessions)
 
-    render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
-    expect(screen.getByText('claude-sess-abc123')).toBeTruthy()
+    render(PiAgentPanel, { props: { taskId: 'T-1' } })
+    expect(screen.getByText('pi-sess-abc123')).toBeTruthy()
   })
 
   it('renders voice input mic button', async () => {
-    render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
+    render(PiAgentPanel, { props: { taskId: 'T-1' } })
     await vi.waitFor(() => {
       const button = screen.getByRole('button', { name: 'Start voice input' })
       expect(button).toBeTruthy()
@@ -207,7 +207,7 @@ describe('ClaudeAgentPanel', () => {
     sessions.set('T-1', baseSession)
     activeSessions.set(sessions)
 
-    render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
+    render(PiAgentPanel, { props: { taskId: 'T-1' } })
     expect(screen.queryByText('No active agent session')).toBeNull()
   })
 
@@ -218,7 +218,7 @@ describe('ClaudeAgentPanel', () => {
     sessions.set('T-1', baseSession)
     activeSessions.set(sessions)
 
-    render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
+    render(PiAgentPanel, { props: { taskId: 'T-1' } })
     await vi.waitFor(() => {
       expect(acquire).toHaveBeenCalledWith('T-1')
     })
@@ -227,7 +227,7 @@ describe('ClaudeAgentPanel', () => {
   it('calls attach with the pooled terminal entry on mount', async () => {
     const { attach } = await import('../../lib/terminalPool')
 
-    render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
+    render(PiAgentPanel, { props: { taskId: 'T-1' } })
     await vi.waitFor(() => {
       expect(attach).toHaveBeenCalledWith(mockPoolEntry, expect.any(HTMLDivElement))
     })
@@ -238,7 +238,7 @@ describe('ClaudeAgentPanel', () => {
     sessions.set('T-1', { ...baseSession, status: 'running' })
     activeSessions.set(sessions)
 
-    render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
+    render(PiAgentPanel, { props: { taskId: 'T-1' } })
     expect(screen.getByText('RUNNING')).toBeTruthy()
 
     const completedSessions = new Map<string, AgentSession>()
@@ -261,7 +261,7 @@ describe('ClaudeAgentPanel', () => {
   })
 
   it('shows starting animation when isStarting=true and no session', async () => {
-    render(ClaudeAgentPanel, { props: { taskId: 'T-1', isStarting: true } })
+    render(PiAgentPanel, { props: { taskId: 'T-1', isStarting: true } })
     await vi.waitFor(() => {
       expect(screen.getByText('Starting agent session...')).toBeTruthy()
       expect(screen.getByText('Preparing workspace and launching agent')).toBeTruthy()
@@ -274,7 +274,7 @@ describe('ClaudeAgentPanel', () => {
     sessions.set('T-1', baseSession)
     activeSessions.set(sessions)
 
-    render(ClaudeAgentPanel, { props: { taskId: 'T-1', isStarting: true } })
+    render(PiAgentPanel, { props: { taskId: 'T-1', isStarting: true } })
     expect(screen.queryByText('Starting agent session...')).toBeNull()
   })
 
@@ -282,7 +282,7 @@ describe('ClaudeAgentPanel', () => {
     mockPoolEntry.ptyActive = false
     mockShellLifecycleState.ptyActive = true
 
-    render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
+    render(PiAgentPanel, { props: { taskId: 'T-1' } })
 
     await vi.waitFor(() => {
       expect(screen.queryByText('No active agent session')).toBeNull()
@@ -294,7 +294,7 @@ describe('ClaudeAgentPanel', () => {
     runningSessions.set('T-1', { ...baseSession, status: 'running' })
     activeSessions.set(runningSessions)
 
-    const { unmount } = render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
+    const { unmount } = render(PiAgentPanel, { props: { taskId: 'T-1' } })
 
     await vi.waitFor(() => {
       expect(screen.queryByRole('button', { name: /abort/i })).toBeTruthy()
@@ -307,7 +307,7 @@ describe('ClaudeAgentPanel', () => {
     completedSessions.set('T-1', { ...baseSession, status: 'completed' })
     activeSessions.set(completedSessions)
 
-    render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
+    render(PiAgentPanel, { props: { taskId: 'T-1' } })
 
     await vi.waitFor(() => {
       expect(screen.queryByText('COMPLETED')).toBeTruthy()

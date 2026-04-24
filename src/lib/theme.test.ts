@@ -130,6 +130,21 @@ describe('theme', () => {
       expect(theme.foreground).toBe('#D8D4DE')
     })
 
+    it('ensures dark terminal ANSI black is distinctly visible from the background', () => {
+      getComputedStyleSpy.mockRestore()
+      const theme = getTerminalTheme('dark')
+      expect(theme.black).not.toEqual(theme.background)
+      expect(theme.black).toBe('#454250')
+    })
+
+    it('ensures light terminal ANSI blue is distinctly visible from ANSI green', () => {
+      getComputedStyleSpy.mockRestore()
+      const theme = getTerminalTheme('light')
+      expect(theme.blue).not.toEqual(theme.green)
+      expect(theme.blue).toBe('#3B329A')
+      expect(theme.green).toBe('#66BB6A')
+    })
+
     it('returns a fresh theme object on each call', () => {
       expect(getTerminalTheme('light')).not.toBe(getTerminalTheme('light'))
     })

@@ -9,16 +9,20 @@ function defaultProps(overrides: Record<string, unknown> = {}) {
     projectPath: '/tmp/test',
     aiProvider: 'claude-code',
     useWorktrees: true,
+    projectColor: '',
     disabled: false,
     opencodeInstalled: false,
     opencodeVersion: null,
     claudeInstalled: true,
     claudeVersion: '1.0.0',
     claudeAuthenticated: true,
+    piInstalled: false,
+    piVersion: null,
     onProjectNameChange: vi.fn(),
     onProjectPathChange: vi.fn(),
     onAiProviderChange: vi.fn(),
     onUseWorktreesChange: vi.fn(),
+    onProjectColorChange: vi.fn(),
     ...overrides,
   }
 }
@@ -75,6 +79,42 @@ describe('SettingsGeneralCard', () => {
           'Run agents in isolated git worktrees. When disabled, agents work directly in the project directory.'
         )
       ).toBeTruthy()
+    })
+  })
+
+  describe('AI Provider', () => {
+    it('renders provider options', () => {
+      render(SettingsGeneralCard, { props: defaultProps() })
+
+      const select = requireElement(screen.getByRole('combobox'), HTMLSelectElement)
+      const options = Array.from(select.options).map((o) => o.value)
+      expect(options).toContain('claude-code')
+      expect(options).toContain('opencode')
+      expect(options).toContain('pi')
+    })
+
+    it('renders Pi installed status', () => {
+      render(SettingsGeneralCard, {
+        props: defaultProps({ piInstalled: true, piVersion: '1.2.3' }),
+      })
+
+      expect(screen.getByText('Pi 1.2.3')).toBeTruthy()
+    })
+
+    it('renders Pi not installed status', () => {
+      render(SettingsGeneralCard, {
+        props: defaultProps({ piInstalled: false, piVersion: null }),
+      })
+
+      expect(screen.getByText('Pi not installed')).toBeTruthy()
+    })
+
+    it('renders warning when selected provider is Pi and not installed', () => {
+      render(SettingsGeneralCard, {
+        props: defaultProps({ aiProvider: 'pi', piInstalled: false }),
+      })
+
+      expect(screen.getByText('Selected provider is not installed')).toBeTruthy()
     })
   })
 })

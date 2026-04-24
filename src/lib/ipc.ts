@@ -139,6 +139,10 @@ export async function checkOpenCodeInstalled(): Promise<{ installed: boolean; pa
   return invoke("check_opencode_installed");
 }
 
+export async function checkPiInstalled(): Promise<{ installed: boolean; path: string | null; version: string | null }> {
+  return invoke("check_pi_installed");
+}
+
 export async function checkClaudeInstalled(): Promise<{ installed: boolean; path: string | null; version: string | null; authenticated: boolean }> {
   return invoke<{ installed: boolean; path: string | null; version: string | null; authenticated: boolean }>("check_claude_installed");
 }
@@ -360,8 +364,8 @@ export async function setWhisperModel(modelSize: WhisperModelSizeId): Promise<vo
   return invoke<void>("set_whisper_model", { modelSize });
 }
 
-export async function finalizeClaudeSession(taskId: string): Promise<void> {
-  return invoke<void>("finalize_claude_session", { taskId });
+export async function finalizeClaudeSession(taskId: string, success: boolean): Promise<void> {
+  return invoke<void>("finalize_claude_session", { taskId, success });
 }
 
 export async function fetchAuthoredPrs(): Promise<AuthoredPullRequest[]> {

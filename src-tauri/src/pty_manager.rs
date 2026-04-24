@@ -9,6 +9,48 @@ use std::sync::Arc;
 use tauri::Emitter;
 use tokio::sync::Mutex;
 
+async fn finalize_agent_pty_exit(
+    sessions: &Arc<Mutex<HashMap<String, PtySession>>>,
+    last_output: &Arc<Mutex<HashMap<String, Arc<AtomicU64>>>>,
+    output_buffers: &Arc<Mutex<HashMap<String, Arc<std::sync::Mutex<RingBuffer>>>>>,
+    pid_file: &Path,
+    session_key: &str,
+    instance_id: u64,
+) -> bool {
+    let removed_session = {
+        let mut sessions = sessions.lock().await;
+        let matches_instance = sessions
+            .get(session_key)
+            .map(|session| session.instance_id == instance_id)
+            .unwrap_or(false);
+        if matches_instance {
+            sessions.remove(session_key)
+        } else {
+            None
+        }
+    };
+
+    let Some(mut session) = removed_session else {
+        return false;
+    };
+
+    {
+        let mut buffers = output_buffers.lock().await;
+        buffers.remove(session_key);
+    }
+
+    {
+        let mut times = last_output.lock().await;
+        times.remove(session_key);
+    }
+
+    let _ = std::fs::remove_file(pid_file);
+
+    tokio::task::spawn_blocking(move || session.child.wait().map(|status| status.success()).unwrap_or(false))
+        .await
+        .unwrap_or(false)
+}
+
 // ============================================================================
 // Ring Buffer
 // ============================================================================
@@ -90,6 +132,7 @@ struct PtySession {
     #[allow(dead_code)]
     master: Box<dyn portable_pty::MasterPty + Send>,
     writer: Box<dyn std::io::Write + Send>,
+    instance_id: u64,
 }
 
 // ============================================================================
@@ -213,6 +256,7 @@ impl PtyManager {
                 child,
                 master: pair.master,
                 writer,
+                instance_id,
             },
         );
 
@@ -489,6 +533,7 @@ impl PtyManager {
                 child,
                 master: pair.master,
                 writer,
+                instance_id,
             },
         );
 
@@ -581,6 +626,10 @@ impl PtyManager {
 
         let task_id_emitter = task_id.to_string();
         let instance_id_emitter = instance_id;
+        let sessions_emitter = Arc::clone(&self.sessions);
+        let last_output_emitter = Arc::clone(&self.last_output);
+        let output_buffers_emitter = Arc::clone(&self.output_buffers);
+        let pid_file_emitter = pid_file.clone();
         tokio::spawn(async move {
             let mut buffer = String::new();
             let mut interval =
@@ -617,9 +666,17 @@ impl PtyManager {
                                     }
                                     buffer.clear();
                                 }
+                                let success = finalize_agent_pty_exit(
+                                    &sessions_emitter,
+                                    &last_output_emitter,
+                                    &output_buffers_emitter,
+                                    &pid_file_emitter,
+                                    &task_id_emitter,
+                                    instance_id_emitter,
+                                ).await;
                                 info!("[PTY] task={} emitter received exit signal", task_id_emitter);
                                 let _ = app_handle.emit(&format!("pty-exit-{}", task_id_emitter), serde_json::json!({"instance_id": instance_id_emitter}));
-                                let _ = app_handle.emit("claude-pty-exited", serde_json::json!({"task_id": &task_id_emitter}));
+                                let _ = app_handle.emit("agent-pty-exited", serde_json::json!({"task_id": &task_id_emitter, "success": success}));
                                 break;
                             }
                         }
@@ -631,6 +688,242 @@ impl PtyManager {
                             }
                             let event_name = format!("pty-output-{}", task_id_emitter);
                              let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer, "instance_id": instance_id_emitter });
+                            if let Err(e) = app_handle.emit(&event_name, &payload) {
+                                warn!("[PTY] Failed to emit {}: {}", event_name, e);
+                            }
+                            buffer.clear();
+                        }
+                    }
+                }
+            }
+        });
+
+        Ok(instance_id)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn spawn_pi_pty(
+        &self,
+        task_id: &str,
+        cwd: &Path,
+        prompt: &str,
+        resume_session_id: Option<&str>,
+        continue_session: bool,
+        cols: u16,
+        rows: u16,
+        app_handle: tauri::AppHandle,
+    ) -> Result<u64, PtyError> {
+        let mut sessions = self.sessions.lock().await;
+
+        if sessions.contains_key(task_id) {
+            info!("[PTY] Replacing existing Pi PTY for task {}", task_id);
+            if let Some(mut old_session) = sessions.remove(task_id) {
+                let _ = old_session.child.kill();
+            }
+            if let Ok(pid_dir) = self.get_pid_dir() {
+                let _ = std::fs::remove_file(pid_dir.join(format!("{}-pty.pid", task_id)));
+            }
+        }
+
+        info!("Spawning Pi PTY for task {} ({}x{})", task_id, cols, rows);
+
+        let pty_system = native_pty_system();
+        let size = PtySize {
+            rows,
+            cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        };
+
+        let pair = pty_system
+            .openpty(size)
+            .map_err(|e| PtyError::SpawnFailed(format!("Failed to create PTY pair: {}", e)))?;
+
+        let mut cmd = CommandBuilder::new("pi");
+        for arg in build_pi_args(prompt, resume_session_id, continue_session) {
+            cmd.arg(arg);
+        }
+        cmd.cwd(cwd);
+
+        let user_env = get_user_environment();
+        for (key, value) in user_env {
+            cmd.env(key, value);
+        }
+
+        cmd.env("TERM", "xterm-256color");
+        cmd.env("COLORTERM", "truecolor");
+        cmd.env("TERM_PROGRAM", "vscode");
+
+        let child = pair
+            .slave
+            .spawn_command(cmd)
+            .map_err(|e| PtyError::SpawnFailed(format!("Failed to spawn command: {}", e)))?;
+
+        drop(pair.slave);
+
+        let pid = child.process_id().unwrap_or(0);
+        info!("Pi PTY for task {} started (PID: {})", task_id, pid);
+
+        let instance_id = NEXT_INSTANCE_ID.fetch_add(1, Ordering::Relaxed);
+
+        let reader = pair
+            .master
+            .try_clone_reader()
+            .map_err(|e| PtyError::SpawnFailed(format!("Failed to clone reader: {}", e)))?;
+
+        let writer = pair
+            .master
+            .take_writer()
+            .map_err(|e| PtyError::SpawnFailed(format!("Failed to take writer: {}", e)))?;
+
+        sessions.insert(
+            task_id.to_string(),
+            PtySession {
+                child,
+                master: pair.master,
+                writer,
+                instance_id,
+            },
+        );
+
+        drop(sessions);
+
+        #[cfg(target_os = "macos")]
+        {
+            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        }
+
+        let pid_dir = self.get_pid_dir()?;
+        std::fs::create_dir_all(&pid_dir)?;
+        let pid_file = pid_dir.join(format!("{}-pty.pid", task_id));
+        std::fs::write(&pid_file, pid.to_string())?;
+
+        let ring_buffer = Arc::new(std::sync::Mutex::new(RingBuffer::new(
+            CLAUDE_BUFFER_CAPACITY,
+        )));
+        {
+            let mut buffers = self.output_buffers.lock().await;
+            buffers.insert(task_id.to_string(), Arc::clone(&ring_buffer));
+        }
+        let ring_buffer_emitter = Arc::clone(&ring_buffer);
+
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Option<String>>();
+
+        let task_id_reader = task_id.to_string();
+        tokio::task::spawn_blocking(move || {
+            let mut reader = reader;
+            let mut buffer = [0u8; 8192];
+            let mut incomplete_utf8: Vec<u8> = Vec::new();
+
+            loop {
+                match reader.read(&mut buffer) {
+                    Ok(0) => {
+                        info!("[PTY] task={} closed (EOF)", task_id_reader);
+                        let _ = tx.send(None);
+                        break;
+                    }
+                    Ok(n) => {
+                        let mut data = if incomplete_utf8.is_empty() {
+                            buffer[..n].to_vec()
+                        } else {
+                            let mut combined = std::mem::take(&mut incomplete_utf8);
+                            combined.extend_from_slice(&buffer[..n]);
+                            combined
+                        };
+
+                        let valid_up_to = find_utf8_boundary(&data);
+                        if valid_up_to < data.len() {
+                            incomplete_utf8 = data[valid_up_to..].to_vec();
+                            data.truncate(valid_up_to);
+                        }
+
+                        if !data.is_empty() {
+                            let text = String::from_utf8_lossy(&data).to_string();
+                            if tx.send(Some(text)).is_err() {
+                                info!(
+                                    "[PTY] task={} channel closed, reader exiting",
+                                    task_id_reader
+                                );
+                                break;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        info!("[PTY] task={} read error: {}", task_id_reader, e);
+                        let _ = tx.send(None);
+                        break;
+                    }
+                }
+            }
+        });
+
+        const FLUSH_INTERVAL_MS: u64 = 16;
+        const MAX_BUFFER_SIZE: usize = 65536;
+
+        let task_id_emitter = task_id.to_string();
+        let instance_id_emitter = instance_id;
+        let sessions_emitter = Arc::clone(&self.sessions);
+        let last_output_emitter = Arc::clone(&self.last_output);
+        let output_buffers_emitter = Arc::clone(&self.output_buffers);
+        let pid_file_emitter = pid_file.clone();
+        tokio::spawn(async move {
+            let mut buffer = String::new();
+            let mut interval =
+                tokio::time::interval(tokio::time::Duration::from_millis(FLUSH_INTERVAL_MS));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+            loop {
+                tokio::select! {
+                    msg = rx.recv() => {
+                        match msg {
+                            Some(Some(text)) => {
+                                buffer.push_str(&text);
+                                if buffer.len() >= MAX_BUFFER_SIZE && !buffer.is_empty() {
+                                    if let Ok(mut buf) = ring_buffer_emitter.lock() {
+                                        buf.push(buffer.as_bytes());
+                                    }
+                                    let event_name = format!("pty-output-{}", task_id_emitter);
+                                    let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer, "instance_id": instance_id_emitter });
+                                    if let Err(e) = app_handle.emit(&event_name, &payload) {
+                                        warn!("[PTY] Failed to emit {}: {}", event_name, e);
+                                    }
+                                    buffer.clear();
+                                }
+                            }
+                            Some(None) | None => {
+                                if !buffer.is_empty() {
+                                    if let Ok(mut buf) = ring_buffer_emitter.lock() {
+                                        buf.push(buffer.as_bytes());
+                                    }
+                                    let event_name = format!("pty-output-{}", task_id_emitter);
+                                    let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer, "instance_id": instance_id_emitter });
+                                    if let Err(e) = app_handle.emit(&event_name, &payload) {
+                                        warn!("[PTY] Failed to emit {}: {}", event_name, e);
+                                    }
+                                    buffer.clear();
+                                }
+                                let success = finalize_agent_pty_exit(
+                                    &sessions_emitter,
+                                    &last_output_emitter,
+                                    &output_buffers_emitter,
+                                    &pid_file_emitter,
+                                    &task_id_emitter,
+                                    instance_id_emitter,
+                                ).await;
+                                info!("[PTY] task={} emitter received exit signal", task_id_emitter);
+                                let _ = app_handle.emit(&format!("pty-exit-{}", task_id_emitter), serde_json::json!({"instance_id": instance_id_emitter}));
+                                let _ = app_handle.emit("agent-pty-exited", serde_json::json!({"task_id": &task_id_emitter, "success": success}));
+                                break;
+                            }
+                        }
+                    }
+                    _ = interval.tick() => {
+                        if !buffer.is_empty() {
+                            if let Ok(mut buf) = ring_buffer_emitter.lock() {
+                                buf.push(buffer.as_bytes());
+                            }
+                            let event_name = format!("pty-output-{}", task_id_emitter);
+                            let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer, "instance_id": instance_id_emitter });
                             if let Err(e) = app_handle.emit(&event_name, &payload) {
                                 warn!("[PTY] Failed to emit {}: {}", event_name, e);
                             }
@@ -726,6 +1019,7 @@ impl PtyManager {
                 child,
                 master: pair.master,
                 writer,
+                instance_id,
             },
         );
 
@@ -1349,6 +1643,24 @@ pub(crate) fn build_claude_args(
     args
 }
 
+pub(crate) fn build_pi_args(
+    prompt: &str,
+    resume_session_id: Option<&str>,
+    continue_session: bool,
+) -> Vec<String> {
+    let mut args = Vec::new();
+    if let Some(session_id) = resume_session_id {
+        args.push("--session".to_string());
+        args.push(session_id.to_string());
+    } else if continue_session {
+        args.push("--continue".to_string());
+    }
+    if !prompt.is_empty() {
+        args.push(prompt.to_string());
+    }
+    args
+}
+
 pub(crate) fn get_shell_path() -> String {
     let shell = std::env::var("SHELL").unwrap_or_default();
     if !shell.is_empty() {
@@ -1837,6 +2149,88 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn test_finalize_agent_pty_exit_ignores_stale_instance() {
+        let manager = PtyManager::new();
+        let pty_system = native_pty_system();
+        let size = PtySize {
+            rows: 24,
+            cols: 80,
+            pixel_width: 0,
+            pixel_height: 0,
+        };
+        let pair = pty_system.openpty(size).expect("openpty should succeed");
+
+        let shell = get_shell_path();
+        let mut cmd = CommandBuilder::new(&shell);
+        cmd.arg("-lc");
+        cmd.arg("sleep 1");
+        let child = pair
+            .slave
+            .spawn_command(cmd)
+            .expect("spawn command should succeed");
+        drop(pair.slave);
+
+        let writer = pair.master.take_writer().expect("take writer should succeed");
+
+        {
+            let mut sessions = manager.sessions.lock().await;
+            sessions.insert(
+                "task-1".to_string(),
+                PtySession {
+                    child,
+                    master: pair.master,
+                    writer,
+                    instance_id: 2,
+                },
+            );
+        }
+
+        let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(128)));
+        {
+            let mut buf = ring.lock().expect("ring buffer should lock");
+            buf.push(b"active output");
+        }
+        {
+            let mut buffers = manager.output_buffers.lock().await;
+            buffers.insert("task-1".to_string(), Arc::clone(&ring));
+        }
+        {
+            let mut times = manager.last_output.lock().await;
+            times.insert("task-1".to_string(), Arc::new(AtomicU64::new(123)));
+        }
+
+        let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+        let pid_file = tmp_dir.path().join("task-1-pty.pid");
+        std::fs::write(&pid_file, "1234").expect("pid file should write");
+
+        let success = finalize_agent_pty_exit(
+            &manager.sessions,
+            &manager.last_output,
+            &manager.output_buffers,
+            &pid_file,
+            "task-1",
+            1,
+        )
+        .await;
+
+        assert!(!success, "stale cleanup should not report a successful exit");
+        {
+            let sessions = manager.sessions.lock().await;
+            let session = sessions.get("task-1").expect("newer session should remain");
+            assert_eq!(session.instance_id, 2);
+        }
+        {
+            let buffers = manager.output_buffers.lock().await;
+            assert!(buffers.contains_key("task-1"), "buffer should remain for active instance");
+        }
+        {
+            let times = manager.last_output.lock().await;
+            assert!(times.contains_key("task-1"), "last_output should remain for active instance");
+        }
+        assert!(pid_file.exists(), "stale cleanup must not remove the active pid file");
+    }
+
     #[test]
     fn test_build_shell_command() {
         let shell = get_shell_path();
@@ -1924,6 +2318,43 @@ mod tests {
             !args.contains(&"--permission-mode".to_string()),
             "--permission-mode should not be present when None"
         );
+    }
+
+    #[test]
+    fn test_build_pi_args_new_session_with_prompt() {
+        let args = build_pi_args("implement the feature", None, false);
+        assert_eq!(args, vec!["implement the feature"]);
+    }
+
+    #[test]
+    fn test_build_pi_args_resume_session_with_prompt() {
+        let args = build_pi_args("continue work", Some("sess-abc-123"), false);
+        assert_eq!(args, vec!["--session", "sess-abc-123", "continue work"]);
+    }
+
+    #[test]
+    fn test_build_pi_args_resume_session_without_prompt() {
+        let args = build_pi_args("", Some("sess-abc-123"), false);
+        assert_eq!(args, vec!["--session", "sess-abc-123"]);
+    }
+
+    #[test]
+    fn test_build_pi_args_continue_session() {
+        let args = build_pi_args("", None, true);
+        assert_eq!(args, vec!["--continue"]);
+    }
+
+    #[test]
+    fn test_build_pi_args_continue_with_prompt() {
+        let args = build_pi_args("what changed?", None, true);
+        assert_eq!(args, vec!["--continue", "what changed?"]);
+    }
+
+    #[test]
+    fn test_build_pi_args_resume_takes_precedence_over_continue() {
+        let args = build_pi_args("", Some("sess-123"), true);
+        assert!(args.contains(&"--session".to_string()));
+        assert!(!args.contains(&"--continue".to_string()));
     }
 
     #[test]

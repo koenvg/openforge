@@ -63,6 +63,8 @@
   let claudeInstalled = $state(false)
   let claudeVersion = $state<string | null>(null)
   let claudeAuthenticated = $state(false)
+  let piInstalled = $state(false)
+  let piVersion = $state<string | null>(null)
 
   // Actions state
   let actions = $state<Action[]>([])
@@ -174,6 +176,8 @@
     claudeInstalled = installationStatus.claudeInstalled
     claudeVersion = installationStatus.claudeVersion
     claudeAuthenticated = installationStatus.claudeAuthenticated
+    piInstalled = installationStatus.piInstalled
+    piVersion = installationStatus.piVersion
 
     modelStatuses = whisperStatuses
 
@@ -373,6 +377,8 @@
           {claudeInstalled}
           {claudeVersion}
           {claudeAuthenticated}
+          {piInstalled}
+          {piVersion}
           onProjectNameChange={(v) => { projectName = v; scheduleSave() }}
           onProjectPathChange={(v) => { projectPath = v; scheduleSave() }}
           onAiProviderChange={(v) => { aiProvider = v; scheduleSave() }}
