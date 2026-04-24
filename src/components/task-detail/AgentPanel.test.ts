@@ -75,6 +75,18 @@ const { listenCallbacks, mockPoolEntry, mockSessionHistoryPort, mockShellLifecyc
   },
 }))
 
+
+vi.mock('@tauri-apps/api/webviewWindow', () => ({
+  getCurrentWebviewWindow: vi.fn().mockReturnValue({
+    listen: vi.fn().mockImplementation((eventName, cb) => {
+      const existing = listenCallbacks.get(eventName) || []
+      existing.push(cb)
+      listenCallbacks.set(eventName, existing)
+      return Promise.resolve(() => {})
+    })
+  })
+}))
+
 vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn().mockImplementation((eventName: string, cb: TauriEventCallback) => {
     const existing = listenCallbacks.get(eventName) || []
@@ -199,6 +211,30 @@ describe('AgentPanel (router)', () => {
     expect(screen.getByText('RUNNING')).toBeTruthy()
     expect(screen.getByText('claude-sess-1')).toBeTruthy()
   })
+
+  it('renders Pi panel for pi provider session', () => {
+    const session: AgentSession = {
+      id: 'ses-1',
+      ticket_id: 'T-1',
+      opencode_session_id: null,
+      stage: 'implement',
+      status: 'running',
+      checkpoint_data: null,
+      error_message: null,
+      created_at: 1000,
+      updated_at: 2000,
+      provider: 'pi',
+      claude_session_id: null,
+    }
+
+    const sessions = new Map<string, AgentSession>()
+    sessions.set('T-1', session)
+    activeSessions.set(sessions)
+
+    render(AgentPanel, { props: { taskId: 'T-1' } })
+    expect(screen.getByTestId('pi-agent-panel')).toBeTruthy()
+  })
+
 })
 
 describe('AgentPanel starting animation', () => {
