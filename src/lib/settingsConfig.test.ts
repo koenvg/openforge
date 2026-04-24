@@ -5,6 +5,7 @@ vi.mock('./ipc', () => ({
   getConfig: vi.fn(),
   checkOpenCodeInstalled: vi.fn(),
   checkClaudeInstalled: vi.fn(),
+  checkPiInstalled: vi.fn(),
   getAllWhisperModelStatuses: vi.fn(),
 }))
 
@@ -21,6 +22,7 @@ import { loadFocusFilterStates } from './boardFilters'
 import {
   checkClaudeInstalled,
   checkOpenCodeInstalled,
+  checkPiInstalled,
   getAllWhisperModelStatuses,
   getConfig,
   getProjectConfig,
@@ -49,6 +51,11 @@ describe('settingsConfig', () => {
       path: null,
       version: null,
       authenticated: false,
+    })
+    vi.mocked(checkPiInstalled).mockResolvedValue({
+      installed: false,
+      path: null,
+      version: null,
     })
     vi.mocked(getAllWhisperModelStatuses).mockResolvedValue([])
   })
@@ -217,6 +224,8 @@ describe('settingsConfig', () => {
         claudeInstalled: true,
         claudeVersion: '2.3.4',
         claudeAuthenticated: true,
+        piInstalled: false,
+        piVersion: null,
       })
     })
 
@@ -232,6 +241,8 @@ describe('settingsConfig', () => {
         claudeInstalled: false,
         claudeVersion: null,
         claudeAuthenticated: false,
+        piInstalled: false,
+        piVersion: null,
       })
     })
   })
