@@ -2,6 +2,7 @@ import { render, fireEvent, screen, cleanup } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { get, writable } from 'svelte/store'
 import type { Task, AgentSession, Project, ProjectAttention, PullRequestInfo, CheckpointNotification, CiFailureNotification, RateLimitNotification, AuthoredPullRequest } from './lib/types'
+import { installPlugin } from './lib/ipc'
 import { requireDefined } from './test-utils/dom'
 
 const callOrder: string[] = []
@@ -19,6 +20,43 @@ const installedPluginRows: Array<{
   installedAt: number
   isBuiltin: boolean
 }> = []
+
+function persistInstalledPluginRow(plugin: {
+  id: string
+  name: string
+  version: string
+  apiVersion: number
+  description: string
+  permissions: string
+  contributes: string
+  frontendEntry: string
+  backendEntry: string | null
+  installPath: string
+  installedAt: number
+  isBuiltin: boolean
+}) {
+  const nextRow = {
+    id: plugin.id,
+    name: plugin.name,
+    version: plugin.version,
+    apiVersion: plugin.apiVersion,
+    description: plugin.description,
+    permissions: plugin.permissions,
+    contributes: plugin.contributes,
+    frontendEntry: plugin.frontendEntry,
+    backendEntry: plugin.backendEntry,
+    installPath: plugin.installPath,
+    installedAt: plugin.installedAt,
+    isBuiltin: plugin.isBuiltin,
+  }
+
+  const existingIndex = installedPluginRows.findIndex((row) => row.id === plugin.id)
+  if (existingIndex >= 0) {
+    installedPluginRows.splice(existingIndex, 1, nextRow)
+  } else {
+    installedPluginRows.push(nextRow)
+  }
+}
 
 const eventListeners = new Map<string, Function>()
 type MockCloseRequestEvent = {
@@ -94,27 +132,7 @@ vi.mock('./lib/stores', () => ({
 
 vi.mock('./lib/ipc', () => ({
   installPlugin: vi.fn(async (plugin) => {
-    const nextRow = {
-      id: plugin.id,
-      name: plugin.name,
-      version: plugin.version,
-      apiVersion: plugin.apiVersion,
-      description: plugin.description,
-      permissions: plugin.permissions,
-      contributes: plugin.contributes,
-      frontendEntry: plugin.frontendEntry,
-      backendEntry: plugin.backendEntry,
-      installPath: plugin.installPath,
-      installedAt: plugin.installedAt,
-      isBuiltin: plugin.isBuiltin,
-    }
-
-    const existingIndex = installedPluginRows.findIndex((row) => row.id === plugin.id)
-    if (existingIndex >= 0) {
-      installedPluginRows.splice(existingIndex, 1, nextRow)
-    } else {
-      installedPluginRows.push(nextRow)
-    }
+    persistInstalledPluginRow(plugin)
   }),
   listPlugins: vi.fn(async () => installedPluginRows.map((row) => ({ ...row }))),
   getEnabledPlugins: vi.fn(async () => installedPluginRows.map((row) => ({ ...row }))),
@@ -307,6 +325,9 @@ describe('App onMount initialization order', () => {
     installedPluginRows.length = 0
     closeRequestedHandler = null
     vi.clearAllMocks()
+    vi.mocked(installPlugin).mockImplementation(async (plugin) => {
+      persistInstalledPluginRow(plugin)
+    })
   })
 
   afterEach(() => {
@@ -318,7 +339,7 @@ describe('App onMount initialization order', () => {
     const { installPlugin, getProjects } = await import('./lib/ipc')
     const stores = await import('./lib/stores')
 
-    vi.mocked(installPlugin).mockRejectedValue(new Error('Failed to install plugin: no such table: plugins'))
+    vi.mocked(installPlugin).mockRejectedValueOnce(new Error('Failed to install plugin: no such table: plugins'))
 
     const App = (await import('./App.svelte')).default
     render(App)

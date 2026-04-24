@@ -974,7 +974,11 @@
     )
 
     // Phase 2: Load data
-    await initializePluginRuntime()
+    try {
+      await initializePluginRuntime()
+    } catch (e) {
+      console.error('[App] Failed to initialize plugin runtime:', e)
+    }
     await loadProjects()
 
     try {
