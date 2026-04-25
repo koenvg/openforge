@@ -5,7 +5,7 @@ import PluginSlotTestView from './PluginSlotTestView.svelte'
 import PluginSlotCrashingView from './PluginSlotCrashingView.svelte'
 import { installedPlugins, enabledPluginIds } from '../../lib/plugin/pluginStore'
 import type { PluginEntry, PluginManifest } from '../../lib/plugin/types'
-import { clearComponentRegistry, registerViewComponent } from '../../lib/plugin/componentRegistry'
+import { clearComponentRegistry, registerRenderableContributionComponent, registerViewComponent } from '../../lib/plugin/componentRegistry'
 import { makePluginViewKey } from '../../lib/plugin/types'
 
 const { activatePluginMock } = vi.hoisted(() => ({
@@ -36,6 +36,13 @@ function makeViewManifest(pluginId: string = 'test-plugin'): PluginManifest {
     },
     frontend: 'index.js',
     backend: null,
+  }
+}
+
+function makeManifestWithContribution(contributes: PluginManifest['contributes'], pluginId: string = 'test-plugin'): PluginManifest {
+  return {
+    ...makeViewManifest(pluginId),
+    contributes,
   }
 }
 
@@ -160,6 +167,63 @@ describe('PluginSlot', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toContain('plugin render failed')
+    })
+  })
+
+  it('renders a registered task pane tab contribution component', async () => {
+    const manifest = makeManifestWithContribution({
+      taskPaneTabs: [{ id: 'activity', title: 'Activity' }],
+    })
+
+    installedPlugins.set(new Map([['test-plugin', { manifest, state: 'active', error: null }]]))
+    enabledPluginIds.set(new Set(['test-plugin']))
+    registerRenderableContributionComponent('taskPaneTabs', 'test-plugin:activity', PluginSlotTestView)
+
+    render(PluginSlot, {
+      props: {
+        slotType: 'taskPaneTabs',
+        slotId: 'test-plugin:activity',
+        projectName: 'Project Gamma',
+        taskId: 'T-42',
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('plugin-slot-view').textContent).toContain('Project Gamma')
+    })
+  })
+
+  it('renders registered settings section and sidebar panel components', async () => {
+    const manifest = makeManifestWithContribution({
+      settingsSections: [{ id: 'preferences', title: 'Preferences' }],
+      sidebarPanels: [{ id: 'inspector', title: 'Inspector', side: 'right' }],
+    })
+
+    installedPlugins.set(new Map([['test-plugin', { manifest, state: 'active', error: null }]]))
+    enabledPluginIds.set(new Set(['test-plugin']))
+    registerRenderableContributionComponent('settingsSections', 'test-plugin:preferences', PluginSlotTestView)
+    registerRenderableContributionComponent('sidebarPanels', 'test-plugin:inspector', PluginSlotTestView)
+
+    const { rerender } = render(PluginSlot, {
+      props: {
+        slotType: 'settingsSections',
+        slotId: 'test-plugin:preferences',
+        projectName: 'Project Delta',
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('plugin-slot-view').textContent).toContain('Project Delta')
+    })
+
+    await rerender({
+      slotType: 'sidebarPanels',
+      slotId: 'test-plugin:inspector',
+      projectName: 'Project Delta',
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('plugin-slot-view').textContent).toContain('Project Delta')
     })
   })
 })

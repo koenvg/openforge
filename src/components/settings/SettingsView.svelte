@@ -21,6 +21,9 @@
   import type { ThemeMode } from '../../lib/theme'
   import type { Action, WhisperModelStatus, WhisperModelSizeId } from '../../lib/types'
   import type { TaskState } from '../../lib/taskState'
+  import { resolveContributions } from '../../lib/plugin/contributionResolver'
+  import { enabledPluginIds, installedPlugins } from '../../lib/plugin/pluginStore'
+  import type { PluginManifest } from '../../lib/plugin/types'
   import SettingsGeneralCard from './SettingsGeneralCard.svelte'
   import SettingsFocusFilterCard from './SettingsFocusFilterCard.svelte'
   import SettingsIntegrationsCard from './SettingsIntegrationsCard.svelte'
@@ -31,6 +34,7 @@
   import SettingsActionsCard from './SettingsActionsCard.svelte'
   import SettingsExperimentalCard from './SettingsExperimentalCard.svelte'
   import ProjectPageHeader from '../project/ProjectPageHeader.svelte'
+  import PluginSlot from '../plugin/PluginSlot.svelte'
   import PluginSettingsPanel from '../plugin/PluginSettingsPanel.svelte'
 
   interface Props {
@@ -114,6 +118,12 @@
   // Derived state
   const hasProject = $derived(!!$activeProjectId)
   const activePage = $derived(mode === 'global' ? 'global' : mode === 'project' ? 'project' : (globalSections.includes(activeSection) ? 'global' : 'project'))
+  let enabledPluginManifests = $derived(
+    Array.from($enabledPluginIds)
+      .map((id) => $installedPlugins.get(id)?.manifest)
+      .filter((manifest): manifest is PluginManifest => manifest !== undefined)
+  )
+  let pluginSettingsSections = $derived(resolveContributions(enabledPluginManifests).settingsSections)
 
   // Sync project name/path from project list
   $effect(() => {
@@ -408,6 +418,22 @@
           projectId={$activeProjectId || ''}
           disabled={!hasProject}
         />
+
+        {#each pluginSettingsSections as section (section.namespacedId)}
+          <div class="bg-base-100 rounded-lg border border-base-300 overflow-hidden">
+            <div class="px-5 py-3 border-b border-base-300">
+              <h3 class="text-sm font-semibold text-base-content m-0">{section.title}</h3>
+            </div>
+            <div class="p-5">
+              <PluginSlot
+                slotType="settingsSections"
+                slotId={section.namespacedId}
+                projectId={$activeProjectId}
+                projectName={projectName}
+              />
+            </div>
+          </div>
+        {/each}
 
         <SettingsActionsCard
           {actions}

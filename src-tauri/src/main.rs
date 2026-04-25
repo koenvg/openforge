@@ -190,11 +190,22 @@ fn resolve_plugin_asset_path(
 ) -> Result<PathBuf, String> {
     validate_plugin_id(plugin_id)?;
 
-    if rel_path.contains("..") {
+    let relative_path = Path::new(rel_path);
+    if relative_path.is_absolute() || rel_path.contains("..") {
         return Err("Forbidden".to_string());
     }
 
-    Ok(install_base_dir.join(rel_path))
+    let candidate = install_base_dir.join(relative_path);
+    let canonical_install_base_dir = install_base_dir
+        .canonicalize()
+        .map_err(|_| "Forbidden".to_string())?;
+    let canonical_candidate = candidate.canonicalize().map_err(|_| "Forbidden".to_string())?;
+
+    if !canonical_candidate.starts_with(&canonical_install_base_dir) {
+        return Err("Forbidden".to_string());
+    }
+
+    Ok(canonical_candidate)
 }
 
 fn resolve_plugin_asset_path_for_request<R: tauri::Runtime>(
@@ -1369,12 +1380,31 @@ mod tests {
 
     #[test]
     fn resolve_plugin_asset_path_uses_install_base_dir() {
-        let install_base_dir = Path::new("/tmp/plugin");
+        let temp = tempfile::tempdir().expect("tempdir should create");
+        let install_base_dir = temp.path();
+        fs::create_dir_all(install_base_dir.join("assets")).expect("assets dir should create");
+        fs::write(install_base_dir.join("assets/index.js"), "export const ok = true;")
+            .expect("asset file should write");
 
         let path = resolve_plugin_asset_path(install_base_dir, "my-plugin", "assets/index.js")
             .expect("valid plugin id should be accepted");
 
-        assert_eq!(path, Path::new("/tmp/plugin/assets/index.js"));
+        assert!(path.ends_with("assets/index.js"));
+    }
+
+    #[test]
+    fn resolve_plugin_asset_path_rejects_absolute_and_traversal_paths() {
+        let temp = tempfile::tempdir().expect("tempdir should create");
+        let install_base_dir = temp.path();
+        fs::create_dir_all(install_base_dir.join("assets")).expect("assets dir should create");
+        fs::write(install_base_dir.join("assets/index.js"), "export const ok = true;")
+            .expect("asset file should write");
+
+        for rel_path in ["/etc/passwd", "../outside.js"] {
+            let err = resolve_plugin_asset_path(install_base_dir, "my-plugin", rel_path)
+                .expect_err("invalid asset path should be rejected");
+            assert_eq!(err, "Forbidden");
+        }
     }
 
     #[test]

@@ -1,6 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { validatePluginManifest } from '@openforge/plugin-sdk'
 import manifest from '../manifest.json'
+
+const { mockTerminalTaskPane } = vi.hoisted(() => ({
+  mockTerminalTaskPane: { name: 'TerminalTaskPaneComponent' },
+}))
+
+vi.mock('../../../src/components/task-detail/TerminalTaskPane.svelte', () => ({
+  default: mockTerminalTaskPane,
+}))
 
 describe('terminal plugin', () => {
   it('has a valid manifest', () => {
@@ -8,7 +16,7 @@ describe('terminal plugin', () => {
     expect(errors).toEqual([])
   })
 
-  it('activates without error', async () => {
+  it('activates task pane and background service implementations', async () => {
     const { activate } = await import('./index')
     const result = await activate({
       pluginId: 'test-plugin',
@@ -17,7 +25,13 @@ describe('terminal plugin', () => {
       onEvent: () => () => {},
       storage: { get: async () => null, set: async () => {} },
     })
-    expect(result).toBeDefined()
+    expect(result.contributions.taskPaneTabs).toHaveLength(1)
+    expect(result.contributions.taskPaneTabs?.[0]).toMatchObject({
+      id: 'terminal',
+      component: mockTerminalTaskPane,
+    })
+    expect(result.contributions.backgroundServices).toHaveLength(1)
+    expect(result.contributions.backgroundServices?.[0]?.id).toBe('pty-manager')
   })
 
   it('deactivates without error', async () => {

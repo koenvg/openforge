@@ -84,6 +84,51 @@ describe('Plugin SDK', () => {
       expect(typeof validatePluginManifest).toBe('function')
       expect(MAX_SUPPORTED_API_VERSION).toBeGreaterThan(0)
     })
+
+    it('validates every supported contribution type from the manifest', () => {
+      const errors = validatePluginManifest({
+        id: 'com.openforge.demo',
+        name: 'Demo Plugin',
+        version: '1.0.0',
+        apiVersion: 1,
+        description: 'Valid demo plugin',
+        permissions: [],
+        contributes: {
+          views: [{ id: 'main', title: 'Main', icon: 'plug', shortcut: 'Cmd+Shift+M' }],
+          taskPaneTabs: [{ id: 'activity', title: 'Activity', icon: 'sparkles', order: 10 }],
+          sidebarPanels: [{ id: 'inspector', title: 'Inspector', side: 'right', order: 20 }],
+          commands: [{ id: 'open-demo', title: 'Open Demo', shortcut: 'Cmd+Shift+O' }],
+          settingsSections: [{ id: 'demo-settings', title: 'Demo Settings' }],
+          backgroundServices: [{ id: 'sync', name: 'Sync Worker' }],
+        },
+        frontend: 'dist/index.js',
+        backend: null,
+      })
+
+      expect(errors).toEqual([])
+    })
+
+    it('rejects malformed sidebar panels, commands, and settings sections', () => {
+      const errors = validatePluginManifest({
+        id: 'com.openforge.demo',
+        name: 'Demo Plugin',
+        version: '1.0.0',
+        apiVersion: 1,
+        description: 'Broken demo plugin',
+        permissions: [],
+        contributes: {
+          sidebarPanels: [{ id: 'inspector', title: 'Inspector', side: 'center' }],
+          commands: [{ id: 'open-demo', title: 'Open Demo', shortcut: 'not-a-shortcut' }],
+          settingsSections: [{ id: '', title: 'Demo Settings' }],
+        },
+        frontend: 'dist/index.js',
+        backend: null,
+      })
+
+      expect(errors).toContainEqual(expect.objectContaining({ path: 'contributes.sidebarPanels[0].side' }))
+      expect(errors).toContainEqual(expect.objectContaining({ path: 'contributes.commands[0].shortcut' }))
+      expect(errors).toContainEqual(expect.objectContaining({ path: 'contributes.settingsSections[0].id' }))
+    })
   })
 
   describe('helpers', () => {

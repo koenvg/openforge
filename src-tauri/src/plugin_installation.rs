@@ -1,12 +1,21 @@
 use crate::db;
 use serde::Deserialize;
 use serde_json::Value;
+use regex::Regex;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::process::Command;
 
 const NPM_PATH_ENV: &str = "OPENFORGE_NPM_PATH";
+
+fn shortcut_pattern() -> &'static Regex {
+    static SHORTCUT_PATTERN: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    SHORTCUT_PATTERN.get_or_init(|| {
+        Regex::new(r"^(?:(?:Cmd|Ctrl|Alt|Shift)\+)*(?:[a-zA-Z0-9]|F\d{1,2}|Space|Enter|Tab|Backspace|Escape)$")
+            .expect("shortcut regex should compile")
+    })
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -159,25 +168,169 @@ fn validate_manifest(manifest: &PluginManifestFile, dir: &Path) -> Result<(), St
         return Err("plugin manifest frontend entry cannot be empty".to_string());
     }
 
-    let frontend_path = dir.join(&manifest.frontend);
-    if !frontend_path.is_file() {
-        return Err(format!(
-            "plugin frontend entry does not exist: {}",
-            frontend_path.display()
-        ));
-    }
+    validate_relative_entry_path(dir, &manifest.frontend, "frontend")?;
 
     if let Some(backend) = &manifest.backend {
         if backend.trim().is_empty() {
             return Err("plugin manifest backend entry cannot be empty when provided".to_string());
         }
 
-        let backend_path = dir.join(backend);
-        if !backend_path.is_file() {
-            return Err(format!(
-                "plugin backend entry does not exist: {}",
-                backend_path.display()
-            ));
+        validate_relative_entry_path(dir, backend, "backend")?;
+    }
+
+    validate_contributions(&manifest.contributes)?;
+
+    Ok(())
+}
+
+fn validate_relative_entry_path(dir: &Path, entry: &str, field_name: &str) -> Result<(), String> {
+    let entry_path = Path::new(entry);
+    if entry_path.is_absolute() {
+        return Err(format!(
+            "plugin manifest {field_name} entry must stay within the plugin directory"
+        ));
+    }
+
+    if entry_path
+        .components()
+        .any(|component| matches!(component, Component::ParentDir))
+    {
+        return Err(format!(
+            "plugin manifest {field_name} entry must stay within the plugin directory"
+        ));
+    }
+
+    let candidate = dir.join(entry_path);
+    if !candidate.is_file() {
+        return Err(format!(
+            "plugin {field_name} entry does not exist: {}",
+            candidate.display()
+        ));
+    }
+
+    let canonical_dir = dir
+        .canonicalize()
+        .map_err(|error| format!("failed to canonicalize plugin directory {}: {error}", dir.display()))?;
+    let canonical_candidate = candidate.canonicalize().map_err(|error| {
+        format!(
+            "failed to canonicalize plugin {field_name} entry {}: {error}",
+            candidate.display()
+        )
+    })?;
+
+    if !canonical_candidate.starts_with(&canonical_dir) {
+        return Err(format!(
+            "plugin manifest {field_name} entry must stay within the plugin directory"
+        ));
+    }
+
+    Ok(())
+}
+
+fn validate_required_string_field(value: Option<&Value>, path: &str) -> Result<String, String> {
+    match value.and_then(Value::as_str).map(str::trim) {
+        Some(value) if !value.is_empty() => Ok(value.to_string()),
+        _ => Err(format!("plugin manifest {} must be a non-empty string", path)),
+    }
+}
+
+fn validate_optional_number_field(value: Option<&Value>, path: &str) -> Result<(), String> {
+    if let Some(value) = value {
+        if !value.is_number() {
+            return Err(format!("plugin manifest {} must be a number", path));
+        }
+    }
+    Ok(())
+}
+
+fn validate_optional_shortcut_field(value: Option<&Value>, path: &str) -> Result<(), String> {
+    if let Some(value) = value {
+        let shortcut = value
+            .as_str()
+            .ok_or_else(|| format!("plugin manifest {} must be a string", path))?;
+        if !shortcut_pattern().is_match(shortcut) {
+            return Err(format!("plugin manifest {} has invalid shortcut format", path));
+        }
+    }
+    Ok(())
+}
+
+fn validate_array<'a>(
+    value: Option<&'a Value>,
+    path: &'a str,
+) -> Result<Vec<&'a serde_json::Map<String, Value>>, String> {
+    let entries = value
+        .ok_or_else(|| format!("plugin manifest {} must be an array", path))?
+        .as_array()
+        .ok_or_else(|| format!("plugin manifest {} must be an array", path))?;
+
+    entries
+        .iter()
+        .enumerate()
+        .map(|(index, item)| {
+            item.as_object()
+                .ok_or_else(|| format!("plugin manifest {}[{}] must be an object", path, index))
+        })
+        .collect()
+}
+
+fn validate_contributions(contributes: &Value) -> Result<(), String> {
+    let contributes = contributes
+        .as_object()
+        .ok_or_else(|| "plugin manifest contributes must be an object".to_string())?;
+
+    if let Some(views) = contributes.get("views") {
+        for (index, view) in validate_array(Some(views), "contributes.views")?.into_iter().enumerate() {
+            validate_required_string_field(view.get("id"), &format!("contributes.views[{index}].id"))?;
+            validate_required_string_field(view.get("title"), &format!("contributes.views[{index}].title"))?;
+            validate_required_string_field(view.get("icon"), &format!("contributes.views[{index}].icon"))?;
+            validate_optional_number_field(view.get("railOrder"), &format!("contributes.views[{index}].railOrder"))?;
+            validate_optional_shortcut_field(view.get("shortcut"), &format!("contributes.views[{index}].shortcut"))?;
+        }
+    }
+
+    if let Some(task_pane_tabs) = contributes.get("taskPaneTabs") {
+        for (index, tab) in validate_array(Some(task_pane_tabs), "contributes.taskPaneTabs")?.into_iter().enumerate() {
+            validate_required_string_field(tab.get("id"), &format!("contributes.taskPaneTabs[{index}].id"))?;
+            validate_required_string_field(tab.get("title"), &format!("contributes.taskPaneTabs[{index}].title"))?;
+            if let Some(icon) = tab.get("icon") {
+                validate_required_string_field(Some(icon), &format!("contributes.taskPaneTabs[{index}].icon"))?;
+            }
+            validate_optional_number_field(tab.get("order"), &format!("contributes.taskPaneTabs[{index}].order"))?;
+        }
+    }
+
+    if let Some(sidebar_panels) = contributes.get("sidebarPanels") {
+        for (index, panel) in validate_array(Some(sidebar_panels), "contributes.sidebarPanels")?.into_iter().enumerate() {
+            validate_required_string_field(panel.get("id"), &format!("contributes.sidebarPanels[{index}].id"))?;
+            validate_required_string_field(panel.get("title"), &format!("contributes.sidebarPanels[{index}].title"))?;
+            let side = validate_required_string_field(panel.get("side"), &format!("contributes.sidebarPanels[{index}].side"))?;
+            if side != "left" && side != "right" {
+                return Err(format!("plugin manifest contributes.sidebarPanels[{index}].side must be 'left' or 'right'"));
+            }
+            validate_optional_number_field(panel.get("order"), &format!("contributes.sidebarPanels[{index}].order"))?;
+        }
+    }
+
+    if let Some(commands) = contributes.get("commands") {
+        for (index, command) in validate_array(Some(commands), "contributes.commands")?.into_iter().enumerate() {
+            validate_required_string_field(command.get("id"), &format!("contributes.commands[{index}].id"))?;
+            validate_required_string_field(command.get("title"), &format!("contributes.commands[{index}].title"))?;
+            validate_optional_shortcut_field(command.get("shortcut"), &format!("contributes.commands[{index}].shortcut"))?;
+        }
+    }
+
+    if let Some(settings_sections) = contributes.get("settingsSections") {
+        for (index, section) in validate_array(Some(settings_sections), "contributes.settingsSections")?.into_iter().enumerate() {
+            validate_required_string_field(section.get("id"), &format!("contributes.settingsSections[{index}].id"))?;
+            validate_required_string_field(section.get("title"), &format!("contributes.settingsSections[{index}].title"))?;
+        }
+    }
+
+    if let Some(background_services) = contributes.get("backgroundServices") {
+        for (index, service) in validate_array(Some(background_services), "contributes.backgroundServices")?.into_iter().enumerate() {
+            validate_required_string_field(service.get("id"), &format!("contributes.backgroundServices[{index}].id"))?;
+            validate_required_string_field(service.get("name"), &format!("contributes.backgroundServices[{index}].name"))?;
         }
     }
 
@@ -386,6 +539,162 @@ mod tests {
     }
 
     #[test]
+    fn install_local_plugin_bundle_rejects_frontend_path_traversal() {
+        let source = tempdir().expect("source tempdir should create");
+        let managed = tempdir().expect("managed tempdir should create");
+        fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
+        fs::write(source.path().join("dist/index.js"), "export const x = 1;")
+            .expect("frontend should write");
+        write_manifest(
+            source.path(),
+            r#"{
+                "id": "com.example.invalid-path",
+                "name": "Broken Path Plugin",
+                "version": "1.0.0",
+                "apiVersion": 1,
+                "description": "Broken plugin",
+                "permissions": [],
+                "contributes": {},
+                "frontend": "../dist/index.js",
+                "backend": null
+            }"#,
+        );
+
+        let result = install_local_plugin_bundle(source.path(), managed.path());
+
+        assert!(result.is_err());
+        assert!(result
+            .expect_err("install should fail")
+            .contains("must stay within the plugin directory"));
+    }
+
+    #[test]
+    fn install_local_plugin_bundle_rejects_absolute_frontend_path() {
+        let source = tempdir().expect("source tempdir should create");
+        let managed = tempdir().expect("managed tempdir should create");
+        fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
+        fs::write(source.path().join("dist/index.js"), "export const x = 1;")
+            .expect("frontend should write");
+        write_manifest(
+            source.path(),
+            r#"{
+                "id": "com.example.absolute-frontend",
+                "name": "Broken Absolute Frontend Plugin",
+                "version": "1.0.0",
+                "apiVersion": 1,
+                "description": "Broken plugin",
+                "permissions": [],
+                "contributes": {},
+                "frontend": "/tmp/index.js",
+                "backend": null
+            }"#,
+        );
+
+        let result = install_local_plugin_bundle(source.path(), managed.path());
+
+        assert!(result.is_err());
+        assert!(result
+            .expect_err("install should fail")
+            .contains("must stay within the plugin directory"));
+    }
+
+    #[test]
+    fn install_local_plugin_bundle_rejects_backend_path_traversal() {
+        let source = tempdir().expect("source tempdir should create");
+        let managed = tempdir().expect("managed tempdir should create");
+        fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
+        fs::write(source.path().join("dist/index.js"), "export const x = 1;")
+            .expect("frontend should write");
+        fs::write(source.path().join("backend.js"), "export async function run() {}")
+            .expect("backend should write");
+        write_manifest(
+            source.path(),
+            r#"{
+                "id": "com.example.invalid-backend-path",
+                "name": "Broken Backend Path Plugin",
+                "version": "1.0.0",
+                "apiVersion": 1,
+                "description": "Broken plugin",
+                "permissions": [],
+                "contributes": {},
+                "frontend": "dist/index.js",
+                "backend": "../backend.js"
+            }"#,
+        );
+
+        let result = install_local_plugin_bundle(source.path(), managed.path());
+
+        assert!(result.is_err());
+        assert!(result
+            .expect_err("install should fail")
+            .contains("must stay within the plugin directory"));
+    }
+
+    #[test]
+    fn install_local_plugin_bundle_rejects_invalid_sidebar_panel_contribution() {
+        let source = tempdir().expect("source tempdir should create");
+        let managed = tempdir().expect("managed tempdir should create");
+        fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
+        fs::write(source.path().join("dist/index.js"), "export const x = 1;")
+            .expect("frontend should write");
+        write_manifest(
+            source.path(),
+            r#"{
+                "id": "com.example.invalid-sidebar",
+                "name": "Broken Sidebar Plugin",
+                "version": "1.0.0",
+                "apiVersion": 1,
+                "description": "Broken plugin",
+                "permissions": [],
+                "contributes": {
+                    "sidebarPanels": [{ "id": "inspector", "title": "Inspector", "side": "center" }]
+                },
+                "frontend": "dist/index.js",
+                "backend": null
+            }"#,
+        );
+
+        let result = install_local_plugin_bundle(source.path(), managed.path());
+
+        assert!(result.is_err());
+        assert!(result
+            .expect_err("install should fail")
+            .contains("sidebarPanels[0].side"));
+    }
+
+    #[test]
+    fn install_local_plugin_bundle_rejects_invalid_command_shortcut() {
+        let source = tempdir().expect("source tempdir should create");
+        let managed = tempdir().expect("managed tempdir should create");
+        fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
+        fs::write(source.path().join("dist/index.js"), "export const x = 1;")
+            .expect("frontend should write");
+        write_manifest(
+            source.path(),
+            r#"{
+                "id": "com.example.invalid-command",
+                "name": "Broken Command Plugin",
+                "version": "1.0.0",
+                "apiVersion": 1,
+                "description": "Broken plugin",
+                "permissions": [],
+                "contributes": {
+                    "commands": [{ "id": "run", "title": "Run", "shortcut": "BAD+FORMAT+!!!" }]
+                },
+                "frontend": "dist/index.js",
+                "backend": null
+            }"#,
+        );
+
+        let result = install_local_plugin_bundle(source.path(), managed.path());
+
+        assert!(result.is_err());
+        assert!(result
+            .expect_err("install should fail")
+            .contains("commands[0].shortcut"));
+    }
+
+    #[test]
     fn uninstall_managed_plugin_removes_managed_directory() {
         let managed = tempdir().expect("managed tempdir should create");
         let plugin_dir = managed_plugin_dir(managed.path(), "com.example.local");
@@ -470,23 +779,17 @@ mod tests {
         let fake_npm = fake_npm_dir.path().join("npm");
         let script = r#"#!/bin/sh
 prefix=""
-package=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --prefix)
       shift
       prefix="$1"
       ;;
-    --ignore-scripts|--omit=dev|--no-save|install)
-      ;;
-    *)
-      package="$1"
-      ;;
   esac
   shift
 done
-mkdir -p "$prefix/node_modules/$package/dist"
-cat > "$prefix/node_modules/$package/manifest.json" <<'EOF'
+mkdir -p "$prefix/node_modules/fake-package/dist"
+cat > "$prefix/node_modules/fake-package/manifest.json" <<'EOF'
 {
   "id": "com.example.npm",
   "name": "Npm Plugin",
@@ -499,7 +802,7 @@ cat > "$prefix/node_modules/$package/manifest.json" <<'EOF'
   "backend": null
 }
 EOF
-echo "export const ok = true;" > "$prefix/node_modules/$package/dist/index.js"
+echo "export const ok = true;" > "$prefix/node_modules/fake-package/dist/index.js"
 "#;
         fs::write(&fake_npm, script).expect("fake npm should write");
         #[cfg(unix)]

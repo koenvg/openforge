@@ -2,6 +2,7 @@ import { render, fireEvent, screen, cleanup } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { get, writable } from 'svelte/store'
 import type { Task, AgentSession, Project, ProjectAttention, PullRequestInfo, CheckpointNotification, CiFailureNotification, RateLimitNotification, AuthoredPullRequest } from './lib/types'
+import { forceGithubSync, installPlugin } from './lib/ipc'
 import { requireDefined } from './test-utils/dom'
 
 const callOrder: string[] = []
@@ -20,6 +21,43 @@ const installedPluginRows: Array<{
   isBuiltin: boolean
 }> = []
 
+function persistInstalledPluginRow(plugin: {
+  id: string
+  name: string
+  version: string
+  apiVersion: number
+  description: string
+  permissions: string
+  contributes: string
+  frontendEntry: string
+  backendEntry: string | null
+  installPath: string
+  installedAt: number
+  isBuiltin: boolean
+}) {
+  const nextRow = {
+    id: plugin.id,
+    name: plugin.name,
+    version: plugin.version,
+    apiVersion: plugin.apiVersion,
+    description: plugin.description,
+    permissions: plugin.permissions,
+    contributes: plugin.contributes,
+    frontendEntry: plugin.frontendEntry,
+    backendEntry: plugin.backendEntry,
+    installPath: plugin.installPath,
+    installedAt: plugin.installedAt,
+    isBuiltin: plugin.isBuiltin,
+  }
+
+  const existingIndex = installedPluginRows.findIndex((row) => row.id === plugin.id)
+  if (existingIndex >= 0) {
+    installedPluginRows.splice(existingIndex, 1, nextRow)
+  } else {
+    installedPluginRows.push(nextRow)
+  }
+}
+
 const eventListeners = new Map<string, Function>()
 type MockCloseRequestEvent = {
   preventDefault: () => void
@@ -37,6 +75,13 @@ const mockWindowDestroy = vi.fn(async () => undefined)
 const mockSelectedTaskIdStore = writable<string | null>(null)
 const mockCurrentViewStore = writable<'board' | 'files' | 'settings' | 'workqueue' | 'global_settings' | 'plugin:com.openforge.file-viewer:files' | 'plugin:com.openforge.github-sync:pr_review' | 'plugin:com.openforge.skills-viewer:skills'>('board')
 const mockSelectedReviewPrStore = writable(null)
+const {
+  mockActivatePlugin,
+  mockExecutePluginCommand,
+} = vi.hoisted(() => ({
+  mockActivatePlugin: vi.fn(async () => true),
+  mockExecutePluginCommand: vi.fn(async (_pluginId: string, _commandId: string) => true),
+}))
 
 vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(async (eventName: string, callback: Function) => {
@@ -57,6 +102,15 @@ vi.mock('@tauri-apps/api/window', () => ({
     destroy: mockWindowDestroy,
   })),
 }))
+
+vi.mock('./lib/plugin/pluginRegistry', async () => {
+  const actual = await vi.importActual<typeof import('./lib/plugin/pluginRegistry')>('./lib/plugin/pluginRegistry')
+  return {
+    ...actual,
+    activatePlugin: mockActivatePlugin,
+    executePluginCommand: mockExecutePluginCommand,
+  }
+})
 
 vi.mock('./lib/stores', () => ({
   tasks: writable<Task[]>([]),
@@ -94,29 +148,10 @@ vi.mock('./lib/stores', () => ({
 
 vi.mock('./lib/ipc', () => ({
   installPlugin: vi.fn(async (plugin) => {
-    const nextRow = {
-      id: plugin.id,
-      name: plugin.name,
-      version: plugin.version,
-      apiVersion: plugin.apiVersion,
-      description: plugin.description,
-      permissions: plugin.permissions,
-      contributes: plugin.contributes,
-      frontendEntry: plugin.frontendEntry,
-      backendEntry: plugin.backendEntry,
-      installPath: plugin.installPath,
-      installedAt: plugin.installedAt,
-      isBuiltin: plugin.isBuiltin,
-    }
-
-    const existingIndex = installedPluginRows.findIndex((row) => row.id === plugin.id)
-    if (existingIndex >= 0) {
-      installedPluginRows.splice(existingIndex, 1, nextRow)
-    } else {
-      installedPluginRows.push(nextRow)
-    }
+    persistInstalledPluginRow(plugin)
   }),
   listPlugins: vi.fn(async () => installedPluginRows.map((row) => ({ ...row }))),
+  getEnabledPlugins: vi.fn(async () => installedPluginRows.map((row) => ({ ...row }))),
   getSessions: vi.fn(),
   getProjects: vi.fn(async () => {
     callOrder.push('getProjects')
@@ -304,8 +339,19 @@ describe('App onMount initialization order', () => {
   beforeEach(() => {
     callOrder.length = 0
     installedPluginRows.length = 0
+    eventListeners.clear()
     closeRequestedHandler = null
     vi.clearAllMocks()
+    vi.mocked(installPlugin).mockImplementation(async (plugin) => {
+      persistInstalledPluginRow(plugin)
+    })
+    mockActivatePlugin.mockResolvedValue(true)
+    mockExecutePluginCommand.mockImplementation(async (pluginId, commandId) => {
+      if (pluginId === 'com.openforge.github-sync' && commandId === 'refresh') {
+        await forceGithubSync()
+      }
+      return true
+    })
   })
 
   afterEach(() => {
@@ -317,7 +363,7 @@ describe('App onMount initialization order', () => {
     const { installPlugin, getProjects } = await import('./lib/ipc')
     const stores = await import('./lib/stores')
 
-    vi.mocked(installPlugin).mockRejectedValue(new Error('Failed to install plugin: no such table: plugins'))
+    vi.mocked(installPlugin).mockRejectedValueOnce(new Error('Failed to install plugin: no such table: plugins'))
 
     const App = (await import('./App.svelte')).default
     render(App)
@@ -1282,6 +1328,33 @@ describe('App onMount initialization order', () => {
       expect(commandPaletteModule.default).toHaveBeenCalled()
     })
 
+    it('CMD+SHIFT+R triggers GitHub refresh through the plugin command shortcut', async () => {
+      const App = (await import('./App.svelte')).default
+      const ipc = await import('./lib/ipc')
+
+      vi.mocked(ipc.forceGithubSync).mockResolvedValue({
+        new_comments: 0,
+        ci_changes: 0,
+        review_changes: 0,
+        pr_changes: 0,
+        errors: 0,
+        rate_limited: false,
+        rate_limit_reset_at: null,
+      })
+
+      render(App)
+
+      await vi.waitFor(() => {
+        expect(installedPluginRows.some((row) => row.id === 'com.openforge.github-sync')).toBe(true)
+      })
+
+      await fireEvent.keyDown(window, { key: 'R', metaKey: true, shiftKey: true, bubbles: true })
+
+      await vi.waitFor(() => {
+        expect(ipc.forceGithubSync).toHaveBeenCalled()
+      })
+    })
+
     it('Shift+/ opens the keyboard shortcuts dialog', async () => {
       const App = (await import('./App.svelte')).default
 
@@ -1676,6 +1749,10 @@ describe('App onMount initialization order', () => {
 
       render(App)
 
+      await vi.waitFor(() => {
+        expect(eventListeners.has('github-sync-complete')).toBe(true)
+      })
+
       const syncCallback = requireDefined(
         eventListeners.get('github-sync-complete'),
         'Expected github-sync-complete listener to be registered',
@@ -1717,6 +1794,10 @@ describe('App onMount initialization order', () => {
       })
 
       render(App)
+
+      await vi.waitFor(() => {
+        expect(eventListeners.has('task-changed')).toBe(true)
+      })
 
       const callback = eventListeners.get('task-changed')
       expect(callback).toBeDefined()

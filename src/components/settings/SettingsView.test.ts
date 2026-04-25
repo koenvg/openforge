@@ -60,6 +60,9 @@ import {
   updateProject,
 } from '../../lib/ipc'
 import { activeProjectId, projects } from '../../lib/stores'
+import PluginSlotTestView from '../plugin/PluginSlotTestView.svelte'
+import { clearComponentRegistry, registerRenderableContributionComponent } from '../../lib/plugin/componentRegistry'
+import { enabledPluginIds, installedPlugins } from '../../lib/plugin/pluginStore'
 import SettingsView from './SettingsView.svelte'
 
 const defaultProps = {
@@ -90,6 +93,9 @@ describe('SettingsView', () => {
         updated_at: Date.now(),
       },
     ])
+    installedPlugins.set(new Map())
+    enabledPluginIds.set(new Set())
+    clearComponentRegistry()
   })
 
   it('renders General section', () => {
@@ -165,6 +171,38 @@ describe('SettingsView', () => {
   it('renders Actions section card', () => {
     render(SettingsView, { props: defaultProps })
     expect(screen.queryAllByText(/actions/i).length).toBeGreaterThan(0)
+  })
+
+  it('renders plugin settings sections on the project settings page', async () => {
+    installedPlugins.set(new Map([[
+      'plugin.settings',
+      {
+        manifest: {
+          id: 'plugin.settings',
+          name: 'Settings Plugin',
+          version: '1.0.0',
+          apiVersion: 1,
+          description: 'Adds a settings section',
+          permissions: [],
+          contributes: {
+            settingsSections: [{ id: 'advanced', title: 'Advanced Plugin Settings' }],
+          },
+          frontend: 'index.js',
+          backend: null,
+        },
+        state: 'active',
+        error: null,
+      },
+    ]]))
+    enabledPluginIds.set(new Set(['plugin.settings']))
+    registerRenderableContributionComponent('settingsSections', 'plugin.settings:advanced', PluginSlotTestView)
+
+    render(SettingsView, { props: defaultProps })
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Advanced Plugin Settings')).toBeTruthy()
+      expect(screen.getByTestId('plugin-slot-view')).toBeTruthy()
+    })
   })
 
   it('renders project name field', () => {

@@ -3,6 +3,64 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager, State};
 
+fn builtin_install_path(plugin_id: &str) -> String {
+    format!("builtin:{plugin_id}")
+}
+
+fn is_known_builtin_plugin(plugin_id: &str) -> bool {
+    matches!(
+        plugin_id,
+        "com.openforge.file-viewer"
+            | "com.openforge.github-sync"
+            | "com.openforge.skills-viewer"
+            | "com.openforge.terminal"
+    )
+}
+
+fn resolve_backend_entry_path(
+    install_root: &std::path::Path,
+    backend_entry: &str,
+) -> Result<PathBuf, String> {
+    let backend_entry_path = std::path::Path::new(backend_entry);
+    if backend_entry_path.is_absolute() {
+        return Err("plugin backend entry must stay within the plugin install root".to_string());
+    }
+
+    if backend_entry_path
+        .components()
+        .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        return Err("plugin backend entry must stay within the plugin install root".to_string());
+    }
+
+    let backend_path = install_root.join(backend_entry_path);
+    if !backend_path.is_file() {
+        return Err(format!(
+            "Plugin backend entry does not exist: {}",
+            backend_path.display()
+        ));
+    }
+
+    let canonical_install_root = install_root.canonicalize().map_err(|error| {
+        format!(
+            "Failed to canonicalize plugin install root {}: {error}",
+            install_root.display()
+        )
+    })?;
+    let canonical_backend_path = backend_path.canonicalize().map_err(|error| {
+        format!(
+            "Failed to canonicalize plugin backend entry {}: {error}",
+            backend_path.display()
+        )
+    })?;
+
+    if !canonical_backend_path.starts_with(&canonical_install_root) {
+        return Err("plugin backend entry must stay within the plugin install root".to_string());
+    }
+
+    Ok(canonical_backend_path)
+}
+
 #[tauri::command]
 pub async fn install_plugin(
     db: State<'_, Arc<Mutex<db::Database>>>,
@@ -17,8 +75,9 @@ pub async fn install_plugin(
     backend_entry: Option<String>,
     install_path: String,
     installed_at: i64,
-    is_builtin: bool,
+    _is_builtin: bool,
 ) -> Result<(), String> {
+    let is_builtin = is_known_builtin_plugin(&id) && install_path == builtin_install_path(&id);
     let db = crate::db::acquire_db(&db);
     db.install_plugin(&db::PluginRow {
         id,
@@ -176,13 +235,7 @@ pub async fn plugin_invoke(
         .clone()
         .ok_or_else(|| format!("Plugin backend not configured for {}", plugin_id))?;
     let install_root = resolve_plugin_install_root(&plugin)?;
-    let backend_path = install_root.join(&backend_entry);
-    if !backend_path.is_file() {
-        return Err(format!(
-            "Plugin backend entry does not exist: {}",
-            backend_path.display()
-        ));
-    }
+    let backend_path = resolve_backend_entry_path(&install_root, &backend_entry)?;
 
     plugin_host
         .invoke_backend(&plugin_id, &command, &backend_path, payload)
@@ -190,7 +243,7 @@ pub async fn plugin_invoke(
 }
 
 fn resolve_plugin_install_root(plugin: &db::PluginRow) -> Result<PathBuf, String> {
-    if plugin.is_builtin && plugin.install_path.starts_with("builtin:") {
+    if plugin.is_builtin && plugin.install_path == builtin_install_path(&plugin.id) {
         return Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join("plugins")
@@ -204,4 +257,42 @@ fn resolve_plugin_install_root(plugin: &db::PluginRow) -> Result<PathBuf, String
     }
 
     Ok(PathBuf::from(&plugin.install_path))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        builtin_install_path, is_known_builtin_plugin, resolve_backend_entry_path,
+    };
+    use std::fs;
+
+    #[test]
+    fn builtin_detection_only_accepts_known_ids_with_exact_sentinel() {
+        assert!(is_known_builtin_plugin("com.openforge.github-sync"));
+        assert_eq!(
+            builtin_install_path("com.openforge.github-sync"),
+            "builtin:com.openforge.github-sync"
+        );
+        assert!(!is_known_builtin_plugin("com.example.custom"));
+    }
+
+    #[test]
+    fn resolve_backend_entry_path_rejects_traversal() {
+        let temp = tempfile::tempdir().expect("tempdir should create");
+        let install_root = temp.path();
+        fs::write(install_root.join("backend.js"), "export async function run() {}")
+            .expect("backend file should write");
+
+        let path = resolve_backend_entry_path(install_root, "backend.js")
+            .expect("backend path should resolve");
+        assert!(path.ends_with("backend.js"));
+
+        let traversal_err = resolve_backend_entry_path(install_root, "../backend.js")
+            .expect_err("traversal path should be rejected");
+        assert!(traversal_err.contains("must stay within the plugin install root"));
+
+        let absolute_err = resolve_backend_entry_path(install_root, "/tmp/backend.js")
+            .expect_err("absolute path should be rejected");
+        assert!(absolute_err.contains("must stay within the plugin install root"));
+    }
 }

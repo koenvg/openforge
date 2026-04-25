@@ -140,4 +140,31 @@ describe('pluginStore', () => {
     expect(set.has('pa')).toBe(true)
     expect(set.has('pb')).toBe(true)
   })
+
+  it('loadEnabledForProject keeps builtin plugins enabled generically', async () => {
+    installedPlugins.set(new Map([[
+      'builtin-plugin',
+      {
+        manifest: {
+          id: 'builtin-plugin',
+          name: 'Builtin Plugin',
+          version: '1.0.0',
+          apiVersion: 1,
+          description: 'Builtin plugin',
+          permissions: [],
+          contributes: {},
+          frontend: 'index.js',
+          backend: null,
+        },
+        state: 'installed',
+        error: null,
+        isBuiltin: true,
+      },
+    ]]))
+    getEnabledPluginsMock.mockResolvedValue([makePlugin('project-plugin')])
+
+    await loadEnabledForProject('proj1')
+
+    expect(get(enabledPluginIds)).toEqual(new Set(['builtin-plugin', 'project-plugin']))
+  })
 })

@@ -6,16 +6,19 @@
   import { resolveContributions, resolveContributionsForSlot } from '../../lib/plugin/contributionResolver'
   import type { PluginManifest } from '../../lib/plugin/types'
   import { makePluginViewKey } from '../../lib/plugin/types'
-  import { getRegisteredComponent } from '../../lib/plugin/componentRegistry'
+  import { getRegisteredComponent, getRegisteredRenderableComponent } from '../../lib/plugin/componentRegistry'
   import { activatePlugin } from '../../lib/plugin/pluginRegistry'
 
   interface Props {
     slotType: 'views' | 'taskPaneTabs' | 'sidebarPanels' | 'commands' | 'settingsSections' | 'backgroundServices'
     slotId?: string
+    taskId?: string
+    projectId?: string | null
     projectName?: string
+    panelSide?: 'left' | 'right'
   }
 
-  let { slotType, slotId = '', projectName = '' }: Props = $props()
+  let { slotType, slotId = '', taskId = '', projectId = null, projectName = '', panelSide }: Props = $props()
 
   let renderedComponents = $state(new Map<string, Component<Record<string, unknown>>>())
   let renderErrors = $state(new Map<string, string>())
@@ -28,7 +31,29 @@
   )
 
   let allContributions = $derived(resolveContributions(enabledManifests))
-  let slotContributions = $derived(resolveContributionsForSlot(allContributions, slotType, slotId))
+  let slotContributions = $derived.by(() => {
+    const baseContributions = slotId
+      ? resolveContributionsForSlot(allContributions, slotType, slotId)
+      : allContributions[slotType]
+
+    if (slotType === 'sidebarPanels' && panelSide) {
+      return baseContributions.filter((contribution) => contribution.side === panelSide)
+    }
+
+    return baseContributions
+  })
+
+  function getContributionComponent(contrib: (typeof slotContributions)[number]): Component<Record<string, unknown>> | undefined {
+    if (slotType === 'views') {
+      return getRegisteredComponent(makePluginViewKey(contrib.pluginId, contrib.contributionId))
+    }
+
+    if (slotType === 'taskPaneTabs' || slotType === 'sidebarPanels' || slotType === 'settingsSections') {
+      return getRegisteredRenderableComponent(slotType, contrib.namespacedId)
+    }
+
+    return undefined
+  }
 
   function normalizeErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error)
@@ -44,7 +69,7 @@
     renderedComponents = new Map()
     renderErrors = new Map()
 
-    if (slotType !== 'views' || slotContributions.length === 0) {
+    if ((slotType !== 'views' && slotType !== 'taskPaneTabs' && slotType !== 'sidebarPanels' && slotType !== 'settingsSections') || slotContributions.length === 0) {
       return
     }
 
@@ -58,10 +83,10 @@
       for (const contrib of contributions) {
         const viewKey = makePluginViewKey(contrib.pluginId, contrib.contributionId)
 
-        let component = getRegisteredComponent(viewKey)
+        let component = getContributionComponent(contrib)
         if (!component) {
           await activatePlugin(contrib.pluginId)
-          component = getRegisteredComponent(viewKey)
+          component = getContributionComponent(contrib)
         }
 
         if (runId !== activationRunId) {
@@ -114,7 +139,7 @@
             errorMessage={normalizeErrorMessage(error)}
           />
         {/snippet}
-        <Component projectName={projectName} />
+        <Component {taskId} {projectId} {projectName} />
       </svelte:boundary>
     {:else}
       <div data-contribution-id={contrib.contributionId}></div>

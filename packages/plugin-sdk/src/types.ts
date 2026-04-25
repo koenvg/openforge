@@ -104,9 +104,40 @@ export interface PluginActivatedViewContribution extends Partial<PluginViewContr
   component: Component<Record<string, unknown>>
 }
 
+export interface PluginActivatedTaskPaneTabContribution extends Partial<PluginTaskPaneTabContribution> {
+  id: string
+  component: Component<Record<string, unknown>>
+}
+
+export interface PluginActivatedSidebarPanelContribution extends Partial<PluginSidebarPanelContribution> {
+  id: string
+  component: Component<Record<string, unknown>>
+}
+
+export interface PluginActivatedSettingsSectionContribution extends Partial<PluginSettingsSection> {
+  id: string
+  component: Component<Record<string, unknown>>
+}
+
+export interface PluginActivatedCommandContribution extends Partial<PluginCommandContribution> {
+  id: string
+  execute(payload?: unknown): Promise<void> | void
+}
+
+export interface PluginActivatedBackgroundService extends Partial<PluginBackgroundService> {
+  id: string
+  start(): Promise<void> | void
+  stop?(): Promise<void> | void
+}
+
 export interface PluginActivationResult {
-  contributions: Omit<PluginContributionPoints, 'views'> & {
+  contributions: Omit<PluginContributionPoints, 'views' | 'taskPaneTabs' | 'sidebarPanels' | 'commands' | 'settingsSections' | 'backgroundServices'> & {
     views?: PluginActivatedViewContribution[]
+    taskPaneTabs?: PluginActivatedTaskPaneTabContribution[]
+    sidebarPanels?: PluginActivatedSidebarPanelContribution[]
+    commands?: PluginActivatedCommandContribution[]
+    settingsSections?: PluginActivatedSettingsSectionContribution[]
+    backgroundServices?: PluginActivatedBackgroundService[]
   }
 }
 

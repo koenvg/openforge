@@ -161,6 +161,100 @@ function validateBackgroundServices(backgroundServices: unknown): ValidationErro
   return errors
 }
 
+function validateSidebarPanelContributions(sidebarPanels: unknown): ValidationError[] {
+  const errors: ValidationError[] = []
+
+  if (!isArray(sidebarPanels)) {
+    errors.push({ path: 'contributes.sidebarPanels', message: 'Must be an array' })
+    return errors
+  }
+
+  sidebarPanels.forEach((panel, index) => {
+    if (!isObject(panel)) {
+      errors.push({ path: `contributes.sidebarPanels[${index}]`, message: 'Must be an object' })
+      return
+    }
+
+    if (!isString(panel.id) || !panel.id) {
+      errors.push({ path: `contributes.sidebarPanels[${index}].id`, message: 'Required string' })
+    }
+
+    if (!isString(panel.title) || !panel.title) {
+      errors.push({ path: `contributes.sidebarPanels[${index}].title`, message: 'Required string' })
+    }
+
+    if (panel.side !== 'left' && panel.side !== 'right') {
+      errors.push({ path: `contributes.sidebarPanels[${index}].side`, message: 'Must be "left" or "right"' })
+    }
+
+    if (panel.order !== undefined && !isNumber(panel.order)) {
+      errors.push({ path: `contributes.sidebarPanels[${index}].order`, message: 'Must be a number' })
+    }
+  })
+
+  return errors
+}
+
+function validateCommandContributions(commands: unknown): ValidationError[] {
+  const errors: ValidationError[] = []
+
+  if (!isArray(commands)) {
+    errors.push({ path: 'contributes.commands', message: 'Must be an array' })
+    return errors
+  }
+
+  commands.forEach((command, index) => {
+    if (!isObject(command)) {
+      errors.push({ path: `contributes.commands[${index}]`, message: 'Must be an object' })
+      return
+    }
+
+    if (!isString(command.id) || !command.id) {
+      errors.push({ path: `contributes.commands[${index}].id`, message: 'Required string' })
+    }
+
+    if (!isString(command.title) || !command.title) {
+      errors.push({ path: `contributes.commands[${index}].title`, message: 'Required string' })
+    }
+
+    if (command.shortcut !== undefined) {
+      if (!isString(command.shortcut)) {
+        errors.push({ path: `contributes.commands[${index}].shortcut`, message: 'Must be a string' })
+      } else if (!isValidShortcutFormat(command.shortcut)) {
+        errors.push({ path: `contributes.commands[${index}].shortcut`, message: 'Invalid shortcut format' })
+      }
+    }
+  })
+
+  return errors
+}
+
+function validateSettingsSectionContributions(settingsSections: unknown): ValidationError[] {
+  const errors: ValidationError[] = []
+
+  if (!isArray(settingsSections)) {
+    errors.push({ path: 'contributes.settingsSections', message: 'Must be an array' })
+    return errors
+  }
+
+  settingsSections.forEach((section, index) => {
+    if (!isObject(section)) {
+      errors.push({ path: `contributes.settingsSections[${index}]`, message: 'Must be an object' })
+      return
+    }
+
+    if (!isString(section.id) || !section.id) {
+      errors.push({ path: `contributes.settingsSections[${index}].id`, message: 'Required string' })
+    }
+
+    if (!isString(section.title) || !section.title) {
+      errors.push({ path: `contributes.settingsSections[${index}].title`, message: 'Required string' })
+    }
+  })
+
+  return errors
+}
+
 function validateContributionPoints(contributes: unknown): ValidationError[] {
   const errors: ValidationError[] = []
 
@@ -175,6 +269,18 @@ function validateContributionPoints(contributes: unknown): ValidationError[] {
 
   if (contributes.taskPaneTabs !== undefined) {
     errors.push(...validateTaskPaneTabContributions(contributes.taskPaneTabs))
+  }
+
+  if (contributes.sidebarPanels !== undefined) {
+    errors.push(...validateSidebarPanelContributions(contributes.sidebarPanels))
+  }
+
+  if (contributes.commands !== undefined) {
+    errors.push(...validateCommandContributions(contributes.commands))
+  }
+
+  if (contributes.settingsSections !== undefined) {
+    errors.push(...validateSettingsSectionContributions(contributes.settingsSections))
   }
 
   if (contributes.backgroundServices !== undefined) {
