@@ -528,7 +528,7 @@
   "repositories": [
     {
       "name": "openforge",
-      "path": "/Users/koen/.openforge/worktrees/openforge/KVG-785",
+      "path": ".",
       "primaryBranch": "main",
       "remote": "https://github.com/koenvangeert/openforge"
     }
@@ -569,6 +569,6 @@
     "attentionModel": "Interrupt only for meaningful decisions, blocked agents, review readiness, CI failures, destructive operations, or workflow handoffs."
   },
   "createdAt": "2026-04-26T15:07:30.000Z",
-  "updatedAt": "2026-04-26T15:20:14.891Z",
+  "updatedAt": "2026-04-26T15:24:38.255Z",
   "version": 1
 }

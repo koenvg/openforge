@@ -2,7 +2,7 @@
 
 A macOS-focused Tauri desktop command center for managing multiple projects and AI coding agents concurrently while keeping the user focused on one active thing at a time. The app coordinates tasks, agent worktrees, embedded terminals, PR/self-review, GitHub status, plugins, and contextual nudges so it interrupts the user only when attention is useful.
 
-> Last updated: 2026-04-26T15:20:14.891Z | Version: 1
+> Last updated: 2026-04-26T15:24:38.255Z | Version: 1
 
 ## Goals
 
@@ -219,7 +219,7 @@ Build and draft macOS releases.
 
 ## Repositories
 
-- **openforge** [`/Users/koen/.openforge/worktrees/openforge/KVG-785`]
+- **openforge** [`.`]
 
 ## CLAUDE.md Instructions
 
