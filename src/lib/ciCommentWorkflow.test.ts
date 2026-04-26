@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
 
 describe('CI comment workflow', () => {
   it('does not hide GitHub Script failures with empty catch blocks', () => {
