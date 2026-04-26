@@ -69,6 +69,12 @@ describe('PluginSlot', () => {
     expect(div?.getAttribute('data-slot-id')).toBe('panel-1')
   })
 
+  it('marks task pane tab slots as fill-layout hosts', () => {
+    const { container } = render(PluginSlot, { props: { slotType: 'taskPaneTabs', slotId: 'test-plugin:activity' } })
+    const div = container.querySelector('div')
+    expect(div?.getAttribute('data-slot-layout')).toBe('fill')
+  })
+
   it('handles slot with no contributions', async () => {
     const manifest: PluginManifest = {
       ...makeViewManifest(),

@@ -24,6 +24,9 @@
   let renderErrors = $state(new Map<string, string>())
   let activationRunId = 0
 
+  let slotLayout = $derived(slotType === 'taskPaneTabs' ? 'fill' : null)
+  let slotHostClass = $derived(slotLayout === 'fill' ? 'flex flex-col flex-1 min-h-0 overflow-hidden' : '')
+
   let enabledManifests = $derived(
     Array.from($enabledPluginIds)
       .map(id => $installedPlugins.get(id)?.manifest)
@@ -118,7 +121,7 @@
   })
 </script>
 
-<div data-slot-type={slotType} data-slot-id={slotId}>
+<div data-slot-type={slotType} data-slot-id={slotId} data-slot-layout={slotLayout} class={slotHostClass}>
   {#each slotContributions as contrib (contrib.namespacedId)}
     {@const viewKey = makePluginViewKey(contrib.pluginId, contrib.contributionId)}
     {@const Component = renderedComponents.get(viewKey)}
