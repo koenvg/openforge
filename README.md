@@ -110,9 +110,14 @@ pnpm test
 
 # Rust tests (from src-tauri/)
 cd src-tauri && cargo test
+
+# Rust-only backend validation (from src-tauri/)
+cargo check
+cargo build
+cargo clippy
 ```
 
-Rust tests use Tauri's mock runtime and do not require a prebuilt `dist/` frontend bundle.
+Rust debug-profile validation uses a no-op Tauri asset context, so `cargo test`, `cargo check`, `cargo build`, and `cargo clippy` do not require a prebuilt `dist/` frontend bundle. Production/release packaging still embeds `build.frontendDist`; run `pnpm tauri:build` (or `pnpm build` before any release-profile Cargo build) when validating the packaged app.
 
 ## Building
 

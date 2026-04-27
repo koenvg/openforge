@@ -36,7 +36,19 @@ use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager};
 use whisper_manager::{WhisperManager, WhisperModelSize};
 
-#[cfg(not(test))]
+#[cfg(any(debug_assertions, test))]
+fn rust_validation_tauri_context() -> tauri::Context<tauri::Wry> {
+    // Tauri embeds `build.frontendDist` at macro-expansion time when the custom-protocol
+    // feature is enabled. Local Rust-only validation should not require a prebuilt Vite bundle.
+    tauri::generate_context!(assets = tauri::test::noop_assets())
+}
+
+#[cfg(all(debug_assertions, not(test)))]
+fn tauri_context() -> tauri::Context<tauri::Wry> {
+    rust_validation_tauri_context()
+}
+
+#[cfg(all(not(debug_assertions), not(test)))]
 fn tauri_context() -> tauri::Context<tauri::Wry> {
     tauri::generate_context!()
 }
@@ -898,7 +910,8 @@ fn main() {
 mod tests {
     use super::{
         load_resume_targets, opencode_resume_persistence, restore_resumed_session_state,
-        should_start_project_root_server, ResumeSessionPersistence, ResumeTarget,
+        rust_validation_tauri_context, should_start_project_root_server, ResumeSessionPersistence,
+        ResumeTarget,
     };
     use crate::db::test_helpers::make_test_db;
     use crate::opencode_client::SessionStatusInfo;
@@ -913,6 +926,19 @@ mod tests {
         assert!(
             app.is_ok(),
             "mock builder should not require frontendDist assets"
+        );
+    }
+
+    #[test]
+    fn test_rust_validation_context_does_not_require_frontend_dist_assets() {
+        let context = rust_validation_tauri_context();
+
+        let index_asset = tauri::utils::assets::AssetKey::from("index.html");
+
+        assert_eq!(context.config().product_name.as_deref(), Some("Open Forge"));
+        assert!(
+            context.assets().get(&index_asset).is_none(),
+            "rust validation context should not embed frontendDist assets"
         );
     }
 
