@@ -485,18 +485,18 @@ fn restore_resumed_session_state(
             None
         };
 
+        let pty_checkpoint_data = pty_instance_id.map(|pty_instance_id| {
+            serde_json::json!({
+                "pty_instance_id": pty_instance_id,
+            })
+            .to_string()
+        });
+
         if let Some(status) = persisted_status {
-            let pty_checkpoint_data;
             let checkpoint_data = if status == "running" {
-                if let Some(pty_instance_id) = pty_instance_id {
-                    pty_checkpoint_data = serde_json::json!({
-                        "pty_instance_id": pty_instance_id,
-                    })
-                    .to_string();
-                    Some(pty_checkpoint_data.as_str())
-                } else {
-                    session.checkpoint_data.as_deref()
-                }
+                pty_checkpoint_data
+                    .as_deref()
+                    .or(session.checkpoint_data.as_deref())
             } else {
                 None
             };
@@ -508,6 +508,21 @@ fn restore_resumed_session_state(
                     "[startup] Failed to restore session {} for task {}: {}",
                     session.id, target.task_id, e
                 );
+            }
+        } else if provider_name == "pi" {
+            if let Some(checkpoint_data) = pty_checkpoint_data.as_deref() {
+                if let Err(e) = db.update_agent_session(
+                    &session.id,
+                    &session.stage,
+                    &session.status,
+                    Some(checkpoint_data),
+                    session.error_message.as_deref(),
+                ) {
+                    warn!(
+                        "[startup] Failed to refresh Pi PTY instance for session {} task {}: {}",
+                        session.id, target.task_id, e
+                    );
+                }
             }
         }
     }
@@ -1094,6 +1109,58 @@ mod tests {
         assert_eq!(workspace.workspace_path, "/tmp/test-repo/.worktrees/T-100");
         assert_eq!(workspace.opencode_port, Some(4312));
         assert_eq!(workspace.kind, "git_worktree");
+
+        drop(db);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn restore_resumed_session_state_keeps_completed_pi_session_completed_but_refreshes_pty_instance(
+    ) {
+        let (db, path) = make_test_db("restore_resumed_pi_completed_running");
+
+        let project = db
+            .create_project("Test Project", "/tmp/test-repo")
+            .expect("create project failed");
+        let task = db
+            .create_task("Resume Pi", "doing", Some(&project.id), None, None, None)
+            .expect("create task failed");
+        db.create_agent_session("ses-pi-100", &task.id, None, "implement", "completed", "pi")
+            .expect("create pi session failed");
+
+        let session = db
+            .get_latest_session_for_ticket(&task.id)
+            .expect("get latest session failed")
+            .expect("missing latest session");
+        let target = ResumeTarget {
+            task_id: task.id.clone(),
+            project_id: project.id.clone(),
+            repo_path: "/tmp/test-repo".to_string(),
+            workspace_path: "/tmp/test-repo".to_string(),
+            kind: "project_dir".to_string(),
+            branch_name: None,
+        };
+
+        restore_resumed_session_state(
+            &db,
+            Some(&session),
+            &target,
+            "pi",
+            0,
+            Some(42),
+            ResumeSessionPersistence::Running,
+        );
+
+        let restored = db
+            .get_latest_session_for_ticket(&task.id)
+            .expect("get restored session failed")
+            .expect("missing restored session");
+        assert_eq!(restored.status, "completed");
+        assert_eq!(
+            restored.checkpoint_data,
+            Some(r#"{"pty_instance_id":42}"#.to_string())
+        );
+        assert!(restored.error_message.is_none());
 
         drop(db);
         let _ = fs::remove_file(path);

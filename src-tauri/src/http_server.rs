@@ -38,6 +38,7 @@ pub struct UpdateTaskRequest {
     pub task_id: String,
     pub initial_prompt: Option<String>,
     pub summary: Option<String>,
+    pub pty_instance_id: Option<u64>,
 }
 
 /// Response containing the updated task ID
@@ -232,10 +233,11 @@ pub async fn update_task_handler(
         return Err(StatusCode::BAD_REQUEST);
     }
 
+    let task_id = request.task_id.clone();
     let db = state.db.lock().unwrap();
 
     db.update_task_title_and_summary(
-        &request.task_id,
+        &task_id,
         request.initial_prompt.as_deref(),
         request.summary.as_deref(),
     )
@@ -243,18 +245,39 @@ pub async fn update_task_handler(
 
     drop(db);
 
+    let pi_status_update = request.pty_instance_id.and_then(|pty_instance_id| {
+        update_pi_session_status_for_pty(
+            &state,
+            &task_id,
+            pty_instance_id,
+            "running",
+            &["completed", "paused", "interrupted"],
+        )
+    });
+
     if let Some(app) = &state.app {
         let _ = app.emit(
             "task-changed",
             serde_json::json!({
                 "action": "updated",
-                "task_id": request.task_id
+                "task_id": task_id
             }),
         );
+
+        if let Some(new_status) = pi_status_update {
+            let _ = app.emit(
+                "agent-status-changed",
+                serde_json::json!({
+                    "task_id": task_id,
+                    "status": new_status,
+                    "provider": "pi"
+                }),
+            );
+        }
     }
 
     Ok(Json(UpdateTaskResponse {
-        task_id: request.task_id,
+        task_id,
         status: "updated".to_string(),
     }))
 }
@@ -657,6 +680,66 @@ mod tests {
         let json = r#"{"initial_prompt": "Test", "description": "old field still sent"}"#;
         let req: CreateTaskRequest = serde_json::from_str(json).unwrap();
         assert_eq!(req.initial_prompt, "Test");
+    }
+
+    #[tokio::test]
+    async fn test_update_task_marks_completed_pi_session_running_for_matching_pty_instance() {
+        let (state, path) = test_state("http_update_task_pi_activity_running");
+        let task_id = {
+            let db = state.db.lock().expect("lock db");
+            let project = db
+                .create_project("Project", "/tmp/project")
+                .expect("create project");
+            let task = db
+                .create_task("Task A", "doing", Some(&project.id), None, None, None)
+                .expect("create task");
+            db.create_agent_session(
+                "ses-pi-completed",
+                &task.id,
+                None,
+                "implementing",
+                "completed",
+                "pi",
+            )
+            .expect("create pi session");
+            db.update_agent_session(
+                "ses-pi-completed",
+                "implementing",
+                "completed",
+                Some(r#"{"pty_instance_id":42}"#),
+                None,
+            )
+            .expect("store pty instance");
+            task.id
+        };
+
+        let router = create_router(state.clone());
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/update_task")
+                    .method("POST")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"task_id":"{}","initial_prompt":"Updated","pty_instance_id":42}}"#,
+                        task_id
+                    )))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let session = state
+            .db
+            .lock()
+            .expect("lock db")
+            .get_agent_session("ses-pi-completed")
+            .expect("get session")
+            .expect("session exists");
+        assert_eq!(session.status, "running");
+
+        let _ = std::fs::remove_file(path);
     }
 
     #[tokio::test]
@@ -1490,19 +1573,22 @@ mod tests {
             task_id: "T-123".to_string(),
             initial_prompt: Some("New Title".to_string()),
             summary: Some("New Summary".to_string()),
+            pty_instance_id: None,
         };
         assert_eq!(request.task_id, "T-123");
         assert_eq!(request.initial_prompt, Some("New Title".to_string()));
         assert_eq!(request.summary, Some("New Summary".to_string()));
+        assert!(request.pty_instance_id.is_none());
     }
 
     #[test]
     fn test_update_task_request_deserialize_all_fields() {
-        let json = r#"{"task_id": "T-456", "initial_prompt": "Updated Title", "summary": "Updated Summary"}"#;
+        let json = r#"{"task_id": "T-456", "initial_prompt": "Updated Title", "summary": "Updated Summary", "pty_instance_id": 42}"#;
         let request: UpdateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
         assert_eq!(request.task_id, "T-456");
         assert_eq!(request.initial_prompt, Some("Updated Title".to_string()));
         assert_eq!(request.summary, Some("Updated Summary".to_string()));
+        assert_eq!(request.pty_instance_id, Some(42));
     }
 
     #[test]
@@ -1548,6 +1634,7 @@ mod tests {
             task_id: "T-555".to_string(),
             initial_prompt: Some("Roundtrip Title".to_string()),
             summary: Some("Roundtrip Summary".to_string()),
+            pty_instance_id: Some(42),
         };
         let json = serde_json::to_string(&original).expect("Failed to serialize");
         let deserialized: UpdateTaskRequest =
@@ -1555,6 +1642,7 @@ mod tests {
         assert_eq!(deserialized.task_id, original.task_id);
         assert_eq!(deserialized.initial_prompt, original.initial_prompt);
         assert_eq!(deserialized.summary, original.summary);
+        assert_eq!(deserialized.pty_instance_id, original.pty_instance_id);
     }
 
     // ========================================================================

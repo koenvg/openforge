@@ -13,6 +13,15 @@ const server = new McpServer({
   version: '1.0.0',
 });
 
+function currentPtyInstanceIdForTask(taskId) {
+  if (process.env.OPENFORGE_TASK_ID !== taskId) return undefined;
+
+  const raw = process.env.OPENFORGE_PTY_INSTANCE_ID;
+  if (!raw || !/^\d+$/.test(raw)) return undefined;
+
+  return Number(raw);
+}
+
 server.tool(
   'create_task',
   'Create a new task in Open Forge. Use this when you need to create follow-up work or break a task into subtasks. The task will be added to the backlog.',
@@ -59,7 +68,12 @@ server.tool(
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ task_id, initial_prompt, summary }),
+        body: JSON.stringify({
+          task_id,
+          initial_prompt,
+          summary,
+          pty_instance_id: currentPtyInstanceIdForTask(task_id),
+        }),
       });
 
       if (!res.ok) {

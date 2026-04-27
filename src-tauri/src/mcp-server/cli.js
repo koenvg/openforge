@@ -87,6 +87,15 @@ function printJson(value) {
   console.log(JSON.stringify(value, null, 2));
 }
 
+function currentPtyInstanceIdForTask(taskId) {
+  if (process.env.OPENFORGE_TASK_ID !== taskId) return undefined;
+
+  const raw = process.env.OPENFORGE_PTY_INSTANCE_ID;
+  if (!raw || !/^\d+$/.test(raw)) return undefined;
+
+  return Number(raw);
+}
+
 async function main(argv) {
   const { command, flags } = parseArgs(argv);
 
@@ -110,10 +119,12 @@ async function main(argv) {
       return;
     }
     case 'update-task': {
+      const taskId = requireFlag(flags, 'taskId');
       const payload = {
-        task_id: requireFlag(flags, 'taskId'),
+        task_id: taskId,
         initial_prompt: typeof flags.initialPrompt === 'string' ? flags.initialPrompt : undefined,
         summary: typeof flags.summary === 'string' ? flags.summary : undefined,
+        pty_instance_id: currentPtyInstanceIdForTask(taskId),
       };
       if (!payload.initial_prompt && !payload.summary) {
         throw new Error('update-task requires --initial-prompt and/or --summary');
