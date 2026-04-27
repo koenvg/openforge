@@ -18,14 +18,6 @@ pub struct PluginRow {
     pub is_builtin: bool,
 }
 
-/// Row from the project_plugins join table
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProjectPluginRow {
-    pub project_id: String,
-    pub plugin_id: String,
-    pub enabled: bool,
-}
-
 impl super::Database {
     /// Insert a plugin record. Replaces if id already exists.
     pub fn install_plugin(&self, plugin: &PluginRow) -> Result<()> {
