@@ -90,6 +90,255 @@ impl RingBuffer {
 }
 
 // ============================================================================
+// PTY Output Reader and Event Batching
+// ============================================================================
+
+const PTY_READ_BUFFER_SIZE: usize = 8192;
+const PTY_FLUSH_INTERVAL_MS: u64 = 16;
+const PTY_MAX_BATCH_SIZE: usize = 65_536;
+
+type PtyOutputMessage = Option<String>;
+type PtyOutputSender = tokio::sync::mpsc::UnboundedSender<PtyOutputMessage>;
+type PtyOutputReceiver = tokio::sync::mpsc::UnboundedReceiver<PtyOutputMessage>;
+type PtyEmitResult = Result<(), String>;
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
+fn read_pty_output_loop<R: Read + ?Sized>(
+    reader: &mut R,
+    tx: PtyOutputSender,
+    session_key: &str,
+    last_output: Option<Arc<AtomicU64>>,
+) {
+    let mut buffer = [0u8; PTY_READ_BUFFER_SIZE];
+    let mut incomplete_utf8: Vec<u8> = Vec::new();
+
+    loop {
+        match reader.read(&mut buffer) {
+            Ok(0) => {
+                info!("[PTY] key={} closed (EOF)", session_key);
+                let _ = tx.send(None);
+                break;
+            }
+            Ok(n) => {
+                if let Some(last_output) = &last_output {
+                    last_output.store(now_ms(), Ordering::Relaxed);
+                }
+
+                let mut data = if incomplete_utf8.is_empty() {
+                    buffer[..n].to_vec()
+                } else {
+                    let mut combined = std::mem::take(&mut incomplete_utf8);
+                    combined.extend_from_slice(&buffer[..n]);
+                    combined
+                };
+
+                let valid_up_to = find_utf8_boundary(&data);
+                if valid_up_to < data.len() {
+                    incomplete_utf8 = data[valid_up_to..].to_vec();
+                    data.truncate(valid_up_to);
+                }
+
+                if !data.is_empty() {
+                    let text = String::from_utf8_lossy(&data).to_string();
+                    if tx.send(Some(text)).is_err() {
+                        info!("[PTY] key={} channel closed, reader exiting", session_key);
+                        break;
+                    }
+                }
+            }
+            Err(e) => {
+                info!("[PTY] key={} read error: {}", session_key, e);
+                let _ = tx.send(None);
+                break;
+            }
+        }
+    }
+}
+
+fn spawn_pty_output_reader(
+    mut reader: Box<dyn Read + Send>,
+    session_key: String,
+    last_output: Option<Arc<AtomicU64>>,
+) -> PtyOutputReceiver {
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    tokio::task::spawn_blocking(move || {
+        read_pty_output_loop(&mut reader, tx, &session_key, last_output);
+    });
+    rx
+}
+
+struct PtyOutputBatcher {
+    session_key: String,
+    instance_id: u64,
+    ring_buffer: Arc<std::sync::Mutex<RingBuffer>>,
+    pending: String,
+    max_buffer_size: usize,
+}
+
+impl PtyOutputBatcher {
+    fn new(
+        session_key: String,
+        instance_id: u64,
+        ring_buffer: Arc<std::sync::Mutex<RingBuffer>>,
+        max_buffer_size: usize,
+    ) -> Self {
+        Self {
+            session_key,
+            instance_id,
+            ring_buffer,
+            pending: String::new(),
+            max_buffer_size,
+        }
+    }
+
+    fn push_output<E>(&mut self, text: &str, emit: &mut E) -> bool
+    where
+        E: FnMut(&str, &serde_json::Value) -> PtyEmitResult,
+    {
+        self.pending.push_str(text);
+        if self.pending.len() >= self.max_buffer_size {
+            self.flush_pending(emit)
+        } else {
+            false
+        }
+    }
+
+    fn flush_pending<E>(&mut self, emit: &mut E) -> bool
+    where
+        E: FnMut(&str, &serde_json::Value) -> PtyEmitResult,
+    {
+        if self.pending.is_empty() {
+            return false;
+        }
+
+        let data = std::mem::take(&mut self.pending);
+        if let Ok(mut buf) = self.ring_buffer.lock() {
+            buf.push(data.as_bytes());
+        }
+
+        let event_name = format!("pty-output-{}", self.session_key);
+        let payload = serde_json::json!({
+            "task_id": &self.session_key,
+            "data": &data,
+            "instance_id": self.instance_id,
+        });
+        if let Err(e) = emit(&event_name, &payload) {
+            warn!("[PTY] Failed to emit {}: {}", event_name, e);
+        }
+        true
+    }
+}
+
+enum PtyExitAction {
+    EmitOnly,
+    FinalizeAgent {
+        sessions: Arc<Mutex<HashMap<String, PtySession>>>,
+        last_output: Arc<Mutex<HashMap<String, Arc<AtomicU64>>>>,
+        output_buffers: Arc<Mutex<HashMap<String, Arc<std::sync::Mutex<RingBuffer>>>>>,
+        pid_file: PathBuf,
+    },
+}
+
+struct PtyEventEmitterConfig {
+    session_key: String,
+    instance_id: u64,
+    app_handle: tauri::AppHandle,
+    ring_buffer: Arc<std::sync::Mutex<RingBuffer>>,
+    exit_action: PtyExitAction,
+}
+
+fn emit_tauri_pty_event(
+    app_handle: &tauri::AppHandle,
+    event_name: &str,
+    payload: &serde_json::Value,
+) -> PtyEmitResult {
+    app_handle
+        .emit(event_name, payload)
+        .map_err(|e| e.to_string())
+}
+
+fn spawn_batched_pty_event_emitter(mut rx: PtyOutputReceiver, config: PtyEventEmitterConfig) {
+    tokio::spawn(async move {
+        let PtyEventEmitterConfig {
+            session_key,
+            instance_id,
+            app_handle,
+            ring_buffer,
+            exit_action,
+        } = config;
+        let mut batcher = PtyOutputBatcher::new(
+            session_key.clone(),
+            instance_id,
+            ring_buffer,
+            PTY_MAX_BATCH_SIZE,
+        );
+        let mut interval =
+            tokio::time::interval(tokio::time::Duration::from_millis(PTY_FLUSH_INTERVAL_MS));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tokio::select! {
+                msg = rx.recv() => {
+                    match msg {
+                        Some(Some(text)) => {
+                            batcher.push_output(&text, &mut |event_name, payload| {
+                                emit_tauri_pty_event(&app_handle, event_name, payload)
+                            });
+                        }
+                        Some(None) | None => {
+                            batcher.flush_pending(&mut |event_name, payload| {
+                                emit_tauri_pty_event(&app_handle, event_name, payload)
+                            });
+
+                            let agent_success = match exit_action {
+                                PtyExitAction::EmitOnly => None,
+                                PtyExitAction::FinalizeAgent {
+                                    sessions,
+                                    last_output,
+                                    output_buffers,
+                                    pid_file,
+                                } => Some(finalize_agent_pty_exit(
+                                    &sessions,
+                                    &last_output,
+                                    &output_buffers,
+                                    &pid_file,
+                                    &session_key,
+                                    instance_id,
+                                ).await),
+                            };
+
+                            info!("[PTY] key={} emitter received exit signal", session_key);
+                            let _ = app_handle.emit(
+                                &format!("pty-exit-{}", session_key),
+                                serde_json::json!({"instance_id": instance_id}),
+                            );
+                            if let Some(success) = agent_success {
+                                let _ = app_handle.emit(
+                                    "agent-pty-exited",
+                                    serde_json::json!({"task_id": &session_key, "success": success}),
+                                );
+                            }
+                            break;
+                        }
+                    }
+                }
+                _ = interval.tick() => {
+                    batcher.flush_pending(&mut |event_name, payload| {
+                        emit_tauri_pty_event(&app_handle, event_name, payload)
+                    });
+                }
+            }
+        }
+    });
+}
+
+// ============================================================================
 // Instance ID Generator
 // ============================================================================
 
@@ -290,129 +539,17 @@ impl PtyManager {
         let pid_file = pid_dir.join(format!("{}-pty.pid", task_id));
         std::fs::write(&pid_file, pid.to_string())?;
 
-        // Channel to bridge blocking reader → async emitter
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Option<String>>();
-
-        // Blocking reader thread: reads PTY output, sends through channel
-        let task_id_reader = task_id.to_string();
-        tokio::task::spawn_blocking(move || {
-            let mut reader = reader;
-            let mut buffer = [0u8; 8192];
-            let mut incomplete_utf8: Vec<u8> = Vec::new();
-
-            loop {
-                match reader.read(&mut buffer) {
-                    Ok(0) => {
-                        info!("[PTY] task={} closed (EOF)", task_id_reader);
-                        let _ = tx.send(None);
-                        break;
-                    }
-                    Ok(n) => {
-                        let mut data = if incomplete_utf8.is_empty() {
-                            buffer[..n].to_vec()
-                        } else {
-                            let mut combined = std::mem::take(&mut incomplete_utf8);
-                            combined.extend_from_slice(&buffer[..n]);
-                            combined
-                        };
-
-                        let valid_up_to = find_utf8_boundary(&data);
-                        if valid_up_to < data.len() {
-                            incomplete_utf8 = data[valid_up_to..].to_vec();
-                            data.truncate(valid_up_to);
-                        }
-
-                        if !data.is_empty() {
-                            let text = String::from_utf8_lossy(&data).to_string();
-                            if tx.send(Some(text)).is_err() {
-                                info!(
-                                    "[PTY] task={} channel closed, reader exiting",
-                                    task_id_reader
-                                );
-                                break;
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        info!("[PTY] task={} read error: {}", task_id_reader, e);
-                        let _ = tx.send(None);
-                        break;
-                    }
-                }
-            }
-        });
-
-        // Async emitter task: receives from channel, batches output, emits Tauri events.
-        // Batch PTY output to reduce Tauri event frequency and prevent visual tearing.
-        // OpenTUI redraws at 60 FPS; without batching, partial frames appear between
-        // cursor-positioning and content writes. We flush at ~60 FPS (every 16ms) or
-        // when the buffer exceeds 64KB.
-        const FLUSH_INTERVAL_MS: u64 = 16;
-        const MAX_BUFFER_SIZE: usize = 65536; // 64KB early flush threshold
-
-        let task_id_emitter = task_id.to_string();
-        let instance_id_emitter = instance_id;
-        tokio::spawn(async move {
-            let mut buffer = String::new();
-            let mut interval =
-                tokio::time::interval(tokio::time::Duration::from_millis(FLUSH_INTERVAL_MS));
-            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-            loop {
-                tokio::select! {
-                    msg = rx.recv() => {
-                        match msg {
-                            Some(Some(text)) => {
-                                buffer.push_str(&text);
-                                if buffer.len() >= MAX_BUFFER_SIZE {
-                                    // Early flush: buffer exceeded threshold
-                                    if !buffer.is_empty() {
-                                        let event_name = format!("pty-output-{}", task_id_emitter);
-                                        let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer, "instance_id": instance_id_emitter });
-                                        if let Err(e) = app_handle.emit(&event_name, &payload) {
-                                            warn!("[PTY] Failed to emit {}: {}", event_name, e);
-                                        }
-                                        if let Ok(mut buf) = ring_buffer_emitter.lock() {
-                                            buf.push(buffer.as_bytes());
-                                        }
-                                        buffer.clear();
-                                    }
-                                }
-                            }
-                            Some(None) | None => {
-                                if !buffer.is_empty() {
-                                    let event_name = format!("pty-output-{}", task_id_emitter);
-                                    let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer, "instance_id": instance_id_emitter });
-                                    if let Err(e) = app_handle.emit(&event_name, &payload) {
-                                        warn!("[PTY] Failed to emit {}: {}", event_name, e);
-                                    }
-                                    if let Ok(mut buf) = ring_buffer_emitter.lock() {
-                                        buf.push(buffer.as_bytes());
-                                    }
-                                    buffer.clear();
-                                }
-                                info!("[PTY] task={} emitter received exit signal", task_id_emitter);
-                                let _ = app_handle.emit(&format!("pty-exit-{}", task_id_emitter), serde_json::json!({"instance_id": instance_id_emitter}));
-                                break;
-                            }
-                        }
-                    }
-                    _ = interval.tick() => {
-                        if !buffer.is_empty() {
-                            let event_name = format!("pty-output-{}", task_id_emitter);
-                            let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer, "instance_id": instance_id_emitter });
-                            if let Err(e) = app_handle.emit(&event_name, &payload) {
-                                warn!("[PTY] Failed to emit {}: {}", event_name, e);
-                            }
-                            if let Ok(mut buf) = ring_buffer_emitter.lock() {
-                                buf.push(buffer.as_bytes());
-                            }
-                            buffer.clear();
-                        }
-                    }
-                }
-            }
-        });
+        let rx = spawn_pty_output_reader(reader, task_id.to_string(), None);
+        spawn_batched_pty_event_emitter(
+            rx,
+            PtyEventEmitterConfig {
+                session_key: task_id.to_string(),
+                instance_id,
+                app_handle,
+                ring_buffer: ring_buffer_emitter,
+                exit_action: PtyExitAction::EmitOnly,
+            },
+        );
 
         Ok(instance_id)
     }
@@ -560,8 +697,6 @@ impl PtyManager {
             let mut times = self.last_output.lock().await;
             times.insert(task_id.to_string(), Arc::clone(&last_output_time));
         }
-        let last_output_time_reader = Arc::clone(&last_output_time);
-
         let ring_buffer = Arc::new(std::sync::Mutex::new(RingBuffer::new(
             CLAUDE_BUFFER_CAPACITY,
         )));
@@ -571,138 +706,26 @@ impl PtyManager {
         }
         let ring_buffer_emitter = Arc::clone(&ring_buffer);
 
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Option<String>>();
-
-        let task_id_reader = task_id.to_string();
-        tokio::task::spawn_blocking(move || {
-            let mut reader = reader;
-            let mut buffer = [0u8; 8192];
-            let mut incomplete_utf8: Vec<u8> = Vec::new();
-
-            loop {
-                match reader.read(&mut buffer) {
-                    Ok(0) => {
-                        info!("[PTY] task={} closed (EOF)", task_id_reader);
-                        let _ = tx.send(None);
-                        break;
-                    }
-                    Ok(n) => {
-                        let now_ms = std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_millis() as u64;
-                        last_output_time_reader.store(now_ms, Ordering::Relaxed);
-
-                        let mut data = if incomplete_utf8.is_empty() {
-                            buffer[..n].to_vec()
-                        } else {
-                            let mut combined = std::mem::take(&mut incomplete_utf8);
-                            combined.extend_from_slice(&buffer[..n]);
-                            combined
-                        };
-
-                        let valid_up_to = find_utf8_boundary(&data);
-                        if valid_up_to < data.len() {
-                            incomplete_utf8 = data[valid_up_to..].to_vec();
-                            data.truncate(valid_up_to);
-                        }
-
-                        if !data.is_empty() {
-                            let text = String::from_utf8_lossy(&data).to_string();
-                            if tx.send(Some(text)).is_err() {
-                                info!(
-                                    "[PTY] task={} channel closed, reader exiting",
-                                    task_id_reader
-                                );
-                                break;
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        info!("[PTY] task={} read error: {}", task_id_reader, e);
-                        let _ = tx.send(None);
-                        break;
-                    }
-                }
-            }
-        });
-
-        const FLUSH_INTERVAL_MS: u64 = 16;
-        const MAX_BUFFER_SIZE: usize = 65536;
-
-        let task_id_emitter = task_id.to_string();
-        let instance_id_emitter = instance_id;
-        let sessions_emitter = Arc::clone(&self.sessions);
-        let last_output_emitter = Arc::clone(&self.last_output);
-        let output_buffers_emitter = Arc::clone(&self.output_buffers);
-        let pid_file_emitter = pid_file.clone();
-        tokio::spawn(async move {
-            let mut buffer = String::new();
-            let mut interval =
-                tokio::time::interval(tokio::time::Duration::from_millis(FLUSH_INTERVAL_MS));
-            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-            loop {
-                tokio::select! {
-                    msg = rx.recv() => {
-                        match msg {
-                            Some(Some(text)) => {
-                                buffer.push_str(&text);
-                                if buffer.len() >= MAX_BUFFER_SIZE && !buffer.is_empty() {
-                                    if let Ok(mut buf) = ring_buffer_emitter.lock() {
-                                        buf.push(buffer.as_bytes());
-                                    }
-                                    let event_name = format!("pty-output-{}", task_id_emitter);
-                                     let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer, "instance_id": instance_id_emitter });
-                                    if let Err(e) = app_handle.emit(&event_name, &payload) {
-                                        warn!("[PTY] Failed to emit {}: {}", event_name, e);
-                                    }
-                                    buffer.clear();
-                                }
-                            }
-                            Some(None) | None => {
-                                if !buffer.is_empty() {
-                                    if let Ok(mut buf) = ring_buffer_emitter.lock() {
-                                        buf.push(buffer.as_bytes());
-                                    }
-                                    let event_name = format!("pty-output-{}", task_id_emitter);
-                                     let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer, "instance_id": instance_id_emitter });
-                                    if let Err(e) = app_handle.emit(&event_name, &payload) {
-                                        warn!("[PTY] Failed to emit {}: {}", event_name, e);
-                                    }
-                                    buffer.clear();
-                                }
-                                let success = finalize_agent_pty_exit(
-                                    &sessions_emitter,
-                                    &last_output_emitter,
-                                    &output_buffers_emitter,
-                                    &pid_file_emitter,
-                                    &task_id_emitter,
-                                    instance_id_emitter,
-                                ).await;
-                                info!("[PTY] task={} emitter received exit signal", task_id_emitter);
-                                let _ = app_handle.emit(&format!("pty-exit-{}", task_id_emitter), serde_json::json!({"instance_id": instance_id_emitter}));
-                                let _ = app_handle.emit("agent-pty-exited", serde_json::json!({"task_id": &task_id_emitter, "success": success}));
-                                break;
-                            }
-                        }
-                    }
-                    _ = interval.tick() => {
-                        if !buffer.is_empty() {
-                            if let Ok(mut buf) = ring_buffer_emitter.lock() {
-                                buf.push(buffer.as_bytes());
-                            }
-                            let event_name = format!("pty-output-{}", task_id_emitter);
-                             let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer, "instance_id": instance_id_emitter });
-                            if let Err(e) = app_handle.emit(&event_name, &payload) {
-                                warn!("[PTY] Failed to emit {}: {}", event_name, e);
-                            }
-                            buffer.clear();
-                        }
-                    }
-                }
-            }
-        });
+        let rx = spawn_pty_output_reader(
+            reader,
+            task_id.to_string(),
+            Some(Arc::clone(&last_output_time)),
+        );
+        spawn_batched_pty_event_emitter(
+            rx,
+            PtyEventEmitterConfig {
+                session_key: task_id.to_string(),
+                instance_id,
+                app_handle,
+                ring_buffer: ring_buffer_emitter,
+                exit_action: PtyExitAction::FinalizeAgent {
+                    sessions: Arc::clone(&self.sessions),
+                    last_output: Arc::clone(&self.last_output),
+                    output_buffers: Arc::clone(&self.output_buffers),
+                    pid_file,
+                },
+            },
+        );
 
         Ok(instance_id)
     }
@@ -826,132 +849,22 @@ impl PtyManager {
         }
         let ring_buffer_emitter = Arc::clone(&ring_buffer);
 
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Option<String>>();
-
-        let task_id_reader = task_id.to_string();
-        tokio::task::spawn_blocking(move || {
-            let mut reader = reader;
-            let mut buffer = [0u8; 8192];
-            let mut incomplete_utf8: Vec<u8> = Vec::new();
-
-            loop {
-                match reader.read(&mut buffer) {
-                    Ok(0) => {
-                        info!("[PTY] task={} closed (EOF)", task_id_reader);
-                        let _ = tx.send(None);
-                        break;
-                    }
-                    Ok(n) => {
-                        let mut data = if incomplete_utf8.is_empty() {
-                            buffer[..n].to_vec()
-                        } else {
-                            let mut combined = std::mem::take(&mut incomplete_utf8);
-                            combined.extend_from_slice(&buffer[..n]);
-                            combined
-                        };
-
-                        let valid_up_to = find_utf8_boundary(&data);
-                        if valid_up_to < data.len() {
-                            incomplete_utf8 = data[valid_up_to..].to_vec();
-                            data.truncate(valid_up_to);
-                        }
-
-                        if !data.is_empty() {
-                            let text = String::from_utf8_lossy(&data).to_string();
-                            if tx.send(Some(text)).is_err() {
-                                info!(
-                                    "[PTY] task={} channel closed, reader exiting",
-                                    task_id_reader
-                                );
-                                break;
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        info!("[PTY] task={} read error: {}", task_id_reader, e);
-                        let _ = tx.send(None);
-                        break;
-                    }
-                }
-            }
-        });
-
-        const FLUSH_INTERVAL_MS: u64 = 16;
-        const MAX_BUFFER_SIZE: usize = 65536;
-
-        let task_id_emitter = task_id.to_string();
-        let instance_id_emitter = instance_id;
-        let sessions_emitter = Arc::clone(&self.sessions);
-        let last_output_emitter = Arc::clone(&self.last_output);
-        let output_buffers_emitter = Arc::clone(&self.output_buffers);
-        let pid_file_emitter = pid_file.clone();
-        tokio::spawn(async move {
-            let mut buffer = String::new();
-            let mut interval =
-                tokio::time::interval(tokio::time::Duration::from_millis(FLUSH_INTERVAL_MS));
-            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-            loop {
-                tokio::select! {
-                    msg = rx.recv() => {
-                        match msg {
-                            Some(Some(text)) => {
-                                buffer.push_str(&text);
-                                if buffer.len() >= MAX_BUFFER_SIZE && !buffer.is_empty() {
-                                    if let Ok(mut buf) = ring_buffer_emitter.lock() {
-                                        buf.push(buffer.as_bytes());
-                                    }
-                                    let event_name = format!("pty-output-{}", task_id_emitter);
-                                    let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer, "instance_id": instance_id_emitter });
-                                    if let Err(e) = app_handle.emit(&event_name, &payload) {
-                                        warn!("[PTY] Failed to emit {}: {}", event_name, e);
-                                    }
-                                    buffer.clear();
-                                }
-                            }
-                            Some(None) | None => {
-                                if !buffer.is_empty() {
-                                    if let Ok(mut buf) = ring_buffer_emitter.lock() {
-                                        buf.push(buffer.as_bytes());
-                                    }
-                                    let event_name = format!("pty-output-{}", task_id_emitter);
-                                    let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer, "instance_id": instance_id_emitter });
-                                    if let Err(e) = app_handle.emit(&event_name, &payload) {
-                                        warn!("[PTY] Failed to emit {}: {}", event_name, e);
-                                    }
-                                    buffer.clear();
-                                }
-                                let success = finalize_agent_pty_exit(
-                                    &sessions_emitter,
-                                    &last_output_emitter,
-                                    &output_buffers_emitter,
-                                    &pid_file_emitter,
-                                    &task_id_emitter,
-                                    instance_id_emitter,
-                                ).await;
-                                info!("[PTY] task={} emitter received exit signal", task_id_emitter);
-                                let _ = app_handle.emit(&format!("pty-exit-{}", task_id_emitter), serde_json::json!({"instance_id": instance_id_emitter}));
-                                let _ = app_handle.emit("agent-pty-exited", serde_json::json!({"task_id": &task_id_emitter, "success": success}));
-                                break;
-                            }
-                        }
-                    }
-                    _ = interval.tick() => {
-                        if !buffer.is_empty() {
-                            if let Ok(mut buf) = ring_buffer_emitter.lock() {
-                                buf.push(buffer.as_bytes());
-                            }
-                            let event_name = format!("pty-output-{}", task_id_emitter);
-                            let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer, "instance_id": instance_id_emitter });
-                            if let Err(e) = app_handle.emit(&event_name, &payload) {
-                                warn!("[PTY] Failed to emit {}: {}", event_name, e);
-                            }
-                            buffer.clear();
-                        }
-                    }
-                }
-            }
-        });
+        let rx = spawn_pty_output_reader(reader, task_id.to_string(), None);
+        spawn_batched_pty_event_emitter(
+            rx,
+            PtyEventEmitterConfig {
+                session_key: task_id.to_string(),
+                instance_id,
+                app_handle,
+                ring_buffer: ring_buffer_emitter,
+                exit_action: PtyExitAction::FinalizeAgent {
+                    sessions: Arc::clone(&self.sessions),
+                    last_output: Arc::clone(&self.last_output),
+                    output_buffers: Arc::clone(&self.output_buffers),
+                    pid_file,
+                },
+            },
+        );
 
         Ok(instance_id)
     }
@@ -1059,8 +972,6 @@ impl PtyManager {
             let mut times = self.last_output.lock().await;
             times.insert(key.clone(), Arc::clone(&last_output_time));
         }
-        let last_output_time_reader = Arc::clone(&last_output_time);
-
         let ring_buffer = Arc::new(std::sync::Mutex::new(RingBuffer::new(
             CLAUDE_BUFFER_CAPACITY,
         )));
@@ -1070,122 +981,17 @@ impl PtyManager {
         }
         let ring_buffer_emitter = Arc::clone(&ring_buffer);
 
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Option<String>>();
-
-        let key_reader = key.clone();
-        tokio::task::spawn_blocking(move || {
-            let mut reader = reader;
-            let mut buffer = [0u8; 8192];
-            let mut incomplete_utf8: Vec<u8> = Vec::new();
-
-            loop {
-                match reader.read(&mut buffer) {
-                    Ok(0) => {
-                        info!("[PTY] key={} closed (EOF)", key_reader);
-                        let _ = tx.send(None);
-                        break;
-                    }
-                    Ok(n) => {
-                        let now_ms = std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_millis() as u64;
-                        last_output_time_reader.store(now_ms, Ordering::Relaxed);
-
-                        let mut data = if incomplete_utf8.is_empty() {
-                            buffer[..n].to_vec()
-                        } else {
-                            let mut combined = std::mem::take(&mut incomplete_utf8);
-                            combined.extend_from_slice(&buffer[..n]);
-                            combined
-                        };
-
-                        let valid_up_to = find_utf8_boundary(&data);
-                        if valid_up_to < data.len() {
-                            incomplete_utf8 = data[valid_up_to..].to_vec();
-                            data.truncate(valid_up_to);
-                        }
-
-                        if !data.is_empty() {
-                            let text = String::from_utf8_lossy(&data).to_string();
-                            if tx.send(Some(text)).is_err() {
-                                info!("[PTY] key={} channel closed, reader exiting", key_reader);
-                                break;
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        info!("[PTY] key={} read error: {}", key_reader, e);
-                        let _ = tx.send(None);
-                        break;
-                    }
-                }
-            }
-        });
-
-        const FLUSH_INTERVAL_MS: u64 = 16;
-        const MAX_BUFFER_SIZE: usize = 65536;
-
-        let key_emitter = key.clone();
-        let instance_id_emitter = instance_id;
-        tokio::spawn(async move {
-            let mut buffer = String::new();
-            let mut interval =
-                tokio::time::interval(tokio::time::Duration::from_millis(FLUSH_INTERVAL_MS));
-            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-            loop {
-                tokio::select! {
-                    msg = rx.recv() => {
-                        match msg {
-                            Some(Some(text)) => {
-                                buffer.push_str(&text);
-                                if buffer.len() >= MAX_BUFFER_SIZE && !buffer.is_empty() {
-                                    if let Ok(mut buf) = ring_buffer_emitter.lock() {
-                                        buf.push(buffer.as_bytes());
-                                    }
-                                    let event_name = format!("pty-output-{}", key_emitter);
-                                     let payload = serde_json::json!({ "task_id": &key_emitter, "data": &buffer, "instance_id": instance_id_emitter });
-                                    if let Err(e) = app_handle.emit(&event_name, &payload) {
-                                        warn!("[PTY] Failed to emit {}: {}", event_name, e);
-                                    }
-                                    buffer.clear();
-                                }
-                            }
-                            Some(None) | None => {
-                                if !buffer.is_empty() {
-                                    if let Ok(mut buf) = ring_buffer_emitter.lock() {
-                                        buf.push(buffer.as_bytes());
-                                    }
-                                    let event_name = format!("pty-output-{}", key_emitter);
-                                     let payload = serde_json::json!({ "task_id": &key_emitter, "data": &buffer, "instance_id": instance_id_emitter });
-                                    if let Err(e) = app_handle.emit(&event_name, &payload) {
-                                        warn!("[PTY] Failed to emit {}: {}", event_name, e);
-                                    }
-                                    buffer.clear();
-                                }
-                                info!("[PTY] key={} emitter received exit signal", key_emitter);
-                                let _ = app_handle.emit(&format!("pty-exit-{}", key_emitter), serde_json::json!({"instance_id": instance_id_emitter}));
-                                break;
-                            }
-                        }
-                    }
-                    _ = interval.tick() => {
-                        if !buffer.is_empty() {
-                            if let Ok(mut buf) = ring_buffer_emitter.lock() {
-                                buf.push(buffer.as_bytes());
-                            }
-                            let event_name = format!("pty-output-{}", key_emitter);
-                             let payload = serde_json::json!({ "task_id": &key_emitter, "data": &buffer, "instance_id": instance_id_emitter });
-                            if let Err(e) = app_handle.emit(&event_name, &payload) {
-                                warn!("[PTY] Failed to emit {}: {}", event_name, e);
-                            }
-                            buffer.clear();
-                        }
-                    }
-                }
-            }
-        });
+        let rx = spawn_pty_output_reader(reader, key.clone(), Some(Arc::clone(&last_output_time)));
+        spawn_batched_pty_event_emitter(
+            rx,
+            PtyEventEmitterConfig {
+                session_key: key.clone(),
+                instance_id,
+                app_handle,
+                ring_buffer: ring_buffer_emitter,
+                exit_action: PtyExitAction::EmitOnly,
+            },
+        );
 
         Ok(instance_id)
     }
@@ -1779,6 +1585,111 @@ mod tests {
         // Should at least have fallback values
         assert!(env.contains_key("PATH"));
         assert!(env.contains_key("LANG"));
+    }
+
+    struct ChunkedReader {
+        chunks: std::collections::VecDeque<Vec<u8>>,
+    }
+
+    impl ChunkedReader {
+        fn new(chunks: Vec<&[u8]>) -> Self {
+            Self {
+                chunks: chunks.into_iter().map(|chunk| chunk.to_vec()).collect(),
+            }
+        }
+    }
+
+    impl Read for ChunkedReader {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            let Some(chunk) = self.chunks.pop_front() else {
+                return Ok(0);
+            };
+            let len = chunk.len().min(buf.len());
+            buf[..len].copy_from_slice(&chunk[..len]);
+            Ok(len)
+        }
+    }
+
+    #[test]
+    fn test_read_pty_output_loop_preserves_utf8_split_across_reads() {
+        let mut reader = ChunkedReader::new(vec![b"hello \xC3", b"\xA9 world"]);
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+
+        read_pty_output_loop(&mut reader, tx, "task-reader", None);
+
+        assert_eq!(rx.blocking_recv(), Some(Some("hello ".to_string())));
+        assert_eq!(rx.blocking_recv(), Some(Some("é world".to_string())));
+        assert_eq!(rx.blocking_recv(), Some(None));
+    }
+
+    #[test]
+    fn test_read_pty_output_loop_updates_last_output_time() {
+        let mut reader = ChunkedReader::new(vec![b"output"]);
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let last_output = Arc::new(AtomicU64::new(0));
+
+        read_pty_output_loop(
+            &mut reader,
+            tx,
+            "task-reader",
+            Some(Arc::clone(&last_output)),
+        );
+
+        assert_eq!(rx.blocking_recv(), Some(Some("output".to_string())));
+        assert!(last_output.load(Ordering::Relaxed) > 0);
+    }
+
+    #[test]
+    fn test_pty_output_batcher_flushes_at_threshold_to_event_and_ring_buffer() {
+        let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(64)));
+        let mut batcher = PtyOutputBatcher::new("task-batch".to_string(), 42, Arc::clone(&ring), 5);
+        let mut emitted = Vec::new();
+
+        batcher.push_output("he", &mut |event_name, payload| {
+            emitted.push((event_name.to_string(), payload.clone()));
+            Ok(())
+        });
+        assert!(
+            emitted.is_empty(),
+            "partial batch should not emit before threshold"
+        );
+
+        batcher.push_output("llo", &mut |event_name, payload| {
+            emitted.push((event_name.to_string(), payload.clone()));
+            Ok(())
+        });
+
+        assert_eq!(emitted.len(), 1);
+        assert_eq!(emitted[0].0, "pty-output-task-batch");
+        assert_eq!(emitted[0].1["task_id"], "task-batch");
+        assert_eq!(emitted[0].1["data"], "hello");
+        assert_eq!(emitted[0].1["instance_id"], 42);
+        assert_eq!(ring.lock().unwrap().snapshot(), "hello");
+    }
+
+    #[test]
+    fn test_pty_output_batcher_flush_pending_returns_false_for_empty_buffer() {
+        let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(64)));
+        let mut batcher = PtyOutputBatcher::new("task-empty".to_string(), 7, ring, 10);
+        let mut emitted = Vec::new();
+
+        assert!(!batcher.flush_pending(&mut |event_name, payload| {
+            emitted.push((event_name.to_string(), payload.clone()));
+            Ok(())
+        }));
+        assert!(emitted.is_empty());
+
+        batcher.push_output("data", &mut |event_name, payload| {
+            emitted.push((event_name.to_string(), payload.clone()));
+            Ok(())
+        });
+        assert!(emitted.is_empty());
+        assert!(batcher.flush_pending(&mut |event_name, payload| {
+            emitted.push((event_name.to_string(), payload.clone()));
+            Ok(())
+        }));
+        assert_eq!(emitted.len(), 1);
+        assert_eq!(emitted[0].1["data"], "data");
     }
 
     #[test]
