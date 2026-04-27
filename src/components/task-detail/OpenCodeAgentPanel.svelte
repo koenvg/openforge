@@ -10,6 +10,7 @@
     attach,
     detach,
     getShellLifecycleState,
+    isValidTerminalDimensions,
     updateShellLifecycleState,
     type PoolEntry,
   } from '../../lib/terminalPool'
@@ -69,7 +70,7 @@
         requestAnimationFrame(() => {
           if (poolEntry) {
             const proposed = poolEntry.fitAddon.proposeDimensions()
-            if (proposed && !Number.isNaN(proposed.cols) && !Number.isNaN(proposed.rows)) {
+            if (isValidTerminalDimensions(proposed)) {
               poolEntry.fitAddon.fit()
             }
           }

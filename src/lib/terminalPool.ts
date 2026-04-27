@@ -66,11 +66,17 @@ function isModalOpen(): boolean {
   return document.querySelector('[role="dialog"][aria-modal="true"]') !== null
 }
 
+export function isValidTerminalDimensions(dimensions: { cols: unknown; rows: unknown } | null | undefined): dimensions is { cols: number; rows: number } {
+  if (!dimensions) return false
+  if (typeof dimensions.cols !== 'number' || typeof dimensions.rows !== 'number') return false
+  return !Number.isNaN(dimensions.cols) && !Number.isNaN(dimensions.rows)
+}
+
 function safeFit(entry: PoolEntry): boolean {
   if (!entry.fitAddon || !entry.hostDiv) return false
   if (entry.hostDiv.clientWidth === 0 || entry.hostDiv.clientHeight === 0) return false
   const proposed = entry.fitAddon.proposeDimensions()
-  if (!proposed || isNaN(proposed.cols) || isNaN(proposed.rows)) return false
+  if (!isValidTerminalDimensions(proposed)) return false
   entry.fitAddon.fit()
   return true
 }

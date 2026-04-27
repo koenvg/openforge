@@ -21,6 +21,7 @@ import {
 	getTaskTerminalTabsSession,
 	isPtyActive,
 	isShellExited,
+	isValidTerminalDimensions,
 	markPtySpawnPending,
 	recoverActiveTerminal,
 	release,
@@ -610,6 +611,22 @@ describe("terminalPool", () => {
 		expect(fitSpy).toHaveBeenCalledTimes(1);
 		expect(refreshSpy).toHaveBeenCalled();
 		expect(focusSpy).toHaveBeenCalled();
+	});
+
+	describe("terminal dimension validation", () => {
+		it("accepts numeric terminal dimensions", () => {
+			expect(isValidTerminalDimensions({ cols: 80, rows: 24 })).toBe(true);
+		});
+
+		it("rejects NaN terminal dimensions without coercion", () => {
+			expect(isValidTerminalDimensions({ cols: Number.NaN, rows: 24 })).toBe(false);
+			expect(isValidTerminalDimensions({ cols: 80, rows: Number.NaN })).toBe(false);
+		});
+
+		it("rejects string terminal dimensions that global isNaN would coerce", () => {
+			expect(isValidTerminalDimensions({ cols: "80", rows: 24 })).toBe(false);
+			expect(isValidTerminalDimensions({ cols: 80, rows: "24" })).toBe(false);
+		});
 	});
 
 	describe("isPtyActive", () => {
