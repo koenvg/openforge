@@ -1,6 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod builtin_plugins;
 mod claude_hooks;
 pub mod command_discovery;
 mod commands;
@@ -185,30 +186,13 @@ fn resolve_host_runtime_passthrough_asset_from_root(
     Some((content, "application/javascript"))
 }
 
-fn builtin_plugin_dir_name(plugin_id: &str) -> Result<&'static str, String> {
-    match plugin_id {
-        "com.openforge.file-viewer" => Ok("file-viewer"),
-        "com.openforge.github-sync" => Ok("github-sync"),
-        "com.openforge.skills-viewer" => Ok("skills-viewer"),
-        "com.openforge.terminal" => Ok("terminal"),
-        _ => Err(format!("Unknown builtin plugin: {}", plugin_id)),
-    }
-}
-
-fn resolve_builtin_plugin_install_path(plugin_id: &str) -> Result<PathBuf, String> {
-    Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("plugins")
-        .join(builtin_plugin_dir_name(plugin_id)?))
-}
-
 fn resolve_plugin_install_base_dir(
     install_path: &str,
     plugin_id: &str,
     is_builtin: bool,
 ) -> Result<PathBuf, String> {
     if is_builtin && install_path.starts_with("builtin:") {
-        return resolve_builtin_plugin_install_path(plugin_id);
+        return builtin_plugins::install_path(plugin_id);
     }
 
     Ok(PathBuf::from(install_path))
@@ -1125,6 +1109,7 @@ mod tests {
         resolve_plugin_asset_path, resolve_plugin_install_base_dir, restore_resumed_session_state,
         should_start_project_root_server, ResumeSessionPersistence, ResumeTarget,
     };
+    use crate::builtin_plugins;
     use crate::db::test_helpers::make_test_db;
     use crate::opencode_client::SessionStatusInfo;
     use std::collections::HashMap;
@@ -1459,14 +1444,14 @@ mod tests {
     }
 
     #[test]
-    fn resolve_plugin_install_base_dir_maps_builtin_sentinel() {
-        let path = resolve_plugin_install_base_dir(
-            "builtin:com.openforge.file-viewer",
-            "com.openforge.file-viewer",
-            true,
-        )
-        .expect("builtin plugin path should resolve");
+    fn resolve_plugin_install_base_dir_maps_builtin_sentinel_from_catalog() {
+        let plugin = builtin_plugins::find("com.openforge.file-viewer")
+            .expect("file viewer should be in builtin catalog");
+        let path =
+            resolve_plugin_install_base_dir(&plugin.sentinel_install_path(), plugin.id, true)
+                .expect("builtin plugin path should resolve");
 
+        assert_eq!(plugin.directory_name, "file-viewer");
         assert!(path.ends_with("plugins/file-viewer"));
     }
 
