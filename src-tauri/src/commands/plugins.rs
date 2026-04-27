@@ -4,17 +4,11 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager, State};
 
 fn builtin_install_path(plugin_id: &str) -> String {
-    format!("builtin:{plugin_id}")
+    crate::builtin_plugins::sentinel_install_path(plugin_id)
 }
 
 fn is_known_builtin_plugin(plugin_id: &str) -> bool {
-    matches!(
-        plugin_id,
-        "com.openforge.file-viewer"
-            | "com.openforge.github-sync"
-            | "com.openforge.skills-viewer"
-            | "com.openforge.terminal"
-    )
+    crate::builtin_plugins::is_known(plugin_id)
 }
 
 fn resolve_backend_entry_path(
@@ -77,7 +71,8 @@ pub async fn install_plugin(
     installed_at: i64,
     _is_builtin: bool,
 ) -> Result<(), String> {
-    let is_builtin = is_known_builtin_plugin(&id) && install_path == builtin_install_path(&id);
+    let is_builtin = is_known_builtin_plugin(&id)
+        && crate::builtin_plugins::has_sentinel_install_path(&id, &install_path);
     let db = crate::db::acquire_db(&db);
     db.install_plugin(&db::PluginRow {
         id,
@@ -246,16 +241,7 @@ pub async fn plugin_invoke(
 
 fn resolve_plugin_install_root(plugin: &db::PluginRow) -> Result<PathBuf, String> {
     if plugin.is_builtin && plugin.install_path == builtin_install_path(&plugin.id) {
-        return Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("..")
-            .join("plugins")
-            .join(match plugin.id.as_str() {
-                "com.openforge.file-viewer" => "file-viewer",
-                "com.openforge.github-sync" => "github-sync",
-                "com.openforge.skills-viewer" => "skills-viewer",
-                "com.openforge.terminal" => "terminal",
-                _ => return Err(format!("Unknown builtin plugin: {}", plugin.id)),
-            }));
+        return crate::builtin_plugins::install_path(&plugin.id);
     }
 
     Ok(PathBuf::from(&plugin.install_path))
@@ -264,15 +250,20 @@ fn resolve_plugin_install_root(plugin: &db::PluginRow) -> Result<PathBuf, String
 #[cfg(test)]
 mod tests {
     use super::{builtin_install_path, is_known_builtin_plugin, resolve_backend_entry_path};
+    use crate::builtin_plugins;
     use std::fs;
 
     #[test]
-    fn builtin_detection_only_accepts_known_ids_with_exact_sentinel() {
-        assert!(is_known_builtin_plugin("com.openforge.github-sync"));
+    fn builtin_detection_only_accepts_catalog_ids_with_exact_sentinel() {
+        let plugin = builtin_plugins::find("com.openforge.github-sync")
+            .expect("github sync should be in builtin catalog");
+
+        assert!(is_known_builtin_plugin(plugin.id));
         assert_eq!(
-            builtin_install_path("com.openforge.github-sync"),
-            "builtin:com.openforge.github-sync"
+            builtin_install_path(plugin.id),
+            plugin.sentinel_install_path()
         );
+        assert_eq!(plugin.directory_name, "github-sync");
         assert!(!is_known_builtin_plugin("com.example.custom"));
     }
 
