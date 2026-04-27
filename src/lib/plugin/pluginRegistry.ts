@@ -89,7 +89,16 @@ type PluginHostContextSnapshot = {
 
 type PluginHostListener = (payload: unknown) => void
 
+type TauriEventSubscription = {
+  listeners: Set<PluginHostListener>
+  ready: Promise<void>
+  unlisten: (() => void) | null
+  disposed: boolean
+}
+
+const HOST_EVENT_NAMES = new Set(['context-changed', 'navigation-changed', 'selection-changed'])
 const pluginHostListeners = new Map<PluginHostEventName, Set<PluginHostListener>>()
+const tauriEventSubscriptions = new Map<string, TauriEventSubscription>()
 const pluginHostUnsubscribers = new Map<string, Set<() => void>>()
 const activationPromises = new Map<string, Promise<boolean>>()
 const pluginCommandHandlers = new Map<string, PluginActivatedCommandContribution['execute']>()
@@ -269,12 +278,73 @@ async function deactivateLoadedPluginModule(pluginId: string): Promise<void> {
   await deactivatePluginLoader(pluginId)
 }
 
+function ensureTauriEventSubscription(event: string): TauriEventSubscription {
+  const existing = tauriEventSubscriptions.get(event)
+  if (existing) return existing
+
+  const subscription: TauriEventSubscription = {
+    listeners: new Set(),
+    ready: Promise.resolve(),
+    unlisten: null,
+    disposed: false,
+  }
+
+  subscription.ready = listen(event, (tauriEvent) => {
+    for (const listener of Array.from(subscription.listeners)) {
+      listener(tauriEvent.payload)
+    }
+  }).then((unlisten) => {
+    subscription.unlisten = unlisten
+    if (subscription.disposed || subscription.listeners.size === 0) {
+      unlisten()
+      tauriEventSubscriptions.delete(event)
+    }
+  }).catch((error) => {
+    tauriEventSubscriptions.delete(event)
+    console.error(`[pluginRegistry] Failed to subscribe to host event ${event}:`, error)
+  })
+
+  tauriEventSubscriptions.set(event, subscription)
+  return subscription
+}
+
+function removeTauriEventListener(event: string, handler: PluginHostListener): void {
+  const subscription = tauriEventSubscriptions.get(event)
+  if (!subscription) return
+
+  subscription.listeners.delete(handler)
+  if (subscription.listeners.size > 0) return
+
+  if (subscription.unlisten) {
+    subscription.unlisten()
+    tauriEventSubscriptions.delete(event)
+    return
+  }
+
+  subscription.disposed = true
+}
+
+async function waitForTauriEventSubscription(event: string): Promise<void> {
+  await tauriEventSubscriptions.get(event)?.ready
+}
+
+async function waitForTerminalEventSubscriptions(commandPayload: Record<string, unknown> | undefined): Promise<void> {
+  const taskId = typeof commandPayload?.taskId === 'string' ? commandPayload.taskId : ''
+  const terminalIndex = Number(commandPayload?.terminalIndex)
+  if (!taskId || !Number.isInteger(terminalIndex) || terminalIndex < 0) return
+
+  const terminalKey = `${taskId}-shell-${terminalIndex}`
+  await Promise.all([
+    waitForTauriEventSubscription(`pty-output-${terminalKey}`),
+    waitForTauriEventSubscription(`pty-exit-${terminalKey}`),
+  ])
+}
+
 function subscribeToPluginHostEvent(pluginId: string, event: string, handler: PluginHostListener): () => void {
   const cleanupCallbacks = pluginHostUnsubscribers.get(pluginId) ?? new Set<() => void>()
-  const hostEventNames = new Set(['context-changed', 'navigation-changed', 'selection-changed'])
   let unsubscribe = () => {}
 
-  if (hostEventNames.has(event)) {
+  if (HOST_EVENT_NAMES.has(event)) {
     const typedEvent = event as PluginHostEventName
     const listeners = pluginHostListeners.get(typedEvent) ?? new Set<PluginHostListener>()
     listeners.add(handler)
@@ -287,21 +357,9 @@ function subscribeToPluginHostEvent(pluginId: string, event: string, handler: Pl
       }
     }
   } else {
-    let tauriUnlisten: (() => void) | null = null
-    let disposed = false
-    void listen(event, (tauriEvent) => {
-      handler(tauriEvent.payload)
-    }).then((unlisten) => {
-      if (disposed) {
-        unlisten()
-      } else {
-        tauriUnlisten = unlisten
-      }
-    })
-    unsubscribe = () => {
-      disposed = true
-      tauriUnlisten?.()
-    }
+    const subscription = ensureTauriEventSubscription(event)
+    subscription.listeners.add(handler)
+    unsubscribe = () => removeTauriEventListener(event, handler)
   }
 
   const cleanup = () => {
@@ -475,6 +533,7 @@ async function invokePluginHostCommand(command: string, payload: unknown): Promi
     case 'setProjectConfig':
       return setProjectConfig(String(commandPayload?.projectId ?? ''), String(commandPayload?.key ?? ''), String(commandPayload?.value ?? ''))
     case 'spawnShellPty':
+      await waitForTerminalEventSubscriptions(commandPayload)
       return spawnShellPty(String(commandPayload?.taskId ?? ''), String(commandPayload?.cwd ?? ''), Number(commandPayload?.cols), Number(commandPayload?.rows), Number(commandPayload?.terminalIndex))
     case 'writePty':
       return writePty(String(commandPayload?.taskId ?? ''), String(commandPayload?.data ?? ''))

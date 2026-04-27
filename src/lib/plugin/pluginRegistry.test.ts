@@ -11,6 +11,7 @@ const {
   pluginInvokeMock,
   getPluginStorageMock,
   setPluginStorageMock,
+  spawnShellPtyMock,
 } = vi.hoisted(() => ({
   forceGithubSyncMock: vi.fn(),
   installPluginMock: vi.fn(),
@@ -21,6 +22,7 @@ const {
   pluginInvokeMock: vi.fn(),
   getPluginStorageMock: vi.fn(),
   setPluginStorageMock: vi.fn(),
+  spawnShellPtyMock: vi.fn(),
 }))
 
 vi.mock('../ipc', () => ({
@@ -35,6 +37,7 @@ vi.mock('../ipc', () => ({
   pluginInvoke: pluginInvokeMock,
   getPluginStorage: getPluginStorageMock,
   setPluginStorage: setPluginStorageMock,
+  spawnShellPty: spawnShellPtyMock,
 }))
 
 const {
@@ -62,6 +65,18 @@ vi.mock('./pluginLoader', async (importOriginal) => {
     isPluginLoaded: isPluginLoadedMock,
   }
 })
+
+const {
+  listenMock,
+  tauriEventHandlers,
+} = vi.hoisted(() => ({
+  listenMock: vi.fn(),
+  tauriEventHandlers: new Map<string, (event: { payload: unknown }) => void>(),
+}))
+
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: listenMock,
+}))
 
 vi.mock('./builtinPluginModules', () => ({
   getBuiltinPluginModule: getBuiltinPluginModuleMock,
@@ -127,6 +142,13 @@ describe('pluginRegistry', () => {
     pluginInvokeMock.mockReset()
     getPluginStorageMock.mockReset()
     setPluginStorageMock.mockReset()
+    spawnShellPtyMock.mockReset()
+    listenMock.mockReset()
+    tauriEventHandlers.clear()
+    listenMock.mockImplementation(async (event: string, handler: (event: { payload: unknown }) => void) => {
+      tauriEventHandlers.set(event, handler)
+      return vi.fn()
+    })
     loadPluginFrontendMock.mockReset()
     activatePluginLoaderMock.mockReset()
     deactivatePluginLoaderMock.mockReset()
@@ -425,6 +447,65 @@ describe('pluginRegistry', () => {
     unsubscribe?.()
     emitPluginHostEvent('selection-changed', { selectedTaskId: 'T-456' })
     expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('waits for terminal event listeners to be attached before spawning shell PTYs', async () => {
+    const manifest = makeManifest()
+    installedPlugins.set(new Map([['test-plugin', { manifest, state: 'installed', error: null }]]))
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: {}, activationResult: null })
+    spawnShellPtyMock.mockResolvedValue(42)
+
+    let resolveOutputListen: ((unlisten: () => void) => void) | null = null
+    let resolveExitListen: ((unlisten: () => void) => void) | null = null
+    listenMock.mockImplementation((event: string, handler: (event: { payload: unknown }) => void) => {
+      tauriEventHandlers.set(event, handler)
+      return new Promise<() => void>((resolve) => {
+        if (event === 'pty-output-T-1-shell-0') {
+          resolveOutputListen = resolve
+        } else if (event === 'pty-exit-T-1-shell-0') {
+          resolveExitListen = resolve
+        } else {
+          resolve(() => undefined)
+        }
+      })
+    })
+
+    activatePluginLoaderMock.mockResolvedValue({ contributions: {} })
+    await activatePlugin('test-plugin')
+    const context = activatePluginLoaderMock.mock.calls[0]?.[1]
+    if (context === undefined) {
+      throw new Error('Expected plugin context to be passed to activatePluginLoader')
+    }
+
+    const outputHandler = vi.fn()
+    context.onEvent('pty-output-T-1-shell-0', outputHandler)
+    context.onEvent('pty-exit-T-1-shell-0', vi.fn())
+
+    const spawn = context.invokeHost('spawnShellPty', {
+      taskId: 'T-1',
+      cwd: '/tmp/worktree',
+      cols: 80,
+      rows: 24,
+      terminalIndex: 0,
+    })
+    await Promise.resolve()
+
+    expect(spawnShellPtyMock).not.toHaveBeenCalled()
+
+    const outputResolver = resolveOutputListen as ((unlisten: () => void) => void) | null
+    if (!outputResolver) throw new Error('Expected output listener registration to be pending')
+    outputResolver(() => undefined)
+    await Promise.resolve()
+    expect(spawnShellPtyMock).not.toHaveBeenCalled()
+
+    const exitResolver = resolveExitListen as ((unlisten: () => void) => void) | null
+    if (!exitResolver) throw new Error('Expected exit listener registration to be pending')
+    exitResolver(() => undefined)
+    await expect(spawn).resolves.toBe(42)
+    expect(spawnShellPtyMock).toHaveBeenCalledWith('T-1', '/tmp/worktree', 80, 24, 0)
+
+    tauriEventHandlers.get('pty-output-T-1-shell-0')?.({ payload: { data: 'hello' } })
+    expect(outputHandler).toHaveBeenCalledWith({ data: 'hello' })
   })
 
   it('deactivatePluginById clears host event subscriptions and unregisters view components for the plugin', async () => {
