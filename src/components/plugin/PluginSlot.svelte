@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Component } from 'svelte'
   import { get } from 'svelte/store'
+  import MountedPluginComponentHost from './MountedPluginComponentHost.svelte'
   import PluginErrorBoundary from './PluginErrorBoundary.svelte'
   import { enabledPluginIds, installedPlugins } from '../../lib/plugin/pluginStore'
   import { resolveContributions, resolveContributionsForSlot } from '../../lib/plugin/contributionResolver'
@@ -142,7 +143,11 @@
             errorMessage={normalizeErrorMessage(error)}
           />
         {/snippet}
-        <Component {taskId} {projectId} {projectName} />
+        <MountedPluginComponentHost
+          pluginId={contrib.pluginId}
+          component={Component}
+          props={{ taskId, projectId, projectName }}
+        />
       </svelte:boundary>
     {:else}
       <div data-contribution-id={contrib.contributionId}></div>
