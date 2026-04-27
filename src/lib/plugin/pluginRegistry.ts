@@ -90,6 +90,31 @@ function toNamespacedContributionId(pluginId: string, contributionId: string): s
   return `${pluginId}:${contributionId}`
 }
 
+function hasContributions<T>(items: T[] | undefined): boolean {
+  return Array.isArray(items) && items.length > 0
+}
+
+function hasRenderableContributions(manifest: PluginManifest): boolean {
+  return hasContributions(manifest.contributes.views)
+    || hasContributions(manifest.contributes.taskPaneTabs)
+    || hasContributions(manifest.contributes.sidebarPanels)
+    || hasContributions(manifest.contributes.settingsSections)
+}
+
+function validateExternalPluginIntegration(manifest: PluginManifest): void {
+  if (!manifest.frontend && !manifest.backend) {
+    throw new Error('External plugins require a frontend or backend entry')
+  }
+
+  if (!manifest.frontend && hasRenderableContributions(manifest)) {
+    throw new Error('Renderable plugin contributions require a frontend entry')
+  }
+
+  if (!manifest.frontend && hasContributions(manifest.contributes.backgroundServices)) {
+    throw new Error('Frontendless background service contributions are not supported')
+  }
+}
+
 function clearPluginRuntimeContributions(pluginId: string): void {
   unregisterViewComponentsForPlugin(pluginId)
 
@@ -155,13 +180,27 @@ async function activateBuiltinPluginModule(pluginId: string, context: PluginCont
   }
 }
 
-async function activateExternalPluginModule(pluginId: string, frontendEntry: string | null, context: PluginContext): Promise<PluginActivationResult | null> {
-  if (!frontendEntry) {
-    setPluginRuntimeError(pluginId, new Error(`Plugin ${pluginId} manifest is missing a frontend entry`))
-    return null
+async function activateExternalPluginModule(pluginId: string, manifest: PluginManifest, context: PluginContext): Promise<PluginActivationResult | null> {
+  if (!manifest.frontend) {
+    if (!manifest.backend) {
+      setPluginRuntimeError(pluginId, new Error(`Plugin ${pluginId} manifest is missing a frontend or backend entry`))
+      return null
+    }
+
+    setPluginRuntimeState(pluginId, 'active', null)
+    return {
+      contributions: {
+        commands: manifest.contributes.commands?.map((command) => ({
+          ...command,
+          execute: async (payload?: unknown) => {
+            await context.invokeBackend(command.id, payload ?? null)
+          },
+        })),
+      },
+    }
   }
 
-  const loaded = await loadPluginFrontend(pluginId, `plugin://${pluginId}/${frontendEntry}`)
+  const loaded = await loadPluginFrontend(pluginId, `plugin://${pluginId}/${manifest.frontend}`)
   if (!loaded) return null
   return activatePluginLoader(pluginId, context)
 }
@@ -180,9 +219,19 @@ async function deactivateBuiltinPluginModule(pluginId: string): Promise<void> {
   }
 }
 
+function isBackendOnlyExternalPlugin(pluginId: string): boolean {
+  const entry = get(installedPlugins).get(pluginId)
+  return Boolean(entry && !entry.isBuiltin && !entry.manifest.frontend && entry.manifest.backend)
+}
+
 async function deactivateLoadedPluginModule(pluginId: string): Promise<void> {
   if (activeBuiltinPluginModules.has(pluginId)) {
     await deactivateBuiltinPluginModule(pluginId)
+    return
+  }
+
+  if (isBackendOnlyExternalPlugin(pluginId)) {
+    setPluginRuntimeState(pluginId, 'installed', null)
     return
   }
 
@@ -377,9 +426,7 @@ export async function installPluginFromManifest(manifest: PluginManifest, instal
     throw new Error(`Unsupported API version: ${manifest.apiVersion}`)
   }
 
-  if (!manifest.frontend) {
-    throw new Error('External plugins require a frontend entry')
-  }
+  validateExternalPluginIntegration(manifest)
 
   await installPlugin({
     id: manifest.id,
@@ -389,7 +436,7 @@ export async function installPluginFromManifest(manifest: PluginManifest, instal
     description: manifest.description,
     permissions: JSON.stringify(manifest.permissions),
     contributes: JSON.stringify(manifest.contributes),
-    frontendEntry: manifest.frontend,
+    frontendEntry: manifest.frontend ?? '',
     backendEntry: manifest.backend,
     installPath,
     installedAt: Date.now(),
@@ -457,7 +504,7 @@ export async function activatePlugin(pluginId: string): Promise<boolean> {
     const context = makePluginContextForPlugin(pluginId)
     const result = entry.isBuiltin
       ? await activateBuiltinPluginModule(pluginId, context)
-      : await activateExternalPluginModule(pluginId, entry.manifest.frontend, context)
+      : await activateExternalPluginModule(pluginId, entry.manifest, context)
     if (result === null) return false
 
     try {

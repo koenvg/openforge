@@ -61,6 +61,29 @@ fn shortcut_pattern() -> &'static Regex {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum NullablePath {
+    Path(String),
+    Null(()),
+}
+
+impl NullablePath {
+    fn as_deref(&self) -> Option<&str> {
+        match self {
+            Self::Path(path) => Some(path.as_str()),
+            Self::Null(()) => None,
+        }
+    }
+
+    fn to_path_string(&self) -> String {
+        match self {
+            Self::Path(path) => path.clone(),
+            Self::Null(()) => String::new(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PluginManifestFile {
     id: String,
@@ -70,7 +93,7 @@ struct PluginManifestFile {
     description: String,
     permissions: Value,
     contributes: Value,
-    frontend: String,
+    frontend: NullablePath,
     backend: Option<String>,
 }
 
@@ -223,11 +246,19 @@ fn validate_manifest(manifest: &PluginManifestFile, dir: &Path) -> Result<(), St
     if manifest.description.trim().is_empty() {
         return Err("plugin manifest description cannot be empty".to_string());
     }
-    if manifest.frontend.trim().is_empty() {
-        return Err("plugin manifest frontend entry cannot be empty".to_string());
+    if manifest.frontend.as_deref().is_none() && manifest.backend.is_none() {
+        return Err("plugin manifest requires a frontend or backend entry".to_string());
     }
 
-    validate_relative_entry_path(dir, &manifest.frontend, "frontend")?;
+    if let Some(frontend) = manifest.frontend.as_deref() {
+        if frontend.trim().is_empty() {
+            return Err("plugin manifest frontend entry cannot be empty".to_string());
+        }
+
+        validate_relative_entry_path(dir, frontend, "frontend")?;
+    } else {
+        validate_frontendless_contributions(&manifest.contributes)?;
+    }
 
     if let Some(backend) = &manifest.backend {
         if backend.trim().is_empty() {
@@ -238,6 +269,27 @@ fn validate_manifest(manifest: &PluginManifestFile, dir: &Path) -> Result<(), St
     }
 
     validate_contributions(&manifest.contributes)?;
+
+    Ok(())
+}
+
+fn contribution_array_is_non_empty(contributes: &Value, key: &str) -> bool {
+    contributes
+        .get(key)
+        .and_then(Value::as_array)
+        .is_some_and(|items| !items.is_empty())
+}
+
+fn validate_frontendless_contributions(contributes: &Value) -> Result<(), String> {
+    for key in ["views", "taskPaneTabs", "sidebarPanels", "settingsSections"] {
+        if contribution_array_is_non_empty(contributes, key) {
+            return Err("renderable plugin contributions require a frontend entry".to_string());
+        }
+    }
+
+    if contribution_array_is_non_empty(contributes, "backgroundServices") {
+        return Err("frontendless background service contributions are not supported".to_string());
+    }
 
     Ok(())
 }
@@ -456,7 +508,7 @@ fn build_plugin_row(
             .map_err(|error| format!("failed to serialize plugin permissions: {error}"))?,
         contributes: serde_json::to_string(&manifest.contributes)
             .map_err(|error| format!("failed to serialize plugin contributions: {error}"))?,
-        frontend_entry: manifest.frontend.clone(),
+        frontend_entry: manifest.frontend.to_path_string(),
         backend_entry: manifest.backend.clone(),
         install_path: install_path.to_string_lossy().into_owned(),
         installed_at: SystemTime::now()
@@ -629,6 +681,73 @@ mod tests {
         assert!(install_path.join("manifest.json").exists());
         assert!(install_path.join("dist/index.js").exists());
         assert!(install_path.join("backend.js").exists());
+    }
+
+    #[test]
+    fn install_local_plugin_bundle_allows_backend_only_command_plugins() {
+        let source = tempdir().expect("source tempdir should create");
+        let managed = tempdir().expect("managed tempdir should create");
+        fs::write(
+            source.path().join("backend.js"),
+            "export async function echo(payload) { return payload }",
+        )
+        .expect("backend should write");
+        write_manifest(
+            source.path(),
+            r#"{
+                "id": "com.example.backend-only",
+                "name": "Backend Only Plugin",
+                "version": "1.0.0",
+                "apiVersion": 1,
+                "description": "A backend-only command plugin",
+                "permissions": [],
+                "contributes": {
+                    "commands": [{ "id": "echo", "title": "Echo" }]
+                },
+                "frontend": null,
+                "backend": "backend.js"
+            }"#,
+        );
+
+        let row = install_local_plugin_bundle(source.path(), managed.path())
+            .expect("backend-only command plugin should install");
+
+        assert_eq!(row.frontend_entry, "");
+        assert_eq!(row.backend_entry.as_deref(), Some("backend.js"));
+    }
+
+    #[test]
+    fn install_local_plugin_bundle_rejects_frontendless_renderable_contributions() {
+        let source = tempdir().expect("source tempdir should create");
+        let managed = tempdir().expect("managed tempdir should create");
+        fs::write(
+            source.path().join("backend.js"),
+            "export async function ping() { return 'pong' }",
+        )
+        .expect("backend should write");
+        write_manifest(
+            source.path(),
+            r#"{
+                "id": "com.example.backend-renderable",
+                "name": "Backend Renderable Plugin",
+                "version": "1.0.0",
+                "apiVersion": 1,
+                "description": "A frontendless renderable plugin",
+                "permissions": [],
+                "contributes": {
+                    "views": [{ "id": "main", "title": "Main", "icon": "plug" }]
+                },
+                "frontend": null,
+                "backend": "backend.js"
+            }"#,
+        );
+
+        let result = install_local_plugin_bundle(source.path(), managed.path());
+
+        assert!(result.is_err());
+        assert!(result
+            .expect_err("install should fail")
+            .contains("renderable plugin contributions require a frontend entry"));
     }
 
     #[test]

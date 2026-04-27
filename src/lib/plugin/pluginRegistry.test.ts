@@ -51,12 +51,17 @@ const {
   getBuiltinPluginModuleMock: vi.fn(),
 }))
 
-vi.mock('./pluginLoader', () => ({
-  loadPluginFrontend: loadPluginFrontendMock,
-  activatePlugin: activatePluginLoaderMock,
-  deactivatePlugin: deactivatePluginLoaderMock,
-  isPluginLoaded: isPluginLoadedMock,
-}))
+vi.mock('./pluginLoader', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./pluginLoader')>()
+
+  return {
+    ...actual,
+    loadPluginFrontend: loadPluginFrontendMock,
+    activatePlugin: activatePluginLoaderMock,
+    deactivatePlugin: deactivatePluginLoaderMock,
+    isPluginLoaded: isPluginLoadedMock,
+  }
+})
 
 vi.mock('./builtinPluginModules', () => ({
   getBuiltinPluginModule: getBuiltinPluginModuleMock,
@@ -152,11 +157,44 @@ describe('pluginRegistry', () => {
     expect(installPluginMock).not.toHaveBeenCalled()
   })
 
-  it('installPluginFromManifest rejects external plugins without a frontend entry', async () => {
-    const manifest = makeManifest({ frontend: null })
+  it('installPluginFromManifest allows backend-only command plugins', async () => {
+    installPluginMock.mockResolvedValue(undefined)
+    const manifest = makeManifest({
+      frontend: null,
+      backend: 'backend.js',
+      contributes: {
+        commands: [{ id: 'echo', title: 'Echo' }],
+      },
+    })
+
+    await installPluginFromManifest(manifest, '/plugins/test')
+
+    expect(installPluginMock).toHaveBeenCalledOnce()
+    const call = installPluginMock.mock.calls[0][0]
+    expect(call.frontendEntry).toBe('')
+    expect(call.backendEntry).toBe('backend.js')
+  })
+
+  it('installPluginFromManifest rejects plugins with no executable integration entry', async () => {
+    const manifest = makeManifest({ frontend: null, backend: null })
 
     await expect(installPluginFromManifest(manifest, '/plugins/test')).rejects.toThrow(
-      'External plugins require a frontend entry'
+      'External plugins require a frontend or backend entry'
+    )
+    expect(installPluginMock).not.toHaveBeenCalled()
+  })
+
+  it('installPluginFromManifest rejects frontendless plugins with renderable contributions', async () => {
+    const manifest = makeManifest({
+      frontend: null,
+      backend: 'backend.js',
+      contributes: {
+        views: [{ id: 'main', title: 'Main', icon: 'plug' }],
+      },
+    })
+
+    await expect(installPluginFromManifest(manifest, '/plugins/test')).rejects.toThrow(
+      'Renderable plugin contributions require a frontend entry'
     )
     expect(installPluginMock).not.toHaveBeenCalled()
   })
@@ -185,6 +223,48 @@ describe('pluginRegistry', () => {
     const set = get(enabledPluginIds)
     expect(set.has('pa')).toBe(true)
     expect(set.has('pb')).toBe(true)
+  })
+
+  it('activates backend-only command plugins with backend RPC handlers', async () => {
+    const manifest = makeManifest({
+      frontend: null,
+      backend: 'backend.js',
+      contributes: {
+        commands: [{ id: 'echo', title: 'Echo' }],
+      },
+    })
+    installedPlugins.set(new Map([['backend-plugin', { manifest: { ...manifest, id: 'backend-plugin' }, state: 'installed', error: null }]]))
+    enabledPluginIds.set(new Set(['backend-plugin']))
+    pluginInvokeMock.mockResolvedValue({ echoed: true })
+
+    await expect(executePluginCommand('backend-plugin', 'echo', { message: 'hello' })).resolves.toBe(true)
+
+    expect(loadPluginFrontendMock).not.toHaveBeenCalled()
+    expect(activatePluginLoaderMock).not.toHaveBeenCalled()
+    expect(pluginInvokeMock).toHaveBeenCalledWith('backend-plugin', 'echo', { message: 'hello' })
+    expect(get(installedPlugins).get('backend-plugin')?.state).toBe('active')
+  })
+
+  it('deactivates backend-only plugins back to installed state', async () => {
+    const manifest = makeManifest({
+      frontend: null,
+      backend: 'backend.js',
+      contributes: {
+        commands: [{ id: 'echo', title: 'Echo' }],
+      },
+    })
+    installedPlugins.set(new Map([['backend-plugin', { manifest: { ...manifest, id: 'backend-plugin' }, state: 'installed', error: null }]]))
+    enabledPluginIds.set(new Set(['backend-plugin']))
+    pluginInvokeMock.mockResolvedValue({ echoed: true })
+
+    await expect(executePluginCommand('backend-plugin', 'echo', { message: 'hello' })).resolves.toBe(true)
+    await deactivatePluginById('backend-plugin')
+
+    expect(deactivatePluginLoaderMock).not.toHaveBeenCalled()
+    expect(get(installedPlugins).get('backend-plugin')).toMatchObject({
+      state: 'installed',
+      error: null,
+    })
   })
 
   it('activatePlugin loads frontend and activates', async () => {
