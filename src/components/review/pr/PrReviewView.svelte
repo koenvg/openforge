@@ -687,7 +687,7 @@
                   <div class="flex flex-col gap-3">
                     {#each prs as pr}
                       {@const flatIdx = flatPrList.indexOf(pr)}
-                      <div data-vim-pr-item class={flatIdx === vimList.focusedIndex ? 'vim-focus' : ''}>
+                      <div data-vim-pr-item class="rounded-box {flatIdx === vimList.focusedIndex ? 'vim-focus' : ''}">
                         <ReviewPrCard
                           {pr}
                           selected={false}
