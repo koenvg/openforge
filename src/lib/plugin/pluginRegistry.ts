@@ -219,9 +219,19 @@ async function deactivateBuiltinPluginModule(pluginId: string): Promise<void> {
   }
 }
 
+function isBackendOnlyExternalPlugin(pluginId: string): boolean {
+  const entry = get(installedPlugins).get(pluginId)
+  return Boolean(entry && !entry.isBuiltin && !entry.manifest.frontend && entry.manifest.backend)
+}
+
 async function deactivateLoadedPluginModule(pluginId: string): Promise<void> {
   if (activeBuiltinPluginModules.has(pluginId)) {
     await deactivateBuiltinPluginModule(pluginId)
+    return
+  }
+
+  if (isBackendOnlyExternalPlugin(pluginId)) {
+    setPluginRuntimeState(pluginId, 'installed', null)
     return
   }
 

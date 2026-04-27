@@ -234,6 +234,7 @@ describe('pluginRegistry', () => {
       },
     })
     installedPlugins.set(new Map([['backend-plugin', { manifest: { ...manifest, id: 'backend-plugin' }, state: 'installed', error: null }]]))
+    enabledPluginIds.set(new Set(['backend-plugin']))
     pluginInvokeMock.mockResolvedValue({ echoed: true })
 
     await expect(executePluginCommand('backend-plugin', 'echo', { message: 'hello' })).resolves.toBe(true)
@@ -242,6 +243,28 @@ describe('pluginRegistry', () => {
     expect(activatePluginLoaderMock).not.toHaveBeenCalled()
     expect(pluginInvokeMock).toHaveBeenCalledWith('backend-plugin', 'echo', { message: 'hello' })
     expect(get(installedPlugins).get('backend-plugin')?.state).toBe('active')
+  })
+
+  it('deactivates backend-only plugins back to installed state', async () => {
+    const manifest = makeManifest({
+      frontend: null,
+      backend: 'backend.js',
+      contributes: {
+        commands: [{ id: 'echo', title: 'Echo' }],
+      },
+    })
+    installedPlugins.set(new Map([['backend-plugin', { manifest: { ...manifest, id: 'backend-plugin' }, state: 'installed', error: null }]]))
+    enabledPluginIds.set(new Set(['backend-plugin']))
+    pluginInvokeMock.mockResolvedValue({ echoed: true })
+
+    await expect(executePluginCommand('backend-plugin', 'echo', { message: 'hello' })).resolves.toBe(true)
+    await deactivatePluginById('backend-plugin')
+
+    expect(deactivatePluginLoaderMock).not.toHaveBeenCalled()
+    expect(get(installedPlugins).get('backend-plugin')).toMatchObject({
+      state: 'installed',
+      error: null,
+    })
   })
 
   it('activatePlugin loads frontend and activates', async () => {
