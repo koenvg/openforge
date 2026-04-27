@@ -6,7 +6,7 @@ const { mockTerminalTaskPane } = vi.hoisted(() => ({
   mockTerminalTaskPane: { name: 'TerminalTaskPaneComponent' },
 }))
 
-vi.mock('../../../src/components/task-detail/TerminalTaskPane.svelte', () => ({
+vi.mock('./TerminalTaskPane.svelte', () => ({
   default: mockTerminalTaskPane,
 }))
 

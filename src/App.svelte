@@ -102,6 +102,7 @@
     return {
       component: activeViewEntry.component,
       props: activeViewEntry.getProps({
+        projectId: $activeProjectId,
         projectName: activeProject?.name ?? '',
         onCloseSettings: () => { router.navigate('board') },
         onProjectDeleted: loadProjects,

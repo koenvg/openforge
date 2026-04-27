@@ -4,7 +4,7 @@ const { mockPrReviewView } = vi.hoisted(() => ({
   mockPrReviewView: { name: 'PrReviewViewComponent' },
 }))
 
-vi.mock('../../../src/components/review/pr/PrReviewView.svelte', () => ({
+vi.mock('./review/pr/PrReviewView.svelte', () => ({
   default: mockPrReviewView,
 }))
 

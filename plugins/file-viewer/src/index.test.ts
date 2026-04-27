@@ -4,7 +4,7 @@ const { mockFilesView } = vi.hoisted(() => ({
   mockFilesView: { name: 'FilesViewComponent' },
 }))
 
-vi.mock('../../../src/components/FilesView.svelte', () => ({
+vi.mock('./FilesView.svelte', () => ({
   default: mockFilesView,
 }))
 

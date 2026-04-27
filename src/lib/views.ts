@@ -7,6 +7,7 @@ import type { PluginManifest, PluginViewKey } from './plugin/types'
 import type { AppView, CoreAppView } from './types'
 
 export interface ViewContext {
+  projectId: string | null
   projectName: string
   onCloseSettings: () => void
   onProjectDeleted: () => void
@@ -61,9 +62,10 @@ export function getPluginViewEntries(manifests: PluginManifest[]): PluginViewEnt
     key: makePluginViewKey(view.pluginId, view.contributionId),
     entry: {
       component: PluginSlot,
-      getProps: ({ projectName }) => ({
+      getProps: ({ projectId, projectName }) => ({
         slotType: 'views' as const,
         slotId: makePluginViewKey(view.pluginId, view.contributionId),
+        projectId,
         projectName,
       }),
     },

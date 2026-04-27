@@ -1,7 +1,9 @@
 import type { PluginActivationResult, PluginContext } from '@openforge/plugin-sdk'
-import TerminalTaskPane from '../../../src/components/task-detail/TerminalTaskPane.svelte'
+import TerminalTaskPane from './TerminalTaskPane.svelte'
+import { setPluginContext } from './pluginContext'
 
-export async function activate(_context: PluginContext): Promise<PluginActivationResult> {
+export async function activate(context: PluginContext): Promise<PluginActivationResult> {
+  setPluginContext(context)
   return {
     contributions: {
       taskPaneTabs: [

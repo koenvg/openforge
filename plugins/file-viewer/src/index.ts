@@ -1,11 +1,13 @@
 import type { PluginActivationResult, PluginContext } from '@openforge/plugin-sdk'
-import FilesView from '../../../src/components/FilesView.svelte'
+import FilesView from './FilesView.svelte'
+import { setPluginContext } from './pluginContext'
 
 type FileViewerActivationResult = PluginActivationResult
 
 export const FilesViewComponent = FilesView
 
-export async function activate(_context: PluginContext): Promise<FileViewerActivationResult> {
+export async function activate(context: PluginContext): Promise<FileViewerActivationResult> {
+  setPluginContext(context)
   return {
     contributions: {
       views: [

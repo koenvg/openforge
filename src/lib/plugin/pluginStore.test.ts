@@ -141,7 +141,7 @@ describe('pluginStore', () => {
     expect(set.has('pb')).toBe(true)
   })
 
-  it('loadEnabledForProject keeps builtin plugins enabled generically', async () => {
+  it('loadEnabledForProject respects per-project builtin plugin enablement without force-enabling builtins', async () => {
     installedPlugins.set(new Map([[
       'builtin-plugin',
       {
@@ -165,6 +165,6 @@ describe('pluginStore', () => {
 
     await loadEnabledForProject('proj1')
 
-    expect(get(enabledPluginIds)).toEqual(new Set(['builtin-plugin', 'project-plugin']))
+    expect(get(enabledPluginIds)).toEqual(new Set(['project-plugin']))
   })
 })

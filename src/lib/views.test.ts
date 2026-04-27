@@ -31,6 +31,7 @@ describe('views registry', () => {
     const onCloseSettings = vi.fn()
     const onProjectDeleted = vi.fn()
     const viewContext = {
+      projectId: 'proj-alpha',
       projectName: 'Project Alpha',
       onCloseSettings,
       onProjectDeleted,
@@ -185,6 +186,7 @@ describe('views registry', () => {
     ])
 
     const props = pluginViews['plugin:com.openforge.file-viewer:files']?.getProps({
+      projectId: 'proj-alpha',
       projectName: 'Project Alpha',
       onCloseSettings: vi.fn(),
       onProjectDeleted: vi.fn(),
@@ -193,6 +195,7 @@ describe('views registry', () => {
     expect(props).toEqual({
       slotType: 'views',
       slotId: 'plugin:com.openforge.file-viewer:files',
+      projectId: 'proj-alpha',
       projectName: 'Project Alpha',
     })
   })

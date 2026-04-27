@@ -1,5 +1,6 @@
 import type { PluginActivationResult, PluginContext } from '@openforge/plugin-sdk'
-import PrReviewView from '../../../src/components/review/pr/PrReviewView.svelte'
+import PrReviewView from './review/pr/PrReviewView.svelte'
+import { setPluginContext } from './pluginContext'
 
 type GithubSyncActivationResult = PluginActivationResult
 
@@ -8,6 +9,7 @@ export const PrReviewViewComponent = PrReviewView
 let stopNavigationListener: (() => void) | null = null
 
 export async function activate(context: PluginContext): Promise<GithubSyncActivationResult> {
+  setPluginContext(context)
   return {
     contributions: {
       views: [

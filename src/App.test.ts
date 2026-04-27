@@ -719,13 +719,15 @@ describe('App onMount initialization order', () => {
 
       stores.currentView.set('board')
       render(App)
+      await vi.waitFor(() => {
+        expect(get(pluginStore.installedPlugins).has(GITHUB_SYNC_PLUGIN_ID)).toBe(true)
+      })
+      pluginStore.enabledPluginIds.set(new Set([GITHUB_SYNC_PLUGIN_ID]))
 
       await vi.waitFor(() => {
-        expect(get(pluginStore.enabledPluginIds).has(GITHUB_SYNC_PLUGIN_ID)).toBe(true)
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', metaKey: true, bubbles: true }))
+        expect(get(stores.currentView)).toBe('plugin:com.openforge.github-sync:pr_review')
       })
-
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', metaKey: true, bubbles: true }))
-      expect(get(stores.currentView)).toBe('plugin:com.openforge.github-sync:pr_review')
     })
 
   it('CMD+O navigates to the plugin-provided files view', async () => {
@@ -737,13 +739,13 @@ describe('App onMount initialization order', () => {
 
     stores.currentView.set('board')
     render(App)
-
     await vi.waitFor(() => {
-      expect(get(pluginStore.enabledPluginIds).has(FILE_VIEWER_PLUGIN_ID)).toBe(true)
+      expect(get(pluginStore.installedPlugins).has(FILE_VIEWER_PLUGIN_ID)).toBe(true)
     })
+    pluginStore.enabledPluginIds.set(new Set([FILE_VIEWER_PLUGIN_ID]))
 
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'o', metaKey: true, bubbles: true }))
     await vi.waitFor(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'o', metaKey: true, bubbles: true }))
       expect(get(stores.currentView)).toBe('plugin:com.openforge.file-viewer:files')
     })
   })
@@ -757,13 +759,15 @@ describe('App onMount initialization order', () => {
 
       stores.currentView.set('board')
       render(App)
+      await vi.waitFor(() => {
+        expect(get(pluginStore.installedPlugins).has(SKILLS_VIEWER_PLUGIN_ID)).toBe(true)
+      })
+      pluginStore.enabledPluginIds.set(new Set([SKILLS_VIEWER_PLUGIN_ID]))
 
       await vi.waitFor(() => {
-        expect(get(pluginStore.enabledPluginIds).has(SKILLS_VIEWER_PLUGIN_ID)).toBe(true)
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', metaKey: true, bubbles: true }))
+        expect(get(stores.currentView)).toBe('plugin:com.openforge.skills-viewer:skills')
       })
-
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', metaKey: true, bubbles: true }))
-      expect(get(stores.currentView)).toBe('plugin:com.openforge.skills-viewer:skills')
     })
 
     it('CMD+comma navigates to settings view', async () => {
@@ -1329,6 +1333,7 @@ describe('App onMount initialization order', () => {
     it('CMD+SHIFT+R triggers GitHub refresh through the plugin command shortcut', async () => {
       const App = (await import('./App.svelte')).default
       const ipc = await import('./lib/ipc')
+      const pluginStore = await import('./lib/plugin/pluginStore')
 
       vi.mocked(ipc.forceGithubSync).mockResolvedValue({
         new_comments: 0,
@@ -1345,11 +1350,12 @@ describe('App onMount initialization order', () => {
       await vi.waitFor(() => {
         expect(installedPluginRows.some((row) => row.id === 'com.openforge.github-sync')).toBe(true)
       })
+      pluginStore.enabledPluginIds.set(new Set(['com.openforge.github-sync']))
 
       await fireEvent.keyDown(window, { key: 'R', metaKey: true, shiftKey: true, bubbles: true })
 
       await vi.waitFor(() => {
-        expect(ipc.forceGithubSync).toHaveBeenCalled()
+        expect(mockExecutePluginCommand).toHaveBeenCalledWith('com.openforge.github-sync', 'refresh')
       })
     })
 
