@@ -20,7 +20,7 @@ vi.mock('../../../lib/stores', () => ({
   activeProjectId: writable('P-1'),
   currentView: writable('plugin:com.openforge.github-sync:pr_review'),
   selectedTaskId: writable<string | null>(null),
-  selectedSkillName: writable<string | null>(null),
+  selectedSkillIdentity: writable(null),
 }))
 
 vi.mock('../../../lib/useDiffWorker.svelte', () => ({

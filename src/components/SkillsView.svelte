@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { skills, selectedSkillName, activeProjectId } from '../lib/stores'
+  import { skills, selectedSkillIdentity, activeProjectId } from '../lib/stores'
   import { listOpenCodeSkills, saveSkillContent } from '../lib/ipc'
   import { useAppRouter } from '../lib/router.svelte'
   import { getHTMLElementAt, isInputFocused } from '../lib/domUtils'
@@ -13,7 +13,7 @@
   import { useVimNavigation } from '../lib/useVimNavigation.svelte'
   import ProjectPageHeader from './project/ProjectPageHeader.svelte'
   import MarkdownContent from './shared/content/MarkdownContent.svelte'
-  import type { SkillInfo } from '../lib/types'
+  import { getSkillIdentity, isSameSkillIdentity, type SkillInfo } from '../lib/types'
 
   const router = useAppRouter()
 
@@ -25,7 +25,7 @@
   let isSaving = $state(false)
   let saveError = $state<string | null>(null)
 
-  let selectedSkill = $derived($skills.find(s => s.name === $selectedSkillName) || null)
+  let selectedSkill = $derived($skills.find(s => isSameSkillIdentity(s, $selectedSkillIdentity)) || null)
 
   let filteredSkills = $derived(
     searchFilter.trim()
@@ -67,8 +67,8 @@
 
   // Auto-select first filtered skill when current selection is filtered out
   $effect(() => {
-    if ($selectedSkillName && filteredSkills.length > 0 && !filteredSkills.find(s => s.name === $selectedSkillName)) {
-      $selectedSkillName = filteredSkills[0].name
+    if ($selectedSkillIdentity && filteredSkills.length > 0 && !filteredSkills.find(s => isSameSkillIdentity(s, $selectedSkillIdentity))) {
+      $selectedSkillIdentity = getSkillIdentity(filteredSkills[0])
     }
   })
 
@@ -80,8 +80,8 @@
       const result = await listOpenCodeSkills($activeProjectId)
       $skills = result
       // Auto-select first skill if none selected
-      if (!$selectedSkillName && result.length > 0) {
-        $selectedSkillName = result[0].name
+      if (!$selectedSkillIdentity && result.length > 0) {
+        $selectedSkillIdentity = getSkillIdentity(result[0])
       }
     } catch (e) {
       console.error('Failed to load skills:', e)
@@ -93,7 +93,7 @@
 
   function selectSkill(skill: SkillInfo) {
     router.navigate(SKILLS_VIEWER_VIEW_KEY)
-    $selectedSkillName = skill.name
+    $selectedSkillIdentity = getSkillIdentity(skill)
     editMode = false
     saveError = null
   }
@@ -249,7 +249,7 @@
                     {@const flatIdx = filteredSkills.indexOf(skill)}
                     <button
                       data-vim-skill
-                      class="w-full text-left pl-8 pr-3 py-2 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {$selectedSkillName === skill.name ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'vim-focus' : ''}"
+                      class="w-full text-left pl-8 pr-3 py-2 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {isSameSkillIdentity(skill, $selectedSkillIdentity) ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'vim-focus' : ''}"
                       onclick={() => selectSkill(skill)}
                     >
                       <span class="text-sm font-medium text-base-content truncate block">{skill.name}</span>
@@ -290,7 +290,7 @@
                     {@const flatIdx = filteredSkills.indexOf(skill)}
                     <button
                       data-vim-skill
-                      class="w-full text-left pl-8 pr-3 py-2 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {$selectedSkillName === skill.name ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'vim-focus' : ''}"
+                      class="w-full text-left pl-8 pr-3 py-2 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {isSameSkillIdentity(skill, $selectedSkillIdentity) ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'vim-focus' : ''}"
                       onclick={() => selectSkill(skill)}
                     >
                       <span class="text-sm font-medium text-base-content truncate block">{skill.name}</span>
