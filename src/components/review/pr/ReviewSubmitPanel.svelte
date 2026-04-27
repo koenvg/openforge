@@ -79,7 +79,7 @@
   }
 </script>
 
-<div class="flex flex-col bg-base-200 border-t border-base-300">
+<div class="flex flex-col shrink-0 bg-base-200 border-t border-base-300">
   <div class="flex items-center justify-between px-6 py-4 pb-3 border-b border-base-300">
     <h3 class="text-[0.9rem] font-semibold text-base-content m-0">Submit Review</h3>
     {#if $pendingManualComments.length > 0}

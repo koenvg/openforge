@@ -455,9 +455,9 @@
 
 <svelte:window onkeydown={handlePrReviewKeydown} />
 
-<div class="flex flex-col w-full h-full overflow-hidden">
+<div class="flex flex-col w-full h-full min-h-0 overflow-hidden">
   {#if $selectedReviewPr}
-    <div class="flex flex-col h-full overflow-hidden">
+    <div class="flex flex-col h-full min-h-0 overflow-hidden">
       <div class="flex flex-col gap-1.5 px-4 py-2.5 border-b border-base-300 shrink-0" style="background-color: var(--project-bg-alt, oklch(var(--b2)))">
         <div class="flex items-center gap-2 min-w-0">
           <button class="btn btn-ghost btn-xs text-base-content/50 shrink-0" onclick={backToList}>← Back</button>
@@ -496,7 +496,7 @@
       {#if activeTab === 'overview'}
         <PrOverviewTab pr={$selectedReviewPr} />
       {:else}
-        <div class="flex flex-1 overflow-hidden">
+        <div class="flex flex-1 min-h-0 overflow-hidden">
           {#if isLoading}
             <div class="flex flex-col items-center justify-center flex-1 gap-3 text-base-content/50 text-sm">
               <span class="loading loading-spinner loading-md text-primary"></span>
