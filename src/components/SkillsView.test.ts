@@ -1,12 +1,12 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { writable } from 'svelte/store'
-import type { SkillInfo } from '../lib/types'
+import type { SkillIdentity, SkillInfo } from '../lib/types'
 import { requireElement } from '../test-utils/dom'
 
 vi.mock('../lib/stores', () => ({
   skills: writable<SkillInfo[]>([]),
-  selectedSkillName: writable<string | null>(null),
+  selectedSkillIdentity: writable<SkillIdentity | null>(null),
   activeProjectId: writable<string | null>('proj-1'),
   currentView: writable('board'),
   selectedTaskId: writable<string | null>(null),
@@ -19,8 +19,8 @@ vi.mock('../lib/ipc', () => ({
 }))
 
 import SkillsView from './SkillsView.svelte'
-import { skills, selectedSkillName, activeProjectId } from '../lib/stores'
-import { listOpenCodeSkills } from '../lib/ipc'
+import { skills, selectedSkillIdentity, activeProjectId } from '../lib/stores'
+import { listOpenCodeSkills, saveSkillContent } from '../lib/ipc'
 
 const projectSkill: SkillInfo = {
   name: 'git-master',
@@ -49,10 +49,28 @@ const userSkill2: SkillInfo = {
   source_dir: '.agents',
 }
 
+const duplicateProjectSkill: SkillInfo = {
+  name: 'shared-skill',
+  description: 'Repository copy of the shared skill',
+  agent: null,
+  template: '# Repository Shared Skill\n\nRepository instructions.',
+  level: 'project',
+  source_dir: '.agents',
+}
+
+const duplicateUserSkill: SkillInfo = {
+  name: 'shared-skill',
+  description: 'Personal copy of the shared skill',
+  agent: null,
+  template: '# Personal Shared Skill\n\nPersonal instructions.',
+  level: 'user',
+  source_dir: '.opencode',
+}
+
 describe('SkillsView', () => {
   beforeEach(() => {
     skills.set([])
-    selectedSkillName.set(null)
+    selectedSkillIdentity.set(null)
     activeProjectId.set('proj-1')
     vi.clearAllMocks()
     vi.mocked(listOpenCodeSkills).mockResolvedValue([])
@@ -203,6 +221,49 @@ describe('SkillsView', () => {
 
     await waitFor(() => {
       expect(screen.getAllByText('Guides creation of effective agent skills').length).toBeGreaterThanOrEqual(1)
+    })
+  })
+
+  it('selects the clicked duplicate skill by name, level, and source directory', async () => {
+    vi.mocked(listOpenCodeSkills).mockResolvedValue([duplicateProjectSkill, duplicateUserSkill])
+    render(SkillsView)
+
+    await waitFor(() => {
+      expect(screen.getByText('Repository instructions.')).toBeTruthy()
+    })
+
+    await fireEvent.click(requireElement(screen.getByText('Personal copy of the shared skill').closest('button'), HTMLButtonElement))
+
+    await waitFor(() => {
+      expect(screen.getByText('Personal instructions.')).toBeTruthy()
+      expect(screen.queryByText('Repository instructions.')).toBeFalsy()
+      expect(screen.getAllByText('personal').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getAllByText('.opencode/skills').length).toBeGreaterThanOrEqual(1)
+    })
+  })
+
+  it('saves edits to the selected duplicate skill identity', async () => {
+    vi.mocked(listOpenCodeSkills).mockResolvedValue([duplicateProjectSkill, duplicateUserSkill])
+    render(SkillsView)
+
+    await waitFor(() => {
+      expect(screen.getByText('Personal copy of the shared skill')).toBeTruthy()
+    })
+
+    await fireEvent.click(requireElement(screen.getByText('Personal copy of the shared skill').closest('button'), HTMLButtonElement))
+    await fireEvent.click(screen.getByText('Manually Edit'))
+    const editTextboxes = screen.getAllByRole('textbox')
+    await fireEvent.input(requireElement(editTextboxes[1], HTMLTextAreaElement), { target: { value: '# Updated Personal Shared Skill' } })
+    await fireEvent.click(screen.getByText('Save'))
+
+    await waitFor(() => {
+      expect(saveSkillContent).toHaveBeenCalledWith(
+        'proj-1',
+        'shared-skill',
+        'user',
+        '.opencode',
+        '# Updated Personal Shared Skill',
+      )
     })
   })
 

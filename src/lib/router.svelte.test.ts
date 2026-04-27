@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { get } from 'svelte/store'
-import { activeProjectId, currentView, selectedReviewPr, selectedSkillName, selectedTaskId } from './stores'
+import { activeProjectId, currentView, selectedReviewPr, selectedSkillIdentity, selectedTaskId } from './stores'
 import { pushNavState, resetToBoard, useAppRouter } from './router.svelte'
 
 describe('useAppRouter', () => {
@@ -9,7 +9,7 @@ describe('useAppRouter', () => {
     currentView.set('board')
     selectedTaskId.set(null)
     selectedReviewPr.set(null)
-    selectedSkillName.set(null)
+    selectedSkillIdentity.set(null)
     activeProjectId.set(null)
 
     while (router.back()) {
@@ -18,7 +18,7 @@ describe('useAppRouter', () => {
     currentView.set('board')
     selectedTaskId.set(null)
     selectedReviewPr.set(null)
-    selectedSkillName.set(null)
+    selectedSkillIdentity.set(null)
     activeProjectId.set(null)
   })
 

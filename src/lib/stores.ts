@@ -1,5 +1,5 @@
 import { writable } from "svelte/store";
-import type { Task, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, CiFailureNotification, RateLimitNotification, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, PrOverviewComment, ProjectAttention, SkillInfo } from "./types";
+import type { Task, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, CiFailureNotification, RateLimitNotification, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, PrOverviewComment, ProjectAttention, SkillInfo, SkillIdentity } from "./types";
 import type { BoardFilter } from './boardFilters'
 
 export interface TaskRuntimeInfo {
@@ -46,7 +46,7 @@ export const agentReviewLoading = writable(false);
 export const agentReviewError = writable<string | null>(null);
 
 export const skills = writable<SkillInfo[]>([]);
-export const selectedSkillName = writable<string | null>(null);
+export const selectedSkillIdentity = writable<SkillIdentity | null>(null);
 
 
 /** Set of task IDs currently starting (worktree creation + agent spawn in progress) */

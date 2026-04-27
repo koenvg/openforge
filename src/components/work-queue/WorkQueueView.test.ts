@@ -12,7 +12,7 @@ vi.mock('../../lib/stores', () => ({
   ticketPrs: writable<Map<string, PullRequestInfo[]>>(new Map()),
   startingTasks: writable<Set<string>>(new Set()),
   selectedReviewPr: writable(null),
-  selectedSkillName: writable<string | null>(null),
+  selectedSkillIdentity: writable(null),
 }))
 
 vi.mock('../../lib/ipc', () => ({

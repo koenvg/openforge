@@ -8,17 +8,17 @@ import {
   prOverviewComments,
   reviewComments,
   selectedReviewPr,
-  selectedSkillName,
+  selectedSkillIdentity,
   selectedTaskId,
 } from './stores'
-import type { AppView, ReviewPullRequest } from './types'
+import type { AppView, ReviewPullRequest, SkillIdentity } from './types'
 import { TASK_CLEARING_VIEWS } from './views'
 
 interface NavState {
   currentView: AppView
   selectedTaskId: string | null
   selectedReviewPr: ReviewPullRequest | null
-  selectedSkillName: string | null
+  selectedSkillIdentity: SkillIdentity | null
   activeProjectId: string | null
 }
 
@@ -30,7 +30,7 @@ function captureState(): NavState {
     currentView: get(currentView),
     selectedTaskId: get(selectedTaskId),
     selectedReviewPr: get(selectedReviewPr),
-    selectedSkillName: get(selectedSkillName),
+    selectedSkillIdentity: get(selectedSkillIdentity),
     activeProjectId: get(activeProjectId),
   }
 }
@@ -47,7 +47,7 @@ export function resetToBoard(): void {
   currentView.set('board')
   selectedTaskId.set(null)
   selectedReviewPr.set(null)
-  selectedSkillName.set(null)
+  selectedSkillIdentity.set(null)
 }
 
 function navigateBack(): boolean {
@@ -61,7 +61,7 @@ function navigateBack(): boolean {
   currentView.set(prev.currentView)
   selectedTaskId.set(prev.selectedTaskId)
   selectedReviewPr.set(prev.selectedReviewPr)
-  selectedSkillName.set(prev.selectedSkillName)
+  selectedSkillIdentity.set(prev.selectedSkillIdentity)
   activeProjectId.set(prev.activeProjectId)
 
   if (hadReviewPr && !prev.selectedReviewPr) {
