@@ -118,6 +118,28 @@ const HOST_RUNTIME_RUNTIME_JS: &str =
     "globalThis.__OPENFORGE_PLUGIN_RUNTIME__ = true; export const runtimeReady = true;";
 const HOST_RUNTIME_PLUGIN_SDK_INDEX_JS: &str = include_str!("../plugin-host/plugin-sdk/index.js");
 
+const PLUGIN_PROTOCOL_CORS_HEADER: &str = "Access-Control-Allow-Origin";
+const PLUGIN_PROTOCOL_CORS_ALLOW_ORIGIN: &str = "*";
+
+fn plugin_protocol_response(
+    status: u16,
+    content_type: Option<&str>,
+    body: Vec<u8>,
+) -> tauri::http::Response<Vec<u8>> {
+    let mut builder = tauri::http::Response::builder().status(status).header(
+        PLUGIN_PROTOCOL_CORS_HEADER,
+        PLUGIN_PROTOCOL_CORS_ALLOW_ORIGIN,
+    );
+
+    if let Some(content_type) = content_type {
+        builder = builder.header("Content-Type", content_type);
+    }
+
+    builder
+        .body(body)
+        .expect("plugin protocol response uses valid static headers and status")
+}
+
 fn host_runtime_asset(rel_path: &str) -> Option<(Vec<u8>, &'static str)> {
     match rel_path {
         "index.html" => Some((
@@ -1008,23 +1030,14 @@ fn main() {
                 let rel_path = path.trim_start_matches("host-runtime/");
 
                 if rel_path.contains("..") {
-                    return tauri::http::Response::builder()
-                        .status(403)
-                        .body(b"Forbidden".to_vec())
-                        .unwrap();
+                    return plugin_protocol_response(403, None, b"Forbidden".to_vec());
                 }
 
                 return match host_runtime_asset(rel_path) {
-                    Some((content, mime_type)) => tauri::http::Response::builder()
-                        .status(200)
-                        .header("Content-Type", mime_type)
-                        .header("Access-Control-Allow-Origin", "*")
-                        .body(content)
-                        .unwrap(),
-                    None => tauri::http::Response::builder()
-                        .status(404)
-                        .body(b"File not found".to_vec())
-                        .unwrap(),
+                    Some((content, mime_type)) => {
+                        plugin_protocol_response(200, Some(mime_type), content)
+                    }
+                    None => plugin_protocol_response(404, None, b"File not found".to_vec()),
                 };
             }
 
@@ -1037,16 +1050,10 @@ fn main() {
                 {
                     Ok(path) => path,
                     Err(error) if error == "Forbidden" => {
-                        return tauri::http::Response::builder()
-                            .status(403)
-                            .body(b"Forbidden".to_vec())
-                            .unwrap();
+                        return plugin_protocol_response(403, None, b"Forbidden".to_vec());
                     }
                     Err(error) => {
-                        return tauri::http::Response::builder()
-                            .status(403)
-                            .body(error.into_bytes())
-                            .unwrap();
+                        return plugin_protocol_response(403, None, error.into_bytes());
                     }
                 };
 
@@ -1063,17 +1070,9 @@ fn main() {
                         "html" => "text/html",
                         _ => "application/octet-stream",
                     };
-                    tauri::http::Response::builder()
-                        .status(200)
-                        .header("Content-Type", mime_type)
-                        .header("Access-Control-Allow-Origin", "*")
-                        .body(content)
-                        .unwrap()
+                    plugin_protocol_response(200, Some(mime_type), content)
                 }
-                Err(_) => tauri::http::Response::builder()
-                    .status(404)
-                    .body(b"File not found".to_vec())
-                    .unwrap(),
+                Err(_) => plugin_protocol_response(404, None, b"File not found".to_vec()),
             }
         })
         .build(tauri_context())
@@ -1123,8 +1122,8 @@ fn main() {
 mod tests {
     use super::{
         host_runtime_asset, load_resume_targets, opencode_resume_persistence,
-        resolve_host_runtime_passthrough_asset_from_root, resolve_plugin_asset_path,
-        resolve_plugin_install_base_dir, restore_resumed_session_state,
+        plugin_protocol_response, resolve_host_runtime_passthrough_asset_from_root,
+        resolve_plugin_asset_path, resolve_plugin_install_base_dir, restore_resumed_session_state,
         should_start_project_root_server, ResumeSessionPersistence, ResumeTarget,
     };
     use crate::db::test_helpers::make_test_db;
@@ -1430,6 +1429,34 @@ mod tests {
                 .expect_err("invalid asset path should be rejected");
             assert_eq!(err, "Forbidden");
         }
+    }
+
+    #[test]
+    fn plugin_protocol_response_adds_cors_header_to_forbidden_errors() {
+        let response = plugin_protocol_response(403, None, b"Forbidden".to_vec());
+
+        assert_eq!(response.status(), 403);
+        assert_eq!(
+            response
+                .headers()
+                .get("Access-Control-Allow-Origin")
+                .and_then(|value| value.to_str().ok()),
+            Some("*")
+        );
+    }
+
+    #[test]
+    fn plugin_protocol_response_adds_cors_header_to_not_found_errors() {
+        let response = plugin_protocol_response(404, None, b"File not found".to_vec());
+
+        assert_eq!(response.status(), 404);
+        assert_eq!(
+            response
+                .headers()
+                .get("Access-Control-Allow-Origin")
+                .and_then(|value| value.to_str().ok()),
+            Some("*")
+        );
     }
 
     #[test]
