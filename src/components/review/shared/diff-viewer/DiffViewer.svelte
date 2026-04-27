@@ -179,13 +179,13 @@
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
 <div
-  class="flex flex-col flex-1 min-w-0 h-full overflow-hidden"
+  class="flex flex-col flex-1 min-w-0 min-h-0 h-full overflow-hidden"
   role="region"
   aria-label="Diff viewer"
   tabindex="-1"
   onkeydown={search.handleRootKeydown}
 >
-  <div class="flex items-center gap-1 px-3 py-2 bg-base-200 border-b border-base-300">
+  <div class="flex items-center gap-1 px-3 py-2 bg-base-200 border-b border-base-300 shrink-0">
     {#if onToggleFileTree}
       <button
         class="btn btn-ghost btn-xs {fileTreeVisible ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
@@ -267,7 +267,7 @@
   </div>
 
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div role="presentation" class="flex-1 overflow-y-auto overflow-x-hidden bg-base-100" bind:this={scrollContainerEl} ondblclick={search.handleDoubleClick} onclick={search.handleContainerClick}>
+  <div role="region" aria-label="Diff scroll area" class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-base-100" bind:this={scrollContainerEl} ondblclick={search.handleDoubleClick} onclick={search.handleContainerClick}>
     {#if files.length === 0}
       <div class="flex items-center justify-center h-full text-base-content/50 text-sm">No files to display</div>
     {:else}

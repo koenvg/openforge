@@ -130,7 +130,7 @@
   })
 </script>
 
-<div class="flex flex-col h-full overflow-hidden">
+<div class="flex flex-col h-full min-h-0 overflow-hidden">
   <div class="flex items-center justify-between px-4 py-2 border-b border-base-300 shrink-0 bg-base-200">
     <h2 class="text-sm font-semibold text-base-content">{projectName} — Files</h2>
     {#if hasLoaded && !loading}
@@ -138,7 +138,7 @@
     {/if}
   </div>
 
-  <div class="flex flex-1 overflow-hidden">
+  <div class="flex flex-1 min-h-0 overflow-hidden">
     {#if !$activeProjectId}
       <div class="flex-1 flex items-center justify-center text-base-content/50 text-sm p-6 text-center">
         Select a project to browse files
@@ -172,7 +172,7 @@
         {/if}
       </ResizablePanel>
 
-      <div class="flex-1 overflow-hidden flex flex-col">
+      <div class="flex-1 min-h-0 overflow-hidden flex flex-col">
         {#if selectedPath === null}
           <div class="flex-1 flex items-center justify-center text-base-content/40 text-sm p-6 text-center">
             Select a file to view its content

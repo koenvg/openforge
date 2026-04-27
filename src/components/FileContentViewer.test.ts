@@ -57,6 +57,26 @@ describe('FileContentViewer', () => {
     expect(screen.getByText('2')).toBeTruthy()
   })
 
+  it('exposes file text content as a dedicated scroll region', () => {
+    const content: FileContent = {
+      type: 'text',
+      content: 'line1\nline2',
+      mimeType: 'text/plain',
+      size: 11,
+    }
+
+    render(FileContentViewer, {
+      props: {
+        content,
+        fileName: 'notes.txt',
+        error: null,
+      },
+    })
+
+    expect(screen.getByText('notes.txt')).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'File text content' })).toBeTruthy()
+  })
+
   it('renders highlighted markup for supported text files', () => {
     const content: FileContent = {
       type: 'text',

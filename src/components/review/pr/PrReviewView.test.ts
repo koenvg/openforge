@@ -197,6 +197,21 @@ describe('PrReviewView', () => {
     })
   })
 
+  it('exposes the files tab diff content as a dedicated scroll region', async () => {
+    vi.mocked(getReviewPrs).mockResolvedValue([basePr])
+    vi.mocked(getPrFileDiffs).mockResolvedValue([])
+    vi.mocked(getReviewComments).mockResolvedValue([])
+
+    render(PrReviewView)
+
+    selectedReviewPr.set(basePr)
+
+    await fireEvent.click(await screen.findByRole('button', { name: /Files changed/ }))
+
+    expect(screen.getByRole('region', { name: 'Diff scroll area' })).toBeTruthy()
+    expect(screen.getByText('Submit Review')).toBeTruthy()
+  })
+
   it('shows back button in detail view', async () => {
     vi.mocked(getReviewPrs).mockResolvedValue([basePr])
     vi.mocked(getPrFileDiffs).mockResolvedValue([])

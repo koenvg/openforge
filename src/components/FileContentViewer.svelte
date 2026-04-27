@@ -36,7 +36,7 @@
   }
 </script>
 
-<div class="flex-1 overflow-auto bg-base-100">
+<div class="flex-1 min-h-0 overflow-hidden bg-base-100">
   {#if content === null && error === null}
     <div class="h-full flex items-center justify-center" aria-label="Loading file content">
       <span class="loading loading-spinner loading-md text-primary"></span>
@@ -51,7 +51,7 @@
       </div>
     </div>
   {:else if content !== null}
-    <div class="flex h-full flex-col">
+    <div class="flex h-full min-h-0 flex-col">
       <div class="shrink-0 border-b border-base-300 px-4 py-3 bg-base-100/70">
         <div class="text-sm font-medium text-base-content break-all">{fileName}</div>
         <div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-base-content/60">
@@ -70,12 +70,12 @@
 
       {#if content.type === 'text'}
         {#if isMarkdown}
-          <div class="flex-1 overflow-auto p-6">
+          <div class="flex-1 min-h-0 overflow-auto p-6" role="region" aria-label="Markdown file content">
             <MarkdownContent content={content.content} />
           </div>
         {:else}
-          <div class="flex-1 overflow-auto p-4">
-            <div class="font-mono text-sm min-w-max" aria-label="File text content">
+          <div class="flex-1 min-h-0 overflow-auto p-4" role="region" aria-label="File text content">
+            <div class="font-mono text-sm min-w-max">
               <div class="flex leading-6">
                 <div
                   class="w-12 shrink-0 pr-3 text-right text-base-content/30 select-none flex flex-col"
@@ -91,7 +91,7 @@
           </div>
         {/if}
       {:else if content.type === 'image'}
-        <div class="flex-1 w-full flex items-center justify-center p-4 overflow-auto">
+        <div class="flex-1 min-h-0 w-full flex items-center justify-center p-4 overflow-auto" role="region" aria-label="Image file content">
           <img
             src={`data:${content.mimeType ?? 'image/*'};base64,${content.content}`}
             alt={`${fileName} preview`}
