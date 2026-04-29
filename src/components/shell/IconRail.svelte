@@ -3,13 +3,8 @@
   import { GITHUB_SYNC_VIEW_KEY } from '../../lib/githubSyncPlugin'
   import type { AppView } from '../../lib/types'
   import { commandHeld } from '../../lib/stores'
-
-  interface PluginNavItem {
-    viewKey: AppView
-    icon: string
-    title: string
-    shortcut: string | null
-  }
+  import { getIconRailNavItems } from '../../lib/iconRailNav'
+  import type { IconRailPluginNavItem } from '../../lib/iconRailNav'
 
   type IconComponent = typeof LayoutDashboard
 
@@ -18,7 +13,7 @@
     onNavigate: (view: AppView) => void
     reviewRequestCount: number
     authoredPrCount: number
-    pluginNavItems?: PluginNavItem[]
+    pluginNavItems?: IconRailPluginNavItem[]
     modalsOpen?: boolean
     railBg?: string
   }
@@ -40,20 +35,12 @@
     wrench: Wrench,
   }
 
-  const staticNavItems: { view: AppView; Icon: IconComponent; shortcut: string; label: string }[] = [
-    { view: 'board', Icon: LayoutDashboard, shortcut: 'H', label: 'Board' },
-    { view: 'settings', Icon: Settings, shortcut: ',', label: 'Settings' },
-  ]
-
-  let navItems = $derived([
-    ...staticNavItems,
-    ...pluginNavItems.map((item) => ({
-      view: item.viewKey,
+  let navItems = $derived(
+    getIconRailNavItems(pluginNavItems).map((item) => ({
+      ...item,
       Icon: iconRegistry[item.icon] ?? Plug,
-      shortcut: item.shortcut ? item.shortcut.replace(/^[⌘⌃⌥⇧]+/, '').toUpperCase() : '',
-      label: item.title,
-    })),
-  ])
+    }))
+  )
 </script>
 
 <div class="w-16 h-full border-r border-base-300/50 flex flex-col items-center py-4 gap-5" style="background-color: {railBg}">

@@ -27,7 +27,7 @@ describe('IconRail', () => {
     expect(onNavigate).toHaveBeenCalledWith('settings')
   })
 
-  it('renders plugin navigation items after the static entries', () => {
+  it('renders plugin navigation items before Settings', () => {
     const onNavigate = vi.fn()
     render(IconRail, {
       props: {
@@ -47,8 +47,11 @@ describe('IconRail', () => {
     const buttons = screen.getAllByRole('button')
     expect(buttons).toHaveLength(3)
 
-    fireEvent.click(buttons[2])
+    fireEvent.click(buttons[1])
     expect(onNavigate).toHaveBeenCalledWith('plugin:com.openforge.file-viewer:files')
+
+    fireEvent.click(buttons[2])
+    expect(onNavigate).toHaveBeenCalledWith('settings')
   })
 
   it('shows review request count badge when reviewRequestCount > 0', () => {
