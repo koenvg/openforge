@@ -7,7 +7,7 @@ import type {
   ReviewComment,
   ReviewPullRequest,
   ReviewSubmissionComment,
-} from './types'
+} from '@openforge/plugin-sdk/domain'
 
 function host<T>(command: string, payload?: Record<string, unknown>): Promise<T> {
   return getPluginContext().invokeHost(command, payload) as Promise<T>

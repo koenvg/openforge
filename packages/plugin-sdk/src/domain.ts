@@ -1,3 +1,6 @@
+import type { PluginViewKey } from './types'
+export type { PluginViewKey } from './types'
+
 export type BoardStatus = 'backlog' | 'doing' | 'done'
 
 export interface Task {
@@ -457,7 +460,6 @@ export interface AgentReviewComment {
 
 /** App-level view for top-bar navigation */
 export type CoreAppView = 'board' | 'settings' | 'global_settings' | 'files'
-export type PluginViewKey = `plugin:${string}:${string}`
 
 /** App-level view for top-bar navigation */
 export type AppView = CoreAppView | PluginViewKey

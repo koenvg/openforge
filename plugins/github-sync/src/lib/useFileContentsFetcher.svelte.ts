@@ -1,4 +1,4 @@
-import type { PrFileDiff } from './types'
+import type { PrFileDiff } from '@openforge/plugin-sdk/domain'
 import type { FileContents } from './diffAdapter'
 
 export interface FileContentsFetcherState {

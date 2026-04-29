@@ -31,3 +31,15 @@ export { isValidShortcutFormat, normalizeShortcut, validatePluginManifest, isPlu
 export type { ValidationError } from './manifest'
 export { PluginContextImpl } from './context'
 export { isPluginCommandContribution, isPluginViewContribution, getViewContributions, getCommandContributions } from './helpers'
+export { parseStrictFiniteNumber } from './numberParsing'
+export {
+  getSkillIdentity,
+  hasMergeConflicts,
+  isQueuedForMerge,
+  isReadyToMerge,
+  isSameSkillIdentity,
+  parseCheckRuns,
+  preservePullRequestState,
+  splitCheckRuns,
+} from './domain'
+export type * from './domain'

@@ -1,4 +1,4 @@
-import { hasMergeConflicts, isReadyToMerge, type MergeStatusInfo } from './types';
+import { hasMergeConflicts, isReadyToMerge, type MergeStatusInfo } from '@openforge/plugin-sdk/domain';
 
 export type PrChipSurface = 'compact' | 'detail';
 

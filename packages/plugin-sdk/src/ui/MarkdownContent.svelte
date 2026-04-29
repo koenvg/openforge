@@ -1,13 +1,13 @@
 <script lang="ts">
   import { marked } from 'marked'
-  import { openUrl } from './lib/ipc'
-  import { sanitizeHtml } from './lib/sanitize'
+  import { sanitizeHtml } from '../sanitize'
 
   interface Props {
     content: string
+    onOpenUrl?: (url: string) => void | Promise<void>
   }
 
-  let { content }: Props = $props()
+  let { content, onOpenUrl }: Props = $props()
 
   marked.setOptions({
     gfm: true,
@@ -22,7 +22,9 @@
     const anchor = e.target.closest('a')
     if (anchor?.href) {
       e.preventDefault()
-      openUrl(anchor.href)
+      if (onOpenUrl) {
+        void onOpenUrl(anchor.href)
+      }
     }
   }
 </script>

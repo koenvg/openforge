@@ -1,6 +1,6 @@
 <script lang="ts">
   import { skills, selectedSkillIdentity, activeProjectId } from './lib/stores'
-  import { listOpenCodeSkills, saveSkillContent } from './lib/ipc'
+  import { listOpenCodeSkills, openUrl, saveSkillContent } from './lib/ipc'
   import { getPluginContext } from './pluginContext'
   import { getHTMLElementAt, isInputFocused } from './lib/domUtils'
 
@@ -11,8 +11,8 @@
   let { projectName, projectId = null }: Props & { projectId?: string | null } = $props()
   import { useVimNavigation } from './lib/useVimNavigation.svelte'
   import ProjectPageHeader from './ProjectPageHeader.svelte'
-  import MarkdownContent from './MarkdownContent.svelte'
-  import { getSkillIdentity, isSameSkillIdentity, type SkillInfo } from './lib/types'
+  import MarkdownContent from '@openforge/plugin-sdk/ui/MarkdownContent.svelte'
+  import { getSkillIdentity, isSameSkillIdentity, type SkillInfo } from '@openforge/plugin-sdk/domain'
 
   $effect(() => {
     $activeProjectId = projectId
@@ -366,7 +366,7 @@
           <!-- Read mode: rendered markdown -->
           <div class="flex-1 overflow-y-auto px-6 py-4">
             {#if selectedSkill.template}
-              <MarkdownContent content={selectedSkill.template} />
+              <MarkdownContent content={selectedSkill.template} onOpenUrl={openUrl} />
             {:else}
               <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-center">
                 <span class="text-3xl">📄</span>

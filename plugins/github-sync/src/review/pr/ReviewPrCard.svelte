@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ReviewPullRequest } from '../../lib/types'
+  import type { ReviewPullRequest } from '@openforge/plugin-sdk/domain'
   import Card from '../../shared/ui/Card.svelte'
   import { timeAgoFromSeconds } from '../../lib/timeAgo'
   import { getPrStatusChips } from '../../lib/prStatusPresentation'

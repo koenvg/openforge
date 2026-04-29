@@ -1,6 +1,6 @@
 import { DiffFile } from '@git-diff-view/core'
 import { toGitDiffViewData, type FileContents } from './diffAdapter'
-import type { PrFileDiff } from './types'
+import type { PrFileDiff } from '@openforge/plugin-sdk/domain'
 import type { DiffWorkerResponse } from './diffWorker'
 import { themeMode, getDiffTheme } from './theme'
 import { get } from 'svelte/store'

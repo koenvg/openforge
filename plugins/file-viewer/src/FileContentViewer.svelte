@@ -1,7 +1,8 @@
 <script lang="ts">
-  import type { FileContent } from './lib/types'
+  import MarkdownContent from '@openforge/plugin-sdk/ui/MarkdownContent.svelte'
+  import type { FileContent } from '@openforge/plugin-sdk/domain'
   import { getLanguageForFile, highlightCode } from './lib/fileHighlighter'
-  import MarkdownContent from './MarkdownContent.svelte'
+  import { openUrl } from './lib/ipc'
 
   interface Props {
     content: FileContent | null
@@ -71,7 +72,7 @@
       {#if content.type === 'text'}
         {#if isMarkdown}
           <div class="flex-1 min-h-0 overflow-auto p-6" role="region" aria-label="Markdown file content">
-            <MarkdownContent content={content.content} />
+            <MarkdownContent content={content.content} onOpenUrl={openUrl} />
           </div>
         {:else}
           <div class="flex-1 min-h-0 overflow-auto p-4" role="region" aria-label="File text content">

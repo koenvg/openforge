@@ -340,4 +340,74 @@ function getCommandContributions(contributes) {
 	return contributes?.commands ?? [];
 }
 //#endregion
-export { ALLOWED_ICON_KEYS, MAX_SUPPORTED_API_VERSION, PluginContextImpl, getCommandContributions, getViewContributions, isPluginCommandContribution, isPluginManifest, isPluginViewContribution, isPluginViewKey, isValidShortcutFormat, makePluginViewKey, normalizeShortcut, parsePluginViewKey, validatePluginManifest };
+//#region packages/plugin-sdk/src/numberParsing.ts
+var STRICT_FINITE_NUMBER_PATTERN = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/;
+function parseStrictFiniteNumber(value) {
+	if (!STRICT_FINITE_NUMBER_PATTERN.test(value)) return null;
+	const parsed = Number(value);
+	return Number.isFinite(parsed) ? parsed : null;
+}
+//#endregion
+//#region packages/plugin-sdk/src/domain.ts
+function hasMergeConflicts(pr) {
+	if (pr.state !== "open") return false;
+	const mergeableState = pr.mergeable_state?.toLowerCase() ?? null;
+	return mergeableState === "dirty" || mergeableState === "conflicting";
+}
+/** Check if a PR is ready to merge based on GitHub's mergeable_state field */
+function isReadyToMerge(pr) {
+	if (pr.state !== "open") return false;
+	const mergeableState = pr.mergeable_state?.toLowerCase() ?? null;
+	return mergeableState === "clean" || mergeableState === "behind";
+}
+/** Check if a PR is queued in a merge queue (ready to merge + is_queued) */
+function isQueuedForMerge(pr) {
+	return pr.state === "open" && pr.is_queued;
+}
+/** Preserves optimistic and definitive states across transient background syncs */
+function preservePullRequestState(oldPr, newPr) {
+	if (!oldPr) return newPr;
+	const result = { ...newPr };
+	if (oldPr.state === "merged" && result.state === "open") {
+		result.state = "merged";
+		result.merged_at = oldPr.merged_at;
+	}
+	const isTransient = result.mergeable === null || result.mergeable_state === "unknown" || result.mergeable_state === null;
+	const oldIsDefinitive = oldPr.mergeable_state !== "unknown" && oldPr.mergeable_state !== null;
+	if (isTransient && oldIsDefinitive) {
+		result.mergeable = oldPr.mergeable;
+		result.mergeable_state = oldPr.mergeable_state;
+	}
+	return result;
+}
+function getSkillIdentity(skill) {
+	return {
+		name: skill.name,
+		level: skill.level,
+		source_dir: skill.source_dir
+	};
+}
+function isSameSkillIdentity(skill, identity) {
+	return identity !== null && skill.name === identity.name && skill.level === identity.level && skill.source_dir === identity.source_dir;
+}
+function parseCheckRuns(json) {
+	if (!json) return [];
+	try {
+		return JSON.parse(json);
+	} catch {
+		return [];
+	}
+}
+/** Split check runs into visible (non-passing) and a count of hidden passing checks. */
+function splitCheckRuns(checks) {
+	const visible = [];
+	let passingCount = 0;
+	for (const check of checks) if (check.status === "completed" && check.conclusion === "success") passingCount++;
+	else visible.push(check);
+	return {
+		visible,
+		passingCount
+	};
+}
+//#endregion
+export { ALLOWED_ICON_KEYS, MAX_SUPPORTED_API_VERSION, PluginContextImpl, getCommandContributions, getSkillIdentity, getViewContributions, hasMergeConflicts, isPluginCommandContribution, isPluginManifest, isPluginViewContribution, isPluginViewKey, isQueuedForMerge, isReadyToMerge, isSameSkillIdentity, isValidShortcutFormat, makePluginViewKey, normalizeShortcut, parseCheckRuns, parsePluginViewKey, parseStrictFiniteNumber, preservePullRequestState, splitCheckRuns, validatePluginManifest };

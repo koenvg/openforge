@@ -5,11 +5,20 @@
   "main": "src/index.ts",
   "types": "src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./domain": "./src/domain.ts",
+    "./numberParsing": "./src/numberParsing.ts",
+    "./sanitize": "./src/sanitize.ts",
+    "./ui/MarkdownContent.svelte": "./src/ui/MarkdownContent.svelte",
+    "./ui/ResizablePanel.svelte": "./src/ui/ResizablePanel.svelte"
   },
   "scripts": {
     "build": "tsc",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "dompurify": "^3.3.2",
+    "marked": "^17.0.3"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"

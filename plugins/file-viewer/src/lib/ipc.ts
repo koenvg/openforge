@@ -1,5 +1,5 @@
 import { getPluginContext } from '../pluginContext'
-import type { FileContent, FileEntry } from './types'
+import type { FileContent, FileEntry } from '@openforge/plugin-sdk/domain'
 
 export async function fsReadDir(projectId: string, dirPath: string | null): Promise<FileEntry[]> {
   return getPluginContext().invokeHost('fsReadDir', { projectId, dirPath }) as Promise<FileEntry[]>

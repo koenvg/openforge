@@ -2,10 +2,10 @@
   import { onMount } from 'svelte'
   import { activeProjectId, pendingFileReveal } from './lib/stores'
   import { fsReadDir, fsReadFile } from './lib/ipc'
-  import type { FileEntry, FileContent } from './lib/types'
+  import type { FileEntry, FileContent } from '@openforge/plugin-sdk/domain'
   import ProjectFileTree from './ProjectFileTree.svelte'
   import FileContentViewer from './FileContentViewer.svelte'
-  import ResizablePanel from './ResizablePanel.svelte'
+  import ResizablePanel from '@openforge/plugin-sdk/ui/ResizablePanel.svelte'
 
   interface Props {
     projectName: string

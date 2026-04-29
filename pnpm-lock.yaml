@@ -104,6 +104,12 @@ importers:
 
   packages/plugin-sdk:
     dependencies:
+      dompurify:
+        specifier: ^3.3.2
+        version: 3.4.1
+      marked:
+        specifier: ^17.0.3
+        version: 17.0.6
       svelte:
         specifier: ^5.0.0
         version: 5.51.3

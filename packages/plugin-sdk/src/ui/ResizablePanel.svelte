@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { parseStrictFiniteNumber } from './lib/numberParsing'
   import type { Snippet } from 'svelte'
+  import { parseStrictFiniteNumber } from '../numberParsing'
 
   interface Props {
     storageKey: string

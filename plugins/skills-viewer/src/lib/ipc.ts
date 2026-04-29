@@ -1,5 +1,5 @@
 import { getPluginContext } from '../pluginContext'
-import type { SkillInfo } from './types'
+import type { SkillInfo } from '@openforge/plugin-sdk/domain'
 
 export async function listOpenCodeSkills(projectId: string): Promise<SkillInfo[]> {
   return getPluginContext().invokeHost('listOpenCodeSkills', { projectId }) as Promise<SkillInfo[]>

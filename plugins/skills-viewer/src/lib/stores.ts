@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store'
-import type { SkillIdentity, SkillInfo } from './types'
+import type { SkillIdentity, SkillInfo } from '@openforge/plugin-sdk/domain'
 
 export const activeProjectId = writable<string | null>(null)
 export const skills = writable<SkillInfo[]>([])

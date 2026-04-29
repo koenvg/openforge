@@ -3,8 +3,9 @@
   import { prOverviewComments } from '../../lib/stores'
   import { getPrOverviewComments } from '../../lib/ipc'
   import { timeAgo, timeAgoFromSeconds } from '../../lib/timeAgo'
-  import type { ReviewPullRequest, PrOverviewComment } from '../../lib/types'
-  import MarkdownContent from '../../shared/content/MarkdownContent.svelte'
+  import type { ReviewPullRequest, PrOverviewComment } from '@openforge/plugin-sdk/domain'
+  import MarkdownContent from '@openforge/plugin-sdk/ui/MarkdownContent.svelte'
+  import { openUrl } from '../../lib/ipc'
 
   interface Props {
     pr: ReviewPullRequest
@@ -72,7 +73,7 @@
       </div>
       <div class="px-5 py-4">
         {#if pr.body}
-          <MarkdownContent content={pr.body} />
+          <MarkdownContent content={pr.body} onOpenUrl={openUrl} />
         {:else}
           <p class="text-sm text-base-content/50 italic m-0">No description provided.</p>
         {/if}
@@ -127,7 +128,7 @@
               </div>
             {/if}
             <div class="px-5 py-4">
-              <MarkdownContent content={comment.body} />
+              <MarkdownContent content={comment.body} onOpenUrl={openUrl} />
             </div>
           </div>
         {/each}

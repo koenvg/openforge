@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte'
   import { getPluginContext } from '../../pluginContext'
   type UnlistenFn = () => void
-  import type { AgentEvent } from '../../lib/types'
+  import type { AgentEvent } from '@openforge/plugin-sdk/domain'
   import Modal from '../../shared/ui/Modal.svelte'
 
   interface Props {
