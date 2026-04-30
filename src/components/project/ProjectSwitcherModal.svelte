@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte'
+  import { onMount } from 'svelte'
   import { projects, activeProjectId, projectAttention } from '../../lib/stores'
   import { getProjectAttention } from '../../lib/ipc'
   import { useAppRouter } from '../../lib/router.svelte'
   import { useListNavigation } from '../../lib/useListNavigation.svelte'
+  import Modal from '../shared/ui/Modal.svelte'
   import type { ProjectAttention } from '../../lib/types'
 
   interface Props {
@@ -15,7 +16,6 @@
 
   let searchQuery = $state('')
   let selectedIndex = $state(-1)
-  let inputEl = $state<HTMLInputElement | null>(null)
 
   let filteredProjects = $derived.by(() => {
     const q = searchQuery.trim().toLowerCase()
@@ -52,25 +52,14 @@
       if (selectedIndex >= 0 && selectedIndex < filteredProjects.length) {
         selectProject(filteredProjects[selectedIndex].id)
       }
-    },
-    onCancel() { onClose() }
+    }
   })
 
-  function handleKeyDown(e: KeyboardEvent) {
-    const handled = listNav.handleKeydown(e)
-    if (handled) return
-  }
-
-  function handleBackdropClick(e: MouseEvent) {
-    if (e.target === e.currentTarget) {
-      onClose()
-    }
+  function handleKeyDown(e: KeyboardEvent): boolean {
+    return listNav.handleKeydown(e)
   }
 
   onMount(async () => {
-    await tick()
-    inputEl?.focus()
-
     try {
       const summaries = await getProjectAttention()
       const map = new Map<string, ProjectAttention>()
@@ -84,27 +73,12 @@
   })
 </script>
 
-<!-- Backdrop -->
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<div
-  data-testid="modal-backdrop"
-  role="presentation"
-  class="fixed inset-0 z-50 flex items-start justify-center pt-[20vh] bg-black/50"
-  onclick={handleBackdropClick}
->
-  <!-- Dialog card -->
-  <div
-    role="dialog"
-    aria-modal="true"
-    aria-label="Switch project"
-    class="w-full max-w-[480px] bg-base-200 border border-base-300 rounded-lg shadow-2xl overflow-hidden"
-    onkeydown={handleKeyDown}
-    tabindex="-1"
-  >
+<Modal onClose={onClose} maxWidth="480px" initialFocus="[data-project-switcher-search]" ariaLabel="Switch project" showHeader={false} onKeydown={handleKeyDown}>
+  <div class="flex flex-col overflow-hidden">
     <!-- Search input -->
     <div class="p-3 border-b border-base-300">
       <input
-        bind:this={inputEl}
+        data-project-switcher-search
         type="text"
         class="input input-sm w-full bg-base-100 border-base-300 focus:outline-none text-base-content placeholder:text-base-content/40"
         placeholder="Switch project..."
@@ -185,4 +159,4 @@
        <span class="text-[10px] text-base-content/40 ml-auto"><kbd class="kbd kbd-xs">Ctrl+N/P</kbd> navigate</span>
      </div>
   </div>
-</div>
+</Modal>

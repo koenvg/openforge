@@ -9,11 +9,14 @@
     maxWidth?: string
     overflowVisible?: boolean
     initialFocus?: ModalInitialFocus
+    ariaLabel?: string
+    showHeader?: boolean
+    onKeydown?: (event: KeyboardEvent) => boolean | void
     header?: Snippet
     children: Snippet
   }
 
-  let { onClose, maxWidth = '500px', overflowVisible = false, initialFocus, header, children }: Props = $props()
+  let { onClose, maxWidth = '500px', overflowVisible = false, initialFocus, ariaLabel, showHeader = true, onKeydown, header, children }: Props = $props()
 
   let modalElement: HTMLDivElement | null = $state(null)
   let hasAppliedInitialFocus = false
@@ -48,6 +51,11 @@
   })
 
   function handleKeydown(e: KeyboardEvent) {
+    if (onKeydown?.(e)) {
+      e.stopPropagation()
+      return
+    }
+
     if (e.metaKey || e.ctrlKey || e.altKey) return
 
     e.stopPropagation()
@@ -64,14 +72,16 @@
   }
 </script>
 
-<div bind:this={modalElement} class="modal modal-open" onclick={handleOverlayClick} onkeydown={handleKeydown} role="dialog" aria-modal="true" tabindex="-1">
+<div bind:this={modalElement} class="modal modal-open" onclick={handleOverlayClick} onkeydown={handleKeydown} role="dialog" aria-modal="true" aria-label={ariaLabel} tabindex="-1">
   <div class="modal-box bg-base-100 shadow-xl p-0 flex flex-col max-h-[90vh] {overflowVisible ? 'overflow-visible' : ''}" style="max-width: {maxWidth}">
-    <div class="flex items-center justify-between px-5 py-4 border-b border-base-300">
-      {#if header}
-        {@render header()}
-      {/if}
-      <button class="btn btn-ghost btn-xs shrink-0" onclick={onClose} type="button">✕</button>
-    </div>
+    {#if showHeader}
+      <div class="flex items-center justify-between px-5 py-4 border-b border-base-300">
+        {#if header}
+          {@render header()}
+        {/if}
+        <button class="btn btn-ghost btn-xs shrink-0" onclick={onClose} type="button">✕</button>
+      </div>
+    {/if}
     {@render children()}
   </div>
 </div>

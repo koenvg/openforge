@@ -36,6 +36,19 @@ describe('Modal', () => {
     expect(document.activeElement).toBe(screen.getByRole('dialog'))
   })
 
+  it('applies an accessible dialog label when provided', async () => {
+    render(ModalTestWrapper, { props: { onClose: vi.fn(), ariaLabel: 'Switch project' } })
+
+    expect(screen.getByRole('dialog', { name: 'Switch project' })).toBeTruthy()
+  })
+
+  it('can hide its default header chrome for palette-style dialogs', async () => {
+    render(ModalTestWrapper, { props: { onClose: vi.fn(), showHeader: false } })
+
+    expect(screen.queryByRole('button', { name: '✕' })).toBeNull()
+    expect(screen.getByText('Test content')).toBeTruthy()
+  })
+
   it('calls onClose when Escape is pressed', async () => {
     const onClose = vi.fn()
     render(ModalTestWrapper, { props: { onClose } })

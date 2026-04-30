@@ -139,8 +139,7 @@ describe('ProjectSwitcherModal', () => {
       await fireEvent.input(input, { target: { value: 'beta' } })
 
       // First (and only) filtered result should be auto-selected — Enter selects it
-      const dialog = screen.getByRole('dialog')
-      await fireEvent.keyDown(dialog, { key: 'Enter' })
+      await fireEvent.keyDown(input, { key: 'Enter' })
 
       expect(get(mockActiveProjectId)).toBe('proj-2')
       expect(onClose).toHaveBeenCalledOnce()
@@ -165,21 +164,21 @@ describe('ProjectSwitcherModal', () => {
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
       render(Modal, { props: { onClose: vi.fn() } })
 
-      const dialog = screen.getByRole('dialog')
-      await fireEvent.keyDown(dialog, { key: 'ArrowDown' })
+      const input = screen.getByPlaceholderText('Switch project...')
+      await fireEvent.keyDown(input, { key: 'ArrowDown' })
 
       // The first item (index 0) should now be highlighted
       // We verify by pressing Enter and checking which project gets selected
       const onClose = vi.fn()
       // Re-render fresh to avoid state bleed
       const { unmount } = render(Modal, { props: { onClose } })
-      const dialog2 = screen.getAllByRole('dialog')[1]
-      await fireEvent.keyDown(dialog2, { key: 'ArrowDown' })
+      const input2 = screen.getAllByPlaceholderText('Switch project...')[1]
+      await fireEvent.keyDown(input2, { key: 'ArrowDown' })
       mockActiveProjectId.set(null) // reset
 
       // After ArrowDown, selectedIndex moves from -1 to 0
       // Enter on this should select first project
-      await fireEvent.keyDown(dialog2, { key: 'Enter' })
+      await fireEvent.keyDown(input2, { key: 'Enter' })
       expect(get(mockActiveProjectId)).toBe('proj-1')
       unmount()
     })
@@ -190,12 +189,25 @@ describe('ProjectSwitcherModal', () => {
       const onClose = vi.fn()
       render(Modal, { props: { onClose } })
 
-      const dialog = screen.getByRole('dialog')
+      const input = screen.getByPlaceholderText('Switch project...')
       // Go to first item
-      await fireEvent.keyDown(dialog, { key: 'ArrowDown' })
+      await fireEvent.keyDown(input, { key: 'ArrowDown' })
       // Now go up — should wrap to last
-      await fireEvent.keyDown(dialog, { key: 'ArrowUp' })
-      await fireEvent.keyDown(dialog, { key: 'Enter' })
+      await fireEvent.keyDown(input, { key: 'ArrowUp' })
+      await fireEvent.keyDown(input, { key: 'Enter' })
+
+      expect(get(mockActiveProjectId)).toBe('proj-3')
+    })
+
+    it('Ctrl+N and Ctrl+P keep palette navigation working through the shared modal', async () => {
+      const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
+      mockActiveProjectId.set(null)
+      render(Modal, { props: { onClose: vi.fn() } })
+
+      const input = screen.getByPlaceholderText('Switch project...')
+      await fireEvent.keyDown(input, { key: 'n', ctrlKey: true })
+      await fireEvent.keyDown(input, { key: 'p', ctrlKey: true })
+      await fireEvent.keyDown(input, { key: 'Enter' })
 
       expect(get(mockActiveProjectId)).toBe('proj-3')
     })
@@ -206,14 +218,14 @@ describe('ProjectSwitcherModal', () => {
       const onClose = vi.fn()
       render(Modal, { props: { onClose } })
 
-      const dialog = screen.getByRole('dialog')
+      const input = screen.getByPlaceholderText('Switch project...')
       // Navigate to last item (3 downs from -1: 0,1,2)
-      await fireEvent.keyDown(dialog, { key: 'ArrowDown' })
-      await fireEvent.keyDown(dialog, { key: 'ArrowDown' })
-      await fireEvent.keyDown(dialog, { key: 'ArrowDown' })
+      await fireEvent.keyDown(input, { key: 'ArrowDown' })
+      await fireEvent.keyDown(input, { key: 'ArrowDown' })
+      await fireEvent.keyDown(input, { key: 'ArrowDown' })
       // One more wraps to 0
-      await fireEvent.keyDown(dialog, { key: 'ArrowDown' })
-      await fireEvent.keyDown(dialog, { key: 'Enter' })
+      await fireEvent.keyDown(input, { key: 'ArrowDown' })
+      await fireEvent.keyDown(input, { key: 'Enter' })
 
       expect(get(mockActiveProjectId)).toBe('proj-1')
     })
@@ -225,9 +237,9 @@ describe('ProjectSwitcherModal', () => {
       const onClose = vi.fn()
       render(Modal, { props: { onClose } })
 
-      const dialog = screen.getByRole('dialog')
-      await fireEvent.keyDown(dialog, { key: 'ArrowDown' }) // select first
-      await fireEvent.keyDown(dialog, { key: 'Enter' })
+      const input = screen.getByPlaceholderText('Switch project...')
+      await fireEvent.keyDown(input, { key: 'ArrowDown' }) // select first
+      await fireEvent.keyDown(input, { key: 'Enter' })
 
       expect(get(mockActiveProjectId)).toBe('proj-1')
       expect(mockResetToBoard).toHaveBeenCalled()
@@ -239,8 +251,8 @@ describe('ProjectSwitcherModal', () => {
       const onClose = vi.fn()
       render(Modal, { props: { onClose } })
 
-      const dialog = screen.getByRole('dialog')
-      await fireEvent.keyDown(dialog, { key: 'Enter' }) // selectedIndex = -1
+      const input = screen.getByPlaceholderText('Switch project...')
+      await fireEvent.keyDown(input, { key: 'Enter' }) // selectedIndex = -1
 
       expect(onClose).not.toHaveBeenCalled()
     })
@@ -266,8 +278,8 @@ describe('ProjectSwitcherModal', () => {
       const onClose = vi.fn()
       render(Modal, { props: { onClose } })
 
-      const dialog = screen.getByRole('dialog')
-      await fireEvent.keyDown(dialog, { key: 'Escape' })
+      const input = screen.getByPlaceholderText('Switch project...')
+      await fireEvent.keyDown(input, { key: 'Escape' })
 
       expect(onClose).toHaveBeenCalledOnce()
     })
@@ -277,9 +289,8 @@ describe('ProjectSwitcherModal', () => {
       const onClose = vi.fn()
       render(Modal, { props: { onClose } })
 
-      // The backdrop is the outermost element with role="presentation" or a data-testid
-      const backdrop = screen.getByTestId('modal-backdrop')
-      await fireEvent.click(backdrop)
+      const dialog = screen.getByRole('dialog')
+      await fireEvent.click(dialog)
 
       expect(onClose).toHaveBeenCalledOnce()
     })
@@ -292,9 +303,9 @@ describe('ProjectSwitcherModal', () => {
       const onClose = vi.fn()
       render(Modal, { props: { onClose } })
 
-      const dialog = screen.getByRole('dialog')
+      const input = screen.getByPlaceholderText('Switch project...')
       // Without moving, Enter should select the pre-highlighted active project
-      await fireEvent.keyDown(dialog, { key: 'Enter' })
+      await fireEvent.keyDown(input, { key: 'Enter' })
 
       expect(get(mockActiveProjectId)).toBe('proj-2')
       expect(onClose).toHaveBeenCalledOnce()
