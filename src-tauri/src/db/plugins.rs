@@ -1,4 +1,4 @@
-use rusqlite::Result;
+use rusqlite::{OptionalExtension, Result};
 use serde::{Deserialize, Serialize};
 
 /// Plugin row from the plugins table
@@ -136,12 +136,13 @@ impl super::Database {
     /// Return true if the plugin is enabled for the given project.
     pub fn is_plugin_enabled(&self, project_id: &str, plugin_id: &str) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
-        let enabled: bool = conn
+        let enabled = conn
             .query_row(
                 "SELECT enabled FROM project_plugins WHERE project_id = ?1 AND plugin_id = ?2",
                 rusqlite::params![project_id, plugin_id],
                 |row| row.get::<_, bool>(0),
             )
+            .optional()?
             .unwrap_or(false);
         Ok(enabled)
     }
@@ -261,6 +262,18 @@ mod tests {
         db.set_plugin_enabled("proj1", "q", true).unwrap();
         db.set_plugin_enabled("proj1", "q", false).unwrap();
         assert!(!db.is_plugin_enabled("proj1", "q").unwrap());
+    }
+
+    #[test]
+    fn is_plugin_enabled_propagates_query_errors() {
+        let (db, _tmp) = make_test_db("plugins_enabled_query_error");
+        {
+            let conn = db.connection();
+            let conn = conn.lock().unwrap();
+            conn.execute("DROP TABLE project_plugins", []).unwrap();
+        }
+
+        assert!(db.is_plugin_enabled("proj1", "missing").is_err());
     }
 
     #[test]
