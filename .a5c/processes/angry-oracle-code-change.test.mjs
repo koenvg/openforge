@@ -6,11 +6,12 @@ import {
   buildOracleReviewPrompt,
   changeInventoryTask,
   hasBlockingOracleFindings,
-  mergeChangedFiles
+  mergeChangedFiles,
+  oracleFixTask
 } from './angry-oracle-code-change.js';
 
 describe('angry oracle code-change process', () => {
-  it('treats critical, high, explicit blockers, and non-approve verdicts as blocking', () => {
+  it('treats critical, high, explicit blockers, required fixes, and non-approve verdicts as blocking', () => {
     assert.deepEqual(ORACLE_BLOCKING_SEVERITIES, ['critical', 'high']);
 
     assert.equal(
@@ -23,6 +24,7 @@ describe('angry oracle code-change process', () => {
     );
     assert.equal(hasBlockingOracleFindings({ verdict: 'changes_requested', findings: [] }), true);
     assert.equal(hasBlockingOracleFindings({ verdict: 'approve', blockers: ['tests do not cover failure path'] }), true);
+    assert.equal(hasBlockingOracleFindings({ verdict: 'approve', requiredFixes: ['split orchestration concerns'] }), true);
   });
 
   it('deduplicates changed files from implementation and fixer outputs while preserving order', () => {
@@ -43,7 +45,14 @@ describe('angry oracle code-change process', () => {
     assert.match(task.shell.command, /git ls-files --others --exclude-standard/);
   });
 
-  it('builds an adversarial post-change oracle prompt that requires actionable fixes', () => {
+  it('directs fixes to address every reviewer-required change before re-review', async () => {
+    const task = await oracleFixTask.build({ iteration: 1 }, { effectId: 'effect-1' });
+
+    assert.ok(task.agent.prompt.instructions.some((instruction) => /required fixes/i.test(instruction)));
+    assert.ok(task.agent.prompt.instructions.some((instruction) => /blocking review/i.test(instruction)));
+  });
+
+  it('builds an adversarial post-change oracle prompt that requires architectural review and actionable fixes', () => {
     const prompt = buildOracleReviewPrompt({
       request: 'Add token rotation',
       changedFiles: ['src/auth.ts'],
@@ -54,8 +63,10 @@ describe('angry oracle code-change process', () => {
     assert.equal(prompt.role, 'angry principal engineer oracle');
     assert.match(prompt.task, /review the completed code changes/i);
     assert.match(prompt.task, /not rubber-stamp/i);
+    assert.match(prompt.task, /architectural fit/i);
     assert.ok(prompt.instructions.some((instruction) => /actionable fix/i.test(instruction)));
     assert.ok(prompt.instructions.some((instruction) => /project conventions/i.test(instruction)));
+    assert.ok(prompt.instructions.some((instruction) => /architecture/i.test(instruction)));
     assert.deepEqual(prompt.context.changedFiles, ['src/auth.ts']);
   });
 });

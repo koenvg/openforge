@@ -23,6 +23,10 @@ export function hasBlockingOracleFindings(review = {}) {
     return true;
   }
 
+  if (Array.isArray(review.requiredFixes) && review.requiredFixes.length > 0) {
+    return true;
+  }
+
   const findings = Array.isArray(review.findings) ? review.findings : [];
   return findings.some((finding) =>
     ORACLE_BLOCKING_SEVERITIES.includes(String(finding?.severity || '').toLowerCase())
@@ -49,12 +53,18 @@ export function mergeChangedFiles(existing = [], update = {}) {
 export function buildOracleReviewPrompt({ request, changedFiles = [], verificationResults = [], iteration = 1 }) {
   return {
     role: 'angry principal engineer oracle',
-    task: 'Review the completed code changes after implementation. Be adversarial: do not rubber-stamp the work, and assume subtle bugs, convention violations, missing tests, and over-engineering are present until proven otherwise.',
+    task: 'Review the completed code changes after implementation, including whether the solution has sound architectural fit for this codebase. Be adversarial: do not rubber-stamp the work, and assume subtle bugs, convention violations, missing tests, over-engineering, and misplaced responsibilities are present until proven otherwise.',
     context: {
       request,
       changedFiles,
       verificationResults,
       iteration,
+      architectureReviewCriteria: [
+        'The change belongs in the right module/layer and preserves established ownership boundaries',
+        'The solution is not over-engineered for the requested scope',
+        'Responsibilities are cohesive and not duplicated across unrelated modules',
+        'The implementation remains maintainable for future OpenForge task/workflow changes'
+      ],
       projectConventions: [
         'Svelte 5 runes only; no legacy event dispatchers',
         'All Tauri invoke calls go through src/lib/ipc.ts typed wrappers',
@@ -69,10 +79,11 @@ export function buildOracleReviewPrompt({ request, changedFiles = [], verificati
     instructions: [
       'Inspect the diff, tests, and verification output against the original request.',
       'Check project conventions from AGENTS.md and the project profile before judging readiness.',
-      'Flag any missing test coverage, business logic regressions, race conditions, stale lifecycle state, direct invoke usage, or Svelte/Rust convention violations.',
+      'Validate architecture and architectural fit: module boundaries, ownership, separation of concerns, cohesion, coupling, and whether the design makes sense for the requested scope.',
+      'Flag any missing test coverage, business logic regressions, race conditions, stale lifecycle state, direct invoke usage, Svelte/Rust convention violations, misplaced responsibilities, or over-engineering.',
       'Every finding must include severity, file/path when applicable, evidence, and an actionable fix.',
-      'Treat critical and high severity findings as blockers that must be fixed before completion.',
-      'Return changes_requested unless the implementation is genuinely ready with no blocking issues.'
+      'Treat critical/high severity findings, blockers, required fixes, and requiredFixes entries as blockers that must be fixed before completion.',
+      'Return changes_requested unless the implementation is genuinely ready with no blocking issues and no required fixes.'
     ],
     outputFormat: 'JSON with verdict (approve|changes_requested), score (0-100), summary, blockers, findings, requiredFixes, and praiseIfAny'
   };
@@ -316,10 +327,12 @@ export const oracleFixTask = defineTask('oracle-fix', (args, taskCtx) => ({
     name: 'general-purpose',
     prompt: {
       role: 'senior engineer fixing code review blockers',
-      task: 'Apply the angry oracle feedback and remove all critical/high blockers',
+      task: 'Apply the angry oracle feedback and remove all required fixes plus critical/high blockers',
       context: args,
       instructions: [
+        'Fix every required fixes item, every requiredFixes entry, and every blocking review finding unless it is demonstrably false; explain any false positive with evidence.',
         'Fix every critical and high severity finding unless it is demonstrably false; explain any false positive with evidence.',
+        'Address architectural fit feedback by preserving module boundaries, ownership, cohesion, and appropriate scope.',
         'Add or update focused business-logic tests for the fixed behavior.',
         'Keep the scope tight to the oracle feedback and original request.',
         'Return exactly what changed and which findings were addressed.'
