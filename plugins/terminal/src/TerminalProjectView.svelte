@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte'
+  import { onDestroy, onMount } from 'svelte'
   import TerminalTabs from './TerminalTabs.svelte'
   import { killPty } from './lib/ipc'
   import { cleanupProjectTerminalTask, getProjectTerminalTaskId } from './lib/projectTerminal'
   import { clearTaskTerminalTabsSession, getTaskTerminalTabsSession, releaseAllForTask } from './lib/terminalPool'
+  import { handleTerminalShortcutKeydown } from './terminalShortcuts'
 
   interface Props {
     projectId?: string | null
@@ -15,6 +16,28 @@
 
   const terminalTaskId = $derived(projectId ? getProjectTerminalTaskId(projectId) : null)
   let previousTerminalTaskId = $state<string | null>(null)
+  let terminalTabsRef = $state<TerminalTabs | null>(null)
+
+  const controller = {
+    addTab() {
+      terminalTabsRef?.addTab()
+    },
+    async closeActiveTab() {
+      await terminalTabsRef?.closeActiveTab()
+    },
+    focusActiveTab() {
+      terminalTabsRef?.focusActiveTab()
+    },
+    switchToTab(tabIndex: number) {
+      terminalTabsRef?.switchToTab(tabIndex)
+    },
+  }
+
+  function handleWindowKeydown(event: KeyboardEvent) {
+    if (terminalTabsRef === null) return
+
+    handleTerminalShortcutKeydown(event, controller)
+  }
 
   function cleanupTerminalTask(taskId: string) {
     void cleanupProjectTerminalTask(taskId, {
@@ -35,6 +58,13 @@
     }
 
     previousTerminalTaskId = terminalTaskId
+  })
+
+  onMount(() => {
+    window.addEventListener('keydown', handleWindowKeydown, { capture: true })
+    return () => {
+      window.removeEventListener('keydown', handleWindowKeydown, { capture: true })
+    }
   })
 
   onDestroy(() => {
@@ -66,6 +96,7 @@
       <div class="flex-1 min-w-0 h-full overflow-hidden">
         {#key terminalTaskId}
           <TerminalTabs
+            bind:this={terminalTabsRef}
             taskId={terminalTaskId}
             workspacePath={projectPath}
             onTabChange={null}
