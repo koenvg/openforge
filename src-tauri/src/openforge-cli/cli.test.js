@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 
 const execFileAsync = promisify(execFile);
-const CLI_PATH = resolve(process.cwd(), 'src-tauri/src/mcp-server/cli.js');
+const CLI_PATH = resolve(process.cwd(), 'src-tauri/src/openforge-cli/cli.js');
 
 async function runCli(args, env = {}) {
   return execFileAsync('node', [CLI_PATH, ...args], {

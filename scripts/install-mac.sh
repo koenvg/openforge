@@ -7,7 +7,7 @@ INSTALL_DIR="/Applications"
 
 install_cli_launcher() {
   local cli_bin_dir="${HOME}/.openforge/bin"
-  local cli_target="${HOME}/Library/Application Support/openforge/mcp-server/cli.js"
+  local cli_target="${HOME}/Library/Application Support/openforge/cli/cli.js"
   local zshrc="${HOME}/.zshrc"
 
   mkdir -p "${cli_bin_dir}"
