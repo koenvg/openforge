@@ -3,6 +3,7 @@
 
 mod builtin_plugins;
 mod claude_hooks;
+mod cli_installer;
 pub mod command_discovery;
 mod commands;
 mod db;
@@ -11,7 +12,6 @@ mod git_worktree;
 mod github_client;
 mod github_poller;
 mod http_server;
-mod mcp_installer;
 mod migration;
 mod opencode_client;
 mod pi_extension;
@@ -631,8 +631,8 @@ fn main() {
                 }
             }
 
-            if let Err(e) = mcp_installer::install_mcp_server() {
-                warn!("[startup] Failed to install MCP server: {}", e);
+            if let Err(e) = cli_installer::install_openforge_cli() {
+                warn!("[startup] Failed to install OpenForge CLI: {}", e);
             }
             let whisper_model_pref = database
                 .get_config("whisper_model_size")
@@ -655,15 +655,6 @@ fn main() {
                 }
             });
             debug!("HTTP server task started");
-
-            let port =
-                std::env::var("AI_COMMAND_CENTER_PORT").unwrap_or_else(|_| "17422".to_string());
-            if let Err(e) = mcp_installer::configure_opencode_mcp(&port) {
-                warn!("[startup] Failed to configure OpenCode MCP: {}", e);
-            }
-            if let Err(e) = mcp_installer::configure_claude_mcp(&port) {
-                warn!("[startup] Failed to configure Claude Code MCP: {}", e);
-            }
 
             let hooks_port = claude_hooks::get_http_server_port();
             match claude_hooks::generate_hooks_settings(hooks_port) {

@@ -10,7 +10,7 @@ cleanup() {
 
 install_cli_launcher() {
   CLI_BIN_DIR="${HOME}/.openforge/bin"
-  CLI_TARGET="${HOME}/Library/Application Support/openforge/mcp-server/cli.js"
+  CLI_TARGET="${HOME}/Library/Application Support/openforge/cli/cli.js"
   ZSHRC="${HOME}/.zshrc"
 
   mkdir -p "${CLI_BIN_DIR}"
