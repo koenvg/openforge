@@ -6,8 +6,8 @@ flowchart TD
     B --> C[Implement requested change with TDD]
     C --> D[Inventory git changes]
     D --> E[Run verification commands]
-    E --> F[Angry principal engineer oracle review]
-    F --> G{Approved and score >= target?}
+    E --> F[Angry principal engineer code + architecture review]
+    F --> G{Approved, no required fixes, and score >= target?}
     G -- Yes --> H[Complete successfully]
     G -- No --> I{Iterations remaining?}
     I -- Yes --> J[Fix oracle blockers and required feedback]

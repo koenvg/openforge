@@ -10,15 +10,15 @@ Purpose: make `/call`-style implementation work converge through normal TDD/veri
 4. Run verification commands, defaulting to:
    - `pnpm exec tsc --noEmit`
    - `pnpm test`
-5. Send the completed changes to an **angry principal engineer oracle**.
-6. If the oracle reports any critical/high findings, blockers, a non-approval verdict, or a score below the threshold, run a fix task and repeat verification + oracle review.
+5. Send the completed changes to an **angry principal engineer oracle** for code quality and architectural-fit review.
+6. If the oracle reports any required fixes, critical/high findings, blockers, a non-approval verdict, or a score below the threshold, run a fix task and repeat verification + oracle review.
 7. Stop as successful only when the oracle approves and reaches the configured score. If the loop exhausts its retries, pause at a manual breakpoint with the oracle feedback visible.
 
 ## Key decisions
 
 - The oracle runs **after code changes and verification**, not before implementation.
-- The oracle is intentionally adversarial and must provide actionable fixes, not vague complaints.
-- Critical/high findings are hard blockers.
+- The oracle is intentionally adversarial and must validate that the code makes architectural sense for this codebase.
+- Required fixes and critical/high findings are hard blockers.
 - The process is generic: callers can override `verificationCommands`, `targetOracleScore`, and `maxOracleIterations` per task.
 - The implementation and fix steps are still constrained by OpenForge project conventions and TDD.
 
