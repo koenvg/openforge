@@ -9,6 +9,7 @@ import {
   installPluginFromGit,
   installPluginFromNpm,
   reloadPluginForProject,
+  uninstallPlugin,
 } from '../../lib/plugin/pluginRegistry'
 import type { PluginEntry } from '../../lib/plugin/types'
 
@@ -29,6 +30,7 @@ vi.mock('../../lib/plugin/pluginRegistry', () => ({
   installPluginFromGit: vi.fn(),
   installPluginFromNpm: vi.fn(),
   reloadPluginForProject: vi.fn(),
+  uninstallPlugin: vi.fn(),
 }))
 
 const mockPlugin: PluginEntry = {
@@ -152,5 +154,36 @@ describe('PluginSettingsPanel', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: /Reload plugin/i }))
     expect(reloadPluginForProject).toHaveBeenCalledWith('proj-1', 'test-plugin')
+  })
+
+  it('uninstalls custom plugins through the plugin registry wrapper', async () => {
+    vi.mocked(uninstallPlugin).mockResolvedValue(undefined)
+    installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
+
+    render(PluginSettingsPanel, { projectId: 'proj-1' })
+
+    await fireEvent.click(screen.getByRole('button', { name: /Uninstall plugin/i }))
+    expect(uninstallPlugin).toHaveBeenCalledWith('test-plugin')
+  })
+
+  it('surfaces uninstall errors through the existing action error message', async () => {
+    vi.mocked(uninstallPlugin).mockRejectedValue(new Error('uninstall failed'))
+    installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
+
+    render(PluginSettingsPanel, { projectId: 'proj-1' })
+
+    await fireEvent.click(screen.getByRole('button', { name: /Uninstall plugin/i }))
+    expect(screen.getByText('uninstall failed')).toBeTruthy()
+  })
+
+  it('does not show uninstall for built-in plugins', () => {
+    installedPlugins.set(new Map([
+      ['builtin-flag', { ...mockPlugin, manifest: { ...mockPlugin.manifest, id: 'builtin-flag' }, isBuiltin: true }],
+      ['builtin-source', { ...mockPlugin, manifest: { ...mockPlugin.manifest, id: 'builtin-source' }, sourceKind: 'builtin' }],
+    ]))
+
+    render(PluginSettingsPanel, { projectId: 'proj-1' })
+
+    expect(screen.queryByRole('button', { name: /Uninstall plugin/i })).toBeNull()
   })
 })
