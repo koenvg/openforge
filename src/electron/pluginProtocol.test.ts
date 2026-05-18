@@ -30,6 +30,17 @@ async function tempWorkspace(): Promise<string> {
 }
 
 describe('Electron plugin:// protocol security contract', () => {
+  it('maps nested Svelte runtime imports to canonical module files so relative chunks resolve under the Svelte host runtime', async () => {
+    const indexHtml = await readFile(join(process.cwd(), 'index.html'), 'utf8')
+    const importMapJson = indexHtml.match(/<script type="importmap">\s*([\s\S]*?)\s*<\/script>/)?.[1]
+    expect(importMapJson).toBeTruthy()
+    const imports = (JSON.parse(importMapJson as string) as { imports: Record<string, string> }).imports
+
+    expect(imports['svelte/internal/client']).toBe('plugin://host-runtime/svelte/internal/client/index.js')
+    expect(imports['svelte/reactivity/window']).toBe('plugin://host-runtime/svelte/reactivity/window/index.js')
+    expect(new URL('../../chunks/runtime.js', imports['svelte/internal/client']).toString()).toBe('plugin://host-runtime/svelte/chunks/runtime.js')
+  })
+
   it('registers plugin:// as a privileged secure standard scheme before app ready', () => {
     const protocol = { registerSchemesAsPrivileged: vi.fn() }
 
@@ -103,6 +114,38 @@ describe('Electron plugin:// protocol security contract', () => {
     expect(await pluginSdkResponse.text()).toBe('export const pluginSdkFromResources = true;')
     expect(svelteResponse.status).toBe(200)
     expect(await svelteResponse.text()).toBe('export const svelteFromResources = true;')
+  })
+
+  it('resolves extensionless Svelte host-runtime subpaths produced by browser import maps', async () => {
+    const workspaceRoot = await tempWorkspace()
+    const hostRuntimeRoot = join(await tempWorkspace(), 'plugin-host')
+    await mkdir(join(hostRuntimeRoot, 'svelte', 'internal', 'client'), { recursive: true })
+    await mkdir(join(hostRuntimeRoot, 'svelte', 'internal', 'flags'), { recursive: true })
+    await writeFile(join(hostRuntimeRoot, 'svelte', 'internal', 'client', 'index.js'), 'export const clientRuntime = true;')
+    await writeFile(join(hostRuntimeRoot, 'svelte', 'internal', 'flags', 'async.js'), 'export const asyncFlag = true;')
+
+    const clientResponse = await handlePluginProtocolRequest('plugin://host-runtime/svelte/internal/client', {
+      workspaceRoot,
+      hostRuntimeRoot,
+      sidecarConfig: null,
+      fetch: vi.fn(),
+      readFile,
+      realpath,
+    })
+    const asyncFlagResponse = await handlePluginProtocolRequest('plugin://host-runtime/svelte/internal/flags/async', {
+      workspaceRoot,
+      hostRuntimeRoot,
+      sidecarConfig: null,
+      fetch: vi.fn(),
+      readFile,
+      realpath,
+    })
+
+    expect(clientResponse.status).toBe(200)
+    expect(clientResponse.headers.get('Content-Type')).toBe('application/javascript')
+    expect(await clientResponse.text()).toBe('export const clientRuntime = true;')
+    expect(asyncFlagResponse.status).toBe(200)
+    expect(await asyncFlagResponse.text()).toBe('export const asyncFlag = true;')
   })
 
   it('loads an external plugin asset via authenticated Rust asset-root resolution and preserves MIME/CORS headers', async () => {

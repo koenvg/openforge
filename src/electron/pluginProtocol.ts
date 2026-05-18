@@ -11,6 +11,7 @@ import {
 import type {
   ElectronProtocolLike,
   ElectronSessionLike,
+  PluginAssetReadResult,
   PluginProtocolFetch,
   PluginProtocolReadFile,
   PluginProtocolRealpath,
@@ -133,17 +134,44 @@ function configuredHostRuntimeRoot(deps: PluginProtocolDeps): string {
   return deps.hostRuntimeRoot ?? join(deps.workspaceRoot, 'dist-electron', 'plugin-host')
 }
 
-async function packagedHostRuntimeAssetResponse(relPath: string, deps: PluginProtocolDeps): Promise<Response> {
-  const asset = await new FilePluginAssetAdapter({
+async function readPackagedHostRuntimeAsset(relPath: string, deps: PluginProtocolDeps): Promise<PluginAssetReadResult> {
+  return new FilePluginAssetAdapter({
     readFile: deps.readFile,
     realpath: deps.realpath,
   }).readCanonicalAsset(configuredHostRuntimeRoot(deps), relPath, 'not-found')
+}
 
+function packagedAssetResultResponse(asset: PluginAssetReadResult): Response {
   return asset === 'forbidden'
     ? forbiddenResponse()
     : asset === 'not-found'
       ? notFoundResponse()
       : okResponse(mimeTypeForPath(asset.filePath), asset.content)
+}
+
+async function packagedHostRuntimeAssetResponse(relPath: string, deps: PluginProtocolDeps): Promise<Response> {
+  return packagedAssetResultResponse(await readPackagedHostRuntimeAsset(relPath, deps))
+}
+
+function svelteHostRuntimeCandidates(relPath: string): string[] {
+  if (relPath.endsWith('.js')) return [relPath]
+
+  return [
+    relPath,
+    `${relPath}.js`,
+    `${relPath}/index.js`,
+    `${relPath}/index-client.js`,
+  ]
+}
+
+async function svelteHostRuntimeAssetResponse(relPath: string, deps: PluginProtocolDeps): Promise<Response> {
+  for (const candidate of svelteHostRuntimeCandidates(relPath)) {
+    const asset = await readPackagedHostRuntimeAsset(candidate, deps)
+    if (asset === 'forbidden') return forbiddenResponse()
+    if (asset !== 'not-found') return packagedAssetResultResponse(asset)
+  }
+
+  return notFoundResponse()
 }
 
 async function hostRuntimeResponse(relPath: string, deps: PluginProtocolDeps): Promise<Response> {
@@ -157,7 +185,7 @@ async function hostRuntimeResponse(relPath: string, deps: PluginProtocolDeps): P
       return packagedHostRuntimeAssetResponse(relPath, deps)
     default:
       return relPath.startsWith('svelte/')
-        ? packagedHostRuntimeAssetResponse(relPath, deps)
+        ? svelteHostRuntimeAssetResponse(relPath, deps)
         : notFoundResponse()
   }
 }
