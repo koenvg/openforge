@@ -263,7 +263,13 @@ pub(super) async fn handle_app_start_implementation_command(
             &start_context,
         )
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+        .map_err(|e| {
+            if e.is_invalid_workspace_cwd() {
+                (StatusCode::BAD_REQUEST, e.to_string())
+            } else {
+                (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+            }
+        })?;
 
     {
         let db = crate::db::acquire_db(&state.db);

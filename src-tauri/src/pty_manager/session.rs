@@ -279,28 +279,20 @@ fn openforge_agent_env(task_id: &str, instance_id: u64) -> HashMap<String, Strin
     ])
 }
 
-fn resolve_pty_cwd(cwd: &Path) -> Result<PathBuf, PtyError> {
-    let resolved_cwd = std::fs::canonicalize(cwd).map_err(|e| {
-        PtyError::SpawnFailed(format!(
-            "workspace cwd '{}' is not accessible: {}",
-            cwd.display(),
-            e
-        ))
-    })?;
+fn invalid_workspace_cwd(cwd: &Path, reason: impl ToString) -> PtyError {
+    PtyError::InvalidWorkspaceCwd {
+        path: cwd.display().to_string(),
+        reason: reason.to_string(),
+    }
+}
 
-    let metadata = std::fs::metadata(&resolved_cwd).map_err(|e| {
-        PtyError::SpawnFailed(format!(
-            "workspace cwd '{}' is not accessible: {}",
-            cwd.display(),
-            e
-        ))
-    })?;
+fn resolve_pty_cwd(cwd: &Path) -> Result<PathBuf, PtyError> {
+    let resolved_cwd = std::fs::canonicalize(cwd).map_err(|e| invalid_workspace_cwd(cwd, e))?;
+
+    let metadata = std::fs::metadata(&resolved_cwd).map_err(|e| invalid_workspace_cwd(cwd, e))?;
 
     if !metadata.is_dir() {
-        return Err(PtyError::SpawnFailed(format!(
-            "workspace cwd '{}' is not a directory",
-            cwd.display()
-        )));
+        return Err(invalid_workspace_cwd(cwd, "not a directory"));
     }
 
     Ok(resolved_cwd)
@@ -1459,8 +1451,8 @@ mod tests {
             .await;
 
         assert!(
-            matches!(result, Err(PtyError::SpawnFailed(ref message)) if message.contains("workspace cwd") && message.contains("Missing Vault")),
-            "missing cwd should fail clearly instead of spawning in a fallback directory: {result:?}"
+            matches!(result, Err(PtyError::InvalidWorkspaceCwd { ref path, .. }) if path.contains("Missing Vault")),
+            "missing cwd should be classified separately from internal PTY spawn failures: {result:?}"
         );
         assert!(
             !manager

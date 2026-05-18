@@ -168,10 +168,15 @@ async fn rejects_shell_spawn_when_workspace_cwd_is_missing_instead_of_falling_ba
     .await
     .expect_err("missing cwd should be rejected before spawning a shell PTY");
 
-    assert_eq!(err.0, StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(err.0, StatusCode::BAD_REQUEST);
     assert!(
         err.1.contains("workspace cwd") && err.1.contains("Missing Vault"),
         "error should explain the inaccessible workspace cwd, got: {}",
+        err.1
+    );
+    assert!(
+        !err.1.contains("Failed to spawn shell PTY"),
+        "client-facing invalid cwd errors should not be wrapped as internal spawn failures, got: {}",
         err.1
     );
     let _ = std::fs::remove_file(path);

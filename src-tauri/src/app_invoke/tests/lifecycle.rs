@@ -122,6 +122,57 @@ async fn start_implementation_reports_missing_task() {
 }
 
 #[tokio::test]
+async fn start_implementation_reports_invalid_workspace_cwd_as_bad_request() {
+    let (state, path) = test_state("app_invoke_start_invalid_workspace_cwd");
+    let temp_dir = tempfile::tempdir().expect("tempdir should succeed");
+    let missing_workspace = temp_dir.path().join("Missing Project");
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let project = db
+            .create_project(
+                "Invalid Workspace Project",
+                missing_workspace.to_str().expect("utf8 path"),
+            )
+            .expect("create project");
+        db.set_project_config(&project.id, "use_worktrees", "false")
+            .expect("disable worktrees");
+        db.set_project_config(&project.id, "ai_provider", "pi")
+            .expect("set provider");
+        db.create_task(
+            "Start with missing cwd",
+            "backlog",
+            Some(&project.id),
+            None,
+            None,
+        )
+        .expect("create task")
+        .id
+    };
+
+    let err = invoke(
+        &state,
+        "start_implementation",
+        json!({ "taskId": task_id, "repoPath": missing_workspace.to_string_lossy() }),
+    )
+    .await
+    .expect_err("invalid workspace cwd should be rejected before spawning an agent PTY");
+
+    assert_eq!(err.0, StatusCode::BAD_REQUEST);
+    assert!(
+        err.1.contains("workspace cwd") && err.1.contains("Missing Project"),
+        "error should identify the inaccessible workspace cwd, got: {}",
+        err.1
+    );
+    assert!(
+        !err.1.contains("Failed to spawn"),
+        "invalid workspace errors should not be reported as generic spawn failures, got: {}",
+        err.1
+    );
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn finalize_agent_session_completes_successful_opencode_pty_run() {
     let (state, path) = test_state("finalize_opencode_success");
     let task_id = {

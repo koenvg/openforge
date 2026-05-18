@@ -30,6 +30,7 @@ use session::{AgentSpawnGenerations, LastOutputTimes, PtyOutputBuffers, PtySessi
 
 #[derive(Debug)]
 pub enum PtyError {
+    InvalidWorkspaceCwd { path: String, reason: String },
     SpawnFailed(String),
     ProcessNotFound(String),
     IoError(std::io::Error),
@@ -39,6 +40,9 @@ pub enum PtyError {
 impl fmt::Display for PtyError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            PtyError::InvalidWorkspaceCwd { path, reason } => {
+                write!(f, "workspace cwd '{}' is not accessible: {}", path, reason)
+            }
             PtyError::SpawnFailed(msg) => write!(f, "Failed to spawn PTY: {}", msg),
             PtyError::ProcessNotFound(task_id) => {
                 write!(f, "No PTY process found for task: {}", task_id)
@@ -133,6 +137,15 @@ mod tests {
 
     #[test]
     fn test_pty_error_display() {
+        let err = PtyError::InvalidWorkspaceCwd {
+            path: "/missing/workspace".to_string(),
+            reason: "No such file or directory".to_string(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "workspace cwd '/missing/workspace' is not accessible: No such file or directory"
+        );
+
         let err = PtyError::SpawnFailed("test error".to_string());
         assert_eq!(err.to_string(), "Failed to spawn PTY: test error");
 

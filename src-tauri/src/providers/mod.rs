@@ -15,6 +15,38 @@ use pi::PiProvider;
 // Shared Types
 // ============================================================================
 
+#[derive(Debug)]
+pub enum ProviderError {
+    Pty(crate::pty_manager::PtyError),
+    Other(String),
+}
+
+impl ProviderError {
+    pub fn is_invalid_workspace_cwd(&self) -> bool {
+        matches!(
+            self,
+            ProviderError::Pty(crate::pty_manager::PtyError::InvalidWorkspaceCwd { .. })
+        )
+    }
+}
+
+impl std::fmt::Display for ProviderError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProviderError::Pty(error) => write!(f, "{error}"),
+            ProviderError::Other(message) => write!(f, "{message}"),
+        }
+    }
+}
+
+impl std::error::Error for ProviderError {}
+
+impl From<crate::pty_manager::PtyError> for ProviderError {
+    fn from(error: crate::pty_manager::PtyError) -> Self {
+        ProviderError::Pty(error)
+    }
+}
+
 /// Result returned by provider `start` and `resume` methods
 #[derive(Debug, Clone)]
 pub struct ProviderSessionResult {
@@ -83,7 +115,7 @@ impl Provider {
         permission_mode: Option<&str>,
         model: Option<&crate::opencode_client::PromptModel>,
         start_context: &ProviderStartContext,
-    ) -> Result<ProviderSessionResult, String> {
+    ) -> Result<ProviderSessionResult, ProviderError> {
         match self {
             Provider::ClaudeCode(p) => {
                 p.start(
@@ -136,7 +168,7 @@ impl Provider {
         permission_mode: Option<&str>,
         model: Option<&crate::opencode_client::PromptModel>,
         start_context: &ProviderStartContext,
-    ) -> Result<ProviderSessionResult, String> {
+    ) -> Result<ProviderSessionResult, ProviderError> {
         match self {
             Provider::ClaudeCode(p) => {
                 p.resume(

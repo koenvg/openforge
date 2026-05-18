@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use super::{ProviderSessionResult, ProviderStartContext};
+use super::{ProviderError, ProviderSessionResult, ProviderStartContext};
 use crate::db::AgentSessionRow;
 use crate::pty_manager::PtyManager;
 
@@ -23,7 +23,7 @@ impl PiProvider {
         _permission_mode: Option<&str>,
         _model: Option<&crate::opencode_client::PromptModel>,
         start_context: &ProviderStartContext,
-    ) -> Result<ProviderSessionResult, String> {
+    ) -> Result<ProviderSessionResult, ProviderError> {
         let pty_instance_id = self
             .pty_mgr
             .spawn_pi_pty(
@@ -37,8 +37,7 @@ impl PiProvider {
                 start_context.app_handle.clone(),
                 start_context.app_event_tx.clone(),
             )
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
 
         Ok(ProviderSessionResult {
             port: 0,
@@ -59,7 +58,7 @@ impl PiProvider {
         _permission_mode: Option<&str>,
         _model: Option<&crate::opencode_client::PromptModel>,
         start_context: &ProviderStartContext,
-    ) -> Result<ProviderSessionResult, String> {
+    ) -> Result<ProviderSessionResult, ProviderError> {
         let resume_session_id = session.pi_session_id.as_deref();
         let actual_prompt = prompt.unwrap_or("");
         let continue_session = resume_session_id.is_none();
@@ -77,8 +76,7 @@ impl PiProvider {
                 start_context.app_handle.clone(),
                 start_context.app_event_tx.clone(),
             )
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
 
         Ok(ProviderSessionResult {
             port: 0,

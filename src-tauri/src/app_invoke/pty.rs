@@ -1,6 +1,23 @@
 use super::pty_payload::{PtyResizePayload, PtySpawnShellPayload, PtyTaskPayload, PtyWritePayload};
 use super::*;
 
+fn pty_command_error_response(
+    action: &str,
+    error: crate::pty_manager::PtyError,
+) -> (StatusCode, String) {
+    if matches!(
+        error,
+        crate::pty_manager::PtyError::InvalidWorkspaceCwd { .. }
+    ) {
+        (StatusCode::BAD_REQUEST, error.to_string())
+    } else {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("{action}: {error}"),
+        )
+    }
+}
+
 pub(super) async fn handle_app_pty_command(
     state: &AppState,
     request: &AppInvokeRequest,
@@ -27,12 +44,7 @@ pub(super) async fn handle_app_pty_command(
                     state.app_event_tx.clone(),
                 )
                 .await
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to spawn shell PTY: {e}"),
-                    )
-                })?;
+                .map_err(|e| pty_command_error_response("Failed to spawn shell PTY", e))?;
             json_value(instance_id)?
         }
         "pty_write" => {
