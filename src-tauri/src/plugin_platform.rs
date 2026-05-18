@@ -111,6 +111,10 @@ impl<'a> PluginPlatform<'a> {
         };
 
         if let Some(plugin) = plugin.as_ref() {
+            if plugin.is_builtin || plugin.source_kind == "builtin" {
+                return Err("built-in plugins cannot be uninstalled".to_string());
+            }
+
             crate::plugin_installation::uninstall_managed_plugin(plugin, self.app_data_dir()?)?;
         }
 

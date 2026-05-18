@@ -22,6 +22,26 @@ fn builtin_plugin_payload(plugin_id: &str, name: &str, is_builtin: bool) -> serd
     })
 }
 
+fn custom_plugin_row(plugin_id: &str) -> crate::db::PluginRow {
+    crate::db::PluginRow {
+        id: plugin_id.to_string(),
+        name: "Custom Plugin".to_string(),
+        version: "1.0.0".to_string(),
+        api_version: 1,
+        description: "Custom plugin".to_string(),
+        permissions: "[]".to_string(),
+        contributes: "{}".to_string(),
+        frontend_entry: "index.js".to_string(),
+        backend_entry: None,
+        install_path: "/tmp/custom-plugin".to_string(),
+        source_kind: "local".to_string(),
+        source_spec: "/tmp/custom-plugin".to_string(),
+        package_metadata: "{}".to_string(),
+        installed_at: 123,
+        is_builtin: false,
+    }
+}
+
 fn external_plugin_payload() -> serde_json::Value {
     json!({
         "plugin": {
@@ -115,6 +135,65 @@ async fn register_builtin_plugin_recomputes_builtin_identity() {
 }
 
 #[tokio::test]
+async fn uninstall_plugin_rejects_builtin_plugins() {
+    let (state, path, _app_dir) = test_state_with_backend_app("app_invoke_builtin_uninstall_rejects");
+
+    invoke_ok(
+        &state,
+        "register_builtin_plugin",
+        builtin_plugin_payload("com.openforge.github-sync", "GitHub Sync", true),
+    )
+    .await;
+
+    let err = invoke(
+        &state,
+        "uninstall_plugin",
+        json!({ "pluginId": "com.openforge.github-sync" }),
+    )
+    .await
+    .expect_err("built-in plugins must not be uninstallable through direct IPC");
+
+    assert_eq!(err.0, StatusCode::BAD_REQUEST);
+    assert!(err.1.contains("built-in plugin"));
+    assert!(!invoke_ok(
+        &state,
+        "get_plugin",
+        json!({ "pluginId": "com.openforge.github-sync" }),
+    )
+    .await
+    .is_null());
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn uninstall_plugin_removes_custom_plugins() {
+    let (state, path, _app_dir) = test_state_with_backend_app("app_invoke_custom_uninstall");
+    {
+        let db = state.db.lock().expect("db lock");
+        db.install_plugin(&custom_plugin_row("com.example.custom"))
+            .expect("install custom plugin");
+    }
+
+    invoke_ok(
+        &state,
+        "uninstall_plugin",
+        json!({ "pluginId": "com.example.custom" }),
+    )
+    .await;
+
+    assert!(invoke_ok(
+        &state,
+        "get_plugin",
+        json!({ "pluginId": "com.example.custom" }),
+    )
+    .await
+    .is_null());
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn handles_db_backed_commands() {
     let (state, path, _app_dir) = test_state_with_backend_app("app_invoke_plugin_db_backed");
     let project_id = {
@@ -186,13 +265,7 @@ async fn handles_db_backed_commands() {
     .await
     .is_null());
 
-    invoke_ok(
-        &state,
-        "uninstall_plugin",
-        json!({ "pluginId": "com.openforge.github-sync" }),
-    )
-    .await;
-    assert!(invoke_ok(
+    assert!(!invoke_ok(
         &state,
         "get_plugin",
         json!({ "pluginId": "com.openforge.github-sync" }),

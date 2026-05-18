@@ -12,6 +12,7 @@
     installPluginFromGit,
     installPluginFromNpm,
     reloadPluginForProject,
+    uninstallPlugin,
   } from '../../lib/plugin/pluginRegistry'
   import type { PluginEntry } from '../../lib/plugin/types'
 
@@ -106,6 +107,19 @@
     } catch (error) {
       actionError = errorMessage(error)
     }
+  }
+
+  async function handleUninstall(pluginId: string) {
+    actionError = null
+    try {
+      await uninstallPlugin(pluginId)
+    } catch (error) {
+      actionError = errorMessage(error)
+    }
+  }
+
+  function isBuiltInPlugin(plugin: PluginEntry): boolean {
+    return plugin.isBuiltin === true || plugin.sourceKind === 'builtin'
   }
 
   function sourceLabel(plugin: PluginEntry): string {
@@ -218,6 +232,7 @@
         <div class="flex flex-col gap-3">
           {#each pluginsList as plugin (plugin.manifest.id)}
             {@const isEnabled = $enabledPluginIds.has(plugin.manifest.id)}
+            {@const isBuiltIn = isBuiltInPlugin(plugin)}
             <div class="flex flex-col gap-3 p-4 border border-base-300 rounded-lg bg-base-200/30">
               <div class="flex items-start justify-between gap-4">
                 <div class="flex flex-col gap-1 min-w-0">
@@ -258,6 +273,9 @@
                     <button class="btn btn-primary btn-xs" type="button" onclick={() => handleEnable(plugin.manifest.id)}>Enable for this project</button>
                   {/if}
                   <button class="btn btn-ghost btn-xs" type="button" onclick={() => handleReload(plugin.manifest.id)}>Reload plugin</button>
+                  {#if !isBuiltIn}
+                    <button class="btn btn-error btn-outline btn-xs" type="button" onclick={() => handleUninstall(plugin.manifest.id)}>Uninstall plugin</button>
+                  {/if}
                   <button class="btn btn-ghost btn-xs" type="button" onclick={() => copyDiagnostics(plugin, isEnabled)}>Copy diagnostics</button>
                 </div>
               </div>
