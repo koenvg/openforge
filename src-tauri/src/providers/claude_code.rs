@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use super::{ProviderSessionResult, ProviderStartContext};
+use super::{ProviderError, ProviderSessionResult, ProviderStartContext};
 use crate::db::AgentSessionRow;
 use crate::pty_manager::PtyManager;
 
@@ -28,10 +28,10 @@ impl ClaudeCodeProvider {
         permission_mode: Option<&str>,
         _model: Option<&crate::opencode_client::PromptModel>,
         start_context: &ProviderStartContext,
-    ) -> Result<ProviderSessionResult, String> {
+    ) -> Result<ProviderSessionResult, ProviderError> {
         let port = crate::claude_hooks::get_http_server_port();
-        let hooks_path =
-            crate::claude_hooks::generate_hooks_settings(port).map_err(|e| e.to_string())?;
+        let hooks_path = crate::claude_hooks::generate_hooks_settings(port)
+            .map_err(|e| ProviderError::Other(e.to_string()))?;
 
         let pty_instance_id = self
             .pty_mgr
@@ -48,8 +48,7 @@ impl ClaudeCodeProvider {
                 start_context.app_handle.clone(),
                 start_context.app_event_tx.clone(),
             )
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
 
         Ok(ProviderSessionResult {
             port: 0,
@@ -70,10 +69,10 @@ impl ClaudeCodeProvider {
         permission_mode: Option<&str>,
         _model: Option<&crate::opencode_client::PromptModel>,
         start_context: &ProviderStartContext,
-    ) -> Result<ProviderSessionResult, String> {
+    ) -> Result<ProviderSessionResult, ProviderError> {
         let port = crate::claude_hooks::get_http_server_port();
-        let hooks_path =
-            crate::claude_hooks::generate_hooks_settings(port).map_err(|e| e.to_string())?;
+        let hooks_path = crate::claude_hooks::generate_hooks_settings(port)
+            .map_err(|e| ProviderError::Other(e.to_string()))?;
 
         let resume_id = session.claude_session_id.as_deref();
 
@@ -100,8 +99,7 @@ impl ClaudeCodeProvider {
                 start_context.app_handle.clone(),
                 start_context.app_event_tx.clone(),
             )
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
 
         Ok(ProviderSessionResult {
             port: 0,
