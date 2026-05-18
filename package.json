@@ -16,7 +16,19 @@
     "build": "pnpm build:plugin-sdk-runtime && vite build",
     "lint": "node scripts/check-svelte-unused-imports.mjs",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "clawpatch:init": "clawpatch init",
+    "clawpatch:map": "clawpatch map",
+    "clawpatch:review": "clawpatch review",
+    "clawpatch:report": "clawpatch report",
+    "clawpatch:next": "clawpatch next",
+    "clawpatch:show": "clawpatch show",
+    "clawpatch:fix": "clawpatch fix",
+    "clawpatch:revalidate": "clawpatch revalidate",
+    "clawpatch:doctor": "clawpatch doctor",
+    "clawpatch:status": "clawpatch status",
+    "clawpatch:clean-locks": "clawpatch clean-locks",
+    "clawpatch:export-openforge": "node scripts/export-clawpatch-findings-to-openforge.mjs"
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.8",
@@ -48,6 +60,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/svelte": "^5.3.1",
     "@types/node": "^20.10.6",
+    "clawpatch": "0.3.0",
     "electron": "^41.5.0",
     "jsdom": "^28.1.0",
     "typescript": "^5.3.3",

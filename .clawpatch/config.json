@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "stateDir": ".clawpatch",
+  "include": [
+    "*.json",
+    "*.md",
+    "*.ts",
+    "*.js",
+    "*.mjs",
+    "*.html",
+    "*.css",
+    "*.svg",
+    "*.toml",
+    "*.rs",
+    "*.lock",
+    "pnpm-workspace.yaml",
+    "src/**",
+    "src-tauri/**",
+    "packages/**",
+    "plugins/**",
+    "scripts/**",
+    "docs/**"
+  ],
+  "exclude": [
+    "node_modules/**",
+    "dist/**",
+    "dist-electron/**",
+    "build/**",
+    "target/**",
+    "src-tauri/target/**",
+    ".cargo-target/**",
+    ".build/**",
+    ".git/**",
+    ".a5c/**",
+    ".clawpatch/features/**",
+    ".clawpatch/findings/**",
+    ".clawpatch/patches/**",
+    ".clawpatch/reports/**",
+    ".clawpatch/runs/**",
+    ".clawpatch/locks/**",
+    ".openforge-dev/**",
+    ".sisyphus/**"
+  ],
+  "provider": {
+    "name": "pi",
+    "model": null
+  },
+  "commands": {
+    "typecheck": "pnpm exec tsc --noEmit",
+    "lint": "pnpm lint",
+    "format": null,
+    "test": "pnpm test"
+  },
+  "review": {
+    "maxContextFiles": 24,
+    "maxOwnedFiles": 12,
+    "maxFindingsPerFeature": 10,
+    "minConfidenceToFix": "medium"
+  },
+  "git": {
+    "requireCleanWorktreeForFix": true,
+    "commit": false,
+    "openPr": false
+  }
+}

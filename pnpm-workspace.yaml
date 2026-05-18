@@ -2,6 +2,8 @@ packages:
   - packages/*
   - plugins/*
 minimumReleaseAge: 7200
+minimumReleaseAgeExclude:
+  - clawpatch
 allowBuilds:
   electron: true
 patchedDependencies:

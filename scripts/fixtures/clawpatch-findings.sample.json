@@ -1,0 +1,49 @@
+{
+  "runId": "sample-run",
+  "findings": [
+    {
+      "schemaVersion": 1,
+      "findingId": "fnd_medium_docs",
+      "featureId": "docs-clawpatch",
+      "title": "Document clawpatch apply workflow",
+      "category": "docs-gap",
+      "severity": "medium",
+      "confidence": "high",
+      "evidence": [
+        {
+          "path": "docs/clawpatch-openforge.md",
+          "startLine": 1,
+          "endLine": 12,
+          "symbol": null,
+          "quote": "Workflow docs should explain dry-run before apply."
+        }
+      ],
+      "reasoning": "Operators need to understand that OpenForge task creation is explicit.",
+      "reproduction": null,
+      "recommendation": "Add dry-run and apply examples.",
+      "status": "open"
+    },
+    {
+      "schemaVersion": 1,
+      "findingId": "fnd_high_export",
+      "featureId": "scripts-export",
+      "title": "Export command should be dry-run by default",
+      "category": "bug",
+      "severity": "high",
+      "confidence": "medium",
+      "evidence": [
+        {
+          "path": "scripts/export-clawpatch-findings-to-openforge.mjs",
+          "startLine": 1,
+          "endLine": 1,
+          "symbol": "runCli",
+          "quote": "Task creation must require --apply."
+        }
+      ],
+      "reasoning": "Creating tasks has an external side effect and should never happen by accident.",
+      "reproduction": "Run the exporter without --apply.",
+      "recommendation": "Keep dry-run as the default and test it.",
+      "status": "open"
+    }
+  ]
+}
