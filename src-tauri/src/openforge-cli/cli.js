@@ -80,6 +80,10 @@ function flagName(name) {
   return `--${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`;
 }
 
+function shouldPrintCommandHelp(flags) {
+  return flags.help === true;
+}
+
 function validateSupportedFlags(command, flags) {
   const supportedFlags = COMMAND_FLAGS[command];
   for (const name of Object.keys(flags)) {
@@ -169,6 +173,11 @@ async function main(argv) {
 
   if (!COMMANDS.has(command)) {
     throw new Error(`unknown command: ${command}`);
+  }
+
+  if (shouldPrintCommandHelp(flags)) {
+    printHelp();
+    return;
   }
 
   validateSupportedFlags(command, flags);
