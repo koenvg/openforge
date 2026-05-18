@@ -40,6 +40,28 @@ describe('OpenForge CLI', () => {
     expect(stdout).not.toContain('openforge mcp');
   });
 
+  it('prints help for command-specific --help before contacting the HTTP bridge', async () => {
+    let requestCount = 0;
+    const server = createServer((_req, res) => {
+      requestCount += 1;
+      res.writeHead(500, { 'content-type': 'text/plain' });
+      res.end('should not be called');
+    });
+    const port = await listen(server);
+
+    try {
+      const { stdout } = await runCli(['create-task', '--help'], {
+        OPENFORGE_HTTP_PORT: String(port),
+      });
+
+      expect(stdout).toContain('Usage:\n  openforge create-task');
+      expect(stdout).toContain('openforge update-task --task-id <id> --summary <text>');
+      expect(requestCount).toBe(0);
+    } finally {
+      await close(server);
+    }
+  });
+
   it('does not expose mcp as a CLI command', async () => {
     await expect(runCli(['mcp'])).rejects.toMatchObject({
       stderr: expect.stringContaining('unknown command: mcp'),
