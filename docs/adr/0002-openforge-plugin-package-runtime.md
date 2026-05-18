@@ -422,6 +422,12 @@ A plugin package ships normal npm metadata plus `package.json#openforge`. Instal
     "@openforge/plugin-sdk": "^0.1.0",
     "svelte": "^5.0.0"
   },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "svelte": "^5.0.0",
+    "typescript": "^5.3.3",
+    "vite": "^8.0.0"
+  },
   "scripts": {
     "build": "vite build && tsc --noEmit",
     "test": "vitest run"
@@ -473,6 +479,34 @@ Install source examples shown in the plugin manager should resolve to one of:
 npm:@acme/openforge-notes@0.1.0
 git:github.com/acme/openforge-notes@main
 /path/to/local/openforge-notes
+```
+
+#### Svelte runtime sharing build contract
+
+Frontend plugins that ship Svelte components must not bundle their own copy of Svelte. `PluginSlot` renders plugin components inside the host renderer's Svelte tree, so the component and host must share the same Svelte active-effect/runtime singleton. Bundling Svelte into the plugin can crash at render time with errors such as `Cannot read properties of null (reading nodes)`.
+
+Use `svelte` as both a `peerDependency` and an author-time `devDependency`, and externalize Svelte in the frontend Vite build. The host renderer import map provides the runtime at `plugin://host-runtime/svelte/*`, including compiled-component imports such as `svelte/internal/client`.
+
+`vite.config.ts`:
+
+```ts
+import { svelte } from '@sveltejs/vite-plugin-svelte'
+import { openforgePluginViteExternals } from '@openforge/plugin-sdk/vite'
+import { defineConfig } from 'vite'
+
+export default defineConfig({
+  plugins: [svelte()],
+  build: {
+    lib: {
+      entry: 'src/frontend.ts',
+      formats: ['es'],
+      fileName: () => 'frontend.js'
+    },
+    rollupOptions: {
+      external: openforgePluginViteExternals
+    }
+  }
+})
 ```
 
 ### Frontend-only plugin template
