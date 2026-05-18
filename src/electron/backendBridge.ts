@@ -21,12 +21,18 @@ export type BridgeFetch = (url: string, init: {
 
 export type OpenExternal = (url: string) => Promise<void>
 export type QuitApp = () => void | Promise<void>
+export type SelectDirectory = (options: {
+  defaultPath?: string
+  buttonLabel?: string
+  message?: string
+}) => Promise<string | null>
 
 export interface ElectronInvokeDeps {
   sidecarConfig: SidecarLaunchConfig | null
   fetch: BridgeFetch
   openExternal: OpenExternal
   quitApp?: QuitApp
+  selectDirectory?: SelectDirectory
 }
 
 const SIDECAR_BACKED_COMMANDS = new Set([
@@ -178,6 +184,52 @@ async function forwardToSidecar(command: string, payload: unknown, deps: Electro
     : body
 }
 
+function payloadString(payload: unknown, key: string): string | null {
+  if (typeof payload !== 'object' || payload === null) return null
+  const value = (payload as Record<string, unknown>)[key]
+  return typeof value === 'string' && value.trim() !== '' ? value : null
+}
+
+function isRepositoryAccessFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.includes('Cannot access repository path')
+    || message.includes('Unable to read current working directory: Operation not permitted')
+}
+
+function normalizeSelectedPath(path: string): string {
+  const trimmed = path.trim()
+  const withoutTrailingSeparators = trimmed.replace(/[\\/]+$/u, '')
+  return withoutTrailingSeparators || trimmed
+}
+
+async function promptForRepositoryAccessAndRetry(
+  command: string,
+  payload: unknown,
+  deps: ElectronInvokeDeps,
+  originalError: unknown,
+): Promise<unknown> {
+  const repoPath = payloadString(payload, 'repoPath')
+  if (command !== 'start_implementation' || !repoPath || !deps.selectDirectory || !isRepositoryAccessFailure(originalError)) {
+    throw originalError
+  }
+
+  const selectedPath = await deps.selectDirectory({
+    defaultPath: repoPath,
+    buttonLabel: 'Grant Access',
+    message: 'OpenForge needs permission to access this repository folder before it can create a worktree.',
+  })
+
+  if (!selectedPath) {
+    throw originalError
+  }
+
+  if (normalizeSelectedPath(selectedPath) !== normalizeSelectedPath(repoPath)) {
+    throw new Error('Selected repository folder does not match the active project path. Update the project path first if you want to use a different repository.')
+  }
+
+  return forwardToSidecar(command, { ...(payload as Record<string, unknown>), repoPath: selectedPath }, deps)
+}
+
 export async function handleElectronInvoke(request: ElectronInvokeRequest, deps: ElectronInvokeDeps): Promise<unknown> {
   const command = commandFromRequest(request)
   const payload = request.payload ?? null
@@ -196,8 +248,21 @@ export async function handleElectronInvoke(request: ElectronInvokeRequest, deps:
     return undefined
   }
 
+  if (command === 'select_directory') {
+    if (!deps.selectDirectory) throw new Error('select_directory is not available')
+    return deps.selectDirectory({
+      defaultPath: payloadString(payload, 'defaultPath') ?? undefined,
+      buttonLabel: payloadString(payload, 'buttonLabel') ?? undefined,
+      message: payloadString(payload, 'message') ?? undefined,
+    })
+  }
+
   if (isSidecarBackedCommand(command)) {
-    return forwardToSidecar(command, payload, deps)
+    try {
+      return await forwardToSidecar(command, payload, deps)
+    } catch (error) {
+      return promptForRepositoryAccessAndRetry(command, payload, deps, error)
+    }
   }
 
   throw new Error(`Electron backend bridge is not implemented for command: ${command}`)

@@ -138,6 +138,15 @@ export async function quitApp(): Promise<void> {
   return invoke("quit_app");
 }
 
+export async function selectDirectory(options: {
+  defaultPath?: string
+  buttonLabel?: string
+  message?: string
+} = {}): Promise<string | null> {
+  const { defaultPath, buttonLabel, message } = options;
+  return invoke<string | null>("select_directory", { defaultPath, buttonLabel, message });
+}
+
 export async function getPrComments(prId: number): Promise<PrComment[]> {
   return invoke<PrComment[]>("get_pr_comments", { prId });
 }

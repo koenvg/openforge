@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Project } from '../../lib/types'
-  import { createProject, setProjectConfig } from '../../lib/ipc'
+  import { createProject, selectDirectory, setProjectConfig } from '../../lib/ipc'
   import Modal from '../shared/ui/Modal.svelte'
 
   interface Props {
@@ -15,6 +15,21 @@
   let githubDefaultRepo = $state('')
   let isSubmitting = $state(false)
   let showGithubSection = $state(false)
+
+  async function handleBrowseRepository() {
+    try {
+      const selectedPath = await selectDirectory({
+        defaultPath: path.trim() || undefined,
+        buttonLabel: 'Use Repository',
+        message: 'Select the local git repository for this project.',
+      })
+      if (selectedPath) {
+        path = selectedPath
+      }
+    } catch (e) {
+      console.error('Failed to select repository directory:', e)
+    }
+  }
 
   async function handleSubmit() {
     if (!projectName.trim() || !path.trim()) return
@@ -62,14 +77,17 @@
 
     <label class="flex flex-col gap-1.5">
       <span class="text-xs text-base-content/60 font-medium">Local Repository Path <span class="text-error">*</span></span>
-      <input
-        type="text"
-        class="input input-bordered input-sm w-full"
-        bind:value={path}
-        placeholder="/Users/you/workspace/my-project"
-        required
-      />
-      <span class="text-[0.65rem] text-base-content/40">Absolute path to the git repository on your machine</span>
+      <div class="flex gap-2">
+        <input
+          type="text"
+          class="input input-bordered input-sm w-full"
+          bind:value={path}
+          placeholder="/Users/you/workspace/my-project"
+          required
+        />
+        <button class="btn btn-outline btn-sm" type="button" onclick={handleBrowseRepository}>Browse…</button>
+      </div>
+      <span class="text-[0.65rem] text-base-content/40">Absolute path to the git repository on your machine. Use Browse for folders in macOS Documents/Desktop so OpenForge can be granted access.</span>
     </label>
 
     <div class="divider my-2"></div>

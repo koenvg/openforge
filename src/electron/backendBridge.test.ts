@@ -47,6 +47,68 @@ describe('Electron backend bridge command forwarding', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it('keeps select_directory shell-owned so macOS folder access is granted through Electron', async () => {
+    const fetch = vi.fn()
+    const openExternal = vi.fn(async () => undefined)
+    const selectDirectory = vi.fn(async () => '/Users/koen/Documents/openforge test project')
+
+    await expect(handleElectronInvoke(
+      { command: 'select_directory', payload: { defaultPath: '/Users/koen/Documents/openforge test project' } },
+      { sidecarConfig: sidecarConfig(), fetch, openExternal, selectDirectory },
+    )).resolves.toBe('/Users/koen/Documents/openforge test project')
+
+    expect(selectDirectory).toHaveBeenCalledWith({
+      defaultPath: '/Users/koen/Documents/openforge test project',
+      buttonLabel: undefined,
+      message: undefined,
+    })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('prompts for repository folder access and retries start_implementation after a Documents permission failure', async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: async () => 'Cannot access repository path \'/Users/koen/Documents/openforge test project\': Operation not permitted',
+        json: async () => ({}),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ value: { task_id: 'KVG-1272', workspace_path: '/tmp/worktree', session_id: 's-1', port: 0 } }),
+      })
+    const selectDirectory = vi.fn(async () => '/Users/koen/Documents/openforge test project')
+
+    await expect(handleElectronInvoke(
+      { command: 'start_implementation', payload: { taskId: 'KVG-1272', repoPath: '/Users/koen/Documents/openforge test project' } },
+      { sidecarConfig: sidecarConfig(), fetch, openExternal: vi.fn(), selectDirectory },
+    )).resolves.toEqual({ task_id: 'KVG-1272', workspace_path: '/tmp/worktree', session_id: 's-1', port: 0 })
+
+    expect(selectDirectory).toHaveBeenCalledWith({
+      defaultPath: '/Users/koen/Documents/openforge test project',
+      buttonLabel: 'Grant Access',
+      message: 'OpenForge needs permission to access this repository folder before it can create a worktree.',
+    })
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not start a task against a different folder selected during repository access recovery', async () => {
+    const fetch = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      text: async () => 'Cannot access repository path \'/Users/koen/Documents/openforge test project\': Operation not permitted',
+      json: async () => ({}),
+    })
+    const selectDirectory = vi.fn(async () => '/Users/koen/Documents/other project')
+
+    await expect(handleElectronInvoke(
+      { command: 'start_implementation', payload: { taskId: 'KVG-1272', repoPath: '/Users/koen/Documents/openforge test project' } },
+      { sidecarConfig: sidecarConfig(), fetch, openExternal: vi.fn(), selectDirectory },
+    )).rejects.toThrow('Selected repository folder does not match')
+
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
   it('forwards config/projects/tasks commands to the authenticated sidecar app IPC route', async () => {
     const fetch = vi.fn(async () => ({
       ok: true,
