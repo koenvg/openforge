@@ -5,7 +5,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use std::fmt;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::process::Command;
 use tokio::sync::Mutex;
@@ -68,10 +68,57 @@ fn acquire_lock(repo_path: &Path) -> Arc<Mutex<()>> {
 // Command Environment
 // ============================================================================
 
+fn safe_subprocess_current_dir() -> PathBuf {
+    #[cfg(windows)]
+    {
+        std::env::temp_dir()
+    }
+
+    #[cfg(not(windows))]
+    {
+        PathBuf::from("/")
+    }
+}
+
 fn git_command() -> Command {
     let mut command = Command::new("git");
     command.env("PATH", user_tool_path());
+    command.current_dir(safe_subprocess_current_dir());
     command
+}
+
+fn rm_command() -> Command {
+    let mut command = Command::new("rm");
+    command.env("PATH", user_tool_path());
+    command.current_dir(safe_subprocess_current_dir());
+    command
+}
+
+fn protected_location_guidance() -> &'static str {
+    "If this repository is in Documents, Desktop, Downloads, iCloud Drive, or another macOS protected location, reselect it with OpenForge's Browse button when prompted or grant OpenForge Full Disk Access in System Settings."
+}
+
+fn repository_access_error(repo_path: &Path, err: &io::Error) -> GitWorktreeError {
+    GitWorktreeError::WorktreeAddFailed(format!(
+        "Cannot access repository path '{}': {err}. {}",
+        repo_path.display(),
+        protected_location_guidance()
+    ))
+}
+
+fn validate_repository_path_access(repo_path: &Path) -> Result<(), GitWorktreeError> {
+    let metadata =
+        std::fs::metadata(repo_path).map_err(|err| repository_access_error(repo_path, &err))?;
+    if !metadata.is_dir() {
+        return Err(GitWorktreeError::WorktreeAddFailed(format!(
+            "Repository path '{}' is not a directory",
+            repo_path.display()
+        )));
+    }
+
+    std::fs::read_dir(repo_path)
+        .map(|_| ())
+        .map_err(|err| repository_access_error(repo_path, &err))
 }
 
 async fn git_ref_exists(repo_path: &Path, git_ref: &str) -> Result<bool, GitWorktreeError> {
@@ -222,6 +269,8 @@ pub async fn create_worktree(
 ) -> Result<(), GitWorktreeError> {
     let lock = acquire_lock(repo_path);
     let _guard = lock.lock().await;
+
+    validate_repository_path_access(repo_path)?;
 
     let prune_output = git_command()
         .arg("-C")
@@ -380,11 +429,7 @@ pub async fn remove_worktree_with_branch(
 
     // Step 3: Force remove the filesystem directory
     if worktree_path.exists() {
-        let rm_output = Command::new("rm")
-            .arg("-rf")
-            .arg(worktree_path)
-            .output()
-            .await?;
+        let rm_output = rm_command().arg("-rf").arg(worktree_path).output().await?;
 
         if !rm_output.status.success() {
             let stderr = String::from_utf8_lossy(&rm_output.stderr);
@@ -469,6 +514,7 @@ pub fn slugify_branch_name(task_id: &str, title: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsStr;
     use std::process::{Command as StdCommand, Output};
 
     fn git(repo_path: &Path, args: &[&str]) -> Output {
@@ -512,6 +558,73 @@ mod tests {
         assert_git_success(repo_path, &["commit", "-m", "initial"]);
     }
 
+    #[test]
+    fn git_command_starts_from_safe_current_dir() {
+        let command = git_command();
+
+        assert_eq!(
+            command.as_std().get_current_dir(),
+            Some(safe_subprocess_current_dir().as_path()),
+            "git subprocesses must not inherit the sidecar cwd, which may be inaccessible"
+        );
+    }
+
+    #[test]
+    fn git_command_preserves_space_bearing_repo_path_as_single_arg() {
+        let repo_path = Path::new("/Users/koen/Documents/openforge test project");
+        let mut command = git_command();
+        command.arg("-C").arg(repo_path).arg("status");
+        let args: Vec<&OsStr> = command.as_std().get_args().collect();
+
+        assert_eq!(args[0], OsStr::new("-C"));
+        assert_eq!(args[1], repo_path.as_os_str());
+        assert_eq!(args[2], OsStr::new("status"));
+    }
+
+    #[test]
+    fn rm_command_starts_from_safe_current_dir_and_preserves_space_bearing_path() {
+        let worktree_path =
+            Path::new("/Users/koen/.openforge/worktrees/openforge test project/T-1");
+        let mut command = rm_command();
+        command.arg("-rf").arg(worktree_path);
+        let args: Vec<&OsStr> = command.as_std().get_args().collect();
+
+        assert_eq!(
+            command.as_std().get_current_dir(),
+            Some(safe_subprocess_current_dir().as_path()),
+            "cleanup rm subprocesses must not inherit the sidecar cwd either"
+        );
+        assert_eq!(args[0], OsStr::new("-rf"));
+        assert_eq!(args[1], worktree_path.as_os_str());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn validate_repository_path_access_reports_permission_denied_with_recovery_guidance() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("Documents repo");
+        std::fs::create_dir(&repo_path).expect("repo directory should be created");
+        let original_permissions = std::fs::metadata(&repo_path)
+            .expect("repo metadata should be readable")
+            .permissions();
+        std::fs::set_permissions(&repo_path, std::fs::Permissions::from_mode(0o000))
+            .expect("permissions should be restricted for fixture");
+
+        let result = validate_repository_path_access(&repo_path);
+
+        std::fs::set_permissions(&repo_path, original_permissions)
+            .expect("permissions should be restored so tempdir can clean up");
+        let message = result
+            .expect_err("permission denied repo should be rejected")
+            .to_string();
+        assert!(message.contains("Cannot access repository path"));
+        assert!(message.contains("Documents"));
+        assert!(message.contains("Browse"));
+        assert!(message.contains("Full Disk Access"));
+    }
+
     #[tokio::test]
     async fn create_worktree_falls_back_to_head_when_origin_main_is_missing() {
         let temp = tempfile::tempdir().expect("tempdir should be created");
@@ -548,6 +661,31 @@ mod tests {
         assert!(
             !upstream_output.status.success(),
             "created task worktree branches should not require an upstream"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_worktree_handles_space_bearing_paths() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("openforge test project");
+        init_committed_repo(&repo_path);
+        let worktree_path = temp.path().join("worktree target with spaces");
+
+        create_worktree(
+            &repo_path,
+            &worktree_path,
+            "T-1272/space-bearing-paths",
+            "origin/main",
+        )
+        .await
+        .expect("worktree creation should preserve space-bearing repo and worktree paths");
+
+        assert!(worktree_path.join("README.md").exists());
+        let branch_output = git(&worktree_path, &["rev-parse", "--abbrev-ref", "HEAD"]);
+        assert!(branch_output.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&branch_output.stdout).trim(),
+            "T-1272/space-bearing-paths"
         );
     }
 

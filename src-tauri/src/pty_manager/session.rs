@@ -279,6 +279,33 @@ fn openforge_agent_env(task_id: &str, instance_id: u64) -> HashMap<String, Strin
     ])
 }
 
+fn resolve_pty_cwd(cwd: &Path) -> Result<PathBuf, PtyError> {
+    let resolved_cwd = std::fs::canonicalize(cwd).map_err(|e| {
+        PtyError::SpawnFailed(format!(
+            "workspace cwd '{}' is not accessible: {}",
+            cwd.display(),
+            e
+        ))
+    })?;
+
+    let metadata = std::fs::metadata(&resolved_cwd).map_err(|e| {
+        PtyError::SpawnFailed(format!(
+            "workspace cwd '{}' is not accessible: {}",
+            cwd.display(),
+            e
+        ))
+    })?;
+
+    if !metadata.is_dir() {
+        return Err(PtyError::SpawnFailed(format!(
+            "workspace cwd '{}' is not a directory",
+            cwd.display()
+        )));
+    }
+
+    Ok(resolved_cwd)
+}
+
 impl PtyManager {
     #[allow(clippy::too_many_arguments)]
     pub async fn spawn_opencode_run_pty(
@@ -427,6 +454,7 @@ impl PtyManager {
         app_handle: Option<crate::backend_runtime::AppHandle>,
         app_event_tx: Option<AppEventSender>,
     ) -> Result<u64, PtyError> {
+        let resolved_cwd = resolve_pty_cwd(cwd)?;
         let spawn_generation = NEXT_AGENT_SPAWN_GENERATION.fetch_add(1, Ordering::Relaxed);
         {
             let mut generations = self.agent_spawn_generations.lock().await;
@@ -460,7 +488,7 @@ impl PtyManager {
             }
         }
 
-        adapter.prepare(cwd)?;
+        adapter.prepare(&resolved_cwd)?;
 
         info!(
             "Spawning {} PTY for task {} ({}x{})",
@@ -487,11 +515,12 @@ impl PtyManager {
         for arg in adapter.command_args() {
             cmd.arg(arg);
         }
-        cmd.cwd(cwd);
+        cmd.cwd(&resolved_cwd);
 
         for (key, value) in user_environment() {
             cmd.env(key, value);
         }
+        cmd.env("PWD", resolved_cwd.to_string_lossy().to_string());
 
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
@@ -731,6 +760,7 @@ impl PtyManager {
         app_handle: Option<crate::backend_runtime::AppHandle>,
         app_event_tx: Option<AppEventSender>,
     ) -> Result<u64, PtyError> {
+        let resolved_cwd = resolve_pty_cwd(cwd)?;
         let key = shell_session_key(task_id, terminal_index);
         let mut sessions = self.sessions.lock().await;
 
@@ -765,11 +795,12 @@ impl PtyManager {
 
         let shell_path = get_shell_path();
         let mut cmd = CommandBuilder::new(&shell_path);
-        cmd.cwd(cwd);
+        cmd.cwd(&resolved_cwd);
 
         for (key, value) in user_environment() {
             cmd.env(key, value);
         }
+        cmd.env("PWD", resolved_cwd.to_string_lossy().to_string());
 
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
@@ -1324,6 +1355,120 @@ mod tests {
         assert!(
             !manager.last_output.lock().await.contains_key(task_id),
             "killed pending spawn must not register last-output tracking"
+        );
+    }
+
+    struct CwdPrintingAgentAdapter;
+
+    impl AgentPtyProviderAdapter for CwdPrintingAgentAdapter {
+        fn label(&self) -> &'static str {
+            "CwdPrinting"
+        }
+
+        fn command_name(&self) -> &'static str {
+            "/bin/pwd"
+        }
+
+        fn command_args(&self) -> Vec<String> {
+            vec!["-P".to_string()]
+        }
+
+        fn prepare(&mut self, _cwd: &Path) -> Result<(), PtyError> {
+            Ok(())
+        }
+
+        fn extra_env(&self, _task_id: &str, _instance_id: u64) -> HashMap<String, String> {
+            HashMap::new()
+        }
+
+        fn pid_file_name(&self, task_id: &str) -> String {
+            format!("{}-pty.pid", task_id)
+        }
+
+        fn track_last_output(&self) -> bool {
+            true
+        }
+    }
+
+    #[tokio::test]
+    async fn agent_pty_starts_process_with_actual_workspace_cwd_containing_spaces() {
+        let mut manager = PtyManager::new();
+        let temp_dir = tempfile::tempdir().expect("tempdir should succeed");
+        manager.set_pid_dir(temp_dir.path().join("pids"));
+        let workspace_path = temp_dir.path().join("Snooze Vault");
+        std::fs::create_dir_all(&workspace_path).expect("workspace with spaces should be created");
+        let expected_cwd = workspace_path
+            .canonicalize()
+            .expect("workspace path should canonicalize")
+            .to_string_lossy()
+            .to_string();
+
+        manager
+            .spawn_agent_pty(
+                CwdPrintingAgentAdapter,
+                "agent-space-cwd",
+                &workspace_path,
+                80,
+                24,
+                None,
+                None,
+            )
+            .await
+            .expect("agent PTY should spawn in workspace with spaces");
+
+        let mut output = String::new();
+        for _ in 0..20 {
+            if let Some(buffer) = manager.get_pty_buffer("agent-space-cwd").await {
+                output = buffer;
+                if output.contains(&expected_cwd) {
+                    break;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+
+        manager
+            .kill_pty("agent-space-cwd")
+            .await
+            .expect("test PTY should be cleaned up");
+        assert!(
+            output
+                .lines()
+                .any(|line| line.trim_end_matches('\r') == expected_cwd),
+            "agent PTY process should start with actual cwd at the workspace even when it contains spaces; output was: {output:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn agent_pty_rejects_missing_workspace_cwd_instead_of_falling_back() {
+        let mut manager = PtyManager::new();
+        let temp_dir = tempfile::tempdir().expect("tempdir should succeed");
+        manager.set_pid_dir(temp_dir.path().join("pids"));
+        let missing_workspace = temp_dir.path().join("Missing Vault");
+
+        let result = manager
+            .spawn_agent_pty(
+                CwdPrintingAgentAdapter,
+                "agent-missing-cwd",
+                &missing_workspace,
+                80,
+                24,
+                None,
+                None,
+            )
+            .await;
+
+        assert!(
+            matches!(result, Err(PtyError::SpawnFailed(ref message)) if message.contains("workspace cwd") && message.contains("Missing Vault")),
+            "missing cwd should fail clearly instead of spawning in a fallback directory: {result:?}"
+        );
+        assert!(
+            !manager
+                .sessions
+                .lock()
+                .await
+                .contains_key("agent-missing-cwd"),
+            "missing cwd must not register an agent session"
         );
     }
 

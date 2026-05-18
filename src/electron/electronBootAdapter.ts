@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
-import { BrowserWindow, app, ipcMain, protocol, session, shell } from 'electron'
+import { BrowserWindow, app, dialog, ipcMain, protocol, session, shell } from 'electron'
 import { handleElectronInvoke } from './backendBridge.js'
 import { createMainWindowOptions } from './windowConfig.js'
 import { createPreloadPath } from './preloadPath.js'
@@ -14,6 +14,7 @@ import {
   resolveHostRuntimeRoot,
 } from './pluginProtocol.js'
 import { asChildProcessLike, createSidecarLaunchConfig, startSidecarReadiness } from './sidecar.js'
+import type { OpenDialogOptions } from 'electron'
 import type { BootBackendInvokeContext, BootLifecycleAdapter } from './bootLifecycle.js'
 import type { ElectronFailureReporter } from './failureReporting.js'
 import type { SidecarEventEnvelopeLike, SidecarLaunchConfig, SidecarReadinessHandle } from './sidecar.js'
@@ -69,6 +70,19 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
           fetch: (url, init) => fetch(url, init),
           openExternal: (url) => shell.openExternal(url),
           quitApp: () => app.quit(),
+          selectDirectory: async ({ defaultPath, buttonLabel, message }) => {
+            const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null
+            const options: OpenDialogOptions = {
+              properties: ['openDirectory'],
+              defaultPath,
+              buttonLabel,
+              message,
+            }
+            const result = window
+              ? await dialog.showOpenDialog(window, options)
+              : await dialog.showOpenDialog(options)
+            return result.canceled ? null : result.filePaths[0] ?? null
+          },
         },
       ))
     },
