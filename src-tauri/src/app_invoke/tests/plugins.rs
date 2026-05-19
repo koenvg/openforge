@@ -136,7 +136,8 @@ async fn register_builtin_plugin_recomputes_builtin_identity() {
 
 #[tokio::test]
 async fn uninstall_plugin_rejects_builtin_plugins() {
-    let (state, path, _app_dir) = test_state_with_backend_app("app_invoke_builtin_uninstall_rejects");
+    let (state, path, _app_dir) =
+        test_state_with_backend_app("app_invoke_builtin_uninstall_rejects");
 
     invoke_ok(
         &state,
