@@ -12,7 +12,7 @@ import { activatePlugin } from '../src/lib/plugin/pluginRegistry.ts'
 import { _resetPluginLoaderForTests, _setModuleLoader } from '../src/lib/plugin/pluginLoader.ts'
 import { installedPlugins, enabledPluginIds, runtimeContributionSources } from '../src/lib/plugin/pluginStore.ts'
 import { activeProjectId } from '../src/lib/stores.ts'
-import { rendererImportMapHtml, svelteHostRuntimeBuildEntries } from '../src/electron/svelteHostRuntimeContract.mjs'
+import { rendererImportMapHtml, svelteHostRuntimeBuildEntries } from '../packages/plugin-sdk/src/svelteHostRuntimeContract.mjs'
 import { buildSvelteHostRuntimeAssets, copyElectronMainRuntimeAssets, copyHostRuntimeAssets, svelteHostRuntimeImportMapEntries } from './electron-build.mjs'
 
 const sidecarConfig = {
@@ -323,7 +323,9 @@ describe('Electron build host-runtime assets', () => {
 
     await copyElectronMainRuntimeAssets(repoRoot, outDir)
 
-    await expect(readFile(join(outDir, 'svelteHostRuntimeContract.mjs'), 'utf8')).resolves.toContain('SVELTE_HOST_RUNTIME_MODULES')
+    const copiedContract = await readFile(join(outDir, 'svelteHostRuntimeContract.mjs'), 'utf8')
+    expect(copiedContract).toContain('SVELTE_HOST_RUNTIME_MODULES')
+    expect(copiedContract).not.toContain('packages/plugin-sdk')
   })
 
   it('generates plugin SDK, bundles backend plugin-host runtime dependencies, and builds browser-ready Svelte host-runtime assets into dist-electron resources', async () => {

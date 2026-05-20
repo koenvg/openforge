@@ -1,7 +1,7 @@
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import tailwindcss from '@tailwindcss/vite'
 import { defineConfig } from 'vite'
-import { rendererImportMapHtml } from './src/electron/svelteHostRuntimeContract.mjs'
+import { rendererImportMapHtml } from './packages/plugin-sdk/src/svelteHostRuntimeContract.mjs'
 import { createDaisyUiTailwindPluginAliases } from './src/lib/viteDaisyUi'
 import { createOpenForgeChunkGroups, OPEN_FORGE_CHUNK_SIZE_WARNING_LIMIT } from './src/lib/viteChunks'
 import { createOpenForgeViteLogger } from './src/lib/viteLogger'

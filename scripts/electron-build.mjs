@@ -8,7 +8,7 @@ import { buildPluginSdkRuntime } from './build-plugin-sdk-runtime.mjs'
 import {
   svelteHostRuntimeBuildEntries,
   svelteHostRuntimeImportMapEntries,
-} from '../src/electron/svelteHostRuntimeContract.mjs'
+} from '../packages/plugin-sdk/src/svelteHostRuntimeContract.mjs'
 
 function repoRoot() {
   return resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -56,7 +56,7 @@ export async function buildBackendPluginHostRuntime(root = repoRoot(), outDir = 
 
 export async function copyElectronMainRuntimeAssets(root = repoRoot(), electronDist = resolve(root, 'dist-electron')) {
   await copyFile(
-    resolve(root, 'src', 'electron', 'svelteHostRuntimeContract.mjs'),
+    resolve(root, 'packages', 'plugin-sdk', 'src', 'svelteHostRuntimeContract.mjs'),
     resolve(electronDist, 'svelteHostRuntimeContract.mjs'),
   )
 }

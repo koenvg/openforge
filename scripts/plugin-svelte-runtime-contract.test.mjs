@@ -8,7 +8,7 @@ import {
   rendererImportMapHtml,
   svelteHostRuntimeBuildEntries,
   svelteHostRuntimeImportMapEntries,
-} from '../src/electron/svelteHostRuntimeContract.mjs'
+} from '../packages/plugin-sdk/src/svelteHostRuntimeContract.mjs'
 
 function readRendererImportMap(indexHtml) {
   const importMapJson = indexHtml.match(/<script type="importmap">\s*([\s\S]*?)\s*<\/script>/)?.[1]
@@ -17,6 +17,14 @@ function readRendererImportMap(indexHtml) {
 }
 
 describe('OpenForge plugin Svelte runtime contract', () => {
+  it('keeps the plugin SDK Vite helper package-self-contained', async () => {
+    const viteHelper = await readFile(join(process.cwd(), 'packages/plugin-sdk/src/vite.ts'), 'utf8')
+
+    expect(viteHelper).toContain("from './svelteHostRuntimeContract.mjs'")
+    expect(viteHelper).not.toContain('src/electron')
+    expect(viteHelper).not.toContain('../../../')
+  })
+
   it('keeps the renderer import map complete for every SDK-externalized Svelte runtime import', async () => {
     const imports = readRendererImportMap(rendererImportMapHtml())
 

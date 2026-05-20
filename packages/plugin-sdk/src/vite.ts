@@ -3,7 +3,7 @@
  * share with the host renderer. The Electron renderer import map and packaged
  * plugin://host-runtime assets are derived from the same host-runtime contract.
  */
-import { OPENFORGE_HOST_RUNTIME_SVELTE_SPECIFIERS as HOST_RUNTIME_SVELTE_SPECIFIERS } from '../../../src/electron/svelteHostRuntimeContract.mjs'
+import { OPENFORGE_HOST_RUNTIME_SVELTE_SPECIFIERS as HOST_RUNTIME_SVELTE_SPECIFIERS } from './svelteHostRuntimeContract.mjs'
 
 export const OPENFORGE_HOST_RUNTIME_SVELTE_SPECIFIERS = HOST_RUNTIME_SVELTE_SPECIFIERS
 

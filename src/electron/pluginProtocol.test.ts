@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it, vi } from 'vitest'
 import { OPENFORGE_HOST_SHARED_SVELTE_IMPORTS } from '../../packages/plugin-sdk/src/vite'
-import { rendererImportMapHtml, svelteHostRuntimeImportMapEntries } from './svelteHostRuntimeContract.mjs'
+import { rendererImportMapHtml, svelteHostRuntimeImportMapEntries } from '../../packages/plugin-sdk/src/svelteHostRuntimeContract.mjs'
 import {
   ELECTRON_RENDERER_CSP,
   applyElectronRendererCsp,
