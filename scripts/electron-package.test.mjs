@@ -41,6 +41,18 @@ async function writeBuiltinPluginCatalog(repoRoot, plugins) {
   await writeFile(join(repoRoot, 'builtin-plugins.json'), `${JSON.stringify({ plugins }, null, 2)}\n`)
 }
 
+async function writeElectronRuntimeDependencyArtifacts(repoRoot) {
+  const dependencyRoot = join(repoRoot, 'node_modules', 'es-module-lexer')
+  await mkdir(join(dependencyRoot, 'dist'), { recursive: true })
+  await writeFile(join(dependencyRoot, 'package.json'), JSON.stringify({
+    name: 'es-module-lexer',
+    version: '2.1.0',
+    type: 'module',
+    exports: './dist/lexer.js',
+  }))
+  await writeFile(join(dependencyRoot, 'dist', 'lexer.js'), 'export const init = Promise.resolve(); export function parse() { return [[]]; }\n')
+}
+
 async function writeBuiltInPluginRuntimeArtifacts(repoRoot, directoryName, pluginId = `com.openforge.${directoryName}`) {
   const pluginRoot = join(repoRoot, 'plugins', directoryName)
   await mkdir(join(pluginRoot, 'dist'), { recursive: true })
@@ -131,6 +143,7 @@ describe('Electron macOS packaging helpers', () => {
     await writeExecutable(join(template, 'Contents/MacOS/Electron'))
     await writeFile(join(template, 'Contents/Info.plist'), '<plist><dict><key>CFBundleExecutable</key><string>Electron</string><key>CFBundleName</key><string>Electron</string><key>CFBundleDisplayName</key><string>Electron</string></dict></plist>')
     await writeElectronBuildOutputs(root)
+    await writeElectronRuntimeDependencyArtifacts(root)
     await writeBuiltinPluginCatalog(root, [])
     await mkdir(join(root, 'src-tauri/target/release'), { recursive: true })
     await writeExecutable(join(root, 'src-tauri/target/release/openforge'), '#!/bin/sh\necho sidecar\n')
@@ -262,6 +275,7 @@ describe('Electron macOS packaging helpers', () => {
     await writeExecutable(join(template, 'Contents/MacOS/Electron'))
     await writeFile(join(template, 'Contents/Info.plist'), '<plist><dict><key>CFBundleExecutable</key><string>Electron</string><key>CFBundleName</key><string>Electron</string><key>CFBundleDisplayName</key><string>Electron</string></dict></plist>')
     await writeElectronBuildOutputs(root)
+    await writeElectronRuntimeDependencyArtifacts(root)
     await mkdir(join(root, 'src-tauri/target/release'), { recursive: true })
     await writeExecutable(join(root, 'src-tauri/target/release/openforge'), '#!/bin/sh\necho sidecar\n')
     await mkdir(join(root, 'src-tauri/src/openforge-cli'), { recursive: true })
@@ -302,7 +316,15 @@ describe('Electron macOS packaging helpers', () => {
     await expect(readFile(join(output, 'Contents/Resources/openforge-cli/openforge-skill.md'), 'utf8')).resolves.toContain('openforge skill docs')
     await expect(readlink(join(output, 'Contents/Frameworks/Electron Framework.framework/Versions/Current'))).resolves.toBe('A')
     await expect(readlink(join(output, 'Contents/Frameworks/Electron Framework.framework/Resources'))).resolves.toBe('Versions/Current/Resources')
-    await expect(readFile(join(output, 'Contents/Resources/app/package.json'), 'utf8').then(JSON.parse)).resolves.toMatchObject({ main: 'dist-electron/main.js' })
+    await expect(readFile(join(output, 'Contents/Resources/app/package.json'), 'utf8').then(JSON.parse)).resolves.toMatchObject({
+      main: 'dist-electron/main.js',
+      dependencies: { 'es-module-lexer': '2.1.0' },
+    })
+    await expect(readFile(join(output, 'Contents/Resources/app/node_modules/es-module-lexer/package.json'), 'utf8').then(JSON.parse)).resolves.toMatchObject({
+      name: 'es-module-lexer',
+      version: '2.1.0',
+    })
+    await expect(readFile(join(output, 'Contents/Resources/app/node_modules/es-module-lexer/dist/lexer.js'), 'utf8')).resolves.toContain('parse')
     await expect(readFile(join(output, 'Contents/Info.plist'), 'utf8')).resolves.toContain('<key>CFBundleExecutable</key><string>Open Forge</string>')
     await expect(readFile(join(output, 'Contents/Info.plist'), 'utf8')).resolves.toMatch(/<key>CFBundleIdentifier<\/key>\s*<string>com\.openforge\.app\.electron<\/string>/)
     await expect(readFile(join(output, 'Contents/Info.plist'), 'utf8')).resolves.toMatch(/<key>ApplePressAndHoldEnabled<\/key>\s*<false\/>/)

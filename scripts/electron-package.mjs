@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { access, chmod, cp, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { access, chmod, cp, mkdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
@@ -82,6 +82,7 @@ async function assertExists(path, label) {
 }
 
 export const BUILTIN_PLUGIN_CATALOG_FILE = 'builtin-plugins.json'
+export const ELECTRON_APP_RUNTIME_DEPENDENCIES = Object.freeze(['es-module-lexer'])
 
 function isBuiltinPluginCatalogEntry(value) {
   return Boolean(value && typeof value.id === 'string' && typeof value.directoryName === 'string')
@@ -105,14 +106,20 @@ export function sidecarBinaryPathForTarget(repoRoot = repoRootFromScript(), carg
   return resolveRustSidecarLayout({ repoRoot }).releaseSidecarBinaryPath({ cargoBuildTarget })
 }
 
-export function createElectronAppPackageJson({ version = '0.0.1', packageName = ELECTRON_APP_PACKAGE_NAME } = {}) {
-  return {
+export function createElectronAppPackageJson({ version = '0.0.1', packageName = ELECTRON_APP_PACKAGE_NAME, dependencies = {} } = {}) {
+  const packageJson = {
     name: packageName,
     version,
     type: 'module',
     main: 'dist-electron/main.js',
     private: true,
   }
+
+  if (Object.keys(dependencies).length > 0) {
+    packageJson.dependencies = dependencies
+  }
+
+  return packageJson
 }
 
 export function expectedDarwinArchForTarget(cargoBuildTarget = '') {
@@ -225,6 +232,27 @@ async function copyBuiltinPluginRuntimeArtifacts(repoRoot, appResourcesPath) {
   }
 }
 
+async function copyElectronAppRuntimeDependencies(repoRoot, appResourcesPath, declaredDependencies = {}) {
+  const packagedDependencies = {}
+
+  for (const packageName of ELECTRON_APP_RUNTIME_DEPENDENCIES) {
+    const packagePathParts = packageName.split('/')
+    const installedPackagePath = join(repoRoot, 'node_modules', ...packagePathParts)
+    await assertExists(installedPackagePath, `Electron app runtime dependency ${packageName}`)
+
+    const sourcePackagePath = await realpath(installedPackagePath)
+    const dependencyPackageJson = JSON.parse(await readFile(join(sourcePackagePath, 'package.json'), 'utf8'))
+    packagedDependencies[packageName] = declaredDependencies[packageName] ?? dependencyPackageJson.version
+
+    const targetPackagePath = join(appResourcesPath, 'node_modules', ...packagePathParts)
+    await rm(targetPackagePath, { recursive: true, force: true })
+    await mkdir(dirname(targetPackagePath), { recursive: true })
+    await cp(sourcePackagePath, targetPackagePath, { recursive: true })
+  }
+
+  return packagedDependencies
+}
+
 async function copyBackendPluginHostRuntime(electronDist, macosDir) {
   const bundledHostEntrypoint = join(electronDist, 'plugin-host', 'index.js')
   await assertExists(bundledHostEntrypoint, 'Bundled backend plugin host runtime')
@@ -297,9 +325,11 @@ export async function packageElectronApp({
   await copyBuiltinPluginRuntimeArtifacts(repoRoot, appResourcesPath)
 
   const rootPackage = JSON.parse(await readFile(join(repoRoot, 'package.json'), 'utf8').catch(() => '{"version":"0.0.1"}'))
+  const runtimeDependencies = await copyElectronAppRuntimeDependencies(repoRoot, appResourcesPath, rootPackage.dependencies ?? {})
   await writeFile(join(appResourcesPath, 'package.json'), `${JSON.stringify(createElectronAppPackageJson({
     version: rootPackage.version ?? '0.0.1',
     packageName: packageIdentity.electronAppPackageName,
+    dependencies: runtimeDependencies,
   }), null, 2)}\n`)
 
   await updateInfoPlist(outputAppPath, {
