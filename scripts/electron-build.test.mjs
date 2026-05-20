@@ -5,9 +5,9 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { build as viteBuild } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
-import { openforgePluginViteExternals } from '../packages/plugin-sdk/src/vite.ts'
+import { OPENFORGE_HOST_RUNTIME_SVELTE_SPECIFIERS, openforgePluginViteExternals } from '../packages/plugin-sdk/src/vite.ts'
 import { handlePluginProtocolRequest } from '../src/electron/pluginProtocol.ts'
-import { buildSvelteHostRuntimeAssets, copyHostRuntimeAssets } from './electron-build.mjs'
+import { buildSvelteHostRuntimeAssets, copyHostRuntimeAssets, svelteHostRuntimeImportMapEntries } from './electron-build.mjs'
 
 async function writeMinimalHostRuntimeInputs(repoRoot) {
   await mkdir(join(repoRoot, 'packages', 'plugin-sdk', 'src'), { recursive: true })
@@ -97,6 +97,18 @@ function resolveImportMapSpecifier(specifier, imports) {
 }
 
 describe('Electron build host-runtime assets', () => {
+  it('keeps the Svelte host-runtime contract aligned across externals, import map, and assets', async () => {
+    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+    const imports = readRendererImportMap(await readFile(join(repoRoot, 'index.html'), 'utf8'))
+    const expectedSvelteImports = svelteHostRuntimeImportMapEntries()
+    const actualSvelteImports = Object.fromEntries(
+      Object.entries(imports).filter(([specifier]) => specifier === 'svelte' || specifier.startsWith('svelte/')),
+    )
+
+    expect(actualSvelteImports).toEqual(expectedSvelteImports)
+    expect([...OPENFORGE_HOST_RUNTIME_SVELTE_SPECIFIERS].sort()).toEqual(Object.keys(expectedSvelteImports).sort())
+  })
+
   it('bundles Svelte host runtime entrypoints without unresolved package-private imports', async () => {
     const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
     const outDir = join(tmpdir(), `openforge-svelte-runtime-${process.pid}-${Date.now()}`)
