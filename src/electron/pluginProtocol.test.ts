@@ -2,6 +2,7 @@ import { mkdtemp, mkdir, readFile, realpath, symlink, writeFile } from 'node:fs/
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it, vi } from 'vitest'
+import { OPENFORGE_HOST_SHARED_SVELTE_IMPORTS } from '../../packages/plugin-sdk/src/vite'
 import {
   ELECTRON_RENDERER_CSP,
   applyElectronRendererCsp,
@@ -30,12 +31,16 @@ async function tempWorkspace(): Promise<string> {
 }
 
 describe('Electron plugin:// protocol security contract', () => {
-  it('maps nested Svelte runtime imports to canonical module files so relative chunks resolve under the Svelte host runtime', async () => {
+  it('maps every SDK-externalized Svelte runtime import to canonical host-runtime modules', async () => {
     const indexHtml = await readFile(join(process.cwd(), 'index.html'), 'utf8')
     const importMapJson = indexHtml.match(/<script type="importmap">\s*([\s\S]*?)\s*<\/script>/)?.[1]
     expect(importMapJson).toBeTruthy()
     const imports = (JSON.parse(importMapJson as string) as { imports: Record<string, string> }).imports
 
+    for (const specifier of OPENFORGE_HOST_SHARED_SVELTE_IMPORTS) {
+      expect(imports[specifier], `${specifier} must be covered by the renderer import map`).toBeTruthy()
+      expect(imports[specifier]).toMatch(/^plugin:\/\/host-runtime\/svelte\//)
+    }
     expect(imports['svelte/internal/client']).toBe('plugin://host-runtime/svelte/internal/client/index.js')
     expect(imports['svelte/reactivity/window']).toBe('plugin://host-runtime/svelte/reactivity/window/index.js')
     expect(new URL('../../chunks/runtime.js', imports['svelte/internal/client']).toString()).toBe('plugin://host-runtime/svelte/chunks/runtime.js')
