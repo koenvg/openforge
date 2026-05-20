@@ -69,6 +69,11 @@ export type {
   SubscriptionSink,
   SupportedOpenForgeApiVersion,
   SystemAPI,
+  TaskCreateRequest,
+  TaskImplementationResumeRequest,
+  TaskImplementationStartRequest,
+  TaskRunModelSelection,
+  TaskRunProvider,
   TasksAPI,
   ValidationError,
 } from './types'

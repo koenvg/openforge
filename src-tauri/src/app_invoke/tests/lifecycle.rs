@@ -104,6 +104,110 @@ fn start_implementation_routes_provider_start_through_provider_module() {
 }
 
 #[tokio::test]
+async fn plugin_start_implementation_reports_missing_task_before_resolving_project_repo() {
+    let (state, path) = test_state("app_invoke_plugin_start_missing_task");
+
+    let err = invoke(
+        &state,
+        "plugin_start_implementation",
+        json!({
+            "taskId": "missing-task",
+            "projectId": "project-1",
+            "provider": "pi",
+            "agent": "worker",
+            "permissionMode": "default",
+            "actionPrompt": "Implement it",
+            "model": { "providerID": "anthropic", "modelID": "claude-sonnet" }
+        }),
+    )
+    .await
+    .expect_err("missing task should be rejected");
+
+    assert_eq!(err.0, StatusCode::NOT_FOUND);
+    assert!(err.1.contains("Task not found"));
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn resume_implementation_reports_missing_session() {
+    let (state, path) = test_state("app_invoke_resume_implementation_missing_session");
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        db.create_task("Resume missing session", "doing", None, None, None)
+            .expect("create task")
+            .id
+    };
+
+    let err = invoke(
+        &state,
+        "resume_implementation",
+        json!({ "taskId": task_id, "sessionId": "missing-session", "provider": "pi" }),
+    )
+    .await
+    .expect_err("missing session should be rejected");
+
+    assert_eq!(err.0, StatusCode::NOT_FOUND);
+    assert!(err.1.contains("Session not found"));
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn resume_implementation_rejects_session_for_another_task() {
+    let (state, path) = test_state("app_invoke_resume_implementation_mismatched_session");
+    let (task_id, other_session_id) = {
+        let db = crate::db::acquire_db(&state.db);
+        let project = db
+            .create_project("Resume mismatch project", "/tmp/openforge-resume-mismatch")
+            .expect("create project");
+        let task = db
+            .create_task("resume this task", "doing", Some(&project.id), None, None)
+            .expect("create task");
+        let other_task = db
+            .create_task("other task", "doing", Some(&project.id), None, None)
+            .expect("create other task");
+        db.create_task_workspace_record(
+            &task.id,
+            &project.id,
+            "/tmp/openforge-resume-mismatch/workspace",
+            "/tmp/openforge-resume-mismatch",
+            "project_dir",
+            None,
+            "pi",
+        )
+        .expect("create task workspace");
+        db.create_agent_session(
+            "session-other-task",
+            &other_task.id,
+            None,
+            "implementing",
+            "running",
+            "pi",
+        )
+        .expect("create other task session");
+        (task.id, "session-other-task".to_string())
+    };
+
+    let err = invoke(
+        &state,
+        "resume_implementation",
+        json!({ "taskId": task_id, "sessionId": other_session_id, "provider": "pi" }),
+    )
+    .await
+    .expect_err("mismatched session should be rejected before provider resume");
+
+    assert_eq!(err.0, StatusCode::BAD_REQUEST);
+    assert!(
+        err.1.contains("session does not belong to task"),
+        "error should identify task/session mismatch, got: {}",
+        err.1
+    );
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn start_implementation_reports_missing_task() {
     let (state, path) = test_state("app_invoke_start_implementation");
 

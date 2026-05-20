@@ -211,6 +211,41 @@ describe('plugin-host backend runtime', () => {
     expect(calls).toContainEqual({ method: 'openforge.storage.delete', params: { pluginId: 'durable', scope: 'project', scopeId: 'P-1', key: 'repo' } })
   })
 
+  it('routes backend task creation and implementation controls through durable host callbacks', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('runTask', {
+            async handler() {
+              const task = await openforge.tasks.create({ initialPrompt: 'Create from backend plugin', projectId: 'P-1', labelNames: ['automation'] })
+              const started = await openforge.tasks.startImplementation({ taskId: task.id, provider: 'pi', agent: 'worker', actionPrompt: 'Implement it' })
+              const resumed = await openforge.tasks.resumeImplementation({ taskId: task.id, provider: 'pi', sessionId: started.session_id })
+              return { task, started, resumed }
+            }
+          }))
+        }
+      }
+    `)
+    const calls: Array<{ method: string; params: Record<string, unknown> }> = []
+    const hostCallbacks = async (request: { method: string; params: Record<string, unknown> }) => {
+      calls.push(request)
+      if (request.method === 'openforge.tasks.create') return { id: 'T-1', initial_prompt: 'Create from backend plugin', prompt: null, summary: null, status: 'backlog', agent: null, permission_mode: null, depends_on: [], project_id: 'P-1', created_at: 1, updated_at: 2 }
+      if (request.method === 'openforge.tasks.startImplementation') return { task_id: 'T-1', workspace_path: '/repo/T-1', port: 0, session_id: 'session-1' }
+      if (request.method === 'openforge.tasks.resumeImplementation') return { task_id: 'T-1', workspace_path: '/repo/T-1', port: 0, session_id: 'session-1' }
+      throw new Error(`unexpected host callback: ${request.method}`)
+    }
+
+    await expect(createPluginHostRuntime({ hostCallbacks }).invokeBackend({ pluginId: 'runner', backendPath, command: 'runTask' })).resolves.toMatchObject({
+      task: { id: 'T-1' },
+      started: { session_id: 'session-1' },
+      resumed: { session_id: 'session-1' },
+    })
+
+    expect(calls).toContainEqual({ method: 'openforge.tasks.create', params: { initialPrompt: 'Create from backend plugin', projectId: 'P-1', labelNames: ['automation'] } })
+    expect(calls).toContainEqual({ method: 'openforge.tasks.startImplementation', params: { taskId: 'T-1', provider: 'pi', agent: 'worker', actionPrompt: 'Implement it' } })
+    expect(calls).toContainEqual({ method: 'openforge.tasks.resumeImplementation', params: { taskId: 'T-1', provider: 'pi', sessionId: 'session-1' } })
+  })
+
   it('starts backend background services after activation and stops them during deactivation', async () => {
     const backendPath = await writeBackendModule(`
       export default {

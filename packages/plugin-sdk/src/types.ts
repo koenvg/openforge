@@ -6,13 +6,14 @@ import type {
   BoardStatus,
   FileContent,
   FileEntry,
+  ImplementationStatus,
   Project,
   ProjectAttention,
   Task,
   TaskWorkspaceInfo,
 } from './domain'
 
-export type SupportedOpenForgeApiVersion = 1
+export type SupportedOpenForgeApiVersion = 1 | 2
 
 function readSupportedOpenForgeApiVersions(): [SupportedOpenForgeApiVersion, ...SupportedOpenForgeApiVersion[]] {
   const versions = packageMetadataSchemaData.properties.apiVersion.enum
@@ -25,9 +26,9 @@ function readSupportedOpenForgeApiVersions(): [SupportedOpenForgeApiVersion, ...
 }
 
 export const SUPPORTED_OPENFORGE_API_VERSIONS = Object.freeze(readSupportedOpenForgeApiVersions())
-export const OPENFORGE_PLUGIN_API_VERSION: SupportedOpenForgeApiVersion = SUPPORTED_OPENFORGE_API_VERSIONS[0]
 export const MIN_SUPPORTED_API_VERSION = Math.min(...SUPPORTED_OPENFORGE_API_VERSIONS) as SupportedOpenForgeApiVersion
 export const MAX_SUPPORTED_API_VERSION = Math.max(...SUPPORTED_OPENFORGE_API_VERSIONS) as SupportedOpenForgeApiVersion
+export const OPENFORGE_PLUGIN_API_VERSION: SupportedOpenForgeApiVersion = MAX_SUPPORTED_API_VERSION
 
 export type JsonPrimitive = string | number | boolean | null
 export type JsonValue = JsonPrimitive | JsonObject | JsonValue[]
@@ -287,13 +288,52 @@ export interface ShellAPI {
   getBuffer(request: { taskId: string }): Promise<string | null>
 }
 
+export type TaskRunProvider = 'opencode' | 'claude-code' | 'pi'
+
+export interface TaskCreateRequest {
+  initialPrompt: string
+  status?: BoardStatus
+  projectId?: string | null
+  permissionMode?: string | null
+  dependsOn?: string[]
+  labelNames?: string[]
+}
+
+export interface TaskRunModelSelection {
+  providerID: string
+  modelID: string
+}
+
+export interface TaskImplementationStartRequest {
+  taskId: string
+  projectId?: string | null
+  provider?: TaskRunProvider
+  agent?: string | null
+  model?: TaskRunModelSelection | null
+  permissionMode?: string | null
+  actionPrompt?: string | null
+}
+
+export interface TaskImplementationResumeRequest {
+  taskId: string
+  sessionId?: string | null
+  provider?: TaskRunProvider
+  agent?: string | null
+  model?: TaskRunModelSelection | null
+  permissionMode?: string | null
+  actionPrompt?: string | null
+}
+
 export interface TasksAPI {
   list(request?: { projectId?: string | null }): Promise<Task[]>
   get(taskId: string): Promise<Task>
+  create(request: TaskCreateRequest): Promise<Task>
   updateSummary(taskId: string, summary: string): Promise<void>
   updateStatus(taskId: string, status: BoardStatus): Promise<void>
   getWorkspace(taskId: string): Promise<TaskWorkspaceInfo | null>
   getLatestSession(taskId: string): Promise<AgentSession | null>
+  startImplementation(request: TaskImplementationStartRequest): Promise<ImplementationStatus>
+  resumeImplementation(request: TaskImplementationResumeRequest): Promise<ImplementationStatus>
 }
 
 export interface ProjectsAPI {

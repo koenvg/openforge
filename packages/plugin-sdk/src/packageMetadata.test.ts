@@ -73,17 +73,18 @@ describe('package.json#openforge metadata contract', () => {
   })
 
   it('uses apiVersion as a hard compatibility gate', () => {
-    expect(OPENFORGE_PLUGIN_API_VERSION).toBe(1)
+    expect(OPENFORGE_PLUGIN_API_VERSION).toBe(2)
     expect(MIN_SUPPORTED_API_VERSION).toBe(1)
-    expect(MAX_SUPPORTED_API_VERSION).toBe(1)
-    expect(SUPPORTED_OPENFORGE_API_VERSIONS).toEqual([1])
+    expect(MAX_SUPPORTED_API_VERSION).toBe(2)
+    expect(SUPPORTED_OPENFORGE_API_VERSIONS).toEqual([1, 2])
     expect(isSupportedOpenForgeApiVersion(1)).toBe(true)
+    expect(isSupportedOpenForgeApiVersion(2)).toBe(true)
     expect(isSupportedOpenForgeApiVersion(0)).toBe(false)
-    expect(isSupportedOpenForgeApiVersion(2)).toBe(false)
+    expect(isSupportedOpenForgeApiVersion(3)).toBe(false)
 
-    expect(validateOpenForgePackageMetadata(validMetadata({ apiVersion: 2 }))).toContainEqual({
+    expect(validateOpenForgePackageMetadata(validMetadata({ apiVersion: 3 }))).toContainEqual({
       path: 'apiVersion',
-      message: 'API version 2 not supported (supported: 1)',
+      message: 'API version 3 not supported (supported: 1, 2)',
     })
   })
 
@@ -94,14 +95,14 @@ describe('package.json#openforge metadata contract', () => {
     })
     expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.properties).not.toHaveProperty('contributes')
     expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.additionalProperties).toBe(false)
-    expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.properties.apiVersion).toEqual({ enum: [1] })
+    expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.properties.apiVersion).toEqual({ enum: [1, 2] })
   })
 
   it('keeps public apiVersion types as literal supported version unions', () => {
-    expectTypeOf<SupportedOpenForgeApiVersion>().toEqualTypeOf<1>()
-    expectTypeOf<OpenForgePackageMetadata['apiVersion']>().toEqualTypeOf<1>()
-    expectTypeOf<typeof OPENFORGE_PLUGIN_API_VERSION>().toEqualTypeOf<1>()
-    expectTypeOf<typeof SUPPORTED_OPENFORGE_API_VERSIONS[number]>().toEqualTypeOf<1>()
+    expectTypeOf<SupportedOpenForgeApiVersion>().toEqualTypeOf<1 | 2>()
+    expectTypeOf<OpenForgePackageMetadata['apiVersion']>().toEqualTypeOf<1 | 2>()
+    expectTypeOf<typeof OPENFORGE_PLUGIN_API_VERSION>().toEqualTypeOf<1 | 2>()
+    expectTypeOf<typeof SUPPORTED_OPENFORGE_API_VERSIONS[number]>().toEqualTypeOf<1 | 2>()
   })
 
   it('derives TypeScript validator constants from schema enum values', async () => {

@@ -371,7 +371,7 @@ function toError(error: unknown): Error {
 function createDefaultPackageMetadata(pluginId: string): OpenForgePackageMetadata {
   return {
     id: pluginId,
-    apiVersion: 1,
+    apiVersion: 2,
     displayName: pluginId,
     description: '',
   }
@@ -686,7 +686,7 @@ export class PluginHostRuntime {
   private createBackendContext(state: RuntimePluginState): BackendPluginContext {
     return {
       pluginId: state.pluginId,
-      apiVersion: 1,
+      apiVersion: state.packageMetadata.apiVersion,
       packageMetadata: state.packageMetadata,
       subscriptions: state.subscriptions,
     }
@@ -718,7 +718,7 @@ export class PluginHostRuntime {
       context: {
         getSnapshot: () => ({ ...contextSnapshot }),
       },
-      tasks: {},
+      tasks: this.createHostTasksApi(),
       projects: {},
       fs: {
         readFile: async () => ({
@@ -743,6 +743,28 @@ export class PluginHostRuntime {
       background: {
         register: (registration) => this.registerBackgroundService(state, registration),
       },
+    }
+  }
+
+  private createHostTasksApi(): BackendOpenForgeAPI['tasks'] {
+    const hostCallbacks = this.hostCallbacks
+    const requireCallback = (name: string) => {
+      if (!hostCallbacks) {
+        throw new Error(`OpenForge core capability is unavailable: tasks.${name}`)
+      }
+      return hostCallbacks
+    }
+
+    return {
+      list: async (request) => await requireCallback('list')({ method: 'openforge.tasks.list', params: request ? { ...request } : {} }) as never,
+      get: async (taskId) => await requireCallback('get')({ method: 'openforge.tasks.get', params: { taskId } }) as never,
+      create: async (request) => await requireCallback('create')({ method: 'openforge.tasks.create', params: { ...request } }) as never,
+      updateSummary: async (taskId, summary) => { await requireCallback('updateSummary')({ method: 'openforge.tasks.updateSummary', params: { taskId, summary } }) },
+      updateStatus: async (taskId, status) => { await requireCallback('updateStatus')({ method: 'openforge.tasks.updateStatus', params: { taskId, status } }) },
+      getWorkspace: async (taskId) => await requireCallback('getWorkspace')({ method: 'openforge.tasks.getWorkspace', params: { taskId } }) as never,
+      getLatestSession: async (taskId) => await requireCallback('getLatestSession')({ method: 'openforge.tasks.getLatestSession', params: { taskId } }) as never,
+      startImplementation: async (request) => await requireCallback('startImplementation')({ method: 'openforge.tasks.startImplementation', params: { ...request } }) as never,
+      resumeImplementation: async (request) => await requireCallback('resumeImplementation')({ method: 'openforge.tasks.resumeImplementation', params: { ...request } }) as never,
     }
   }
 

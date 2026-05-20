@@ -141,6 +141,40 @@ export default defineBackendPlugin({
 
 Cleanup is only through `context.subscriptions`. `activate()` does not return a cleanup function.
 
+### Task and implementation-run APIs (apiVersion 2)
+
+OpenForge plugin API version 2 adds narrow, trusted task orchestration APIs under `openforge.tasks` so plugins do not shell out to the `openforge` CLI or raw host commands:
+
+```ts
+const task = await openforge.tasks.create({
+  initialPrompt: 'Implement the scheduled maintenance task',
+  projectId: 'P-123',
+  status: 'backlog',
+  permissionMode: 'default',
+  dependsOn: ['T-100'],
+  labelNames: ['scheduled']
+})
+
+await openforge.tasks.startImplementation({
+  taskId: task.id,
+  projectId: 'P-123',
+  provider: 'pi', // 'pi' | 'claude-code' | 'opencode'
+  agent: 'worker',
+  model: { providerID: 'anthropic', modelID: 'claude-sonnet' },
+  permissionMode: 'default',
+  actionPrompt: 'Run this from the trusted scheduler plugin.'
+})
+
+await openforge.tasks.resumeImplementation({
+  taskId: task.id,
+  sessionId: 'agent-session-id',
+  provider: 'pi',
+  actionPrompt: 'Continue the scheduled implementation.'
+})
+```
+
+These APIs are versioned SDK surface, not generic command execution. The renderer host routes them through typed IPC wrappers; backend plugins route them through explicit `openforge.tasks.*` host callbacks. The sidecar resolves project paths and provider defaults at the core boundary, while optional provider/agent/model/permission/action prompt fields let trusted automation start or resume native OpenForge agent runs without bypassing OpenForge lifecycle tracking.
+
 ## Runtime model
 
 - A plugin package can include optional `frontend` and `backend` entries.

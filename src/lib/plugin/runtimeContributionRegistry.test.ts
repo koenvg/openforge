@@ -284,6 +284,47 @@ describe('runtime contribution registry', () => {
     expect(host.setProjectConfig).toHaveBeenCalledWith('P-1', 'repo', 'openforge')
   })
 
+  it('routes task creation and implementation run controls through the configured host bridge', async () => {
+    const task = { id: 'T-1', initial_prompt: 'Implement scheduler', prompt: null, summary: null, status: 'backlog' as const, agent: null, permission_mode: 'default', depends_on: ['T-0'], project_id: 'P-1', created_at: 1, updated_at: 2 }
+    const session = { id: 'session-1', ticket_id: 'T-1', opencode_session_id: 'oc-1', stage: 'implementing', status: 'running', checkpoint_data: null, pty_instance_id: 7, error_message: null, created_at: 1, updated_at: 2, provider: 'opencode', claude_session_id: null, pi_session_id: null }
+    const status = { task_id: 'T-1', workspace_path: '/repo/.worktrees/T-1', port: 0, session_id: 'session-1' }
+    const host = {
+      createTask: vi.fn(async () => task),
+      startImplementation: vi.fn(async () => status),
+      resumeImplementation: vi.fn(async () => status),
+    }
+    const registry = createRuntimeContributionRegistry({ pluginId: 'github', projectId: 'P-1', host })
+    const api = registry.getFrontendApi()
+
+    await expect(api.tasks.create({
+      initialPrompt: 'Implement scheduler',
+      projectId: 'P-1',
+      status: 'backlog',
+      permissionMode: 'default',
+      dependsOn: ['T-0'],
+      labelNames: ['scheduler'],
+    })).resolves.toEqual(task)
+    await expect(api.tasks.startImplementation({
+      taskId: 'T-1',
+      projectId: 'P-1',
+      provider: 'opencode',
+      agent: 'build',
+      model: { providerID: 'anthropic', modelID: 'claude-sonnet' },
+      permissionMode: 'default',
+      actionPrompt: 'Use native OpenForge APIs',
+    })).resolves.toEqual(status)
+    await expect(api.tasks.resumeImplementation({
+      taskId: 'T-1',
+      sessionId: session.id,
+      provider: 'opencode',
+      actionPrompt: 'Continue',
+    })).resolves.toEqual(status)
+
+    expect(host.createTask).toHaveBeenCalledWith({ initialPrompt: 'Implement scheduler', projectId: 'P-1', status: 'backlog', permissionMode: 'default', dependsOn: ['T-0'], labelNames: ['scheduler'] })
+    expect(host.startImplementation).toHaveBeenCalledWith({ taskId: 'T-1', projectId: 'P-1', provider: 'opencode', agent: 'build', model: { providerID: 'anthropic', modelID: 'claude-sonnet' }, permissionMode: 'default', actionPrompt: 'Use native OpenForge APIs' })
+    expect(host.resumeImplementation).toHaveBeenCalledWith({ taskId: 'T-1', sessionId: session.id, provider: 'opencode', actionPrompt: 'Continue' })
+  })
+
   it('exposes backend readiness and invocation through the configured host bridge', async () => {
     let readyHandler: (() => void) | null = null
     const host = {

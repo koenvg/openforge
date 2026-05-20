@@ -28,7 +28,9 @@ import {
 	killPty,
 	killShellsForTask,
 	resizePty,
+	resumeImplementation,
 	spawnShellPty,
+	startImplementation,
 	transcribeAudio,
 	updateTask,
 	updateTaskSummary,
@@ -162,6 +164,37 @@ describe("ipc spawnShellPty", () => {
 			permissionMode: null,
 			dependsOn: [],
 			labelNames: [],
+		});
+	});
+
+	it("sends implementation run options to the sidecar with typed camelCase payloads", async () => {
+		await startImplementation("T-42", "/repo", {
+			provider: "opencode",
+			agent: "build",
+			model: { providerID: "anthropic", modelID: "claude-sonnet" },
+			permissionMode: "default",
+			actionPrompt: "Implement the task",
+		});
+
+		expect(invokeMock).toHaveBeenCalledWith("start_implementation", {
+			taskId: "T-42",
+			repoPath: "/repo",
+			provider: "opencode",
+			agent: "build",
+			model: { providerID: "anthropic", modelID: "claude-sonnet" },
+			permissionMode: "default",
+			actionPrompt: "Implement the task",
+		});
+	});
+
+	it("sends resume implementation requests through a narrow typed sidecar command", async () => {
+		await resumeImplementation({ taskId: "T-42", sessionId: "session-1", provider: "pi", actionPrompt: "Continue" });
+
+		expect(invokeMock).toHaveBeenCalledWith("resume_implementation", {
+			taskId: "T-42",
+			sessionId: "session-1",
+			provider: "pi",
+			actionPrompt: "Continue",
 		});
 	});
 

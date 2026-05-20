@@ -12,6 +12,12 @@ import type {
   CommandShortcutMetadata,
   Disposable,
   OpenForgeContextSnapshot,
+  TaskCreateRequest,
+  TaskImplementationResumeRequest,
+  TaskImplementationStartRequest,
+  TaskRunModelSelection,
+  TaskRunProvider,
+  TasksAPI,
 } from './types'
 
 export function defineBackendPlugin<const TPlugin extends BackendPlugin>(plugin: TPlugin): TPlugin {
@@ -32,4 +38,10 @@ export type {
   CommandShortcutMetadata,
   Disposable,
   OpenForgeContextSnapshot,
+  TaskCreateRequest,
+  TaskImplementationResumeRequest,
+  TaskImplementationStartRequest,
+  TaskRunModelSelection,
+  TaskRunProvider,
+  TasksAPI,
 }

@@ -8,6 +8,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Stdio;
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -608,7 +609,10 @@ impl PluginHost {
         session_id: u64,
         process_token: u64,
     ) {
-        let response = match self.handle_host_callback(&request.method, &request.params) {
+        let response = match self
+            .handle_host_callback_for_sidecar(&request.method, &request.params)
+            .await
+        {
             Ok(result) => crate::plugin_rpc::format_success_response(request.id, result),
             Err(error) => crate::plugin_rpc::format_error_response(request.id, -32603, &error),
         };
@@ -646,6 +650,27 @@ impl PluginHost {
         }
     }
 
+    async fn handle_host_callback_for_sidecar(
+        &self,
+        method: &str,
+        params: &Value,
+    ) -> Result<Value, String> {
+        match method {
+            "openforge.tasks.create"
+            | "openforge.tasks.list"
+            | "openforge.tasks.get"
+            | "openforge.tasks.updateSummary"
+            | "openforge.tasks.updateStatus"
+            | "openforge.tasks.getWorkspace"
+            | "openforge.tasks.getLatestSession"
+            | "openforge.tasks.startImplementation"
+            | "openforge.tasks.resumeImplementation" => {
+                self.invoke_task_host_callback(method, params).await
+            }
+            _ => self.handle_host_callback(method, params),
+        }
+    }
+
     fn handle_host_callback(&self, method: &str, params: &Value) -> Result<Value, String> {
         match method {
             "openforge.storage.get" => self.get_plugin_storage_for_host(params),
@@ -653,6 +678,197 @@ impl PluginHost {
             "openforge.storage.delete" => self.delete_plugin_storage_for_host(params),
             _ => Err(format!("unsupported plugin host callback method: {method}")),
         }
+    }
+
+    async fn invoke_task_host_callback(
+        &self,
+        method: &str,
+        params: &Value,
+    ) -> Result<Value, String> {
+        match method {
+            "openforge.tasks.create" => self.create_task_for_host(params),
+            "openforge.tasks.list" => self.list_tasks_for_host(params),
+            "openforge.tasks.get" => self.get_task_for_host(params),
+            "openforge.tasks.updateSummary" => self.update_task_summary_for_host(params),
+            "openforge.tasks.updateStatus" => self.update_task_status_for_host(params),
+            "openforge.tasks.getWorkspace" => self.get_task_workspace_for_host(params),
+            "openforge.tasks.getLatestSession" => self.get_latest_session_for_host(params),
+            "openforge.tasks.startImplementation" => {
+                self.invoke_lifecycle_host_callback("plugin_start_implementation", params.clone())
+                    .await
+            }
+            "openforge.tasks.resumeImplementation" => {
+                self.invoke_lifecycle_host_callback("resume_implementation", params.clone())
+                    .await
+            }
+            _ => Err(format!("unsupported plugin host callback method: {method}")),
+        }
+    }
+
+    async fn invoke_lifecycle_host_callback(
+        &self,
+        command: &str,
+        payload: Value,
+    ) -> Result<Value, String> {
+        let state = self.app_invoke_state()?;
+        crate::app_invoke::handle_start_implementation_command(
+            &state,
+            &crate::http_server::AppInvokeRequest {
+                command: command.to_string(),
+                payload,
+            },
+        )
+        .await
+        .map_err(|(_, message)| message)?
+        .ok_or_else(|| format!("unsupported plugin task lifecycle callback: {command}"))
+    }
+
+    fn task_db(&self) -> Result<Arc<Mutex<crate::db::Database>>, String> {
+        Ok(self
+            .app_handle
+            .try_state::<Arc<Mutex<crate::db::Database>>>()
+            .ok_or_else(|| "plugin task callback database state is not available".to_string())?
+            .inner()
+            .clone())
+    }
+
+    fn create_task_for_host(&self, params: &Value) -> Result<Value, String> {
+        let initial_prompt = required_param_string(params, "initialPrompt")?;
+        let status =
+            optional_param_string(params, "status")?.unwrap_or_else(|| "backlog".to_string());
+        crate::db::BoardStatus::from_str(&status)?;
+        let project_id = optional_param_string(params, "projectId")?;
+        let permission_mode = optional_param_string(params, "permissionMode")?;
+        let depends_on = optional_param_string_vec(params, "dependsOn")?;
+        let label_names = optional_param_string_vec(params, "labelNames")?;
+        let db_state = self.task_db()?;
+        let db = crate::db::acquire_db(&db_state);
+        let task = db
+            .create_task(
+                &initial_prompt,
+                &status,
+                project_id.as_deref(),
+                None,
+                permission_mode.as_deref(),
+            )
+            .map_err(|error| format!("failed to create task: {error}"))?;
+        if let Some(depends_on) = depends_on {
+            if !depends_on.is_empty() {
+                db.set_task_dependencies(&task.id, &depends_on)
+                    .map_err(|error| {
+                        let _ = db.delete_task(&task.id);
+                        format!("failed to set task dependencies: {error}")
+                    })?;
+            }
+        }
+        if let Some(label_names) = label_names {
+            if !label_names.is_empty() {
+                db.set_task_labels(&task.id, &label_names)
+                    .map_err(|error| {
+                        let _ = db.delete_task(&task.id);
+                        format!("failed to set task labels: {error}")
+                    })?;
+            }
+        }
+        serde_json::to_value(
+            db.get_task(&task.id)
+                .map_err(|error| format!("failed to reload task: {error}"))?
+                .ok_or_else(|| format!("task {} not found", task.id))?,
+        )
+        .map_err(|error| format!("failed to serialize task: {error}"))
+    }
+
+    fn list_tasks_for_host(&self, params: &Value) -> Result<Value, String> {
+        let db_state = self.task_db()?;
+        let db = crate::db::acquire_db(&db_state);
+        let tasks = if let Some(project_id) = optional_param_string(params, "projectId")? {
+            db.get_tasks_for_project(&project_id)
+        } else {
+            db.get_all_tasks()
+        }
+        .map_err(|error| format!("failed to list tasks: {error}"))?;
+        serde_json::to_value(tasks).map_err(|error| format!("failed to serialize tasks: {error}"))
+    }
+
+    fn get_task_for_host(&self, params: &Value) -> Result<Value, String> {
+        let task_id = required_param_string(params, "taskId")?;
+        let db_state = self.task_db()?;
+        let db = crate::db::acquire_db(&db_state);
+        serde_json::to_value(
+            db.get_task(&task_id)
+                .map_err(|error| format!("failed to get task: {error}"))?
+                .ok_or_else(|| format!("task {task_id} not found"))?,
+        )
+        .map_err(|error| format!("failed to serialize task: {error}"))
+    }
+
+    fn update_task_summary_for_host(&self, params: &Value) -> Result<Value, String> {
+        let task_id = required_param_string(params, "taskId")?;
+        let summary = required_param_string(params, "summary")?;
+        let db_state = self.task_db()?;
+        let db = crate::db::acquire_db(&db_state);
+        db.update_task_summary(&task_id, &summary)
+            .map_err(|error| format!("failed to update task summary: {error}"))?;
+        Ok(Value::Null)
+    }
+
+    fn update_task_status_for_host(&self, params: &Value) -> Result<Value, String> {
+        let task_id = required_param_string(params, "taskId")?;
+        let status = required_param_string(params, "status")?;
+        crate::db::BoardStatus::from_str(&status)?;
+        let db_state = self.task_db()?;
+        let db = crate::db::acquire_db(&db_state);
+        db.update_task_status(&task_id, &status)
+            .map_err(|error| format!("failed to update task status: {error}"))?;
+        Ok(Value::Null)
+    }
+
+    fn get_task_workspace_for_host(&self, params: &Value) -> Result<Value, String> {
+        let task_id = required_param_string(params, "taskId")?;
+        let db_state = self.task_db()?;
+        let db = crate::db::acquire_db(&db_state);
+        serde_json::to_value(
+            db.get_task_workspace_for_task(&task_id)
+                .map_err(|error| format!("failed to get task workspace: {error}"))?,
+        )
+        .map_err(|error| format!("failed to serialize task workspace: {error}"))
+    }
+
+    fn get_latest_session_for_host(&self, params: &Value) -> Result<Value, String> {
+        let task_id = required_param_string(params, "taskId")?;
+        let db_state = self.task_db()?;
+        let db = crate::db::acquire_db(&db_state);
+        serde_json::to_value(
+            db.get_latest_session_for_ticket(&task_id)
+                .map_err(|error| format!("failed to get latest session: {error}"))?,
+        )
+        .map_err(|error| format!("failed to serialize latest session: {error}"))
+    }
+
+    fn app_invoke_state(&self) -> Result<crate::http_server::AppState, String> {
+        let db = self.task_db()?;
+        let pty_manager = self
+            .app_handle
+            .try_state::<crate::pty_manager::PtyManager>()
+            .map(|state| state.inner().clone());
+        let github_client = self
+            .app_handle
+            .try_state::<crate::github_client::GitHubClient>()
+            .map(|state| state.inner().clone())
+            .unwrap_or_default();
+
+        Ok(crate::http_server::AppState {
+            app: Some(self.app_handle.clone()),
+            db,
+            backend_token: None,
+            pty_manager,
+            github_client,
+            plugin_host: None,
+            app_event_tx: self.app_event_tx.clone(),
+            app_event_bus: None,
+            whisper: None,
+            sidecar_readiness: crate::http_server::SidecarReadinessState::default(),
+        })
     }
 
     fn get_plugin_storage_for_host(&self, params: &Value) -> Result<Value, String> {
@@ -975,6 +1191,30 @@ fn optional_param_string(params: &Value, key: &str) -> Result<Option<String>, St
     }
 }
 
+fn optional_param_string_vec(params: &Value, key: &str) -> Result<Option<Vec<String>>, String> {
+    let Some(value) = params.get(key) else {
+        return Ok(None);
+    };
+    if value.is_null() {
+        return Ok(None);
+    }
+    let Some(values) = value.as_array() else {
+        return Err(format!(
+            "plugin host callback param must be an array of strings: {key}"
+        ));
+    };
+
+    values
+        .iter()
+        .map(|value| {
+            value.as_str().map(ToOwned::to_owned).ok_or_else(|| {
+                format!("plugin host callback param must be an array of strings: {key}")
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(Some)
+}
+
 fn resolve_bun_binary() -> Result<PathBuf, String> {
     if let Ok(path) = std::env::var(BUN_PATH_ENV) {
         let trimmed = path.trim();
@@ -1268,6 +1508,40 @@ mod tests {
             )
             .expect("get deleted storage callback");
         assert_eq!(deleted, Value::Null);
+    }
+
+    #[tokio::test]
+    async fn task_host_callback_creates_and_reads_tasks_through_app_invoke_boundary() {
+        let (database, _path) = crate::db::test_helpers::make_test_db("plugin_host_task_callback");
+        let project = database
+            .create_project("Plugin Project", "/tmp/openforge-plugin-project")
+            .expect("create project");
+        let app = AppHandle::new();
+        app.manage(Arc::new(Mutex::new(database)));
+        let host = PluginHost::new(app);
+
+        let task = host
+            .handle_host_callback_for_sidecar(
+                "openforge.tasks.create",
+                &json!({
+                    "initialPrompt": "Create from backend plugin",
+                    "projectId": project.id,
+                    "labelNames": ["automation"]
+                }),
+            )
+            .await
+            .expect("create task callback");
+        assert_eq!(task["initial_prompt"], "Create from backend plugin");
+        assert_eq!(task["status"], "backlog");
+
+        let fetched = host
+            .handle_host_callback_for_sidecar(
+                "openforge.tasks.get",
+                &json!({ "taskId": task["id"].as_str().expect("task id") }),
+            )
+            .await
+            .expect("get task callback");
+        assert_eq!(fetched["id"], task["id"]);
     }
 
     #[test]

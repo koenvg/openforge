@@ -38,6 +38,9 @@ import {
   spawnShellPty,
   submitPrReview,
   updateAgentReviewCommentStatus,
+  createTask,
+  pluginStartImplementation,
+  resumeImplementation,
   updateTaskStatus,
   updateTaskSummary,
   writePty,
@@ -61,6 +64,12 @@ function isAppView(value: unknown): value is AppView {
   return typeof value === 'string' && (STATIC_APP_VIEWS.has(value as AppView) || isPluginViewKey(value))
 }
 
+function isTaskRunModelSelection(value: unknown): value is { providerID: string; modelID: string } {
+  return typeof value === 'object' && value !== null &&
+    typeof (value as { providerID?: unknown }).providerID === 'string' &&
+    typeof (value as { modelID?: unknown }).modelID === 'string'
+}
+
 export function clearPluginRuntimeHostState(pluginId: string): void {
   pluginBackendReadyStates.delete(pluginId)
 }
@@ -78,10 +87,13 @@ export function createPluginRuntimeHost(pluginId: string) {
     getProject: async (projectId: string) => (await getProjects()).find((project) => project.id === projectId) ?? null,
     listTasks: (request?: { projectId?: string }) => request?.projectId ? getTasksForProject(request.projectId) : getAllTasks(),
     getTask: (taskId: string) => getTaskDetail(taskId),
+    createTask: (request: { initialPrompt: string; status?: Parameters<typeof createTask>[1]; projectId?: string | null; permissionMode?: string | null; dependsOn?: string[]; labelNames?: string[] }) => createTask(request.initialPrompt, request.status ?? 'backlog', request.projectId ?? null, request.permissionMode ?? null, request.dependsOn ?? [], request.labelNames ?? []),
     updateTaskSummary: (taskId: string, summary: string) => updateTaskSummary(taskId, summary),
     updateTaskStatus: (taskId: string, status: Parameters<typeof updateTaskStatus>[1]) => updateTaskStatus(taskId, status),
     getTaskWorkspace: (taskId: string) => getTaskWorkspace(taskId),
     getLatestSession: (taskId: string) => getLatestSession(taskId),
+    startImplementation: (request: Parameters<typeof pluginStartImplementation>[0]) => pluginStartImplementation(request),
+    resumeImplementation: (request: Parameters<typeof resumeImplementation>[0]) => resumeImplementation(request),
     readDir: (request: { projectId: string; path?: string | null }) => fsReadDir(request.projectId, request.path ?? null),
     readFile: (request: { projectId: string; path: string }) => fsReadFile(request.projectId, request.path),
     searchFiles: (request: { projectId: string; query: string; limit?: number }) => fsSearchFiles(request.projectId, request.query, request.limit),
@@ -204,6 +216,35 @@ export async function invokePluginHostCommand(command: string, payload: unknown)
       return forceGithubSync()
     case 'openUrl':
       return openUrl(String(commandPayload?.url ?? ''))
+    case 'createTask':
+      return createTask(
+        String(commandPayload?.initialPrompt ?? ''),
+        commandPayload?.status === 'doing' || commandPayload?.status === 'done' ? commandPayload.status : 'backlog',
+        typeof commandPayload?.projectId === 'string' ? commandPayload.projectId : null,
+        typeof commandPayload?.permissionMode === 'string' ? commandPayload.permissionMode : null,
+        Array.isArray(commandPayload?.dependsOn) ? commandPayload.dependsOn.filter((value): value is string => typeof value === 'string') : [],
+        Array.isArray(commandPayload?.labelNames) ? commandPayload.labelNames.filter((value): value is string => typeof value === 'string') : []
+      )
+    case 'startImplementation': {
+      const runRequest: Parameters<typeof pluginStartImplementation>[0] = { taskId: String(commandPayload?.taskId ?? '') }
+      if (typeof commandPayload?.projectId === 'string') runRequest.projectId = commandPayload.projectId
+      if (commandPayload?.provider === 'opencode' || commandPayload?.provider === 'claude-code' || commandPayload?.provider === 'pi') runRequest.provider = commandPayload.provider
+      if (typeof commandPayload?.agent === 'string') runRequest.agent = commandPayload.agent
+      if (isTaskRunModelSelection(commandPayload?.model)) runRequest.model = commandPayload.model
+      if (typeof commandPayload?.permissionMode === 'string') runRequest.permissionMode = commandPayload.permissionMode
+      if (typeof commandPayload?.actionPrompt === 'string') runRequest.actionPrompt = commandPayload.actionPrompt
+      return pluginStartImplementation(runRequest)
+    }
+    case 'resumeImplementation': {
+      const runRequest: Parameters<typeof resumeImplementation>[0] = { taskId: String(commandPayload?.taskId ?? '') }
+      if (typeof commandPayload?.sessionId === 'string') runRequest.sessionId = commandPayload.sessionId
+      if (commandPayload?.provider === 'opencode' || commandPayload?.provider === 'claude-code' || commandPayload?.provider === 'pi') runRequest.provider = commandPayload.provider
+      if (typeof commandPayload?.agent === 'string') runRequest.agent = commandPayload.agent
+      if (isTaskRunModelSelection(commandPayload?.model)) runRequest.model = commandPayload.model
+      if (typeof commandPayload?.permissionMode === 'string') runRequest.permissionMode = commandPayload.permissionMode
+      if (typeof commandPayload?.actionPrompt === 'string') runRequest.actionPrompt = commandPayload.actionPrompt
+      return resumeImplementation(runRequest)
+    }
     case 'fsReadDir':
       return fsReadDir(String(commandPayload?.projectId ?? ''), typeof commandPayload?.dirPath === 'string' ? commandPayload.dirPath : null)
     case 'fsReadFile':

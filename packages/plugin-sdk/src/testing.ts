@@ -21,6 +21,9 @@ import type {
   PluginTaskPaneTabRegistration,
   PluginViewRegistration,
   SubscriptionSink,
+  TaskCreateRequest,
+  TaskImplementationResumeRequest,
+  TaskImplementationStartRequest,
 } from './types'
 
 export type TestingRuntimeScope = 'global' | 'project' | 'task'
@@ -46,8 +49,11 @@ export interface TestingOpenForgeApiCalls {
   emittedGlobalEvents: Array<{ qualifiedEvent: string; payload: unknown }>
   openUrl: string[]
   notify: NotificationRequest[]
+  taskCreates: TaskCreateRequest[]
   taskSummaryUpdates: Array<{ taskId: string; summary: string }>
   taskStatusUpdates: Array<{ taskId: string; status: string }>
+  implementationStarts: TaskImplementationStartRequest[]
+  implementationResumes: TaskImplementationResumeRequest[]
   configWrites: Array<{ key: string; value: JsonValue; projectId: string | null }>
   fsWrites: Array<{ projectId: string; path: string; content: string }>
   shellSpawns: Array<{ taskId: string; cwd: string; cols: number; rows: number; terminalIndex: number }>
@@ -168,7 +174,7 @@ export class TestingOpenForgeRegistryFake {
     this.taskId = options.taskId ?? null
     this.packageMetadata = options.packageMetadata ?? {
       id: this.pluginId,
-      apiVersion: 1,
+      apiVersion: 2,
       displayName: this.pluginId,
       description: '',
     }
@@ -282,7 +288,7 @@ export class TestingOpenForgeRegistryFake {
   private createContext(subscriptions: TestingSubscriptionSink): FrontendPluginContext {
     return {
       pluginId: this.pluginId,
-      apiVersion: 1,
+      apiVersion: this.packageMetadata.apiVersion,
       packageMetadata: this.packageMetadata,
       subscriptions,
     }
@@ -309,6 +315,22 @@ export class TestingOpenForgeRegistryFake {
       tasks: {
         list: async () => [],
         get: async (taskId) => { throw new Error(`Mock task not found: ${taskId}`) },
+        create: async (request) => {
+          this.calls.taskCreates.push(request)
+          return {
+            id: 'T-1',
+            initial_prompt: request.initialPrompt,
+            prompt: null,
+            summary: null,
+            status: request.status ?? 'backlog',
+            agent: null,
+            permission_mode: request.permissionMode ?? null,
+            depends_on: request.dependsOn ?? [],
+            project_id: request.projectId ?? null,
+            created_at: Date.now(),
+            updated_at: Date.now(),
+          }
+        },
         updateSummary: async (taskId, summary) => {
           this.calls.taskSummaryUpdates.push({ taskId, summary })
         },
@@ -317,6 +339,14 @@ export class TestingOpenForgeRegistryFake {
         },
         getWorkspace: async () => null,
         getLatestSession: async () => null,
+        startImplementation: async (request) => {
+          this.calls.implementationStarts.push(request)
+          return { task_id: request.taskId, workspace_path: '', port: 0, session_id: '' }
+        },
+        resumeImplementation: async (request) => {
+          this.calls.implementationResumes.push(request)
+          return { task_id: request.taskId, workspace_path: '', port: 0, session_id: request.sessionId ?? '' }
+        },
       },
       projects: {
         list: async () => [],
@@ -674,8 +704,11 @@ export function createTestingCalls(): TestingOpenForgeApiCalls {
     emittedGlobalEvents: [],
     openUrl: [],
     notify: [],
+    taskCreates: [],
     taskSummaryUpdates: [],
     taskStatusUpdates: [],
+    implementationStarts: [],
+    implementationResumes: [],
     configWrites: [],
     fsWrites: [],
     shellSpawns: [],

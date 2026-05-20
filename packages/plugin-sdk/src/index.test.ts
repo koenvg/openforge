@@ -12,7 +12,7 @@ import {
 
 describe('Plugin SDK root export', () => {
   it('exports shared package contract helpers', () => {
-    expect(OPENFORGE_PLUGIN_API_VERSION).toBe(1)
+    expect(OPENFORGE_PLUGIN_API_VERSION).toBe(2)
     expect(MAX_SUPPORTED_API_VERSION).toBeGreaterThan(0)
     expect(typeof validateOpenForgePackageMetadata).toBe('function')
     expect(typeof isOpenForgePackageMetadata).toBe('function')

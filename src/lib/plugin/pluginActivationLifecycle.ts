@@ -208,10 +208,13 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
     tasks: {
       list: unavailable,
       get: unavailable,
+      create: unavailable,
       updateSummary: unavailable,
       updateStatus: unavailable,
       getWorkspace: unavailable,
       getLatestSession: unavailable,
+      startImplementation: unavailable,
+      resumeImplementation: unavailable,
     },
     projects: {
       list: unavailable,

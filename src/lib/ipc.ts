@@ -1,6 +1,6 @@
 import { invokeDesktopCommand as invoke, isElectronDesktopBridgeAvailable } from "./desktopIpc";
 import { normalizeTask } from "./boardStatus"
-import type { JsonValue } from '@openforge/plugin-sdk'
+import type { JsonValue, TaskImplementationResumeRequest, TaskImplementationStartRequest } from '@openforge/plugin-sdk'
 import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, FileContent, FileEntry, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, SkillInfo, Task, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo } from "./types";
 
 type RawTask = Omit<Task, 'status'> & { status: string }
@@ -93,8 +93,16 @@ export async function removeTaskLabel(taskId: string, labelId: number): Promise<
   return invoke("remove_task_label", { taskId, labelId })
 }
 
-export async function startImplementation(taskId: string, repoPath: string): Promise<ImplementationStatus> {
-  return invoke<ImplementationStatus>("start_implementation", { taskId, repoPath });
+export async function startImplementation(taskId: string, repoPath: string, options: Omit<TaskImplementationStartRequest, 'taskId'> = {}): Promise<ImplementationStatus> {
+  return invoke<ImplementationStatus>("start_implementation", { taskId, repoPath, ...options });
+}
+
+export async function pluginStartImplementation(request: TaskImplementationStartRequest): Promise<ImplementationStatus> {
+  return invoke<ImplementationStatus>("plugin_start_implementation", request);
+}
+
+export async function resumeImplementation(request: TaskImplementationResumeRequest): Promise<ImplementationStatus> {
+  return invoke<ImplementationStatus>("resume_implementation", request);
 }
 
 export async function resumeStartupSessions(): Promise<void> {

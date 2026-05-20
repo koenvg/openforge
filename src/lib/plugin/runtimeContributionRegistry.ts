@@ -31,7 +31,11 @@ import type {
   ProjectAttention,
   SubscriptionSink,
   Task,
+  TaskCreateRequest,
+  TaskImplementationResumeRequest,
+  TaskImplementationStartRequest,
   TaskWorkspaceInfo,
+  ImplementationStatus,
 } from '@openforge/plugin-sdk'
 
 type MaybePromise<T> = T | Promise<T>
@@ -45,10 +49,13 @@ export type RuntimeHostBridge = {
   getProject?(projectId: string): Promise<Project | null>
   listTasks?(request?: { projectId?: string | null }): Promise<Task[]>
   getTask?(taskId: string): Promise<Task>
+  createTask?(request: TaskCreateRequest): Promise<Task>
   updateTaskSummary?(taskId: string, summary: string): Promise<void>
   updateTaskStatus?(taskId: string, status: BoardStatus): Promise<void>
   getTaskWorkspace?(taskId: string): Promise<TaskWorkspaceInfo | null>
   getLatestSession?(taskId: string): Promise<AgentSession | null>
+  startImplementation?(request: TaskImplementationStartRequest): Promise<ImplementationStatus>
+  resumeImplementation?(request: TaskImplementationResumeRequest): Promise<ImplementationStatus>
   readDir?(request: { projectId: string; path?: string | null }): Promise<FileEntry[]>
   readFile?(request: { projectId: string; path: string }): Promise<FileContent>
   writeFile?(request: { projectId: string; path: string; content: string }): Promise<void>
@@ -342,7 +349,7 @@ class RuntimeContributionRegistry {
     this.projectId = options.projectId
     this.packageMetadata = options.packageMetadata ?? {
       id: options.pluginId,
-      apiVersion: 1,
+      apiVersion: 2,
       displayName: options.pluginId,
       description: '',
     }
@@ -455,7 +462,7 @@ class RuntimeContributionRegistry {
   private createFrontendContext(): FrontendPluginContext {
     return {
       pluginId: this.pluginId,
-      apiVersion: 1,
+      apiVersion: this.packageMetadata.apiVersion,
       packageMetadata: this.packageMetadata,
       subscriptions: this.frontendSubscriptions,
     }
@@ -464,7 +471,7 @@ class RuntimeContributionRegistry {
   private createBackendContext(): BackendPluginContext {
     return {
       pluginId: this.pluginId,
-      apiVersion: 1,
+      apiVersion: this.packageMetadata.apiVersion,
       packageMetadata: this.packageMetadata,
       subscriptions: this.backendSubscriptions,
     }
@@ -533,10 +540,13 @@ class RuntimeContributionRegistry {
       tasks: {
         list: async (request) => this.host.listTasks ? this.host.listTasks(request) : unavailableCapability('tasks.list'),
         get: async (taskId) => this.host.getTask ? this.host.getTask(taskId) : unavailableCapability('tasks.get'),
+        create: async (request) => this.host.createTask ? this.host.createTask(request) : unavailableCapability('tasks.create'),
         updateSummary: async (taskId, summary) => this.host.updateTaskSummary ? this.host.updateTaskSummary(taskId, summary) : unavailableCapability('tasks.updateSummary'),
         updateStatus: async (taskId, status) => this.host.updateTaskStatus ? this.host.updateTaskStatus(taskId, status) : unavailableCapability('tasks.updateStatus'),
         getWorkspace: async (taskId) => this.host.getTaskWorkspace ? this.host.getTaskWorkspace(taskId) : unavailableCapability('tasks.getWorkspace'),
         getLatestSession: async (taskId) => this.host.getLatestSession ? this.host.getLatestSession(taskId) : unavailableCapability('tasks.getLatestSession'),
+        startImplementation: async (request) => this.host.startImplementation ? this.host.startImplementation(request) : unavailableCapability('tasks.startImplementation'),
+        resumeImplementation: async (request) => this.host.resumeImplementation ? this.host.resumeImplementation(request) : unavailableCapability('tasks.resumeImplementation'),
       },
       projects: {
         list: async () => this.host.listProjects ? this.host.listProjects() : unavailableCapability('projects.list'),

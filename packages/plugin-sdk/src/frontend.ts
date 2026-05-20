@@ -18,6 +18,12 @@ import type {
   PluginTaskPaneTabRegistration,
   PluginViewProps,
   PluginViewRegistration,
+  TaskCreateRequest,
+  TaskImplementationResumeRequest,
+  TaskImplementationStartRequest,
+  TaskRunModelSelection,
+  TaskRunProvider,
+  TasksAPI,
 } from './types'
 
 export const OPENFORGE_FRONTEND_PLUGIN_MARKER = '__openforgeFrontendPlugin'
@@ -55,4 +61,10 @@ export type {
   PluginTaskPaneTabRegistration,
   PluginViewProps,
   PluginViewRegistration,
+  TaskCreateRequest,
+  TaskImplementationResumeRequest,
+  TaskImplementationStartRequest,
+  TaskRunModelSelection,
+  TaskRunProvider,
+  TasksAPI,
 }

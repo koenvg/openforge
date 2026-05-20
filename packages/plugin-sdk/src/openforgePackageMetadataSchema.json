@@ -14,7 +14,7 @@
       "description": "Explicit app-wide plugin id. Host-exposed contribution ids are qualified with this id."
     },
     "apiVersion": {
-      "enum": [1]
+      "enum": [1, 2]
     },
     "displayName": {
       "type": "string",

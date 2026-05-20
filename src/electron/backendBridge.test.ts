@@ -317,6 +317,8 @@ describe('Electron backend bridge command forwarding', () => {
     expect(isSidecarBackedCommand('get_session_status')).toBe(true)
     expect(isSidecarBackedCommand('resume_startup_sessions')).toBe(true)
     expect(isSidecarBackedCommand('start_implementation')).toBe(true)
+    expect(isSidecarBackedCommand('plugin_start_implementation')).toBe(true)
+    expect(isSidecarBackedCommand('resume_implementation')).toBe(true)
     expect(isSidecarBackedCommand('abort_implementation')).toBe(true)
     expect(isSidecarBackedCommand('finalize_agent_session')).toBe(true)
     expect(isSidecarBackedCommand('finalize_claude_session')).toBe(false)
