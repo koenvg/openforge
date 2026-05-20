@@ -1,7 +1,14 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import viteConfig from '../vite.config.ts'
 import { OPENFORGE_HOST_SHARED_SVELTE_IMPORTS } from '../packages/plugin-sdk/src/vite.ts'
+import {
+  SVELTE_HOST_RUNTIME_MODULES,
+  rendererImportMapHtml,
+  svelteHostRuntimeBuildEntries,
+  svelteHostRuntimeImportMapEntries,
+} from '../src/electron/svelteHostRuntimeContract.mjs'
 
 function readRendererImportMap(indexHtml) {
   const importMapJson = indexHtml.match(/<script type="importmap">\s*([\s\S]*?)\s*<\/script>/)?.[1]
@@ -11,12 +18,31 @@ function readRendererImportMap(indexHtml) {
 
 describe('OpenForge plugin Svelte runtime contract', () => {
   it('keeps the renderer import map complete for every SDK-externalized Svelte runtime import', async () => {
-    const imports = readRendererImportMap(await readFile(join(process.cwd(), 'index.html'), 'utf8'))
+    const imports = readRendererImportMap(rendererImportMapHtml())
+
+    expect(imports).toMatchObject(svelteHostRuntimeImportMapEntries())
+    expect([...OPENFORGE_HOST_SHARED_SVELTE_IMPORTS].sort()).toEqual(
+      SVELTE_HOST_RUNTIME_MODULES.map(module => module.specifier).sort(),
+    )
+    expect(Object.keys(svelteHostRuntimeBuildEntries()).sort()).toEqual(
+      SVELTE_HOST_RUNTIME_MODULES.map(module => module.assetPath.replace(/\.js$/, '')).sort(),
+    )
 
     for (const specifier of OPENFORGE_HOST_SHARED_SVELTE_IMPORTS) {
       expect(imports[specifier], `${specifier} must be mapped by the host renderer import map`).toBeTruthy()
       expect(imports[specifier]).toMatch(/^plugin:\/\/host-runtime\/svelte\//)
     }
+  })
+
+  it('injects the renderer import map from the shared contract through Vite', async () => {
+    const plugin = viteConfig.plugins.find(candidate => candidate?.name === 'openforge-host-runtime-import-map')
+    expect(plugin).toBeTruthy()
+    const transformed = plugin.transformIndexHtml(await readFile(join(process.cwd(), 'index.html'), 'utf8'))
+
+    expect(readRendererImportMap(transformed)).toEqual({
+      ...svelteHostRuntimeImportMapEntries(),
+      '@openforge/plugin-sdk': 'plugin://host-runtime/plugin-sdk/index.js',
+    })
   })
 
   it('keeps built-in plugin packages on the SDK Vite host-shared Svelte template', async () => {

@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it, vi } from 'vitest'
 import { OPENFORGE_HOST_SHARED_SVELTE_IMPORTS } from '../../packages/plugin-sdk/src/vite'
+import { rendererImportMapHtml, svelteHostRuntimeImportMapEntries } from './svelteHostRuntimeContract.mjs'
 import {
   ELECTRON_RENDERER_CSP,
   applyElectronRendererCsp,
@@ -32,11 +33,11 @@ async function tempWorkspace(): Promise<string> {
 
 describe('Electron plugin:// protocol security contract', () => {
   it('maps every SDK-externalized Svelte runtime import to canonical host-runtime modules', async () => {
-    const indexHtml = await readFile(join(process.cwd(), 'index.html'), 'utf8')
-    const importMapJson = indexHtml.match(/<script type="importmap">\s*([\s\S]*?)\s*<\/script>/)?.[1]
+    const importMapJson = rendererImportMapHtml().match(/<script type="importmap">\s*([\s\S]*?)\s*<\/script>/)?.[1]
     expect(importMapJson).toBeTruthy()
     const imports = (JSON.parse(importMapJson as string) as { imports: Record<string, string> }).imports
 
+    expect(imports).toMatchObject(svelteHostRuntimeImportMapEntries())
     for (const specifier of OPENFORGE_HOST_SHARED_SVELTE_IMPORTS) {
       expect(imports[specifier], `${specifier} must be covered by the renderer import map`).toBeTruthy()
       expect(imports[specifier]).toMatch(/^plugin:\/\/host-runtime\/svelte\//)
@@ -195,6 +196,7 @@ describe('Electron plugin:// protocol security contract', () => {
     await mkdir(join(installRoot, 'assets'), { recursive: true })
     await writeFile(join(installRoot, 'assets', 'index.js'), [
       "import { onMount } from 'svelte'",
+      "import { experimental } from 'svelte/internal/flags/experimental'",
       "const stringSnippet = \"import { onMount } from 'svelte'\"",
       "const templateSnippet = `export { onMount } from 'svelte/internal/client'`",
       "// export * from 'svelte/store'",
@@ -221,6 +223,7 @@ describe('Electron plugin:// protocol security contract', () => {
     expect(response.status).toBe(200)
     const servedCode = await response.text()
     expect(servedCode).toContain("import { onMount } from 'plugin://host-runtime/svelte/index.js'")
+    expect(servedCode).toContain("import { experimental } from 'svelte/internal/flags/experimental'")
     expect(servedCode).toContain("const stringSnippet = \"import { onMount } from 'svelte'\"")
     expect(servedCode).toContain("const templateSnippet = `export { onMount } from 'svelte/internal/client'`")
     expect(servedCode).toContain("// export * from 'svelte/store'")

@@ -12,7 +12,8 @@ import { activatePlugin } from '../src/lib/plugin/pluginRegistry.ts'
 import { _resetPluginLoaderForTests, _setModuleLoader } from '../src/lib/plugin/pluginLoader.ts'
 import { installedPlugins, enabledPluginIds, runtimeContributionSources } from '../src/lib/plugin/pluginStore.ts'
 import { activeProjectId } from '../src/lib/stores.ts'
-import { buildSvelteHostRuntimeAssets, copyHostRuntimeAssets, svelteHostRuntimeImportMapEntries } from './electron-build.mjs'
+import { rendererImportMapHtml, svelteHostRuntimeBuildEntries } from '../src/electron/svelteHostRuntimeContract.mjs'
+import { buildSvelteHostRuntimeAssets, copyElectronMainRuntimeAssets, copyHostRuntimeAssets, svelteHostRuntimeImportMapEntries } from './electron-build.mjs'
 
 const sidecarConfig = {
   command: 'openforge-sidecar',
@@ -35,25 +36,9 @@ async function writeMinimalHostRuntimeInputs(repoRoot) {
   await writeFile(join(repoRoot, 'packages', 'plugin-runtime', 'src', 'commandValidation.ts'), 'export function validateSchemaValue() { return { valid: true, bundledRuntimeMarker: true }; }')
   await writeFile(join(repoRoot, 'src-tauri', 'plugin-host', 'index.ts'), "import { validateSchemaValue } from '@openforge/plugin-runtime/commandValidation'\nconsole.log(validateSchemaValue())\n")
 
-  const svelteFiles = {
-    'index-client.js': 'export const svelte = true;',
-    'animate/index.js': 'export const animate = true;',
-    'attachments/index.js': 'export const attachments = true;',
-    'easing/index.js': 'export const easing = true;',
-    'events/index.js': 'export const events = true;',
-    'internal/index.js': 'export const internal = true;',
-    'internal/client/index.js': 'export const internalClient = true;',
-    'internal/disclose-version.js': 'export const discloseVersion = true;',
-    'internal/flags/async.js': 'export const asyncFlag = true;',
-    'internal/flags/legacy.js': 'export const legacyFlag = true;',
-    'internal/flags/tracing.js': 'export const tracingFlag = true;',
-    'legacy/legacy-client.js': 'export const legacy = true;',
-    'motion/index.js': 'export const motion = true;',
-    'reactivity/index-client.js': 'export const reactivity = true;',
-    'reactivity/window/index.js': 'export const reactiveWindow = true;',
-    'store/index-client.js': 'export const store = true;',
-    'transition/index.js': 'export const transition = true;',
-  }
+  const svelteFiles = Object.fromEntries(
+    Object.values(svelteHostRuntimeBuildEntries()).map(relPath => [relPath, `export const stub = ${JSON.stringify(`svelte:${relPath}`)};`]),
+  )
   for (const [relPath, content] of Object.entries(svelteFiles)) {
     const filePath = join(repoRoot, 'node_modules', 'svelte', 'src', relPath)
     await mkdir(dirname(filePath), { recursive: true })
@@ -198,8 +183,7 @@ describe('Electron build host-runtime assets', () => {
   })
 
   it('keeps the Svelte host-runtime contract aligned across externals, import map, and assets', async () => {
-    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-    const imports = readRendererImportMap(await readFile(join(repoRoot, 'index.html'), 'utf8'))
+    const imports = readRendererImportMap(rendererImportMapHtml())
     const expectedSvelteImports = svelteHostRuntimeImportMapEntries()
     const actualSvelteImports = Object.fromEntries(
       Object.entries(imports).filter(([specifier]) => specifier === 'svelte' || specifier.startsWith('svelte/')),
@@ -228,7 +212,7 @@ describe('Electron build host-runtime assets', () => {
     try {
       const bundle = await buildMinimalSveltePluginBundle(pluginRoot)
       const svelteImports = staticModuleSpecifiers(bundle).filter(specifier => specifier === 'svelte' || specifier.startsWith('svelte/'))
-      const imports = readRendererImportMap(await readFile(join(repoRoot, 'index.html'), 'utf8'))
+      const imports = readRendererImportMap(rendererImportMapHtml())
 
       expect(svelteImports).toContain('svelte')
       expect(svelteImports).toContain('svelte/internal/client')
@@ -330,6 +314,16 @@ describe('Electron build host-runtime assets', () => {
       await rm(pluginRoot, { recursive: true, force: true })
       await rm(hostRuntimeRoot, { recursive: true, force: true })
     }
+  })
+
+  it('copies the shared host-runtime contract next to compiled Electron main assets', async () => {
+    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+    const outDir = join(tmpdir(), `openforge-electron-main-runtime-${process.pid}-${Date.now()}`)
+    await mkdir(outDir, { recursive: true })
+
+    await copyElectronMainRuntimeAssets(repoRoot, outDir)
+
+    await expect(readFile(join(outDir, 'svelteHostRuntimeContract.mjs'), 'utf8')).resolves.toContain('SVELTE_HOST_RUNTIME_MODULES')
   })
 
   it('generates plugin SDK, bundles backend plugin-host runtime dependencies, and builds browser-ready Svelte host-runtime assets into dist-electron resources', async () => {
