@@ -40,6 +40,26 @@ const HOST_RUNTIME_INDEX_HTML = `<!doctype html>
 `
 const HOST_RUNTIME_RUNTIME_JS = 'globalThis.__OPENFORGE_PLUGIN_RUNTIME__ = true; export const runtimeReady = true;'
 
+const SVELTE_HOST_RUNTIME_IMPORTS = new Map<string, string>([
+  ['svelte', 'plugin://host-runtime/svelte/index.js'],
+  ['svelte/animate', 'plugin://host-runtime/svelte/animate.js'],
+  ['svelte/attachments', 'plugin://host-runtime/svelte/attachments.js'],
+  ['svelte/easing', 'plugin://host-runtime/svelte/easing.js'],
+  ['svelte/events', 'plugin://host-runtime/svelte/events.js'],
+  ['svelte/internal', 'plugin://host-runtime/svelte/internal.js'],
+  ['svelte/internal/client', 'plugin://host-runtime/svelte/internal/client/index.js'],
+  ['svelte/internal/disclose-version', 'plugin://host-runtime/svelte/internal/disclose-version.js'],
+  ['svelte/internal/flags/async', 'plugin://host-runtime/svelte/internal/flags/async.js'],
+  ['svelte/internal/flags/legacy', 'plugin://host-runtime/svelte/internal/flags/legacy.js'],
+  ['svelte/internal/flags/tracing', 'plugin://host-runtime/svelte/internal/flags/tracing.js'],
+  ['svelte/legacy', 'plugin://host-runtime/svelte/legacy.js'],
+  ['svelte/motion', 'plugin://host-runtime/svelte/motion.js'],
+  ['svelte/reactivity', 'plugin://host-runtime/svelte/reactivity.js'],
+  ['svelte/reactivity/window', 'plugin://host-runtime/svelte/reactivity/window/index.js'],
+  ['svelte/store', 'plugin://host-runtime/svelte/store.js'],
+  ['svelte/transition', 'plugin://host-runtime/svelte/transition.js'],
+])
+
 
 export interface PluginProtocolDeps {
   workspaceRoot: string
@@ -149,6 +169,39 @@ function packagedAssetResultResponse(asset: PluginAssetReadResult): Response {
       : okResponse(mimeTypeForPath(asset.filePath), asset.content)
 }
 
+function svelteHostRuntimeImportUrl(specifier: string): string | null {
+  const mapped = SVELTE_HOST_RUNTIME_IMPORTS.get(specifier)
+  if (mapped) return mapped
+
+  if (specifier.startsWith('svelte/internal/flags/')) {
+    return `plugin://host-runtime/${specifier}.js`
+  }
+
+  return null
+}
+
+function rewriteSvelteRuntimeImports(code: string): string {
+  return code.replace(
+    /\b((?:import|export)\s*(?:[^'"]*?\bfrom\s*)?)(['"])(svelte(?:\/[^'"]*)?)\2/g,
+    (match: string, prefix: string, quote: string, specifier: string) => {
+      const mapped = svelteHostRuntimeImportUrl(specifier)
+      return mapped ? `${prefix}${quote}${mapped}${quote}` : match
+    }
+  )
+}
+
+function pluginAssetResultResponse(asset: PluginAssetReadResult): Response {
+  if (asset === 'forbidden') return forbiddenResponse()
+  if (asset === 'not-found') return notFoundResponse()
+
+  const contentType = mimeTypeForPath(asset.filePath)
+  if (contentType !== 'application/javascript') {
+    return okResponse(contentType, asset.content)
+  }
+
+  return okResponse(contentType, rewriteSvelteRuntimeImports(Buffer.from(asset.content).toString('utf8')))
+}
+
 async function packagedHostRuntimeAssetResponse(relPath: string, deps: PluginProtocolDeps): Promise<Response> {
   return packagedAssetResultResponse(await readPackagedHostRuntimeAsset(relPath, deps))
 }
@@ -204,11 +257,7 @@ async function pluginAssetResponse(parsed: ParsedPluginUrl, deps: PluginProtocol
     realpath: deps.realpath,
   }).readCanonicalAsset(assetRoot.assetRoot, parsed.relPath)
 
-  return asset === 'forbidden'
-    ? forbiddenResponse()
-    : asset === 'not-found'
-      ? notFoundResponse()
-      : okResponse(mimeTypeForPath(asset.filePath), asset.content)
+  return pluginAssetResultResponse(asset)
 }
 
 export async function handlePluginProtocolRequest(requestUrl: string, deps: PluginProtocolDeps): Promise<Response> {
