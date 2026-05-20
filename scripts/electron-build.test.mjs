@@ -1,8 +1,12 @@
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { build as viteBuild } from 'vite'
+import { svelte } from '@sveltejs/vite-plugin-svelte'
+import { openforgePluginViteExternals } from '../packages/plugin-sdk/src/vite.ts'
+import { handlePluginProtocolRequest } from '../src/electron/pluginProtocol.ts'
 import { buildSvelteHostRuntimeAssets, copyHostRuntimeAssets } from './electron-build.mjs'
 
 async function writeMinimalHostRuntimeInputs(repoRoot) {
@@ -39,6 +43,59 @@ async function writeMinimalHostRuntimeInputs(repoRoot) {
   }
 }
 
+async function writeMinimalSveltePlugin(root) {
+  await mkdir(join(root, 'src'), { recursive: true })
+  await writeFile(join(root, 'src', 'TaskSchedulerView.svelte'), `<script lang="ts">\n  export let name: string = 'Scheduler'\n</script>\n<div>{name}</div>\n`)
+  await writeFile(join(root, 'src', 'index.ts'), `import TaskSchedulerView from './TaskSchedulerView.svelte'\n\nconst plugin = {\n  activate(_api, registry) {\n    registry.registerView({ id: 'task-scheduler', title: 'Task Scheduler', component: TaskSchedulerView })\n  },\n}\n\nObject.defineProperty(plugin, '__openforgeFrontendPlugin', { value: true })\n\nexport default plugin\n`)
+}
+
+async function buildMinimalSveltePluginBundle(root) {
+  await writeMinimalSveltePlugin(root)
+  await viteBuild({
+    configFile: false,
+    root,
+    publicDir: false,
+    logLevel: 'silent',
+    plugins: [svelte()],
+    build: {
+      emptyOutDir: true,
+      outDir: join(root, 'dist'),
+      lib: {
+        entry: join(root, 'src', 'index.ts'),
+        formats: ['es'],
+        fileName: () => 'frontend.js',
+      },
+      minify: false,
+      sourcemap: false,
+      target: 'es2022',
+      rollupOptions: {
+        external: openforgePluginViteExternals,
+      },
+    },
+  })
+
+  return readFile(join(root, 'dist', 'frontend.js'), 'utf8')
+}
+
+function staticModuleSpecifiers(code) {
+  return Array.from(code.matchAll(/(?:import|export)\s+(?:[^'";]+?\s+from\s+)?['"]([^'"]+)['"]/g), match => match[1])
+}
+
+function readRendererImportMap(indexHtml) {
+  const importMapJson = indexHtml.match(/<script type="importmap">\s*([\s\S]*?)\s*<\/script>/)?.[1]
+  expect(importMapJson).toBeTruthy()
+  return JSON.parse(importMapJson).imports
+}
+
+function resolveImportMapSpecifier(specifier, imports) {
+  if (imports[specifier]) return imports[specifier]
+
+  const prefix = Object.keys(imports)
+    .filter(key => key.endsWith('/') && specifier.startsWith(key))
+    .sort((a, b) => b.length - a.length)[0]
+  return prefix ? `${imports[prefix]}${specifier.slice(prefix.length)}` : null
+}
+
 describe('Electron build host-runtime assets', () => {
   it('bundles Svelte host runtime entrypoints without unresolved package-private imports', async () => {
     const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -49,6 +106,41 @@ describe('Electron build host-runtime assets', () => {
     const internalClient = await readFile(join(outDir, 'internal', 'client', 'index.js'), 'utf8')
     expect(internalClient).not.toMatch(/^\s*import\s+.*from\s+['\"](?:#|esm-env|clsx|svelte)/m)
     expect(internalClient).not.toMatch(/^\s*export\s+.*from\s+['\"](?:#|esm-env|clsx|svelte)/m)
+  })
+
+  it('resolves Svelte plugin bundle runtime imports through the renderer import map and host protocol', async () => {
+    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+    const pluginRoot = join(tmpdir(), `openforge-svelte-plugin-${process.pid}-${Date.now()}`)
+    const hostRuntimeRoot = join(tmpdir(), `openforge-plugin-host-runtime-${process.pid}-${Date.now()}`)
+
+    try {
+      const bundle = await buildMinimalSveltePluginBundle(pluginRoot)
+      const svelteImports = staticModuleSpecifiers(bundle).filter(specifier => specifier === 'svelte' || specifier.startsWith('svelte/'))
+      const imports = readRendererImportMap(await readFile(join(repoRoot, 'index.html'), 'utf8'))
+
+      expect(svelteImports).toContain('svelte/internal/disclose-version')
+
+      await buildSvelteHostRuntimeAssets(repoRoot, join(hostRuntimeRoot, 'svelte'))
+
+      for (const specifier of svelteImports) {
+        const mappedUrl = resolveImportMapSpecifier(specifier, imports)
+        expect(mappedUrl, `${specifier} must be covered by the renderer import map`).toBeTruthy()
+
+        const response = await handlePluginProtocolRequest(mappedUrl, {
+          workspaceRoot: repoRoot,
+          hostRuntimeRoot,
+          sidecarConfig: null,
+          fetch: async () => new Response(null, { status: 404 }),
+          readFile,
+          realpath,
+        })
+        expect(response.status, `${specifier} resolved to ${mappedUrl}`).toBe(200)
+        expect(response.headers.get('Content-Type')).toBe('application/javascript')
+      }
+    } finally {
+      await rm(pluginRoot, { recursive: true, force: true })
+      await rm(hostRuntimeRoot, { recursive: true, force: true })
+    }
   })
 
   it('generates plugin SDK, bundles backend plugin-host runtime dependencies, and builds browser-ready Svelte host-runtime assets into dist-electron resources', async () => {
