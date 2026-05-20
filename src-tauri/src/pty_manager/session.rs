@@ -1,5 +1,5 @@
 use crate::app_events::AppEventSender;
-use crate::user_environment::user_environment;
+use crate::user_environment::{find_tool_on_path, user_environment, user_tool_path};
 use log::{error, info};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::collections::HashMap;
@@ -200,11 +200,14 @@ impl AgentPtyProviderAdapter for OpenCodePtyAdapter {
     }
 }
 
+type PiNodeCwdPreflight = fn(&Path, &HashMap<String, String>) -> Result<(), String>;
+
 struct PiPtyAdapter {
     prompt: String,
     resume_session_id: Option<String>,
     continue_session: bool,
     extension_path: Option<PathBuf>,
+    node_cwd_preflight: PiNodeCwdPreflight,
 }
 
 impl PiPtyAdapter {
@@ -219,6 +222,7 @@ impl PiPtyAdapter {
             resume_session_id: resume_session_id.map(str::to_string),
             continue_session,
             extension_path,
+            node_cwd_preflight: run_pi_node_cwd_preflight,
         }
     }
 }
@@ -241,7 +245,9 @@ impl AgentPtyProviderAdapter for PiPtyAdapter {
         )
     }
 
-    fn prepare(&mut self, _cwd: &Path) -> Result<(), PtyError> {
+    fn prepare(&mut self, cwd: &Path) -> Result<(), PtyError> {
+        verify_pi_node_cwd_access(cwd, self.node_cwd_preflight)?;
+
         if self.extension_path.is_none() {
             self.extension_path = Some(
                 crate::pi_extension::ensure_pi_extension_installed().map_err(|e| {
@@ -284,6 +290,53 @@ fn invalid_workspace_cwd(cwd: &Path, reason: impl ToString) -> PtyError {
         path: cwd.display().to_string(),
         reason: reason.to_string(),
     }
+}
+
+fn verify_pi_node_cwd_access(cwd: &Path, preflight: PiNodeCwdPreflight) -> Result<(), PtyError> {
+    let env = user_environment();
+    verify_pi_node_cwd_access_with(cwd, &env, preflight)
+}
+
+fn verify_pi_node_cwd_access_with(
+    cwd: &Path,
+    env: &HashMap<String, String>,
+    preflight: impl FnOnce(&Path, &HashMap<String, String>) -> Result<(), String>,
+) -> Result<(), PtyError> {
+    preflight(cwd, env)
+        .map_err(|err| invalid_workspace_cwd(cwd, format!("not accessible to Pi/Node: {err}")))
+}
+
+fn run_pi_node_cwd_preflight(cwd: &Path, env: &HashMap<String, String>) -> Result<(), String> {
+    let path = env.get("PATH").cloned().unwrap_or_else(user_tool_path);
+    let node_path = find_tool_on_path("node", &path)
+        .ok_or_else(|| "node executable was not found on PATH".to_string())?;
+
+    let output = std::process::Command::new(&node_path)
+        .arg("-e")
+        .arg("process.cwd()")
+        .current_dir(cwd)
+        .envs(env)
+        .output()
+        .map_err(|e| format!("failed to start node cwd preflight: {e}"))?;
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let detail = if !stderr.is_empty() {
+        stderr
+    } else if !stdout.is_empty() {
+        stdout
+    } else {
+        "node exited without diagnostic output".to_string()
+    };
+
+    Err(format!(
+        "node cwd preflight failed with status {}: {}",
+        output.status, detail
+    ))
 }
 
 fn resolve_pty_cwd(cwd: &Path) -> Result<PathBuf, PtyError> {
@@ -1577,5 +1630,80 @@ mod tests {
         assert_eq!(env.get("OPENFORGE_PTY_INSTANCE_ID"), Some(&"9".to_string()));
         assert!(env.contains_key("OPENFORGE_HTTP_PORT"));
         assert!(!env.contains_key("CLAUDE_TASK_ID"));
+    }
+
+    #[test]
+    fn pi_node_cwd_preflight_maps_failures_to_clear_workspace_error() {
+        let cwd = Path::new("/tmp/Open Forge Workspace");
+        let env = HashMap::from([("PATH".to_string(), "/test/bin".to_string())]);
+        let mut preflight_called = false;
+
+        let result = verify_pi_node_cwd_access_with(cwd, &env, |preflight_cwd, preflight_env| {
+            preflight_called = true;
+            assert_eq!(preflight_cwd, cwd);
+            assert_eq!(preflight_env.get("PATH"), Some(&"/test/bin".to_string()));
+            Err(
+                "Error: EPERM: process.cwd failed with error operation not permitted, uv_cwd"
+                    .to_string(),
+            )
+        });
+
+        assert!(preflight_called);
+        match result {
+            Err(PtyError::InvalidWorkspaceCwd { path, reason }) => {
+                assert!(path.contains("/tmp/Open Forge Workspace"));
+                assert!(reason.contains("Pi/Node"));
+                assert!(reason.contains("uv_cwd"));
+            }
+            other => panic!("expected clear Pi/Node workspace cwd failure, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn pi_adapter_prepare_runs_node_cwd_preflight() {
+        static PREFLIGHT_CALLED: std::sync::atomic::AtomicBool =
+            std::sync::atomic::AtomicBool::new(false);
+
+        fn recording_preflight(_cwd: &Path, _env: &HashMap<String, String>) -> Result<(), String> {
+            PREFLIGHT_CALLED.store(true, Ordering::SeqCst);
+            Ok(())
+        }
+
+        PREFLIGHT_CALLED.store(false, Ordering::SeqCst);
+        let mut adapter = PiPtyAdapter {
+            prompt: String::new(),
+            resume_session_id: None,
+            continue_session: false,
+            extension_path: Some(PathBuf::from("/tmp/openforge-pi-extension")),
+            node_cwd_preflight: recording_preflight,
+        };
+
+        adapter
+            .prepare(Path::new("/tmp"))
+            .expect("Pi prepare should succeed when preflight succeeds");
+
+        assert!(PREFLIGHT_CALLED.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn pi_adapter_prepare_stops_before_extension_install_when_node_cwd_preflight_fails() {
+        fn failing_preflight(_cwd: &Path, _env: &HashMap<String, String>) -> Result<(), String> {
+            Err("uv_cwd EPERM".to_string())
+        }
+
+        let mut adapter = PiPtyAdapter {
+            prompt: String::new(),
+            resume_session_id: None,
+            continue_session: false,
+            extension_path: None,
+            node_cwd_preflight: failing_preflight,
+        };
+
+        let result = adapter.prepare(Path::new("/tmp"));
+
+        assert!(
+            matches!(result, Err(PtyError::InvalidWorkspaceCwd { reason, .. }) if reason.contains("Pi/Node") && reason.contains("uv_cwd EPERM"))
+        );
+        assert!(adapter.extension_path.is_none());
     }
 }
