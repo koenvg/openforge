@@ -61,6 +61,9 @@ importers:
       dompurify:
         specifier: ^3.3.2
         version: 3.4.1
+      es-module-lexer:
+        specifier: 2.1.0
+        version: 2.1.0
       lucide-svelte:
         specifier: ^0.577.0
         version: 0.577.0(svelte@5.55.5)

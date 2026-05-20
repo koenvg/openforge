@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { init as initModuleLexer, parse as parseModule } from 'es-module-lexer'
 import {
   DEFAULT_RENDERER_TRUST_POLICY,
   ElectronRendererTrustAdapter,
@@ -180,17 +181,34 @@ function svelteHostRuntimeImportUrl(specifier: string): string | null {
   return null
 }
 
-function rewriteSvelteRuntimeImports(code: string): string {
-  return code.replace(
-    /\b((?:import|export)\s*(?:[^'"]*?\bfrom\s*)?)(['"])(svelte(?:\/[^'"]*)?)\2/g,
-    (match: string, prefix: string, quote: string, specifier: string) => {
-      const mapped = svelteHostRuntimeImportUrl(specifier)
-      return mapped ? `${prefix}${quote}${mapped}${quote}` : match
-    }
-  )
+async function rewriteSvelteRuntimeImports(code: string): Promise<string> {
+  await initModuleLexer
+
+  let imports: ReturnType<typeof parseModule>[0]
+  try {
+    ;[imports] = parseModule(code)
+  } catch {
+    return code
+  }
+
+  const replacements = imports
+    .filter(importSpecifier => importSpecifier.d === -1 && importSpecifier.n !== undefined)
+    .map(importSpecifier => ({
+      start: importSpecifier.s,
+      end: importSpecifier.e,
+      value: svelteHostRuntimeImportUrl(importSpecifier.n as string),
+    }))
+    .filter((replacement): replacement is { start: number; end: number; value: string } => replacement.value !== null)
+
+  return replacements
+    .sort((a, b) => b.start - a.start)
+    .reduce(
+      (rewritten, replacement) => `${rewritten.slice(0, replacement.start)}${replacement.value}${rewritten.slice(replacement.end)}`,
+      code
+    )
 }
 
-function pluginAssetResultResponse(asset: PluginAssetReadResult): Response {
+async function pluginAssetResultResponse(asset: PluginAssetReadResult): Promise<Response> {
   if (asset === 'forbidden') return forbiddenResponse()
   if (asset === 'not-found') return notFoundResponse()
 
@@ -199,7 +217,7 @@ function pluginAssetResultResponse(asset: PluginAssetReadResult): Response {
     return okResponse(contentType, asset.content)
   }
 
-  return okResponse(contentType, rewriteSvelteRuntimeImports(Buffer.from(asset.content).toString('utf8')))
+  return okResponse(contentType, await rewriteSvelteRuntimeImports(Buffer.from(asset.content).toString('utf8')))
 }
 
 async function packagedHostRuntimeAssetResponse(relPath: string, deps: PluginProtocolDeps): Promise<Response> {
