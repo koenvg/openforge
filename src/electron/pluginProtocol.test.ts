@@ -189,6 +189,44 @@ describe('Electron plugin:// protocol security contract', () => {
     expect(await response.text()).toBe('export const ok = true;')
   })
 
+  it('rewrites only real Svelte static import specifiers in served plugin JavaScript', async () => {
+    const workspaceRoot = await tempWorkspace()
+    const installRoot = join(workspaceRoot, 'installed-plugin')
+    await mkdir(join(installRoot, 'assets'), { recursive: true })
+    await writeFile(join(installRoot, 'assets', 'index.js'), [
+      "import { onMount } from 'svelte'",
+      "const stringSnippet = \"import { onMount } from 'svelte'\"",
+      "const templateSnippet = `export { onMount } from 'svelte/internal/client'`",
+      "// export * from 'svelte/store'",
+      "/* import { tick } from 'svelte' */",
+      'export { onMount }',
+    ].join('\n'))
+
+    const fetch = vi.fn(async () => new Response(JSON.stringify({
+      value: {
+        plugin_id: 'com.example.plugin',
+        asset_root: installRoot,
+        is_builtin: false,
+      },
+    }), { status: 200 }))
+
+    const response = await handlePluginProtocolRequest('plugin://com.example.plugin/assets/index.js', {
+      workspaceRoot,
+      sidecarConfig,
+      fetch,
+      readFile,
+      realpath,
+    })
+
+    expect(response.status).toBe(200)
+    const servedCode = await response.text()
+    expect(servedCode).toContain("import { onMount } from 'plugin://host-runtime/svelte/index.js'")
+    expect(servedCode).toContain("const stringSnippet = \"import { onMount } from 'svelte'\"")
+    expect(servedCode).toContain("const templateSnippet = `export { onMount } from 'svelte/internal/client'`")
+    expect(servedCode).toContain("// export * from 'svelte/store'")
+    expect(servedCode).toContain("/* import { tick } from 'svelte' */")
+  })
+
   it('uses Rust-resolved asset roots for builtin plugins instead of Electron builtin path mapping', async () => {
     const workspaceRoot = await tempWorkspace()
     const installRoot = join(await tempWorkspace(), 'rust-resolved-builtin')
