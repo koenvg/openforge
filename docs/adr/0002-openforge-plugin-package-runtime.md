@@ -483,9 +483,9 @@ git:github.com/acme/openforge-notes@main
 
 #### Svelte runtime sharing build contract
 
-Frontend plugins that ship Svelte components must not bundle their own copy of Svelte. `PluginSlot` renders plugin components inside the host renderer's Svelte tree, so the component and host must share the same Svelte active-effect/runtime singleton. Bundling Svelte into the plugin can crash at render time with errors such as `Cannot read properties of null (reading nodes)`.
+Official contract: host-shared Svelte. Frontend plugins that ship Svelte components must not bundle their own copy of Svelte. `PluginSlot` renders plugin components inside the host renderer's Svelte tree, so the component and host must share the same Svelte active-effect/runtime singleton. Bundling Svelte into the plugin can crash at render time with errors such as `Cannot read properties of null (reading nodes)`.
 
-Use `svelte` as both a `peerDependency` and an author-time `devDependency`, and externalize Svelte in the frontend Vite build. The host renderer import map provides the runtime at `plugin://host-runtime/svelte/*`, including compiled-component imports such as `svelte/internal/client`.
+Use `svelte` as both a `peerDependency` and an author-time `devDependency`, and externalize Svelte in the frontend Vite build with `openforgePluginViteExternals`. The SDK exports the complete host-shared runtime list as `OPENFORGE_HOST_SHARED_SVELTE_IMPORTS`; the host renderer import map and packaged `plugin://host-runtime/svelte/*` assets must cover every specifier in that list, including compiled-component imports such as `svelte/internal/client` and `svelte/internal/disclose-version`.
 
 `vite.config.ts`:
 
