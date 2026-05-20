@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { init as initModuleLexer, parse as parseModule } from 'es-module-lexer'
+import { svelteHostRuntimeImportUrl } from './svelteHostRuntimeContract.mjs'
 import {
   DEFAULT_RENDERER_TRUST_POLICY,
   ElectronRendererTrustAdapter,
@@ -40,27 +41,6 @@ const HOST_RUNTIME_INDEX_HTML = `<!doctype html>
 </html>
 `
 const HOST_RUNTIME_RUNTIME_JS = 'globalThis.__OPENFORGE_PLUGIN_RUNTIME__ = true; export const runtimeReady = true;'
-
-const SVELTE_HOST_RUNTIME_IMPORTS = new Map<string, string>([
-  ['svelte', 'plugin://host-runtime/svelte/index.js'],
-  ['svelte/animate', 'plugin://host-runtime/svelte/animate.js'],
-  ['svelte/attachments', 'plugin://host-runtime/svelte/attachments.js'],
-  ['svelte/easing', 'plugin://host-runtime/svelte/easing.js'],
-  ['svelte/events', 'plugin://host-runtime/svelte/events.js'],
-  ['svelte/internal', 'plugin://host-runtime/svelte/internal.js'],
-  ['svelte/internal/client', 'plugin://host-runtime/svelte/internal/client/index.js'],
-  ['svelte/internal/disclose-version', 'plugin://host-runtime/svelte/internal/disclose-version.js'],
-  ['svelte/internal/flags/async', 'plugin://host-runtime/svelte/internal/flags/async.js'],
-  ['svelte/internal/flags/legacy', 'plugin://host-runtime/svelte/internal/flags/legacy.js'],
-  ['svelte/internal/flags/tracing', 'plugin://host-runtime/svelte/internal/flags/tracing.js'],
-  ['svelte/legacy', 'plugin://host-runtime/svelte/legacy.js'],
-  ['svelte/motion', 'plugin://host-runtime/svelte/motion.js'],
-  ['svelte/reactivity', 'plugin://host-runtime/svelte/reactivity.js'],
-  ['svelte/reactivity/window', 'plugin://host-runtime/svelte/reactivity/window/index.js'],
-  ['svelte/store', 'plugin://host-runtime/svelte/store.js'],
-  ['svelte/transition', 'plugin://host-runtime/svelte/transition.js'],
-])
-
 
 export interface PluginProtocolDeps {
   workspaceRoot: string
@@ -168,17 +148,6 @@ function packagedAssetResultResponse(asset: PluginAssetReadResult): Response {
     : asset === 'not-found'
       ? notFoundResponse()
       : okResponse(mimeTypeForPath(asset.filePath), asset.content)
-}
-
-function svelteHostRuntimeImportUrl(specifier: string): string | null {
-  const mapped = SVELTE_HOST_RUNTIME_IMPORTS.get(specifier)
-  if (mapped) return mapped
-
-  if (specifier.startsWith('svelte/internal/flags/')) {
-    return `plugin://host-runtime/${specifier}.js`
-  }
-
-  return null
 }
 
 async function rewriteSvelteRuntimeImports(code: string): Promise<string> {
