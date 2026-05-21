@@ -255,9 +255,12 @@ describe('runtime contribution registry', () => {
   })
 
   it('exposes typed core API wrappers through the configured host bridge', async () => {
+    const createdTask = { id: 'T-2', initial_prompt: 'New prompt', prompt: null, summary: null, status: 'backlog' as const, agent: null, permission_mode: null, depends_on: ['T-1'], project_id: 'P-1', created_at: 3, updated_at: 3 }
     const host = {
       listProjects: vi.fn(async () => [{ id: 'P-1', name: 'OpenForge', path: '/repo', created_at: 1, updated_at: 2 }]),
       listTasks: vi.fn(async () => [{ id: 'T-1', initial_prompt: 'Prompt', prompt: null, summary: null, status: 'doing' as const, agent: null, permission_mode: null, depends_on: [], project_id: 'P-1', created_at: 1, updated_at: 2 }]),
+      createTask: vi.fn(async () => createdTask),
+      startTaskImplementation: vi.fn(async () => ({ taskId: 'T-2', workspacePath: '/repo/.worktrees/T-2', sessionId: 'S-1' })),
       readFile: vi.fn(async () => ({ type: 'text' as const, content: 'hello', mimeType: null, size: 5 })),
       openUrl: vi.fn(async () => undefined),
       getConfig: vi.fn(async () => 'dark'),
@@ -271,6 +274,15 @@ describe('runtime contribution registry', () => {
 
     await expect(api.projects.list()).resolves.toHaveLength(1)
     await expect(api.tasks.list({ projectId: 'P-1' })).resolves.toHaveLength(1)
+    await expect(api.tasks.create({
+      initialPrompt: 'New prompt',
+      projectId: 'P-1',
+      dependsOn: ['T-1'],
+      labelNames: ['scheduled'],
+    })).resolves.toEqual(createdTask)
+    await expect(api.tasks.startImplementation({
+      taskId: 'T-2',
+    })).resolves.toEqual({ taskId: 'T-2', workspacePath: '/repo/.worktrees/T-2', sessionId: 'S-1' })
     await expect(api.fs.readFile({ projectId: 'P-1', path: 'README.md' })).resolves.toEqual({ type: 'text', content: 'hello', mimeType: null, size: 5 })
     await expect(api.shell.spawn({ taskId: 'T-1', cwd: '/repo', cols: 80, rows: 24, terminalIndex: 1 })).resolves.toBe(42)
     await api.system.openUrl('https://example.com')
@@ -279,6 +291,15 @@ describe('runtime contribution registry', () => {
     await expect(api.attention.listProjects()).resolves.toHaveLength(1)
     await api.notifications.notify({ title: 'Sync complete', body: '1 PR updated' })
 
+    expect(host.createTask).toHaveBeenCalledWith({
+      initialPrompt: 'New prompt',
+      projectId: 'P-1',
+      dependsOn: ['T-1'],
+      labelNames: ['scheduled'],
+    })
+    expect(host.startTaskImplementation).toHaveBeenCalledWith({
+      taskId: 'T-2',
+    })
     expect(host.readFile).toHaveBeenCalledWith({ projectId: 'P-1', path: 'README.md' })
     expect(host.openUrl).toHaveBeenCalledWith('https://example.com')
     expect(host.setProjectConfig).toHaveBeenCalledWith('P-1', 'repo', 'openforge')

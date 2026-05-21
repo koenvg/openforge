@@ -98,6 +98,9 @@ fn start_implementation_routes_provider_start_through_provider_module() {
 
     assert!(source.contains("Provider::from_name"));
     assert!(source.contains(".start("));
+    assert!(source.contains("task.agent.as_deref()"));
+    assert!(source.contains("task.permission_mode.as_deref()"));
+    assert!(!source.contains("handle_app_resume_implementation_command"));
     assert!(!source.contains("spawn_opencode_run_pty"));
     assert!(!source.contains("spawn_claude_pty"));
     assert!(!source.contains("spawn_pi_pty"));
@@ -117,6 +120,76 @@ async fn start_implementation_reports_missing_task() {
 
     assert_eq!(err.0, StatusCode::NOT_FOUND);
     assert!(err.1.contains("Task not found"));
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn start_implementation_blocks_active_agent_session() {
+    let (state, path) = test_state("app_invoke_start_blocks_active_session");
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let project = db
+            .create_project("Active Session Project", "/tmp/openforge-active-session")
+            .expect("create project");
+        let task = db
+            .create_task("Already running", "doing", Some(&project.id), None, None)
+            .expect("create task");
+        db.create_agent_session(
+            "session-active",
+            &task.id,
+            None,
+            "implementing",
+            "running",
+            "pi",
+        )
+        .expect("create session");
+        task.id
+    };
+
+    let err = invoke(
+        &state,
+        "start_implementation",
+        json!({ "taskId": task_id, "repoPath": "/tmp" }),
+    )
+    .await
+    .expect_err("active session should block duplicate start");
+
+    assert_eq!(err.0, StatusCode::CONFLICT);
+    assert!(err.1.contains("active agent session"));
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn start_implementation_blocks_unmet_dependencies() {
+    let (state, path) = test_state("app_invoke_start_blocks_dependencies");
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let project = db
+            .create_project("Dependency Project", "/tmp/openforge-dependencies")
+            .expect("create project");
+        let prerequisite = db
+            .create_task("Prerequisite", "backlog", Some(&project.id), None, None)
+            .expect("create prerequisite");
+        let task = db
+            .create_task("Dependent", "backlog", Some(&project.id), None, None)
+            .expect("create dependent");
+        db.set_task_dependencies(&task.id, &[prerequisite.id])
+            .expect("set dependency");
+        task.id
+    };
+
+    let err = invoke(
+        &state,
+        "start_implementation",
+        json!({ "taskId": task_id, "repoPath": "/tmp" }),
+    )
+    .await
+    .expect_err("unmet dependency should block start");
+
+    assert_eq!(err.0, StatusCode::CONFLICT);
+    assert!(err.1.contains("not done"));
 
     let _ = std::fs::remove_file(path);
 }

@@ -89,10 +89,16 @@ describe('plugin SDK testing utilities', () => {
 
     await api.system.openUrl('https://example.com')
     await api.notifications.notify({ title: 'Ready' })
+    const task = await api.tasks.create({ initialPrompt: 'Scheduled prompt', projectId: 'P-1', labelNames: ['scheduled'] })
+    const run = await api.tasks.startImplementation({ taskId: task.id })
     await frontendApi.storage.global.set('flag', true)
 
+    expect(task).toMatchObject({ initial_prompt: 'Scheduled prompt', project_id: 'P-1', status: 'backlog', agent: null, permission_mode: null })
+    expect(run).toMatchObject({ taskId: task.id, workspacePath: '/mock-workspace', sessionId: 'mock-session' })
     expect(api.__testing.calls.openUrl).toEqual(['https://example.com'])
     expect(api.__testing.calls.notify).toEqual([{ title: 'Ready' }])
+    expect(api.__testing.calls.taskCreations).toEqual([{ initialPrompt: 'Scheduled prompt', projectId: 'P-1', labelNames: ['scheduled'] }])
+    expect(api.__testing.calls.taskImplementationStarts).toEqual([{ taskId: task.id }])
     await expect(frontendApi.storage.global.get('flag')).resolves.toBe(true)
     expect(backendApi.context.getSnapshot()).toEqual({ pluginId: 'demo', projectId: null })
   })

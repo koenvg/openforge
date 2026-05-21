@@ -209,6 +209,7 @@ describe("ipc spawnShellPty", () => {
 		expect(ipcModule).not.toHaveProperty("dismissAllAgentReviewComments");
 		expect(ipcModule).toHaveProperty("getAgentReviewComments");
 		expect(ipcModule).toHaveProperty("updateAgentReviewCommentStatus");
+		expect(ipcModule).not.toHaveProperty("resumeImplementation");
 	});
 
 	it("sends registerBuiltinPlugin metadata as a single trusted builtin command argument", async () => {

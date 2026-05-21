@@ -21,14 +21,17 @@ import type {
   BoardStatus,
   CommandDescriptor,
   CommandShortcutMetadata,
+  CreateTaskRequest,
   FileContent,
   FileEntry,
+  ImplementationRun,
   JsonSchema,
   OpenForgeContextSnapshot,
   OpenForgePackageMetadata,
   PluginStorage,
   Project,
   ProjectAttention,
+  StartTaskImplementationRequest,
   SubscriptionSink,
   Task,
   TaskWorkspaceInfo,
@@ -45,8 +48,10 @@ export type RuntimeHostBridge = {
   getProject?(projectId: string): Promise<Project | null>
   listTasks?(request?: { projectId?: string | null }): Promise<Task[]>
   getTask?(taskId: string): Promise<Task>
+  createTask?(request: CreateTaskRequest): Promise<Task>
   updateTaskSummary?(taskId: string, summary: string): Promise<void>
   updateTaskStatus?(taskId: string, status: BoardStatus): Promise<void>
+  startTaskImplementation?(request: StartTaskImplementationRequest): Promise<ImplementationRun>
   getTaskWorkspace?(taskId: string): Promise<TaskWorkspaceInfo | null>
   getLatestSession?(taskId: string): Promise<AgentSession | null>
   readDir?(request: { projectId: string; path?: string | null }): Promise<FileEntry[]>
@@ -533,8 +538,10 @@ class RuntimeContributionRegistry {
       tasks: {
         list: async (request) => this.host.listTasks ? this.host.listTasks(request) : unavailableCapability('tasks.list'),
         get: async (taskId) => this.host.getTask ? this.host.getTask(taskId) : unavailableCapability('tasks.get'),
+        create: async (request) => this.host.createTask ? this.host.createTask(request) : unavailableCapability('tasks.create'),
         updateSummary: async (taskId, summary) => this.host.updateTaskSummary ? this.host.updateTaskSummary(taskId, summary) : unavailableCapability('tasks.updateSummary'),
         updateStatus: async (taskId, status) => this.host.updateTaskStatus ? this.host.updateTaskStatus(taskId, status) : unavailableCapability('tasks.updateStatus'),
+        startImplementation: async (request) => this.host.startTaskImplementation ? this.host.startTaskImplementation(request) : unavailableCapability('tasks.startImplementation'),
         getWorkspace: async (taskId) => this.host.getTaskWorkspace ? this.host.getTaskWorkspace(taskId) : unavailableCapability('tasks.getWorkspace'),
         getLatestSession: async (taskId) => this.host.getLatestSession ? this.host.getLatestSession(taskId) : unavailableCapability('tasks.getLatestSession'),
       },
