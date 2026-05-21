@@ -1,7 +1,7 @@
 import { createInterface } from 'node:readline'
 import { pathToFileURL } from 'node:url'
 import { validateSchemaValue } from '@openforge/plugin-runtime/commandValidation'
-import type { CommandDescriptor, CommandRegistration, OpenForgePackageMetadata, PluginStorage, SubscriptionSink } from '@openforge/plugin-sdk'
+import type { CommandDescriptor, CommandRegistration, FileContent, FileEntry, JsonValue, OpenForgePackageMetadata, PluginStorage, Project, ProjectAttention, SubscriptionSink } from '@openforge/plugin-sdk'
 import type { BackendMethodRegistration, BackendOpenForgeAPI, BackendPlugin, BackendPluginContext, BackgroundServiceRegistration, Disposable, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/backend'
 
 type JsonRpcId = number | null | undefined
@@ -698,8 +698,12 @@ export class PluginHostRuntime {
       projectId: state.projectId,
     }
     const storage = state.storage
-    const config = createMemoryStorageScope()
-    const projectConfig = createMemoryStorageScope()
+    const hostCallback = async <T>(method: string, params: Record<string, unknown> = {}): Promise<T> => {
+      if (!this.hostCallbacks) {
+        throw new Error(`Host callback unavailable for ${method}`)
+      }
+      return await this.hostCallbacks({ method, params }) as T
+    }
 
     return {
       commands: {
@@ -719,24 +723,40 @@ export class PluginHostRuntime {
         getSnapshot: () => ({ ...contextSnapshot }),
       },
       tasks: {},
-      projects: {},
+      projects: {
+        list: async () => await hostCallback<Project[]>('openforge.projects.list'),
+        get: async (projectId) => await hostCallback<Project | null>('openforge.projects.get', { projectId }),
+      },
       fs: {
-        readFile: async () => ({
-          type: 'text',
-          content: '',
-          mimeType: null,
-          size: 0,
-        }),
-        writeFile: async () => undefined,
+        readDir: async (request) => await hostCallback<FileEntry[]>('openforge.fs.readDir', request as unknown as Record<string, unknown>),
+        readFile: async (request) => await hostCallback<FileContent>('openforge.fs.readFile', request as unknown as Record<string, unknown>),
+        writeFile: async (request) => { await hostCallback<void>('openforge.fs.writeFile', request as unknown as Record<string, unknown>) },
+        searchFiles: async (request) => await hostCallback<string[]>('openforge.fs.searchFiles', request as unknown as Record<string, unknown>),
       },
-      shell: {},
-      notifications: {},
-      attention: {},
+      shell: {
+        spawn: async (request) => await hostCallback<number>('openforge.shell.spawn', request as unknown as Record<string, unknown>),
+        write: async (request) => { await hostCallback<void>('openforge.shell.write', request as unknown as Record<string, unknown>) },
+        resize: async (request) => { await hostCallback<void>('openforge.shell.resize', request as unknown as Record<string, unknown>) },
+        kill: async (request) => { await hostCallback<void>('openforge.shell.kill', request as unknown as Record<string, unknown>) },
+        getBuffer: async (request) => await hostCallback<string | null>('openforge.shell.getBuffer', request as unknown as Record<string, unknown>),
+      },
+      notifications: {
+        notify: async (request) => { await hostCallback<void>('openforge.notifications.notify', request as unknown as Record<string, unknown>) },
+      },
+      attention: {
+        listProjects: async () => await hostCallback<ProjectAttention[]>('openforge.attention.listProjects'),
+      },
       system: {
-        openUrl: async () => undefined,
+        openUrl: async (url) => { await hostCallback<void>('openforge.system.openUrl', { url }) },
       },
-      config,
-      projectConfig,
+      config: {
+        get: async (key, projectId) => await hostCallback<JsonValue | null>('openforge.config.get', { key, projectId: projectId ?? null }),
+        set: async (key, value, projectId) => { await hostCallback<void>('openforge.config.set', { key, value, projectId: projectId ?? null }) },
+      },
+      projectConfig: {
+        get: async (key, projectId = state.projectId ?? null) => await hostCallback<JsonValue | null>('openforge.projectConfig.get', { key, projectId }),
+        set: async (key, value, projectId = state.projectId ?? null) => { await hostCallback<void>('openforge.projectConfig.set', { key, value, projectId }) },
+      },
       backend: {
         registerMethod: (method, registration) => this.registerBackendMethod(state, method, registration),
       },

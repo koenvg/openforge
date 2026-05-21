@@ -608,7 +608,10 @@ impl PluginHost {
         session_id: u64,
         process_token: u64,
     ) {
-        let response = match self.handle_host_callback(&request.method, &request.params) {
+        let response = match self
+            .handle_host_callback(&request.method, &request.params)
+            .await
+        {
             Ok(result) => crate::plugin_rpc::format_success_response(request.id, result),
             Err(error) => crate::plugin_rpc::format_error_response(request.id, -32603, &error),
         };
@@ -646,11 +649,31 @@ impl PluginHost {
         }
     }
 
-    fn handle_host_callback(&self, method: &str, params: &Value) -> Result<Value, String> {
+    async fn handle_host_callback(&self, method: &str, params: &Value) -> Result<Value, String> {
         match method {
             "openforge.storage.get" => self.get_plugin_storage_for_host(params),
             "openforge.storage.set" => self.set_plugin_storage_for_host(params),
             "openforge.storage.delete" => self.delete_plugin_storage_for_host(params),
+            "openforge.projects.list" => self.list_projects_for_host(),
+            "openforge.projects.get" => self.get_project_for_host(params),
+            "openforge.fs.readDir" => self.read_project_dir_for_host(params).await,
+            "openforge.fs.readFile" => self.read_project_file_for_host(params).await,
+            "openforge.fs.searchFiles" => self.search_project_files_for_host(params),
+            "openforge.fs.writeFile" => self.write_project_file_for_host(params).await,
+            "openforge.shell.spawn" => self.spawn_shell_for_host(params).await,
+            "openforge.shell.write" => self.write_shell_for_host(params).await,
+            "openforge.shell.resize" => self.resize_shell_for_host(params).await,
+            "openforge.shell.kill" => self.kill_shell_for_host(params).await,
+            "openforge.shell.getBuffer" => self.get_shell_buffer_for_host(params).await,
+            "openforge.notifications.notify" => {
+                self.emit_host_app_event("openforge.notification", params)
+            }
+            "openforge.attention.listProjects" => self.list_project_attention_for_host(),
+            "openforge.system.openUrl" => self.emit_host_app_event("openforge.open-url", params),
+            "openforge.config.get" => self.get_config_for_host(params),
+            "openforge.config.set" => self.set_config_for_host(params),
+            "openforge.projectConfig.get" => self.get_project_config_for_host(params),
+            "openforge.projectConfig.set" => self.set_project_config_for_host(params),
             _ => Err(format!("unsupported plugin host callback method: {method}")),
         }
     }
@@ -709,6 +732,306 @@ impl PluginHost {
         let db = crate::db::acquire_db(db_state.inner().as_ref());
         db.delete_plugin_storage(&plugin_id, &scope, scope_id.as_deref(), &key)
             .map_err(|error| format!("failed to delete plugin storage: {error}"))?;
+        Ok(Value::Null)
+    }
+
+    fn list_projects_for_host(&self) -> Result<Value, String> {
+        let db_state = self
+            .app_handle
+            .try_state::<Arc<Mutex<crate::db::Database>>>()
+            .ok_or_else(|| "plugin host database state is not available".to_string())?;
+        let db = crate::db::acquire_db(db_state.inner().as_ref());
+        serde_json::to_value(
+            db.get_all_projects()
+                .map_err(|error| format!("failed to list projects: {error}"))?,
+        )
+        .map_err(|error| format!("failed to serialize projects: {error}"))
+    }
+
+    fn get_project_for_host(&self, params: &Value) -> Result<Value, String> {
+        let project_id = required_param_string(params, "projectId")?;
+        let db_state = self
+            .app_handle
+            .try_state::<Arc<Mutex<crate::db::Database>>>()
+            .ok_or_else(|| "plugin host database state is not available".to_string())?;
+        let db = crate::db::acquire_db(db_state.inner().as_ref());
+        serde_json::to_value(
+            db.get_project(&project_id)
+                .map_err(|error| format!("failed to get project: {error}"))?,
+        )
+        .map_err(|error| format!("failed to serialize project: {error}"))
+    }
+
+    async fn read_project_dir_for_host(&self, params: &Value) -> Result<Value, String> {
+        let project_id = required_param_string(params, "projectId")?;
+        let path = optional_param_string(params, "path")?;
+        let project_root = self.project_root_for_host(&project_id)?;
+        let dir = resolve_host_project_existing_path(&project_root, path.as_deref())?;
+        let mut read_dir = tokio::fs::read_dir(&dir)
+            .await
+            .map_err(|error| format!("failed to read directory: {error}"))?;
+        let mut entries = Vec::new();
+        while let Some(entry) = read_dir
+            .next_entry()
+            .await
+            .map_err(|error| format!("failed to read directory entry: {error}"))?
+        {
+            let metadata = match entry.metadata().await {
+                Ok(metadata) => metadata,
+                Err(_) => continue,
+            };
+            let name = entry.file_name().to_string_lossy().to_string();
+            let full_path = entry.path();
+            let relative_path = full_path
+                .strip_prefix(&project_root)
+                .map(|path| path.to_string_lossy().to_string())
+                .unwrap_or_else(|_| name.clone());
+            let is_dir = metadata.is_dir();
+            let modified_at = metadata.modified().ok().and_then(|time| {
+                time.duration_since(std::time::UNIX_EPOCH)
+                    .ok()
+                    .map(|duration| duration.as_millis() as u64)
+            });
+            entries.push(json!({
+                "name": name,
+                "path": relative_path,
+                "isDir": is_dir,
+                "size": if is_dir { Value::Null } else { json!(metadata.len()) },
+                "modifiedAt": modified_at,
+            }));
+        }
+        entries.sort_by(|left, right| {
+            let left_dir = left["isDir"].as_bool().unwrap_or(false);
+            let right_dir = right["isDir"].as_bool().unwrap_or(false);
+            right_dir
+                .cmp(&left_dir)
+                .then_with(|| left["name"].as_str().cmp(&right["name"].as_str()))
+        });
+        Ok(Value::Array(entries))
+    }
+
+    async fn read_project_file_for_host(&self, params: &Value) -> Result<Value, String> {
+        let project_id = required_param_string(params, "projectId")?;
+        let path = required_param_string(params, "path")?;
+        let project_root = self.project_root_for_host(&project_id)?;
+        let full_path = resolve_host_project_existing_path(&project_root, Some(&path))?;
+        let metadata = tokio::fs::metadata(&full_path)
+            .await
+            .map_err(|error| format!("failed to read file metadata: {error}"))?;
+        if metadata.is_dir() {
+            return Err("Path is a directory, not a file".to_string());
+        }
+        let bytes = tokio::fs::read(&full_path)
+            .await
+            .map_err(|error| format!("failed to read file: {error}"))?;
+        let size = metadata.len();
+        match String::from_utf8(bytes) {
+            Ok(content) => Ok(
+                json!({ "type": "text", "content": content, "mimeType": Value::Null, "size": size }),
+            ),
+            Err(_) => Ok(
+                json!({ "type": "binary", "content": "", "mimeType": Value::Null, "size": size }),
+            ),
+        }
+    }
+
+    fn search_project_files_for_host(&self, params: &Value) -> Result<Value, String> {
+        let project_id = required_param_string(params, "projectId")?;
+        let query = required_param_string(params, "query")?;
+        let limit = optional_param_usize(params, "limit")?.unwrap_or(50);
+        let project_root = self.project_root_for_host(&project_id)?;
+        serde_json::to_value(crate::command_discovery::search_project_files(
+            &project_root.to_string_lossy(),
+            &query,
+            limit,
+        ))
+        .map_err(|error| format!("failed to serialize file search results: {error}"))
+    }
+
+    async fn write_project_file_for_host(&self, params: &Value) -> Result<Value, String> {
+        let project_id = required_param_string(params, "projectId")?;
+        let path = required_param_string(params, "path")?;
+        let content = required_param_string(params, "content")?;
+        let project_root = self.project_root_for_host(&project_id)?;
+        let target = resolve_host_project_write_path(&project_root, &path)?;
+        if let Some(parent) = target.parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|error| format!("failed to create parent directory: {error}"))?;
+        }
+        tokio::fs::write(target, content)
+            .await
+            .map_err(|error| format!("failed to write project file: {error}"))?;
+        Ok(Value::Null)
+    }
+
+    fn project_root_for_host(&self, project_id: &str) -> Result<PathBuf, String> {
+        let db_state = self
+            .app_handle
+            .try_state::<Arc<Mutex<crate::db::Database>>>()
+            .ok_or_else(|| "plugin host database state is not available".to_string())?;
+        let db = crate::db::acquire_db(db_state.inner().as_ref());
+        let project = db
+            .get_project(project_id)
+            .map_err(|error| format!("failed to get project root: {error}"))?
+            .ok_or_else(|| format!("Project not found: {project_id}"))?;
+        Ok(PathBuf::from(project.path))
+    }
+
+    fn pty_manager_for_host(&self) -> Result<crate::pty_manager::PtyManager, String> {
+        self.app_handle
+            .try_state::<crate::pty_manager::PtyManager>()
+            .map(|state| state.inner().clone())
+            .ok_or_else(|| "PTY manager is not available".to_string())
+    }
+
+    async fn spawn_shell_for_host(&self, params: &Value) -> Result<Value, String> {
+        let task_id = required_param_string(params, "taskId")?;
+        let cwd = required_param_string(params, "cwd")?;
+        let cols = required_param_u16(params, "cols")?;
+        let rows = required_param_u16(params, "rows")?;
+        let terminal_index = Some(u32::from(required_param_u16(params, "terminalIndex")?));
+        let pty_manager = self.pty_manager_for_host()?;
+        serde_json::to_value(
+            pty_manager
+                .spawn_shell_pty(
+                    &task_id,
+                    std::path::Path::new(&cwd),
+                    cols,
+                    rows,
+                    terminal_index,
+                    Some(self.app_handle.clone()),
+                    self.app_event_tx.clone(),
+                )
+                .await
+                .map_err(|error| format!("failed to spawn shell PTY: {error}"))?,
+        )
+        .map_err(|error| format!("failed to serialize shell PTY id: {error}"))
+    }
+
+    async fn write_shell_for_host(&self, params: &Value) -> Result<Value, String> {
+        let task_id = required_param_string(params, "taskId")?;
+        let data = params
+            .get("data")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "plugin host callback missing string param: data".to_string())?;
+        self.pty_manager_for_host()?
+            .write_pty(&task_id, data.as_bytes())
+            .await
+            .map_err(|error| format!("failed to write to PTY: {error}"))?;
+        Ok(Value::Null)
+    }
+
+    async fn resize_shell_for_host(&self, params: &Value) -> Result<Value, String> {
+        let task_id = required_param_string(params, "taskId")?;
+        let cols = required_param_u16(params, "cols")?;
+        let rows = required_param_u16(params, "rows")?;
+        self.pty_manager_for_host()?
+            .resize_pty(&task_id, cols, rows)
+            .await
+            .map_err(|error| format!("failed to resize PTY: {error}"))?;
+        Ok(Value::Null)
+    }
+
+    async fn kill_shell_for_host(&self, params: &Value) -> Result<Value, String> {
+        let task_id = required_param_string(params, "taskId")?;
+        self.pty_manager_for_host()?
+            .kill_pty(&task_id)
+            .await
+            .map_err(|error| format!("failed to kill PTY: {error}"))?;
+        Ok(Value::Null)
+    }
+
+    async fn get_shell_buffer_for_host(&self, params: &Value) -> Result<Value, String> {
+        let task_id = required_param_string(params, "taskId")?;
+        serde_json::to_value(self.pty_manager_for_host()?.get_pty_buffer(&task_id).await)
+            .map_err(|error| format!("failed to serialize PTY buffer: {error}"))
+    }
+
+    fn list_project_attention_for_host(&self) -> Result<Value, String> {
+        let db_state = self
+            .app_handle
+            .try_state::<Arc<Mutex<crate::db::Database>>>()
+            .ok_or_else(|| "plugin host database state is not available".to_string())?;
+        let db = crate::db::acquire_db(db_state.inner().as_ref());
+        serde_json::to_value(
+            db.get_project_attention_summaries()
+                .map_err(|error| format!("failed to get project attention: {error}"))?,
+        )
+        .map_err(|error| format!("failed to serialize project attention: {error}"))
+    }
+
+    fn get_config_for_host(&self, params: &Value) -> Result<Value, String> {
+        let key = required_param_string(params, "key")?;
+        let db_state = self
+            .app_handle
+            .try_state::<Arc<Mutex<crate::db::Database>>>()
+            .ok_or_else(|| "plugin host database state is not available".to_string())?;
+        let db = crate::db::acquire_db(db_state.inner().as_ref());
+        let value = if crate::secure_store::is_secret(&key) {
+            crate::secure_store::get_secret(&key)
+                .map_err(|error| format!("failed to get secret config: {error}"))?
+                .or_else(|| db.get_config(&key).ok().flatten())
+        } else {
+            db.get_config(&key)
+                .map_err(|error| format!("failed to get config: {error}"))?
+        };
+        serde_json::to_value(value).map_err(|error| format!("failed to serialize config: {error}"))
+    }
+
+    fn set_config_for_host(&self, params: &Value) -> Result<Value, String> {
+        let key = required_param_string(params, "key")?;
+        let value = host_config_value(params);
+        let db_state = self
+            .app_handle
+            .try_state::<Arc<Mutex<crate::db::Database>>>()
+            .ok_or_else(|| "plugin host database state is not available".to_string())?;
+        let db = crate::db::acquire_db(db_state.inner().as_ref());
+        if crate::secure_store::is_secret(&key) {
+            crate::secure_store::set_secret(&key, &value)
+                .map_err(|error| format!("failed to set secret config: {error}"))?;
+            db.set_config(&key, "")
+                .map_err(|error| format!("failed to clear persisted secret config: {error}"))?;
+        } else {
+            db.set_config(&key, &value)
+                .map_err(|error| format!("failed to set config: {error}"))?;
+        }
+        Ok(Value::Null)
+    }
+
+    fn get_project_config_for_host(&self, params: &Value) -> Result<Value, String> {
+        let project_id = required_param_string(params, "projectId")?;
+        let key = required_param_string(params, "key")?;
+        let db_state = self
+            .app_handle
+            .try_state::<Arc<Mutex<crate::db::Database>>>()
+            .ok_or_else(|| "plugin host database state is not available".to_string())?;
+        let db = crate::db::acquire_db(db_state.inner().as_ref());
+        serde_json::to_value(
+            db.get_project_config(&project_id, &key)
+                .map_err(|error| format!("failed to get project config: {error}"))?,
+        )
+        .map_err(|error| format!("failed to serialize project config: {error}"))
+    }
+
+    fn set_project_config_for_host(&self, params: &Value) -> Result<Value, String> {
+        let project_id = required_param_string(params, "projectId")?;
+        let key = required_param_string(params, "key")?;
+        let value = host_config_value(params);
+        let db_state = self
+            .app_handle
+            .try_state::<Arc<Mutex<crate::db::Database>>>()
+            .ok_or_else(|| "plugin host database state is not available".to_string())?;
+        let db = crate::db::acquire_db(db_state.inner().as_ref());
+        db.set_project_config(&project_id, &key, &value)
+            .map_err(|error| format!("failed to set project config: {error}"))?;
+        Ok(Value::Null)
+    }
+
+    fn emit_host_app_event(&self, event_name: &str, params: &Value) -> Result<Value, String> {
+        let payload = params.clone();
+        publish_app_event(&self.app_event_tx, event_name, &payload);
+        self.app_handle.emit(event_name, payload)?;
         Ok(Value::Null)
     }
 
@@ -975,6 +1298,84 @@ fn optional_param_string(params: &Value, key: &str) -> Result<Option<String>, St
     }
 }
 
+fn required_param_u16(params: &Value, key: &str) -> Result<u16, String> {
+    let value = params
+        .get(key)
+        .and_then(Value::as_u64)
+        .ok_or_else(|| format!("plugin host callback missing integer param: {key}"))?;
+    u16::try_from(value)
+        .map_err(|_| format!("plugin host callback integer param out of range: {key}"))
+}
+
+fn optional_param_usize(params: &Value, key: &str) -> Result<Option<usize>, String> {
+    match params.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Number(number)) => {
+            let value = number.as_u64().ok_or_else(|| {
+                format!("plugin host callback param must be a positive integer: {key}")
+            })?;
+            usize::try_from(value)
+                .map(Some)
+                .map_err(|_| format!("plugin host callback integer param out of range: {key}"))
+        }
+        Some(_) => Err(format!(
+            "plugin host callback param must be a positive integer or null: {key}"
+        )),
+    }
+}
+
+fn host_config_value(params: &Value) -> String {
+    match params.get("value") {
+        Some(Value::String(value)) => value.clone(),
+        Some(value) => value.to_string(),
+        None => String::new(),
+    }
+}
+
+fn resolve_host_project_existing_path(
+    project_root: &std::path::Path,
+    sub_path: Option<&str>,
+) -> Result<PathBuf, String> {
+    let resolved = match sub_path {
+        None | Some("") => project_root.to_path_buf(),
+        Some(path) => project_root.join(path),
+    };
+    let canonical_root = std::fs::canonicalize(project_root)
+        .map_err(|error| format!("Failed to canonicalize project root: {error}"))?;
+    let canonical_resolved = std::fs::canonicalize(&resolved)
+        .map_err(|error| format!("Failed to canonicalize path: {error}"))?;
+    if !canonical_resolved.starts_with(&canonical_root) {
+        return Err("Path traversal detected: access denied".to_string());
+    }
+    Ok(canonical_resolved)
+}
+
+fn resolve_host_project_write_path(
+    project_root: &std::path::Path,
+    sub_path: &str,
+) -> Result<PathBuf, String> {
+    if sub_path.trim().is_empty() {
+        return Err("plugin host callback missing string param: path".to_string());
+    }
+    let requested_path = std::path::Path::new(sub_path);
+    if requested_path.is_absolute() {
+        return Err("project file path must be relative".to_string());
+    }
+    if requested_path
+        .components()
+        .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        return Err("Path traversal detected: access denied".to_string());
+    }
+    let canonical_root = std::fs::canonicalize(project_root)
+        .map_err(|error| format!("Failed to canonicalize project root: {error}"))?;
+    let target = canonical_root.join(requested_path);
+    if !target.starts_with(&canonical_root) {
+        return Err("Path traversal detected: access denied".to_string());
+    }
+    Ok(target)
+}
+
 fn resolve_bun_binary() -> Result<PathBuf, String> {
     if let Ok(path) = std::env::var(BUN_PATH_ENV) {
         let trimmed = path.trim();
@@ -1178,8 +1579,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn host_storage_callback_round_trips_through_plugin_storage_table() {
+    #[tokio::test]
+    async fn host_storage_callback_round_trips_through_plugin_storage_table() {
         let (database, _path) =
             crate::db::test_helpers::make_test_db("plugin_host_storage_callback");
         for plugin_id in ["backend-plugin", "other-plugin"] {
@@ -1217,6 +1618,7 @@ mod tests {
                 "value": { "owner": "acme" }
             }),
         )
+        .await
         .expect("set storage callback");
 
         let value = host
@@ -1229,6 +1631,7 @@ mod tests {
                     "key": "repo"
                 }),
             )
+            .await
             .expect("get storage callback");
         assert_eq!(value, json!({ "owner": "acme" }));
 
@@ -1242,6 +1645,7 @@ mod tests {
                     "key": "repo"
                 }),
             )
+            .await
             .expect("get isolated storage callback");
         assert_eq!(isolated, Value::Null);
 
@@ -1254,6 +1658,7 @@ mod tests {
                 "key": "repo"
             }),
         )
+        .await
         .expect("delete storage callback");
 
         let deleted = host
@@ -1266,8 +1671,150 @@ mod tests {
                     "key": "repo"
                 }),
             )
+            .await
             .expect("get deleted storage callback");
         assert_eq!(deleted, Value::Null);
+    }
+
+    #[tokio::test]
+    async fn host_core_callbacks_route_to_app_services() {
+        let (database, _path) = crate::db::test_helpers::make_test_db("plugin_host_core_callbacks");
+        let project_dir = tempfile::tempdir().expect("project dir");
+        let src_dir = project_dir.path().join("src");
+        std::fs::create_dir(&src_dir).expect("src dir");
+        std::fs::write(project_dir.path().join("README.md"), "# Plugin host")
+            .expect("readme fixture");
+        std::fs::write(src_dir.join("main.ts"), "export const plugin = true")
+            .expect("source fixture");
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(project_dir.path())
+            .output()
+            .expect("git init fixture");
+        std::process::Command::new("git")
+            .args(["add", "README.md", "src/main.ts"])
+            .current_dir(project_dir.path())
+            .output()
+            .expect("git add fixture");
+        let project = database
+            .create_project("Plugin Host", &project_dir.path().to_string_lossy())
+            .expect("project fixture");
+        database
+            .set_config("theme", "light")
+            .expect("config fixture");
+        database
+            .set_project_config(&project.id, "github_default_repo", "acme/old")
+            .expect("project config fixture");
+
+        let app = AppHandle::new();
+        app.manage(Arc::new(Mutex::new(database)));
+        app.manage(crate::pty_manager::PtyManager::new());
+        let host = PluginHost::new(app);
+
+        let projects = host
+            .handle_host_callback("openforge.projects.list", &Value::Null)
+            .await
+            .expect("list projects callback");
+        assert_eq!(projects.as_array().expect("projects").len(), 1);
+
+        let project_value = host
+            .handle_host_callback(
+                "openforge.projects.get",
+                &json!({ "projectId": project.id }),
+            )
+            .await
+            .expect("get project callback");
+        assert_eq!(project_value["name"], "Plugin Host");
+
+        let dir = host
+            .handle_host_callback(
+                "openforge.fs.readDir",
+                &json!({ "projectId": project.id, "path": "src" }),
+            )
+            .await
+            .expect("read dir callback");
+        assert_eq!(dir[0]["name"], "main.ts");
+
+        let file = host
+            .handle_host_callback(
+                "openforge.fs.readFile",
+                &json!({ "projectId": project.id, "path": "README.md" }),
+            )
+            .await
+            .expect("read file callback");
+        assert_eq!(file["content"], "# Plugin host");
+
+        let search = host
+            .handle_host_callback(
+                "openforge.fs.searchFiles",
+                &json!({ "projectId": project.id, "query": "main", "limit": 5 }),
+            )
+            .await
+            .expect("search callback");
+        assert_eq!(search, json!(["src/main.ts"]));
+
+        host.handle_host_callback(
+            "openforge.fs.writeFile",
+            &json!({ "projectId": project.id, "path": "generated.txt", "content": "hello" }),
+        )
+        .await
+        .expect("write file callback");
+        assert_eq!(
+            std::fs::read_to_string(project_dir.path().join("generated.txt")).expect("generated"),
+            "hello"
+        );
+
+        assert_eq!(
+            host.handle_host_callback("openforge.attention.listProjects", &Value::Null)
+                .await
+                .expect("attention callback"),
+            json!([])
+        );
+        assert_eq!(
+            host.handle_host_callback("openforge.config.get", &json!({ "key": "theme" }))
+                .await
+                .expect("config get callback"),
+            json!("light")
+        );
+        host.handle_host_callback(
+            "openforge.config.set",
+            &json!({ "key": "theme", "value": "dark" }),
+        )
+        .await
+        .expect("config set callback");
+        assert_eq!(
+            host.handle_host_callback(
+                "openforge.projectConfig.get",
+                &json!({ "projectId": project.id, "key": "github_default_repo" }),
+            )
+            .await
+            .expect("project config get callback"),
+            json!("acme/old")
+        );
+        host.handle_host_callback(
+            "openforge.projectConfig.set",
+            &json!({ "projectId": project.id, "key": "github_default_repo", "value": "acme/new" }),
+        )
+        .await
+        .expect("project config set callback");
+        assert_eq!(
+            host.handle_host_callback(
+                "openforge.system.openUrl",
+                &json!({ "url": "https://example.com" })
+            )
+            .await
+            .expect("open url callback"),
+            Value::Null
+        );
+        assert_eq!(
+            host.handle_host_callback(
+                "openforge.notifications.notify",
+                &json!({ "title": "Done" })
+            )
+            .await
+            .expect("notification callback"),
+            Value::Null
+        );
     }
 
     #[test]

@@ -36,26 +36,94 @@ describe('plugin-host backend runtime', () => {
     expect(await runtime.getBackendState('github')).toMatchObject({ state: 'ready', ready: true })
   })
 
-  it('exposes fs.readFile as FileContent shape to backend plugins', async () => {
+  it('routes remaining backend core OpenForge APIs through durable host callbacks', async () => {
     const backendPath = await writeBackendModule(`
       export default {
         async activate(openforge, context) {
-          context.subscriptions.add(openforge.backend.registerMethod('readFile', {
+          context.subscriptions.add(openforge.backend.registerMethod('coreApis', {
             async handler() {
-              return await openforge.fs.readFile({ projectId: 'P-1', path: 'README.md' })
+              const projects = await openforge.projects.list()
+              const project = await openforge.projects.get('P-1')
+              const dir = await openforge.fs.readDir({ projectId: 'P-1', path: 'src' })
+              const file = await openforge.fs.readFile({ projectId: 'P-1', path: 'README.md' })
+              const search = await openforge.fs.searchFiles({ projectId: 'P-1', query: 'plugin', limit: 3 })
+              await openforge.fs.writeFile({ projectId: 'P-1', path: 'generated.txt', content: 'hello' })
+              const pty = await openforge.shell.spawn({ taskId: 'T-1', cwd: '/repo', cols: 80, rows: 24, terminalIndex: 2 })
+              await openforge.shell.write({ taskId: 'T-1', data: 'echo hi\\n' })
+              await openforge.shell.resize({ taskId: 'T-1', cols: 100, rows: 30 })
+              const buffer = await openforge.shell.getBuffer({ taskId: 'T-1' })
+              await openforge.shell.kill({ taskId: 'T-1' })
+              await openforge.notifications.notify({ title: 'Done', body: context.pluginId })
+              const attention = await openforge.attention.listProjects()
+              await openforge.system.openUrl('https://example.com')
+              const configBefore = await openforge.config.get('theme')
+              await openforge.config.set('theme', 'dark')
+              const projectConfigBefore = await openforge.projectConfig.get('github_default_repo', 'P-1')
+              await openforge.projectConfig.set('github_default_repo', 'acme/repo', 'P-1')
+              return { projects, project, dir, file, search, pty, buffer, attention, configBefore, projectConfigBefore }
             }
           }))
         }
       }
     `)
-    const runtime = createPluginHostRuntime()
+    const calls: Array<{ method: string; params: Record<string, unknown> }> = []
+    const hostCallbacks = async (request: { method: string; params: Record<string, unknown> }) => {
+      calls.push(request)
+      switch (request.method) {
+        case 'openforge.projects.list': return [{ id: 'P-1', name: 'Project', path: '/repo' }]
+        case 'openforge.projects.get': return { id: request.params.projectId, name: 'Project', path: '/repo' }
+        case 'openforge.fs.readDir': return [{ name: 'main.ts', path: 'src/main.ts', isDir: false, size: 12, modifiedAt: null }]
+        case 'openforge.fs.readFile': return { type: 'text', content: '# Readme', mimeType: 'text/markdown', size: 8 }
+        case 'openforge.fs.searchFiles': return ['src/plugin.ts']
+        case 'openforge.fs.writeFile': return null
+        case 'openforge.shell.spawn': return 42
+        case 'openforge.shell.write': return null
+        case 'openforge.shell.resize': return null
+        case 'openforge.shell.getBuffer': return 'hello'
+        case 'openforge.shell.kill': return null
+        case 'openforge.notifications.notify': return null
+        case 'openforge.attention.listProjects': return [{ project_id: 'P-1', needs_input: 1 }]
+        case 'openforge.system.openUrl': return null
+        case 'openforge.config.get': return 'light'
+        case 'openforge.config.set': return null
+        case 'openforge.projectConfig.get': return null
+        case 'openforge.projectConfig.set': return null
+        default: throw new Error(`unexpected host callback: ${request.method}`)
+      }
+    }
 
-    await expect(runtime.invokeBackend({ pluginId: 'reader', backendPath, command: 'readFile' })).resolves.toEqual({
-      type: 'text',
-      content: '',
-      mimeType: null,
-      size: 0,
+    await expect(createPluginHostRuntime({ hostCallbacks }).invokeBackend({ pluginId: 'core', backendPath, command: 'coreApis' })).resolves.toEqual({
+      projects: [{ id: 'P-1', name: 'Project', path: '/repo' }],
+      project: { id: 'P-1', name: 'Project', path: '/repo' },
+      dir: [{ name: 'main.ts', path: 'src/main.ts', isDir: false, size: 12, modifiedAt: null }],
+      file: { type: 'text', content: '# Readme', mimeType: 'text/markdown', size: 8 },
+      search: ['src/plugin.ts'],
+      pty: 42,
+      buffer: 'hello',
+      attention: [{ project_id: 'P-1', needs_input: 1 }],
+      configBefore: 'light',
+      projectConfigBefore: null,
     })
+    expect(calls.map(call => call.method)).toEqual([
+      'openforge.projects.list',
+      'openforge.projects.get',
+      'openforge.fs.readDir',
+      'openforge.fs.readFile',
+      'openforge.fs.searchFiles',
+      'openforge.fs.writeFile',
+      'openforge.shell.spawn',
+      'openforge.shell.write',
+      'openforge.shell.resize',
+      'openforge.shell.getBuffer',
+      'openforge.shell.kill',
+      'openforge.notifications.notify',
+      'openforge.attention.listProjects',
+      'openforge.system.openUrl',
+      'openforge.config.get',
+      'openforge.config.set',
+      'openforge.projectConfig.get',
+      'openforge.projectConfig.set',
+    ])
   })
 
   it('routes backend commands and explicit global event listeners through public integration primitives', async () => {
