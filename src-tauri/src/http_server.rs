@@ -20,6 +20,7 @@ use futures::{Stream, StreamExt};
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::HashSet,
     convert::Infallible,
     net::SocketAddr,
     path::PathBuf,
@@ -59,6 +60,43 @@ pub struct AppState {
     pub app_event_bus: Option<AppEventBus>,
     pub whisper: Option<std::sync::Arc<WhisperManager>>,
     pub sidecar_readiness: SidecarReadinessState,
+    pub start_implementation_claims: StartImplementationClaims,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct StartImplementationClaims {
+    active_task_ids: Arc<Mutex<HashSet<String>>>,
+}
+
+pub struct StartImplementationClaim {
+    task_id: String,
+    active_task_ids: Arc<Mutex<HashSet<String>>>,
+}
+
+impl StartImplementationClaims {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub(crate) fn try_claim(&self, task_id: &str) -> Option<StartImplementationClaim> {
+        let mut active_task_ids = self.active_task_ids.lock().ok()?;
+        if !active_task_ids.insert(task_id.to_string()) {
+            return None;
+        }
+
+        Some(StartImplementationClaim {
+            task_id: task_id.to_string(),
+            active_task_ids: Arc::clone(&self.active_task_ids),
+        })
+    }
+}
+
+impl Drop for StartImplementationClaim {
+    fn drop(&mut self) {
+        if let Ok(mut active_task_ids) = self.active_task_ids.lock() {
+            active_task_ids.remove(&self.task_id);
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1355,6 +1393,7 @@ async fn start_http_server_with_app_state(
         app_event_bus: Some(app_event_bus),
         whisper,
         sidecar_readiness,
+        start_implementation_claims: StartImplementationClaims::new(),
     };
 
     if is_electron_sidecar {

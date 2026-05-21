@@ -125,6 +125,42 @@ async fn start_implementation_reports_missing_task() {
 }
 
 #[tokio::test]
+async fn start_implementation_blocks_in_progress_start_claim() {
+    let (state, path) = test_state("app_invoke_start_blocks_in_progress_claim");
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let project = db
+            .create_project("Start Claim Project", "/tmp/openforge-start-claim")
+            .expect("create project");
+        db.create_task("Starting already", "backlog", Some(&project.id), None, None)
+            .expect("create task")
+            .id
+    };
+    let _claim = state
+        .start_implementation_claims
+        .try_claim(&task_id)
+        .expect("first start claim should be acquired");
+    let cloned_state = state.clone();
+    assert!(cloned_state
+        .start_implementation_claims
+        .try_claim(&task_id)
+        .is_none());
+
+    let err = invoke(
+        &state,
+        "start_implementation",
+        json!({ "taskId": task_id, "repoPath": "/tmp" }),
+    )
+    .await
+    .expect_err("in-progress start should block duplicate start");
+
+    assert_eq!(err.0, StatusCode::CONFLICT);
+    assert!(err.1.contains("start in progress"));
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn start_implementation_blocks_active_agent_session() {
     let (state, path) = test_state("app_invoke_start_blocks_active_session");
     let task_id = {

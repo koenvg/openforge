@@ -148,6 +148,15 @@ pub(super) async fn handle_app_start_implementation_command(
             "PTY manager is not available".to_string(),
         )
     })?;
+    let _start_claim = state
+        .start_implementation_claims
+        .try_claim(&task_id)
+        .ok_or_else(|| {
+            (
+                StatusCode::CONFLICT,
+                "Task already has an implementation start in progress".to_string(),
+            )
+        })?;
 
     let (
         task,
@@ -187,7 +196,10 @@ pub(super) async fn handle_app_start_implementation_command(
                     format!("Failed to get dependency task: {e}"),
                 )
             })?;
-            if !matches!(dependency.as_ref().map(|task| task.status.as_str()), Some("done")) {
+            if !matches!(
+                dependency.as_ref().map(|task| task.status.as_str()),
+                Some("done")
+            ) {
                 return Err((
                     StatusCode::CONFLICT,
                     format!("Task dependency {dependency_id} is not done"),
