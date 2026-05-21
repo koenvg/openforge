@@ -1,7 +1,10 @@
 use crate::{
     backend_runtime::AppHandle,
     github_client::GitHubClient,
-    http_server::{electron_sidecar_app_handle, AppInvokeRequest, AppState, SidecarReadinessState},
+    http_server::{
+        electron_sidecar_app_handle, AppInvokeRequest, AppState, SidecarReadinessState,
+        StartImplementationClaims,
+    },
     plugin_host::PluginHost,
     pty_manager::PtyManager,
     whisper_manager::{WhisperManager, WhisperModelSize},
@@ -26,6 +29,7 @@ pub(crate) fn test_state(name: &str) -> (AppState, std::path::PathBuf) {
                 WhisperModelSize::Small,
             ))),
             sidecar_readiness: SidecarReadinessState::new(),
+            start_implementation_claims: StartImplementationClaims::new(),
         },
         path,
     )

@@ -1,8 +1,9 @@
 import { get } from 'svelte/store'
-import type { BackendReadyState } from '@openforge/plugin-sdk'
+import type { BackendReadyState, CreateTaskRequest, ImplementationRun, StartTaskImplementationRequest } from '@openforge/plugin-sdk'
 import {
   fetchAuthoredPrs,
   fetchReviewPrs,
+  createTask,
   forceGithubSync,
   fsReadDir,
   fsReadFile,
@@ -36,6 +37,7 @@ import {
   setConfig,
   setProjectConfig,
   spawnShellPty,
+  startImplementation,
   submitPrReview,
   updateAgentReviewCommentStatus,
   updateTaskStatus,
@@ -61,6 +63,43 @@ function isAppView(value: unknown): value is AppView {
   return typeof value === 'string' && (STATIC_APP_VIEWS.has(value as AppView) || isPluginViewKey(value))
 }
 
+function createTaskFromPluginRequest(request: CreateTaskRequest) {
+  return createTask(
+    request.initialPrompt,
+    'backlog',
+    request.projectId,
+    null,
+    request.dependsOn ?? [],
+    request.labelNames ?? [],
+  )
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
+}
+
+function normalizeImplementationRun(status: Awaited<ReturnType<typeof startImplementation>>): ImplementationRun {
+  return {
+    taskId: status.task_id,
+    sessionId: status.session_id,
+    workspacePath: status.workspace_path,
+  }
+}
+
+async function startTaskImplementationFromPluginRequest(request: StartTaskImplementationRequest): Promise<ImplementationRun> {
+  const task = await getTaskDetail(request.taskId)
+  if (!task.project_id) {
+    throw new Error(`Cannot start task ${request.taskId}: task is not associated with a project`)
+  }
+
+  const project = (await getProjects()).find((candidate) => candidate.id === task.project_id)
+  if (!project) {
+    throw new Error(`Cannot start task ${request.taskId}: project ${task.project_id} not found`)
+  }
+
+  return normalizeImplementationRun(await startImplementation(request.taskId, project.path))
+}
+
 export function clearPluginRuntimeHostState(pluginId: string): void {
   pluginBackendReadyStates.delete(pluginId)
 }
@@ -78,8 +117,10 @@ export function createPluginRuntimeHost(pluginId: string) {
     getProject: async (projectId: string) => (await getProjects()).find((project) => project.id === projectId) ?? null,
     listTasks: (request?: { projectId?: string }) => request?.projectId ? getTasksForProject(request.projectId) : getAllTasks(),
     getTask: (taskId: string) => getTaskDetail(taskId),
+    createTask: (request: CreateTaskRequest) => createTaskFromPluginRequest(request),
     updateTaskSummary: (taskId: string, summary: string) => updateTaskSummary(taskId, summary),
     updateTaskStatus: (taskId: string, status: Parameters<typeof updateTaskStatus>[1]) => updateTaskStatus(taskId, status),
+    startTaskImplementation: (request: StartTaskImplementationRequest) => startTaskImplementationFromPluginRequest(request),
     getTaskWorkspace: (taskId: string) => getTaskWorkspace(taskId),
     getLatestSession: (taskId: string) => getLatestSession(taskId),
     readDir: (request: { projectId: string; path?: string | null }) => fsReadDir(request.projectId, request.path ?? null),
@@ -185,6 +226,22 @@ export async function invokePluginHostCommand(command: string, payload: unknown)
       const projectId = typeof commandPayload?.projectId === 'string' ? commandPayload.projectId : get(activeProjectId)
       return { projectId }
     }
+    case 'createTask': {
+      const projectId = typeof commandPayload?.projectId === 'string' ? commandPayload.projectId : null
+      if (!projectId) {
+        throw new Error('createTask requires projectId')
+      }
+      return createTask(
+        String(commandPayload?.initialPrompt ?? ''),
+        'backlog',
+        projectId,
+        null,
+        stringArray(commandPayload?.dependsOn),
+        stringArray(commandPayload?.labelNames),
+      )
+    }
+    case 'startImplementation':
+      return startTaskImplementationFromPluginRequest({ taskId: String(commandPayload?.taskId ?? '') })
     case 'navigate': {
       if (isAppView(commandPayload?.currentView)) {
         currentView.set(commandPayload.currentView)

@@ -677,6 +677,24 @@ await openforge.commands.invoke('syncNow', { projectId })
 await openforge.commands.invokeGlobal('acme.notes.syncNow', { projectId })
 ```
 
+### Task creation and implementation run examples
+
+Trusted plugins can create OpenForge tasks and start native implementation runs through the versioned `tasks` capability. This is the supported path for scheduler-style plugins; plugin code should not shell out to the OpenForge CLI or call Electron/preload APIs directly.
+
+```ts
+const task = await openforge.tasks.create({
+  initialPrompt: 'Refresh the billing export job',
+  projectId: context.projectId,
+  labelNames: ['scheduled']
+})
+
+const run = await openforge.tasks.startImplementation({
+  taskId: task.id
+})
+```
+
+`projectId` controls task ownership and is required for plugin-created tasks. Plugin-created tasks always enter the backlog; plugins may attach dependency task IDs and label names, and missing labels are created by the host. `startImplementation` starts a native OpenForge implementation run for the task and returns `{ taskId, sessionId, workspacePath }` once launch is accepted. The host resolves the task's project checkout, provider, agent, permission mode, and workspace settings from OpenForge project/task state; plugins cannot override those execution settings per call.
+
 ### Storage examples
 
 Plugin storage is JSON-only and automatically namespaced by plugin id. Use the narrowest scope that matches the state lifetime.

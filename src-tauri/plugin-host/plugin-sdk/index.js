@@ -348,6 +348,22 @@ var TestingOpenForgeRegistryFake = class {
 				get: async (taskId) => {
 					throw new Error(`Mock task not found: ${taskId}`);
 				},
+				create: async (request) => {
+					this.calls.taskCreations.push(request);
+					return {
+						id: `mock-task-${this.calls.taskCreations.length}`,
+						initial_prompt: request.initialPrompt,
+						status: "backlog",
+						prompt: null,
+						summary: null,
+						agent: null,
+						permission_mode: null,
+						depends_on: request.dependsOn ?? [],
+						project_id: request.projectId,
+						created_at: 0,
+						updated_at: 0
+					};
+				},
 				updateSummary: async (taskId, summary) => {
 					this.calls.taskSummaryUpdates.push({
 						taskId,
@@ -359,6 +375,14 @@ var TestingOpenForgeRegistryFake = class {
 						taskId,
 						status
 					});
+				},
+				startImplementation: async (request) => {
+					this.calls.taskImplementationStarts.push(request);
+					return {
+						taskId: request.taskId,
+						workspacePath: "/mock-workspace",
+						sessionId: "mock-session"
+					};
 				},
 				getWorkspace: async () => null,
 				getLatestSession: async () => null
@@ -699,6 +723,8 @@ function createTestingCalls() {
 		emittedGlobalEvents: [],
 		openUrl: [],
 		notify: [],
+		taskCreations: [],
+		taskImplementationStarts: [],
 		taskSummaryUpdates: [],
 		taskStatusUpdates: [],
 		configWrites: [],

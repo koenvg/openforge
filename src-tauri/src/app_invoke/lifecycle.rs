@@ -148,6 +148,15 @@ pub(super) async fn handle_app_start_implementation_command(
             "PTY manager is not available".to_string(),
         )
     })?;
+    let _start_claim = state
+        .start_implementation_claims
+        .try_claim(&task_id)
+        .ok_or_else(|| {
+            (
+                StatusCode::CONFLICT,
+                "Task already has an implementation start in progress".to_string(),
+            )
+        })?;
 
     let (
         task,
@@ -167,6 +176,36 @@ pub(super) async fn handle_app_start_implementation_command(
                 )
             })?
             .ok_or_else(|| (StatusCode::NOT_FOUND, "Task not found".to_string()))?;
+        if let Some(active_session) = db.get_latest_session_for_ticket(&task_id).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get latest session: {e}"),
+            )
+        })? {
+            if matches!(active_session.status.as_str(), "running" | "paused") {
+                return Err((
+                    StatusCode::CONFLICT,
+                    "Task already has an active agent session".to_string(),
+                ));
+            }
+        }
+        for dependency_id in &task.depends_on {
+            let dependency = db.get_task(dependency_id).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to get dependency task: {e}"),
+                )
+            })?;
+            if !matches!(
+                dependency.as_ref().map(|task| task.status.as_str()),
+                Some("done")
+            ) {
+                return Err((
+                    StatusCode::CONFLICT,
+                    format!("Task dependency {dependency_id} is not done"),
+                ));
+            }
+        }
         let project_id = task.project_id.clone().unwrap_or_default();
         let instructions = db
             .get_project_config(&project_id, "additional_instructions")

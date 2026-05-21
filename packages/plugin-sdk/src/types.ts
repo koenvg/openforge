@@ -287,11 +287,30 @@ export interface ShellAPI {
   getBuffer(request: { taskId: string }): Promise<string | null>
 }
 
+export interface CreateTaskRequest {
+  initialPrompt: string
+  projectId: string
+  dependsOn?: string[]
+  labelNames?: string[]
+}
+
+export interface StartTaskImplementationRequest {
+  taskId: string
+}
+
+export interface ImplementationRun {
+  taskId: string
+  sessionId: string
+  workspacePath: string
+}
+
 export interface TasksAPI {
   list(request?: { projectId?: string | null }): Promise<Task[]>
   get(taskId: string): Promise<Task>
+  create(request: CreateTaskRequest): Promise<Task>
   updateSummary(taskId: string, summary: string): Promise<void>
   updateStatus(taskId: string, status: BoardStatus): Promise<void>
+  startImplementation(request: StartTaskImplementationRequest): Promise<ImplementationRun>
   getWorkspace(taskId: string): Promise<TaskWorkspaceInfo | null>
   getLatestSession(taskId: string): Promise<AgentSession | null>
 }

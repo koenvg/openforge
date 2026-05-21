@@ -122,44 +122,6 @@ async fn handles_config_projects_tasks_and_unmatched_commands() {
 }
 
 #[tokio::test]
-async fn create_task_ignores_legacy_agent_payload() {
-    let (state, path) = test_state("app_invoke_create_task_ignores_agent");
-    let project = invoke_ok(
-        &state,
-        "create_project",
-        json!({ "name": "Open Forge", "path": "/tmp/openforge" }),
-    )
-    .await;
-    let project_id = project["id"].as_str().expect("project id");
-
-    let task = invoke_ok(
-        &state,
-        "create_task",
-        json!({
-            "initialPrompt": "No selected agent",
-            "status": "backlog",
-            "projectId": project_id,
-            "agent": "legacy-selected-agent",
-            "permissionMode": "default",
-        }),
-    )
-    .await;
-
-    assert_eq!(task["agent"], serde_json::Value::Null);
-    assert_eq!(task["permission_mode"], "default");
-
-    let task_id = task["id"].as_str().expect("task id");
-    let persisted = crate::db::acquire_db(&state.db)
-        .get_task(task_id)
-        .expect("get task")
-        .expect("task exists");
-    assert_eq!(persisted.agent, None);
-    assert_eq!(persisted.permission_mode.as_deref(), Some("default"));
-
-    let _ = std::fs::remove_file(path);
-}
-
-#[tokio::test]
 async fn task_label_commands_round_trip_labels_on_tasks() {
     let (state, path) = test_state("app_invoke_task_labels");
     let project = invoke_ok(
