@@ -15,6 +15,21 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@openforge/plugin-sdk": ["packages/plugin-sdk/src/index.ts"],
+      "@openforge/plugin-sdk/backend": ["packages/plugin-sdk/src/backend.ts"],
+      "@openforge/plugin-sdk/domain": ["packages/plugin-sdk/src/domain.ts"],
+      "@openforge/plugin-sdk/frontend": ["packages/plugin-sdk/src/frontend.ts"],
+      "@openforge/plugin-sdk/markdown": ["packages/plugin-sdk/src/markdown.ts"],
+      "@openforge/plugin-sdk/numberParsing": ["packages/plugin-sdk/src/numberParsing.ts"],
+      "@openforge/plugin-sdk/package-metadata-schema.json": ["packages/plugin-sdk/src/openforgePackageMetadataSchema.json"],
+      "@openforge/plugin-sdk/sanitize": ["packages/plugin-sdk/src/sanitize.ts"],
+      "@openforge/plugin-sdk/testing": ["packages/plugin-sdk/src/testing.ts"],
+      "@openforge/plugin-sdk/ui/MarkdownContent.svelte": ["packages/plugin-sdk/src/ui/MarkdownContent.svelte"],
+      "@openforge/plugin-sdk/ui/ResizablePanel.svelte": ["packages/plugin-sdk/src/ui/ResizablePanel.svelte"],
+      "@openforge/plugin-sdk/vite": ["packages/plugin-sdk/src/vite.ts"]
+    },
 
     /* Linting */
     "strict": true,
