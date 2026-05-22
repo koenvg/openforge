@@ -1,5 +1,6 @@
 use super::*;
 use log::error;
+use std::path::{Path, PathBuf};
 
 pub(super) async fn cleanup_task_runtime_for_app(
     state: &AppState,
@@ -68,6 +69,207 @@ pub(super) async fn handle_app_resume_startup_sessions_command(
     // compatibility no-op for older renderer flows so provider PTY resume,
     // persistence, events, and failure handling cannot diverge.
     Ok(Some(serde_json::Value::Null))
+}
+
+struct StartImplementationContext {
+    task: crate::db::TaskRow,
+    project_id: String,
+    additional_instructions: Option<String>,
+    code_cleanup_enabled: bool,
+    use_worktrees: bool,
+    provider_name: String,
+}
+
+struct PreparedWorkspace {
+    working_dir: PathBuf,
+    kind: &'static str,
+    branch_name: Option<String>,
+}
+
+struct ProviderRunOptions<'a> {
+    agent: Option<&'a str>,
+    permission_mode: Option<&'a str>,
+    model: Option<&'a crate::opencode_client::PromptModel>,
+}
+
+fn provider_run_options_for_task(task: &crate::db::TaskRow) -> ProviderRunOptions<'_> {
+    ProviderRunOptions {
+        agent: task.agent.as_deref(),
+        permission_mode: task.permission_mode.as_deref(),
+        model: None,
+    }
+}
+
+fn load_start_implementation_context(
+    state: &AppState,
+    task_id: &str,
+) -> AppResult<StartImplementationContext> {
+    let db = crate::db::acquire_db(&state.db);
+    let task = db
+        .get_task(task_id)
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get task: {e}"),
+            )
+        })?
+        .ok_or_else(|| (StatusCode::NOT_FOUND, "Task not found".to_string()))?;
+
+    if let Some(active_session) = db.get_latest_session_for_ticket(task_id).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to get latest session: {e}"),
+        )
+    })? {
+        if matches!(active_session.status.as_str(), "running" | "paused") {
+            return Err((
+                StatusCode::CONFLICT,
+                "Task already has an active agent session".to_string(),
+            ));
+        }
+    }
+
+    for dependency_id in &task.depends_on {
+        let dependency = db.get_task(dependency_id).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get dependency task: {e}"),
+            )
+        })?;
+        if !matches!(
+            dependency.as_ref().map(|task| task.status.as_str()),
+            Some("done")
+        ) {
+            return Err((
+                StatusCode::CONFLICT,
+                format!("Task dependency {dependency_id} is not done"),
+            ));
+        }
+    }
+
+    let project_id = task.project_id.clone().unwrap_or_default();
+    let additional_instructions = db
+        .get_project_config(&project_id, "additional_instructions")
+        .ok()
+        .flatten();
+    let code_cleanup_enabled = db
+        .get_config("code_cleanup_tasks_enabled")
+        .ok()
+        .flatten()
+        .map(|value| value == "true")
+        .unwrap_or(false);
+    let use_worktrees = db.resolve_use_worktrees(&project_id);
+    let provider_name = db.resolve_ai_provider(&project_id);
+
+    Ok(StartImplementationContext {
+        task,
+        project_id,
+        additional_instructions,
+        code_cleanup_enabled,
+        use_worktrees,
+        provider_name,
+    })
+}
+
+async fn prepare_start_workspace(
+    state: &AppState,
+    task: &crate::db::TaskRow,
+    project_id: &str,
+    task_id: &str,
+    repo_path: &str,
+    use_worktrees: bool,
+) -> AppResult<PreparedWorkspace> {
+    if !use_worktrees {
+        return Ok(PreparedWorkspace {
+            working_dir: PathBuf::from(repo_path),
+            kind: "project_dir",
+            branch_name: None,
+        });
+    }
+
+    let branch = crate::git_worktree::slugify_branch_name(
+        task_id,
+        task.prompt.as_deref().unwrap_or(&task.initial_prompt),
+    );
+    let home = dirs::home_dir().ok_or_else(|| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to get home directory".to_string(),
+        )
+    })?;
+    let repo_name = Path::new(repo_path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, "Invalid repo path".to_string()))?;
+    let working_dir = home
+        .join(".openforge")
+        .join("worktrees")
+        .join(repo_name)
+        .join(task_id);
+
+    crate::git_worktree::create_worktree(
+        Path::new(repo_path),
+        &working_dir,
+        &branch,
+        "origin/main",
+    )
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    {
+        let db = crate::db::acquire_db(&state.db);
+        db.create_worktree_record(
+            task_id,
+            project_id,
+            repo_path,
+            working_dir.to_str().ok_or_else(|| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Invalid worktree path".to_string(),
+                )
+            })?,
+            &branch,
+        )
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
+
+    Ok(PreparedWorkspace {
+        working_dir,
+        kind: "git_worktree",
+        branch_name: Some(branch),
+    })
+}
+
+fn persist_active_task_workspace(
+    state: &AppState,
+    task_id: &str,
+    project_id: &str,
+    repo_path: &str,
+    workspace: &PreparedWorkspace,
+    provider_name: &str,
+) -> AppResult<()> {
+    let db = crate::db::acquire_db(&state.db);
+    db.upsert_task_workspace_record(
+        task_id,
+        project_id,
+        workspace.working_dir.to_str().ok_or_else(|| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Invalid workspace path".to_string(),
+            )
+        })?,
+        repo_path,
+        workspace.kind,
+        workspace.branch_name.as_deref(),
+        provider_name,
+        "active",
+    )
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to persist task workspace: {e}"),
+        )
+    })
 }
 
 pub(super) async fn handle_app_abort_implementation_command(
@@ -158,148 +360,38 @@ pub(super) async fn handle_app_start_implementation_command(
             )
         })?;
 
-    let (
-        task,
-        project_id_owned,
-        additional_instructions,
-        code_cleanup_enabled,
-        use_worktrees,
-        provider_name,
-    ) = {
-        let db = crate::db::acquire_db(&state.db);
-        let task = db
-            .get_task(&task_id)
-            .map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get task: {e}"),
-                )
-            })?
-            .ok_or_else(|| (StatusCode::NOT_FOUND, "Task not found".to_string()))?;
-        if let Some(active_session) = db.get_latest_session_for_ticket(&task_id).map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get latest session: {e}"),
-            )
-        })? {
-            if matches!(active_session.status.as_str(), "running" | "paused") {
-                return Err((
-                    StatusCode::CONFLICT,
-                    "Task already has an active agent session".to_string(),
-                ));
-            }
-        }
-        for dependency_id in &task.depends_on {
-            let dependency = db.get_task(dependency_id).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get dependency task: {e}"),
-                )
-            })?;
-            if !matches!(
-                dependency.as_ref().map(|task| task.status.as_str()),
-                Some("done")
-            ) {
-                return Err((
-                    StatusCode::CONFLICT,
-                    format!("Task dependency {dependency_id} is not done"),
-                ));
-            }
-        }
-        let project_id = task.project_id.clone().unwrap_or_default();
-        let instructions = db
-            .get_project_config(&project_id, "additional_instructions")
-            .ok()
-            .flatten();
-        let cleanup = db
-            .get_config("code_cleanup_tasks_enabled")
-            .ok()
-            .flatten()
-            .map(|value| value == "true")
-            .unwrap_or(false);
-        let worktrees = db.resolve_use_worktrees(&project_id);
-        let provider_name = db.resolve_ai_provider(&project_id);
-        (
-            task,
-            project_id,
-            instructions,
-            cleanup,
-            worktrees,
-            provider_name,
-        )
-    };
-
-    let (working_dir, workspace_kind, branch_name) = if use_worktrees {
-        let branch = crate::git_worktree::slugify_branch_name(
-            &task_id,
-            task.prompt.as_deref().unwrap_or(&task.initial_prompt),
-        );
-        let home = dirs::home_dir().ok_or_else(|| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to get home directory".to_string(),
-            )
-        })?;
-        let repo_name = std::path::Path::new(&repo_path)
-            .file_name()
-            .and_then(|name| name.to_str())
-            .ok_or_else(|| (StatusCode::BAD_REQUEST, "Invalid repo path".to_string()))?;
-        let worktree_path = home
-            .join(".openforge")
-            .join("worktrees")
-            .join(repo_name)
-            .join(&task_id);
-
-        crate::git_worktree::create_worktree(
-            std::path::Path::new(&repo_path),
-            &worktree_path,
-            &branch,
-            "origin/main",
-        )
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-        {
-            let db = crate::db::acquire_db(&state.db);
-            db.create_worktree_record(
-                &task_id,
-                &project_id_owned,
-                &repo_path,
-                worktree_path.to_str().ok_or_else(|| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Invalid worktree path".to_string(),
-                    )
-                })?,
-                &branch,
-            )
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-        }
-
-        (worktree_path, "git_worktree", Some(branch))
-    } else {
-        (std::path::PathBuf::from(&repo_path), "project_dir", None)
-    };
+    let start_context = load_start_implementation_context(state, &task_id)?;
+    let workspace = prepare_start_workspace(
+        state,
+        &start_context.task,
+        &start_context.project_id,
+        &task_id,
+        &repo_path,
+        start_context.use_worktrees,
+    )
+    .await?;
 
     let prompt = crate::agent_lifecycle::build_task_prompt(
-        &task,
-        additional_instructions.as_deref(),
-        code_cleanup_enabled,
+        &start_context.task,
+        start_context.additional_instructions.as_deref(),
+        start_context.code_cleanup_enabled,
     );
+    let provider_options = provider_run_options_for_task(&start_context.task);
 
-    let provider = crate::providers::Provider::from_name(&provider_name, pty_manager.clone())
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
-    let start_context =
+    let provider =
+        crate::providers::Provider::from_name(&start_context.provider_name, pty_manager.clone())
+            .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    let provider_start_context =
         crate::providers::ProviderStartContext::new(state.app.clone(), state.app_event_tx.clone());
     let provider_result = provider
         .start(
             &task_id,
-            &working_dir,
+            &workspace.working_dir,
             &prompt,
-            task.agent.as_deref(),
-            task.permission_mode.as_deref(),
-            None,
-            &start_context,
+            provider_options.agent,
+            provider_options.permission_mode,
+            provider_options.model,
+            &provider_start_context,
         )
         .await
         .map_err(|e| {
@@ -310,40 +402,24 @@ pub(super) async fn handle_app_start_implementation_command(
             }
         })?;
 
-    {
-        let db = crate::db::acquire_db(&state.db);
-        db.upsert_task_workspace_record(
-            &task_id,
-            &project_id_owned,
-            working_dir.to_str().ok_or_else(|| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Invalid workspace path".to_string(),
-                )
-            })?,
-            &repo_path,
-            workspace_kind,
-            branch_name.as_deref(),
-            &provider_name,
-            "active",
-        )
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to persist task workspace: {e}"),
-            )
-        })?;
-    }
+    persist_active_task_workspace(
+        state,
+        &task_id,
+        &start_context.project_id,
+        &repo_path,
+        &workspace,
+        &start_context.provider_name,
+    )?;
 
     let agent_session_id = crate::agent_lifecycle::create_and_record_session(
         &state.db,
         &task_id,
         &provider_result,
-        &provider_name,
+        &start_context.provider_name,
     )
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
-    if task.status == "backlog" {
+    if start_context.task.status == "backlog" {
         let db = crate::db::acquire_db(&state.db);
         db.update_task_status(&task_id, "doing").map_err(|e| {
             (
@@ -358,7 +434,7 @@ pub(super) async fn handle_app_start_implementation_command(
     Ok(Some(crate::agent_lifecycle::build_start_response(
         &task_id,
         &agent_session_id,
-        working_dir.to_str().ok_or_else(|| {
+        workspace.working_dir.to_str().ok_or_else(|| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Invalid workspace path".to_string(),
@@ -366,4 +442,51 @@ pub(super) async fn handle_app_start_implementation_command(
         })?,
         provider_result.port,
     )))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn task_with_provider_options(
+        agent: Option<&str>,
+        permission_mode: Option<&str>,
+    ) -> crate::db::TaskRow {
+        crate::db::TaskRow {
+            id: "T-provider-options".to_string(),
+            initial_prompt: "Implement provider options".to_string(),
+            status: "backlog".to_string(),
+            project_id: Some("P-provider-options".to_string()),
+            created_at: 1,
+            updated_at: 1,
+            prompt: None,
+            summary: None,
+            agent: agent.map(str::to_string),
+            permission_mode: permission_mode.map(str::to_string),
+            depends_on: Vec::new(),
+            labels: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn provider_run_options_borrow_task_agent_and_permission_mode() {
+        let task = task_with_provider_options(Some("rust-specialist"), Some("trusted"));
+
+        let options = provider_run_options_for_task(&task);
+
+        assert_eq!(options.agent, Some("rust-specialist"));
+        assert_eq!(options.permission_mode, Some("trusted"));
+        assert!(options.model.is_none());
+    }
+
+    #[test]
+    fn provider_run_options_keep_missing_task_options_empty() {
+        let task = task_with_provider_options(None, None);
+
+        let options = provider_run_options_for_task(&task);
+
+        assert_eq!(options.agent, None);
+        assert_eq!(options.permission_mode, None);
+        assert!(options.model.is_none());
+    }
 }

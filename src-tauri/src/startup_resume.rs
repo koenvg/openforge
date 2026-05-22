@@ -17,18 +17,35 @@ pub(crate) struct ResumeTarget {
     pub(crate) branch_name: Option<String>,
 }
 
-pub(crate) fn load_resume_targets(db: &db::Database) -> rusqlite::Result<Vec<ResumeTarget>> {
-    let mut targets: Vec<ResumeTarget> = db
-        .get_resumable_task_workspaces()?
-        .into_iter()
-        .map(|workspace| ResumeTarget {
+impl ResumeTarget {
+    fn from_task_workspace(workspace: db::TaskWorkspaceRow) -> Self {
+        Self {
             task_id: workspace.task_id,
             project_id: workspace.project_id,
             repo_path: workspace.repo_path,
             workspace_path: workspace.workspace_path,
             kind: workspace.kind,
             branch_name: workspace.branch_name,
-        })
+        }
+    }
+
+    fn from_worktree(worktree: db::WorktreeRow) -> Self {
+        Self {
+            task_id: worktree.task_id,
+            project_id: worktree.project_id,
+            repo_path: worktree.repo_path,
+            workspace_path: worktree.worktree_path,
+            kind: "git_worktree".to_string(),
+            branch_name: Some(worktree.branch_name),
+        }
+    }
+}
+
+pub(crate) fn load_resume_targets(db: &db::Database) -> rusqlite::Result<Vec<ResumeTarget>> {
+    let mut targets: Vec<ResumeTarget> = db
+        .get_resumable_task_workspaces()?
+        .into_iter()
+        .map(ResumeTarget::from_task_workspace)
         .collect();
 
     let existing_task_ids: HashSet<String> = targets
@@ -41,14 +58,7 @@ pub(crate) fn load_resume_targets(db: &db::Database) -> rusqlite::Result<Vec<Res
             continue;
         }
 
-        targets.push(ResumeTarget {
-            task_id: worktree.task_id,
-            project_id: worktree.project_id,
-            repo_path: worktree.repo_path,
-            workspace_path: worktree.worktree_path,
-            kind: "git_worktree".to_string(),
-            branch_name: Some(worktree.branch_name),
-        });
+        targets.push(ResumeTarget::from_worktree(worktree));
     }
 
     Ok(targets)
@@ -56,6 +66,61 @@ pub(crate) fn load_resume_targets(db: &db::Database) -> rusqlite::Result<Vec<Res
 
 fn startup_resume_database_lock_message(context: &str, error: impl std::fmt::Display) -> String {
     format!("{context}: database lock error: {error}")
+}
+
+fn provider_name_for_resume(latest_session: Option<&db::AgentSessionRow>) -> &str {
+    latest_session
+        .map(|session| session.provider.as_str())
+        .unwrap_or("claude-code")
+}
+
+fn fallback_resume_session(target: &ResumeTarget, provider_name: &str) -> db::AgentSessionRow {
+    db::AgentSessionRow {
+        id: String::new(),
+        ticket_id: target.task_id.clone(),
+        opencode_session_id: None,
+        stage: "implementing".to_string(),
+        status: "running".to_string(),
+        checkpoint_data: None,
+        pty_instance_id: None,
+        error_message: None,
+        created_at: 0,
+        updated_at: 0,
+        provider: provider_name.to_string(),
+        claude_session_id: None,
+        pi_session_id: None,
+    }
+}
+
+pub(crate) fn persist_resumed_session_state(
+    db: &db::Database,
+    latest_session: Option<&db::AgentSessionRow>,
+    target: &ResumeTarget,
+    provider_name: &str,
+    provider_result: &providers::ProviderSessionResult,
+) {
+    if provider_name == "pi" {
+        if let (Some(session), Some(pi_session_id)) =
+            (latest_session, provider_result.pi_session_id.as_deref())
+        {
+            if session.pi_session_id.as_deref() != Some(pi_session_id) {
+                if let Err(e) = db.set_agent_session_pi_id(&session.id, pi_session_id) {
+                    warn!(
+                        "[startup] Failed to persist resumed Pi session id for {}: {}",
+                        target.task_id, e
+                    );
+                }
+            }
+        }
+    }
+
+    restore_resumed_session_state(
+        db,
+        latest_session,
+        target,
+        provider_name,
+        provider_result.pty_instance_id,
+    );
 }
 
 pub(crate) async fn resume_task_sessions(
@@ -151,32 +216,15 @@ pub(crate) async fn resume_task_sessions(
                 .ok()
                 .flatten()
         };
-        let provider_name = latest_session
-            .as_ref()
-            .map(|s| s.provider.as_str())
-            .unwrap_or("claude-code");
+        let provider_name = provider_name_for_resume(latest_session.as_ref());
 
         // Build a dummy session for the case where no session exists in the DB.
         // ClaudeCodeProvider uses claude_session_id=None → spawns with --continue.
         let dummy_session;
         let session_ref: &db::AgentSessionRow = match &latest_session {
-            Some(s) => s,
+            Some(session) => session,
             None => {
-                dummy_session = db::AgentSessionRow {
-                    id: String::new(),
-                    ticket_id: target.task_id.clone(),
-                    opencode_session_id: None,
-                    stage: "implementing".to_string(),
-                    status: "running".to_string(),
-                    checkpoint_data: None,
-                    pty_instance_id: None,
-                    error_message: None,
-                    created_at: 0,
-                    updated_at: 0,
-                    provider: provider_name.to_string(),
-                    claude_session_id: None,
-                    pi_session_id: None,
-                };
+                dummy_session = fallback_resume_session(&target, provider_name);
                 &dummy_session
             }
         };
@@ -214,32 +262,13 @@ pub(crate) async fn resume_task_sessions(
                 {
                     let db = app.state::<Arc<Mutex<db::Database>>>();
                     match db.lock() {
-                        Ok(db_lock) => {
-                            if provider_name == "pi" {
-                                if let (Some(session), Some(pi_session_id)) =
-                                    (latest_session.as_ref(), result.pi_session_id.as_deref())
-                                {
-                                    if session.pi_session_id.as_deref() != Some(pi_session_id) {
-                                        if let Err(e) = db_lock
-                                            .set_agent_session_pi_id(&session.id, pi_session_id)
-                                        {
-                                            warn!(
-                                                "[startup] Failed to persist resumed Pi session id for {}: {}",
-                                                target.task_id, e
-                                            );
-                                        }
-                                    }
-                                }
-                            }
-
-                            restore_resumed_session_state(
-                                &db_lock,
-                                latest_session.as_ref(),
-                                &target,
-                                provider_name,
-                                result.pty_instance_id,
-                            );
-                        }
+                        Ok(db_lock) => persist_resumed_session_state(
+                            &db_lock,
+                            latest_session.as_ref(),
+                            &target,
+                            provider_name,
+                            &result,
+                        ),
                         Err(e) => {
                             let message = startup_resume_database_lock_message(
                                 &format!(
@@ -422,7 +451,8 @@ pub(crate) fn restore_resumed_session_state(
 #[cfg(test)]
 mod tests {
     use super::{
-        load_resume_targets, restore_resumed_session_state, resume_task_sessions, ResumeTarget,
+        load_resume_targets, persist_resumed_session_state, restore_resumed_session_state,
+        resume_task_sessions, ResumeTarget,
     };
     use crate::app_events::{AppEventError, AppEventId, EmitReceipt, RustAppEventAdapter};
     use crate::db::test_helpers::make_test_db;
@@ -692,6 +722,67 @@ mod tests {
         assert_eq!(restored.status, "completed");
         assert_eq!(restored.pty_instance_id, Some(42));
         assert_eq!(restored.checkpoint_data, None);
+
+        drop(db);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn persist_resumed_pi_session_state_updates_changed_pi_session_id() {
+        let (db, path) = make_test_db("persist_resumed_pi_session_id");
+
+        let project = db
+            .create_project("Test Project", "/tmp/test-repo")
+            .expect("create project failed");
+        let task = db
+            .create_task(
+                "Resume Pi",
+                "doing",
+                Some(&project.id),
+                Some("Resume Pi"),
+                None,
+            )
+            .expect("create task failed");
+        db.create_agent_session(
+            "ses-pi-resume",
+            &task.id,
+            None,
+            "implement",
+            "running",
+            "pi",
+        )
+        .expect("create pi session failed");
+        db.set_agent_session_pi_id("ses-pi-resume", "pi-old")
+            .expect("set old pi session id failed");
+
+        let session = db
+            .get_latest_session_for_ticket(&task.id)
+            .expect("get latest session failed")
+            .expect("missing latest session");
+        let target = ResumeTarget {
+            task_id: task.id.clone(),
+            project_id: project.id.clone(),
+            repo_path: "/tmp/test-repo".to_string(),
+            workspace_path: "/tmp/test-repo/.worktrees/T-pi".to_string(),
+            kind: "git_worktree".to_string(),
+            branch_name: Some("t-pi".to_string()),
+        };
+        let provider_result = crate::providers::ProviderSessionResult {
+            port: 0,
+            opencode_session_id: None,
+            pi_session_id: Some("pi-new".to_string()),
+            pty_instance_id: Some(55),
+        };
+
+        persist_resumed_session_state(&db, Some(&session), &target, "pi", &provider_result);
+
+        let restored = db
+            .get_agent_session("ses-pi-resume")
+            .expect("get restored pi session failed")
+            .expect("missing restored pi session");
+        assert_eq!(restored.pi_session_id.as_deref(), Some("pi-new"));
+        assert_eq!(restored.pty_instance_id, Some(55));
+        assert_eq!(restored.status, "running");
 
         drop(db);
         let _ = fs::remove_file(path);
