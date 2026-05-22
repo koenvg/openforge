@@ -25,6 +25,7 @@ mod plugin_host;
 mod plugin_installation;
 mod plugin_platform;
 mod plugin_rpc;
+mod project_fs;
 mod provider_runtime;
 pub mod providers;
 mod pty_manager;
