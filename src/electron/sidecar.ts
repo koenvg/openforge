@@ -203,6 +203,8 @@ export interface SidecarHandle {
 
 const DEFAULT_HOST = '127.0.0.1'
 export const DEFAULT_SIDECAR_PORT = 17422
+const MIN_PORT = 1
+const MAX_PORT = 65_535
 const DEFAULT_HEALTH_PATH = '/app/health'
 const DEFAULT_SIDECAR_COMMAND = 'openforge-sidecar'
 const DEFAULT_HEALTH_TIMEOUT_MS = 10_000
@@ -214,7 +216,16 @@ export function generateBackendToken(): string {
 }
 
 export function resolveSidecarPort(env: Record<string, string | undefined> = process.env): number {
-  return Number(env.OPENFORGE_BACKEND_PORT ?? DEFAULT_SIDECAR_PORT)
+  const configuredPort = env.OPENFORGE_BACKEND_PORT
+  if (configuredPort === undefined) return DEFAULT_SIDECAR_PORT
+
+  const normalizedPort = configuredPort.trim()
+  const port = Number(normalizedPort)
+  if (!/^\d+$/.test(normalizedPort) || port < MIN_PORT || port > MAX_PORT) {
+    throw new Error(`Invalid OPENFORGE_BACKEND_PORT "${configuredPort}". Expected an integer from ${MIN_PORT} to ${MAX_PORT}.`)
+  }
+
+  return port
 }
 
 function normalizeHealthPath(path: string): string {

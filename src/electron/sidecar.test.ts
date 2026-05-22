@@ -37,6 +37,23 @@ describe('Electron Rust sidecar supervision', () => {
   it('resolves the installed CLI bridge port as the Electron sidecar default while preserving explicit overrides', () => {
     expect(resolveSidecarPort({})).toBe(17422)
     expect(resolveSidecarPort({ OPENFORGE_BACKEND_PORT: '18000' })).toBe(18000)
+    expect(resolveSidecarPort({ OPENFORGE_BACKEND_PORT: '1' })).toBe(1)
+    expect(resolveSidecarPort({ OPENFORGE_BACKEND_PORT: '65535' })).toBe(65535)
+  })
+
+  it('rejects explicitly invalid Electron sidecar backend ports', () => {
+    for (const value of ['abc', '12.5', '0', '-1', '65536', 'Infinity', '']) {
+      expect(() => resolveSidecarPort({ OPENFORGE_BACKEND_PORT: value }), value).toThrow(
+        `Invalid OPENFORGE_BACKEND_PORT "${value}". Expected an integer from 1 to 65535.`
+      )
+    }
+  })
+
+  it('does not build sidecar launch args from invalid Electron sidecar backend ports', () => {
+    expect(() => createSidecarLaunchConfig({
+      token: 'token-123',
+      processEnv: { OPENFORGE_BACKEND_PORT: 'not-a-port' },
+    })).toThrow('Invalid OPENFORGE_BACKEND_PORT "not-a-port". Expected an integer from 1 to 65535.')
   })
 
   it('defaults the Electron sidecar to the installed CLI bridge port', () => {
