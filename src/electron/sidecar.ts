@@ -202,7 +202,7 @@ export interface SidecarHandle {
 }
 
 const DEFAULT_HOST = '127.0.0.1'
-const DEFAULT_PORT = 17642
+export const DEFAULT_SIDECAR_PORT = 17422
 const DEFAULT_HEALTH_PATH = '/app/health'
 const DEFAULT_SIDECAR_COMMAND = 'openforge-sidecar'
 const DEFAULT_HEALTH_TIMEOUT_MS = 10_000
@@ -211,6 +211,10 @@ const DEFAULT_STOP_GRACE_MS = 2_000
 
 export function generateBackendToken(): string {
   return randomBytes(32).toString('hex')
+}
+
+export function resolveSidecarPort(env: Record<string, string | undefined> = process.env): number {
+  return Number(env.OPENFORGE_BACKEND_PORT ?? DEFAULT_SIDECAR_PORT)
 }
 
 function normalizeHealthPath(path: string): string {
@@ -223,7 +227,7 @@ export function createSidecarLaunchConfig(options: SidecarLaunchConfigOptions = 
     throw new Error('Electron sidecar must bind to 127.0.0.1 during the migration skeleton')
   }
 
-  const port = options.port ?? DEFAULT_PORT
+  const port = options.port ?? resolveSidecarPort(options.processEnv)
   const token = options.token ?? generateBackendToken()
   const healthPath = normalizeHealthPath(options.healthPath ?? DEFAULT_HEALTH_PATH)
   const command = options.executablePath ?? options.processEnv?.OPENFORGE_SIDECAR_PATH ?? DEFAULT_SIDECAR_COMMAND

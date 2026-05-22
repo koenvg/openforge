@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
 import { RecordingFailureReporterAdapter } from './failureReporting'
-import { createSidecarLaunchConfig, startSidecar, startSidecarReadiness, stopSidecar, waitForSidecarHealth } from './sidecar'
+import { createSidecarLaunchConfig, resolveSidecarPort, startSidecar, startSidecarReadiness, stopSidecar, waitForSidecarHealth } from './sidecar'
 import type { ChildProcessLike, SidecarEventEnvelopeLike, SidecarEventStreamAdapter } from './sidecar'
 
 class FakeChild extends EventEmitter implements ChildProcessLike {
@@ -34,6 +34,24 @@ class ScriptedEventStream implements SidecarEventStreamAdapter {
 }
 
 describe('Electron Rust sidecar supervision', () => {
+  it('resolves the installed CLI bridge port as the Electron sidecar default while preserving explicit overrides', () => {
+    expect(resolveSidecarPort({})).toBe(17422)
+    expect(resolveSidecarPort({ OPENFORGE_BACKEND_PORT: '18000' })).toBe(18000)
+  })
+
+  it('defaults the Electron sidecar to the installed CLI bridge port', () => {
+    const config = createSidecarLaunchConfig({
+      executablePath: '/Applications/Open Forge.app/Contents/MacOS/openforge-sidecar',
+      token: 'token-123',
+      processEnv: { PATH: '/usr/bin' },
+    })
+
+    expect(config.args).toEqual(['--host', '127.0.0.1', '--port', '17422'])
+    expect(config.port).toBe(17422)
+    expect(config.healthUrl).toBe('http://127.0.0.1:17422/app/health')
+    expect(config.env.OPENFORGE_BACKEND_PORT).toBe('17422')
+  })
+
   it('builds a loopback-only sidecar command with a per-launch token and app-data isolation in env', () => {
     const config = createSidecarLaunchConfig({
       executablePath: '/Applications/Open Forge.app/Contents/MacOS/openforge-sidecar',

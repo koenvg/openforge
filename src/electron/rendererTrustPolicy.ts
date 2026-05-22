@@ -1,6 +1,6 @@
 import { readFile as nodeReadFile, realpath as nodeRealpath } from 'node:fs/promises'
 import { isAbsolute, join, relative, sep, win32 } from 'node:path'
-import type { SidecarLaunchConfig } from './sidecar.js'
+import { DEFAULT_SIDECAR_PORT, type SidecarLaunchConfig } from './sidecar.js'
 
 export const PLUGIN_PROTOCOL_SCHEME = 'plugin'
 
@@ -64,7 +64,6 @@ export type CanonicalPluginAsset = { content: Uint8Array | string; filePath: str
 export type PluginAssetReadResult = CanonicalPluginAsset | 'forbidden' | 'not-found'
 
 const DEFAULT_SIDECAR_HOST = '127.0.0.1'
-const DEFAULT_SIDECAR_PORT = 17642
 const TRUSTED_CONNECT_SRC = ['https://api.github.com', 'https://*.atlassian.net']
 const TRUSTED_DEV_RENDERER_HOSTS = new Set(['localhost', '127.0.0.1'])
 
