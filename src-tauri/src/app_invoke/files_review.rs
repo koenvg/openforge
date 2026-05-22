@@ -1,24 +1,5 @@
 use super::*;
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct AppFileEntry {
-    name: String,
-    path: String,
-    is_dir: bool,
-    size: Option<u64>,
-    modified_at: Option<u64>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct AppFileContent {
-    r#type: String,
-    content: String,
-    mime_type: Option<String>,
-    size: u64,
-}
-
 fn app_task_workspace_path(
     state: &AppState,
     task_id: &str,
@@ -46,207 +27,13 @@ fn app_project_root(state: &AppState, project_id: &str) -> Result<String, (Statu
         })
 }
 
-fn app_resolve_project_path(
-    project_root: &std::path::Path,
-    sub_path: Option<&str>,
-) -> Result<std::path::PathBuf, (StatusCode, String)> {
-    let resolved = match sub_path {
-        None | Some("") => project_root.to_path_buf(),
-        Some(path) => project_root.join(path),
+fn app_project_fs_error(error: crate::project_fs::ProjectFsError) -> (StatusCode, String) {
+    let status = match error.kind() {
+        crate::project_fs::ProjectFsErrorKind::BadRequest => StatusCode::BAD_REQUEST,
+        crate::project_fs::ProjectFsErrorKind::Forbidden => StatusCode::FORBIDDEN,
+        crate::project_fs::ProjectFsErrorKind::Internal => StatusCode::INTERNAL_SERVER_ERROR,
     };
-
-    let canonical_root = std::fs::canonicalize(project_root).map_err(|e| {
-        (
-            StatusCode::BAD_REQUEST,
-            format!("Failed to canonicalize project root: {e}"),
-        )
-    })?;
-    let canonical_resolved = std::fs::canonicalize(&resolved).map_err(|e| {
-        (
-            StatusCode::BAD_REQUEST,
-            format!("Failed to canonicalize path: {e}"),
-        )
-    })?;
-
-    if !canonical_resolved.starts_with(&canonical_root) {
-        return Err((
-            StatusCode::FORBIDDEN,
-            "Path traversal detected: access denied".to_string(),
-        ));
-    }
-
-    Ok(canonical_resolved)
-}
-
-fn app_file_type_key(path: &std::path::Path) -> String {
-    if let Some(ext) = path.extension().and_then(|ext| ext.to_str()) {
-        return ext.to_ascii_lowercase();
-    }
-
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("")
-        .trim_start_matches('.')
-        .to_ascii_lowercase()
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum FilePreviewType {
-    Text,
-    Image,
-    Document,
-    Binary,
-}
-
-impl FilePreviewType {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Text => "text",
-            Self::Image => "image",
-            Self::Document => "document",
-            Self::Binary => "binary",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct FilePreviewMetadata {
-    preview_type: FilePreviewType,
-    mime_type: Option<&'static str>,
-}
-
-impl FilePreviewMetadata {
-    const fn new(preview_type: FilePreviewType, mime_type: &'static str) -> Self {
-        Self {
-            preview_type,
-            mime_type: Some(mime_type),
-        }
-    }
-
-    const fn binary() -> Self {
-        Self {
-            preview_type: FilePreviewType::Binary,
-            mime_type: None,
-        }
-    }
-
-    fn mime_type_string(self) -> Option<String> {
-        self.mime_type.map(str::to_string)
-    }
-}
-
-fn app_file_preview_metadata(path: &std::path::Path) -> FilePreviewMetadata {
-    let key = app_file_type_key(path);
-    match key.as_str() {
-        "ts" | "tsx" => FilePreviewMetadata::new(FilePreviewType::Text, "text/typescript"),
-        "js" | "jsx" => FilePreviewMetadata::new(FilePreviewType::Text, "application/javascript"),
-        "rs" => FilePreviewMetadata::new(FilePreviewType::Text, "text/rust"),
-        "py" => FilePreviewMetadata::new(FilePreviewType::Text, "text/python"),
-        "rb" => FilePreviewMetadata::new(FilePreviewType::Text, "text/ruby"),
-        "go" => FilePreviewMetadata::new(FilePreviewType::Text, "text/go"),
-        "json" => FilePreviewMetadata::new(FilePreviewType::Text, "application/json"),
-        "yaml" | "yml" => FilePreviewMetadata::new(FilePreviewType::Text, "application/yaml"),
-        "md" => FilePreviewMetadata::new(FilePreviewType::Text, "text/markdown"),
-        "txt" => FilePreviewMetadata::new(FilePreviewType::Text, "text/plain"),
-        "toml" => FilePreviewMetadata::new(FilePreviewType::Text, "text/toml"),
-        "css" => FilePreviewMetadata::new(FilePreviewType::Text, "text/css"),
-        "html" => FilePreviewMetadata::new(FilePreviewType::Text, "text/html"),
-        "svelte" => FilePreviewMetadata::new(FilePreviewType::Text, "text/svelte"),
-        "vue" => FilePreviewMetadata::new(FilePreviewType::Text, "text/vue"),
-        "sh" | "bash" | "zsh" => FilePreviewMetadata::new(FilePreviewType::Text, "text/shell"),
-        "sql" => FilePreviewMetadata::new(FilePreviewType::Text, "text/sql"),
-        "graphql" => FilePreviewMetadata::new(FilePreviewType::Text, "text/graphql"),
-        "xml" => FilePreviewMetadata::new(FilePreviewType::Text, "application/xml"),
-        "csv" => FilePreviewMetadata::new(FilePreviewType::Text, "text/csv"),
-        "env" | "gitignore" | "prettierrc" | "eslintrc" => {
-            FilePreviewMetadata::new(FilePreviewType::Text, "text/plain")
-        }
-        "cfg" | "ini" | "conf" => FilePreviewMetadata::new(FilePreviewType::Text, "text/plain"),
-        "log" => FilePreviewMetadata::new(FilePreviewType::Text, "text/plain"),
-        "lock" => FilePreviewMetadata::new(FilePreviewType::Text, "text/plain"),
-        "png" => FilePreviewMetadata::new(FilePreviewType::Image, "image/png"),
-        "jpg" | "jpeg" => FilePreviewMetadata::new(FilePreviewType::Image, "image/jpeg"),
-        "gif" => FilePreviewMetadata::new(FilePreviewType::Image, "image/gif"),
-        "svg" => FilePreviewMetadata::new(FilePreviewType::Image, "image/svg+xml"),
-        "webp" => FilePreviewMetadata::new(FilePreviewType::Image, "image/webp"),
-        "ico" => FilePreviewMetadata::new(FilePreviewType::Image, "image/x-icon"),
-        "bmp" => FilePreviewMetadata::new(FilePreviewType::Image, "image/bmp"),
-        "pdf" => FilePreviewMetadata::new(FilePreviewType::Document, "application/pdf"),
-        _ => FilePreviewMetadata::binary(),
-    }
-}
-
-async fn app_read_file_preview(
-    full_path: &std::path::Path,
-) -> Result<AppFileContent, (StatusCode, String)> {
-    let metadata = tokio::fs::metadata(full_path).await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to read file metadata: {e}"),
-        )
-    })?;
-    if metadata.is_dir() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "Path is a directory, not a file".to_string(),
-        ));
-    }
-
-    let size = metadata.len();
-    let preview_metadata = app_file_preview_metadata(full_path);
-    let mime_type = preview_metadata.mime_type_string();
-    match preview_metadata.preview_type {
-        FilePreviewType::Text => {
-            const MAX_TEXT_SIZE: u64 = 1_048_576;
-            if size > MAX_TEXT_SIZE {
-                return Ok(AppFileContent {
-                    r#type: "large-file".to_string(),
-                    content: String::new(),
-                    mime_type,
-                    size,
-                });
-            }
-            let bytes = tokio::fs::read(full_path).await.map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to read file: {e}"),
-                )
-            })?;
-            let content = String::from_utf8(bytes).map_err(|e| {
-                (
-                    StatusCode::BAD_REQUEST,
-                    format!("File is not valid UTF-8: {e}"),
-                )
-            })?;
-            Ok(AppFileContent {
-                r#type: "text".to_string(),
-                content,
-                mime_type,
-                size,
-            })
-        }
-        FilePreviewType::Image => {
-            let bytes = tokio::fs::read(full_path).await.map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to read file: {e}"),
-                )
-            })?;
-            use base64::Engine;
-            Ok(AppFileContent {
-                r#type: "image".to_string(),
-                content: base64::engine::general_purpose::STANDARD.encode(bytes),
-                mime_type,
-                size,
-            })
-        }
-        file_type => Ok(AppFileContent {
-            r#type: file_type.as_str().to_string(),
-            content: String::new(),
-            mime_type,
-            size,
-        }),
-    }
+    (status, error.message())
 }
 
 pub(super) async fn handle_app_files_review_command(
@@ -258,63 +45,29 @@ pub(super) async fn handle_app_files_review_command(
             let project_id = payload_string(&request.payload, "projectId")?;
             let dir_path = payload_optional_string(&request.payload, "dirPath")?;
             let project_root = app_project_root(state, &project_id)?;
-            let project_root = std::path::Path::new(&project_root);
-            let dir_to_read = app_resolve_project_path(project_root, dir_path.as_deref())?;
-            let mut read_dir = tokio::fs::read_dir(&dir_to_read).await.map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to read directory: {e}"),
+            json_value(
+                crate::project_fs::read_dir(
+                    std::path::Path::new(&project_root),
+                    dir_path.as_deref(),
                 )
-            })?;
-            let mut dirs = Vec::new();
-            let mut files = Vec::new();
-            while let Some(entry) = read_dir.next_entry().await.map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Error reading directory entry: {e}"),
-                )
-            })? {
-                let metadata = match entry.metadata().await {
-                    Ok(metadata) => metadata,
-                    Err(_) => continue,
-                };
-                let name = entry.file_name().to_string_lossy().to_string();
-                let full_path = entry.path();
-                let path = full_path
-                    .strip_prefix(project_root)
-                    .map(|path| path.to_string_lossy().to_string())
-                    .unwrap_or_else(|_| name.clone());
-                let is_dir = metadata.is_dir();
-                let modified_at = metadata.modified().ok().and_then(|time| {
-                    time.duration_since(std::time::UNIX_EPOCH)
-                        .ok()
-                        .map(|duration| duration.as_millis() as u64)
-                });
-                let entry = AppFileEntry {
-                    name,
-                    path,
-                    is_dir,
-                    size: if is_dir { None } else { Some(metadata.len()) },
-                    modified_at,
-                };
-                if is_dir {
-                    dirs.push(entry)
-                } else {
-                    files.push(entry)
-                }
-            }
-            dirs.sort_by(|left, right| left.name.cmp(&right.name));
-            files.sort_by(|left, right| left.name.cmp(&right.name));
-            dirs.extend(files);
-            json_value(dirs)?
+                .await
+                .map_err(app_project_fs_error)?,
+            )?
         }
         "fs_read_file" => {
             let project_id = payload_string(&request.payload, "projectId")?;
             let file_path = payload_string(&request.payload, "filePath")?;
             let project_root = app_project_root(state, &project_id)?;
-            let full_path =
-                app_resolve_project_path(std::path::Path::new(&project_root), Some(&file_path))?;
-            json_value(app_read_file_preview(&full_path).await?)?
+            let full_path = crate::project_fs::resolve_existing_path(
+                std::path::Path::new(&project_root),
+                Some(&file_path),
+            )
+            .map_err(app_project_fs_error)?;
+            json_value(
+                crate::project_fs::read_file_preview(&full_path)
+                    .await
+                    .map_err(app_project_fs_error)?,
+            )?
         }
         "fs_search_files" => {
             let project_id = payload_string(&request.payload, "projectId")?;
@@ -328,8 +81,8 @@ pub(super) async fn handle_app_files_review_command(
             if project_root.is_empty() {
                 serde_json::json!([])
             } else {
-                json_value(crate::command_discovery::search_project_files(
-                    &project_root,
+                json_value(crate::project_fs::search_files(
+                    std::path::Path::new(&project_root),
                     &query,
                     limit,
                 ))?
@@ -542,38 +295,4 @@ pub(super) async fn handle_app_files_review_command(
     };
 
     Ok(Some(value))
-}
-
-#[cfg(test)]
-mod file_preview_metadata_tests {
-    use super::*;
-
-    #[test]
-    fn derives_preview_type_and_mime_from_shared_metadata() {
-        let cases = [
-            (
-                "component.svelte",
-                FilePreviewType::Text,
-                Some("text/svelte"),
-            ),
-            (".gitignore", FilePreviewType::Text, Some("text/plain")),
-            ("photo.jpeg", FilePreviewType::Image, Some("image/jpeg")),
-            (
-                "design.pdf",
-                FilePreviewType::Document,
-                Some("application/pdf"),
-            ),
-            ("archive.bin", FilePreviewType::Binary, None),
-            ("extensionless", FilePreviewType::Binary, None),
-        ];
-
-        for (path, expected_type, expected_mime) in cases {
-            let metadata = app_file_preview_metadata(std::path::Path::new(path));
-            assert_eq!(
-                metadata.preview_type, expected_type,
-                "preview type for {path}"
-            );
-            assert_eq!(metadata.mime_type, expected_mime, "MIME type for {path}");
-        }
-    }
 }

@@ -766,73 +766,26 @@ impl PluginHost {
         let project_id = required_param_string(params, "projectId")?;
         let path = optional_param_string(params, "path")?;
         let project_root = self.project_root_for_host(&project_id)?;
-        let dir = resolve_host_project_existing_path(&project_root, path.as_deref())?;
-        let mut read_dir = tokio::fs::read_dir(&dir)
-            .await
-            .map_err(|error| format!("failed to read directory: {error}"))?;
-        let mut entries = Vec::new();
-        while let Some(entry) = read_dir
-            .next_entry()
-            .await
-            .map_err(|error| format!("failed to read directory entry: {error}"))?
-        {
-            let metadata = match entry.metadata().await {
-                Ok(metadata) => metadata,
-                Err(_) => continue,
-            };
-            let name = entry.file_name().to_string_lossy().to_string();
-            let full_path = entry.path();
-            let relative_path = full_path
-                .strip_prefix(&project_root)
-                .map(|path| path.to_string_lossy().to_string())
-                .unwrap_or_else(|_| name.clone());
-            let is_dir = metadata.is_dir();
-            let modified_at = metadata.modified().ok().and_then(|time| {
-                time.duration_since(std::time::UNIX_EPOCH)
-                    .ok()
-                    .map(|duration| duration.as_millis() as u64)
-            });
-            entries.push(json!({
-                "name": name,
-                "path": relative_path,
-                "isDir": is_dir,
-                "size": if is_dir { Value::Null } else { json!(metadata.len()) },
-                "modifiedAt": modified_at,
-            }));
-        }
-        entries.sort_by(|left, right| {
-            let left_dir = left["isDir"].as_bool().unwrap_or(false);
-            let right_dir = right["isDir"].as_bool().unwrap_or(false);
-            right_dir
-                .cmp(&left_dir)
-                .then_with(|| left["name"].as_str().cmp(&right["name"].as_str()))
-        });
-        Ok(Value::Array(entries))
+        serde_json::to_value(
+            crate::project_fs::read_dir(&project_root, path.as_deref())
+                .await
+                .map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| format!("failed to serialize directory entries: {error}"))
     }
 
     async fn read_project_file_for_host(&self, params: &Value) -> Result<Value, String> {
         let project_id = required_param_string(params, "projectId")?;
         let path = required_param_string(params, "path")?;
         let project_root = self.project_root_for_host(&project_id)?;
-        let full_path = resolve_host_project_existing_path(&project_root, Some(&path))?;
-        let metadata = tokio::fs::metadata(&full_path)
-            .await
-            .map_err(|error| format!("failed to read file metadata: {error}"))?;
-        if metadata.is_dir() {
-            return Err("Path is a directory, not a file".to_string());
-        }
-        let bytes = tokio::fs::read(&full_path)
-            .await
-            .map_err(|error| format!("failed to read file: {error}"))?;
-        let size = metadata.len();
-        match String::from_utf8(bytes) {
-            Ok(content) => Ok(
-                json!({ "type": "text", "content": content, "mimeType": Value::Null, "size": size }),
-            ),
-            Err(_) => Ok(
-                json!({ "type": "binary", "content": "", "mimeType": Value::Null, "size": size }),
-            ),
-        }
+        let full_path = crate::project_fs::resolve_existing_path(&project_root, Some(&path))
+            .map_err(|error| error.to_string())?;
+        serde_json::to_value(
+            crate::project_fs::read_file_preview(&full_path)
+                .await
+                .map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| format!("failed to serialize file content: {error}"))
     }
 
     fn search_project_files_for_host(&self, params: &Value) -> Result<Value, String> {
@@ -840,8 +793,8 @@ impl PluginHost {
         let query = required_param_string(params, "query")?;
         let limit = optional_param_usize(params, "limit")?.unwrap_or(50);
         let project_root = self.project_root_for_host(&project_id)?;
-        serde_json::to_value(crate::command_discovery::search_project_files(
-            &project_root.to_string_lossy(),
+        serde_json::to_value(crate::project_fs::search_files(
+            &project_root,
             &query,
             limit,
         ))
@@ -853,15 +806,9 @@ impl PluginHost {
         let path = required_param_string(params, "path")?;
         let content = required_param_string(params, "content")?;
         let project_root = self.project_root_for_host(&project_id)?;
-        let target = resolve_host_project_write_path(&project_root, &path)?;
-        if let Some(parent) = target.parent() {
-            tokio::fs::create_dir_all(parent)
-                .await
-                .map_err(|error| format!("failed to create parent directory: {error}"))?;
-        }
-        tokio::fs::write(target, content)
+        crate::project_fs::write_file(&project_root, &path, &content)
             .await
-            .map_err(|error| format!("failed to write project file: {error}"))?;
+            .map_err(|error| error.to_string())?;
         Ok(Value::Null)
     }
 
@@ -1332,50 +1279,6 @@ fn host_config_value(params: &Value) -> String {
     }
 }
 
-fn resolve_host_project_existing_path(
-    project_root: &std::path::Path,
-    sub_path: Option<&str>,
-) -> Result<PathBuf, String> {
-    let resolved = match sub_path {
-        None | Some("") => project_root.to_path_buf(),
-        Some(path) => project_root.join(path),
-    };
-    let canonical_root = std::fs::canonicalize(project_root)
-        .map_err(|error| format!("Failed to canonicalize project root: {error}"))?;
-    let canonical_resolved = std::fs::canonicalize(&resolved)
-        .map_err(|error| format!("Failed to canonicalize path: {error}"))?;
-    if !canonical_resolved.starts_with(&canonical_root) {
-        return Err("Path traversal detected: access denied".to_string());
-    }
-    Ok(canonical_resolved)
-}
-
-fn resolve_host_project_write_path(
-    project_root: &std::path::Path,
-    sub_path: &str,
-) -> Result<PathBuf, String> {
-    if sub_path.trim().is_empty() {
-        return Err("plugin host callback missing string param: path".to_string());
-    }
-    let requested_path = std::path::Path::new(sub_path);
-    if requested_path.is_absolute() {
-        return Err("project file path must be relative".to_string());
-    }
-    if requested_path
-        .components()
-        .any(|component| matches!(component, std::path::Component::ParentDir))
-    {
-        return Err("Path traversal detected: access denied".to_string());
-    }
-    let canonical_root = std::fs::canonicalize(project_root)
-        .map_err(|error| format!("Failed to canonicalize project root: {error}"))?;
-    let target = canonical_root.join(requested_path);
-    if !target.starts_with(&canonical_root) {
-        return Err("Path traversal detected: access denied".to_string());
-    }
-    Ok(target)
-}
-
 fn resolve_bun_binary() -> Result<PathBuf, String> {
     if let Ok(path) = std::env::var(BUN_PATH_ENV) {
         let trimmed = path.trim();
@@ -1684,8 +1587,11 @@ mod tests {
         std::fs::create_dir(&src_dir).expect("src dir");
         std::fs::write(project_dir.path().join("README.md"), "# Plugin host")
             .expect("readme fixture");
+        std::fs::write(project_dir.path().join(".gitignore"), "target/\n")
+            .expect("gitignore fixture");
         std::fs::write(src_dir.join("main.ts"), "export const plugin = true")
             .expect("source fixture");
+        std::fs::write(src_dir.join("main.py"), "print('plugin')").expect("python fixture");
         std::process::Command::new("git")
             .args(["init"])
             .current_dir(project_dir.path())
@@ -1733,7 +1639,11 @@ mod tests {
             )
             .await
             .expect("read dir callback");
-        assert_eq!(dir[0]["name"], "main.ts");
+        assert!(dir
+            .as_array()
+            .expect("dir entries")
+            .iter()
+            .any(|entry| entry["name"] == "main.ts"));
 
         let file = host
             .handle_host_callback(
@@ -1743,6 +1653,27 @@ mod tests {
             .await
             .expect("read file callback");
         assert_eq!(file["content"], "# Plugin host");
+        assert_eq!(file["mimeType"], "text/markdown");
+
+        let gitignore = host
+            .handle_host_callback(
+                "openforge.fs.readFile",
+                &json!({ "projectId": project.id, "path": ".gitignore" }),
+            )
+            .await
+            .expect("read gitignore callback");
+        assert_eq!(gitignore["type"], "text");
+        assert_eq!(gitignore["content"], "target/\n");
+        assert_eq!(gitignore["mimeType"], "text/plain");
+
+        let python = host
+            .handle_host_callback(
+                "openforge.fs.readFile",
+                &json!({ "projectId": project.id, "path": "src/main.py" }),
+            )
+            .await
+            .expect("read python callback");
+        assert_eq!(python["mimeType"], "text/python");
 
         let search = host
             .handle_host_callback(
