@@ -239,7 +239,31 @@ pub(crate) fn resolve_write_path(project_root: &Path, sub_path: &str) -> Project
             "Path traversal detected: access denied",
         ));
     }
+    validate_write_parent_under_root(&canonical_root, &target)?;
     Ok(target)
+}
+
+fn validate_write_parent_under_root(canonical_root: &Path, target: &Path) -> ProjectFsResult<()> {
+    let mut ancestor = target.parent().ok_or_else(|| {
+        ProjectFsError::bad_request("project file path must include a parent directory")
+    })?;
+
+    while !ancestor.exists() {
+        ancestor = ancestor.parent().ok_or_else(|| {
+            ProjectFsError::bad_request("project file path parent could not be resolved")
+        })?;
+    }
+
+    let canonical_parent = std::fs::canonicalize(ancestor).map_err(|error| {
+        ProjectFsError::bad_request(format!("Failed to canonicalize parent path: {error}"))
+    })?;
+    if !canonical_parent.starts_with(canonical_root) {
+        return Err(ProjectFsError::forbidden(
+            "Path traversal detected: access denied",
+        ));
+    }
+
+    Ok(())
 }
 
 pub(crate) async fn read_dir(
@@ -426,6 +450,26 @@ mod tests {
         let traversal =
             resolve_write_path(temp_dir.path(), "../outside.txt").expect_err("traversal rejected");
         assert_eq!(traversal.kind(), ProjectFsErrorKind::Forbidden);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn write_file_rejects_symlinked_parent_escape() {
+        let temp_dir = tempfile::tempdir().expect("project root");
+        let outside_dir = tempfile::tempdir().expect("outside dir");
+        let symlink_path = temp_dir.path().join("link");
+        std::os::unix::fs::symlink(outside_dir.path(), &symlink_path).expect("symlink parent");
+
+        let escape_target = outside_dir.path().join("out.txt");
+        let error = write_file(temp_dir.path(), "link/out.txt", "escaped")
+            .await
+            .expect_err("symlinked parent write rejected");
+
+        assert_eq!(error.kind(), ProjectFsErrorKind::Forbidden);
+        assert!(
+            !escape_target.exists(),
+            "write through symlinked parent must not create files outside the project root"
+        );
     }
 
     #[test]
