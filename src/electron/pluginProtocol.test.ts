@@ -337,7 +337,7 @@ describe('Electron plugin:// protocol security contract', () => {
   it('keeps renderer CSP compatible with plugin:// import maps and sidecar IPC without unsafe filesystem access', () => {
     expect(ELECTRON_RENDERER_CSP).toContain("default-src 'self'")
     expect(ELECTRON_RENDERER_CSP).toContain("script-src 'self' plugin:")
-    expect(ELECTRON_RENDERER_CSP).toContain("connect-src 'self' http://127.0.0.1:17642 https://api.github.com https://*.atlassian.net")
+    expect(ELECTRON_RENDERER_CSP).toContain("connect-src 'self' http://127.0.0.1:17422 https://api.github.com https://*.atlassian.net")
     expect(createElectronRendererCsp({ host: '127.0.0.1', port: 18000 })).toContain('http://127.0.0.1:18000')
     expect(ELECTRON_RENDERER_CSP).not.toContain('file:')
   })
