@@ -132,6 +132,8 @@ impl ProviderTestSandbox {
 
 struct PathEnvGuard {
     original_path: Option<OsString>,
+    #[cfg(windows)]
+    original_pathext: Option<OsString>,
 }
 
 impl PathEnvGuard {
@@ -143,7 +145,19 @@ impl PathEnvGuard {
         }
         let joined = std::env::join_paths(paths).expect("test PATH should be joinable");
         std::env::set_var("PATH", joined);
-        Self { original_path }
+
+        #[cfg(windows)]
+        let original_pathext = {
+            let original_pathext = std::env::var_os("PATHEXT");
+            ensure_windows_pathext_resolves_cmd(original_pathext.as_ref());
+            original_pathext
+        };
+
+        Self {
+            original_path,
+            #[cfg(windows)]
+            original_pathext,
+        }
     }
 }
 
@@ -153,9 +167,33 @@ impl Drop for PathEnvGuard {
             Some(path) => std::env::set_var("PATH", path),
             None => std::env::remove_var("PATH"),
         }
+        #[cfg(windows)]
+        match self.original_pathext.as_ref() {
+            Some(path) => std::env::set_var("PATHEXT", path),
+            None => std::env::remove_var("PATHEXT"),
+        }
     }
 }
 
+#[cfg(windows)]
+fn ensure_windows_pathext_resolves_cmd(original_pathext: Option<&OsString>) {
+    let mut extensions: Vec<String> = original_pathext
+        .and_then(|value| value.to_str())
+        .unwrap_or(".COM;.EXE;.BAT;.CMD")
+        .split(';')
+        .filter(|extension| !extension.is_empty())
+        .map(str::to_string)
+        .collect();
+    if !extensions
+        .iter()
+        .any(|extension| extension.eq_ignore_ascii_case(".CMD"))
+    {
+        extensions.push(".CMD".to_string());
+    }
+    std::env::set_var("PATHEXT", extensions.join(";"));
+}
+
+#[cfg(unix)]
 fn install_fake_provider(bin_dir: &Path, command: &str, log_path: &Path) {
     let script = format!(
         "#!/bin/sh\n{{\n  printf 'provider={command}\\n'\n  printf 'cwd=%s\\n' \"$PWD\"\n  i=0\n  for arg in \"$@\"; do\n    i=$((i + 1))\n    printf 'arg%s=%s\\n' \"$i\" \"$arg\"\n  done\n}} >> '{}'\nexit 0\n",
@@ -163,25 +201,35 @@ fn install_fake_provider(bin_dir: &Path, command: &str, log_path: &Path) {
     );
     let path = bin_dir.join(command);
     fs::write(&path, script).expect("fake provider should be written");
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o755))
-            .expect("fake provider should be executable");
-    }
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o755))
+        .expect("fake provider should be executable");
 }
 
-async fn wait_for_provider_log(log_path: &Path) -> String {
+#[cfg(windows)]
+fn install_fake_provider(bin_dir: &Path, command: &str, log_path: &Path) {
+    let escaped_log_path = log_path.to_string_lossy().replace('\'', "''");
+    let script = format!(
+        "@echo off\r\npowershell -NoProfile -ExecutionPolicy Bypass -Command \"$log = '{}'; Add-Content -LiteralPath $log -Value 'provider={}'; Add-Content -LiteralPath $log -Value ('cwd=' + (Get-Location).Path); $i = 0; foreach ($arg in $args) {{ $i += 1; Add-Content -LiteralPath $log -Value ('arg' + $i + '=' + $arg) }}\" -- %*\r\nexit /b 0\r\n",
+        escaped_log_path, command
+    );
+    fs::write(bin_dir.join(format!("{command}.cmd")), script)
+        .expect("fake provider should be written");
+}
+
+async fn wait_for_provider_log_containing(log_path: &Path, required_content: &str) -> String {
+    let mut last_contents = String::new();
     for _ in 0..50 {
         if let Ok(contents) = fs::read_to_string(log_path) {
-            if !contents.is_empty() {
+            if contents.contains(required_content) {
                 return contents;
             }
+            last_contents = contents;
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     panic!(
-        "fake provider log should be written at {}",
+        "fake provider log at {} should contain {required_content:?}, got: {last_contents}",
         log_path.display()
     );
 }
@@ -196,11 +244,11 @@ fn provider_repo_dir() -> (tempfile::TempDir, PathBuf) {
 #[tokio::test]
 async fn start_implementation_starts_configured_pi_provider_through_app_invoke_boundary() {
     let _env_lock = PROVIDER_PATH_ENV_LOCK.lock().await;
-    let (state, path) = test_state("app_invoke_start_pi_provider_boundary");
     let sandbox = &*PROVIDER_TEST_SANDBOX;
     sandbox.clear_log();
     let (_temp, repo_dir) = provider_repo_dir();
     let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
+    let (state, path) = test_state("app_invoke_start_pi_provider_boundary");
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -238,7 +286,8 @@ async fn start_implementation_starts_configured_pi_provider_through_app_invoke_b
     );
     assert_eq!(response["port"], 0);
 
-    let log = wait_for_provider_log(&sandbox.log_path).await;
+    let log =
+        wait_for_provider_log_containing(&sandbox.log_path, "Start through Pi provider").await;
     assert!(log.contains("provider=pi"), "got provider log: {log}");
     let canonical_repo_dir = fs::canonicalize(&repo_dir).expect("repo dir should canonicalize");
     assert!(
@@ -281,11 +330,11 @@ async fn start_implementation_starts_configured_pi_provider_through_app_invoke_b
 #[tokio::test]
 async fn start_implementation_passes_task_agent_to_configured_opencode_provider() {
     let _env_lock = PROVIDER_PATH_ENV_LOCK.lock().await;
-    let (state, path) = test_state("app_invoke_start_opencode_agent_boundary");
     let sandbox = &*PROVIDER_TEST_SANDBOX;
     sandbox.clear_log();
     let (_temp, repo_dir) = provider_repo_dir();
     let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
+    let (state, path) = test_state("app_invoke_start_opencode_agent_boundary");
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -325,7 +374,9 @@ async fn start_implementation_passes_task_agent_to_configured_opencode_provider(
     )
     .await;
 
-    let log = wait_for_provider_log(&sandbox.log_path).await;
+    let log =
+        wait_for_provider_log_containing(&sandbox.log_path, "Start through OpenCode provider")
+            .await;
     assert!(log.contains("provider=opencode"), "got provider log: {log}");
     assert!(log.contains("arg1=--agent"), "got provider log: {log}");
     assert!(
