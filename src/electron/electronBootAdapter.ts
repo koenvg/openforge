@@ -13,7 +13,7 @@ import {
   registerPluginProtocolHandler,
   resolveHostRuntimeRoot,
 } from './pluginProtocol.js'
-import { asChildProcessLike, createSidecarLaunchConfig, startSidecarReadiness } from './sidecar.js'
+import { asChildProcessLike, createSidecarLaunchConfig, resolveSidecarPort, startSidecarReadiness } from './sidecar.js'
 import type { OpenDialogOptions } from 'electron'
 import type { BootBackendInvokeContext, BootLifecycleAdapter } from './bootLifecycle.js'
 import type { ElectronFailureReporter } from './failureReporting.js'
@@ -114,7 +114,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     createSidecarLaunchConfig(sidecarPath: string): SidecarLaunchConfig {
       return createSidecarLaunchConfig({
         executablePath: sidecarPath,
-        port: Number(options.env.OPENFORGE_BACKEND_PORT ?? 17642),
+        port: resolveSidecarPort(options.env),
         processEnv: options.env,
       })
     },
