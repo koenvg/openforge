@@ -14,7 +14,28 @@ const DEFAULT_LANG: &str = "en_US.UTF-8";
 static USER_ENVIRONMENT: Lazy<HashMap<String, String>> = Lazy::new(resolve_user_environment);
 
 pub(crate) fn user_environment() -> HashMap<String, String> {
-    USER_ENVIRONMENT.clone()
+    #[cfg(not(test))]
+    {
+        USER_ENVIRONMENT.clone()
+    }
+
+    #[cfg(test)]
+    {
+        let mut environment = USER_ENVIRONMENT.clone();
+        if let Some(current_path) = std::env::var_os("PATH") {
+            let current_path = current_path.to_string_lossy();
+            let home_dir = dirs::home_dir();
+            environment.insert(
+                "PATH".to_string(),
+                merge_user_tool_path(
+                    Some(current_path.as_ref()),
+                    environment.get("PATH").map(String::as_str),
+                    home_dir.as_deref(),
+                ),
+            );
+        }
+        environment
+    }
 }
 
 pub(crate) fn user_tool_path() -> String {
