@@ -2,24 +2,57 @@
   "name": "@openforge/plugin-sdk",
   "version": "0.1.0",
   "type": "module",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./frontend": "./src/frontend.ts",
-    "./backend": "./src/backend.ts",
-    "./testing": "./src/testing.ts",
-    "./vite": "./src/vite.ts",
-    "./package-metadata-schema.json": "./src/openforgePackageMetadataSchema.json",
-    "./domain": "./src/domain.ts",
-    "./markdown": "./src/markdown.ts",
-    "./numberParsing": "./src/numberParsing.ts",
-    "./sanitize": "./src/sanitize.ts",
-    "./ui/MarkdownContent.svelte": "./src/ui/MarkdownContent.svelte",
-    "./ui/ResizablePanel.svelte": "./src/ui/ResizablePanel.svelte"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./frontend": {
+      "types": "./dist/frontend.d.ts",
+      "default": "./dist/frontend.js"
+    },
+    "./backend": {
+      "types": "./dist/backend.d.ts",
+      "default": "./dist/backend.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "default": "./dist/vite.js"
+    },
+    "./package-metadata-schema.json": "./dist/openforgePackageMetadataSchema.json",
+    "./domain": {
+      "types": "./dist/domain.d.ts",
+      "default": "./dist/domain.js"
+    },
+    "./markdown": {
+      "types": "./dist/markdown.d.ts",
+      "default": "./dist/markdown.js"
+    },
+    "./numberParsing": {
+      "types": "./dist/numberParsing.d.ts",
+      "default": "./dist/numberParsing.js"
+    },
+    "./sanitize": {
+      "types": "./dist/sanitize.d.ts",
+      "default": "./dist/sanitize.js"
+    },
+    "./ui/MarkdownContent.svelte": "./dist/ui/MarkdownContent.svelte",
+    "./ui/ResizablePanel.svelte": "./dist/ui/ResizablePanel.svelte"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "tsc",
+    "clean": "node -e \"import('node:fs').then(({ rmSync }) => rmSync('dist', { recursive: true, force: true }))\"",
+    "build": "pnpm run clean && tsc && pnpm run build:assets",
+    "build:assets": "node ./scripts/copy-package-assets.mjs",
+    "prepack": "pnpm run build",
     "test": "vitest run"
   },
   "dependencies": {
