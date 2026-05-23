@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto'
+import { DEFAULT_HTTP_BRIDGE_PORT } from './httpBridgePortContract.js'
 import { createFailureReport, reportFailure } from './failureReporting.js'
 import type { ChildProcess, SpawnOptions } from 'node:child_process'
 import type { ElectronFailureReporter } from './failureReporting.js'
@@ -202,7 +203,7 @@ export interface SidecarHandle {
 }
 
 const DEFAULT_HOST = '127.0.0.1'
-export const DEFAULT_SIDECAR_PORT = 17422
+export const DEFAULT_SIDECAR_PORT = DEFAULT_HTTP_BRIDGE_PORT
 const MIN_PORT = 1
 const MAX_PORT = 65_535
 const DEFAULT_HEALTH_PATH = '/app/health'

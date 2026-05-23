@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
 import { RecordingFailureReporterAdapter } from './failureReporting'
-import { createSidecarLaunchConfig, resolveSidecarPort, startSidecar, startSidecarReadiness, stopSidecar, waitForSidecarHealth } from './sidecar'
+import { DEFAULT_SIDECAR_PORT, createSidecarLaunchConfig, resolveSidecarPort, startSidecar, startSidecarReadiness, stopSidecar, waitForSidecarHealth } from './sidecar'
 import type { ChildProcessLike, SidecarEventEnvelopeLike, SidecarEventStreamAdapter } from './sidecar'
 
 class FakeChild extends EventEmitter implements ChildProcessLike {
@@ -35,7 +35,7 @@ class ScriptedEventStream implements SidecarEventStreamAdapter {
 
 describe('Electron Rust sidecar supervision', () => {
   it('resolves the installed CLI bridge port as the Electron sidecar default while preserving explicit overrides', () => {
-    expect(resolveSidecarPort({})).toBe(17422)
+    expect(resolveSidecarPort({})).toBe(DEFAULT_SIDECAR_PORT)
     expect(resolveSidecarPort({ OPENFORGE_BACKEND_PORT: '18000' })).toBe(18000)
     expect(resolveSidecarPort({ OPENFORGE_BACKEND_PORT: '1' })).toBe(1)
     expect(resolveSidecarPort({ OPENFORGE_BACKEND_PORT: '65535' })).toBe(65535)
@@ -63,10 +63,10 @@ describe('Electron Rust sidecar supervision', () => {
       processEnv: { PATH: '/usr/bin' },
     })
 
-    expect(config.args).toEqual(['--host', '127.0.0.1', '--port', '17422'])
-    expect(config.port).toBe(17422)
-    expect(config.healthUrl).toBe('http://127.0.0.1:17422/app/health')
-    expect(config.env.OPENFORGE_BACKEND_PORT).toBe('17422')
+    expect(config.args).toEqual(['--host', '127.0.0.1', '--port', String(DEFAULT_SIDECAR_PORT)])
+    expect(config.port).toBe(DEFAULT_SIDECAR_PORT)
+    expect(config.healthUrl).toBe(`http://127.0.0.1:${DEFAULT_SIDECAR_PORT}/app/health`)
+    expect(config.env.OPENFORGE_BACKEND_PORT).toBe(String(DEFAULT_SIDECAR_PORT))
   })
 
   it('builds a loopback-only sidecar command with a per-launch token and app-data isolation in env', () => {

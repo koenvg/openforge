@@ -1260,7 +1260,7 @@ fn resolve_http_server_port(
     openforge_backend_port
         .or(ai_command_center_port)
         .and_then(|port| port.parse::<u16>().ok())
-        .unwrap_or(17422)
+        .unwrap_or(crate::http_bridge_port_contract::DEFAULT_HTTP_BRIDGE_PORT)
 }
 
 /// Start the HTTP server on the configured port
@@ -1270,7 +1270,7 @@ fn resolve_http_server_port(
 ///
 /// The port can be configured via OPENFORGE_BACKEND_PORT for the Electron
 /// sidecar contract, or AI_COMMAND_CENTER_PORT for the legacy hook bridge,
-/// defaulting to 17422.
+/// defaulting to the shared OpenForge HTTP bridge port contract.
 pub fn electron_sidecar_app_handle(
     app_data_dir: PathBuf,
     resource_dir: PathBuf,

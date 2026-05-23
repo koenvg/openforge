@@ -9,6 +9,7 @@ import {
   RendererTrustPolicy,
   SidecarPluginMetadataAdapter,
 } from './rendererTrustPolicy'
+import { DEFAULT_SIDECAR_PORT } from './sidecar'
 import type { SidecarLaunchConfig } from './sidecar'
 
 const sidecarConfig: SidecarLaunchConfig = {
@@ -42,7 +43,7 @@ describe('Renderer Trust Policy Module', () => {
       },
     })
     expect(policy.contentSecurityPolicy(sidecarConfig)).toBe("default-src 'self'; script-src 'self' plugin:; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src 'self' http://127.0.0.1:17642 https://api.github.com https://*.atlassian.net")
-    expect(policy.contentSecurityPolicy(null)).toContain('connect-src \'self\' http://127.0.0.1:17422')
+    expect(policy.contentSecurityPolicy(null)).toContain(`connect-src 'self' http://127.0.0.1:${DEFAULT_SIDECAR_PORT}`)
     expect(policy.contentSecurityPolicy(sidecarConfig)).not.toContain('file:')
     expect(policy.trustedRendererUrlFromEnv({ ELECTRON_RENDERER_URL: 'http://localhost:1420/tasks' })).toBe('http://localhost:1420/tasks')
     expect(() => policy.trustedRendererUrlFromEnv({ ELECTRON_RENDERER_URL: 'https://evil.example' })).toThrow('trusted loopback Vite dev server')

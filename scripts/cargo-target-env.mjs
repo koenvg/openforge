@@ -1,11 +1,15 @@
 import { execFileSync as defaultExecFileSync } from 'node:child_process'
 import path from 'node:path'
+import {
+  DEFAULT_DEV_HTTP_BRIDGE_PORT,
+  DEFAULT_HTTP_BRIDGE_PORT_STRING,
+} from './openforge-http-bridge-ports.mjs'
 import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 
 const SHARED_TARGET_DIR_NAME = '.cargo-target'
 const NON_STANDARD_COMMON_DIR_TARGET_NAME = 'openforge-cargo-target'
-const DEFAULT_PRODUCTION_BACKEND_PORT = '17422'
-export const DEFAULT_DEV_BACKEND_PORT = 17642
+export const DEFAULT_PRODUCTION_BACKEND_PORT = DEFAULT_HTTP_BRIDGE_PORT_STRING
+export const DEFAULT_DEV_BACKEND_PORT = DEFAULT_DEV_HTTP_BRIDGE_PORT
 
 export function resolveGitCommonDir(cwd, gitCommonDir) {
   return path.normalize(path.isAbsolute(gitCommonDir) ? gitCommonDir : path.resolve(cwd, gitCommonDir))
