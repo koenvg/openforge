@@ -6,7 +6,7 @@ import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { connect } from 'node:net'
-import { DEFAULT_DEV_BACKEND_PORT, buildElectronSidecarDevEnv } from './cargo-target-env.mjs'
+import { DEFAULT_DEV_BACKEND_PORT, buildElectronSidecarDevEnv, parsePort } from './cargo-target-env.mjs'
 import { OPENFORGE_APP_DATA_IDENTIFIER, databaseFilenameForBuildMode } from './data-identity.mjs'
 import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 
@@ -61,14 +61,6 @@ function repoRoot() {
 
 export function rendererUrlForPort(port, host = VITE_HOST) {
   return `http://${host}:${port}`
-}
-
-function parsePort(value, envName) {
-  const port = Number(value)
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error(`${envName} must be an integer port between 1 and 65535`)
-  }
-  return port
 }
 
 function nonEmptyEnv(value) {
@@ -355,7 +347,7 @@ async function findAvailableBackendPort(startPort, deps = { isPortOpen }) {
 export async function resolveElectronDevBackendEnv(options = {}, deps = { isPortOpen }) {
   const baseEnv = options.env ?? process.env
   const result = buildElectronSidecarDevEnv({ ...options, env: baseEnv })
-  const backendPort = Number(result.env.OPENFORGE_BACKEND_PORT)
+  const backendPort = parsePort(result.env.OPENFORGE_BACKEND_PORT, 'OPENFORGE_BACKEND_PORT')
 
   const defaultDevBackendPort = String(DEFAULT_DEV_BACKEND_PORT)
   const hasExplicitBackendPort = result.env.OPENFORGE_BACKEND_PORT !== defaultDevBackendPort

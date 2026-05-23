@@ -596,6 +596,24 @@ describe('electron dev script environment', () => {
     )).rejects.toThrow('Port 18000 is already in use')
   })
 
+  it('rejects invalid explicit backend ports before probing availability', async () => {
+    const isPortOpen = vi.fn(async () => false)
+
+    await expect(resolveElectronDevBackendEnv(
+      {
+        cwd: '/repo/openforge',
+        env: { OPENFORGE_BACKEND_PORT: 'not-a-port' },
+        rustSidecarLayout: defaultTestLayout,
+        execFileSync: () => {
+          throw new Error('not a git checkout')
+        },
+      },
+      { isPortOpen },
+    )).rejects.toThrow('OPENFORGE_BACKEND_PORT must be an integer port between 1 and 65535')
+
+    expect(isPortOpen).not.toHaveBeenCalled()
+  })
+
   it('fails fast instead of reassigning an occupied custom legacy backend port', async () => {
     await expect(resolveElectronDevBackendEnv(
       {
@@ -608,6 +626,24 @@ describe('electron dev script environment', () => {
       },
       { isPortOpen: async (_host, port) => port === 19000 },
     )).rejects.toThrow('Port 19000 is already in use')
+  })
+
+  it('rejects invalid custom legacy backend ports before probing availability', async () => {
+    const isPortOpen = vi.fn(async () => false)
+
+    await expect(resolveElectronDevBackendEnv(
+      {
+        cwd: '/repo/openforge',
+        env: { AI_COMMAND_CENTER_PORT: 'not-a-port' },
+        rustSidecarLayout: defaultTestLayout,
+        execFileSync: () => {
+          throw new Error('not a git checkout')
+        },
+      },
+      { isPortOpen },
+    )).rejects.toThrow('AI_COMMAND_CENTER_PORT must be an integer port between 1 and 65535')
+
+    expect(isPortOpen).not.toHaveBeenCalled()
   })
 
   it('fails fast if the spawned Vite process exits before readiness', async () => {

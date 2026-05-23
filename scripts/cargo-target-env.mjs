@@ -25,6 +25,26 @@ export function sharedCargoTargetDirFromGitCommonDir(gitCommonDir) {
   return path.join(normalizedGitCommonDir, NON_STANDARD_COMMON_DIR_TARGET_NAME)
 }
 
+export function parsePort(value, envName) {
+  const port = Number(value)
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`${envName} must be an integer port between 1 and 65535`)
+  }
+  return port
+}
+
+function resolveDevBackendPort(env) {
+  if (env.OPENFORGE_BACKEND_PORT != null) {
+    return String(parsePort(env.OPENFORGE_BACKEND_PORT, 'OPENFORGE_BACKEND_PORT'))
+  }
+
+  if (env.AI_COMMAND_CENTER_PORT != null && env.AI_COMMAND_CENTER_PORT !== DEFAULT_PRODUCTION_BACKEND_PORT) {
+    return String(parsePort(env.AI_COMMAND_CENTER_PORT, 'AI_COMMAND_CENTER_PORT'))
+  }
+
+  return String(DEFAULT_DEV_BACKEND_PORT)
+}
+
 export function computeCargoTargetDir({
   cwd = process.cwd(),
   env = process.env,
@@ -63,10 +83,7 @@ export function computeCargoTargetDir({
 export function buildElectronSidecarDevEnv(options = {}) {
   const env = options.env ?? process.env
   const result = computeCargoTargetDir({ ...options, env })
-  const legacyBackendPort = env.AI_COMMAND_CENTER_PORT === DEFAULT_PRODUCTION_BACKEND_PORT
-    ? undefined
-    : env.AI_COMMAND_CENTER_PORT
-  const backendPort = env.OPENFORGE_BACKEND_PORT ?? legacyBackendPort ?? String(DEFAULT_DEV_BACKEND_PORT)
+  const backendPort = resolveDevBackendPort(env)
 
   return {
     ...result,
