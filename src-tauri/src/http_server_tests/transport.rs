@@ -1,5 +1,6 @@
 use super::*;
 use crate::app_events::{AppEventBus, AppEventCursor};
+use crate::http_bridge_port_contract::DEFAULT_HTTP_BRIDGE_PORT;
 use std::time::Duration;
 
 #[test]
@@ -9,12 +10,12 @@ fn test_resolve_http_server_port_prefers_electron_sidecar_env() {
         17642
     );
     assert_eq!(
-        resolve_http_server_port(None, Some("17422".to_string())),
-        17422
+        resolve_http_server_port(None, Some(DEFAULT_HTTP_BRIDGE_PORT.to_string())),
+        DEFAULT_HTTP_BRIDGE_PORT
     );
     assert_eq!(
         resolve_http_server_port(Some("not-a-port".to_string()), None),
-        17422
+        DEFAULT_HTTP_BRIDGE_PORT
     );
 }
 

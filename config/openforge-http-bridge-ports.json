@@ -1,0 +1,11 @@
+{
+  "$schema": "../docs/contracts/openforge-http-bridge-ports.schema.json",
+  "description": "Shared default ports for the local OpenForge HTTP bridge. Production is used by packaged Electron/CLI/provider integrations; development is used by pnpm electron:dev when no explicit port is set.",
+  "productionDefaultPort": 17422,
+  "developmentDefaultPort": 17642,
+  "environmentVariables": {
+    "backendPort": "OPENFORGE_BACKEND_PORT",
+    "cliPort": "OPENFORGE_HTTP_PORT",
+    "legacyBackendPort": "AI_COMMAND_CENTER_PORT"
+  }
+}

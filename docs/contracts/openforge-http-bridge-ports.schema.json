@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OpenForge HTTP bridge port contract",
+  "type": "object",
+  "required": ["productionDefaultPort", "developmentDefaultPort", "environmentVariables"],
+  "properties": {
+    "description": { "type": "string" },
+    "productionDefaultPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+    "developmentDefaultPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+    "environmentVariables": {
+      "type": "object",
+      "required": ["backendPort", "cliPort", "legacyBackendPort"],
+      "properties": {
+        "backendPort": { "const": "OPENFORGE_BACKEND_PORT" },
+        "cliPort": { "const": "OPENFORGE_HTTP_PORT" },
+        "legacyBackendPort": { "const": "AI_COMMAND_CENTER_PORT" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

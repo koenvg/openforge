@@ -1,5 +1,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
+const DEFAULT_OPENFORGE_HTTP_PORT = "17422";
+
 function openForgeLifecycleKind(eventType: "agent.start" | "agent.end") {
   return eventType === "agent.start" ? "started" : "ended";
 }
@@ -9,7 +11,7 @@ async function reportPiLifecycle(eventType: "agent.start" | "agent.end") {
   const ptyInstanceId = process.env.OPENFORGE_PTY_INSTANCE_ID;
   if (!taskId || !ptyInstanceId) return;
 
-  const port = process.env.OPENFORGE_HTTP_PORT ?? "17422";
+  const port = process.env.OPENFORGE_HTTP_PORT ?? DEFAULT_OPENFORGE_HTTP_PORT;
   try {
     await fetch(`http://127.0.0.1:${port}/hooks/agent-lifecycle`, {
       method: "POST",

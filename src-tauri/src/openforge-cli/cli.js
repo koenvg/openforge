@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-const HTTP_PORT = process.env.OPENFORGE_HTTP_PORT ?? '17422';
+const DEFAULT_OPENFORGE_HTTP_PORT = '17422';
+const HTTP_PORT = process.env.OPENFORGE_HTTP_PORT ?? DEFAULT_OPENFORGE_HTTP_PORT;
 const BASE_URL = `http://127.0.0.1:${HTTP_PORT}`;
 
 const COMMAND_FLAGS = {

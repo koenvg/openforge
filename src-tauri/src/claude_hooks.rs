@@ -6,13 +6,13 @@ use std::path::{Path, PathBuf};
 ///
 /// Electron sidecar mode exposes its authenticated backend on
 /// OPENFORGE_BACKEND_PORT, while legacy Tauri hooks use AI_COMMAND_CENTER_PORT.
-/// Defaults to 17422 if neither is set or valid.
+/// Defaults to the shared OpenForge HTTP bridge port contract if neither is set or valid.
 pub fn get_http_server_port() -> u16 {
     std::env::var("OPENFORGE_BACKEND_PORT")
         .or_else(|_| std::env::var("AI_COMMAND_CENTER_PORT"))
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(17422)
+        .unwrap_or(crate::http_bridge_port_contract::DEFAULT_HTTP_BRIDGE_PORT)
 }
 
 pub(crate) fn generate_hooks_settings_for_home(
@@ -343,8 +343,9 @@ mod tests {
         // Test 1: Default (env var not set)
         let port = get_http_server_port();
         assert_eq!(
-            port, 17422,
-            "Should return default 17422 when env var is not set"
+            port,
+            crate::http_bridge_port_contract::DEFAULT_HTTP_BRIDGE_PORT,
+            "Should return the shared default when env var is not set"
         );
 
         // Test 2: Valid legacy Tauri value from env
@@ -367,8 +368,9 @@ mod tests {
         backend_guard.set("invalid");
         let port = get_http_server_port();
         assert_eq!(
-            port, 17422,
-            "Should return default 17422 when selected env var is invalid"
+            port,
+            crate::http_bridge_port_contract::DEFAULT_HTTP_BRIDGE_PORT,
+            "Should return the shared default when selected env var is invalid"
         );
 
         if let Some(value) = original_ai_port {
