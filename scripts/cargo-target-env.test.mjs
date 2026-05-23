@@ -121,6 +121,19 @@ describe('Electron sidecar dev shared Cargo target env', () => {
     expect(result.env.OPENFORGE_HTTP_PORT).toBe('18000')
   })
 
+  it('rejects invalid explicit dev backend ports', () => {
+    for (const value of ['abc', '0', '65536', '123.5']) {
+      expect(() => buildElectronSidecarDevEnv({
+        cwd: '/repo/openforge',
+        env: { OPENFORGE_BACKEND_PORT: value },
+        rustSidecarLayout: defaultTestLayout,
+        execFileSync: () => {
+          throw new Error('not a git checkout')
+        },
+      })).toThrow('OPENFORGE_BACKEND_PORT must be an integer port between 1 and 65535')
+    }
+  })
+
   it('uses a non-production dev backend port when the legacy production port is inherited', () => {
     const result = buildElectronSidecarDevEnv({
       cwd: '/repo/openforge',
@@ -147,6 +160,19 @@ describe('Electron sidecar dev shared Cargo target env', () => {
 
     expect(result.env.OPENFORGE_BACKEND_PORT).toBe('19000')
     expect(result.env.OPENFORGE_HTTP_PORT).toBe('19000')
+  })
+
+  it('rejects invalid custom legacy AI_COMMAND_CENTER_PORT values', () => {
+    for (const value of ['abc', '-1', '70000', '19000.1']) {
+      expect(() => buildElectronSidecarDevEnv({
+        cwd: '/repo/openforge',
+        env: { AI_COMMAND_CENTER_PORT: value },
+        rustSidecarLayout: defaultTestLayout,
+        execFileSync: () => {
+          throw new Error('not a git checkout')
+        },
+      })).toThrow('AI_COMMAND_CENTER_PORT must be an integer port between 1 and 65535')
+    }
   })
 
   it('prefers OPENFORGE_BACKEND_PORT over legacy AI_COMMAND_CENTER_PORT in dev', () => {
