@@ -232,6 +232,12 @@ describe('SettingsView', () => {
     ).toBeTruthy()
   })
 
+  it('renders the project handoff notes template textarea', () => {
+    render(SettingsView, { props: defaultProps })
+    expect(screen.getByText('Handoff Notes Template')).toBeTruthy()
+    expect(screen.getByPlaceholderText(/## Current summary/i)).toBeTruthy()
+  })
+
   it('renders GitHub PAT field on global page', () => {
     activeProjectId.set(null)
     projects.set([])
@@ -311,6 +317,7 @@ describe('SettingsView', () => {
 
       expect(vi.mocked(updateProject)).toHaveBeenCalled()
       expect(vi.mocked(setProjectConfig)).toHaveBeenCalled()
+      expect(vi.mocked(setProjectConfig)).toHaveBeenCalledWith('test-project-id', 'handoff_notes_template', '')
       expect(vi.mocked(setConfig)).toHaveBeenCalled()
     })
 

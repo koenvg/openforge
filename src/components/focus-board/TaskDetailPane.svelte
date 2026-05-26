@@ -73,13 +73,13 @@
     </section>
 
     <section class="flex flex-col gap-1.5">
-      <span class="font-mono text-[10px] font-bold text-primary">// SUMMARY</span>
+      <span class="font-mono text-[10px] font-bold text-primary">// HANDOFF_NOTES</span>
       {#if task.summary}
         <div class="text-xs text-base-content/70 leading-relaxed break-words [&_.markdown-body]:text-xs [&_.markdown-body_pre]:text-[10px] [&_.markdown-body_code]:text-[10px] [&_.markdown-body_p]:m-0">
           <MarkdownContent content={task.summary.replace(/\\n/g, '\n')} />
         </div>
       {:else}
-        <p class="text-xs text-base-content/40">No summary yet.</p>
+        <p class="text-xs text-base-content/40">No handoff notes yet.</p>
       {/if}
     </section>
 

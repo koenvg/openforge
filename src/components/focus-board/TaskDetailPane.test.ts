@@ -96,7 +96,7 @@ describe('TaskDetailPane', () => {
         },
       })
       expect(screen.queryByText('// INITIAL_PROMPT')).toBeNull()
-      expect(screen.queryByText('// SUMMARY')).toBeNull()
+      expect(screen.queryByText('// HANDOFF_NOTES')).toBeNull()
     })
   })
 
@@ -219,8 +219,8 @@ describe('TaskDetailPane', () => {
     })
   })
 
-  describe('summary section', () => {
-    it('renders // SUMMARY label', () => {
+  describe('handoff notes section', () => {
+    it('renders // HANDOFF_NOTES label', () => {
       render(TaskDetailPane, {
         props: {
           task: baseTask,
@@ -229,10 +229,10 @@ describe('TaskDetailPane', () => {
           onOpenFullView: vi.fn(),
         },
       })
-      expect(screen.getByText('// SUMMARY')).toBeTruthy()
+      expect(screen.getByText('// HANDOFF_NOTES')).toBeTruthy()
     })
 
-    it('renders summary text when present', () => {
+    it('renders handoff notes text when present', () => {
       render(TaskDetailPane, {
         props: {
           task: baseTask,
@@ -244,7 +244,7 @@ describe('TaskDetailPane', () => {
       expect(screen.getByText('Applied reactive fix.')).toBeTruthy()
     })
 
-    it('renders summary markdown when present', () => {
+    it('renders handoff notes markdown when present', () => {
       const taskWithMarkdownSummary = {
         ...baseTask,
         summary: '**Bold summary** and `inline code`',
@@ -262,7 +262,7 @@ describe('TaskDetailPane', () => {
       expect(container.querySelector('code')?.textContent).toBe('inline code')
     })
 
-    it('renders fallback text when summary is null', () => {
+    it('renders fallback text when handoff notes are null', () => {
       const taskNoSummary = { ...baseTask, summary: null }
       render(TaskDetailPane, {
         props: {
@@ -272,7 +272,7 @@ describe('TaskDetailPane', () => {
           onOpenFullView: vi.fn(),
         },
       })
-      expect(screen.getByText(/no summary yet/i)).toBeTruthy()
+      expect(screen.getByText(/no handoff notes yet/i)).toBeTruthy()
     })
   })
 

@@ -24,6 +24,14 @@ _Avoid_: Restart, start, continue with prompt
 A message sent into an existing **Agent Session** to continue or redirect work.
 _Avoid_: Resume, restart
 
+**Handoff Notes**:
+A living reviewer-facing brief on a **Task** that summarizes what needs inspection after agent work.
+_Avoid_: Completion log, run history, random comments
+
+**Project Handoff Notes Template**:
+A project-owned format that defines what **Handoff Notes** must contain for that project.
+_Avoid_: Global summary format, additional instructions
+
 **Project Agent Settings**:
 The project-owned choice of provider, agent, and permission mode for new **Implementation Runs**.
 _Avoid_: Plugin run options, per-call agent override
@@ -47,6 +55,9 @@ _Avoid_: Run scheduling, agent configuration, global task creation, status selec
 - A **Task** with an active **Agent Session** cannot start another **Implementation Run**.
 - **Session Reattachment** preserves the existing **Agent Session** identity.
 - **Implementation Input** targets an existing **Agent Session** and does not choose a new provider or agent.
+- **Handoff Notes** belong to a **Task** and are updated to reflect the current review state rather than appended per **Implementation Run**.
+- A **Project Handoff Notes Template** defines the required shape of **Handoff Notes** for Tasks in one project.
+- Existing Tasks may have unstructured historical summaries; **Handoff Notes** are the forward-looking reviewer brief, not a migration requirement.
 
 ## Example dialogue
 
@@ -58,3 +69,6 @@ _Avoid_: Run scheduling, agent configuration, global task creation, status selec
 - "Resume" was used to mean both reattaching a detached session and sending a new prompt to an active session — resolved: **Session Reattachment** means reconnect only, while **Implementation Input** is the prompt/message.
 - `agent` and `permissionMode` were considered for plugin **Task Creation** — resolved: task creation records work only; execution policy belongs to **Project Agent Settings**.
 - Task status was considered for plugin **Task Creation** — resolved: plugin-created tasks always enter the backlog.
+- "Handoff" could mean a per-run completion record or the current reviewer brief — resolved: **Handoff Notes** are the current Task-level review brief, not append-only run history.
+- The handoff format could be hidden inside broad project instructions — resolved: use a dedicated **Project Handoff Notes Template** so the review contract is explicit.
+- "Summary" and **Handoff Notes** overlapped — resolved: user-facing review language should say **Handoff Notes**, while existing unstructured summaries remain valid legacy content.
