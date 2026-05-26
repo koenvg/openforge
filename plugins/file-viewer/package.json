@@ -26,6 +26,6 @@
     "description": "Browse and preview project files",
     "icon": "folder-open",
     "frontend": "./dist/frontend.js",
-    "requires": ["views", "fs", "system.openUrl", "context"]
+    "requires": ["views", "commands", "fs", "system.openUrl", "context"]
   }
 }

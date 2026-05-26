@@ -5,7 +5,7 @@ import { writable } from 'svelte/store'
 const mockActiveProjectId = writable<string | null>('test-project-id')
 const mockFsSearchFiles = vi.fn<(projectId: string, query: string, limit: number) => Promise<string[]>>()
 const mockNavigate = vi.fn()
-const mockRevealFileInFileViewer = vi.fn<(path: string) => void>()
+const mockRevealFileInFileViewer = vi.fn<(path: string) => Promise<boolean>>()
 
 vi.mock('../../lib/stores', () => ({
   activeProjectId: mockActiveProjectId,
@@ -44,6 +44,7 @@ describe('FileQuickOpen', () => {
     vi.clearAllMocks()
     mockActiveProjectId.set('test-project-id')
     mockFsSearchFiles.mockResolvedValue([])
+    mockRevealFileInFileViewer.mockResolvedValue(true)
   })
 
   it('renders search input and focuses it on mount', async () => {
@@ -118,9 +119,11 @@ describe('FileQuickOpen', () => {
     await fireEvent.keyDown(dialog, { key: 'ArrowDown' })
     await fireEvent.keyDown(dialog, { key: 'Enter' })
 
-    expect(mockRevealFileInFileViewer).toHaveBeenCalledWith('b.ts')
-    expect(mockNavigate).toHaveBeenCalledWith('plugin:com.openforge.file-viewer:files')
-    expect(onClose).toHaveBeenCalledOnce()
+    await waitFor(() => {
+      expect(mockRevealFileInFileViewer).toHaveBeenCalledWith('b.ts')
+      expect(mockNavigate).toHaveBeenCalledWith('plugin:com.openforge.file-viewer:files')
+      expect(onClose).toHaveBeenCalledOnce()
+    })
   })
 
   it('Escape closes the modal', async () => {
@@ -181,7 +184,9 @@ describe('FileQuickOpen', () => {
     await fireEvent.keyDown(dialog, { key: 'j', ctrlKey: true })
     await fireEvent.keyDown(dialog, { key: 'Enter' })
 
-    expect(mockRevealFileInFileViewer).toHaveBeenCalledWith('b.ts')
+    await waitFor(() => {
+      expect(mockRevealFileInFileViewer).toHaveBeenCalledWith('b.ts')
+    })
   })
 
   it('displays file name and directory path for results', async () => {
