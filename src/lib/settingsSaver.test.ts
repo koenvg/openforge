@@ -36,6 +36,7 @@ describe('settingsSaver', () => {
       projectPath: '/tmp/project',
       githubDefaultRepo: 'owner/repo',
       agentInstructions: 'Do the thing',
+      handoffNotesTemplate: '## Current summary\nCustom template',
       aiProvider: 'opencode',
       useWorktrees: false,
       projectColor: 'violet',
@@ -46,6 +47,7 @@ describe('settingsSaver', () => {
     expect(updateProject).toHaveBeenCalledWith('project-1', 'My Project', '/tmp/project')
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'github_default_repo', 'owner/repo')
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'additional_instructions', 'Do the thing')
+    expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'handoff_notes_template', '## Current summary\nCustom template')
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'ai_provider', 'opencode')
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'use_worktrees', 'false')
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'project_color', 'violet')

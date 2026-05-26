@@ -18,9 +18,15 @@ const baseTask: Task = {
 }
 
 describe('TaskPromptSummary', () => {
-  it('renders initial prompt and summary', () => {
+  it('renders initial prompt and handoff notes', () => {
     render(TaskPromptSummary, { props: { task: baseTask } })
     expect(screen.getByText('Implement auth middleware')).toBeTruthy()
+    expect(screen.getByText('// HANDOFF_NOTES')).toBeTruthy()
     expect(screen.getByText('Implemented JWT auth')).toBeTruthy()
+  })
+
+  it('renders handoff notes fallback when summary is empty', () => {
+    render(TaskPromptSummary, { props: { task: { ...baseTask, summary: null } } })
+    expect(screen.getByText(/no handoff notes yet/i)).toBeTruthy()
   })
 })

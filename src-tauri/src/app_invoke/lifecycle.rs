@@ -75,6 +75,7 @@ struct StartImplementationContext {
     task: crate::db::TaskRow,
     project_id: String,
     additional_instructions: Option<String>,
+    handoff_notes_template: Option<String>,
     code_cleanup_enabled: bool,
     use_worktrees: bool,
     provider_name: String,
@@ -152,6 +153,10 @@ fn load_start_implementation_context(
         .get_project_config(&project_id, "additional_instructions")
         .ok()
         .flatten();
+    let handoff_notes_template = db
+        .get_project_config(&project_id, "handoff_notes_template")
+        .ok()
+        .flatten();
     let code_cleanup_enabled = db
         .get_config("code_cleanup_tasks_enabled")
         .ok()
@@ -165,6 +170,7 @@ fn load_start_implementation_context(
         task,
         project_id,
         additional_instructions,
+        handoff_notes_template,
         code_cleanup_enabled,
         use_worktrees,
         provider_name,
@@ -375,6 +381,7 @@ pub(super) async fn handle_app_start_implementation_command(
         &start_context.task,
         start_context.additional_instructions.as_deref(),
         start_context.code_cleanup_enabled,
+        start_context.handoff_notes_template.as_deref(),
     );
     let provider_options = provider_run_options_for_task(&start_context.task);
 

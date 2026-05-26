@@ -49,6 +49,7 @@
   let projectPath = $state('')
   let githubDefaultRepo = $state('')
   let agentInstructions = $state('')
+  let handoffNotesTemplate = $state('')
   let aiProvider = $state('claude-code')
   let useWorktrees = $state(true)
   let projectColor = $state('')
@@ -144,6 +145,7 @@
       loadProjectSettings(pid).then((settings) => {
         githubDefaultRepo = settings.githubDefaultRepo
         agentInstructions = settings.agentInstructions
+        handoffNotesTemplate = settings.handoffNotesTemplate
         aiProvider = settings.aiProvider
         useWorktrees = settings.useWorktrees
         projectColor = settings.projectColor
@@ -153,6 +155,7 @@
     } else {
       githubDefaultRepo = ''
       agentInstructions = ''
+      handoffNotesTemplate = ''
       aiProvider = 'claude-code'
       useWorktrees = true
       projectColor = ''
@@ -250,6 +253,7 @@
           projectPath,
           githubDefaultRepo,
           agentInstructions,
+          handoffNotesTemplate,
           aiProvider,
           useWorktrees,
           projectColor,
@@ -415,8 +419,10 @@
 
         <SettingsInstructionsCard
           {agentInstructions}
+          {handoffNotesTemplate}
           disabled={!hasProject}
           onInstructionsChange={(v) => { agentInstructions = v; scheduleSave() }}
+          onHandoffNotesTemplateChange={(v) => { handoffNotesTemplate = v; scheduleSave() }}
         />
 
         <PluginSettingsPanel

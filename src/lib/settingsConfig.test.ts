@@ -65,6 +65,7 @@ describe('settingsConfig', () => {
       vi.mocked(getProjectConfig)
         .mockResolvedValueOnce('owner/repo')
         .mockResolvedValueOnce('Be careful')
+        .mockResolvedValueOnce('## Current summary\nCustom handoff format')
         .mockResolvedValueOnce('opencode')
         .mockResolvedValueOnce('false')
         .mockResolvedValueOnce('amber')
@@ -76,12 +77,13 @@ describe('settingsConfig', () => {
 
       const result = await loadProjectSettings('project-1')
 
-      expect(getProjectConfig).toHaveBeenCalledTimes(5)
+      expect(getProjectConfig).toHaveBeenCalledTimes(6)
       expect(loadActions).toHaveBeenCalledWith('project-1')
       expect(loadFocusFilterStates).toHaveBeenCalledWith('project-1')
       expect(result).toEqual({
         githubDefaultRepo: 'owner/repo',
         agentInstructions: 'Be careful',
+        handoffNotesTemplate: '## Current summary\nCustom handoff format',
         aiProvider: 'opencode',
         useWorktrees: false,
         projectColor: 'amber',
@@ -96,6 +98,7 @@ describe('settingsConfig', () => {
       expect(result).toEqual({
         githubDefaultRepo: '',
         agentInstructions: '',
+        handoffNotesTemplate: '',
         aiProvider: 'claude-code',
         useWorktrees: true,
         projectColor: '',

@@ -1,6 +1,36 @@
 use crate::db::{self, AgentSessionRow};
 use serde::{Deserialize, Serialize};
 
+pub const DEFAULT_HANDOFF_NOTES_TEMPLATE: &str = r#"## Current summary
+Brief status of what changed and whether the task is ready for review.
+
+## Decisions made
+Key choices and trade-offs.
+
+## Review focus
+What the reviewer should inspect first.
+
+## Risky files or lines
+Files, line ranges, migrations, lifecycle code, or state transitions that deserve care.
+
+## Tricky API calls or casts
+IPC payloads, provider APIs, unsafe casts, schema assumptions, or naming mismatches.
+
+## Tests skipped or weak
+What was not tested, weak coverage, flaky checks, or verification gaps.
+
+## Open questions
+Anything unresolved or needing product/technical judgment.
+
+## Follow-up tasks
+Cleanup or follow-up work created or recommended."#;
+
+fn effective_handoff_notes_template(project_template: Option<&str>) -> &str {
+    project_template
+        .filter(|template| !template.trim().is_empty())
+        .unwrap_or(DEFAULT_HANDOFF_NOTES_TEMPLATE)
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentLifecycleEventKind {
@@ -143,29 +173,35 @@ pub fn build_task_prompt(
     task: &db::TaskRow,
     additional_instructions: Option<&str>,
     code_cleanup_enabled: bool,
+    handoff_notes_template: Option<&str>,
 ) -> String {
     let mut prompt = String::new();
+    let handoff_notes_template = effective_handoff_notes_template(handoff_notes_template);
 
-    prompt.push_str(&format!(r#"<openforge_task_management>
-This task is {task_id}. You MUST update the OpenForge task at both points below — the task is not complete without these updates.
+    prompt.push_str(&format!(r###"<openforge_task_management>
+This task is {task_id}. OpenForge stores this task's user-facing Handoff Notes in the task summary field. You MUST update the OpenForge task at both points below — the task is not complete without these updates.
+
+<handoff_notes_template>
+{handoff_notes_template}
+</handoff_notes_template>
 
 <analysis_update trigger="after_initial_analysis">
 Once you understand the scope, run: openforge update-task --task-id "{task_id}" --summary "..."
-Write a concise initial-analysis status reflecting the actual work, not the original request verbatim.
-Good: "Scoped JWT refresh token rotation in auth middleware" — Bad: "implement the auth thing"
+Write concise initial Handoff Notes reflecting the actual work and the active template, not the original request verbatim.
+Good: "## Current summary\nScoped JWT refresh token rotation in auth middleware\n\n## Review focus\nInspect auth middleware expiry handling." — Bad: "implement the auth thing"
 </analysis_update>
 
 <summary_update trigger="before_finalizing">
 Before reporting completion, run: openforge update-task --task-id "{task_id}" --summary "..."
-Cover: what changed, key decisions, and anything needing attention.
+Replace the task's Handoff Notes with an accurate, up-to-date reviewer brief using the active template. Cover decisions made, risky files or lines, tricky API calls or casts, skipped or weak tests, open questions, and follow-up tasks. Keep it current rather than appending run history.
 </summary_update>
 
 <completeness_check>
-Task is incomplete unless both summary updates were made. If the openforge CLI is unavailable, use the equivalent OpenForge task-update mechanism with the same task id and summary fields. If blocked or abandoned, still update the summary with status and what remains.
+Task is incomplete unless both Handoff Notes updates were made. If the openforge CLI is unavailable, use the equivalent OpenForge task-update mechanism with the same task id and summary fields. If blocked or abandoned, still update the Handoff Notes with status and what remains.
 </completeness_check>
 </openforge_task_management>
 
-"#, task_id = task.id));
+"###, task_id = task.id, handoff_notes_template = handoff_notes_template));
 
     if code_cleanup_enabled {
         prompt.push_str(&format!(r#"<openforge_code_cleanup>
@@ -278,10 +314,14 @@ mod tests {
     fn test_build_task_prompt_contains_management_and_prompt() {
         let task = sample_task("T-123", "Test Task", None);
 
-        let prompt = build_task_prompt(&task, None, false);
+        let prompt = build_task_prompt(&task, None, false, None);
 
         assert!(prompt.contains("Test Task"));
         assert!(prompt.contains("<openforge_task_management>"));
+        assert!(prompt.contains("<handoff_notes_template>"));
+        assert!(prompt.contains("## Current summary"));
+        assert!(prompt.contains("## Review focus"));
+        assert!(prompt.contains("OpenForge stores this task's user-facing Handoff Notes in the task summary field"));
         assert!(prompt.contains("openforge update-task --task-id \"T-123\" --summary \"...\""));
         assert!(!prompt.contains("openforge_update_task"));
         assert!(prompt.contains("T-123"));
@@ -293,13 +333,42 @@ mod tests {
     fn test_build_task_prompt_never_requests_initial_prompt_update() {
         let task = sample_task("T-124", "Immutable prompt", None);
 
-        let prompt = build_task_prompt(&task, None, false);
+        let prompt = build_task_prompt(&task, None, false, None);
 
         assert!(prompt.contains("<analysis_update trigger=\"after_initial_analysis\">"));
+        assert!(prompt.contains("Write concise initial Handoff Notes"));
+        assert!(prompt.contains("<summary_update trigger=\"before_finalizing\">"));
+        assert!(prompt.contains("Replace the task's Handoff Notes"));
         assert!(prompt.contains("openforge update-task --task-id \"T-124\" --summary \"...\""));
         assert!(!prompt.contains("openforge_update_task"));
         assert!(!prompt.contains("<initial_prompt_update"));
         assert!(!prompt.contains("initial_prompt=\"...\""));
+    }
+
+    #[test]
+    fn test_build_task_prompt_uses_project_handoff_notes_template_when_present() {
+        let task = sample_task("T-125", "Custom handoff", None);
+
+        let prompt = build_task_prompt(
+            &task,
+            None,
+            false,
+            Some("## Custom review brief\n- Inspect project-specific risk"),
+        );
+
+        assert!(prompt.contains("## Custom review brief"));
+        assert!(prompt.contains("Inspect project-specific risk"));
+        assert!(!prompt.contains("## Risky files or lines"));
+    }
+
+    #[test]
+    fn test_build_task_prompt_uses_default_handoff_notes_template_when_project_template_blank() {
+        let task = sample_task("T-126", "Blank handoff", None);
+
+        let prompt = build_task_prompt(&task, None, false, Some("   "));
+
+        assert!(prompt.contains("## Current summary"));
+        assert!(prompt.contains("## Follow-up tasks"));
     }
 
     #[test]
@@ -310,7 +379,7 @@ mod tests {
             Some("Specific implementation prompt"),
         );
 
-        let prompt = build_task_prompt(&task, None, false);
+        let prompt = build_task_prompt(&task, None, false, None);
 
         assert!(prompt.contains("Specific implementation prompt"));
         assert!(!prompt.contains("\nInitial title\n"));
@@ -320,7 +389,7 @@ mod tests {
     fn test_build_task_prompt_with_additional_instructions_ordering() {
         let task = sample_task("T-789", "Task Body", Some("Do the work"));
 
-        let prompt = build_task_prompt(&task, Some("Project rules here"), false);
+        let prompt = build_task_prompt(&task, Some("Project rules here"), false, None);
 
         let mgmt_pos = prompt.find("<openforge_task_management>").unwrap();
         let instructions_pos = prompt.find("Project rules here").unwrap();
@@ -675,7 +744,7 @@ mod tests {
     fn test_build_task_prompt_without_code_cleanup() {
         let task = sample_task("T-800", "No cleanup", None);
 
-        let prompt = build_task_prompt(&task, None, false);
+        let prompt = build_task_prompt(&task, None, false, None);
 
         assert!(!prompt.contains("<openforge_code_cleanup>"));
         assert!(!prompt.contains("openforge_create_task"));
@@ -687,7 +756,7 @@ mod tests {
     fn test_build_task_prompt_with_code_cleanup_enabled() {
         let task = sample_task("T-801", "With cleanup", None);
 
-        let prompt = build_task_prompt(&task, None, true);
+        let prompt = build_task_prompt(&task, None, true, None);
 
         assert!(prompt.contains("<openforge_code_cleanup>"));
         assert!(prompt.contains("</openforge_code_cleanup>"));
@@ -703,7 +772,7 @@ mod tests {
     fn test_build_task_prompt_code_cleanup_ordering() {
         let task = sample_task("T-802", "Cleanup ordering", None);
 
-        let prompt = build_task_prompt(&task, None, true);
+        let prompt = build_task_prompt(&task, None, true, None);
 
         let mgmt_pos = prompt.find("<openforge_task_management>").unwrap();
         let cleanup_pos = prompt.find("<openforge_code_cleanup>").unwrap();

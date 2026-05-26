@@ -11,6 +11,7 @@ export interface ProjectSettingsSavePayload {
   projectPath: string
   githubDefaultRepo: string
   agentInstructions: string
+  handoffNotesTemplate: string
   aiProvider: string
   useWorktrees: boolean
   projectColor: string
@@ -29,6 +30,7 @@ export async function saveProjectSettings(payload: ProjectSettingsSavePayload): 
   await updateProject(payload.projectId, payload.projectName, payload.projectPath)
   await setProjectConfig(payload.projectId, 'github_default_repo', payload.githubDefaultRepo)
   await setProjectConfig(payload.projectId, 'additional_instructions', payload.agentInstructions)
+  await setProjectConfig(payload.projectId, 'handoff_notes_template', payload.handoffNotesTemplate)
   await setProjectConfig(payload.projectId, 'ai_provider', payload.aiProvider)
   await setProjectConfig(payload.projectId, 'use_worktrees', payload.useWorktrees ? 'true' : 'false')
   await setProjectConfig(payload.projectId, 'project_color', payload.projectColor)

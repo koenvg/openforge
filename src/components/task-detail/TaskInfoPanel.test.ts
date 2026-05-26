@@ -145,43 +145,43 @@ describe('TaskInfoPanel', () => {
     expect(promptSection?.querySelector('textarea')).toBeNull()
   })
 
-  it('renders // SUMMARY label', () => {
+  it('renders // HANDOFF_NOTES label', () => {
     render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
-    expect(screen.getByText('// SUMMARY')).toBeTruthy()
+    expect(screen.getByText('// HANDOFF_NOTES')).toBeTruthy()
   })
 
-  it('renders "No summary yet" in muted text when summary is null', () => {
+  it('renders "No handoff notes yet" in muted text when summary is null', () => {
     render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
-    expect(screen.getByText('No summary yet')).toBeTruthy()
+    expect(screen.getByText('No handoff notes yet')).toBeTruthy()
   })
 
-  it('renders summary content when summary is present', () => {
+  it('renders handoff notes content when summary is present', () => {
     const taskWithSummary = { ...baseTask, summary: 'Implemented JWT auth with refresh token support.' }
     render(TaskInfoPanel, { props: { task: taskWithSummary, workspacePath: null } })
     expect(screen.getByText('Implemented JWT auth with refresh token support.')).toBeTruthy()
-    expect(screen.queryByText('No summary yet')).toBeNull()
+    expect(screen.queryByText('No handoff notes yet')).toBeNull()
   })
 
-  it('renders literal \\n in summary as actual line breaks', () => {
+  it('renders literal \\n in handoff notes as actual line breaks', () => {
     const taskWithNewlines = { ...baseTask, summary: 'Added feature.\\n\\nChanges:\\n- New file added' }
     render(TaskInfoPanel, { props: { task: taskWithNewlines, workspacePath: null } })
-    const summarySection = screen.getByLabelText('Summary').closest('section')
-    expect(summarySection).not.toBeNull()
-    if (!summarySection) {
-      throw new Error('Expected Summary section to exist')
+    const handoffNotesSection = screen.getByLabelText('Handoff Notes').closest('section')
+    expect(handoffNotesSection).not.toBeNull()
+    if (!handoffNotesSection) {
+      throw new Error('Expected Handoff Notes section to exist')
     }
-    expect(summarySection.textContent).toContain('Added feature.')
-    expect(summarySection.textContent).toContain('Changes:')
-    expect(summarySection.textContent).toContain('New file added')
-    expect(summarySection.textContent).not.toContain('\\n')
+    expect(handoffNotesSection.textContent).toContain('Added feature.')
+    expect(handoffNotesSection.textContent).toContain('Changes:')
+    expect(handoffNotesSection.textContent).toContain('New file added')
+    expect(handoffNotesSection.textContent).not.toContain('\\n')
   })
 
-  it('renders summary as read-only text (no input elements in summary section)', () => {
+  it('renders handoff notes as read-only text (no input elements in handoff notes section)', () => {
     const taskWithSummary = { ...baseTask, summary: 'Done.' }
     render(TaskInfoPanel, { props: { task: taskWithSummary, workspacePath: null } })
-    const summarySection = screen.getByLabelText('Summary').closest('section')
-    expect(summarySection?.querySelector('input')).toBeNull()
-    expect(summarySection?.querySelector('textarea')).toBeNull()
+    const handoffNotesSection = screen.getByLabelText('Handoff Notes').closest('section')
+    expect(handoffNotesSection?.querySelector('input')).toBeNull()
+    expect(handoffNotesSection?.querySelector('textarea')).toBeNull()
   })
 
   it('does not show Edit Task or Delete buttons', () => {
