@@ -21,6 +21,7 @@ export default defineFrontendPlugin({
     context.subscriptions.add(openforge.commands.register({
       id: FILE_VIEWER_REVEAL_FILE_COMMAND_ID,
       title: 'Reveal File',
+      discoverable: false,
       input: {
         type: 'object',
         required: ['path'],

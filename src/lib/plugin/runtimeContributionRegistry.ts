@@ -97,6 +97,7 @@ export type RuntimeCommandContribution = RuntimeContributionBase & {
   title: string
   icon?: string
   shortcut?: CommandShortcutMetadata
+  discoverable?: boolean
   input?: JsonSchema
   output?: JsonSchema
   handler: RuntimeHandler
@@ -303,6 +304,7 @@ function commandDescriptor(command: RuntimeCommandContribution): CommandDescript
     title: command.title,
     icon: command.icon,
     shortcut: command.shortcut,
+    discoverable: command.discoverable ?? true,
     input: command.input,
     output: command.output,
   }

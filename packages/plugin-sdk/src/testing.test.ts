@@ -28,6 +28,12 @@ describe('plugin SDK testing utilities', () => {
           title: 'Refresh',
           handler: async (input: { force: boolean }) => ({ refreshed: input.force }),
         }))
+        context.subscriptions.add(openforge.commands.register({
+          id: 'internal-refresh',
+          title: 'Internal Refresh',
+          discoverable: false,
+          handler: async () => ({ refreshed: true }),
+        }))
       },
     })
 
@@ -38,7 +44,8 @@ describe('plugin SDK testing utilities', () => {
     ])
     await expect(registry.frontendApi.commands.invoke('refresh', { force: true })).resolves.toEqual({ refreshed: true })
     expect(await registry.frontendApi.commands.list()).toMatchObject([
-      { id: 'refresh', qualifiedId: 'github.refresh', title: 'Refresh' },
+      { id: 'refresh', qualifiedId: 'github.refresh', title: 'Refresh', discoverable: true },
+      { id: 'internal-refresh', qualifiedId: 'github.internal-refresh', title: 'Internal Refresh', discoverable: false },
     ])
 
     await registry.disposeAll()

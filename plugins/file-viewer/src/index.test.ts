@@ -84,6 +84,7 @@ describe('file-viewer plugin', () => {
     expect(registerCommand).toHaveBeenCalledWith(expect.objectContaining({
       id: 'revealFile',
       title: 'Reveal File',
+      discoverable: false,
       input: expect.objectContaining({
         type: 'object',
         required: ['path'],

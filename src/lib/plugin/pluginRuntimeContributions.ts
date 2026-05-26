@@ -41,6 +41,7 @@ function runtimeSnapshotToContributionSource(snapshot: RuntimeContributionSnapsh
       id: command.id,
       title: command.title,
       shortcut: command.shortcut,
+      discoverable: command.discoverable ?? true,
     })),
     backgroundServices: snapshot.backgroundServices.map((service) => ({
       id: service.id,

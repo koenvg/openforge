@@ -138,6 +138,8 @@ export interface CommandRegistration<TInput = unknown, TOutput = unknown> {
   title: string
   icon?: string
   shortcut?: CommandShortcutMetadata
+  /** Whether this command should appear in user-facing discovery surfaces such as the Command Palette. Defaults to true. */
+  discoverable?: boolean
   input?: JsonSchema
   output?: JsonSchema
   handler(input: TInput): MaybePromise<TOutput>
@@ -151,6 +153,7 @@ export interface CommandDescriptor {
   title: string
   icon?: string
   shortcut?: CommandShortcutMetadata
+  discoverable: boolean
   input?: JsonSchema
   output?: JsonSchema
 }

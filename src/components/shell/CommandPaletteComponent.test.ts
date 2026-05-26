@@ -151,7 +151,13 @@ describe('CommandPalette component', () => {
     mockEnabledPluginIds.set(new Set(['plugin.commands']))
     mockRuntimeContributionSources.set(new Map([[
       'plugin.commands',
-      { pluginId: 'plugin.commands', commands: [{ id: 'sync-now', title: 'Sync Now', shortcut: 'Cmd+Shift+S' }] },
+      {
+        pluginId: 'plugin.commands',
+        commands: [
+          { id: 'sync-now', title: 'Sync Now', shortcut: 'Cmd+Shift+S' },
+          { id: 'internal-sync', title: 'Internal Sync', discoverable: false },
+        ],
+      },
     ]]))
 
     const { default: CommandPalette } = await import('./CommandPalette.svelte')
@@ -162,6 +168,7 @@ describe('CommandPalette component', () => {
       expect(screen.getByText('Sync Now')).toBeTruthy()
       expect(screen.getByText('Command Plugin')).toBeTruthy()
     })
+    expect(screen.queryByText('Internal Sync')).toBeNull()
 
     await fireEvent.click(screen.getByRole('button', { name: /sync now/i }))
 

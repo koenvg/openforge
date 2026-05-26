@@ -218,6 +218,8 @@ Commands can declare default shortcut metadata in v1. Plugin command shortcuts a
 
 Command metadata should support a future command palette, but building a command palette is not part of this ADR unless another task already requires it.
 
+Commands that are intended only for programmatic integration may set `discoverable: false`. Non-discoverable commands remain invokable through local/global command APIs with their typed payloads, but user-facing discovery surfaces such as Command Palette must omit them. Use this for internal bridge commands rather than adding plugin-specific SDK APIs.
+
 ## Frontend UI model
 
 Frontend plugin UI uses native Svelte components, not iframes, webviews, or web-component isolation.

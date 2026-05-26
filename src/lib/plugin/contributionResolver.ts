@@ -10,7 +10,7 @@ import type {
 
 type RuntimeViewSource = Pick<RuntimeViewContribution, 'id' | 'title' | 'icon' | 'shortcut'> & Partial<Pick<RuntimeViewContribution, 'placement' | 'order'>>
 type RuntimeTaskPaneTabSource = Pick<RuntimeTaskPaneTabContribution, 'id' | 'title' | 'icon' | 'order'>
-type RuntimeCommandSource = Pick<RuntimeCommandContribution, 'id' | 'title' | 'shortcut'>
+type RuntimeCommandSource = Pick<RuntimeCommandContribution, 'id' | 'title' | 'shortcut' | 'discoverable'>
 type RuntimeSettingsSectionSource = Pick<RuntimeSettingsSectionContribution, 'id' | 'title' | 'order'>
 type RuntimeBackgroundServiceSource = Pick<RuntimeBackgroundServiceContribution, 'id' | 'scope'>
 
@@ -40,6 +40,7 @@ export interface ResolvedCommand {
   namespacedId: string
   title: string
   shortcut: string | null
+  discoverable: boolean
 }
 
 export interface ResolvedSettingsSection {
@@ -188,7 +189,7 @@ function resolveCommand(pluginId: string, item: unknown): ResolvedCommand | null
     return null
   }
 
-  const { id, title, shortcut } = item
+  const { id, title, shortcut, discoverable } = item
   if (!isNonEmptyString(id) || !isNonEmptyString(title)) {
     return null
   }
@@ -199,6 +200,7 @@ function resolveCommand(pluginId: string, item: unknown): ResolvedCommand | null
     namespacedId: toNamespacedId(pluginId, id),
     title,
     shortcut: normalizeCommandShortcut(shortcut),
+    discoverable: discoverable !== false,
   }
 }
 

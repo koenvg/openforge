@@ -204,6 +204,7 @@ describe('runtime contribution registry', () => {
     frontend.commands.register({
       id: 'batch',
       title: 'Batch Pull Requests',
+      discoverable: false,
       input: { type: 'array', items: { type: 'integer' } },
       output: { type: 'array', items: { type: 'string' } },
       handler: async (payload) => (payload as number[]).map(String),
@@ -221,12 +222,14 @@ describe('runtime contribution registry', () => {
         pluginId: 'github',
         title: 'Sync Pull Requests',
         shortcut: { key: 'mod+shift+s', scope: 'project' },
+        discoverable: true,
       },
       {
         id: 'batch',
         qualifiedId: 'github.batch',
         pluginId: 'github',
         title: 'Batch Pull Requests',
+        discoverable: false,
       },
     ])
     expect((await frontend.commands.list())[0]).not.toHaveProperty('handler')
