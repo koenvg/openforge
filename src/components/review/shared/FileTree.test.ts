@@ -251,4 +251,56 @@ describe('FileTree', () => {
     expect(screen.getAllByText('+15').length).toBeGreaterThan(0)
     expect(screen.getAllByText('−8').length).toBeGreaterThan(0)
   })
+
+  it('hides reviewed files by default and can reveal them', async () => {
+    const onSelectFile = () => {}
+    render(FileTree, {
+      props: {
+        files: baseFiles,
+        onSelectFile,
+        reviewedFileShas: new Map([['src/lib/auth.ts', 'a1']]),
+      },
+    })
+
+    expect(screen.queryByText('auth.ts')).toBeNull()
+    expect(screen.getByText('utils.ts')).toBeTruthy()
+    expect(screen.getByText('1 reviewed hidden')).toBeTruthy()
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Show reviewed files' }))
+
+    expect(screen.getByText('auth.ts')).toBeTruthy()
+  })
+
+  it('shows a reviewed file again when its sha changes', () => {
+    const onSelectFile = () => {}
+    render(FileTree, {
+      props: {
+        files: [{ ...baseFiles[0], sha: 'new-sha' }],
+        onSelectFile,
+        reviewedFileShas: new Map([['src/lib/auth.ts', 'a1']]),
+      },
+    })
+
+    expect(screen.getByText('auth.ts')).toBeTruthy()
+    expect(screen.queryByText('1 reviewed hidden')).toBeNull()
+  })
+
+  it('notifies when a file is marked reviewed', async () => {
+    let reviewed: { filename: string; reviewed: boolean } | null = null
+    render(FileTree, {
+      props: {
+        files: [baseFiles[0]],
+        onSelectFile: () => {},
+        onToggleFileReviewed: (file: PrFileDiff, nextReviewed: boolean) => {
+          reviewed = { filename: file.filename, reviewed: nextReviewed }
+        },
+      },
+    })
+
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'Mark src/lib/auth.ts reviewed' }))
+
+    expect(reviewed).toEqual({ filename: 'src/lib/auth.ts', reviewed: true })
+    expect(screen.queryByLabelText('Mark src/lib/auth.ts reviewed')).toBeNull()
+    expect(screen.getByText('1 reviewed hidden')).toBeTruthy()
+  })
 })
