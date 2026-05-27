@@ -178,7 +178,6 @@ vi.mock('./lib/stores', () => ({
   reviewPullRequestDiff: writable(null),
   authoredPrCount: writable(0),
   commandHeld: writable(false),
-  pendingFileReveal: writable<string | null>(null),
   focusBoardFilters: writable(new Map()),
   startingTasks: writable<Set<string>>(new Set()),
     codeCleanupTasksEnabled: writable(false),
