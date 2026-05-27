@@ -45,6 +45,9 @@ describe('skills-viewer plugin', () => {
     expect(isOpenForgePackageMetadata(packageJson.openforge)).toBe(true)
     expect(packageJson.openforge).not.toHaveProperty('contributes')
     expect(packageJson.openforge.frontend).toBe('./dist/frontend.js')
+    expect(packageJson.openforge.backend).toBe('./dist/backend.js')
+    expect(packageJson.openforge.requires).toEqual(expect.arrayContaining(['views', 'backend', 'projects', 'navigation', 'system.openUrl', 'context']))
+    expect(packageJson.openforge.requires).not.toContain('fs')
   })
 
   it('registers the Skills view at runtime through defineFrontendPlugin', async () => {
@@ -66,10 +69,27 @@ describe('skills-viewer plugin', () => {
     expect(subscriptions.add).toHaveBeenCalledWith(expect.objectContaining({ dispose: expect.any(Function) }))
   })
 
-  it('does not keep plugin-local runtime adapter modules or imports', () => {
+  it('does not keep plugin-local runtime adapter modules or host command calls in the view', () => {
     const skillsViewSource = readFileSync(join(pluginSrcDir, 'SkillsView.svelte'), 'utf8')
 
     expect(existsSync(join(pluginSrcDir, 'lib/ipc.ts'))).toBe(false)
     expect(skillsViewSource).not.toContain('./lib/ipc')
+    expect(skillsViewSource).not.toContain('openforge.listOpenCodeSkills')
+    expect(skillsViewSource).not.toContain('openforge.saveSkillContent')
+    expect(skillsViewSource).not.toContain('openforge.navigate')
+    expect(skillsViewSource).toContain("api.backend.invoke<SkillInfo[]>('listSkills'")
+    expect(skillsViewSource).toContain('api.navigation.navigate')
+  })
+
+  it('registers plugin-owned backend methods for skill list and save contracts', async () => {
+    const { default: backend } = await import('./backend')
+    const subscriptions = { add: vi.fn() }
+    const api = { backend: { registerMethod: vi.fn(() => ({ dispose: vi.fn() })) } }
+
+    await backend.activate(api as never, { pluginId: packageJson.openforge.id, apiVersion: 1, packageMetadata: packageJson.openforge, subscriptions })
+
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('listSkills', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('saveSkillContent', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(subscriptions.add).toHaveBeenCalledTimes(2)
   })
 })

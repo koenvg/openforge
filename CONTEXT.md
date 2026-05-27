@@ -44,6 +44,10 @@ _Avoid_: Plugin run options, per-call agent override
 An installed OpenForge extension that may act across tasks when using explicit host capabilities.
 _Avoid_: Sandboxed widget, project-only script
 
+**Plugin-owned Domain**:
+A product area whose language, contracts, and workflows belong to a **Trusted Plugin** rather than OpenForge core.
+_Avoid_: Core capability, host feature
+
 **Task Creation**:
 Recording a new project-owned backlog **Task** from a prompt, without choosing how an agent will run it.
 _Avoid_: Run scheduling, agent configuration, global task creation, status selection
@@ -59,6 +63,7 @@ _Avoid_: Prompt branch, run branch, title branch
 - An **Implementation Run** uses exactly one **Agent Session** at a time.
 - A new **Implementation Run** uses the **Project Agent Settings** rather than plugin-supplied provider or agent overrides.
 - A **Trusted Plugin** may start an **Implementation Run** for any **Task** when using the host-provided task capability.
+- A **Trusted Plugin** may own a **Plugin-owned Domain** when the concept is not shared across plugins or core workflows.
 - A **Task** with unmet dependencies cannot start an **Implementation Run**.
 - A **Task** with an active **Agent Session** cannot start another **Implementation Run**.
 - **Session Reattachment** preserves the existing **Agent Session** identity.
@@ -83,3 +88,4 @@ _Avoid_: Prompt branch, run branch, title branch
 - The handoff format could be hidden inside broad project instructions — resolved: use a dedicated **Project Handoff Notes Template** so the review contract is explicit.
 - "Summary" and **Handoff Notes** overlapped — resolved: user-facing review language should say **Handoff Notes**, while existing unstructured summaries remain valid legacy content.
 - Worktree branch names were considered for prompt-derived descriptions — resolved: **Task Branches** should be stable task identifiers because they are visible as PR source branches.
+- "Skill" was considered as a core OpenForge platform concept because one built-in plugin manages skills — resolved: skill discovery and editing are a **Plugin-owned Domain** unless multiple plugins need a shared platform contract.

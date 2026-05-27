@@ -27,6 +27,8 @@ import type {
   ImplementationRun,
   JsonSchema,
   OpenForgeContextSnapshot,
+  OpenForgeNavigationRequest,
+  OpenForgeNavigationSnapshot,
   OpenForgePackageMetadata,
   PluginStorage,
   Project,
@@ -66,6 +68,8 @@ export type RuntimeHostBridge = {
   notify?(request: { title: string; body?: string; [key: string]: unknown }): Promise<void>
   getAttention?(): Promise<ProjectAttention[]>
   openUrl?(url: string): Promise<void>
+  getNavigation?(): OpenForgeNavigationSnapshot
+  navigate?(request: OpenForgeNavigationRequest): Promise<OpenForgeNavigationSnapshot>
   getConfig?(key: string): Promise<unknown>
   setConfig?(key: string, value: unknown): Promise<void>
   getProjectConfig?(projectId: string, key: string): Promise<unknown>
@@ -572,6 +576,10 @@ class RuntimeContributionRegistry {
       },
       system: {
         openUrl: async (url) => this.host.openUrl ? this.host.openUrl(url) : unavailableCapability('system.openUrl'),
+      },
+      navigation: {
+        get: () => this.host.getNavigation ? this.host.getNavigation() : unavailableCapability('navigation.get'),
+        navigate: async (request) => this.host.navigate ? this.host.navigate(request) : unavailableCapability('navigation.navigate'),
       },
       config: {
         get: async (key) => this.host.getConfig ? this.host.getConfig(key) as never : unavailableCapability('config.get'),

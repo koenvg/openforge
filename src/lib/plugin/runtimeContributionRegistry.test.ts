@@ -266,6 +266,8 @@ describe('runtime contribution registry', () => {
       startTaskImplementation: vi.fn(async () => ({ taskId: 'T-2', workspacePath: '/repo/.worktrees/T-2', sessionId: 'S-1' })),
       readFile: vi.fn(async () => ({ type: 'text' as const, content: 'hello', mimeType: null, size: 5 })),
       openUrl: vi.fn(async () => undefined),
+      getNavigation: vi.fn(() => ({ activeProjectId: 'P-1', currentView: 'board', selectedTaskId: null })),
+      navigate: vi.fn(async () => ({ activeProjectId: 'P-1', currentView: 'plugin:github:prs', selectedTaskId: 'T-1' })),
       getConfig: vi.fn(async () => 'dark'),
       setProjectConfig: vi.fn(async () => undefined),
       spawnShell: vi.fn(async () => 42),
@@ -289,6 +291,8 @@ describe('runtime contribution registry', () => {
     await expect(api.fs.readFile({ projectId: 'P-1', path: 'README.md' })).resolves.toEqual({ type: 'text', content: 'hello', mimeType: null, size: 5 })
     await expect(api.shell.spawn({ taskId: 'T-1', cwd: '/repo', cols: 80, rows: 24, terminalIndex: 1 })).resolves.toBe(42)
     await api.system.openUrl('https://example.com')
+    expect(api.navigation.get()).toEqual({ activeProjectId: 'P-1', currentView: 'board', selectedTaskId: null })
+    await expect(api.navigation.navigate({ viewId: 'plugin:github:prs', projectId: 'P-1', taskId: 'T-1' })).resolves.toEqual({ activeProjectId: 'P-1', currentView: 'plugin:github:prs', selectedTaskId: 'T-1' })
     await expect(api.config.get('theme')).resolves.toBe('dark')
     await api.projectConfig.set('repo', 'openforge', 'P-1')
     await expect(api.attention.listProjects()).resolves.toHaveLength(1)
@@ -305,6 +309,7 @@ describe('runtime contribution registry', () => {
     })
     expect(host.readFile).toHaveBeenCalledWith({ projectId: 'P-1', path: 'README.md' })
     expect(host.openUrl).toHaveBeenCalledWith('https://example.com')
+    expect(host.navigate).toHaveBeenCalledWith({ viewId: 'plugin:github:prs', projectId: 'P-1', taskId: 'T-1' })
     expect(host.setProjectConfig).toHaveBeenCalledWith('P-1', 'repo', 'openforge')
   })
 

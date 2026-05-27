@@ -79,12 +79,14 @@ describe('plugin host commands', () => {
     expect(invoke).toHaveBeenLastCalledWith('update_agent_review_comment_status', { commentId: 7, status: 'approved' })
   })
 
-  it('does not expose removed live agent review or resume implementation host commands', async () => {
+  it('does not expose removed live agent review, resume implementation, or skills-viewer host commands', async () => {
     const { invoke } = installDesktopBridge()
 
     await expect(invokePluginHostCommand('startAgentReview', { reviewPrId: 42 })).rejects.toThrow('Unknown plugin host command: startAgentReview')
     await expect(invokePluginHostCommand('abortAgentReview', { reviewSessionKey: 'review-42' })).rejects.toThrow('Unknown plugin host command: abortAgentReview')
     await expect(invokePluginHostCommand('resumeImplementation', { taskId: 'T-2' })).rejects.toThrow('Unknown plugin host command: resumeImplementation')
+    await expect(invokePluginHostCommand('listOpenCodeSkills', { projectId: 'P-1' })).rejects.toThrow('Unknown plugin host command: listOpenCodeSkills')
+    await expect(invokePluginHostCommand('saveSkillContent', { projectId: 'P-1' })).rejects.toThrow('Unknown plugin host command: saveSkillContent')
     expect(invoke).not.toHaveBeenCalled()
   })
 })

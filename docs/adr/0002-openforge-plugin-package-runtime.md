@@ -42,7 +42,7 @@ Replace the current manifest-contribution plugin model with a hard-cutover OpenF
 
 - No stronger sandboxing or runtime permission wall in v1.
 - No compatibility adapter for old manifest-based plugins.
-- No agent-specific plugin resources such as skills or prompts.
+- No agent-specific plugin resources such as skills or prompts in the core SDK.
 - No plugin-to-plugin dependency ordering or plugin-defined host capabilities in v1.
 - No GitHub, review, or PR-specific core plugin APIs.
 - No global enablement mode in v1.
@@ -311,6 +311,8 @@ Storage APIs are available from both frontend and backend runtimes. Renderer imp
 ## Core capability namespaces
 
 The versioned `OpenForgeAPI` should be organized as capability namespaces. Commands can remain the generic primitive internally, but normal plugin code should prefer typed core APIs.
+
+V1 capabilities should stay generic. Domain-specific concepts such as skill discovery or skill editing remain owned by the plugin that presents them unless they become a cross-plugin platform concern. Do not add SDK namespaces like `openforge.skills` for one built-in plugin; use generic primitives such as backend methods, commands/events, context, project access, storage, filesystem, and navigation.
 
 V1 capabilities should include:
 
