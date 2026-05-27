@@ -38,6 +38,16 @@ describe('task review pane reviewed files', () => {
     expect(getTaskReviewReviewedFileShas('task-1')).toEqual(new Map([['src/feature.ts', 'sha-one']]))
   })
 
+  it('restores reviewed files after the in-memory pane cache is cleared', () => {
+    const file = diff('src/feature.ts', 'sha-one')
+    markTaskReviewFileReviewed('task-1', file)
+
+    clearTaskReviewPaneState(undefined, { clearPersisted: false })
+
+    expect(isTaskReviewFileReviewed('task-1', file)).toBe(true)
+    expect(getTaskReviewReviewedFileShas('task-1')).toEqual(new Map([['src/feature.ts', 'sha-one']]))
+  })
+
   it('treats the same file as unreviewed when its sha changes', () => {
     markTaskReviewFileReviewed('task-1', diff('src/feature.ts', 'sha-one'))
 
