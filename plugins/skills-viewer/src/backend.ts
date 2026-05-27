@@ -42,17 +42,39 @@ function parseSkillFrontmatter(content: string): { name: string | null; descript
 
   const frontmatter = afterFirst.slice(0, endIndex)
   let name: string | null = null
-  let description: string | null = null
+  let description = ''
+  let inDescription = false
+
   for (const line of frontmatter.split(/\r?\n/)) {
-    const match = line.match(/^([A-Za-z_][\w-]*):\s*(.*)$/)
-    if (!match) continue
-    const key = match[1]
-    const value = match[2].trim().replace(/^['"]|['"]$/g, '')
-    if (key === 'name' && value) name = value
-    if (key === 'description' && value) description = value
+    const trimmedLine = line.trim()
+    if (trimmedLine.startsWith('name:')) {
+      const value = trimmedLine.slice('name:'.length).trim().replace(/^['"]|['"]$/g, '')
+      name = value || null
+      inDescription = false
+      continue
+    }
+
+    if (trimmedLine.startsWith('description:')) {
+      const value = trimmedLine.slice('description:'.length).trim().replace(/^['"]|['"]$/g, '')
+      if (value === '|' || value === '>' || value === '') {
+        inDescription = true
+      } else {
+        description = value
+        inDescription = false
+      }
+      continue
+    }
+
+    if (inDescription) {
+      if (trimmedLine && (line.startsWith(' ') || line.startsWith('\t'))) {
+        description = description ? `${description} ${trimmedLine}` : trimmedLine
+      } else {
+        inDescription = false
+      }
+    }
   }
 
-  return { name, description }
+  return { name, description: description || null }
 }
 
 async function scanSkillDirectory(dir: string, level: SkillLevel, sourceDir: string): Promise<SkillInfo[]> {
