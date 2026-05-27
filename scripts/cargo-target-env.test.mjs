@@ -134,6 +134,23 @@ describe('Electron sidecar dev shared Cargo target env', () => {
     }
   })
 
+  it('uses a non-production dev backend port when OpenForge production bridge ports are inherited', () => {
+    const result = buildElectronSidecarDevEnv({
+      cwd: '/repo/openforge',
+      env: {
+        OPENFORGE_BACKEND_PORT: '17422',
+        OPENFORGE_HTTP_PORT: '17422',
+      },
+      rustSidecarLayout: defaultTestLayout,
+      execFileSync: () => {
+        throw new Error('not a git checkout')
+      },
+    })
+
+    expect(result.env.OPENFORGE_BACKEND_PORT).toBe(String(DEFAULT_DEV_BACKEND_PORT))
+    expect(result.env.OPENFORGE_HTTP_PORT).toBe(String(DEFAULT_DEV_BACKEND_PORT))
+  })
+
   it('uses a non-production dev backend port when the legacy production port is inherited', () => {
     const result = buildElectronSidecarDevEnv({
       cwd: '/repo/openforge',
