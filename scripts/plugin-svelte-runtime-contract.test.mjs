@@ -1,5 +1,5 @@
 import { readdir, readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import viteConfig from '../vite.config.ts'
 import { OPENFORGE_HOST_SHARED_SVELTE_IMPORTS } from '../packages/plugin-sdk/src/vite.ts'
@@ -16,6 +16,17 @@ function readRendererImportMap(indexHtml) {
   return JSON.parse(importMapJson).imports
 }
 
+function resolveAliasReplacement(alias, specifier) {
+  const entries = Array.isArray(alias)
+    ? alias
+    : Object.entries(alias ?? {}).map(([find, replacement]) => ({ find, replacement }))
+
+  return entries.find(entry => {
+    if (entry.find instanceof RegExp) return entry.find.test(specifier)
+    return entry.find === specifier
+  })?.replacement
+}
+
 describe('OpenForge plugin Svelte runtime contract', () => {
   it('keeps the plugin SDK Vite helper package-self-contained', async () => {
     const viteHelper = await readFile(join(process.cwd(), 'packages/plugin-sdk/src/vite.ts'), 'utf8')
@@ -23,6 +34,17 @@ describe('OpenForge plugin Svelte runtime contract', () => {
     expect(viteHelper).toContain("from './svelteHostRuntimeContract.mjs'")
     expect(viteHelper).not.toContain('src/electron')
     expect(viteHelper).not.toContain('../../../')
+  })
+
+  it('aliases plugin SDK source entrypoints for host-bundled built-in plugins', async () => {
+    const aliases = viteConfig.resolve?.alias
+
+    expect(resolveAliasReplacement(aliases, '@openforge/plugin-sdk')).toBe(
+      resolve(process.cwd(), 'packages/plugin-sdk/src/index.ts'),
+    )
+    expect(resolveAliasReplacement(aliases, '@openforge/plugin-sdk/frontend')).toBe(
+      resolve(process.cwd(), 'packages/plugin-sdk/src/frontend.ts'),
+    )
   })
 
   it('keeps the renderer import map complete for every SDK-externalized Svelte runtime import', async () => {

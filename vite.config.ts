@@ -1,3 +1,4 @@
+import { resolve } from 'node:path'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import tailwindcss from '@tailwindcss/vite'
 import { defineConfig } from 'vite'
@@ -16,6 +17,60 @@ function createOpenForgeHostRuntimeImportMapPlugin() {
   }
 }
 
+function createOpenForgeRootAliases() {
+  return [
+    {
+      find: /^@openforge\/plugin-sdk$/,
+      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/index.ts'),
+    },
+    {
+      find: /^@openforge\/plugin-sdk\/backend$/,
+      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/backend.ts'),
+    },
+    {
+      find: /^@openforge\/plugin-sdk\/domain$/,
+      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/domain.ts'),
+    },
+    {
+      find: /^@openforge\/plugin-sdk\/frontend$/,
+      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/frontend.ts'),
+    },
+    {
+      find: /^@openforge\/plugin-sdk\/markdown$/,
+      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/markdown.ts'),
+    },
+    {
+      find: /^@openforge\/plugin-sdk\/numberParsing$/,
+      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/numberParsing.ts'),
+    },
+    {
+      find: /^@openforge\/plugin-sdk\/package-metadata-schema\.json$/,
+      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/openforgePackageMetadataSchema.json'),
+    },
+    {
+      find: /^@openforge\/plugin-sdk\/sanitize$/,
+      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/sanitize.ts'),
+    },
+    {
+      find: /^@openforge\/plugin-sdk\/testing$/,
+      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/testing.ts'),
+    },
+    {
+      find: /^@openforge\/plugin-sdk\/ui\/MarkdownContent\.svelte$/,
+      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/ui/MarkdownContent.svelte'),
+    },
+    {
+      find: /^@openforge\/plugin-sdk\/ui\/ResizablePanel\.svelte$/,
+      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/ui/ResizablePanel.svelte'),
+    },
+    {
+      find: /^@openforge\/plugin-sdk\/vite$/,
+      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/vite.ts'),
+    },
+    ...createDaisyUiTailwindPluginAliases(),
+  ]
+}
+
 // https://vitejs.dev/config/
 export default defineConfig({
   // Electron packages load index.html through file://, so emitted asset URLs must
@@ -26,7 +81,7 @@ export default defineConfig({
   customLogger: createOpenForgeViteLogger(),
   plugins: [createOpenForgeHostRuntimeImportMapPlugin(), tailwindcss(), svelte()],
   resolve: {
-    alias: createDaisyUiTailwindPluginAliases(),
+    alias: createOpenForgeRootAliases(),
   },
   // Vite options tailored for Tauri to prevent too much magic
   clearScreen: false,

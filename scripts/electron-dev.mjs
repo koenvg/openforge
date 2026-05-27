@@ -365,8 +365,8 @@ export async function resolveElectronDevBackendEnv(options = {}, deps = { isPort
     env: {
       ...result.env,
       OPENFORGE_BACKEND_PORT: selectedPortString,
-      OPENFORGE_HTTP_PORT: baseEnv.OPENFORGE_HTTP_PORT && baseEnv.OPENFORGE_HTTP_PORT !== defaultDevBackendPort
-        ? baseEnv.OPENFORGE_HTTP_PORT
+      OPENFORGE_HTTP_PORT: result.env.OPENFORGE_HTTP_PORT !== defaultDevBackendPort
+        ? result.env.OPENFORGE_HTTP_PORT
         : selectedPortString,
     },
   }

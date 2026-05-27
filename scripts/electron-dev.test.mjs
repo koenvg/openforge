@@ -545,6 +545,43 @@ describe('electron dev script environment', () => {
     expect(result.env.OPENFORGE_HTTP_PORT).toBe('17643')
   })
 
+  it('selects the next free dev port when inherited OpenForge production bridge ports are present', async () => {
+    const result = await resolveElectronDevBackendEnv(
+      {
+        cwd: '/repo/openforge',
+        env: {
+          OPENFORGE_BACKEND_PORT: '17422',
+          OPENFORGE_HTTP_PORT: '17422',
+        },
+        rustSidecarLayout: defaultTestLayout,
+        execFileSync: () => {
+          throw new Error('not a git checkout')
+        },
+      },
+      { isPortOpen: async (_host, port) => port === 17422 || port === 17642 },
+    )
+
+    expect(result.env.OPENFORGE_BACKEND_PORT).toBe('17643')
+    expect(result.env.OPENFORGE_HTTP_PORT).toBe('17643')
+  })
+
+  it('repoints an inherited OpenForge production hook port to the selected dev backend port', async () => {
+    const result = await resolveElectronDevBackendEnv(
+      {
+        cwd: '/repo/openforge',
+        env: { OPENFORGE_HTTP_PORT: '17422' },
+        rustSidecarLayout: defaultTestLayout,
+        execFileSync: () => {
+          throw new Error('not a git checkout')
+        },
+      },
+      { isPortOpen: async (_host, port) => port === 17642 },
+    )
+
+    expect(result.env.OPENFORGE_BACKEND_PORT).toBe('17643')
+    expect(result.env.OPENFORGE_HTTP_PORT).toBe('17643')
+  })
+
   it('selects a free port when inherited OpenForge env uses the occupied default dev port', async () => {
     const result = await resolveElectronDevBackendEnv(
       {

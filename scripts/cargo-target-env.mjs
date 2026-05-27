@@ -33,16 +33,31 @@ export function parsePort(value, envName) {
   return port
 }
 
+export function isInheritedProductionBridgePort(value) {
+  if (value == null) return false
+  const port = Number(value)
+  return Number.isInteger(port) && port === Number(DEFAULT_PRODUCTION_BACKEND_PORT)
+}
+
 function resolveDevBackendPort(env) {
   if (env.OPENFORGE_BACKEND_PORT != null) {
-    return String(parsePort(env.OPENFORGE_BACKEND_PORT, 'OPENFORGE_BACKEND_PORT'))
+    const port = parsePort(env.OPENFORGE_BACKEND_PORT, 'OPENFORGE_BACKEND_PORT')
+    if (port !== Number(DEFAULT_PRODUCTION_BACKEND_PORT)) return String(port)
   }
 
-  if (env.AI_COMMAND_CENTER_PORT != null && env.AI_COMMAND_CENTER_PORT !== DEFAULT_PRODUCTION_BACKEND_PORT) {
+  if (env.AI_COMMAND_CENTER_PORT != null && !isInheritedProductionBridgePort(env.AI_COMMAND_CENTER_PORT)) {
     return String(parsePort(env.AI_COMMAND_CENTER_PORT, 'AI_COMMAND_CENTER_PORT'))
   }
 
   return String(DEFAULT_DEV_BACKEND_PORT)
+}
+
+function resolveDevHttpPort(env, backendPort) {
+  if (env.OPENFORGE_HTTP_PORT != null && !isInheritedProductionBridgePort(env.OPENFORGE_HTTP_PORT)) {
+    return env.OPENFORGE_HTTP_PORT
+  }
+
+  return backendPort
 }
 
 export function computeCargoTargetDir({
@@ -91,7 +106,7 @@ export function buildElectronSidecarDevEnv(options = {}) {
       ...env,
       CARGO_TARGET_DIR: result.cargoTargetDir,
       OPENFORGE_BACKEND_PORT: backendPort,
-      OPENFORGE_HTTP_PORT: env.OPENFORGE_HTTP_PORT ?? backendPort,
+      OPENFORGE_HTTP_PORT: resolveDevHttpPort(env, backendPort),
     },
   }
 }
