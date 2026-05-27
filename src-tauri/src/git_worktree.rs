@@ -2,7 +2,6 @@ use crate::user_environment::user_tool_path;
 use dashmap::DashMap;
 use log::{info, warn};
 use once_cell::sync::Lazy;
-use regex::Regex;
 use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -474,37 +473,24 @@ pub async fn remove_worktree_with_branch(
 // Branch Name Generation
 // ============================================================================
 
-/// Generates a slugified branch name from a task ID and title.
-/// Converts to lowercase, replaces non-alphanumeric characters with hyphens,
-/// collapses multiple hyphens, trims, and limits to 50 characters.
+/// Generates the branch name for an OpenForge task worktree.
+///
+/// Branch names are visible in pull requests, so OpenForge uses a short,
+/// stable task identifier instead of deriving text from the task prompt.
 ///
 /// # Arguments
 /// * `task_id` - The task identifier (e.g., "T-5", "PROJ-123")
-/// * `title` - The task title (e.g., "Add Auth Module!")
 ///
 /// # Returns
-/// A branch name in the format "{task_id}/{slug}" (e.g., "T-5/add-auth-module")
+/// A branch name in the format "openforge/{task_id}" (e.g., "openforge/T-5")
 ///
 /// # Example
 /// ```
-/// let branch = slugify_branch_name("T-5", "Add Auth Module!");
-/// assert_eq!(branch, "T-5/add-auth-module");
+/// let branch = task_branch_name("T-5");
+/// assert_eq!(branch, "openforge/T-5");
 /// ```
-pub fn slugify_branch_name(task_id: &str, title: &str) -> String {
-    let lower = title.to_lowercase();
-    let re = Regex::new(r"[^a-z0-9]+").unwrap();
-    let with_hyphens = re.replace_all(&lower, "-");
-    let re_collapse = Regex::new(r"-+").unwrap();
-    let collapsed = re_collapse.replace_all(&with_hyphens, "-");
-    let trimmed = collapsed.trim_matches('-');
-    let limited = if trimmed.len() > 50 {
-        &trimmed[..50]
-    } else {
-        trimmed
-    };
-    let slug = limited.trim_end_matches('-');
-
-    format!("{}/{}", task_id, slug)
+pub fn task_branch_name(task_id: &str) -> String {
+    format!("openforge/{task_id}")
 }
 
 // ============================================================================
@@ -871,37 +857,32 @@ mod tests {
     }
 
     #[test]
-    fn test_slugify_branch_name_basic() {
-        let result = slugify_branch_name("T-5", "Add Auth Module!");
-        assert_eq!(result, "T-5/add-auth-module");
+    fn task_branch_name_uses_openforge_namespace_and_task_id() {
+        let result = task_branch_name("KVG-1307");
+        assert_eq!(result, "openforge/KVG-1307");
     }
 
     #[test]
-    fn test_slugify_branch_name_special_chars() {
-        let result = slugify_branch_name("PROJ-123", "Fix: Bug with @mentions & #hashtags");
-        assert_eq!(result, "PROJ-123/fix-bug-with-mentions-hashtags");
+    fn task_branch_name_does_not_include_special_chars_from_prompt() {
+        let result = task_branch_name("PROJ-123");
+        assert_eq!(result, "openforge/PROJ-123");
     }
 
     #[test]
-    fn test_slugify_branch_name_multiple_spaces() {
-        let result = slugify_branch_name("T-1", "Multiple   Spaces   Here");
-        assert_eq!(result, "T-1/multiple-spaces-here");
+    fn task_branch_name_does_not_include_spacing_from_prompt() {
+        let result = task_branch_name("T-1");
+        assert_eq!(result, "openforge/T-1");
     }
 
     #[test]
-    fn test_slugify_branch_name_long_title() {
-        let long_title =
-            "This is a very long title that should be truncated to fifty characters maximum";
-        let result = slugify_branch_name("T-999", long_title);
-        assert!(result.starts_with("T-999/"));
-        let slug_part = result.strip_prefix("T-999/").unwrap();
-        assert!(slug_part.len() <= 50);
-        assert!(!slug_part.ends_with('-'));
+    fn task_branch_name_does_not_include_long_prompt_text() {
+        let result = task_branch_name("T-999");
+        assert_eq!(result, "openforge/T-999");
     }
 
     #[test]
-    fn test_slugify_branch_name_unicode() {
-        let result = slugify_branch_name("T-7", "Add 日本語 support");
-        assert_eq!(result, "T-7/add-support");
+    fn task_branch_name_does_not_include_unicode_prompt_text() {
+        let result = task_branch_name("T-7");
+        assert_eq!(result, "openforge/T-7");
     }
 }

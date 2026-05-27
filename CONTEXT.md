@@ -44,6 +44,10 @@ _Avoid_: Sandboxed widget, project-only script
 Recording a new project-owned backlog **Task** from a prompt, without choosing how an agent will run it.
 _Avoid_: Run scheduling, agent configuration, global task creation, status selection
 
+**Task Branch**:
+A PR-visible Git branch OpenForge creates for a **Task** workspace.
+_Avoid_: Prompt branch, run branch, title branch
+
 ## Relationships
 
 - **Task Creation** creates a project-owned backlog **Task**, not an **Implementation Run**.
@@ -58,6 +62,7 @@ _Avoid_: Run scheduling, agent configuration, global task creation, status selec
 - **Handoff Notes** belong to a **Task** and are updated to reflect the current review state rather than appended per **Implementation Run**.
 - A **Project Handoff Notes Template** defines the required shape of **Handoff Notes** for Tasks in one project.
 - Existing Tasks may have unstructured historical summaries; **Handoff Notes** are the forward-looking reviewer brief, not a migration requirement.
+- A **Task Branch** identifies the **Task**; human-readable context belongs in the **Task**, **Handoff Notes**, PR title, or PR body rather than in prompt-derived branch text.
 
 ## Example dialogue
 
@@ -72,3 +77,4 @@ _Avoid_: Run scheduling, agent configuration, global task creation, status selec
 - "Handoff" could mean a per-run completion record or the current reviewer brief — resolved: **Handoff Notes** are the current Task-level review brief, not append-only run history.
 - The handoff format could be hidden inside broad project instructions — resolved: use a dedicated **Project Handoff Notes Template** so the review contract is explicit.
 - "Summary" and **Handoff Notes** overlapped — resolved: user-facing review language should say **Handoff Notes**, while existing unstructured summaries remain valid legacy content.
+- Worktree branch names were considered for prompt-derived descriptions — resolved: **Task Branches** should be stable task identifiers because they are visible as PR source branches.

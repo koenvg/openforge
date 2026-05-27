@@ -179,7 +179,6 @@ fn load_start_implementation_context(
 
 async fn prepare_start_workspace(
     state: &AppState,
-    task: &crate::db::TaskRow,
     project_id: &str,
     task_id: &str,
     repo_path: &str,
@@ -193,10 +192,7 @@ async fn prepare_start_workspace(
         });
     }
 
-    let branch = crate::git_worktree::slugify_branch_name(
-        task_id,
-        task.prompt.as_deref().unwrap_or(&task.initial_prompt),
-    );
+    let branch = crate::git_worktree::task_branch_name(task_id);
     let home = dirs::home_dir().ok_or_else(|| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -369,7 +365,6 @@ pub(super) async fn handle_app_start_implementation_command(
     let start_context = load_start_implementation_context(state, &task_id)?;
     let workspace = prepare_start_workspace(
         state,
-        &start_context.task,
         &start_context.project_id,
         &task_id,
         &repo_path,
