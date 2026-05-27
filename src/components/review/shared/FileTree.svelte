@@ -5,9 +5,11 @@
   interface Props {
     files?: PrFileDiff[]
     onSelectFile: (filename: string) => void
+    reviewedFileShas?: Map<string, string>
+    onToggleFileReviewed?: (file: PrFileDiff, reviewed: boolean) => void
   }
 
-  let { files = [], onSelectFile }: Props = $props()
+  let { files = [], onSelectFile, reviewedFileShas = new Map(), onToggleFileReviewed }: Props = $props()
 </script>
 
-<SharedFileTree {files} {onSelectFile} />
+<SharedFileTree {files} {onSelectFile} {reviewedFileShas} {onToggleFileReviewed} />

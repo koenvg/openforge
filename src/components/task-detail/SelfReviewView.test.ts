@@ -70,7 +70,7 @@ import {
 	setSelfReviewGeneralComments,
 } from "../../lib/taskScopedSelfReviewState";
 import { createVirtualizer } from "@openforge/pr-review-ui/useVirtualizer.svelte";
-import { clearTaskReviewPaneState, getTaskReviewPaneState } from "../../lib/taskReviewPaneState";
+import { clearTaskReviewPaneState, getTaskReviewPaneState, markTaskReviewFileReviewed } from "../../lib/taskReviewPaneState";
 
 const baseTask: Task = {
 	id: "task-1",
@@ -101,6 +101,7 @@ const baseDiff: PrFileDiff = {
 
 describe("SelfReviewView uncommitted toggle", () => {
 	beforeEach(() => {
+		clearTaskReviewPaneState();
 		selfReviewStateByTask.set(new Map());
 		pendingManualComments.set([]);
 		ticketPrs.set(new Map());
@@ -119,7 +120,7 @@ describe("SelfReviewView uncommitted toggle", () => {
 		});
 
 		await waitFor(() => {
-			const checkbox = requireElement(screen.getByRole("checkbox"), HTMLInputElement);
+			const checkbox = requireElement(screen.getByLabelText("Include uncommitted changes"), HTMLInputElement);
 			expect(checkbox.checked).toBe(false);
 		});
 	});
@@ -154,7 +155,7 @@ describe("SelfReviewView uncommitted toggle", () => {
 		});
 
 		await waitFor(() => {
-			const checkbox = screen.getByRole("checkbox");
+			const checkbox = screen.getByLabelText("Include uncommitted changes");
 			expect(checkbox).toBeTruthy();
 			expect(requireElement(checkbox, HTMLInputElement).checked).toBe(true);
 		});
@@ -173,7 +174,7 @@ describe("SelfReviewView uncommitted toggle", () => {
 		});
 
 		await waitFor(() => {
-			const checkbox = requireElement(screen.getByRole("checkbox"), HTMLInputElement);
+			const checkbox = requireElement(screen.getByLabelText("Include uncommitted changes"), HTMLInputElement);
 			expect(checkbox.checked).toBe(true);
 			expect(mockGetTaskDiff).toHaveBeenCalledTimes(2);
 			expect(mockGetTaskDiff).toHaveBeenNthCalledWith(1, "task-1", false);
@@ -195,7 +196,7 @@ describe("SelfReviewView uncommitted toggle", () => {
 		});
 
 		await waitFor(() => {
-			const checkbox = requireElement(screen.getByRole("checkbox"), HTMLInputElement);
+			const checkbox = requireElement(screen.getByLabelText("Include uncommitted changes"), HTMLInputElement);
 			expect(checkbox.checked).toBe(false);
 			expect(mockGetTaskDiff).toHaveBeenCalledTimes(1);
 			expect(mockGetTaskDiff).toHaveBeenCalledWith("task-1", false);
@@ -215,14 +216,14 @@ describe("SelfReviewView uncommitted toggle", () => {
 			},
 		});
 
-		await screen.findByRole("checkbox");
+		await screen.findByLabelText("Include uncommitted changes");
 		mockGetTaskDiff.mockClear();
 
 		await waitFor(() => {
-			expect(screen.getByRole("checkbox").isConnected).toBe(true);
+			expect(screen.getByLabelText("Include uncommitted changes").isConnected).toBe(true);
 		});
 
-		const cb = requireElement(screen.getByRole("checkbox"), HTMLInputElement);
+		const cb = requireElement(screen.getByLabelText("Include uncommitted changes"), HTMLInputElement);
 		cb.click();
 		cb.dispatchEvent(new Event("change", { bubbles: true }));
 
@@ -248,14 +249,14 @@ describe("SelfReviewView uncommitted toggle", () => {
 		});
 
 		await waitFor(() => {
-			expect(screen.getByRole("checkbox")).toBeTruthy();
+			expect(screen.getByLabelText("Include uncommitted changes")).toBeTruthy();
 		});
 
 		const commitButton = screen.getByText("All changes");
 		commitButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
 		await waitFor(() => {
-			expect(screen.queryByRole("checkbox")).toBeTruthy();
+			expect(screen.queryByLabelText("Include uncommitted changes")).toBeTruthy();
 			expect(screen.queryByText("Show all changes")).toBeNull();
 		});
 	});
@@ -263,6 +264,7 @@ describe("SelfReviewView uncommitted toggle", () => {
 
 describe("SelfReviewView integration — performance fixes", () => {
 	beforeEach(() => {
+		clearTaskReviewPaneState();
 		selfReviewStateByTask.set(new Map());
 		pendingManualComments.set([]);
 		ticketPrs.set(new Map());
@@ -334,7 +336,7 @@ describe("SelfReviewView integration — performance fixes", () => {
 			expect(screen.getByTitle("Search (\u2318F)")).toBeTruthy();
 		});
 
-		const cb = requireElement(screen.getByRole("checkbox"), HTMLInputElement);
+		const cb = requireElement(screen.getByLabelText("Include uncommitted changes"), HTMLInputElement);
 		cb.click();
 		cb.dispatchEvent(new Event("change", { bubbles: true }));
 
@@ -502,6 +504,40 @@ describe("SelfReviewView pane restoration", () => {
 		await waitFor(() => {
 			const restoredScrollArea = requireElement(screen.getByRole("region", { name: "Diff scroll area" }), HTMLElement);
 			expect(restoredScrollArea.scrollTop).toBe(184);
+		});
+	});
+
+	it("remembers reviewed files across remounts until their sha changes", async () => {
+		const mockGetTaskDiff = vi.mocked(getTaskDiff);
+		mockGetTaskDiff.mockResolvedValue([baseDiff]);
+
+		const firstRender = render(SelfReviewView, {
+			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
+		});
+
+		await screen.findByLabelText("Mark src/main.rs reviewed");
+		markTaskReviewFileReviewed(baseTask.id, baseDiff);
+		firstRender.unmount();
+
+		const secondRender = render(SelfReviewView, {
+			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
+		});
+
+		await waitFor(() => {
+			expect(screen.queryByLabelText("Mark src/main.rs reviewed")).toBeNull();
+			expect(screen.getByText("1 reviewed hidden")).toBeTruthy();
+		});
+
+		secondRender.unmount();
+		mockGetTaskDiff.mockResolvedValue([{ ...baseDiff, sha: "changed-sha" }]);
+
+		render(SelfReviewView, {
+			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
+		});
+
+		await waitFor(() => {
+			expect(screen.getByLabelText("Mark src/main.rs reviewed")).toBeTruthy();
+			expect(screen.queryByText("1 reviewed hidden")).toBeNull();
 		});
 	});
 });

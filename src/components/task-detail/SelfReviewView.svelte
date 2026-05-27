@@ -6,7 +6,14 @@
   import { createDiffLoader } from '../../lib/useDiffLoader.svelte'
   import { createCommentSelection } from '../../lib/useCommentSelection.svelte'
   import { prCommentsToReviewComments } from '@openforge/pr-review-ui/diffComments'
-  import { getTaskReviewPaneState, updateTaskReviewPaneState } from '../../lib/taskReviewPaneState'
+  import {
+    getTaskReviewPaneState,
+    getTaskReviewReviewedFileShas,
+    markTaskReviewFileReviewed,
+    pruneTaskReviewReviewedFiles,
+    unmarkTaskReviewFileReviewed,
+    updateTaskReviewPaneState,
+  } from '../../lib/taskReviewPaneState'
   import { getGitHubMarkdownImageBaseUrl } from '../../lib/githubMarkdown'
 
   import type { Task, PrFileDiff, ReviewSubmissionComment } from '../../lib/types'
@@ -34,6 +41,7 @@
 
   let sidebarVisible = $state(false)
   let sidebarTab = $state<'pr' | 'notes'>('pr')
+  let reviewedFileShas = $state<Map<string, string>>(new Map())
 
   let hasRestoredScroll = false
 
@@ -63,6 +71,11 @@
   let markdownImageBaseUrl = $derived(getGitHubMarkdownImageBaseUrl(diffLoader.linkedPr))
 
   let hasAutoOpened = false
+  $effect(() => {
+    const taskId = task.id
+    reviewedFileShas = getTaskReviewReviewedFileShas(taskId)
+  })
+
   $effect(() => {
     if (commentSelection.unaddressedCount > 0 && !hasAutoOpened) {
       sidebarVisible = true
@@ -122,6 +135,18 @@
     setPendingSelfReviewComments(task.id, comments)
   }
 
+  function syncReviewedFileShas() {
+    reviewedFileShas = getTaskReviewReviewedFileShas(task.id)
+  }
+
+  function handleToggleFileReviewed(file: PrFileDiff, reviewed: boolean) {
+    if (reviewed) {
+      markTaskReviewFileReviewed(task.id, file)
+    } else {
+      unmarkTaskReviewFileReviewed(task.id, file.filename)
+    }
+  }
+
   async function restoreDiffScroll() {
     if (hasRestoredScroll || diffLoader.isLoading) return
     await tick()
@@ -131,6 +156,12 @@
     if (diffScrollTop <= 0) return
     diffViewer.setScrollTop(diffScrollTop)
   }
+
+  $effect(() => {
+    if (diffLoader.isLoading || selfReviewDiffFiles.length === 0) return
+    pruneTaskReviewReviewedFiles(task.id, selfReviewDiffFiles)
+    syncReviewedFileShas()
+  })
 
   $effect(() => {
     if (!diffViewer || diffLoader.isLoading) return
@@ -165,7 +196,12 @@
             <div class="px-2 py-1.5 text-[0.65rem] uppercase tracking-wider font-semibold text-base-content/50 border-b border-base-300 bg-base-200">Files</div>
             <div class="flex-1 overflow-hidden">
               {#if fileTreeVisible}
-                <FileTree files={selfReviewDiffFiles} onSelectFile={handleFileSelect} />
+                <FileTree
+                  files={selfReviewDiffFiles}
+                  onSelectFile={handleFileSelect}
+                  {reviewedFileShas}
+                  onToggleFileReviewed={handleToggleFileReviewed}
+                />
               {:else}
                 <div class="h-full flex flex-col items-center justify-center gap-2 text-center px-3 text-base-content/50">
                   <div class="text-xs">File explorer hidden</div>

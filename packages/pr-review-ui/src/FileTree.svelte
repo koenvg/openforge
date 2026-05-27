@@ -5,12 +5,17 @@
   interface Props {
     files?: PrFileDiff[]
     onSelectFile: (filename: string) => void
+    reviewedFileShas?: Map<string, string>
+    onToggleFileReviewed?: (file: PrFileDiff, reviewed: boolean) => void
   }
 
-  let { files = [], onSelectFile }: Props = $props()
+  let { files = [], onSelectFile, reviewedFileShas = new Map(), onToggleFileReviewed }: Props = $props()
 
   let selectedFile = $state<string | null>(null)
   let expandedDirs = $state(new Set<string>())
+  let showReviewedFiles = $state(false)
+  let locallyReviewedFiles = $state<Array<{ filename: string; sha: string }>>([])
+  let locallyUnreviewedFilenames = $state<string[]>([])
 
   interface TreeNode {
     name: string
@@ -35,11 +40,33 @@
     expandedDirs = collectDirPaths(files)
   })
 
-  let tree = $derived(buildTree(files))
-  let totalStats = $derived(files.reduce((acc, f) => ({
-    additions: acc.additions + f.additions,
-    deletions: acc.deletions + f.deletions,
-  }), { additions: 0, deletions: 0 }))
+  function isLocallyReviewed(file: PrFileDiff): boolean {
+    return locallyReviewedFiles.some((entry) => entry.filename === file.filename && entry.sha === file.sha)
+  }
+
+  function isLocallyUnreviewed(file: PrFileDiff): boolean {
+    return locallyUnreviewedFilenames.includes(file.filename)
+  }
+
+  function isFileReviewed(file: PrFileDiff): boolean {
+    if (isLocallyUnreviewed(file)) return false
+    return isLocallyReviewed(file) || reviewedFileShas.get(file.filename) === file.sha
+  }
+
+  function getHiddenReviewedCount(): number {
+    return files.filter(isFileReviewed).length
+  }
+
+  function getVisibleFiles(): PrFileDiff[] {
+    return showReviewedFiles ? files : files.filter((file) => !isFileReviewed(file))
+  }
+
+  function getTotalStats(): { additions: number; deletions: number } {
+    return getVisibleFiles().reduce((acc, f) => ({
+      additions: acc.additions + f.additions,
+      deletions: acc.deletions + f.deletions,
+    }), { additions: 0, deletions: 0 })
+  }
 
   function buildTree(files: PrFileDiff[]): TreeNode {
     const root: TreeNode = { name: '', fullPath: '', isDir: true, children: new Map() }
@@ -85,6 +112,21 @@
     expandedDirs = next
   }
 
+  function handleReviewedChange(file: PrFileDiff, event: Event) {
+    if (!(event.currentTarget instanceof HTMLInputElement)) return
+    if (event.currentTarget.checked) {
+      locallyReviewedFiles = [
+        ...locallyReviewedFiles.filter((entry) => entry.filename !== file.filename),
+        { filename: file.filename, sha: file.sha },
+      ]
+      locallyUnreviewedFilenames = locallyUnreviewedFilenames.filter((filename) => filename !== file.filename)
+    } else {
+      locallyReviewedFiles = locallyReviewedFiles.filter((entry) => entry.filename !== file.filename)
+      locallyUnreviewedFilenames = [...locallyUnreviewedFilenames.filter((filename) => filename !== file.filename), file.filename]
+    }
+    onToggleFileReviewed?.(file, event.currentTarget.checked)
+  }
+
   function flattenTree(node: TreeNode, depth: number = 0): Array<{ node: TreeNode; depth: number }> {
     const result: Array<{ node: TreeNode; depth: number }> = []
     const sortedChildren = [...node.children.entries()].sort(([, a], [, b]) => {
@@ -101,15 +143,21 @@
     return result
   }
 
-  let flattenedNodes = $derived(flattenTree(tree, 0))
+  let flattenedNodes = $derived(flattenTree(buildTree(getVisibleFiles()), 0))
 </script>
 
 <div class="flex flex-col h-full bg-base-200 border-r border-base-300">
   <div class="px-3 py-3 border-b border-base-300">
-    <div class="flex gap-3 text-xs">
-      <span class="text-base-content font-medium">{files.length} files</span>
-      <span class="text-success">+{totalStats.additions}</span>
-      <span class="text-error">−{totalStats.deletions}</span>
+    <div class="flex gap-3 text-xs items-center flex-wrap">
+      <span class="text-base-content font-medium">{getVisibleFiles().length} files</span>
+      <span class="text-success">+{getTotalStats().additions}</span>
+      <span class="text-error">−{getTotalStats().deletions}</span>
+      {#if getHiddenReviewedCount() > 0}
+        <span class="text-base-content/50">{getHiddenReviewedCount()} reviewed hidden</span>
+        <button class="btn btn-ghost btn-xs h-5 min-h-0 px-1" onclick={() => { showReviewedFiles = !showReviewedFiles }}>
+          {showReviewedFiles ? 'Hide reviewed files' : 'Show reviewed files'}
+        </button>
+      {/if}
     </div>
   </div>
 
@@ -125,20 +173,33 @@
           <span class="text-base-content/50 font-medium flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">{node.name}/</span>
         </button>
       {:else if node.file}
-        <button
-          class="w-full flex items-center gap-2 text-xs cursor-pointer transition-colors py-1.5 pr-3 text-base-content {selectedFile === node.file.filename ? 'bg-primary/10 border-l-2 border-l-primary' : 'hover:bg-primary/5'}"
+        <div
+          class="w-full flex items-center gap-2 text-xs transition-colors py-1.5 pr-3 text-base-content {selectedFile === node.file.filename ? 'bg-primary/10 border-l-2 border-l-primary' : 'hover:bg-primary/5'}"
           style="padding-left: {selectedFile === node.file.filename ? 10 + depth * 16 : 12 + depth * 16}px"
-          onclick={() => node.file && handleFileClick(node.file)}
         >
-          <span class="font-bold text-sm w-4 text-center shrink-0 {getFileStatusClass(node.file.status)}">
-            {getFileStatusIcon(node.file.status)}
-          </span>
-          <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">{node.name}</span>
-          <span class="flex gap-2 text-[0.7rem] ml-auto shrink-0">
-            <span class="text-success">+{node.file.additions}</span>
-            <span class="text-error">−{node.file.deletions}</span>
-          </span>
-        </button>
+          {#if onToggleFileReviewed}
+            <input
+              type="checkbox"
+              class="checkbox checkbox-xs shrink-0"
+              aria-label="Mark {node.file.filename} reviewed"
+              checked={isFileReviewed(node.file)}
+              onchange={(event) => node.file && handleReviewedChange(node.file, event)}
+            />
+          {/if}
+          <button
+            class="flex min-w-0 flex-1 items-center gap-2 text-left"
+            onclick={() => node.file && handleFileClick(node.file)}
+          >
+            <span class="font-bold text-sm w-4 text-center shrink-0 {getFileStatusClass(node.file.status)}">
+              {getFileStatusIcon(node.file.status)}
+            </span>
+            <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">{node.name}</span>
+            <span class="flex gap-2 text-[0.7rem] ml-auto shrink-0">
+              <span class="text-success">+{node.file.additions}</span>
+              <span class="text-error">−{node.file.deletions}</span>
+            </span>
+          </button>
+        </div>
       {/if}
     {/each}
   </div>

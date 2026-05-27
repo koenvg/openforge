@@ -28,6 +28,10 @@ _Avoid_: Resume, restart
 A living reviewer-facing brief on a **Task** that summarizes what needs inspection after agent work.
 _Avoid_: Completion log, run history, random comments
 
+**Reviewed File**:
+A changed file the user has explicitly marked as already inspected during review. It stops counting as reviewed when the file's content identity changes.
+_Avoid_: Hidden file, dismissed file, permanently ignored file
+
 **Project Handoff Notes Template**:
 A project-owned format that defines what **Handoff Notes** must contain for that project.
 _Avoid_: Global summary format, additional instructions
@@ -56,6 +60,7 @@ _Avoid_: Run scheduling, agent configuration, global task creation, status selec
 - **Session Reattachment** preserves the existing **Agent Session** identity.
 - **Implementation Input** targets an existing **Agent Session** and does not choose a new provider or agent.
 - **Handoff Notes** belong to a **Task** and are updated to reflect the current review state rather than appended per **Implementation Run**.
+- A **Reviewed File** remains reviewed only while its content identity is unchanged.
 - A **Project Handoff Notes Template** defines the required shape of **Handoff Notes** for Tasks in one project.
 - Existing Tasks may have unstructured historical summaries; **Handoff Notes** are the forward-looking reviewer brief, not a migration requirement.
 
