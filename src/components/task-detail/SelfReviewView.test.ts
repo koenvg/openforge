@@ -540,6 +540,76 @@ describe("SelfReviewView pane restoration", () => {
 			expect(screen.queryByText("1 reviewed hidden")).toBeNull();
 		});
 	});
+
+	it("remembers empty-sha reviewed files by diff content and shows them again when content changes", async () => {
+		const mockGetTaskDiff = vi.mocked(getTaskDiff);
+		const emptyShaDiff = { ...baseDiff, sha: "" };
+		mockGetTaskDiff.mockResolvedValue([emptyShaDiff]);
+
+		const firstRender = render(SelfReviewView, {
+			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
+		});
+
+		await fireEvent.click(await screen.findByLabelText("Mark src/main.rs reviewed"));
+
+		await waitFor(() => {
+			expect(screen.queryByLabelText("Mark src/main.rs reviewed")).toBeNull();
+			expect(screen.getByText("1 reviewed hidden")).toBeTruthy();
+		});
+
+		firstRender.unmount();
+
+		const secondRender = render(SelfReviewView, {
+			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
+		});
+
+		await waitFor(() => {
+			expect(screen.queryByLabelText("Mark src/main.rs reviewed")).toBeNull();
+			expect(screen.getByText("1 reviewed hidden")).toBeTruthy();
+		});
+
+		secondRender.unmount();
+		mockGetTaskDiff.mockResolvedValue([
+			{
+				...emptyShaDiff,
+				additions: emptyShaDiff.additions + 1,
+				changes: emptyShaDiff.changes + 1,
+				patch: `${emptyShaDiff.patch}\n+new content`,
+			},
+		]);
+
+		render(SelfReviewView, {
+			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
+		});
+
+		await waitFor(() => {
+			expect(screen.getByLabelText("Mark src/main.rs reviewed")).toBeTruthy();
+			expect(screen.queryByText("1 reviewed hidden")).toBeNull();
+		});
+	});
+
+	it("keeps reviewed file state synced when the file tree is remounted after a checkbox toggle", async () => {
+		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
+		vi.mocked(getTaskBatchFileContents).mockResolvedValue([["", ""]]);
+
+		render(SelfReviewView, {
+			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
+		});
+
+		await fireEvent.click(await screen.findByLabelText("Mark src/main.rs reviewed"));
+
+		await waitFor(() => {
+			expect(screen.getByText("1 reviewed hidden")).toBeTruthy();
+		});
+
+		await fireEvent.click(screen.getByTitle("Hide file tree"));
+		await fireEvent.click(screen.getByRole("button", { name: "Show files" }));
+
+		await waitFor(() => {
+			expect(screen.queryByLabelText("Mark src/main.rs reviewed")).toBeNull();
+			expect(screen.getByText("1 reviewed hidden")).toBeTruthy();
+		});
+	});
 });
 
 describe("SelfReviewView — hide addressed comments", () => {

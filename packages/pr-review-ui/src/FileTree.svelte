@@ -7,14 +7,21 @@
     onSelectFile: (filename: string) => void
     reviewedFileShas?: Map<string, string>
     onToggleFileReviewed?: (file: PrFileDiff, reviewed: boolean) => void
+    getFileReviewIdentity?: (file: PrFileDiff) => string | null
   }
 
-  let { files = [], onSelectFile, reviewedFileShas = new Map(), onToggleFileReviewed }: Props = $props()
+  let {
+    files = [],
+    onSelectFile,
+    reviewedFileShas = new Map(),
+    onToggleFileReviewed,
+    getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null,
+  }: Props = $props()
 
   let selectedFile = $state<string | null>(null)
   let expandedDirs = $state(new Set<string>())
   let showReviewedFiles = $state(false)
-  let locallyReviewedFiles = $state<Array<{ filename: string; sha: string }>>([])
+  let locallyReviewedFiles = $state<Array<{ filename: string; identity: string }>>([])
   let locallyUnreviewedFilenames = $state<string[]>([])
 
   interface TreeNode {
@@ -40,8 +47,13 @@
     expandedDirs = collectDirPaths(files)
   })
 
+  function getReviewIdentity(file: PrFileDiff): string | null {
+    return getFileReviewIdentity(file)
+  }
+
   function isLocallyReviewed(file: PrFileDiff): boolean {
-    return locallyReviewedFiles.some((entry) => entry.filename === file.filename && entry.sha === file.sha)
+    const identity = getReviewIdentity(file)
+    return identity !== null && locallyReviewedFiles.some((entry) => entry.filename === file.filename && entry.identity === identity)
   }
 
   function isLocallyUnreviewed(file: PrFileDiff): boolean {
@@ -50,7 +62,8 @@
 
   function isFileReviewed(file: PrFileDiff): boolean {
     if (isLocallyUnreviewed(file)) return false
-    return isLocallyReviewed(file) || reviewedFileShas.get(file.filename) === file.sha
+    const identity = getReviewIdentity(file)
+    return identity !== null && (isLocallyReviewed(file) || reviewedFileShas.get(file.filename) === identity)
   }
 
   function getHiddenReviewedCount(): number {
@@ -115,10 +128,13 @@
   function handleReviewedChange(file: PrFileDiff, event: Event) {
     if (!(event.currentTarget instanceof HTMLInputElement)) return
     if (event.currentTarget.checked) {
-      locallyReviewedFiles = [
-        ...locallyReviewedFiles.filter((entry) => entry.filename !== file.filename),
-        { filename: file.filename, sha: file.sha },
-      ]
+      const identity = getReviewIdentity(file)
+      locallyReviewedFiles = identity === null
+        ? locallyReviewedFiles.filter((entry) => entry.filename !== file.filename)
+        : [
+          ...locallyReviewedFiles.filter((entry) => entry.filename !== file.filename),
+          { filename: file.filename, identity },
+        ]
       locallyUnreviewedFilenames = locallyUnreviewedFilenames.filter((filename) => filename !== file.filename)
     } else {
       locallyReviewedFiles = locallyReviewedFiles.filter((entry) => entry.filename !== file.filename)

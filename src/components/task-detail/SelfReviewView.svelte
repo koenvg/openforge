@@ -7,6 +7,7 @@
   import { createCommentSelection } from '../../lib/useCommentSelection.svelte'
   import { prCommentsToReviewComments } from '@openforge/pr-review-ui/diffComments'
   import {
+    getTaskReviewFileIdentity,
     getTaskReviewPaneState,
     getTaskReviewReviewedFileShas,
     markTaskReviewFileReviewed,
@@ -145,6 +146,7 @@
     } else {
       unmarkTaskReviewFileReviewed(task.id, file.filename)
     }
+    syncReviewedFileShas()
   }
 
   async function restoreDiffScroll() {
@@ -201,6 +203,7 @@
                   onSelectFile={handleFileSelect}
                   {reviewedFileShas}
                   onToggleFileReviewed={handleToggleFileReviewed}
+                  getFileReviewIdentity={getTaskReviewFileIdentity}
                 />
               {:else}
                 <div class="h-full flex flex-col items-center justify-center gap-2 text-center px-3 text-base-content/50">

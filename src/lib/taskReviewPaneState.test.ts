@@ -44,6 +44,30 @@ describe('task review pane reviewed files', () => {
     expect(isTaskReviewFileReviewed('task-1', diff('src/feature.ts', 'sha-two'))).toBe(false)
   })
 
+  it('uses diff content as the reviewed identity when the file sha is empty', () => {
+    const original = diff('src/feature.ts', '')
+    const changed = {
+      ...original,
+      additions: 2,
+      changes: 3,
+      patch: '@@ -1,1 +1,2 @@\n line\n+new line',
+    }
+
+    markTaskReviewFileReviewed('task-1', original)
+
+    expect(isTaskReviewFileReviewed('task-1', original)).toBe(true)
+    expect(isTaskReviewFileReviewed('task-1', changed)).toBe(false)
+  })
+
+  it('does not hide empty-sha truncated diffs because their content identity is incomplete', () => {
+    const truncated = { ...diff('src/feature.ts', ''), is_truncated: true }
+
+    markTaskReviewFileReviewed('task-1', truncated)
+
+    expect(isTaskReviewFileReviewed('task-1', truncated)).toBe(false)
+    expect(getTaskReviewReviewedFileShas('task-1')).toEqual(new Map())
+  })
+
   it('removes reviewed state for a file when the user unchecks it', () => {
     const file = diff('src/feature.ts', 'sha-one')
     markTaskReviewFileReviewed('task-1', file)

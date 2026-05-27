@@ -6,6 +6,20 @@ export interface TaskReviewPaneState {
 	reviewedFileShas: Map<string, string>;
 }
 
+type TaskReviewFileIdentityInput = Pick<
+	PrFileDiff,
+	| 'filename'
+	| 'sha'
+	| 'status'
+	| 'additions'
+	| 'deletions'
+	| 'changes'
+	| 'patch'
+	| 'previous_filename'
+	| 'is_truncated'
+	| 'patch_line_count'
+>;
+
 const defaultTaskReviewPaneState: TaskReviewPaneState = {
 	selectedCommitSha: null,
 	diffScrollTop: 0,
@@ -20,6 +34,34 @@ function cloneTaskReviewPaneState(state: TaskReviewPaneState): TaskReviewPaneSta
 }
 
 const taskReviewPaneStates = new Map<string, TaskReviewPaneState>();
+
+function hashString(value: string): string {
+	let hash = 0x811c9dc5;
+	for (let i = 0; i < value.length; i += 1) {
+		hash ^= value.charCodeAt(i);
+		hash = Math.imul(hash, 0x01000193);
+	}
+	return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+export function getTaskReviewFileIdentity(file: TaskReviewFileIdentityInput): string | null {
+	const sha = file.sha.trim();
+	if (sha.length > 0) return sha;
+
+	if (file.patch === null || file.is_truncated) return null;
+
+	const contentIdentity = JSON.stringify({
+		status: file.status,
+		previousFilename: file.previous_filename,
+		additions: file.additions,
+		deletions: file.deletions,
+		changes: file.changes,
+		patch: file.patch,
+		isTruncated: file.is_truncated,
+		patchLineCount: file.patch_line_count,
+	});
+	return `diff:${contentIdentity.length}:${hashString(contentIdentity)}`;
+}
 
 export function getTaskReviewPaneState(taskId: string): TaskReviewPaneState {
 	return taskReviewPaneStates.get(taskId) ?? cloneTaskReviewPaneState(defaultTaskReviewPaneState);
@@ -47,17 +89,23 @@ export function getTaskReviewReviewedFileShas(taskId: string): Map<string, strin
 
 export function isTaskReviewFileReviewed(
 	taskId: string,
-	file: Pick<PrFileDiff, 'filename' | 'sha'>,
+	file: TaskReviewFileIdentityInput,
 ): boolean {
-	return getTaskReviewPaneState(taskId).reviewedFileShas.get(file.filename) === file.sha;
+	const identity = getTaskReviewFileIdentity(file);
+	return identity !== null && getTaskReviewPaneState(taskId).reviewedFileShas.get(file.filename) === identity;
 }
 
 export function markTaskReviewFileReviewed(
 	taskId: string,
-	file: Pick<PrFileDiff, 'filename' | 'sha'>,
+	file: TaskReviewFileIdentityInput,
 ): TaskReviewPaneState {
 	const reviewedFileShas = getTaskReviewReviewedFileShas(taskId);
-	reviewedFileShas.set(file.filename, file.sha);
+	const identity = getTaskReviewFileIdentity(file);
+	if (identity === null) {
+		reviewedFileShas.delete(file.filename);
+	} else {
+		reviewedFileShas.set(file.filename, identity);
+	}
 	return updateTaskReviewPaneState(taskId, { reviewedFileShas });
 }
 
@@ -70,8 +118,12 @@ export function unmarkTaskReviewFileReviewed(
 	return updateTaskReviewPaneState(taskId, { reviewedFileShas });
 }
 
-export function pruneTaskReviewReviewedFiles(taskId: string, files: Pick<PrFileDiff, 'filename' | 'sha'>[]): void {
-	const currentFiles = new Map(files.map((file) => [file.filename, file.sha]));
+export function pruneTaskReviewReviewedFiles(taskId: string, files: TaskReviewFileIdentityInput[]): void {
+	const currentFiles = new Map(
+		files
+			.map((file): [string, string | null] => [file.filename, getTaskReviewFileIdentity(file)])
+			.filter((entry): entry is [string, string] => entry[1] !== null),
+	);
 	const reviewedFileShas = getTaskReviewReviewedFileShas(taskId);
 	let changed = false;
 
