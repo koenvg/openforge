@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && vite build --config vite.backend.config.ts",
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
@@ -26,6 +26,7 @@
     "description": "Browse and manage AI skills",
     "icon": "sparkles",
     "frontend": "./dist/frontend.js",
-    "requires": ["views", "system.openUrl", "context"]
+    "backend": "./dist/backend.js",
+    "requires": ["views", "backend", "projects", "navigation", "system.openUrl", "context"]
   }
 }

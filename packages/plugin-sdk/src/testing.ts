@@ -15,6 +15,8 @@ import type {
   JsonValue,
   NotificationRequest,
   OpenForgeContextSnapshot,
+  OpenForgeNavigationRequest,
+  OpenForgeNavigationSnapshot,
   OpenForgePackageMetadata,
   PluginSettingsSectionRegistration,
   PluginStorage,
@@ -47,6 +49,7 @@ export interface TestingOpenForgeApiCalls {
   emittedEvents: Array<{ event: string; qualifiedEvent: string; payload: unknown }>
   emittedGlobalEvents: Array<{ qualifiedEvent: string; payload: unknown }>
   openUrl: string[]
+  navigationRequests: OpenForgeNavigationRequest[]
   notify: NotificationRequest[]
   taskCreations: CreateTaskRequest[]
   taskImplementationStarts: StartTaskImplementationRequest[]
@@ -387,6 +390,13 @@ export class TestingOpenForgeRegistryFake {
           this.calls.openUrl.push(url)
         },
       },
+      navigation: {
+        get: () => this.getNavigationSnapshot(),
+        navigate: async (request) => {
+          this.calls.navigationRequests.push(request)
+          return this.getNavigationSnapshot(request)
+        },
+      },
       config: {
         get: async <T extends JsonValue = JsonValue>(key: string): Promise<T | null> => this.config.has(`global:${key}`) ? this.config.get(`global:${key}`) as T : null,
         set: async (key, value) => {
@@ -409,6 +419,14 @@ export class TestingOpenForgeRegistryFake {
       pluginId: this.pluginId,
       projectId: this.projectId,
       ...(this.taskId === null ? {} : { taskId: this.taskId }),
+    }
+  }
+
+  private getNavigationSnapshot(overrides: OpenForgeNavigationRequest = {}): OpenForgeNavigationSnapshot {
+    return {
+      activeProjectId: overrides.projectId ?? this.projectId,
+      currentView: overrides.viewId ?? 'board',
+      selectedTaskId: overrides.taskId ?? this.taskId,
     }
   }
 
@@ -701,6 +719,7 @@ export function createTestingCalls(): TestingOpenForgeApiCalls {
     emittedEvents: [],
     emittedGlobalEvents: [],
     openUrl: [],
+    navigationRequests: [],
     notify: [],
     taskCreations: [],
     taskImplementationStarts: [],

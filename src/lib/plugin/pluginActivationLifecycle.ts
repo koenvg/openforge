@@ -224,6 +224,10 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
     notifications: { notify: unavailable },
     attention: { listProjects: unavailable },
     system: { openUrl: async (url: string) => openUrl(url) },
+    navigation: {
+      get: () => ({ activeProjectId: get(activeProjectId), currentView: 'board', selectedTaskId: null }),
+      navigate: unavailable,
+    },
     config: { get: unavailable, set: unavailable },
     projectConfig: { get: unavailable, set: unavailable },
     views: { register: () => ({ dispose: () => undefined }) },

@@ -55,6 +55,7 @@ var openforgePackageMetadataSchema_default = {
 				"backend",
 				"storage",
 				"context",
+				"navigation",
 				"tasks",
 				"projects",
 				"fs",
@@ -427,6 +428,13 @@ var TestingOpenForgeRegistryFake = class {
 			system: { openUrl: async (url) => {
 				this.calls.openUrl.push(url);
 			} },
+			navigation: {
+				get: () => this.getNavigationSnapshot(),
+				navigate: async (request) => {
+					this.calls.navigationRequests.push(request);
+					return this.getNavigationSnapshot(request);
+				}
+			},
 			config: {
 				get: async (key) => this.config.has(`global:${key}`) ? this.config.get(`global:${key}`) : null,
 				set: async (key, value) => {
@@ -456,6 +464,13 @@ var TestingOpenForgeRegistryFake = class {
 			pluginId: this.pluginId,
 			projectId: this.projectId,
 			...this.taskId === null ? {} : { taskId: this.taskId }
+		};
+	}
+	getNavigationSnapshot(overrides = {}) {
+		return {
+			activeProjectId: overrides.projectId ?? this.projectId,
+			currentView: overrides.viewId ?? "board",
+			selectedTaskId: overrides.taskId ?? this.taskId
 		};
 	}
 	localQualifiedId(kind, id) {
@@ -722,6 +737,7 @@ function createTestingCalls() {
 		emittedEvents: [],
 		emittedGlobalEvents: [],
 		openUrl: [],
+		navigationRequests: [],
 		notify: [],
 		taskCreations: [],
 		taskImplementationStarts: [],
@@ -813,44 +829,6 @@ function preservePullRequestState(oldPr, newPr) {
 	}
 	return result;
 }
-var SKILL_SOURCE_DIRS = [
-	".agents",
-	".claude",
-	".opencode",
-	".pi"
-];
-function getSkillSourcePath(source, level) {
-	if (source === ".pi" && level === "user") return ".pi/agent/skills";
-	return `${source}/skills`;
-}
-function groupSkillsBySource(skills) {
-	const groups = [];
-	for (const source of SKILL_SOURCE_DIRS) {
-		const matching = skills.filter((skill) => skill.source_dir === source);
-		if (matching.length > 0) groups.push({
-			source,
-			skills: matching
-		});
-	}
-	const known = new Set(SKILL_SOURCE_DIRS);
-	const other = skills.filter((skill) => !known.has(skill.source_dir));
-	if (other.length > 0) groups.push({
-		source: "other",
-		skills: other
-	});
-	return groups;
-}
-function getSkillIdentity(skill) {
-	return {
-		name: skill.name,
-		level: skill.level,
-		source_dir: skill.source_dir,
-		file_name: skill.file_name
-	};
-}
-function isSameSkillIdentity(skill, identity) {
-	return identity !== null && skill.name === identity.name && skill.level === identity.level && skill.source_dir === identity.source_dir && skill.file_name === identity.file_name;
-}
 function parseCheckRuns(json) {
 	if (!json) return [];
 	try {
@@ -871,4 +849,4 @@ function splitCheckRuns(checks) {
 	};
 }
 //#endregion
-export { MAX_SUPPORTED_API_VERSION, MIN_SUPPORTED_API_VERSION, OPENFORGE_PACKAGE_METADATA_SCHEMA, OPENFORGE_PLUGIN_API_VERSION, OPENFORGE_PLUGIN_CAPABILITIES, SKILL_SOURCE_DIRS, SUPPORTED_OPENFORGE_API_VERSIONS, TestingOpenForgeRegistryFake, TestingSubscriptionSink, createMemoryPluginStorage, createMockBackendOpenForgeApi, createMockFrontendOpenForgeApi, createMockOpenForgeApi, createMockPluginContext, createOpenForgeRegistryFake, createTestingCalls, getSkillIdentity, getSkillSourcePath, groupSkillsBySource, hasMergeConflicts, isOpenForgePackageMetadata, isPluginPackageMetadata, isPluginViewKey, isQueuedForMerge, isReadyToMerge, isSameSkillIdentity, isSupportedOpenForgeApiVersion, makePluginViewKey, parseCheckRuns, parsePluginViewKey, parseStrictFiniteNumber, preservePullRequestState, splitCheckRuns, validateOpenForgePackageMetadata, validatePluginPackageMetadata };
+export { MAX_SUPPORTED_API_VERSION, MIN_SUPPORTED_API_VERSION, OPENFORGE_PACKAGE_METADATA_SCHEMA, OPENFORGE_PLUGIN_API_VERSION, OPENFORGE_PLUGIN_CAPABILITIES, SUPPORTED_OPENFORGE_API_VERSIONS, TestingOpenForgeRegistryFake, TestingSubscriptionSink, createMemoryPluginStorage, createMockBackendOpenForgeApi, createMockFrontendOpenForgeApi, createMockOpenForgeApi, createMockPluginContext, createOpenForgeRegistryFake, createTestingCalls, hasMergeConflicts, isOpenForgePackageMetadata, isPluginPackageMetadata, isPluginViewKey, isQueuedForMerge, isReadyToMerge, isSupportedOpenForgeApiVersion, makePluginViewKey, parseCheckRuns, parsePluginViewKey, parseStrictFiniteNumber, preservePullRequestState, splitCheckRuns, validateOpenForgePackageMetadata, validatePluginPackageMetadata };

@@ -1,5 +1,3 @@
-export * from '@openforge/plugin-sdk/domain'
-
 export interface SkillInfo {
   name: string
   description: string | null
@@ -64,11 +62,4 @@ export function isSameSkillIdentity(skill: SkillInfo, identity: SkillIdentity | 
     skill.level === identity.level &&
     skill.source_dir === identity.source_dir &&
     skill.file_name === identity.file_name
-}
-
-export interface TaskLabel {
-  id: number
-  project_id: string
-  name: string
-  color: 'primary' | 'secondary' | 'accent' | 'info' | 'success' | 'warning' | 'error'
 }

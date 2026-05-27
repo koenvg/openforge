@@ -14,7 +14,7 @@
   import { useVimNavigation } from './lib/useVimNavigation.svelte'
   import ProjectPageHeader from './ProjectPageHeader.svelte'
   import MarkdownContent from '@openforge/plugin-sdk/ui/MarkdownContent.svelte'
-  import { getSkillIdentity, getSkillSourcePath, groupSkillsBySource, isSameSkillIdentity, type SkillInfo } from '@openforge/plugin-sdk/domain'
+  import { getSkillIdentity, getSkillSourcePath, groupSkillsBySource, isSameSkillIdentity, type SkillInfo } from './lib/skillDomain'
 
   $effect(() => {
     $activeProjectId = projectId
@@ -60,7 +60,8 @@
     isLoading = true
     error = null
     try {
-      const result = await api.commands.invokeGlobal<SkillInfo[]>('openforge.listOpenCodeSkills', { projectId: $activeProjectId })
+      await api.backend.whenReady()
+      const result = await api.backend.invoke<SkillInfo[]>('listSkills', { projectId: $activeProjectId })
       $skills = result
       // Auto-select first skill if none selected
       if (!$selectedSkillIdentity && result.length > 0) {
@@ -68,14 +69,14 @@
       }
     } catch (e) {
       console.error('Failed to load skills:', e)
-      error = 'Failed to load skills. Is OpenCode running?'
+      error = 'Failed to load skills. Check the skills-viewer backend and project access.'
     } finally {
       isLoading = false
     }
   }
 
   function selectSkill(skill: SkillInfo) {
-    void api.commands.invokeGlobal('openforge.navigate', { currentView: 'plugin:com.openforge.skills-viewer:skills' })
+    void api.navigation.navigate({ viewId: 'plugin:com.openforge.skills-viewer:skills' })
     $selectedSkillIdentity = getSkillIdentity(skill)
     editMode = false
     saveError = null
@@ -98,7 +99,8 @@
     isSaving = true
     saveError = null
     try {
-      await api.commands.invokeGlobal('openforge.saveSkillContent', {
+      await api.backend.whenReady()
+      await api.backend.invoke('saveSkillContent', {
         projectId: $activeProjectId,
         name: selectedSkill.name,
         level: selectedSkill.level,

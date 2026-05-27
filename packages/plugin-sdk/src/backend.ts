@@ -11,7 +11,10 @@ import type {
   CommandRegistration,
   CommandShortcutMetadata,
   Disposable,
+  NavigationAPI,
   OpenForgeContextSnapshot,
+  OpenForgeNavigationRequest,
+  OpenForgeNavigationSnapshot,
 } from './types'
 
 export function defineBackendPlugin<const TPlugin extends BackendPlugin>(plugin: TPlugin): TPlugin {
@@ -31,5 +34,8 @@ export type {
   CommandRegistration,
   CommandShortcutMetadata,
   Disposable,
+  NavigationAPI,
   OpenForgeContextSnapshot,
+  OpenForgeNavigationRequest,
+  OpenForgeNavigationSnapshot,
 }

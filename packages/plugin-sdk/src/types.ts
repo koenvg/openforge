@@ -53,6 +53,7 @@ export type OpenForgePluginCapability =
   | 'backend'
   | 'storage'
   | 'context'
+  | 'navigation'
   | 'tasks'
   | 'projects'
   | 'fs'
@@ -103,6 +104,23 @@ export interface OpenForgeContextSnapshot {
   pluginId: string
   projectId: string | null
   taskId?: string | null
+}
+
+export interface OpenForgeNavigationSnapshot {
+  activeProjectId: string | null
+  currentView: string
+  selectedTaskId: string | null
+}
+
+export interface OpenForgeNavigationRequest {
+  viewId?: string
+  projectId?: string | null
+  taskId?: string | null
+}
+
+export interface NavigationAPI {
+  get(): OpenForgeNavigationSnapshot
+  navigate(request: OpenForgeNavigationRequest): Promise<OpenForgeNavigationSnapshot>
 }
 
 export interface OpenForgePluginContext {
@@ -365,6 +383,7 @@ export interface OpenForgeCommonAPI {
 }
 
 export interface FrontendOpenForgeAPI extends OpenForgeCommonAPI {
+  navigation: NavigationAPI
   views: FrontendViewRegistry
   taskPane: FrontendTaskPaneRegistry
   settings: FrontendSettingsRegistry

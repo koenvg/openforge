@@ -1,20 +1,19 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import { parseStrictFiniteNumber } from '@openforge/plugin-sdk/numberParsing'
 import { sanitizeHtml } from '@openforge/plugin-sdk/sanitize'
 import {
-  getSkillIdentity,
   hasMergeConflicts,
   isQueuedForMerge,
   isReadyToMerge,
-  isSameSkillIdentity,
   parseCheckRuns,
   preservePullRequestState,
   splitCheckRuns,
   type FileContent,
   type FileEntry,
   type PullRequestInfo,
-  type SkillInfo,
 } from '@openforge/plugin-sdk/domain'
 
 describe('public plugin utilities', () => {
@@ -61,21 +60,12 @@ describe('public plugin utilities', () => {
     })
   })
 
-  it('exposes skill identity helpers for skills plugins', () => {
-    const skill: SkillInfo = {
-      name: 'review',
-      description: null,
-      agent: null,
-      template: null,
-      level: 'project',
-      source_dir: '.agents',
-      file_name: null,
-    }
+  it('keeps skill-domain contracts out of the public SDK domain helpers', () => {
+    const domainSource = readFileSync(resolve(import.meta.dirname, 'domain.ts'), 'utf8')
 
-    const identity = getSkillIdentity(skill)
-
-    expect(identity).toEqual({ name: 'review', level: 'project', source_dir: '.agents', file_name: null })
-    expect(isSameSkillIdentity(skill, identity)).toBe(true)
+    expect(domainSource).not.toContain('SkillInfo')
+    expect(domainSource).not.toContain('getSkillIdentity')
+    expect(domainSource).not.toContain('groupSkillsBySource')
   })
 
   it('parses and splits CI check runs for PR views', () => {

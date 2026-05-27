@@ -173,10 +173,10 @@ export interface AgentInfo {
 }
 
 // ============================================================================
-// Autocomplete Types (OpenCode API)
+// Autocomplete Types
 // ============================================================================
 
-/** Command/skill info from OpenCode GET /command endpoint — used for / autocomplete */
+/** Command info from provider command endpoints — used for / autocomplete */
 export interface CommandInfo {
   name: string;
   description: string | null;
@@ -184,74 +184,7 @@ export interface CommandInfo {
   agent: string | null;
 }
 
-/** Skill info for the Skills view — enriched from CommandInfo with content and level */
-export interface SkillInfo {
-  name: string;
-  description: string | null;
-  agent: string | null;
-  template: string | null;
-  level: "project" | "user";
-  source_dir: string;
-  file_name: string | null;
-}
-
-export interface SkillIdentity {
-  name: string;
-  level: SkillInfo['level'];
-  source_dir: string;
-  file_name: string | null;
-}
-
-export const SKILL_SOURCE_DIRS = ['.agents', '.claude', '.opencode', '.pi'] as const;
-
-export type SkillSourceDir = typeof SKILL_SOURCE_DIRS[number];
-
-export interface SkillSourceGroup {
-  source: string;
-  skills: SkillInfo[];
-}
-
-export function getSkillSourcePath(source: string, level: SkillInfo['level']): string {
-  if (source === '.pi' && level === 'user') return '.pi/agent/skills';
-  return `${source}/skills`;
-}
-
-export function groupSkillsBySource(skills: SkillInfo[]): SkillSourceGroup[] {
-  const groups: SkillSourceGroup[] = [];
-  for (const source of SKILL_SOURCE_DIRS) {
-    const matching = skills.filter((skill) => skill.source_dir === source);
-    if (matching.length > 0) {
-      groups.push({ source, skills: matching });
-    }
-  }
-
-  const known = new Set<string>(SKILL_SOURCE_DIRS);
-  const other = skills.filter((skill) => !known.has(skill.source_dir));
-  if (other.length > 0) {
-    groups.push({ source: 'other', skills: other });
-  }
-
-  return groups;
-}
-
-export function getSkillIdentity(skill: SkillInfo): SkillIdentity {
-  return {
-    name: skill.name,
-    level: skill.level,
-    source_dir: skill.source_dir,
-    file_name: skill.file_name,
-  };
-}
-
-export function isSameSkillIdentity(skill: SkillInfo, identity: SkillIdentity | null): boolean {
-  return identity !== null &&
-    skill.name === identity.name &&
-    skill.level === identity.level &&
-    skill.source_dir === identity.source_dir &&
-    skill.file_name === identity.file_name;
-}
-
-/** Extended agent info from OpenCode GET /agent endpoint — used for @ autocomplete */
+/** Extended agent info from provider agent endpoints — used for @ autocomplete */
 export interface AutocompleteAgentInfo {
   name: string;
   hidden: boolean | null;

@@ -26,14 +26,12 @@ import {
   getTasksForProject,
   getTaskWorkspace,
   getLatestSession,
-  listOpenCodeSkills,
   markReviewPrViewed,
   killPty,
   openUrl,
   pluginBackendWhenReady,
   pluginInvoke,
   resizePty,
-  saveSkillContent,
   setConfig,
   setProjectConfig,
   spawnShellPty,
@@ -140,6 +138,30 @@ export function createPluginRuntimeHost(pluginId: string) {
     },
     getAttention: () => getProjectAttention(),
     openUrl: (url: string) => openUrl(url),
+    getNavigation: () => ({
+      activeProjectId: get(activeProjectId),
+      currentView: get(currentView),
+      selectedTaskId: get(selectedTaskId),
+    }),
+    navigate: async (request: { viewId?: string; projectId?: string | null; taskId?: string | null }) => {
+      if (isAppView(request.viewId)) {
+        currentView.set(request.viewId)
+      }
+
+      if (request.taskId !== undefined) {
+        selectedTaskId.set(request.taskId)
+      }
+
+      if (request.projectId !== undefined) {
+        activeProjectId.set(request.projectId)
+      }
+
+      return {
+        activeProjectId: get(activeProjectId),
+        currentView: get(currentView),
+        selectedTaskId: get(selectedTaskId),
+      }
+    },
     getBackendState: () => {
       const entry = get(installedPlugins).get(pluginId)
       if (!entry?.manifest.backend) return 'missing' as const
@@ -265,17 +287,6 @@ export async function invokePluginHostCommand(command: string, payload: unknown)
       return fsReadDir(String(commandPayload?.projectId ?? ''), typeof commandPayload?.dirPath === 'string' ? commandPayload.dirPath : null)
     case 'fsReadFile':
       return fsReadFile(String(commandPayload?.projectId ?? ''), String(commandPayload?.filePath ?? ''))
-    case 'listOpenCodeSkills':
-      return listOpenCodeSkills(String(commandPayload?.projectId ?? ''))
-    case 'saveSkillContent':
-      return saveSkillContent(
-        String(commandPayload?.projectId ?? ''),
-        String(commandPayload?.name ?? ''),
-        commandPayload?.level === 'user' ? 'user' : 'project',
-        String(commandPayload?.sourceDir ?? ''),
-        String(commandPayload?.content ?? ''),
-        typeof commandPayload?.fileName === 'string' ? commandPayload.fileName : null
-      )
     case 'fetchReviewPrs':
       return fetchReviewPrs()
     case 'getReviewPrs':
