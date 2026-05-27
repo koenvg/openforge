@@ -747,6 +747,7 @@ function commandDescriptor(command) {
 		title: command.title,
 		icon: command.icon,
 		shortcut: command.shortcut,
+		discoverable: command.discoverable ?? true,
 		input: command.input,
 		output: command.output
 	};

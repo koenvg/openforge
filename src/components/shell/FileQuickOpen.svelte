@@ -39,7 +39,7 @@
     wrap: true,
     onSelect() {
       if (selectedIndex >= 0 && selectedIndex < filteredResults.length) {
-        handleSelectFile(filteredResults[selectedIndex])
+        void handleSelectFile(filteredResults[selectedIndex])
       }
     },
     onCancel() { closeModal() }
@@ -76,10 +76,15 @@
     }, 150)
   }
 
-  function handleSelectFile(path: string) {
-    revealFileInFileViewer(path)
-    router.navigate(FILE_VIEWER_VIEW_KEY)
-    closeModal()
+  async function handleSelectFile(path: string) {
+    try {
+      await revealFileInFileViewer(path)
+    } catch (e) {
+      console.error('[FileQuickOpen] reveal failed:', e)
+    } finally {
+      router.navigate(FILE_VIEWER_VIEW_KEY)
+      closeModal()
+    }
   }
 
   function getFileName(path: string): string {
@@ -149,7 +154,7 @@
             data-palette-item
             class="flex items-center gap-3 w-full px-4 py-2 text-left text-sm text-base-content transition-colors
               {i === selectedIndex ? 'bg-base-300' : 'hover:bg-base-300/60'}"
-            onclick={() => handleSelectFile(filePath)}
+            onclick={() => void handleSelectFile(filePath)}
           >
             <div class="flex-1 min-w-0">
               <div class="font-medium truncate">{getFileName(filePath)}</div>

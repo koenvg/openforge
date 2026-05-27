@@ -27,7 +27,7 @@
       .map((pluginId) => $runtimeContributionSources.get(pluginId))
       .filter((source) => source !== undefined)
   )
-  let pluginCommands = $derived(resolveContributions(enabledPluginContributionSources).commands)
+  let pluginCommands = $derived(resolveContributions(enabledPluginContributionSources).commands.filter((command) => command.discoverable))
 
   async function loadAllTasks() {
     loading = true
