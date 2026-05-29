@@ -46,6 +46,7 @@ function openForgeLifecycleKind(event) {
     case "session.error":
       return "failed"
     case "session.status":
+      return statusTypeFromEvent(event) === "idle" ? "ended" : "became_busy"
     case "session.updated":
     case "message.updated":
     case "tool.execute.before":

@@ -135,6 +135,30 @@ mod tests {
     }
 
     #[test]
+    fn opencode_plugin_posts_idle_status_as_completion() {
+        let payloads = evaluate_posted_payloads_for_events(
+            r#"[
+                {
+                    type: "session.status",
+                    properties: { session: { id: "ses_idle123" }, status: { type: "idle" } }
+                },
+                {
+                    type: "session.updated",
+                    properties: { session: { id: "ses_idle123" } }
+                }
+            ]"#,
+        );
+
+        let kinds: Vec<&str> = payloads
+            .iter()
+            .map(|payload| payload["kind"].as_str().expect("kind should be string"))
+            .collect();
+        assert_eq!(kinds, ["ended"]);
+        assert_eq!(payloads[0]["raw_event_type"], "session.status");
+        assert_eq!(payloads[0]["raw_status_type"], "idle");
+    }
+
+    #[test]
     fn opencode_plugin_suppresses_same_session_cleanup_after_idle() {
         let payloads = evaluate_posted_payloads_for_events(
             r#"[
