@@ -130,16 +130,20 @@ describe('Electron migration Phase 0 contract inventory', () => {
     expect(inventoriedContracts).toEqual(parsedContracts)
   })
 
-  it('does not keep dead live agent-review controls in the public IPC inventory', () => {
+  it('does not keep dead live agent-review controls or legacy core skills-viewer commands in the public IPC inventory', () => {
     const functionNames = ipcCommandContracts.map(contract => contract.functionName)
     const ipcCommands = ipcCommandContracts.map(contract => contract.ipcCommand)
 
     expect(functionNames).not.toContain('startAgentReview')
     expect(functionNames).not.toContain('abortAgentReview')
     expect(functionNames).not.toContain('dismissAllAgentReviewComments')
+    expect(functionNames).not.toContain('listOpenCodeSkills')
+    expect(functionNames).not.toContain('saveSkillContent')
     expect(ipcCommands).not.toContain('start_agent_review')
     expect(ipcCommands).not.toContain('abort_agent_review')
     expect(ipcCommands).not.toContain('dismiss_all_agent_review_comments')
+    expect(ipcCommands).not.toContain('list_opencode_skills')
+    expect(ipcCommands).not.toContain('save_skill_content')
     expect(functionNames).toEqual(expect.arrayContaining([
       'getAgentReviewComments',
       'updateAgentReviewCommentStatus',

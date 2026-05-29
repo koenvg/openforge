@@ -61,53 +61,6 @@ async fn list_opencode_models(state: &AppState, project_id: &str) -> AppResult<s
     )
 }
 
-async fn list_opencode_skills(state: &AppState, project_id: &str) -> AppResult<serde_json::Value> {
-    let context = project_runtime_context(state, project_id)?;
-    json_value(
-        provider_runtime::list_runtime_skills(project_id, &context)
-            .await
-            .map_err(runtime_error)?,
-    )
-}
-
-fn save_skill_content(
-    state: &AppState,
-    request: &AppInvokeRequest,
-) -> AppResult<serde_json::Value> {
-    let project_id = payload_string(&request.payload, "projectId")?;
-    let skill_name = payload_string(&request.payload, "skillName")?;
-    let level = payload_string(&request.payload, "level")?;
-    let source_dir = payload_string(&request.payload, "sourceDir")?;
-    let content = payload_string(&request.payload, "content")?;
-    let file_name = payload_optional_string(&request.payload, "fileName")?;
-
-    let db = crate::db::acquire_db(&state.db);
-    provider_runtime::save_skill_content(
-        &db,
-        &project_id,
-        &skill_name,
-        &level,
-        &source_dir,
-        &content,
-        file_name.as_deref(),
-    )
-    .map_err(|error| {
-        let status = if error.starts_with("Unsupported skill source directory")
-            || error.starts_with("Invalid skill file name")
-            || error == "Root markdown skill files are only supported for .pi skills"
-        {
-            StatusCode::BAD_REQUEST
-        } else if error == "Project not found" {
-            StatusCode::NOT_FOUND
-        } else {
-            StatusCode::INTERNAL_SERVER_ERROR
-        };
-        (status, error)
-    })?;
-
-    Ok(serde_json::Value::Null)
-}
-
 async fn abort_session(
     state: &AppState,
     request: &AppInvokeRequest,
@@ -201,11 +154,6 @@ pub(super) async fn handle_app_runtime_command(
             let project_id = payload_string(&request.payload, "projectId")?;
             list_opencode_commands(state, &project_id).await?
         }
-        "list_opencode_skills" => {
-            let project_id = payload_string(&request.payload, "projectId")?;
-            list_opencode_skills(state, &project_id).await?
-        }
-        "save_skill_content" => save_skill_content(state, request)?,
         "search_opencode_files" => {
             let project_id = payload_string(&request.payload, "projectId")?;
             let query = payload_string(&request.payload, "query")?;
