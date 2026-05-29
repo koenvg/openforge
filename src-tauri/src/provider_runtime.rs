@@ -1,14 +1,9 @@
-use crate::command_discovery::{
-    is_supported_skill_source_dir, scan_skill_directories_for_root, search_project_files,
-    skill_source_dir_for_level, PI_SKILLS_SOURCE_DIR,
-};
+use crate::command_discovery::search_project_files;
 use crate::db;
-use crate::opencode_client::{AgentInfo, CommandInfo, ProviderModelInfo, SkillInfo};
+use crate::opencode_client::{AgentInfo, CommandInfo, ProviderModelInfo};
 use crate::providers::{
     claude_code::ClaudeCodeProvider, opencode::OpenCodeProvider, pi::PiProvider,
 };
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ProjectRuntimeContext {
@@ -126,93 +121,6 @@ pub(crate) async fn list_runtime_models(
 ) -> Result<Vec<ProviderModelInfo>, String> {
     let _ = (project_id, context);
     Ok(Vec::new())
-}
-
-pub(crate) async fn list_runtime_skills(
-    project_id: &str,
-    context: &ProjectRuntimeContext,
-) -> Result<Vec<SkillInfo>, String> {
-    let mut skills_map = HashMap::<String, SkillInfo>::new();
-
-    let _ = project_id;
-
-    if let Some(project_path) = context.project_path.as_deref() {
-        for skill in scan_skill_directories_for_root(Path::new(project_path), "project") {
-            skills_map.entry(skill.name.clone()).or_insert(skill);
-        }
-    }
-
-    if let Some(home) = dirs::home_dir() {
-        for skill in scan_skill_directories_for_root(&home, "user") {
-            skills_map.entry(skill.name.clone()).or_insert(skill);
-        }
-    }
-
-    let mut skills: Vec<_> = skills_map.into_values().collect();
-    skills.sort_by(|left, right| left.name.cmp(&right.name));
-    Ok(skills)
-}
-
-fn is_valid_root_markdown_skill_file_name(file_name: &str) -> bool {
-    let path = Path::new(file_name);
-    !file_name.starts_with('.')
-        && !file_name.contains('/')
-        && !file_name.contains('\\')
-        && path.components().count() == 1
-        && path.extension().and_then(|extension| extension.to_str()) == Some("md")
-        && path
-            .file_stem()
-            .and_then(|stem| stem.to_str())
-            .is_some_and(|stem| !stem.is_empty())
-}
-
-pub(crate) fn save_skill_content(
-    db: &db::Database,
-    project_id: &str,
-    skill_name: &str,
-    level: &str,
-    source_dir: &str,
-    content: &str,
-    file_name: Option<&str>,
-) -> Result<(), String> {
-    if !is_supported_skill_source_dir(source_dir) {
-        return Err(format!("Unsupported skill source directory: {source_dir}"));
-    }
-
-    let skill_root = if level == "project" {
-        PathBuf::from(
-            db.get_project(project_id)
-                .map_err(|e| format!("Failed to get project: {e}"))?
-                .map(|project| project.path)
-                .ok_or_else(|| "Project not found".to_string())?,
-        )
-    } else {
-        dirs::home_dir().ok_or_else(|| "Cannot determine home directory".to_string())?
-    };
-
-    let skills_dir = skill_source_dir_for_level(&skill_root, source_dir, level);
-    if let Some(file_name) = file_name {
-        if source_dir != PI_SKILLS_SOURCE_DIR {
-            return Err("Root markdown skill files are only supported for .pi skills".to_string());
-        }
-        if !is_valid_root_markdown_skill_file_name(file_name) {
-            return Err(format!("Invalid skill file name: {file_name}"));
-        }
-
-        std::fs::create_dir_all(&skills_dir)
-            .map_err(|e| format!("Failed to create skill directory: {e}"))?;
-        std::fs::write(skills_dir.join(file_name), content)
-            .map_err(|e| format!("Failed to write skill file: {e}"))?;
-        return Ok(());
-    }
-
-    let skill_dir = skills_dir.join(skill_name);
-    std::fs::create_dir_all(&skill_dir)
-        .map_err(|e| format!("Failed to create skill directory: {e}"))?;
-    std::fs::write(skill_dir.join("SKILL.md"), content)
-        .map_err(|e| format!("Failed to write skill file: {e}"))?;
-
-    Ok(())
 }
 
 pub(crate) fn legacy_worktree_from_task_workspace(
@@ -374,127 +282,6 @@ mod tests {
                 ignore_unknown_provider: false,
             }
         );
-    }
-
-    #[tokio::test]
-    async fn list_runtime_skills_includes_project_pi_skills() {
-        let dir = tempfile::tempdir().unwrap();
-        let skill_dir = dir.path().join(".pi").join("skills").join("pi-project");
-        std::fs::create_dir_all(&skill_dir).unwrap();
-        std::fs::write(skill_dir.join("SKILL.md"), "# Pi Project").unwrap();
-        std::fs::write(
-            dir.path().join(".pi").join("skills").join("pi-root.md"),
-            "---\nname: pi-root\ndescription: Pi root markdown skill\n---\n# Pi Root",
-        )
-        .unwrap();
-
-        let context = ProjectRuntimeContext {
-            provider: "pi".to_string(),
-            project_path: Some(dir.path().to_string_lossy().into_owned()),
-        };
-
-        let skills = list_runtime_skills("project-1", &context).await.unwrap();
-
-        assert!(skills.iter().any(|skill| {
-            skill.name == "pi-project" && skill.level == "project" && skill.source_dir == ".pi"
-        }));
-        assert!(skills.iter().any(|skill| {
-            skill.name == "pi-root"
-                && skill.level == "project"
-                && skill.source_dir == ".pi"
-                && skill.file_name.as_deref() == Some("pi-root.md")
-        }));
-    }
-
-    #[test]
-    fn save_skill_content_accepts_project_pi_skills() {
-        let dir = tempfile::tempdir().unwrap();
-        let db = crate::db::Database::new(dir.path().join("openforge.sqlite")).unwrap();
-        let project_root = dir.path().join("project");
-        std::fs::create_dir_all(&project_root).unwrap();
-        let project = db
-            .create_project("Pi Skills Project", &project_root.to_string_lossy())
-            .unwrap();
-
-        save_skill_content(
-            &db,
-            &project.id,
-            "pi-review",
-            "project",
-            ".pi",
-            "# Pi Review",
-            None,
-        )
-        .unwrap();
-
-        assert_eq!(
-            std::fs::read_to_string(
-                project_root
-                    .join(".pi")
-                    .join("skills")
-                    .join("pi-review")
-                    .join("SKILL.md")
-            )
-            .unwrap(),
-            "# Pi Review"
-        );
-    }
-
-    #[test]
-    fn save_skill_content_updates_project_pi_root_markdown_skill_files() {
-        let dir = tempfile::tempdir().unwrap();
-        let db = crate::db::Database::new(dir.path().join("openforge.sqlite")).unwrap();
-        let project_root = dir.path().join("project");
-        let skills_root = project_root.join(".pi").join("skills");
-        std::fs::create_dir_all(&skills_root).unwrap();
-        let project = db
-            .create_project("Pi Root Skills Project", &project_root.to_string_lossy())
-            .unwrap();
-        std::fs::write(skills_root.join("pi-root.md"), "# Old Pi Root").unwrap();
-
-        save_skill_content(
-            &db,
-            &project.id,
-            "pi-root",
-            "project",
-            ".pi",
-            "# Updated Pi Root",
-            Some("pi-root.md"),
-        )
-        .unwrap();
-
-        assert_eq!(
-            std::fs::read_to_string(skills_root.join("pi-root.md")).unwrap(),
-            "# Updated Pi Root"
-        );
-        assert!(!skills_root.join("pi-root").join("SKILL.md").exists());
-    }
-
-    #[test]
-    fn save_skill_content_rejects_invalid_pi_root_markdown_file_names() {
-        let dir = tempfile::tempdir().unwrap();
-        let db = crate::db::Database::new(dir.path().join("openforge.sqlite")).unwrap();
-        let project_root = dir.path().join("project");
-        std::fs::create_dir_all(&project_root).unwrap();
-        let project = db
-            .create_project(
-                "Pi Invalid Root Skills Project",
-                &project_root.to_string_lossy(),
-            )
-            .unwrap();
-
-        let error = save_skill_content(
-            &db,
-            &project.id,
-            "pi-root",
-            "project",
-            ".pi",
-            "# Updated Pi Root",
-            Some("../pi-root.md"),
-        )
-        .unwrap_err();
-
-        assert!(error.contains("Invalid skill file name"));
     }
 
     #[test]
