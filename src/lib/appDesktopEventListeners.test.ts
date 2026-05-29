@@ -243,6 +243,21 @@ describe('registerAppDesktopEventListeners', () => {
     expect(get(checkpointNotification)?.timestamp).toBe(123)
   })
 
+  it('marks active sessions failed from provider-neutral failed status events', async () => {
+    const { deps, handlers } = createHarness()
+    activeSessions.set(new Map([['task-1', createSession({ status: 'running', checkpoint_data: '{"pending":true}' })]]))
+
+    await registerAppDesktopEventListeners(deps)
+    await handlers.get('agent-status-changed')?.({
+      payload: { task_id: 'task-1', status: 'failed', kind: 'failed', pty_instance_id: 42 },
+    })
+
+    expect(get(activeSessions).get('task-1')?.status).toBe('failed')
+    expect(get(activeSessions).get('task-1')?.checkpoint_data).toBeNull()
+    expect(deps.loadTasks).toHaveBeenCalledOnce()
+    expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
+  })
+
   it('does not reactivate an exited PTY from completed status metadata', async () => {
     const { deps, handlers } = createHarness()
     vi.mocked(getShellLifecycleState).mockReturnValue({

@@ -319,6 +319,11 @@ export async function registerAppDesktopEventListeners(deps: AppDesktopEventDeps
         setActiveSession(taskId, { ...session, status: 'interrupted' })
         clearCheckpointForTask(taskId)
         void deps.loadTasks()
+      } else if (status === 'failed') {
+        if (session.status === 'failed') return
+        setActiveSession(taskId, { ...session, status: 'failed', checkpoint_data: null })
+        clearCheckpointForTask(taskId)
+        void deps.loadTasks()
       }
       void deps.loadProjectAttention()
     }),
