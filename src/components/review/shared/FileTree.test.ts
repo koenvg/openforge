@@ -252,23 +252,30 @@ describe('FileTree', () => {
     expect(screen.getAllByText('−8').length).toBeGreaterThan(0)
   })
 
-  it('hides reviewed files by default and can reveal them', async () => {
+  it('collapses reviewed files by default and can expand them', async () => {
     const onSelectFile = () => {}
     render(FileTree, {
       props: {
         files: baseFiles,
         onSelectFile,
         reviewedFileShas: new Map([['src/lib/auth.ts', 'a1']]),
+        onToggleFileReviewed: () => {},
       },
     })
 
+    const reviewedSectionButton = screen.getByRole('button', { name: 'Reviewed files (1)' })
+    expect(reviewedSectionButton.getAttribute('aria-expanded')).toBe('false')
     expect(screen.queryByText('auth.ts')).toBeNull()
     expect(screen.getByText('utils.ts')).toBeTruthy()
-    expect(screen.getByText('1 reviewed hidden')).toBeTruthy()
+    expect(screen.queryByText('1 reviewed hidden')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Show reviewed files' })).toBeNull()
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Show reviewed files' }))
+    await fireEvent.click(reviewedSectionButton)
 
+    expect(reviewedSectionButton.getAttribute('aria-expanded')).toBe('true')
     expect(screen.getByText('auth.ts')).toBeTruthy()
+    const checkbox = screen.getByRole('checkbox', { name: 'Mark src/lib/auth.ts reviewed' }) as HTMLInputElement
+    expect(checkbox.checked).toBe(true)
   })
 
   it('shows a reviewed file again when its sha changes', () => {
@@ -300,7 +307,14 @@ describe('FileTree', () => {
     await fireEvent.click(screen.getByRole('checkbox', { name: 'Mark src/lib/auth.ts reviewed' }))
 
     expect(reviewed).toEqual({ filename: 'src/lib/auth.ts', reviewed: true })
+    const reviewedSectionButton = screen.getByRole('button', { name: 'Reviewed files (1)' })
+    expect(reviewedSectionButton.getAttribute('aria-expanded')).toBe('false')
     expect(screen.queryByLabelText('Mark src/lib/auth.ts reviewed')).toBeNull()
-    expect(screen.getByText('1 reviewed hidden')).toBeTruthy()
+    expect(screen.queryByText('1 reviewed hidden')).toBeNull()
+
+    await fireEvent.click(reviewedSectionButton)
+
+    const checkbox = screen.getByRole('checkbox', { name: 'Mark src/lib/auth.ts reviewed' }) as HTMLInputElement
+    expect(checkbox.checked).toBe(true)
   })
 })
