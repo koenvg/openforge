@@ -4,7 +4,7 @@ import type { FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
 import { openUrl } from '../ipc'
 import { activeProjectId } from '../stores'
 import { installedPlugins } from './pluginStore'
-import { loadPluginFrontend, deactivatePlugin as deactivatePluginLoader, isFrontendPluginModule } from './pluginLoader'
+import { clearLoadedPlugin, loadPluginFrontend, deactivatePlugin as deactivatePluginLoader, isFrontendPluginModule } from './pluginLoader'
 import { createRuntimeContributionRegistry } from './runtimeContributionRegistry'
 import type { RuntimeContributionRegistryInstance } from './runtimeContributionRegistry'
 import { createIpcPluginStorage } from './pluginStorage'
@@ -22,10 +22,27 @@ import {
 
 const activationPromises = new Map<string, Promise<boolean>>()
 const activeRuntimeRegistries = new Map<string, RuntimeContributionRegistryInstance>()
+const pluginFrontendReloadGenerations = new Map<string, number>()
+
+function appendReloadGenerationQuery(assetUrl: string, generation: number): string {
+  const hashIndex = assetUrl.indexOf('#')
+  const beforeHash = hashIndex >= 0 ? assetUrl.slice(0, hashIndex) : assetUrl
+  const hash = hashIndex >= 0 ? assetUrl.slice(hashIndex) : ''
+  const separator = beforeHash.includes('?') ? '&' : '?'
+  return `${beforeHash}${separator}openforgeReload=${generation}${hash}`
+}
+
+function bumpPluginFrontendReloadGeneration(pluginId: string): void {
+  pluginFrontendReloadGenerations.set(pluginId, (pluginFrontendReloadGenerations.get(pluginId) ?? 0) + 1)
+}
 
 function normalizePluginAssetUrl(pluginId: string, frontendEntry: string): string {
   const entry = frontendEntry.replace(/^\.\//, '').replace(/^\//, '')
-  return `plugin://${pluginId}/${entry}`
+  const assetUrl = `plugin://${pluginId}/${entry}`
+  const reloadGeneration = pluginFrontendReloadGenerations.get(pluginId)
+  return reloadGeneration === undefined
+    ? assetUrl
+    : appendReloadGenerationQuery(assetUrl, reloadGeneration)
 }
 
 function createFrontendRuntimeRegistryForPlugin(pluginId: string, manifest: PluginManifest): RuntimeContributionRegistryInstance {
@@ -115,6 +132,7 @@ async function deactivateLoadedPluginModule(pluginId: string): Promise<void> {
     } finally {
       activeRuntimeRegistries.delete(pluginId)
       clearPluginRuntimeHostState(pluginId)
+      clearLoadedPlugin(pluginId)
     }
     setPluginRuntimeState(pluginId, 'installed', null)
     return
@@ -127,6 +145,12 @@ async function deactivateLoadedPluginModule(pluginId: string): Promise<void> {
   }
 
   await deactivatePluginLoader(pluginId)
+}
+
+export function _resetPluginActivationLifecycleForTests(): void {
+  activationPromises.clear()
+  activeRuntimeRegistries.clear()
+  pluginFrontendReloadGenerations.clear()
 }
 
 export async function activatePlugin(pluginId: string): Promise<boolean> {
@@ -263,6 +287,7 @@ export function getPluginRenderProps(pluginId: string, options: { projectId: str
 
 export async function deactivatePluginById(pluginId: string): Promise<void> {
   await deactivateLoadedPluginModule(pluginId)
+  bumpPluginFrontendReloadGeneration(pluginId)
   clearPluginRuntimeContributions(pluginId)
   await stopPluginBackgroundServices(pluginId)
   clearPluginHostSubscriptions(pluginId)

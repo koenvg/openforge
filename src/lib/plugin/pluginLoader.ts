@@ -107,6 +107,10 @@ export async function activatePlugin(pluginId: string): Promise<null> {
   return null
 }
 
+export function clearLoadedPlugin(pluginId: string): void {
+  loadedPlugins.delete(pluginId)
+}
+
 export async function deactivatePlugin(pluginId: string): Promise<void> {
   const loadedPlugin = loadedPlugins.get(pluginId)
   if (!loadedPlugin) return
@@ -116,7 +120,7 @@ export async function deactivatePlugin(pluginId: string): Promise<void> {
   } catch (error) {
     console.error(`[pluginLoader] Failed to deactivate plugin ${pluginId}:`, error)
   } finally {
-    loadedPlugins.delete(pluginId)
+    clearLoadedPlugin(pluginId)
     setPluginState(pluginId, 'installed', null)
   }
 }

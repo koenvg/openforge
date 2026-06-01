@@ -191,6 +191,46 @@ describe('Electron plugin:// protocol security contract', () => {
     expect(await response.text()).toBe('export const ok = true;')
   })
 
+  it('propagates reload cache-busting to plugin-owned JavaScript dependency imports', async () => {
+    const workspaceRoot = await tempWorkspace()
+    const installRoot = join(workspaceRoot, 'installed-plugin')
+    await mkdir(join(installRoot, 'dist'), { recursive: true })
+    await writeFile(join(installRoot, 'dist', 'frontend.js'), [
+      "import { helper } from './chunk.js'",
+      "export { shared } from '../shared.js?existing=1#frag'",
+      "import '/dist/root.js'",
+      "import { onMount } from 'svelte'",
+      "import 'lit'",
+      "const lazy = () => import('./lazy.js')",
+      'export { helper, onMount, lazy }',
+    ].join('\n'))
+
+    const fetch = vi.fn(async () => new Response(JSON.stringify({
+      value: {
+        plugin_id: 'com.example.plugin',
+        asset_root: installRoot,
+        is_builtin: false,
+      },
+    }), { status: 200 }))
+
+    const response = await handlePluginProtocolRequest('plugin://com.example.plugin/dist/frontend.js?openforgeReload=7', {
+      workspaceRoot,
+      sidecarConfig,
+      fetch,
+      readFile,
+      realpath,
+    })
+
+    expect(response.status).toBe(200)
+    const servedCode = await response.text()
+    expect(servedCode).toContain("import { helper } from './chunk.js?openforgeReload=7'")
+    expect(servedCode).toContain("export { shared } from '../shared.js?existing=1&openforgeReload=7#frag'")
+    expect(servedCode).toContain("import '/dist/root.js?openforgeReload=7'")
+    expect(servedCode).toContain("const lazy = () => import(\"./lazy.js?openforgeReload=7\")")
+    expect(servedCode).toContain("import { onMount } from 'plugin://host-runtime/svelte/index.js'")
+    expect(servedCode).toContain("import 'lit'")
+  })
+
   it('rewrites only real Svelte static import specifiers in served plugin JavaScript', async () => {
     const workspaceRoot = await tempWorkspace()
     const installRoot = join(workspaceRoot, 'installed-plugin')

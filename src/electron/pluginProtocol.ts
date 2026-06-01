@@ -58,6 +58,7 @@ export interface ElectronProtocolHandlerLike {
 type ParsedPluginUrl = {
   pluginId: string
   relPath: string
+  reloadToken: string | null
 }
 
 
@@ -107,7 +108,14 @@ function parsePluginUrl(requestUrl: string): ParsedPluginUrl | null {
   const relPath = safeDecode(rawRelPath)
   if (pluginId === null || relPath === null) return null
 
-  return { pluginId, relPath }
+  let reloadToken: string | null = null
+  try {
+    reloadToken = new URL(requestUrl).searchParams.get('openforgeReload')
+  } catch {
+    reloadToken = null
+  }
+
+  return { pluginId, relPath, reloadToken }
 }
 
 function validatePluginId(pluginId: string): boolean {
@@ -150,7 +158,34 @@ function packagedAssetResultResponse(asset: PluginAssetReadResult): Response {
       : okResponse(mimeTypeForPath(asset.filePath), asset.content)
 }
 
-async function rewriteSvelteRuntimeImports(code: string): Promise<string> {
+function isPluginOwnedDependencySpecifier(pluginId: string, specifier: string): boolean {
+  return specifier.startsWith('./')
+    || specifier.startsWith('../')
+    || (specifier.startsWith('/') && !specifier.startsWith('//'))
+    || specifier.startsWith(`plugin://${pluginId}/`)
+}
+
+function appendReloadTokenToSpecifier(specifier: string, reloadToken: string): string {
+  const hashIndex = specifier.indexOf('#')
+  const beforeHash = hashIndex >= 0 ? specifier.slice(0, hashIndex) : specifier
+  const hash = hashIndex >= 0 ? specifier.slice(hashIndex) : ''
+  const queryIndex = beforeHash.indexOf('?')
+  const path = queryIndex >= 0 ? beforeHash.slice(0, queryIndex) : beforeHash
+  const query = queryIndex >= 0 ? beforeHash.slice(queryIndex + 1) : ''
+  const params = new URLSearchParams(query)
+  params.set('openforgeReload', reloadToken)
+  return `${path}?${params.toString()}${hash}`
+}
+
+function moduleSpecifierReplacement(importSpecifier: ReturnType<typeof parseModule>[0][number], value: string): { start: number; end: number; value: string } {
+  if (importSpecifier.d === -1) {
+    return { start: importSpecifier.s, end: importSpecifier.e, value }
+  }
+
+  return { start: importSpecifier.s, end: importSpecifier.e, value: JSON.stringify(value) }
+}
+
+async function rewritePluginJavaScriptImports(code: string, pluginId: string, reloadToken: string | null): Promise<string> {
   await initModuleLexer
 
   let imports: ReturnType<typeof parseModule>[0]
@@ -161,13 +196,21 @@ async function rewriteSvelteRuntimeImports(code: string): Promise<string> {
   }
 
   const replacements = imports
-    .filter(importSpecifier => importSpecifier.d === -1 && importSpecifier.n !== undefined)
-    .map(importSpecifier => ({
-      start: importSpecifier.s,
-      end: importSpecifier.e,
-      value: svelteHostRuntimeImportUrl(importSpecifier.n as string),
-    }))
-    .filter((replacement): replacement is { start: number; end: number; value: string } => replacement.value !== null)
+    .filter(importSpecifier => importSpecifier.n !== undefined)
+    .map(importSpecifier => {
+      const specifier = importSpecifier.n as string
+      const svelteRuntimeUrl = importSpecifier.d === -1 ? svelteHostRuntimeImportUrl(specifier) : null
+      if (svelteRuntimeUrl !== null) {
+        return moduleSpecifierReplacement(importSpecifier, svelteRuntimeUrl)
+      }
+
+      if (reloadToken !== null && isPluginOwnedDependencySpecifier(pluginId, specifier)) {
+        return moduleSpecifierReplacement(importSpecifier, appendReloadTokenToSpecifier(specifier, reloadToken))
+      }
+
+      return null
+    })
+    .filter((replacement): replacement is { start: number; end: number; value: string } => replacement !== null)
 
   return replacements
     .sort((a, b) => b.start - a.start)
@@ -177,7 +220,7 @@ async function rewriteSvelteRuntimeImports(code: string): Promise<string> {
     )
 }
 
-async function pluginAssetResultResponse(asset: PluginAssetReadResult): Promise<Response> {
+async function pluginAssetResultResponse(parsed: ParsedPluginUrl, asset: PluginAssetReadResult): Promise<Response> {
   if (asset === 'forbidden') return forbiddenResponse()
   if (asset === 'not-found') return notFoundResponse()
 
@@ -186,7 +229,7 @@ async function pluginAssetResultResponse(asset: PluginAssetReadResult): Promise<
     return okResponse(contentType, asset.content)
   }
 
-  return okResponse(contentType, await rewriteSvelteRuntimeImports(Buffer.from(asset.content).toString('utf8')))
+  return okResponse(contentType, await rewritePluginJavaScriptImports(Buffer.from(asset.content).toString('utf8'), parsed.pluginId, parsed.reloadToken))
 }
 
 async function packagedHostRuntimeAssetResponse(relPath: string, deps: PluginProtocolDeps): Promise<Response> {
@@ -244,7 +287,7 @@ async function pluginAssetResponse(parsed: ParsedPluginUrl, deps: PluginProtocol
     realpath: deps.realpath,
   }).readCanonicalAsset(assetRoot.assetRoot, parsed.relPath)
 
-  return pluginAssetResultResponse(asset)
+  return pluginAssetResultResponse(parsed, asset)
 }
 
 export async function handlePluginProtocolRequest(requestUrl: string, deps: PluginProtocolDeps): Promise<Response> {
