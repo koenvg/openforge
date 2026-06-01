@@ -83,6 +83,36 @@ fn provider_session_id_is_persistable(provider: &str, provider_session_id: &str)
     provider != "opencode" || provider_session_id.starts_with("ses")
 }
 
+fn session_provider_id<'a>(session: &'a AgentSessionRow, provider: &str) -> Option<&'a str> {
+    match provider {
+        "opencode" => session.opencode_session_id.as_deref(),
+        "claude-code" => session.claude_session_id.as_deref(),
+        "pi" => session.pi_session_id.as_deref(),
+        _ => None,
+    }
+}
+
+fn provider_session_id_belongs_to_other_active_session(
+    db: &db::Database,
+    current_session: &AgentSessionRow,
+    provider: &str,
+    provider_session_id: &str,
+) -> Result<bool, String> {
+    if provider != "claude-code" {
+        return Ok(false);
+    }
+
+    let sessions = db
+        .get_sessions_by_provider(provider)
+        .map_err(|e| format!("failed to load provider sessions: {e}"))?;
+
+    Ok(sessions.iter().any(|session| {
+        session.id != current_session.id
+            && matches!(session.status.as_str(), "running" | "paused")
+            && session_provider_id(session, provider) == Some(provider_session_id)
+    }))
+}
+
 pub fn apply_agent_lifecycle_notification(
     db: &db::Database,
     notification: &AgentLifecycleNotification,
@@ -116,8 +146,20 @@ pub fn apply_agent_lifecycle_notification(
         .filter(|id| !id.is_empty())
         .filter(|id| provider_session_id_is_persistable(&notification.provider, id))
     {
-        db.set_agent_session_provider_id(&session.id, &notification.provider, provider_session_id)
+        let already_attached = provider_session_id_belongs_to_other_active_session(
+            db,
+            &session,
+            &notification.provider,
+            provider_session_id,
+        )?;
+        if !already_attached {
+            db.set_agent_session_provider_id(
+                &session.id,
+                &notification.provider,
+                provider_session_id,
+            )
             .map_err(|e| format!("failed to persist provider session id: {e}"))?;
+        }
     }
 
     let (target_status, eligible_statuses) = lifecycle_status_transition(notification.kind);
@@ -310,7 +352,9 @@ mod tests {
         assert!(prompt.contains("<handoff_notes_template>"));
         assert!(prompt.contains("## Current summary"));
         assert!(prompt.contains("## Review focus"));
-        assert!(prompt.contains("OpenForge stores this task's user-facing Handoff Notes in the task summary field"));
+        assert!(prompt.contains(
+            "OpenForge stores this task's user-facing Handoff Notes in the task summary field"
+        ));
         assert!(prompt.contains("openforge update-task --task-id \"T-123\" --summary \"...\""));
         assert!(!prompt.contains("openforge_update_task"));
         assert!(prompt.contains("T-123"));
@@ -706,6 +750,86 @@ mod tests {
             session.claude_session_id,
             Some("claude-current".to_string())
         );
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn claude_lifecycle_keeps_provider_session_ids_task_scoped_for_active_tasks() {
+        use crate::db::test_helpers::*;
+        let (db, path) = make_test_db("claude_lifecycle_provider_id_unique");
+        let first_task = db
+            .create_task("First Claude task", "doing", None, None, None)
+            .expect("create first task");
+        let second_task = db
+            .create_task("Second Claude task", "doing", None, None, None)
+            .expect("create second task");
+        db.create_agent_session(
+            "ses-claude-first",
+            &first_task.id,
+            None,
+            "implementing",
+            "running",
+            "claude-code",
+        )
+        .expect("create first session");
+        db.set_agent_session_pty_instance_id("ses-claude-first", 101)
+            .expect("store first pty instance");
+        db.create_agent_session(
+            "ses-claude-second",
+            &second_task.id,
+            None,
+            "implementing",
+            "running",
+            "claude-code",
+        )
+        .expect("create second session");
+        db.set_agent_session_pty_instance_id("ses-claude-second", 202)
+            .expect("store second pty instance");
+
+        apply_agent_lifecycle_notification(
+            &db,
+            &AgentLifecycleNotification {
+                provider: "claude-code".to_string(),
+                task_id: first_task.id.clone(),
+                pty_instance_id: Some(101),
+                provider_session_id: Some("claude-shared".to_string()),
+                kind: AgentLifecycleEventKind::BecameBusy,
+                raw_event_type: Some("pre-tool-use".to_string()),
+                raw_status_type: None,
+            },
+        )
+        .expect("first lifecycle should apply")
+        .expect("first status should change");
+
+        apply_agent_lifecycle_notification(
+            &db,
+            &AgentLifecycleNotification {
+                provider: "claude-code".to_string(),
+                task_id: second_task.id.clone(),
+                pty_instance_id: Some(202),
+                provider_session_id: Some("claude-shared".to_string()),
+                kind: AgentLifecycleEventKind::BecameBusy,
+                raw_event_type: Some("pre-tool-use".to_string()),
+                raw_status_type: None,
+            },
+        )
+        .expect("duplicate lifecycle should not error")
+        .expect("duplicate lifecycle still updates status");
+
+        let first_session = db
+            .get_agent_session("ses-claude-first")
+            .expect("get first session")
+            .expect("first session exists");
+        let second_session = db
+            .get_agent_session("ses-claude-second")
+            .expect("get second session")
+            .expect("second session exists");
+        assert_eq!(
+            first_session.claude_session_id.as_deref(),
+            Some("claude-shared")
+        );
+        assert_eq!(second_session.claude_session_id, None);
 
         let _ = std::fs::remove_file(path);
     }
