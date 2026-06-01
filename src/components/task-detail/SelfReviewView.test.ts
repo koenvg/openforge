@@ -507,7 +507,7 @@ describe("SelfReviewView pane restoration", () => {
 		});
 	});
 
-	it("moves a reviewed file into a collapsed reviewed section after marking it reviewed", async () => {
+	it("marks a file reviewed from the diff header while keeping the file tree row in place", async () => {
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
 		vi.mocked(getTaskBatchFileContents).mockResolvedValue([["", ""]]);
 
@@ -515,27 +515,26 @@ describe("SelfReviewView pane restoration", () => {
 			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
 		});
 
-		await fireEvent.click(await screen.findByLabelText("Mark src/main.rs reviewed"));
-
-		let reviewedSectionButton!: HTMLElement;
-		await waitFor(() => {
-			reviewedSectionButton = screen.getByRole("button", { name: "Reviewed files (1)" });
-			expect(reviewedSectionButton.getAttribute("aria-expanded")).toBe("false");
-			expect(screen.queryByLabelText("Mark src/main.rs reviewed")).toBeNull();
-			expect(screen.queryByText("1 reviewed hidden")).toBeNull();
-			expect(getTaskReviewPaneState(baseTask.id).reviewedFileShas.get(baseDiff.filename)).toBe(baseDiff.sha);
-		});
-
-		await fireEvent.click(reviewedSectionButton);
-
-		let checkbox = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
-		expect(checkbox.checked).toBe(true);
+		const checkbox = requireElement(await screen.findByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
+		expect(checkbox.checked).toBe(false);
 
 		await fireEvent.click(checkbox);
 
 		await waitFor(() => {
-			checkbox = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
-			expect(checkbox.checked).toBe(false);
+			const checked = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
+			expect(checked.checked).toBe(true);
+			expect(screen.getByLabelText("Reviewed file src/main.rs")).toBeTruthy();
+			expect(screen.queryByRole("button", { name: "Reviewed files (1)" })).toBeNull();
+			expect(screen.queryByText("1 reviewed hidden")).toBeNull();
+			expect(getTaskReviewPaneState(baseTask.id).reviewedFileShas.get(baseDiff.filename)).toBe(baseDiff.sha);
+		});
+
+		await fireEvent.click(screen.getByLabelText("Mark src/main.rs reviewed"));
+
+		await waitFor(() => {
+			const unchecked = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
+			expect(unchecked.checked).toBe(false);
+			expect(screen.queryByLabelText("Reviewed file src/main.rs")).toBeNull();
 			expect(getTaskReviewPaneState(baseTask.id).reviewedFileShas.has(baseDiff.filename)).toBe(false);
 		});
 	});
@@ -556,17 +555,13 @@ describe("SelfReviewView pane restoration", () => {
 			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
 		});
 
-		let reviewedSectionButton!: HTMLElement;
 		await waitFor(() => {
-			reviewedSectionButton = screen.getByRole("button", { name: "Reviewed files (1)" });
-			expect(reviewedSectionButton.getAttribute("aria-expanded")).toBe("false");
-			expect(screen.queryByLabelText("Mark src/main.rs reviewed")).toBeNull();
+			const checkbox = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
+			expect(checkbox.checked).toBe(true);
+			expect(screen.getByLabelText("Reviewed file src/main.rs")).toBeTruthy();
+			expect(screen.queryByRole("button", { name: "Reviewed files (1)" })).toBeNull();
 			expect(screen.queryByText("1 reviewed hidden")).toBeNull();
 		});
-
-		await fireEvent.click(reviewedSectionButton);
-		let checkbox = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
-		expect(checkbox.checked).toBe(true);
 
 		secondRender.unmount();
 		mockGetTaskDiff.mockResolvedValue([{ ...baseDiff, sha: "changed-sha" }]);
@@ -576,8 +571,9 @@ describe("SelfReviewView pane restoration", () => {
 		});
 
 		await waitFor(() => {
-			checkbox = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
+			const checkbox = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
 			expect(checkbox.checked).toBe(false);
+			expect(screen.queryByLabelText("Reviewed file src/main.rs")).toBeNull();
 			expect(screen.queryByRole("button", { name: "Reviewed files (1)" })).toBeNull();
 			expect(screen.queryByText("1 reviewed hidden")).toBeNull();
 		});
@@ -594,17 +590,13 @@ describe("SelfReviewView pane restoration", () => {
 
 		await fireEvent.click(await screen.findByLabelText("Mark src/main.rs reviewed"));
 
-		let reviewedSectionButton!: HTMLElement;
 		await waitFor(() => {
-			reviewedSectionButton = screen.getByRole("button", { name: "Reviewed files (1)" });
-			expect(reviewedSectionButton.getAttribute("aria-expanded")).toBe("false");
-			expect(screen.queryByLabelText("Mark src/main.rs reviewed")).toBeNull();
+			const checkbox = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
+			expect(checkbox.checked).toBe(true);
+			expect(screen.getByLabelText("Reviewed file src/main.rs")).toBeTruthy();
+			expect(screen.queryByRole("button", { name: "Reviewed files (1)" })).toBeNull();
 			expect(screen.queryByText("1 reviewed hidden")).toBeNull();
 		});
-
-		await fireEvent.click(reviewedSectionButton);
-		let checkbox = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
-		expect(checkbox.checked).toBe(true);
 
 		firstRender.unmount();
 
@@ -613,15 +605,12 @@ describe("SelfReviewView pane restoration", () => {
 		});
 
 		await waitFor(() => {
-			reviewedSectionButton = screen.getByRole("button", { name: "Reviewed files (1)" });
-			expect(reviewedSectionButton.getAttribute("aria-expanded")).toBe("false");
-			expect(screen.queryByLabelText("Mark src/main.rs reviewed")).toBeNull();
+			const checkbox = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
+			expect(checkbox.checked).toBe(true);
+			expect(screen.getByLabelText("Reviewed file src/main.rs")).toBeTruthy();
+			expect(screen.queryByRole("button", { name: "Reviewed files (1)" })).toBeNull();
 			expect(screen.queryByText("1 reviewed hidden")).toBeNull();
 		});
-
-		await fireEvent.click(reviewedSectionButton);
-		checkbox = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
-		expect(checkbox.checked).toBe(true);
 
 		secondRender.unmount();
 		mockGetTaskDiff.mockResolvedValue([
@@ -638,14 +627,15 @@ describe("SelfReviewView pane restoration", () => {
 		});
 
 		await waitFor(() => {
-			checkbox = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
+			const checkbox = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
 			expect(checkbox.checked).toBe(false);
+			expect(screen.queryByLabelText("Reviewed file src/main.rs")).toBeNull();
 			expect(screen.queryByRole("button", { name: "Reviewed files (1)" })).toBeNull();
 			expect(screen.queryByText("1 reviewed hidden")).toBeNull();
 		});
 	});
 
-	it("keeps reviewed file state synced when the file tree is remounted after a checkbox toggle", async () => {
+	it("keeps reviewed file state synced when the file tree is remounted after a header toggle", async () => {
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
 		vi.mocked(getTaskBatchFileContents).mockResolvedValue([["", ""]]);
 
@@ -656,23 +646,19 @@ describe("SelfReviewView pane restoration", () => {
 		await fireEvent.click(await screen.findByLabelText("Mark src/main.rs reviewed"));
 
 		await waitFor(() => {
-			const reviewedSectionButton = screen.getByRole("button", { name: "Reviewed files (1)" });
-			expect(reviewedSectionButton.getAttribute("aria-expanded")).toBe("false");
+			expect(screen.getByLabelText("Reviewed file src/main.rs")).toBeTruthy();
+			expect(screen.queryByRole("button", { name: "Reviewed files (1)" })).toBeNull();
 		});
 
 		await fireEvent.click(screen.getByTitle("Hide file tree"));
 		await fireEvent.click(screen.getByRole("button", { name: "Show files" }));
 
-		let reviewedSectionButton!: HTMLElement;
 		await waitFor(() => {
-			reviewedSectionButton = screen.getByRole("button", { name: "Reviewed files (1)" });
-			expect(reviewedSectionButton.getAttribute("aria-expanded")).toBe("false");
+			const checkbox = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
+			expect(checkbox.checked).toBe(true);
+			expect(screen.getByLabelText("Reviewed file src/main.rs")).toBeTruthy();
 			expect(screen.queryByText("1 reviewed hidden")).toBeNull();
 		});
-
-		await fireEvent.click(reviewedSectionButton);
-		const checkbox = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
-		expect(checkbox.checked).toBe(true);
 	});
 });
 

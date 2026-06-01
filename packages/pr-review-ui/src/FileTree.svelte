@@ -6,7 +6,6 @@
     files?: PrFileDiff[]
     onSelectFile: (filename: string) => void
     reviewedFileShas?: Map<string, string>
-    onToggleFileReviewed?: (file: PrFileDiff, reviewed: boolean) => void
     getFileReviewIdentity?: (file: PrFileDiff) => string | null
   }
 
@@ -14,15 +13,11 @@
     files = [],
     onSelectFile,
     reviewedFileShas = new Map(),
-    onToggleFileReviewed,
     getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null,
   }: Props = $props()
 
   let selectedFile = $state<string | null>(null)
   let expandedDirs = $state(new Set<string>())
-  let reviewedFilesExpanded = $state(false)
-  let locallyReviewedFiles = $state<Array<{ filename: string; identity: string }>>([])
-  let locallyUnreviewedFilenames = $state<string[]>([])
 
   interface TreeNode {
     name: string
@@ -31,8 +26,6 @@
     children: Map<string, TreeNode>
     file?: PrFileDiff
   }
-
-  type FlattenedTreeNode = { node: TreeNode; depth: number }
 
   function collectDirPaths(files: PrFileDiff[]): Set<string> {
     const dirs = new Set<string>()
@@ -53,23 +46,10 @@
     return getFileReviewIdentity(file)
   }
 
-  function isLocallyReviewed(file: PrFileDiff): boolean {
-    const identity = getReviewIdentity(file)
-    return identity !== null && locallyReviewedFiles.some((entry) => entry.filename === file.filename && entry.identity === identity)
-  }
-
-  function isLocallyUnreviewed(file: PrFileDiff): boolean {
-    return locallyUnreviewedFilenames.includes(file.filename)
-  }
-
   function isFileReviewed(file: PrFileDiff): boolean {
-    if (isLocallyUnreviewed(file)) return false
     const identity = getReviewIdentity(file)
-    return identity !== null && (isLocallyReviewed(file) || reviewedFileShas.get(file.filename) === identity)
+    return identity !== null && reviewedFileShas.get(file.filename) === identity
   }
-
-  const reviewedFiles = $derived(files.filter(isFileReviewed))
-  const unreviewedFiles = $derived(files.filter((file) => !isFileReviewed(file)))
 
   function getTotalStats(): { additions: number; deletions: number } {
     return files.reduce((acc, f) => ({
@@ -122,26 +102,8 @@
     expandedDirs = next
   }
 
-  function handleReviewedChange(file: PrFileDiff, event: Event) {
-    if (!(event.currentTarget instanceof HTMLInputElement)) return
-    if (event.currentTarget.checked) {
-      const identity = getReviewIdentity(file)
-      locallyReviewedFiles = identity === null
-        ? locallyReviewedFiles.filter((entry) => entry.filename !== file.filename)
-        : [
-          ...locallyReviewedFiles.filter((entry) => entry.filename !== file.filename),
-          { filename: file.filename, identity },
-        ]
-      locallyUnreviewedFilenames = locallyUnreviewedFilenames.filter((filename) => filename !== file.filename)
-    } else {
-      locallyReviewedFiles = locallyReviewedFiles.filter((entry) => entry.filename !== file.filename)
-      locallyUnreviewedFilenames = [...locallyUnreviewedFilenames.filter((filename) => filename !== file.filename), file.filename]
-    }
-    onToggleFileReviewed?.(file, event.currentTarget.checked)
-  }
-
-  function flattenTree(node: TreeNode, depth: number = 0): FlattenedTreeNode[] {
-    const result: FlattenedTreeNode[] = []
+  function flattenTree(node: TreeNode, depth: number = 0): Array<{ node: TreeNode; depth: number }> {
+    const result: Array<{ node: TreeNode; depth: number }> = []
     const sortedChildren = [...node.children.entries()].sort(([, a], [, b]) => {
       if (a.isDir && !b.isDir) return -1
       if (!a.isDir && b.isDir) return 1
@@ -156,52 +118,8 @@
     return result
   }
 
-  const unreviewedFlattenedNodes = $derived(flattenTree(buildTree(unreviewedFiles), 0))
-  const reviewedFlattenedNodes = $derived(flattenTree(buildTree(reviewedFiles), 0))
+  let flattenedNodes = $derived(flattenTree(buildTree(files), 0))
 </script>
-
-{#snippet treeRows(nodes: FlattenedTreeNode[])}
-  {#each nodes as { node, depth }}
-    {#if node.isDir}
-      <button
-        class="w-full flex items-center gap-2 text-xs text-base-content cursor-pointer hover:bg-base-content/5 transition-colors py-1.5 pr-3"
-        style="padding-left: {12 + depth * 16}px"
-        onclick={() => toggleDir(node.fullPath)}
-      >
-        <span class="text-[0.6rem] text-base-content/50 shrink-0">{expandedDirs.has(node.fullPath) ? '▼' : '▶'}</span>
-        <span class="text-base-content/50 font-medium flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">{node.name}/</span>
-      </button>
-    {:else if node.file}
-      <div
-        class="w-full flex items-center gap-2 text-xs transition-colors py-1.5 pr-3 text-base-content {selectedFile === node.file.filename ? 'bg-primary/10 border-l-2 border-l-primary' : 'hover:bg-primary/5'}"
-        style="padding-left: {selectedFile === node.file.filename ? 10 + depth * 16 : 12 + depth * 16}px"
-      >
-        {#if onToggleFileReviewed}
-          <input
-            type="checkbox"
-            class="checkbox checkbox-xs shrink-0"
-            aria-label="Mark {node.file.filename} reviewed"
-            checked={isFileReviewed(node.file)}
-            onchange={(event) => node.file && handleReviewedChange(node.file, event)}
-          />
-        {/if}
-        <button
-          class="flex min-w-0 flex-1 items-center gap-2 text-left"
-          onclick={() => node.file && handleFileClick(node.file)}
-        >
-          <span class="font-bold text-sm w-4 text-center shrink-0 {getFileStatusClass(node.file.status)}">
-            {getFileStatusIcon(node.file.status)}
-          </span>
-          <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">{node.name}</span>
-          <span class="flex gap-2 text-[0.7rem] ml-auto shrink-0">
-            <span class="text-success">+{node.file.additions}</span>
-            <span class="text-error">−{node.file.deletions}</span>
-          </span>
-        </button>
-      </div>
-    {/if}
-  {/each}
-{/snippet}
 
 <div class="flex flex-col h-full bg-base-200 border-r border-base-300">
   <div class="px-3 py-3 border-b border-base-300">
@@ -213,22 +131,33 @@
   </div>
 
   <div class="flex-1 overflow-y-auto py-2">
-    {@render treeRows(unreviewedFlattenedNodes)}
-
-    {#if reviewedFiles.length > 0}
-      <button
-        class="w-full flex items-center gap-2 text-xs text-base-content cursor-pointer hover:bg-base-content/5 transition-colors py-1.5 px-3"
-        aria-expanded={reviewedFilesExpanded}
-        aria-label="Reviewed files ({reviewedFiles.length})"
-        onclick={() => { reviewedFilesExpanded = !reviewedFilesExpanded }}
-      >
-        <span class="text-[0.6rem] text-base-content/50 shrink-0">{reviewedFilesExpanded ? '▼' : '▶'}</span>
-        <span class="text-base-content/50 font-medium flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">Reviewed files ({reviewedFiles.length})</span>
-      </button>
-
-      {#if reviewedFilesExpanded}
-        {@render treeRows(reviewedFlattenedNodes)}
+    {#each flattenedNodes as { node, depth }}
+      {#if node.isDir}
+        <button
+          class="w-full flex items-center gap-2 text-xs text-base-content cursor-pointer hover:bg-base-content/5 transition-colors py-1.5 pr-3"
+          style="padding-left: {12 + depth * 16}px"
+          onclick={() => toggleDir(node.fullPath)}
+        >
+          <span class="text-[0.6rem] text-base-content/50 shrink-0">{expandedDirs.has(node.fullPath) ? '▼' : '▶'}</span>
+          <span class="text-base-content/50 font-medium flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">{node.name}/</span>
+        </button>
+      {:else if node.file}
+        {@const reviewed = isFileReviewed(node.file)}
+        <button
+          class="w-full flex items-center gap-2 text-xs transition-colors py-1.5 pr-3 text-base-content {selectedFile === node.file.filename ? 'bg-primary/10 border-l-2 border-l-primary' : 'hover:bg-primary/5'}"
+          style="padding-left: {selectedFile === node.file.filename ? 10 + depth * 16 : 12 + depth * 16}px"
+          onclick={() => node.file && handleFileClick(node.file)}
+        >
+          <span class="font-bold text-sm w-4 text-center shrink-0 {getFileStatusClass(node.file.status)}">
+            {getFileStatusIcon(node.file.status)}
+          </span>
+          <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left {reviewed ? 'line-through' : ''}" aria-label={reviewed ? `Reviewed file ${node.file.filename}` : undefined}>{node.name}</span>
+          <span class="flex gap-2 text-[0.7rem] ml-auto shrink-0">
+            <span class="text-success">+{node.file.additions}</span>
+            <span class="text-error">−{node.file.deletions}</span>
+          </span>
+        </button>
       {/if}
-    {/if}
+    {/each}
   </div>
 </div>
