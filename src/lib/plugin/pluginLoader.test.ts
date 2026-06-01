@@ -6,6 +6,7 @@ import {
   _resetPluginLoaderForTests,
   _setModuleLoader,
   activatePlugin,
+  clearLoadedPlugin,
   deactivatePlugin,
   getLoadedPlugin,
   isPluginLoaded,
@@ -169,5 +170,20 @@ describe('pluginLoader', () => {
 
     expect(first).toBe(second)
     expect(loader).toHaveBeenCalledOnce()
+  })
+
+  it('clears a loaded module without invoking plugin deactivation', async () => {
+    seedPlugin('plugin.clear')
+    const module = defineFrontendPlugin({
+      activate: vi.fn((_api, _context) => undefined),
+      deactivate: vi.fn(async () => undefined),
+    })
+    _setModuleLoader(async () => module)
+    await loadPluginFrontend('plugin.clear', '/plugins/plugin.clear/index.js')
+
+    clearLoadedPlugin('plugin.clear')
+
+    expect(module.deactivate).not.toHaveBeenCalled()
+    expect(isPluginLoaded('plugin.clear')).toBe(false)
   })
 })

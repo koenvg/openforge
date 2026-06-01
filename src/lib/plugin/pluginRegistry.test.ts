@@ -84,12 +84,14 @@ const {
   loadPluginFrontendMock,
   activatePluginLoaderMock,
   deactivatePluginLoaderMock,
+  clearLoadedPluginMock,
   isPluginLoadedMock,
   getBuiltinPluginModuleMock,
 } = vi.hoisted(() => ({
   loadPluginFrontendMock: vi.fn(),
   activatePluginLoaderMock: vi.fn(),
   deactivatePluginLoaderMock: vi.fn(),
+  clearLoadedPluginMock: vi.fn(),
   isPluginLoadedMock: vi.fn(),
   getBuiltinPluginModuleMock: vi.fn(),
 }))
@@ -102,6 +104,7 @@ vi.mock('./pluginLoader', async (importOriginal) => {
     loadPluginFrontend: loadPluginFrontendMock,
     activatePlugin: activatePluginLoaderMock,
     deactivatePlugin: deactivatePluginLoaderMock,
+    clearLoadedPlugin: clearLoadedPluginMock,
     isPluginLoaded: isPluginLoadedMock,
   }
 })
@@ -140,6 +143,7 @@ import {
   reloadPluginForProject,
 } from './pluginRegistry'
 import { installedPlugins, enabledPluginIds, runtimeContributionSources } from './pluginStore'
+import { _resetPluginActivationLifecycleForTests } from './pluginActivationLifecycle'
 import type { PluginManifest } from './types'
 import type { NormalizedPluginRow } from '../ipc'
 import { clearComponentRegistry, getRegisteredComponent, getRegisteredRenderableComponent } from './componentRegistry'
@@ -221,8 +225,10 @@ describe('pluginRegistry', () => {
     loadPluginFrontendMock.mockReset()
     activatePluginLoaderMock.mockReset()
     deactivatePluginLoaderMock.mockReset()
+    clearLoadedPluginMock.mockReset()
     isPluginLoadedMock.mockReset()
     getBuiltinPluginModuleMock.mockReset()
+    _resetPluginActivationLifecycleForTests()
     installedPlugins.set(new Map())
     enabledPluginIds.set(new Set())
     runtimeContributionSources.set(new Map())
@@ -486,6 +492,7 @@ describe('pluginRegistry', () => {
     await disablePluginForProject('P-1', 'enable-runtime-plugin')
 
     expect(get(enabledPluginIds)).toEqual(new Set())
+    expect(clearLoadedPluginMock).toHaveBeenCalledWith('enable-runtime-plugin')
     expect(get(installedPlugins).get('enable-runtime-plugin')?.state).toBe('installed')
     expect(get(runtimeContributionSources).get('enable-runtime-plugin')).toBeUndefined()
   })
@@ -882,6 +889,39 @@ describe('pluginRegistry', () => {
       state: 'installed',
     })
     expect(get(enabledPluginIds).has('local-plugin')).toBe(false)
+  })
+
+  it('reloadPluginForProject re-imports changed local frontend bundles with a cache-busted URL', async () => {
+    const manifest = makeManifest({ id: 'reload-plugin', frontend: './dist/frontend.js' })
+    enabledPluginIds.set(new Set(['reload-plugin']))
+    installedPlugins.set(new Map([['reload-plugin', {
+      manifest,
+      state: 'installed',
+      error: null,
+      sourceKind: 'local',
+      sourceSpec: '/plugins/reload-plugin',
+    }]]))
+    getPluginIpcMock.mockResolvedValue({
+      ...makeNormalized('reload-plugin'),
+      frontendEntry: './dist/frontend.js',
+      sourceKind: 'local',
+      sourceSpec: '/plugins/reload-plugin',
+    })
+    getEnabledPluginsMock.mockResolvedValue([{ ...makeNormalized('reload-plugin'), frontendEntry: './dist/frontend.js' }])
+    const firstActivate = vi.fn(() => undefined)
+    const secondActivate = vi.fn(() => undefined)
+    loadPluginFrontendMock
+      .mockResolvedValueOnce({ pluginId: 'reload-plugin', module: defineFrontendPlugin({ activate: firstActivate }) })
+      .mockResolvedValueOnce({ pluginId: 'reload-plugin', module: defineFrontendPlugin({ activate: secondActivate }) })
+
+    await expect(activatePlugin('reload-plugin')).resolves.toBe(true)
+    await expect(reloadPluginForProject('project-1', 'reload-plugin')).resolves.toBe(true)
+
+    expect(clearLoadedPluginMock).toHaveBeenCalledWith('reload-plugin')
+    expect(loadPluginFrontendMock).toHaveBeenNthCalledWith(1, 'reload-plugin', 'plugin://reload-plugin/dist/frontend.js')
+    expect(loadPluginFrontendMock).toHaveBeenNthCalledWith(2, 'reload-plugin', 'plugin://reload-plugin/dist/frontend.js?openforgeReload=1')
+    expect(firstActivate).toHaveBeenCalledOnce()
+    expect(secondActivate).toHaveBeenCalledOnce()
   })
 
   it('reloadPluginForProject refreshes target metadata and preserves other active plugins', async () => {
