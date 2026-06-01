@@ -64,6 +64,42 @@ _Avoid_: Run scheduling, agent configuration, global task creation, status selec
 A PR-visible Git branch OpenForge creates for a **Task** workspace.
 _Avoid_: Prompt branch, run branch, title branch
 
+**Marketing Site**:
+A public web presence that explains OpenForge and guides people toward installation or documentation.
+_Avoid_: Web app, hosted dashboard, web companion
+
+**Marketing Site Primary Visitor**:
+An AI-assisted individual developer or tech lead who wants local, calm control over coding-agent workflow.
+_Avoid_: AI beginner, enterprise buyer, plugin author
+
+**Marketing Site Primary Conversion**:
+The main action the **Marketing Site** asks visitors to take: install OpenForge locally.
+_Avoid_: Waitlist signup, hosted app launch, sales contact
+
+**Marketing Site Promise**:
+The core claim of the **Marketing Site**: run AI coding agents without losing control of the work.
+_Avoid_: Autonomous software factory, AI developer replacement, productivity dashboard
+
+**Marketing Site Plugin Customization Pillar**:
+A top-level **Marketing Site** reason to use OpenForge: the task-based operator console stays stable while **Trusted Plugins** let users shape the workspace around their own workflow.
+_Avoid_: Arbitrary untrusted extensions, hosted marketplace promise, plugin-only product
+
+**Marketing Site Top Reasons**:
+The three primary reasons the **Marketing Site** gives for using OpenForge: stay in control of agent work, work locally with visible state, and customize the operator console with **Trusted Plugins**.
+_Avoid_: Generic productivity claims, enterprise collaboration claims, review-only positioning
+
+**Marketing Site Workspace**:
+The repository location for website implementation: an Astro monorepo workspace app at `apps/website`.
+_Avoid_: Desktop renderer, docs folder site, separate repository
+
+**Marketing Site First Milestone**:
+The first website implementation target: a static one-page **Marketing Site** with hero, top reasons, workflow, plugin customization, screenshots, local-first trust, install block, and footer links.
+_Avoid_: Blog, hosted docs system, plugin marketplace, analytics, mailing list, interactive demo
+
+**Marketing Site Visual Direction**:
+A calm developer-tool aesthetic for the **Marketing Site** that foregrounds product screenshots and focused workflow rather than flashy AI imagery.
+_Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot art
+
 ## Relationships
 
 - **Task Creation** creates a project-owned backlog **Task**, not an **Implementation Run**.
@@ -83,6 +119,15 @@ _Avoid_: Prompt branch, run branch, title branch
 - A **Project Handoff Notes Template** defines the required shape of **Handoff Notes** for Tasks in one project.
 - Existing Tasks may have unstructured historical summaries; **Handoff Notes** are the forward-looking reviewer brief, not a migration requirement.
 - A **Task Branch** identifies the **Task**; human-readable context belongs in the **Task**, **Handoff Notes**, PR title, or PR body rather than in prompt-derived branch text.
+- The **Marketing Site** presents the desktop product; it does not host **Tasks**, **Implementation Runs**, or **Agent Sessions**.
+- The **Marketing Site Primary Visitor** already understands coding agents and needs help coordinating the workflow around them.
+- The **Marketing Site Primary Conversion** is supported by source-code credibility, documentation, and philosophy rather than replacing them.
+- The **Marketing Site Promise** emphasizes human control over coding-agent workflow, not autonomous replacement.
+- The **Marketing Site Plugin Customization Pillar** depends on **Trusted Plugins** and explicit host capabilities rather than implying unrestricted sandboxed code.
+- **Marketing Site Top Reasons** frame PR review and self-review as part of staying in control, not as the sole product category.
+- The **Marketing Site Workspace** keeps website implementation separate from the desktop renderer while staying version-aligned with product language and assets.
+- The **Marketing Site First Milestone** validates positioning before adding multi-page content, analytics, or marketplace-like surfaces.
+- The **Marketing Site Visual Direction** should make OpenForge feel precise, grounded, and calm rather than autonomous or noisy.
 
 ## Example dialogue
 
@@ -99,3 +144,5 @@ _Avoid_: Prompt branch, run branch, title branch
 - "Summary" and **Handoff Notes** overlapped — resolved: user-facing review language should say **Handoff Notes**, while existing unstructured summaries remain valid legacy content.
 - Worktree branch names were considered for prompt-derived descriptions — resolved: **Task Branches** should be stable task identifiers because they are visible as PR source branches.
 - "Skill" was considered as a core OpenForge platform concept because one built-in plugin manages skills — resolved: skill discovery and editing are a **Plugin-owned Domain** unless multiple plugins need a shared platform contract.
+- "Website" could mean a hosted product surface or public promotion — resolved: the current website direction is a **Marketing Site**, not a web version of OpenForge.
+- The **Marketing Site Promise** could be inflated into agent autonomy claims — resolved: avoid promises of autonomous engineering teams, code-review replacement, one-click shipping, hosted control planes, universal provider support, or enterprise collaboration suites.
