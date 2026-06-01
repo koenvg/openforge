@@ -252,7 +252,7 @@ describe('FileTree', () => {
     expect(screen.getAllByText('−8').length).toBeGreaterThan(0)
   })
 
-  it('hides reviewed files by default and can reveal them', async () => {
+  it('keeps reviewed files in their original tree location without a reviewed group or checkbox', () => {
     const onSelectFile = () => {}
     render(FileTree, {
       props: {
@@ -262,13 +262,12 @@ describe('FileTree', () => {
       },
     })
 
-    expect(screen.queryByText('auth.ts')).toBeNull()
-    expect(screen.getByText('utils.ts')).toBeTruthy()
-    expect(screen.getByText('1 reviewed hidden')).toBeTruthy()
-
-    await fireEvent.click(screen.getByRole('button', { name: 'Show reviewed files' }))
-
     expect(screen.getByText('auth.ts')).toBeTruthy()
+    expect(screen.getByText('utils.ts')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Reviewed files (1)' })).toBeNull()
+    expect(screen.queryByRole('checkbox', { name: 'Mark src/lib/auth.ts reviewed' })).toBeNull()
+    expect(screen.queryByText('1 reviewed hidden')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Show reviewed files' })).toBeNull()
   })
 
   it('shows a reviewed file again when its sha changes', () => {
@@ -285,22 +284,22 @@ describe('FileTree', () => {
     expect(screen.queryByText('1 reviewed hidden')).toBeNull()
   })
 
-  it('notifies when a file is marked reviewed', async () => {
-    let reviewed: { filename: string; reviewed: boolean } | null = null
+  it('keeps reviewed file rows navigable', async () => {
+    let selected: string | null = null
     render(FileTree, {
       props: {
         files: [baseFiles[0]],
-        onSelectFile: () => {},
-        onToggleFileReviewed: (file: PrFileDiff, nextReviewed: boolean) => {
-          reviewed = { filename: file.filename, reviewed: nextReviewed }
+        onSelectFile: (filename: string) => {
+          selected = filename
         },
+        reviewedFileShas: new Map([['src/lib/auth.ts', 'a1']]),
       },
     })
 
-    await fireEvent.click(screen.getByRole('checkbox', { name: 'Mark src/lib/auth.ts reviewed' }))
+    await fireEvent.click(screen.getByRole('button', { name: /auth\.ts/ }))
 
-    expect(reviewed).toEqual({ filename: 'src/lib/auth.ts', reviewed: true })
-    expect(screen.queryByLabelText('Mark src/lib/auth.ts reviewed')).toBeNull()
-    expect(screen.getByText('1 reviewed hidden')).toBeTruthy()
+    expect(selected).toBe('src/lib/auth.ts')
+    expect(screen.queryByRole('checkbox', { name: 'Mark src/lib/auth.ts reviewed' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Reviewed files (1)' })).toBeNull()
   })
 })

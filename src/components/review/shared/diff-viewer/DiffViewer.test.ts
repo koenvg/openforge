@@ -375,6 +375,69 @@ const fileWithPatch2: PrFileDiff = {
   patch_line_count: null,
 }
 
+describe('DiffViewer reviewed files', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    const diffFile = { clearId: vi.fn() }
+    const { createDiffWorker } = await import('@openforge/pr-review-ui/useDiffWorker.svelte')
+    vi.mocked(createDiffWorker).mockReturnValue({
+      getDiffFile: () => diffFile as never,
+      processing: false,
+    })
+  })
+
+  it('collapses the file body when the header Reviewed checkbox is checked', async () => {
+    const onToggleFileReviewed = vi.fn()
+    render(DiffViewer, {
+      props: {
+        files: [fileWithPatch],
+        reviewedFileShas: new Map(),
+        onToggleFileReviewed,
+        getFileReviewIdentity: (file: PrFileDiff) => file.sha.trim() || null,
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-diff-view')).toBeTruthy()
+    })
+
+    const checkbox = requireElement(screen.getByRole('checkbox', { name: 'Mark src/test.ts reviewed' }), HTMLInputElement)
+    expect(checkbox.checked).toBe(false)
+
+    await fireEvent.click(checkbox)
+
+    expect(onToggleFileReviewed).toHaveBeenCalledWith(expect.objectContaining({ filename: 'src/test.ts' }), true)
+    await waitFor(() => {
+      expect(screen.queryByTestId('mock-diff-view')).toBeNull()
+    })
+  })
+
+  it('keeps the header Reviewed checkbox available while collapsed and expands when unchecked', async () => {
+    const onToggleFileReviewed = vi.fn()
+    render(DiffViewer, {
+      props: {
+        files: [fileWithPatch],
+        reviewedFileShas: new Map([['src/test.ts', 'abc123']]),
+        onToggleFileReviewed,
+        getFileReviewIdentity: (file: PrFileDiff) => file.sha.trim() || null,
+      },
+    })
+
+    const checkbox = requireElement(await screen.findByRole('checkbox', { name: 'Mark src/test.ts reviewed' }), HTMLInputElement)
+    expect(checkbox.checked).toBe(true)
+    await waitFor(() => {
+      expect(screen.queryByTestId('mock-diff-view')).toBeNull()
+    })
+
+    await fireEvent.click(checkbox)
+
+    expect(onToggleFileReviewed).toHaveBeenCalledWith(expect.objectContaining({ filename: 'src/test.ts' }), false)
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-diff-view')).toBeTruthy()
+    })
+  })
+})
+
 describe('DiffViewer pending comments source', () => {
   beforeEach(() => {
     vi.clearAllMocks()

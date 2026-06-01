@@ -40,9 +40,12 @@
     setInlineDraft?: (scopeId: string, filename: string, lineNumber: number, side: ReviewSubmissionComment['side'], text: string) => void
     clearInlineDraft?: (scopeId: string, filename: string, lineNumber: number, side: ReviewSubmissionComment['side']) => void
     diffTheme?: 'light' | 'dark'
+    reviewedFileShas?: Map<string, string>
+    onToggleFileReviewed?: (file: PrFileDiff, reviewed: boolean) => void
+    getFileReviewIdentity?: (file: PrFileDiff) => string | null
   }
   type Props = BaseProps
-  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onAgentCommentsChange, onUpdateAgentCommentStatus, onOpenUrl, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, diffTheme }: Props = $props()
+  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onAgentCommentsChange, onUpdateAgentCommentStatus, onOpenUrl, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, diffTheme, reviewedFileShas = new Map(), onToggleFileReviewed, getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null }: Props = $props()
   let internalPendingComments = $state<ReviewSubmissionComment[]>([])
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
   let diffViewWrap = $state(false)
@@ -63,6 +66,7 @@
   const maxScrollRestoreAttempts = 40
   const scrollRestoreRetryMs = 25
   let hasAutoCollapsed = false
+  let previousReviewedFileIdentities = new Map<string, string>()
   const fileContentsFetcher = createFileContentsFetcher({
     getFiles: () => files,
     getIncludeUncommitted: () => includeUncommitted,
@@ -94,6 +98,39 @@
     collapsedFiles = next
   }
 
+  function getReviewIdentity(file: PrFileDiff): string | null {
+    return getFileReviewIdentity(file)
+  }
+
+  function isFileReviewed(file: PrFileDiff): boolean {
+    const identity = getReviewIdentity(file)
+    return identity !== null && reviewedFileShas.get(file.filename) === identity
+  }
+
+  function getCurrentReviewedFileIdentities(): Map<string, string> {
+    const reviewedIdentities = new Map<string, string>()
+    for (const file of files) {
+      const identity = getReviewIdentity(file)
+      if (identity !== null && reviewedFileShas.get(file.filename) === identity) {
+        reviewedIdentities.set(file.filename, identity)
+      }
+    }
+    return reviewedIdentities
+  }
+
+  function handleReviewedChange(file: PrFileDiff, event: Event) {
+    if (!(event.currentTarget instanceof HTMLInputElement)) return
+    const reviewed = event.currentTarget.checked
+    onToggleFileReviewed?.(file, reviewed)
+    const next = new Set(collapsedFiles)
+    if (reviewed) {
+      next.add(file.filename)
+    } else {
+      next.delete(file.filename)
+    }
+    collapsedFiles = next
+  }
+
   // Auto-collapse large files on initial load
   $effect(() => {
     if (hasAutoCollapsed) return
@@ -109,10 +146,36 @@
     hasAutoCollapsed = true
   })
 
+  $effect(() => {
+    const currentReviewedFileIdentities = getCurrentReviewedFileIdentities()
+    const next = new Set(collapsedFiles)
+    let changed = false
+
+    for (const [filename, identity] of currentReviewedFileIdentities.entries()) {
+      if (previousReviewedFileIdentities.get(filename) !== identity) {
+        next.add(filename)
+        changed = true
+      }
+    }
+
+    for (const filename of previousReviewedFileIdentities.keys()) {
+      if (!currentReviewedFileIdentities.has(filename)) {
+        next.delete(filename)
+        changed = true
+      }
+    }
+
+    previousReviewedFileIdentities = currentReviewedFileIdentities
+    if (changed) {
+      collapsedFiles = next
+    }
+  })
+
   export function scrollToFile(filename: string) {
     const index = sortedFiles.findIndex(f => f.filename === filename)
     if (index >= 0) {
-      if (collapsedFiles.has(filename)) {
+      const file = sortedFiles[index]
+      if (file && !isFileReviewed(file) && collapsedFiles.has(filename)) {
         const next = new Set(collapsedFiles)
         next.delete(filename)
         collapsedFiles = next
@@ -455,24 +518,38 @@
             use:virtualizer.measureAction
           >
             <div class="border border-base-300 rounded-md overflow-hidden">
-              <button class="w-full flex items-center gap-2 px-4 py-3 bg-base-200 hover:bg-base-300 transition-colors cursor-pointer border-b border-base-300" onclick={() => toggleCollapse(file.filename)}>
-                <span class="text-xs text-base-content/50 flex-shrink-0">{collapsedFiles.has(file.filename) ? '▶' : '▼'}</span>
-                <span class="font-bold text-sm" style="color: {getFileStatusColor(file.status)}">
-                  {getFileStatusIcon(file.status)}
-                </span>
-                <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-xs text-base-content" title={file.filename}>
-                  {#if file.previous_filename}
-                    <span class="text-base-content/50 line-through">{file.previous_filename}</span>
-                    <span class="text-primary mx-1">→</span>
-                  {/if}
-                  {file.filename}
-                </span>
+              <div class="w-full flex items-center gap-2 px-4 py-3 bg-base-200 border-b border-base-300">
+                <button class="min-w-0 flex flex-1 items-center gap-2 text-left hover:text-primary transition-colors" onclick={() => toggleCollapse(file.filename)}>
+                  <span class="text-xs text-base-content/50 flex-shrink-0">{collapsedFiles.has(file.filename) ? '▶' : '▼'}</span>
+                  <span class="font-bold text-sm" style="color: {getFileStatusColor(file.status)}">
+                    {getFileStatusIcon(file.status)}
+                  </span>
+                  <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-xs text-base-content" title={file.filename}>
+                    {#if file.previous_filename}
+                      <span class="text-base-content/50 line-through">{file.previous_filename}</span>
+                      <span class="text-primary mx-1">→</span>
+                    {/if}
+                    {file.filename}
+                  </span>
+                </button>
+                {#if onToggleFileReviewed}
+                  <label class="flex items-center gap-1.5 text-xs text-base-content/70 cursor-pointer flex-shrink-0">
+                    <input
+                      type="checkbox"
+                      class="checkbox checkbox-xs"
+                      aria-label="Mark {file.filename} reviewed"
+                      checked={isFileReviewed(file)}
+                      onchange={(event) => handleReviewedChange(file, event)}
+                    />
+                    <span>Reviewed</span>
+                  </label>
+                {/if}
                 <span class="text-xs font-semibold uppercase tracking-wider flex-shrink-0" style="color: {getFileStatusColor(file.status)}">{getFileStatusLabel(file.status)}</span>
                 <span class="flex gap-2 text-xs flex-shrink-0">
                   {#if file.additions > 0}<span class="text-success">+{file.additions}</span>{/if}
                   {#if file.deletions > 0}<span class="text-error">−{file.deletions}</span>{/if}
                 </span>
-              </button>
+              </div>
               {#if !collapsedFiles.has(file.filename)}
                 {#if truncated}
                   <div class="alert alert-info py-1.5 px-4 rounded-none border-x-0 text-xs">

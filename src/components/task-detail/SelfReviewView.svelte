@@ -202,7 +202,6 @@
                   files={selfReviewDiffFiles}
                   onSelectFile={handleFileSelect}
                   {reviewedFileShas}
-                  onToggleFileReviewed={handleToggleFileReviewed}
                   getFileReviewIdentity={getTaskReviewFileIdentity}
                 />
               {:else}
@@ -308,6 +307,9 @@
               {includeUncommitted}
               initialScrollTop={getTaskReviewPaneState(task.id).diffScrollTop}
               onScrollTopChange={(diffScrollTop) => updateTaskReviewPaneState(task.id, { diffScrollTop })}
+              {reviewedFileShas}
+              onToggleFileReviewed={handleToggleFileReviewed}
+              getFileReviewIdentity={getTaskReviewFileIdentity}
             >
               {#snippet toolbarExtra()}
                 <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>

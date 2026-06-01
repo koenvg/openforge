@@ -29,8 +29,16 @@ A living reviewer-facing brief on a **Task** that summarizes what needs inspecti
 _Avoid_: Completion log, run history, random comments
 
 **Reviewed File**:
-A changed file the user has explicitly marked as already inspected during review. It stops counting as reviewed when the file's content identity changes.
+A changed file the user has explicitly marked as already inspected during review; it remains visible in the review flow and stops counting as reviewed when the file's content identity changes.
 _Avoid_: Hidden file, dismissed file, permanently ignored file
+
+**Review File Tree**:
+The navigation list of changed files in a review flow.
+_Avoid_: Reviewed-files bucket, hidden-files list
+
+**Diff File Section**:
+The per-file review area that contains a changed file's header and diff content.
+_Avoid_: File tree row, reviewed-files group
 
 **Project Handoff Notes Template**:
 A project-owned format that defines what **Handoff Notes** must contain for that project.
@@ -70,6 +78,8 @@ _Avoid_: Prompt branch, run branch, title branch
 - **Implementation Input** targets an existing **Agent Session** and does not choose a new provider or agent.
 - **Handoff Notes** belong to a **Task** and are updated to reflect the current review state rather than appended per **Implementation Run**.
 - A **Reviewed File** remains reviewed only while its content identity is unchanged.
+- A **Review File Tree** keeps **Reviewed Files** in their original location as navigation items.
+- A **Diff File Section** may collapse after its file becomes a **Reviewed File**, while remaining available to reopen.
 - A **Project Handoff Notes Template** defines the required shape of **Handoff Notes** for Tasks in one project.
 - Existing Tasks may have unstructured historical summaries; **Handoff Notes** are the forward-looking reviewer brief, not a migration requirement.
 - A **Task Branch** identifies the **Task**; human-readable context belongs in the **Task**, **Handoff Notes**, PR title, or PR body rather than in prompt-derived branch text.
