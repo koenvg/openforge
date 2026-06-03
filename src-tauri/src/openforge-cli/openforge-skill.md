@@ -23,6 +23,7 @@ If OpenForge is listening on a non-default HTTP bridge port, set `OPENFORGE_HTTP
 ```bash
 openforge create-task --initial-prompt "Describe the follow-up work" --project-id P-1 --depends-on T-122 --label cleanup
 openforge update-task --task-id T-123 --summary "What changed and what needs attention"
+openforge delete-task --task-id T-123
 openforge set-task-dependencies --task-id T-123 --depends-on T-121,T-122
 openforge add-task-dependency --task-id T-123 --depends-on T-122
 openforge link-tasks --chain "T-121 -> T-122 -> T-123"
@@ -42,6 +43,7 @@ Labels are project-scoped. Use `--label` on `create-task` for AI-created follow-
 
 - Create follow-up tasks for real cleanup or missing work; do not create tasks for trivial preferences.
 - Update the active task with a concise implementation summary before finishing.
+- Use `delete-task` only when the user explicitly wants an OpenForge task removed; it returns JSON status output from the backend deletion bridge.
 - Use dependencies to record prerequisite ordering, not to mark tasks blocked; Start Task enforcement is intentionally left to the app UX.
 - Use labels to record task categories or triage context when they are useful for backlog filtering; do not add noisy labels just because the CLI supports them.
 - Task summaries are Markdown-formatted; use short paragraphs or bullets when they improve readability.

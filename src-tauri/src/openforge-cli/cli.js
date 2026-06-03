@@ -7,6 +7,7 @@ const BASE_URL = `http://127.0.0.1:${HTTP_PORT}`;
 const COMMAND_FLAGS = {
   'create-task': new Set(['initialPrompt', 'projectId', 'worktree', 'dependsOn', 'label']),
   'update-task': new Set(['taskId', 'summary']),
+  'delete-task': new Set(['taskId']),
   'set-task-dependencies': new Set(['taskId', 'dependsOn']),
   'add-task-dependency': new Set(['taskId', 'dependsOn']),
   'link-tasks': new Set(['chain']),
@@ -26,6 +27,7 @@ function printHelp() {
 Usage:
   openforge create-task --initial-prompt <text> [--project-id <id>] [--worktree <path>] [--depends-on <task-id>[,<task-id>...]] [--label <name>[,<name>...]]
   openforge update-task --task-id <id> --summary <text>
+  openforge delete-task --task-id <id>
   openforge set-task-dependencies --task-id <id> --depends-on <task-id>[,<task-id>...]
   openforge add-task-dependency --task-id <id> --depends-on <task-id>
   openforge link-tasks --chain "T-1 -> T-2 -> T-3"
@@ -206,6 +208,13 @@ async function main(argv) {
         throw new Error('update-task requires --summary');
       }
       printJson(await requestJson('/update_task', { method: 'POST', body: JSON.stringify(payload) }));
+      return;
+    }
+    case 'delete-task': {
+      const payload = {
+        task_id: requireFlag(flags, 'taskId'),
+      };
+      printJson(await requestJson('/delete_task', { method: 'POST', body: JSON.stringify(payload) }));
       return;
     }
     case 'set-task-dependencies': {
