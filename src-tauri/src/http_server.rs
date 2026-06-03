@@ -599,7 +599,7 @@ pub async fn delete_task_handler(
     Json(request): Json<DeleteTaskRequest>,
 ) -> Result<Json<DeleteTaskResponse>, (StatusCode, String)> {
     let db = state.db.lock().unwrap();
-    let project_id = db
+    let task = db
         .get_task(&request.task_id)
         .map_err(|e| {
             (
@@ -612,8 +612,19 @@ pub async fn delete_task_handler(
                 StatusCode::NOT_FOUND,
                 format!("Task not found: {}", request.task_id),
             )
-        })?
-        .project_id;
+        })?;
+
+    if task.status != "backlog" {
+        return Err((
+            StatusCode::CONFLICT,
+            format!(
+                "delete_task requires a backlog task; task {} has status {}",
+                request.task_id, task.status
+            ),
+        ));
+    }
+
+    let project_id = task.project_id;
 
     db.delete_task(&request.task_id).map_err(|e| {
         (

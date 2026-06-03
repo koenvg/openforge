@@ -204,6 +204,45 @@ async fn test_delete_task_handler_deletes_task() {
 }
 
 #[tokio::test]
+async fn test_delete_task_handler_rejects_non_backlog_task() {
+    let (state, path) = test_state("http_delete_task_handler_non_backlog_task");
+    {
+        let db = state.db.lock().expect("lock db");
+        let project = db
+            .create_project("Project", "/tmp/project")
+            .expect("create project");
+        db.set_config("task_id_prefix", "T")
+            .expect("set task prefix");
+        db.create_task("Task", "doing", Some(&project.id), None, None)
+            .expect("create task");
+    }
+
+    let router = create_router(state.clone());
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/delete_task")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"task_id":"T-1"}"#))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert!(state
+        .db
+        .lock()
+        .expect("lock db")
+        .get_task("T-1")
+        .expect("get task")
+        .is_some());
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn test_delete_task_handler_rejects_missing_task() {
     let (state, path) = test_state("http_delete_task_handler_missing_task");
 
