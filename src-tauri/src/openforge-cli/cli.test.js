@@ -35,6 +35,7 @@ describe('OpenForge CLI', () => {
     const { stdout } = await runCli(['--help']);
 
     expect(stdout).toContain('Usage:\n  openforge create-task');
+    expect(stdout).toContain('openforge delete-task --task-id <id>');
     expect(stdout).toContain('openforge list-projects');
     expect(stdout).not.toContain('node cli.js');
     expect(stdout).not.toContain('openforge mcp');
@@ -56,6 +57,7 @@ describe('OpenForge CLI', () => {
 
       expect(stdout).toContain('Usage:\n  openforge create-task');
       expect(stdout).toContain('openforge update-task --task-id <id> --summary <text>');
+      expect(stdout).toContain('openforge delete-task --task-id <id>');
       expect(requestCount).toBe(0);
     } finally {
       await close(server);
@@ -245,6 +247,58 @@ describe('OpenForge CLI', () => {
         ],
       });
       expect(seenBody).toEqual({ chain: ['KVG-1129', 'KVG-1133', 'KVG-1131'] });
+    } finally {
+      await close(server);
+    }
+  });
+
+  it('deletes tasks through the first-class HTTP bridge endpoint', async () => {
+    let seenBody = null;
+    const server = createServer((req, res) => {
+      if (req.url !== '/delete_task' || req.method !== 'POST') {
+        res.writeHead(404, { 'content-type': 'text/plain' });
+        res.end('not found');
+        return;
+      }
+
+      let body = '';
+      req.on('data', (chunk) => {
+        body += chunk;
+      });
+      req.on('end', () => {
+        seenBody = JSON.parse(body);
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ task_id: 'T-1', status: 'deleted' }));
+      });
+    });
+    const port = await listen(server);
+
+    try {
+      const { stdout } = await runCli(['delete-task', '--task-id', 'T-1'], {
+        OPENFORGE_HTTP_PORT: String(port),
+      });
+
+      expect(JSON.parse(stdout)).toEqual({ task_id: 'T-1', status: 'deleted' });
+      expect(seenBody).toEqual({ task_id: 'T-1' });
+    } finally {
+      await close(server);
+    }
+  });
+
+  it('rejects delete-task without task-id before contacting the HTTP bridge', async () => {
+    let requestCount = 0;
+    const server = createServer((_req, res) => {
+      requestCount += 1;
+      res.writeHead(500, { 'content-type': 'text/plain' });
+      res.end('should not be called');
+    });
+    const port = await listen(server);
+
+    try {
+      await expect(runCli(['delete-task'], { OPENFORGE_HTTP_PORT: String(port) })).rejects.toMatchObject({
+        stderr: expect.stringContaining('missing required flag --task-id'),
+      });
+      expect(requestCount).toBe(0);
     } finally {
       await close(server);
     }

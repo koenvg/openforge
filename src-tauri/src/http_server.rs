@@ -231,6 +231,17 @@ pub struct UpdateTaskResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteTaskRequest {
+    pub task_id: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DeleteTaskResponse {
+    pub task_id: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SetTaskDependenciesRequest {
     pub task_id: String,
     #[serde(default)]
@@ -580,6 +591,43 @@ pub async fn update_task_handler(
     Ok(Json(UpdateTaskResponse {
         task_id: request.task_id,
         status: "updated".to_string(),
+    }))
+}
+
+pub async fn delete_task_handler(
+    State(state): State<AppState>,
+    Json(request): Json<DeleteTaskRequest>,
+) -> Result<Json<DeleteTaskResponse>, (StatusCode, String)> {
+    let db = state.db.lock().unwrap();
+    let project_id = db
+        .get_task(&request.task_id)
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get task before deletion: {e}"),
+            )
+        })?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                format!("Task not found: {}", request.task_id),
+            )
+        })?
+        .project_id;
+
+    db.delete_task(&request.task_id).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to delete task: {e}"),
+        )
+    })?;
+    drop(db);
+
+    emit_task_changed(&state, "deleted", &request.task_id, project_id.as_deref());
+
+    Ok(Json(DeleteTaskResponse {
+        task_id: request.task_id,
+        status: "deleted".to_string(),
     }))
 }
 
@@ -1224,6 +1272,7 @@ pub fn create_router(state: AppState) -> Router {
         )
         .route("/create_task", post(create_task_handler))
         .route("/update_task", post(update_task_handler))
+        .route("/delete_task", post(delete_task_handler))
         .route(
             "/set_task_dependencies",
             post(set_task_dependencies_handler),
