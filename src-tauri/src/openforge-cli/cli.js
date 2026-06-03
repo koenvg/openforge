@@ -38,6 +38,18 @@ Usage:
   openforge list-tasks --project-id <id> [--state backlog|doing|done]
   openforge list-projects
 
+Task prompt semantics:
+  create-task sets the task's initial_prompt from --initial-prompt.
+  update-task updates only the task summary/handoff notes via --summary.
+  update-task does not change initial_prompt or prompt; do not use it to fix a bad task prompt.
+  If a task was created with the wrong initial prompt, first record its labels, own depends_on list, and reverse dependents by listing project tasks and finding depends_on entries containing the old id. Delete the incorrect task, create a replacement with the desired --initial-prompt, then repoint each dependent with set-task-dependencies.
+
+Examples:
+  openforge list-tasks --project-id P-1
+  openforge delete-task --task-id T-123
+  openforge create-task --initial-prompt "Correct task prompt" --project-id P-1 --depends-on T-122 --label cleanup
+  openforge set-task-dependencies --task-id T-999 --depends-on T-456,T-122
+
 Environment:
   OPENFORGE_HTTP_PORT  OpenForge HTTP bridge port (default: 17422)
 `);
