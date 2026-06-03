@@ -58,6 +58,9 @@ describe('OpenForge CLI', () => {
       expect(stdout).toContain('Usage:\n  openforge create-task');
       expect(stdout).toContain('openforge update-task --task-id <id> --summary <text>');
       expect(stdout).toContain('openforge delete-task --task-id <id>');
+      expect(stdout).toContain('update-task updates only the task summary/handoff notes');
+      expect(stdout).toContain('reverse dependents');
+      expect(stdout).toContain('set-task-dependencies');
       expect(requestCount).toBe(0);
     } finally {
       await close(server);
@@ -74,6 +77,8 @@ describe('OpenForge CLI', () => {
     const { stdout } = await runCli(['--help']);
 
     expect(stdout).toContain('openforge update-task --task-id <id> --summary <text>');
+    expect(stdout).toContain('update-task does not change initial_prompt or prompt');
+    expect(stdout).toContain('finding depends_on entries containing the old id');
     expect(stdout).not.toContain('update-task --task-id <id> [--initial-prompt <text>]');
   });
 
