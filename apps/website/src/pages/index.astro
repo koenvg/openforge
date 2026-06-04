@@ -1,0 +1,498 @@
+---
+import '../styles/global.css';
+
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="OpenForge is a local desktop command center for keeping AI coding-agent work visible, reviewable, and under human control."
+    />
+    <title>OpenForge — Run AI coding agents without losing control</title>
+  </head>
+  <body>
+    <main class="hero-shell" aria-labelledby="hero-title">
+      <header class="site-header" aria-label="OpenForge home">
+        <a class="wordmark" href="/" aria-label="OpenForge home">OpenForge</a>
+      </header>
+
+      <section class="hero" aria-describedby="hero-description">
+        <div class="hero-copy">
+          <h1 id="hero-title">Run AI coding<br />agents without losing<br />control of the work</h1>
+          <p id="hero-description" class="lede">
+            OpenForge keeps the work local, visible, and ready for human review.
+          </p>
+
+          <div class="actions" aria-label="Primary actions">
+            <a class="button button-primary" href="https://github.com/koenvg/openforge/releases" aria-label="Install OpenForge from releases">
+              Install OpenForge
+            </a>
+            <a class="button button-secondary" href="https://github.com/koenvg/openforge" aria-label="View OpenForge on GitHub">
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="button-icon">
+                <path
+                  fill="currentColor"
+                  d="M12 .5A11.5 11.5 0 0 0 8.36 22.4c.58.11.8-.25.8-.56v-2.17c-3.25.71-3.94-1.38-3.94-1.38-.53-1.35-1.3-1.71-1.3-1.71-1.06-.72.08-.71.08-.71 1.17.08 1.79 1.2 1.79 1.2 1.04 1.78 2.73 1.27 3.4.97.1-.76.4-1.27.74-1.56-2.6-.3-5.33-1.3-5.33-5.77 0-1.27.46-2.31 1.2-3.13-.12-.3-.52-1.52.12-3.08 0 0 .98-.31 3.2 1.2a11.1 11.1 0 0 1 5.84 0c2.22-1.51 3.2-1.2 3.2-1.2.64 1.56.24 2.78.12 3.08.75.82 1.2 1.86 1.2 3.13 0 4.48-2.74 5.47-5.35 5.76.42.36.8 1.08.8 2.18v3.23c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"
+                />
+              </svg>
+              GitHub
+            </a>
+          </div>
+        </div>
+
+        <div class="approval-stage" aria-label="Task to review workflow illustration">
+          <img
+            class="hero-visual-image"
+            src="/images/openforge-approval-workflow.png"
+            width="1100"
+            height="500"
+            alt="Task, agent, handoff, and review workflow with a human approval gate and diff summary"
+          />
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
+
+<style>
+  .hero-shell {
+    min-height: 100dvh;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    padding: clamp(1.5rem, 3vw, 3.25rem);
+    overflow: hidden;
+  }
+
+  .site-header {
+    display: flex;
+    align-items: center;
+    min-height: 2.75rem;
+  }
+
+  .wordmark {
+    position: relative;
+    z-index: 2;
+    color: var(--ink);
+    font-size: clamp(1.4rem, 2vw, 2rem);
+    font-weight: 760;
+    letter-spacing: -0.06em;
+    text-decoration: none;
+  }
+
+  .hero {
+    position: relative;
+    width: min(100%, 99rem);
+    min-height: calc(100dvh - 5rem);
+    margin: 0 auto;
+  }
+
+  .hero-copy {
+    position: relative;
+    z-index: 2;
+    width: min(55rem, 60vw);
+    padding-top: clamp(2.25rem, 6vh, 3.6rem);
+  }
+
+  h1 {
+    max-width: 8.75em;
+    margin: 0;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: clamp(4.35rem, 5.75vw, 6.05rem);
+    font-weight: 500;
+    line-height: 0.98;
+    letter-spacing: -0.068em;
+  }
+
+  .lede {
+    max-width: 31rem;
+    margin: clamp(1.5rem, 3vw, 2.3rem) 0 0;
+    color: var(--muted);
+    font-size: clamp(1.2rem, 1.6vw, 1.7rem);
+    line-height: 1.35;
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-top: clamp(2rem, 4vw, 3rem);
+  }
+
+  .button {
+    min-height: 3.65rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.7rem;
+    border: 1.5px solid var(--line);
+    border-radius: 0.55rem;
+    padding: 0 2rem;
+    color: var(--ink);
+    font-weight: 720;
+    text-decoration: none;
+    transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease, background 180ms ease;
+  }
+
+  .button:hover {
+    transform: translateY(-1px);
+  }
+
+  .button-primary {
+    border-color: var(--green);
+    background: linear-gradient(180deg, #128341, var(--green));
+    box-shadow: 0 1rem 2rem rgba(15, 111, 56, 0.18);
+    color: #ffffff;
+  }
+
+  .button-primary:hover {
+    box-shadow: 0 1.25rem 2.5rem rgba(15, 111, 56, 0.24);
+  }
+
+  .button-secondary {
+    background: rgba(255, 250, 240, 0.62);
+  }
+
+  .button-secondary:hover {
+    border-color: var(--green);
+    background: rgba(255, 250, 240, 0.88);
+  }
+
+  .button-icon {
+    width: 1.35rem;
+    height: 1.35rem;
+  }
+
+  .approval-stage {
+    position: absolute;
+    left: clamp(29rem, 29vw, 31rem);
+    right: clamp(-3rem, -2vw, -1rem);
+    bottom: clamp(1.25rem, 3.5vh, 2.5rem);
+    min-height: min(31rem, 58vh);
+    display: grid;
+    place-items: center;
+    isolation: isolate;
+  }
+
+  .approval-stage::before {
+    content: "";
+    position: absolute;
+    inset: 7% -4% 2% 2%;
+    z-index: -2;
+    border-radius: 999rem;
+    background:
+      radial-gradient(circle at 54% 48%, rgba(191, 114, 0, 0.1), transparent 10rem),
+      radial-gradient(circle at 36% 56%, rgba(15, 111, 56, 0.08), transparent 16rem);
+    mask-image: linear-gradient(90deg, transparent, black 16%, black 82%, transparent);
+  }
+
+  .hero-visual-image {
+    width: min(100%, 66.25rem);
+    height: auto;
+    display: block;
+    user-select: none;
+    mix-blend-mode: multiply;
+    opacity: 0.98;
+    -webkit-mask-image:
+      linear-gradient(to right, transparent 0, #000 3rem, #000 calc(100% - 2rem), transparent 100%),
+      linear-gradient(to bottom, transparent 0, #000 1.25rem, #000 calc(100% - 2rem), transparent 100%);
+    -webkit-mask-composite: source-in;
+    mask-image:
+      linear-gradient(to right, transparent 0, #000 3rem, #000 calc(100% - 2rem), transparent 100%),
+      linear-gradient(to bottom, transparent 0, #000 1.25rem, #000 calc(100% - 2rem), transparent 100%);
+    mask-composite: intersect;
+  }
+
+  .approval-label {
+    position: absolute;
+    top: 22%;
+    left: 49%;
+    color: var(--amber);
+    font-size: clamp(0.94rem, 1vw, 1.08rem);
+    font-weight: 740;
+    letter-spacing: -0.025em;
+  }
+
+  .workflow {
+    position: relative;
+    z-index: 5;
+    width: min(100%, 74rem);
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    align-items: start;
+    gap: clamp(2.6rem, 3.6vw, 5.2rem);
+    transform: translateY(-0.2rem);
+  }
+
+  .workflow::before {
+    content: "";
+    position: absolute;
+    top: 2.95rem;
+    left: 8%;
+    right: 7%;
+    height: 1.35px;
+    z-index: -1;
+    background: linear-gradient(90deg, var(--line-soft), rgba(15, 111, 56, 0.46), var(--line-soft));
+  }
+
+  .workflow-node {
+    display: grid;
+    justify-items: center;
+    gap: 0.4rem;
+    color: var(--ink);
+    text-align: center;
+  }
+
+  .node-icon {
+    width: clamp(4.4rem, 5.3vw, 5.6rem);
+    height: clamp(4.4rem, 5.3vw, 5.6rem);
+    display: grid;
+    place-items: center;
+    border: 1.5px solid rgba(16, 21, 31, 0.72);
+    border-radius: 999rem;
+    background: rgba(255, 250, 240, 0.72);
+    box-shadow: 0 1rem 2.5rem rgba(46, 36, 24, 0.08);
+  }
+
+  .node-icon svg {
+    width: 2rem;
+    height: 2rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.7;
+  }
+
+  .node-label {
+    margin-top: 0.3rem;
+    font-size: clamp(1rem, 1.25vw, 1.25rem);
+    font-weight: 760;
+  }
+
+  .node-title {
+    max-width: 9rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+    line-height: 1.3;
+  }
+
+  .handoff-node {
+    transform: translateX(8%);
+  }
+
+  .review-node .node-icon {
+    border-color: rgba(191, 114, 0, 0.78);
+    background: linear-gradient(180deg, #fff4d9, #f5dcab);
+    box-shadow: 0 1.4rem 3rem rgba(191, 114, 0, 0.16);
+  }
+
+  .gate {
+    position: absolute;
+    left: 51%;
+    top: 45%;
+    z-index: 6;
+    transform: translate(-3%, -50%);
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.54rem 0.68rem;
+    border: 1px solid rgba(191, 114, 0, 0.36);
+    border-radius: 999rem;
+    background: rgba(255, 250, 240, 0.9);
+    box-shadow: 0 1rem 2.6rem rgba(79, 52, 12, 0.12);
+  }
+
+  .gate-track {
+    width: 5.8rem;
+    height: 2.55rem;
+    display: block;
+    border: 1.5px solid rgba(191, 114, 0, 0.75);
+    border-radius: 999rem;
+    background: linear-gradient(90deg, #f3d296, #fff6de);
+  }
+
+  .gate-thumb {
+    width: 2.15rem;
+    height: 2.15rem;
+    display: block;
+    margin: 0.17rem 0.22rem 0 auto;
+    border: 1.5px solid rgba(79, 52, 12, 0.5);
+    border-radius: 999rem;
+    background: #fffaf0;
+    box-shadow: 0 0.4rem 1rem rgba(79, 52, 12, 0.16);
+  }
+
+  .gate-copy {
+    color: var(--amber);
+    font-size: 0.86rem;
+    font-weight: 760;
+  }
+
+  .approval-hand {
+    position: absolute;
+    left: 58%;
+    top: 40%;
+    z-index: 4;
+    width: clamp(15rem, 21vw, 20.5rem);
+    height: auto;
+    color: rgba(16, 21, 31, 0.48);
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2.2;
+    transform: rotate(-5deg);
+    filter: drop-shadow(0 1.1rem 1.4rem rgba(46, 36, 24, 0.1));
+  }
+
+  .hand-fill {
+    fill: rgba(255, 250, 240, 0.34);
+    stroke: rgba(16, 21, 31, 0.3);
+  }
+
+  .hand-detail {
+    stroke: rgba(16, 21, 31, 0.22);
+    stroke-width: 1.5;
+  }
+
+  .diff-slip {
+    position: absolute;
+    left: 13%;
+    bottom: -8%;
+    z-index: 3;
+    width: min(24rem, 46vw);
+    transform: rotate(-3deg);
+    display: grid;
+    gap: 0.42rem;
+    border: 1px solid rgba(30, 41, 59, 0.1);
+    border-radius: 0.45rem;
+    padding: 1rem 1.1rem;
+    background: rgba(255, 250, 240, 0.88);
+    box-shadow: var(--shadow);
+    color: var(--ink);
+    font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+    font-size: clamp(0.76rem, 1vw, 0.95rem);
+  }
+
+  .diff-title {
+    color: var(--muted);
+    font-size: 0.78em;
+  }
+
+  .diff-line {
+    white-space: nowrap;
+  }
+
+  .removed {
+    color: #a33c36;
+  }
+
+  .added {
+    color: var(--green-deep);
+  }
+
+  @media (max-width: 62rem) {
+    .hero-shell {
+      min-height: auto;
+      overflow: visible;
+      padding: 1.25rem;
+    }
+
+    .hero {
+      min-height: auto;
+      display: grid;
+      grid-template-columns: 1fr;
+      align-items: start;
+      gap: 1.5rem;
+    }
+
+    .hero-copy {
+      width: 100%;
+      padding-top: clamp(2rem, 6vw, 3rem);
+    }
+
+    h1 {
+      max-width: 12ch;
+    }
+
+    .approval-stage {
+      position: relative;
+      left: auto;
+      right: auto;
+      bottom: auto;
+      min-height: 34rem;
+      overflow: hidden;
+      border-radius: 1.5rem;
+    }
+
+    .hero-visual-image {
+      width: 44rem;
+      max-width: none;
+      transform: translateX(-6%) scale(0.95);
+    }
+
+    .workflow {
+      width: 44rem;
+      transform: scale(0.82);
+    }
+
+    .approval-label {
+      top: 18%;
+      left: 52%;
+    }
+
+    .gate {
+      top: 41%;
+      transform: translate(-8%, -50%) scale(0.88);
+    }
+
+    .approval-hand {
+      left: 61%;
+      top: 42%;
+      width: 11rem;
+    }
+
+    .diff-slip {
+      left: 8%;
+      bottom: 9%;
+      width: min(22rem, 82vw);
+    }
+  }
+
+  @media (max-width: 35rem) {
+    .actions {
+      flex-direction: column;
+    }
+
+    .button {
+      width: 100%;
+    }
+
+    .approval-stage {
+      min-height: 30rem;
+    }
+
+    .hero-visual-image {
+      width: 39rem;
+      transform: translateX(-14%) scale(0.9);
+    }
+
+    .workflow {
+      transform: translateX(-6%) scale(0.68);
+    }
+
+    .gate {
+      left: 46%;
+      top: 40%;
+    }
+
+    .approval-hand {
+      left: 55%;
+      top: 45%;
+      width: 8rem;
+    }
+  }
+</style>

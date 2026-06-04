@@ -3,6 +3,7 @@ src-tauri/target/
 dist/
 dist-electron/
 node_modules/
+.astro/
 package-lock.json
 bun.lock
 .sisyphus/
