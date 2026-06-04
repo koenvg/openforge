@@ -16,7 +16,7 @@
     "@sveltejs/vite-plugin-svelte": "^7.0.0",
     "svelte": "^5.0.0",
     "typescript": "^5.3.3",
-    "vite": "^8.0.0",
+    "vite": "^8.0.16",
     "vitest": "^4.1.0"
   },
   "openforge": {
@@ -27,6 +27,13 @@
     "icon": "sparkles",
     "frontend": "./dist/frontend.js",
     "backend": "./dist/backend.js",
-    "requires": ["views", "backend", "projects", "navigation", "system.openUrl", "context"]
+    "requires": [
+      "views",
+      "backend",
+      "projects",
+      "navigation",
+      "system.openUrl",
+      "context"
+    ]
   }
 }
