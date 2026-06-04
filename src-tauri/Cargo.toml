@@ -4,7 +4,7 @@ version = "0.0.1"
 description = "Open Forge - Desktop application for managing AI workflows"
 authors = ["OpenCode"]
 edition = "2021"
-rust-version = "1.77"
+rust-version = "1.95"
 
 [dependencies]
 serde_json = "1.0"
@@ -14,7 +14,7 @@ tokio = { version = "1", features = ["full"] }
 tokio-stream = "0.1"
 bytes = "1.0"
 rusqlite = { version = "0.40", features = ["bundled"] }
-rusqlite_migration = "1.3"
+rusqlite_migration = "2.6.0"
 reqwest = { version = "0.13", features = ["json", "stream"] }
 which = "6.0"
 
