@@ -1,7 +1,7 @@
 import { invokeDesktopCommand as invoke, isElectronDesktopBridgeAvailable } from "./desktopIpc";
 import { normalizeTask } from "./boardStatus"
 import type { JsonValue } from '@openforge/plugin-sdk'
-import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, FileContent, FileEntry, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, SkillInfo, Task, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo } from "./types";
+import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, FileContent, FileEntry, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo } from "./types";
 
 type RawTask = Omit<Task, 'status'> & { status: string }
 
@@ -328,21 +328,6 @@ export async function updateAgentReviewCommentStatus(commentId: number, status: 
 
 export async function listOpenCodeCommands(projectId: string): Promise<CommandInfo[]> {
   return invoke<CommandInfo[]>("list_opencode_commands", { projectId });
-}
-
-export async function listOpenCodeSkills(projectId: string): Promise<SkillInfo[]> {
-  return invoke<SkillInfo[]>("list_opencode_skills", { projectId });
-}
-
-export async function saveSkillContent(
-  projectId: string,
-  skillName: string,
-  level: string,
-  sourceDir: string,
-  content: string,
-  fileName: string | null = null,
-): Promise<void> {
-  return invoke<void>("save_skill_content", { projectId, skillName, level, sourceDir, content, fileName });
 }
 
 export async function searchOpenCodeFiles(projectId: string, query: string): Promise<string[]> {

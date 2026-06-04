@@ -7,6 +7,7 @@ const BASE_URL = `http://127.0.0.1:${HTTP_PORT}`;
 const COMMAND_FLAGS = {
   'create-task': new Set(['initialPrompt', 'projectId', 'worktree', 'dependsOn', 'label']),
   'update-task': new Set(['taskId', 'summary']),
+  'delete-task': new Set(['taskId']),
   'set-task-dependencies': new Set(['taskId', 'dependsOn']),
   'add-task-dependency': new Set(['taskId', 'dependsOn']),
   'link-tasks': new Set(['chain']),
@@ -26,6 +27,7 @@ function printHelp() {
 Usage:
   openforge create-task --initial-prompt <text> [--project-id <id>] [--worktree <path>] [--depends-on <task-id>[,<task-id>...]] [--label <name>[,<name>...]]
   openforge update-task --task-id <id> --summary <text>
+  openforge delete-task --task-id <id>
   openforge set-task-dependencies --task-id <id> --depends-on <task-id>[,<task-id>...]
   openforge add-task-dependency --task-id <id> --depends-on <task-id>
   openforge link-tasks --chain "T-1 -> T-2 -> T-3"
@@ -35,6 +37,18 @@ Usage:
   openforge remove-task-label --task-id <id> --label-id <id>
   openforge list-tasks --project-id <id> [--state backlog|doing|done]
   openforge list-projects
+
+Task prompt semantics:
+  create-task sets the task's initial_prompt from --initial-prompt.
+  update-task updates only the task summary/handoff notes via --summary.
+  update-task does not change initial_prompt or prompt; do not use it to fix a bad task prompt.
+  If a task was created with the wrong initial prompt, first record its labels, own depends_on list, and reverse dependents by listing project tasks and finding depends_on entries containing the old id. Delete the incorrect task, create a replacement with the desired --initial-prompt, then repoint each dependent with set-task-dependencies.
+
+Examples:
+  openforge list-tasks --project-id P-1
+  openforge delete-task --task-id T-123
+  openforge create-task --initial-prompt "Correct task prompt" --project-id P-1 --depends-on T-122 --label cleanup
+  openforge set-task-dependencies --task-id T-999 --depends-on T-456,T-122
 
 Environment:
   OPENFORGE_HTTP_PORT  OpenForge HTTP bridge port (default: 17422)
@@ -206,6 +220,13 @@ async function main(argv) {
         throw new Error('update-task requires --summary');
       }
       printJson(await requestJson('/update_task', { method: 'POST', body: JSON.stringify(payload) }));
+      return;
+    }
+    case 'delete-task': {
+      const payload = {
+        task_id: requireFlag(flags, 'taskId'),
+      };
+      printJson(await requestJson('/delete_task', { method: 'POST', body: JSON.stringify(payload) }));
       return;
     }
     case 'set-task-dependencies': {

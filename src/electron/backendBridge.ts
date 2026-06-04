@@ -116,8 +116,6 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'get_agent_review_comments',
   'update_agent_review_comment_status',
   'list_opencode_commands',
-  'list_opencode_skills',
-  'save_skill_content',
   'search_opencode_files',
   'list_opencode_agents',
   'list_opencode_models',

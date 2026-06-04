@@ -35,11 +35,6 @@ async fn accepts_remaining_electron_cutover_ipc_commands() {
             json!({ "sessionId": "session-ipc-parity" }),
         ),
         ("list_opencode_commands", json!({ "projectId": project_id })),
-        ("list_opencode_skills", json!({ "projectId": project_id })),
-        (
-            "save_skill_content",
-            json!({ "projectId": project_id, "skillName": "review-skill", "level": "project", "sourceDir": "unsupported", "content": "---\nname: review-skill\n---\n" }),
-        ),
         (
             "search_opencode_files",
             json!({ "projectId": project_id, "query": "README" }),
@@ -68,6 +63,15 @@ async fn accepts_remaining_electron_cutover_ipc_commands() {
         Some(StatusCode::NOT_IMPLEMENTED),
         "legacy OpenCode REST session output recovery should not be routed after direct TTY migration"
     );
+
+    for command in ["list_opencode_skills", "save_skill_content"] {
+        let result = invoke(&state, command, json!({ "projectId": project_id })).await;
+        assert_eq!(
+            result.err().map(|err| err.0),
+            Some(StatusCode::NOT_IMPLEMENTED),
+            "legacy core skills-viewer command {command} should not be routed after plugin migration"
+        );
+    }
 
     let _ = std::fs::remove_file(path);
 }

@@ -355,6 +355,8 @@ describe('Electron backend bridge command forwarding', () => {
     expect(isSidecarBackedCommand('start_agent_review')).toBe(false)
     expect(isSidecarBackedCommand('get_agent_review_comments')).toBe(true)
     expect(isSidecarBackedCommand('update_agent_review_comment_status')).toBe(true)
+    expect(isSidecarBackedCommand('list_opencode_skills')).toBe(false)
+    expect(isSidecarBackedCommand('save_skill_content')).toBe(false)
     expect(isSidecarBackedCommand('dismiss_all_agent_review_comments')).toBe(false)
     expect(isSidecarBackedCommand('abort_agent_review')).toBe(false)
     expect(isSidecarBackedCommand('register_builtin_plugin')).toBe(true)

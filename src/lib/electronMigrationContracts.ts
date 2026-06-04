@@ -119,8 +119,6 @@ export const ipcCommandContracts = [
   { functionName: 'getAgentReviewComments', ipcCommand: 'get_agent_review_comments', payloadKeys: ['reviewPrId'], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'updateAgentReviewCommentStatus', ipcCommand: 'update_agent_review_comment_status', payloadKeys: ['commentId', 'status'], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'listOpenCodeCommands', ipcCommand: 'list_opencode_commands', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },
-  { functionName: 'listOpenCodeSkills', ipcCommand: 'list_opencode_skills', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },
-  { functionName: 'saveSkillContent', ipcCommand: 'save_skill_content', payloadKeys: ['projectId', 'skillName', 'level', 'sourceDir', 'content', 'fileName'], targetOwner: 'rust-sidecar', domain: 'misc' },
   { functionName: 'searchOpenCodeFiles', ipcCommand: 'search_opencode_files', payloadKeys: ['projectId', 'query'], targetOwner: 'rust-sidecar', domain: 'files-review' },
   { functionName: 'listOpenCodeAgents', ipcCommand: 'list_opencode_agents', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },
   { functionName: 'listOpenCodeModels', ipcCommand: 'list_opencode_models', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },

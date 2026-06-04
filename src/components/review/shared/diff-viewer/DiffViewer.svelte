@@ -23,6 +23,9 @@
     onScrollTopChange?: (scrollTop: number) => void
     initialScrollTop?: number
     inlineDraftScopeId?: string
+    reviewedFileShas?: Map<string, string>
+    onToggleFileReviewed?: (file: PrFileDiff, reviewed: boolean) => void
+    getFileReviewIdentity?: (file: PrFileDiff) => string | null
   }
 
   type PendingCommentsControl =
@@ -48,6 +51,9 @@
     onScrollTopChange,
     initialScrollTop = 0,
     inlineDraftScopeId,
+    reviewedFileShas = new Map(),
+    onToggleFileReviewed,
+    getFileReviewIdentity,
   }: Props = $props()
 
   type SharedDiffViewerHandle = {
@@ -106,6 +112,9 @@
   {onScrollTopChange}
   {initialScrollTop}
   {inlineDraftScopeId}
+  {reviewedFileShas}
+  {onToggleFileReviewed}
+  {getFileReviewIdentity}
   getInlineDraft={getSelfReviewInlineCommentDraft}
   setInlineDraft={setSelfReviewInlineCommentDraft}
   clearInlineDraft={clearSelfReviewInlineCommentDraft}
