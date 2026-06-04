@@ -34,6 +34,14 @@ use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextPar
 const APP_DIR_NAME: &str = "openforge";
 const MODELS_SUBDIR: &str = "models";
 
+fn sha1_digest_to_lower_hex(digest: impl AsRef<[u8]>) -> String {
+    digest
+        .as_ref()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
 // ============================================================================
 // Model Size Enum
 // ============================================================================
@@ -582,7 +590,7 @@ impl WhisperManager {
         drop(file);
 
         // Verify SHA1 hash.
-        let actual_hash = format!("{:x}", hasher.finalize());
+        let actual_hash = sha1_digest_to_lower_hex(hasher.finalize());
         if actual_hash != spec.sha1 {
             let _ = std::fs::remove_file(&tmp_path);
             return Err(WhisperError::HashMismatch {
@@ -611,6 +619,17 @@ impl WhisperManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_sha1_digest_to_lower_hex_preserves_expected_format() {
+        let mut hasher = Sha1::new();
+        hasher.update(b"abc");
+
+        assert_eq!(
+            sha1_digest_to_lower_hex(hasher.finalize()),
+            "a9993e364706816aba3e25717850c26c9cd0d89d"
+        );
+    }
 
     #[test]
     fn test_manager_with_active_model() {
