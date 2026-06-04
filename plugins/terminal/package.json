@@ -18,7 +18,7 @@
     "@types/node": "^20.19.33",
     "svelte": "^5.0.0",
     "typescript": "^5.3.3",
-    "vite": "^8.0.0",
+    "vite": "^8.0.16",
     "vitest": "^4.1.0"
   },
   "openforge": {
@@ -28,6 +28,13 @@
     "description": "Embedded terminal with PTY management and agent panels",
     "icon": "terminal",
     "frontend": "./dist/frontend.js",
-    "requires": ["views", "taskPane", "shell", "events", "config", "system.openUrl"]
+    "requires": [
+      "views",
+      "taskPane",
+      "shell",
+      "events",
+      "config",
+      "system.openUrl"
+    ]
   }
 }
