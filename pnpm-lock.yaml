@@ -100,7 +100,7 @@ importers:
         version: 20.19.33
       electron:
         specifier: ^41.5.0
-        version: 41.5.0
+        version: 41.7.1
       jsdom:
         specifier: ^28.1.0
         version: 28.1.0
@@ -125,7 +125,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^4.1.0
-        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@28.1.0)(vite@8.0.14(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
+        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(jsdom@28.1.0)(vite@8.0.14(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
 
   packages/plugin-sdk:
     dependencies:
@@ -144,7 +144,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^4.1.0
-        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@28.1.0)(vite@8.0.14(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
+        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(jsdom@28.1.0)(vite@8.0.14(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
 
   packages/pr-review-ui:
     dependencies:
@@ -184,7 +184,7 @@ importers:
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^7.0.0
-        version: 7.1.2(svelte@5.55.5)(vite@8.0.12(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
+        version: 7.1.2(svelte@5.55.5)(vite@8.0.12(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
       svelte:
         specifier: ^5.0.0
         version: 5.55.5
@@ -193,10 +193,10 @@ importers:
         version: 5.9.3
       vite:
         specifier: ^8.0.0
-        version: 8.0.12(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)
+        version: 8.0.12(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)
       vitest:
         specifier: ^4.1.0
-        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@28.1.0)(vite@8.0.12(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
+        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(jsdom@28.1.0)(vite@8.0.12(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
 
   plugins/file-viewer:
     dependencies:
@@ -206,7 +206,7 @@ importers:
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^7.0.0
-        version: 7.1.2(svelte@5.55.5)(vite@8.0.12(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
+        version: 7.1.2(svelte@5.55.5)(vite@8.0.12(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
       svelte:
         specifier: ^5.0.0
         version: 5.55.5
@@ -215,10 +215,10 @@ importers:
         version: 5.9.3
       vite:
         specifier: ^8.0.0
-        version: 8.0.12(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)
+        version: 8.0.12(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)
       vitest:
         specifier: ^4.1.0
-        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@28.1.0)(vite@8.0.12(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
+        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(jsdom@28.1.0)(vite@8.0.12(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
 
   plugins/github-sync:
     dependencies:
@@ -259,7 +259,7 @@ importers:
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^7.0.0
-        version: 7.1.2(svelte@5.55.5)(vite@8.0.12(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
+        version: 7.1.2(svelte@5.55.5)(vite@8.0.12(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
       svelte:
         specifier: ^5.0.0
         version: 5.55.5
@@ -268,10 +268,10 @@ importers:
         version: 5.9.3
       vite:
         specifier: ^8.0.0
-        version: 8.0.12(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)
+        version: 8.0.12(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)
       vitest:
         specifier: ^4.1.0
-        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@28.1.0)(vite@8.0.12(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
+        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(jsdom@28.1.0)(vite@8.0.12(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
 
   plugins/terminal:
     dependencies:
@@ -1525,8 +1525,8 @@ packages:
   '@types/node@20.19.33':
     resolution: {integrity: sha512-Rs1bVAIdBs5gbTIKza/tgpMuG1k3U/UMJLWecIMxNdJFDMzcM5LOiLVRYh3PilWEYDIeUDv7bpiHPLPsbydGcw==}
 
-  '@types/node@24.12.2':
-    resolution: {integrity: sha512-A1sre26ke7HDIuY/M23nd9gfB+nrmhtYyMINbjI1zHJxYteKR6qSMX56FsmjMcDb3SMcjJg5BiRRgOCC/yBD0g==}
+  '@types/node@24.12.4':
+    resolution: {integrity: sha512-GUUEShf+PBCGW2KaXwcIt3Yk+e3pkKwWKb9GSyM9WQVE+ep2jzmHdGsHzu4wgcZy5fN9FBdVzjpBQsYlpfpgLA==}
 
   '@types/responselike@1.0.3':
     resolution: {integrity: sha512-H/+L+UkTV33uf49PH5pCAUBVPNj2nDBXTN+qS1dOwyyg24l3CcicicCA7ca+HMvJBZcFgl5r8e+RR6elsb4Lyw==}
@@ -1963,8 +1963,8 @@ packages:
   ee-first@1.1.1:
     resolution: {integrity: sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==}
 
-  electron@41.5.0:
-    resolution: {integrity: sha512-x9j9//PubUA4EjDtQbZhtk3prolandqCKgit0uCIqc1jb8FTskPbnJtxcDFB1aejczJcuERgjPixBUaMwoWyJg==}
+  electron@41.7.1:
+    resolution: {integrity: sha512-pdRvNNP99Qfvs1lyIxo/sfIGAwJP0CrJFNCE3goFKc7/fV+kjK3EPxx5Nt6sLTkzqTyeRYylpwPUfpeGojiyyw==}
     engines: {node: '>= 12.20.55'}
     hasBin: true
 
@@ -2853,6 +2853,11 @@ packages:
 
   semver@7.7.4:
     resolution: {integrity: sha512-vFKC2IEtQnVhpT78h1Yp8wzwrf8CM+MzKMHGJZfBtzhZNycRFnXsHk6E5TxIkkMsgNS7mdX3AGB7x2QM2di4lA==}
+    engines: {node: '>=10'}
+    hasBin: true
+
+  semver@7.8.1:
+    resolution: {integrity: sha512-rkVq3IXh+4FDGch+KwzX3aV9W3kO54GyEgpvBzSyctDA6Xtd7RJQV1xmXbeQp5v7+VzLOfVqiutSE6GICgPFvg==}
     engines: {node: '>=10'}
     hasBin: true
 
@@ -4687,14 +4692,14 @@ snapshots:
       vite: 8.0.12(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)
       vitefu: 1.1.3(vite@8.0.12(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
 
-  '@sveltejs/vite-plugin-svelte@7.1.2(svelte@5.55.5)(vite@8.0.12(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))':
+  '@sveltejs/vite-plugin-svelte@7.1.2(svelte@5.55.5)(vite@8.0.12(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))':
     dependencies:
       deepmerge: 4.3.1
       magic-string: 0.30.21
       obug: 2.1.1
       svelte: 5.55.5
-      vite: 8.0.12(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)
-      vitefu: 1.1.3(vite@8.0.12(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
+      vite: 8.0.12(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)
+      vitefu: 1.1.3(vite@8.0.12(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
 
   '@szmarczak/http-timer@4.0.6':
     dependencies:
@@ -4855,7 +4860,7 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
-  '@types/node@24.12.2':
+  '@types/node@24.12.4':
     dependencies:
       undici-types: 7.16.0
 
@@ -4871,7 +4876,7 @@ snapshots:
 
   '@types/yauzl@2.10.3':
     dependencies:
-      '@types/node': 24.12.2
+      '@types/node': 20.19.33
     optional: true
 
   '@vitest/expect@4.1.6':
@@ -4891,21 +4896,21 @@ snapshots:
     optionalDependencies:
       vite: 8.0.12(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)
 
-  '@vitest/mocker@4.1.6(vite@8.0.12(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))':
+  '@vitest/mocker@4.1.6(vite@8.0.12(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))':
     dependencies:
       '@vitest/spy': 4.1.6
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 8.0.12(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)
+      vite: 8.0.12(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)
 
-  '@vitest/mocker@4.1.6(vite@8.0.14(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))':
+  '@vitest/mocker@4.1.6(vite@8.0.14(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))':
     dependencies:
       '@vitest/spy': 4.1.6
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 8.0.14(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)
+      vite: 8.0.14(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)
 
   '@vitest/pretty-format@4.1.6':
     dependencies:
@@ -5291,10 +5296,10 @@ snapshots:
 
   ee-first@1.1.1: {}
 
-  electron@41.5.0:
+  electron@41.7.1:
     dependencies:
       '@electron/get': 2.0.3
-      '@types/node': 24.12.2
+      '@types/node': 24.12.4
       extract-zip: 2.0.1
     transitivePeerDependencies:
       - supports-color
@@ -5606,7 +5611,7 @@ snapshots:
       es6-error: 4.1.1
       matcher: 3.0.0
       roarr: 2.15.4
-      semver: 7.7.4
+      semver: 7.8.1
       serialize-error: 7.0.1
     optional: true
 
@@ -6107,7 +6112,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.1
-      '@types/node': 24.12.2
+      '@types/node': 20.19.33
       long: 5.3.2
 
   proxy-addr@2.0.7:
@@ -6288,6 +6293,9 @@ snapshots:
   semver@6.3.1: {}
 
   semver@7.7.4:
+    optional: true
+
+  semver@7.8.1:
     optional: true
 
   send@1.2.1:
@@ -6616,7 +6624,7 @@ snapshots:
       jiti: 2.6.1
       yaml: 2.8.4
 
-  vite@8.0.12(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4):
+  vite@8.0.12(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4):
     dependencies:
       lightningcss: 1.32.0
       picomatch: 4.0.4
@@ -6624,13 +6632,13 @@ snapshots:
       rolldown: 1.0.0
       tinyglobby: 0.2.16
     optionalDependencies:
-      '@types/node': 24.12.2
+      '@types/node': 24.12.4
       esbuild: 0.27.3
       fsevents: 2.3.3
       jiti: 2.6.1
       yaml: 2.8.4
 
-  vite@8.0.14(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4):
+  vite@8.0.14(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4):
     dependencies:
       lightningcss: 1.32.0
       picomatch: 4.0.4
@@ -6638,7 +6646,7 @@ snapshots:
       rolldown: 1.0.2
       tinyglobby: 0.2.16
     optionalDependencies:
-      '@types/node': 24.12.2
+      '@types/node': 24.12.4
       esbuild: 0.27.3
       fsevents: 2.3.3
       jiti: 2.6.1
@@ -6648,9 +6656,9 @@ snapshots:
     optionalDependencies:
       vite: 8.0.12(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)
 
-  vitefu@1.1.3(vite@8.0.12(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)):
+  vitefu@1.1.3(vite@8.0.12(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)):
     optionalDependencies:
-      vite: 8.0.12(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)
+      vite: 8.0.12(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)
 
   vitest@4.1.6(@opentelemetry/api@1.9.1)(@types/node@20.19.33)(jsdom@28.1.0)(vite@8.0.12(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)):
     dependencies:
@@ -6681,10 +6689,10 @@ snapshots:
     transitivePeerDependencies:
       - msw
 
-  vitest@4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@28.1.0)(vite@8.0.12(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)):
+  vitest@4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(jsdom@28.1.0)(vite@8.0.12(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)):
     dependencies:
       '@vitest/expect': 4.1.6
-      '@vitest/mocker': 4.1.6(vite@8.0.12(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
+      '@vitest/mocker': 4.1.6(vite@8.0.12(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
       '@vitest/pretty-format': 4.1.6
       '@vitest/runner': 4.1.6
       '@vitest/snapshot': 4.1.6
@@ -6701,19 +6709,19 @@ snapshots:
       tinyexec: 1.1.2
       tinyglobby: 0.2.16
       tinyrainbow: 3.1.0
-      vite: 8.0.12(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)
+      vite: 8.0.12(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
-      '@types/node': 24.12.2
+      '@types/node': 24.12.4
       jsdom: 28.1.0
     transitivePeerDependencies:
       - msw
 
-  vitest@4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@28.1.0)(vite@8.0.14(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)):
+  vitest@4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(jsdom@28.1.0)(vite@8.0.14(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)):
     dependencies:
       '@vitest/expect': 4.1.6
-      '@vitest/mocker': 4.1.6(vite@8.0.14(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
+      '@vitest/mocker': 4.1.6(vite@8.0.14(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
       '@vitest/pretty-format': 4.1.6
       '@vitest/runner': 4.1.6
       '@vitest/snapshot': 4.1.6
@@ -6730,11 +6738,11 @@ snapshots:
       tinyexec: 1.1.2
       tinyglobby: 0.2.16
       tinyrainbow: 3.1.0
-      vite: 8.0.14(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)
+      vite: 8.0.14(@types/node@24.12.4)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
-      '@types/node': 24.12.2
+      '@types/node': 24.12.4
       jsdom: 28.1.0
     transitivePeerDependencies:
       - msw
