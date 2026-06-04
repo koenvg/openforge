@@ -2,5 +2,16 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended"
+  ],
+  "minimumReleaseAgeBehaviour": "timestamp-required",
+  "packageRules": [
+    {
+      "description": "Wait for npm releases to satisfy pnpm's 7200-minute minimumReleaseAge before creating or updating dependency branches.",
+      "matchDatasources": [
+        "npm"
+      ],
+      "minimumReleaseAge": "5 days",
+      "internalChecksFilter": "strict"
+    }
   ]
 }
