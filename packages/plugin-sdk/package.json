@@ -56,7 +56,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "dompurify": "^3.3.2",
+    "dompurify": "^3.4.8",
     "marked": "^17.0.3"
   },
   "peerDependencies": {
