@@ -2,11 +2,19 @@ packages:
   - apps/*
   - packages/*
   - plugins/*
+# pnpm minimumReleaseAge is in minutes; 7200 minutes equals 5 days.
+# Keep Renovate's npm minimumReleaseAge in renovate.json aligned with this value,
+# because Renovate does not infer pnpm's release-age policy.
 minimumReleaseAge: 7200
+# minimumReleaseAgeExclude is for emergency artifact regeneration only.
+# Prefer package+version-pinned exceptions (package@version), and remove them
+# after the lockfile/artifact issue is resolved. Broad package or scope
+# exceptions must be intentional and mirrored by an explicit Renovate packageRule
+# so Renovate and pnpm continue to agree about release-age policy.
 minimumReleaseAgeExclude:
   - vite@8.0.16
   - tinyglobby@0.2.17
-  - dompurify
+  - dompurify@3.4.8
 allowBuilds:
   electron: true
 patchedDependencies:
