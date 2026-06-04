@@ -4,6 +4,7 @@ import { cleanup, render } from '@testing-library/svelte'
 import { tick } from 'svelte'
 import { compile } from 'svelte/compiler'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createMockFrontendOpenForgeApi } from '@openforge/plugin-sdk/testing'
 import TerminalProjectView from './TerminalProjectView.svelte'
 
 const { terminalTabsApi, cleanupSideEffects } = vi.hoisted(() => ({
@@ -21,6 +22,7 @@ const { terminalTabsApi, cleanupSideEffects } = vi.hoisted(() => ({
 }))
 
 vi.mock('./lib/ipc', () => ({
+  bindTerminalPluginApi: vi.fn(),
   killPty: cleanupSideEffects.killPty,
 }))
 
@@ -57,13 +59,19 @@ function makeKeyEvent(init: KeyboardEventInit): KeyboardEvent {
   return new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init })
 }
 
+function projectViewProps(projectId: string, projectName: string, projectPath: string) {
+  return {
+    api: createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.terminal', projectId }),
+    context: { pluginId: 'com.openforge.terminal', projectId },
+    projectId,
+    projectName,
+    projectPath,
+  }
+}
+
 function renderProjectTerminalView() {
   render(TerminalProjectView, {
-    props: {
-      projectId: 'P-123',
-      projectName: 'Demo',
-      projectPath: '/tmp/demo',
-    },
+    props: projectViewProps('P-123', 'Demo', '/tmp/demo'),
   })
 }
 
@@ -119,22 +127,14 @@ describe('TerminalProjectView', () => {
 
   it('keeps project terminal sessions alive when navigating away from and back to the same terminal view', async () => {
     const first = render(TerminalProjectView, {
-      props: {
-        projectId: 'P-123',
-        projectName: 'Demo',
-        projectPath: '/tmp/demo',
-      },
+      props: projectViewProps('P-123', 'Demo', '/tmp/demo'),
     })
 
     first.unmount()
     await tick()
 
     render(TerminalProjectView, {
-      props: {
-        projectId: 'P-123',
-        projectName: 'Demo',
-        projectPath: '/tmp/demo',
-      },
+      props: projectViewProps('P-123', 'Demo', '/tmp/demo'),
     })
     await tick()
 
@@ -143,22 +143,14 @@ describe('TerminalProjectView', () => {
 
   it('keeps the previous project terminal alive when switching projects after navigating away', async () => {
     const first = render(TerminalProjectView, {
-      props: {
-        projectId: 'P-123',
-        projectName: 'Demo',
-        projectPath: '/tmp/demo',
-      },
+      props: projectViewProps('P-123', 'Demo', '/tmp/demo'),
     })
 
     first.unmount()
     await tick()
 
     render(TerminalProjectView, {
-      props: {
-        projectId: 'P-456',
-        projectName: 'Other',
-        projectPath: '/tmp/other',
-      },
+      props: projectViewProps('P-456', 'Other', '/tmp/other'),
     })
     await tick()
 
@@ -167,18 +159,10 @@ describe('TerminalProjectView', () => {
 
   it('keeps the previous project terminal alive when switching to a different project', async () => {
     const { rerender } = render(TerminalProjectView, {
-      props: {
-        projectId: 'P-123',
-        projectName: 'Demo',
-        projectPath: '/tmp/demo',
-      },
+      props: projectViewProps('P-123', 'Demo', '/tmp/demo'),
     })
 
-    await rerender({
-      projectId: 'P-456',
-      projectName: 'Other',
-      projectPath: '/tmp/other',
-    })
+    await rerender(projectViewProps('P-456', 'Other', '/tmp/other'))
     await tick()
 
     expectNoProjectTerminalCleanup()

@@ -109,4 +109,24 @@ describe('plugin SDK testing utilities', () => {
     await expect(frontendApi.storage.global.get('flag')).resolves.toBe(true)
     expect(backendApi.context.getSnapshot()).toEqual({ pluginId: 'demo', projectId: null })
   })
+
+  it('records generic shell session operations through public session identity', async () => {
+    const api = createMockOpenForgeApi({ pluginId: 'terminal', projectId: 'P-1' })
+    const session = {
+      id: 'task-terminal:T-1:0',
+      origin: { kind: 'task' as const, taskId: 'T-1' },
+      ordinal: 0,
+    }
+
+    await expect(api.shell.spawn({ session, cwd: '/repo', cols: 80, rows: 24 })).resolves.toBe(0)
+    await api.shell.write({ session, data: 'echo hi\\n' })
+    await api.shell.resize({ session, cols: 100, rows: 30 })
+    await expect(api.shell.getBuffer({ session })).resolves.toBeNull()
+    await api.shell.kill({ session })
+
+    expect(api.__testing.calls.shellSpawns).toEqual([{ session, cwd: '/repo', cols: 80, rows: 24 }])
+    expect(api.__testing.calls.shellWrites).toEqual([{ session, data: 'echo hi\\n' }])
+    expect(api.__testing.calls.shellResizes).toEqual([{ session, cols: 100, rows: 30 }])
+    expect(api.__testing.calls.shellKills).toEqual([{ session }])
+  })
 })

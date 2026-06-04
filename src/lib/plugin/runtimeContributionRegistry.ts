@@ -33,6 +33,14 @@ import type {
   PluginStorage,
   Project,
   ProjectAttention,
+  ShellBufferRequest,
+  ShellExitEvent,
+  ShellKillRequest,
+  ShellOutputEvent,
+  ShellResizeRequest,
+  ShellSessionIdentity,
+  ShellSpawnRequest,
+  ShellWriteRequest,
   StartTaskImplementationRequest,
   SubscriptionSink,
   Task,
@@ -60,11 +68,12 @@ export type RuntimeHostBridge = {
   readFile?(request: { projectId: string; path: string }): Promise<FileContent>
   writeFile?(request: { projectId: string; path: string; content: string }): Promise<void>
   searchFiles?(request: { projectId: string; query: string; limit?: number }): Promise<string[]>
-  spawnShell?(request: { taskId: string; cwd: string; cols: number; rows: number; terminalIndex: number }): Promise<number>
-  writeShell?(request: { taskId: string; data: string }): Promise<void>
-  resizeShell?(request: { taskId: string; cols: number; rows: number }): Promise<void>
-  killShell?(request: { taskId: string }): Promise<void>
-  getShellBuffer?(request: { taskId: string }): Promise<string | null>
+  spawnShell?(request: ShellSpawnRequest): Promise<number>
+  writeShell?(request: ShellWriteRequest): Promise<void>
+  resizeShell?(request: ShellResizeRequest): Promise<void>
+  killShell?(request: ShellKillRequest): Promise<void>
+  getShellBuffer?(request: ShellBufferRequest): Promise<string | null>
+  onShellEvent?(request: { session: ShellSessionIdentity; type: 'output' | 'exit' }, handler: ((event: ShellOutputEvent) => void) | ((event: ShellExitEvent) => void)): Disposable | (() => void)
   notify?(request: { title: string; body?: string; [key: string]: unknown }): Promise<void>
   getAttention?(): Promise<ProjectAttention[]>
   openUrl?(url: string): Promise<void>
@@ -249,6 +258,10 @@ function createDisposable(dispose: () => MaybePromise<void>): Disposable {
       await dispose()
     },
   }
+}
+
+function toDisposable(subscription: Disposable | (() => void)): Disposable {
+  return typeof subscription === 'function' ? createDisposable(subscription) : subscription
 }
 
 function createMemoryStorageScope() {
@@ -567,6 +580,8 @@ class RuntimeContributionRegistry {
         resize: async (request) => this.host.resizeShell ? this.host.resizeShell(request) : unavailableCapability('shell.resize'),
         kill: async (request) => this.host.killShell ? this.host.killShell(request) : unavailableCapability('shell.kill'),
         getBuffer: async (request) => this.host.getShellBuffer ? this.host.getShellBuffer(request) : unavailableCapability('shell.getBuffer'),
+        onOutput: (session, handler) => this.host.onShellEvent ? toDisposable(this.host.onShellEvent({ session, type: 'output' }, handler)) : unavailableCapability('shell.onOutput'),
+        onExit: (session, handler) => this.host.onShellEvent ? toDisposable(this.host.onShellEvent({ session, type: 'exit' }, handler)) : unavailableCapability('shell.onExit'),
       },
       notifications: {
         notify: async (request) => this.host.notify ? this.host.notify(request) : unavailableCapability('notifications.notify'),

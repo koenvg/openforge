@@ -15,5 +15,10 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     include: ['src/**/*.test.ts'],
+    alias: {
+      '@openforge/plugin-sdk/frontend': new URL('../../packages/plugin-sdk/src/frontend.ts', import.meta.url).pathname,
+      '@openforge/plugin-sdk/testing': new URL('../../packages/plugin-sdk/src/testing.ts', import.meta.url).pathname,
+      '@openforge/plugin-sdk': new URL('../../packages/plugin-sdk/src/index.ts', import.meta.url).pathname,
+    },
   },
 })

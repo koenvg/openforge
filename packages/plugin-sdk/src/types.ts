@@ -292,20 +292,63 @@ export interface FileSystemAPI {
   searchFiles(request: { projectId: string; query: string; limit?: number }): Promise<string[]>
 }
 
-export interface ShellSpawnRequest {
+export type ShellSessionOrigin =
+  | { kind: 'task'; taskId: string }
+  | { kind: 'project'; projectId: string }
+  | { kind: 'custom'; purpose: string }
+
+export interface ShellSessionIdentity {
+  /** Plugin-visible stable identity for this shell session. Host PTY keys remain private. */
+  id: string
+  origin: ShellSessionOrigin
+  /** Optional stable ordering hint for plugins that present multiple related shell sessions. */
+  ordinal?: number
+}
+
+export interface ShellSessionRequest {
+  session: ShellSessionIdentity
+}
+
+/** @deprecated Use ShellSessionIdentity-based shell requests instead. */
+export interface LegacyShellSessionRequest {
   taskId: string
+}
+
+export type ShellSpawnRequest = (ShellSessionRequest & {
+  cwd: string
+  cols: number
+  rows: number
+}) | (LegacyShellSessionRequest & {
   cwd: string
   cols: number
   rows: number
   terminalIndex: number
+})
+
+export type ShellWriteRequest = (ShellSessionRequest | LegacyShellSessionRequest) & { data: string }
+export type ShellResizeRequest = (ShellSessionRequest | LegacyShellSessionRequest) & { cols: number; rows: number }
+export type ShellKillRequest = ShellSessionRequest | LegacyShellSessionRequest
+export type ShellBufferRequest = ShellSessionRequest | LegacyShellSessionRequest
+
+export interface ShellOutputEvent {
+  session: ShellSessionIdentity
+  data: string
+  instanceId: number | null
+}
+
+export interface ShellExitEvent {
+  session: ShellSessionIdentity
+  instanceId: number | null
 }
 
 export interface ShellAPI {
   spawn(request: ShellSpawnRequest): Promise<number>
-  write(request: { taskId: string; data: string }): Promise<void>
-  resize(request: { taskId: string; cols: number; rows: number }): Promise<void>
-  kill(request: { taskId: string }): Promise<void>
-  getBuffer(request: { taskId: string }): Promise<string | null>
+  write(request: ShellWriteRequest): Promise<void>
+  resize(request: ShellResizeRequest): Promise<void>
+  kill(request: ShellKillRequest): Promise<void>
+  getBuffer(request: ShellBufferRequest): Promise<string | null>
+  onOutput(session: ShellSessionIdentity, handler: (event: ShellOutputEvent) => void): Disposable
+  onExit(session: ShellSessionIdentity, handler: (event: ShellExitEvent) => void): Disposable
 }
 
 export interface CreateTaskRequest {

@@ -1,5 +1,5 @@
 import { get } from 'svelte/store'
-import type { BackendReadyState, CreateTaskRequest, ImplementationRun, StartTaskImplementationRequest } from '@openforge/plugin-sdk'
+import type { BackendReadyState, CreateTaskRequest, ImplementationRun, ShellBufferRequest, ShellExitEvent, ShellKillRequest, ShellOutputEvent, ShellResizeRequest, ShellSessionIdentity, ShellSpawnRequest, ShellWriteRequest, StartTaskImplementationRequest } from '@openforge/plugin-sdk'
 import {
   fetchAuthoredPrs,
   fetchReviewPrs,
@@ -52,6 +52,7 @@ import {
   getContextSnapshot,
   subscribeToPluginHostEvent,
   waitForTerminalEventSubscriptions,
+  waitForTerminalEventSubscriptionsForKey,
 } from './pluginHostEvents'
 
 const STATIC_APP_VIEWS = new Set<AppView>(['board', 'settings', 'global_settings', 'files'])
@@ -81,6 +82,107 @@ function normalizeImplementationRun(status: Awaited<ReturnType<typeof startImple
     taskId: status.task_id,
     sessionId: status.session_id,
     workspacePath: status.workspace_path,
+  }
+}
+
+type ResolvedShellSession = {
+  publicSession: ShellSessionIdentity | null
+  hostTaskId: string
+  terminalIndex: number
+  terminalKey: string
+}
+
+const shellSessionMappings = new Map<string, ResolvedShellSession>()
+const shellSessionOrdinalsByRoot = new Map<string, Map<string, number>>()
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isShellSessionIdentity(value: unknown): value is ShellSessionIdentity {
+  if (!isRecord(value) || typeof value.id !== 'string' || !isRecord(value.origin)) return false
+  if (value.origin.kind === 'task') return typeof value.origin.taskId === 'string' && value.origin.taskId.length > 0
+  if (value.origin.kind === 'project') return typeof value.origin.projectId === 'string' && value.origin.projectId.length > 0
+  if (value.origin.kind === 'custom') return typeof value.origin.purpose === 'string' && value.origin.purpose.length > 0
+  return false
+}
+
+function sanitizeShellKeyPart(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_.:-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'session'
+}
+
+function shellSessionRoot(pluginId: string, session: ShellSessionIdentity): string {
+  switch (session.origin.kind) {
+    case 'task':
+      return session.origin.taskId
+    case 'project':
+      return `project-${session.origin.projectId}`
+    case 'custom':
+      return `plugin-${pluginId}-${sanitizeShellKeyPart(session.origin.purpose)}`
+  }
+}
+
+function shellSessionOrdinal(root: string, session: ShellSessionIdentity): number {
+  if (typeof session.ordinal === 'number' && Number.isInteger(session.ordinal) && session.ordinal >= 0) {
+    return session.ordinal
+  }
+
+  let rootOrdinals = shellSessionOrdinalsByRoot.get(root)
+  if (!rootOrdinals) {
+    rootOrdinals = new Map()
+    shellSessionOrdinalsByRoot.set(root, rootOrdinals)
+  }
+
+  const existing = rootOrdinals.get(session.id)
+  if (existing !== undefined) return existing
+
+  const next = rootOrdinals.size
+  rootOrdinals.set(session.id, next)
+  return next
+}
+
+function resolveShellSession(pluginId: string, request: { session?: unknown; taskId?: unknown; terminalIndex?: unknown }): ResolvedShellSession {
+  if (isShellSessionIdentity(request.session)) {
+    const mappingKey = `${pluginId}\u0000${request.session.id}`
+    const existing = shellSessionMappings.get(mappingKey)
+    if (existing) return existing
+
+    const hostTaskId = shellSessionRoot(pluginId, request.session)
+    const terminalIndex = shellSessionOrdinal(hostTaskId, request.session)
+    const terminalKey = `${hostTaskId}-shell-${terminalIndex}`
+    const resolved = { publicSession: request.session, hostTaskId, terminalIndex, terminalKey }
+    shellSessionMappings.set(mappingKey, resolved)
+    return resolved
+  }
+
+  const taskId = typeof request.taskId === 'string' ? request.taskId : ''
+  const terminalIndex = Number(request.terminalIndex)
+  if (!taskId || !Number.isInteger(terminalIndex) || terminalIndex < 0) {
+    throw new Error('shell session requires a public session identity or legacy taskId + terminalIndex')
+  }
+
+  return {
+    publicSession: null,
+    hostTaskId: taskId,
+    terminalIndex,
+    terminalKey: `${taskId}-shell-${terminalIndex}`,
+  }
+}
+
+function normalizeShellOutputEvent(session: ShellSessionIdentity, payload: unknown): ShellOutputEvent {
+  const record = isRecord(payload) ? payload : {}
+  return {
+    session,
+    data: typeof record.data === 'string' ? record.data : '',
+    instanceId: typeof record.instance_id === 'number' ? record.instance_id : null,
+  }
+}
+
+function normalizeShellExitEvent(session: ShellSessionIdentity, payload: unknown): ShellExitEvent {
+  const record = isRecord(payload) ? payload : {}
+  return {
+    session,
+    instanceId: typeof record.instance_id === 'number' ? record.instance_id : null,
   }
 }
 
@@ -124,14 +226,44 @@ export function createPluginRuntimeHost(pluginId: string) {
     readDir: (request: { projectId: string; path?: string | null }) => fsReadDir(request.projectId, request.path ?? null),
     readFile: (request: { projectId: string; path: string }) => fsReadFile(request.projectId, request.path),
     searchFiles: (request: { projectId: string; query: string; limit?: number }) => fsSearchFiles(request.projectId, request.query, request.limit),
-    spawnShell: async (request: { taskId: string; cwd: string; cols: number; rows: number; terminalIndex: number }) => {
-      await waitForTerminalEventSubscriptions(request)
+    spawnShell: async (request: ShellSpawnRequest) => {
+      if ('session' in request) {
+        const resolved = resolveShellSession(pluginId, request)
+        await waitForTerminalEventSubscriptionsForKey(resolved.terminalKey)
+        return spawnShellPty(resolved.hostTaskId, request.cwd, request.cols, request.rows, resolved.terminalIndex)
+      }
+
+      await waitForTerminalEventSubscriptions(request as unknown as Record<string, unknown>)
       return spawnShellPty(request.taskId, request.cwd, request.cols, request.rows, request.terminalIndex)
     },
-    writeShell: (request: { taskId: string; data: string }) => writePty(request.taskId, request.data),
-    resizeShell: (request: { taskId: string; cols: number; rows: number }) => resizePty(request.taskId, request.cols, request.rows),
-    killShell: (request: { taskId: string }) => killPty(request.taskId),
-    getShellBuffer: (request: { taskId: string }) => getPtyBuffer(request.taskId),
+    writeShell: (request: ShellWriteRequest) => {
+      const terminalKey = 'session' in request ? resolveShellSession(pluginId, request).terminalKey : request.taskId
+      return writePty(terminalKey, request.data)
+    },
+    resizeShell: (request: ShellResizeRequest) => {
+      const terminalKey = 'session' in request ? resolveShellSession(pluginId, request).terminalKey : request.taskId
+      return resizePty(terminalKey, request.cols, request.rows)
+    },
+    killShell: (request: ShellKillRequest) => {
+      const terminalKey = 'session' in request ? resolveShellSession(pluginId, request).terminalKey : request.taskId
+      return killPty(terminalKey)
+    },
+    getShellBuffer: (request: ShellBufferRequest) => {
+      const terminalKey = 'session' in request ? resolveShellSession(pluginId, request).terminalKey : request.taskId
+      return getPtyBuffer(terminalKey)
+    },
+    onShellEvent: (request: { session: ShellSessionIdentity; type: 'output' | 'exit' }, handler: ((event: ShellOutputEvent) => void) | ((event: ShellExitEvent) => void)) => {
+      const resolved = resolveShellSession(pluginId, request)
+      const eventName = request.type === 'output' ? `pty-output-${resolved.terminalKey}` : `pty-exit-${resolved.terminalKey}`
+      const eventHandler = (payload: unknown) => {
+        if (request.type === 'output') {
+          ;(handler as (event: ShellOutputEvent) => void)(normalizeShellOutputEvent(request.session, payload))
+        } else {
+          ;(handler as (event: ShellExitEvent) => void)(normalizeShellExitEvent(request.session, payload))
+        }
+      }
+      return subscribeToPluginHostEvent(pluginId, eventName, eventHandler)
+    },
     notify: async (request: unknown) => {
       await Promise.resolve()
       emitPluginHostEvent('openforge.notification', request)

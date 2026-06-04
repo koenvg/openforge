@@ -224,6 +224,8 @@ var TestingOpenForgeRegistryFake = class {
 	eventHandlers = /* @__PURE__ */ new Map();
 	backendMethods = /* @__PURE__ */ new Map();
 	backgroundServices = /* @__PURE__ */ new Map();
+	shellOutputHandlers = /* @__PURE__ */ new Map();
+	shellExitHandlers = /* @__PURE__ */ new Map();
 	claimedIds = /* @__PURE__ */ new Set();
 	config = /* @__PURE__ */ new Map();
 	eventListenerSequence = 0;
@@ -419,7 +421,9 @@ var TestingOpenForgeRegistryFake = class {
 				kill: async (request) => {
 					this.calls.shellKills.push(request);
 				},
-				getBuffer: async () => null
+				getBuffer: async (_request) => null,
+				onOutput: (session, handler) => this.registerShellOutputHandler(session, handler),
+				onExit: (session, handler) => this.registerShellExitHandler(session, handler)
 			},
 			notifications: { notify: async (request) => {
 				this.calls.notify.push(request);
@@ -458,6 +462,38 @@ var TestingOpenForgeRegistryFake = class {
 				}
 			}
 		};
+	}
+	emitShellOutput(session, data, instanceId = null) {
+		const event = {
+			session,
+			data,
+			instanceId
+		};
+		for (const handler of this.shellOutputHandlers.get(session.id) ?? []) handler(event);
+	}
+	emitShellExit(session, instanceId = null) {
+		const event = {
+			session,
+			instanceId
+		};
+		for (const handler of this.shellExitHandlers.get(session.id) ?? []) handler(event);
+	}
+	registerShellOutputHandler(session, handler) {
+		return this.registerShellHandler(this.shellOutputHandlers, session, handler);
+	}
+	registerShellExitHandler(session, handler) {
+		return this.registerShellHandler(this.shellExitHandlers, session, handler);
+	}
+	registerShellHandler(registry, session, handler) {
+		const handlers = registry.get(session.id) ?? /* @__PURE__ */ new Set();
+		handlers.add(handler);
+		registry.set(session.id, handlers);
+		return createDisposable(() => {
+			const current = registry.get(session.id);
+			if (!current) return;
+			current.delete(handler);
+			if (current.size === 0) registry.delete(session.id);
+		});
 	}
 	getContextSnapshot() {
 		return {

@@ -23,6 +23,14 @@ import type {
   PluginStorageScope,
   PluginTaskPaneTabRegistration,
   StartTaskImplementationRequest,
+  ShellBufferRequest,
+  ShellExitEvent,
+  ShellKillRequest,
+  ShellOutputEvent,
+  ShellResizeRequest,
+  ShellSessionIdentity,
+  ShellSpawnRequest,
+  ShellWriteRequest,
   PluginViewRegistration,
   SubscriptionSink,
 } from './types'
@@ -57,10 +65,10 @@ export interface TestingOpenForgeApiCalls {
   taskStatusUpdates: Array<{ taskId: string; status: string }>
   configWrites: Array<{ key: string; value: JsonValue; projectId: string | null }>
   fsWrites: Array<{ projectId: string; path: string; content: string }>
-  shellSpawns: Array<{ taskId: string; cwd: string; cols: number; rows: number; terminalIndex: number }>
-  shellWrites: Array<{ taskId: string; data: string }>
-  shellResizes: Array<{ taskId: string; cols: number; rows: number }>
-  shellKills: Array<{ taskId: string }>
+  shellSpawns: ShellSpawnRequest[]
+  shellWrites: ShellWriteRequest[]
+  shellResizes: ShellResizeRequest[]
+  shellKills: ShellKillRequest[]
   storageGets: Array<{ scope: TestingRuntimeScope; scopeId: string | null; key: string }>
   storageSets: Array<{ scope: TestingRuntimeScope; scopeId: string | null; key: string; value: JsonValue }>
   storageDeletes: Array<{ scope: TestingRuntimeScope; scopeId: string | null; key: string }>
@@ -163,6 +171,8 @@ export class TestingOpenForgeRegistryFake {
   private readonly eventHandlers = new Map<string, Set<EventHandler>>()
   private readonly backendMethods = new Map<string, TestingBackendMethodContribution>()
   private readonly backgroundServices = new Map<string, TestingBackgroundServiceContribution>()
+  private readonly shellOutputHandlers = new Map<string, Set<(event: ShellOutputEvent) => void>>()
+  private readonly shellExitHandlers = new Map<string, Set<(event: ShellExitEvent) => void>>()
   private readonly claimedIds = new Set<string>()
   private readonly config = new Map<string, JsonValue>()
   private eventListenerSequence = 0
@@ -375,7 +385,9 @@ export class TestingOpenForgeRegistryFake {
         kill: async (request) => {
           this.calls.shellKills.push(request)
         },
-        getBuffer: async () => null,
+        getBuffer: async (_request: ShellBufferRequest) => null,
+        onOutput: (session: ShellSessionIdentity, handler: (event: ShellOutputEvent) => void) => this.registerShellOutputHandler(session, handler),
+        onExit: (session: ShellSessionIdentity, handler: (event: ShellExitEvent) => void) => this.registerShellExitHandler(session, handler),
       },
       notifications: {
         notify: async (request) => {
@@ -412,6 +424,41 @@ export class TestingOpenForgeRegistryFake {
         },
       },
     }
+  }
+
+  emitShellOutput(session: ShellSessionIdentity, data: string, instanceId: number | null = null): void {
+    const event = { session, data, instanceId }
+    for (const handler of this.shellOutputHandlers.get(session.id) ?? []) {
+      handler(event)
+    }
+  }
+
+  emitShellExit(session: ShellSessionIdentity, instanceId: number | null = null): void {
+    const event = { session, instanceId }
+    for (const handler of this.shellExitHandlers.get(session.id) ?? []) {
+      handler(event)
+    }
+  }
+
+  private registerShellOutputHandler(session: ShellSessionIdentity, handler: (event: ShellOutputEvent) => void): Disposable {
+    return this.registerShellHandler(this.shellOutputHandlers, session, handler)
+  }
+
+  private registerShellExitHandler(session: ShellSessionIdentity, handler: (event: ShellExitEvent) => void): Disposable {
+    return this.registerShellHandler(this.shellExitHandlers, session, handler)
+  }
+
+  private registerShellHandler<TEvent>(registry: Map<string, Set<(event: TEvent) => void>>, session: ShellSessionIdentity, handler: (event: TEvent) => void): Disposable {
+    const handlers = registry.get(session.id) ?? new Set<(event: TEvent) => void>()
+    handlers.add(handler)
+    registry.set(session.id, handlers)
+
+    return createDisposable(() => {
+      const current = registry.get(session.id)
+      if (!current) return
+      current.delete(handler)
+      if (current.size === 0) registry.delete(session.id)
+    })
   }
 
   private getContextSnapshot(): OpenForgeContextSnapshot {

@@ -1,21 +1,27 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import type { PluginViewProps } from '@openforge/plugin-sdk/frontend'
   import TerminalTabs from './TerminalTabs.svelte'
-  import { getProjectTerminalTaskId } from './lib/projectTerminal'
+  import { bindTerminalPluginApi } from './lib/ipc'
+  import { createProjectShellSession } from './lib/projectTerminal'
   import { createTerminalShortcutController } from './terminalShortcutController'
 
-  interface Props {
+  interface Props extends PluginViewProps {
     projectId?: string | null
     projectName?: string
     projectPath?: string
   }
 
-  let { projectId = null, projectName = '', projectPath = '' }: Props = $props()
+  let { api, projectId = null, projectName = '', projectPath = '' }: Props = $props()
 
-  const terminalTaskId = $derived(projectId ? getProjectTerminalTaskId(projectId) : null)
+  const terminalContextId = $derived(projectId ? `project-terminal:${projectId}` : null)
 
   const terminalShortcuts = createTerminalShortcutController({ ignoreWhenDetached: true })
   let terminalTabsRef = $state<TerminalTabs | null>(null)
+
+  $effect(() => {
+    bindTerminalPluginApi(api)
+  })
 
   $effect(() => {
     terminalShortcuts.terminalTabsRef = terminalTabsRef
@@ -41,13 +47,15 @@
       <div class="flex-1 flex items-center justify-center text-base-content/50 text-sm p-6 text-center">
         Project path unavailable
       </div>
-    {:else if terminalTaskId}
+    {:else if terminalContextId}
       <div class="flex-1 min-w-0 h-full overflow-hidden">
-        {#key terminalTaskId}
+        {#key terminalContextId}
           <TerminalTabs
             bind:this={terminalTabsRef}
-            taskId={terminalTaskId}
+            {api}
+            taskId={terminalContextId}
             workspacePath={projectPath}
+            createShellSession={(_contextId, tabIndex) => createProjectShellSession(projectId, tabIndex)}
             onTabChange={null}
             onTabCountChange={null}
           />

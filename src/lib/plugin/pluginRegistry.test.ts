@@ -712,19 +712,19 @@ describe('pluginRegistry', () => {
     expect(handler).toHaveBeenCalledTimes(1)
   })
 
-  it('waits for terminal event listeners to be attached before spawning shell PTYs', async () => {
+  it('waits for terminal event listeners to be attached before spawning shell sessions', async () => {
     let spawn: Promise<number> | null = null
     const outputHandler = vi.fn()
+    const session = { id: 'task-terminal:T-1:0', origin: { kind: 'task' as const, taskId: 'T-1' }, ordinal: 0 }
     const frontendPlugin = defineFrontendPlugin({
       activate(openforge, context) {
-        context.subscriptions.add(openforge.events.onGlobal('openforge.pty-output-T-1-shell-0', outputHandler))
-        context.subscriptions.add(openforge.events.onGlobal('openforge.pty-exit-T-1-shell-0', vi.fn()))
+        context.subscriptions.add(openforge.shell.onOutput(session, outputHandler))
+        context.subscriptions.add(openforge.shell.onExit(session, vi.fn()))
         spawn = openforge.shell.spawn({
-          taskId: 'T-1',
+          session,
           cwd: '/tmp/worktree',
           cols: 80,
           rows: 24,
-          terminalIndex: 0,
         })
       },
     })
@@ -767,8 +767,8 @@ describe('pluginRegistry', () => {
     await expect(spawn).resolves.toBe(42)
     expect(spawnShellPtyMock).toHaveBeenCalledWith('T-1', '/tmp/worktree', 80, 24, 0)
 
-    desktopEventHandlers.get('pty-output-T-1-shell-0')?.({ payload: { data: 'hello' } })
-    expect(outputHandler).toHaveBeenCalledWith({ data: 'hello' })
+    desktopEventHandlers.get('pty-output-T-1-shell-0')?.({ payload: { data: 'hello', instance_id: 7 } })
+    expect(outputHandler).toHaveBeenCalledWith({ session, data: 'hello', instanceId: 7 })
   })
 
   it('deactivatePluginById clears runtime host event subscriptions and unregisters view components for the plugin', async () => {

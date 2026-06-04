@@ -56,6 +56,18 @@ _Avoid_: Sandboxed widget, project-only script
 A product area whose language, contracts, and workflows belong to a **Trusted Plugin** rather than OpenForge core.
 _Avoid_: Core capability, host feature
 
+**Shell Session**:
+A host-managed interactive process stream exposed to **Trusted Plugins** through a public session identity.
+_Avoid_: PTY key, terminal key, task ID when referring to SDK identity
+
+**Terminal Surface**:
+A plugin-owned user interface for presenting and controlling one or more **Shell Sessions**.
+_Avoid_: Core terminal UI, host-owned terminal tabs
+
+**Shell Session Origin**:
+The public reason a **Shell Session** exists, such as task work, project work, or a plugin-defined purpose.
+_Avoid_: App-internal key suffix, PTY filename convention
+
 **Task Creation**:
 Recording a new project-owned backlog **Task** from a prompt, without choosing how an agent will run it.
 _Avoid_: Run scheduling, agent configuration, global task creation, status selection
@@ -108,6 +120,9 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - A new **Implementation Run** uses the **Project Agent Settings** rather than plugin-supplied provider or agent overrides.
 - A **Trusted Plugin** may start an **Implementation Run** for any **Task** when using the host-provided task capability.
 - A **Trusted Plugin** may own a **Plugin-owned Domain** when the concept is not shared across plugins or core workflows.
+- A **Terminal Surface** owns terminal UI, tab policy, and lifecycle presentation for **Shell Sessions**.
+- A **Shell Session** may have a **Shell Session Origin** tied to a **Task**, a project, or a plugin-defined purpose, while its public identity remains separate from app-internal PTY keys.
+- OpenForge core provides generic **Shell Session** capability to **Trusted Plugins** without owning terminal-specific UI policy.
 - A **Task** with unmet dependencies cannot start an **Implementation Run**.
 - A **Task** with an active **Agent Session** cannot start another **Implementation Run**.
 - **Session Reattachment** preserves the existing **Agent Session** identity.
@@ -144,5 +159,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - "Summary" and **Handoff Notes** overlapped — resolved: user-facing review language should say **Handoff Notes**, while existing unstructured summaries remain valid legacy content.
 - Worktree branch names were considered for prompt-derived descriptions — resolved: **Task Branches** should be stable task identifiers because they are visible as PR source branches.
 - "Skill" was considered as a core OpenForge platform concept because one built-in plugin manages skills — resolved: skill discovery and editing are a **Plugin-owned Domain** unless multiple plugins need a shared platform contract.
+- "Terminal" could mean a core UI feature, a plugin view, an xterm instance, or a PTY process — resolved: user-facing terminal UI is a **Terminal Surface** owned by the terminal plugin, while core exposes generic **Shell Sessions**.
+- Task IDs and project-derived strings were used as shell keys — resolved: SDK-facing language uses **Shell Session** identity and **Shell Session Origin**, leaving PTY key construction as a host implementation detail.
 - "Website" could mean a hosted product surface or public promotion — resolved: the current website direction is a **Marketing Site**, not a web version of OpenForge.
 - The **Marketing Site Promise** could be inflated into agent autonomy claims — resolved: avoid promises of autonomous engineering teams, code-review replacement, one-click shipping, hosted control planes, universal provider support, or enterprise collaboration suites.

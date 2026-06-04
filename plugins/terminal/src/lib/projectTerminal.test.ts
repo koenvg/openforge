@@ -1,14 +1,26 @@
 import { describe, expect, it } from 'vitest'
 import * as projectTerminal from './projectTerminal'
 
-const { getProjectTerminalTaskId } = projectTerminal
+const { createProjectShellSession, createTaskShellSession } = projectTerminal
 
 describe('projectTerminal', () => {
-  it('uses a project-scoped terminal task id so main terminals do not collide with task terminals', () => {
-    expect(getProjectTerminalTaskId('P-123')).toBe('project-P-123')
+  it('uses public shell session identity for project terminals without exposing host PTY keys', () => {
+    expect(createProjectShellSession('P-123', 2)).toEqual({
+      id: 'project-terminal:P-123:2',
+      origin: { kind: 'project', projectId: 'P-123' },
+      ordinal: 2,
+    })
   })
 
-  it('keeps project terminal utilities limited to id generation until an explicit cleanup lifecycle exists', () => {
-    expect(Object.keys(projectTerminal).sort()).toEqual(['getProjectTerminalTaskId'])
+  it('uses task shell session identity for task terminal tabs', () => {
+    expect(createTaskShellSession('T-123', 1)).toEqual({
+      id: 'task-terminal:T-123:1',
+      origin: { kind: 'task', taskId: 'T-123' },
+      ordinal: 1,
+    })
+  })
+
+  it('keeps terminal identity utilities limited to public SDK shell session helpers', () => {
+    expect(Object.keys(projectTerminal).sort()).toEqual(['createProjectShellSession', 'createTaskShellSession'])
   })
 })

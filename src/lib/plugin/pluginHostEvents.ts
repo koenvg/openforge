@@ -83,7 +83,10 @@ export async function waitForTerminalEventSubscriptions(commandPayload: Record<s
   const terminalIndex = Number(commandPayload?.terminalIndex)
   if (!taskId || !Number.isInteger(terminalIndex) || terminalIndex < 0) return
 
-  const terminalKey = `${taskId}-shell-${terminalIndex}`
+  await waitForTerminalEventSubscriptionsForKey(`${taskId}-shell-${terminalIndex}`)
+}
+
+export async function waitForTerminalEventSubscriptionsForKey(terminalKey: string): Promise<void> {
   await Promise.all([
     waitForDesktopEventSubscription(`pty-output-${terminalKey}`),
     waitForDesktopEventSubscription(`pty-exit-${terminalKey}`),

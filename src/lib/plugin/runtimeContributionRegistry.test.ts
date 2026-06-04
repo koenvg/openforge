@@ -271,6 +271,7 @@ describe('runtime contribution registry', () => {
       getConfig: vi.fn(async () => 'dark'),
       setProjectConfig: vi.fn(async () => undefined),
       spawnShell: vi.fn(async () => 42),
+      onShellEvent: vi.fn(() => ({ dispose: vi.fn() })),
       getAttention: vi.fn(async () => [{ project_id: 'P-1', needs_input: 0, running_agents: 1, ci_failures: 0, unaddressed_comments: 0, completed_agents: 0 }]),
       notify: vi.fn(async () => undefined),
     }
@@ -289,7 +290,10 @@ describe('runtime contribution registry', () => {
       taskId: 'T-2',
     })).resolves.toEqual({ taskId: 'T-2', workspacePath: '/repo/.worktrees/T-2', sessionId: 'S-1' })
     await expect(api.fs.readFile({ projectId: 'P-1', path: 'README.md' })).resolves.toEqual({ type: 'text', content: 'hello', mimeType: null, size: 5 })
-    await expect(api.shell.spawn({ taskId: 'T-1', cwd: '/repo', cols: 80, rows: 24, terminalIndex: 1 })).resolves.toBe(42)
+    const shellSession = { id: 'task-terminal:T-1:1', origin: { kind: 'task' as const, taskId: 'T-1' }, ordinal: 1 }
+    const onShellOutput = vi.fn()
+    const shellOutputSubscription = api.shell.onOutput(shellSession, onShellOutput)
+    await expect(api.shell.spawn({ session: shellSession, cwd: '/repo', cols: 80, rows: 24 })).resolves.toBe(42)
     await api.system.openUrl('https://example.com')
     expect(api.navigation.get()).toEqual({ activeProjectId: 'P-1', currentView: 'board', selectedTaskId: null })
     await expect(api.navigation.navigate({ viewId: 'plugin:github:prs', projectId: 'P-1', taskId: 'T-1' })).resolves.toEqual({ activeProjectId: 'P-1', currentView: 'plugin:github:prs', selectedTaskId: 'T-1' })
@@ -311,6 +315,9 @@ describe('runtime contribution registry', () => {
     expect(host.openUrl).toHaveBeenCalledWith('https://example.com')
     expect(host.navigate).toHaveBeenCalledWith({ viewId: 'plugin:github:prs', projectId: 'P-1', taskId: 'T-1' })
     expect(host.setProjectConfig).toHaveBeenCalledWith('P-1', 'repo', 'openforge')
+    expect(host.onShellEvent).toHaveBeenCalledWith({ session: shellSession, type: 'output' }, onShellOutput)
+    expect(host.spawnShell).toHaveBeenCalledWith({ session: shellSession, cwd: '/repo', cols: 80, rows: 24 })
+    shellOutputSubscription.dispose()
   })
 
   it('exposes backend readiness and invocation through the configured host bridge', async () => {
