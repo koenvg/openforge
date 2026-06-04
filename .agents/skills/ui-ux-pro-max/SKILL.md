@@ -1,11 +1,25 @@
 ---
 name: ui-ux-pro-max
-description: "UI/UX design intelligence for web and mobile. Includes 50+ styles, 161 color palettes, 57 font pairings, 161 product types, 99 UX guidelines, and 25 chart types across 10 stacks (React, Next.js, Vue, Svelte, SwiftUI, React Native, Flutter, Tailwind, shadcn/ui, and HTML/CSS). Actions: plan, build, create, design, implement, review, fix, improve, optimize, enhance, refactor, and check UI/UX code. Projects: website, landing page, dashboard, admin panel, e-commerce, SaaS, portfolio, blog, and mobile app. Elements: button, modal, navbar, sidebar, card, table, form, and chart. Styles: glassmorphism, claymorphism, minimalism, brutalism, neumorphism, bento grid, dark mode, responsive, skeuomorphism, and flat design. Topics: color systems, accessibility, animation, layout, typography, font pairing, spacing, interaction states, shadow, and gradient. Integrations: shadcn/ui MCP for component search and examples."
+description: "UI/UX design intelligence for OpenForge/Pi web, desktop, and mobile surfaces. Includes 50+ styles, 161 color palettes, 57 font pairings, 161 product types, 99 UX guidelines, and 25 chart types across 16 stacks (React, Next.js, Vue, Svelte, Astro, SwiftUI, React Native, Flutter, Nuxt, Tailwind, shadcn/ui, HTML/CSS, and more). Actions: plan, build, create, design, implement, review, fix, improve, optimize, enhance, refactor, and check UI/UX code. Projects: website, landing page, dashboard, admin panel, e-commerce, SaaS, portfolio, blog, desktop app, and mobile app. Elements: button, modal, navbar, sidebar, card, table, form, and chart. Styles: glassmorphism, claymorphism, minimalism, brutalism, neumorphism, bento grid, dark mode, responsive, skeuomorphism, and flat design. Topics: color systems, accessibility, animation, layout, typography, font pairing, spacing, interaction states, shadow, and gradient. Integrations: shadcn/ui MCP for component search and examples."
 ---
 
 # UI/UX Pro Max - Design Intelligence
 
-Comprehensive design guide for web and mobile applications. Contains 50+ styles, 161 color palettes, 57 font pairings, 161 product types with reasoning rules, 99 UX guidelines, and 25 chart types across 10 technology stacks. Searchable database with priority-based recommendations.
+Comprehensive design guide for web, desktop, and mobile applications. Contains 50+ styles, 161 color palettes, 57 font pairings, 161 product types with reasoning rules, 99 UX guidelines, and 25 chart types across 16 technology stacks. Searchable database with priority-based recommendations.
+
+## OpenForge/Pi Project Adapter
+
+This repository installs the skill as a **Pi project skill** under `.agents/skills/ui-ux-pro-max/`. For OpenForge work:
+
+- Use project-local paths from the worktree root: `.agents/skills/ui-ux-pro-max/SKILL.md`, `.agents/skills/ui-ux-pro-max/scripts/search.py`, and `.agents/skills/ui-ux-pro-max/data/...`.
+- Do **not** copy upstream examples from other harnesses that omit the leading `.agents/` directory; those paths will be wrong in Pi/OpenForge.
+- Prefer OpenForge's actual stacks before mobile-only guidance: Svelte 5 + TypeScript renderer (`src/`), Tailwind CSS v4/daisyUI (`src/app.css`), and Astro website (`apps/website/`). Use React Native guidance only when the user explicitly asks for a React Native/mobile surface.
+- When searching stack-specific guidance, choose the stack that matches the file being edited:
+  - `--stack svelte` for `.svelte` components and Svelte runes patterns.
+  - `--stack astro` for `apps/website` and `.astro` pages.
+  - `--stack html-tailwind` for Tailwind/daisyUI layout, spacing, responsive, and utility-class guidance.
+  - `--stack shadcn` only for shadcn/ui examples or primitives; adapt patterns to Svelte/daisyUI instead of importing React components.
+- Keep upstream data (`data/*.csv`, `data/stacks/*.csv`) intact unless the task explicitly asks to change the skill database. Most OpenForge adaptation belongs in this `SKILL.md` file or a project-local note.
 
 ## When to Apply
 
@@ -343,10 +357,10 @@ Use this skill when the user requests any of the following:
 | **Choose style / color / font** | "What style fits a fintech app?", "Recommend a color palette" | Step 2 (design system) |
 | **Review existing UI** | "Review this page for UX issues", "Check accessibility" | Quick Reference checklist above |
 | **Fix a UI bug** | "Button hover is broken", "Layout shifts on load" | Quick Reference → relevant section |
-| **Improve / optimize** | "Make this faster", "Improve mobile experience" | Step 3 (domain search: ux, react) |
+| **Improve / optimize** | "Make this faster", "Improve desktop/web experience" | Step 3 (domain search: ux) + Step 4 (matching stack) |
 | **Implement dark mode** | "Add dark mode support" | Step 3 (domain: style "dark mode") |
 | **Add charts / data viz** | "Add an analytics dashboard chart" | Step 3 (domain: chart) |
-| **Stack best practices** | "React performance tips"、"SwiftUI navigation" | Step 4 (stack search) |
+| **Stack best practices** | "Svelte component accessibility", "Astro landing page", "Tailwind layout" | Step 4 (stack search) |
 
 Follow this workflow:
 
@@ -354,16 +368,16 @@ Follow this workflow:
 
 Extract key information from user request:
 - **Product type**: Entertainment (social, video, music, gaming), Tool (scanner, editor, converter), Productivity (task manager, notes, calendar), or hybrid
-- **Target audience**: C-end consumer users; consider age group, usage context (commute, leisure, work)
-- **Style keywords**: playful, vibrant, minimal, dark mode, content-first, immersive, etc.
-- **Stack**: React Native (this project's only tech stack)
+- **Target audience**: OpenForge desktop users, website visitors, plugin authors, or mobile users only when explicitly in scope
+- **Style keywords**: playful, vibrant, minimal, dark mode, content-first, immersive, low-distraction, command-center, etc.
+- **Stack/surface**: choose from this repo's actual surfaces — `svelte` for the Electron renderer and plugins, `astro` for `apps/website`, `html-tailwind` for Tailwind/daisyUI utility/layout guidance, and `react-native` only for explicit React Native/mobile work
 
 ### Step 2: Generate Design System (REQUIRED)
 
 **Always start with `--design-system`** to get comprehensive recommendations with reasoning:
 
 ```bash
-python3 skills/ui-ux-pro-max/scripts/search.py "<product_type> <industry> <keywords>" --design-system [-p "Project Name"]
+python3 .agents/skills/ui-ux-pro-max/scripts/search.py "<product_type> <industry> <keywords>" --design-system [-p "Project Name"]
 ```
 
 This command:
@@ -374,7 +388,7 @@ This command:
 
 **Example:**
 ```bash
-python3 skills/ui-ux-pro-max/scripts/search.py "beauty spa wellness service" --design-system -p "Serenity Spa"
+python3 .agents/skills/ui-ux-pro-max/scripts/search.py "beauty spa wellness service" --design-system -p "Serenity Spa"
 ```
 
 ### Step 2b: Persist Design System (Master + Overrides Pattern)
@@ -382,7 +396,7 @@ python3 skills/ui-ux-pro-max/scripts/search.py "beauty spa wellness service" --d
 To save the design system for **hierarchical retrieval across sessions**, add `--persist`:
 
 ```bash
-python3 skills/ui-ux-pro-max/scripts/search.py "<query>" --design-system --persist -p "Project Name"
+python3 .agents/skills/ui-ux-pro-max/scripts/search.py "<query>" --design-system --persist -p "Project Name"
 ```
 
 This creates:
@@ -391,7 +405,7 @@ This creates:
 
 **With page-specific override:**
 ```bash
-python3 skills/ui-ux-pro-max/scripts/search.py "<query>" --design-system --persist -p "Project Name" --page "dashboard"
+python3 .agents/skills/ui-ux-pro-max/scripts/search.py "<query>" --design-system --persist -p "Project Name" --page "dashboard"
 ```
 
 This also creates:
@@ -416,7 +430,7 @@ Now, generate the code...
 After getting the design system, use domain searches to get additional details:
 
 ```bash
-python3 skills/ui-ux-pro-max/scripts/search.py "<keyword>" --domain <domain> [-n <max_results>]
+python3 .agents/skills/ui-ux-pro-max/scripts/search.py "<keyword>" --domain <domain> [-n <max_results>]
 ```
 
 **When to use detailed searches:**
@@ -432,17 +446,26 @@ python3 skills/ui-ux-pro-max/scripts/search.py "<keyword>" --domain <domain> [-n
 | Alternative fonts | `typography` | `--domain typography "elegant luxury"` |
 | Individual Google Fonts | `google-fonts` | `--domain google-fonts "sans serif popular variable"` |
 | Landing structure | `landing` | `--domain landing "hero social-proof"` |
-| React Native perf | `react` | `--domain react "rerender memo list"` |
-| App interface a11y | `web` | `--domain web "accessibilityLabel touch safe-areas"` |
+| React/Next.js perf (only when applicable) | `react` | `--domain react "rerender memo list"` |
+| Web/app interface a11y | `web` | `--domain web "keyboard focus touch targets"` |
 | AI prompt / CSS keywords | `prompt` | `--domain prompt "minimalism"` |
 
-### Step 4: Stack Guidelines (React Native)
+### Step 4: Stack Guidelines (OpenForge web/Astro/Svelte first)
 
-Get React Native implementation-specific best practices:
+Get implementation-specific best practices for the surface you are editing:
 
 ```bash
-python3 skills/ui-ux-pro-max/scripts/search.py "<keyword>" --stack react-native
+# Svelte 5 renderer/components/plugins
+python3 .agents/skills/ui-ux-pro-max/scripts/search.py "accessibility forms state" --stack svelte
+
+# Astro marketing/docs site under apps/website
+python3 .agents/skills/ui-ux-pro-max/scripts/search.py "landing page performance" --stack astro
+
+# Tailwind CSS v4 + daisyUI utility/layout guidance
+python3 .agents/skills/ui-ux-pro-max/scripts/search.py "responsive dashboard spacing" --stack html-tailwind
 ```
+
+Use `--stack react-native` only when the task explicitly targets React Native/mobile UI.
 
 ---
 
@@ -460,15 +483,19 @@ python3 skills/ui-ux-pro-max/scripts/search.py "<keyword>" --stack react-native
 | `chart` | Chart types, library recommendations | trend, comparison, timeline, funnel, pie |
 | `ux` | Best practices, anti-patterns | animation, accessibility, z-index, loading |
 | `google-fonts` | Individual Google Fonts lookup | sans serif, monospace, japanese, variable font, popular |
-| `react` | React/Next.js performance | waterfall, bundle, suspense, memo, rerender, cache |
-| `web` | App interface guidelines (iOS/Android/React Native) | accessibilityLabel, touch targets, safe areas, Dynamic Type |
+| `react` | React/Next.js performance when relevant | waterfall, bundle, suspense, memo, rerender, cache |
+| `web` | Web/app interface guidelines | keyboard focus, aria-label, touch targets, safe areas, reduced motion |
 | `prompt` | AI prompts, CSS keywords | (style name) |
 
 ### Available Stacks
 
 | Stack | Focus |
 |-------|-------|
-| `react-native` | Components, Navigation, Lists |
+| `svelte` | Svelte component patterns, reactivity, accessibility, forms |
+| `astro` | Astro pages, islands, content/landing performance |
+| `html-tailwind` | Tailwind utility layout, responsive design, spacing, semantics |
+| `shadcn` | Component examples/patterns to adapt, not React imports |
+| `react-native` | Components, navigation, lists — only for explicit mobile/RN tasks |
 
 ---
 
@@ -478,14 +505,14 @@ python3 skills/ui-ux-pro-max/scripts/search.py "<keyword>" --stack react-native
 
 ### Step 1: Analyze Requirements
 - Product type: Tool (AI search engine)
-- Target audience: C-end users looking for fast, intelligent search
+- Target audience: desktop/web users looking for fast, intelligent search
 - Style keywords: modern, minimal, content-first, dark mode
-- Stack: React Native
+- Stack/surface: Svelte + Tailwind for the OpenForge renderer, or Astro for the website
 
 ### Step 2: Generate Design System (REQUIRED)
 
 ```bash
-python3 skills/ui-ux-pro-max/scripts/search.py "AI search tool modern minimal" --design-system -p "AI Search"
+python3 .agents/skills/ui-ux-pro-max/scripts/search.py "AI search tool modern minimal" --design-system -p "AI Search"
 ```
 
 **Output:** Complete design system with pattern, style, colors, typography, effects, and anti-patterns.
@@ -494,16 +521,17 @@ python3 skills/ui-ux-pro-max/scripts/search.py "AI search tool modern minimal" -
 
 ```bash
 # Get style options for a modern tool product
-python3 skills/ui-ux-pro-max/scripts/search.py "minimalism dark mode" --domain style
+python3 .agents/skills/ui-ux-pro-max/scripts/search.py "minimalism dark mode" --domain style
 
 # Get UX best practices for search interaction and loading
-python3 skills/ui-ux-pro-max/scripts/search.py "search loading animation" --domain ux
+python3 .agents/skills/ui-ux-pro-max/scripts/search.py "search loading animation" --domain ux
 ```
 
 ### Step 4: Stack Guidelines
 
 ```bash
-python3 skills/ui-ux-pro-max/scripts/search.py "list performance navigation" --stack react-native
+python3 .agents/skills/ui-ux-pro-max/scripts/search.py "search form keyboard accessibility" --stack svelte
+python3 .agents/skills/ui-ux-pro-max/scripts/search.py "responsive hero landing page" --stack astro
 ```
 
 **Then:** Synthesize design system + detailed searches and implement the design.
@@ -516,10 +544,10 @@ The `--design-system` flag supports two output formats:
 
 ```bash
 # ASCII box (default) - best for terminal display
-python3 skills/ui-ux-pro-max/scripts/search.py "fintech crypto" --design-system
+python3 .agents/skills/ui-ux-pro-max/scripts/search.py "fintech crypto" --design-system
 
 # Markdown - best for documentation
-python3 skills/ui-ux-pro-max/scripts/search.py "fintech crypto" --design-system -f markdown
+python3 .agents/skills/ui-ux-pro-max/scripts/search.py "fintech crypto" --design-system -f markdown
 ```
 
 ---
@@ -531,7 +559,7 @@ python3 skills/ui-ux-pro-max/scripts/search.py "fintech crypto" --design-system 
 - Use **multi-dimensional keywords** — combine product + industry + tone + density: `"entertainment social vibrant content-dense"` not just `"app"`
 - Try different keywords for the same need: `"playful neon"` → `"vibrant dark"` → `"content-first minimal"`
 - Use `--design-system` first for full recommendations, then `--domain` to deep-dive any dimension you're unsure about
-- Always add `--stack react-native` for implementation-specific guidance
+- Always add the matching stack search for implementation-specific guidance: `--stack svelte` for renderer/plugin UI, `--stack astro` for the website, `--stack html-tailwind` for Tailwind/daisyUI layout, and `--stack react-native` only for explicit mobile/RN work
 
 ### Common Sticking Points
 
@@ -549,17 +577,17 @@ python3 skills/ui-ux-pro-max/scripts/search.py "fintech crypto" --design-system 
 
 - Run `--domain ux "animation accessibility z-index loading"` as a UX validation pass before implementation
 - Run through Quick Reference **§1–§3** (CRITICAL + HIGH) as a final review
-- Test on 375px (small phone) and landscape orientation
-- Verify behavior with **reduced-motion** enabled and **Dynamic Type** at largest size
+- For OpenForge desktop UI, check keyboard navigation, focus visibility, reduced motion, window resizing, and responsive breakpoints; use 375px/mobile checks only when the surface is responsive web or mobile.
+- Verify behavior with **reduced-motion** enabled and browser/system text scaling where applicable.
 - Check dark mode contrast independently (don't assume light mode values work)
-- Confirm all touch targets ≥44pt and no content hidden behind safe areas
+- Confirm interactive targets are comfortably sized and fixed/sticky regions do not hide content
 
 ---
 
 ## Common Rules for Professional UI
 
 These are frequently overlooked issues that make UI look unprofessional:
-Scope notice: The rules below are for App UI (iOS/Android/React Native/Flutter), not desktop-web interaction patterns.
+Scope notice: The upstream rules below include mobile app language. For OpenForge, translate them to desktop/web/Svelte semantics first (keyboard focus, ARIA labels, pointer/touch targets, responsive windows, Tailwind/daisyUI tokens). Use the React Native/Flutter interpretation only for explicit mobile tasks.
 
 ### Icons & Visual Elements
 
@@ -577,7 +605,7 @@ Scope notice: The rules below are for App UI (iOS/Android/React Native/Flutter),
 | **Icon Contrast** | Follow WCAG contrast standards: 4.5:1 for small elements, 3:1 minimum for larger UI glyphs. | Low-contrast icons that blend into the background. | Ensures accessibility in both light and dark modes. |
 
 
-### Interaction (App)
+### Interaction (Web/Desktop/App)
 
 | Rule | Do | Don't |
 |------|----|----- |
@@ -619,7 +647,7 @@ Scope notice: The rules below are for App UI (iOS/Android/React Native/Flutter),
 ## Pre-Delivery Checklist
 
 Before delivering UI code, verify these items:
-Scope notice: This checklist is for App UI (iOS/Android/React Native/Flutter).
+Scope notice: For OpenForge, apply this checklist through the desktop/web lens first. Keep mobile-specific safe-area, Dynamic Type, and gesture checks only when the edited surface targets responsive web or mobile.
 
 ### Visual Quality
 - [ ] No emojis used as icons (use SVG instead)
