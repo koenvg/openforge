@@ -176,9 +176,6 @@ mod tests {
 
     #[test]
     fn codex_args_continue_last_session_without_prompt() {
-        assert_eq!(
-            build_codex_args("", None, true),
-            vec!["resume", "--last"]
-        );
+        assert_eq!(build_codex_args("", None, true), vec!["resume", "--last"]);
     }
 }

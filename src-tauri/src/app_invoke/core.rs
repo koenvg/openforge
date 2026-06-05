@@ -370,7 +370,7 @@ pub(super) async fn handle_app_unmatched_command(
                 )
             })? {
                 let pty_backed_provider =
-                    matches!(session.provider.as_str(), "claude-code" | "pi" | "opencode");
+                    crate::agent_lifecycle::provider_requires_pty_instance(&session.provider);
                 let current_pty_instance_matches = !pty_backed_provider
                     || pty_instance_id
                         .map(|id| {
@@ -382,7 +382,9 @@ pub(super) async fn handle_app_unmatched_command(
                     && current_pty_instance_matches
                 {
                     let next_status =
-                        if matches!(session.provider.as_str(), "pi" | "opencode") && success {
+                        if matches!(session.provider.as_str(), "pi" | "opencode" | "codex")
+                            && success
+                        {
                             "completed"
                         } else {
                             "interrupted"

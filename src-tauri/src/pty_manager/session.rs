@@ -228,15 +228,22 @@ impl AgentPtyProviderAdapter for CodexPtyAdapter {
     }
 
     fn command_args(&self) -> Vec<String> {
-        build_codex_args(
+        let mut args = vec![
+            "--profile".to_string(),
+            crate::codex_hooks::OPENFORGE_CODEX_PROFILE_NAME.to_string(),
+        ];
+        args.extend(build_codex_args(
             &self.prompt,
             self.resume_session_id.as_deref(),
             self.continue_session,
-        )
+        ));
+        args
     }
 
     fn prepare(&mut self, _cwd: &Path) -> Result<(), PtyError> {
-        Ok(())
+        crate::codex_hooks::ensure_codex_hooks_installed()
+            .map(|_| ())
+            .map_err(|e| PtyError::SpawnFailed(format!("Failed to install Codex hooks: {}", e)))
     }
 
     fn extra_env(&self, task_id: &str, instance_id: u64) -> HashMap<String, String> {
@@ -1670,6 +1677,36 @@ mod tests {
         let env = adapter.extra_env("task-1", 7);
         assert_eq!(env.get("OPENFORGE_TASK_ID"), Some(&"task-1".to_string()));
         assert_eq!(env.get("OPENFORGE_PTY_INSTANCE_ID"), Some(&"7".to_string()));
+        assert!(env.contains_key("OPENFORGE_HTTP_PORT"));
+        assert!(!env.contains_key("CLAUDE_TASK_ID"));
+    }
+
+    #[test]
+    fn codex_adapter_owns_provider_specific_spawn_details() {
+        let adapter = CodexPtyAdapter::new("continue work", Some("codex-session"), false);
+
+        assert_eq!(adapter.label(), "Codex");
+        assert_eq!(adapter.command_name(), "codex");
+        assert_eq!(
+            adapter.command_args(),
+            vec![
+                "--profile",
+                "openforge-lifecycle",
+                "resume",
+                "codex-session",
+                "continue work",
+            ]
+        );
+        assert_eq!(adapter.pid_file_name("task-1"), "task-1-pty.pid");
+        assert_eq!(
+            adapter.stale_pid_file_names("task-1"),
+            vec!["task-1-pty.pid"]
+        );
+        assert!(adapter.track_last_output());
+
+        let env = adapter.extra_env("task-1", 8);
+        assert_eq!(env.get("OPENFORGE_TASK_ID"), Some(&"task-1".to_string()));
+        assert_eq!(env.get("OPENFORGE_PTY_INSTANCE_ID"), Some(&"8".to_string()));
         assert!(env.contains_key("OPENFORGE_HTTP_PORT"));
         assert!(!env.contains_key("CLAUDE_TASK_ID"));
     }

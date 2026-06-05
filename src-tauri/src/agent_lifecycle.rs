@@ -56,6 +56,10 @@ pub fn session_matches_pty_instance(session: &AgentSessionRow, pty_instance_id: 
     session.pty_instance_id == Some(pty_instance_id)
 }
 
+pub fn provider_requires_pty_instance(provider: &str) -> bool {
+    matches!(provider, "claude-code" | "pi" | "opencode" | "codex")
+}
+
 pub(crate) fn lifecycle_status_transition(
     kind: AgentLifecycleEventKind,
 ) -> (&'static str, &'static [&'static str]) {
@@ -128,10 +132,7 @@ pub fn apply_agent_lifecycle_notification(
         return Ok(None);
     }
 
-    if matches!(
-        notification.provider.as_str(),
-        "claude-code" | "pi" | "opencode"
-    ) {
+    if provider_requires_pty_instance(&notification.provider) {
         let Some(pty_instance_id) = notification.pty_instance_id else {
             return Ok(None);
         };
@@ -750,6 +751,81 @@ mod tests {
             session.claude_session_id,
             Some("claude-current".to_string())
         );
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn codex_lifecycle_requires_matching_pty_instance() {
+        use crate::db::test_helpers::*;
+        let (db, path) = make_test_db("codex_lifecycle_requires_pty_instance");
+        let task = db
+            .create_task("Codex task", "doing", None, None, None)
+            .expect("create task");
+        db.create_agent_session(
+            "ses-codex-pty",
+            &task.id,
+            None,
+            "implementing",
+            "completed",
+            "codex",
+        )
+        .expect("create session");
+        db.set_agent_session_pty_instance_id("ses-codex-pty", 51)
+            .expect("store pty instance");
+
+        let stale = apply_agent_lifecycle_notification(
+            &db,
+            &AgentLifecycleNotification {
+                provider: "codex".to_string(),
+                task_id: task.id.clone(),
+                pty_instance_id: Some(99),
+                provider_session_id: None,
+                kind: AgentLifecycleEventKind::BecameBusy,
+                raw_event_type: Some("PreToolUse".to_string()),
+                raw_status_type: None,
+            },
+        )
+        .expect("stale lifecycle should not error");
+        assert!(stale.is_none());
+
+        let missing_identity = apply_agent_lifecycle_notification(
+            &db,
+            &AgentLifecycleNotification {
+                provider: "codex".to_string(),
+                task_id: task.id.clone(),
+                pty_instance_id: None,
+                provider_session_id: None,
+                kind: AgentLifecycleEventKind::BecameBusy,
+                raw_event_type: Some("PreToolUse".to_string()),
+                raw_status_type: None,
+            },
+        )
+        .expect("missing pty identity should not error");
+        assert!(missing_identity.is_none());
+
+        let applied = apply_agent_lifecycle_notification(
+            &db,
+            &AgentLifecycleNotification {
+                provider: "codex".to_string(),
+                task_id: task.id.clone(),
+                pty_instance_id: Some(51),
+                provider_session_id: None,
+                kind: AgentLifecycleEventKind::BecameBusy,
+                raw_event_type: Some("PreToolUse".to_string()),
+                raw_status_type: None,
+            },
+        )
+        .expect("current lifecycle should apply")
+        .expect("status should change");
+        assert_eq!(applied.status, "running");
+        assert_eq!(applied.pty_instance_id, Some(51));
+
+        let session = db
+            .get_agent_session("ses-codex-pty")
+            .expect("get session")
+            .expect("session exists");
+        assert_eq!(session.status, "running");
 
         let _ = std::fs::remove_file(path);
     }
