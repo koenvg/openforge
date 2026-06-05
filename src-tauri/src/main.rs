@@ -8,6 +8,7 @@ mod backend_runtime;
 mod builtin_plugins;
 mod claude_hooks;
 mod cli_installer;
+mod codex_hooks;
 pub mod command_discovery;
 mod data_identity;
 mod db;
