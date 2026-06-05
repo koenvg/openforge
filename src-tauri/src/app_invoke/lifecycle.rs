@@ -294,39 +294,28 @@ pub(super) async fn handle_app_abort_implementation_command(
     };
 
     if let Some(session) = session {
-        match session.provider.as_str() {
-            "opencode" => {
-                if let Some(pty_manager) = state.pty_manager.as_ref() {
-                    pty_manager.kill_shells_for_task(&task_id).await;
-                    let _ = pty_manager.kill_pty(&task_id).await;
-                }
+        if crate::agent_lifecycle::provider_requires_pty_instance(&session.provider) {
+            if let Some(pty_manager) = state.pty_manager.as_ref() {
+                pty_manager.kill_shells_for_task(&task_id).await;
+                let _ = pty_manager.kill_pty(&task_id).await;
             }
-            "claude-code" | "pi" => {
-                if let Some(pty_manager) = state.pty_manager.as_ref() {
-                    pty_manager.kill_shells_for_task(&task_id).await;
-                    let _ = pty_manager.kill_pty(&task_id).await;
-                }
-            }
-            _ => {}
         }
 
-        let abort_status = if matches!(session.provider.as_str(), "claude-code" | "pi" | "opencode")
-        {
-            "interrupted"
-        } else {
-            "failed"
-        };
+        let abort_policy =
+            crate::provider_runtime::app_invoke_abort_session_policy(&session.provider);
         {
             let db = crate::db::acquire_db(&state.db);
             let _ = db.update_agent_session(
                 &session.id,
                 "implementing",
-                abort_status,
+                abort_policy.session_status,
                 None,
                 Some("Aborted by user"),
             );
-            if session.provider != "claude-code" {
+            if abort_policy.update_worktree_status {
                 let _ = db.update_worktree_status(&task_id, "stopped");
+            }
+            if abort_policy.update_task_workspace_status {
                 let _ = db.update_task_workspace_status(&task_id, "stopped");
             }
         }
