@@ -13,6 +13,7 @@ vi.mock("./desktopIpc", () => ({
 
 import * as ipcModule from "./ipc";
 import {
+	checkCodexInstalled,
 	checkPiInstalled,
 	createTask,
 	fsSearchFiles,
@@ -318,6 +319,31 @@ describe("ipc checkPiInstalled", () => {
 			installed: true,
 			path: "/usr/local/bin/pi",
 			version: "1.2.3",
+		});
+	});
+});
+
+describe("ipc checkCodexInstalled", () => {
+	beforeEach(() => {
+		invokeMock.mockReset();
+		invokeMock.mockResolvedValue({
+			installed: true,
+			path: "/usr/local/bin/codex",
+			version: "codex-cli 0.137.0",
+		});
+	});
+
+	it("calls check_codex_installed", async () => {
+		await checkCodexInstalled();
+
+		expect(invokeMock).toHaveBeenCalledWith("check_codex_installed");
+	});
+
+	it("returns the installed/path/version shape", async () => {
+		await expect(checkCodexInstalled()).resolves.toEqual({
+			installed: true,
+			path: "/usr/local/bin/codex",
+			version: "codex-cli 0.137.0",
 		});
 	});
 });

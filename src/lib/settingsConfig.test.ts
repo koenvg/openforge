@@ -5,6 +5,7 @@ vi.mock('./ipc', () => ({
   getConfig: vi.fn(),
   checkOpenCodeInstalled: vi.fn(),
   checkClaudeInstalled: vi.fn(),
+  checkCodexInstalled: vi.fn(),
   checkPiInstalled: vi.fn(),
   getAllWhisperModelStatuses: vi.fn(),
 }))
@@ -21,6 +22,7 @@ import { loadActions } from './actions'
 import { loadFocusFilterStates } from './boardFilters'
 import {
   checkClaudeInstalled,
+  checkCodexInstalled,
   checkOpenCodeInstalled,
   checkPiInstalled,
   getAllWhisperModelStatuses,
@@ -53,6 +55,11 @@ describe('settingsConfig', () => {
       authenticated: false,
     })
     vi.mocked(checkPiInstalled).mockResolvedValue({
+      installed: false,
+      path: null,
+      version: null,
+    })
+    vi.mocked(checkCodexInstalled).mockResolvedValue({
       installed: false,
       path: null,
       version: null,
@@ -218,6 +225,11 @@ describe('settingsConfig', () => {
         version: '2.3.4',
         authenticated: true,
       })
+      vi.mocked(checkCodexInstalled).mockResolvedValue({
+        installed: true,
+        path: '/usr/local/bin/codex',
+        version: 'codex-cli 0.137.0',
+      })
 
       const result = await loadInstallationStatus()
 
@@ -229,12 +241,15 @@ describe('settingsConfig', () => {
         claudeAuthenticated: true,
         piInstalled: false,
         piVersion: null,
+        codexInstalled: true,
+        codexVersion: 'codex-cli 0.137.0',
       })
     })
 
     it('falls back to disconnected install status when checks fail', async () => {
       vi.mocked(checkOpenCodeInstalled).mockRejectedValue(new Error('missing'))
       vi.mocked(checkClaudeInstalled).mockRejectedValue(new Error('missing'))
+      vi.mocked(checkCodexInstalled).mockRejectedValue(new Error('missing'))
 
       const result = await loadInstallationStatus()
 
@@ -246,6 +261,8 @@ describe('settingsConfig', () => {
         claudeAuthenticated: false,
         piInstalled: false,
         piVersion: null,
+        codexInstalled: false,
+        codexVersion: null,
       })
     })
   })

@@ -64,6 +64,7 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'get_git_branch',
   'check_opencode_installed',
   'check_pi_installed',
+  'check_codex_installed',
   'check_claude_installed',
   'get_latest_session',
   'get_latest_sessions',

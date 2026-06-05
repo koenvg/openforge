@@ -66,6 +66,17 @@
     stageLabels={sharedStageLabels}
     rootTestId="pi-agent-panel"
   />
+{:else if provider === 'codex'}
+  <AgentTerminalShell
+    {taskId}
+    {isStarting}
+    runningText="Codex agent running..."
+    logPrefix="AgentPanel:Codex"
+    sessionIdKey={null}
+    stageLabels={sharedStageLabels}
+    rootTestId="codex-agent-panel"
+    resumeCommandProvider="codex"
+  />
 {:else if provider || checkedDb}
   <AgentTerminalShell
     {taskId}

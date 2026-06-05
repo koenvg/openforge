@@ -15,6 +15,7 @@ vi.mock('../../lib/ipc', () => ({
   checkOpenCodeInstalled: vi.fn(() => Promise.resolve({ installed: false, path: null, version: null })),
   checkClaudeInstalled: vi.fn(() => Promise.resolve({ installed: false, path: null, version: null, authenticated: false })),
   checkPiInstalled: vi.fn(() => Promise.resolve({ installed: false, path: null, version: null })),
+  checkCodexInstalled: vi.fn(() => Promise.resolve({ installed: false, path: null, version: null })),
   getAllWhisperModelStatuses: vi.fn(() => Promise.resolve([])),
   setWhisperModel: vi.fn(),
 }))

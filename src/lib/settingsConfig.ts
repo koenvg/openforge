@@ -2,6 +2,7 @@ import { loadActions } from './actions'
 import { loadFocusFilterStates } from './boardFilters'
 import {
   checkClaudeInstalled,
+  checkCodexInstalled,
   checkOpenCodeInstalled,
   checkPiInstalled,
   getAllWhisperModelStatuses,
@@ -37,6 +38,8 @@ export interface InstallationStatus {
   claudeAuthenticated: boolean
   piInstalled: boolean
   piVersion: string | null
+  codexInstalled: boolean
+  codexVersion: string | null
 }
 
 export const DEFAULT_GITHUB_POLL_INTERVAL_SECONDS = 60
@@ -129,7 +132,7 @@ export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
 }
 
 export async function loadInstallationStatus(): Promise<InstallationStatus> {
-  const [opencodeResult, claudeResult, piResult] = await Promise.all([
+  const [opencodeResult, claudeResult, piResult, codexResult] = await Promise.all([
     checkOpenCodeInstalled().catch<OpenCodeInstallStatus>(() => ({
       installed: false,
       path: null,
@@ -146,6 +149,11 @@ export async function loadInstallationStatus(): Promise<InstallationStatus> {
       path: null,
       version: null,
     })),
+    checkCodexInstalled().catch(() => ({
+      installed: false,
+      path: null,
+      version: null,
+    })),
   ])
 
   return {
@@ -156,6 +164,8 @@ export async function loadInstallationStatus(): Promise<InstallationStatus> {
     claudeAuthenticated: claudeResult.authenticated,
     piInstalled: piResult.installed,
     piVersion: piResult.version,
+    codexInstalled: codexResult.installed,
+    codexVersion: codexResult.version,
   }
 }
 

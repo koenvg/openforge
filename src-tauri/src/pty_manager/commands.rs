@@ -82,6 +82,25 @@ pub(crate) fn build_opencode_tui_args(
     args
 }
 
+pub(crate) fn build_codex_args(
+    prompt: &str,
+    resume_session_id: Option<&str>,
+    continue_session: bool,
+) -> Vec<String> {
+    let mut args = Vec::new();
+    if let Some(session_id) = resume_session_id {
+        args.push("resume".to_string());
+        args.push(session_id.to_string());
+    } else if continue_session {
+        args.push("resume".to_string());
+        args.push("--last".to_string());
+    }
+    if !prompt.is_empty() {
+        args.push(prompt.to_string());
+    }
+    args
+}
+
 pub(super) fn resolve_shell_path<'a>(
     shell: Option<&str>,
     candidates: impl IntoIterator<Item = &'a str>,
@@ -136,6 +155,30 @@ mod tests {
         assert_eq!(
             build_opencode_tui_args("", None, true, None, None),
             vec!["--continue"]
+        );
+    }
+
+    #[test]
+    fn codex_args_start_interactive_session_with_prompt() {
+        assert_eq!(
+            build_codex_args("implement the feature", None, false),
+            vec!["implement the feature"]
+        );
+    }
+
+    #[test]
+    fn codex_args_resume_session_with_prompt() {
+        assert_eq!(
+            build_codex_args("continue work", Some("codex-session-1"), false),
+            vec!["resume", "codex-session-1", "continue work"]
+        );
+    }
+
+    #[test]
+    fn codex_args_continue_last_session_without_prompt() {
+        assert_eq!(
+            build_codex_args("", None, true),
+            vec!["resume", "--last"]
         );
     }
 }
