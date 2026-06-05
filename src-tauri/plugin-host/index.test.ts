@@ -120,6 +120,27 @@ describe('plugin-host backend runtime', () => {
     ])
   })
 
+  it('fails backend host capability calls clearly when the callback bridge is unavailable', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('schedule', {
+            async handler() {
+              return await openforge.tasks.create({
+                initialPrompt: 'Scheduled prompt',
+                projectId: 'P-1'
+              })
+            }
+          }))
+        }
+      }
+    `)
+
+    await expect(createPluginHostRuntime().invokeBackend({ pluginId: 'scheduler', backendPath, command: 'schedule' })).rejects.toThrow(
+      'OpenForge host capability is unavailable: openforge.tasks.create'
+    )
+  })
+
   it('routes remaining backend core OpenForge APIs through durable host callbacks', async () => {
     const backendPath = await writeBackendModule(`
       export default {

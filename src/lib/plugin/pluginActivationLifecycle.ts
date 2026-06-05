@@ -204,64 +204,69 @@ export async function executePluginCommand(pluginId: string, commandId: string, 
 }
 
 function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
-  const unavailable = async () => {
-    throw new Error(`Frontend runtime API is unavailable for plugin ${pluginId}`)
+  const unavailable = (capability: string) => async () => {
+    throw new Error(`OpenForge frontend runtime API is unavailable for plugin ${pluginId}: ${capability}`)
   }
+  const unavailableStorageScope = (scope: string) => ({
+    get: unavailable(`${scope}.get`),
+    set: unavailable(`${scope}.set`),
+    delete: unavailable(`${scope}.delete`),
+  })
 
   return {
     commands: {
       register: () => ({ dispose: () => undefined }),
-      invoke: unavailable,
-      invokeGlobal: unavailable,
-      list: unavailable,
+      invoke: unavailable('commands.invoke'),
+      invokeGlobal: unavailable('commands.invokeGlobal'),
+      list: unavailable('commands.list'),
     },
     events: {
       on: () => ({ dispose: () => undefined }),
       onGlobal: () => ({ dispose: () => undefined }),
-      emit: unavailable,
-      emitGlobal: unavailable,
+      emit: unavailable('events.emit'),
+      emitGlobal: unavailable('events.emitGlobal'),
     },
     storage: {
-      global: { get: unavailable, set: unavailable, delete: unavailable },
-      project: () => ({ get: unavailable, set: unavailable, delete: unavailable }),
-      task: () => ({ get: unavailable, set: unavailable, delete: unavailable }),
+      global: unavailableStorageScope('storage.global'),
+      project: () => unavailableStorageScope('storage.project'),
+      task: () => unavailableStorageScope('storage.task'),
     },
     context: {
       getSnapshot: () => ({ pluginId, projectId: get(activeProjectId) }),
     },
     tasks: {
-      list: unavailable,
-      get: unavailable,
-      create: unavailable,
-      updateSummary: unavailable,
-      updateStatus: unavailable,
-      startImplementation: unavailable,
-      getWorkspace: unavailable,
-      getLatestSession: unavailable,
+      list: unavailable('tasks.list'),
+      get: unavailable('tasks.get'),
+      create: unavailable('tasks.create'),
+      updateSummary: unavailable('tasks.updateSummary'),
+      updateStatus: unavailable('tasks.updateStatus'),
+      startImplementation: unavailable('tasks.startImplementation'),
+      getWorkspace: unavailable('tasks.getWorkspace'),
+      getLatestSession: unavailable('tasks.getLatestSession'),
     },
     projects: {
-      list: unavailable,
-      get: unavailable,
+      list: unavailable('projects.list'),
+      get: unavailable('projects.get'),
     },
-    fs: { readDir: unavailable, readFile: unavailable, writeFile: unavailable, searchFiles: unavailable },
-    shell: { spawn: unavailable, write: unavailable, resize: unavailable, kill: unavailable, getBuffer: unavailable },
-    notifications: { notify: unavailable },
-    attention: { listProjects: unavailable },
+    fs: { readDir: unavailable('fs.readDir'), readFile: unavailable('fs.readFile'), writeFile: unavailable('fs.writeFile'), searchFiles: unavailable('fs.searchFiles') },
+    shell: { spawn: unavailable('shell.spawn'), write: unavailable('shell.write'), resize: unavailable('shell.resize'), kill: unavailable('shell.kill'), getBuffer: unavailable('shell.getBuffer') },
+    notifications: { notify: unavailable('notifications.notify') },
+    attention: { listProjects: unavailable('attention.listProjects') },
     system: { openUrl: async (url: string) => openUrl(url) },
     navigation: {
       get: () => ({ activeProjectId: get(activeProjectId), currentView: 'board', selectedTaskId: null }),
-      navigate: unavailable,
+      navigate: unavailable('navigation.navigate'),
     },
-    config: { get: unavailable, set: unavailable },
-    projectConfig: { get: unavailable, set: unavailable },
+    config: { get: unavailable('config.get'), set: unavailable('config.set') },
+    projectConfig: { get: unavailable('projectConfig.get'), set: unavailable('projectConfig.set') },
     views: { register: () => ({ dispose: () => undefined }) },
     taskPane: { registerTab: () => ({ dispose: () => undefined }) },
     settings: { registerSection: () => ({ dispose: () => undefined }) },
     backend: {
       state: 'missing',
-      whenReady: unavailable,
+      whenReady: unavailable('backend.whenReady'),
       onReady: () => ({ dispose: () => undefined }),
-      invoke: unavailable,
+      invoke: unavailable('backend.invoke'),
     },
   }
 }

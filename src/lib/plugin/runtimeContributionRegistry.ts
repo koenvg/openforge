@@ -315,7 +315,7 @@ function commandDescriptor(command: RuntimeCommandContribution): CommandDescript
 }
 
 function unavailableCapability(name: string): never {
-  throw new Error(`OpenForge core capability is unavailable: ${name}`)
+  throw new Error(`OpenForge host capability is unavailable: ${name}`)
 }
 
 export function createRuntimeContributionRegistry(options: RuntimeOptions) {

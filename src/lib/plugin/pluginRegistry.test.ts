@@ -453,6 +453,20 @@ describe('pluginRegistry', () => {
     expect(firstProps.api.context.getSnapshot()).toEqual({ pluginId: 'runtime-plugin', projectId: null })
   })
 
+  it('returns capability-specific unavailable APIs for render props before frontend activation', async () => {
+    const props = getPluginRenderProps('missing-plugin', { projectId: 'P-1', taskId: 'T-1' })
+
+    expect(props.context).toEqual({ pluginId: 'missing-plugin', projectId: 'P-1', taskId: 'T-1' })
+    await expect(props.api.tasks.create({ initialPrompt: 'Scheduled prompt', projectId: 'P-1' })).rejects.toThrow(
+      'OpenForge frontend runtime API is unavailable for plugin missing-plugin: tasks.create'
+    )
+    await expect(props.api.notifications.notify({ title: 'Ready' })).rejects.toThrow(
+      'OpenForge frontend runtime API is unavailable for plugin missing-plugin: notifications.notify'
+    )
+    await props.api.system.openUrl('https://example.com/plugin')
+    expect(openUrlMock).toHaveBeenCalledWith('https://example.com/plugin')
+  })
+
   it('activates package plugins immediately when enabling and deactivates them when disabling', async () => {
     const RuntimeView = vi.fn() as never
     const frontendPlugin = defineFrontendPlugin({
