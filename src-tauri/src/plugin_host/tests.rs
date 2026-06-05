@@ -352,6 +352,143 @@ async fn host_core_callbacks_route_to_app_services() {
     );
 }
 
+#[tokio::test]
+async fn plugin_host_task_callbacks_create_start_and_read_state() {
+    let (database, _path) = crate::db::test_helpers::make_test_db("plugin_host_task_callbacks");
+    let project_dir = tempfile::tempdir().expect("project dir");
+    let project = database
+        .create_project("Plugin Tasks", &project_dir.path().to_string_lossy())
+        .expect("project fixture");
+    let dependency = database
+        .create_task("Dependency", "done", Some(&project.id), None, None)
+        .expect("dependency fixture");
+
+    let app = AppHandle::new();
+    app.manage(Arc::new(Mutex::new(database)));
+    let host = PluginHost::new(app.clone());
+
+    let created = host
+        .handle_host_callback(
+            "openforge.tasks.create",
+            &json!({
+                "initialPrompt": "Scheduled backend task",
+                "projectId": project.id,
+                "dependsOn": [dependency.id],
+                "labelNames": ["scheduled"]
+            }),
+        )
+        .await
+        .expect("task create callback");
+    let task_id = created["id"].as_str().expect("created task id").to_string();
+    assert_eq!(created["initial_prompt"], "Scheduled backend task");
+    assert_eq!(created["status"], "backlog");
+    assert_eq!(created["project_id"], project.id);
+    assert_eq!(created["depends_on"], json!([dependency.id]));
+    assert_eq!(created["labels"][0]["name"], "scheduled");
+
+    let project_tasks = host
+        .handle_host_callback("openforge.tasks.list", &json!({ "projectId": project.id }))
+        .await
+        .expect("task list callback");
+    assert!(project_tasks
+        .as_array()
+        .expect("project tasks")
+        .iter()
+        .any(|task| task["id"] == task_id));
+
+    let fetched = host
+        .handle_host_callback("openforge.tasks.get", &json!({ "taskId": task_id }))
+        .await
+        .expect("task get callback");
+    assert_eq!(fetched["id"], task_id);
+
+    assert_eq!(
+        host.handle_host_callback(
+            "openforge.tasks.updateSummary",
+            &json!({ "taskId": task_id, "summary": "Scheduler handoff" }),
+        )
+        .await
+        .expect("task summary callback"),
+        Value::Null
+    );
+    assert_eq!(
+        host.handle_host_callback(
+            "openforge.tasks.updateStatus",
+            &json!({ "taskId": task_id, "status": "doing" }),
+        )
+        .await
+        .expect("task status callback"),
+        Value::Null
+    );
+
+    {
+        let db_state = app
+            .try_state::<Arc<Mutex<crate::db::Database>>>()
+            .expect("database state");
+        let db = crate::db::acquire_db(db_state.inner().as_ref());
+        let task = db
+            .get_task(&task_id)
+            .expect("get updated task")
+            .expect("task exists");
+        assert_eq!(task.summary.as_deref(), Some("Scheduler handoff"));
+        assert_eq!(task.status, "doing");
+        db.create_task_workspace_record(
+            &task_id,
+            &project.id,
+            project_dir.path().to_str().expect("workspace path"),
+            project_dir.path().to_str().expect("repo path"),
+            "project_dir",
+            None,
+            "pi",
+        )
+        .expect("workspace fixture");
+        db.create_agent_session(
+            "session-1",
+            &task_id,
+            None,
+            "implementing",
+            "completed",
+            "pi",
+        )
+        .expect("session fixture");
+    }
+
+    let workspace = host
+        .handle_host_callback(
+            "openforge.tasks.getWorkspace",
+            &json!({ "taskId": task_id }),
+        )
+        .await
+        .expect("workspace callback");
+    assert_eq!(workspace["task_id"], task_id);
+    assert_eq!(
+        workspace["workspace_path"],
+        project_dir.path().to_string_lossy().as_ref()
+    );
+
+    let latest_session = host
+        .handle_host_callback(
+            "openforge.tasks.getLatestSession",
+            &json!({ "taskId": task_id }),
+        )
+        .await
+        .expect("latest session callback");
+    assert_eq!(latest_session["id"], "session-1");
+    assert_eq!(latest_session["ticket_id"], task_id);
+
+    let start_error = host
+        .handle_host_callback(
+            "openforge.tasks.startImplementation",
+            &json!({ "taskId": task_id }),
+        )
+        .await
+        .expect_err("start should route through app lifecycle and report unavailable PTY manager");
+    assert!(
+        start_error.contains("PTY manager is not available"),
+        "unexpected start error: {start_error}"
+    );
+}
+
 #[test]
 fn new_host_starts_stopped() {
     let host = build_plugin_host();

@@ -36,6 +36,90 @@ describe('plugin-host backend runtime', () => {
     expect(await runtime.getBackendState('github')).toMatchObject({ state: 'ready', ready: true })
   })
 
+  it('routes backend task APIs through host callbacks and normalizes implementation runs', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('taskApis', {
+            async handler() {
+              const projectTasks = await openforge.tasks.list({ projectId: 'P-1' })
+              const allTasks = await openforge.tasks.list()
+              const existing = await openforge.tasks.get('T-existing')
+              const created = await openforge.tasks.create({
+                initialPrompt: 'Scheduled prompt',
+                projectId: 'P-1',
+                dependsOn: ['T-parent'],
+                labelNames: ['scheduled']
+              })
+              await openforge.tasks.updateSummary(created.id, 'Scheduler handoff')
+              await openforge.tasks.updateStatus(created.id, 'doing')
+              const run = await openforge.tasks.startImplementation({ taskId: created.id })
+              const workspace = await openforge.tasks.getWorkspace(created.id)
+              const latestSession = await openforge.tasks.getLatestSession(created.id)
+              return { projectTasks, allTasks, existing, created, run, workspace, latestSession }
+            }
+          }))
+        }
+      }
+    `)
+    const calls: Array<{ method: string; params: Record<string, unknown> }> = []
+    const task = {
+      id: 'T-existing',
+      initial_prompt: 'Existing task',
+      status: 'backlog',
+      prompt: null,
+      summary: null,
+      agent: null,
+      permission_mode: null,
+      depends_on: [],
+      project_id: 'P-1',
+      created_at: 1,
+      updated_at: 1,
+    }
+    const createdTask = {
+      ...task,
+      id: 'T-created',
+      initial_prompt: 'Scheduled prompt',
+      depends_on: ['T-parent'],
+      labels: [{ id: 1, project_id: 'P-1', name: 'scheduled', color: 'primary' }],
+    }
+    const hostCallbacks = async (request: { method: string; params: Record<string, unknown> }) => {
+      calls.push(request)
+      switch (request.method) {
+        case 'openforge.tasks.list': return request.params.projectId === 'P-1' ? [task] : [task, { ...task, id: 'T-other', project_id: 'P-2' }]
+        case 'openforge.tasks.get': return { ...task, id: request.params.taskId }
+        case 'openforge.tasks.create': return createdTask
+        case 'openforge.tasks.updateSummary': return null
+        case 'openforge.tasks.updateStatus': return null
+        case 'openforge.tasks.startImplementation': return { task_id: request.params.taskId, session_id: 'session-1', workspace_path: '/workspace/T-created', port: 0 }
+        case 'openforge.tasks.getWorkspace': return { id: 7, task_id: request.params.taskId, project_id: 'P-1', workspace_path: '/workspace/T-created', repo_path: '/repo', kind: 'project_dir', branch_name: null, provider_name: 'pi', status: 'active', created_at: 2, updated_at: 2 }
+        case 'openforge.tasks.getLatestSession': return { id: 'session-1', ticket_id: request.params.taskId, opencode_session_id: null, stage: 'implementing', status: 'running', checkpoint_data: null, pty_instance_id: null, error_message: null, created_at: 3, updated_at: 3, provider: 'pi', claude_session_id: null, pi_session_id: 'pi-session-1' }
+        default: throw new Error(`unexpected host callback: ${request.method}`)
+      }
+    }
+
+    await expect(createPluginHostRuntime({ hostCallbacks }).invokeBackend({ pluginId: 'scheduler', backendPath, command: 'taskApis' })).resolves.toEqual({
+      projectTasks: [task],
+      allTasks: [task, { ...task, id: 'T-other', project_id: 'P-2' }],
+      existing: { ...task, id: 'T-existing' },
+      created: createdTask,
+      run: { taskId: 'T-created', sessionId: 'session-1', workspacePath: '/workspace/T-created' },
+      workspace: { id: 7, task_id: 'T-created', project_id: 'P-1', workspace_path: '/workspace/T-created', repo_path: '/repo', kind: 'project_dir', branch_name: null, provider_name: 'pi', status: 'active', created_at: 2, updated_at: 2 },
+      latestSession: { id: 'session-1', ticket_id: 'T-created', opencode_session_id: null, stage: 'implementing', status: 'running', checkpoint_data: null, pty_instance_id: null, error_message: null, created_at: 3, updated_at: 3, provider: 'pi', claude_session_id: null, pi_session_id: 'pi-session-1' },
+    })
+    expect(calls).toEqual([
+      { method: 'openforge.tasks.list', params: { projectId: 'P-1' } },
+      { method: 'openforge.tasks.list', params: {} },
+      { method: 'openforge.tasks.get', params: { taskId: 'T-existing' } },
+      { method: 'openforge.tasks.create', params: { initialPrompt: 'Scheduled prompt', projectId: 'P-1', dependsOn: ['T-parent'], labelNames: ['scheduled'] } },
+      { method: 'openforge.tasks.updateSummary', params: { taskId: 'T-created', summary: 'Scheduler handoff' } },
+      { method: 'openforge.tasks.updateStatus', params: { taskId: 'T-created', status: 'doing' } },
+      { method: 'openforge.tasks.startImplementation', params: { taskId: 'T-created' } },
+      { method: 'openforge.tasks.getWorkspace', params: { taskId: 'T-created' } },
+      { method: 'openforge.tasks.getLatestSession', params: { taskId: 'T-created' } },
+    ])
+  })
+
   it('routes remaining backend core OpenForge APIs through durable host callbacks', async () => {
     const backendPath = await writeBackendModule(`
       export default {

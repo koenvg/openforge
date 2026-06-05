@@ -6,7 +6,9 @@ mod rpc_transport;
 #[cfg(test)]
 mod tests;
 
-use crate::{app_events::AppEventSender, backend_runtime::AppHandle};
+use crate::{
+    app_events::AppEventSender, backend_runtime::AppHandle, http_server::StartImplementationClaims,
+};
 use std::sync::{Arc, Mutex};
 use tokio::sync::Notify;
 
@@ -21,6 +23,7 @@ pub struct PluginHost {
     state_change: Arc<Notify>,
     app_handle: AppHandle,
     app_event_tx: Option<AppEventSender>,
+    start_implementation_claims: StartImplementationClaims,
 }
 
 impl Clone for PluginHost {
@@ -31,6 +34,7 @@ impl Clone for PluginHost {
             state_change: Arc::clone(&self.state_change),
             app_handle: self.app_handle.clone(),
             app_event_tx: self.app_event_tx.clone(),
+            start_implementation_claims: self.start_implementation_claims.clone(),
         }
     }
 }
@@ -43,15 +47,30 @@ impl PluginHost {
             state_change: Arc::new(Notify::new()),
             app_handle,
             app_event_tx: None,
+            start_implementation_claims: StartImplementationClaims::new(),
         }
     }
 
+    #[cfg(test)]
     pub fn with_app_event_sender(
         app_handle: AppHandle,
         app_event_tx: Option<AppEventSender>,
     ) -> Self {
+        Self::with_app_event_sender_and_start_claims(
+            app_handle,
+            app_event_tx,
+            StartImplementationClaims::new(),
+        )
+    }
+
+    pub fn with_app_event_sender_and_start_claims(
+        app_handle: AppHandle,
+        app_event_tx: Option<AppEventSender>,
+        start_implementation_claims: StartImplementationClaims,
+    ) -> Self {
         let mut host = Self::new(app_handle);
         host.app_event_tx = app_event_tx;
+        host.start_implementation_claims = start_implementation_claims;
         host
     }
 

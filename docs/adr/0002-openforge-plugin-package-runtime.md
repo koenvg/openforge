@@ -699,6 +699,8 @@ const run = await openforge.tasks.startImplementation({
 
 `projectId` controls task ownership and is required for plugin-created tasks. Plugin-created tasks always enter the backlog; plugins may attach dependency task IDs and label names, and missing labels are created by the host. `startImplementation` starts a native OpenForge implementation run for the task and returns `{ taskId, sessionId, workspacePath }` once launch is accepted. The host resolves the task's project checkout, provider, agent, permission mode, and workspace settings from OpenForge project/task state; plugins cannot override those execution settings per call.
 
+Capability limits: backend plugins cannot create a task directly in `doing`/`done`, choose a provider, agent, permission mode, model, branch, or workspace path through `tasks.create` or `tasks.startImplementation`. Starting an implementation can fail when the task has unmet dependencies, already has an active agent session, is missing a project, its project checkout cannot be resolved, the PTY/provider runtime is unavailable, or the configured workspace cannot be prepared. `tasks.getWorkspace(taskId)` and `tasks.getLatestSession(taskId)` return `null` when no workspace/session has been recorded yet.
+
 ### Storage examples
 
 Plugin storage is JSON-only and automatically namespaced by plugin id. Use the narrowest scope that matches the state lifetime.
