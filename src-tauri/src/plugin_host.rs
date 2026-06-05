@@ -1,7 +1,12 @@
 mod callbacks;
+mod config_callbacks;
 mod filesystem_callbacks;
 mod lifecycle;
+mod project_callbacks;
 mod rpc_transport;
+mod shell_callbacks;
+mod storage_callbacks;
+mod system_callbacks;
 mod task_callbacks;
 
 #[cfg(test)]
