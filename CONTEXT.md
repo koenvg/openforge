@@ -56,6 +56,18 @@ _Avoid_: Sandboxed widget, project-only script
 A product area whose language, contracts, and workflows belong to a **Trusted Plugin** rather than OpenForge core.
 _Avoid_: Core capability, host feature
 
+**Terminal Runtime**:
+The shared OpenForge runtime that owns terminal session lifecycle for **Terminal Surfaces**.
+_Avoid_: Terminal plugin internals, ordinary plugin dependency, private terminal pool, private forwarding package
+
+**Terminal Surface**:
+A plugin or core UI area that presents an interactive terminal through the **Terminal Runtime**.
+_Avoid_: PTY owner, terminal backend, shell manager
+
+**Shell Session Key**:
+The OpenForge identifier for one concrete terminal shell tab/session.
+_Avoid_: Task ID, terminal index, PID filename
+
 **Task Creation**:
 Recording a new project-owned backlog **Task** from a prompt, without choosing how an agent will run it.
 _Avoid_: Run scheduling, agent configuration, global task creation, status selection
@@ -108,6 +120,10 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - A new **Implementation Run** uses the **Project Agent Settings** rather than plugin-supplied provider or agent overrides.
 - A **Trusted Plugin** may start an **Implementation Run** for any **Task** when using the host-provided task capability.
 - A **Trusted Plugin** may own a **Plugin-owned Domain** when the concept is not shared across plugins or core workflows.
+- A **Terminal Surface** uses the **Terminal Runtime** and does not own shell process state.
+- The **Terminal Runtime** is shared across **Terminal Surfaces** when they need one terminal lifecycle owner.
+- The **Terminal Runtime** uses **Shell Session Keys** to distinguish terminal shell tabs/sessions.
+- A **Shell Session Key** is not a **Task** id, even when it belongs to a **Task** terminal.
 - A **Task** with unmet dependencies cannot start an **Implementation Run**.
 - A **Task** with an active **Agent Session** cannot start another **Implementation Run**.
 - **Session Reattachment** preserves the existing **Agent Session** identity.
@@ -133,6 +149,9 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 
 > **Dev:** "Should the scheduler resume this task with the worker agent?"
 > **Domain expert:** "No — if there is already an agent session, resuming only reattaches to it. To ask it to do work, send implementation input. New implementation runs use the project agent settings, not plugin-supplied overrides."
+>
+> **Dev:** "Can the terminal plugin own the shared terminal pool?"
+> **Domain expert:** "No — the plugin may provide a Terminal Surface, but shared lifecycle belongs to the Terminal Runtime."
 
 ## Flagged ambiguities
 
@@ -144,5 +163,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - "Summary" and **Handoff Notes** overlapped — resolved: user-facing review language should say **Handoff Notes**, while existing unstructured summaries remain valid legacy content.
 - Worktree branch names were considered for prompt-derived descriptions — resolved: **Task Branches** should be stable task identifiers because they are visible as PR source branches.
 - "Skill" was considered as a core OpenForge platform concept because one built-in plugin manages skills — resolved: skill discovery and editing are a **Plugin-owned Domain** unless multiple plugins need a shared platform contract.
+- "Terminal pooling" was used for plugin UI, shell process state, and reusable terminal lifecycle — resolved: **Terminal Surface** names the UI, while **Terminal Runtime** names the shared lifecycle owner.
+- "Terminal API" could mean a host `openforge.terminal` capability, a normal package dependency, or the shared runtime — resolved: **Terminal Runtime** names the shared runtime; lower-level shell/event APIs remain capability primitives.
 - "Website" could mean a hosted product surface or public promotion — resolved: the current website direction is a **Marketing Site**, not a web version of OpenForge.
 - The **Marketing Site Promise** could be inflated into agent autonomy claims — resolved: avoid promises of autonomous engineering teams, code-review replacement, one-click shipping, hosted control planes, universal provider support, or enterprise collaboration suites.
