@@ -1,7 +1,7 @@
 import { createInterface } from 'node:readline'
 import { pathToFileURL } from 'node:url'
 import { validateSchemaValue } from '@openforge/plugin-runtime/commandValidation'
-import type { CommandDescriptor, CommandRegistration, FileContent, FileEntry, JsonValue, OpenForgePackageMetadata, PluginStorage, Project, ProjectAttention, SubscriptionSink } from '@openforge/plugin-sdk'
+import type { AgentSession, BoardStatus, CommandDescriptor, CommandRegistration, CreateTaskRequest, FileContent, FileEntry, ImplementationRun, JsonValue, OpenForgePackageMetadata, PluginStorage, Project, ProjectAttention, StartTaskImplementationRequest, SubscriptionSink, Task, TaskWorkspaceInfo } from '@openforge/plugin-sdk'
 import type { BackendMethodRegistration, BackendOpenForgeAPI, BackendPlugin, BackendPluginContext, BackgroundServiceRegistration, Disposable, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/backend'
 
 type JsonRpcId = number | null | undefined
@@ -368,6 +368,33 @@ function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error))
 }
 
+function requireImplementationRunString(value: unknown, fieldName: string): string {
+  if (typeof value === 'string' && value.length > 0) return value
+  throw new Error(`Host callback returned invalid implementation run field: ${fieldName}`)
+}
+
+function normalizeImplementationRun(value: unknown): ImplementationRun {
+  if (value === null || typeof value !== 'object') {
+    throw new Error('Host callback returned invalid implementation run')
+  }
+
+  const record = value as Record<string, unknown>
+  return {
+    taskId: requireImplementationRunString(record.taskId ?? record.task_id, 'taskId'),
+    sessionId: requireImplementationRunString(record.sessionId ?? record.session_id, 'sessionId'),
+    workspacePath: requireImplementationRunString(record.workspacePath ?? record.workspace_path, 'workspacePath'),
+  }
+}
+
+function taskListCallbackParams(request?: { projectId?: string | null }): Record<string, unknown> {
+  if (!request || request.projectId === undefined) return {}
+  return { projectId: request.projectId ?? null }
+}
+
+function objectCallbackParams(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === 'object' ? value as Record<string, unknown> : {}
+}
+
 function createDefaultPackageMetadata(pluginId: string): OpenForgePackageMetadata {
   return {
     id: pluginId,
@@ -722,7 +749,16 @@ export class PluginHostRuntime {
       context: {
         getSnapshot: () => ({ ...contextSnapshot }),
       },
-      tasks: {},
+      tasks: {
+        list: async (request) => await hostCallback<Task[]>('openforge.tasks.list', taskListCallbackParams(request)),
+        get: async (taskId) => await hostCallback<Task>('openforge.tasks.get', { taskId }),
+        create: async (request: CreateTaskRequest) => await hostCallback<Task>('openforge.tasks.create', objectCallbackParams(request)),
+        updateSummary: async (taskId: string, summary: string) => { await hostCallback<void>('openforge.tasks.updateSummary', { taskId, summary }) },
+        updateStatus: async (taskId: string, status: BoardStatus) => { await hostCallback<void>('openforge.tasks.updateStatus', { taskId, status }) },
+        startImplementation: async (request: StartTaskImplementationRequest) => normalizeImplementationRun(await hostCallback<unknown>('openforge.tasks.startImplementation', objectCallbackParams(request))),
+        getWorkspace: async (taskId: string) => await hostCallback<TaskWorkspaceInfo | null>('openforge.tasks.getWorkspace', { taskId }),
+        getLatestSession: async (taskId: string) => await hostCallback<AgentSession | null>('openforge.tasks.getLatestSession', { taskId }),
+      },
       projects: {
         list: async () => await hostCallback<Project[]>('openforge.projects.list'),
         get: async (projectId) => await hostCallback<Project | null>('openforge.projects.get', { projectId }),

@@ -1437,10 +1437,12 @@ async fn start_http_server_with_app_state(
         .and_then(|app| app.try_state::<GitHubClient>())
         .map(|state| state.inner().clone())
         .unwrap_or_else(GitHubClient::new);
-    let plugin_host = Some(PluginHost::with_app_event_sender(
+    let start_implementation_claims = StartImplementationClaims::new();
+    let plugin_host = Some(PluginHost::with_app_event_sender_and_start_claims(
         app.clone()
             .unwrap_or_else(crate::backend_runtime::AppHandle::new),
         Some(app_event_tx.clone()),
+        start_implementation_claims.clone(),
     ));
     let state = AppState {
         app,
@@ -1453,7 +1455,7 @@ async fn start_http_server_with_app_state(
         app_event_bus: Some(app_event_bus),
         whisper,
         sidecar_readiness,
-        start_implementation_claims: StartImplementationClaims::new(),
+        start_implementation_claims,
     };
 
     if is_electron_sidecar {
