@@ -635,7 +635,7 @@ describe("SelfReviewView pane restoration", () => {
 		});
 	});
 
-	it("keeps reviewed file state synced when the file tree is remounted after a header toggle", async () => {
+	it("hides and restores the full left pane while keeping reviewed file state synced", async () => {
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
 		vi.mocked(getTaskBatchFileContents).mockResolvedValue([["", ""]]);
 
@@ -651,13 +651,50 @@ describe("SelfReviewView pane restoration", () => {
 		});
 
 		await fireEvent.click(screen.getByTitle("Hide file tree"));
-		await fireEvent.click(screen.getByRole("button", { name: "Show files" }));
+
+		await waitFor(() => {
+			expect(screen.queryByText("Files")).toBeNull();
+			expect(screen.queryByText("Commit history")).toBeNull();
+			expect(screen.queryByLabelText("Reviewed file src/main.rs")).toBeNull();
+		});
+
+		await fireEvent.click(screen.getByTitle("Show file tree"));
 
 		await waitFor(() => {
 			const checkbox = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
 			expect(checkbox.checked).toBe(true);
 			expect(screen.getByLabelText("Reviewed file src/main.rs")).toBeTruthy();
 			expect(screen.queryByText("1 reviewed hidden")).toBeNull();
+		});
+	});
+
+	it("keeps a left pane restore control when a hidden pane refreshes to an empty diff", async () => {
+		const mockGetTaskDiff = vi.mocked(getTaskDiff);
+		mockGetTaskDiff.mockResolvedValueOnce([baseDiff]).mockResolvedValueOnce([]);
+		vi.mocked(getTaskBatchFileContents).mockResolvedValue([["", ""]]);
+
+		render(SelfReviewView, {
+			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
+		});
+
+		await screen.findByText("src/main.rs");
+		await fireEvent.click(screen.getByTitle("Hide file tree"));
+
+		await waitFor(() => {
+			expect(screen.queryByText("Commit history")).toBeNull();
+		});
+
+		await fireEvent.click(screen.getByTitle("Refresh diff"));
+
+		await waitFor(() => {
+			expect(screen.getByText("No changes for current selection")).toBeTruthy();
+		});
+
+		await fireEvent.click(screen.getByTitle("Show file tree"));
+
+		await waitFor(() => {
+			expect(screen.getByText("Files")).toBeTruthy();
+			expect(screen.getByText("Commit history")).toBeTruthy();
 		});
 	});
 });
