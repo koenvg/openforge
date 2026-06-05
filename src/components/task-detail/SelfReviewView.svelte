@@ -286,6 +286,15 @@
                   This commit has no displayable diff. Switch back to All changes from the commit history pane.
                 {/if}
               </p>
+              {#if !fileTreeVisible}
+                <button
+                  class="btn btn-soft btn-sm"
+                  onclick={() => { fileTreeVisible = true }}
+                  title="Show file tree"
+                >
+                  Show file tree
+                </button>
+              {/if}
             </div>
           {:else}
             <DiffViewer

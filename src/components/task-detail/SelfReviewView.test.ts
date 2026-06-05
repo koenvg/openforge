@@ -667,6 +667,36 @@ describe("SelfReviewView pane restoration", () => {
 			expect(screen.queryByText("1 reviewed hidden")).toBeNull();
 		});
 	});
+
+	it("keeps a left pane restore control when a hidden pane refreshes to an empty diff", async () => {
+		const mockGetTaskDiff = vi.mocked(getTaskDiff);
+		mockGetTaskDiff.mockResolvedValueOnce([baseDiff]).mockResolvedValueOnce([]);
+		vi.mocked(getTaskBatchFileContents).mockResolvedValue([["", ""]]);
+
+		render(SelfReviewView, {
+			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
+		});
+
+		await screen.findByText("src/main.rs");
+		await fireEvent.click(screen.getByTitle("Hide file tree"));
+
+		await waitFor(() => {
+			expect(screen.queryByText("Commit history")).toBeNull();
+		});
+
+		await fireEvent.click(screen.getByTitle("Refresh diff"));
+
+		await waitFor(() => {
+			expect(screen.getByText("No changes for current selection")).toBeTruthy();
+		});
+
+		await fireEvent.click(screen.getByTitle("Show file tree"));
+
+		await waitFor(() => {
+			expect(screen.getByText("Files")).toBeTruthy();
+			expect(screen.getByText("Commit history")).toBeTruthy();
+		});
+	});
 });
 
 describe("SelfReviewView — hide addressed comments", () => {
