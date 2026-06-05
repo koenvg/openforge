@@ -335,6 +335,18 @@ V1 capabilities should include:
 - `config`
 - `projectConfig`
 
+Runtime availability in the current contract:
+
+| Capability | Frontend runtime | Backend plugin-host runtime |
+| --- | --- | --- |
+| `commands`, `events`, `storage`, `context` | Supported | Supported |
+| `tasks`, `projects`, `fs`, `shell`, `notifications`, `attention`, `system.openUrl`, `config`, `projectConfig` | Supported through the host bridge when the capability is wired for the active app runtime | Supported through durable `openforge.*` host callbacks |
+| `views`, `taskPane`, `settings`, `navigation` | Supported in the renderer | Not exposed to backend plugins |
+| `backend.whenReady`, `backend.invoke` | Supported for calling the same plugin's backend methods | Not applicable |
+| `backend.registerMethod`, `background.register` | Not exposed to frontend plugins | Supported in the backend plugin-host |
+
+Unsupported or inactive runtime calls must fail with named capability errors rather than silently no-oping. Examples include `OpenForge host capability is unavailable: tasks.create` for a missing renderer host bridge, `OpenForge host capability is unavailable: openforge.tasks.create` for a missing backend host callback bridge, and `OpenForge frontend runtime API is unavailable for plugin acme.notes: tasks.create` when a render surface asks for props before the plugin's frontend runtime is active.
+
 Filesystem capability should be project-scoped as the primary interface, for example `openforge.fs.readFile({ projectId, path })`. Backend plugins may still use Node `fs` for trusted advanced operations or plugin-private files. `FileSystemAPI.readFile()` returns `FileContent`, not a raw string; plugin authors should follow the migration guidance in [`docs/plugin-sdk-file-api-migration.md`](../plugin-sdk-file-api-migration.md) when handling text, image, binary, document, and large-file metadata.
 
 Shell/terminal capability is included in v1, with explicit shell/session/index semantics. Avoid task-scoped ambiguity.
@@ -515,6 +527,8 @@ export default defineConfig({
 
 ### Frontend-only plugin template
 
+A frontend-only plugin can use renderer-owned UI plus host capabilities such as JSON storage, task creation, and notifications without shipping a backend entry.
+
 `src/frontend.ts`:
 
 ```ts
@@ -555,12 +569,28 @@ export default defineFrontendPlugin({
     }
     await api.notifications.notify({ title: 'Note saved' })
   }
+
+  async function scheduleFollowUp() {
+    if (!context.projectId) {
+      await api.notifications.notify({ title: 'Select a project before creating a follow-up task' })
+      return
+    }
+
+    const task = await api.tasks.create({
+      initialPrompt: draft || 'Review project notes',
+      projectId: context.projectId,
+      labelNames: ['scheduled']
+    })
+    await api.storage.task(task.id).set('source', { plugin: context.pluginId, kind: 'note-follow-up' })
+    await api.notifications.notify({ title: 'Follow-up task created', body: task.id })
+  }
 </script>
 
 <section>
   <h2>Notes</h2>
   <textarea bind:value={draft}></textarea>
   <button type="button" onclick={save}>Save</button>
+  <button type="button" onclick={scheduleFollowUp}>Create follow-up task</button>
 </section>
 ```
 
@@ -683,7 +713,7 @@ await openforge.commands.invokeGlobal('acme.notes.syncNow', { projectId })
 
 ### Task creation and implementation run examples
 
-Trusted plugins can create OpenForge tasks and start native implementation runs through the versioned `tasks` capability. This is the supported path for scheduler-style plugins; plugin code should not shell out to the OpenForge CLI or call Electron/preload APIs directly.
+Trusted plugins can create OpenForge tasks and start native implementation runs through the versioned `tasks` capability from both frontend plugins and backend plugin-host methods/background services. This is the supported path for scheduler-style plugins; plugin code should not shell out to the OpenForge CLI or call Electron/preload APIs directly. Frontend-only scheduler plugins can call the same task APIs from renderer-owned UI/timer code, while backend scheduler plugins use the backend host callback bridge for long-running or Node-dependent work.
 
 ```ts
 const task = await openforge.tasks.create({
@@ -699,7 +729,7 @@ const run = await openforge.tasks.startImplementation({
 
 `projectId` controls task ownership and is required for plugin-created tasks. Plugin-created tasks always enter the backlog; plugins may attach dependency task IDs and label names, and missing labels are created by the host. `startImplementation` starts a native OpenForge implementation run for the task and returns `{ taskId, sessionId, workspacePath }` once launch is accepted. The host resolves the task's project checkout, provider, agent, permission mode, and workspace settings from OpenForge project/task state; plugins cannot override those execution settings per call.
 
-Capability limits: backend plugins cannot create a task directly in `doing`/`done`, choose a provider, agent, permission mode, model, branch, or workspace path through `tasks.create` or `tasks.startImplementation`. Starting an implementation can fail when the task has unmet dependencies, already has an active agent session, is missing a project, its project checkout cannot be resolved, the PTY/provider runtime is unavailable, or the configured workspace cannot be prepared. `tasks.getWorkspace(taskId)` and `tasks.getLatestSession(taskId)` return `null` when no workspace/session has been recorded yet.
+Capability limits: plugins cannot create a task directly in `doing`/`done`, choose a provider, agent, permission mode, model, branch, or workspace path through `tasks.create` or `tasks.startImplementation`. Starting an implementation can fail when the task has unmet dependencies, already has an active agent session, is missing a project, its project checkout cannot be resolved, the PTY/provider runtime is unavailable, or the configured workspace cannot be prepared. `tasks.getWorkspace(taskId)` and `tasks.getLatestSession(taskId)` return `null` when no workspace/session has been recorded yet.
 
 ### Storage examples
 

@@ -257,6 +257,29 @@ describe('runtime contribution registry', () => {
     await expect(github.getFrontendApi().storage.project('project-2').get('repo')).resolves.toEqual({ owner: 'acme', name: 'other' })
   })
 
+  it('supports frontend-only plugins using storage, task creation, and notifications', async () => {
+    const createdTask = { id: 'T-scheduled', initial_prompt: 'Scheduled prompt', prompt: null, summary: null, status: 'backlog' as const, agent: null, permission_mode: null, depends_on: [], project_id: 'P-1', created_at: 3, updated_at: 3 }
+    const host = {
+      createTask: vi.fn(async () => createdTask),
+      notify: vi.fn(async () => undefined),
+    }
+    const registry = createRuntimeContributionRegistry({ pluginId: 'scheduler', projectId: 'P-1', host })
+
+    await registry.activateFrontend(defineFrontendPlugin({
+      async activate(openforge, context) {
+        await openforge.storage.project('P-1').set('scheduler', { enabled: true })
+        const task = await openforge.tasks.create({ initialPrompt: 'Scheduled prompt', projectId: 'P-1', labelNames: ['scheduled'] })
+        await openforge.storage.task(task.id).set('source', { plugin: context.pluginId })
+        await openforge.notifications.notify({ title: 'Scheduled task created', body: task.id })
+      },
+    }))
+
+    await expect(registry.getFrontendApi().storage.project('P-1').get('scheduler')).resolves.toEqual({ enabled: true })
+    await expect(registry.getFrontendApi().storage.task('T-scheduled').get('source')).resolves.toEqual({ plugin: 'scheduler' })
+    expect(host.createTask).toHaveBeenCalledWith({ initialPrompt: 'Scheduled prompt', projectId: 'P-1', labelNames: ['scheduled'] })
+    expect(host.notify).toHaveBeenCalledWith({ title: 'Scheduled task created', body: 'T-scheduled' })
+  })
+
   it('exposes typed core API wrappers through the configured host bridge', async () => {
     const createdTask = { id: 'T-2', initial_prompt: 'New prompt', prompt: null, summary: null, status: 'backlog' as const, agent: null, permission_mode: null, depends_on: ['T-1'], project_id: 'P-1', created_at: 3, updated_at: 3 }
     const host = {
@@ -311,6 +334,17 @@ describe('runtime contribution registry', () => {
     expect(host.openUrl).toHaveBeenCalledWith('https://example.com')
     expect(host.navigate).toHaveBeenCalledWith({ viewId: 'plugin:github:prs', projectId: 'P-1', taskId: 'T-1' })
     expect(host.setProjectConfig).toHaveBeenCalledWith('P-1', 'repo', 'openforge')
+  })
+
+  it('reports unavailable frontend host capabilities with capability names', async () => {
+    const api = createRuntimeContributionRegistry({ pluginId: 'scheduler', projectId: 'P-1' }).getFrontendApi()
+
+    await expect(api.tasks.create({ initialPrompt: 'Scheduled prompt', projectId: 'P-1' })).rejects.toThrow(
+      'OpenForge host capability is unavailable: tasks.create'
+    )
+    await expect(api.notifications.notify({ title: 'Ready' })).rejects.toThrow(
+      'OpenForge host capability is unavailable: notifications.notify'
+    )
   })
 
   it('exposes backend readiness and invocation through the configured host bridge', async () => {

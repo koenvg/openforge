@@ -727,7 +727,7 @@ export class PluginHostRuntime {
     const storage = state.storage
     const hostCallback = async <T>(method: string, params: Record<string, unknown> = {}): Promise<T> => {
       if (!this.hostCallbacks) {
-        throw new Error(`Host callback unavailable for ${method}`)
+        throw new Error(`OpenForge host capability is unavailable: ${method}`)
       }
       return await this.hostCallbacks({ method, params }) as T
     }
