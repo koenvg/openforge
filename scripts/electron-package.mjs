@@ -203,13 +203,16 @@ async function copyOpenForgeCliAssets(repoRoot, resourcesDir) {
   if (!(await pathExists(cliSourcePath))) return
 
   const skillSourcePath = join(cliSourceDir, 'openforge-skill.md')
+  const pluginDevSkillSourcePath = join(cliSourceDir, 'openforge-plugin-dev-skill.md')
   await assertExists(skillSourcePath, 'OpenForge CLI skill template')
+  await assertExists(pluginDevSkillSourcePath, 'OpenForge plugin dev skill template')
 
   const cliResourcesDir = join(resourcesDir, 'openforge-cli')
   await rm(cliResourcesDir, { recursive: true, force: true })
   await mkdir(cliResourcesDir, { recursive: true })
   await cp(cliSourcePath, join(cliResourcesDir, 'cli.js'))
   await cp(skillSourcePath, join(cliResourcesDir, 'openforge-skill.md'))
+  await cp(pluginDevSkillSourcePath, join(cliResourcesDir, 'openforge-plugin-dev-skill.md'))
 }
 
 async function copyBuiltinPluginRuntimeArtifacts(repoRoot, appResourcesPath) {
