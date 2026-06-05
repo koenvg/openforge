@@ -193,82 +193,77 @@
 
 <div class="flex flex-col w-full h-full overflow-hidden">
   <div class="flex flex-1 overflow-hidden">
-    <ResizablePanel storageKey="self-review-file-tree" defaultWidth={260} minWidth={160} maxWidth={500} side="left">
-          <div class="flex flex-col h-full bg-base-100 border-r border-base-300">
-            <div class="px-2 py-1.5 text-[0.65rem] uppercase tracking-wider font-semibold text-base-content/50 border-b border-base-300 bg-base-200">Files</div>
-            <div class="flex-1 overflow-hidden">
-              {#if fileTreeVisible}
-                <FileTree
-                  files={selfReviewDiffFiles}
-                  onSelectFile={handleFileSelect}
-                  {reviewedFileShas}
-                  getFileReviewIdentity={getTaskReviewFileIdentity}
-                />
-              {:else}
-                <div class="h-full flex flex-col items-center justify-center gap-2 text-center px-3 text-base-content/50">
-                  <div class="text-xs">File explorer hidden</div>
-                  <button class="btn btn-ghost btn-xs" onclick={() => { fileTreeVisible = true }}>Show files</button>
-                </div>
-              {/if}
-            </div>
-            <ResizableBottomPanel
-              storageKey="self-review-commit-history"
-              defaultHeight={160}
-              minHeight={110}
-              maxHeight={320}
-              fillParent={false}
-              panelTestId="self-review-commit-history-panel"
-              handleTestId="self-review-commit-history-handle"
-            >
-              <div class="h-full flex flex-col border-t border-base-300 bg-base-200/70">
-                <div class="px-2 py-1.5 text-[0.65rem] uppercase tracking-wider font-semibold text-base-content/50 border-b border-base-300 bg-base-200">Commit history</div>
-                <div class="px-2 py-1.5 border-b border-base-300 bg-base-100/50">
-                  {#if diffLoader.selectedCommitSha === null}
-                    <label class="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        class="checkbox checkbox-xs"
-                        checked={includeUncommitted}
-                        onchange={(e: Event) => {
-                          if (!(e.currentTarget instanceof HTMLInputElement)) return
-                          includeUncommitted = e.currentTarget.checked
-                          diffLoader.refresh()
-                        }}
-                      />
-                      <span class="text-base-content/70 text-[0.65rem]">Include uncommitted changes</span>
-                    </label>
-                  {:else}
-                    <button
-                      class="btn btn-ghost btn-xs h-6 min-h-0 px-2 text-[0.65rem] justify-start"
-                      onclick={() => handleCommitSelect(null)}
-                    >
-                      Show all changes
-                    </button>
-                  {/if}
-                </div>
-                <div class="flex-1 overflow-y-auto py-1">
+    {#if fileTreeVisible}
+      <ResizablePanel storageKey="self-review-file-tree" defaultWidth={260} minWidth={160} maxWidth={500} side="left">
+        <div class="flex flex-col h-full bg-base-100 border-r border-base-300">
+          <div class="px-2 py-1.5 text-[0.65rem] uppercase tracking-wider font-semibold text-base-content/50 border-b border-base-300 bg-base-200">Files</div>
+          <div class="flex-1 overflow-hidden">
+            <FileTree
+              files={selfReviewDiffFiles}
+              onSelectFile={handleFileSelect}
+              {reviewedFileShas}
+              getFileReviewIdentity={getTaskReviewFileIdentity}
+            />
+          </div>
+          <ResizableBottomPanel
+            storageKey="self-review-commit-history"
+            defaultHeight={160}
+            minHeight={110}
+            maxHeight={320}
+            fillParent={false}
+            panelTestId="self-review-commit-history-panel"
+            handleTestId="self-review-commit-history-handle"
+          >
+            <div class="h-full flex flex-col border-t border-base-300 bg-base-200/70">
+              <div class="px-2 py-1.5 text-[0.65rem] uppercase tracking-wider font-semibold text-base-content/50 border-b border-base-300 bg-base-200">Commit history</div>
+              <div class="px-2 py-1.5 border-b border-base-300 bg-base-100/50">
+                {#if diffLoader.selectedCommitSha === null}
+                  <label class="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      class="checkbox checkbox-xs"
+                      checked={includeUncommitted}
+                      onchange={(e: Event) => {
+                        if (!(e.currentTarget instanceof HTMLInputElement)) return
+                        includeUncommitted = e.currentTarget.checked
+                        diffLoader.refresh()
+                      }}
+                    />
+                    <span class="text-base-content/70 text-[0.65rem]">Include uncommitted changes</span>
+                  </label>
+                {:else}
                   <button
-                    class="flex flex-col w-full text-left px-3 py-2.5 gap-1 border-b border-base-200 last:border-b-0 hover:bg-base-300/50 transition-colors {diffLoader.selectedCommitSha === null ? 'bg-primary/5 text-primary' : 'text-base-content'}"
+                    class="btn btn-ghost btn-xs h-6 min-h-0 px-2 text-[0.65rem] justify-start"
                     onclick={() => handleCommitSelect(null)}
                   >
-                    <div class="text-xs font-semibold leading-snug">All changes</div>
-                    <div class="font-mono text-[10px] opacity-60">merge-base..HEAD</div>
+                    Show all changes
                   </button>
-                  {#each diffLoader.commits as commit (commit.sha)}
-                    <button
-                      class="flex flex-col w-full text-left px-3 py-2.5 gap-1 border-b border-base-200 last:border-b-0 hover:bg-base-300/50 transition-colors {diffLoader.selectedCommitSha === commit.sha ? 'bg-primary/5 text-primary' : 'text-base-content'}"
-                      onclick={() => handleCommitSelect(commit.sha)}
-                      title={commit.message}
-                    >
-                      <div class="font-mono text-[10px] font-medium opacity-70">{commit.short_sha}</div>
-                      <div class="text-xs font-medium truncate w-full leading-snug">{commit.message}</div>
-                    </button>
-                  {/each}
-                </div>
+                {/if}
               </div>
-            </ResizableBottomPanel>
-          </div>
-    </ResizablePanel>
+              <div class="flex-1 overflow-y-auto py-1">
+                <button
+                  class="flex flex-col w-full text-left px-3 py-2.5 gap-1 border-b border-base-200 last:border-b-0 hover:bg-base-300/50 transition-colors {diffLoader.selectedCommitSha === null ? 'bg-primary/5 text-primary' : 'text-base-content'}"
+                  onclick={() => handleCommitSelect(null)}
+                >
+                  <div class="text-xs font-semibold leading-snug">All changes</div>
+                  <div class="font-mono text-[10px] opacity-60">merge-base..HEAD</div>
+                </button>
+                {#each diffLoader.commits as commit (commit.sha)}
+                  <button
+                    class="flex flex-col w-full text-left px-3 py-2.5 gap-1 border-b border-base-200 last:border-b-0 hover:bg-base-300/50 transition-colors {diffLoader.selectedCommitSha === commit.sha ? 'bg-primary/5 text-primary' : 'text-base-content'}"
+                    onclick={() => handleCommitSelect(commit.sha)}
+                    title={commit.message}
+                  >
+                    <div class="font-mono text-[10px] font-medium opacity-70">{commit.short_sha}</div>
+                    <div class="text-xs font-medium truncate w-full leading-snug">{commit.message}</div>
+                  </button>
+                {/each}
+              </div>
+            </div>
+          </ResizableBottomPanel>
+        </div>
+      </ResizablePanel>
+    {/if}
     <div class="flex flex-col flex-1 overflow-hidden bg-base-100">
       {#if diffLoader.isLoading}
         <div class="flex flex-col items-center justify-center flex-1 gap-3 text-base-content/50 text-sm">
