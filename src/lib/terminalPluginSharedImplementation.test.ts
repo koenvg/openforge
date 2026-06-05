@@ -33,7 +33,7 @@ import {
   unregisterTerminalTaskPaneController as unregisterPluginController,
 } from '../../plugins/terminal/src/terminalTaskPaneController'
 
-describe('terminal plugin shared implementation', () => {
+describe('terminal plugin implementation boundary', () => {
   beforeEach(() => {
     appCommandHeld.set(false)
     pluginCommandHeld.set(false)
@@ -41,26 +41,26 @@ describe('terminal plugin shared implementation', () => {
     clearPluginControllers()
   })
 
-  it('uses the app terminal pool as the plugin terminal pool', () => {
-    expect(pluginAcquire).toBe(appAcquire)
-    expect(pluginRelease).toBe(appRelease)
-    expect(pluginFocusTerminal).toBe(appFocusTerminal)
-    expect(pluginGetTaskTerminalTabsSession).toBe(appGetTaskTerminalTabsSession)
-    expect(pluginUpdateTaskTerminalTabsSession).toBe(appUpdateTaskTerminalTabsSession)
+  it('uses a plugin-owned terminal pool instead of the private app terminal pool', () => {
+    expect(pluginAcquire).not.toBe(appAcquire)
+    expect(pluginRelease).not.toBe(appRelease)
+    expect(pluginFocusTerminal).not.toBe(appFocusTerminal)
+    expect(pluginGetTaskTerminalTabsSession).not.toBe(appGetTaskTerminalTabsSession)
+    expect(pluginUpdateTaskTerminalTabsSession).not.toBe(appUpdateTaskTerminalTabsSession)
   })
 
-  it('uses one command-held store and listener setup for app shell and terminal plugin', () => {
-    expect(pluginCommandHeld).toBe(appCommandHeld)
-    expect(pluginSetupCommandHeldListeners).toBe(appSetupCommandHeldListeners)
+  it('uses a plugin-owned command-held store and listener setup', () => {
+    expect(pluginCommandHeld).not.toBe(appCommandHeld)
+    expect(pluginSetupCommandHeldListeners).not.toBe(appSetupCommandHeldListeners)
 
     appCommandHeld.set(true)
-    expect(get(pluginCommandHeld)).toBe(true)
+    expect(get(pluginCommandHeld)).toBe(false)
 
-    pluginCommandHeld.set(false)
-    expect(get(appCommandHeld)).toBe(false)
+    pluginCommandHeld.set(true)
+    expect(get(appCommandHeld)).toBe(true)
   })
 
-  it('uses one task-pane controller registry for app shell and terminal plugin', async () => {
+  it('uses a plugin-owned task-pane controller registry', async () => {
     const controller: TerminalTaskPaneController = {
       addTab() {},
       async closeActiveTab() {},
@@ -69,12 +69,14 @@ describe('terminal plugin shared implementation', () => {
     }
 
     registerAppController('T-861', controller)
-    expect(getPluginController('T-861')).toBe(controller)
-
-    unregisterPluginController('T-861', controller)
-    expect(getAppController('T-861')).toBeUndefined()
+    expect(getPluginController('T-861')).toBeUndefined()
 
     registerPluginController('T-861', controller)
     expect(getAppController('T-861')).toBe(controller)
+    expect(getPluginController('T-861')).toBe(controller)
+
+    unregisterPluginController('T-861', controller)
+    expect(getAppController('T-861')).toBe(controller)
+    expect(getPluginController('T-861')).toBeUndefined()
   })
 })

@@ -14,7 +14,9 @@ const { mockTerminalTaskPane, mockTerminalProjectView, cleanupSideEffects } = vi
   mockTerminalProjectView: { name: 'TerminalProjectViewComponent' },
   cleanupSideEffects: {
     killPty: vi.fn(),
+    releaseAll: vi.fn(),
     releaseAllForTask: vi.fn(),
+    setupHostThemeSync: vi.fn(() => vi.fn()),
     clearTaskTerminalTabsSession: vi.fn(),
   },
 }))
@@ -29,12 +31,18 @@ vi.mock('./TerminalProjectView.svelte', () => ({
 
 vi.mock('./lib/ipc', () => ({
   killPty: cleanupSideEffects.killPty,
+  setTerminalOpenForgeApi: vi.fn(),
 }))
 
 vi.mock('./lib/terminalPool', () => ({
   clearTaskTerminalTabsSession: cleanupSideEffects.clearTaskTerminalTabsSession,
   getTaskTerminalTabsSession: vi.fn(() => ({ tabs: [] })),
+  releaseAll: cleanupSideEffects.releaseAll,
   releaseAllForTask: cleanupSideEffects.releaseAllForTask,
+}))
+
+vi.mock('./lib/theme', () => ({
+  setupHostThemeSync: cleanupSideEffects.setupHostThemeSync,
 }))
 
 function makeRuntimeHarness() {
@@ -49,6 +57,7 @@ function makeRuntimeHarness() {
 
 function expectNoProjectTerminalCleanup() {
   expect(cleanupSideEffects.killPty).not.toHaveBeenCalled()
+  expect(cleanupSideEffects.releaseAll).not.toHaveBeenCalled()
   expect(cleanupSideEffects.releaseAllForTask).not.toHaveBeenCalled()
   expect(cleanupSideEffects.clearTaskTerminalTabsSession).not.toHaveBeenCalled()
 }
@@ -56,7 +65,9 @@ function expectNoProjectTerminalCleanup() {
 describe('terminal plugin', () => {
   afterEach(() => {
     cleanupSideEffects.killPty.mockClear()
+    cleanupSideEffects.releaseAll.mockClear()
     cleanupSideEffects.releaseAllForTask.mockClear()
+    cleanupSideEffects.setupHostThemeSync.mockClear()
     cleanupSideEffects.clearTaskTerminalTabsSession.mockClear()
   })
 
@@ -96,7 +107,8 @@ describe('terminal plugin', () => {
       order: 10,
       component: mockTerminalTaskPane,
     }))
-    expect(subscriptions.add).toHaveBeenCalledTimes(2)
+    expect(cleanupSideEffects.setupHostThemeSync).toHaveBeenCalledTimes(1)
+    expect(subscriptions.add).toHaveBeenCalledTimes(3)
   })
 
   it('keeps previous project terminals alive when project navigation changes while the view is unmounted', async () => {
