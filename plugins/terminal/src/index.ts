@@ -1,9 +1,17 @@
 import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
 import TerminalTaskPane from './TerminalTaskPane.svelte'
 import TerminalProjectView from './TerminalProjectView.svelte'
+import { setTerminalOpenForgeApi } from './lib/ipc'
+import { releaseAll } from './lib/terminalPool'
 
 export default defineFrontendPlugin({
   activate(openforge, context) {
+    setTerminalOpenForgeApi(openforge)
+    context.subscriptions.add(() => {
+      releaseAll()
+      setTerminalOpenForgeApi(null)
+    })
+
     context.subscriptions.add(openforge.views.register({
       id: 'terminal',
       title: 'Terminal',
