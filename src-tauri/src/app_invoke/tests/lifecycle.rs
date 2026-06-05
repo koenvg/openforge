@@ -699,6 +699,98 @@ async fn finalize_agent_session_completes_successful_opencode_pty_run() {
 }
 
 #[tokio::test]
+async fn finalize_agent_session_completes_successful_codex_pty_run() {
+    let (state, path) = test_state("finalize_codex_success");
+    let mut events = state
+        .app_event_tx
+        .as_ref()
+        .expect("app event sender")
+        .subscribe();
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let task = db
+            .create_task("Codex task", "doing", None, None, None)
+            .expect("create task");
+        db.create_agent_session(
+            "session-codex",
+            &task.id,
+            None,
+            "implementing",
+            "running",
+            "codex",
+        )
+        .expect("create session");
+        db.set_agent_session_pty_instance_id("session-codex", 11)
+            .expect("store pty instance");
+        task.id
+    };
+
+    invoke_ok(
+        &state,
+        "finalize_agent_session",
+        json!({ "taskId": task_id, "success": true, "ptyInstanceId": 11 }),
+    )
+    .await;
+
+    let db = crate::db::acquire_db(&state.db);
+    assert_eq!(
+        db.get_agent_session("session-codex")
+            .expect("get codex")
+            .expect("codex exists")
+            .status,
+        "completed"
+    );
+    drop(db);
+    let event = events.try_recv().expect("status event should be emitted");
+    assert_eq!(event.event_name, "agent-status-changed");
+    assert_eq!(event.payload["task_id"], task_id);
+    assert_eq!(event.payload["status"], "completed");
+    assert_eq!(event.payload["provider"], "codex");
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn finalize_agent_session_interrupts_failed_codex_pty_run() {
+    let (state, path) = test_state("finalize_codex_failure");
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let task = db
+            .create_task("Codex task", "doing", None, None, None)
+            .expect("create task");
+        db.create_agent_session(
+            "session-codex-failed",
+            &task.id,
+            None,
+            "implementing",
+            "running",
+            "codex",
+        )
+        .expect("create session");
+        db.set_agent_session_pty_instance_id("session-codex-failed", 12)
+            .expect("store pty instance");
+        task.id
+    };
+
+    invoke_ok(
+        &state,
+        "finalize_agent_session",
+        json!({ "taskId": task_id, "success": false, "ptyInstanceId": 12 }),
+    )
+    .await;
+
+    let db = crate::db::acquire_db(&state.db);
+    let session = db
+        .get_agent_session("session-codex-failed")
+        .expect("get codex")
+        .expect("codex exists");
+    assert_eq!(session.status, "interrupted");
+    assert_eq!(session.error_message.as_deref(), Some("PTY process exited"));
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn finalize_agent_session_ignores_missing_pty_exit_instance() {
     let (state, path) = test_state("finalize_ignores_missing_pty_exit");
     let task_id = {
@@ -735,6 +827,39 @@ async fn finalize_agent_session_ignores_missing_pty_exit_instance() {
             .status,
         "running"
     );
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn abort_implementation_interrupts_codex_pty_session() {
+    let (state, path) = test_state("abort_codex_implementation");
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let task = db
+            .create_task("Codex task", "doing", None, None, None)
+            .expect("create task");
+        db.create_agent_session(
+            "session-codex-abort",
+            &task.id,
+            None,
+            "implementing",
+            "running",
+            "codex",
+        )
+        .expect("create session");
+        task.id
+    };
+
+    invoke_ok(&state, "abort_implementation", json!({ "taskId": task_id })).await;
+
+    let db = crate::db::acquire_db(&state.db);
+    let session = db
+        .get_agent_session("session-codex-abort")
+        .expect("get codex")
+        .expect("codex exists");
+    assert_eq!(session.status, "interrupted");
+    assert_eq!(session.error_message.as_deref(), Some("Aborted by user"));
 
     let _ = std::fs::remove_file(path);
 }
