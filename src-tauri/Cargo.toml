@@ -38,7 +38,7 @@ rand = "0.8"
 keyring = { version = "3", features = ["apple-native"] }
 
 [dev-dependencies]
-tower = { version = "0.4", features = ["util"] }
+tower = { version = "0.5", features = ["util"] }
 tempfile = "3"
 
 [features]
