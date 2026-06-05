@@ -16,6 +16,8 @@
     claudeAuthenticated: boolean
     piInstalled: boolean
     piVersion: string | null
+    codexInstalled: boolean
+    codexVersion: string | null
     onProjectNameChange: (value: string) => void
     onProjectPathChange: (value: string) => void
     onAiProviderChange: (value: string) => void
@@ -37,6 +39,8 @@
     claudeAuthenticated,
     piInstalled,
     piVersion,
+    codexInstalled,
+    codexVersion,
     onProjectNameChange,
     onProjectPathChange,
     onAiProviderChange,
@@ -91,6 +95,7 @@
           <option value="claude-code">Claude Code</option>
           <option value="opencode">OpenCode</option>
           <option value="pi">Pi Coding Agent</option>
+          <option value="codex">Codex</option>
         </select>
       </label>
 
@@ -127,9 +132,18 @@
             <span class="text-base-content/50">Pi not installed</span>
           {/if}
         </div>
+        <div class="flex items-center gap-2">
+          {#if codexInstalled}
+            <span class="text-success">✓</span>
+            <span>Codex {codexVersion || ''}</span>
+          {:else}
+            <span class="text-error">✗</span>
+            <span class="text-base-content/50">Codex not installed</span>
+          {/if}
+        </div>
       </div>
 
-      {#if (aiProvider === 'opencode' && !opencodeInstalled) || (aiProvider === 'claude-code' && !claudeInstalled) || (aiProvider === 'pi' && !piInstalled)}
+      {#if (aiProvider === 'opencode' && !opencodeInstalled) || (aiProvider === 'claude-code' && !claudeInstalled) || (aiProvider === 'pi' && !piInstalled) || (aiProvider === 'codex' && !codexInstalled)}
         <div class="alert alert-warning text-xs py-2">
           <span>Selected provider is not installed</span>
         </div>

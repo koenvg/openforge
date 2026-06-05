@@ -1,3 +1,4 @@
+pub mod codex;
 pub mod claude_code;
 pub mod opencode;
 pub mod pi;
@@ -8,6 +9,7 @@ use std::path::Path;
 
 use crate::db::AgentSessionRow;
 use claude_code::ClaudeCodeProvider;
+use codex::CodexProvider;
 use opencode::OpenCodeProvider;
 use pi::PiProvider;
 
@@ -82,6 +84,7 @@ impl ProviderStartContext {
 
 /// Unified provider enum. Add a new variant here when adding a new provider.
 pub enum Provider {
+    Codex(CodexProvider),
     ClaudeCode(ClaudeCodeProvider),
     OpenCode(OpenCodeProvider),
     Pi(PiProvider),
@@ -93,6 +96,7 @@ impl Provider {
     /// Returns `Err` if the name is unrecognised.
     pub fn from_name(name: &str, pty_mgr: crate::pty_manager::PtyManager) -> Result<Self, String> {
         match name {
+            "codex" => Ok(Provider::Codex(CodexProvider::new(pty_mgr))),
             "claude-code" => Ok(Provider::ClaudeCode(ClaudeCodeProvider::new(pty_mgr))),
             "opencode" => Ok(Provider::OpenCode(OpenCodeProvider::new(pty_mgr))),
             "pi" => Ok(Provider::Pi(PiProvider::new(pty_mgr))),
@@ -117,6 +121,18 @@ impl Provider {
         start_context: &ProviderStartContext,
     ) -> Result<ProviderSessionResult, ProviderError> {
         match self {
+            Provider::Codex(p) => {
+                p.start(
+                    task_id,
+                    worktree_path,
+                    prompt,
+                    agent,
+                    permission_mode,
+                    model,
+                    start_context,
+                )
+                .await
+            }
             Provider::ClaudeCode(p) => {
                 p.start(
                     task_id,
@@ -170,6 +186,19 @@ impl Provider {
         start_context: &ProviderStartContext,
     ) -> Result<ProviderSessionResult, ProviderError> {
         match self {
+            Provider::Codex(p) => {
+                p.resume(
+                    task_id,
+                    session,
+                    worktree_path,
+                    prompt,
+                    agent,
+                    permission_mode,
+                    model,
+                    start_context,
+                )
+                .await
+            }
             Provider::ClaudeCode(p) => {
                 p.resume(
                     task_id,
@@ -215,6 +244,7 @@ impl Provider {
     /// Abort a running session.
     pub async fn abort(&self, task_id: &str, session: &AgentSessionRow) -> Result<(), String> {
         match self {
+            Provider::Codex(p) => p.abort(task_id, session).await,
             Provider::ClaudeCode(p) => p.abort(task_id, session).await,
             Provider::OpenCode(p) => p.abort(task_id, session).await,
             Provider::Pi(p) => p.abort(task_id, session).await,
@@ -224,15 +254,17 @@ impl Provider {
     /// Clean up resources (called during shutdown or after the session ends).
     pub async fn cleanup(&self, task_id: &str) -> Result<(), String> {
         match self {
+            Provider::Codex(p) => p.cleanup(task_id).await,
             Provider::ClaudeCode(p) => p.cleanup(task_id).await,
             Provider::OpenCode(p) => p.cleanup(task_id).await,
             Provider::Pi(p) => p.cleanup(task_id).await,
         }
     }
 
-    /// Provider name used for DB storage (`"claude-code"` or `"opencode"`).
+    /// Provider name used for DB storage.
     pub fn provider_name(&self) -> &'static str {
         match self {
+            Provider::Codex(p) => p.provider_name(),
             Provider::ClaudeCode(p) => p.provider_name(),
             Provider::OpenCode(p) => p.provider_name(),
             Provider::Pi(p) => p.provider_name(),
@@ -242,6 +274,7 @@ impl Provider {
     /// Extract the provider-specific session ID from the DB row.
     pub fn provider_session_id(&self, session: &AgentSessionRow) -> Option<String> {
         match self {
+            Provider::Codex(p) => p.provider_session_id(session),
             Provider::ClaudeCode(p) => p.provider_session_id(session),
             Provider::OpenCode(p) => p.provider_session_id(session),
             Provider::Pi(p) => p.provider_session_id(session),
@@ -254,6 +287,7 @@ impl Provider {
         project_path: Option<&str>,
     ) -> Vec<crate::opencode_client::CommandInfo> {
         match self {
+            Provider::Codex(p) => p.list_commands(project_path),
             Provider::ClaudeCode(p) => p.list_commands(project_path),
             Provider::OpenCode(p) => p.list_commands(project_path),
             Provider::Pi(p) => p.list_commands(project_path),
@@ -266,6 +300,7 @@ impl Provider {
         project_path: Option<&str>,
     ) -> Vec<crate::opencode_client::AgentInfo> {
         match self {
+            Provider::Codex(p) => p.list_agents(project_path),
             Provider::ClaudeCode(p) => p.list_agents(project_path),
             Provider::OpenCode(p) => p.list_agents(project_path),
             Provider::Pi(p) => p.list_agents(project_path),
@@ -281,6 +316,7 @@ impl Provider {
 mod tests {
     use super::*;
     use crate::db::AgentSessionRow;
+    use crate::providers::codex::CodexProvider;
     use crate::providers::pi::PiProvider;
 
     fn make_session(
@@ -393,6 +429,23 @@ mod tests {
     }
 
     // ------------------------------------------------------------------
+    // CodexProvider tests
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_codex_provider_name() {
+        let provider = CodexProvider::new(crate::pty_manager::PtyManager::new());
+        assert_eq!(provider.provider_name(), "codex");
+    }
+
+    #[test]
+    fn test_codex_provider_session_id_none() {
+        let provider = CodexProvider::new(crate::pty_manager::PtyManager::new());
+        let session = make_session(None, None, None, "codex");
+        assert_eq!(provider.provider_session_id(&session), None);
+    }
+
+    // ------------------------------------------------------------------
     // Provider enum dispatch tests
     // ------------------------------------------------------------------
 
@@ -443,6 +496,19 @@ mod tests {
     }
 
     #[test]
+    fn test_provider_enum_codex_name() {
+        let p = Provider::Codex(CodexProvider::new(crate::pty_manager::PtyManager::new()));
+        assert_eq!(p.provider_name(), "codex");
+    }
+
+    #[test]
+    fn test_provider_enum_codex_session_id_none() {
+        let p = Provider::Codex(CodexProvider::new(crate::pty_manager::PtyManager::new()));
+        let session = make_session(None, None, None, "codex");
+        assert_eq!(p.provider_session_id(&session), None);
+    }
+
+    #[test]
     fn test_from_name_claude_code() {
         let result = Provider::from_name("claude-code", crate::pty_manager::PtyManager::new());
         assert!(result.is_ok());
@@ -461,6 +527,13 @@ mod tests {
         let result = Provider::from_name("pi", crate::pty_manager::PtyManager::new());
         assert!(result.is_ok());
         assert_eq!(result.unwrap().provider_name(), "pi");
+    }
+
+    #[test]
+    fn test_codex_provider_from_name() {
+        let result = Provider::from_name("codex", crate::pty_manager::PtyManager::new());
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().provider_name(), "codex");
     }
 
     #[test]

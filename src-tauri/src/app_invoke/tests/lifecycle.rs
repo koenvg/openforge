@@ -118,6 +118,7 @@ impl ProviderTestSandbox {
         let log_path = temp.path().join("provider.log");
         install_fake_provider(&bin_dir, "pi", &log_path);
         install_fake_provider(&bin_dir, "opencode", &log_path);
+        install_fake_provider(&bin_dir, "codex", &log_path);
         Self {
             _temp: temp,
             bin_dir,
@@ -397,6 +398,82 @@ async fn start_implementation_passes_task_agent_to_configured_opencode_provider(
     assert_eq!(session.provider, "opencode");
     assert_eq!(session.status, "running");
     assert!(session.pty_instance_id.is_some());
+    drop(db);
+
+    if let Some(pty_manager) = state.pty_manager.as_ref() {
+        let _ = pty_manager.kill_pty(&task_id).await;
+    }
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn start_implementation_starts_configured_codex_provider_through_app_invoke_boundary() {
+    let _env_lock = PROVIDER_PATH_ENV_LOCK.lock().await;
+    let sandbox = &*PROVIDER_TEST_SANDBOX;
+    sandbox.clear_log();
+    let (_temp, repo_dir) = provider_repo_dir();
+    let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
+    let (state, path) = test_state("app_invoke_start_codex_provider_boundary");
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let project = db
+            .create_project(
+                "Codex Provider Project",
+                repo_dir.to_str().expect("utf8 repo path"),
+            )
+            .expect("create project");
+        db.set_project_config(&project.id, "use_worktrees", "false")
+            .expect("disable worktrees");
+        db.set_project_config(&project.id, "ai_provider", "codex")
+            .expect("set provider");
+        db.create_task(
+            "Start through Codex provider",
+            "backlog",
+            Some(&project.id),
+            None,
+            None,
+        )
+        .expect("create task")
+        .id
+    };
+
+    let response = invoke_ok(
+        &state,
+        "start_implementation",
+        json!({ "taskId": task_id, "repoPath": repo_dir.to_string_lossy() }),
+    )
+    .await;
+
+    assert_eq!(response["task_id"], task_id);
+    assert_eq!(
+        response["workspace_path"],
+        repo_dir.to_string_lossy().as_ref()
+    );
+    assert_eq!(response["port"], 0);
+
+    let log =
+        wait_for_provider_log_containing(&sandbox.log_path, "Start through Codex provider").await;
+    assert!(log.contains("provider=codex"), "got provider log: {log}");
+    assert!(
+        log.contains("Start through Codex provider"),
+        "prompt should cross the provider boundary, got provider log: {log}"
+    );
+
+    let db = crate::db::acquire_db(&state.db);
+    let session = db
+        .get_latest_session_for_ticket(&task_id)
+        .expect("get latest session")
+        .expect("session should be recorded");
+    assert_eq!(session.provider, "codex");
+    assert_eq!(session.status, "running");
+    assert!(session.pty_instance_id.is_some());
+    let workspace = db
+        .get_task_workspace_for_task(&task_id)
+        .expect("get task workspace")
+        .expect("workspace should be recorded");
+    assert_eq!(workspace.provider_name, "codex");
+    assert_eq!(workspace.kind, "project_dir");
+    assert_eq!(workspace.status, "active");
     drop(db);
 
     if let Some(pty_manager) = state.pty_manager.as_ref() {

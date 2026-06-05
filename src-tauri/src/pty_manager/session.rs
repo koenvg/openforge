@@ -9,7 +9,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use super::commands::{build_claude_args, build_opencode_tui_args, build_pi_args, get_shell_path};
+use super::commands::{
+    build_claude_args, build_codex_args, build_opencode_tui_args, build_pi_args, get_shell_path,
+};
 use super::events::{
     spawn_batched_pty_event_emitter, spawn_pty_output_reader, PtyEventEmitterConfig, PtyExitAction,
     RingBuffer, SharedRingBuffer, CLAUDE_BUFFER_CAPACITY,
@@ -185,6 +187,56 @@ impl AgentPtyProviderAdapter for OpenCodePtyAdapter {
         crate::opencode_plugin::ensure_opencode_plugin_installed()
             .map(|_| ())
             .map_err(|e| PtyError::SpawnFailed(format!("Failed to install OpenCode plugin: {}", e)))
+    }
+
+    fn extra_env(&self, task_id: &str, instance_id: u64) -> HashMap<String, String> {
+        openforge_agent_env(task_id, instance_id)
+    }
+
+    fn pid_file_name(&self, task_id: &str) -> String {
+        format!("{}-pty.pid", task_id)
+    }
+
+    fn track_last_output(&self) -> bool {
+        true
+    }
+}
+
+struct CodexPtyAdapter {
+    prompt: String,
+    resume_session_id: Option<String>,
+    continue_session: bool,
+}
+
+impl CodexPtyAdapter {
+    fn new(prompt: &str, resume_session_id: Option<&str>, continue_session: bool) -> Self {
+        Self {
+            prompt: prompt.to_string(),
+            resume_session_id: resume_session_id.map(str::to_string),
+            continue_session,
+        }
+    }
+}
+
+impl AgentPtyProviderAdapter for CodexPtyAdapter {
+    fn label(&self) -> &'static str {
+        "Codex"
+    }
+
+    fn command_name(&self) -> &'static str {
+        "codex"
+    }
+
+    fn command_args(&self) -> Vec<String> {
+        build_codex_args(
+            &self.prompt,
+            self.resume_session_id.as_deref(),
+            self.continue_session,
+        )
+    }
+
+    fn prepare(&mut self, _cwd: &Path) -> Result<(), PtyError> {
+        Ok(())
     }
 
     fn extra_env(&self, task_id: &str, instance_id: u64) -> HashMap<String, String> {
@@ -376,6 +428,31 @@ impl PtyManager {
                 agent,
                 model_name.as_deref(),
             ),
+            task_id,
+            cwd,
+            cols,
+            rows,
+            app_handle,
+            app_event_tx,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn spawn_codex_pty(
+        &self,
+        task_id: &str,
+        cwd: &Path,
+        prompt: &str,
+        resume_session_id: Option<&str>,
+        continue_session: bool,
+        cols: u16,
+        rows: u16,
+        app_handle: Option<crate::backend_runtime::AppHandle>,
+        app_event_tx: Option<AppEventSender>,
+    ) -> Result<u64, PtyError> {
+        self.spawn_agent_pty(
+            CodexPtyAdapter::new(prompt, resume_session_id, continue_session),
             task_id,
             cwd,
             cols,

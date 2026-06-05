@@ -241,6 +241,14 @@ pub fn provider_skill_install_targets(
                 .join("SKILL.md"),
         },
         ProviderSkillInstallTarget {
+            provider: "codex",
+            path: home_dir
+                .join(".codex")
+                .join("skills")
+                .join("openforge")
+                .join("SKILL.md"),
+        },
+        ProviderSkillInstallTarget {
             provider: "opencode",
             path: config_dir
                 .join("opencode")
@@ -352,6 +360,7 @@ mod tests {
         assert!(paths.contains(&home.join(".agents/skills/openforge/SKILL.md").as_path()));
         assert!(paths.contains(&home.join(".claude/skills/openforge/SKILL.md").as_path()));
         assert!(paths.contains(&home.join(".pi/agent/skills/openforge/SKILL.md").as_path()));
+        assert!(paths.contains(&home.join(".codex/skills/openforge/SKILL.md").as_path()));
         assert!(paths.contains(&config.join("opencode/skills/openforge/SKILL.md").as_path()));
     }
 
@@ -363,7 +372,7 @@ mod tests {
 
         let targets = write_provider_skill_files(&home, &config).expect("write provider skills");
 
-        assert_eq!(targets.len(), 4);
+        assert_eq!(targets.len(), 5);
         for target in targets {
             let content = std::fs::read_to_string(&target.path).unwrap();
             assert!(content.contains("name: openforge"));

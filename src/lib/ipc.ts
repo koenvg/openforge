@@ -167,6 +167,10 @@ export async function checkPiInstalled(): Promise<{ installed: boolean; path: st
   return invoke("check_pi_installed");
 }
 
+export async function checkCodexInstalled(): Promise<{ installed: boolean; path: string | null; version: string | null }> {
+  return invoke("check_codex_installed");
+}
+
 export async function checkClaudeInstalled(): Promise<{ installed: boolean; path: string | null; version: string | null; authenticated: boolean }> {
   return invoke<{ installed: boolean; path: string | null; version: string | null; authenticated: boolean }>("check_claude_installed");
 }

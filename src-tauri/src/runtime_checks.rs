@@ -18,6 +18,13 @@ pub struct ClaudeInstallStatus {
     pub authenticated: bool,
 }
 
+#[derive(Serialize)]
+pub struct CodexInstallStatus {
+    pub installed: bool,
+    pub path: Option<String>,
+    pub version: Option<String>,
+}
+
 #[derive(Serialize, Clone, Debug)]
 pub struct PiInstallStatus {
     pub installed: bool,
@@ -43,6 +50,16 @@ impl From<VersionedExecutableInstallStatus> for OpenCodeInstallStatus {
 }
 
 impl From<VersionedExecutableInstallStatus> for PiInstallStatus {
+    fn from(status: VersionedExecutableInstallStatus) -> Self {
+        Self {
+            installed: status.installed,
+            path: status.path,
+            version: status.version,
+        }
+    }
+}
+
+impl From<VersionedExecutableInstallStatus> for CodexInstallStatus {
     fn from(status: VersionedExecutableInstallStatus) -> Self {
         Self {
             installed: status.installed,
@@ -147,6 +164,14 @@ fn check_pi_installed_with_path(path: &str) -> PiInstallStatus {
     check_versioned_executable_installed("pi", path).into()
 }
 
+pub async fn check_codex_installed() -> Result<CodexInstallStatus, String> {
+    Ok(check_codex_installed_with_path(&user_tool_path()))
+}
+
+fn check_codex_installed_with_path(path: &str) -> CodexInstallStatus {
+    check_versioned_executable_installed("codex", path).into()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -209,6 +234,11 @@ mod tests {
         assert!(pi_status.installed);
         assert_eq!(pi_status.path.as_deref(), Some("/usr/local/bin/tool"));
         assert_eq!(pi_status.version.as_deref(), Some("tool 1.2.3"));
+
+        let codex_status = CodexInstallStatus::from(shared_status.clone());
+        assert!(codex_status.installed);
+        assert_eq!(codex_status.path.as_deref(), Some("/usr/local/bin/tool"));
+        assert_eq!(codex_status.version.as_deref(), Some("tool 1.2.3"));
 
         let claude_status = ClaudeInstallStatus::from_versioned_install(shared_status, true);
         assert!(claude_status.installed);
@@ -308,5 +338,30 @@ mod tests {
             Some(executable.to_string_lossy().as_ref())
         );
         assert_eq!(status.version.as_deref(), Some("pi version 3.4.5"));
+    }
+
+    #[test]
+    fn check_codex_installed_with_path_finds_tool_outside_process_path() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let executable = temp_dir.path().join("codex");
+        write_executable(&executable, "#!/bin/sh\nprintf 'codex-cli 0.137.0\\n'\n");
+
+        let status = check_codex_installed_with_path(&temp_dir.path().to_string_lossy());
+
+        assert!(status.installed);
+        assert_eq!(
+            status.path.as_deref(),
+            Some(executable.to_string_lossy().as_ref())
+        );
+        assert_eq!(status.version.as_deref(), Some("codex-cli 0.137.0"));
+    }
+
+    #[test]
+    fn check_codex_installed_with_path_reports_missing_when_not_on_effective_path() {
+        let status = check_codex_installed_with_path("/definitely/missing");
+
+        assert!(!status.installed);
+        assert_eq!(status.path, None);
+        assert_eq!(status.version, None);
     }
 }

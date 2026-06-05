@@ -6,6 +6,7 @@ describe('getAgentResumeCommand', () => {
     expect(getAgentResumeCommand('opencode', 'oc-sess-1')).toBe('opencode --session oc-sess-1')
     expect(getAgentResumeCommand('claude-code', 'claude-sess-1')).toBe('claude --resume claude-sess-1')
     expect(getAgentResumeCommand('pi', 'pi-sess-1')).toBe('pi --session pi-sess-1')
+    expect(getAgentResumeCommand('codex', 'codex-sess-1')).toBe('codex resume codex-sess-1')
   })
 
   it('returns null when no provider session id is available', () => {

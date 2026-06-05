@@ -2,7 +2,8 @@ use crate::command_discovery::search_project_files;
 use crate::db;
 use crate::opencode_client::{AgentInfo, CommandInfo, ProviderModelInfo};
 use crate::providers::{
-    claude_code::ClaudeCodeProvider, opencode::OpenCodeProvider, pi::PiProvider,
+    claude_code::ClaudeCodeProvider, codex::CodexProvider, opencode::OpenCodeProvider,
+    pi::PiProvider,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,6 +44,9 @@ pub(crate) fn provider_commands(
         "pi" => {
             Some(PiProvider::new(crate::pty_manager::PtyManager::new()).list_commands(project_path))
         }
+        "codex" => Some(
+            CodexProvider::new(crate::pty_manager::PtyManager::new()).list_commands(project_path),
+        ),
         "claude-code" => Some(
             ClaudeCodeProvider::new(crate::pty_manager::PtyManager::new())
                 .list_commands(project_path),
@@ -63,6 +67,9 @@ pub(crate) fn provider_agents(
         "pi" => {
             Some(PiProvider::new(crate::pty_manager::PtyManager::new()).list_agents(project_path))
         }
+        "codex" => Some(
+            CodexProvider::new(crate::pty_manager::PtyManager::new()).list_agents(project_path),
+        ),
         "claude-code" => Some(
             ClaudeCodeProvider::new(crate::pty_manager::PtyManager::new())
                 .list_agents(project_path),
@@ -92,7 +99,10 @@ pub(crate) async fn search_runtime_files(
     query: &str,
 ) -> Result<Vec<String>, String> {
     let _ = project_id;
-    if matches!(context.provider.as_str(), "claude-code" | "pi" | "opencode") {
+    if matches!(
+        context.provider.as_str(),
+        "claude-code" | "pi" | "opencode" | "codex"
+    ) {
         return Ok(context
             .project_path
             .as_deref()
@@ -200,7 +210,7 @@ pub(crate) fn get_task_workspace(
 
 pub(crate) fn app_invoke_abort_session_policy(provider: &str) -> AbortSessionPolicy {
     AbortSessionPolicy {
-        session_status: if matches!(provider, "claude-code" | "pi" | "opencode") {
+        session_status: if matches!(provider, "claude-code" | "pi" | "opencode" | "codex") {
             "interrupted"
         } else {
             "failed"

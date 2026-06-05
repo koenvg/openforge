@@ -28,6 +28,7 @@ async fn accepts_remaining_electron_cutover_ipc_commands() {
     let requests = [
         ("check_opencode_installed", serde_json::Value::Null),
         ("check_pi_installed", serde_json::Value::Null),
+        ("check_codex_installed", serde_json::Value::Null),
         ("check_claude_installed", serde_json::Value::Null),
         ("get_worktree_for_task", json!({ "taskId": task_id })),
         (

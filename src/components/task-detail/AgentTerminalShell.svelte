@@ -26,13 +26,14 @@
     taskId: string
     runningText: string
     logPrefix: string
-    sessionIdKey: ProviderSessionIdKey
+    sessionIdKey: ProviderSessionIdKey | null
     stageLabels: AgentStageLabels
     isStarting?: boolean
     rootTestId?: string | null
     stageLabelPrefix?: string
     uppercaseSessionStatus?: boolean
     sessionStatusBadgeVariant?: AgentSessionStatusBadgeVariant
+    resumeCommandProvider?: AgentResumeCommandProvider | null
   }
 
   let {
@@ -46,6 +47,7 @@
     stageLabelPrefix = '// ',
     uppercaseSessionStatus = true,
     sessionStatusBadgeVariant = 'soft',
+    resumeCommandProvider = null,
   }: Props = $props()
 
   let terminalEl: HTMLDivElement
@@ -57,15 +59,16 @@
   let destroyed = false
 
   let session = $derived($activeSessions.get(taskId) || null)
-  let providerSessionId = $derived(session ? session[sessionIdKey] : null)
-  let resumeCommandProvider: AgentResumeCommandProvider = $derived(
-    sessionIdKey === 'opencode_session_id'
-      ? 'opencode'
-      : sessionIdKey === 'claude_session_id'
-        ? 'claude-code'
-        : 'pi'
+  let providerSessionId = $derived(session && sessionIdKey ? session[sessionIdKey] : null)
+  let resolvedResumeCommandProvider: AgentResumeCommandProvider = $derived(
+    resumeCommandProvider
+      ?? (sessionIdKey === 'opencode_session_id'
+        ? 'opencode'
+        : sessionIdKey === 'claude_session_id'
+          ? 'claude-code'
+          : 'pi')
   )
-  let resumeCommand = $derived(getAgentResumeCommand(resumeCommandProvider, providerSessionId))
+  let resumeCommand = $derived(getAgentResumeCommand(resolvedResumeCommandProvider, providerSessionId))
   let checkpointQuestion = $derived(
     sessionIdKey === 'opencode_session_id' && session?.status === 'paused'
       ? parseCheckpointQuestion(session.checkpoint_data)

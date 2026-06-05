@@ -80,6 +80,7 @@ export const ipcCommandContracts = [
   { functionName: 'mergePullRequest', ipcCommand: 'merge_pull_request', payloadKeys: ['owner', 'repo', 'prNumber'], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'checkOpenCodeInstalled', ipcCommand: 'check_opencode_installed', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'checkPiInstalled', ipcCommand: 'check_pi_installed', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
+  { functionName: 'checkCodexInstalled', ipcCommand: 'check_codex_installed', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'checkClaudeInstalled', ipcCommand: 'check_claude_installed', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'getConfig', ipcCommand: 'get_config', payloadKeys: ['key'], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'setConfig', ipcCommand: 'set_config', payloadKeys: ['key', 'value'], targetOwner: 'rust-sidecar', domain: 'config' },

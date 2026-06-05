@@ -214,6 +214,33 @@ describe('AgentPanel (router)', () => {
     expect(screen.getByText('pi --session pi-sess-1')).toBeTruthy()
   })
 
+  it('routes codex provider sessions through the shared terminal shell', () => {
+    const session: AgentSession = {
+      id: 'ses-1',
+      ticket_id: 'T-1',
+      opencode_session_id: 'codex-sess-1',
+      stage: 'implement',
+      status: 'running',
+      checkpoint_data: null,
+      pty_instance_id: null,
+      error_message: null,
+      created_at: 1000,
+      updated_at: 2000,
+      provider: 'codex',
+      claude_session_id: null,
+      pi_session_id: null,
+    }
+
+    const sessions = new Map<string, AgentSession>()
+    sessions.set('T-1', session)
+    activeSessions.set(sessions)
+
+    render(AgentPanel, { props: { taskId: 'T-1' } })
+    expect(screen.getByTestId('codex-agent-panel')).toBeTruthy()
+    expect(screen.getByText('Codex agent running...')).toBeTruthy()
+    expect(screen.queryByText('codex resume codex-sess-1')).toBeNull()
+  })
+
 })
 
 describe('AgentPanel starting animation', () => {

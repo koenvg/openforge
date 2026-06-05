@@ -310,7 +310,7 @@ pub(crate) async fn resume_task_sessions(
 
                 // Mark provider sessions as interrupted on failure for providers that do not
                 // have an external status source to reconcile against after startup.
-                if matches!(provider_name, "claude-code" | "pi" | "opencode") {
+                if matches!(provider_name, "claude-code" | "pi" | "opencode" | "codex") {
                     if let Some(ref session) = latest_session {
                         let db = app.state::<Arc<Mutex<db::Database>>>();
                         match db.lock() {
@@ -420,7 +420,7 @@ pub(crate) fn restore_resumed_session_state(
 
         let persisted_status = if matches!(session.status.as_str(), "interrupted" | "running") {
             Some("running")
-        } else if matches!(provider_name, "pi" | "opencode")
+        } else if matches!(provider_name, "pi" | "opencode" | "codex")
             && pty_instance_id.is_some()
             && matches!(session.status.as_str(), "completed" | "paused")
         {

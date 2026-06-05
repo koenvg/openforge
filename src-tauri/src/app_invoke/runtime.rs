@@ -143,6 +143,11 @@ pub(super) async fn handle_app_runtime_command(
                 .await
                 .map_err(string_error)?,
         )?,
+        "check_codex_installed" => json_value(
+            crate::runtime_checks::check_codex_installed()
+                .await
+                .map_err(string_error)?,
+        )?,
         "check_claude_installed" => json_value(
             crate::runtime_checks::check_claude_installed()
                 .await

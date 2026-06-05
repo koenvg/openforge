@@ -20,6 +20,8 @@ function defaultProps(overrides: Record<string, unknown> = {}) {
     claudeAuthenticated: true,
     piInstalled: false,
     piVersion: null,
+    codexInstalled: false,
+    codexVersion: null,
     onProjectNameChange: vi.fn(),
     onProjectPathChange: vi.fn(),
     onAiProviderChange: vi.fn(),
@@ -100,6 +102,7 @@ describe('SettingsGeneralCard', () => {
       expect(options).toContain('claude-code')
       expect(options).toContain('opencode')
       expect(options).toContain('pi')
+      expect(options).toContain('codex')
     })
 
     it('renders Pi installed status', () => {
@@ -121,6 +124,30 @@ describe('SettingsGeneralCard', () => {
     it('renders warning when selected provider is Pi and not installed', () => {
       render(SettingsGeneralCard, {
         props: defaultProps({ aiProvider: 'pi', piInstalled: false }),
+      })
+
+      expect(screen.getByText('Selected provider is not installed')).toBeTruthy()
+    })
+
+    it('renders Codex installed status', () => {
+      render(SettingsGeneralCard, {
+        props: defaultProps({ codexInstalled: true, codexVersion: 'codex-cli 0.137.0' }),
+      })
+
+      expect(screen.getByText('Codex codex-cli 0.137.0')).toBeTruthy()
+    })
+
+    it('renders Codex not installed status', () => {
+      render(SettingsGeneralCard, {
+        props: defaultProps({ codexInstalled: false, codexVersion: null }),
+      })
+
+      expect(screen.getByText('Codex not installed')).toBeTruthy()
+    })
+
+    it('renders warning when selected provider is Codex and not installed', () => {
+      render(SettingsGeneralCard, {
+        props: defaultProps({ aiProvider: 'codex', codexInstalled: false }),
       })
 
       expect(screen.getByText('Selected provider is not installed')).toBeTruthy()
