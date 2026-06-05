@@ -1,6 +1,5 @@
 import type { ITheme } from '@xterm/xterm'
 import { writable } from 'svelte/store'
-import { getConfig, setConfig } from './ipc'
 
 export type ThemeMode = 'light' | 'dark'
 
@@ -11,34 +10,32 @@ const THEME_NAMES: Record<ThemeMode, string> = {
   dark: 'openforge-dark',
 }
 
-/**
- * Apply a theme mode: sets the data-theme attribute on <html>,
- * updates the reactive store, and persists the preference.
- */
-export function applyTheme(mode: ThemeMode): void {
-  document.documentElement.setAttribute('data-theme', THEME_NAMES[mode])
-  themeMode.set(mode)
-  setConfig('theme', mode).catch((e) =>
-    console.error('Failed to persist theme:', e)
-  )
+function themeModeFromDocumentTheme(themeName: string | null): ThemeMode {
+  return themeName === THEME_NAMES.dark ? 'dark' : 'light'
 }
 
-/**
- * Load stored theme preference from backend config and apply it.
- * Falls back to light mode if no preference is stored or on error.
- */
-export async function initTheme(): Promise<void> {
-  let mode: ThemeMode = 'light'
-  try {
-    const stored = await getConfig('theme')
-    if (stored === 'dark') {
-      mode = 'dark'
-    }
-  } catch {
-    // fallthrough: use default light mode
+export function syncThemeModeWithDocument(): void {
+  if (typeof document === 'undefined') return
+
+  themeMode.set(themeModeFromDocumentTheme(document.documentElement.getAttribute('data-theme')))
+}
+
+export function setupHostThemeSync(): () => void {
+  syncThemeModeWithDocument()
+
+  if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') {
+    return () => undefined
   }
-  document.documentElement.setAttribute('data-theme', THEME_NAMES[mode])
-  themeMode.set(mode)
+
+  const observer = new MutationObserver(() => {
+    syncThemeModeWithDocument()
+  })
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme'],
+  })
+
+  return () => observer.disconnect()
 }
 
 type TerminalThemeKey =
