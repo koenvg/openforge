@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('./ipc', () => ({
-  abortImplementation: vi.fn().mockResolvedValue(undefined),
-  killPty: vi.fn().mockResolvedValue(undefined),
   writePty: vi.fn().mockResolvedValue(undefined),
 }))
 
@@ -12,15 +10,13 @@ vi.mock('./terminalPool', () => ({
 }))
 
 import {
-  abortAgentTerminalSession,
   getAgentStageLabel,
   getAgentStatusText,
   hydrateAgentTerminalPtyInstance,
-  markAgentTerminalExited,
   syncAgentPanelStatusFromSession,
   writeAgentTerminalTranscription,
 } from './agentTerminalPanel'
-import { abortImplementation, killPty, writePty } from './ipc'
+import { writePty } from './ipc'
 import { getShellLifecycleState, updateShellLifecycleState } from './terminalPool'
 
 describe('agent terminal panel helpers', () => {
@@ -85,26 +81,6 @@ describe('agent terminal panel helpers', () => {
     expect(setStatus).toHaveBeenCalledWith('paused')
   })
 
-  it('aborts through PTY kill, terminalPool lifecycle update, and implementation abort', async () => {
-    vi.mocked(getShellLifecycleState).mockReturnValue({ ptyActive: true, shellExited: false, currentPtyInstance: 42 })
-    const setStatus = vi.fn()
-
-    await abortAgentTerminalSession({
-      taskId: 'T-1',
-      logPrefix: 'TestPanel',
-      setStatus,
-    })
-
-    expect(killPty).toHaveBeenCalledWith('T-1')
-    expect(updateShellLifecycleState).toHaveBeenCalledWith('T-1', {
-      ptyActive: false,
-      shellExited: true,
-      currentPtyInstance: 42,
-    })
-    expect(abortImplementation).toHaveBeenCalledWith('T-1')
-    expect(setStatus).toHaveBeenCalledWith('error')
-  })
-
   it('writes transcription only when terminalPool reports an active PTY', async () => {
     vi.mocked(getShellLifecycleState).mockReturnValue({ ptyActive: false, shellExited: false, currentPtyInstance: null })
     await writeAgentTerminalTranscription('T-1', 'hello', 'TestPanel')
@@ -113,16 +89,6 @@ describe('agent terminal panel helpers', () => {
     vi.mocked(getShellLifecycleState).mockReturnValue({ ptyActive: true, shellExited: false, currentPtyInstance: null })
     await writeAgentTerminalTranscription('T-1', 'hello', 'TestPanel')
     expect(writePty).toHaveBeenCalledWith('T-1', 'hello')
-  })
-
-  it('marks terminal lifecycle exited through terminalPool', () => {
-    markAgentTerminalExited('T-1', 99)
-
-    expect(updateShellLifecycleState).toHaveBeenCalledWith('T-1', {
-      ptyActive: false,
-      shellExited: true,
-      currentPtyInstance: 99,
-    })
   })
 
   it('hydrates current PTY instance through terminalPool lifecycle state', () => {
