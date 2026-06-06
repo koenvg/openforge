@@ -281,6 +281,7 @@ describe('Electron macOS packaging helpers', () => {
     await mkdir(join(root, 'src-tauri/src/openforge-cli'), { recursive: true })
     await writeFile(join(root, 'src-tauri/src/openforge-cli/cli.js'), '#!/usr/bin/env node\nconsole.log("openforge cli")\n')
     await writeFile(join(root, 'src-tauri/src/openforge-cli/openforge-skill.md'), 'openforge skill docs\n')
+    await writeFile(join(root, 'src-tauri/src/openforge-cli/openforge-plugin-dev-skill.md'), 'openforge plugin dev skill docs\n')
     const builtInPluginCatalog = [
       { id: 'com.openforge.file-viewer', directoryName: 'file-viewer' },
       { id: 'com.openforge.github-sync', directoryName: 'github-sync' },
@@ -314,6 +315,7 @@ describe('Electron macOS packaging helpers', () => {
     await expect(readFile(join(output, 'Contents/MacOS/plugin-host/index.js'), 'utf8')).resolves.toContain('bundled backend plugin host')
     await expect(readFile(join(output, 'Contents/Resources/openforge-cli/cli.js'), 'utf8')).resolves.toContain('openforge cli')
     await expect(readFile(join(output, 'Contents/Resources/openforge-cli/openforge-skill.md'), 'utf8')).resolves.toContain('openforge skill docs')
+    await expect(readFile(join(output, 'Contents/Resources/openforge-cli/openforge-plugin-dev-skill.md'), 'utf8')).resolves.toContain('openforge plugin dev skill docs')
     await expect(readlink(join(output, 'Contents/Frameworks/Electron Framework.framework/Versions/Current'))).resolves.toBe('A')
     await expect(readlink(join(output, 'Contents/Frameworks/Electron Framework.framework/Resources'))).resolves.toBe('Versions/Current/Resources')
     await expect(readFile(join(output, 'Contents/Resources/app/package.json'), 'utf8').then(JSON.parse)).resolves.toMatchObject({
