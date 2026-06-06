@@ -6,7 +6,6 @@
   import { listenToAgentStatusChanged, type AgentPanelStatus } from '../../lib/agentPanelSessionSync'
   import { acquire, attach, detach, isValidTerminalDimensions, type PoolEntry } from '../../lib/terminalPool'
   import {
-    abortAgentTerminalSession,
     getAgentSessionStatusBadgeClass,
     getAgentStageLabel,
     getAgentStatusText,
@@ -143,14 +142,6 @@
     }
   })
 
-  async function handleAbort() {
-    await abortAgentTerminalSession({
-      taskId,
-      logPrefix,
-      setStatus: (nextStatus) => { status = nextStatus },
-    })
-  }
-
   function handleTranscription(text: string) {
     void writeAgentTerminalTranscription(taskId, text, logPrefix)
   }
@@ -195,11 +186,6 @@
     </div>
     <div class="flex items-center gap-3">
       <VoiceInput onTranscription={handleTranscription} listenToHotkey />
-      {#if status === 'running'}
-        <button class="btn btn-outline btn-error btn-sm" onclick={handleAbort}>
-          Abort
-        </button>
-      {/if}
     </div>
   </div>
 

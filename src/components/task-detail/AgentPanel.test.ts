@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/svelte'
+import { render, screen } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { writable } from 'svelte/store'
 import type { AgentSession } from '../../lib/types'
@@ -35,12 +35,10 @@ vi.mock('../../lib/stores', () => ({
 }))
 
 vi.mock('../../lib/ipc', () => ({
-  abortImplementation: vi.fn().mockResolvedValue(undefined),
   getLatestSession: vi.fn().mockResolvedValue(null),
   getWorktreeForTask: vi.fn().mockResolvedValue(null),
   writePty: vi.fn().mockResolvedValue(undefined),
   resizePty: vi.fn().mockResolvedValue(undefined),
-  killPty: vi.fn().mockResolvedValue(undefined),
   transcribeAudio: vi.fn(),
   getWhisperModelStatus: vi.fn(),
   downloadWhisperModel: vi.fn(),
@@ -103,8 +101,6 @@ vi.mock('../../lib/terminalPool', () => ({
 
 import AgentPanel from './AgentPanel.svelte'
 import { activeSessions } from '../../lib/stores'
-import { killPty } from '../../lib/ipc'
-import { updateShellLifecycleState } from '../../lib/terminalPool'
 
 describe('AgentPanel (router)', () => {
   beforeEach(() => {
@@ -443,10 +439,7 @@ describe('OpenCode shared shell (via router)', () => {
     })
   })
 
-  it('updates lifecycle state through terminalPool when aborting', async () => {
-    mockShellLifecycleState.ptyActive = true
-    mockShellLifecycleState.currentPtyInstance = 42
-
+  it('does not expose an Abort action for a running agent session', async () => {
     const session: AgentSession = {
       id: 'ses-1',
       ticket_id: 'T-1',
@@ -460,22 +453,17 @@ describe('OpenCode shared shell (via router)', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
-    pi_session_id: null,
+      pi_session_id: null,
     }
 
     activeSessions.set(new Map([['T-1', session]]))
 
     render(AgentPanel, { props: { taskId: 'T-1' } })
 
-    const abortButton = await screen.findByRole('button', { name: 'Abort' })
-    await fireEvent.click(abortButton)
-
-    expect(killPty).toHaveBeenCalledWith('T-1')
-    expect(updateShellLifecycleState).toHaveBeenCalledWith('T-1', {
-      ptyActive: false,
-      shellExited: true,
-      currentPtyInstance: 42,
+    await vi.waitFor(() => {
+      expect(screen.getByText('running')).toBeTruthy()
     })
+    expect(screen.queryByRole('button', { name: 'Abort' })).toBeNull()
   })
 
   it('shows question banner when session is paused with checkpoint_data', () => {
