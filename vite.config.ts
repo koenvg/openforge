@@ -67,6 +67,34 @@ function createOpenForgeRootAliases() {
       find: /^@openforge\/plugin-sdk\/vite$/,
       replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/vite.ts'),
     },
+    {
+      find: /^@openforge\/terminal-runtime$/,
+      replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/index.ts'),
+    },
+    {
+      find: /^@openforge\/terminal-runtime\/terminalRuntime$/,
+      replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/terminalRuntime.ts'),
+    },
+    {
+      find: /^@openforge\/terminal-runtime\/terminalOptions$/,
+      replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/terminalOptions.ts'),
+    },
+    {
+      find: /^@openforge\/terminal-runtime\/theme$/,
+      replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/theme.ts'),
+    },
+    {
+      find: /^@openforge\/terminal-runtime\/shortcuts$/,
+      replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/terminalShortcuts.ts'),
+    },
+    {
+      find: /^@openforge\/terminal-runtime\/shortcutController$/,
+      replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/terminalShortcutController.ts'),
+    },
+    {
+      find: /^@openforge\/terminal-runtime\/xterm\.css$/,
+      replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/xterm.css'),
+    },
     ...createDaisyUiTailwindPluginAliases(),
   ]
 }

@@ -42,10 +42,22 @@ export function svelteHostRuntimeImportMapEntries() {
   return { ...SVELTE_HOST_RUNTIME_IMPORTS }
 }
 
+export function terminalRuntimeImportMapEntries() {
+  return {
+    '@openforge/terminal-runtime': 'plugin://host-runtime/terminal-runtime/index.js',
+    '@openforge/terminal-runtime/terminalRuntime': 'plugin://host-runtime/terminal-runtime/terminalRuntime.js',
+    '@openforge/terminal-runtime/terminalOptions': 'plugin://host-runtime/terminal-runtime/terminalOptions.js',
+    '@openforge/terminal-runtime/theme': 'plugin://host-runtime/terminal-runtime/theme.js',
+    '@openforge/terminal-runtime/shortcuts': 'plugin://host-runtime/terminal-runtime/shortcuts.js',
+    '@openforge/terminal-runtime/shortcutController': 'plugin://host-runtime/terminal-runtime/shortcutController.js',
+  }
+}
+
 export function rendererImportMapEntries() {
   return {
     ...svelteHostRuntimeImportMapEntries(),
     '@openforge/plugin-sdk': 'plugin://host-runtime/plugin-sdk/index.js',
+    ...terminalRuntimeImportMapEntries(),
   }
 }
 

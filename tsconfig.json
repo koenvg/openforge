@@ -28,7 +28,14 @@
       "@openforge/plugin-sdk/testing": ["packages/plugin-sdk/src/testing.ts"],
       "@openforge/plugin-sdk/ui/MarkdownContent.svelte": ["packages/plugin-sdk/src/ui/MarkdownContent.svelte"],
       "@openforge/plugin-sdk/ui/ResizablePanel.svelte": ["packages/plugin-sdk/src/ui/ResizablePanel.svelte"],
-      "@openforge/plugin-sdk/vite": ["packages/plugin-sdk/src/vite.ts"]
+      "@openforge/plugin-sdk/vite": ["packages/plugin-sdk/src/vite.ts"],
+      "@openforge/terminal-runtime": ["packages/terminal-runtime/src/index.ts"],
+      "@openforge/terminal-runtime/terminalRuntime": ["packages/terminal-runtime/src/terminalRuntime.ts"],
+      "@openforge/terminal-runtime/terminalOptions": ["packages/terminal-runtime/src/terminalOptions.ts"],
+      "@openforge/terminal-runtime/theme": ["packages/terminal-runtime/src/theme.ts"],
+      "@openforge/terminal-runtime/shortcuts": ["packages/terminal-runtime/src/terminalShortcuts.ts"],
+      "@openforge/terminal-runtime/shortcutController": ["packages/terminal-runtime/src/terminalShortcutController.ts"],
+      "@openforge/terminal-runtime/xterm.css": ["packages/terminal-runtime/src/xterm.css"]
     },
 
     /* Linting */

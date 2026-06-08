@@ -28,7 +28,7 @@ vi.mock('@xterm/addon-fit', () => {
   return { FitAddon }
 })
 
-vi.mock('@xterm/xterm/css/xterm.css', () => ({}))
+vi.mock('@openforge/terminal-runtime/xterm.css', () => ({}))
 
 vi.mock('../../lib/stores', () => ({
   activeSessions: writable(new Map()),

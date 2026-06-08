@@ -31,8 +31,15 @@ const sidecarConfig = {
 async function writeMinimalHostRuntimeInputs(repoRoot) {
   await mkdir(join(repoRoot, 'packages', 'plugin-sdk', 'src'), { recursive: true })
   await mkdir(join(repoRoot, 'packages', 'plugin-runtime', 'src'), { recursive: true })
+  await mkdir(join(repoRoot, 'packages', 'terminal-runtime', 'src'), { recursive: true })
   await mkdir(join(repoRoot, 'src-tauri', 'plugin-host'), { recursive: true })
   await writeFile(join(repoRoot, 'packages', 'plugin-sdk', 'src', 'index.ts'), 'export const pluginSdk = true;')
+  await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'index.ts'), 'export const terminalRuntime = true;')
+  await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'terminalRuntime.ts'), 'export const terminalRuntimeCore = true;')
+  await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'terminalOptions.ts'), 'export const terminalOptions = true;')
+  await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'theme.ts'), 'export const terminalTheme = true;')
+  await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'terminalShortcuts.ts'), 'export const terminalShortcuts = true;')
+  await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'terminalShortcutController.ts'), 'export const terminalShortcutController = true;')
   await writeFile(join(repoRoot, 'packages', 'plugin-runtime', 'src', 'commandValidation.ts'), 'export function validateSchemaValue() { return { valid: true, bundledRuntimeMarker: true }; }')
   await writeFile(join(repoRoot, 'src-tauri', 'plugin-host', 'index.ts'), "import { validateSchemaValue } from '@openforge/plugin-runtime/commandValidation'\nconsole.log(validateSchemaValue())\n")
 
@@ -337,6 +344,8 @@ describe('Electron build host-runtime assets', () => {
 
     await expect(stat(join(outDir, 'plugin-host', 'index.js'))).resolves.toBeTruthy()
     await expect(stat(join(outDir, 'plugin-host', 'plugin-sdk', 'index.js'))).resolves.toBeTruthy()
+    await expect(stat(join(outDir, 'plugin-host', 'terminal-runtime', 'index.js'))).resolves.toBeTruthy()
+    await expect(stat(join(outDir, 'plugin-host', 'terminal-runtime', 'shortcuts.js'))).resolves.toBeTruthy()
     await expect(stat(join(outDir, 'plugin-host', 'svelte', 'index.js'))).resolves.toBeTruthy()
     await expect(stat(join(outDir, 'plugin-host', 'svelte', 'internal.js'))).resolves.toBeTruthy()
     await expect(stat(join(outDir, 'plugin-host', 'svelte', 'internal', 'client', 'index.js'))).resolves.toBeTruthy()
@@ -347,6 +356,7 @@ describe('Electron build host-runtime assets', () => {
     expect(backendHost).toContain('bundledRuntimeMarker')
     expect(backendHost).not.toContain('@openforge/plugin-runtime')
     await expect(readFile(join(outDir, 'plugin-host', 'plugin-sdk', 'index.js'), 'utf8')).resolves.toContain('pluginSdk')
+    await expect(readFile(join(outDir, 'plugin-host', 'terminal-runtime', 'index.js'), 'utf8')).resolves.toContain('terminalRuntime')
     await expect(readFile(join(outDir, 'plugin-host', 'svelte', 'index.js'), 'utf8')).resolves.toContain('svelte')
     await expect(readFile(join(outDir, 'plugin-host', 'svelte', 'internal.js'), 'utf8')).resolves.toContain('internal')
     await expect(readFile(join(outDir, 'plugin-host', 'svelte', 'store.js'), 'utf8')).resolves.toContain('store')

@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte'
   import type { DesktopUnlistenFn } from '../../lib/desktopIpc'
   import { activeSessions } from '../../lib/stores'
-  import '@xterm/xterm/css/xterm.css'
+  import '@openforge/terminal-runtime/xterm.css'
   import { listenToAgentStatusChanged, type AgentPanelStatus } from '../../lib/agentPanelSessionSync'
   import { acquire, attach, detach, isValidTerminalDimensions, type PoolEntry } from '../../lib/terminalPool'
   import {

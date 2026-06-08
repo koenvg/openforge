@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import { spawnShellPty, killPty } from '../../lib/ipc'
-  import '@xterm/xterm/css/xterm.css'
+  import '@openforge/terminal-runtime/xterm.css'
   import { acquire, attach, detach, recoverActiveTerminal, markPtySpawnPending, clearPtySpawnPending, shouldSpawnPty, markShellPtyStarted, getShellLifecycleState, subscribeShellLifecycle, type PoolEntry, type ShellLifecycleState } from '../../lib/terminalPool'
 
   interface Props {
