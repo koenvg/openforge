@@ -19,26 +19,14 @@ async fn resume_startup_sessions_command_is_compatibility_noop() {
 #[tokio::test]
 async fn handles_agent_lifecycle_followups() {
     let (state, path) = test_state("app_invoke_agent_lifecycle_followups");
-    let (pi_task_id, claude_task_id) = {
+    let claude_task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
             .create_project("Lifecycle Project", "/tmp/openforge-lifecycle")
             .expect("create project");
-        let pi_task = db
-            .create_task("pi task", "doing", Some(&project.id), None, None)
-            .expect("create pi task");
         let claude_task = db
             .create_task("claude task", "doing", Some(&project.id), None, None)
             .expect("create claude task");
-        db.create_agent_session(
-            "session-pi",
-            &pi_task.id,
-            None,
-            "implementing",
-            "running",
-            "pi",
-        )
-        .expect("create pi session");
         db.create_agent_session(
             "session-claude",
             &claude_task.id,
@@ -50,26 +38,13 @@ async fn handles_agent_lifecycle_followups() {
         .expect("create claude session");
         db.set_agent_session_pty_instance_id("session-claude", 7)
             .expect("store claude pty instance");
-        (pi_task.id, claude_task.id)
+        claude_task.id
     };
 
-    let status = invoke_ok(
-        &state,
-        "get_session_status",
-        json!({ "sessionId": "session-pi" }),
-    )
-    .await;
-    assert_eq!(status["id"], "session-pi");
     invoke_ok(
         &state,
         "finalize_agent_session",
         json!({ "taskId": claude_task_id, "success": false, "ptyInstanceId": 7 }),
-    )
-    .await;
-    invoke_ok(
-        &state,
-        "abort_implementation",
-        json!({ "taskId": pi_task_id }),
     )
     .await;
 
@@ -78,13 +53,6 @@ async fn handles_agent_lifecycle_followups() {
         db.get_agent_session("session-claude")
             .expect("get claude")
             .expect("claude exists")
-            .status,
-        "interrupted"
-    );
-    assert_eq!(
-        db.get_agent_session("session-pi")
-            .expect("get pi")
-            .expect("pi exists")
             .status,
         "interrupted"
     );
@@ -827,39 +795,6 @@ async fn finalize_agent_session_ignores_missing_pty_exit_instance() {
             .status,
         "running"
     );
-
-    let _ = std::fs::remove_file(path);
-}
-
-#[tokio::test]
-async fn abort_implementation_interrupts_codex_pty_session() {
-    let (state, path) = test_state("abort_codex_implementation");
-    let task_id = {
-        let db = crate::db::acquire_db(&state.db);
-        let task = db
-            .create_task("Codex task", "doing", None, None, None)
-            .expect("create task");
-        db.create_agent_session(
-            "session-codex-abort",
-            &task.id,
-            None,
-            "implementing",
-            "running",
-            "codex",
-        )
-        .expect("create session");
-        task.id
-    };
-
-    invoke_ok(&state, "abort_implementation", json!({ "taskId": task_id })).await;
-
-    let db = crate::db::acquire_db(&state.db);
-    let session = db
-        .get_agent_session("session-codex-abort")
-        .expect("get codex")
-        .expect("codex exists");
-    assert_eq!(session.status, "interrupted");
-    assert_eq!(session.error_message.as_deref(), Some("Aborted by user"));
 
     let _ = std::fs::remove_file(path);
 }

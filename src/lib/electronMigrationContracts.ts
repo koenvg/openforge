@@ -65,7 +65,6 @@ export const ipcCommandContracts = [
   { functionName: 'removeTaskLabel', ipcCommand: 'remove_task_label', payloadKeys: ['taskId', 'labelId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'startImplementation', ipcCommand: 'start_implementation', payloadKeys: ['taskId', 'repoPath'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'resumeStartupSessions', ipcCommand: 'resume_startup_sessions', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },
-  { functionName: 'abortImplementation', ipcCommand: 'abort_implementation', payloadKeys: ['taskId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'getWorktreeForTask', ipcCommand: 'get_worktree_for_task', payloadKeys: ['taskId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'getTaskWorkspace', ipcCommand: 'get_task_workspace', payloadKeys: ['taskId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'getSessionStatus', ipcCommand: 'get_session_status', payloadKeys: ['sessionId'], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },

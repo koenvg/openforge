@@ -102,10 +102,6 @@ export async function resumeStartupSessions(): Promise<void> {
   return invoke("resume_startup_sessions");
 }
 
-export async function abortImplementation(taskId: string): Promise<void> {
-  return invoke("abort_implementation", { taskId });
-}
-
 export async function getWorktreeForTask(taskId: string): Promise<WorktreeInfo | null> {
   return invoke<WorktreeInfo | null>("get_worktree_for_task", { taskId });
 }

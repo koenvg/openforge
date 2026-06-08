@@ -274,57 +274,6 @@ fn persist_active_task_workspace(
     })
 }
 
-pub(super) async fn handle_app_abort_implementation_command(
-    state: &AppState,
-    request: &AppInvokeRequest,
-) -> Result<Option<serde_json::Value>, (StatusCode, String)> {
-    if request.command != "abort_implementation" {
-        return Ok(None);
-    }
-
-    let task_id = payload_string(&request.payload, "taskId")?;
-    let session = {
-        let db = crate::db::acquire_db(&state.db);
-        db.get_latest_session_for_ticket(&task_id).map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get latest session: {e}"),
-            )
-        })?
-    };
-
-    if let Some(session) = session {
-        if crate::agent_lifecycle::provider_requires_pty_instance(&session.provider) {
-            if let Some(pty_manager) = state.pty_manager.as_ref() {
-                pty_manager.kill_shells_for_task(&task_id).await;
-                let _ = pty_manager.kill_pty(&task_id).await;
-            }
-        }
-
-        let abort_policy =
-            crate::provider_runtime::app_invoke_abort_session_policy(&session.provider);
-        {
-            let db = crate::db::acquire_db(&state.db);
-            let _ = db.update_agent_session(
-                &session.id,
-                "implementing",
-                abort_policy.session_status,
-                None,
-                Some("Aborted by user"),
-            );
-            if abort_policy.update_worktree_status {
-                let _ = db.update_worktree_status(&task_id, "stopped");
-            }
-            if abort_policy.update_task_workspace_status {
-                let _ = db.update_task_workspace_status(&task_id, "stopped");
-            }
-        }
-    }
-
-    publish_task_changed(state, &task_id);
-    Ok(Some(serde_json::Value::Null))
-}
-
 pub(super) async fn handle_app_start_implementation_command(
     state: &AppState,
     request: &AppInvokeRequest,

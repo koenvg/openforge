@@ -87,7 +87,6 @@ vi.mock('../../lib/stores', () => ({
 }))
 
 vi.mock('../../lib/ipc', () => ({
-  abortImplementation: vi.fn().mockResolvedValue(undefined),
   updateTaskFields: vi.fn().mockResolvedValue(undefined),
   updateTaskStatus: vi.fn().mockResolvedValue(undefined),
   deleteTask: vi.fn().mockResolvedValue(undefined),
