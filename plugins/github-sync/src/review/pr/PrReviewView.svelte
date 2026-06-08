@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
-  import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
-  type UnlistenFn = () => void
+  import type { Disposable, FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
+  type UnlistenFn = Disposable
   import { reviewPrs, selectedReviewPr, prFileDiffs, reviewRequestCount, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, authoredPrs, authoredPrCount, activeProjectId } from '../../lib/stores'
   import { getHTMLElementAt, isInputFocused } from '../../lib/domUtils'
   import { useVimNavigation } from '../../lib/useVimNavigation.svelte'
@@ -16,6 +16,7 @@
   import PrOverviewTab from '@openforge/pr-review-ui/PrOverviewTab.svelte'
   import { hasMergeConflicts } from '@openforge/plugin-sdk/domain'
   import type { AgentReviewComment, ReviewComment, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, PrOverviewComment, ReviewSubmissionComment } from '@openforge/plugin-sdk/domain'
+  import { createGithubSyncPrReviewClient } from './githubSyncClient'
   import type { FileContents } from '@openforge/pr-review-ui/diffAdapter'
 
   type PrDetailTab = 'overview' | 'files'
@@ -28,6 +29,7 @@
   }
 
   let { api, context: _context, projectName, projectId = null }: Props = $props()
+  let githubSync = $derived(createGithubSyncPrReviewClient(api))
 
   $effect(() => {
     $activeProjectId = projectId
@@ -41,11 +43,6 @@
   let fileTreeVisible = $state(true)
   let activeTab = $state<PrDetailTab>('overview')
   let unlisteners: UnlistenFn[] = []
-
-  function listenGlobal<TPayload>(event: string, handler: (payload: TPayload) => void): UnlistenFn {
-    const subscription = api.events.onGlobal(event, handler)
-    return () => { void subscription.dispose() }
-  }
 
   // Repo filtering
   let excludedRepos = $state<Set<string>>(new Set())
@@ -216,7 +213,7 @@
     isLoading = true
     error = null
     try {
-      const prs = await api.commands.invokeGlobal<ReviewPullRequest[]>('openforge.getReviewPrs')
+      const prs = await githubSync.listReviewPullRequests()
       $reviewPrs = prs
     } catch (e) {
       console.error('Failed to load PRs:', e)
@@ -230,7 +227,7 @@
     isLoading = true
     error = null
     try {
-      const prs = await api.commands.invokeGlobal<ReviewPullRequest[]>('openforge.fetchReviewPrs')
+      const prs = await githubSync.refreshReviewPullRequests()
       $reviewPrs = prs
     } catch (e) {
       console.error('Failed to refresh PRs:', e)
@@ -243,7 +240,7 @@
   /** Silently update PR store from DB without showing loading state. Used by background sync events. */
   async function silentRefreshPrs() {
     try {
-      const prs = await api.commands.invokeGlobal<ReviewPullRequest[]>('openforge.getReviewPrs')
+      const prs = await githubSync.listReviewPullRequests()
       $reviewPrs = prs
     } catch (e) {
       console.error('Failed to silently refresh PRs:', e)
@@ -254,7 +251,7 @@
     isLoadingAuthored = true
     authoredError = null
     try {
-      const prs = await api.commands.invokeGlobal<AuthoredPullRequest[]>('openforge.getAuthoredPrs')
+      const prs = await githubSync.listAuthoredPullRequests()
       $authoredPrs = prs
       // count is updated reactively via $effect
     } catch (e) {
@@ -269,7 +266,7 @@
     isLoadingAuthored = true
     authoredError = null
     try {
-      const prs = await api.commands.invokeGlobal<AuthoredPullRequest[]>('openforge.fetchAuthoredPrs')
+      const prs = await githubSync.refreshAuthoredPullRequests()
       $authoredPrs = prs
       // count is updated reactively via $effect
     } catch (e) {
@@ -283,7 +280,7 @@
   /** Silently update authored PR store from DB without showing loading state. Used by background sync events. */
   async function silentRefreshAuthoredPrs() {
     try {
-      const prs = await api.commands.invokeGlobal<AuthoredPullRequest[]>('openforge.getAuthoredPrs')
+      const prs = await githubSync.listAuthoredPullRequests()
       $authoredPrs = prs
     } catch (e) {
       console.error('Failed to silently refresh authored PRs:', e)
@@ -291,27 +288,27 @@
   }
 
   async function selectPr(pr: ReviewPullRequest) {
-    void api.commands.invokeGlobal('openforge.navigate', { currentView: 'plugin:com.openforge.github-sync:pr_review' })
+    void api.navigation.navigate({ viewId: 'plugin:com.openforge.github-sync:pr_review' })
     const now = Math.floor(Date.now() / 1000)
     const updatedPr = { ...pr, viewed_at: now, viewed_head_sha: pr.head_sha }
     $selectedReviewPr = updatedPr
     $reviewPrs = $reviewPrs.map(p => p.id === pr.id ? updatedPr : p)
-    api.commands.invokeGlobal('openforge.markReviewPrViewed', { prId: pr.id, headSha: pr.head_sha }).catch(e => console.error('Failed to mark viewed:', e))
+    githubSync.markReviewPullRequestViewed({ prId: pr.id, headSha: pr.head_sha }).catch(e => console.error('Failed to mark viewed:', e))
     isLoading = true
     try {
-      const diffs = await api.commands.invokeGlobal<PrFileDiff[]>('openforge.getPrFileDiffs', {
+      const diffs = await githubSync.listPullRequestFileDiffs({
         owner: pr.repo_owner,
         repo: pr.repo_name,
         prNumber: pr.number,
       })
       $prFileDiffs = diffs
-      const comments = await api.commands.invokeGlobal<ReviewComment[]>('openforge.getReviewComments', {
+      const comments = await githubSync.listReviewComments({
         owner: pr.repo_owner,
         repo: pr.repo_name,
         prNumber: pr.number,
       })
       $reviewComments = comments
-      const agentComments = await api.commands.invokeGlobal<AgentReviewComment[]>('openforge.getAgentReviewComments', { reviewPrId: pr.id })
+      const agentComments = await githubSync.listAgentReviewComments({ reviewPrId: pr.id })
       $agentReviewComments = agentComments
     } catch (e) {
       console.error('Failed to load PR diffs:', e)
@@ -344,7 +341,7 @@
   }
 
   async function loadOverviewComments(pr: ReviewPullRequest): Promise<PrOverviewComment[]> {
-    return api.commands.invokeGlobal<PrOverviewComment[]>('openforge.getPrOverviewComments', {
+    return githubSync.listPullRequestOverviewComments({
       owner: pr.repo_owner,
       repo: pr.repo_name,
       prNumber: pr.number,
@@ -360,7 +357,7 @@
     comments: ReviewSubmissionComment[]
     commitId: string
   }): Promise<void> {
-    await api.commands.invokeGlobal('openforge.submitPrReview', {
+    await githubSync.submitPullRequestReview({
       owner: request.repoOwner,
       repo: request.repoName,
       prNumber: request.prNumber,
@@ -378,7 +375,7 @@
 
     if (file.status !== 'removed' && file.sha) {
       try {
-        newContent = await api.commands.invokeGlobal<string>('openforge.getFileContent', {
+        newContent = await githubSync.getFileContent({
           owner: pr.repo_owner,
           repo: pr.repo_name,
           sha: file.sha,
@@ -389,7 +386,7 @@
     if (file.status !== 'added') {
       const oldPath = file.previous_filename || file.filename
       try {
-        oldContent = await api.commands.invokeGlobal<string>('openforge.getFileAtRef', {
+        oldContent = await githubSync.getFileAtRef({
           owner: pr.repo_owner,
           repo: pr.repo_name,
           path: oldPath,
@@ -405,20 +402,20 @@
     loadPrs()
     loadAuthoredPrs()
     unlisteners.push(
-      listenGlobal('openforge.authored-prs-updated', () => {
+      githubSync.onAuthoredPullRequestsUpdated(() => {
         silentRefreshAuthoredPrs()
       })
     )
     unlisteners.push(
-      listenGlobal('openforge.review-pr-count-changed', () => {
+      githubSync.onReviewPullRequestCountChanged(() => {
         silentRefreshPrs()
       })
     )
   })
 
   onDestroy(() => {
-    unlisteners.forEach((fn) => {
-      fn()
+    unlisteners.forEach((subscription) => {
+      void subscription.dispose()
     })
   })
 </script>
@@ -502,7 +499,7 @@
               pendingComments={$pendingManualComments}
               onPendingCommentsChange={(comments) => { $pendingManualComments = comments }}
               onAgentCommentsChange={(comments) => { $agentReviewComments = comments }}
-              onUpdateAgentCommentStatus={(commentId, status) => api.commands.invokeGlobal('openforge.updateAgentReviewCommentStatus', { commentId, status })}
+              onUpdateAgentCommentStatus={(commentId, status) => githubSync.updateAgentReviewCommentStatus({ commentId, status })}
               onOpenUrl={(url) => api.system.openUrl(url)}
             />
           {/if}
