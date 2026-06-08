@@ -91,6 +91,10 @@ function createOpenForgeRootAliases() {
       find: /^@openforge\/terminal-runtime\/shortcutController$/,
       replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/terminalShortcutController.ts'),
     },
+    {
+      find: /^@openforge\/terminal-runtime\/xterm\.css$/,
+      replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/xterm.css'),
+    },
     ...createDaisyUiTailwindPluginAliases(),
   ]
 }

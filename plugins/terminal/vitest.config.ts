@@ -13,6 +13,7 @@ export default defineConfig({
       { find: /^@openforge\/terminal-runtime\/terminalOptions$/, replacement: resolve(import.meta.dirname, '../../packages/terminal-runtime/src/terminalOptions.ts') },
       { find: /^@openforge\/terminal-runtime\/theme$/, replacement: resolve(import.meta.dirname, '../../packages/terminal-runtime/src/theme.ts') },
       { find: /^@openforge\/terminal-runtime\/terminalRuntime$/, replacement: resolve(import.meta.dirname, '../../packages/terminal-runtime/src/terminalRuntime.ts') },
+      { find: /^@openforge\/terminal-runtime\/xterm\.css$/, replacement: resolve(import.meta.dirname, '../../packages/terminal-runtime/src/xterm.css') },
     ],
   },
   build: {

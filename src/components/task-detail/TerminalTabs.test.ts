@@ -33,7 +33,7 @@ vi.mock('@xterm/addon-web-links', () => {
   return { WebLinksAddon }
 })
 
-vi.mock('@xterm/xterm/css/xterm.css', () => ({}))
+vi.mock('@openforge/terminal-runtime/xterm.css', () => ({}))
 
 const { killPtyMock, spawnShellPtyMock } = vi.hoisted(() => ({
   killPtyMock: vi.fn().mockResolvedValue(undefined),

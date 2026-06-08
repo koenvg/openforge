@@ -8,7 +8,8 @@
     "./terminalOptions": "./src/terminalOptions.ts",
     "./theme": "./src/theme.ts",
     "./shortcuts": "./src/terminalShortcuts.ts",
-    "./shortcutController": "./src/terminalShortcutController.ts"
+    "./shortcutController": "./src/terminalShortcutController.ts",
+    "./xterm.css": "./src/xterm.css"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",

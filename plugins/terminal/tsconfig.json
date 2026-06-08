@@ -10,7 +10,8 @@
       "@openforge/terminal-runtime/terminalOptions": ["../../packages/terminal-runtime/src/terminalOptions.ts"],
       "@openforge/terminal-runtime/theme": ["../../packages/terminal-runtime/src/theme.ts"],
       "@openforge/terminal-runtime/shortcuts": ["../../packages/terminal-runtime/src/terminalShortcuts.ts"],
-      "@openforge/terminal-runtime/shortcutController": ["../../packages/terminal-runtime/src/terminalShortcutController.ts"]
+      "@openforge/terminal-runtime/shortcutController": ["../../packages/terminal-runtime/src/terminalShortcutController.ts"],
+      "@openforge/terminal-runtime/xterm.css": ["../../packages/terminal-runtime/src/xterm.css"]
     },
     "strict": true,
     "esModuleInterop": true,
