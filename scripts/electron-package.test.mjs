@@ -258,6 +258,37 @@ describe('Electron macOS packaging helpers', () => {
     })
   })
 
+  it('hydrates the Electron app template when the installed electron package is missing its dist payload', async () => {
+    const root = await import('node:os').then(os => os.tmpdir()).then(tmp => join(tmp, `openforge-electron-package-hydrate-template-${process.pid}-${Date.now()}`))
+    const template = join(root, 'node_modules/electron/dist/Electron.app')
+    const hydrateCalls = []
+    await mkdir(root, { recursive: true })
+    await writeFile(join(root, BACKEND_LAYOUT_CONFIG_FILE), JSON.stringify(currentLayoutConfig))
+    await writeCurrentDataIdentityManifest(root)
+    await writeElectronBuildOutputs(root)
+    await writeElectronRuntimeDependencyArtifacts(root)
+    await writeBuiltinPluginCatalog(root, [])
+    await mkdir(join(root, 'src-tauri/target/release'), { recursive: true })
+    await writeExecutable(join(root, 'src-tauri/target/release/openforge'), '#!/bin/sh\necho sidecar\n')
+
+    await packageElectronApp({
+      repoRoot: root,
+      hydrateElectronTemplate: async ({ electronPackageRoot, electronTemplatePath }) => {
+        hydrateCalls.push({ electronPackageRoot, electronTemplatePath })
+        await mkdir(join(template, 'Contents/MacOS'), { recursive: true })
+        await mkdir(join(template, 'Contents/Resources'), { recursive: true })
+        await writeExecutable(join(template, 'Contents/MacOS/Electron'))
+        await writeFile(join(template, 'Contents/Info.plist'), '<plist><dict><key>CFBundleExecutable</key><string>Electron</string><key>CFBundleName</key><string>Electron</string><key>CFBundleDisplayName</key><string>Electron</string></dict></plist>')
+      },
+    })
+
+    expect(hydrateCalls).toEqual([{
+      electronPackageRoot: join(root, 'node_modules/electron'),
+      electronTemplatePath: template,
+    }])
+    await expect(stat(join(electronBundlePath(root), 'Contents/MacOS/Open Forge'))).resolves.toBeTruthy()
+  })
+
   it('packages the compiled renderer, Electron main process, and Rust sidecar into a macOS .app bundle', async () => {
     const root = await import('node:os').then(os => os.tmpdir()).then(tmp => join(tmp, `openforge-electron-package-${process.pid}-${Date.now()}`))
     const template = join(root, 'node_modules/electron/dist/Electron.app')

@@ -114,6 +114,34 @@ install_openforge_cli ${shellQuote(appPath)} error
     await expect(readFile(join(home, '.openforge/bin/openforge'), 'utf8')).resolves.toContain(copiedCli)
   })
 
+  it('reports an actionable error when the CLI launcher directory is not writable', async () => {
+    const root = await mkdtemp(join(tmpdir(), `openforge-install-cli-permission-${process.pid}-`))
+    const home = join(root, 'home')
+    const appPath = join(root, 'Applications', 'Open Forge.app')
+    const payloadDir = join(appPath, 'Contents/Resources/openforge-cli')
+    const launcherDir = join(home, '.openforge/bin')
+    await mkdir(payloadDir, { recursive: true })
+    await mkdir(launcherDir, { recursive: true })
+    await writeFile(join(payloadDir, 'cli.js'), 'console.log("openforge cli")\n')
+    await writeFile(join(launcherDir, 'openforge'), '#!/bin/sh\necho stale launcher\n')
+    await chmod(join(launcherDir, 'openforge'), 0o555)
+    await chmod(launcherDir, 0o555)
+
+    const runner = await writeRunner(root, `
+HOME=${shellQuote(home)}
+install_openforge_cli ${shellQuote(appPath)} error
+`)
+
+    const result = await runShell(runner)
+    await chmod(launcherDir, 0o755)
+    await chmod(join(launcherDir, 'openforge'), 0o755)
+
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('ERROR: OpenForge CLI launcher directory is not writable')
+    expect(result.stderr).toContain('sudo chown -R')
+    expect(result.stderr).not.toMatch(/line \d+.*Permission denied/)
+  })
+
   it('propagates payload copy failures without writing the launcher', async () => {
     const root = await mkdtemp(join(tmpdir(), `openforge-install-cli-copy-failure-${process.pid}-`))
     const home = join(root, 'home')

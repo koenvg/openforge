@@ -81,6 +81,27 @@ async function assertExists(path, label) {
   }
 }
 
+export async function hydrateElectronTemplate({
+  electronPackageRoot,
+  electronTemplatePath,
+  runCommand = runBuildCommand,
+} = {}) {
+  if (await pathExists(electronTemplatePath)) {
+    return { hydrated: false }
+  }
+
+  const installScriptPath = join(electronPackageRoot, 'install.js')
+  await assertExists(installScriptPath, 'Electron install script')
+  console.log(`Electron app template missing; hydrating Electron runtime via ${installScriptPath}`)
+  await runCommand(process.execPath, ['install.js'], { cwd: electronPackageRoot })
+
+  if (!(await pathExists(electronTemplatePath))) {
+    throw new Error(`Electron app template not found at ${electronTemplatePath} after running ${installScriptPath}. Run pnpm rebuild electron or reinstall dependencies with Electron binary downloads enabled.`)
+  }
+
+  return { hydrated: true }
+}
+
 export const BUILTIN_PLUGIN_CATALOG_FILE = 'builtin-plugins.json'
 export const ELECTRON_APP_RUNTIME_DEPENDENCIES = Object.freeze(['es-module-lexer'])
 
@@ -282,7 +303,9 @@ export async function packageElectronApp({
   packageIdentity = electronPackageIdentityForRepoRoot(repoRoot),
   rustSidecarLayout = resolveRustSidecarLayout({ repoRoot, appName: packageIdentity.appName }),
   outputAppPath = rustSidecarLayout.electronAppPath,
+  electronPackageRoot = join(repoRoot, 'node_modules', 'electron'),
   electronTemplatePath = join(repoRoot, 'node_modules', 'electron', 'dist', packageIdentity.electronTemplateAppName),
+  hydrateElectronTemplate: hydrateTemplate = hydrateElectronTemplate,
   cargoBuildTarget = process.env.CARGO_BUILD_TARGET ?? '',
   sidecarBinaryPath = rustSidecarLayout.releaseSidecarBinaryPath({ cargoBuildTarget }),
   readExecutableArchitectures = readDarwinExecutableArchitectures,
@@ -290,6 +313,12 @@ export async function packageElectronApp({
   const rendererDist = join(repoRoot, 'dist')
   const electronDist = join(repoRoot, 'dist-electron')
 
+  await hydrateTemplate({
+    repoRoot,
+    electronPackageRoot,
+    electronTemplatePath,
+    electronTemplateAppName: packageIdentity.electronTemplateAppName,
+  })
   await assertExists(electronTemplatePath, 'Electron app template')
   await assertExists(rendererDist, 'Renderer build')
   await assertExists(electronDist, 'Electron main build')
