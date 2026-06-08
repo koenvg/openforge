@@ -32,6 +32,9 @@ import {
   registerTerminalTaskPaneController as registerPluginController,
   unregisterTerminalTaskPaneController as unregisterPluginController,
 } from '../../plugins/terminal/src/terminalTaskPaneController'
+import { handleTerminalShortcutKeydown as runtimeShortcutHandler } from '@openforge/terminal-runtime/shortcuts'
+import { handleTerminalShortcutKeydown as appShortcutHandler } from './terminalShortcuts'
+import { handleTerminalShortcutKeydown as pluginShortcutHandler } from '../../plugins/terminal/src/terminalShortcuts'
 
 describe('terminal plugin implementation boundary', () => {
   beforeEach(() => {
@@ -41,12 +44,15 @@ describe('terminal plugin implementation boundary', () => {
     clearPluginControllers()
   })
 
-  it('uses a plugin-owned terminal pool instead of the private app terminal pool', () => {
+  it('uses shared terminal-runtime lifecycle helpers through host-specific thin adapters', () => {
     expect(pluginAcquire).not.toBe(appAcquire)
     expect(pluginRelease).not.toBe(appRelease)
     expect(pluginFocusTerminal).not.toBe(appFocusTerminal)
     expect(pluginGetTaskTerminalTabsSession).not.toBe(appGetTaskTerminalTabsSession)
     expect(pluginUpdateTaskTerminalTabsSession).not.toBe(appUpdateTaskTerminalTabsSession)
+
+    expect(appShortcutHandler).toBe(runtimeShortcutHandler)
+    expect(pluginShortcutHandler).toBe(runtimeShortcutHandler)
   })
 
   it('uses a plugin-owned command-held store and listener setup', () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   OPENFORGE_HOST_RUNTIME_SVELTE_SPECIFIERS,
   OPENFORGE_HOST_SHARED_SVELTE_IMPORTS,
+  OPENFORGE_HOST_SHARED_TERMINAL_RUNTIME_IMPORTS,
   isOpenForgeHostRuntimeExternal,
 } from '@openforge/plugin-sdk/vite'
 
@@ -28,6 +29,17 @@ describe('OpenForge plugin Vite author tooling', () => {
 
     expect(isOpenForgeHostRuntimeExternal('svelte/internal/flags/experimental')).toBe(false)
     expect(isOpenForgeHostRuntimeExternal('svelte/internal/client/dom')).toBe(false)
+  })
+
+  it('externalizes the host-shared terminal runtime contract', () => {
+    expect(OPENFORGE_HOST_SHARED_TERMINAL_RUNTIME_IMPORTS).toContain('@openforge/terminal-runtime')
+    expect(OPENFORGE_HOST_SHARED_TERMINAL_RUNTIME_IMPORTS).toContain('@openforge/terminal-runtime/shortcuts')
+
+    for (const specifier of OPENFORGE_HOST_SHARED_TERMINAL_RUNTIME_IMPORTS) {
+      expect(isOpenForgeHostRuntimeExternal(specifier), `${specifier} should be host-shared`).toBe(true)
+    }
+
+    expect(isOpenForgeHostRuntimeExternal('@openforge/terminal-runtime/internal')).toBe(false)
   })
 
   it('does not externalize non-Svelte dependencies that plugins may bundle normally', () => {

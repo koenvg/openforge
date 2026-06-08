@@ -5,6 +5,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build as viteBuild } from 'vite'
 import { buildPluginSdkRuntime } from './build-plugin-sdk-runtime.mjs'
+import { buildTerminalRuntime } from './build-terminal-runtime.mjs'
 import {
   svelteHostRuntimeBuildEntries,
   svelteHostRuntimeImportMapEntries,
@@ -68,6 +69,10 @@ export async function copyHostRuntimeAssets(root = repoRoot(), electronDist = re
   await buildPluginSdkRuntime({
     workspaceRoot: root,
     outDir: resolve(hostRuntimeDir, 'plugin-sdk'),
+  })
+  await buildTerminalRuntime({
+    workspaceRoot: root,
+    outDir: resolve(hostRuntimeDir, 'terminal-runtime'),
   })
   await buildBackendPluginHostRuntime(root, hostRuntimeDir)
   await buildSvelteHostRuntimeAssets(root, resolve(hostRuntimeDir, 'svelte'))

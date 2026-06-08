@@ -1,13 +1,6 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { getTerminalOptions, TERMINAL_CELL_HEIGHT, TERMINAL_FONT_FAMILY, TERMINAL_FONT_SIZE, TERMINAL_WEB_FONT_FACES } from './terminalOptions'
-import { getTerminalTheme } from './theme'
-
-vi.mock('./theme', () => ({
-  getTerminalTheme: vi.fn((mode: string) => ({
-    background: mode === 'dark' ? '#000' : '#FFF',
-    foreground: mode === 'dark' ? '#FFF' : '#000',
-  })),
-}))
+import { getTerminalTheme } from '@openforge/terminal-runtime/theme'
 
 describe('terminalOptions', () => {
   it('exports TERMINAL_FONT_FAMILY constant', () => {
@@ -52,14 +45,12 @@ describe('terminalOptions', () => {
     expect(getTerminalOptions('light').minimumContrastRatio).toBe(4.5)
   })
 
-  it('getTerminalOptions uses theme from getTerminalTheme', () => {
+  it('returns distinct host-theme-aware terminal palettes for light and dark modes', () => {
     const lightOptions = getTerminalOptions('light')
     const darkOptions = getTerminalOptions('dark')
 
-    expect(getTerminalTheme).toHaveBeenCalledWith('light')
-    expect(getTerminalTheme).toHaveBeenCalledWith('dark')
-
-    expect(lightOptions.theme).toEqual({ background: '#FFF', foreground: '#000' })
-    expect(darkOptions.theme).toEqual({ background: '#000', foreground: '#FFF' })
+    expect(lightOptions.theme).toEqual(getTerminalTheme('light'))
+    expect(darkOptions.theme).toEqual(getTerminalTheme('dark'))
+    expect(lightOptions.theme).not.toEqual(darkOptions.theme)
   })
 })

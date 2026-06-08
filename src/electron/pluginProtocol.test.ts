@@ -92,15 +92,25 @@ describe('Electron plugin:// protocol security contract', () => {
     expect(await response.text()).toBe('Forbidden')
   })
 
-  it('serves host-runtime plugin SDK and Svelte assets from Electron resources without source-tree fallbacks', async () => {
+  it('serves host-runtime plugin SDK, terminal runtime, and Svelte assets from Electron resources without source-tree fallbacks', async () => {
     const workspaceRoot = await tempWorkspace()
     const hostRuntimeRoot = join(await tempWorkspace(), 'plugin-host')
     await mkdir(join(hostRuntimeRoot, 'plugin-sdk'), { recursive: true })
+    await mkdir(join(hostRuntimeRoot, 'terminal-runtime'), { recursive: true })
     await mkdir(join(hostRuntimeRoot, 'svelte'), { recursive: true })
     await writeFile(join(hostRuntimeRoot, 'plugin-sdk', 'index.js'), 'export const pluginSdkFromResources = true;')
+    await writeFile(join(hostRuntimeRoot, 'terminal-runtime', 'index.js'), 'export const terminalRuntimeFromResources = true;')
     await writeFile(join(hostRuntimeRoot, 'svelte', 'index.js'), 'export const svelteFromResources = true;')
 
     const pluginSdkResponse = await handlePluginProtocolRequest('plugin://host-runtime/plugin-sdk/index.js', {
+      workspaceRoot,
+      hostRuntimeRoot,
+      sidecarConfig: null,
+      fetch: vi.fn(),
+      readFile,
+      realpath,
+    })
+    const terminalRuntimeResponse = await handlePluginProtocolRequest('plugin://host-runtime/terminal-runtime/index.js', {
       workspaceRoot,
       hostRuntimeRoot,
       sidecarConfig: null,
@@ -119,6 +129,8 @@ describe('Electron plugin:// protocol security contract', () => {
 
     expect(pluginSdkResponse.status).toBe(200)
     expect(await pluginSdkResponse.text()).toBe('export const pluginSdkFromResources = true;')
+    expect(terminalRuntimeResponse.status).toBe(200)
+    expect(await terminalRuntimeResponse.text()).toBe('export const terminalRuntimeFromResources = true;')
     expect(svelteResponse.status).toBe(200)
     expect(await svelteResponse.text()).toBe('export const svelteFromResources = true;')
   })

@@ -34,6 +34,9 @@ importers:
       '@openforge/pr-review-ui':
         specifier: workspace:*
         version: link:packages/pr-review-ui
+      '@openforge/terminal-runtime':
+        specifier: workspace:*
+        version: link:packages/terminal-runtime
       '@tailwindcss/vite':
         specifier: ^4.2.2
         version: 4.2.4(vite@8.0.16(@types/node@20.19.41)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
@@ -180,6 +183,24 @@ importers:
         specifier: ^5.0.0
         version: 5.56.1
 
+  packages/terminal-runtime:
+    dependencies:
+      '@xterm/addon-fit':
+        specifier: ^0.11.0
+        version: 0.11.0
+      '@xterm/addon-web-links':
+        specifier: ^0.12.0
+        version: 0.12.0
+      '@xterm/addon-webgl':
+        specifier: ^0.19.0
+        version: 0.19.0
+      '@xterm/xterm':
+        specifier: ^6.0.0
+        version: 6.0.0
+      svelte:
+        specifier: ^5.0.0
+        version: 5.56.1
+
   plugins/demo-hello-world:
     dependencies:
       '@openforge/plugin-sdk':
@@ -282,18 +303,9 @@ importers:
       '@openforge/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
-      '@xterm/addon-fit':
-        specifier: ^0.11.0
-        version: 0.11.0
-      '@xterm/addon-web-links':
-        specifier: ^0.12.0
-        version: 0.12.0
-      '@xterm/addon-webgl':
-        specifier: ^0.19.0
-        version: 0.19.0
-      '@xterm/xterm':
-        specifier: ^6.0.0
-        version: 6.0.0
+      '@openforge/terminal-runtime':
+        specifier: workspace:*
+        version: link:../../packages/terminal-runtime
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^7.0.0

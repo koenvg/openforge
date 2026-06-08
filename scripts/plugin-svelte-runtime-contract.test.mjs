@@ -2,12 +2,13 @@ import { readdir, readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import viteConfig from '../vite.config.ts'
-import { OPENFORGE_HOST_SHARED_SVELTE_IMPORTS } from '../packages/plugin-sdk/src/vite.ts'
+import { OPENFORGE_HOST_SHARED_SVELTE_IMPORTS, OPENFORGE_HOST_SHARED_TERMINAL_RUNTIME_IMPORTS } from '../packages/plugin-sdk/src/vite.ts'
 import {
   SVELTE_HOST_RUNTIME_MODULES,
   rendererImportMapHtml,
   svelteHostRuntimeBuildEntries,
   svelteHostRuntimeImportMapEntries,
+  terminalRuntimeImportMapEntries,
 } from '../packages/plugin-sdk/src/svelteHostRuntimeContract.mjs'
 
 function readRendererImportMap(indexHtml) {
@@ -62,6 +63,11 @@ describe('OpenForge plugin Svelte runtime contract', () => {
       expect(imports[specifier], `${specifier} must be mapped by the host renderer import map`).toBeTruthy()
       expect(imports[specifier]).toMatch(/^plugin:\/\/host-runtime\/svelte\//)
     }
+
+    for (const specifier of OPENFORGE_HOST_SHARED_TERMINAL_RUNTIME_IMPORTS) {
+      expect(imports[specifier], `${specifier} must be mapped by the host renderer import map`).toBeTruthy()
+      expect(imports[specifier]).toMatch(/^plugin:\/\/host-runtime\/terminal-runtime\//)
+    }
   })
 
   it('injects the renderer import map from the shared contract through Vite', async () => {
@@ -72,6 +78,7 @@ describe('OpenForge plugin Svelte runtime contract', () => {
     expect(readRendererImportMap(transformed)).toEqual({
       ...svelteHostRuntimeImportMapEntries(),
       '@openforge/plugin-sdk': 'plugin://host-runtime/plugin-sdk/index.js',
+      ...terminalRuntimeImportMapEntries(),
     })
   })
 

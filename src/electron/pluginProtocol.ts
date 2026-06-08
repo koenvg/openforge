@@ -267,6 +267,9 @@ async function hostRuntimeResponse(relPath: string, deps: PluginProtocolDeps): P
     case 'plugin-sdk/index.js':
       return packagedHostRuntimeAssetResponse(relPath, deps)
     default:
+      if (relPath.startsWith('terminal-runtime/')) {
+        return packagedHostRuntimeAssetResponse(relPath, deps)
+      }
       return relPath.startsWith('svelte/')
         ? svelteHostRuntimeAssetResponse(relPath, deps)
         : notFoundResponse()
