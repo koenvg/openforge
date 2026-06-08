@@ -116,13 +116,6 @@ pub(crate) async fn handle_start_implementation_command(
     lifecycle::handle_app_start_implementation_command(state, request).await
 }
 
-pub(crate) async fn handle_abort_implementation_command(
-    state: &AppState,
-    request: &AppInvokeRequest,
-) -> AppResult<Option<serde_json::Value>> {
-    lifecycle::handle_app_abort_implementation_command(state, request).await
-}
-
 pub(crate) async fn handle_pty_command(
     state: &AppState,
     request: &AppInvokeRequest,
@@ -179,9 +172,6 @@ pub(crate) async fn handle_command(
         return Ok(value);
     }
     if let Some(value) = handle_start_implementation_command(state, request).await? {
-        return Ok(value);
-    }
-    if let Some(value) = handle_abort_implementation_command(state, request).await? {
         return Ok(value);
     }
     if let Some(value) = handle_pty_command(state, request).await? {

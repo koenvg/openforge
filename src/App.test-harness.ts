@@ -227,7 +227,6 @@ vi.mock('./lib/ipc', () => ({
     callOrder.push('finalizeAgentSession')
   }),
   openUrl: vi.fn(),
-  abortImplementation: vi.fn(),
   writePty: vi.fn(),
   resizePty: vi.fn(),
   killPty: vi.fn(),
