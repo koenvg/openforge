@@ -15,7 +15,7 @@
   import ReviewSubmitPanel from '@openforge/pr-review-ui/ReviewSubmitPanel.svelte'
   import PrOverviewTab from '@openforge/pr-review-ui/PrOverviewTab.svelte'
   import { hasMergeConflicts } from '@openforge/plugin-sdk/domain'
-  import type { AgentReviewComment, ReviewComment, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, PrOverviewComment, ReviewSubmissionComment } from '@openforge/plugin-sdk/domain'
+  import type { ReviewPullRequest, AuthoredPullRequest, PrFileDiff, PrOverviewComment, ReviewSubmissionComment } from '@openforge/plugin-sdk/domain'
   import { createGithubSyncPrReviewClient } from './githubSyncClient'
   import type { FileContents } from '@openforge/pr-review-ui/diffAdapter'
 
