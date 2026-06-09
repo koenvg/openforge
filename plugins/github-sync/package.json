@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "build": "vite build",
+    "build": "pnpm --filter @openforge/plugin-sdk build && pnpm run build:bundle",
+    "build:bundle": "vite build",
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
