@@ -6,7 +6,7 @@
   "packageManager": "pnpm@10.33.4",
   "scripts": {
     "build:plugin-sdk-runtime": "node scripts/build-plugin-sdk-runtime.mjs",
-    "build:plugins": "pnpm --filter @openforge/plugin-sdk build && pnpm -r --filter './plugins/*' --if-present build",
+    "build:plugins": "pnpm --filter @openforge/plugin-sdk build && pnpm -r --filter './plugins/*' --if-present build:bundle",
     "dev:plugin-artifacts": "node scripts/build-dev-plugin-artifacts.mjs",
     "dev": "vite",
     "website:dev": "pnpm --filter @openforge/website dev",
