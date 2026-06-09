@@ -69,14 +69,23 @@ describe('plugin host commands', () => {
     })
   })
 
-  it('keeps persisted inline agent comment commands available to plugins', async () => {
+  it('does not expose GitHub Sync PR review operations as core plugin host commands', async () => {
     const { invoke } = installDesktopBridge([])
 
-    await invokePluginHostCommand('getAgentReviewComments', { reviewPrId: '42' })
-    expect(invoke).toHaveBeenLastCalledWith('get_agent_review_comments', { reviewPrId: 42 })
+    for (const command of [
+      'forceGithubSync',
+      'fetchReviewPrs',
+      'getReviewPrs',
+      'getPrFileDiffs',
+      'getReviewComments',
+      'submitPrReview',
+      'getAgentReviewComments',
+      'updateAgentReviewCommentStatus',
+    ]) {
+      await expect(invokePluginHostCommand(command, {})).rejects.toThrow(`Unknown plugin host command: ${command}`)
+    }
 
-    await invokePluginHostCommand('updateAgentReviewCommentStatus', { commentId: '7', status: 'approved' })
-    expect(invoke).toHaveBeenLastCalledWith('update_agent_review_comment_status', { commentId: 7, status: 'approved' })
+    expect(invoke).not.toHaveBeenCalled()
   })
 
   it('does not expose removed live agent review, resume implementation, or skills-viewer host commands', async () => {

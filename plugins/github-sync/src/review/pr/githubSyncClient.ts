@@ -57,28 +57,29 @@ export interface GithubSyncPrReviewClient {
 
 const HOST_COMMAND_NAMESPACE = ['open', 'forge'].join('')
 
-function hostCommandId(command: string): string {
-  return `${HOST_COMMAND_NAMESPACE}.${command}`
-}
-
 function hostEventId(event: string): string {
   return `${HOST_COMMAND_NAMESPACE}.${event}`
 }
 
-export function createGithubSyncPrReviewClient(api: Pick<FrontendOpenForgeAPI, 'commands' | 'events'>): GithubSyncPrReviewClient {
+async function invokeBackend<TOutput>(api: Pick<FrontendOpenForgeAPI, 'backend'>, method: string, payload?: unknown): Promise<TOutput> {
+  await api.backend.whenReady()
+  return api.backend.invoke<TOutput>(method, payload)
+}
+
+export function createGithubSyncPrReviewClient(api: Pick<FrontendOpenForgeAPI, 'backend' | 'events'>): GithubSyncPrReviewClient {
   return {
-    syncPullRequests: () => api.commands.invokeGlobal<PollResult>(hostCommandId('forceGithubSync')),
-    listReviewPullRequests: () => api.commands.invokeGlobal<ReviewPullRequest[]>(hostCommandId('getReviewPrs')),
-    refreshReviewPullRequests: () => api.commands.invokeGlobal<ReviewPullRequest[]>(hostCommandId('fetchReviewPrs')),
-    listAuthoredPullRequests: () => api.commands.invokeGlobal<AuthoredPullRequest[]>(hostCommandId('getAuthoredPrs')),
-    refreshAuthoredPullRequests: () => api.commands.invokeGlobal<AuthoredPullRequest[]>(hostCommandId('fetchAuthoredPrs')),
-    markReviewPullRequestViewed: ({ prId, headSha }) => api.commands.invokeGlobal<void>(hostCommandId('markReviewPrViewed'), { prId, headSha }),
-    listPullRequestFileDiffs: ({ owner, repo, prNumber }) => api.commands.invokeGlobal<PrFileDiff[]>(hostCommandId('getPrFileDiffs'), { owner, repo, prNumber }),
-    getFileContent: ({ owner, repo, sha }) => api.commands.invokeGlobal<string>(hostCommandId('getFileContent'), { owner, repo, sha }),
-    getFileAtRef: ({ owner, repo, path, refSha }) => api.commands.invokeGlobal<string>(hostCommandId('getFileAtRef'), { owner, repo, path, refSha }),
-    listReviewComments: ({ owner, repo, prNumber }) => api.commands.invokeGlobal<ReviewComment[]>(hostCommandId('getReviewComments'), { owner, repo, prNumber }),
-    listPullRequestOverviewComments: ({ owner, repo, prNumber }) => api.commands.invokeGlobal<PrOverviewComment[]>(hostCommandId('getPrOverviewComments'), { owner, repo, prNumber }),
-    submitPullRequestReview: ({ owner, repo, prNumber, event, body, comments, commitId }) => api.commands.invokeGlobal<void>(hostCommandId('submitPrReview'), {
+    syncPullRequests: () => invokeBackend<PollResult>(api, 'forceGithubSync'),
+    listReviewPullRequests: () => invokeBackend<ReviewPullRequest[]>(api, 'getReviewPrs'),
+    refreshReviewPullRequests: () => invokeBackend<ReviewPullRequest[]>(api, 'fetchReviewPrs'),
+    listAuthoredPullRequests: () => invokeBackend<AuthoredPullRequest[]>(api, 'getAuthoredPrs'),
+    refreshAuthoredPullRequests: () => invokeBackend<AuthoredPullRequest[]>(api, 'fetchAuthoredPrs'),
+    markReviewPullRequestViewed: ({ prId, headSha }) => invokeBackend<void>(api, 'markReviewPrViewed', { prId, headSha }),
+    listPullRequestFileDiffs: ({ owner, repo, prNumber }) => invokeBackend<PrFileDiff[]>(api, 'getPrFileDiffs', { owner, repo, prNumber }),
+    getFileContent: ({ owner, repo, sha }) => invokeBackend<string>(api, 'getFileContent', { owner, repo, sha }),
+    getFileAtRef: ({ owner, repo, path, refSha }) => invokeBackend<string>(api, 'getFileAtRef', { owner, repo, path, refSha }),
+    listReviewComments: ({ owner, repo, prNumber }) => invokeBackend<ReviewComment[]>(api, 'getReviewComments', { owner, repo, prNumber }),
+    listPullRequestOverviewComments: ({ owner, repo, prNumber }) => invokeBackend<PrOverviewComment[]>(api, 'getPrOverviewComments', { owner, repo, prNumber }),
+    submitPullRequestReview: ({ owner, repo, prNumber, event, body, comments, commitId }) => invokeBackend<void>(api, 'submitPrReview', {
       owner,
       repo,
       prNumber,
@@ -87,8 +88,8 @@ export function createGithubSyncPrReviewClient(api: Pick<FrontendOpenForgeAPI, '
       comments,
       commitId,
     }),
-    listAgentReviewComments: ({ reviewPrId }) => api.commands.invokeGlobal<AgentReviewComment[]>(hostCommandId('getAgentReviewComments'), { reviewPrId }),
-    updateAgentReviewCommentStatus: ({ commentId, status }) => api.commands.invokeGlobal<void>(hostCommandId('updateAgentReviewCommentStatus'), { commentId, status }),
+    listAgentReviewComments: ({ reviewPrId }) => invokeBackend<AgentReviewComment[]>(api, 'getAgentReviewComments', { reviewPrId }),
+    updateAgentReviewCommentStatus: ({ commentId, status }) => invokeBackend<void>(api, 'updateAgentReviewCommentStatus', { commentId, status }),
     onAuthoredPullRequestsUpdated: (handler) => api.events.onGlobal(hostEventId('authored-prs-updated'), handler),
     onReviewPullRequestCountChanged: (handler) => api.events.onGlobal(hostEventId('review-pr-count-changed'), handler),
   }

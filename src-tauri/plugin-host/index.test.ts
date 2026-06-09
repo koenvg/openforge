@@ -274,6 +274,31 @@ describe('plugin-host backend runtime', () => {
     expect(await runtime.invokeBackend({ pluginId: 'backend', command: 'events' })).toEqual([{ pluginId: 'backend', projectId: 'P-1' }])
   })
 
+  it('routes backend openforge global command fallback through durable host callbacks', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('sync', {
+            async handler(input) {
+              return await openforge.commands.invokeGlobal('openforge.forceGithubSync', input)
+            }
+          }))
+        }
+      }
+    `)
+    const hostCallbacks = vi.fn(async ({ method, params }) => ({ method, params }))
+    const runtime = createPluginHostRuntime({ hostCallbacks })
+
+    await expect(runtime.invokeBackend({ pluginId: 'com.openforge.github-sync', backendPath, command: 'sync', payload: { force: true } })).resolves.toEqual({
+      method: 'openforge.commands.invokeGlobal',
+      params: { qualifiedId: 'openforge.forceGithubSync', payload: { force: true }, callerPluginId: 'com.openforge.github-sync' },
+    })
+    expect(hostCallbacks).toHaveBeenCalledWith({
+      method: 'openforge.commands.invokeGlobal',
+      params: { qualifiedId: 'openforge.forceGithubSync', payload: { force: true }, callerPluginId: 'com.openforge.github-sync' },
+    })
+  })
+
   it('exposes scoped JSON storage to backend plugins with plugin/project/task isolation', async () => {
     const backendPath = await writeBackendModule(`
       export default {

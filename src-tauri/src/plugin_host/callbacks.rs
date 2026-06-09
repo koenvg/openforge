@@ -3,6 +3,39 @@ use crate::app_events::publish_app_event;
 use serde_json::Value;
 use std::sync::{Arc, Mutex};
 
+const GITHUB_SYNC_PLUGIN_ID: &str = "com.openforge.github-sync";
+
+fn openforge_global_command_to_app_invoke(qualified_id: &str) -> Result<&'static str, String> {
+    let command = qualified_id
+        .strip_prefix("openforge.")
+        .ok_or_else(|| format!("unsupported plugin host global command id: {qualified_id}"))?;
+
+    match command {
+        "forceGithubSync" => Ok("force_github_sync"),
+        "fetchReviewPrs" => Ok("fetch_review_prs"),
+        "getReviewPrs" => Ok("get_review_prs"),
+        "fetchAuthoredPrs" => Ok("fetch_authored_prs"),
+        "getAuthoredPrs" => Ok("get_authored_prs"),
+        "markReviewPrViewed" => Ok("mark_review_pr_viewed"),
+        "getPrFileDiffs" => Ok("get_pr_file_diffs"),
+        "getFileContent" => Ok("get_file_content"),
+        "getFileAtRef" => Ok("get_file_at_ref"),
+        "getReviewComments" => Ok("get_review_comments"),
+        "getPrOverviewComments" => Ok("get_pr_overview_comments"),
+        "submitPrReview" => Ok("submit_pr_review"),
+        "getAgentReviewComments" => Ok("get_agent_review_comments"),
+        "updateAgentReviewCommentStatus" => Ok("update_agent_review_comment_status"),
+        _ => Err(format!("unsupported plugin host global command id: {qualified_id}")),
+    }
+}
+
+fn is_files_review_app_command(command: &str) -> bool {
+    matches!(
+        command,
+        "get_agent_review_comments" | "update_agent_review_comment_status"
+    )
+}
+
 impl PluginHost {
     pub(super) async fn handle_host_callback(
         &self,
@@ -10,6 +43,7 @@ impl PluginHost {
         params: &Value,
     ) -> Result<Value, String> {
         match method {
+            "openforge.commands.invokeGlobal" => self.invoke_global_command_for_host(params).await,
             "openforge.storage.get" => self.get_plugin_storage_for_host(params),
             "openforge.storage.set" => self.set_plugin_storage_for_host(params),
             "openforge.storage.delete" => self.delete_plugin_storage_for_host(params),
@@ -45,6 +79,64 @@ impl PluginHost {
             "openforge.projectConfig.set" => self.set_project_config_for_host(params),
             _ => Err(format!("unsupported plugin host callback method: {method}")),
         }
+    }
+
+    fn app_state_for_command_callback(&self) -> Result<crate::http_server::AppState, String> {
+        let db_state = self
+            .app_handle
+            .try_state::<Arc<Mutex<crate::db::Database>>>()
+            .ok_or_else(|| "plugin host database state is not available".to_string())?;
+        let pty_manager = self
+            .app_handle
+            .try_state::<crate::pty_manager::PtyManager>()
+            .map(|state| state.inner().clone());
+        let github_client = self
+            .app_handle
+            .try_state::<crate::github_client::GitHubClient>()
+            .map(|state| state.inner().clone())
+            .unwrap_or_else(crate::github_client::GitHubClient::new);
+
+        Ok(crate::http_server::AppState {
+            app: Some(self.app_handle.clone()),
+            db: Arc::clone(db_state.inner()),
+            backend_token: None,
+            pty_manager,
+            github_client,
+            plugin_host: Some(self.clone()),
+            app_event_tx: self.app_event_tx.clone(),
+            app_event_bus: None,
+            whisper: None,
+            sidecar_readiness: crate::http_server::SidecarReadinessState::default(),
+            start_implementation_claims: self.start_implementation_claims.clone(),
+        })
+    }
+
+    async fn invoke_global_command_for_host(&self, params: &Value) -> Result<Value, String> {
+        let qualified_id = required_param_string(params, "qualifiedId")?;
+        let caller_plugin_id = required_param_string(params, "callerPluginId")?;
+        if caller_plugin_id != GITHUB_SYNC_PLUGIN_ID {
+            return Err(format!(
+                "plugin {caller_plugin_id} is not authorized to invoke private GitHub Sync host command {qualified_id}"
+            ));
+        }
+        let command = openforge_global_command_to_app_invoke(&qualified_id)?;
+        let payload = params.get("payload").cloned().unwrap_or(Value::Null);
+        let request = crate::http_server::AppInvokeRequest {
+            command: command.to_string(),
+            payload,
+        };
+        let state = self.app_state_for_command_callback()?;
+        let result = if is_files_review_app_command(command) {
+            crate::app_invoke::handle_files_review_command(&state, &request).await
+        } else {
+            crate::app_invoke::handle_github_review_command(&state, &request).await
+        };
+
+        result
+            .map_err(|(status, message)| {
+                format!("plugin host command callback {command} failed ({status}): {message}")
+            })?
+            .ok_or_else(|| format!("plugin host command callback returned no value: {command}"))
     }
 
     fn get_plugin_storage_for_host(&self, params: &Value) -> Result<Value, String> {
