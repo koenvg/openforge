@@ -554,14 +554,14 @@ export class PluginHostRuntime {
     assertLocalId('commands', input.pluginId)
     assertLocalId('commands', input.command)
     await this.whenBackendReady(input)
-    return this.invokeGlobalCommand(`${input.pluginId}.${input.command.trim()}`, input.payload)
+    return this.invokeGlobalCommand(`${input.pluginId}.${input.command.trim()}`, input.payload, input.pluginId)
   }
 
-  async invokeGlobalCommand(qualifiedId: string, payload?: unknown): Promise<unknown> {
+  async invokeGlobalCommand(qualifiedId: string, payload?: unknown, callerPluginId?: string): Promise<unknown> {
     const command = globalCommands.get(qualifiedId)
     if (!command) {
       if (qualifiedId.startsWith('openforge.') && this.hostCallbacks) {
-        return await this.hostCallbacks({ method: 'openforge.commands.invokeGlobal', params: { qualifiedId, payload: payload ?? null } })
+        return await this.hostCallbacks({ method: 'openforge.commands.invokeGlobal', params: { qualifiedId, payload: payload ?? null, callerPluginId: callerPluginId ?? null } })
       }
       throw new Error(`Command not found: ${qualifiedId}`)
     }
@@ -739,7 +739,7 @@ export class PluginHostRuntime {
       commands: {
         register: (registration) => this.registerCommand(state, registration),
         invoke: async (command, payload) => this.invokeCommand({ pluginId: state.pluginId, command, payload }),
-        invokeGlobal: async (qualifiedId, payload) => this.invokeGlobalCommand(qualifiedId, payload),
+        invokeGlobal: async (qualifiedId, payload) => this.invokeGlobalCommand(qualifiedId, payload, state.pluginId),
         list: async () => this.listCommands(),
       },
       events: {

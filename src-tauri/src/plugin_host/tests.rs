@@ -364,16 +364,37 @@ async fn plugin_host_global_command_callback_routes_github_sync_backend_bridge()
     let review_prs = host
         .handle_host_callback(
             "openforge.commands.invokeGlobal",
-            &json!({ "qualifiedId": "openforge.getReviewPrs", "payload": null }),
+            &json!({
+                "qualifiedId": "openforge.getReviewPrs",
+                "payload": null,
+                "callerPluginId": "com.openforge.github-sync"
+            }),
         )
         .await
         .expect("global command callback");
     assert_eq!(review_prs, json!([]));
 
+    let unauthorized = host
+        .handle_host_callback(
+            "openforge.commands.invokeGlobal",
+            &json!({
+                "qualifiedId": "openforge.submitPrReview",
+                "payload": {},
+                "callerPluginId": "com.example.third-party"
+            }),
+        )
+        .await
+        .expect_err("third-party global command should fail");
+    assert!(unauthorized.contains("not authorized to invoke private GitHub Sync host command"));
+
     let unsupported = host
         .handle_host_callback(
             "openforge.commands.invokeGlobal",
-            &json!({ "qualifiedId": "openforge.notAGithubSyncCommand", "payload": null }),
+            &json!({
+                "qualifiedId": "openforge.notAGithubSyncCommand",
+                "payload": null,
+                "callerPluginId": "com.openforge.github-sync"
+            }),
         )
         .await
         .expect_err("unsupported global command should fail");

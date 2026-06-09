@@ -3,6 +3,8 @@ use crate::app_events::publish_app_event;
 use serde_json::Value;
 use std::sync::{Arc, Mutex};
 
+const GITHUB_SYNC_PLUGIN_ID: &str = "com.openforge.github-sync";
+
 fn openforge_global_command_to_app_invoke(qualified_id: &str) -> Result<&'static str, String> {
     let command = qualified_id
         .strip_prefix("openforge.")
@@ -111,6 +113,12 @@ impl PluginHost {
 
     async fn invoke_global_command_for_host(&self, params: &Value) -> Result<Value, String> {
         let qualified_id = required_param_string(params, "qualifiedId")?;
+        let caller_plugin_id = required_param_string(params, "callerPluginId")?;
+        if caller_plugin_id != GITHUB_SYNC_PLUGIN_ID {
+            return Err(format!(
+                "plugin {caller_plugin_id} is not authorized to invoke private GitHub Sync host command {qualified_id}"
+            ));
+        }
         let command = openforge_global_command_to_app_invoke(&qualified_id)?;
         let payload = params.get("payload").cloned().unwrap_or(Value::Null);
         let request = crate::http_server::AppInvokeRequest {

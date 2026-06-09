@@ -289,13 +289,13 @@ describe('plugin-host backend runtime', () => {
     const hostCallbacks = vi.fn(async ({ method, params }) => ({ method, params }))
     const runtime = createPluginHostRuntime({ hostCallbacks })
 
-    await expect(runtime.invokeBackend({ pluginId: 'github-sync', backendPath, command: 'sync', payload: { force: true } })).resolves.toEqual({
+    await expect(runtime.invokeBackend({ pluginId: 'com.openforge.github-sync', backendPath, command: 'sync', payload: { force: true } })).resolves.toEqual({
       method: 'openforge.commands.invokeGlobal',
-      params: { qualifiedId: 'openforge.forceGithubSync', payload: { force: true } },
+      params: { qualifiedId: 'openforge.forceGithubSync', payload: { force: true }, callerPluginId: 'com.openforge.github-sync' },
     })
     expect(hostCallbacks).toHaveBeenCalledWith({
       method: 'openforge.commands.invokeGlobal',
-      params: { qualifiedId: 'openforge.forceGithubSync', payload: { force: true } },
+      params: { qualifiedId: 'openforge.forceGithubSync', payload: { force: true }, callerPluginId: 'com.openforge.github-sync' },
     })
   })
 
