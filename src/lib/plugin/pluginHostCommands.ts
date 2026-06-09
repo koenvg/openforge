@@ -1,32 +1,20 @@
 import { get } from 'svelte/store'
 import type { BackendReadyState, CreateTaskRequest, ImplementationRun, StartTaskImplementationRequest } from '@openforge/plugin-sdk'
 import {
-  fetchAuthoredPrs,
-  fetchReviewPrs,
   createTask,
-  forceGithubSync,
   fsReadDir,
   fsReadFile,
   fsSearchFiles,
-  getAgentReviewComments,
   getAllTasks,
-  getAuthoredPrs,
   getConfig,
-  getFileAtRef,
-  getFileContent,
-  getPrFileDiffs,
-  getPrOverviewComments,
   getProjectAttention,
   getProjectConfig,
   getProjects,
   getPtyBuffer,
-  getReviewComments,
-  getReviewPrs,
   getTaskDetail,
   getTasksForProject,
   getTaskWorkspace,
   getLatestSession,
-  markReviewPrViewed,
   killPty,
   openUrl,
   pluginBackendWhenReady,
@@ -36,8 +24,6 @@ import {
   setProjectConfig,
   spawnShellPty,
   startImplementation,
-  submitPrReview,
-  updateAgentReviewCommentStatus,
   updateTaskStatus,
   updateTaskSummary,
   writePty,
@@ -279,40 +265,12 @@ export async function invokePluginHostCommand(command: string, payload: unknown)
 
       return getContextSnapshot()
     }
-    case 'forceGithubSync':
-      return forceGithubSync()
     case 'openUrl':
       return openUrl(String(commandPayload?.url ?? ''))
     case 'fsReadDir':
       return fsReadDir(String(commandPayload?.projectId ?? ''), typeof commandPayload?.dirPath === 'string' ? commandPayload.dirPath : null)
     case 'fsReadFile':
       return fsReadFile(String(commandPayload?.projectId ?? ''), String(commandPayload?.filePath ?? ''))
-    case 'fetchReviewPrs':
-      return fetchReviewPrs()
-    case 'getReviewPrs':
-      return getReviewPrs()
-    case 'fetchAuthoredPrs':
-      return fetchAuthoredPrs()
-    case 'getAuthoredPrs':
-      return getAuthoredPrs()
-    case 'markReviewPrViewed':
-      return markReviewPrViewed(Number(commandPayload?.prId), String(commandPayload?.headSha ?? ''))
-    case 'getPrFileDiffs':
-      return getPrFileDiffs(String(commandPayload?.owner ?? ''), String(commandPayload?.repo ?? ''), Number(commandPayload?.prNumber))
-    case 'getFileContent':
-      return getFileContent(String(commandPayload?.owner ?? ''), String(commandPayload?.repo ?? ''), String(commandPayload?.sha ?? ''))
-    case 'getFileAtRef':
-      return getFileAtRef(String(commandPayload?.owner ?? ''), String(commandPayload?.repo ?? ''), String(commandPayload?.path ?? ''), String(commandPayload?.refSha ?? ''))
-    case 'getReviewComments':
-      return getReviewComments(String(commandPayload?.owner ?? ''), String(commandPayload?.repo ?? ''), Number(commandPayload?.prNumber))
-    case 'getPrOverviewComments':
-      return getPrOverviewComments(String(commandPayload?.owner ?? ''), String(commandPayload?.repo ?? ''), Number(commandPayload?.prNumber))
-    case 'submitPrReview':
-      return submitPrReview(String(commandPayload?.owner ?? ''), String(commandPayload?.repo ?? ''), Number(commandPayload?.prNumber), String(commandPayload?.event ?? ''), String(commandPayload?.body ?? ''), Array.isArray(commandPayload?.comments) ? commandPayload.comments as never : [], String(commandPayload?.commitId ?? ''))
-    case 'getAgentReviewComments':
-      return getAgentReviewComments(Number(commandPayload?.reviewPrId))
-    case 'updateAgentReviewCommentStatus':
-      return updateAgentReviewCommentStatus(Number(commandPayload?.commentId), String(commandPayload?.status ?? ''))
     case 'getProjectConfig':
       return getProjectConfig(String(commandPayload?.projectId ?? ''), String(commandPayload?.key ?? ''))
     case 'setProjectConfig':

@@ -560,6 +560,9 @@ export class PluginHostRuntime {
   async invokeGlobalCommand(qualifiedId: string, payload?: unknown): Promise<unknown> {
     const command = globalCommands.get(qualifiedId)
     if (!command) {
+      if (qualifiedId.startsWith('openforge.') && this.hostCallbacks) {
+        return await this.hostCallbacks({ method: 'openforge.commands.invokeGlobal', params: { qualifiedId, payload: payload ?? null } })
+      }
       throw new Error(`Command not found: ${qualifiedId}`)
     }
     validateSchemaValue(command.input, payload, `${qualifiedId} input`)

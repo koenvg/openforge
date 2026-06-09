@@ -22,15 +22,18 @@ const repoRoot = join(pluginSrcDir, '../../..')
 function makeRuntimeHarness() {
   const subscriptions = { add: vi.fn() }
   const invokeGlobal = vi.fn(async () => null)
+  const backendInvoke = vi.fn(async () => null)
+  const backendWhenReady = vi.fn(async () => undefined)
   const onGlobal = vi.fn(() => ({ dispose: vi.fn() }))
   const api = {
     views: { register: vi.fn(() => ({ dispose: vi.fn() })) },
     commands: { register: vi.fn(() => ({ dispose: vi.fn() })), invokeGlobal },
+    backend: { invoke: backendInvoke, whenReady: backendWhenReady },
     events: { onGlobal },
     navigation: { get: vi.fn(() => ({ activeProjectId: 'project-1', currentView: 'board', selectedTaskId: null })) },
   } as unknown as FrontendOpenForgeAPI
   const context = { pluginId: packageJson.openforge.id, apiVersion: 1, packageMetadata: packageJson.openforge, subscriptions } as FrontendPluginContext
-  return { api, context, subscriptions, invokeGlobal, onGlobal }
+  return { api, context, subscriptions, invokeGlobal, backendInvoke, backendWhenReady, onGlobal }
 }
 
 describe('github-sync plugin', () => {
@@ -46,6 +49,8 @@ describe('github-sync plugin', () => {
     expect(isOpenForgePackageMetadata(packageJson.openforge)).toBe(true)
     expect(packageJson.openforge).not.toHaveProperty('contributes')
     expect(packageJson.openforge.frontend).toBe('./dist/frontend.js')
+    expect(packageJson.openforge.backend).toBe('./dist/backend.js')
+    expect(packageJson.openforge.requires).toEqual(expect.arrayContaining(['backend']))
   })
 
   it('keeps GitHub PR review host command strings out of plugin UI and activation code', () => {
@@ -80,7 +85,7 @@ describe('github-sync plugin', () => {
 
   it('registers PR view and refresh command at runtime through defineFrontendPlugin', async () => {
     const { default: plugin, PrReviewViewComponent } = await import('./index')
-    const { api, context, subscriptions, invokeGlobal } = makeRuntimeHarness()
+    const { api, context, subscriptions, backendInvoke, backendWhenReady } = makeRuntimeHarness()
 
     await plugin.activate(api, context)
 
@@ -103,8 +108,30 @@ describe('github-sync plugin', () => {
 
     const refreshRegistration = vi.mocked(api.commands.register).mock.calls[0]?.[0]
     await refreshRegistration?.handler(undefined)
-    expect(invokeGlobal).toHaveBeenCalledWith(expect.stringMatching(/\.forceGithubSync$/))
+    expect(backendWhenReady).toHaveBeenCalled()
+    expect(backendInvoke).toHaveBeenCalledWith('forceGithubSync', undefined)
     expect(api.navigation.get).toHaveBeenCalled()
+  })
+
+  it('registers GitHub Sync-owned backend methods for PR review operations', async () => {
+    const { default: backend } = await import('./backend')
+    const subscriptions = { add: vi.fn() }
+    const api = {
+      backend: { registerMethod: vi.fn(() => ({ dispose: vi.fn() })) },
+      commands: { invokeGlobal: vi.fn(async () => null) },
+    }
+
+    await backend.activate(api as never, { pluginId: packageJson.openforge.id, apiVersion: 1, packageMetadata: packageJson.openforge, subscriptions })
+
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('forceGithubSync', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('fetchReviewPrs', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('getReviewPrs', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('getPrFileDiffs', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('getReviewComments', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('submitPrReview', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('getAgentReviewComments', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('updateAgentReviewCommentStatus', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(subscriptions.add).toHaveBeenCalledTimes(14)
   })
 
   it('does not add a GitHub-specific SDK namespace', () => {

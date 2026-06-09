@@ -4,9 +4,12 @@ import { createGithubSyncPrReviewClient } from './githubSyncClient'
 
 function makeApi() {
   const invokeGlobal = vi.fn(async () => [])
+  const backendInvoke = vi.fn(async () => [])
+  const backendWhenReady = vi.fn(async () => undefined)
   const onGlobal = vi.fn(() => ({ dispose: vi.fn() }))
   return {
     commands: { invokeGlobal },
+    backend: { invoke: backendInvoke, whenReady: backendWhenReady },
     events: { onGlobal },
   } as unknown as FrontendOpenForgeAPI
 }
@@ -20,9 +23,11 @@ describe('GitHub Sync PR review client contracts', () => {
     await client.listPullRequestFileDiffs({ owner: 'acme', repo: 'repo', prNumber: 42 })
     await client.markReviewPullRequestViewed({ prId: 7, headSha: 'abc' })
 
-    expect(api.commands.invokeGlobal).toHaveBeenNthCalledWith(1, expect.stringMatching(/\.fetchReviewPrs$/))
-    expect(api.commands.invokeGlobal).toHaveBeenNthCalledWith(2, expect.stringMatching(/\.getPrFileDiffs$/), { owner: 'acme', repo: 'repo', prNumber: 42 })
-    expect(api.commands.invokeGlobal).toHaveBeenNthCalledWith(3, expect.stringMatching(/\.markReviewPrViewed$/), { prId: 7, headSha: 'abc' })
+    expect(api.backend.whenReady).toHaveBeenCalledTimes(3)
+    expect(api.backend.invoke).toHaveBeenNthCalledWith(1, 'fetchReviewPrs', undefined)
+    expect(api.backend.invoke).toHaveBeenNthCalledWith(2, 'getPrFileDiffs', { owner: 'acme', repo: 'repo', prNumber: 42 })
+    expect(api.backend.invoke).toHaveBeenNthCalledWith(3, 'markReviewPrViewed', { prId: 7, headSha: 'abc' })
+    expect(api.commands.invokeGlobal).not.toHaveBeenCalled()
   })
 
   it('wraps host PR update events as GitHub Sync-owned subscriptions', () => {
