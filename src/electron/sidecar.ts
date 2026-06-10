@@ -545,6 +545,7 @@ export async function startSidecarReadiness(
   }
 
   let eventStream: SidecarEventStreamAdapter | null = null
+  let eventRunSettled: Promise<void> = Promise.resolve()
   let snapshot: SidecarReadinessSnapshot | null = null
 
   try {
@@ -563,6 +564,9 @@ export async function startSidecarReadiness(
       if (snapshot) applyReadinessEvent(snapshot, envelope)
     })
     const eventRun = eventStream.start()
+    eventRunSettled = eventRun.catch(error => {
+      if (snapshot) markDegraded(snapshot, 'events', error instanceof Error ? error.message : String(error))
+    })
     await eventStream.ready()
     snapshot.events = {
       ...snapshot.events,
@@ -570,9 +574,6 @@ export async function startSidecarReadiness(
       available: true,
       connectedAt: snapshot.events.connectedAt ?? new Date().toISOString(),
     }
-    void eventRun.catch(error => {
-      if (snapshot) markDegraded(snapshot, 'events', error instanceof Error ? error.message : String(error))
-    })
   } catch (error) {
     await reportFailure(deps.failureReporter, createFailureReport({
       phase: eventStream ? 'boot:event-stream' : 'boot:sidecar-health',
@@ -587,6 +588,7 @@ export async function startSidecarReadiness(
       decision: 'quit',
     }))
     eventStream?.stop()
+    await eventRunSettled
     await stopSidecar(child, { graceMs: DEFAULT_STOP_GRACE_MS, sleep: deps.sleep })
     throw error
   }
@@ -594,6 +596,7 @@ export async function startSidecarReadiness(
   const resolvedSnapshot = snapshot
   const resolvedEventStream = eventStream
   let intentionalStop = false
+  let stopPromise: Promise<SidecarStopReport> | null = null
   if (!resolvedSnapshot || !resolvedEventStream) {
     await stopSidecar(child, { graceMs: DEFAULT_STOP_GRACE_MS, sleep: deps.sleep })
     throw new Error('sidecar readiness did not produce a snapshot')
@@ -617,18 +620,22 @@ export async function startSidecarReadiness(
     eventStream: resolvedEventStream,
     ready: async () => resolvedSnapshot,
     snapshot: () => resolvedSnapshot,
-    async stop(options: Partial<StopSidecarOptions> = {}): Promise<SidecarStopReport> {
-      intentionalStop = true
-      resolvedSnapshot.process = { ...resolvedSnapshot.process, state: 'stopping' }
-      resolvedEventStream.stop()
-      const report = await stopSidecar(child, {
-        graceMs: options.graceMs ?? DEFAULT_STOP_GRACE_MS,
-        sleep: options.sleep ?? ((ms) => new Promise(resolve => setTimeout(resolve, ms))),
-      })
-      if (resolvedSnapshot.process.state !== 'exited') {
-        resolvedSnapshot.process = { state: 'stopped' }
-      }
-      return report
+    stop(options: Partial<StopSidecarOptions> = {}): Promise<SidecarStopReport> {
+      stopPromise ??= (async () => {
+        intentionalStop = true
+        resolvedSnapshot.process = { ...resolvedSnapshot.process, state: 'stopping' }
+        resolvedEventStream.stop()
+        await eventRunSettled
+        const report = await stopSidecar(child, {
+          graceMs: options.graceMs ?? DEFAULT_STOP_GRACE_MS,
+          sleep: options.sleep ?? ((ms) => new Promise(resolve => setTimeout(resolve, ms))),
+        })
+        if (resolvedSnapshot.process.state !== 'exited') {
+          resolvedSnapshot.process = { state: 'stopped' }
+        }
+        return report
+      })()
+      return stopPromise
     },
   }
 }
