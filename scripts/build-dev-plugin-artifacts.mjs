@@ -162,9 +162,33 @@ async function collectBundledPluginInputs(workspaceRoot) {
   return files
 }
 
+function pluginPackageOutputPath(pluginDir, entry) {
+  if (typeof entry !== 'string' || entry.trim() === '') return null
+  const resolved = path.resolve(pluginDir, entry)
+  const relative = path.relative(pluginDir, resolved)
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return null
+  return resolved
+}
+
+function pluginPackageOutputPaths(pluginDir, packageJson) {
+  const outputs = [
+    pluginPackageOutputPath(pluginDir, packageJson?.openforge?.frontend),
+    pluginPackageOutputPath(pluginDir, packageJson?.openforge?.backend),
+  ].filter(Boolean)
+
+  return outputs.length > 0 ? outputs : [path.join(pluginDir, 'dist', 'index.js')]
+}
+
 async function buildScriptPluginOutputs(workspaceRoot) {
   const pluginDirs = await collectBuildScriptPluginDirs(workspaceRoot)
-  return pluginDirs.map((pluginDir) => path.join(pluginDir, 'dist', 'index.js'))
+  const outputs = []
+
+  for (const pluginDir of pluginDirs) {
+    const packageJson = await readJson(path.join(pluginDir, 'package.json'), null)
+    outputs.push(...pluginPackageOutputPaths(pluginDir, packageJson))
+  }
+
+  return outputs
 }
 
 async function anyMissing(paths) {

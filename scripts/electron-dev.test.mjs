@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
-import { DevScriptCleanupAdapter, ELECTRON_DEV_DISABLE_AUTO_SEED_ENV, ELECTRON_DEV_SEED_APP_DATA_DIR_ENV, ELECTRON_DEV_SEED_DB_PATH_ENV, ELECTRON_RENDERER_URL, assertBackendPortAvailable, assertElectronDebugPortAvailable, assertVitePortAvailable, buildElectronDebugArgs, buildElectronDevEnv, cleanupDevProcesses, electronSidecarPath, rendererUrlForPort, resolveElectronDevBackendEnv, resolveElectronDevRuntimeOptions, stopProcess, waitForVite } from './electron-dev.mjs'
+import { DevScriptCleanupAdapter, ELECTRON_DEV_DISABLE_AUTO_SEED_ENV, ELECTRON_DEV_SEED_APP_DATA_DIR_ENV, ELECTRON_DEV_SEED_DB_PATH_ENV, ELECTRON_RENDERER_URL, assertBackendPortAvailable, assertElectronDebugPortAvailable, assertVitePortAvailable, buildElectronDebugArgs, buildElectronDevEnv, cleanupDevProcesses, electronSidecarPath, prepareElectronDevArtifacts, rendererUrlForPort, resolveElectronDevBackendEnv, resolveElectronDevRuntimeOptions, stopProcess, waitForVite } from './electron-dev.mjs'
 import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 
 const defaultTestLayout = resolveRustSidecarLayout({
@@ -134,6 +134,14 @@ describe('electron dev script environment', () => {
   it('uses one canonical loopback URL for Electron and Vite readiness by default', () => {
     expect(ELECTRON_RENDERER_URL).toBe('http://127.0.0.1:1420')
     expect(rendererUrlForPort(1431)).toBe('http://127.0.0.1:1431')
+  })
+
+  it('prepares bundled plugin artifacts before launching Electron dev so plugin backends can load', async () => {
+    const ensureDevPluginArtifacts = vi.fn(async () => ({ rebuilt: true }))
+
+    await prepareElectronDevArtifacts({ ensureDevPluginArtifacts })
+
+    expect(ensureDevPluginArtifacts).toHaveBeenCalledOnce()
   })
 
   it('resolves configurable renderer/debug ports and creates per-run isolation dirs', () => {
