@@ -54,6 +54,7 @@
   let reviewedFileShas = $state<Map<string, string>>(new Map())
   let loadedReviewedFilesKey = $state<string | null>(null)
   let reviewedFilesLoadSequence = 0
+  let prDetailsLoadSequence = 0
   let unlisteners: UnlistenFn[] = []
 
   // Repo filtering
@@ -357,12 +358,22 @@
     }
   }
 
+  function isCurrentPrDetailsLoad(sequence: number, pr: ReviewPullRequest): boolean {
+    return sequence === prDetailsLoadSequence && $selectedReviewPr?.id === pr.id
+  }
+
   async function selectPr(pr: ReviewPullRequest) {
     void api.navigation.navigate({ viewId: 'plugin:com.openforge.github-sync:pr_review' })
+    const loadSequence = ++prDetailsLoadSequence
     const now = Math.floor(Date.now() / 1000)
     const updatedPr = { ...pr, viewed_at: now, viewed_head_sha: pr.head_sha }
     $selectedReviewPr = updatedPr
     $reviewPrs = $reviewPrs.map(p => p.id === pr.id ? updatedPr : p)
+    $prFileDiffs = []
+    $reviewComments = []
+    $pendingManualComments = []
+    $prOverviewComments = []
+    $agentReviewComments = []
     githubSync.markReviewPullRequestViewed({ prId: pr.id, headSha: pr.head_sha }).catch(e => console.error('Failed to mark viewed:', e))
     isLoading = true
     try {
@@ -371,24 +382,32 @@
         repo: pr.repo_name,
         prNumber: pr.number,
       })
+      if (!isCurrentPrDetailsLoad(loadSequence, pr)) return
       $prFileDiffs = diffs
       const comments = await githubSync.listReviewComments({
         owner: pr.repo_owner,
         repo: pr.repo_name,
         prNumber: pr.number,
       })
+      if (!isCurrentPrDetailsLoad(loadSequence, pr)) return
       $reviewComments = comments
       const agentComments = await githubSync.listAgentReviewComments({ reviewPrId: pr.id })
+      if (!isCurrentPrDetailsLoad(loadSequence, pr)) return
       $agentReviewComments = agentComments
     } catch (e) {
+      if (!isCurrentPrDetailsLoad(loadSequence, pr)) return
       console.error('Failed to load PR diffs:', e)
       error = 'Failed to load pull request details.'
     } finally {
-      isLoading = false
+      if (loadSequence === prDetailsLoadSequence) {
+        isLoading = false
+      }
     }
   }
 
   function backToList() {
+    prDetailsLoadSequence += 1
+    isLoading = false
     $selectedReviewPr = null
     $prFileDiffs = []
     $reviewComments = []

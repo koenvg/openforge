@@ -111,6 +111,26 @@ const baseDiff: PrFileDiff = {
   patch_line_count: null,
 }
 
+const secondPr: ReviewPullRequest = {
+  ...basePr,
+  id: 67890,
+  number: 43,
+  title: 'Add checkout flow',
+  head_sha: 'second-head-sha',
+  additions: 3,
+  deletions: 1,
+}
+
+const secondDiff: PrFileDiff = {
+  ...baseDiff,
+  sha: 'second-file-sha',
+  filename: 'src/checkout.ts',
+  additions: 3,
+  deletions: 1,
+  changes: 4,
+  patch: '@@ -1 +1,2 @@\n line1\n+checkout',
+}
+
 function resetStores() {
   activeProjectId.set(null)
   reviewPrs.set([])
@@ -125,14 +145,18 @@ function resetStores() {
   agentReviewComments.set([])
 }
 
-function registerPrReviewBackends(registry: TestingOpenForgeRegistryFake, getDiffs: () => PrFileDiff[]) {
+function registerPrReviewBackends(
+  registry: TestingOpenForgeRegistryFake,
+  getDiffs: (request: { prNumber: number }) => PrFileDiff[] | Promise<PrFileDiff[]>,
+  prs: ReviewPullRequest[] = [basePr],
+) {
   const backend = registry.backendApi.backend
-  backend.registerMethod('getReviewPrs', { handler: async () => [basePr] })
-  backend.registerMethod('fetchReviewPrs', { handler: async () => [basePr] })
+  backend.registerMethod('getReviewPrs', { handler: async () => prs })
+  backend.registerMethod('fetchReviewPrs', { handler: async () => prs })
   backend.registerMethod('getAuthoredPrs', { handler: async () => [] })
   backend.registerMethod('fetchAuthoredPrs', { handler: async () => [] })
   backend.registerMethod('markReviewPrViewed', { handler: async () => undefined })
-  backend.registerMethod('getPrFileDiffs', { handler: async () => getDiffs() })
+  backend.registerMethod('getPrFileDiffs', { handler: async (payload) => getDiffs(payload as { prNumber: number }) })
   backend.registerMethod('getReviewComments', { handler: async () => [] })
   backend.registerMethod('getPrOverviewComments', { handler: async () => [] })
   backend.registerMethod('getAgentReviewComments', { handler: async () => [] })
@@ -179,6 +203,54 @@ describe('PrReviewView reviewed files', () => {
       expect(screen.getByLabelText('Reviewed file src/main.rs')).toBeTruthy()
       expect(screen.queryByRole('button', { name: 'Reviewed files (1)' })).toBeNull()
       expect(screen.queryByText('1 reviewed hidden')).toBeNull()
+    })
+  })
+
+  it('does not prune a selected pull request reviewed files against stale diffs from the previous PR', async () => {
+    let resolveSecondDiffs: (files: PrFileDiff[]) => void = () => {}
+    const secondDiffs = new Promise<PrFileDiff[]>((resolve) => {
+      resolveSecondDiffs = resolve
+    })
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    registerPrReviewBackends(
+      registry,
+      ({ prNumber }) => prNumber === basePr.number ? [baseDiff] : secondDiffs,
+      [basePr, secondPr],
+    )
+
+    render(PrReviewView, {
+      props: {
+        api: registry.frontendApi,
+        context: registry.frontendApi.context.getSnapshot(),
+        projectName: 'Demo Project',
+        projectId: 'project-1',
+      },
+    })
+
+    await registry.frontendApi.storage.project('project-1').set('githubSync.prReview.reviewedFiles.v1', {
+      'acme/repo#43': [[secondDiff.filename, secondDiff.sha]],
+    })
+
+    const firstTitle = await screen.findByText('Fix authentication middleware')
+    await fireEvent.click(requireElement(firstTitle.closest('button'), HTMLButtonElement))
+    await fireEvent.click(await screen.findByRole('button', { name: /Files changed/i }))
+    await screen.findByLabelText('Mark src/main.rs reviewed')
+
+    selectedReviewPr.set(null)
+    await screen.findByText('Add checkout flow')
+
+    await fireEvent.click(requireElement(screen.getByText('Add checkout flow').closest('button'), HTMLButtonElement))
+
+    await waitFor(async () => {
+      await expect(registry.frontendApi.storage.project('project-1').get('githubSync.prReview.reviewedFiles.v1')).resolves.toEqual({
+        'acme/repo#43': [[secondDiff.filename, secondDiff.sha]],
+      })
+    })
+
+    resolveSecondDiffs([secondDiff])
+
+    await waitFor(() => {
+      expect(requireElement(screen.getByLabelText('Mark src/checkout.ts reviewed'), HTMLInputElement).checked).toBe(true)
     })
   })
 
