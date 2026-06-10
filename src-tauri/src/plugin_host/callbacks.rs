@@ -25,7 +25,9 @@ fn openforge_global_command_to_app_invoke(qualified_id: &str) -> Result<&'static
         "submitPrReview" => Ok("submit_pr_review"),
         "getAgentReviewComments" => Ok("get_agent_review_comments"),
         "updateAgentReviewCommentStatus" => Ok("update_agent_review_comment_status"),
-        _ => Err(format!("unsupported plugin host global command id: {qualified_id}")),
+        _ => Err(format!(
+            "unsupported plugin host global command id: {qualified_id}"
+        )),
     }
 }
 
@@ -81,36 +83,6 @@ impl PluginHost {
         }
     }
 
-    fn app_state_for_command_callback(&self) -> Result<crate::http_server::AppState, String> {
-        let db_state = self
-            .app_handle
-            .try_state::<Arc<Mutex<crate::db::Database>>>()
-            .ok_or_else(|| "plugin host database state is not available".to_string())?;
-        let pty_manager = self
-            .app_handle
-            .try_state::<crate::pty_manager::PtyManager>()
-            .map(|state| state.inner().clone());
-        let github_client = self
-            .app_handle
-            .try_state::<crate::github_client::GitHubClient>()
-            .map(|state| state.inner().clone())
-            .unwrap_or_else(crate::github_client::GitHubClient::new);
-
-        Ok(crate::http_server::AppState {
-            app: Some(self.app_handle.clone()),
-            db: Arc::clone(db_state.inner()),
-            backend_token: None,
-            pty_manager,
-            github_client,
-            plugin_host: Some(self.clone()),
-            app_event_tx: self.app_event_tx.clone(),
-            app_event_bus: None,
-            whisper: None,
-            sidecar_readiness: crate::http_server::SidecarReadinessState::default(),
-            start_implementation_claims: self.start_implementation_claims.clone(),
-        })
-    }
-
     async fn invoke_global_command_for_host(&self, params: &Value) -> Result<Value, String> {
         let qualified_id = required_param_string(params, "qualifiedId")?;
         let caller_plugin_id = required_param_string(params, "callerPluginId")?;
@@ -125,7 +97,7 @@ impl PluginHost {
             command: command.to_string(),
             payload,
         };
-        let state = self.app_state_for_command_callback()?;
+        let state = self.app_state_for_host_callback()?;
         let result = if is_files_review_app_command(command) {
             crate::app_invoke::handle_files_review_command(&state, &request).await
         } else {
