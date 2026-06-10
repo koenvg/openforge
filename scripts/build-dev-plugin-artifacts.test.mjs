@@ -19,7 +19,7 @@ async function makeWorkspace() {
   await write(root, 'packages/plugin-sdk/tsconfig.json', '{}\n')
   await write(root, 'scripts/build-plugin-sdk-runtime.mjs', 'export async function buildPluginSdkRuntime() {}\n')
 
-  await write(root, 'plugins/demo/package.json', '{"scripts":{"build":"vite build"}}\n')
+  await write(root, 'plugins/demo/package.json', '{"scripts":{"build":"vite build"},"openforge":{"frontend":"./dist/frontend.js","backend":"./dist/backend.js"}}\n')
   await write(root, 'plugins/demo/src/index.ts', 'export const demo = 1\n')
   await write(root, 'plugins/demo/manifest.json', '{"id":"demo"}\n')
   await write(root, 'plugins/demo/tsconfig.json', '{}\n')
@@ -32,7 +32,8 @@ async function makeWorkspace() {
 }
 
 async function createPluginArtifacts(root) {
-  await write(root, 'plugins/demo/dist/index.js', 'demo bundle\n')
+  await write(root, 'plugins/demo/dist/frontend.js', 'demo frontend bundle\n')
+  await write(root, 'plugins/demo/dist/backend.js', 'demo backend bundle\n')
 }
 
 async function runWithCommands(root) {

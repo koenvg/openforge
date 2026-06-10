@@ -9,6 +9,7 @@ import { connect } from 'node:net'
 import { DEFAULT_DEV_BACKEND_PORT, buildElectronSidecarDevEnv, parsePort } from './cargo-target-env.mjs'
 import { OPENFORGE_APP_DATA_IDENTIFIER, databaseFilenameForBuildMode } from './data-identity.mjs'
 import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
+import { ensureDevPluginArtifacts as defaultEnsureDevPluginArtifacts } from './build-dev-plugin-artifacts.mjs'
 
 export const DEFAULT_VITE_PORT = 1420
 export const ELECTRON_DEV_SEED_APP_DATA_DIR_ENV = 'OPENFORGE_ELECTRON_DEV_SEED_APP_DATA_DIR'
@@ -287,6 +288,11 @@ export function isPortOpen(host = VITE_HOST, port = VITE_PORT, timeoutMs = 500) 
   })
 }
 
+export async function prepareElectronDevArtifacts(deps = {}) {
+  const ensureDevPluginArtifacts = deps.ensureDevPluginArtifacts ?? defaultEnsureDevPluginArtifacts
+  await ensureDevPluginArtifacts()
+}
+
 export async function assertVitePortAvailable(portOrDeps = VITE_PORT, deps = { isPortOpen }) {
   const port = typeof portOrDeps === 'number' ? portOrDeps : VITE_PORT
   const portDeps = typeof portOrDeps === 'number' ? deps : portOrDeps
@@ -563,6 +569,8 @@ async function main() {
   process.once('SIGTERM', () => shutdown(143))
 
   try {
+    logStep('Preparing plugin backend artifacts for Electron dev ...')
+    await prepareElectronDevArtifacts()
     logStep(`Starting Vite dev server on ${runtimeOptions.rendererUrl} ...`)
     await assertVitePortAvailable(runtimeOptions.rendererPort)
     await assertElectronDebugPortAvailable(runtimeOptions.electronDebugPort)
