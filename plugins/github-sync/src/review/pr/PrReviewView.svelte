@@ -11,12 +11,21 @@
   import FileTree from '@openforge/pr-review-ui/FileTree.svelte'
   import ResizablePanel from '@openforge/plugin-sdk/ui/ResizablePanel.svelte'
   import DiffViewer from '@openforge/pr-review-ui/DiffViewer.svelte'
+  import { getReviewFileIdentity } from '@openforge/pr-review-ui/reviewFileIdentity'
   import ProjectPageHeader from '../../project/ProjectPageHeader.svelte'
   import ReviewSubmitPanel from '@openforge/pr-review-ui/ReviewSubmitPanel.svelte'
   import PrOverviewTab from '@openforge/pr-review-ui/PrOverviewTab.svelte'
   import { hasMergeConflicts } from '@openforge/plugin-sdk/domain'
   import type { ReviewPullRequest, AuthoredPullRequest, PrFileDiff, PrOverviewComment, ReviewSubmissionComment } from '@openforge/plugin-sdk/domain'
   import { createGithubSyncPrReviewClient } from './githubSyncClient'
+  import {
+    getPrReviewFilesKey,
+    loadPrReviewedFileShas,
+    persistPrReviewedFileShas,
+    prunePrReviewedFileShas,
+    reviewedFileMapsEqual,
+    updatePrReviewedFileShas,
+  } from './reviewedFilesState'
   import type { FileContents } from '@openforge/pr-review-ui/diffAdapter'
 
   type PrDetailTab = 'overview' | 'files'
@@ -42,6 +51,10 @@
   let diffViewer = $state<DiffViewer>()
   let fileTreeVisible = $state(true)
   let activeTab = $state<PrDetailTab>('overview')
+  let reviewedFileShas = $state<Map<string, string>>(new Map())
+  let loadedReviewedFilesKey = $state<string | null>(null)
+  let reviewedFilesLoadSequence = 0
+  let prDetailsLoadSequence = 0
   let unlisteners: UnlistenFn[] = []
 
   // Repo filtering
@@ -209,6 +222,64 @@
     $reviewRequestCount = filteredReviewPrs.filter(p => p.viewed_at === null).length
   })
 
+  function getReviewedFilesStorageScope() {
+    return projectId ? api.storage.project(projectId) : api.storage.global
+  }
+
+  async function hydrateReviewedFiles(pr: ReviewPullRequest) {
+    const prKey = getPrReviewFilesKey(pr)
+    const sequence = ++reviewedFilesLoadSequence
+    const storedReviewedFileShas = await loadPrReviewedFileShas(getReviewedFilesStorageScope(), prKey)
+    if (sequence !== reviewedFilesLoadSequence) return
+    if (!$selectedReviewPr || getPrReviewFilesKey($selectedReviewPr) !== prKey) return
+    reviewedFileShas = storedReviewedFileShas
+    loadedReviewedFilesKey = prKey
+  }
+
+  async function persistReviewedFiles(prKey: string, nextReviewedFileShas: Map<string, string>) {
+    await persistPrReviewedFileShas(getReviewedFilesStorageScope(), prKey, nextReviewedFileShas)
+  }
+
+  function handleToggleFileReviewed(file: PrFileDiff, reviewed: boolean) {
+    const pr = $selectedReviewPr
+    if (!pr) return
+
+    const prKey = getPrReviewFilesKey(pr)
+    reviewedFilesLoadSequence += 1
+    const nextReviewedFileShas = updatePrReviewedFileShas(reviewedFileShas, file, reviewed)
+    reviewedFileShas = nextReviewedFileShas
+    loadedReviewedFilesKey = prKey
+    void persistReviewedFiles(prKey, nextReviewedFileShas)
+  }
+
+  $effect(() => {
+    const pr = $selectedReviewPr
+    if (!pr) {
+      reviewedFilesLoadSequence += 1
+      loadedReviewedFilesKey = null
+      reviewedFileShas = new Map()
+      return
+    }
+
+    const prKey = getPrReviewFilesKey(pr)
+    if (loadedReviewedFilesKey === prKey) return
+
+    reviewedFileShas = new Map()
+    loadedReviewedFilesKey = null
+    void hydrateReviewedFiles(pr)
+  })
+
+  $effect(() => {
+    const pr = $selectedReviewPr
+    if (!pr || loadedReviewedFilesKey !== getPrReviewFilesKey(pr) || $prFileDiffs.length === 0) return
+
+    const prunedReviewedFileShas = prunePrReviewedFileShas(reviewedFileShas, $prFileDiffs)
+    if (reviewedFileMapsEqual(reviewedFileShas, prunedReviewedFileShas)) return
+
+    reviewedFileShas = prunedReviewedFileShas
+    void persistReviewedFiles(loadedReviewedFilesKey, prunedReviewedFileShas)
+  })
+
   async function loadPrs() {
     isLoading = true
     error = null
@@ -287,12 +358,22 @@
     }
   }
 
+  function isCurrentPrDetailsLoad(sequence: number, pr: ReviewPullRequest): boolean {
+    return sequence === prDetailsLoadSequence && $selectedReviewPr?.id === pr.id
+  }
+
   async function selectPr(pr: ReviewPullRequest) {
     void api.navigation.navigate({ viewId: 'plugin:com.openforge.github-sync:pr_review' })
+    const loadSequence = ++prDetailsLoadSequence
     const now = Math.floor(Date.now() / 1000)
     const updatedPr = { ...pr, viewed_at: now, viewed_head_sha: pr.head_sha }
     $selectedReviewPr = updatedPr
     $reviewPrs = $reviewPrs.map(p => p.id === pr.id ? updatedPr : p)
+    $prFileDiffs = []
+    $reviewComments = []
+    $pendingManualComments = []
+    $prOverviewComments = []
+    $agentReviewComments = []
     githubSync.markReviewPullRequestViewed({ prId: pr.id, headSha: pr.head_sha }).catch(e => console.error('Failed to mark viewed:', e))
     isLoading = true
     try {
@@ -301,24 +382,32 @@
         repo: pr.repo_name,
         prNumber: pr.number,
       })
+      if (!isCurrentPrDetailsLoad(loadSequence, pr)) return
       $prFileDiffs = diffs
       const comments = await githubSync.listReviewComments({
         owner: pr.repo_owner,
         repo: pr.repo_name,
         prNumber: pr.number,
       })
+      if (!isCurrentPrDetailsLoad(loadSequence, pr)) return
       $reviewComments = comments
       const agentComments = await githubSync.listAgentReviewComments({ reviewPrId: pr.id })
+      if (!isCurrentPrDetailsLoad(loadSequence, pr)) return
       $agentReviewComments = agentComments
     } catch (e) {
+      if (!isCurrentPrDetailsLoad(loadSequence, pr)) return
       console.error('Failed to load PR diffs:', e)
       error = 'Failed to load pull request details.'
     } finally {
-      isLoading = false
+      if (loadSequence === prDetailsLoadSequence) {
+        isLoading = false
+      }
     }
   }
 
   function backToList() {
+    prDetailsLoadSequence += 1
+    isLoading = false
     $selectedReviewPr = null
     $prFileDiffs = []
     $reviewComments = []
@@ -483,7 +572,12 @@
           {:else}
             {#if fileTreeVisible}
               <ResizablePanel storageKey="pr-review-file-tree" defaultWidth={260} minWidth={160} maxWidth={500} side="left">
-                <FileTree files={$prFileDiffs} onSelectFile={handleFileSelect} />
+                <FileTree
+                  files={$prFileDiffs}
+                  onSelectFile={handleFileSelect}
+                  {reviewedFileShas}
+                  getFileReviewIdentity={getReviewFileIdentity}
+                />
               </ResizablePanel>
             {/if}
             <DiffViewer
@@ -501,6 +595,9 @@
               onAgentCommentsChange={(comments) => { $agentReviewComments = comments }}
               onUpdateAgentCommentStatus={(commentId, status) => githubSync.updateAgentReviewCommentStatus({ commentId, status })}
               onOpenUrl={(url) => api.system.openUrl(url)}
+              {reviewedFileShas}
+              onToggleFileReviewed={handleToggleFileReviewed}
+              getFileReviewIdentity={getReviewFileIdentity}
             />
           {/if}
         </div>

@@ -129,7 +129,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - **Session Reattachment** preserves the existing **Agent Session** identity.
 - **Implementation Input** targets an existing **Agent Session** and does not choose a new provider or agent.
 - **Handoff Notes** belong to a **Task** and are updated to reflect the current review state rather than appended per **Implementation Run**.
-- A **Reviewed File** remains reviewed only while its content identity is unchanged.
+- A **Reviewed File** can belong to self-review or pull request review; it remains reviewed only while its content identity is unchanged.
 - A **Review File Tree** keeps **Reviewed Files** in their original location as navigation items.
 - A **Diff File Section** may collapse after its file becomes a **Reviewed File**, while remaining available to reopen.
 - A **Project Handoff Notes Template** defines the required shape of **Handoff Notes** for Tasks in one project.
