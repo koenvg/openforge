@@ -2,43 +2,8 @@ use super::callbacks::{optional_param_string, required_param_string};
 use super::PluginHost;
 use crate::app_events::publish_app_event;
 use serde_json::{json, Value};
-use std::sync::{Arc, Mutex};
 
 impl PluginHost {
-    fn database_state_for_host(&self) -> Result<Arc<Mutex<crate::db::Database>>, String> {
-        self.app_handle
-            .try_state::<Arc<Mutex<crate::db::Database>>>()
-            .map(|state| Arc::clone(state.inner()))
-            .ok_or_else(|| "plugin host database state is not available".to_string())
-    }
-
-    fn app_state_for_task_callback(&self) -> Result<crate::http_server::AppState, String> {
-        let db = self.database_state_for_host()?;
-        let pty_manager = self
-            .app_handle
-            .try_state::<crate::pty_manager::PtyManager>()
-            .map(|state| state.inner().clone());
-        let github_client = self
-            .app_handle
-            .try_state::<crate::github_client::GitHubClient>()
-            .map(|state| state.inner().clone())
-            .unwrap_or_else(crate::github_client::GitHubClient::new);
-
-        Ok(crate::http_server::AppState {
-            app: Some(self.app_handle.clone()),
-            db,
-            backend_token: None,
-            pty_manager,
-            github_client,
-            plugin_host: Some(self.clone()),
-            app_event_tx: self.app_event_tx.clone(),
-            app_event_bus: None,
-            whisper: None,
-            sidecar_readiness: crate::http_server::SidecarReadinessState::default(),
-            start_implementation_claims: self.start_implementation_claims.clone(),
-        })
-    }
-
     fn publish_task_changed_for_host(
         &self,
         action: &str,
@@ -62,7 +27,7 @@ impl PluginHost {
         command: &str,
         payload: Value,
     ) -> Result<Value, String> {
-        let state = self.app_state_for_task_callback()?;
+        let state = self.app_state_for_host_callback()?;
         let request = crate::http_server::AppInvokeRequest {
             command: command.to_string(),
             payload,

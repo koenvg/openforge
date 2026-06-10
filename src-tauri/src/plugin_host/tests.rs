@@ -354,9 +354,8 @@ async fn host_core_callbacks_route_to_app_services() {
 
 #[tokio::test]
 async fn plugin_host_global_command_callback_routes_github_sync_backend_bridge() {
-    let (database, _path) = crate::db::test_helpers::make_test_db(
-        "plugin_host_global_command_github_sync_bridge",
-    );
+    let (database, _path) =
+        crate::db::test_helpers::make_test_db("plugin_host_global_command_github_sync_bridge");
     let app = AppHandle::new();
     app.manage(Arc::new(Mutex::new(database)));
     let host = PluginHost::new(app.clone());
