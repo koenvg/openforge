@@ -1,3 +1,4 @@
+import { getReviewFileIdentity, type ReviewFileIdentityInput } from '@openforge/pr-review-ui/reviewFileIdentity';
 import type { PrFileDiff } from './types';
 
 export interface TaskReviewPaneState {
@@ -6,19 +7,7 @@ export interface TaskReviewPaneState {
 	reviewedFileShas: Map<string, string>;
 }
 
-type TaskReviewFileIdentityInput = Pick<
-	PrFileDiff,
-	| 'filename'
-	| 'sha'
-	| 'status'
-	| 'additions'
-	| 'deletions'
-	| 'changes'
-	| 'patch'
-	| 'previous_filename'
-	| 'is_truncated'
-	| 'patch_line_count'
->;
+type TaskReviewFileIdentityInput = Pick<PrFileDiff, keyof ReviewFileIdentityInput>;
 
 const defaultTaskReviewPaneState: TaskReviewPaneState = {
 	selectedCommitSha: null,
@@ -125,32 +114,8 @@ function clearPersistedTaskReviewReviewedFiles(taskId?: string): void {
 	writePersistedReviewedFiles(persisted);
 }
 
-function hashString(value: string): string {
-	let hash = 0x811c9dc5;
-	for (let i = 0; i < value.length; i += 1) {
-		hash ^= value.charCodeAt(i);
-		hash = Math.imul(hash, 0x01000193);
-	}
-	return (hash >>> 0).toString(16).padStart(8, '0');
-}
-
 export function getTaskReviewFileIdentity(file: TaskReviewFileIdentityInput): string | null {
-	const sha = file.sha.trim();
-	if (sha.length > 0) return sha;
-
-	if (file.patch === null || file.is_truncated) return null;
-
-	const contentIdentity = JSON.stringify({
-		status: file.status,
-		previousFilename: file.previous_filename,
-		additions: file.additions,
-		deletions: file.deletions,
-		changes: file.changes,
-		patch: file.patch,
-		isTruncated: file.is_truncated,
-		patchLineCount: file.patch_line_count,
-	});
-	return `diff:${contentIdentity.length}:${hashString(contentIdentity)}`;
+	return getReviewFileIdentity(file);
 }
 
 export function getTaskReviewPaneState(taskId: string): TaskReviewPaneState {
