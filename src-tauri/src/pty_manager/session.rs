@@ -1727,6 +1727,7 @@ mod tests {
             vec![
                 "-e",
                 "/tmp/openforge-pi-extension",
+                "--approve",
                 "--session",
                 "pi-session",
                 "continue work",
