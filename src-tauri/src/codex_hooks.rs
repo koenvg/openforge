@@ -33,9 +33,69 @@ pub(crate) fn ensure_codex_hooks_installed() -> Result<PathBuf, Box<dyn std::err
     fs::write(&hook_path, CODEX_HOOK_SOURCE)?;
 
     let profile_path = codex_hooks_profile_path_for_home(&codex_home);
-    fs::write(&profile_path, render_codex_hooks_profile(&hook_path))?;
+    let existing_profile = read_existing_codex_profile(&profile_path)?;
+    fs::write(
+        &profile_path,
+        render_codex_hooks_profile_preserving_state(&hook_path, existing_profile.as_deref()),
+    )?;
 
     Ok(profile_path)
+}
+
+fn read_existing_codex_profile(
+    profile_path: &Path,
+) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    match fs::read_to_string(profile_path) {
+        Ok(profile) => Ok(Some(profile)),
+        Err(error) if should_ignore_existing_profile_read_error(&error) => Ok(None),
+        Err(error) => Err(Box::new(error)),
+    }
+}
+
+fn should_ignore_existing_profile_read_error(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::NotFound | std::io::ErrorKind::InvalidData
+    )
+}
+
+fn render_codex_hooks_profile_preserving_state(
+    hook_script_path: &Path,
+    existing_profile: Option<&str>,
+) -> String {
+    let mut profile = render_codex_hooks_profile(hook_script_path);
+
+    if let Some(hooks_state) = existing_profile.and_then(extract_hooks_state_section) {
+        profile.push_str(hooks_state);
+    }
+
+    profile
+}
+
+fn extract_hooks_state_section(profile: &str) -> Option<&str> {
+    let mut offset = 0;
+
+    for line in profile.split_inclusive('\n') {
+        let trimmed = line.trim_start();
+        if is_hooks_state_header(trimmed) {
+            return Some(&profile[offset..]);
+        }
+        offset += line.len();
+    }
+
+    None
+}
+
+fn is_hooks_state_header(trimmed_line: &str) -> bool {
+    if trimmed_line.starts_with("[[") {
+        return false;
+    }
+
+    let Some(rest) = trimmed_line.strip_prefix("[hooks.state") else {
+        return false;
+    };
+
+    matches!(rest.as_bytes().first(), Some(b']') | Some(b'.'))
 }
 
 fn render_codex_hooks_profile(hook_script_path: &Path) -> String {
@@ -203,6 +263,41 @@ mod tests {
         assert!(profile.contains("sandbox_mode = \"danger-full-access\""));
         assert!(profile.contains("approval_policy = \"never\""));
         assert!(!profile.contains("dangerously-bypass-approvals-and-sandbox"));
+    }
+
+    #[test]
+    fn codex_hooks_profile_preserves_trusted_hook_state_when_regenerated() {
+        let old_script_path =
+            std::path::Path::new("/Users/tester/.codex/openforge/old-openforge-hook.js");
+        let mut existing_profile = render_codex_hooks_profile(old_script_path);
+        existing_profile.push_str(
+            "[hooks.state]\n\n\
+             [hooks.state.\"/Users/tester/.codex/openforge-lifecycle.config.toml:pre_tool_use:0:0\"]\n\
+             trusted_hash = \"sha256:trusted-pre-tool-use\"\n",
+        );
+
+        let new_script_path =
+            std::path::Path::new("/Users/tester/.codex/openforge/openforge-hook.js");
+        let profile =
+            render_codex_hooks_profile_preserving_state(new_script_path, Some(&existing_profile));
+
+        assert!(profile.contains("openforge-hook.js\\\" became_busy PreToolUse"));
+        assert!(!profile.contains("old-openforge-hook.js"));
+        assert!(profile.contains("[hooks.state]"));
+        assert!(profile.contains("trusted_hash = \"sha256:trusted-pre-tool-use\""));
+    }
+
+    #[test]
+    fn codex_hooks_profile_does_not_preserve_similarly_named_tables() {
+        let script_path = std::path::Path::new("/Users/tester/.codex/openforge/openforge-hook.js");
+        let mut existing_profile = render_codex_hooks_profile(script_path);
+        existing_profile.push_str("[hooks.stateful]\ncustom = true\n");
+
+        let profile =
+            render_codex_hooks_profile_preserving_state(script_path, Some(&existing_profile));
+
+        assert!(!profile.contains("[hooks.stateful]"));
+        assert!(!profile.contains("custom = true"));
     }
 
     #[test]
