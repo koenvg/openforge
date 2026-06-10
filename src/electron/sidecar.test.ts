@@ -20,8 +20,8 @@ class FakeChild extends EventEmitter implements ChildProcessLike {
 
 class ScriptedEventStream implements SidecarEventStreamAdapter {
   private listener: ((envelope: SidecarEventEnvelopeLike) => void) | null = null
-  start = vi.fn(async () => undefined)
-  ready = vi.fn(async () => undefined)
+  start = vi.fn(async (): Promise<void> => undefined)
+  ready = vi.fn(async (): Promise<void> => undefined)
   stop = vi.fn()
 
   onEvent(listener: (envelope: SidecarEventEnvelopeLike) => void): void {
@@ -30,6 +30,17 @@ class ScriptedEventStream implements SidecarEventStreamAdapter {
 
   emit(envelope: SidecarEventEnvelopeLike): void {
     this.listener?.(envelope)
+  }
+}
+
+class OrderedFakeChild extends FakeChild {
+  constructor(private readonly order: string[]) {
+    super()
+  }
+
+  override kill(signal?: NodeJS.Signals): boolean {
+    this.order.push(`process:${signal ?? 'SIGTERM'}`)
+    return super.kill(signal)
   }
 }
 
@@ -366,6 +377,49 @@ describe('Electron Rust sidecar supervision', () => {
     }))
     expect(eventStream.stop).toHaveBeenCalled()
     expect(child.killCalls).toContain('SIGTERM')
+  })
+
+  it('awaits app event stream termination before signaling sidecar process shutdown', async () => {
+    let finishEventStream!: () => void
+    const order: string[] = []
+    class BlockingEventStream extends ScriptedEventStream {
+      start = vi.fn(async () => {
+        order.push('event-stream:start')
+        await new Promise<void>(resolve => { finishEventStream = resolve })
+        order.push('event-stream:terminated')
+      })
+      stop = vi.fn(() => {
+        order.push('event-stream:stop')
+      })
+    }
+    const child = new OrderedFakeChild(order)
+    const eventStream = new BlockingEventStream()
+    const spawn = vi.fn(() => child)
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ status: 'ok', events: { available: true }, startupResume: { phase: 'pending' } }),
+    })
+    const sleep = vi.fn(() => new Promise<void>(() => undefined))
+
+    const handle = await startSidecarReadiness(createSidecarLaunchConfig({ token: 'token-123', port: 17642 }), {
+      spawn,
+      fetch,
+      sleep,
+      createEventStream: vi.fn(() => eventStream),
+    })
+
+    const stopping = handle.stop({ graceMs: 1, sleep })
+    await Promise.resolve()
+
+    expect(order).toEqual(['event-stream:start', 'event-stream:stop'])
+    expect(child.killCalls).toEqual([])
+
+    finishEventStream()
+    await vi.waitFor(() => expect(order).toContain('process:SIGTERM'))
+    child.emit('exit', 0, 'SIGTERM')
+
+    await expect(stopping).resolves.toMatchObject({ status: 'terminated', timedOut: false })
+    expect(order).toEqual(['event-stream:start', 'event-stream:stop', 'event-stream:terminated', 'process:SIGTERM'])
   })
 
   it('makes a sidecar handle stop idempotent and reports the original stop result', async () => {
