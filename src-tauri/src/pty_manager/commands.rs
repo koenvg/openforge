@@ -41,6 +41,7 @@ pub(crate) fn build_pi_args(
         args.push("-e".to_string());
         args.push(path.to_string_lossy().to_string());
     }
+    args.push("--approve".to_string());
     if let Some(session_id) = resume_session_id {
         args.push("--session".to_string());
         args.push(session_id.to_string());
@@ -126,6 +127,52 @@ pub(crate) fn get_shell_path() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn build_pi_args_trusts_project_for_new_session_without_persisting_decision() {
+        assert_eq!(
+            build_pi_args(
+                "implement the feature",
+                None,
+                false,
+                Some(Path::new("/tmp/openforge-pi-extension.ts")),
+            ),
+            vec![
+                "-e",
+                "/tmp/openforge-pi-extension.ts",
+                "--approve",
+                "implement the feature",
+            ]
+        );
+    }
+
+    #[test]
+    fn build_pi_args_trusts_project_for_resumed_session_and_preserves_ordering() {
+        assert_eq!(
+            build_pi_args(
+                "continue work",
+                Some("pi-session-1"),
+                false,
+                Some(Path::new("/tmp/openforge-pi-extension.ts")),
+            ),
+            vec![
+                "-e",
+                "/tmp/openforge-pi-extension.ts",
+                "--approve",
+                "--session",
+                "pi-session-1",
+                "continue work",
+            ]
+        );
+    }
+
+    #[test]
+    fn build_pi_args_trusts_project_for_continue_session_without_prompt() {
+        assert_eq!(
+            build_pi_args("", None, true, None),
+            vec!["--approve", "--continue"]
+        );
+    }
 
     #[test]
     fn opencode_tui_args_use_prompt_without_attaching_to_openforge_server() {

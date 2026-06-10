@@ -1362,7 +1362,7 @@ mod tests {
     #[test]
     fn test_build_pi_args_new_session_with_prompt() {
         let args = build_pi_args("implement the feature", None, false, None);
-        assert_eq!(args, vec!["implement the feature"]);
+        assert_eq!(args, vec!["--approve", "implement the feature"]);
     }
 
     #[test]
@@ -1374,6 +1374,7 @@ mod tests {
             vec![
                 "-e",
                 "/tmp/openforge-pi-extension.ts",
+                "--approve",
                 "implement the feature",
             ]
         );
@@ -1382,25 +1383,28 @@ mod tests {
     #[test]
     fn test_build_pi_args_resume_session_with_prompt() {
         let args = build_pi_args("continue work", Some("sess-abc-123"), false, None);
-        assert_eq!(args, vec!["--session", "sess-abc-123", "continue work"]);
+        assert_eq!(
+            args,
+            vec!["--approve", "--session", "sess-abc-123", "continue work"]
+        );
     }
 
     #[test]
     fn test_build_pi_args_resume_session_without_prompt() {
         let args = build_pi_args("", Some("sess-abc-123"), false, None);
-        assert_eq!(args, vec!["--session", "sess-abc-123"]);
+        assert_eq!(args, vec!["--approve", "--session", "sess-abc-123"]);
     }
 
     #[test]
     fn test_build_pi_args_continue_session() {
         let args = build_pi_args("", None, true, None);
-        assert_eq!(args, vec!["--continue"]);
+        assert_eq!(args, vec!["--approve", "--continue"]);
     }
 
     #[test]
     fn test_build_pi_args_continue_with_prompt() {
         let args = build_pi_args("what changed?", None, true, None);
-        assert_eq!(args, vec!["--continue", "what changed?"]);
+        assert_eq!(args, vec!["--approve", "--continue", "what changed?"]);
     }
 
     #[test]
