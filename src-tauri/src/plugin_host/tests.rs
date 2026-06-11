@@ -1,5 +1,6 @@
 use super::lifecycle::{
-    resolve_entrypoint, BUN_PATH_ENV, ENTRYPOINT_ENV, SIDECAR_EXITED_EVENT, SIDECAR_FAILED_EVENT,
+    packaged_electron_node_runtime, resolve_entrypoint, resolve_sidecar_runtime, BUN_PATH_ENV,
+    ELECTRON_RUN_AS_NODE_ENV, ENTRYPOINT_ENV, SIDECAR_EXITED_EVENT, SIDECAR_FAILED_EVENT,
 };
 use super::*;
 use serde_json::{json, Value};
@@ -88,6 +89,71 @@ async fn resolve_entrypoint_prefers_packaged_resource_bundle_over_source_and_leg
         resolve_entrypoint(&app).expect("entrypoint should resolve"),
         bundled_entrypoint
     );
+}
+
+#[tokio::test]
+async fn resolve_sidecar_runtime_prefers_explicit_bun_override() {
+    let temp = tempdir().expect("tempdir should create");
+    let entrypoint = temp.path().join("index.js");
+    let bun_path = temp.path().join("custom-bun");
+    fs::write(&entrypoint, "console.log('plugin host')").expect("entrypoint should write");
+
+    let _env_lock = lock_plugin_host_env().await;
+    let _bun_env = EnvVarRestore::set_path(BUN_PATH_ENV, &bun_path);
+
+    let runtime = resolve_sidecar_runtime(&entrypoint).expect("runtime should resolve");
+
+    assert_eq!(runtime.command, bun_path);
+    assert_eq!(
+        runtime.args,
+        vec![OsString::from("run"), entrypoint.into_os_string()]
+    );
+    assert!(runtime.env.is_empty());
+}
+
+#[test]
+fn packaged_electron_node_runtime_uses_sibling_app_binary_for_bundled_javascript_host() {
+    let temp = tempdir().expect("tempdir should create");
+    let macos_dir = temp
+        .path()
+        .join("Open Forge.app")
+        .join("Contents")
+        .join("MacOS");
+    fs::create_dir_all(&macos_dir).expect("macos dir should create");
+    let sidecar_exe = macos_dir.join("openforge-sidecar");
+    let electron_exe = macos_dir.join(crate::data_identity::package_app_name());
+    let entrypoint = macos_dir.join("plugin-host").join("index.js");
+    fs::create_dir_all(entrypoint.parent().expect("entrypoint parent"))
+        .expect("plugin host dir should create");
+    fs::write(&electron_exe, "electron").expect("electron runtime should write");
+    fs::write(&entrypoint, "console.log('plugin host')").expect("entrypoint should write");
+
+    let runtime = packaged_electron_node_runtime(Some(&sidecar_exe), &entrypoint)
+        .expect("packaged runtime should resolve");
+
+    assert_eq!(runtime.command, electron_exe);
+    assert_eq!(runtime.args, vec![entrypoint.into_os_string()]);
+    assert_eq!(
+        runtime.env.get(ELECTRON_RUN_AS_NODE_ENV),
+        Some(&OsString::from("1"))
+    );
+}
+
+#[test]
+fn packaged_electron_node_runtime_does_not_claim_typescript_dev_entrypoints() {
+    let temp = tempdir().expect("tempdir should create");
+    let macos_dir = temp
+        .path()
+        .join("Open Forge.app")
+        .join("Contents")
+        .join("MacOS");
+    fs::create_dir_all(&macos_dir).expect("macos dir should create");
+    let sidecar_exe = macos_dir.join("openforge-sidecar");
+    let electron_exe = macos_dir.join(crate::data_identity::package_app_name());
+    let entrypoint = macos_dir.join("plugin-host").join("index.ts");
+    fs::write(&electron_exe, "electron").expect("electron runtime should write");
+
+    assert!(packaged_electron_node_runtime(Some(&sidecar_exe), &entrypoint).is_none());
 }
 
 #[tokio::test]
