@@ -120,14 +120,32 @@ describe('Shutdown Cleanup Module', () => {
     expect(events).toEqual(['last-adapter:ran'])
   })
 
-  it('promotes adapter-reported failures and timeouts into the observable shutdown report and failure seam', async () => {
+  it('does not report successful forced rust-sidecar cleanup as a shutdown failure', async () => {
     const failureReporter = new RecordingFailureReporterAdapter()
     const shutdown = new ShutdownCoordinator({
       logger: null,
       failureReporter,
       adapters: [
-        { name: 'rust-sidecar-failed', shutdown: () => ({ status: 'kill-failed', error: 'failed to send SIGKILL' }) },
-        { name: 'rust-sidecar-killed', shutdown: () => ({ status: 'killed', timedOut: true }) },
+        { name: 'rust-sidecar', shutdown: () => ({ status: 'killed', signal: 'SIGKILL', timedOut: true, error: null }) },
+      ],
+    })
+
+    const report = await shutdown.shutdown()
+
+    expect(report.ok).toBe(true)
+    expect(report.adapters[0]).toMatchObject({ status: 'ok', error: null })
+    expect(report.adapters[0].result).toMatchObject({ status: 'killed', signal: 'SIGKILL', timedOut: true })
+    expect(failureReporter.reports).toEqual([])
+  })
+
+  it('promotes adapter-reported failures and unresolved timeouts into the observable shutdown report and failure seam', async () => {
+    const failureReporter = new RecordingFailureReporterAdapter()
+    const shutdown = new ShutdownCoordinator({
+      logger: null,
+      failureReporter,
+      adapters: [
+        { name: 'rust-sidecar-failed', shutdown: () => ({ status: 'kill-failed', signal: 'SIGKILL', timedOut: true, error: 'failed to send SIGKILL' }) },
+        { name: 'rust-sidecar-timeout', shutdown: () => ({ status: 'timeout', timedOut: true }) },
       ],
     })
 
@@ -136,8 +154,12 @@ describe('Shutdown Cleanup Module', () => {
     expect(report.ok).toBe(false)
     expect(report.adapters[0]).toMatchObject({ status: 'failed', error: 'failed to send SIGKILL' })
     expect(report.adapters[1]).toMatchObject({ status: 'timeout', error: 'adapter reported timeout' })
+    expect(failureReporter.reports).toHaveLength(2)
+    expect(failureReporter.reports.map(report => report.cause.message)).toEqual([
+      'failed to send SIGKILL',
+      'adapter reported timeout',
+    ])
     expect(failureReporter.reports).toEqual(expect.arrayContaining([
-      expect.objectContaining({ phase: 'shutdown:cleanup', severity: 'error', decision: 'quit' }),
       expect.objectContaining({ phase: 'shutdown:cleanup', severity: 'error', decision: 'quit' }),
     ]))
   })

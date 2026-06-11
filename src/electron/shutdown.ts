@@ -65,9 +65,13 @@ function statusFromAdapterResult(result: ShutdownAdapterResult | null): Pick<Shu
   const error = typeof result.error === 'string' ? result.error : null
   const timedOut = result.timedOut === true || status === 'timeout'
 
+  if (status === 'killed' && !error) return null
+  if (status === 'failed' || status === 'kill-failed') {
+    return { status: 'failed', error: error ?? `adapter reported ${status}` }
+  }
   if (timedOut) return { status: 'timeout', error: error ?? 'adapter reported timeout' }
-  if (status === 'failed' || status === 'kill-failed' || error) {
-    return { status: 'failed', error: error ?? `adapter reported ${status ?? 'failure'}` }
+  if (error) {
+    return { status: 'failed', error }
   }
 
   return null
