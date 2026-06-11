@@ -19,9 +19,9 @@ use events::{
     PtyEventEmitterConfig, PtyExitAction, PtyOutputBatcher, RingBuffer, CLAUDE_BUFFER_CAPACITY,
 };
 #[cfg(test)]
-use pids::{shell_pid_file_name, shell_session_key};
+use pids::{is_shell_session_key_for_task, shell_pid_file_name, shell_session_key};
 #[cfg(test)]
-use session::{frozen_seconds, PtySession, NEXT_INSTANCE_ID};
+use session::{frozen_seconds, PtySession, PtySessionKind, NEXT_INSTANCE_ID};
 use session::{AgentSpawnGenerations, LastOutputTimes, PtyOutputBuffers, PtySessions};
 
 // ============================================================================
@@ -318,6 +318,92 @@ mod tests {
         manager.kill_all().await;
         let sessions = manager.sessions.lock().await;
         assert_eq!(sessions.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_kill_all_removes_indexed_shell_pid_files() {
+        let mut manager = PtyManager::new();
+        let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+        manager.set_pid_dir(tmp_dir.path().to_path_buf());
+
+        let task_id = "task-1";
+        let shell_key = shell_session_key(task_id, Some(2));
+        {
+            let mut sessions = manager.sessions.lock().await;
+            sessions.insert(shell_key.clone(), test_shell_pty_session(task_id, 2));
+        }
+
+        let shell_pid_file = tmp_dir.path().join(shell_pid_file_name(task_id, Some(2)));
+        std::fs::write(&shell_pid_file, "1234").expect("shell pid file should write");
+
+        manager.kill_all().await;
+
+        assert!(
+            !shell_pid_file.exists(),
+            "kill_all should remove the indexed shell PID file via centralized session-key classification"
+        );
+        let sessions = manager.sessions.lock().await;
+        assert!(!sessions.contains_key(&shell_key));
+    }
+
+    #[tokio::test]
+    async fn test_kill_all_keeps_agent_pid_derivation_for_task_id_with_shell_suffix() {
+        let mut manager = PtyManager::new();
+        let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+        manager.set_pid_dir(tmp_dir.path().to_path_buf());
+
+        let task_id = "task-1-shell-2";
+        {
+            let mut sessions = manager.sessions.lock().await;
+            sessions.insert(task_id.to_string(), test_agent_pty_session(task_id));
+        }
+
+        let agent_pid_file = tmp_dir.path().join(format!("{}-pty.pid", task_id));
+        let misleading_shell_pid_file = tmp_dir.path().join(format!("{}.pid", task_id));
+        std::fs::write(&agent_pid_file, "1234").expect("agent pid file should write");
+        std::fs::write(&misleading_shell_pid_file, "5678")
+            .expect("misleading shell pid file should write");
+
+        manager.kill_all().await;
+
+        assert!(
+            !agent_pid_file.exists(),
+            "agent-like task IDs ending in -shell-N must still remove their agent PID file"
+        );
+        assert!(
+            misleading_shell_pid_file.exists(),
+            "agent cleanup should not derive the misleading indexed shell PID path"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_kill_pty_removes_actual_provider_pid_file_name() {
+        let mut manager = PtyManager::new();
+        let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+        manager.set_pid_dir(tmp_dir.path().to_path_buf());
+
+        let task_id = "task-claude";
+        let pid_file_name = format!("{}-claude.pid", task_id);
+        {
+            let mut sessions = manager.sessions.lock().await;
+            sessions.insert(
+                task_id.to_string(),
+                test_pty_session(PtySessionKind::Agent, pid_file_name.clone()),
+            );
+        }
+
+        let pid_file = tmp_dir.path().join(pid_file_name);
+        std::fs::write(&pid_file, "1234").expect("provider pid file should write");
+
+        manager
+            .kill_pty(task_id)
+            .await
+            .expect("kill_pty should succeed");
+
+        assert!(
+            !pid_file.exists(),
+            "kill_pty should remove the actual provider PID file tracked by the session"
+        );
     }
 
     #[test]
@@ -1005,6 +1091,10 @@ mod tests {
                     master: pair.master,
                     writer,
                     instance_id: 1,
+                    kind: PtySessionKind::Shell {
+                        task_id: "task-1".to_string(),
+                    },
+                    pid_file_name: "task-1-shell-0.pid".to_string(),
                 },
             );
         }
@@ -1115,6 +1205,8 @@ mod tests {
                     master: pair.master,
                     writer,
                     instance_id: 1,
+                    kind: PtySessionKind::Agent,
+                    pid_file_name: "agent-task-1-pty.pid".to_string(),
                 },
             );
         }
@@ -1195,6 +1287,8 @@ mod tests {
                     master: pair.master,
                     writer,
                     instance_id: 2,
+                    kind: PtySessionKind::Agent,
+                    pid_file_name: "task-1-pty.pid".to_string(),
                 },
             );
         }
@@ -1426,7 +1520,7 @@ mod tests {
         assert_eq!(key_2, "t1-shell-2");
     }
 
-    fn test_pty_session() -> PtySession {
+    fn test_pty_session(kind: PtySessionKind, pid_file_name: String) -> PtySession {
         let pty_system = native_pty_system();
         let size = PtySize {
             rows: 24,
@@ -1456,7 +1550,22 @@ mod tests {
             master: pair.master,
             writer,
             instance_id: 1,
+            kind,
+            pid_file_name,
         }
+    }
+
+    fn test_agent_pty_session(task_id: &str) -> PtySession {
+        test_pty_session(PtySessionKind::Agent, format!("{}-pty.pid", task_id))
+    }
+
+    fn test_shell_pty_session(task_id: &str, terminal_index: u32) -> PtySession {
+        test_pty_session(
+            PtySessionKind::Shell {
+                task_id: task_id.to_string(),
+            },
+            shell_pid_file_name(task_id, Some(terminal_index)),
+        )
     }
 
     #[tokio::test]
@@ -1472,9 +1581,9 @@ mod tests {
 
         {
             let mut sessions = manager.sessions.lock().await;
-            sessions.insert(shell0_key.clone(), test_pty_session());
-            sessions.insert(shell1_key.clone(), test_pty_session());
-            sessions.insert(unrelated_key.clone(), test_pty_session());
+            sessions.insert(shell0_key.clone(), test_shell_pty_session(task_id, 0));
+            sessions.insert(shell1_key.clone(), test_shell_pty_session(task_id, 1));
+            sessions.insert(unrelated_key.clone(), test_shell_pty_session("task-2", 0));
         }
 
         let shell0_pid_file = tmp_dir.path().join(shell_pid_file_name(task_id, Some(0)));
@@ -1531,19 +1640,68 @@ mod tests {
         assert!(times.contains_key(&unrelated_key));
     }
 
+    #[tokio::test]
+    async fn test_kill_shells_for_task_does_not_kill_agent_with_shell_suffix_task_id() {
+        let mut manager = PtyManager::new();
+        let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+        manager.set_pid_dir(tmp_dir.path().to_path_buf());
+
+        let task_id = "task-1";
+        let shell_key = shell_session_key(task_id, Some(0));
+        let agent_like_shell_key = "task-1-shell-2";
+        {
+            let mut sessions = manager.sessions.lock().await;
+            sessions.insert(shell_key.clone(), test_shell_pty_session(task_id, 0));
+            sessions.insert(
+                agent_like_shell_key.to_string(),
+                test_agent_pty_session(agent_like_shell_key),
+            );
+        }
+
+        let shell_pid_file = tmp_dir.path().join(shell_pid_file_name(task_id, Some(0)));
+        let agent_pid_file = tmp_dir
+            .path()
+            .join(format!("{}-pty.pid", agent_like_shell_key));
+        std::fs::write(&shell_pid_file, "1234").expect("shell pid file should write");
+        std::fs::write(&agent_pid_file, "5678").expect("agent pid file should write");
+
+        manager.kill_shells_for_task(task_id).await;
+
+        assert!(
+            !shell_pid_file.exists(),
+            "matching shell PID should be removed"
+        );
+        assert!(
+            agent_pid_file.exists(),
+            "agent PID should not be removed just because its task ID looks shell-like"
+        );
+        let sessions = manager.sessions.lock().await;
+        assert!(!sessions.contains_key(&shell_key));
+        assert!(sessions.contains_key(agent_like_shell_key));
+    }
+
     #[test]
     fn test_kill_shells_for_task_key_matching() {
         let task_id = "t1";
-        let keys = ["t1-shell-0", "t1-shell-1", "t1", "t2-shell-0"];
+        let keys = [
+            "t1-shell-0",
+            "t1-shell-1",
+            "t1",
+            "t2-shell-0",
+            "t1-shell-feature",
+        ];
 
-        let prefix = format!("{}-shell-", task_id);
-        let matching: Vec<_> = keys.iter().filter(|k| k.starts_with(&prefix)).collect();
+        let matching: Vec<_> = keys
+            .iter()
+            .filter(|key| is_shell_session_key_for_task(key, task_id))
+            .collect();
 
         assert_eq!(matching.len(), 2);
         assert!(matching.contains(&&"t1-shell-0"));
         assert!(matching.contains(&&"t1-shell-1"));
         assert!(!matching.contains(&&"t1"));
         assert!(!matching.contains(&&"t2-shell-0"));
+        assert!(!matching.contains(&&"t1-shell-feature"));
     }
 
     #[test]
