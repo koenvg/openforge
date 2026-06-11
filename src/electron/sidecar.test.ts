@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
 import { RecordingFailureReporterAdapter } from './failureReporting'
+import { RUST_SIDECAR_SIGTERM_GRACE_MS } from './shutdownBudgetContract'
 import { DEFAULT_SIDECAR_PORT, createSidecarLaunchConfig, resolveSidecarPort, startSidecar, startSidecarReadiness, stopSidecar, waitForSidecarHealth } from './sidecar'
 import type { ChildProcessLike, SidecarEventEnvelopeLike, SidecarEventStreamAdapter } from './sidecar'
 
@@ -144,6 +145,7 @@ describe('Electron Rust sidecar supervision', () => {
       decision: 'quit',
     }))
     expect(child.killCalls).toContain('SIGTERM')
+    expect(sleep).toHaveBeenCalledWith(RUST_SIDECAR_SIGTERM_GRACE_MS)
   })
 
   it('exposes the spawned child before health readiness so shutdown can clean up in-flight launches', async () => {
@@ -379,7 +381,7 @@ describe('Electron Rust sidecar supervision', () => {
     expect(child.killCalls).toContain('SIGTERM')
   })
 
-  it('awaits app event stream termination before signaling sidecar process shutdown', async () => {
+  it('tears down the app event stream before SIGTERM as part of the Electron shutdown budget', async () => {
     let finishEventStream!: () => void
     const order: string[] = []
     class BlockingEventStream extends ScriptedEventStream {

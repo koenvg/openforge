@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import { bootOpenForgeDesktop } from './bootLifecycle'
 import { RecordingFailureReporterAdapter } from './failureReporting'
+import {
+  RUST_SIDECAR_INTERNAL_CLEANUP_TIMEOUT_MS,
+  RUST_SIDECAR_SHUTDOWN_COORDINATOR_DEADLINE_MS,
+  RUST_SIDECAR_SIGTERM_GRACE_MS,
+  assertRustSidecarShutdownBudgetContract,
+} from './shutdownBudgetContract'
 import type {
   BootBackendInvokeContext,
   BootLifecycleAdapter,
@@ -148,6 +154,15 @@ function expectBefore(operations: string[], first: string, second: string): void
 }
 
 describe('Electron Boot Lifecycle Module seam', () => {
+  it('keeps the Rust sidecar shutdown budgets ordered to avoid false quit-time cleanup failures', () => {
+    expect(RUST_SIDECAR_INTERNAL_CLEANUP_TIMEOUT_MS).toBe(5_000)
+    expect(RUST_SIDECAR_SIGTERM_GRACE_MS).toBe(7_000)
+    expect(RUST_SIDECAR_SHUTDOWN_COORDINATOR_DEADLINE_MS).toBe(8_000)
+    expect(() => assertRustSidecarShutdownBudgetContract()).not.toThrow()
+    expect(RUST_SIDECAR_INTERNAL_CLEANUP_TIMEOUT_MS).toBeLessThan(RUST_SIDECAR_SIGTERM_GRACE_MS)
+    expect(RUST_SIDECAR_SIGTERM_GRACE_MS).toBeLessThan(RUST_SIDECAR_SHUTDOWN_COORDINATOR_DEADLINE_MS)
+  })
+
   it('hides successful launch ordering behind one deep Interface', async () => {
     const adapter = new FakeBootLifecycleAdapter()
 
@@ -267,5 +282,6 @@ describe('Electron Boot Lifecycle Module seam', () => {
     await vi.waitFor(() => expect(adapter.exit).toHaveBeenCalledTimes(1))
     expect(beforeQuitEvent.preventDefault).toHaveBeenCalledTimes(1)
     expect(adapter.sidecar.stop).toHaveBeenCalledTimes(1)
+    expect(adapter.sidecar.stop).toHaveBeenCalledWith({ graceMs: RUST_SIDECAR_SIGTERM_GRACE_MS })
   })
 })

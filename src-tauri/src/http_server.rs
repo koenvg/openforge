@@ -30,7 +30,12 @@ use std::{
 
 const APP_INVOKE_MAX_BODY_BYTES: usize = 96 * 1024 * 1024;
 const APP_EVENT_KEEPALIVE_TEXT: &str = "openforge-event-stream-keepalive";
-const SIDECAR_RUNTIME_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
+/// Rust-sidecar internal cleanup budget after SIGTERM.
+///
+/// This must stay below Electron's 7s SIGTERM grace so plugin-sidecar and PTY
+/// cleanup can finish before Electron escalates to SIGKILL. See
+/// docs/contracts/rust-sidecar-shutdown-budget.md.
+const SIDECAR_RUNTIME_SHUTDOWN_TIMEOUT: Duration = Duration::from_millis(5_000);
 #[cfg(test)]
 const APP_EVENT_KEEPALIVE_INTERVAL: Duration = Duration::from_millis(50);
 #[cfg(not(test))]

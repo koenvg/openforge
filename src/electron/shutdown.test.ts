@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { RecordingFailureReporterAdapter } from './failureReporting'
 import { ElectronShutdownAdapter, RustSidecarShutdownAdapter, ShutdownCoordinator } from './shutdown'
+import {
+  RUST_SIDECAR_SHUTDOWN_COORDINATOR_DEADLINE_MS,
+  RUST_SIDECAR_SIGTERM_GRACE_MS,
+} from './shutdownBudgetContract'
 import type { ChildProcessLike } from './sidecar'
 import type { ShutdownAdapter } from './shutdown'
 
@@ -170,8 +174,8 @@ describe('Shutdown Cleanup Module', () => {
     const adapter = new RustSidecarShutdownAdapter({
       sidecar: () => null,
       process: () => child,
-      stopOptions: { graceMs: 7_000, sleep },
-      deadlineMs: 8_000,
+      stopOptions: { sleep },
+      deadlineMs: RUST_SIDECAR_SHUTDOWN_COORDINATOR_DEADLINE_MS,
     })
 
     const stopping = adapter.shutdown()
@@ -179,7 +183,7 @@ describe('Shutdown Cleanup Module', () => {
 
     await expect(stopping).resolves.toMatchObject({ status: 'terminated', signal: 'SIGTERM' })
     expect(child.killCalls).toEqual(['SIGTERM'])
-    expect(sleep).toHaveBeenCalledWith(7_000)
+    expect(sleep).toHaveBeenCalledWith(RUST_SIDECAR_SIGTERM_GRACE_MS)
   })
 
   it('is idempotent for concurrent and repeated shutdown calls', async () => {
