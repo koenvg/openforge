@@ -3,7 +3,9 @@ use crate::app_events::publish_app_event;
 use crate::backend_runtime::AppHandle;
 use log::{error, info, warn};
 use serde::Serialize;
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
@@ -22,6 +24,7 @@ const FORCE_KILL_TIMEOUT: Duration = Duration::from_secs(1);
 pub(super) const SIDECAR_EXITED_EVENT: &str = "plugin:sidecar-exited";
 pub(super) const SIDECAR_FAILED_EVENT: &str = "plugin:sidecar-failed";
 pub(super) const BUN_PATH_ENV: &str = "OPENFORGE_BUN_PATH";
+pub(super) const ELECTRON_RUN_AS_NODE_ENV: &str = "ELECTRON_RUN_AS_NODE";
 pub(super) const ENTRYPOINT_ENV: &str = "OPENFORGE_PLUGIN_HOST_ENTRYPOINT";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -178,19 +181,19 @@ impl PluginHost {
     }
 
     async fn spawn_sidecar_for_session(&self, session_id: u64) -> Result<(), String> {
-        let bun_path = resolve_bun_binary()?;
         let entrypoint = resolve_entrypoint(&self.app_handle)?;
+        let runtime = resolve_sidecar_runtime(&entrypoint)?;
 
         info!(
-            "[plugin_host] starting plugin sidecar with bun={} entrypoint={}",
-            bun_path.display(),
+            "[plugin_host] starting plugin sidecar with runtime={} entrypoint={}",
+            runtime.command.display(),
             entrypoint.display()
         );
 
-        let mut command = Command::new(&bun_path);
+        let mut command = Command::new(&runtime.command);
         command
-            .arg("run")
-            .arg(&entrypoint)
+            .args(&runtime.args)
+            .envs(&runtime.env)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -538,15 +541,99 @@ impl PluginHost {
     }
 }
 
-fn resolve_bun_binary() -> Result<PathBuf, String> {
-    if let Ok(path) = std::env::var(BUN_PATH_ENV) {
-        let trimmed = path.trim();
-        if !trimmed.is_empty() {
-            return Ok(PathBuf::from(trimmed));
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct SidecarRuntimeCommand {
+    pub(super) command: PathBuf,
+    pub(super) args: Vec<OsString>,
+    pub(super) env: HashMap<&'static str, OsString>,
+}
+
+impl SidecarRuntimeCommand {
+    fn bun(command: PathBuf, entrypoint: &Path) -> Self {
+        Self {
+            command,
+            args: vec![OsString::from("run"), entrypoint.as_os_str().to_os_string()],
+            env: HashMap::new(),
         }
     }
 
-    which::which("bun").map_err(|error| format!("failed to locate bun in PATH: {error}"))
+    fn electron_node(command: PathBuf, entrypoint: &Path) -> Self {
+        Self {
+            command,
+            args: vec![entrypoint.as_os_str().to_os_string()],
+            env: HashMap::from([(ELECTRON_RUN_AS_NODE_ENV, OsString::from("1"))]),
+        }
+    }
+}
+
+fn explicit_bun_runtime(entrypoint: &Path) -> Option<SidecarRuntimeCommand> {
+    let path = std::env::var(BUN_PATH_ENV).ok()?;
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    Some(SidecarRuntimeCommand::bun(
+        PathBuf::from(trimmed),
+        entrypoint,
+    ))
+}
+
+fn is_javascript_entrypoint(entrypoint: &Path) -> bool {
+    matches!(
+        entrypoint
+            .extension()
+            .and_then(|extension| extension.to_str()),
+        Some("js" | "mjs" | "cjs")
+    )
+}
+
+pub(super) fn packaged_electron_node_runtime(
+    current_exe: Option<&Path>,
+    entrypoint: &Path,
+) -> Option<SidecarRuntimeCommand> {
+    if !is_javascript_entrypoint(entrypoint) {
+        return None;
+    }
+
+    let macos_dir = current_exe?.parent()?;
+    if macos_dir.file_name()? != "MacOS" {
+        return None;
+    }
+
+    let contents_dir = macos_dir.parent()?;
+    if contents_dir.file_name()? != "Contents" {
+        return None;
+    }
+
+    let electron_runtime = macos_dir.join(crate::data_identity::package_app_name());
+    if electron_runtime.is_file() {
+        Some(SidecarRuntimeCommand::electron_node(
+            electron_runtime,
+            entrypoint,
+        ))
+    } else {
+        None
+    }
+}
+
+pub(super) fn resolve_sidecar_runtime(entrypoint: &Path) -> Result<SidecarRuntimeCommand, String> {
+    if let Some(runtime) = explicit_bun_runtime(entrypoint) {
+        return Ok(runtime);
+    }
+
+    let current_exe = std::env::current_exe().ok();
+    if let Some(runtime) = packaged_electron_node_runtime(current_exe.as_deref(), entrypoint) {
+        return Ok(runtime);
+    }
+
+    which::which("bun")
+        .map(|path| SidecarRuntimeCommand::bun(path, entrypoint))
+        .map_err(|error| {
+            format!(
+                "failed to locate plugin host runtime: set {BUN_PATH_ENV}, install bun on PATH, or launch the packaged Electron app with its bundled Node runtime available ({error})"
+            )
+        })
 }
 
 pub(super) fn resolve_entrypoint(app_handle: &AppHandle) -> Result<PathBuf, String> {

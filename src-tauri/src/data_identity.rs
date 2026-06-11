@@ -8,6 +8,7 @@ const IDENTITY_MANIFEST: &str = include_str!("../../openforge-data-identity.json
 pub(crate) struct OpenForgeDataIdentity {
     data_identity: DataIdentity,
     legacy_sources: LegacySources,
+    package_identity: PackageIdentity,
 }
 
 #[derive(Debug, Deserialize)]
@@ -25,6 +26,12 @@ struct KeychainIdentity {
     debug_service: String,
     release_service: String,
     secret_accounts: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PackageIdentity {
+    app_name: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -72,6 +79,10 @@ pub(crate) fn app_data_dir_env() -> &'static str {
 
 pub(crate) fn database_filename() -> &'static str {
     database_filename_for_build(cfg!(debug_assertions))
+}
+
+pub(crate) fn package_app_name() -> &'static str {
+    &manifest().package_identity.app_name
 }
 
 pub(crate) fn database_filename_for_build(debug: bool) -> &'static str {
@@ -146,6 +157,7 @@ mod tests {
         assert_eq!(database_filename_for_build(true), "openforge_dev.db");
         assert_eq!(keychain_service_name_for_build(false), "openforge");
         assert_eq!(keychain_service_name_for_build(true), "openforge-dev");
+        assert_eq!(package_app_name(), "Open Forge");
         assert!(is_secret_account("github_token"));
         assert!(!is_secret_account("github_username"));
     }

@@ -133,8 +133,8 @@ impl super::Database {
                     p.contributes, p.frontend_entry, p.backend_entry, p.install_path,
                     p.source_kind, p.source_spec, p.package_metadata, p.installed_at, p.is_builtin
              FROM plugins p
-             JOIN project_plugins pp ON pp.plugin_id = p.id
-             WHERE pp.project_id = ?1 AND pp.enabled = 1
+             LEFT JOIN project_plugins pp ON pp.plugin_id = p.id AND pp.project_id = ?1
+             WHERE pp.enabled = 1 OR (pp.plugin_id IS NULL AND p.is_builtin = 1)
              ORDER BY p.name ASC",
         )?;
         let rows = stmt.query_map([project_id], row_to_plugin)?;
@@ -150,7 +150,10 @@ impl super::Database {
         let conn = self.conn.lock().unwrap();
         let enabled = conn
             .query_row(
-                "SELECT enabled FROM project_plugins WHERE project_id = ?1 AND plugin_id = ?2",
+                "SELECT COALESCE(pp.enabled, CASE WHEN p.is_builtin = 1 THEN 1 ELSE 0 END)
+                 FROM plugins p
+                 LEFT JOIN project_plugins pp ON pp.plugin_id = p.id AND pp.project_id = ?1
+                 WHERE p.id = ?2",
                 rusqlite::params![project_id, plugin_id],
                 |row| row.get::<_, bool>(0),
             )
@@ -330,6 +333,38 @@ mod tests {
 
         assert!(db.is_plugin_enabled("proj1", "pa").unwrap());
         assert!(!db.is_plugin_enabled("proj1", "pb").unwrap());
+    }
+
+    #[test]
+    fn builtin_plugins_are_enabled_by_default_for_projects() {
+        let (db, _tmp) = make_test_db("plugins_builtin_default_enabled");
+        let mut builtin = sample_plugin("builtin-pr-skills");
+        builtin.is_builtin = true;
+        builtin.source_kind = "builtin".to_string();
+        db.install_plugin(&builtin).unwrap();
+        db.install_plugin(&sample_plugin("custom-plugin")).unwrap();
+
+        let enabled = db.get_enabled_plugins("proj1").unwrap();
+
+        assert_eq!(enabled.len(), 1);
+        assert_eq!(enabled[0].id, "builtin-pr-skills");
+    }
+
+    #[test]
+    fn explicit_project_disable_hides_builtin_plugins() {
+        let (db, _tmp) = make_test_db("plugins_builtin_explicit_disable");
+        let mut builtin = sample_plugin("builtin-pr-skills");
+        builtin.is_builtin = true;
+        builtin.source_kind = "builtin".to_string();
+        db.install_plugin(&builtin).unwrap();
+
+        db.set_plugin_enabled("proj1", "builtin-pr-skills", false)
+            .unwrap();
+
+        let enabled = db.get_enabled_plugins("proj1").unwrap();
+
+        assert!(enabled.is_empty());
+        assert!(!db.is_plugin_enabled("proj1", "builtin-pr-skills").unwrap());
     }
 
     #[test]
