@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
 import { RecordingFailureReporterAdapter } from './failureReporting'
-import { RUST_SIDECAR_SIGTERM_GRACE_MS } from './shutdownBudgetContract'
+import { RUST_SIDECAR_SIGTERM_GRACE_MS, SIDECAR_EVENT_STREAM_TEARDOWN_TIMEOUT_MS } from './shutdownBudgetContract'
 import { DEFAULT_SIDECAR_PORT, createSidecarLaunchConfig, resolveSidecarPort, startSidecar, startSidecarReadiness, stopSidecar, waitForSidecarHealth } from './sidecar'
 import type { ChildProcessLike, SidecarEventEnvelopeLike, SidecarEventStreamAdapter } from './sidecar'
 
@@ -422,6 +422,60 @@ describe('Electron Rust sidecar supervision', () => {
 
     await expect(stopping).resolves.toMatchObject({ status: 'terminated', timedOut: false })
     expect(order).toEqual(['event-stream:start', 'event-stream:stop', 'event-stream:terminated', 'process:SIGTERM'])
+  })
+
+  it('does not let a hung app event stream delay SIGTERM beyond the teardown budget', async () => {
+    let releaseTeardownBudget!: () => void
+    const order: string[] = []
+    class HungEventStream extends ScriptedEventStream {
+      start = vi.fn(async () => {
+        order.push('event-stream:start')
+        await new Promise<void>(() => undefined)
+      })
+      stop = vi.fn(() => {
+        order.push('event-stream:stop')
+      })
+    }
+    const child = new OrderedFakeChild(order)
+    const eventStream = new HungEventStream()
+    const spawn = vi.fn(() => child)
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ status: 'ok', events: { available: true }, startupResume: { phase: 'pending' } }),
+    })
+    const sleep = vi.fn((ms: number) => {
+      order.push(`sleep:${ms}`)
+      if (ms === SIDECAR_EVENT_STREAM_TEARDOWN_TIMEOUT_MS) {
+        return new Promise<void>(resolve => { releaseTeardownBudget = resolve })
+      }
+      return new Promise<void>(() => undefined)
+    })
+
+    const handle = await startSidecarReadiness(createSidecarLaunchConfig({ token: 'token-123', port: 17642 }), {
+      spawn,
+      fetch,
+      sleep,
+      createEventStream: vi.fn(() => eventStream),
+    })
+
+    const stopping = handle.stop({ graceMs: 1, sleep })
+    await Promise.resolve()
+
+    expect(order).toEqual([
+      'event-stream:start',
+      'event-stream:stop',
+      `sleep:${SIDECAR_EVENT_STREAM_TEARDOWN_TIMEOUT_MS}`,
+    ])
+    expect(child.killCalls).toEqual([])
+
+    releaseTeardownBudget()
+    await vi.waitFor(() => expect(order).toContain('process:SIGTERM'))
+    child.emit('exit', 0, 'SIGTERM')
+
+    await expect(stopping).resolves.toMatchObject({ status: 'terminated', timedOut: false })
+    expect(order).toContain('sleep:1')
+    expect(order).not.toContain('event-stream:terminated')
+    expect(order.indexOf(`sleep:${SIDECAR_EVENT_STREAM_TEARDOWN_TIMEOUT_MS}`)).toBeLessThan(order.indexOf('process:SIGTERM'))
   })
 
   it('makes a sidecar handle stop idempotent and reports the original stop result', async () => {
