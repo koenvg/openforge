@@ -69,7 +69,7 @@ describe('Electron Failure Reporting Module seam', () => {
     expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Remediation: Stop the conflicting process or choose a free port.'))
   })
 
-  it('keeps ElectronFailureReporterAdapter concrete Electron behavior behind the same seam', async () => {
+  it('uses startup dialog wording for boot-time failures', async () => {
     const consoleReporter = new RecordingFailureReporterAdapter()
     const showErrorBox = vi.fn()
     const onQuitDecision = vi.fn()
@@ -86,7 +86,39 @@ describe('Electron Failure Reporting Module seam', () => {
     await expect(reportFailure(reporter, report)).resolves.toBe('quit')
 
     expect(consoleReporter.reports).toEqual([report])
-    expect(showErrorBox).toHaveBeenCalledWith('OpenForge failed to start', expect.stringContaining('OpenForge window could not load.'))
+    expect(showErrorBox).toHaveBeenCalledWith(
+      'OpenForge failed to start',
+      expect.stringContaining('OpenForge window could not load.'),
+    )
+    expect(onQuitDecision).toHaveBeenCalledWith(report)
+  })
+
+  it('uses shutdown dialog wording for quit-time cleanup failures', async () => {
+    const consoleReporter = new RecordingFailureReporterAdapter()
+    const showErrorBox = vi.fn()
+    const onQuitDecision = vi.fn()
+    const reporter = new ElectronFailureReporterAdapter({ consoleReporter, showErrorBox, onQuitDecision })
+    const report = createFailureReport({
+      phase: 'shutdown:cleanup',
+      severity: 'error',
+      cause: 'sidecar stop timed out',
+      userMessage: 'Shutdown cleanup failed for rust-sidecar.',
+      remediation: 'OpenForge will continue exiting; check logs for sidecar or process cleanup details.',
+      decision: 'quit',
+    })
+
+    await expect(reportFailure(reporter, report)).resolves.toBe('quit')
+
+    expect(consoleReporter.reports).toEqual([report])
+    expect(showErrorBox).toHaveBeenCalledWith(
+      'OpenForge shutdown cleanup failed',
+      expect.stringContaining('OpenForge will continue exiting; check logs for sidecar or process cleanup details.'),
+    )
+    expect(showErrorBox).not.toHaveBeenCalledWith(
+      'OpenForge failed to start',
+      expect.any(String),
+    )
+    expect(showErrorBox.mock.calls[0]?.[1]).not.toContain('OpenForge failed to start')
     expect(onQuitDecision).toHaveBeenCalledWith(report)
   })
 })

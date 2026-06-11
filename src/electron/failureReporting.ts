@@ -90,6 +90,12 @@ function formatFailureReport(report: ElectronFailureReport): string[] {
   ]
 }
 
+function titleForFailureDialog(report: ElectronFailureReport): string {
+  return report.phase === 'shutdown:cleanup'
+    ? 'OpenForge shutdown cleanup failed'
+    : 'OpenForge failed to start'
+}
+
 export class ConsoleFailureReporterAdapter implements ElectronFailureReporter {
   private readonly logger: FailureLogger
 
@@ -139,7 +145,7 @@ export class ElectronFailureReporterAdapter implements ElectronFailureReporter {
     await this.consoleReporter.reportFailure(report)
 
     if (report.severity === 'fatal' || report.decision === 'quit') {
-      this.showErrorBox?.('OpenForge failed to start', `${report.userMessage}\n\n${report.remediation}\n\nCause: ${report.cause.message}`)
+      this.showErrorBox?.(titleForFailureDialog(report), `${report.userMessage}\n\n${report.remediation}\n\nCause: ${report.cause.message}`)
     }
 
     if (report.decision === 'quit') {
