@@ -16,7 +16,7 @@ use super::events::{
     spawn_batched_pty_event_emitter, spawn_pty_output_reader, PtyEventEmitterConfig, PtyExitAction,
     RingBuffer, SharedRingBuffer, CLAUDE_BUFFER_CAPACITY,
 };
-use super::pids::{shell_pid_file_name, shell_session_key};
+use super::pids::{pid_file_name_for_session_key, shell_session_key};
 use super::{PtyError, PtyManager};
 
 pub(super) type PtySessions = Arc<Mutex<HashMap<String, PtySession>>>;
@@ -35,6 +35,17 @@ static NEXT_AGENT_SPAWN_GENERATION: AtomicU64 = AtomicU64::new(1);
 // PTY Session
 // ============================================================================
 
+pub(super) enum PtySessionKind {
+    Agent,
+    Shell { task_id: String },
+}
+
+impl PtySessionKind {
+    fn is_shell_for_task(&self, task_id: &str) -> bool {
+        matches!(self, Self::Shell { task_id: shell_task_id } if shell_task_id == task_id)
+    }
+}
+
 pub(super) struct PtySession {
     #[allow(dead_code)]
     pub(super) child: Box<dyn portable_pty::Child + Send + Sync>,
@@ -42,6 +53,8 @@ pub(super) struct PtySession {
     pub(super) master: Box<dyn portable_pty::MasterPty + Send>,
     pub(super) writer: Box<dyn std::io::Write + Send>,
     pub(super) instance_id: u64,
+    pub(super) kind: PtySessionKind,
+    pub(super) pid_file_name: String,
 }
 
 trait AgentPtyProviderAdapter {
@@ -683,6 +696,7 @@ impl PtyManager {
             .take_writer()
             .map_err(|e| PtyError::SpawnFailed(format!("Failed to take writer: {}", e)))?;
 
+        let pid_file_name = adapter.pid_file_name(task_id);
         let replaced_session = {
             let generations = self.agent_spawn_generations.lock().await;
             if generations
@@ -706,6 +720,8 @@ impl PtyManager {
                     master: pair.master,
                     writer,
                     instance_id,
+                    kind: PtySessionKind::Agent,
+                    pid_file_name: pid_file_name.clone(),
                 },
             );
             drop(sessions);
@@ -753,7 +769,7 @@ impl PtyManager {
 
         let pid_dir = self.get_pid_dir()?;
         std::fs::create_dir_all(&pid_dir)?;
-        let pid_file = pid_dir.join(adapter.pid_file_name(task_id));
+        let pid_file = pid_dir.join(&pid_file_name);
         let pid_string = pid.to_string();
         std::fs::write(&pid_file, &pid_string)?;
         if !self
@@ -891,17 +907,16 @@ impl PtyManager {
     ) -> Result<u64, PtyError> {
         let resolved_cwd = resolve_pty_cwd(cwd)?;
         let key = shell_session_key(task_id, terminal_index);
+        let pid_file_name = pid_file_name_for_session_key(&key);
         let mut sessions = self.sessions.lock().await;
 
         if sessions.contains_key(&key) {
             info!("[PTY] Replacing existing shell PTY for task {}", task_id);
             if let Some(mut old_session) = sessions.remove(&key) {
                 let _ = old_session.child.kill();
-            }
-            if let Ok(pid_dir) = self.get_pid_dir() {
-                let _ = std::fs::remove_file(
-                    pid_dir.join(shell_pid_file_name(task_id, terminal_index)),
-                );
+                if let Ok(pid_dir) = self.get_pid_dir() {
+                    let _ = std::fs::remove_file(pid_dir.join(&old_session.pid_file_name));
+                }
             }
         }
 
@@ -964,6 +979,10 @@ impl PtyManager {
                 master: pair.master,
                 writer,
                 instance_id,
+                kind: PtySessionKind::Shell {
+                    task_id: task_id.to_string(),
+                },
+                pid_file_name: pid_file_name.clone(),
             },
         );
 
@@ -976,7 +995,7 @@ impl PtyManager {
 
         let pid_dir = self.get_pid_dir()?;
         std::fs::create_dir_all(&pid_dir)?;
-        let pid_file = pid_dir.join(shell_pid_file_name(task_id, terminal_index));
+        let pid_file = pid_dir.join(&pid_file_name);
         std::fs::write(&pid_file, pid.to_string())?;
 
         let last_output_time = Arc::new(AtomicU64::new(0));
@@ -1080,7 +1099,7 @@ impl PtyManager {
 
             let _ = session.child.kill();
 
-            let pid_file = self.get_pid_dir()?.join(format!("{}-pty.pid", task_id));
+            let pid_file = self.get_pid_dir()?.join(&session.pid_file_name);
             let _ = std::fs::remove_file(pid_file);
 
             info!("PTY for task {} killed", task_id);
@@ -1104,22 +1123,25 @@ impl PtyManager {
         let keys_to_kill: Vec<String> = {
             let sessions = self.sessions.lock().await;
             sessions
-                .keys()
-                .filter(|k| k.starts_with(&format!("{}-shell-", task_id)))
-                .cloned()
+                .iter()
+                .filter(|(_key, session)| session.kind.is_shell_for_task(task_id))
+                .map(|(key, _session)| key.clone())
                 .collect()
         };
 
         for key in keys_to_kill {
             let mut sessions = self.sessions.lock().await;
-            if let Some(mut session) = sessions.remove(&key) {
+            let pid_file_name = if let Some(mut session) = sessions.remove(&key) {
                 info!("Killing shell PTY for key {}", key);
                 let _ = session.child.kill();
-            }
+                Some(session.pid_file_name)
+            } else {
+                None
+            };
             drop(sessions);
 
-            if let Ok(pid_dir) = self.get_pid_dir() {
-                let _ = std::fs::remove_file(pid_dir.join(format!("{}.pid", key)));
+            if let (Some(pid_file_name), Ok(pid_dir)) = (pid_file_name, self.get_pid_dir()) {
+                let _ = std::fs::remove_file(pid_dir.join(pid_file_name));
             }
 
             {

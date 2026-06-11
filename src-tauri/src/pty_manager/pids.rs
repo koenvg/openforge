@@ -113,6 +113,17 @@ impl PtyManager {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum PtySessionKeyKind<'a> {
+    Agent {
+        task_id: &'a str,
+    },
+    Shell {
+        task_id: &'a str,
+        terminal_index: u32,
+    },
+}
+
 pub(super) fn shell_session_key(task_id: &str, terminal_index: Option<u32>) -> String {
     if let Some(idx) = terminal_index {
         format!("{}-shell-{}", task_id, idx)
@@ -121,24 +132,113 @@ pub(super) fn shell_session_key(task_id: &str, terminal_index: Option<u32>) -> S
     }
 }
 
+pub(super) fn classify_pty_session_key(session_key: &str) -> PtySessionKeyKind<'_> {
+    if let Some((task_id, shell_index)) = session_key.rsplit_once("-shell-") {
+        if !task_id.is_empty() && shell_index.chars().all(|ch| ch.is_ascii_digit()) {
+            if let Ok(terminal_index) = shell_index.parse::<u32>() {
+                return PtySessionKeyKind::Shell {
+                    task_id,
+                    terminal_index,
+                };
+            }
+        }
+    }
+
+    PtySessionKeyKind::Agent {
+        task_id: session_key,
+    }
+}
+
+#[cfg(test)]
+pub(super) fn is_shell_session_key_for_task(session_key: &str, task_id: &str) -> bool {
+    matches!(
+        classify_pty_session_key(session_key),
+        PtySessionKeyKind::Shell {
+            task_id: shell_task_id,
+            ..
+        } if shell_task_id == task_id
+    )
+}
+
+pub(super) fn pid_file_name_for_session_key(session_key: &str) -> String {
+    match classify_pty_session_key(session_key) {
+        PtySessionKeyKind::Agent { task_id } => format!("{}-pty.pid", task_id),
+        PtySessionKeyKind::Shell { .. } => format!("{}.pid", session_key),
+    }
+}
+
+#[cfg(test)]
 pub(super) fn shell_pid_file_name(task_id: &str, terminal_index: Option<u32>) -> String {
-    format!("{}.pid", shell_session_key(task_id, terminal_index))
+    pid_file_name_for_session_key(&shell_session_key(task_id, terminal_index))
 }
 
 fn is_pty_pid_file_name(name: &str) -> bool {
-    name.ends_with("-pty.pid")
-        || name.ends_with("-claude.pid")
-        || name.ends_with("-shell.pid")
-        || is_indexed_shell_pid_file_name(name)
+    managed_session_key_from_pid_file_name(name).is_some()
 }
 
-fn is_indexed_shell_pid_file_name(name: &str) -> bool {
-    let Some(stem) = name.strip_suffix(".pid") else {
-        return false;
-    };
-    let Some((_task_id, shell_index)) = stem.rsplit_once("-shell-") else {
-        return false;
-    };
+fn managed_session_key_from_pid_file_name(name: &str) -> Option<String> {
+    let stem = name.strip_suffix(".pid")?;
 
-    !shell_index.is_empty() && shell_index.chars().all(|ch| ch.is_ascii_digit())
+    if let Some(task_id) = stem.strip_suffix("-pty") {
+        return (!task_id.is_empty()).then(|| task_id.to_string());
+    }
+
+    if let Some(task_id) = stem.strip_suffix("-claude") {
+        return (!task_id.is_empty()).then(|| task_id.to_string());
+    }
+
+    if let Some(task_id) = stem.strip_suffix("-shell") {
+        return (!task_id.is_empty()).then(|| shell_session_key(task_id, None));
+    }
+
+    match classify_pty_session_key(stem) {
+        PtySessionKeyKind::Shell { .. } => Some(stem.to_string()),
+        PtySessionKeyKind::Agent { .. } => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn classifies_indexed_shell_session_keys() {
+        assert_eq!(
+            classify_pty_session_key("task-1-shell-2"),
+            PtySessionKeyKind::Shell {
+                task_id: "task-1",
+                terminal_index: 2,
+            }
+        );
+    }
+
+    #[test]
+    fn does_not_classify_agent_task_ids_with_shell_text_as_shells() {
+        assert_eq!(
+            classify_pty_session_key("task-shell-feature"),
+            PtySessionKeyKind::Agent {
+                task_id: "task-shell-feature",
+            }
+        );
+    }
+
+    #[test]
+    fn derives_pid_file_names_from_session_keys() {
+        assert_eq!(
+            pid_file_name_for_session_key("task-1-shell-2"),
+            "task-1-shell-2.pid"
+        );
+        assert_eq!(
+            pid_file_name_for_session_key("task-shell-feature"),
+            "task-shell-feature-pty.pid"
+        );
+    }
+
+    #[test]
+    fn classifies_managed_pid_files_through_one_parser() {
+        assert!(is_pty_pid_file_name("task-1-shell-2.pid"));
+        assert!(is_pty_pid_file_name("task-shell-feature-pty.pid"));
+        assert!(is_pty_pid_file_name("task-1-claude.pid"));
+        assert!(!is_pty_pid_file_name("task-1-shell-x.pid"));
+    }
 }
