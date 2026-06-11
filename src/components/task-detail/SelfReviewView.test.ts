@@ -60,6 +60,7 @@ import {
 	getPrComments,
 	getTaskBatchFileContents,
 	getTaskCommits,
+	getTaskFileContents,
 	getTaskDiff,
 } from "../../lib/ipc";
 import { pendingManualComments, ticketPrs } from "../../lib/stores";
@@ -536,6 +537,54 @@ describe("SelfReviewView pane restoration", () => {
 			expect(unchecked.checked).toBe(false);
 			expect(screen.queryByLabelText("Reviewed file src/main.rs")).toBeNull();
 			expect(getTaskReviewPaneState(baseTask.id).reviewedFileShas.has(baseDiff.filename)).toBe(false);
+		});
+	});
+
+	it("can compare current changes against the last reviewed file snapshot", async () => {
+		const originalDiff = { ...baseDiff, sha: "old-sha" };
+		const changedDiff = {
+			...baseDiff,
+			sha: "new-sha",
+			patch: "@@ -1,1 +1,1 @@\n-reviewed content\n+changed content",
+		};
+		const mockGetTaskDiff = vi.mocked(getTaskDiff);
+		mockGetTaskDiff.mockResolvedValueOnce([originalDiff]).mockResolvedValue([changedDiff]);
+		vi.mocked(getTaskFileContents).mockResolvedValue(["base content\n", "reviewed content\n"]);
+		vi.mocked(getTaskBatchFileContents).mockResolvedValue([["base content\n", "changed content\n"]]);
+
+		const firstRender = render(SelfReviewView, {
+			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
+		});
+
+		const checkbox = requireElement(await screen.findByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
+		await fireEvent.click(checkbox);
+		await waitFor(() => {
+			expect(vi.mocked(getTaskFileContents)).toHaveBeenCalledWith(
+				baseTask.id,
+				originalDiff.filename,
+				originalDiff.previous_filename,
+				originalDiff.status,
+				false,
+			);
+		});
+
+		firstRender.unmount();
+
+		render(SelfReviewView, {
+			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
+		});
+
+		const sinceReviewedButton = await screen.findByRole("button", { name: /Since reviewed/ });
+		await fireEvent.click(sinceReviewedButton);
+
+		await waitFor(() => {
+			expect(screen.getByText("Comparing with last reviewed version")).toBeTruthy();
+			expect(screen.getByRole("button", { name: "Back to all changes" })).toBeTruthy();
+			expect(vi.mocked(getTaskBatchFileContents)).toHaveBeenCalledWith(
+				baseTask.id,
+				[{ path: changedDiff.filename, oldPath: changedDiff.previous_filename, status: changedDiff.status }],
+				false,
+			);
 		});
 	});
 

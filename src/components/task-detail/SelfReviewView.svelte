@@ -10,12 +10,15 @@
     getTaskReviewFileIdentity,
     getTaskReviewPaneState,
     getTaskReviewReviewedFileShas,
+    getTaskReviewReviewedFileSnapshots,
     markTaskReviewFileReviewed,
     pruneTaskReviewReviewedFiles,
     unmarkTaskReviewFileReviewed,
     updateTaskReviewPaneState,
+    type ReviewedFileSnapshot,
   } from '../../lib/taskReviewPaneState'
   import { getGitHubMarkdownImageBaseUrl } from '../../lib/githubMarkdown'
+  import { buildReviewedBaselineComparison } from '../../lib/reviewedBaselineDiff'
 
   import type { Task, PrFileDiff, ReviewSubmissionComment } from '../../lib/types'
   import type { FileContents } from '@openforge/pr-review-ui/diffAdapter'
@@ -43,6 +46,10 @@
   let sidebarVisible = $state(false)
   let sidebarTab = $state<'pr' | 'notes'>('pr')
   let reviewedFileShas = $state<Map<string, string>>(new Map())
+  let reviewedFileSnapshots = $state<Map<string, ReviewedFileSnapshot>>(new Map())
+  let showReviewedComparison = $state(false)
+  let reviewedComparisonFiles = $state<PrFileDiff[]>([])
+  let reviewedComparisonContents = $state<Map<string, FileContents>>(new Map())
 
   let hasRestoredScroll = false
 
@@ -65,6 +72,14 @@
 
   let selfReviewState = $derived($selfReviewStateByTask.get(task.id))
   let selfReviewDiffFiles = $derived(selfReviewState?.diffFiles ?? [])
+  let visibleDiffFiles = $derived(showReviewedComparison ? reviewedComparisonFiles : selfReviewDiffFiles)
+  let reviewedBaselineChangeCount = $derived(diffLoader.selectedCommitSha === null
+    ? selfReviewDiffFiles.filter((file) => {
+      const snapshot = reviewedFileSnapshots.get(file.filename)
+      const currentIdentity = getTaskReviewFileIdentity(file)
+      return snapshot !== undefined && currentIdentity !== null && snapshot.identity !== currentIdentity
+    }).length
+    : 0)
   let selfReviewGeneralComments = $derived(selfReviewState?.generalComments ?? [])
   let inlineReviewComments = $derived(prCommentsToReviewComments(diffLoader.prComments))
   let pendingInlineComments = $derived(selfReviewState?.pendingInlineComments ?? [])
@@ -75,6 +90,7 @@
   $effect(() => {
     const taskId = task.id
     reviewedFileShas = getTaskReviewReviewedFileShas(taskId)
+    reviewedFileSnapshots = getTaskReviewReviewedFileSnapshots(taskId)
   })
 
   $effect(() => {
@@ -91,6 +107,11 @@
   }
 
   async function fetchTaskFileContents(file: PrFileDiff): Promise<FileContents> {
+    if (showReviewedComparison) {
+      const comparisonContents = reviewedComparisonContents.get(file.filename)
+      if (comparisonContents !== undefined) return comparisonContents
+    }
+
     const sha = diffLoader.selectedCommitSha
     if (sha !== null) {
       const [oldContent, newContent] = await getCommitFileContents(
@@ -113,6 +134,13 @@
   }
 
   async function batchFetchTaskFileContents(files: PrFileDiff[]): Promise<Map<string, FileContents>> {
+    if (showReviewedComparison) {
+      return new Map(files.flatMap((file) => {
+        const contents = reviewedComparisonContents.get(file.filename)
+        return contents === undefined ? [] : [[file.filename, contents]]
+      }))
+    }
+
     const requests = files.map(f => ({ path: f.filename, oldPath: f.previous_filename ?? null, status: f.status }))
     const sha = diffLoader.selectedCommitSha
 
@@ -129,7 +157,26 @@
   }
 
   async function handleCommitSelect(sha: string | null) {
+    restoreAllChangesView()
     await diffLoader.selectCommit(sha)
+  }
+
+  function restoreAllChangesView() {
+    showReviewedComparison = false
+    reviewedComparisonFiles = []
+    reviewedComparisonContents = new Map()
+  }
+
+  async function showChangesSinceReviewed() {
+    const result = await buildReviewedBaselineComparison({
+      files: selfReviewDiffFiles,
+      snapshots: reviewedFileSnapshots,
+      getFileIdentity: getTaskReviewFileIdentity,
+      fetchCurrentContents: batchFetchTaskFileContents,
+    })
+    reviewedComparisonFiles = result.files
+    reviewedComparisonContents = result.contents
+    showReviewedComparison = true
   }
 
   function handlePendingInlineCommentsChange(comments: ReviewSubmissionComment[]) {
@@ -138,11 +185,18 @@
 
   function syncReviewedFileShas() {
     reviewedFileShas = getTaskReviewReviewedFileShas(task.id)
+    reviewedFileSnapshots = getTaskReviewReviewedFileSnapshots(task.id)
   }
 
-  function handleToggleFileReviewed(file: PrFileDiff, reviewed: boolean) {
+  async function handleToggleFileReviewed(file: PrFileDiff, reviewed: boolean) {
     if (reviewed) {
-      markTaskReviewFileReviewed(task.id, file)
+      try {
+        const contents = await fetchTaskFileContents(file)
+        markTaskReviewFileReviewed(task.id, file, { newContent: contents.newContent })
+      } catch (e) {
+        console.error(`Failed to snapshot reviewed file ${file.filename}:`, e)
+        markTaskReviewFileReviewed(task.id, file)
+      }
     } else {
       unmarkTaskReviewFileReviewed(task.id, file.filename)
     }
@@ -199,7 +253,7 @@
           <div class="px-2 py-1.5 text-[0.65rem] uppercase tracking-wider font-semibold text-base-content/50 border-b border-base-300 bg-base-200">Files</div>
           <div class="flex-1 overflow-hidden">
             <FileTree
-              files={selfReviewDiffFiles}
+              files={visibleDiffFiles}
               onSelectFile={handleFileSelect}
               {reviewedFileShas}
               getFileReviewIdentity={getTaskReviewFileIdentity}
@@ -226,6 +280,7 @@
                       onchange={(e: Event) => {
                         if (!(e.currentTarget instanceof HTMLInputElement)) return
                         includeUncommitted = e.currentTarget.checked
+                        restoreAllChangesView()
                         diffLoader.refresh()
                       }}
                     />
@@ -275,7 +330,7 @@
           <span class="text-5xl">⚠</span>
           <span>{diffLoader.error}</span>
         </div>
-      {:else if selfReviewDiffFiles.length === 0}
+      {:else if visibleDiffFiles.length === 0}
             <div class="flex flex-col items-center justify-center flex-1 gap-4 text-base-content/50 text-center p-10">
               <span class="text-6xl">📂</span>
               <h3 class="text-xl font-semibold text-base-content m-0">No changes for current selection</h3>
@@ -297,11 +352,18 @@
               {/if}
             </div>
           {:else}
+            {#if showReviewedComparison}
+              <div class="flex items-center gap-3 border-b border-base-300 bg-base-200/70 px-4 py-2 text-xs text-base-content/70">
+                <span class="font-semibold text-base-content">Comparing with last reviewed version</span>
+                <span class="text-base-content/50">{reviewedComparisonFiles.length} changed {reviewedComparisonFiles.length === 1 ? 'file' : 'files'}</span>
+                <button class="btn btn-ghost btn-xs ml-auto" onclick={restoreAllChangesView}>Back to all changes</button>
+              </div>
+            {/if}
             <DiffViewer
               bind:this={diffViewer}
-              files={selfReviewDiffFiles}
-              existingComments={inlineReviewComments}
-              pendingComments={pendingInlineComments}
+              files={visibleDiffFiles}
+              existingComments={showReviewedComparison ? [] : inlineReviewComments}
+              pendingComments={showReviewedComparison ? [] : pendingInlineComments}
               onPendingCommentsChange={handlePendingInlineCommentsChange}
               inlineDraftScopeId={task.id}
               {fileTreeVisible}
@@ -316,6 +378,17 @@
               getFileReviewIdentity={getTaskReviewFileIdentity}
             >
               {#snippet toolbarExtra()}
+                {#if reviewedBaselineChangeCount > 0}
+                  <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
+                  <button
+                    class="btn btn-ghost btn-xs gap-1 {showReviewedComparison ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
+                    onclick={showChangesSinceReviewed}
+                    title="Compare current files with the last versions you marked reviewed"
+                  >
+                    Since reviewed
+                    <span class="badge badge-ghost badge-xs">{reviewedBaselineChangeCount}</span>
+                  </button>
+                {/if}
                 <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
                 <button
                   class="btn btn-ghost btn-xs gap-1 {sidebarVisible ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
