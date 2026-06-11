@@ -58,9 +58,10 @@ export interface TestingOpenForgeApiCalls {
   configWrites: Array<{ key: string; value: JsonValue; projectId: string | null }>
   fsWrites: Array<{ projectId: string; path: string; content: string }>
   shellSpawns: Array<{ taskId: string; cwd: string; cols: number; rows: number; terminalIndex: number }>
-  shellWrites: Array<{ taskId: string; data: string }>
-  shellResizes: Array<{ taskId: string; cols: number; rows: number }>
-  shellKills: Array<{ taskId: string }>
+  shellWrites: Array<{ taskId: string; terminalIndex: number; data: string }>
+  shellResizes: Array<{ taskId: string; terminalIndex: number; cols: number; rows: number }>
+  shellKills: Array<{ taskId: string; terminalIndex: number }>
+  shellBuffers: Array<{ taskId: string; terminalIndex: number }>
   storageGets: Array<{ scope: TestingRuntimeScope; scopeId: string | null; key: string }>
   storageSets: Array<{ scope: TestingRuntimeScope; scopeId: string | null; key: string; value: JsonValue }>
   storageDeletes: Array<{ scope: TestingRuntimeScope; scopeId: string | null; key: string }>
@@ -375,7 +376,10 @@ export class TestingOpenForgeRegistryFake {
         kill: async (request) => {
           this.calls.shellKills.push(request)
         },
-        getBuffer: async () => null,
+        getBuffer: async (request) => {
+          this.calls.shellBuffers.push(request)
+          return null
+        },
       },
       notifications: {
         notify: async (request) => {
@@ -731,6 +735,7 @@ export function createTestingCalls(): TestingOpenForgeApiCalls {
     shellWrites: [],
     shellResizes: [],
     shellKills: [],
+    shellBuffers: [],
     storageGets: [],
     storageSets: [],
     storageDeletes: [],

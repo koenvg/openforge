@@ -62,6 +62,23 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
 }
 
+function shellSessionKey(request: { taskId: string; terminalIndex: number }): string {
+  if (!request.taskId) {
+    throw new Error('shell callback requires taskId')
+  }
+  if (!Number.isInteger(request.terminalIndex) || request.terminalIndex < 0) {
+    throw new Error('shell callback requires a non-negative integer terminalIndex')
+  }
+  return `${request.taskId}-shell-${request.terminalIndex}`
+}
+
+function shellSessionKeyFromPayload(commandPayload: Record<string, unknown> | undefined): string {
+  return shellSessionKey({
+    taskId: String(commandPayload?.taskId ?? ''),
+    terminalIndex: Number(commandPayload?.terminalIndex),
+  })
+}
+
 function normalizeImplementationRun(status: Awaited<ReturnType<typeof startImplementation>>): ImplementationRun {
   return {
     taskId: status.task_id,
@@ -114,10 +131,10 @@ export function createPluginRuntimeHost(pluginId: string) {
       await waitForTerminalEventSubscriptions(request)
       return spawnShellPty(request.taskId, request.cwd, request.cols, request.rows, request.terminalIndex)
     },
-    writeShell: (request: { taskId: string; data: string }) => writePty(request.taskId, request.data),
-    resizeShell: (request: { taskId: string; cols: number; rows: number }) => resizePty(request.taskId, request.cols, request.rows),
-    killShell: (request: { taskId: string }) => killPty(request.taskId),
-    getShellBuffer: (request: { taskId: string }) => getPtyBuffer(request.taskId),
+    writeShell: (request: { taskId: string; terminalIndex: number; data: string }) => writePty(shellSessionKey(request), request.data),
+    resizeShell: (request: { taskId: string; terminalIndex: number; cols: number; rows: number }) => resizePty(shellSessionKey(request), request.cols, request.rows),
+    killShell: (request: { taskId: string; terminalIndex: number }) => killPty(shellSessionKey(request)),
+    getShellBuffer: (request: { taskId: string; terminalIndex: number }) => getPtyBuffer(shellSessionKey(request)),
     notify: async (request: unknown) => {
       await Promise.resolve()
       emitPluginHostEvent('openforge.notification', request)
@@ -279,13 +296,13 @@ export async function invokePluginHostCommand(command: string, payload: unknown)
       await waitForTerminalEventSubscriptions(commandPayload)
       return spawnShellPty(String(commandPayload?.taskId ?? ''), String(commandPayload?.cwd ?? ''), Number(commandPayload?.cols), Number(commandPayload?.rows), Number(commandPayload?.terminalIndex))
     case 'writePty':
-      return writePty(String(commandPayload?.taskId ?? ''), String(commandPayload?.data ?? ''))
+      return writePty(shellSessionKeyFromPayload(commandPayload), String(commandPayload?.data ?? ''))
     case 'resizePty':
-      return resizePty(String(commandPayload?.taskId ?? ''), Number(commandPayload?.cols), Number(commandPayload?.rows))
+      return resizePty(shellSessionKeyFromPayload(commandPayload), Number(commandPayload?.cols), Number(commandPayload?.rows))
     case 'killPty':
-      return killPty(String(commandPayload?.taskId ?? ''))
+      return killPty(shellSessionKeyFromPayload(commandPayload))
     case 'getPtyBuffer':
-      return getPtyBuffer(String(commandPayload?.taskId ?? ''))
+      return getPtyBuffer(shellSessionKeyFromPayload(commandPayload))
     case 'getTaskWorkspace':
       return getTaskWorkspace(String(commandPayload?.taskId ?? ''))
     case 'getConfig':

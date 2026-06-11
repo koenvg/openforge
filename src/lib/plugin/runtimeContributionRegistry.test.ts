@@ -294,6 +294,10 @@ describe('runtime contribution registry', () => {
       getConfig: vi.fn(async () => 'dark'),
       setProjectConfig: vi.fn(async () => undefined),
       spawnShell: vi.fn(async () => 42),
+      writeShell: vi.fn(async () => undefined),
+      resizeShell: vi.fn(async () => undefined),
+      killShell: vi.fn(async () => undefined),
+      getShellBuffer: vi.fn(async () => 'buffered'),
       getAttention: vi.fn(async () => [{ project_id: 'P-1', needs_input: 0, running_agents: 1, ci_failures: 0, unaddressed_comments: 0, completed_agents: 0 }]),
       notify: vi.fn(async () => undefined),
     }
@@ -313,6 +317,10 @@ describe('runtime contribution registry', () => {
     })).resolves.toEqual({ taskId: 'T-2', workspacePath: '/repo/.worktrees/T-2', sessionId: 'S-1' })
     await expect(api.fs.readFile({ projectId: 'P-1', path: 'README.md' })).resolves.toEqual({ type: 'text', content: 'hello', mimeType: null, size: 5 })
     await expect(api.shell.spawn({ taskId: 'T-1', cwd: '/repo', cols: 80, rows: 24, terminalIndex: 1 })).resolves.toBe(42)
+    await api.shell.write({ taskId: 'T-1', terminalIndex: 2, data: 'echo hi\n' })
+    await api.shell.resize({ taskId: 'T-1', terminalIndex: 2, cols: 120, rows: 40 })
+    await expect(api.shell.getBuffer({ taskId: 'T-1', terminalIndex: 2 })).resolves.toBe('buffered')
+    await api.shell.kill({ taskId: 'T-1', terminalIndex: 2 })
     await api.system.openUrl('https://example.com')
     expect(api.navigation.get()).toEqual({ activeProjectId: 'P-1', currentView: 'board', selectedTaskId: null })
     await expect(api.navigation.navigate({ viewId: 'plugin:github:prs', projectId: 'P-1', taskId: 'T-1' })).resolves.toEqual({ activeProjectId: 'P-1', currentView: 'plugin:github:prs', selectedTaskId: 'T-1' })
@@ -334,6 +342,10 @@ describe('runtime contribution registry', () => {
     expect(host.openUrl).toHaveBeenCalledWith('https://example.com')
     expect(host.navigate).toHaveBeenCalledWith({ viewId: 'plugin:github:prs', projectId: 'P-1', taskId: 'T-1' })
     expect(host.setProjectConfig).toHaveBeenCalledWith('P-1', 'repo', 'openforge')
+    expect(host.writeShell).toHaveBeenCalledWith({ taskId: 'T-1', terminalIndex: 2, data: 'echo hi\n' })
+    expect(host.resizeShell).toHaveBeenCalledWith({ taskId: 'T-1', terminalIndex: 2, cols: 120, rows: 40 })
+    expect(host.getShellBuffer).toHaveBeenCalledWith({ taskId: 'T-1', terminalIndex: 2 })
+    expect(host.killShell).toHaveBeenCalledWith({ taskId: 'T-1', terminalIndex: 2 })
   })
 
   it('reports unavailable frontend host capabilities with capability names', async () => {

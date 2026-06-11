@@ -292,20 +292,32 @@ export interface FileSystemAPI {
   searchFiles(request: { projectId: string; query: string; limit?: number }): Promise<string[]>
 }
 
-export interface ShellSpawnRequest {
+export interface ShellSessionRequest {
   taskId: string
+  terminalIndex: number
+}
+
+export interface ShellSpawnRequest extends ShellSessionRequest {
   cwd: string
   cols: number
   rows: number
-  terminalIndex: number
+}
+
+export interface ShellWriteRequest extends ShellSessionRequest {
+  data: string
+}
+
+export interface ShellResizeRequest extends ShellSessionRequest {
+  cols: number
+  rows: number
 }
 
 export interface ShellAPI {
   spawn(request: ShellSpawnRequest): Promise<number>
-  write(request: { taskId: string; data: string }): Promise<void>
-  resize(request: { taskId: string; cols: number; rows: number }): Promise<void>
-  kill(request: { taskId: string }): Promise<void>
-  getBuffer(request: { taskId: string }): Promise<string | null>
+  write(request: ShellWriteRequest): Promise<void>
+  resize(request: ShellResizeRequest): Promise<void>
+  kill(request: ShellSessionRequest): Promise<void>
+  getBuffer(request: ShellSessionRequest): Promise<string | null>
 }
 
 export interface CreateTaskRequest {
