@@ -1,5 +1,10 @@
 import { createFailureReport, reportFailure } from './failureReporting.js'
 import { ElectronShutdownAdapter, RustSidecarShutdownAdapter, ShutdownCoordinator } from './shutdown.js'
+import {
+  RUST_SIDECAR_SHUTDOWN_COORDINATOR_DEADLINE_MS,
+  RUST_SIDECAR_SIGTERM_GRACE_MS,
+  assertRustSidecarShutdownBudgetContract,
+} from './shutdownBudgetContract.js'
 import type { ElectronFailureReporter } from './failureReporting.js'
 import type { ChildProcessLike, SidecarLaunchConfig, SidecarReadinessHandle } from './sidecar.js'
 
@@ -69,8 +74,7 @@ export interface BootResult {
   degradations: BootDegradation[]
 }
 
-const RUST_SIDECAR_STOP_GRACE_MS = 7_000
-const RUST_SIDECAR_SHUTDOWN_DEADLINE_MS = 8_000
+assertRustSidecarShutdownBudgetContract()
 
 export const DEFAULT_BOOT_LIFECYCLE_POLICY: BootLifecyclePolicy = {
   missingSidecar: 'continue',
@@ -104,8 +108,8 @@ export async function bootOpenForgeDesktop(
       new RustSidecarShutdownAdapter({
         sidecar: () => sidecar,
         process: () => adapter.getSidecarLaunchProcess(),
-        stopOptions: { graceMs: RUST_SIDECAR_STOP_GRACE_MS },
-        deadlineMs: RUST_SIDECAR_SHUTDOWN_DEADLINE_MS,
+        stopOptions: { graceMs: RUST_SIDECAR_SIGTERM_GRACE_MS },
+        deadlineMs: RUST_SIDECAR_SHUTDOWN_COORDINATOR_DEADLINE_MS,
       }),
     ],
     logger,

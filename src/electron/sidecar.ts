@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { DEFAULT_HTTP_BRIDGE_PORT } from './httpBridgePortContract.js'
 import { createFailureReport, reportFailure } from './failureReporting.js'
+import { RUST_SIDECAR_SIGTERM_GRACE_MS } from './shutdownBudgetContract.js'
 import type { ChildProcess, SpawnOptions } from 'node:child_process'
 import type { ElectronFailureReporter } from './failureReporting.js'
 
@@ -210,7 +211,7 @@ const DEFAULT_HEALTH_PATH = '/app/health'
 const DEFAULT_SIDECAR_COMMAND = 'openforge-sidecar'
 const DEFAULT_HEALTH_TIMEOUT_MS = 10_000
 const DEFAULT_HEALTH_INTERVAL_MS = 100
-const DEFAULT_STOP_GRACE_MS = 2_000
+const DEFAULT_STOP_GRACE_MS = RUST_SIDECAR_SIGTERM_GRACE_MS
 
 export function generateBackendToken(): string {
   return randomBytes(32).toString('hex')
@@ -624,6 +625,9 @@ export async function startSidecarReadiness(
       stopPromise ??= (async () => {
         intentionalStop = true
         resolvedSnapshot.process = { ...resolvedSnapshot.process, state: 'stopping' }
+        // Event-stream teardown happens before SIGTERM and is counted by the
+        // Electron coordinator deadline, not by Rust's internal cleanup budget.
+        // Keep this path fast/non-blocking; see docs/contracts/rust-sidecar-shutdown-budget.md.
         resolvedEventStream.stop()
         await eventRunSettled
         const report = await stopSidecar(child, {

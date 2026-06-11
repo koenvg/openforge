@@ -1,6 +1,7 @@
 import { createFailureReport, reportFailure } from './failureReporting.js'
 import type { AppEventForwarder } from './eventForwarder.js'
 import { stopSidecar } from './sidecar.js'
+import { RUST_SIDECAR_SIGTERM_GRACE_MS } from './shutdownBudgetContract.js'
 import type { ElectronFailureReporter } from './failureReporting.js'
 import type { ChildProcessLike, SidecarHandle, StopSidecarOptions } from './sidecar.js'
 
@@ -271,7 +272,7 @@ export class RustSidecarShutdownAdapter implements ShutdownAdapter {
     const child = this.process()
     if (!child) return { status: 'absent' }
     return { ...await stopSidecar(child, {
-      graceMs: this.stopOptions?.graceMs ?? 2_000,
+      graceMs: this.stopOptions?.graceMs ?? RUST_SIDECAR_SIGTERM_GRACE_MS,
       sleep: this.stopOptions?.sleep ?? ((ms) => new Promise(resolve => setTimeout(resolve, ms))),
     }) }
   }
