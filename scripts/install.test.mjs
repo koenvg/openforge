@@ -9,8 +9,12 @@ function shellQuote(value) {
 }
 
 function runShell(scriptPath) {
+  return runScript('sh', [scriptPath])
+}
+
+function runScript(command, args, options = {}) {
   return new Promise(resolve => {
-    const child = spawn('sh', [scriptPath], { stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], ...options })
     let stdout = ''
     let stderr = ''
     child.stdout.on('data', chunk => { stdout += chunk.toString() })
@@ -44,6 +48,11 @@ ${body}
   return runner
 }
 
+async function writeExecutable(path, content) {
+  await writeFile(path, content)
+  await chmod(path, 0o755)
+}
+
 describe('macOS installer CLI helpers', () => {
   it('keeps Electron installer stale sidecar cleanup on the structured failure reporting seam', async () => {
     const installScript = await readFile(join(import.meta.dirname, 'install-electron-mac.sh'), 'utf8')
@@ -60,6 +69,88 @@ describe('macOS installer CLI helpers', () => {
     ])
 
     expect(embeddedHelperSnippet(installScript)).toBe(sharedHelper.trimEnd())
+  })
+
+  it('waits for a stale sidecar to stop before replacing a closed Electron app', async () => {
+    const root = await mkdtemp(join(tmpdir(), `openforge-electron-install-sidecar-${process.pid}-`))
+    const home = join(root, 'home')
+    const installDir = join(root, 'Applications')
+    const builtAppPath = join(root, 'build', 'Open Forge.app')
+    const payloadDir = join(builtAppPath, 'Contents/Resources/openforge-cli')
+    const binDir = join(root, 'bin')
+    const logPath = join(root, 'commands.log')
+    const sidecarProbeCountPath = join(root, 'sidecar-probes')
+    const copyProbeCountPath = join(root, 'copy-sidecar-probes')
+
+    await mkdir(payloadDir, { recursive: true })
+    await mkdir(binDir, { recursive: true })
+    await mkdir(home, { recursive: true })
+    await writeFile(join(payloadDir, 'cli.js'), 'console.log("openforge cli")\n')
+
+    await writeExecutable(join(binDir, 'pnpm'), `#!/bin/sh
+echo "pnpm $*" >> ${shellQuote(logPath)}
+exit 0
+`)
+    await writeExecutable(join(binDir, 'node'), `#!/bin/sh
+echo "node $*" >> ${shellQuote(logPath)}
+if [ "$1" = "scripts/rust-sidecar-layout.mjs" ]; then
+  echo ${shellQuote(builtAppPath)}
+fi
+exit 0
+`)
+    await writeExecutable(join(binDir, 'pgrep'), `#!/bin/sh
+echo "pgrep $*" >> ${shellQuote(logPath)}
+if [ "$1" = "-xq" ]; then
+  exit 1
+fi
+if [ "$1" = "-fq" ]; then
+  count=0
+  if [ -f ${shellQuote(sidecarProbeCountPath)} ]; then count=$(cat ${shellQuote(sidecarProbeCountPath)}); fi
+  count=$((count + 1))
+  printf '%s\n' "$count" > ${shellQuote(sidecarProbeCountPath)}
+  if [ "$count" -lt 3 ]; then exit 0; fi
+fi
+exit 1
+`)
+    await writeExecutable(join(binDir, 'pkill'), `#!/bin/sh
+echo "pkill $*" >> ${shellQuote(logPath)}
+exit 0
+`)
+    await writeExecutable(join(binDir, 'sleep'), `#!/bin/sh
+echo "sleep $*" >> ${shellQuote(logPath)}
+exit 0
+`)
+    await writeExecutable(join(binDir, 'xattr'), `#!/bin/sh
+echo "xattr $*" >> ${shellQuote(logPath)}
+exit 0
+`)
+    await writeExecutable(join(binDir, 'open'), `#!/bin/sh
+echo "open $*" >> ${shellQuote(logPath)}
+exit 0
+`)
+    await writeExecutable(join(binDir, 'cp'), `#!/bin/sh
+echo "cp $*" >> ${shellQuote(logPath)}
+cat ${shellQuote(sidecarProbeCountPath)} > ${shellQuote(copyProbeCountPath)}
+exec /bin/cp "$@"
+`)
+
+    const result = await runScript('bash', [join(import.meta.dirname, 'install-electron-mac.sh')], {
+      env: {
+        ...process.env,
+        HOME: home,
+        PATH: `${binDir}:${process.env.PATH ?? ''}`,
+        OPENFORGE_ELECTRON_INSTALL_DIR: installDir,
+      }
+    })
+
+    const log = await readFile(logPath, 'utf8')
+    expect(result.status).toBe(0)
+    expect(log).toContain('pnpm electron:package')
+    expect(log).toContain('pkill -f Open Forge.app/Contents/MacOS/openforge-sidecar')
+    expect(log).toContain(`cp -R ${builtAppPath} ${installDir}/`)
+    expect(log).not.toContain('open ')
+    await expect(readFile(copyProbeCountPath, 'utf8').then(Number)).resolves.toBeGreaterThanOrEqual(3)
+    await expect(readFile(join(installDir, 'Open Forge.app', 'Contents/Resources/openforge-cli/cli.js'), 'utf8')).resolves.toBe('console.log("openforge cli")\n')
   })
 
   it('keeps release install CLI setup self-contained when no sibling helper file is available', async () => {
