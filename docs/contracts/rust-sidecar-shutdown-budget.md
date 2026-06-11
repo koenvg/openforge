@@ -6,7 +6,8 @@ This contract keeps Electron quit cleanup from reporting false failures while st
 
 1. **Electron event-stream teardown** starts inside `SidecarReadinessHandle.stop()`.
    - The app event stream is stopped before Electron signals the Rust sidecar process.
-   - This teardown is part of the Electron coordinator deadline, so it must remain fast and non-blocking.
+   - Electron waits at most **250ms** (`SIDECAR_EVENT_STREAM_TEARDOWN_TIMEOUT_MS`) for the event-stream run to settle before sending `SIGTERM`.
+   - This teardown is part of the Electron coordinator deadline, so it must remain fast and bounded.
 2. **Electron sends `SIGTERM`** to the Rust sidecar process.
    - Electron waits **7,000ms** (`RUST_SIDECAR_SIGTERM_GRACE_MS`) for a graceful process exit.
 3. **Rust internal cleanup** runs after the HTTP server graceful shutdown completes.
@@ -20,6 +21,7 @@ This contract keeps Electron quit cleanup from reporting false failures while st
 
 | Budget | Value | Owner | Purpose |
 | --- | ---: | --- | --- |
+| Electron event-stream teardown timeout | 250ms | `src/electron/shutdownBudgetContract.ts` | Bounds pre-SIGTERM event-stream settling so a hung stream cannot consume quit cleanup. |
 | Rust internal cleanup timeout | 5,000ms | `src-tauri/src/http_server.rs` | Bounds plugin-sidecar and PTY cleanup after Rust observes shutdown. |
 | Electron SIGTERM grace | 7,000ms | `src/electron/shutdownBudgetContract.ts` | Gives Rust cleanup time before Electron sends `SIGKILL`. |
 | Electron coordinator deadline | 8,000ms | `src/electron/shutdownBudgetContract.ts` | Bounds the whole sidecar shutdown adapter and leaves room for structured kill reporting. |
@@ -29,6 +31,9 @@ Required ordering:
 ```text
 Rust internal cleanup timeout (5s)
   < Electron SIGTERM grace (7s)
+
+Electron event-stream teardown timeout (250ms)
+  + Electron SIGTERM grace (7s)
   < Electron coordinator deadline (8s)
 ```
 
@@ -42,5 +47,5 @@ Rust internal cleanup timeout (5s)
 
 - `src/electron/bootLifecycle.test.ts` asserts the exact Electron budget values and ordering, and verifies boot shutdown passes the 7s SIGTERM grace to the sidecar handle.
 - `src/electron/shutdown.test.ts` asserts successful forced sidecar kills do not create failure reports.
-- `src/electron/sidecar.test.ts` covers event-stream teardown before process `SIGTERM`.
+- `src/electron/sidecar.test.ts` covers event-stream teardown before process `SIGTERM`, including the hung-stream timeout path.
 - `src-tauri/src/http_server_tests/shutdown.rs` asserts the Rust cleanup timeout stays at 5s and below Electron's 7s SIGTERM grace.

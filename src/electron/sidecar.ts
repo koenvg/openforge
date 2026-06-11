@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { DEFAULT_HTTP_BRIDGE_PORT } from './httpBridgePortContract.js'
 import { createFailureReport, reportFailure } from './failureReporting.js'
-import { RUST_SIDECAR_SIGTERM_GRACE_MS } from './shutdownBudgetContract.js'
+import { RUST_SIDECAR_SIGTERM_GRACE_MS, SIDECAR_EVENT_STREAM_TEARDOWN_TIMEOUT_MS } from './shutdownBudgetContract.js'
 import type { ChildProcess, SpawnOptions } from 'node:child_process'
 import type { ElectronFailureReporter } from './failureReporting.js'
 
@@ -414,6 +414,17 @@ function waitForExit(child: ChildProcessLike, sleep: Sleep, graceMs: number): Pr
   })
 }
 
+function waitForEventStreamTeardown(
+  eventRunSettled: Promise<void>,
+  sleep: Sleep,
+  timeoutMs: number = SIDECAR_EVENT_STREAM_TEARDOWN_TIMEOUT_MS,
+): Promise<'settled' | 'timeout'> {
+  return Promise.race([
+    eventRunSettled.then(() => 'settled' as const),
+    sleep(timeoutMs).then(() => 'timeout' as const).catch(() => 'timeout' as const),
+  ])
+}
+
 export async function stopSidecar(
   child: ChildProcessLike,
   options: StopSidecarOptions = { graceMs: DEFAULT_STOP_GRACE_MS, sleep: (ms) => new Promise(resolve => setTimeout(resolve, ms)) },
@@ -627,12 +638,14 @@ export async function startSidecarReadiness(
         resolvedSnapshot.process = { ...resolvedSnapshot.process, state: 'stopping' }
         // Event-stream teardown happens before SIGTERM and is counted by the
         // Electron coordinator deadline, not by Rust's internal cleanup budget.
-        // Keep this path fast/non-blocking; see docs/contracts/rust-sidecar-shutdown-budget.md.
+        // Bound this pre-SIGTERM wait so a hung stream cannot consume the whole
+        // coordinator deadline; see docs/contracts/rust-sidecar-shutdown-budget.md.
+        const stopSleep = options.sleep ?? ((ms) => new Promise<void>(resolve => setTimeout(resolve, ms)))
         resolvedEventStream.stop()
-        await eventRunSettled
+        await waitForEventStreamTeardown(eventRunSettled, stopSleep)
         const report = await stopSidecar(child, {
           graceMs: options.graceMs ?? DEFAULT_STOP_GRACE_MS,
-          sleep: options.sleep ?? ((ms) => new Promise(resolve => setTimeout(resolve, ms))),
+          sleep: stopSleep,
         })
         if (resolvedSnapshot.process.state !== 'exited') {
           resolvedSnapshot.process = { state: 'stopped' }
