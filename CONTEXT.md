@@ -32,6 +32,10 @@ _Avoid_: Completion log, run history, random comments
 A changed file the user has explicitly marked as already inspected during review; it remains visible in the review flow and stops counting as reviewed when the file's content identity changes.
 _Avoid_: Hidden file, dismissed file, permanently ignored file
 
+**Reviewed File Snapshot**:
+The file version the user last accepted when marking a **Reviewed File**; it lets the review flow show what changed since that review.
+_Avoid_: Latest commit, branch head, base branch
+
 **Review File Tree**:
 The navigation list of changed files in a review flow.
 _Avoid_: Reviewed-files bucket, hidden-files list
@@ -130,6 +134,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - **Implementation Input** targets an existing **Agent Session** and does not choose a new provider or agent.
 - **Handoff Notes** belong to a **Task** and are updated to reflect the current review state rather than appended per **Implementation Run**.
 - A **Reviewed File** can belong to self-review or pull request review; it remains reviewed only while its content identity is unchanged.
+- A **Reviewed File Snapshot** records the accepted file version for a **Reviewed File**, not the latest commit on the branch.
 - A **Review File Tree** keeps **Reviewed Files** in their original location as navigation items.
 - A **Diff File Section** may collapse after its file becomes a **Reviewed File**, while remaining available to reopen.
 - A **Project Handoff Notes Template** defines the required shape of **Handoff Notes** for Tasks in one project.
@@ -165,5 +170,6 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - "Skill" was considered as a core OpenForge platform concept because one built-in plugin manages skills — resolved: skill discovery and editing are a **Plugin-owned Domain** unless multiple plugins need a shared platform contract.
 - "Terminal pooling" was used for plugin UI, shell process state, and reusable terminal lifecycle — resolved: **Terminal Surface** names the UI, while **Terminal Runtime** names the shared lifecycle owner.
 - "Terminal API" could mean a host `openforge.terminal` capability, a normal package dependency, or the shared runtime — resolved: **Terminal Runtime** names the shared runtime; lower-level shell/event APIs remain capability primitives.
+- "Latest hash" in self-review could mean branch HEAD, latest commit, or the last accepted file version — resolved: use **Reviewed File Snapshot** for the last accepted file version.
 - "Website" could mean a hosted product surface or public promotion — resolved: the current website direction is a **Marketing Site**, not a web version of OpenForge.
 - The **Marketing Site Promise** could be inflated into agent autonomy claims — resolved: avoid promises of autonomous engineering teams, code-review replacement, one-click shipping, hosted control planes, universal provider support, or enterprise collaboration suites.

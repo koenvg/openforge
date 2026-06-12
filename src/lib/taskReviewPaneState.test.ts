@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach } from 'vitest'
 import {
   clearTaskReviewPaneState,
   getTaskReviewReviewedFileShas,
+  getTaskReviewReviewedFileSnapshots,
   isTaskReviewFileReviewed,
   markTaskReviewFileReviewed,
   pruneTaskReviewReviewedFiles,
@@ -78,22 +79,43 @@ describe('task review pane reviewed files', () => {
     expect(getTaskReviewReviewedFileShas('task-1')).toEqual(new Map())
   })
 
-  it('removes reviewed state for a file when the user unchecks it', () => {
+  it('persists a reviewed file content snapshot for future since-reviewed comparisons', () => {
     const file = diff('src/feature.ts', 'sha-one')
-    markTaskReviewFileReviewed('task-1', file)
+
+    markTaskReviewFileReviewed('task-1', file, { newContent: 'reviewed content\n' })
+
+    expect(getTaskReviewReviewedFileSnapshots('task-1')).toEqual(new Map([
+      ['src/feature.ts', { identity: 'sha-one', newContent: 'reviewed content\n' }],
+    ]))
+
+    clearTaskReviewPaneState(undefined, { clearPersisted: false })
+
+    expect(getTaskReviewReviewedFileSnapshots('task-1')).toEqual(new Map([
+      ['src/feature.ts', { identity: 'sha-one', newContent: 'reviewed content\n' }],
+    ]))
+  })
+
+  it('removes reviewed state and its comparison snapshot when the user unchecks it', () => {
+    const file = diff('src/feature.ts', 'sha-one')
+    markTaskReviewFileReviewed('task-1', file, { newContent: 'reviewed content\n' })
 
     unmarkTaskReviewFileReviewed('task-1', file.filename)
 
     expect(isTaskReviewFileReviewed('task-1', file)).toBe(false)
     expect(getTaskReviewReviewedFileShas('task-1')).toEqual(new Map())
+    expect(getTaskReviewReviewedFileSnapshots('task-1')).toEqual(new Map())
   })
 
-  it('prunes reviewed file entries that no longer match the current diff files', () => {
-    markTaskReviewFileReviewed('task-1', diff('src/feature.ts', 'sha-one'))
-    markTaskReviewFileReviewed('task-1', diff('src/unchanged.ts', 'sha-old'))
+  it('prunes reviewed file entries that no longer match the current diff files without losing comparison snapshots', () => {
+    markTaskReviewFileReviewed('task-1', diff('src/feature.ts', 'sha-one'), { newContent: 'old feature\n' })
+    markTaskReviewFileReviewed('task-1', diff('src/unchanged.ts', 'sha-old'), { newContent: 'old unchanged\n' })
 
     pruneTaskReviewReviewedFiles('task-1', [diff('src/feature.ts', 'sha-two')])
 
     expect(getTaskReviewReviewedFileShas('task-1')).toEqual(new Map())
+    expect(getTaskReviewReviewedFileSnapshots('task-1')).toEqual(new Map([
+      ['src/feature.ts', { identity: 'sha-one', newContent: 'old feature\n' }],
+      ['src/unchanged.ts', { identity: 'sha-old', newContent: 'old unchanged\n' }],
+    ]))
   })
 })

@@ -60,6 +60,7 @@ import {
 	getPrComments,
 	getTaskBatchFileContents,
 	getTaskCommits,
+	getTaskFileContents,
 	getTaskDiff,
 } from "../../lib/ipc";
 import { pendingManualComments, ticketPrs } from "../../lib/stores";
@@ -70,7 +71,7 @@ import {
 	setSelfReviewGeneralComments,
 } from "../../lib/taskScopedSelfReviewState";
 import { createVirtualizer } from "@openforge/pr-review-ui/useVirtualizer.svelte";
-import { clearTaskReviewPaneState, getTaskReviewPaneState, markTaskReviewFileReviewed } from "../../lib/taskReviewPaneState";
+import { clearTaskReviewPaneState, getTaskReviewFileIdentity, getTaskReviewPaneState, markTaskReviewFileReviewed } from "../../lib/taskReviewPaneState";
 
 const baseTask: Task = {
 	id: "task-1",
@@ -536,6 +537,74 @@ describe("SelfReviewView pane restoration", () => {
 			expect(unchecked.checked).toBe(false);
 			expect(screen.queryByLabelText("Reviewed file src/main.rs")).toBeNull();
 			expect(getTaskReviewPaneState(baseTask.id).reviewedFileShas.has(baseDiff.filename)).toBe(false);
+		});
+	});
+
+	it("can compare current changes against the last reviewed file snapshot", async () => {
+		const originalDiff = {
+			...baseDiff,
+			sha: "",
+			patch: "@@ -1,1 +1,1 @@\n-base content\n+reviewed content",
+		};
+		const changedDiff = {
+			...baseDiff,
+			sha: "",
+			patch: "@@ -1,1 +1,1 @@\n-base content\n+changed content",
+		};
+		const mockGetTaskDiff = vi.mocked(getTaskDiff);
+		mockGetTaskDiff.mockResolvedValueOnce([originalDiff]).mockResolvedValue([changedDiff]);
+		vi.mocked(getTaskFileContents).mockResolvedValue(["base content\n", "reviewed content\n"]);
+		vi.mocked(getTaskBatchFileContents).mockResolvedValue([["base content\n", "changed content\n"]]);
+
+		const firstRender = render(SelfReviewView, {
+			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
+		});
+
+		const checkbox = requireElement(await screen.findByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
+		await fireEvent.click(checkbox);
+		await waitFor(() => {
+			expect(vi.mocked(getTaskFileContents)).toHaveBeenCalledWith(
+				baseTask.id,
+				originalDiff.filename,
+				originalDiff.previous_filename,
+				originalDiff.status,
+				false,
+			);
+		});
+
+		firstRender.unmount();
+
+		render(SelfReviewView, {
+			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
+		});
+
+		const sinceReviewedButton = await screen.findByRole("button", { name: /Since reviewed/ });
+		await fireEvent.click(sinceReviewedButton);
+
+		await waitFor(() => {
+			expect(screen.getByText("Comparing with last reviewed version")).toBeTruthy();
+			expect(screen.getByRole("button", { name: "Back to all changes" })).toBeTruthy();
+			expect(vi.mocked(getTaskBatchFileContents)).toHaveBeenCalledWith(
+				baseTask.id,
+				[{ path: changedDiff.filename, oldPath: changedDiff.previous_filename, status: changedDiff.status }],
+				false,
+			);
+		});
+
+		await fireEvent.click(screen.getByLabelText("Mark src/main.rs reviewed"));
+
+		await waitFor(() => {
+			expect(getTaskReviewPaneState(baseTask.id).reviewedFileShas.get(changedDiff.filename)).toBe(
+				getTaskReviewFileIdentity(changedDiff),
+			);
+			expect(screen.queryByRole("button", { name: /Since reviewed/ })).toBeNull();
+		});
+
+		await fireEvent.click(screen.getByRole("button", { name: "Back to all changes" }));
+
+		await waitFor(() => {
+			const allChangesCheckbox = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
+			expect(allChangesCheckbox.checked).toBe(true);
 		});
 	});
 

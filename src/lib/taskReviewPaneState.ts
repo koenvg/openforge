@@ -7,6 +7,11 @@ export interface TaskReviewPaneState {
 	reviewedFileShas: Map<string, string>;
 }
 
+export interface ReviewedFileSnapshot {
+	identity: string;
+	newContent: string;
+}
+
 type TaskReviewFileIdentityInput = Pick<PrFileDiff, keyof ReviewFileIdentityInput>;
 
 const defaultTaskReviewPaneState: TaskReviewPaneState = {
@@ -16,8 +21,10 @@ const defaultTaskReviewPaneState: TaskReviewPaneState = {
 };
 
 const reviewedFilesStorageKey = 'openforge.taskReviewPaneState.reviewedFiles.v1';
+const reviewedFileSnapshotsStorageKey = 'openforge.taskReviewPaneState.reviewedFileSnapshots.v1';
 
 type PersistedReviewedFiles = Record<string, Array<[string, string]>>;
+type PersistedReviewedFileSnapshots = Record<string, Array<[string, ReviewedFileSnapshot]>>;
 
 interface ClearTaskReviewPaneStateOptions {
 	clearPersisted?: boolean;
@@ -61,6 +68,30 @@ function normalizePersistedReviewedFiles(value: unknown): PersistedReviewedFiles
 	return persisted;
 }
 
+function normalizePersistedReviewedFileSnapshots(value: unknown): PersistedReviewedFileSnapshots {
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+		return {};
+	}
+
+	const persisted = Object.create(null) as PersistedReviewedFileSnapshots;
+	for (const [taskId, entries] of Object.entries(value)) {
+		if (!Array.isArray(entries)) continue;
+		const normalizedEntries = entries.filter((entry): entry is [string, ReviewedFileSnapshot] => (
+			Array.isArray(entry)
+			&& entry.length === 2
+			&& typeof entry[0] === 'string'
+			&& entry[1] !== null
+			&& typeof entry[1] === 'object'
+			&& typeof (entry[1] as ReviewedFileSnapshot).identity === 'string'
+			&& typeof (entry[1] as ReviewedFileSnapshot).newContent === 'string'
+		));
+		if (normalizedEntries.length > 0) {
+			persisted[taskId] = normalizedEntries;
+		}
+	}
+	return persisted;
+}
+
 function readPersistedReviewedFiles(): PersistedReviewedFiles {
 	const storage = getLocalStorage();
 	if (storage === null) return {};
@@ -74,8 +105,25 @@ function readPersistedReviewedFiles(): PersistedReviewedFiles {
 	}
 }
 
+function readPersistedReviewedFileSnapshots(): PersistedReviewedFileSnapshots {
+	const storage = getLocalStorage();
+	if (storage === null) return {};
+
+	try {
+		const rawValue = storage.getItem(reviewedFileSnapshotsStorageKey);
+		if (rawValue === null) return {};
+		return normalizePersistedReviewedFileSnapshots(JSON.parse(rawValue));
+	} catch {
+		return {};
+	}
+}
+
 function readPersistedTaskReviewedFileShas(taskId: string): Map<string, string> {
 	return new Map(readPersistedReviewedFiles()[taskId] ?? []);
+}
+
+function readPersistedTaskReviewedFileSnapshots(taskId: string): Map<string, ReviewedFileSnapshot> {
+	return new Map(readPersistedReviewedFileSnapshots()[taskId] ?? []);
 }
 
 function writePersistedReviewedFiles(persisted: PersistedReviewedFiles): void {
@@ -93,6 +141,21 @@ function writePersistedReviewedFiles(persisted: PersistedReviewedFiles): void {
 	}
 }
 
+function writePersistedReviewedFileSnapshots(persisted: PersistedReviewedFileSnapshots): void {
+	const storage = getLocalStorage();
+	if (storage === null) return;
+
+	try {
+		if (Object.keys(persisted).length === 0) {
+			storage.removeItem(reviewedFileSnapshotsStorageKey);
+			return;
+		}
+		storage.setItem(reviewedFileSnapshotsStorageKey, JSON.stringify(persisted));
+	} catch {
+		// Snapshot persistence is best effort and must not block review interactions.
+	}
+}
+
 function writePersistedTaskReviewedFileShas(taskId: string, reviewedFileShas: Map<string, string>): void {
 	const persisted = readPersistedReviewedFiles();
 	if (reviewedFileShas.size === 0) {
@@ -103,15 +166,30 @@ function writePersistedTaskReviewedFileShas(taskId: string, reviewedFileShas: Ma
 	writePersistedReviewedFiles(persisted);
 }
 
+function writePersistedTaskReviewedFileSnapshots(taskId: string, snapshots: Map<string, ReviewedFileSnapshot>): void {
+	const persisted = readPersistedReviewedFileSnapshots();
+	if (snapshots.size === 0) {
+		delete persisted[taskId];
+	} else {
+		persisted[taskId] = Array.from(snapshots.entries());
+	}
+	writePersistedReviewedFileSnapshots(persisted);
+}
+
 function clearPersistedTaskReviewReviewedFiles(taskId?: string): void {
 	if (taskId === undefined) {
 		writePersistedReviewedFiles(Object.create(null) as PersistedReviewedFiles);
+		writePersistedReviewedFileSnapshots(Object.create(null) as PersistedReviewedFileSnapshots);
 		return;
 	}
 
 	const persisted = readPersistedReviewedFiles();
 	delete persisted[taskId];
 	writePersistedReviewedFiles(persisted);
+
+	const persistedSnapshots = readPersistedReviewedFileSnapshots();
+	delete persistedSnapshots[taskId];
+	writePersistedReviewedFileSnapshots(persistedSnapshots);
 }
 
 export function getTaskReviewFileIdentity(file: TaskReviewFileIdentityInput): string | null {
@@ -153,6 +231,10 @@ export function getTaskReviewReviewedFileShas(taskId: string): Map<string, strin
 	return new Map(getTaskReviewPaneState(taskId).reviewedFileShas);
 }
 
+export function getTaskReviewReviewedFileSnapshots(taskId: string): Map<string, ReviewedFileSnapshot> {
+	return readPersistedTaskReviewedFileSnapshots(taskId);
+}
+
 export function isTaskReviewFileReviewed(
 	taskId: string,
 	file: TaskReviewFileIdentityInput,
@@ -164,14 +246,23 @@ export function isTaskReviewFileReviewed(
 export function markTaskReviewFileReviewed(
 	taskId: string,
 	file: TaskReviewFileIdentityInput,
+	snapshot?: { newContent: string },
 ): TaskReviewPaneState {
 	const reviewedFileShas = getTaskReviewReviewedFileShas(taskId);
+	const snapshots = getTaskReviewReviewedFileSnapshots(taskId);
 	const identity = getTaskReviewFileIdentity(file);
 	if (identity === null) {
 		reviewedFileShas.delete(file.filename);
+		snapshots.delete(file.filename);
 	} else {
 		reviewedFileShas.set(file.filename, identity);
+		if (snapshot !== undefined) {
+			snapshots.set(file.filename, { identity, newContent: snapshot.newContent });
+		} else {
+			snapshots.delete(file.filename);
+		}
 	}
+	writePersistedTaskReviewedFileSnapshots(taskId, snapshots);
 	return updateTaskReviewPaneState(taskId, { reviewedFileShas });
 }
 
@@ -180,7 +271,10 @@ export function unmarkTaskReviewFileReviewed(
 	filename: string,
 ): TaskReviewPaneState {
 	const reviewedFileShas = getTaskReviewReviewedFileShas(taskId);
+	const snapshots = getTaskReviewReviewedFileSnapshots(taskId);
 	reviewedFileShas.delete(filename);
+	snapshots.delete(filename);
+	writePersistedTaskReviewedFileSnapshots(taskId, snapshots);
 	return updateTaskReviewPaneState(taskId, { reviewedFileShas });
 }
 
