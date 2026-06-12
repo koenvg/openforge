@@ -117,6 +117,19 @@ describe('plugin host commands', () => {
     expect(invoke).toHaveBeenLastCalledWith('get_pty_buffer', { taskId: 'T-1-shell-2' })
   })
 
+  it('rejects missing indexed shell host command payloads instead of coercing them to shell zero', async () => {
+    const { invoke } = installDesktopBridge('buffered')
+
+    for (const terminalIndex of [null, '']) {
+      await expect(invokePluginHostCommand('writePty', { taskId: 'T-1', terminalIndex, data: 'echo hi\n' })).rejects.toThrow('terminalIndex')
+      await expect(invokePluginHostCommand('resizePty', { taskId: 'T-1', terminalIndex, cols: 120, rows: 40 })).rejects.toThrow('terminalIndex')
+      await expect(invokePluginHostCommand('killPty', { taskId: 'T-1', terminalIndex })).rejects.toThrow('terminalIndex')
+      await expect(invokePluginHostCommand('getPtyBuffer', { taskId: 'T-1', terminalIndex })).rejects.toThrow('terminalIndex')
+    }
+
+    expect(invoke).not.toHaveBeenCalled()
+  })
+
   it('does not expose GitHub Sync PR review operations as core plugin host commands', async () => {
     const { invoke } = installDesktopBridge([])
 

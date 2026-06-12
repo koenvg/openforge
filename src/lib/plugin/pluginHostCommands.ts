@@ -73,9 +73,14 @@ function shellSessionKey(request: { taskId: string; terminalIndex: number }): st
 }
 
 function shellSessionKeyFromPayload(commandPayload: Record<string, unknown> | undefined): string {
+  const terminalIndex = commandPayload?.terminalIndex
+  if (typeof terminalIndex !== 'number') {
+    throw new Error('shell callback requires a non-negative integer terminalIndex')
+  }
+
   return shellSessionKey({
     taskId: String(commandPayload?.taskId ?? ''),
-    terminalIndex: Number(commandPayload?.terminalIndex),
+    terminalIndex,
   })
 }
 
