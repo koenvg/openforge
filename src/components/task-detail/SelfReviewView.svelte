@@ -106,6 +106,15 @@
     }
   }
 
+  function getBackingSelfReviewFile(file: PrFileDiff): PrFileDiff {
+    if (!showReviewedComparison) return file
+    return selfReviewDiffFiles.find((currentFile) => currentFile.filename === file.filename) ?? file
+  }
+
+  function getVisibleFileReviewIdentity(file: PrFileDiff): string | null {
+    return getTaskReviewFileIdentity(getBackingSelfReviewFile(file))
+  }
+
   async function fetchTaskFileContents(file: PrFileDiff): Promise<FileContents> {
     if (showReviewedComparison) {
       const comparisonContents = reviewedComparisonContents.get(file.filename)
@@ -190,12 +199,13 @@
 
   async function handleToggleFileReviewed(file: PrFileDiff, reviewed: boolean) {
     if (reviewed) {
+      const reviewFile = getBackingSelfReviewFile(file)
       try {
         const contents = await fetchTaskFileContents(file)
-        markTaskReviewFileReviewed(task.id, file, { newContent: contents.newContent })
+        markTaskReviewFileReviewed(task.id, reviewFile, { newContent: contents.newContent })
       } catch (e) {
         console.error(`Failed to snapshot reviewed file ${file.filename}:`, e)
-        markTaskReviewFileReviewed(task.id, file)
+        markTaskReviewFileReviewed(task.id, reviewFile)
       }
     } else {
       unmarkTaskReviewFileReviewed(task.id, file.filename)
@@ -256,7 +266,7 @@
               files={visibleDiffFiles}
               onSelectFile={handleFileSelect}
               {reviewedFileShas}
-              getFileReviewIdentity={getTaskReviewFileIdentity}
+              getFileReviewIdentity={getVisibleFileReviewIdentity}
             />
           </div>
           <ResizableBottomPanel
@@ -375,7 +385,7 @@
               onScrollTopChange={(diffScrollTop) => updateTaskReviewPaneState(task.id, { diffScrollTop })}
               {reviewedFileShas}
               onToggleFileReviewed={handleToggleFileReviewed}
-              getFileReviewIdentity={getTaskReviewFileIdentity}
+              getFileReviewIdentity={getVisibleFileReviewIdentity}
             >
               {#snippet toolbarExtra()}
                 {#if reviewedBaselineChangeCount > 0}

@@ -71,7 +71,7 @@ import {
 	setSelfReviewGeneralComments,
 } from "../../lib/taskScopedSelfReviewState";
 import { createVirtualizer } from "@openforge/pr-review-ui/useVirtualizer.svelte";
-import { clearTaskReviewPaneState, getTaskReviewPaneState, markTaskReviewFileReviewed } from "../../lib/taskReviewPaneState";
+import { clearTaskReviewPaneState, getTaskReviewFileIdentity, getTaskReviewPaneState, markTaskReviewFileReviewed } from "../../lib/taskReviewPaneState";
 
 const baseTask: Task = {
 	id: "task-1",
@@ -541,11 +541,15 @@ describe("SelfReviewView pane restoration", () => {
 	});
 
 	it("can compare current changes against the last reviewed file snapshot", async () => {
-		const originalDiff = { ...baseDiff, sha: "old-sha" };
+		const originalDiff = {
+			...baseDiff,
+			sha: "",
+			patch: "@@ -1,1 +1,1 @@\n-base content\n+reviewed content",
+		};
 		const changedDiff = {
 			...baseDiff,
-			sha: "new-sha",
-			patch: "@@ -1,1 +1,1 @@\n-reviewed content\n+changed content",
+			sha: "",
+			patch: "@@ -1,1 +1,1 @@\n-base content\n+changed content",
 		};
 		const mockGetTaskDiff = vi.mocked(getTaskDiff);
 		mockGetTaskDiff.mockResolvedValueOnce([originalDiff]).mockResolvedValue([changedDiff]);
@@ -585,6 +589,22 @@ describe("SelfReviewView pane restoration", () => {
 				[{ path: changedDiff.filename, oldPath: changedDiff.previous_filename, status: changedDiff.status }],
 				false,
 			);
+		});
+
+		await fireEvent.click(screen.getByLabelText("Mark src/main.rs reviewed"));
+
+		await waitFor(() => {
+			expect(getTaskReviewPaneState(baseTask.id).reviewedFileShas.get(changedDiff.filename)).toBe(
+				getTaskReviewFileIdentity(changedDiff),
+			);
+			expect(screen.queryByRole("button", { name: /Since reviewed/ })).toBeNull();
+		});
+
+		await fireEvent.click(screen.getByRole("button", { name: "Back to all changes" }));
+
+		await waitFor(() => {
+			const allChangesCheckbox = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
+			expect(allChangesCheckbox.checked).toBe(true);
 		});
 	});
 
