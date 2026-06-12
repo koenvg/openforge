@@ -38,6 +38,12 @@ fn is_files_review_app_command(command: &str) -> bool {
     )
 }
 
+fn required_shell_session_key(params: &Value) -> Result<String, String> {
+    let task_id = required_param_string(params, "taskId")?;
+    let terminal_index = required_param_u16(params, "terminalIndex")?;
+    Ok(format!("{task_id}-shell-{terminal_index}"))
+}
+
 impl PluginHost {
     pub(super) async fn handle_host_callback(
         &self,
@@ -227,7 +233,7 @@ impl PluginHost {
     }
 
     async fn write_shell_for_host(&self, params: &Value) -> Result<Value, String> {
-        let task_id = required_param_string(params, "taskId")?;
+        let task_id = required_shell_session_key(params)?;
         let data = params
             .get("data")
             .and_then(Value::as_str)
@@ -240,7 +246,7 @@ impl PluginHost {
     }
 
     async fn resize_shell_for_host(&self, params: &Value) -> Result<Value, String> {
-        let task_id = required_param_string(params, "taskId")?;
+        let task_id = required_shell_session_key(params)?;
         let cols = required_param_u16(params, "cols")?;
         let rows = required_param_u16(params, "rows")?;
         self.pty_manager_for_host()?
@@ -251,7 +257,7 @@ impl PluginHost {
     }
 
     async fn kill_shell_for_host(&self, params: &Value) -> Result<Value, String> {
-        let task_id = required_param_string(params, "taskId")?;
+        let task_id = required_shell_session_key(params)?;
         self.pty_manager_for_host()?
             .kill_pty(&task_id)
             .await
@@ -260,7 +266,7 @@ impl PluginHost {
     }
 
     async fn get_shell_buffer_for_host(&self, params: &Value) -> Result<Value, String> {
-        let task_id = required_param_string(params, "taskId")?;
+        let task_id = required_shell_session_key(params)?;
         serde_json::to_value(self.pty_manager_for_host()?.get_pty_buffer(&task_id).await)
             .map_err(|error| format!("failed to serialize PTY buffer: {error}"))
     }
@@ -403,5 +409,31 @@ fn host_config_value(params: &Value) -> String {
         Some(Value::String(value)) => value.clone(),
         Some(value) => value.to_string(),
         None => String::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn shell_session_key_uses_task_id_and_terminal_index() {
+        let params = json!({ "taskId": "project-P-1", "terminalIndex": 2 });
+
+        assert_eq!(
+            required_shell_session_key(&params).expect("valid shell request"),
+            "project-P-1-shell-2"
+        );
+    }
+
+    #[test]
+    fn shell_session_key_rejects_missing_terminal_index() {
+        let params = json!({ "taskId": "project-P-1" });
+
+        assert_eq!(
+            required_shell_session_key(&params).expect_err("terminalIndex should be required"),
+            "plugin host callback missing integer param: terminalIndex"
+        );
     }
 }

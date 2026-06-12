@@ -154,10 +154,10 @@ describe('plugin-host backend runtime', () => {
               const search = await openforge.fs.searchFiles({ projectId: 'P-1', query: 'plugin', limit: 3 })
               await openforge.fs.writeFile({ projectId: 'P-1', path: 'generated.txt', content: 'hello' })
               const pty = await openforge.shell.spawn({ taskId: 'T-1', cwd: '/repo', cols: 80, rows: 24, terminalIndex: 2 })
-              await openforge.shell.write({ taskId: 'T-1', data: 'echo hi\\n' })
-              await openforge.shell.resize({ taskId: 'T-1', cols: 100, rows: 30 })
-              const buffer = await openforge.shell.getBuffer({ taskId: 'T-1' })
-              await openforge.shell.kill({ taskId: 'T-1' })
+              await openforge.shell.write({ taskId: 'T-1', terminalIndex: 2, data: 'echo hi\\n' })
+              await openforge.shell.resize({ taskId: 'T-1', terminalIndex: 2, cols: 100, rows: 30 })
+              const buffer = await openforge.shell.getBuffer({ taskId: 'T-1', terminalIndex: 2 })
+              await openforge.shell.kill({ taskId: 'T-1', terminalIndex: 2 })
               await openforge.notifications.notify({ title: 'Done', body: context.pluginId })
               const attention = await openforge.attention.listProjects()
               await openforge.system.openUrl('https://example.com')
@@ -209,6 +209,10 @@ describe('plugin-host backend runtime', () => {
       configBefore: 'light',
       projectConfigBefore: null,
     })
+    expect(calls.find(call => call.method === 'openforge.shell.write')?.params).toEqual({ taskId: 'T-1', terminalIndex: 2, data: 'echo hi\n' })
+    expect(calls.find(call => call.method === 'openforge.shell.resize')?.params).toEqual({ taskId: 'T-1', terminalIndex: 2, cols: 100, rows: 30 })
+    expect(calls.find(call => call.method === 'openforge.shell.getBuffer')?.params).toEqual({ taskId: 'T-1', terminalIndex: 2 })
+    expect(calls.find(call => call.method === 'openforge.shell.kill')?.params).toEqual({ taskId: 'T-1', terminalIndex: 2 })
     expect(calls.map(call => call.method)).toEqual([
       'openforge.projects.list',
       'openforge.projects.get',

@@ -23,6 +23,15 @@ function toUnlisten(disposable: Disposable): OpenForgeEventUnlistenFn {
   }
 }
 
+function parseIndexedTerminalKey(terminalKey: string): { taskId: string; terminalIndex: number } {
+  const match = /^(.*)-shell-(\d+)$/.exec(terminalKey)
+  if (!match || !match[1]) {
+    throw new Error(`[terminal plugin] Expected indexed terminal key, received: ${terminalKey}`)
+  }
+
+  return { taskId: match[1], terminalIndex: Number(match[2]) }
+}
+
 export async function listenOpenForgeEvent<TPayload>(eventName: string, handler: (event: { payload: TPayload }) => void): Promise<OpenForgeEventUnlistenFn> {
   const disposable = getTerminalOpenForgeApi().events.onGlobal<TPayload>(`openforge.${eventName}`, (payload) => {
     handler({ payload })
@@ -53,17 +62,17 @@ export async function spawnShellPty(taskId: string, cwd: string, cols: number, r
 }
 
 export async function writePty(taskId: string, data: string): Promise<void> {
-  await getTerminalOpenForgeApi().shell.write({ taskId, data })
+  await getTerminalOpenForgeApi().shell.write({ ...parseIndexedTerminalKey(taskId), data })
 }
 
 export async function resizePty(taskId: string, cols: number, rows: number): Promise<void> {
-  await getTerminalOpenForgeApi().shell.resize({ taskId, cols, rows })
+  await getTerminalOpenForgeApi().shell.resize({ ...parseIndexedTerminalKey(taskId), cols, rows })
 }
 
 export async function killPty(taskId: string): Promise<void> {
-  await getTerminalOpenForgeApi().shell.kill({ taskId })
+  await getTerminalOpenForgeApi().shell.kill(parseIndexedTerminalKey(taskId))
 }
 
 export async function getPtyBuffer(taskId: string): Promise<string | null> {
-  return getTerminalOpenForgeApi().shell.getBuffer({ taskId })
+  return getTerminalOpenForgeApi().shell.getBuffer(parseIndexedTerminalKey(taskId))
 }

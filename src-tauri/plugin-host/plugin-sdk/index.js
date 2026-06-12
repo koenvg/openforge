@@ -419,7 +419,10 @@ var TestingOpenForgeRegistryFake = class {
 				kill: async (request) => {
 					this.calls.shellKills.push(request);
 				},
-				getBuffer: async () => null
+				getBuffer: async (request) => {
+					this.calls.shellBuffers.push(request);
+					return null;
+				}
 			},
 			notifications: { notify: async (request) => {
 				this.calls.notify.push(request);
@@ -749,6 +752,7 @@ function createTestingCalls() {
 		shellWrites: [],
 		shellResizes: [],
 		shellKills: [],
+		shellBuffers: [],
 		storageGets: [],
 		storageSets: [],
 		storageDeletes: []

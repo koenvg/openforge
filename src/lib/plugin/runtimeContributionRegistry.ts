@@ -61,10 +61,10 @@ export type RuntimeHostBridge = {
   writeFile?(request: { projectId: string; path: string; content: string }): Promise<void>
   searchFiles?(request: { projectId: string; query: string; limit?: number }): Promise<string[]>
   spawnShell?(request: { taskId: string; cwd: string; cols: number; rows: number; terminalIndex: number }): Promise<number>
-  writeShell?(request: { taskId: string; data: string }): Promise<void>
-  resizeShell?(request: { taskId: string; cols: number; rows: number }): Promise<void>
-  killShell?(request: { taskId: string }): Promise<void>
-  getShellBuffer?(request: { taskId: string }): Promise<string | null>
+  writeShell?(request: { taskId: string; terminalIndex: number; data: string }): Promise<void>
+  resizeShell?(request: { taskId: string; terminalIndex: number; cols: number; rows: number }): Promise<void>
+  killShell?(request: { taskId: string; terminalIndex: number }): Promise<void>
+  getShellBuffer?(request: { taskId: string; terminalIndex: number }): Promise<string | null>
   notify?(request: { title: string; body?: string; [key: string]: unknown }): Promise<void>
   getAttention?(): Promise<ProjectAttention[]>
   openUrl?(url: string): Promise<void>

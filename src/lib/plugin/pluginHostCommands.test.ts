@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { invokePluginHostCommand } from './pluginHostCommands'
+import { createPluginRuntimeHost, invokePluginHostCommand } from './pluginHostCommands'
 
 function installDesktopBridge(result: unknown = []): { invoke: ReturnType<typeof vi.fn> } {
   const invoke = vi.fn().mockResolvedValue(result)
@@ -67,6 +67,67 @@ describe('plugin host commands', () => {
       taskId: 'T-2',
       repoPath: '/repo',
     })
+  })
+
+  it('routes runtime host shell callbacks through concrete PTY session keys', async () => {
+    const { invoke } = installDesktopBridge('buffered')
+    const host = createPluginRuntimeHost('test-plugin')
+
+    await host.writeShell({ taskId: 'T-1', terminalIndex: 2, data: 'echo hi\n' })
+    expect(invoke).toHaveBeenLastCalledWith('pty_write', { taskId: 'T-1-shell-2', data: 'echo hi\n' })
+
+    await host.resizeShell({ taskId: 'T-1', terminalIndex: 2, cols: 120, rows: 40 })
+    expect(invoke).toHaveBeenLastCalledWith('pty_resize', { taskId: 'T-1-shell-2', cols: 120, rows: 40 })
+
+    await host.killShell({ taskId: 'T-1', terminalIndex: 2 })
+    expect(invoke).toHaveBeenLastCalledWith('pty_kill', { taskId: 'T-1-shell-2' })
+
+    await expect(host.getShellBuffer({ taskId: 'T-1', terminalIndex: 2 })).resolves.toBe('buffered')
+    expect(invoke).toHaveBeenLastCalledWith('get_pty_buffer', { taskId: 'T-1-shell-2' })
+  })
+
+  it('routes indexed shell host commands through concrete PTY session keys', async () => {
+    const { invoke } = installDesktopBridge('buffered')
+
+    await expect(invokePluginHostCommand('spawnShellPty', {
+      taskId: 'T-1',
+      cwd: '/repo',
+      cols: 80,
+      rows: 24,
+      terminalIndex: 2,
+    })).resolves.toBe('buffered')
+    expect(invoke).toHaveBeenLastCalledWith('pty_spawn_shell', {
+      taskId: 'T-1',
+      cwd: '/repo',
+      cols: 80,
+      rows: 24,
+      terminalIndex: 2,
+    })
+
+    await invokePluginHostCommand('writePty', { taskId: 'T-1', terminalIndex: 2, data: 'echo hi\n' })
+    expect(invoke).toHaveBeenLastCalledWith('pty_write', { taskId: 'T-1-shell-2', data: 'echo hi\n' })
+
+    await invokePluginHostCommand('resizePty', { taskId: 'T-1', terminalIndex: 2, cols: 120, rows: 40 })
+    expect(invoke).toHaveBeenLastCalledWith('pty_resize', { taskId: 'T-1-shell-2', cols: 120, rows: 40 })
+
+    await invokePluginHostCommand('killPty', { taskId: 'T-1', terminalIndex: 2 })
+    expect(invoke).toHaveBeenLastCalledWith('pty_kill', { taskId: 'T-1-shell-2' })
+
+    await expect(invokePluginHostCommand('getPtyBuffer', { taskId: 'T-1', terminalIndex: 2 })).resolves.toBe('buffered')
+    expect(invoke).toHaveBeenLastCalledWith('get_pty_buffer', { taskId: 'T-1-shell-2' })
+  })
+
+  it('rejects missing indexed shell host command payloads instead of coercing them to shell zero', async () => {
+    const { invoke } = installDesktopBridge('buffered')
+
+    for (const terminalIndex of [null, '']) {
+      await expect(invokePluginHostCommand('writePty', { taskId: 'T-1', terminalIndex, data: 'echo hi\n' })).rejects.toThrow('terminalIndex')
+      await expect(invokePluginHostCommand('resizePty', { taskId: 'T-1', terminalIndex, cols: 120, rows: 40 })).rejects.toThrow('terminalIndex')
+      await expect(invokePluginHostCommand('killPty', { taskId: 'T-1', terminalIndex })).rejects.toThrow('terminalIndex')
+      await expect(invokePluginHostCommand('getPtyBuffer', { taskId: 'T-1', terminalIndex })).rejects.toThrow('terminalIndex')
+    }
+
+    expect(invoke).not.toHaveBeenCalled()
   })
 
   it('does not expose GitHub Sync PR review operations as core plugin host commands', async () => {
