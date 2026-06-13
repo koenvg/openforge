@@ -74,7 +74,7 @@ function isReviewedFileSnapshotWithinPerFileCap(snapshot: ReviewedFileSnapshot):
 	return snapshot.newContent.length <= reviewedFileSnapshotMaxContentLength;
 }
 
-function normalizePersistedReviewedFileSnapshots(value: unknown): PersistedReviewedFileSnapshots {
+function normalizePersistedReviewedFileSnapshots(value: unknown, preferredTaskId?: string): PersistedReviewedFileSnapshots {
 	if (value === null || typeof value !== 'object' || Array.isArray(value)) {
 		return {};
 	}
@@ -100,7 +100,7 @@ function normalizePersistedReviewedFileSnapshots(value: unknown): PersistedRevie
 			persisted[taskId] = normalizedEntries;
 		}
 	}
-	return prunePersistedReviewedFileSnapshots(persisted);
+	return prunePersistedReviewedFileSnapshots(persisted, preferredTaskId);
 }
 
 function readPersistedReviewedFiles(): PersistedReviewedFiles {
@@ -116,14 +116,14 @@ function readPersistedReviewedFiles(): PersistedReviewedFiles {
 	}
 }
 
-function readPersistedReviewedFileSnapshots(): PersistedReviewedFileSnapshots {
+function readPersistedReviewedFileSnapshots(preferredTaskId?: string): PersistedReviewedFileSnapshots {
 	const storage = getLocalStorage();
 	if (storage === null) return {};
 
 	try {
 		const rawValue = storage.getItem(reviewedFileSnapshotsStorageKey);
 		if (rawValue === null) return {};
-		return normalizePersistedReviewedFileSnapshots(JSON.parse(rawValue));
+		return normalizePersistedReviewedFileSnapshots(JSON.parse(rawValue), preferredTaskId);
 	} catch {
 		return {};
 	}
@@ -134,7 +134,7 @@ function readPersistedTaskReviewedFileShas(taskId: string): Map<string, string> 
 }
 
 function readPersistedTaskReviewedFileSnapshots(taskId: string): Map<string, ReviewedFileSnapshot> {
-	return new Map(readPersistedReviewedFileSnapshots()[taskId] ?? []);
+	return new Map(readPersistedReviewedFileSnapshots(taskId)[taskId] ?? []);
 }
 
 function writePersistedReviewedFiles(persisted: PersistedReviewedFiles): void {
@@ -221,7 +221,7 @@ function writePersistedTaskReviewedFileShas(taskId: string, reviewedFileShas: Ma
 }
 
 function writePersistedTaskReviewedFileSnapshots(taskId: string, snapshots: Map<string, ReviewedFileSnapshot>): void {
-	const persisted = readPersistedReviewedFileSnapshots();
+	const persisted = readPersistedReviewedFileSnapshots(taskId);
 	if (snapshots.size === 0) {
 		delete persisted[taskId];
 	} else {

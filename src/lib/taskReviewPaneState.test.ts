@@ -158,6 +158,30 @@ describe('task review pane reviewed files', () => {
     ]))
   })
 
+  it('preserves current-task baselines when normalizing a legacy over-cap snapshot cache', () => {
+    const snapshotContent = 'x'.repeat(240 * 1024)
+    localStorage.setItem('openforge.taskReviewPaneState.reviewedFileSnapshots.v1', JSON.stringify({
+      'task-a': [
+        ['src/old-a-1.ts', { identity: 'old-a-sha-1', newContent: snapshotContent }],
+        ['src/old-a-2.ts', { identity: 'old-a-sha-2', newContent: snapshotContent }],
+        ['src/old-a-3.ts', { identity: 'old-a-sha-3', newContent: snapshotContent }],
+        ['src/old-a-4.ts', { identity: 'old-a-sha-4', newContent: snapshotContent }],
+      ],
+      'task-z': [
+        ['src/already-reviewed.ts', { identity: 'old-z-sha', newContent: snapshotContent }],
+      ],
+    }))
+
+    markTaskReviewFileReviewed('task-z', diff('src/newly-reviewed.ts', 'new-z-sha'), {
+      newContent: snapshotContent,
+    })
+
+    expect(getTaskReviewReviewedFileSnapshots('task-z')).toEqual(new Map([
+      ['src/already-reviewed.ts', { identity: 'old-z-sha', newContent: snapshotContent }],
+      ['src/newly-reviewed.ts', { identity: 'new-z-sha', newContent: snapshotContent }],
+    ]))
+  })
+
   it('keeps reviewed marker persistence when snapshot storage is rejected by quota', () => {
     const file = diff('src/feature.ts', 'sha-one')
     const setItem = Storage.prototype.setItem
