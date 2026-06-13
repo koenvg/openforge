@@ -1,0 +1,5 @@
+# Built-in Task Schedules plugin
+
+OpenForge will add recurring task automation as a built-in trusted plugin, not as a new core scheduler daemon or SDK capability. A Task Schedule belongs to the active project context, uses a Codex-style composer with simple schedule presets plus custom five-field cron, stores its state in project-scoped plugin storage, creates normal board Tasks with the `scheduled` label, and may immediately request an Implementation Run through the existing plugin `tasks.startImplementation` API.
+
+This keeps scheduling aligned with the plugin platform while preserving OpenForge's focus model: scheduled work does not introduce a separate automation inbox, auto-archive behavior, or scheduler-specific notifications. Schedules run only while OpenForge is open, collapse missed fires into at most one catch-up fire on restart, skip when their previous scheduled Task is not done, keep the last five outcomes for diagnosis, and remain plugin-owned until multiple plugins prove a shared scheduling capability is needed.
