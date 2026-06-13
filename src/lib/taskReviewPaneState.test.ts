@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   clearTaskReviewPaneState,
   getTaskReviewReviewedFileShas,
@@ -28,6 +28,10 @@ function diff(filename: string, sha: string): PrFileDiff {
 describe('task review pane reviewed files', () => {
   beforeEach(() => {
     clearTaskReviewPaneState()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   it('marks a file reviewed for its current sha', () => {
@@ -90,6 +94,142 @@ describe('task review pane reviewed files', () => {
 
     clearTaskReviewPaneState(undefined, { clearPersisted: false })
 
+    expect(getTaskReviewReviewedFileSnapshots('task-1')).toEqual(new Map([
+      ['src/feature.ts', { identity: 'sha-one', newContent: 'reviewed content\n' }],
+    ]))
+  })
+
+  it('skips oversized reviewed file content snapshots while keeping the reviewed marker persistent', () => {
+    const file = diff('src/large-feature.ts', 'sha-one')
+    const oversizedContent = 'x'.repeat(300 * 1024)
+
+    markTaskReviewFileReviewed('task-1', file, { newContent: oversizedContent })
+
+    expect(isTaskReviewFileReviewed('task-1', file)).toBe(true)
+    expect(getTaskReviewReviewedFileShas('task-1')).toEqual(new Map([['src/large-feature.ts', 'sha-one']]))
+    expect(getTaskReviewReviewedFileSnapshots('task-1')).toEqual(new Map())
+
+    clearTaskReviewPaneState(undefined, { clearPersisted: false })
+
+    expect(isTaskReviewFileReviewed('task-1', file)).toBe(true)
+    expect(getTaskReviewReviewedFileShas('task-1')).toEqual(new Map([['src/large-feature.ts', 'sha-one']]))
+    expect(getTaskReviewReviewedFileSnapshots('task-1')).toEqual(new Map())
+  })
+
+  it('deterministically prunes snapshots over the global snapshot storage cap without dropping markers', () => {
+    const snapshotContent = 'x'.repeat(240 * 1024)
+
+    for (let index = 1; index <= 5; index += 1) {
+      markTaskReviewFileReviewed('task-1', diff(`src/file-${index}.ts`, `sha-${index}`), {
+        newContent: snapshotContent,
+      })
+    }
+
+    expect(getTaskReviewReviewedFileShas('task-1')).toEqual(new Map([
+      ['src/file-1.ts', 'sha-1'],
+      ['src/file-2.ts', 'sha-2'],
+      ['src/file-3.ts', 'sha-3'],
+      ['src/file-4.ts', 'sha-4'],
+      ['src/file-5.ts', 'sha-5'],
+    ]))
+    expect(getTaskReviewReviewedFileSnapshots('task-1')).toEqual(new Map([
+      ['src/file-1.ts', { identity: 'sha-1', newContent: snapshotContent }],
+      ['src/file-2.ts', { identity: 'sha-2', newContent: snapshotContent }],
+      ['src/file-3.ts', { identity: 'sha-3', newContent: snapshotContent }],
+      ['src/file-4.ts', { identity: 'sha-4', newContent: snapshotContent }],
+    ]))
+  })
+
+  it('prefers the task being updated when pruning snapshots over the global cap', () => {
+    const snapshotContent = 'x'.repeat(240 * 1024)
+
+    for (let index = 1; index <= 4; index += 1) {
+      markTaskReviewFileReviewed('task-a', diff(`src/old-${index}.ts`, `old-sha-${index}`), {
+        newContent: snapshotContent,
+      })
+    }
+    markTaskReviewFileReviewed('task-z', diff('src/current.ts', 'current-sha'), {
+      newContent: snapshotContent,
+    })
+
+    expect(getTaskReviewReviewedFileShas('task-z')).toEqual(new Map([['src/current.ts', 'current-sha']]))
+    expect(getTaskReviewReviewedFileSnapshots('task-z')).toEqual(new Map([
+      ['src/current.ts', { identity: 'current-sha', newContent: snapshotContent }],
+    ]))
+  })
+
+  it('preserves current-task baselines when normalizing a legacy over-cap snapshot cache', () => {
+    const snapshotContent = 'x'.repeat(240 * 1024)
+    localStorage.setItem('openforge.taskReviewPaneState.reviewedFileSnapshots.v1', JSON.stringify({
+      'task-a': [
+        ['src/old-a-1.ts', { identity: 'old-a-sha-1', newContent: snapshotContent }],
+        ['src/old-a-2.ts', { identity: 'old-a-sha-2', newContent: snapshotContent }],
+        ['src/old-a-3.ts', { identity: 'old-a-sha-3', newContent: snapshotContent }],
+        ['src/old-a-4.ts', { identity: 'old-a-sha-4', newContent: snapshotContent }],
+      ],
+      'task-z': [
+        ['src/already-reviewed.ts', { identity: 'old-z-sha', newContent: snapshotContent }],
+      ],
+    }))
+
+    markTaskReviewFileReviewed('task-z', diff('src/newly-reviewed.ts', 'new-z-sha'), {
+      newContent: snapshotContent,
+    })
+
+    expect(getTaskReviewReviewedFileSnapshots('task-z')).toEqual(new Map([
+      ['src/already-reviewed.ts', { identity: 'old-z-sha', newContent: snapshotContent }],
+      ['src/newly-reviewed.ts', { identity: 'new-z-sha', newContent: snapshotContent }],
+    ]))
+  })
+
+  it('keeps reviewed marker persistence when snapshot storage is rejected by quota', () => {
+    const file = diff('src/feature.ts', 'sha-one')
+    const setItem = Storage.prototype.setItem
+    const rejectedSnapshotWrites: string[] = []
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key: string, value: string) {
+      if (key === 'openforge.taskReviewPaneState.reviewedFileSnapshots.v1') {
+        rejectedSnapshotWrites.push(value)
+        throw new DOMException('snapshot quota exceeded', 'QuotaExceededError')
+      }
+      return setItem.call(this, key, value)
+    })
+
+    markTaskReviewFileReviewed('task-1', file, { newContent: 'reviewed content\n' })
+
+    expect(rejectedSnapshotWrites).toHaveLength(1)
+    expect(getTaskReviewReviewedFileShas('task-1')).toEqual(new Map([['src/feature.ts', 'sha-one']]))
+    expect(getTaskReviewReviewedFileSnapshots('task-1')).toEqual(new Map())
+
+    clearTaskReviewPaneState(undefined, { clearPersisted: false })
+
+    expect(isTaskReviewFileReviewed('task-1', file)).toBe(true)
+    expect(getTaskReviewReviewedFileShas('task-1')).toEqual(new Map([['src/feature.ts', 'sha-one']]))
+    expect(getTaskReviewReviewedFileSnapshots('task-1')).toEqual(new Map())
+  })
+
+  it('prunes oversized existing snapshots before writing reviewed markers', () => {
+    const file = diff('src/feature.ts', 'sha-one')
+    const snapshotStorageKey = 'openforge.taskReviewPaneState.reviewedFileSnapshots.v1'
+    localStorage.setItem(snapshotStorageKey, JSON.stringify({
+      'old-task': [['src/huge.ts', { identity: 'old-sha', newContent: 'x'.repeat(2 * 1024 * 1024) }]],
+    }))
+    const setItem = Storage.prototype.setItem
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key: string, value: string) {
+      if (
+        key === 'openforge.taskReviewPaneState.reviewedFiles.v1'
+        && (localStorage.getItem(snapshotStorageKey)?.length ?? 0) > 1024 * 1024
+      ) {
+        throw new DOMException('reviewed marker quota blocked by stale snapshots', 'QuotaExceededError')
+      }
+      return setItem.call(this, key, value)
+    })
+
+    markTaskReviewFileReviewed('task-1', file, { newContent: 'reviewed content\n' })
+
+    clearTaskReviewPaneState(undefined, { clearPersisted: false })
+
+    expect(isTaskReviewFileReviewed('task-1', file)).toBe(true)
+    expect(getTaskReviewReviewedFileShas('task-1')).toEqual(new Map([['src/feature.ts', 'sha-one']]))
     expect(getTaskReviewReviewedFileSnapshots('task-1')).toEqual(new Map([
       ['src/feature.ts', { identity: 'sha-one', newContent: 'reviewed content\n' }],
     ]))
