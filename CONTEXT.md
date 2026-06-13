@@ -76,6 +76,18 @@ _Avoid_: Task ID, terminal index, PID filename
 Recording a new project-owned backlog **Task** from a prompt, without choosing how an agent will run it.
 _Avoid_: Run scheduling, agent configuration, global task creation, status selection
 
+**Task Schedule**:
+A project-owned recurring rule that performs **Task Creation** from a prompt and may also request a new **Implementation Run** for the created **Task**.
+_Avoid_: Cronjob, task reuse, implementation input schedule
+
+**Scheduled Fire**:
+One due occurrence of a **Task Schedule**, including an on-time occurrence while OpenForge is open or a single catch-up occurrence after OpenForge restarts.
+_Avoid_: Job run, background daemon run, reused task
+
+**Schedule Preset**:
+A simple user-facing cadence choice for a **Task Schedule**, such as daily, weekly, monthly, or custom cron.
+_Avoid_: Timezone policy, provider automation type, project selector
+
 **Task Branch**:
 A PR-visible Git branch OpenForge creates for a **Task** workspace.
 _Avoid_: Prompt branch, run branch, title branch
@@ -119,6 +131,16 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 ## Relationships
 
 - **Task Creation** creates a project-owned backlog **Task**, not an **Implementation Run**.
+- A **Task Schedule** creates a new normal board **Task** for each **Scheduled Fire** rather than mutating or reusing an existing **Task**.
+- A **Task Schedule** belongs to the active project context where it is configured; it is not selected globally from inside the schedule composer.
+- A **Task Schedule** may request an **Implementation Run** only after the scheduled **Task Creation** succeeds.
+- If multiple **Scheduled Fires** are missed while OpenForge is closed, they collapse into at most one catch-up **Scheduled Fire** after OpenForge restarts.
+- A **Task Schedule** skips a due **Scheduled Fire** when its previously created **Task** is still not done.
+- A **Schedule Preset** may compile to simple five-field cron syntax for custom cadence without making cron syntax the primary user-facing path.
+- A **Task Schedule** uses plain prompt text rather than template variables, scripts, loops, conditionals, or starter prompt templates.
+- A **Task Schedule** can be manually fired for testing, using the same behavior and overlap rules as a due **Scheduled Fire**.
+- A **Task Schedule** keeps a minimal history of its five most recent outcomes for diagnosis.
+- **Scheduled Fires** do not create a separate automation inbox, auto-archive workflow, or scheduler-specific notification flow; resulting **Tasks** follow the normal OpenForge board and review lifecycle.
 - A **Task** may have zero or more **Implementation Runs** over time.
 - An **Implementation Run** uses exactly one **Agent Session** at a time.
 - A new **Implementation Run** uses the **Project Agent Settings** rather than plugin-supplied provider or agent overrides.
@@ -160,6 +182,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 
 ## Flagged ambiguities
 
+- "Cronjob" was used for scheduled task automation — resolved: use **Task Schedule** for the project-owned recurring rule; cron syntax can be a configuration format, not the domain term.
 - "Resume" was used to mean both reattaching a detached session and sending a new prompt to an active session — resolved: **Session Reattachment** means reconnect only, while **Implementation Input** is the prompt/message.
 - `agent` and `permissionMode` were considered for plugin **Task Creation** — resolved: task creation records work only; execution policy belongs to **Project Agent Settings**.
 - Task status was considered for plugin **Task Creation** — resolved: plugin-created tasks always enter the backlog.
