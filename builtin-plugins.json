@@ -15,6 +15,10 @@
     {
       "id": "com.openforge.terminal",
       "directoryName": "terminal"
+    },
+    {
+      "id": "com.openforge.task-schedules",
+      "directoryName": "task-schedules"
     }
   ]
 }
