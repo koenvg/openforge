@@ -11,6 +11,7 @@ function defaultProps(overrides: Record<string, unknown> = {}) {
 		onThemeToggle: vi.fn(),
 		githubPollInterval: 60,
 		onGithubPollIntervalChange: vi.fn(),
+		disabled: false,
 		...overrides,
 	}
 }
@@ -66,6 +67,15 @@ describe('SettingsPreferencesCard', () => {
 
 		const input = requireElement(screen.getByPlaceholderText('e.g. ABC'), HTMLInputElement)
 		expect(input).toBeTruthy()
+	})
+
+	it('disables global preference inputs when disabled', () => {
+		render(SettingsPreferencesCard, { props: defaultProps({ disabled: true }) })
+
+		const prefixInput = requireElement(screen.getByPlaceholderText('e.g. ABC'), HTMLInputElement)
+		const pollIntervalInput = requireElement(screen.getByTestId('poll-interval-input'), HTMLInputElement)
+		expect(prefixInput.disabled).toBe(true)
+		expect(pollIntervalInput.disabled).toBe(true)
 	})
 
 	describe('dark mode toggle', () => {

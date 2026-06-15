@@ -322,6 +322,65 @@ describe('SettingsView', () => {
       expect(vi.mocked(setConfig)).toHaveBeenCalled()
     })
 
+    it('does not clear global settings when project autosave runs before global settings hydrate', async () => {
+      vi.mocked(getConfig).mockImplementation(() => new Promise<string | null>(() => {}))
+
+      render(SettingsView, { props: defaultProps })
+
+      await vi.advanceTimersByTimeAsync(50)
+      vi.mocked(setProjectConfig).mockClear()
+      vi.mocked(setConfig).mockClear()
+      vi.mocked(updateProject).mockClear()
+
+      const nameInput = screen.getByPlaceholderText('My Project')
+      await fireEvent.input(nameInput, { target: { value: 'New Name' } })
+
+      await vi.advanceTimersByTimeAsync(600)
+
+      expect(vi.mocked(updateProject)).toHaveBeenCalled()
+      expect(vi.mocked(setProjectConfig)).toHaveBeenCalledWith('test-project-id', 'handoff_notes_template', '')
+      expect(vi.mocked(setConfig)).not.toHaveBeenCalledWith('task_id_prefix', '')
+      expect(vi.mocked(setConfig)).not.toHaveBeenCalledWith('github_token', '')
+      expect(vi.mocked(setConfig)).not.toHaveBeenCalled()
+    })
+
+    it('keeps global settings controls disabled until global settings hydrate', async () => {
+      activeProjectId.set(null)
+      projects.set([])
+      const resolvers = new Map<string, (value: string | null) => void>()
+      vi.mocked(getConfig).mockImplementation((key: string) => new Promise<string | null>((resolve) => {
+        resolvers.set(key, resolve)
+      }))
+
+      render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
+
+      const prefixInput = requireElement(screen.getByPlaceholderText('e.g. ABC'), HTMLInputElement)
+      const pollIntervalInput = requireElement(screen.getByTestId('poll-interval-input'), HTMLInputElement)
+      const tokenInput = requireElement(screen.getByPlaceholderText('ghp_...'), HTMLInputElement)
+      const cleanupToggle = requireElement(screen.getByTestId('code-cleanup-tasks-toggle'), HTMLInputElement)
+
+      expect(prefixInput.disabled).toBe(true)
+      expect(pollIntervalInput.disabled).toBe(true)
+      expect(tokenInput.disabled).toBe(true)
+      expect(cleanupToggle.disabled).toBe(true)
+
+      await vi.waitFor(() => {
+        expect(resolvers.size).toBeGreaterThanOrEqual(4)
+      })
+
+      resolvers.get('task_id_prefix')?.('OF')
+      resolvers.get('github_token')?.('ghp_old')
+      resolvers.get('code_cleanup_tasks_enabled')?.('false')
+      resolvers.get('github_poll_interval')?.('60')
+
+      await vi.waitFor(() => {
+        expect(prefixInput.disabled).toBe(false)
+        expect(pollIntervalInput.disabled).toBe(false)
+        expect(tokenInput.disabled).toBe(false)
+        expect(cleanupToggle.disabled).toBe(false)
+      })
+    })
+
     it('updates projects store with new name and path after save', async () => {
       render(SettingsView, { props: defaultProps })
 
@@ -390,6 +449,32 @@ describe('SettingsView', () => {
       await vi.advanceTimersByTimeAsync(600)
 
       expect(vi.mocked(setConfig)).toHaveBeenCalled()
+    })
+
+    it('hydrates and saves global settings without waiting for Whisper status loading', async () => {
+      activeProjectId.set(null)
+      projects.set([])
+      vi.mocked(getConfig).mockImplementation(async (key: string) => {
+        if (key === 'task_id_prefix') return 'OF'
+        if (key === 'github_token') return 'ghp_old'
+        if (key === 'github_poll_interval') return '60'
+        return null
+      })
+      vi.mocked(getAllWhisperModelStatuses).mockImplementation(() => new Promise(() => {}))
+
+      render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
+
+      await vi.waitFor(() => {
+        expect(screen.getByDisplayValue('OF')).toBeTruthy()
+      })
+      vi.mocked(setConfig).mockClear()
+
+      const tokenInput = screen.getByPlaceholderText('ghp_...')
+      await fireEvent.input(tokenInput, { target: { value: 'ghp_new' } })
+
+      await vi.advanceTimersByTimeAsync(600)
+
+      expect(vi.mocked(setConfig)).toHaveBeenCalledWith('github_token', 'ghp_new')
     })
 
     it('resets debounce when multiple changes happen quickly', async () => {

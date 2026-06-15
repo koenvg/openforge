@@ -58,6 +58,7 @@
   let taskIdPrefix = $state('')
   let githubToken = $state('')
   let githubPollInterval = $state(DEFAULT_GITHUB_POLL_INTERVAL_SECONDS)
+  let globalSettingsLoaded = $state(false)
 
   // AI state
   let modelStatuses = $state<WhisperModelStatus[]>([])
@@ -179,17 +180,23 @@
 
   // Load global config once on mount
   onMount(async () => {
-    const [globalSettings, installationStatus, whisperStatuses] = await Promise.all([
-      loadGlobalSettings(),
-      loadInstallationStatus(),
-      loadWhisperModelStatuses(),
-    ])
+    const globalSettingsPromise = loadGlobalSettings()
+    const installationStatusPromise = loadInstallationStatus()
+    const whisperStatusesPromise = loadWhisperModelStatuses()
+
+    const globalSettings = await globalSettingsPromise
 
     taskIdPrefix = globalSettings.taskIdPrefix
     githubToken = globalSettings.githubToken
     isCodeCleanupTasksEnabled = globalSettings.codeCleanupTasksEnabled
     $codeCleanupTasksEnabled = isCodeCleanupTasksEnabled
     githubPollInterval = globalSettings.githubPollInterval
+    globalSettingsLoaded = true
+
+    const [installationStatus, whisperStatuses] = await Promise.all([
+      installationStatusPromise,
+      whisperStatusesPromise,
+    ])
 
     opencodeInstalled = installationStatus.opencodeInstalled
     opencodeVersion = installationStatus.opencodeVersion
@@ -270,12 +277,14 @@
           path: projectPath,
         })
       }
-      await saveGlobalSettings({
-        taskIdPrefix,
-        githubToken,
-        codeCleanupTasksEnabled: isCodeCleanupTasksEnabled,
-        githubPollInterval,
-      })
+      if (globalSettingsLoaded) {
+        await saveGlobalSettings({
+          taskIdPrefix,
+          githubToken,
+          codeCleanupTasksEnabled: isCodeCleanupTasksEnabled,
+          githubPollInterval,
+        })
+      }
       saved = true
       setTimeout(() => {
         saved = false
@@ -497,6 +506,7 @@
           onThemeToggle={() => { handleThemeToggle(); scheduleSave() }}
           {githubPollInterval}
           onGithubPollIntervalChange={(v) => { githubPollInterval = v; scheduleSave() }}
+          disabled={!globalSettingsLoaded}
         />
 
         <SettingsAICard
@@ -514,11 +524,13 @@
         <SettingsCredentialsCard
           {githubToken}
           onGithubTokenChange={(v: string) => { githubToken = v; scheduleSave() }}
+          disabled={!globalSettingsLoaded}
         />
 
         <SettingsExperimentalCard
           codeCleanupTasksEnabled={isCodeCleanupTasksEnabled}
           onCodeCleanupTasksToggle={() => { handleCodeCleanupTasksToggle(); scheduleSave() }}
+          disabled={!globalSettingsLoaded}
         />
       {/if}
     </div>
