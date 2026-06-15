@@ -21,7 +21,7 @@ describe('TaskPromptSummary', () => {
   it('renders initial prompt and handoff notes', () => {
     render(TaskPromptSummary, { props: { task: baseTask } })
     expect(screen.getByText('Implement auth middleware')).toBeTruthy()
-    expect(screen.getByText('// HANDOFF_NOTES')).toBeTruthy()
+    expect(screen.getByText('Handoff Notes')).toBeTruthy()
     expect(screen.getByText('Implemented JWT auth')).toBeTruthy()
   })
 

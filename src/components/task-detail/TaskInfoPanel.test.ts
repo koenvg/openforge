@@ -3,9 +3,9 @@ import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { writable } from 'svelte/store'
 import { requireElement } from '../../test-utils/dom'
 import TaskInfoPanel from './TaskInfoPanel.svelte'
-import type { Task, PullRequestInfo, TaskLabel } from '../../lib/types'
+import type { Task, PullRequestInfo, PrComment, TaskLabel } from '../../lib/types'
 import { mergingTaskIds, tasks, ticketPrs } from '../../lib/stores'
-import { addTaskLabel, forceGithubSync, getPullRequests, mergePullRequest, removeTaskLabel } from '../../lib/ipc'
+import { addTaskLabel, forceGithubSync, getPrComments, getPullRequests, mergePullRequest, removeTaskLabel } from '../../lib/ipc'
 
 vi.mock('../../lib/stores', () => ({
   ticketPrs: writable(new Map()),
@@ -25,6 +25,7 @@ vi.mock('../../lib/ipc', () => ({
     rate_limit_reset_at: null,
   }),
   getPullRequests: vi.fn().mockResolvedValue([]),
+  getPrComments: vi.fn().mockResolvedValue([]),
   mergePullRequest: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn().mockResolvedValue(undefined),
   getProjectTaskLabels: vi.fn().mockResolvedValue([]),
@@ -60,6 +61,7 @@ describe('TaskInfoPanel', () => {
     ticketPrs.set(new Map())
     tasks.set([])
     vi.mocked(getPullRequests).mockResolvedValue([])
+    vi.mocked(getPrComments).mockResolvedValue([])
   })
 
   function createPullRequest(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
@@ -88,9 +90,113 @@ describe('TaskInfoPanel', () => {
     }
   }
 
+  function createComment(overrides: Partial<PrComment> = {}): PrComment {
+    return {
+      id: 100,
+      pr_id: 42,
+      author: 'Maya Chen',
+      body: 'Please address the failing review comment before merge.',
+      comment_type: 'review',
+      file_path: 'src/auth.ts',
+      line_number: 12,
+      addressed: 0,
+      created_at: 3000,
+      ...overrides,
+    }
+  }
+
+  it('renders Docket List attention and PR signals before handoff notes and initial prompt', async () => {
+    ticketPrs.set(new Map([['T-42', [createPullRequest({
+      ci_status: 'failure',
+      review_status: 'changes_requested',
+      unaddressed_comment_count: 1,
+    })]]]))
+
+    render(TaskInfoPanel, { props: { task: { ...baseTask, summary: 'Reviewer handoff notes' }, workspacePath: null } })
+
+    await screen.findByText('Pull Requests')
+    const content = document.body.textContent ?? ''
+    expect(content.indexOf('T-42')).toBeLessThan(content.indexOf('Attention'))
+    expect(content.indexOf('Attention')).toBeLessThan(content.indexOf('Pull Requests'))
+    expect(content.indexOf('Pull Requests')).toBeLessThan(content.indexOf('Handoff Notes'))
+    expect(content.indexOf('Handoff Notes')).toBeLessThan(content.indexOf('Initial Prompt'))
+    expect(screen.getByText('Review PR comments before merge')).toBeTruthy()
+  })
+
+  it('renders multiple pull requests as equal cards without marking a primary PR', async () => {
+    const firstPr = createPullRequest({ id: 42, title: 'First PR', unaddressed_comment_count: 0 })
+    const secondPr = createPullRequest({ id: 99, title: 'Second PR', url: 'https://github.com/owner/repo/pull/99', unaddressed_comment_count: 0 })
+    ticketPrs.set(new Map([['T-42', [firstPr, secondPr]]]))
+
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
+
+    await screen.findByText('First PR')
+    const prCards = document.querySelectorAll('[data-testid="task-attention-pr-card"]')
+    expect(prCards).toHaveLength(2)
+    expect(prCards[0].textContent).toContain('First PR')
+    expect(prCards[1].textContent).toContain('Second PR')
+    expect(document.body.textContent?.toLowerCase()).not.toContain('primary pr')
+  })
+
+  it('renders full unaddressed PR comments inline under their related PR card', async () => {
+    const firstPr = createPullRequest({ id: 42, title: 'First PR', unaddressed_comment_count: 1 })
+    const secondPr = createPullRequest({ id: 99, title: 'Second PR', url: 'https://github.com/owner/repo/pull/99', unaddressed_comment_count: 1 })
+    const longComment = 'The nested comment surface is still inheriting parent card padding, which makes long review notes wrap too late on the pane. Please constrain this block and verify keyboard focus does not jump when expanding notes.'
+    vi.mocked(getPrComments).mockImplementation(async (prId: number) => prId === 42
+      ? [createComment({ pr_id: 42, body: longComment })]
+      : [createComment({ id: 101, pr_id: 99, author: 'Arjun Patel', body: 'Second PR needs a separate inline note.' })]
+    )
+    ticketPrs.set(new Map([['T-42', [firstPr, secondPr]]]))
+
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
+
+    expect(await screen.findByText(longComment)).toBeTruthy()
+    const prCards = document.querySelectorAll('[data-testid="task-attention-pr-card"]')
+    expect(prCards[0].textContent).toContain(longComment)
+    expect(prCards[0].textContent).not.toContain('Second PR needs a separate inline note.')
+    expect(prCards[1].textContent).toContain('Second PR needs a separate inline note.')
+  })
+
+  it('previews handoff notes by default and expands them on request', async () => {
+    const taskWithSummary = {
+      ...baseTask,
+      summary: 'Current summary: implementation started. Review focus: ordering and comments. Risks: lifecycle fetching. Open questions: none. Follow-up tasks: none.',
+    }
+
+    render(TaskInfoPanel, { props: { task: taskWithSummary, workspacePath: null } })
+
+    const handoffSection = screen.getByLabelText('Handoff Notes').closest('section')
+    expect(handoffSection?.textContent).toContain('Current summary')
+    expect(handoffSection?.textContent).not.toContain('Follow-up tasks: none')
+
+    const expandButton = screen.getByRole('button', { name: 'Expand Handoff Notes' })
+    expect(expandButton.getAttribute('aria-expanded')).toBe('false')
+    await fireEvent.click(expandButton)
+
+    expect(screen.getByText(/Follow-up tasks: none/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Collapse Handoff Notes' }).getAttribute('aria-expanded')).toBe('true')
+  })
+
+  it('previews the initial prompt by default and expands it on request', async () => {
+    const longPromptTask = {
+      ...baseTask,
+      initial_prompt: 'Build a calm task attention pane that starts with an attention summary, then pull request status cards, then handoff notes, then the original initial prompt so reviewers see the active signals before long-form task documents.',
+    }
+
+    render(TaskInfoPanel, { props: { task: longPromptTask, workspacePath: null } })
+
+    const promptSection = screen.getByLabelText('Initial Prompt').closest('section')
+    expect(promptSection?.textContent).toContain('Build a calm task attention pane')
+    expect(promptSection?.textContent).not.toContain('before long-form task documents')
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Expand Initial Prompt' }))
+
+    expect(screen.getByText(/before long-form task documents/)).toBeTruthy()
+  })
+
   it('renders Initial Prompt section with task initial_prompt', () => {
     render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
-    expect(screen.getByText('// INITIAL_PROMPT')).toBeTruthy()
+    expect(screen.getByText('Initial Prompt')).toBeTruthy()
     expect(screen.getByText('Implement auth middleware')).toBeTruthy()
     expect(screen.queryByText('Build the auth middleware implementation with JWT support')).toBeNull()
   })
@@ -103,7 +209,7 @@ describe('TaskInfoPanel', () => {
       },
     })
 
-    expect(screen.getByText('// LABELS')).toBeTruthy()
+    expect(screen.getByText('Labels')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Remove label bug' })).toBeTruthy()
 
     await fireEvent.click(screen.getByRole('button', { name: 'Remove label bug' }))
@@ -146,9 +252,9 @@ describe('TaskInfoPanel', () => {
     expect(promptSection?.querySelector('textarea')).toBeNull()
   })
 
-  it('renders // HANDOFF_NOTES label', () => {
+  it('renders Handoff Notes label', () => {
     render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
-    expect(screen.getByText('// HANDOFF_NOTES')).toBeTruthy()
+    expect(screen.getByText('Handoff Notes')).toBeTruthy()
   })
 
   it('renders "No handoff notes yet" in muted text when summary is null', () => {
@@ -320,7 +426,7 @@ describe('TaskInfoPanel', () => {
     render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
 
     await new Promise((r) => setTimeout(r, 10))
-    expect(screen.getByText('// PIPELINE_STATUS')).toBeTruthy()
+    expect(screen.getByText('Pipeline checks')).toBeTruthy()
   })
 
 
@@ -390,7 +496,7 @@ describe('TaskInfoPanel', () => {
 
   it('renders workspace path section when workspacePath is provided', () => {
     render(TaskInfoPanel, { props: { task: baseTask, workspacePath: '/home/user/worktrees/T-42' } })
-    expect(screen.getByText('// WORKSPACE')).toBeTruthy()
+    expect(screen.getByText('Workspace')).toBeTruthy()
     expect(screen.getByText('/home/user/worktrees/T-42')).toBeTruthy()
   })
 
