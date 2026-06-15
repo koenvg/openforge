@@ -1,0 +1,40 @@
+{
+  "name": "@openforge/plugin-task-schedules",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm --filter @openforge/plugin-sdk build && pnpm run build:bundle",
+    "build:bundle": "vite build && vite build --config vite.backend.config.ts",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "@openforge/plugin-sdk": "workspace:*"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "svelte": "^5.0.0",
+    "typescript": "^5.3.3",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.0"
+  },
+  "openforge": {
+    "id": "com.openforge.task-schedules",
+    "apiVersion": 1,
+    "displayName": "Task Schedules",
+    "description": "Create recurring project Task Schedules that create and optionally start Tasks.",
+    "icon": "clock",
+    "frontend": "./dist/frontend.js",
+    "backend": "./dist/backend.js",
+    "requires": [
+      "views",
+      "backend",
+      "background",
+      "storage",
+      "context",
+      "tasks"
+    ]
+  }
+}
