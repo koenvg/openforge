@@ -28,6 +28,10 @@ _Avoid_: Resume, restart
 A living reviewer-facing brief on a **Task** that summarizes what needs inspection after agent work.
 _Avoid_: Completion log, run history, random comments
 
+**Task Attention Pane**:
+A compact task detail area that prioritizes current signals requiring user attention before long-form task documents.
+_Avoid_: Status cockpit, right sidebar, document reader
+
 **Reviewed File**:
 A changed file the user has explicitly marked as already inspected during review; it remains visible in the review flow and stops counting as reviewed when the file's content identity changes.
 _Avoid_: Hidden file, dismissed file, permanently ignored file
@@ -155,6 +159,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - **Session Reattachment** preserves the existing **Agent Session** identity.
 - **Implementation Input** targets an existing **Agent Session** and does not choose a new provider or agent.
 - **Handoff Notes** belong to a **Task** and are updated to reflect the current review state rather than appended per **Implementation Run**.
+- A **Task Attention Pane** surfaces the most time-sensitive Task signals before lower-priority long-form context such as **Handoff Notes** or the initial prompt.
 - A **Reviewed File** can belong to self-review or pull request review; it remains reviewed only while its content identity is unchanged.
 - A **Reviewed File Snapshot** records the accepted file version for a **Reviewed File**, not the latest commit on the branch.
 - A **Review File Tree** keeps **Reviewed Files** in their original location as navigation items.
@@ -189,6 +194,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - "Handoff" could mean a per-run completion record or the current reviewer brief — resolved: **Handoff Notes** are the current Task-level review brief, not append-only run history.
 - The handoff format could be hidden inside broad project instructions — resolved: use a dedicated **Project Handoff Notes Template** so the review contract is explicit.
 - "Summary" and **Handoff Notes** overlapped — resolved: user-facing review language should say **Handoff Notes**, while existing unstructured summaries remain valid legacy content.
+- "Status cockpit" was used for the task detail sidebar redesign — resolved: use **Task Attention Pane** for the compact attention-first task detail area.
 - Worktree branch names were considered for prompt-derived descriptions — resolved: **Task Branches** should be stable task identifiers because they are visible as PR source branches.
 - "Skill" was considered as a core OpenForge platform concept because one built-in plugin manages skills — resolved: skill discovery and editing are a **Plugin-owned Domain** unless multiple plugins need a shared platform contract.
 - "Terminal pooling" was used for plugin UI, shell process state, and reusable terminal lifecycle — resolved: **Terminal Surface** names the UI, while **Terminal Runtime** names the shared lifecycle owner.
