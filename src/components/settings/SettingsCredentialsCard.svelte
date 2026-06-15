@@ -4,11 +4,13 @@
 	interface Props {
 		githubToken: string;
 		onGithubTokenChange: (value: string) => void;
+		disabled: boolean;
 	}
 
 	const {
 		githubToken,
-		onGithubTokenChange
+		onGithubTokenChange,
+		disabled
 	}: Props = $props();
 </script>
 
@@ -34,6 +36,7 @@
 						value={githubToken}
 						oninput={(e) => onGithubTokenChange(e.currentTarget.value)}
 						placeholder="ghp_..."
+						disabled={disabled}
 						class="input input-bordered input-sm w-full"
 					/>
 				</label>

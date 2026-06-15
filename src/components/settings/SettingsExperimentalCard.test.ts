@@ -7,6 +7,7 @@ function defaultProps(overrides: Record<string, unknown> = {}) {
 	return {
 		codeCleanupTasksEnabled: false,
 		onCodeCleanupTasksToggle: vi.fn(),
+		disabled: false,
 		...overrides,
 	}
 }
@@ -53,6 +54,15 @@ describe('SettingsExperimentalCard', () => {
 			await fireEvent.click(toggle)
 
 			expect(onCodeCleanupTasksToggle).toHaveBeenCalledOnce()
+		})
+
+		it('disables code cleanup tasks toggle when disabled', () => {
+			render(SettingsExperimentalCard, {
+				props: defaultProps({ disabled: true }),
+			})
+
+			const toggle = requireElement(screen.getByTestId('code-cleanup-tasks-toggle'), HTMLInputElement)
+			expect(toggle.disabled).toBe(true)
 		})
 
 		it('renders description text for code cleanup tasks toggle', () => {

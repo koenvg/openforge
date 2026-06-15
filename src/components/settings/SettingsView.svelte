@@ -506,6 +506,7 @@
           onThemeToggle={() => { handleThemeToggle(); scheduleSave() }}
           {githubPollInterval}
           onGithubPollIntervalChange={(v) => { githubPollInterval = v; scheduleSave() }}
+          disabled={!globalSettingsLoaded}
         />
 
         <SettingsAICard
@@ -523,11 +524,13 @@
         <SettingsCredentialsCard
           {githubToken}
           onGithubTokenChange={(v: string) => { githubToken = v; scheduleSave() }}
+          disabled={!globalSettingsLoaded}
         />
 
         <SettingsExperimentalCard
           codeCleanupTasksEnabled={isCodeCleanupTasksEnabled}
           onCodeCleanupTasksToggle={() => { handleCodeCleanupTasksToggle(); scheduleSave() }}
+          disabled={!globalSettingsLoaded}
         />
       {/if}
     </div>

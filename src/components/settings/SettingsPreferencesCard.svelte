@@ -13,9 +13,10 @@
 		onThemeToggle: () => void
 		githubPollInterval: number
 		onGithubPollIntervalChange: (value: number) => void
+		disabled: boolean
 	}
 
-	const { taskIdPrefix, onTaskIdPrefixChange, isDarkMode, onThemeToggle, githubPollInterval, onGithubPollIntervalChange }: Props = $props()
+	const { taskIdPrefix, onTaskIdPrefixChange, isDarkMode, onThemeToggle, githubPollInterval, onGithubPollIntervalChange, disabled }: Props = $props()
 
 	// Sanitize input: strip non-alphanumeric, uppercase, max 5 chars
 	function handleInput(e: Event) {
@@ -69,6 +70,7 @@
 					oninput={handleInput}
 					placeholder="e.g. ABC"
 					maxlength="5"
+					disabled={disabled}
 					class="input input-bordered input-sm w-full {!isValid && taskIdPrefix.length > 0
 						? 'input-error'
 						: ''}"
@@ -100,6 +102,7 @@
 				step="5"
 				value={githubPollInterval}
 				data-testid="poll-interval-input"
+				disabled={disabled}
 				class="input input-bordered input-sm w-full"
 				oninput={handlePollIntervalInput}
 			/>

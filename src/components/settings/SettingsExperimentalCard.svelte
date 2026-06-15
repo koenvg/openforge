@@ -4,9 +4,10 @@
 	interface Props {
 		codeCleanupTasksEnabled: boolean
 		onCodeCleanupTasksToggle: () => void
+		disabled: boolean
 	}
 
-	const { codeCleanupTasksEnabled, onCodeCleanupTasksToggle }: Props = $props()
+	const { codeCleanupTasksEnabled, onCodeCleanupTasksToggle, disabled }: Props = $props()
 </script>
 
 <div id="section-experimental" class="rounded-lg border border-base-300 overflow-hidden" style="background-color: var(--project-bg, oklch(var(--b1)))">
@@ -26,6 +27,7 @@
 					type="checkbox"
 					class="toggle toggle-primary toggle-sm"
 					checked={codeCleanupTasksEnabled}
+					disabled={disabled}
 					onchange={onCodeCleanupTasksToggle}
 					data-testid="code-cleanup-tasks-toggle"
 				/>
