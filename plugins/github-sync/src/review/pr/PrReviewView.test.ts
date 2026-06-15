@@ -206,6 +206,46 @@ describe('PrReviewView reviewed files', () => {
     })
   })
 
+  it('renders changed screenshot files by fetching base64 content for image previews', async () => {
+    const imageDiff: PrFileDiff = {
+      ...baseDiff,
+      sha: 'new-image-sha',
+      filename: 'assets/screenshot.png',
+      status: 'modified',
+      additions: 0,
+      deletions: 0,
+      changes: 0,
+      patch: null,
+    }
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    registerPrReviewBackends(registry, () => [imageDiff])
+    const getFileContentBase64 = vi.fn().mockResolvedValue('new-image-base64')
+    const getFileAtRefBase64 = vi.fn().mockResolvedValue('old-image-base64')
+    registry.backendApi.backend.registerMethod('getFileContentBase64', { handler: getFileContentBase64 })
+    registry.backendApi.backend.registerMethod('getFileAtRefBase64', { handler: getFileAtRefBase64 })
+
+    render(PrReviewView, {
+      props: {
+        api: registry.frontendApi,
+        context: registry.frontendApi.context.getSnapshot(),
+        projectName: 'Demo Project',
+        projectId: 'project-1',
+      },
+    })
+
+    const title = await screen.findByText('Fix authentication middleware')
+    await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
+    await fireEvent.click(await screen.findByRole('button', { name: /Files changed/i }))
+
+    const newPreview = requireElement(await screen.findByRole('img', { name: 'assets/screenshot.png new preview' }), HTMLImageElement)
+    const oldPreview = requireElement(await screen.findByRole('img', { name: 'assets/screenshot.png old preview' }), HTMLImageElement)
+
+    expect(newPreview.getAttribute('src')).toBe('data:image/png;base64,new-image-base64')
+    expect(oldPreview.getAttribute('src')).toBe('data:image/png;base64,old-image-base64')
+    expect(getFileContentBase64).toHaveBeenCalledWith({ owner: 'acme', repo: 'repo', sha: 'new-image-sha' })
+    expect(getFileAtRefBase64).toHaveBeenCalledWith({ owner: 'acme', repo: 'repo', path: 'assets/screenshot.png', refSha: 'main' })
+  })
+
   it('does not prune a selected pull request reviewed files against stale diffs from the previous PR', async () => {
     let resolveSecondDiffs: (files: PrFileDiff[]) => void = () => {}
     const secondDiffs = new Promise<PrFileDiff[]>((resolve) => {

@@ -26,7 +26,7 @@
     reviewedFileMapsEqual,
     updatePrReviewedFileShas,
   } from './reviewedFilesState'
-  import type { FileContents } from '@openforge/pr-review-ui/diffAdapter'
+  import { isImageFileDiff, type FileContents } from '@openforge/pr-review-ui/diffAdapter'
 
   type PrDetailTab = 'overview' | 'files'
 
@@ -459,28 +459,42 @@
 
   async function fetchPrFileContents(file: PrFileDiff): Promise<FileContents> {
     const pr = $selectedReviewPr!
+    const isImageFile = isImageFileDiff(file)
     let oldContent = ''
     let newContent = ''
 
     if (file.status !== 'removed' && file.sha) {
       try {
-        newContent = await githubSync.getFileContent({
-          owner: pr.repo_owner,
-          repo: pr.repo_name,
-          sha: file.sha,
-        })
+        newContent = isImageFile
+          ? await githubSync.getFileContentBase64({
+            owner: pr.repo_owner,
+            repo: pr.repo_name,
+            sha: file.sha,
+          })
+          : await githubSync.getFileContent({
+            owner: pr.repo_owner,
+            repo: pr.repo_name,
+            sha: file.sha,
+          })
       } catch { /* file may not exist */ }
     }
 
     if (file.status !== 'added') {
       const oldPath = file.previous_filename || file.filename
       try {
-        oldContent = await githubSync.getFileAtRef({
-          owner: pr.repo_owner,
-          repo: pr.repo_name,
-          path: oldPath,
-          refSha: pr.base_ref,
-        })
+        oldContent = isImageFile
+          ? await githubSync.getFileAtRefBase64({
+            owner: pr.repo_owner,
+            repo: pr.repo_name,
+            path: oldPath,
+            refSha: pr.base_ref,
+          })
+          : await githubSync.getFileAtRef({
+            owner: pr.repo_owner,
+            repo: pr.repo_name,
+            path: oldPath,
+            refSha: pr.base_ref,
+          })
       } catch { /* file may not exist on base */ }
     }
 

@@ -45,7 +45,9 @@ export interface GithubSyncPrReviewClient {
   markReviewPullRequestViewed(request: { prId: number; headSha: string }): Promise<void>
   listPullRequestFileDiffs(request: PullRequestRepositoryRequest): Promise<PrFileDiff[]>
   getFileContent(request: FileContentRequest): Promise<string>
+  getFileContentBase64(request: FileContentRequest): Promise<string>
   getFileAtRef(request: FileAtRefRequest): Promise<string>
+  getFileAtRefBase64(request: FileAtRefRequest): Promise<string>
   listReviewComments(request: PullRequestRepositoryRequest): Promise<ReviewComment[]>
   listPullRequestOverviewComments(request: PullRequestRepositoryRequest): Promise<PrOverviewComment[]>
   submitPullRequestReview(request: SubmitPullRequestReviewRequest): Promise<void>
@@ -76,7 +78,9 @@ export function createGithubSyncPrReviewClient(api: Pick<FrontendOpenForgeAPI, '
     markReviewPullRequestViewed: ({ prId, headSha }) => invokeBackend<void>(api, 'markReviewPrViewed', { prId, headSha }),
     listPullRequestFileDiffs: ({ owner, repo, prNumber }) => invokeBackend<PrFileDiff[]>(api, 'getPrFileDiffs', { owner, repo, prNumber }),
     getFileContent: ({ owner, repo, sha }) => invokeBackend<string>(api, 'getFileContent', { owner, repo, sha }),
+    getFileContentBase64: ({ owner, repo, sha }) => invokeBackend<string>(api, 'getFileContentBase64', { owner, repo, sha }),
     getFileAtRef: ({ owner, repo, path, refSha }) => invokeBackend<string>(api, 'getFileAtRef', { owner, repo, path, refSha }),
+    getFileAtRefBase64: ({ owner, repo, path, refSha }) => invokeBackend<string>(api, 'getFileAtRefBase64', { owner, repo, path, refSha }),
     listReviewComments: ({ owner, repo, prNumber }) => invokeBackend<ReviewComment[]>(api, 'getReviewComments', { owner, repo, prNumber }),
     listPullRequestOverviewComments: ({ owner, repo, prNumber }) => invokeBackend<PrOverviewComment[]>(api, 'getPrOverviewComments', { owner, repo, prNumber }),
     submitPullRequestReview: ({ owner, repo, prNumber, event, body, comments, commitId }) => invokeBackend<void>(api, 'submitPrReview', {

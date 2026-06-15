@@ -57,8 +57,16 @@ export default defineBackendPlugin({
       handler: (request) => invokeHostCommand<string>(openforge, 'getFileContent', request),
     }))
 
+    context.subscriptions.add(openforge.backend.registerMethod<FileContentRequest, string>('getFileContentBase64', {
+      handler: (request) => invokeHostCommand<string>(openforge, 'getFileContentBase64', request),
+    }))
+
     context.subscriptions.add(openforge.backend.registerMethod<FileAtRefRequest, string>('getFileAtRef', {
       handler: (request) => invokeHostCommand<string>(openforge, 'getFileAtRef', request),
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<FileAtRefRequest, string>('getFileAtRefBase64', {
+      handler: (request) => invokeHostCommand<string>(openforge, 'getFileAtRefBase64', request),
     }))
 
     context.subscriptions.add(openforge.backend.registerMethod<PullRequestRepositoryRequest, ReviewComment[]>('getReviewComments', {
