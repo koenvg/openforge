@@ -205,6 +205,10 @@ mod tests {
         assert!(CODEX_HOOK_SOURCE.contains("/hooks/agent-lifecycle"));
         assert!(CODEX_HOOK_SOURCE.contains("provider: \"codex\""));
         assert!(CODEX_HOOK_SOURCE.contains("raw_event_type"));
+        assert!(CODEX_HOOK_SOURCE.contains("raw_status_type"));
+        assert!(CODEX_HOOK_SOURCE.contains("transcript_path"));
+        assert!(CODEX_HOOK_SOURCE.contains("openforge-codex-turn"));
+        assert!(CODEX_HOOK_SOURCE.contains("turn_aborted"));
         assert!(CODEX_HOOK_SOURCE.contains("started"));
         assert!(CODEX_HOOK_SOURCE.contains("became_busy"));
         assert!(CODEX_HOOK_SOURCE.contains("requested_permission"));
@@ -333,6 +337,84 @@ mod tests {
         assert!(payloads[0].get("provider_session_id").is_none());
     }
 
+    #[test]
+    fn codex_hook_reports_transcript_turn_end_status() {
+        let payloads = evaluate_posted_payloads_for_script(
+            r#"
+process.env.OPENFORGE_TASK_ID = "T-CODEX";
+process.env.OPENFORGE_PTY_INSTANCE_ID = "77";
+process.env.OPENFORGE_HTTP_PORT = "38123";
+const payloads = [];
+globalThis.fetch = async (_url, options) => {
+  payloads.push(JSON.parse(options.body));
+  return { ok: true };
+};
+await postLifecycleEvent("ended", "TranscriptTurnEnd", "turn_aborted:interrupted");
+process.stdout.write(JSON.stringify(payloads));
+"#,
+        );
+
+        assert_eq!(payloads[0]["kind"], "ended");
+        assert_eq!(payloads[0]["raw_event_type"], "TranscriptTurnEnd");
+        assert_eq!(payloads[0]["raw_status_type"], "turn_aborted:interrupted");
+    }
+
+    #[test]
+    fn codex_hook_monitor_reports_interrupted_transcript_turn() {
+        let payloads = evaluate_posted_payloads_for_script(
+            r#"
+process.env.OPENFORGE_TASK_ID = "T-CODEX-MONITOR";
+process.env.OPENFORGE_PTY_INSTANCE_ID = "78";
+process.env.OPENFORGE_HTTP_PORT = "38123";
+const fs = await import("node:fs/promises");
+const os = await import("node:os");
+const path = await import("node:path");
+const transcriptPath = path.join(os.tmpdir(), `openforge-codex-transcript-${Date.now()}.jsonl`);
+const payloads = [];
+globalThis.fetch = async (_url, options) => {
+  payloads.push(JSON.parse(options.body));
+  return { ok: true };
+};
+await writeActiveTurnId("turn-monitor");
+await fs.writeFile(transcriptPath, JSON.stringify({ type: "event_msg", payload: { type: "turn_aborted", turn_id: "turn-monitor", reason: "interrupted" } }) + "\n", "utf8");
+await monitorCodexTranscriptTurn(transcriptPath, "turn-monitor", { timeoutMs: 100, pollIntervalMs: 1 });
+await fs.unlink(transcriptPath);
+process.stdout.write(JSON.stringify(payloads));
+"#,
+        );
+
+        assert_eq!(payloads[0]["kind"], "ended");
+        assert_eq!(payloads[0]["raw_event_type"], "TranscriptTurnEnd");
+        assert_eq!(payloads[0]["raw_status_type"], "turn_aborted:interrupted");
+    }
+
+    #[test]
+    fn codex_hook_detects_completed_and_interrupted_turns_in_transcript() {
+        let statuses = evaluate_json_for_script(
+            r#"
+const entries = [
+  { type: "event_msg", payload: { type: "task_started", turn_id: "turn-1" } },
+  { type: "event_msg", payload: { type: "turn_aborted", turn_id: "turn-1", reason: "interrupted" } },
+  { type: "event_msg", payload: { type: "task_complete", turn_id: "turn-2" } },
+  { type: "event_msg", payload: { type: "turn_aborted", turn_id: "other", reason: "interrupted" } },
+];
+process.stdout.write(JSON.stringify(entries.map((entry) => codexTranscriptTurnEndStatus(entry, "turn-1"))));
+"#,
+        );
+
+        assert_eq!(
+            statuses,
+            serde_json::json!([null, "turn_aborted:interrupted", null, null])
+        );
+
+        let completed = evaluate_json_for_script(
+            r#"
+process.stdout.write(JSON.stringify(codexTranscriptTurnEndStatus({ type: "event_msg", payload: { type: "task_complete", turn_id: "turn-2" } }, "turn-2")));
+"#,
+        );
+        assert_eq!(completed, serde_json::json!("task_complete"));
+    }
+
     fn evaluate_posted_payloads_for_events(events: &[(&str, &str)]) -> Vec<serde_json::Value> {
         let event_calls = events
             .iter()
@@ -354,6 +436,16 @@ process.stdout.write(JSON.stringify(payloads));
 "#
         ));
         serde_json::from_str(&stdout).expect("payloads should be valid json")
+    }
+
+    fn evaluate_posted_payloads_for_script(script_body: &str) -> Vec<serde_json::Value> {
+        let stdout = run_codex_hook_script(script_body);
+        serde_json::from_str(&stdout).expect("payloads should be valid json")
+    }
+
+    fn evaluate_json_for_script(script_body: &str) -> serde_json::Value {
+        let stdout = run_codex_hook_script(script_body);
+        serde_json::from_str(&stdout).expect("script output should be valid json")
     }
 
     fn run_codex_hook_script(script_body: &str) -> String {
