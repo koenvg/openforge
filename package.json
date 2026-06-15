@@ -13,7 +13,7 @@
     "website:check": "pnpm --filter @openforge/website check",
     "website:build": "pnpm --filter @openforge/website build",
     "website:preview": "pnpm --filter @openforge/website preview",
-    "website:deploy": "pnpm --filter @openforge/website build",
+    "website:deploy": "pnpm --filter @openforge/website exec astro build --outDir ../../dist",
     "electron:build": "node scripts/electron-build.mjs",
     "electron:package": "node scripts/electron-package.mjs",
     "electron:install": "bash scripts/install-electron-mac.sh",
