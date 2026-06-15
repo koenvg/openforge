@@ -358,7 +358,7 @@ describe('TaskDetailView', () => {
 
   it('has TaskInfoPanel child with Initial Prompt section', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
-    expect(screen.getByText('// INITIAL_PROMPT')).toBeTruthy()
+    expect(screen.getByText('Initial Prompt')).toBeTruthy()
   })
 
   it('shows Start Task button for backlog tasks', () => {
@@ -611,7 +611,7 @@ describe('TaskDetailView', () => {
 
   it('shows TaskInfoPanel by default', async () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
-    expect(screen.getByText('// INITIAL_PROMPT')).toBeTruthy()
+    expect(screen.getByText('Initial Prompt')).toBeTruthy()
   })
 
   it('Info panel always visible in agent mode (no tab toggle)', async () => {
@@ -620,7 +620,7 @@ describe('TaskDetailView', () => {
 
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     await waitFor(() => {
-      expect(screen.getByText('// INITIAL_PROMPT')).toBeTruthy()
+      expect(screen.getByText('Initial Prompt')).toBeTruthy()
     })
     expect(screen.queryByRole('button', { name: /^Info$/ })).toBeNull()
     vi.mocked(getTaskWorkspace).mockResolvedValue(null)
@@ -628,7 +628,7 @@ describe('TaskDetailView', () => {
 
   it('rightPanelMode state does NOT exist — Info always visible', async () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
-    expect(screen.getByText('// INITIAL_PROMPT')).toBeTruthy()
+    expect(screen.getByText('Initial Prompt')).toBeTruthy()
   })
 
   it('renders three tab buttons when worktree exists', async () => {

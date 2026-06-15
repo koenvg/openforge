@@ -430,7 +430,7 @@
       </div>
     </main>
 
-    {#if $activeProjectId && $currentView !== 'global_settings'}
+    {#if $activeProjectId && $currentView !== 'global_settings' && !selectedTask}
       <button
         type="button"
         class="absolute bottom-6 right-6 btn btn-primary btn-circle btn-lg shadow-lg font-mono text-lg z-10"

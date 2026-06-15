@@ -63,8 +63,8 @@
   }
 </script>
 
-<section class="flex flex-col gap-2.5" aria-label="Labels">
-  <h3 class="text-[10px] font-bold text-primary font-mono tracking-[1.2px] m-0">// LABELS</h3>
+<section class="flex flex-col gap-2" aria-label="Labels">
+  <h3 class="text-xs font-semibold text-base-content/60 m-0">Labels</h3>
 
   <div class="flex flex-wrap gap-1.5">
     {#each selectedLabels as label (label.id)}
@@ -81,7 +81,7 @@
     {/each}
   </div>
 
-  <div class="flex items-center gap-2">
+  <div class="flex items-center gap-1.5">
     <input
       class="input input-bordered input-xs flex-1"
       aria-label="Add label"
