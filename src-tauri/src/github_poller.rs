@@ -219,15 +219,8 @@ async fn poll_github_once_with_state(
         };
 
         let poll_start = Instant::now();
-        let (new_comments, ci_changes, review_changes, errors) = poll_prs_for_project(
-            github_client,
-            &db,
-            events,
-            &github_token,
-            open_prs,
-            &[],
-        )
-        .await;
+        let (new_comments, ci_changes, review_changes, errors) =
+            poll_prs_for_project(github_client, &db, events, &github_token, open_prs, &[]).await;
         debug!(
             "[GitHub Poller] PR polling for project {} took {:.1}s",
             project.id,
@@ -500,10 +493,14 @@ async fn sync_authored_task_prs(
                     .map_err(|e| SyncOpenPrsError::Db(format!("Failed to upsert PR: {}", e)))?;
                 db_lock
                     .update_pr_head_sha(pr.id, &pr.head_sha)
-                    .map_err(|e| SyncOpenPrsError::Db(format!("Failed to update PR head SHA: {}", e)))?;
+                    .map_err(|e| {
+                        SyncOpenPrsError::Db(format!("Failed to update PR head SHA: {}", e))
+                    })?;
                 db_lock
                     .update_pr_mergeability(pr.id, pr.mergeable, pr.mergeable_state.as_deref())
-                    .map_err(|e| SyncOpenPrsError::Db(format!("Failed to update PR mergeability: {}", e)))?;
+                    .map_err(|e| {
+                        SyncOpenPrsError::Db(format!("Failed to update PR mergeability: {}", e))
+                    })?;
                 synced += 1;
             }
         }
@@ -601,10 +598,12 @@ fn find_authoritative_task_id(
         TaskMatchOutcome::None => match classify_task_matches(pr_title, task_ids) {
             TaskMatchOutcome::Unique(task_id) => Some(task_id),
             TaskMatchOutcome::Ambiguous => None,
-            TaskMatchOutcome::None => pr_body.and_then(|body| match classify_task_matches(body, task_ids) {
-                TaskMatchOutcome::Unique(task_id) => Some(task_id),
-                TaskMatchOutcome::Ambiguous | TaskMatchOutcome::None => None,
-            }),
+            TaskMatchOutcome::None => {
+                pr_body.and_then(|body| match classify_task_matches(body, task_ids) {
+                    TaskMatchOutcome::Unique(task_id) => Some(task_id),
+                    TaskMatchOutcome::Ambiguous | TaskMatchOutcome::None => None,
+                })
+            }
         },
     }
 }
@@ -1672,7 +1671,8 @@ mod tests {
     fn test_find_authoritative_task_id_rejects_ambiguous_title_matches() {
         let task_ids = vec!["T-2".to_string(), "T-1".to_string()];
 
-        let matched = find_authoritative_task_id("Fix T-1 before T-2", "feature/auth", None, &task_ids);
+        let matched =
+            find_authoritative_task_id("Fix T-1 before T-2", "feature/auth", None, &task_ids);
 
         assert_eq!(matched, None);
     }

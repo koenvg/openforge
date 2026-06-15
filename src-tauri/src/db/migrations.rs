@@ -1071,7 +1071,10 @@ pub(super) fn ensure_pr_number_column(conn: &Connection) -> Result<()> {
             "ALTER TABLE pull_requests ADD COLUMN pr_number INTEGER NOT NULL DEFAULT 0",
             [],
         )?;
-        conn.execute("UPDATE pull_requests SET pr_number = id WHERE pr_number = 0", [])?;
+        conn.execute(
+            "UPDATE pull_requests SET pr_number = id WHERE pr_number = 0",
+            [],
+        )?;
     }
     Ok(())
 }

@@ -155,16 +155,7 @@ impl super::Database {
         draft: bool,
     ) -> Result<()> {
         self.insert_pull_request_with_number(
-            id,
-            id,
-            ticket_id,
-            repo_owner,
-            repo_name,
-            title,
-            url,
-            state,
-            created_at,
-            updated_at,
+            id, id, ticket_id, repo_owner, repo_name, title, url, state, created_at, updated_at,
             draft,
         )
     }
@@ -186,8 +177,9 @@ impl super::Database {
         updated_at: i64,
         draft: bool,
     ) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        tx.execute(
             "INSERT INTO pull_requests (id, pr_number, ticket_id, repo_owner, repo_name, title, url, state, created_at, updated_at, draft)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
              ON CONFLICT(id) DO UPDATE SET
@@ -214,6 +206,21 @@ impl super::Database {
                 draft,
             ],
         )?;
+        tx.execute(
+            "UPDATE pr_comments
+             SET pr_id = ?1
+             WHERE pr_id IN (
+               SELECT id FROM pull_requests
+               WHERE repo_owner = ?2 AND repo_name = ?3 AND pr_number = ?4 AND id <> ?1
+             )",
+            rusqlite::params![id, repo_owner, repo_name, pr_number],
+        )?;
+        tx.execute(
+            "DELETE FROM pull_requests
+             WHERE repo_owner = ?1 AND repo_name = ?2 AND pr_number = ?3 AND id <> ?4",
+            rusqlite::params![repo_owner, repo_name, pr_number, id],
+        )?;
+        tx.commit()?;
         Ok(())
     }
 
@@ -471,7 +478,10 @@ impl super::Database {
     pub fn close_stale_open_prs_by_ids(&self, open_pr_ids: &[i64]) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         if open_pr_ids.is_empty() {
-            conn.execute("UPDATE pull_requests SET state = 'closed' WHERE state = 'open'", [])?;
+            conn.execute(
+                "UPDATE pull_requests SET state = 'closed' WHERE state = 'open'",
+                [],
+            )?;
         } else {
             let placeholders: Vec<String> = open_pr_ids
                 .iter()
@@ -607,8 +617,79 @@ mod tests {
 
         let open_prs = db.get_open_prs().expect("get open prs failed");
         assert_eq!(open_prs.len(), 2);
-        assert!(open_prs.iter().any(|pr| pr.id == 1001 && pr.pr_number == 42 && pr.repo_name == "web"));
-        assert!(open_prs.iter().any(|pr| pr.id == 2001 && pr.pr_number == 42 && pr.repo_name == "api"));
+        assert!(open_prs
+            .iter()
+            .any(|pr| pr.id == 1001 && pr.pr_number == 42 && pr.repo_name == "web"));
+        assert!(open_prs
+            .iter()
+            .any(|pr| pr.id == 2001 && pr.pr_number == 42 && pr.repo_name == "api"));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_global_pr_upsert_migrates_legacy_repo_number_row_and_comments() {
+        let (db, path) = make_test_db("pr_global_upsert_migrates_legacy_row");
+        insert_test_task(&db);
+
+        db.insert_pull_request(
+            42,
+            "T-100",
+            "acme",
+            "repo",
+            "Legacy title",
+            "https://github.com/acme/repo/pull/42",
+            "open",
+            1000,
+            1000,
+            false,
+        )
+        .expect("insert legacy pr failed");
+        db.insert_pr_comment(
+            9001,
+            42,
+            "reviewer",
+            "Still needs work",
+            "review_comment",
+            Some("src/main.rs"),
+            Some(12),
+            false,
+            1500,
+        )
+        .expect("insert legacy comment failed");
+
+        db.insert_pull_request_with_number(
+            1001,
+            42,
+            "T-100",
+            "acme",
+            "repo",
+            "Global title",
+            "https://github.com/acme/repo/pull/42",
+            "open",
+            1000,
+            2000,
+            false,
+        )
+        .expect("upsert global pr failed");
+
+        let all_prs = db.get_all_pull_requests().expect("get prs failed");
+        assert_eq!(all_prs.len(), 1);
+        assert_eq!(all_prs[0].id, 1001);
+        assert_eq!(all_prs[0].pr_number, 42);
+        assert_eq!(all_prs[0].title, "Global title");
+        assert_eq!(all_prs[0].unaddressed_comment_count, 1);
+
+        let comments = db.get_comments_for_pr(1001).expect("get comments failed");
+        assert_eq!(comments.len(), 1);
+        assert_eq!(comments[0].id, 9001);
+        assert_eq!(comments[0].pr_id, 1001);
+
+        let legacy_comments = db
+            .get_comments_for_pr(42)
+            .expect("get legacy comments failed");
+        assert!(legacy_comments.is_empty());
 
         drop(db);
         let _ = fs::remove_file(&path);
