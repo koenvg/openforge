@@ -4,7 +4,7 @@ import { sanitizeHtml } from './sanitize'
 const RELATIVE_PARENT_SEGMENT = /^\.\.\//
 const RELATIVE_CURRENT_SEGMENT = /^\.\//
 
-interface RenderMarkdownOptions {
+export interface RenderMarkdownOptions {
   imageBaseUrl?: string | null
 }
 
