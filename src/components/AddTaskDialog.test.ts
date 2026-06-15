@@ -163,26 +163,27 @@ describe('AddTaskDialog', () => {
     })
   })
 
-  it('includes autorun as a Claude Code permission mode', async () => {
+  it('includes autorun as a Claude Code permission mode using Claude\'s auto value', async () => {
     render(AddTaskDialog, { props: { mode: 'create' } })
 
     const select = await screen.findByRole('combobox') as HTMLSelectElement
+    const autorunOption = Array.from(select.options).find((option) => option.textContent === 'Autorun')
 
-    expect(Array.from(select.options).map((option) => option.value)).toContain('autorun')
+    expect(autorunOption?.value).toBe('auto')
   })
 
-  it('persists autorun when selected for a new Claude Code task', async () => {
+  it('persists Claude auto mode when Autorun is selected for a new Claude Code task', async () => {
     render(AddTaskDialog, { props: { mode: 'create' } })
 
     const textbox = await findPromptTextbox()
     const select = await screen.findByRole('combobox') as HTMLSelectElement
 
-    await fireEvent.change(select, { target: { value: 'autorun' } })
+    await fireEvent.change(select, { target: { value: 'auto' } })
     await fireEvent.input(textbox, { target: { value: 'Task with autorun' } })
     await fireEvent.click(await screen.findByRole('button', { name: /Add to Backlog/ }))
 
     await waitFor(() => {
-      expect(createTask).toHaveBeenCalledWith('Task with autorun', 'backlog', 'test-project-id', 'autorun')
+      expect(createTask).toHaveBeenCalledWith('Task with autorun', 'backlog', 'test-project-id', 'auto')
     })
   })
 

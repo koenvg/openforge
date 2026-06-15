@@ -1465,15 +1465,15 @@ mod tests {
     }
 
     #[test]
-    fn test_build_claude_args_accepts_autorun_permission_mode() {
+    fn test_build_claude_args_accepts_auto_permission_mode() {
         let settings = Path::new("/path/to/settings.json");
-        let args = build_claude_args("my prompt", None, false, settings, Some("autorun"));
+        let args = build_claude_args("my prompt", None, false, settings, Some("auto"));
 
         let pm_pos = args
             .iter()
             .position(|a| a == "--permission-mode")
             .expect("--permission-mode flag should be present");
-        assert_eq!(args[pm_pos + 1], "autorun");
+        assert_eq!(args[pm_pos + 1], "auto");
     }
 
     #[test]

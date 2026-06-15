@@ -521,4 +521,4 @@ export interface WhisperModelStatus {
 // ============================================================================
 
 /** Permission mode for Claude Code sessions */
-export type PermissionMode = 'default' | 'autorun' | 'acceptEdits' | 'plan' | 'bypassPermissions' | 'dontAsk';
+export type PermissionMode = 'default' | 'auto' | 'acceptEdits' | 'plan' | 'bypassPermissions' | 'dontAsk';

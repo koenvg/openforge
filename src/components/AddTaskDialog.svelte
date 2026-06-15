@@ -105,7 +105,7 @@
               bind:value={selectedPermissionMode}
             >
               <option value="default">Default</option>
-              <option value="autorun">Autorun</option>
+              <option value="auto">Autorun</option>
               <option value="acceptEdits">Accept Edits</option>
               <option value="plan">Plan</option>
               <option value="bypassPermissions">Bypass Permissions</option>
