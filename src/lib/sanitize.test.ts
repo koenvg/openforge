@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { sanitizeHtml } from './sanitize'
+import { sanitizeHtml as sanitizePluginSdkHtml } from '@openforge/plugin-sdk/sanitize'
 
 describe('sanitizeHtml', () => {
+  it('uses the plugin SDK sanitization implementation as the shared owner', () => {
+    expect(sanitizeHtml).toBe(sanitizePluginSdkHtml)
+  })
+
   it('strips script tags', () => {
     const dirty = '<p>Hello</p><script>alert("xss")</script>'
     expect(sanitizeHtml(dirty)).toBe('<p>Hello</p>')
