@@ -309,10 +309,23 @@ impl super::Database {
     }
 
     pub fn update_pr_merged(&self, id: i64, merged_at: i64) -> Result<()> {
+        self.update_pr_merged_state(id, Some(merged_at))
+    }
+
+    pub fn update_pr_merged_state(&self, id: i64, merged_at: Option<i64>) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "UPDATE pull_requests SET state = 'merged', merged_at = ?1 WHERE id = ?2",
             rusqlite::params![merged_at, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_pr_closed(&self, id: i64) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE pull_requests SET state = 'closed', merged_at = NULL WHERE id = ?1",
+            rusqlite::params![id],
         )?;
         Ok(())
     }
@@ -576,6 +589,40 @@ mod tests {
 
         let open_prs = db.get_open_prs().expect("get open prs failed");
         assert_eq!(open_prs.len(), 0);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_pull_request_terminal_state_updates_merged_and_closed() {
+        let (db, path) = make_test_db("pr_terminal_state_updates");
+        insert_test_task(&db);
+
+        db.insert_pull_request(
+            42,
+            "T-100",
+            "acme",
+            "repo",
+            "Fix auth",
+            "https://github.com/acme/repo/pull/42",
+            "open",
+            1000,
+            2000,
+            false,
+        )
+        .expect("insert pr failed");
+
+        db.update_pr_merged_state(42, Some(1704067200))
+            .expect("mark merged failed");
+        let merged = db.get_all_pull_requests().expect("get prs failed");
+        assert_eq!(merged[0].state, "merged");
+        assert_eq!(merged[0].merged_at, Some(1704067200));
+
+        db.update_pr_closed(42).expect("mark closed failed");
+        let closed = db.get_all_pull_requests().expect("get prs failed");
+        assert_eq!(closed[0].state, "closed");
+        assert_eq!(closed[0].merged_at, None);
 
         drop(db);
         let _ = fs::remove_file(&path);
