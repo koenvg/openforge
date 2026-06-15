@@ -439,6 +439,103 @@ impl fmt::Display for SyncOpenPrsError {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum StaleAuthoredPrTerminalState {
+    Closed,
+    Merged(Option<i64>),
+}
+
+fn stale_authored_task_pr_candidates(open_prs: Vec<PrRow>, open_search_ids: &[i64]) -> Vec<PrRow> {
+    let open_search_ids: HashSet<i64> = open_search_ids.iter().copied().collect();
+    open_prs
+        .into_iter()
+        .filter(|pr| !open_search_ids.contains(&pr.id))
+        .collect()
+}
+
+fn terminal_state_for_stale_authored_pr(
+    details: &crate::github_client::PullRequest,
+) -> Option<StaleAuthoredPrTerminalState> {
+    let state = details.state.to_ascii_lowercase();
+    if state == "open" {
+        return None;
+    }
+
+    let merged_at = details
+        .extra
+        .get("merged_at")
+        .and_then(|value| value.as_str())
+        .and_then(parse_github_timestamp);
+    let merged = details
+        .extra
+        .get("merged")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+        || merged_at.is_some();
+
+    match state.as_str() {
+        "closed" if merged => Some(StaleAuthoredPrTerminalState::Merged(merged_at)),
+        "closed" => Some(StaleAuthoredPrTerminalState::Closed),
+        "merged" => Some(StaleAuthoredPrTerminalState::Merged(merged_at)),
+        _ => None,
+    }
+}
+
+async fn reconcile_stale_authored_task_prs(
+    github_client: &GitHubClient,
+    db: &Mutex<Database>,
+    github_token: &str,
+    open_search_ids: &[i64],
+) -> Result<usize, SyncOpenPrsError> {
+    let candidates = {
+        let db_lock = db.lock().unwrap();
+        let open_prs = db_lock
+            .get_open_prs()
+            .map_err(|e| SyncOpenPrsError::Db(format!("Failed to get open PRs: {}", e)))?;
+        stale_authored_task_pr_candidates(open_prs, open_search_ids)
+    };
+
+    let mut terminal_states = Vec::new();
+    for pr in candidates {
+        match github_client
+            .get_pr_details(&pr.repo_owner, &pr.repo_name, pr.pr_number, github_token)
+            .await
+        {
+            Ok(details) => {
+                if let Some(terminal_state) = terminal_state_for_stale_authored_pr(&details) {
+                    terminal_states.push((pr.id, terminal_state));
+                }
+            }
+            Err(error) => warn!(
+                "[GitHub Poller] Leaving stale authored PR {}/{} #{} open after failed detail fetch: {}",
+                pr.repo_owner, pr.repo_name, pr.pr_number, error
+            ),
+        }
+    }
+
+    if terminal_states.is_empty() {
+        return Ok(0);
+    }
+
+    let db_lock = db.lock().unwrap();
+    let mut updated = 0;
+    for (pr_id, terminal_state) in terminal_states {
+        match terminal_state {
+            StaleAuthoredPrTerminalState::Closed => db_lock
+                .update_pr_closed(pr_id)
+                .map_err(|e| SyncOpenPrsError::Db(format!("Failed to close stale PR: {}", e)))?,
+            StaleAuthoredPrTerminalState::Merged(merged_at) => db_lock
+                .update_pr_merged_state(pr_id, merged_at)
+                .map_err(|e| {
+                    SyncOpenPrsError::Db(format!("Failed to mark stale PR merged: {}", e))
+                })?,
+        }
+        updated += 1;
+    }
+
+    Ok(updated)
+}
+
 async fn sync_authored_task_prs(
     github_client: &GitHubClient,
     db: &Mutex<Database>,
@@ -470,6 +567,7 @@ async fn sync_authored_task_prs(
         .as_secs() as i64;
 
     let mut synced = 0;
+    let should_reconcile_stale = !all_search_ids.is_empty() || github_prs.is_empty();
     {
         let db_lock = db.lock().unwrap();
         for pr in &github_prs {
@@ -504,12 +602,10 @@ async fn sync_authored_task_prs(
                 synced += 1;
             }
         }
+    }
 
-        if !all_search_ids.is_empty() || github_prs.is_empty() {
-            db_lock
-                .close_stale_open_prs_by_ids(&all_search_ids)
-                .map_err(|e| SyncOpenPrsError::Db(format!("Failed to close stale PRs: {}", e)))?;
-        }
+    if should_reconcile_stale {
+        reconcile_stale_authored_task_prs(github_client, db, github_token, &all_search_ids).await?;
     }
 
     Ok(synced)
@@ -1418,7 +1514,125 @@ mod tests {
     use super::*;
     use crate::backend_runtime::AppHandle;
     use crate::db::test_helpers::{insert_test_task, make_test_db};
-    use crate::github_client::GitHubClient;
+    use crate::github_client::{GitHubClient, GitHubHead, GitHubUser, PullRequest};
+
+    fn make_stale_detail(state: &str, extra: serde_json::Value) -> PullRequest {
+        PullRequest {
+            number: 42,
+            title: "Stale authored PR".to_string(),
+            state: state.to_string(),
+            html_url: "https://github.com/acme/repo/pull/42".to_string(),
+            user: GitHubUser {
+                login: "octocat".to_string(),
+                extra: serde_json::json!({}),
+            },
+            head: GitHubHead {
+                ref_name: "feature/T-100".to_string(),
+                sha: "abc123".to_string(),
+                extra: serde_json::json!({}),
+            },
+            draft: Some(false),
+            mergeable: None,
+            mergeable_state: None,
+            extra,
+        }
+    }
+
+    #[test]
+    fn test_stale_authored_pr_terminal_state_marks_merged_from_merged_at() {
+        let details = make_stale_detail(
+            "closed",
+            serde_json::json!({
+                "merged": true,
+                "merged_at": "2024-01-01T00:00:00Z"
+            }),
+        );
+
+        assert_eq!(
+            terminal_state_for_stale_authored_pr(&details),
+            Some(StaleAuthoredPrTerminalState::Merged(Some(1704067200)))
+        );
+    }
+
+    #[test]
+    fn test_stale_authored_pr_terminal_state_marks_closed_without_merged_evidence() {
+        let details = make_stale_detail(
+            "closed",
+            serde_json::json!({
+                "merged": false,
+                "merged_at": null
+            }),
+        );
+
+        assert_eq!(
+            terminal_state_for_stale_authored_pr(&details),
+            Some(StaleAuthoredPrTerminalState::Closed)
+        );
+    }
+
+    #[test]
+    fn test_stale_authored_pr_terminal_state_leaves_open_pr_open() {
+        let details = make_stale_detail("open", serde_json::json!({ "merged": false }));
+
+        assert_eq!(terminal_state_for_stale_authored_pr(&details), None);
+    }
+
+    #[test]
+    fn test_stale_authored_pr_candidates_preserve_repo_local_pr_identity() {
+        let open_prs = vec![
+            PrRow {
+                id: 1001,
+                pr_number: 42,
+                ticket_id: "T-100".to_string(),
+                repo_owner: "acme".to_string(),
+                repo_name: "web".to_string(),
+                title: "Web".to_string(),
+                url: "https://github.com/acme/web/pull/42".to_string(),
+                state: "open".to_string(),
+                head_sha: "web-sha".to_string(),
+                ci_status: None,
+                ci_check_runs: None,
+                review_status: None,
+                mergeable: None,
+                mergeable_state: None,
+                merged_at: None,
+                created_at: 1,
+                updated_at: 2,
+                draft: false,
+                is_queued: false,
+                unaddressed_comment_count: 0,
+            },
+            PrRow {
+                id: 2001,
+                pr_number: 42,
+                ticket_id: "T-100".to_string(),
+                repo_owner: "acme".to_string(),
+                repo_name: "api".to_string(),
+                title: "API".to_string(),
+                url: "https://github.com/acme/api/pull/42".to_string(),
+                state: "open".to_string(),
+                head_sha: "api-sha".to_string(),
+                ci_status: None,
+                ci_check_runs: None,
+                review_status: None,
+                mergeable: None,
+                mergeable_state: None,
+                merged_at: None,
+                created_at: 1,
+                updated_at: 2,
+                draft: false,
+                is_queued: false,
+                unaddressed_comment_count: 0,
+            },
+        ];
+
+        let candidates = stale_authored_task_pr_candidates(open_prs, &[1001]);
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].id, 2001);
+        assert_eq!(candidates[0].repo_name, "api");
+        assert_eq!(candidates[0].pr_number, 42);
+    }
 
     #[test]
     fn test_poll_result_construction() {
