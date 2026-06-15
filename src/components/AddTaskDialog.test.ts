@@ -163,6 +163,29 @@ describe('AddTaskDialog', () => {
     })
   })
 
+  it('includes autorun as a Claude Code permission mode', async () => {
+    render(AddTaskDialog, { props: { mode: 'create' } })
+
+    const select = await screen.findByRole('combobox') as HTMLSelectElement
+
+    expect(Array.from(select.options).map((option) => option.value)).toContain('autorun')
+  })
+
+  it('persists autorun when selected for a new Claude Code task', async () => {
+    render(AddTaskDialog, { props: { mode: 'create' } })
+
+    const textbox = await findPromptTextbox()
+    const select = await screen.findByRole('combobox') as HTMLSelectElement
+
+    await fireEvent.change(select, { target: { value: 'autorun' } })
+    await fireEvent.input(textbox, { target: { value: 'Task with autorun' } })
+    await fireEvent.click(await screen.findByRole('button', { name: /Add to Backlog/ }))
+
+    await waitFor(() => {
+      expect(createTask).toHaveBeenCalledWith('Task with autorun', 'backlog', 'test-project-id', 'autorun')
+    })
+  })
+
   it('uses direct task creation defaults and no agent when starting a task for opencode', async () => {
     const onRunAction = vi.fn()
     vi.mocked(getProjectConfig).mockResolvedValue('opencode')
