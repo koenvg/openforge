@@ -21,7 +21,7 @@ pub(crate) fn build_claude_args(
     if !prompt.is_empty() {
         args.push(prompt.to_string());
     }
-    if let Some(mode) = permission_mode {
+    if let Some(mode) = permission_mode.filter(|mode| !mode.is_empty() && *mode != "default") {
         args.push("--permission-mode".to_string());
         args.push(mode.to_string());
     }

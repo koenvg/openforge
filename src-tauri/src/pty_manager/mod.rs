@@ -1454,6 +1454,29 @@ mod tests {
     }
 
     #[test]
+    fn test_build_claude_args_omits_default_permission_mode() {
+        let settings = Path::new("/path/to/settings.json");
+        let args = build_claude_args("my prompt", None, false, settings, Some("default"));
+
+        assert!(
+            !args.contains(&"--permission-mode".to_string()),
+            "OpenForge default should defer to Claude's configured default"
+        );
+    }
+
+    #[test]
+    fn test_build_claude_args_accepts_auto_permission_mode() {
+        let settings = Path::new("/path/to/settings.json");
+        let args = build_claude_args("my prompt", None, false, settings, Some("auto"));
+
+        let pm_pos = args
+            .iter()
+            .position(|a| a == "--permission-mode")
+            .expect("--permission-mode flag should be present");
+        assert_eq!(args[pm_pos + 1], "auto");
+    }
+
+    #[test]
     fn test_build_pi_args_new_session_with_prompt() {
         let args = build_pi_args("implement the feature", None, false, None);
         assert_eq!(args, vec!["--approve", "implement the feature"]);
