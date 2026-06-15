@@ -319,6 +319,7 @@ describe('App action palette shortcuts', () => {
 
       const readyPr: PullRequestInfo = {
         id: 42,
+        pr_number: 42,
         ticket_id: selectedTask.id,
         repo_owner: 'owner',
         repo_name: 'repo',
@@ -415,6 +416,7 @@ describe('App action palette shortcuts', () => {
 
       const readyPr: PullRequestInfo = {
         id: 42,
+        pr_number: 42,
         ticket_id: selectedTask.id,
         repo_owner: 'owner',
         repo_name: 'repo',
@@ -517,6 +519,7 @@ describe('App action palette shortcuts', () => {
 
       const firstReadyPr: PullRequestInfo = {
         id: 42,
+        pr_number: 42,
         ticket_id: selectedTask.id,
         repo_owner: 'owner',
         repo_name: 'repo',

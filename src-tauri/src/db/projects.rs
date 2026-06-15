@@ -244,30 +244,6 @@ impl super::Database {
         true
     }
 
-    /// Find a project by its github_default_repo config value.
-    /// Returns the project that has github_default_repo set to the given repo_full_name (e.g. "owner/repo").
-    pub fn find_project_by_github_repo(&self, repo_full_name: &str) -> Result<Option<ProjectRow>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT p.id, p.name, p.path, p.created_at, p.updated_at
-             FROM projects p
-             JOIN project_config pc ON p.id = pc.project_id
-             WHERE pc.key = 'github_default_repo' AND pc.value = ?1",
-        )?;
-        let mut rows = stmt.query([repo_full_name])?;
-        if let Some(row) = rows.next()? {
-            Ok(Some(ProjectRow {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                path: row.get(2)?,
-                created_at: row.get(3)?,
-                updated_at: row.get(4)?,
-            }))
-        } else {
-            Ok(None)
-        }
-    }
-
     /// Get attention summaries for all projects.
     ///
     /// Aggregates cross-domain signals (agent status, PR status) per project
@@ -497,15 +473,15 @@ mod tests {
             .create_project("Test Project", "/tmp/test")
             .expect("Failed to create project");
 
-        db.set_project_config(&project.id, "github_default_repo", "owner/repo")
-            .expect("Failed to set github_default_repo");
+        db.set_project_config(&project.id, "custom_repo_hint", "owner/repo")
+            .expect("Failed to set custom_repo_hint");
         db.set_project_config(&project.id, "custom_setting", "value123")
             .expect("Failed to set custom_setting");
 
-        let repo = db
-            .get_project_config(&project.id, "github_default_repo")
-            .expect("Failed to get github_default_repo");
-        assert_eq!(repo, Some("owner/repo".to_string()));
+        let repo_hint = db
+            .get_project_config(&project.id, "custom_repo_hint")
+            .expect("Failed to get custom_repo_hint");
+        assert_eq!(repo_hint, Some("owner/repo".to_string()));
 
         let setting = db
             .get_project_config(&project.id, "custom_setting")
@@ -532,18 +508,18 @@ mod tests {
             .create_project("Test Project", "/tmp/test")
             .expect("Failed to create project");
 
-        db.set_project_config(&project.id, "github_default_repo", "owner/repo")
-            .expect("Failed to set project github_default_repo");
+        db.set_project_config(&project.id, "custom_repo_hint", "owner/repo")
+            .expect("Failed to set project custom_repo_hint");
 
         let global_token = db
             .get_config("github_token")
             .expect("Failed to get global github_token");
         assert_eq!(global_token, Some("global-token-456".to_string()));
 
-        let project_repo = db
-            .get_project_config(&project.id, "github_default_repo")
-            .expect("Failed to get project github_default_repo");
-        assert_eq!(project_repo, Some("owner/repo".to_string()));
+        let project_repo_hint = db
+            .get_project_config(&project.id, "custom_repo_hint")
+            .expect("Failed to get project custom_repo_hint");
+        assert_eq!(project_repo_hint, Some("owner/repo".to_string()));
 
         drop(db);
         let _ = fs::remove_file(&path);
@@ -770,35 +746,5 @@ mod tests {
 
         drop(db);
         let _ = fs::remove_file(&path);
-    }
-
-    #[test]
-    fn test_find_project_by_github_repo() {
-        let (db, path) = make_test_db("find_by_repo");
-        // Create a project
-        let project_id = db
-            .create_project("My Project", "/path/to/project")
-            .expect("create failed");
-        // Set github_default_repo config
-        db.set_project_config(&project_id.id, "github_default_repo", "facebook/react")
-            .expect("set config failed");
-
-        // Should find the project
-        let found = db
-            .find_project_by_github_repo("facebook/react")
-            .expect("find failed");
-        assert!(found.is_some());
-        let found = found.unwrap();
-        assert_eq!(found.id, project_id.id);
-        assert_eq!(found.path, "/path/to/project");
-
-        // Should NOT find with different repo
-        let not_found = db
-            .find_project_by_github_repo("unknown/repo")
-            .expect("find failed");
-        assert!(not_found.is_none());
-
-        drop(db);
-        let _ = std::fs::remove_file(&path);
     }
 }

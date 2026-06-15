@@ -61,6 +61,7 @@ const makeSession = (taskId: string, status: string, checkpoint_data: string | n
 
 const makePr = (taskId: string, unaddressed: number): PullRequestInfo => ({
   id: Number(taskId.replace(/\D/g, '')) || 1,
+  pr_number: Number(taskId.replace(/\D/g, '')) || 1,
   ticket_id: taskId,
   repo_owner: 'owner',
   repo_name: 'repo',

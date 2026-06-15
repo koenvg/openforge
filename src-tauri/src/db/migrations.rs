@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS agent_logs (
 
 CREATE TABLE IF NOT EXISTS pull_requests (
     id INTEGER PRIMARY KEY,
+    pr_number INTEGER NOT NULL DEFAULT 0,
     ticket_id TEXT NOT NULL,
     repo_owner TEXT NOT NULL,
     repo_name TEXT NOT NULL,
@@ -178,7 +179,6 @@ CREATE INDEX IF NOT EXISTS idx_review_prs_updated_at ON review_prs(updated_at DE
 CREATE INDEX IF NOT EXISTS idx_review_prs_repo ON review_prs(repo_owner, repo_name);
 
 INSERT OR IGNORE INTO config (key, value) VALUES ('github_token', '');
-INSERT OR IGNORE INTO config (key, value) VALUES ('github_default_repo', '');
 INSERT OR IGNORE INTO config (key, value) VALUES ('opencode_auto_start', 'true');
 INSERT OR IGNORE INTO config (key, value) VALUES ('github_poll_interval', '60');
 INSERT OR IGNORE INTO config (key, value) VALUES ('next_task_id', '1');
@@ -1051,6 +1051,34 @@ pub(super) fn ensure_tasks_columns(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+pub(super) fn ensure_pr_number_column(conn: &Connection) -> Result<()> {
+    let has_pull_requests: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='pull_requests'",
+        [],
+        |r| r.get(0),
+    )?;
+    if !has_pull_requests {
+        return Ok(());
+    }
+
+    let exists: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM pragma_table_info('pull_requests') WHERE name = 'pr_number'",
+        [],
+        |r| r.get(0),
+    )?;
+    if !exists {
+        conn.execute(
+            "ALTER TABLE pull_requests ADD COLUMN pr_number INTEGER NOT NULL DEFAULT 0",
+            [],
+        )?;
+        conn.execute(
+            "UPDATE pull_requests SET pr_number = id WHERE pr_number = 0",
+            [],
+        )?;
+    }
+    Ok(())
+}
+
 pub(super) fn ensure_mergeability_columns(conn: &Connection) -> Result<()> {
     for (table, column, sql) in [
         (
@@ -1444,8 +1472,8 @@ mod tests {
             .expect("Failed to count config rows");
 
         assert_eq!(
-            config_count, 8,
-            "All 8 default config values should be inserted"
+            config_count, 7,
+            "All 7 default config values should be inserted"
         );
 
         let jira_columns: i32 = conn

@@ -792,6 +792,7 @@ describe("SelfReviewView — hide addressed comments", () => {
 
 	const mockPr: PullRequestInfo = {
 		id: 1,
+		pr_number: 1,
 		ticket_id: "task-1",
 		repo_owner: "acme",
 		repo_name: "repo",

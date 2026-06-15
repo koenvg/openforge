@@ -279,7 +279,7 @@ async fn host_core_callbacks_route_to_app_services() {
         .set_config("theme", "light")
         .expect("config fixture");
     database
-        .set_project_config(&project.id, "github_default_repo", "acme/old")
+        .set_project_config(&project.id, "repo_hint", "acme/old")
         .expect("project config fixture");
 
     let app = AppHandle::new();
@@ -386,7 +386,7 @@ async fn host_core_callbacks_route_to_app_services() {
     assert_eq!(
         host.handle_host_callback(
             "openforge.projectConfig.get",
-            &json!({ "projectId": project.id, "key": "github_default_repo" }),
+            &json!({ "projectId": project.id, "key": "repo_hint" }),
         )
         .await
         .expect("project config get callback"),
@@ -394,7 +394,7 @@ async fn host_core_callbacks_route_to_app_services() {
     );
     host.handle_host_callback(
         "openforge.projectConfig.set",
-        &json!({ "projectId": project.id, "key": "github_default_repo", "value": "acme/new" }),
+        &json!({ "projectId": project.id, "key": "repo_hint", "value": "acme/new" }),
     )
     .await
     .expect("project config set callback");

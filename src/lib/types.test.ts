@@ -4,6 +4,7 @@ import { type PullRequestInfo, type CheckRunInfo, hasMergeConflicts, isReadyToMe
 function createPullRequest(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
   return {
     id: 1,
+    pr_number: 1,
     ticket_id: 'T-1',
     repo_owner: 'acme',
     repo_name: 'repo',

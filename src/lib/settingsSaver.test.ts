@@ -34,7 +34,6 @@ describe('settingsSaver', () => {
       projectId: 'project-1',
       projectName: 'My Project',
       projectPath: '/tmp/project',
-      githubDefaultRepo: 'owner/repo',
       agentInstructions: 'Do the thing',
       handoffNotesTemplate: '## Current summary\nCustom template',
       aiProvider: 'opencode',
@@ -45,7 +44,7 @@ describe('settingsSaver', () => {
     })
 
     expect(updateProject).toHaveBeenCalledWith('project-1', 'My Project', '/tmp/project')
-    expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'github_default_repo', 'owner/repo')
+    expect(setProjectConfig).not.toHaveBeenCalledWith('project-1', 'github_default_repo', expect.anything())
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'additional_instructions', 'Do the thing')
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'handoff_notes_template', '## Current summary\nCustom template')
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'ai_provider', 'opencode')

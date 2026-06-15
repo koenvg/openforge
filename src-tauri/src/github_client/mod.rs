@@ -24,9 +24,7 @@ pub mod types;
 
 pub use checks::{aggregate_ci_status, deduplicate_check_runs, filter_to_required};
 pub use error::GitHubError;
-pub use events::{
-    dedupe_pr_refs, extract_authored_pr_refs_from_user_events, parse_repo_event_changes,
-};
+pub use events::{dedupe_pr_refs, extract_authored_pr_refs_from_user_events};
 pub use reviews::aggregate_review_status;
 pub use types::*;
 

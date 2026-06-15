@@ -114,7 +114,7 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
       const pr = readyPrs[0]
       try {
         setTaskMerging(task.id, true)
-        await mergePullRequest(pr.repo_owner, pr.repo_name, pr.id)
+        await mergePullRequest(pr.repo_owner, pr.repo_name, pr.pr_number ?? pr.id)
         const nextMap = new Map(get(ticketPrs))
         const taskPrs = nextMap.get(task.id) || []
         nextMap.set(task.id, taskPrs.map(p =>

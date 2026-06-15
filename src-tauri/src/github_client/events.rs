@@ -4,31 +4,6 @@ use super::error::GitHubError;
 use super::types::{GitHubEvent, PrRef};
 use super::GitHubClient;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct RepoEventChanges {
-    pub touched_pr_numbers: Vec<i64>,
-}
-
-pub fn parse_repo_event_changes(events: &[GitHubEvent]) -> RepoEventChanges {
-    let mut seen_event_ids: HashSet<&str> = HashSet::new();
-    let mut seen_pr_numbers: HashSet<i64> = HashSet::new();
-    let mut touched_pr_numbers = Vec::new();
-
-    for event in events {
-        if !seen_event_ids.insert(event.id.as_str()) {
-            continue;
-        }
-
-        if let Some(pr_number) = extract_pr_number(event) {
-            if seen_pr_numbers.insert(pr_number) {
-                touched_pr_numbers.push(pr_number);
-            }
-        }
-    }
-
-    RepoEventChanges { touched_pr_numbers }
-}
-
 pub fn extract_authored_pr_refs_from_user_events(
     events: &[GitHubEvent],
     username: &str,
@@ -95,19 +70,6 @@ pub fn extract_authored_pr_refs_from_user_events(
 }
 
 impl GitHubClient {
-    pub async fn list_repo_events(
-        &self,
-        owner: &str,
-        repo: &str,
-        token: &str,
-    ) -> Result<Vec<GitHubEvent>, GitHubError> {
-        let url = format!(
-            "https://api.github.com/repos/{}/{}/events?per_page=100",
-            owner, repo
-        );
-        self.get_with_etag::<Vec<GitHubEvent>>(&url, token).await
-    }
-
     pub async fn list_user_events(
         &self,
         username: &str,
@@ -147,22 +109,6 @@ fn parse_repo_full_name(repo_name: &str) -> Option<(&str, &str)> {
     Some((owner, repo))
 }
 
-fn extract_pr_number(event: &GitHubEvent) -> Option<i64> {
-    let payload = &event.payload;
-    match event.event_type.as_str() {
-        "PullRequestEvent" => json_i64(payload.get("pull_request"), "number"),
-        "IssueCommentEvent" => {
-            let issue = payload.get("issue")?;
-            issue.get("pull_request")?;
-            issue.get("number")?.as_i64()
-        }
-        "PullRequestReviewEvent" | "PullRequestReviewCommentEvent" => {
-            json_i64(payload.get("pull_request"), "number")
-        }
-        _ => None,
-    }
-}
-
 fn json_i64(root: Option<&serde_json::Value>, key: &str) -> Option<i64> {
     root?.get(key)?.as_i64()
 }
@@ -188,53 +134,6 @@ mod tests {
 
     fn parse_events(json: &str) -> Vec<GitHubEvent> {
         serde_json::from_str(json).expect("events should deserialize")
-    }
-
-    #[test]
-    fn test_parse_repo_event_changes_maps_pr_and_comment_activity() {
-        let events = parse_events(
-            r#"[
-              {
-                "id": "e-1",
-                "type": "PullRequestEvent",
-                "created_at": "2026-03-10T10:00:00Z",
-                "payload": { "action": "synchronize", "pull_request": { "number": 42 } }
-              },
-              {
-                "id": "e-2",
-                "type": "IssueCommentEvent",
-                "created_at": "2026-03-10T10:01:00Z",
-                "payload": {
-                  "action": "created",
-                  "issue": { "number": 42, "pull_request": { "url": "https://api.github.com/repos/acme/repo/pulls/42" } },
-                  "comment": { "id": 9001 }
-                }
-              },
-              {
-                "id": "e-3",
-                "type": "PullRequestReviewEvent",
-                "created_at": "2026-03-10T10:02:00Z",
-                "payload": {
-                  "action": "submitted",
-                  "pull_request": { "number": 42 },
-                  "review": { "id": 777 }
-                }
-              },
-              {
-                "id": "e-4",
-                "type": "PullRequestReviewCommentEvent",
-                "created_at": "2026-03-10T10:03:00Z",
-                "payload": {
-                  "action": "created",
-                  "pull_request": { "number": 99 },
-                  "comment": { "id": 888 }
-                }
-              }
-            ]"#,
-        );
-
-        let changes = parse_repo_event_changes(&events);
-        assert_eq!(changes.touched_pr_numbers, vec![42, 99]);
     }
 
     #[test]
@@ -284,36 +183,5 @@ mod tests {
         assert_eq!(refs[0].repo_name, "core");
         assert_eq!(refs[0].number, 7);
         assert_eq!(refs[1].number, 9);
-    }
-
-    #[test]
-    fn test_parse_repo_event_changes_is_idempotent_for_duplicate_events() {
-        let events = parse_events(
-            r#"[
-              {
-                "id": "dup-1",
-                "type": "IssueCommentEvent",
-                "created_at": "2026-03-10T10:01:00Z",
-                "payload": {
-                  "action": "created",
-                  "issue": { "number": 42, "pull_request": { "url": "https://api.github.com/repos/acme/repo/pulls/42" } },
-                  "comment": { "id": 9001 }
-                }
-              },
-              {
-                "id": "dup-1",
-                "type": "IssueCommentEvent",
-                "created_at": "2026-03-10T10:01:00Z",
-                "payload": {
-                  "action": "created",
-                  "issue": { "number": 42, "pull_request": { "url": "https://api.github.com/repos/acme/repo/pulls/42" } },
-                  "comment": { "id": 9001 }
-                }
-              }
-            ]"#,
-        );
-
-        let changes = parse_repo_event_changes(&events);
-        assert_eq!(changes.touched_pr_numbers, vec![42]);
     }
 }

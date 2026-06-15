@@ -9,7 +9,6 @@ export interface ProjectSettingsSavePayload {
   projectId: string
   projectName: string
   projectPath: string
-  githubDefaultRepo: string
   agentInstructions: string
   handoffNotesTemplate: string
   aiProvider: string
@@ -28,7 +27,6 @@ export interface GlobalSettingsSavePayload {
 
 export async function saveProjectSettings(payload: ProjectSettingsSavePayload): Promise<void> {
   await updateProject(payload.projectId, payload.projectName, payload.projectPath)
-  await setProjectConfig(payload.projectId, 'github_default_repo', payload.githubDefaultRepo)
   await setProjectConfig(payload.projectId, 'additional_instructions', payload.agentInstructions)
   await setProjectConfig(payload.projectId, 'handoff_notes_template', payload.handoffNotesTemplate)
   await setProjectConfig(payload.projectId, 'ai_provider', payload.aiProvider)

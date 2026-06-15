@@ -34,6 +34,7 @@ function makeAction(overrides: Partial<Action> = {}): Action {
 function makePR(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
   return {
     id: 1,
+    pr_number: 1,
     ticket_id: 'T-100',
     repo_owner: 'test',
     repo_name: 'test',

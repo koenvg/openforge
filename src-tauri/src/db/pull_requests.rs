@@ -6,6 +6,7 @@ use std::collections::HashSet;
 #[derive(Debug, Clone, Serialize)]
 pub struct PrRow {
     pub id: i64,
+    pub pr_number: i64,
     pub ticket_id: String,
     pub repo_owner: String,
     pub repo_name: String,
@@ -24,6 +25,31 @@ pub struct PrRow {
     pub draft: bool,
     pub is_queued: bool,
     pub unaddressed_comment_count: i64,
+}
+
+fn read_pr_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrRow> {
+    Ok(PrRow {
+        id: row.get(0)?,
+        pr_number: row.get(1)?,
+        ticket_id: row.get(2)?,
+        repo_owner: row.get(3)?,
+        repo_name: row.get(4)?,
+        title: row.get(5)?,
+        url: row.get(6)?,
+        state: row.get(7)?,
+        head_sha: row.get(8)?,
+        ci_status: row.get(9)?,
+        ci_check_runs: row.get(10)?,
+        review_status: row.get(11)?,
+        mergeable: row.get(12)?,
+        mergeable_state: row.get(13)?,
+        merged_at: row.get(14)?,
+        created_at: row.get(15)?,
+        updated_at: row.get(16)?,
+        draft: row.get(17)?,
+        is_queued: row.get(18)?,
+        unaddressed_comment_count: row.get(19)?,
+    })
 }
 
 /// PR comment row from database
@@ -45,36 +71,14 @@ impl super::Database {
     pub fn get_open_prs(&self) -> Result<Vec<PrRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, mergeable, mergeable_state, merged_at, created_at, updated_at, draft, is_queued,
+            "SELECT id, pr_number, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, mergeable, mergeable_state, merged_at, created_at, updated_at, draft, is_queued,
                     (SELECT COUNT(*) FROM pr_comments WHERE pr_id = pull_requests.id AND addressed = 0) as unaddressed_comment_count
              FROM pull_requests
              WHERE state = 'open'
              ORDER BY updated_at DESC"
         )?;
 
-        let prs = stmt.query_map([], |row| {
-            Ok(PrRow {
-                id: row.get(0)?,
-                ticket_id: row.get(1)?,
-                repo_owner: row.get(2)?,
-                repo_name: row.get(3)?,
-                title: row.get(4)?,
-                url: row.get(5)?,
-                state: row.get(6)?,
-                head_sha: row.get(7)?,
-                ci_status: row.get(8)?,
-                ci_check_runs: row.get(9)?,
-                review_status: row.get(10)?,
-                mergeable: row.get(11)?,
-                mergeable_state: row.get(12)?,
-                merged_at: row.get(13)?,
-                created_at: row.get(14)?,
-                updated_at: row.get(15)?,
-                draft: row.get(16)?,
-                is_queued: row.get(17)?,
-                unaddressed_comment_count: row.get(18)?,
-            })
-        })?;
+        let prs = stmt.query_map([], read_pr_row)?;
 
         let mut result = Vec::new();
         for pr in prs {
@@ -86,35 +90,13 @@ impl super::Database {
     pub fn get_all_pull_requests(&self) -> Result<Vec<PrRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, mergeable, mergeable_state, merged_at, created_at, updated_at, draft, is_queued,
+            "SELECT id, pr_number, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, mergeable, mergeable_state, merged_at, created_at, updated_at, draft, is_queued,
                     (SELECT COUNT(*) FROM pr_comments WHERE pr_id = pull_requests.id AND addressed = 0) as unaddressed_comment_count
              FROM pull_requests
              ORDER BY updated_at DESC",
         )?;
 
-        let prs = stmt.query_map([], |row| {
-            Ok(PrRow {
-                id: row.get(0)?,
-                ticket_id: row.get(1)?,
-                repo_owner: row.get(2)?,
-                repo_name: row.get(3)?,
-                title: row.get(4)?,
-                url: row.get(5)?,
-                state: row.get(6)?,
-                head_sha: row.get(7)?,
-                ci_status: row.get(8)?,
-                ci_check_runs: row.get(9)?,
-                review_status: row.get(10)?,
-                mergeable: row.get(11)?,
-                mergeable_state: row.get(12)?,
-                merged_at: row.get(13)?,
-                created_at: row.get(14)?,
-                updated_at: row.get(15)?,
-                draft: row.get(16)?,
-                is_queued: row.get(17)?,
-                unaddressed_comment_count: row.get(18)?,
-            })
-        })?;
+        let prs = stmt.query_map([], read_pr_row)?;
 
         let mut result = Vec::new();
         for pr in prs {
@@ -156,8 +138,8 @@ impl super::Database {
         Ok(())
     }
 
-    /// Insert or update a pull request in the database
-    /// Uses ON CONFLICT to preserve CI status columns (head_sha, ci_status, ci_check_runs)
+    /// Insert or update a pull request in the database.
+    /// Legacy callers use the repository-local PR number as the row id.
     #[allow(clippy::too_many_arguments)]
     pub fn insert_pull_request(
         &self,
@@ -172,11 +154,36 @@ impl super::Database {
         updated_at: i64,
         draft: bool,
     ) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "INSERT INTO pull_requests (id, ticket_id, repo_owner, repo_name, title, url, state, created_at, updated_at, draft)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+        self.insert_pull_request_with_number(
+            id, id, ticket_id, repo_owner, repo_name, title, url, state, created_at, updated_at,
+            draft,
+        )
+    }
+
+    /// Insert or update a pull request in the database.
+    /// GitHub issue ids are globally unique; PR numbers are only unique within a repository.
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_pull_request_with_number(
+        &self,
+        id: i64,
+        pr_number: i64,
+        ticket_id: &str,
+        repo_owner: &str,
+        repo_name: &str,
+        title: &str,
+        url: &str,
+        state: &str,
+        created_at: i64,
+        updated_at: i64,
+        draft: bool,
+    ) -> Result<()> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        tx.execute(
+            "INSERT INTO pull_requests (id, pr_number, ticket_id, repo_owner, repo_name, title, url, state, created_at, updated_at, draft)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
              ON CONFLICT(id) DO UPDATE SET
+               pr_number=excluded.pr_number,
                ticket_id=excluded.ticket_id,
                repo_owner=excluded.repo_owner,
                repo_name=excluded.repo_name,
@@ -187,6 +194,7 @@ impl super::Database {
                draft=excluded.draft",
             rusqlite::params![
                 id,
+                pr_number,
                 ticket_id,
                 repo_owner,
                 repo_name,
@@ -198,6 +206,21 @@ impl super::Database {
                 draft,
             ],
         )?;
+        tx.execute(
+            "UPDATE pr_comments
+             SET pr_id = ?1
+             WHERE pr_id IN (
+               SELECT id FROM pull_requests
+               WHERE repo_owner = ?2 AND repo_name = ?3 AND pr_number = ?4 AND id <> ?1
+             )",
+            rusqlite::params![id, repo_owner, repo_name, pr_number],
+        )?;
+        tx.execute(
+            "DELETE FROM pull_requests
+             WHERE repo_owner = ?1 AND repo_name = ?2 AND pr_number = ?3 AND id <> ?4",
+            rusqlite::params![repo_owner, repo_name, pr_number, id],
+        )?;
+        tx.commit()?;
         Ok(())
     }
 
@@ -452,6 +475,35 @@ impl super::Database {
         Ok(())
     }
 
+    pub fn close_stale_open_prs_by_ids(&self, open_pr_ids: &[i64]) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        if open_pr_ids.is_empty() {
+            conn.execute(
+                "UPDATE pull_requests SET state = 'closed' WHERE state = 'open'",
+                [],
+            )?;
+        } else {
+            let placeholders: Vec<String> = open_pr_ids
+                .iter()
+                .enumerate()
+                .map(|(i, _)| format!("?{}", i + 1))
+                .collect();
+            let sql = format!(
+                "UPDATE pull_requests SET state = 'closed' WHERE state = 'open' AND id NOT IN ({})",
+                placeholders.join(", ")
+            );
+            let mut stmt = conn.prepare(&sql)?;
+            let params: Vec<Box<dyn rusqlite::types::ToSql>> = open_pr_ids
+                .iter()
+                .map(|id| Box::new(*id) as Box<dyn rusqlite::types::ToSql>)
+                .collect();
+            let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+                params.iter().map(|p| p.as_ref()).collect();
+            stmt.execute(param_refs.as_slice())?;
+        }
+        Ok(())
+    }
+
     pub fn mark_comments_addressed(&self, ids: &[i64]) -> Result<()> {
         if ids.is_empty() {
             return Ok(());
@@ -524,6 +576,120 @@ mod tests {
 
         let open_prs = db.get_open_prs().expect("get open prs failed");
         assert_eq!(open_prs.len(), 0);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_pull_requests_with_same_number_in_different_repositories_do_not_collide() {
+        let (db, path) = make_test_db("pr_same_number_different_repos");
+        insert_test_task(&db);
+
+        db.insert_pull_request_with_number(
+            1001,
+            42,
+            "T-100",
+            "acme",
+            "web",
+            "Web changes",
+            "https://github.com/acme/web/pull/42",
+            "open",
+            1000,
+            2000,
+            false,
+        )
+        .expect("insert web pr failed");
+        db.insert_pull_request_with_number(
+            2001,
+            42,
+            "T-100",
+            "acme",
+            "api",
+            "API changes",
+            "https://github.com/acme/api/pull/42",
+            "open",
+            1000,
+            2000,
+            false,
+        )
+        .expect("insert api pr failed");
+
+        let open_prs = db.get_open_prs().expect("get open prs failed");
+        assert_eq!(open_prs.len(), 2);
+        assert!(open_prs
+            .iter()
+            .any(|pr| pr.id == 1001 && pr.pr_number == 42 && pr.repo_name == "web"));
+        assert!(open_prs
+            .iter()
+            .any(|pr| pr.id == 2001 && pr.pr_number == 42 && pr.repo_name == "api"));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_global_pr_upsert_migrates_legacy_repo_number_row_and_comments() {
+        let (db, path) = make_test_db("pr_global_upsert_migrates_legacy_row");
+        insert_test_task(&db);
+
+        db.insert_pull_request(
+            42,
+            "T-100",
+            "acme",
+            "repo",
+            "Legacy title",
+            "https://github.com/acme/repo/pull/42",
+            "open",
+            1000,
+            1000,
+            false,
+        )
+        .expect("insert legacy pr failed");
+        db.insert_pr_comment(
+            9001,
+            42,
+            "reviewer",
+            "Still needs work",
+            "review_comment",
+            Some("src/main.rs"),
+            Some(12),
+            false,
+            1500,
+        )
+        .expect("insert legacy comment failed");
+
+        db.insert_pull_request_with_number(
+            1001,
+            42,
+            "T-100",
+            "acme",
+            "repo",
+            "Global title",
+            "https://github.com/acme/repo/pull/42",
+            "open",
+            1000,
+            2000,
+            false,
+        )
+        .expect("upsert global pr failed");
+
+        let all_prs = db.get_all_pull_requests().expect("get prs failed");
+        assert_eq!(all_prs.len(), 1);
+        assert_eq!(all_prs[0].id, 1001);
+        assert_eq!(all_prs[0].pr_number, 42);
+        assert_eq!(all_prs[0].title, "Global title");
+        assert_eq!(all_prs[0].unaddressed_comment_count, 1);
+
+        let comments = db.get_comments_for_pr(1001).expect("get comments failed");
+        assert_eq!(comments.len(), 1);
+        assert_eq!(comments[0].id, 9001);
+        assert_eq!(comments[0].pr_id, 1001);
+
+        let legacy_comments = db
+            .get_comments_for_pr(42)
+            .expect("get legacy comments failed");
+        assert!(legacy_comments.is_empty());
 
         drop(db);
         let _ = fs::remove_file(&path);

@@ -63,6 +63,7 @@ export interface PrComment {
 
 export interface PullRequestInfo {
   id: number;
+  pr_number: number;
   ticket_id: string;
   repo_owner: string;
   repo_name: string;

@@ -186,20 +186,6 @@ impl GitHubClient {
         Ok(all_comments)
     }
 
-    /// List all open pull requests for a repository
-    pub async fn list_open_prs(
-        &self,
-        owner: &str,
-        repo: &str,
-        token: &str,
-    ) -> Result<Vec<PullRequest>, GitHubError> {
-        let url = format!(
-            "https://api.github.com/repos/{}/{}/pulls?state=open&per_page=100",
-            owner, repo
-        );
-        self.get_with_etag::<Vec<PullRequest>>(&url, token).await
-    }
-
     pub async fn search_review_requested_prs(
         &self,
         username: &str,
