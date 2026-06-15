@@ -94,6 +94,7 @@ const basePrComment: PrComment = {
 
 const baseLinkedPr: PullRequestInfo = {
 	id: 10,
+	pr_number: 10,
 	ticket_id: "task-1",
 	repo_owner: "org",
 	repo_name: "repo",

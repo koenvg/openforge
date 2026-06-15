@@ -57,7 +57,7 @@ export function useMergeOrchestration() {
     setMergeFeedback(pr.id, null)
 
     try {
-      await mergePullRequest(pr.repo_owner, pr.repo_name, pr.id)
+      await mergePullRequest(pr.repo_owner, pr.repo_name, pr.pr_number ?? pr.id)
 
       updateTaskPullRequests(taskId, (currentTaskPrs) =>
         currentTaskPrs.map((taskPr) =>

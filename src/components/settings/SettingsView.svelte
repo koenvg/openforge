@@ -25,7 +25,6 @@
   import { enabledPluginIds, runtimeContributionSources } from '../../lib/plugin/pluginStore'
   import SettingsGeneralCard from './SettingsGeneralCard.svelte'
   import SettingsFocusFilterCard from './SettingsFocusFilterCard.svelte'
-  import SettingsIntegrationsCard from './SettingsIntegrationsCard.svelte'
   import SettingsPreferencesCard from './SettingsPreferencesCard.svelte'
   import SettingsAICard from './SettingsAICard.svelte'
   import SettingsInstructionsCard from './SettingsInstructionsCard.svelte'
@@ -47,7 +46,6 @@
   // Project state
   let projectName = $state('')
   let projectPath = $state('')
-  let githubDefaultRepo = $state('')
   let agentInstructions = $state('')
   let handoffNotesTemplate = $state('')
   let aiProvider = $state('claude-code')
@@ -121,7 +119,7 @@
   // Scroll spy
   let scrollContainer = $state<HTMLDivElement | null>(null)
   let isNavigating = false
-  const projectSections = ['general', 'integrations', 'instructions', 'plugins', 'actions']
+  const projectSections = ['general', 'instructions', 'plugins', 'actions']
   const globalSections = ['preferences', 'ai', 'credentials', 'experimental']
 
   // Derived state
@@ -146,7 +144,6 @@
     const pid = $activeProjectId
     if (pid) {
       loadProjectSettings(pid).then((settings) => {
-        githubDefaultRepo = settings.githubDefaultRepo
         agentInstructions = settings.agentInstructions
         handoffNotesTemplate = settings.handoffNotesTemplate
         aiProvider = settings.aiProvider
@@ -156,7 +153,6 @@
         focusFilterStates = settings.focusFilterStates
       })
     } else {
-      githubDefaultRepo = ''
       agentInstructions = ''
       handoffNotesTemplate = ''
       aiProvider = 'claude-code'
@@ -262,7 +258,6 @@
           projectId: $activeProjectId,
           projectName,
           projectPath,
-          githubDefaultRepo,
           agentInstructions,
           handoffNotesTemplate,
           aiProvider,
@@ -424,12 +419,6 @@
           focusStates={focusFilterStates}
           onFocusStatesChange={(states) => { focusFilterStates = states; scheduleSave() }}
           disabled={!hasProject}
-        />
-
-        <SettingsIntegrationsCard
-          {githubDefaultRepo}
-          disabled={!hasProject}
-          onGithubDefaultRepoChange={(v) => { githubDefaultRepo = v; scheduleSave() }}
         />
 
         <SettingsInstructionsCard

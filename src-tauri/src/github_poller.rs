@@ -6,9 +6,10 @@
 //! ## Architecture
 //! - Spawned as background task by the Electron sidecar HTTP runtime
 //! - Reads GitHub token from secure storage
-//! - Iterates all projects and reads per-project github_default_repo
-//! - For each project with GitHub config:
-//!   - Gets all open PRs from pull_requests table
+//! - Searches open Pull Requests authored by the configured GitHub token account
+//! - Links authored PRs to Tasks when a unique Task ID appears in branch, title, or body
+//! - For each project:
+//!   - Gets all linked open PRs from pull_requests table
 //!   - Fetches PR status from GitHub API (detects merged/closed PRs)
 //!   - For each PR, fetches comments via GitHubClient::get_pr_comments()
 //!   - Inserts NEW comments only (checks if comment id exists)
@@ -25,14 +26,13 @@
 //! - Logs errors and continues (doesn't crash the polling loop)
 //! - Individual PR errors don't stop the batch
 //! - Network errors trigger retry on next cycle
-//! - Skips projects with missing GitHub config
+//! - Skips GitHub syncing when no token is configured
 
 use crate::app_events::{publish_app_event, AppEventSender};
 use crate::db::{Database, PrRow};
 use crate::github_client::{
     aggregate_ci_status, aggregate_review_status, deduplicate_check_runs, filter_to_required,
-    parse_repo_event_changes, CheckRunsResponse, CombinedStatusResponse, GitHubClient, PrComment,
-    PrReview,
+    CheckRunsResponse, CombinedStatusResponse, GitHubClient, PrComment, PrReview,
 };
 use futures::future::join_all;
 use log::{debug, error, info, warn};
@@ -192,54 +192,20 @@ async fn poll_github_once_with_state(
     let mut total_errors = 0;
     let mut rate_limit_count = 0;
 
+    let sync_start = Instant::now();
+    if let Err(e) = sync_authored_task_prs(github_client, &db, &github_token).await {
+        error!("[GitHub Poller] Failed to sync authored task PRs: {}", e);
+        total_errors += 1;
+        if e.should_increment_rate_limit_count() {
+            rate_limit_count += 1;
+        }
+    }
+    debug!(
+        "[GitHub Poller] Sync authored task PRs took {:.1}s",
+        sync_start.elapsed().as_secs_f64()
+    );
+
     for project in projects {
-        let config = match read_project_config(&db, &project.id) {
-            Ok(Some(cfg)) => cfg,
-            Ok(None) => {
-                continue;
-            }
-            Err(e) => {
-                error!(
-                    "[GitHub Poller] Failed to read config for project {}: {}",
-                    project.id, e
-                );
-                total_errors += 1;
-                continue;
-            }
-        };
-
-        if config.github_default_repo.is_empty() {
-            continue;
-        }
-
-        let parts: Vec<&str> = config.github_default_repo.split('/').collect();
-        if parts.len() != 2 {
-            error!(
-                "[GitHub Poller] Invalid repo format for project {}: {}",
-                project.id, config.github_default_repo
-            );
-            total_errors += 1;
-            continue;
-        }
-
-        let sync_start = Instant::now();
-        if let Err(e) = sync_open_prs(github_client, &db, &config, &github_token).await {
-            error!(
-                "[GitHub Poller] Failed to sync PRs for project {}: {}",
-                project.id, e
-            );
-            total_errors += 1;
-            if e.should_increment_rate_limit_count() {
-                rate_limit_count += 1;
-            }
-            continue;
-        }
-        debug!(
-            "[GitHub Poller] Sync open PRs for project {} took {:.1}s",
-            project.id,
-            sync_start.elapsed().as_secs_f64()
-        );
-
         let open_prs = match get_open_prs_for_project(&db, &project.id) {
             Ok(prs) => prs,
             Err(e) => {
@@ -252,20 +218,6 @@ async fn poll_github_once_with_state(
             }
         };
 
-        let activity_pr_numbers = match github_client
-            .list_repo_events(parts[0], parts[1], &github_token)
-            .await
-        {
-            Ok(events) => parse_repo_event_changes(&events).touched_pr_numbers,
-            Err(e) => {
-                error!(
-                    "[GitHub Poller] Failed to fetch repo events for {}/{}: {}",
-                    parts[0], parts[1], e
-                );
-                Vec::new()
-            }
-        };
-
         let poll_start = Instant::now();
         let (new_comments, ci_changes, review_changes, errors) = poll_prs_for_project(
             github_client,
@@ -273,7 +225,7 @@ async fn poll_github_once_with_state(
             events,
             &github_token,
             open_prs,
-            &activity_pr_numbers,
+            &[],
         )
         .await;
         debug!(
@@ -429,33 +381,6 @@ fn json_value_for_event<T: Serialize>(value: &T) -> serde_json::Value {
     serde_json::to_value(value).unwrap_or(serde_json::Value::Null)
 }
 
-#[derive(Debug)]
-struct PollerConfig {
-    project_id: String,
-    github_default_repo: String,
-}
-
-fn read_project_config(
-    db: &Mutex<Database>,
-    project_id: &str,
-) -> Result<Option<PollerConfig>, String> {
-    let db_lock = db.lock().unwrap();
-
-    let github_default_repo = db_lock
-        .get_project_config(project_id, "github_default_repo")
-        .map_err(|e| e.to_string())?
-        .unwrap_or_default();
-
-    if github_default_repo.is_empty() {
-        return Ok(None);
-    }
-
-    Ok(Some(PollerConfig {
-        project_id: project_id.to_string(),
-        github_default_repo,
-    }))
-}
-
 fn get_open_prs_for_project(db: &Mutex<Database>, project_id: &str) -> Result<Vec<PrRow>, String> {
     let db_lock = db.lock().unwrap();
     let all_open_prs = db_lock.get_open_prs().map_err(|e| e.to_string())?;
@@ -502,7 +427,6 @@ impl fmt::Display for PollPhaseError {
 
 #[derive(Debug)]
 enum SyncOpenPrsError {
-    InvalidRepoFormat(String),
     GitHub(crate::github_client::GitHubError),
     Db(String),
 }
@@ -516,124 +440,36 @@ impl SyncOpenPrsError {
 impl fmt::Display for SyncOpenPrsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidRepoFormat(message) | Self::Db(message) => f.write_str(message),
+            Self::Db(message) => f.write_str(message),
             Self::GitHub(error) => write!(f, "{}", error),
         }
     }
 }
 
-async fn sync_open_prs(
+async fn sync_authored_task_prs(
     github_client: &GitHubClient,
     db: &Mutex<Database>,
-    config: &PollerConfig,
     github_token: &str,
 ) -> Result<usize, SyncOpenPrsError> {
-    let parts: Vec<&str> = config.github_default_repo.split('/').collect();
-    if parts.len() != 2 {
-        return Err(SyncOpenPrsError::InvalidRepoFormat(
-            "github_default_repo must be in format 'owner/repo'".to_string(),
-        ));
-    }
-    let (repo_owner, repo_name) = (parts[0], parts[1]);
+    let username = match read_or_fetch_github_username(github_client, db, github_token).await? {
+        Some(username) => username,
+        None => return Ok(0),
+    };
 
-    let github_prs = github_client
-        .list_open_prs(repo_owner, repo_name, github_token)
+    let (github_prs, all_search_ids) = github_client
+        .search_authored_prs(&username, github_token)
         .await
         .map_err(SyncOpenPrsError::GitHub)?;
 
     let task_ids: Vec<String> = {
         let db_lock = db.lock().unwrap();
         db_lock
-            .get_tasks_for_project(&config.project_id)
+            .get_all_tasks()
             .map_err(|e| SyncOpenPrsError::Db(format!("Failed to get task data: {}", e)))?
             .into_iter()
             .map(|task| task.id)
             .collect()
     };
-
-    let open_pr_ids: Vec<i64> = github_prs.iter().map(|pr| pr.number).collect();
-
-    let closed_prs = {
-        let db_lock = db.lock().unwrap();
-        let all_open_prs = db_lock
-            .get_open_prs()
-            .map_err(|e| SyncOpenPrsError::Db(e.to_string()))?;
-
-        all_open_prs
-            .into_iter()
-            .filter(|pr| {
-                pr.repo_owner == repo_owner
-                    && pr.repo_name == repo_name
-                    && !open_pr_ids.contains(&pr.id)
-            })
-            .collect::<Vec<_>>()
-    };
-
-    let mut merged_pr_ids: HashSet<i64> = HashSet::new();
-    let merge_check_futures: Vec<_> = closed_prs
-        .iter()
-        .map(|pr| {
-            let client = github_client.clone();
-            let token = github_token.to_string();
-            let owner = pr.repo_owner.clone();
-            let name = pr.repo_name.clone();
-            let pr_id = pr.id;
-            async move {
-                match client.get_pr_details(&owner, &name, pr_id, &token).await {
-                    Ok(details) => {
-                        let merged = details
-                            .extra
-                            .get("merged")
-                            .and_then(|v| v.as_bool())
-                            .unwrap_or(false);
-                        let merged_at = details
-                            .extra
-                            .get("merged_at")
-                            .and_then(|v| v.as_str())
-                            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-                            .map(|dt| dt.timestamp());
-                        (pr_id, merged, merged_at)
-                    }
-                    Err(e) => {
-                        warn!(
-                            "[GitHub Poller] Failed to check merge status for PR #{}: {}",
-                            pr_id, e
-                        );
-                        (pr_id, false, None)
-                    }
-                }
-            }
-        })
-        .collect();
-
-    let merge_results = join_all(merge_check_futures).await;
-
-    {
-        let db_lock = db.lock().unwrap();
-        for (pr_id, merged, merged_at) in &merge_results {
-            if *merged {
-                merged_pr_ids.insert(*pr_id);
-                if let Some(ts) = merged_at {
-                    if let Err(e) = db_lock.update_pr_merged(*pr_id, *ts) {
-                        error!(
-                            "[GitHub Poller] Failed to update merged status for PR #{}: {}",
-                            pr_id, e
-                        );
-                    }
-                }
-            }
-        }
-    }
-
-    let mut dont_close_ids = open_pr_ids.clone();
-    dont_close_ids.extend(merged_pr_ids.iter());
-
-    {
-        let db_lock = db.lock().unwrap();
-        db_lock
-            .close_stale_open_prs(repo_owner, repo_name, &dont_close_ids)
-            .map_err(|e| SyncOpenPrsError::Db(format!("Failed to close stale PRs: {}", e)))?;
-    }
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -641,28 +477,65 @@ async fn sync_open_prs(
         .as_secs() as i64;
 
     let mut synced = 0;
-    for pr in &github_prs {
-        if let Some(task_id) = find_authoritative_task_id(&pr.title, &pr.head.ref_name, &task_ids) {
-            let db_lock = db.lock().unwrap();
-            let _ = db_lock.insert_pull_request(
-                pr.number,
-                &task_id,
-                repo_owner,
-                repo_name,
-                &pr.title,
-                &pr.html_url,
-                &pr.state,
-                now,
-                now,
-                pr.draft.unwrap_or(false),
-            );
-            let _ = db_lock.update_pr_head_sha(pr.number, &pr.head.sha);
-            drop(db_lock);
-            synced += 1;
+    {
+        let db_lock = db.lock().unwrap();
+        for pr in &github_prs {
+            if let Some(task_id) =
+                find_authoritative_task_id(&pr.title, &pr.head_ref, pr.body.as_deref(), &task_ids)
+            {
+                db_lock
+                    .insert_pull_request_with_number(
+                        pr.id,
+                        pr.number,
+                        &task_id,
+                        &pr.repo_owner,
+                        &pr.repo_name,
+                        &pr.title,
+                        &pr.html_url,
+                        &pr.state,
+                        now,
+                        now,
+                        pr.draft,
+                    )
+                    .map_err(|e| SyncOpenPrsError::Db(format!("Failed to upsert PR: {}", e)))?;
+                db_lock
+                    .update_pr_head_sha(pr.id, &pr.head_sha)
+                    .map_err(|e| SyncOpenPrsError::Db(format!("Failed to update PR head SHA: {}", e)))?;
+                db_lock
+                    .update_pr_mergeability(pr.id, pr.mergeable, pr.mergeable_state.as_deref())
+                    .map_err(|e| SyncOpenPrsError::Db(format!("Failed to update PR mergeability: {}", e)))?;
+                synced += 1;
+            }
+        }
+
+        if !all_search_ids.is_empty() || github_prs.is_empty() {
+            db_lock
+                .close_stale_open_prs_by_ids(&all_search_ids)
+                .map_err(|e| SyncOpenPrsError::Db(format!("Failed to close stale PRs: {}", e)))?;
         }
     }
 
     Ok(synced)
+}
+
+async fn read_or_fetch_github_username(
+    github_client: &GitHubClient,
+    db: &Mutex<Database>,
+    github_token: &str,
+) -> Result<Option<String>, SyncOpenPrsError> {
+    let username = github_client
+        .get_authenticated_user(github_token)
+        .await
+        .map_err(SyncOpenPrsError::GitHub)?;
+
+    {
+        let db_lock = db.lock().unwrap();
+        db_lock
+            .set_config("github_username", &username)
+            .map_err(|e| SyncOpenPrsError::Db(format!("Failed to cache GitHub username: {}", e)))?;
+    }
+
+    Ok(Some(username))
 }
 
 fn find_task_id_position(text: &str, task_id: &str) -> Option<usize> {
@@ -719,6 +592,7 @@ fn classify_task_matches(text: &str, task_ids: &[String]) -> TaskMatchOutcome {
 fn find_authoritative_task_id(
     pr_title: &str,
     pr_branch: &str,
+    pr_body: Option<&str>,
     task_ids: &[String],
 ) -> Option<String> {
     match classify_task_matches(pr_branch, task_ids) {
@@ -726,7 +600,11 @@ fn find_authoritative_task_id(
         TaskMatchOutcome::Ambiguous => None,
         TaskMatchOutcome::None => match classify_task_matches(pr_title, task_ids) {
             TaskMatchOutcome::Unique(task_id) => Some(task_id),
-            TaskMatchOutcome::Ambiguous | TaskMatchOutcome::None => None,
+            TaskMatchOutcome::Ambiguous => None,
+            TaskMatchOutcome::None => pr_body.and_then(|body| match classify_task_matches(body, task_ids) {
+                TaskMatchOutcome::Unique(task_id) => Some(task_id),
+                TaskMatchOutcome::Ambiguous | TaskMatchOutcome::None => None,
+            }),
         },
     }
 }
@@ -829,7 +707,7 @@ async fn poll_single_pr(
             .get_pr_comments(
                 &pr.repo_owner,
                 &pr.repo_name,
-                pr.id,
+                pr.pr_number,
                 &github_token,
                 since_ref,
             )
@@ -887,9 +765,9 @@ async fn poll_single_pr(
     };
 
     let reviews_future =
-        github_client.get_pr_reviews(&pr.repo_owner, &pr.repo_name, pr.id, &github_token);
+        github_client.get_pr_reviews(&pr.repo_owner, &pr.repo_name, pr.pr_number, &github_token);
     let pr_details_future =
-        github_client.get_pr_details(&pr.repo_owner, &pr.repo_name, pr.id, &github_token);
+        github_client.get_pr_details(&pr.repo_owner, &pr.repo_name, pr.pr_number, &github_token);
 
     let ((check_runs_result, combined_status_result), reviews_result, pr_details_result) =
         tokio::join!(ci_future, reviews_future, pr_details_future);
@@ -899,7 +777,7 @@ async fn poll_single_pr(
         Err(e) => {
             warn!(
                 "[GitHub Poller] Failed to fetch check runs for PR #{}: {}",
-                pr.id, e
+                pr.pr_number, e
             );
             None
         }
@@ -910,7 +788,7 @@ async fn poll_single_pr(
         Err(e) => {
             warn!(
                 "[GitHub Poller] Failed to fetch combined status for PR #{}: {}",
-                pr.id, e
+                pr.pr_number, e
             );
             None
         }
@@ -921,7 +799,7 @@ async fn poll_single_pr(
         Err(e) => {
             warn!(
                 "[GitHub Poller] Failed to fetch reviews for PR #{}: {}",
-                pr.id, e
+                pr.pr_number, e
             );
             None
         }
@@ -945,7 +823,7 @@ async fn poll_single_pr(
         Err(e) => {
             warn!(
                 "[GitHub Poller] Failed to fetch PR details for PR #{}: {}",
-                pr.id, e
+                pr.pr_number, e
             );
             false
         }
@@ -1095,7 +973,7 @@ async fn poll_prs_for_project(
                 .get(&pr.id)
                 .cloned()
                 .unwrap_or((None, None));
-            let fetch_comments = should_fetch_comments_for_pr(pr.id, &changed_pr_numbers);
+            let fetch_comments = should_fetch_comments_for_pr(pr.pr_number, &changed_pr_numbers);
             poll_single_pr(
                 client,
                 token,
@@ -1740,10 +1618,15 @@ mod tests {
     }
 
     #[test]
-    fn test_find_authoritative_task_id_prefers_branch_match_over_title_match() {
-        let task_ids = vec!["T-2".to_string(), "T-1".to_string()];
+    fn test_find_authoritative_task_id_prefers_branch_match_over_title_and_body_match() {
+        let task_ids = vec!["T-2".to_string(), "T-1".to_string(), "T-3".to_string()];
 
-        let matched = find_authoritative_task_id("Fix T-2", "feature/T-1-auth", &task_ids);
+        let matched = find_authoritative_task_id(
+            "Fix T-2",
+            "feature/T-1-auth",
+            Some("Closes T-3"),
+            &task_ids,
+        );
 
         assert_eq!(matched.as_deref(), Some("T-1"));
     }
@@ -1752,74 +1635,46 @@ mod tests {
     fn test_find_authoritative_task_id_uses_unique_title_match_when_branch_has_none() {
         let task_ids = vec!["T-2".to_string(), "T-1".to_string(), "T-3".to_string()];
 
-        let matched = find_authoritative_task_id("Fix T-3", "feature/auth", &task_ids);
+        let matched = find_authoritative_task_id("Fix T-3", "feature/auth", None, &task_ids);
 
         assert_eq!(matched.as_deref(), Some("T-3"));
+    }
+
+    #[test]
+    fn test_find_authoritative_task_id_uses_unique_body_match_when_branch_and_title_have_none() {
+        let task_ids = vec!["T-2".to_string(), "T-1".to_string(), "T-3".to_string()];
+
+        let matched = find_authoritative_task_id(
+            "Fix authentication",
+            "feature/auth",
+            Some("Implementation for Task T-3."),
+            &task_ids,
+        );
+
+        assert_eq!(matched.as_deref(), Some("T-3"));
+    }
+
+    #[test]
+    fn test_find_authoritative_task_id_rejects_ambiguous_body_matches() {
+        let task_ids = vec!["T-2".to_string(), "T-1".to_string()];
+
+        let matched = find_authoritative_task_id(
+            "Fix authentication",
+            "feature/auth",
+            Some("Covers T-1 and T-2."),
+            &task_ids,
+        );
+
+        assert_eq!(matched, None);
     }
 
     #[test]
     fn test_find_authoritative_task_id_rejects_ambiguous_title_matches() {
         let task_ids = vec!["T-2".to_string(), "T-1".to_string()];
 
-        let matched = find_authoritative_task_id("Fix T-1 before T-2", "feature/auth", &task_ids);
+        let matched = find_authoritative_task_id("Fix T-1 before T-2", "feature/auth", None, &task_ids);
 
         assert_eq!(matched, None);
-    }
-
-    #[test]
-    fn test_read_project_config_returns_github_default_repo() {
-        use crate::db::Database;
-        use std::fs;
-
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join("test_poller_config.db");
-        let _ = fs::remove_file(&db_path);
-
-        let db = Database::new(db_path.clone()).expect("Failed to create database");
-
-        let project = db
-            .create_project("Test Project", "/tmp/test")
-            .expect("Failed to create project");
-
-        db.set_project_config(&project.id, "github_default_repo", "owner/repo")
-            .expect("Failed to set github_default_repo");
-
-        let db_mutex = Mutex::new(db);
-
-        let config = read_project_config(&db_mutex, &project.id)
-            .expect("Failed to read config")
-            .expect("Config should not be None");
-
-        assert_eq!(config.project_id, project.id);
-        assert_eq!(config.github_default_repo, "owner/repo");
-
-        drop(db_mutex);
-        let _ = fs::remove_file(&db_path);
-    }
-
-    #[test]
-    fn test_read_project_config_returns_none_when_no_repo_set() {
-        use crate::db::Database;
-        use std::fs;
-
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join("test_poller_no_repo.db");
-        let _ = fs::remove_file(&db_path);
-
-        let db = Database::new(db_path.clone()).expect("Failed to create database");
-
-        let project = db
-            .create_project("Test Project", "/tmp/test")
-            .expect("Failed to create project");
-
-        let db_mutex = Mutex::new(db);
-
-        let config = read_project_config(&db_mutex, &project.id).expect("Failed to read config");
-
-        assert!(config.is_none());
-
-        drop(db_mutex);
-        let _ = fs::remove_file(&db_path);
     }
 
     #[test]

@@ -33,6 +33,7 @@ describe('App desktop events', () => {
 
       const prA: PullRequestInfo = {
         id: 42,
+        pr_number: 42,
         ticket_id: 'T-42',
         repo_owner: 'owner',
         repo_name: 'repo',
@@ -55,6 +56,7 @@ describe('App desktop events', () => {
       const prB: PullRequestInfo = {
         ...prA,
         id: 99,
+        pr_number: 99,
         ticket_id: 'T-99',
         title: 'PR B',
         state: 'open',

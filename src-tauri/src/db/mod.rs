@@ -50,6 +50,7 @@ impl Database {
             .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
 
         migrations::ensure_tasks_columns(&conn)?;
+        migrations::ensure_pr_number_column(&conn)?;
         migrations::ensure_mergeability_columns(&conn)?;
         migrations::ensure_task_dependency_table(&conn)?;
         migrations::ensure_task_label_tables(&conn)?;

@@ -44,6 +44,7 @@ import {
 function createPullRequest(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
   return {
     id: 42,
+    pr_number: 42,
     ticket_id: 'T-42',
     repo_owner: 'owner',
     repo_name: 'repo',

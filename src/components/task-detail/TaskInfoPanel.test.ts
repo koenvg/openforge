@@ -65,6 +65,7 @@ describe('TaskInfoPanel', () => {
   function createPullRequest(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
     return {
       id: 42,
+      pr_number: 42,
       ticket_id: 'T-42',
       repo_owner: 'owner',
       repo_name: 'repo',
@@ -290,6 +291,7 @@ describe('TaskInfoPanel', () => {
    it('renders pipeline status section when PRs have CI data', async () => {
      const prWithCi: PullRequestInfo = {
        id: 42,
+       pr_number: 42,
        ticket_id: 'T-42',
        repo_owner: 'owner',
        repo_name: 'repo',
@@ -325,6 +327,7 @@ describe('TaskInfoPanel', () => {
    it('renders Draft badge when PR is draft', async () => {
      const draftPr: PullRequestInfo = {
        id: 42,
+       pr_number: 42,
        ticket_id: 'T-42',
        repo_owner: 'owner',
        repo_name: 'repo',
@@ -356,6 +359,7 @@ describe('TaskInfoPanel', () => {
    it('hides Draft badge when PR is not draft', async () => {
      const openPr: PullRequestInfo = {
        id: 42,
+       pr_number: 42,
        ticket_id: 'T-42',
        repo_owner: 'owner',
        repo_name: 'repo',
@@ -493,8 +497,10 @@ describe('TaskInfoPanel', () => {
     expect(screen.getByText('Merge Conflict')).toBeTruthy()
   })
 
-  it('calls mergePullRequest with repo coordinates when Merge is clicked', async () => {
+  it('calls mergePullRequest with repo coordinates and repository-local PR number when Merge is clicked', async () => {
     const readyPr = createPullRequest({
+      id: 9001,
+      pr_number: 42,
       ci_status: 'success',
       review_status: 'approved',
       mergeable: true,
@@ -636,6 +642,7 @@ describe('TaskInfoPanel', () => {
 
     const prA = createPullRequest({
       id: 42,
+      pr_number: 42,
       ticket_id: 'T-42',
       ci_status: 'success',
       review_status: 'approved',
@@ -644,6 +651,7 @@ describe('TaskInfoPanel', () => {
     })
     const prB = createPullRequest({
       id: 99,
+      pr_number: 99,
       ticket_id: 'T-99',
       ci_status: 'success',
       review_status: 'approved',

@@ -106,9 +106,9 @@ describe('SettingsView', () => {
     expect(screen.queryAllByText(/general/i).length).toBeGreaterThan(0)
   })
 
-  it('renders Integrations section', () => {
+  it('does not render removed Integrations section', () => {
     render(SettingsView, { props: defaultProps })
-    expect(screen.queryAllByText(/integrations/i).length).toBeGreaterThan(0)
+    expect(screen.queryAllByText(/integrations/i).length).toBe(0)
   })
 
   it('renders Instructions section', () => {
@@ -143,9 +143,9 @@ describe('SettingsView', () => {
     expect(screen.queryByText(/Board Columns/i)).toBeNull()
   })
 
-  it('renders Integrations section card', () => {
+  it('does not render removed Integrations section card', () => {
     render(SettingsView, { props: defaultProps })
-    expect(screen.queryAllByText(/integrations/i).length).toBeGreaterThan(0)
+    expect(screen.queryAllByText(/integrations/i).length).toBe(0)
   })
 
   it('renders Instructions section card', () => {
@@ -219,9 +219,9 @@ describe('SettingsView', () => {
     expect(screen.getByPlaceholderText('/path/to/project')).toBeTruthy()
   })
 
-  it('renders GitHub repository field', () => {
+  it('does not render removed GitHub repository field', () => {
     render(SettingsView, { props: defaultProps })
-    expect(screen.getByPlaceholderText('owner/repo')).toBeTruthy()
+    expect(screen.queryByPlaceholderText('owner/repo')).toBeNull()
   })
 
   it('renders AI instructions textarea', () => {

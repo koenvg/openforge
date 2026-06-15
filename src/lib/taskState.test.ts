@@ -51,6 +51,7 @@ function createPr(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
 
   return {
     id: 1,
+    pr_number: 1,
     ticket_id: 'task-1',
     repo_owner: 'test',
     repo_name: 'repo',

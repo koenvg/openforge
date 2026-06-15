@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Project } from '../../lib/types'
-  import { createProject, selectDirectory, setProjectConfig } from '../../lib/ipc'
+  import { createProject, selectDirectory } from '../../lib/ipc'
   import Modal from '../shared/ui/Modal.svelte'
 
   interface Props {
@@ -12,9 +12,7 @@
 
   let projectName = $state('')
   let path = $state('')
-  let githubDefaultRepo = $state('')
   let isSubmitting = $state(false)
-  let showGithubSection = $state(false)
 
   async function handleBrowseRepository() {
     try {
@@ -37,11 +35,6 @@
     isSubmitting = true
     try {
       const project = await createProject(projectName.trim(), path.trim())
-
-      // Set GitHub config if provided
-      if (githubDefaultRepo.trim()) {
-        await setProjectConfig(project.id, 'github_default_repo', githubDefaultRepo.trim())
-      }
 
       onProjectCreated?.(project)
       close()
@@ -89,34 +82,6 @@
       </div>
       <span class="text-[0.65rem] text-base-content/40">Absolute path to the git repository on your machine. Use Browse for folders in macOS Documents/Desktop so OpenForge can be granted access.</span>
     </label>
-
-    <div class="divider my-2"></div>
-
-    <div class="my-1">
-      <button
-        class="btn btn-ghost btn-xs gap-2 text-base-content/60 font-semibold"
-        onclick={() => showGithubSection = !showGithubSection}
-        type="button"
-      >
-        <span class="text-[0.6rem] transition-transform duration-200 {showGithubSection ? 'rotate-90' : ''}">▶</span>
-        <span>GitHub Configuration (Optional)</span>
-      </button>
-    </div>
-
-    {#if showGithubSection}
-      <div class="flex flex-col gap-3.5 pl-4 mt-2">
-        <label class="flex flex-col gap-1.5">
-          <span class="text-xs text-base-content/60 font-medium">Default GitHub Repository</span>
-          <input
-            type="text"
-            class="input input-bordered input-sm w-full"
-            bind:value={githubDefaultRepo}
-            placeholder="owner/repo-name"
-          />
-          <span class="text-[0.65rem] text-base-content/40">GitHub remote repository for PRs and reviews (e.g. collibra/openforge)</span>
-        </label>
-      </div>
-    {/if}
   </form>
 
   <div class="flex gap-2.5 px-5 py-4 border-t border-base-300 justify-end">

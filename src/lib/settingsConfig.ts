@@ -13,7 +13,6 @@ import type { TaskState } from './taskState'
 import type { Action, ClaudeInstallStatus, WhisperModelStatus } from './types'
 
 export interface ProjectSettingsConfig {
-  githubDefaultRepo: string
   agentInstructions: string
   handoffNotesTemplate: string
   aiProvider: string
@@ -76,7 +75,6 @@ interface OpenCodeInstallStatus {
 }
 
 const DEFAULT_PROJECT_SETTINGS: Omit<ProjectSettingsConfig, 'actions' | 'focusFilterStates'> = {
-  githubDefaultRepo: '',
   agentInstructions: '',
   handoffNotesTemplate: '',
   aiProvider: 'claude-code',
@@ -92,8 +90,7 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettingsConfig = {
 }
 
 export async function loadProjectSettings(projectId: string): Promise<ProjectSettingsConfig> {
-  const [repo, instructions, handoffTemplate, provider, worktrees, color, actions, focusFilterStates] = await Promise.all([
-    getProjectConfig(projectId, 'github_default_repo'),
+  const [instructions, handoffTemplate, provider, worktrees, color, actions, focusFilterStates] = await Promise.all([
     getProjectConfig(projectId, 'additional_instructions'),
     getProjectConfig(projectId, 'handoff_notes_template'),
     getProjectConfig(projectId, 'ai_provider'),
@@ -104,7 +101,6 @@ export async function loadProjectSettings(projectId: string): Promise<ProjectSet
   ])
 
   return {
-    githubDefaultRepo: repo ?? DEFAULT_PROJECT_SETTINGS.githubDefaultRepo,
     agentInstructions: instructions ?? DEFAULT_PROJECT_SETTINGS.agentInstructions,
     handoffNotesTemplate: handoffTemplate ?? DEFAULT_PROJECT_SETTINGS.handoffNotesTemplate,
     aiProvider: provider ?? DEFAULT_PROJECT_SETTINGS.aiProvider,

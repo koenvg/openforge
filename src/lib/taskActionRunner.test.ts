@@ -59,6 +59,7 @@ const task: Task = {
 function createPullRequest(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
   return {
     id: 42,
+    pr_number: 42,
     ticket_id: task.id,
     repo_owner: 'owner',
     repo_name: 'repo',
@@ -153,7 +154,7 @@ describe('createTaskActionRunner', () => {
       loadTasks: vi.fn(async () => undefined),
       triggerGithubSync,
     })
-    const readyPr = createPullRequest()
+    const readyPr = createPullRequest({ id: 9001, pr_number: 42 })
     ticketPrs.set(new Map([[task.id, [readyPr]]]))
     vi.mocked(mergePullRequest).mockResolvedValue(undefined)
 

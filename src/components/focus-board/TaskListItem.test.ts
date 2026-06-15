@@ -24,6 +24,7 @@ const baseTask: Task = {
 
 const basePr: PullRequestInfo = {
   id: 99,
+  pr_number: 99,
   ticket_id: 'T-100',
   repo_owner: 'owner',
   repo_name: 'repo',

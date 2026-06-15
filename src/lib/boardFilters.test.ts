@@ -61,6 +61,7 @@ function makePr(overrides: Partial<PullRequestInfo> & { id: number }): PullReque
     draft: false,
     is_queued: false,
     unaddressed_comment_count: 0,
+    pr_number: overrides.id,
     ...overrides,
   }
 }
