@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte'
-import { writable } from 'svelte/store'
+import { get, writable } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PrFileDiff, ReviewPullRequest } from '@openforge/plugin-sdk/domain'
+import type { PrFileDiff, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge/plugin-sdk/domain'
 import { createOpenForgeRegistryFake } from '@openforge/plugin-sdk/testing'
 import type { TestingOpenForgeRegistryFake } from '@openforge/plugin-sdk/testing'
 import { requireElement } from '../../../../../src/test-utils/dom'
@@ -149,6 +149,8 @@ function registerPrReviewBackends(
   registry: TestingOpenForgeRegistryFake,
   getDiffs: (request: { prNumber: number }) => PrFileDiff[] | Promise<PrFileDiff[]>,
   prs: ReviewPullRequest[] = [basePr],
+  reviewCommentResults: ReviewComment[] | (() => ReviewComment[] | Promise<ReviewComment[]>) = [],
+  submitReview: () => Promise<void> = async () => undefined,
 ) {
   const backend = registry.backendApi.backend
   backend.registerMethod('getReviewPrs', { handler: async () => prs })
@@ -157,13 +159,17 @@ function registerPrReviewBackends(
   backend.registerMethod('fetchAuthoredPrs', { handler: async () => [] })
   backend.registerMethod('markReviewPrViewed', { handler: async () => undefined })
   backend.registerMethod('getPrFileDiffs', { handler: async (payload) => getDiffs(payload as { prNumber: number }) })
-  backend.registerMethod('getReviewComments', { handler: async () => [] })
+  backend.registerMethod('getReviewComments', {
+    handler: async () => typeof reviewCommentResults === 'function'
+      ? reviewCommentResults()
+      : reviewCommentResults,
+  })
   backend.registerMethod('getPrOverviewComments', { handler: async () => [] })
   backend.registerMethod('getAgentReviewComments', { handler: async () => [] })
   backend.registerMethod('updateAgentReviewCommentStatus', { handler: async () => undefined })
   backend.registerMethod('getFileContent', { handler: async () => '' })
   backend.registerMethod('getFileAtRef', { handler: async () => '' })
-  backend.registerMethod('submitPrReview', { handler: async () => undefined })
+  backend.registerMethod('submitPrReview', { handler: submitReview })
 }
 
 async function openFilesTab(registry: TestingOpenForgeRegistryFake) {
@@ -303,6 +309,94 @@ describe('PrReviewView reviewed files', () => {
       const changedCheckbox = requireElement(screen.getByLabelText('Mark src/main.rs reviewed'), HTMLInputElement)
       expect(changedCheckbox.checked).toBe(false)
       expect(screen.queryByLabelText('Reviewed file src/main.rs')).toBeNull()
+    })
+  })
+})
+
+describe('PrReviewView submit review', () => {
+  beforeEach(() => {
+    resetStores()
+    vi.clearAllMocks()
+  })
+
+  it('treats a rejected submit as successful when GitHub already has the submitted inline comments', async () => {
+    const submittedComment: ReviewSubmissionComment = {
+      path: baseDiff.filename,
+      line: 2,
+      side: 'RIGHT',
+      body: 'This was accepted by GitHub before the transport failed',
+    }
+    const postedComment: ReviewComment = {
+      id: 987,
+      pr_number: basePr.number,
+      repo_owner: basePr.repo_owner,
+      repo_name: basePr.repo_name,
+      path: submittedComment.path,
+      line: submittedComment.line,
+      side: submittedComment.side,
+      body: submittedComment.body,
+      author: 'koenvangeert',
+      created_at: '2026-06-11T14:00:00Z',
+      in_reply_to_id: null,
+    }
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    let reviewCommentResults: ReviewComment[] = []
+    const submitPrReview = vi.fn(async () => {
+      reviewCommentResults = [postedComment]
+      throw new Error('timed out waiting for plugin backend response')
+    })
+    registerPrReviewBackends(registry, () => [baseDiff], [basePr], () => reviewCommentResults, submitPrReview)
+
+    await openFilesTab(registry)
+    pendingManualComments.set([submittedComment])
+    await screen.findByText('1 comment will be submitted')
+    await fireEvent.click(await screen.findByRole('button', { name: 'Comment' }))
+
+    await waitFor(() => {
+      expect(submitPrReview).toHaveBeenCalledOnce()
+      expect(get(pendingManualComments)).toEqual([])
+      expect(screen.queryByText('Failed to submit review. Please try again.')).toBeNull()
+    })
+  })
+
+  it('does not treat a rejected submit as successful when the matching inline comment already existed', async () => {
+    const submittedComment: ReviewSubmissionComment = {
+      path: baseDiff.filename,
+      line: 2,
+      side: 'RIGHT',
+      body: 'This comment was already on GitHub before submit',
+    }
+    const existingComment: ReviewComment = {
+      id: 654,
+      pr_number: basePr.number,
+      repo_owner: basePr.repo_owner,
+      repo_name: basePr.repo_name,
+      path: submittedComment.path,
+      line: submittedComment.line,
+      side: submittedComment.side,
+      body: submittedComment.body,
+      author: 'koenvangeert',
+      created_at: '2026-06-11T13:55:00Z',
+      in_reply_to_id: null,
+    }
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    const submitPrReview = vi.fn(async () => {
+      throw new Error('connection closed before response')
+    })
+    registerPrReviewBackends(registry, () => [baseDiff], [basePr], [existingComment], submitPrReview)
+
+    await openFilesTab(registry)
+    await waitFor(() => {
+      expect(get(reviewComments)).toEqual([existingComment])
+    })
+    pendingManualComments.set([submittedComment])
+    await screen.findByText('1 comment will be submitted')
+    await fireEvent.click(await screen.findByRole('button', { name: 'Comment' }))
+
+    await waitFor(() => {
+      expect(submitPrReview).toHaveBeenCalledOnce()
+      expect(get(pendingManualComments)).toEqual([submittedComment])
+      expect(screen.getByText('Failed to submit review. Please try again.')).toBeTruthy()
     })
   })
 })
