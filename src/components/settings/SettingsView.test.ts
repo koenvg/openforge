@@ -48,12 +48,15 @@ vi.mock('../../lib/stores', () => ({
     },
   ]),
   codeCleanupTasksEnabled: writable(false),
+  error: writable<string | null>(null),
 }))
 
 import { createAction, loadActions, saveActions } from '../../lib/actions'
 import {
   deleteProject,
   getAllWhisperModelStatuses,
+  checkClaudeInstalled,
+  checkPiInstalled,
   getConfig,
   getProjectConfig,
   setConfig,
@@ -81,6 +84,8 @@ describe('SettingsView', () => {
     vi.mocked(setConfig).mockResolvedValue(undefined)
     vi.mocked(updateProject).mockResolvedValue(undefined)
     vi.mocked(deleteProject).mockResolvedValue(undefined)
+    vi.mocked(checkClaudeInstalled).mockResolvedValue({ installed: false, path: null, version: null, authenticated: false })
+    vi.mocked(checkPiInstalled).mockResolvedValue({ installed: false, path: null, version: null })
     vi.mocked(getAllWhisperModelStatuses).mockResolvedValue([])
     vi.mocked(loadActions).mockResolvedValue([])
 
@@ -311,6 +316,62 @@ describe('SettingsView', () => {
       vi.useRealTimers()
     })
 
+    it('communicates autosave, dirty, saving, and saved states', async () => {
+      let resolveFirstSave!: () => void
+      vi.mocked(updateProject).mockImplementationOnce(() => new Promise<void>((resolve) => {
+        resolveFirstSave = resolve
+      }))
+
+      render(SettingsView, { props: defaultProps })
+
+      await vi.advanceTimersByTimeAsync(50)
+      vi.mocked(updateProject).mockClear()
+
+      expect(screen.getByText('Autosaves changes')).toBeTruthy()
+
+      const nameInput = screen.getByPlaceholderText('My Project')
+      await fireEvent.input(nameInput, { target: { value: 'New Name' } })
+
+      expect(screen.getByText('Unsaved changes — autosaving soon…')).toBeTruthy()
+
+      await vi.advanceTimersByTimeAsync(600)
+      await vi.waitFor(() => {
+        expect(screen.getByText('Saving changes…')).toBeTruthy()
+      })
+
+      resolveFirstSave()
+      await vi.advanceTimersByTimeAsync(0)
+
+      await vi.waitFor(() => {
+        expect(screen.getByText('All changes saved')).toBeTruthy()
+      })
+    })
+
+    it('shows autosave errors with a retry action', async () => {
+      vi.mocked(updateProject)
+        .mockRejectedValueOnce(new Error('disk full'))
+        .mockResolvedValueOnce(undefined)
+
+      render(SettingsView, { props: defaultProps })
+
+      await vi.advanceTimersByTimeAsync(50)
+
+      const nameInput = screen.getByPlaceholderText('My Project')
+      await fireEvent.input(nameInput, { target: { value: 'New Name' } })
+
+      await vi.advanceTimersByTimeAsync(600)
+
+      await vi.waitFor(() => {
+        expect(screen.getByText('Autosave failed: disk full')).toBeTruthy()
+      })
+
+      await fireEvent.click(screen.getByRole('button', { name: /retry autosave/i }))
+
+      await vi.waitFor(() => {
+        expect(screen.getByText('All changes saved')).toBeTruthy()
+      })
+    })
+
     it('updates the shared active project color before debounced persistence', async () => {
       render(SettingsView, { props: defaultProps })
 
@@ -321,6 +382,53 @@ describe('SettingsView', () => {
 
       expect(get(activeProjectColorId)).toBe('violet')
       expect(vi.mocked(setProjectConfig)).not.toHaveBeenCalled()
+    })
+
+    it('refreshes provider installation status from the recovery warning', async () => {
+      vi.mocked(getProjectConfig).mockImplementation(async (_projectId: string, key: string) => {
+        if (key === 'ai_provider') return 'pi'
+        return null
+      })
+      vi.mocked(checkPiInstalled)
+        .mockResolvedValueOnce({ installed: false, path: null, version: null })
+        .mockResolvedValueOnce({ installed: true, path: '/usr/local/bin/pi', version: '2.0.0' })
+
+      render(SettingsView, { props: defaultProps })
+
+      await vi.waitFor(() => {
+        expect(screen.getByText('Pi Coding Agent is not installed')).toBeTruthy()
+      })
+
+      await fireEvent.click(screen.getByRole('button', { name: /refresh install status/i }))
+
+      await vi.waitFor(() => {
+        expect(screen.getByText('Pi 2.0.0')).toBeTruthy()
+      })
+      expect(screen.queryByText('Pi Coding Agent is not installed')).toBeNull()
+    })
+
+    it('switches to an installed provider from provider recovery', async () => {
+      vi.mocked(getProjectConfig).mockImplementation(async (_projectId: string, key: string) => {
+        if (key === 'ai_provider') return 'pi'
+        return null
+      })
+      vi.mocked(checkClaudeInstalled).mockResolvedValue({
+        installed: true,
+        path: '/usr/local/bin/claude',
+        version: '1.0.0',
+        authenticated: true,
+      })
+
+      render(SettingsView, { props: defaultProps })
+
+      await vi.waitFor(() => {
+        expect(screen.getByRole('button', { name: /switch to claude code/i })).toBeTruthy()
+      })
+
+      await fireEvent.click(screen.getByRole('button', { name: /switch to claude code/i }))
+      await vi.advanceTimersByTimeAsync(600)
+
+      expect(vi.mocked(setProjectConfig)).toHaveBeenCalledWith('test-project-id', 'ai_provider', 'claude-code')
     })
 
     it('saves project settings after debounce when a field changes', async () => {
@@ -438,7 +546,7 @@ describe('SettingsView', () => {
       await vi.advanceTimersByTimeAsync(600)
       await vi.waitFor(() => {
         expect(updateProject).toHaveBeenCalledTimes(1)
-        expect(screen.getByText('Saving…')).toBeTruthy()
+        expect(screen.getByText('Saving changes…')).toBeTruthy()
       })
 
       await fireEvent.input(nameInput, { target: { value: 'Second Name' } })
@@ -669,7 +777,7 @@ describe('SettingsView', () => {
 
       await vi.waitFor(() => {
         expect(saveActions).toHaveBeenCalledTimes(1)
-        expect(screen.getByText('Saving…')).toBeTruthy()
+        expect(screen.getByText('Saving changes…')).toBeTruthy()
       })
 
       await vi.advanceTimersByTimeAsync(600)
@@ -680,7 +788,7 @@ describe('SettingsView', () => {
 
       await vi.advanceTimersByTimeAsync(0)
       await vi.waitFor(() => {
-        expect(screen.queryByText('Saving…')).toBeNull()
+        expect(screen.queryByText('Saving changes…')).toBeNull()
       })
     })
 
@@ -712,7 +820,7 @@ describe('SettingsView', () => {
 
       await vi.waitFor(() => {
         expect(saveActions).toHaveBeenCalledTimes(1)
-        expect(screen.getByText('Saving…')).toBeTruthy()
+        expect(screen.getByText('Saving changes…')).toBeTruthy()
       })
 
       await vi.advanceTimersByTimeAsync(600)
@@ -723,7 +831,7 @@ describe('SettingsView', () => {
 
       await vi.advanceTimersByTimeAsync(0)
       await vi.waitFor(() => {
-        expect(screen.queryByText('Saving…')).toBeNull()
+        expect(screen.queryByText('Saving changes…')).toBeNull()
       })
     })
   })

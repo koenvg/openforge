@@ -44,6 +44,8 @@
 
   let { onClose, onProjectDeleted, mode }: Props = $props()
 
+  type SaveStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
+
   // Project state
   let projectName = $state('')
   let projectPath = $state('')
@@ -58,6 +60,7 @@
   let githubToken = $state('')
   let githubPollInterval = $state(DEFAULT_GITHUB_POLL_INTERVAL_SECONDS)
   let globalSettingsLoaded = $state(false)
+  let globalSettingsLoadError = $state<string | null>(null)
 
   // AI state
   let modelStatuses = $state<WhisperModelStatus[]>([])
@@ -71,6 +74,8 @@
   let piVersion = $state<string | null>(null)
   let codexInstalled = $state(false)
   let codexVersion = $state<string | null>(null)
+  let installationStatusLoading = $state(false)
+  let installationStatusError = $state<string | null>(null)
 
   // Actions state
   let actions = $state<Action[]>([])
@@ -105,6 +110,12 @@
   // UI state
   let isSaving = $state(false)
   let saved = $state(false)
+  let saveStatus = $state<SaveStatus>('idle')
+  let saveError = $state<string | null>(null)
+  let projectSettingsLoading = $state(false)
+  let projectSettingsLoadError = $state<string | null>(null)
+  let projectSettingsRequestId = 0
+  let savedStatusTimer: ReturnType<typeof setTimeout> | null = null
   const SAVE_DEBOUNCE_MS = 500
   let pendingProjectSettingsSave = $state<ProjectSettingsSavePayload | null>(null)
   let pendingGlobalSettingsSave = $state<GlobalSettingsSavePayload | null>(null)
@@ -125,9 +136,45 @@
   const projectSections = ['general', 'instructions', 'plugins', 'actions']
   const globalSections = ['preferences', 'ai', 'credentials', 'experimental']
 
+  function getErrorMessage(e: unknown): string {
+    return e instanceof Error ? e.message : String(e)
+  }
+
+  function clearSavedStatusTimer() {
+    if (savedStatusTimer) {
+      clearTimeout(savedStatusTimer)
+      savedStatusTimer = null
+    }
+  }
+
+  function applyInstallationStatus(status: Awaited<ReturnType<typeof loadInstallationStatus>>) {
+    opencodeInstalled = status.opencodeInstalled
+    opencodeVersion = status.opencodeVersion
+    claudeInstalled = status.claudeInstalled
+    claudeVersion = status.claudeVersion
+    claudeAuthenticated = status.claudeAuthenticated
+    piInstalled = status.piInstalled
+    piVersion = status.piVersion
+    codexInstalled = status.codexInstalled
+    codexVersion = status.codexVersion
+  }
+
+  async function refreshInstallationStatus() {
+    installationStatusLoading = true
+    installationStatusError = null
+    try {
+      applyInstallationStatus(await loadInstallationStatus())
+    } catch (e) {
+      installationStatusError = getErrorMessage(e)
+    } finally {
+      installationStatusLoading = false
+    }
+  }
+
   // Derived state
   const hasProject = $derived(!!$activeProjectId)
   const activePage = $derived(mode === 'global' ? 'global' : mode === 'project' ? 'project' : (globalSections.includes(activeSection) ? 'global' : 'project'))
+  const settingsLoading = $derived(activePage === 'project' ? projectSettingsLoading : !globalSettingsLoaded)
   let enabledPluginContributionSources = $derived(
     Array.from($enabledPluginIds)
       .map((id) => $runtimeContributionSources.get(id))
@@ -145,17 +192,34 @@
   // Load project config on activeProjectId change
   $effect(() => {
     const pid = $activeProjectId
+    const requestId = ++projectSettingsRequestId
+    projectSettingsLoadError = null
+
     if (mode === 'project' && pid) {
-      loadProjectSettings(pid).then((settings) => {
-        agentInstructions = settings.agentInstructions
-        handoffNotesTemplate = settings.handoffNotesTemplate
-        aiProvider = settings.aiProvider
-        useWorktrees = settings.useWorktrees
-        projectColor = settings.projectColor
-        actions = settings.actions
-        focusFilterStates = settings.focusFilterStates
-      })
+      projectSettingsLoading = true
+      loadProjectSettings(pid)
+        .then((settings) => {
+          if (requestId !== projectSettingsRequestId) return
+          agentInstructions = settings.agentInstructions
+          handoffNotesTemplate = settings.handoffNotesTemplate
+          aiProvider = settings.aiProvider
+          useWorktrees = settings.useWorktrees
+          projectColor = settings.projectColor
+          actions = settings.actions
+          focusFilterStates = settings.focusFilterStates
+        })
+        .catch((e) => {
+          if (requestId !== projectSettingsRequestId) return
+          projectSettingsLoadError = getErrorMessage(e)
+          $error = projectSettingsLoadError
+        })
+        .finally(() => {
+          if (requestId === projectSettingsRequestId) {
+            projectSettingsLoading = false
+          }
+        })
     } else {
+      projectSettingsLoading = false
       agentInstructions = ''
       handoffNotesTemplate = ''
       aiProvider = 'claude-code'
@@ -180,34 +244,25 @@
   // Load global config once on mount
   onMount(async () => {
     const globalSettingsPromise = loadGlobalSettings()
-    const installationStatusPromise = loadInstallationStatus()
+    const installationStatusPromise = refreshInstallationStatus()
     const whisperStatusesPromise = loadWhisperModelStatuses()
 
-    const globalSettings = await globalSettingsPromise
+    try {
+      const globalSettings = await globalSettingsPromise
 
-    taskIdPrefix = globalSettings.taskIdPrefix
-    githubToken = globalSettings.githubToken
-    isCodeCleanupTasksEnabled = globalSettings.codeCleanupTasksEnabled
-    $codeCleanupTasksEnabled = isCodeCleanupTasksEnabled
-    githubPollInterval = globalSettings.githubPollInterval
-    globalSettingsLoaded = true
+      taskIdPrefix = globalSettings.taskIdPrefix
+      githubToken = globalSettings.githubToken
+      isCodeCleanupTasksEnabled = globalSettings.codeCleanupTasksEnabled
+      $codeCleanupTasksEnabled = isCodeCleanupTasksEnabled
+      githubPollInterval = globalSettings.githubPollInterval
+      globalSettingsLoaded = true
+    } catch (e) {
+      globalSettingsLoadError = getErrorMessage(e)
+      $error = globalSettingsLoadError
+    }
 
-    const [installationStatus, whisperStatuses] = await Promise.all([
-      installationStatusPromise,
-      whisperStatusesPromise,
-    ])
-
-    opencodeInstalled = installationStatus.opencodeInstalled
-    opencodeVersion = installationStatus.opencodeVersion
-    claudeInstalled = installationStatus.claudeInstalled
-    claudeVersion = installationStatus.claudeVersion
-    claudeAuthenticated = installationStatus.claudeAuthenticated
-    piInstalled = installationStatus.piInstalled
-    piVersion = installationStatus.piVersion
-    codexInstalled = installationStatus.codexInstalled
-    codexVersion = installationStatus.codexVersion
-
-    modelStatuses = whisperStatuses
+    modelStatuses = await whisperStatusesPromise
+    await installationStatusPromise
 
   })
 
@@ -305,6 +360,9 @@
     if (!projectPayload && !globalPayload) return
 
     isSaving = true
+    saveStatus = 'saving'
+    saveError = null
+    clearSavedStatusTimer()
     try {
       if (projectPayload) {
         await saveProjectSettings(projectPayload)
@@ -320,12 +378,19 @@
         await saveGlobalSettings(globalPayload)
       }
       saved = true
-      setTimeout(() => {
+      saveStatus = 'saved'
+      savedStatusTimer = setTimeout(() => {
         saved = false
+        if (saveStatus === 'saved') {
+          saveStatus = 'idle'
+        }
+        savedStatusTimer = null
       }, 2000)
     } catch (e) {
       console.error('Failed to save settings:', e)
-      $error = e instanceof Error ? e.message : String(e)
+      saveError = getErrorMessage(e)
+      saveStatus = 'error'
+      $error = saveError
       throw e
     } finally {
       isSaving = false
@@ -335,6 +400,10 @@
   function scheduleSave() {
     if (!captureCurrentSave()) return
 
+    clearSavedStatusTimer()
+    saved = false
+    saveError = null
+    saveStatus = 'dirty'
     void saveController.schedule().catch(() => {})
   }
 
@@ -343,6 +412,7 @@
   }
 
   onDestroy(() => {
+    clearSavedStatusTimer()
     void flushPendingSave().catch(() => {})
   })
 
@@ -427,11 +497,25 @@
       >
         {#snippet actions()}
           <div class="flex items-center gap-3">
-            {#if isSaving}
-              <span class="text-xs text-base-content/50">Saving…</span>
-            {:else if saved}
-              <span class="text-xs text-success">Saved</span>
-            {/if}
+            <div class="flex flex-col items-end gap-1 text-xs" aria-live="polite">
+              <span class="text-base-content/60">Autosaves changes</span>
+              {#if projectSettingsLoadError || globalSettingsLoadError}
+                <span class="text-error">Failed to load settings: {projectSettingsLoadError ?? globalSettingsLoadError}</span>
+              {:else if settingsLoading}
+                <span class="text-base-content/50">Loading settings…</span>
+              {:else if saveStatus === 'dirty'}
+                <span class="text-warning">Unsaved changes — autosaving soon…</span>
+              {:else if isSaving || saveStatus === 'saving'}
+                <span class="text-base-content/50">Saving changes…</span>
+              {:else if saved || saveStatus === 'saved'}
+                <span class="text-success">All changes saved</span>
+              {:else if saveStatus === 'error'}
+                <div class="flex items-center gap-2">
+                  <span class="text-error">Autosave failed: {saveError}</span>
+                  <button type="button" class="btn btn-xs btn-error" onclick={runImmediateSave}>Retry autosave</button>
+                </div>
+              {/if}
+            </div>
             <button
               type="button"
               class="btn btn-ghost btn-sm"
@@ -460,11 +544,14 @@
           {piVersion}
           {codexInstalled}
           {codexVersion}
+          {installationStatusLoading}
+          {installationStatusError}
           onProjectNameChange={(v) => { projectName = v; scheduleSave() }}
           onProjectPathChange={(v) => { projectPath = v; scheduleSave() }}
           onAiProviderChange={(v) => { aiProvider = v; scheduleSave() }}
           onUseWorktreesChange={() => { useWorktrees = !useWorktrees; scheduleSave() }}
           onProjectColorChange={handleProjectColorChange}
+          onRefreshInstallationStatus={refreshInstallationStatus}
         />
 
         <SettingsFocusFilterCard
