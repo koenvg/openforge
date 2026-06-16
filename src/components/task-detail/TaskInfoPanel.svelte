@@ -18,9 +18,10 @@
     allTasksOverride?: Task[]
     taskPrsOverride?: PullRequestInfo[]
     allowCommentAddressing?: boolean
+    surface?: 'default' | 'transparent'
   }
 
-  let { task, workspacePath, allTasksOverride, taskPrsOverride, allowCommentAddressing = false }: Props = $props()
+  let { task, workspacePath, allTasksOverride, taskPrsOverride, allowCommentAddressing = false, surface = 'default' }: Props = $props()
 
   let labels = $state<TaskLabel[]>([])
   let previousTaskId: string | null = null
@@ -31,6 +32,7 @@
   let dependencies = $derived(getTaskDependencySummaries(task, taskList))
   let waitingDependencyCount = $derived(getWaitingDependencyCount(task, taskList))
   let dependents = $derived(getTaskDependentSummaries(task, taskList))
+  let surfaceClass = $derived(surface === 'transparent' ? 'bg-transparent' : 'bg-base-200')
 
   function labelSignature(nextLabels: TaskLabel[]): string {
     return JSON.stringify(nextLabels.map((label) => [label.id, label.name, label.color]))
@@ -148,7 +150,7 @@
 
 </script>
 
-<div data-testid="task-info-panel" data-scroll-owner="false" class="flex flex-col gap-3 p-3 bg-base-200 min-h-max">
+<div data-testid="task-info-panel" data-scroll-owner="false" class="flex flex-col gap-3 p-3 {surfaceClass} min-h-max">
   <header data-task-info-card="summary" data-card-sizing="natural" class="flex flex-col gap-2 border-b border-base-300/70 pb-3 shrink-0" aria-label="Task Attention">
     <div class="flex items-center justify-between gap-2">
       <h2 class="m-0 font-mono text-lg font-bold text-base-content tracking-tight">{task.id}</h2>
