@@ -65,6 +65,7 @@
   let saving = $state(false)
   let error = $state<string | null>(null)
   let previousProjectId: string | null = null
+  let loadRequestId = 0
 
   let sortedSchedules = $derived([...schedules].sort((a, b) => a.nextFireAt - b.nextFireAt || a.title.localeCompare(b.title)))
   let composerTitle = $derived(draft.id ? 'Edit Task Schedule' : 'New Task Schedule')
@@ -72,6 +73,7 @@
   $effect(() => {
     if (projectId === previousProjectId) return
     previousProjectId = projectId
+    loadRequestId += 1
     draft = emptyDraft()
     schedules = []
     if (projectId) {
@@ -79,16 +81,26 @@
     }
   })
 
+  function isCurrentLoad(activeProjectId: string, requestId: number): boolean {
+    return projectId === activeProjectId && requestId === loadRequestId
+  }
+
   async function loadSchedules(activeProjectId: string) {
+    const requestId = ++loadRequestId
     loading = true
     error = null
     try {
       await api.backend.whenReady()
-      schedules = await api.backend.invoke<TaskSchedule[]>(LIST_SCHEDULES_METHOD, { projectId: activeProjectId })
+      const loadedSchedules = await api.backend.invoke<TaskSchedule[]>(LIST_SCHEDULES_METHOD, { projectId: activeProjectId })
+      if (!isCurrentLoad(activeProjectId, requestId)) return
+      schedules = loadedSchedules
     } catch (cause) {
+      if (!isCurrentLoad(activeProjectId, requestId)) return
       error = cause instanceof Error ? cause.message : String(cause)
     } finally {
-      loading = false
+      if (isCurrentLoad(activeProjectId, requestId)) {
+        loading = false
+      }
     }
   }
 
