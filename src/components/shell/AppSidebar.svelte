@@ -3,7 +3,7 @@
   import { projects, activeProjectId, projectAttention } from '../../lib/stores'
   import { getProjectAttention, getGitBranch, setConfig } from '../../lib/ipc'
   import { useAppRouter } from '../../lib/router.svelte'
-  import { ChevronLeft, ChevronRight, Settings, Plus, ArrowUp, ArrowDown } from 'lucide-svelte'
+  import { ChevronLeft, ChevronRight, Settings, Plus, ArrowUp, ArrowDown } from '@lucide/svelte'
   import type { ProjectAttention, AppView } from '../../lib/types'
 
   interface Props {

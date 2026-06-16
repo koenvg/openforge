@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte'
   import type { Action } from '../../../lib/types'
   import HoverTooltip from './HoverTooltip.svelte'
-  import { ChevronDown } from 'lucide-svelte'
+  import { ChevronDown } from '@lucide/svelte'
 
   interface Props {
     actions: Action[]

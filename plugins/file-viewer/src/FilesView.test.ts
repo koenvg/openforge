@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
 import type { FileContent, FileEntry } from '@openforge/plugin-sdk/domain'
 
-vi.mock('lucide-svelte', () => ({
+vi.mock('@lucide/svelte', () => ({
   FileText: vi.fn(() => ({})),
   Folder: vi.fn(() => ({})),
   FolderOpen: vi.fn(() => ({})),

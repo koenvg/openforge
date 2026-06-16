@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Settings2 } from 'lucide-svelte'
+	import { Settings2 } from '@lucide/svelte'
 	import {
 		MAX_GITHUB_POLL_INTERVAL_SECONDS,
 		MIN_GITHUB_POLL_INTERVAL_SECONDS,

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { FileText, Folder, FolderOpen } from 'lucide-svelte'
+  import { FileText, Folder, FolderOpen } from '@lucide/svelte'
   import type { FileEntry } from '@openforge/plugin-sdk/domain'
 
   interface Props {

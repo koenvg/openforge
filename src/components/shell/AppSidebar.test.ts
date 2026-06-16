@@ -33,7 +33,7 @@ vi.mock('../../lib/router.svelte', () => ({
   }),
 }))
 
-vi.mock('lucide-svelte', () => {
+vi.mock('@lucide/svelte', () => {
   const stub = vi.fn()
   return {
     ChevronLeft: stub,

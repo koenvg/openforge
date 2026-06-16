@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { FileText } from 'lucide-svelte'
+  import { FileText } from '@lucide/svelte'
   import { DEFAULT_HANDOFF_NOTES_TEMPLATE } from '../../lib/handoffNotes'
 
   interface Props {

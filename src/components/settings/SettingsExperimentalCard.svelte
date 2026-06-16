@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { FlaskConical } from 'lucide-svelte'
+	import { FlaskConical } from '@lucide/svelte'
 
 	interface Props {
 		codeCleanupTasksEnabled: boolean

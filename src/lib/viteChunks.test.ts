@@ -26,7 +26,7 @@ describe('getOpenForgeChunkGroupName', () => {
   })
 
   it('falls back to the coarse vendor chunk for other node_modules packages', () => {
-    expect(getOpenForgeChunkGroupName('/repo/node_modules/lucide-svelte/dist/index.js')).toBe('vendor')
+    expect(getOpenForgeChunkGroupName('/repo/node_modules/@lucide/svelte/dist/index.js')).toBe('vendor')
     expect(getOpenForgeChunkGroupName('/repo/node_modules/marked/lib/marked.esm.js')).toBe('vendor')
   })
 

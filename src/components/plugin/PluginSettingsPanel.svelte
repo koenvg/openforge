@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Blocks, AlertCircle } from 'lucide-svelte'
+  import { Blocks, AlertCircle } from '@lucide/svelte'
   import {
     installedPlugins,
     enabledPluginIds,

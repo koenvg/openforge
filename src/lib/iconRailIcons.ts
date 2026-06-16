@@ -1,4 +1,4 @@
-import { Boxes, Clock, Code, FileText, FolderOpen, GitPullRequest, LayoutDashboard, Plug, Puzzle, Settings, Sparkles, Terminal, Wrench } from 'lucide-svelte'
+import { Boxes, Clock, Code, FileText, FolderOpen, GitPullRequest, LayoutDashboard, Plug, Puzzle, Settings, Sparkles, Terminal, Wrench } from '@lucide/svelte'
 
 type IconComponent = typeof LayoutDashboard
 
