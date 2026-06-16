@@ -9,7 +9,7 @@ export type AppShortcutAction =
   | 'toggleCommandPalette'
   | 'toggleFileQuickOpen'
   | 'resetToBoard'
-  | 'navigateToSettings'
+  | 'navigateToGlobalSettings'
   | 'cycleNextProjectOnBoard'
   | 'cyclePreviousProjectOnBoard'
   | 'cyclePreviousProject'
@@ -103,7 +103,7 @@ export const APP_SHORTCUT_DEFINITIONS: readonly AppShortcutDefinition[] = [
   },
   {
     id: 'settings',
-    registrations: [{ key: '⌘,', action: 'navigateToSettings' }],
+    registrations: [{ key: '⌘,', action: 'navigateToGlobalSettings' }],
     help: null,
   },
   {

@@ -17,6 +17,7 @@
   } from '../../lib/settingsConfig'
   import { mergeUpdatedProject, getProjectIdentity } from '../../lib/settingsProjectSync'
   import { saveGlobalSettings, saveProjectSettings } from '../../lib/settingsSaver'
+  import type { GlobalSettingsSavePayload, ProjectSettingsSavePayload } from '../../lib/settingsSaver'
   import { themeMode, applyTheme } from '../../lib/theme'
   import type { ThemeMode } from '../../lib/theme'
   import type { Action, WhisperModelStatus, WhisperModelSizeId } from '../../lib/types'
@@ -105,6 +106,8 @@
   let isSaving = $state(false)
   let saved = $state(false)
   const SAVE_DEBOUNCE_MS = 500
+  let pendingProjectSettingsSave = $state<ProjectSettingsSavePayload | null>(null)
+  let pendingGlobalSettingsSave = $state<GlobalSettingsSavePayload | null>(null)
   const saveController = createTrackedDebouncedSave({
     delayMs: SAVE_DEBOUNCE_MS,
     save,
@@ -142,7 +145,7 @@
   // Load project config on activeProjectId change
   $effect(() => {
     const pid = $activeProjectId
-    if (pid) {
+    if (mode === 'project' && pid) {
       loadProjectSettings(pid).then((settings) => {
         agentInstructions = settings.agentInstructions
         handoffNotesTemplate = settings.handoffNotesTemplate
@@ -250,35 +253,71 @@
     return () => obs.disconnect()
   })
 
+  function captureCurrentSave(): boolean {
+    if (mode === 'project' && hasProject && $activeProjectId) {
+      pendingProjectSettingsSave = {
+        projectId: $activeProjectId,
+        projectName,
+        projectPath,
+        agentInstructions,
+        handoffNotesTemplate,
+        aiProvider,
+        useWorktrees,
+        projectColor,
+        actions,
+        focusFilterStates,
+      }
+      return true
+    }
+
+    if (mode === 'global' && globalSettingsLoaded) {
+      pendingGlobalSettingsSave = {
+        taskIdPrefix,
+        githubToken,
+        codeCleanupTasksEnabled: isCodeCleanupTasksEnabled,
+        githubPollInterval,
+      }
+      return true
+    }
+
+    return false
+  }
+
+  function isLatestProjectIdentityPayload(payload: ProjectSettingsSavePayload): boolean {
+    const newerPendingProjectSave = pendingProjectSettingsSave
+    if (newerPendingProjectSave?.projectId === payload.projectId) {
+      return newerPendingProjectSave.projectName === payload.projectName && newerPendingProjectSave.projectPath === payload.projectPath
+    }
+
+    if ($activeProjectId === payload.projectId) {
+      return projectName === payload.projectName && projectPath === payload.projectPath
+    }
+
+    return true
+  }
+
   async function save() {
+    const projectPayload = pendingProjectSettingsSave
+    const globalPayload = pendingGlobalSettingsSave
+    pendingProjectSettingsSave = null
+    pendingGlobalSettingsSave = null
+
+    if (!projectPayload && !globalPayload) return
+
     isSaving = true
     try {
-      if (hasProject && $activeProjectId) {
-        await saveProjectSettings({
-          projectId: $activeProjectId,
-          projectName,
-          projectPath,
-          agentInstructions,
-          handoffNotesTemplate,
-          aiProvider,
-          useWorktrees,
-          projectColor,
-          actions,
-          focusFilterStates,
-        })
-        $projects = mergeUpdatedProject($projects, {
-          id: $activeProjectId,
-          name: projectName,
-          path: projectPath,
-        })
+      if (projectPayload) {
+        await saveProjectSettings(projectPayload)
+        if (isLatestProjectIdentityPayload(projectPayload)) {
+          $projects = mergeUpdatedProject($projects, {
+            id: projectPayload.projectId,
+            name: projectPayload.projectName,
+            path: projectPayload.projectPath,
+          })
+        }
       }
-      if (globalSettingsLoaded) {
-        await saveGlobalSettings({
-          taskIdPrefix,
-          githubToken,
-          codeCleanupTasksEnabled: isCodeCleanupTasksEnabled,
-          githubPollInterval,
-        })
+      if (globalPayload) {
+        await saveGlobalSettings(globalPayload)
       }
       saved = true
       setTimeout(() => {
@@ -294,6 +333,8 @@
   }
 
   function scheduleSave() {
+    if (!captureCurrentSave()) return
+
     void saveController.schedule().catch(() => {})
   }
 
@@ -306,6 +347,8 @@
   })
 
   function runImmediateSave() {
+    if (!captureCurrentSave()) return Promise.resolve()
+
     return saveController.runImmediately()
   }
 
@@ -376,18 +419,27 @@
     <div class="px-6 py-6 flex flex-col gap-6">
       <ProjectPageHeader
         title={activePage === 'project'
-          ? `${projectName || 'Project'} — Settings`
+          ? `${projectName || 'Project'} — Project Settings`
           : 'Global Settings'}
         subtitle={activePage === 'project'
-          ? 'Configure project-specific options'
-          : 'Configure global preferences and credentials'}
+          ? 'Configure settings for this project only'
+          : 'Configure app-wide preferences and credentials'}
       >
         {#snippet actions()}
-          {#if isSaving}
-            <span class="text-xs text-base-content/50">Saving…</span>
-          {:else if saved}
-            <span class="text-xs text-success">Saved</span>
-          {/if}
+          <div class="flex items-center gap-3">
+            {#if isSaving}
+              <span class="text-xs text-base-content/50">Saving…</span>
+            {:else if saved}
+              <span class="text-xs text-success">Saved</span>
+            {/if}
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm"
+              onclick={onClose}
+            >
+              Back to Board
+            </button>
+          </div>
         {/snippet}
       </ProjectPageHeader>
 

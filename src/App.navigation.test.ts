@@ -132,7 +132,7 @@ describe('App navigation shortcuts', () => {
       })
     })
 
-    it('CMD+comma navigates to settings view', async () => {
+    it('CMD+comma navigates to global settings view', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
       const { get } = await import('svelte/store')
@@ -140,7 +140,7 @@ describe('App navigation shortcuts', () => {
       render(App)
 
       window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true, bubbles: true }))
-      expect(get(stores.currentView)).toBe('settings')
+      expect(get(stores.currentView)).toBe('global_settings')
     })
 
     it('dashboard icon resets to board when a task view is open', async () => {

@@ -323,7 +323,7 @@
       toggleFileQuickOpen: () => { showFileQuickOpen = !showFileQuickOpen },
       canToggleFileQuickOpen: () => selectedTask === null && !showCommandPalette && !showProjectSwitcher && !actionPalette.showActionPalette && !showShortcutsDialog,
       resetToBoard: () => { router.resetToBoard() },
-      navigateToSettings: () => { handleNavigate('settings') },
+      navigateToGlobalSettings: () => { handleNavigate('global_settings') },
       cycleActiveProject,
     })
 

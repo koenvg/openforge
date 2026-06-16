@@ -14,7 +14,7 @@ export interface AppShortcutHandlers {
   toggleFileQuickOpen(): void
   canToggleFileQuickOpen(): boolean
   resetToBoard(): void
-  navigateToSettings(): void
+  navigateToGlobalSettings(): void
   cycleActiveProject(direction: 'previous' | 'next', options?: { boardOnly?: boolean }): void
 }
 
@@ -52,8 +52,8 @@ function runAppShortcutAction(action: AppShortcutAction, handlers: AppShortcutHa
     case 'resetToBoard':
       handlers.resetToBoard()
       break
-    case 'navigateToSettings':
-      handlers.navigateToSettings()
+    case 'navigateToGlobalSettings':
+      handlers.navigateToGlobalSettings()
       break
     case 'cycleNextProjectOnBoard':
       handlers.cycleActiveProject('next', { boardOnly: true })

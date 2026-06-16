@@ -31,7 +31,7 @@ describe('registerAppShortcuts', () => {
       toggleFileQuickOpen: vi.fn(),
       canToggleFileQuickOpen: () => true,
       resetToBoard: vi.fn(),
-      navigateToSettings: vi.fn(),
+      navigateToGlobalSettings: vi.fn(),
       cycleActiveProject: vi.fn(),
     })
 
@@ -69,7 +69,7 @@ describe('registerAppShortcuts', () => {
     const toggleCommandPalette = vi.fn()
     const toggleFileQuickOpen = vi.fn()
     const resetToBoard = vi.fn()
-    const navigateToSettings = vi.fn()
+    const navigateToGlobalSettings = vi.fn()
     const cycleActiveProject = vi.fn()
 
     registerAppShortcuts(registry, {
@@ -84,7 +84,7 @@ describe('registerAppShortcuts', () => {
       toggleFileQuickOpen,
       canToggleFileQuickOpen: () => true,
       resetToBoard,
-      navigateToSettings,
+      navigateToGlobalSettings,
       cycleActiveProject,
     })
 
@@ -114,7 +114,7 @@ describe('registerAppShortcuts', () => {
     expect(toggleCommandPalette).toHaveBeenCalledOnce()
     expect(toggleFileQuickOpen).toHaveBeenCalledOnce()
     expect(resetToBoard).toHaveBeenCalledOnce()
-    expect(navigateToSettings).toHaveBeenCalledOnce()
+    expect(navigateToGlobalSettings).toHaveBeenCalledOnce()
     expect(cycleActiveProject).toHaveBeenNthCalledWith(1, 'next', { boardOnly: true })
     expect(cycleActiveProject).toHaveBeenNthCalledWith(2, 'previous', { boardOnly: true })
     expect(cycleActiveProject).toHaveBeenNthCalledWith(3, 'previous')
@@ -137,7 +137,7 @@ describe('registerAppShortcuts', () => {
       toggleFileQuickOpen,
       canToggleFileQuickOpen: () => false,
       resetToBoard: vi.fn(),
-      navigateToSettings: vi.fn(),
+      navigateToGlobalSettings: vi.fn(),
       cycleActiveProject: vi.fn(),
     })
 

@@ -3,7 +3,7 @@ import { getIconRailNavItems } from './iconRailNav'
 import type { AppView } from './types'
 
 describe('getIconRailNavItems', () => {
-  it('keeps Settings last after plugin rail items', () => {
+  it('keeps Project Settings last after plugin rail items', () => {
     const items = getIconRailNavItems([
       {
         viewKey: 'plugin:com.openforge.github-sync:pr_review' as AppView,
@@ -19,7 +19,7 @@ describe('getIconRailNavItems', () => {
       },
     ])
 
-    expect(items.map((item) => item.label)).toEqual(['Board', 'PR Review', 'Skills', 'Settings'])
+    expect(items.map((item) => item.label)).toEqual(['Board', 'PR Review', 'Skills', 'Project Settings'])
   })
 
   it('normalizes shortcut hints for plugin-provided rail items', () => {

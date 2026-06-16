@@ -129,16 +129,25 @@ describe('AppSidebar', () => {
     expect(screen.queryByRole('button', { name: /work queue/i })).toBeNull()
   })
 
-  it('renders Settings nav button (labeled "Settings")', () => {
+  it('renders Global Settings nav button with a clear label', () => {
     renderSidebar()
-    expect(screen.getByRole('button', { name: /settings/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /global settings/i })).toBeTruthy()
   })
 
-  it('clicking Settings calls onNavigate(\'global_settings\')', async () => {
+  it('marks Global Settings as current only on the global settings view', () => {
+    const { unmount } = renderSidebar({ currentView: 'global_settings' })
+    expect(screen.getByRole('button', { name: /global settings/i }).getAttribute('aria-current')).toBe('page')
+    unmount()
+
+    renderSidebar({ currentView: 'settings' })
+    expect(screen.getByRole('button', { name: /global settings/i }).getAttribute('aria-current')).toBeNull()
+  })
+
+  it('clicking Global Settings calls onNavigate(\'global_settings\')', async () => {
     const onNavigate = vi.fn()
     renderSidebar({ onNavigate })
 
-    await fireEvent.click(screen.getByRole('button', { name: /settings/i }))
+    await fireEvent.click(screen.getByRole('button', { name: /global settings/i }))
     expect(onNavigate).toHaveBeenCalledWith('global_settings')
   })
 
@@ -180,6 +189,13 @@ describe('AppSidebar', () => {
 
   it('project is NOT visually active (aria-current) when on global_settings view', () => {
     renderSidebar({ currentView: 'global_settings' })
+
+    const activeProjectButton = screen.getByRole('button', { name: /^alpha project$/i })
+    expect(activeProjectButton.getAttribute('aria-current')).toBeNull()
+  })
+
+  it('project is NOT visually active (aria-current) when on project settings view', () => {
+    renderSidebar({ currentView: 'settings' })
 
     const activeProjectButton = screen.getByRole('button', { name: /^alpha project$/i })
     expect(activeProjectButton.getAttribute('aria-current')).toBeNull()

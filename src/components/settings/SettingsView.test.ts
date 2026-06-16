@@ -248,7 +248,8 @@ describe('SettingsView', () => {
 
   it('shows Project Settings header when project is active', () => {
     render(SettingsView, { props: defaultProps })
-    expect(screen.getByText('Test Project — Settings')).toBeTruthy()
+    expect(screen.getByText('Test Project — Project Settings')).toBeTruthy()
+    expect(screen.getByText('Configure settings for this project only')).toBeTruthy()
   })
 
   it('shows Global Settings header when no project is active', () => {
@@ -256,6 +257,27 @@ describe('SettingsView', () => {
     projects.set([])
     render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
     expect(screen.queryAllByText(/global settings/i).length).toBeGreaterThan(0)
+    expect(screen.getByText('Configure app-wide preferences and credentials')).toBeTruthy()
+  })
+
+  it('renders a visible Board return control on project settings', async () => {
+    const onClose = vi.fn()
+    render(SettingsView, { props: { ...defaultProps, onClose } })
+
+    await fireEvent.click(screen.getByRole('button', { name: /back to board/i }))
+
+    expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  it('renders a visible Board return control on global settings', async () => {
+    const onClose = vi.fn()
+    activeProjectId.set(null)
+    projects.set([])
+    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const, onClose } })
+
+    await fireEvent.click(screen.getByRole('button', { name: /back to board/i }))
+
+    expect(onClose).toHaveBeenCalledOnce()
   })
 
   it('renders project name in header in project mode', () => {
@@ -319,7 +341,7 @@ describe('SettingsView', () => {
       expect(vi.mocked(updateProject)).toHaveBeenCalled()
       expect(vi.mocked(setProjectConfig)).toHaveBeenCalled()
       expect(vi.mocked(setProjectConfig)).toHaveBeenCalledWith('test-project-id', 'handoff_notes_template', '')
-      expect(vi.mocked(setConfig)).toHaveBeenCalled()
+      expect(vi.mocked(setConfig)).not.toHaveBeenCalled()
     })
 
     it('does not clear global settings when project autosave runs before global settings hydrate', async () => {
@@ -435,6 +457,47 @@ describe('SettingsView', () => {
       expect(updatedProject?.name).toBe('Second Name')
     })
 
+    it('does not merge a stale project name while a newer save is still in flight', async () => {
+      let resolveFirstSave!: () => void
+      let resolveSecondSave!: () => void
+      vi.mocked(updateProject)
+        .mockImplementationOnce(() => new Promise<void>((resolve) => {
+          resolveFirstSave = resolve
+        }))
+        .mockImplementationOnce(() => new Promise<void>((resolve) => {
+          resolveSecondSave = resolve
+        }))
+
+      render(SettingsView, { props: defaultProps })
+
+      await vi.advanceTimersByTimeAsync(50)
+
+      const nameInput = requireElement(screen.getByPlaceholderText('My Project'), HTMLInputElement)
+      await fireEvent.input(nameInput, { target: { value: 'First Name' } })
+
+      await vi.advanceTimersByTimeAsync(600)
+      await vi.waitFor(() => {
+        expect(updateProject).toHaveBeenCalledTimes(1)
+      })
+
+      await fireEvent.input(nameInput, { target: { value: 'Second Name' } })
+
+      resolveFirstSave()
+      await vi.advanceTimersByTimeAsync(0)
+      await vi.waitFor(() => {
+        expect(updateProject).toHaveBeenCalledTimes(2)
+      })
+
+      expect(nameInput.value).toBe('Second Name')
+      expect(get(projects).find(p => p.id === 'test-project-id')?.name).not.toBe('First Name')
+
+      resolveSecondSave()
+      await vi.advanceTimersByTimeAsync(0)
+      await vi.waitFor(() => {
+        expect(get(projects).find(p => p.id === 'test-project-id')?.name).toBe('Second Name')
+      })
+    })
+
     it('saves global settings after debounce when a field changes', async () => {
       activeProjectId.set(null)
       projects.set([])
@@ -449,6 +512,84 @@ describe('SettingsView', () => {
       await vi.advanceTimersByTimeAsync(600)
 
       expect(vi.mocked(setConfig)).toHaveBeenCalled()
+    })
+
+    it('does not save active project settings from the global settings page', async () => {
+      render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
+
+      await vi.advanceTimersByTimeAsync(50)
+      vi.mocked(setConfig).mockClear()
+      vi.mocked(setProjectConfig).mockClear()
+      vi.mocked(updateProject).mockClear()
+
+      const tokenInput = screen.getByPlaceholderText('ghp_...')
+      await fireEvent.input(tokenInput, { target: { value: 'ghp_new' } })
+
+      await vi.advanceTimersByTimeAsync(600)
+
+      expect(vi.mocked(setConfig)).toHaveBeenCalled()
+      expect(vi.mocked(setProjectConfig)).not.toHaveBeenCalled()
+      expect(vi.mocked(updateProject)).not.toHaveBeenCalled()
+    })
+
+    it('persists the original settings scope when mode changes before debounce fires', async () => {
+      const { rerender } = render(SettingsView, { props: defaultProps })
+
+      await vi.advanceTimersByTimeAsync(50)
+      vi.mocked(setConfig).mockClear()
+      vi.mocked(setProjectConfig).mockClear()
+      vi.mocked(updateProject).mockClear()
+
+      const nameInput = screen.getByPlaceholderText('My Project')
+      await fireEvent.input(nameInput, { target: { value: 'Renamed Project' } })
+      await rerender({ ...defaultProps, mode: 'global' as const })
+
+      await vi.advanceTimersByTimeAsync(600)
+
+      expect(vi.mocked(updateProject)).toHaveBeenCalled()
+      expect(vi.mocked(setProjectConfig)).toHaveBeenCalledWith('test-project-id', 'handoff_notes_template', '')
+      expect(vi.mocked(setConfig)).not.toHaveBeenCalled()
+    })
+
+    it('persists pending global settings when switching to project settings before debounce fires', async () => {
+      const { rerender } = render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
+
+      await vi.advanceTimersByTimeAsync(50)
+      vi.mocked(setConfig).mockClear()
+      vi.mocked(setProjectConfig).mockClear()
+      vi.mocked(updateProject).mockClear()
+
+      const tokenInput = screen.getByPlaceholderText('ghp_...')
+      await fireEvent.input(tokenInput, { target: { value: 'ghp_new' } })
+      await rerender(defaultProps)
+
+      await vi.advanceTimersByTimeAsync(600)
+
+      expect(vi.mocked(setConfig)).toHaveBeenCalledWith('github_token', 'ghp_new')
+      expect(vi.mocked(setProjectConfig)).not.toHaveBeenCalled()
+      expect(vi.mocked(updateProject)).not.toHaveBeenCalled()
+    })
+
+    it('persists edits from both settings scopes when both change before debounce fires', async () => {
+      const { rerender } = render(SettingsView, { props: defaultProps })
+
+      await vi.advanceTimersByTimeAsync(50)
+      vi.mocked(setConfig).mockClear()
+      vi.mocked(setProjectConfig).mockClear()
+      vi.mocked(updateProject).mockClear()
+
+      const nameInput = screen.getByPlaceholderText('My Project')
+      await fireEvent.input(nameInput, { target: { value: 'Renamed Project' } })
+      await rerender({ ...defaultProps, mode: 'global' as const })
+
+      const tokenInput = screen.getByPlaceholderText('ghp_...')
+      await fireEvent.input(tokenInput, { target: { value: 'ghp_new' } })
+
+      await vi.advanceTimersByTimeAsync(600)
+
+      expect(vi.mocked(updateProject)).toHaveBeenCalled()
+      expect(vi.mocked(setProjectConfig)).toHaveBeenCalledWith('test-project-id', 'handoff_notes_template', '')
+      expect(vi.mocked(setConfig)).toHaveBeenCalledWith('github_token', 'ghp_new')
     })
 
     it('hydrates and saves global settings without waiting for Whisper status loading', async () => {

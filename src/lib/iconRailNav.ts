@@ -24,8 +24,8 @@ const boardNavItem: IconRailNavItem = {
 const settingsNavItem: IconRailNavItem = {
   view: 'settings',
   icon: 'settings',
-  shortcut: ',',
-  label: 'Settings',
+  shortcut: '',
+  label: 'Project Settings',
 }
 
 function normalizeShortcut(shortcut: string | null): string {
