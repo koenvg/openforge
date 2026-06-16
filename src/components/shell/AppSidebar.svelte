@@ -99,7 +99,7 @@
   }
 
   const bottomNavItems: { view: AppView; Icon: typeof Settings; label: string }[] = [
-    { view: 'global_settings', Icon: Settings, label: 'Settings' },
+    { view: 'global_settings', Icon: Settings, label: 'Global Settings' },
   ]
 </script>
 
@@ -145,7 +145,7 @@
   <div class="flex-1 overflow-y-auto">
     {#each $projects as project, index (project.id)}
       {@const status = getAttentionStatus(project.id)}
-      {@const isActive = project.id === $activeProjectId && currentView !== 'global_settings'}
+      {@const isActive = project.id === $activeProjectId && currentView === 'board'}
 
       {#if collapsed}
         <button
@@ -212,6 +212,8 @@
         type="button"
         class="w-full flex items-center {collapsed ? 'justify-center px-0' : 'px-3'} gap-2 py-2 transition-colors {isActive ? 'text-primary' : 'text-base-content/50 hover:text-base-content/80'}"
         title={collapsed ? label : undefined}
+        aria-label={label}
+        aria-current={isActive ? 'page' : undefined}
         onclick={() => onNavigate(view)}
       >
          <Icon size={18} class="shrink-0" />

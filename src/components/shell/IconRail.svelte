@@ -29,6 +29,7 @@
 <div class="w-16 h-full border-r border-base-300/50 flex flex-col items-center py-4 gap-5" style="background-color: {railBg}">
   {#each navItems as { view, Icon, shortcut, label }}
     <button
+      type="button"
       class="relative cursor-pointer {currentView === view ? 'text-primary' : 'text-base-content/35'}"
       title={label}
       aria-label={label}
@@ -42,7 +43,7 @@
       {#if view === GITHUB_SYNC_VIEW_KEY && authoredPrCount > 0}
         <span class="badge badge-warning badge-xs absolute -bottom-2 -right-3 text-[0.6rem] font-bold min-w-4 h-4">{authoredPrCount}</span>
       {/if}
-      {#if $commandHeld && !modalsOpen}
+      {#if shortcut && $commandHeld && !modalsOpen}
         <kbd class="kbd kbd-xs absolute -bottom-2 -left-3 bg-base-content/10 text-base-content/40 border-base-content/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none">{shortcut}</kbd>
       {/if}
     </button>

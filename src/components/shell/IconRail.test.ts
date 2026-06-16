@@ -15,21 +15,32 @@ describe('IconRail', () => {
     render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn() } })
 
     expect(screen.getByRole('button', { name: 'Board' }).getAttribute('aria-current')).toBe('page')
-    expect(screen.getByRole('button', { name: 'Settings' }).hasAttribute('aria-current')).toBe(false)
+    expect(screen.getByRole('button', { name: 'Project Settings' }).hasAttribute('aria-current')).toBe(false)
   })
 
-  it('clicking first button (board) calls onNavigate with "board"', () => {
+  it('clicking Board calls onNavigate with "board"', () => {
     const onNavigate = vi.fn()
     render(IconRail, { props: { currentView: 'settings' as AppView, onNavigate } })
-    fireEvent.click(screen.getByRole('button', { name: 'Board' }))
+    fireEvent.click(screen.getByRole('button', { name: /board/i }))
     expect(onNavigate).toHaveBeenCalledWith('board')
   })
 
-  it('clicking second button (settings) calls onNavigate with "settings"', () => {
+  it('clicking Project Settings calls onNavigate with "settings"', () => {
     const onNavigate = vi.fn()
     render(IconRail, { props: { currentView: 'board' as AppView, onNavigate } })
-    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    fireEvent.click(screen.getByRole('button', { name: /project settings/i }))
     expect(onNavigate).toHaveBeenCalledWith('settings')
+  })
+
+  it('marks Board and Project Settings current states semantically', () => {
+    const { unmount } = render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn() } })
+    expect(screen.getByRole('button', { name: /board/i }).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('button', { name: /project settings/i }).getAttribute('aria-current')).toBeNull()
+    unmount()
+
+    render(IconRail, { props: { currentView: 'settings' as AppView, onNavigate: vi.fn() } })
+    expect(screen.getByRole('button', { name: /board/i }).getAttribute('aria-current')).toBeNull()
+    expect(screen.getByRole('button', { name: /project settings/i }).getAttribute('aria-current')).toBe('page')
   })
 
   it('renders plugin navigation items before Settings', () => {
@@ -104,12 +115,12 @@ describe('IconRail', () => {
   })
 
   describe('shortcut badges', () => {
-    it('shows shortcut key badges for all nav items when commandHeld is true', () => {
+    it('shows shortcut key badges only for nav items with registered shortcuts when commandHeld is true', () => {
       commandHeld.set(true)
       render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn() } })
 
       expect(screen.getByText('H')).toBeTruthy()
-      expect(screen.getByText(',')).toBeTruthy()
+      expect(screen.queryByText(',')).toBeNull()
 
       commandHeld.set(false)
     })
@@ -122,12 +133,12 @@ describe('IconRail', () => {
       expect(screen.queryByText(',')).toBeNull()
     })
 
-    it('shows correct shortcut letter for each view', () => {
+    it('does not advertise Cmd+, on Project Settings because Cmd+, opens Global Settings', () => {
       commandHeld.set(true)
       render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn() } })
 
       expect(screen.getByText('H')).toBeTruthy()
-      expect(screen.getByText(',')).toBeTruthy()
+      expect(screen.queryByText(',')).toBeNull()
 
       commandHeld.set(false)
     })
