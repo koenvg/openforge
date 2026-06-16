@@ -27,6 +27,7 @@ function defaultProps(overrides: Record<string, unknown> = {}) {
     onAiProviderChange: vi.fn(),
     onUseWorktreesChange: vi.fn(),
     onProjectColorChange: vi.fn(),
+    onRefreshInstallationStatus: vi.fn(),
     ...overrides,
   }
 }
@@ -153,12 +154,28 @@ describe('SettingsGeneralCard', () => {
       expect(screen.getByText('Pi not installed')).toBeTruthy()
     })
 
-    it('renders warning when selected provider is Pi and not installed', () => {
+    it('renders provider-specific recovery actions when selected provider is Pi and not installed', async () => {
+      const onRefreshInstallationStatus = vi.fn()
+      const onAiProviderChange = vi.fn()
       render(SettingsGeneralCard, {
-        props: defaultProps({ aiProvider: 'pi', piInstalled: false }),
+        props: defaultProps({
+          aiProvider: 'pi',
+          piInstalled: false,
+          claudeInstalled: true,
+          claudeAuthenticated: true,
+          onRefreshInstallationStatus,
+          onAiProviderChange,
+        }),
       })
 
-      expect(screen.getByText('Selected provider is not installed')).toBeTruthy()
+      expect(screen.getByText('Pi Coding Agent is not installed')).toBeTruthy()
+      expect(screen.getByText(/Install the Pi Coding Agent CLI/i)).toBeTruthy()
+
+      await fireEvent.click(screen.getByRole('button', { name: /refresh install status/i }))
+      expect(onRefreshInstallationStatus).toHaveBeenCalledOnce()
+
+      await fireEvent.click(screen.getByRole('button', { name: /switch to claude code/i }))
+      expect(onAiProviderChange).toHaveBeenCalledWith('claude-code')
     })
 
     it('renders Codex installed status', () => {
@@ -182,7 +199,29 @@ describe('SettingsGeneralCard', () => {
         props: defaultProps({ aiProvider: 'codex', codexInstalled: false }),
       })
 
-      expect(screen.getByText('Selected provider is not installed')).toBeTruthy()
+      expect(screen.getByText('Codex is not installed')).toBeTruthy()
+    })
+
+    it('renders authentication recovery when Claude Code is installed but not authenticated', () => {
+      render(SettingsGeneralCard, {
+        props: defaultProps({ aiProvider: 'claude-code', claudeInstalled: true, claudeAuthenticated: false }),
+      })
+
+      expect(screen.getByText('Claude Code needs authentication')).toBeTruthy()
+      expect(screen.getByText(/run claude login/i)).toBeTruthy()
+    })
+
+    it('does not offer unauthenticated Claude Code as a recovery switch target', () => {
+      render(SettingsGeneralCard, {
+        props: defaultProps({
+          aiProvider: 'pi',
+          piInstalled: false,
+          claudeInstalled: true,
+          claudeAuthenticated: false,
+        }),
+      })
+
+      expect(screen.queryByRole('button', { name: /switch to claude code/i })).toBeNull()
     })
   })
 })

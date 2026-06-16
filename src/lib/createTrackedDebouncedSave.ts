@@ -81,6 +81,7 @@ export function createTrackedDebouncedSave({ delayMs, save }: CreateTrackedDebou
         inFlightPromise = null;
       }
     })();
+    void inFlightPromise.catch(() => {});
 
     return completion.promise;
   }

@@ -18,11 +18,26 @@
     piVersion: string | null
     codexInstalled: boolean
     codexVersion: string | null
+    installationStatusLoading?: boolean
+    installationStatusError?: string | null
     onProjectNameChange: (value: string) => void
     onProjectPathChange: (value: string) => void
     onAiProviderChange: (value: string) => void
     onUseWorktreesChange: () => void
     onProjectColorChange: (value: string) => void
+    onRefreshInstallationStatus: () => void
+  }
+
+  interface ProviderRecoveryInfo {
+    id: string
+    label: string
+    installed: boolean
+    authenticated: boolean
+    version: string | null
+    installTitle: string
+    installGuidance: string
+    authTitle: string | null
+    authGuidance: string | null
   }
 
   let {
@@ -41,11 +56,14 @@
     piVersion,
     codexInstalled,
     codexVersion,
+    installationStatusLoading = false,
+    installationStatusError = null,
     onProjectNameChange,
     onProjectPathChange,
     onAiProviderChange,
     onUseWorktreesChange,
     onProjectColorChange,
+    onRefreshInstallationStatus,
   }: Props = $props()
 
   interface ProjectColorOption {
@@ -62,6 +80,58 @@
   const selectedProjectColor = $derived(
     projectColorOptions.some((color) => color.id === projectColor) ? projectColor : ''
   )
+
+  const providerRecoveryInfo = $derived<ProviderRecoveryInfo[]>([
+    {
+      id: 'claude-code',
+      label: 'Claude Code',
+      installed: claudeInstalled,
+      authenticated: claudeAuthenticated,
+      version: claudeVersion,
+      installTitle: 'Claude Code is not installed',
+      installGuidance: 'Install Claude Code from Anthropic, then run claude login in your terminal before using it for tasks.',
+      authTitle: 'Claude Code needs authentication',
+      authGuidance: 'Run claude login in your terminal, then refresh install status to confirm OpenForge can use Claude Code.',
+    },
+    {
+      id: 'opencode',
+      label: 'OpenCode',
+      installed: opencodeInstalled,
+      authenticated: true,
+      version: opencodeVersion,
+      installTitle: 'OpenCode is not installed',
+      installGuidance: 'Install OpenCode and make sure the opencode command is available on PATH, then refresh install status.',
+      authTitle: null,
+      authGuidance: null,
+    },
+    {
+      id: 'pi',
+      label: 'Pi Coding Agent',
+      installed: piInstalled,
+      authenticated: true,
+      version: piVersion,
+      installTitle: 'Pi Coding Agent is not installed',
+      installGuidance: 'Install the Pi Coding Agent CLI and make sure the pi command is available on PATH, then refresh install status.',
+      authTitle: null,
+      authGuidance: null,
+    },
+    {
+      id: 'codex',
+      label: 'Codex',
+      installed: codexInstalled,
+      authenticated: true,
+      version: codexVersion,
+      installTitle: 'Codex is not installed',
+      installGuidance: 'Install the Codex CLI and make sure the codex command is available on PATH, then refresh install status.',
+      authTitle: null,
+      authGuidance: null,
+    },
+  ])
+
+  const selectedProviderRecovery = $derived(providerRecoveryInfo.find((provider) => provider.id === aiProvider) ?? null)
+  const installedProviderAlternatives = $derived(providerRecoveryInfo.filter((provider) => provider.id !== aiProvider && provider.installed && provider.authenticated))
+  const selectedProviderNeedsInstall = $derived(!!selectedProviderRecovery && !selectedProviderRecovery.installed)
+  const selectedProviderNeedsAuth = $derived(!!selectedProviderRecovery && selectedProviderRecovery.installed && !selectedProviderRecovery.authenticated)
 
   function focusProjectColorRadio(event: KeyboardEvent, optionIndex: number) {
     const target = event.currentTarget
@@ -149,7 +219,7 @@
         </select>
       </label>
 
-      <div class="flex flex-col gap-1 text-xs">
+      <div class="flex flex-col gap-1 text-xs" aria-live="polite">
         <div class="flex items-center gap-2">
           {#if opencodeInstalled}
             <span class="text-success">✓</span>
@@ -191,11 +261,46 @@
             <span class="text-base-content/50">Codex not installed</span>
           {/if}
         </div>
+        {#if installationStatusLoading}
+          <div class="flex items-center gap-2 text-base-content/60">
+            <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
+            <span>Checking provider installs…</span>
+          </div>
+        {/if}
       </div>
 
-      {#if (aiProvider === 'opencode' && !opencodeInstalled) || (aiProvider === 'claude-code' && !claudeInstalled) || (aiProvider === 'pi' && !piInstalled) || (aiProvider === 'codex' && !codexInstalled)}
-        <div class="alert alert-warning text-xs py-2">
-          <span>Selected provider is not installed</span>
+      {#if selectedProviderRecovery && (selectedProviderNeedsInstall || selectedProviderNeedsAuth)}
+        <div class="alert alert-warning text-xs py-2 flex-col items-start gap-2" role="status">
+          <div class="flex flex-col gap-1">
+            <span class="font-semibold">{selectedProviderNeedsInstall ? selectedProviderRecovery.installTitle : selectedProviderRecovery.authTitle}</span>
+            <span>{selectedProviderNeedsInstall ? selectedProviderRecovery.installGuidance : selectedProviderRecovery.authGuidance}</span>
+            {#if installationStatusError}
+              <span class="text-error">Could not refresh install status: {installationStatusError}</span>
+            {/if}
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button
+              type="button"
+              class="btn btn-xs btn-warning"
+              onclick={onRefreshInstallationStatus}
+              disabled={installationStatusLoading}
+            >
+              {installationStatusLoading ? 'Refreshing…' : 'Refresh install status'}
+            </button>
+            {#if installedProviderAlternatives.length > 0}
+              {#each installedProviderAlternatives as provider (provider.id)}
+                <button
+                  type="button"
+                  class="btn btn-xs btn-ghost"
+                  onclick={() => onAiProviderChange(provider.id)}
+                >
+                  Switch to {provider.label}
+                </button>
+              {/each}
+            {:else}
+              <span class="text-base-content/60">No installed provider alternatives detected yet.</span>
+            {/if}
+          </div>
         </div>
       {/if}
     </div>
