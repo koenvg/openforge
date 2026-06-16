@@ -1,8 +1,8 @@
 <script lang="ts">
   import { tick } from 'svelte'
   import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
-  import { dayOfWeekFromCron, timeOfDayFromCron } from '../lib/cron'
-  import type { ScheduledFireOutcome, SchedulePreset, TaskSchedule, TaskScheduleMode } from '../lib/types'
+  import { dayOfWeekFromCron, timeOfDayFromCron, validateFiveFieldCron } from '../lib/cron'
+  import type { ScheduledFireOutcome, SchedulePreset, TaskSchedule, TaskScheduleDraft, TaskScheduleMode } from '../lib/types'
 
   interface Props {
     api: FrontendOpenForgeAPI
@@ -15,6 +15,7 @@
   const SAVE_SCHEDULE_METHOD = 'saveSchedule'
   const DELETE_SCHEDULE_METHOD = 'deleteSchedule'
   const RUN_NOW_METHOD = 'runNow'
+  const CRON_HELP_TEXT = 'Use five fields: minute hour day-of-month month day-of-week.'
 
   let { api, context: _context, projectId, projectName = '' }: Props = $props()
 
@@ -29,6 +30,10 @@
     advancedCron: boolean
     mode: TaskScheduleMode
     enabled: boolean
+  }
+
+  type FieldErrors = {
+    cron: string | null
   }
 
   const timeOptions = Array.from({ length: 24 * 4 }, (_, index) => {
@@ -60,10 +65,18 @@
     enabled: true,
   })
 
+  const emptyFieldErrors = (): FieldErrors => ({ cron: null })
+
   let schedules = $state<TaskSchedule[]>([])
   let draft = $state<Draft>(emptyDraft())
+  let fieldErrors = $state<FieldErrors>(emptyFieldErrors())
   let loading = $state(false)
   let saving = $state(false)
+  let deletingScheduleId = $state<string | null>(null)
+  let runningScheduleId = $state<string | null>(null)
+  let undoingDelete = $state(false)
+  let confirmingDeleteId = $state<string | null>(null)
+  let recentlyDeleted = $state<TaskSchedule | null>(null)
   let error = $state<string | null>(null)
   let previousProjectId: string | null = null
   let loadRequestId = 0
@@ -79,6 +92,9 @@
     previousProjectId = projectId
     loadRequestId += 1
     draft = emptyDraft()
+    fieldErrors = emptyFieldErrors()
+    recentlyDeleted = null
+    confirmingDeleteId = null
     schedules = []
     if (projectId) {
       void loadSchedules(projectId)
@@ -100,7 +116,7 @@
       schedules = loadedSchedules
     } catch (cause) {
       if (!isCurrentLoad(activeProjectId, requestId)) return
-      error = cause instanceof Error ? cause.message : String(cause)
+      error = messageForAsyncError(cause)
     } finally {
       if (isCurrentLoad(activeProjectId, requestId)) {
         loading = false
@@ -110,29 +126,23 @@
 
   async function saveSchedule() {
     if (!projectId) return
-    saving = true
     error = null
+    fieldErrors = emptyFieldErrors()
+    if (!validateDraft()) return
+
+    saving = true
     try {
       const saved = await api.backend.invoke<TaskSchedule>(SAVE_SCHEDULE_METHOD, {
         projectId,
-        schedule: {
-          id: draft.id,
-          title: draft.title,
-          prompt: draft.prompt,
-          preset: draft.advancedCron ? 'custom' : draft.preset,
-          cron: draft.advancedCron ? draft.cron : null,
-          timeOfDay: draft.advancedCron ? null : draft.timeOfDay,
-          dayOfWeek: !draft.advancedCron && draft.preset === 'weekly' ? draft.dayOfWeek : null,
-          mode: draft.mode,
-          enabled: draft.enabled,
-        },
+        schedule: draftToPayload(draft),
       })
       schedules = schedules.some((schedule) => schedule.id === saved.id)
         ? schedules.map((schedule) => schedule.id === saved.id ? saved : schedule)
         : [...schedules, saved]
       draft = emptyDraft()
+      fieldErrors = emptyFieldErrors()
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : String(cause)
+      handleSaveError(cause)
     } finally {
       saving = false
     }
@@ -151,32 +161,133 @@
       mode: schedule.mode,
       enabled: schedule.enabled,
     }
+    fieldErrors = emptyFieldErrors()
+    error = null
     editAnnouncement = `Editing ${schedule.title}`
     await tick()
     titleInput?.focus()
   }
 
-  async function deleteSchedule(scheduleId: string) {
+  async function deleteSchedule(schedule: TaskSchedule) {
     if (!projectId) return
     error = null
+    deletingScheduleId = schedule.id
     try {
-      await api.backend.invoke(DELETE_SCHEDULE_METHOD, { projectId, scheduleId })
-      schedules = schedules.filter((schedule) => schedule.id !== scheduleId)
-      if (draft.id === scheduleId) draft = emptyDraft()
+      await api.backend.invoke(DELETE_SCHEDULE_METHOD, { projectId, scheduleId: schedule.id })
+      schedules = schedules.filter((candidate) => candidate.id !== schedule.id)
+      recentlyDeleted = schedule
+      confirmingDeleteId = null
+      if (draft.id === schedule.id) draft = emptyDraft()
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : String(cause)
+      error = messageForAsyncError(cause)
+    } finally {
+      deletingScheduleId = null
+    }
+  }
+
+  async function undoDelete() {
+    if (!projectId || !recentlyDeleted) return
+    error = null
+    undoingDelete = true
+    const schedule = recentlyDeleted
+    try {
+      const saved = await api.backend.invoke<TaskSchedule>(SAVE_SCHEDULE_METHOD, {
+        projectId,
+        schedule: scheduleToDraftPayload(schedule),
+      })
+      schedules = schedules.some((candidate) => candidate.id === saved.id)
+        ? schedules.map((candidate) => candidate.id === saved.id ? saved : candidate)
+        : [...schedules, saved]
+      recentlyDeleted = null
+    } catch (cause) {
+      error = messageForAsyncError(cause)
+    } finally {
+      undoingDelete = false
     }
   }
 
   async function runNow(scheduleId: string) {
     if (!projectId) return
     error = null
+    runningScheduleId = scheduleId
     try {
       await api.backend.invoke<ScheduledFireOutcome>(RUN_NOW_METHOD, { projectId, scheduleId })
       await loadSchedules(projectId)
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : String(cause)
+      error = messageForAsyncError(cause)
+    } finally {
+      runningScheduleId = null
     }
+  }
+
+  function validateDraft(): boolean {
+    if (!draft.advancedCron) return true
+
+    const validation = validateFiveFieldCron(draft.cron)
+    if (validation.valid) return true
+
+    fieldErrors = { ...fieldErrors, cron: CRON_HELP_TEXT }
+    error = 'Fix the highlighted schedule fields and try again.'
+    return false
+  }
+
+  function handleSaveError(cause: unknown): void {
+    if (isCronError(cause)) {
+      fieldErrors = { ...fieldErrors, cron: CRON_HELP_TEXT }
+      error = 'Fix the highlighted schedule fields and try again.'
+      return
+    }
+
+    error = messageForAsyncError(cause)
+  }
+
+  function draftToPayload(currentDraft: Draft): TaskScheduleDraft {
+    return {
+      id: currentDraft.id,
+      title: currentDraft.title,
+      prompt: currentDraft.prompt,
+      preset: currentDraft.advancedCron ? 'custom' : currentDraft.preset,
+      cron: currentDraft.advancedCron ? currentDraft.cron : null,
+      timeOfDay: currentDraft.advancedCron ? null : currentDraft.timeOfDay,
+      dayOfWeek: !currentDraft.advancedCron && currentDraft.preset === 'weekly' ? currentDraft.dayOfWeek : null,
+      mode: currentDraft.mode,
+      enabled: currentDraft.enabled,
+    }
+  }
+
+  function scheduleToDraftPayload(schedule: TaskSchedule): TaskScheduleDraft {
+    return {
+      id: schedule.id,
+      title: schedule.title,
+      prompt: schedule.prompt,
+      preset: schedule.preset,
+      cron: schedule.preset === 'custom' ? schedule.cron : null,
+      timeOfDay: schedule.preset === 'custom' ? null : timeOfDayFromCron(schedule.cron),
+      dayOfWeek: schedule.preset === 'weekly' ? dayOfWeekFromCron(schedule.cron) : null,
+      mode: schedule.mode,
+      enabled: schedule.enabled,
+      createdAt: schedule.createdAt,
+      lastFireAt: schedule.lastFireAt,
+      lastTaskId: schedule.lastTaskId,
+      history: schedule.history,
+    }
+  }
+
+  function messageForAsyncError(cause: unknown): string {
+    return cause instanceof Error ? cause.message : String(cause)
+  }
+
+  function isCronError(cause: unknown): boolean {
+    const message = messageForAsyncError(cause).toLowerCase()
+    return message.includes('cron') || message.includes('schedule preset') || message.includes('field')
+  }
+
+  function runNowDescription(schedule: TaskSchedule): string {
+    if (schedule.mode === 'create-only') {
+      return 'Creates a scheduled board Task immediately without starting implementation.'
+    }
+
+    return 'Creates a scheduled board Task immediately and starts implementation if no previous scheduled Task is still open.'
   }
 
   function formatDate(value: number | null): string {
@@ -192,7 +303,7 @@
       <p class="text-xs text-base-content/60">Create recurring project tasks and optional implementation runs.</p>
     </div>
     {#if projectId}
-      <button class="btn btn-sm" type="button" onclick={() => loadSchedules(projectId)}>Refresh</button>
+      <button class="btn btn-sm" type="button" disabled={loading} onclick={() => loadSchedules(projectId)}>{loading ? 'Refreshing…' : 'Refresh'}</button>
     {/if}
   </div>
 
@@ -203,12 +314,19 @@
     <div class="alert alert-info">Select a project to manage Task Schedules.</div>
   {:else}
     {#if error}
-      <div class="alert alert-error mb-4">{error}</div>
+      <div class="alert alert-error mb-4" role="alert" aria-live="assertive">{error}</div>
+    {/if}
+
+    {#if recentlyDeleted}
+      <div class="alert alert-info mb-4" aria-live="polite">
+        <span>Deleted “{recentlyDeleted.title}”.</span>
+        <button class="btn btn-sm" type="button" disabled={undoingDelete} onclick={undoDelete}>{undoingDelete ? 'Restoring…' : 'Undo delete'}</button>
+      </div>
     {/if}
 
     <div class="grid items-start gap-y-6 gap-x-4 md:grid-cols-[minmax(18rem,1fr)_minmax(22rem,28rem)]">
       <section class="min-w-0 space-y-3" aria-label="Task schedules list">
-        {#if loading}
+        {#if loading && schedules.length === 0}
           <div class="loading loading-spinner loading-md" aria-label="Loading Task Schedules"></div>
         {:else if sortedSchedules.length === 0}
           <div class="rounded-box border border-dashed border-base-300 bg-base-100 px-4 py-6 text-sm text-base-content/70">
@@ -247,6 +365,8 @@
                 </div>
               </dl>
 
+              <p class="mt-3 text-xs leading-relaxed text-base-content/60">{runNowDescription(schedule)}</p>
+
               {#if schedule.history.length > 0}
                 <div class="mt-4 rounded-box bg-base-200 p-3">
                   <h3 class="text-sm font-semibold">Recent Scheduled Fires</h3>
@@ -259,9 +379,21 @@
               {/if}
 
               <div class="mt-4 flex flex-wrap gap-2">
-                <button class="btn btn-primary btn-sm" type="button" onclick={() => runNow(schedule.id)}>Run now</button>
-                <button class="btn btn-sm" type="button" onclick={() => { void editSchedule(schedule) }}>Edit</button>
-                <button class="btn btn-ghost btn-sm" type="button" onclick={() => deleteSchedule(schedule.id)}>Delete</button>
+                <button class="btn btn-primary btn-sm" type="button" disabled={runningScheduleId === schedule.id || deletingScheduleId === schedule.id} onclick={() => runNow(schedule.id)}>
+                  {runningScheduleId === schedule.id ? 'Running now…' : 'Run now'}
+                </button>
+                <button class="btn btn-sm" type="button" disabled={runningScheduleId === schedule.id || deletingScheduleId === schedule.id} onclick={() => { void editSchedule(schedule) }}>Edit</button>
+                {#if confirmingDeleteId === schedule.id}
+                  <span class="inline-flex flex-wrap items-center gap-2 rounded-box bg-base-200 px-2 py-1 text-sm" role="group" aria-label="Confirm delete Task Schedule">
+                    <span>Delete this Task Schedule?</span>
+                    <button class="btn btn-error btn-xs" type="button" disabled={deletingScheduleId === schedule.id} onclick={() => deleteSchedule(schedule)}>
+                      {deletingScheduleId === schedule.id ? 'Deleting…' : 'Confirm delete'}
+                    </button>
+                    <button class="btn btn-ghost btn-xs" type="button" disabled={deletingScheduleId === schedule.id} onclick={() => { confirmingDeleteId = null }}>Cancel</button>
+                  </span>
+                {:else}
+                  <button class="btn btn-ghost btn-sm" type="button" disabled={runningScheduleId === schedule.id || deletingScheduleId === schedule.id} onclick={() => { confirmingDeleteId = schedule.id }}>Delete</button>
+                {/if}
               </div>
             </article>
           {/each}
@@ -285,10 +417,20 @@
           </label>
 
           {#if draft.advancedCron}
-            <label class="form-control flex w-full flex-col gap-1">
-              <span class="label-text text-xs font-medium uppercase tracking-wide text-base-content/60">Cron expression</span>
-              <input class="input input-bordered w-full font-mono" bind:value={draft.cron} placeholder="*/30 * * * *" />
-            </label>
+            <div class="form-control flex w-full flex-col gap-1">
+              <label for="cron-expression" class="label-text text-xs font-medium uppercase tracking-wide text-base-content/60">Cron expression</label>
+              <input
+                id="cron-expression"
+                class="input input-bordered w-full font-mono {fieldErrors.cron ? 'input-error' : ''}"
+                bind:value={draft.cron}
+                placeholder="*/30 * * * *"
+                aria-describedby="cron-help"
+                aria-invalid={fieldErrors.cron ? 'true' : 'false'}
+                oninput={() => { fieldErrors = { ...fieldErrors, cron: null } }}
+                onblur={() => { if (draft.advancedCron && draft.cron.trim()) validateDraft() }}
+              />
+              <span id="cron-help" class="text-xs {fieldErrors.cron ? 'text-error' : 'text-base-content/60'}">{fieldErrors.cron ?? CRON_HELP_TEXT}</span>
+            </div>
           {:else}
             <div class="grid gap-3 sm:grid-cols-2">
               <label class="form-control flex w-full flex-col gap-1">
@@ -323,17 +465,22 @@
           {/if}
 
           <label class="flex min-h-11 items-center gap-3 rounded-box bg-base-200/60 px-3 text-sm">
-            <input class="checkbox checkbox-primary checkbox-sm" type="checkbox" bind:checked={draft.advancedCron} />
+            <input class="checkbox checkbox-primary checkbox-sm" type="checkbox" bind:checked={draft.advancedCron} onchange={() => { fieldErrors = emptyFieldErrors() }} />
             <span>Advanced: use a cron expression</span>
           </label>
 
-          <label class="form-control flex w-full flex-col gap-1">
-            <span class="label-text text-xs font-medium uppercase tracking-wide text-base-content/60">Mode</span>
-            <select class="select select-bordered w-full" bind:value={draft.mode}>
+          <div class="form-control flex w-full flex-col gap-1">
+            <label for="schedule-mode" class="label-text text-xs font-medium uppercase tracking-wide text-base-content/60">Mode</label>
+            <select id="schedule-mode" class="select select-bordered w-full" bind:value={draft.mode} aria-describedby="schedule-mode-help">
               <option value="create-and-start">Create + start</option>
               <option value="create-only">Create only</option>
             </select>
-          </label>
+            <span id="schedule-mode-help" class="text-xs text-base-content/60">
+              {draft.mode === 'create-and-start'
+                ? 'Scheduled Fires create a board Task and start implementation when no previous scheduled Task is still open.'
+                : 'Scheduled Fires create a board Task and leave it in the backlog for manual start.'}
+            </span>
+          </div>
 
           <label class="flex min-h-11 items-center gap-3 rounded-box bg-base-200/60 px-3 text-sm">
             <input class="toggle toggle-primary" type="checkbox" bind:checked={draft.enabled} />
@@ -343,7 +490,7 @@
           <div class="flex flex-wrap gap-2 pt-1">
             <button class="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save Task Schedule'}</button>
             {#if draft.id}
-              <button class="btn btn-ghost" type="button" onclick={() => { draft = emptyDraft() }}>Cancel</button>
+              <button class="btn btn-ghost" type="button" disabled={saving} onclick={() => { draft = emptyDraft(); fieldErrors = emptyFieldErrors() }}>Cancel</button>
             {/if}
           </div>
         </form>

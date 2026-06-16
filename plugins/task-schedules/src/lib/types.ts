@@ -38,4 +38,8 @@ export interface TaskScheduleDraft {
   dayOfWeek?: number | null
   mode?: TaskScheduleMode | null
   enabled?: boolean | null
+  createdAt?: number | null
+  lastFireAt?: number | null
+  lastTaskId?: string | null
+  history?: ScheduledFireOutcome[] | null
 }

@@ -215,24 +215,29 @@ function normalizeScheduleDraft(draft: TaskScheduleDraft, existing: TaskSchedule
   }
 
   return {
-    id: existing?.id ?? createId('schedule', now),
+    id: existing?.id ?? normalizeDraftId(draft.id) ?? createId('schedule', now),
     title,
     prompt,
     preset,
     cron,
     mode,
     enabled: draft.enabled ?? existing?.enabled ?? true,
-    createdAt: existing?.createdAt ?? now,
+    createdAt: existing?.createdAt ?? draft.createdAt ?? now,
     updatedAt: now,
     nextFireAt: getNextScheduledFireAt(cron, now),
-    lastFireAt: existing?.lastFireAt ?? null,
-    lastTaskId: existing?.lastTaskId ?? null,
-    history: existing?.history ?? [],
+    lastFireAt: existing?.lastFireAt ?? draft.lastFireAt ?? null,
+    lastTaskId: existing?.lastTaskId ?? draft.lastTaskId ?? null,
+    history: existing?.history ?? draft.history ?? [],
   }
 }
 
 function isSchedulePreset(value: unknown): value is TaskSchedule['preset'] {
   return value === 'daily' || value === 'weekly' || value === 'monthly' || value === 'custom'
+}
+
+function normalizeDraftId(id: string | null | undefined): string | null {
+  const trimmed = id?.trim()
+  return trimmed ? trimmed : null
 }
 
 function createOutcome(

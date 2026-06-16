@@ -1,10 +1,13 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
-import TaskSchedulesView from './TaskSchedulesView.svelte'
 import type { TaskSchedule } from '../lib/types'
+import TaskSchedulesView from './TaskSchedulesView.svelte'
 
 const LIST_SCHEDULES_METHOD = 'listSchedules'
+
+const whenReady = vi.fn()
+const invoke = vi.fn()
 
 type Deferred<T> = {
   promise: Promise<T>
@@ -22,18 +25,15 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve, reject }
 }
 
-const invoke = vi.fn()
-const whenReady = vi.fn()
-
 function makeApi(): FrontendOpenForgeAPI {
   return {
-    backend: { invoke, whenReady },
+    backend: { whenReady, invoke },
   } as unknown as FrontendOpenForgeAPI
 }
 
-const runtimeContext: OpenForgeContextSnapshot = {
+const context: OpenForgeContextSnapshot = {
   pluginId: 'com.openforge.task-schedules',
-  projectId: 'project-a',
+  projectId: 'project-1',
 }
 
 function makeSchedule(overrides: Partial<TaskSchedule> = {}): TaskSchedule {
@@ -45,8 +45,8 @@ function makeSchedule(overrides: Partial<TaskSchedule> = {}): TaskSchedule {
     cron: '0 9 * * *',
     mode: 'create-and-start',
     enabled: true,
-    createdAt: Date.UTC(2026, 0, 1),
-    updatedAt: Date.UTC(2026, 0, 1),
+    createdAt: Date.UTC(2026, 0, 1, 8),
+    updatedAt: Date.UTC(2026, 0, 1, 8),
     nextFireAt: Date.UTC(2026, 0, 2, 9),
     lastFireAt: null,
     lastTaskId: null,
@@ -68,17 +68,34 @@ function renderTaskSchedulesView(props: { projectId?: string | null; projectName
   return render(TaskSchedulesView, {
     props: {
       api: makeApi(),
-      context: runtimeContext,
-      projectId: props.projectId === undefined ? 'project-a' : props.projectId,
-      projectName: props.projectName ?? 'Project A',
+      context,
+      projectId: props.projectId === undefined ? 'project-1' : props.projectId,
+      projectName: props.projectName ?? 'Project One',
     },
   })
 }
 
-function mockScheduleList(schedules: TaskSchedule[]) {
-  invoke.mockImplementation(async (method: string) => {
+function mockScheduleBackend(schedules: TaskSchedule[]) {
+  invoke.mockImplementation(async (method: string, payload?: { schedule?: Partial<TaskSchedule> }) => {
     if (method === LIST_SCHEDULES_METHOD) return schedules
+    if (method === 'saveSchedule') return makeSchedule({
+      id: payload?.schedule?.id ?? 'saved-schedule',
+      title: payload?.schedule?.title ?? 'Saved schedule',
+      prompt: payload?.schedule?.prompt ?? 'Saved prompt',
+      createdAt: payload?.schedule?.createdAt ?? Date.UTC(2026, 0, 1, 8),
+      lastFireAt: payload?.schedule?.lastFireAt ?? null,
+      lastTaskId: payload?.schedule?.lastTaskId ?? null,
+      history: payload?.schedule?.history ?? [],
+    })
+    if (method === 'runNow') return { id: 'fire-1', firedAt: Date.UTC(2026, 0, 1, 10), trigger: 'manual', status: 'started', taskId: 'T-1', message: 'Created and started scheduled Task T-1' }
+    if (method === 'deleteSchedule') return { deleted: true }
     throw new Error(`Unexpected backend method: ${method}`)
+  })
+}
+
+async function waitForInitialLoad(projectId = 'project-1') {
+  await waitFor(() => {
+    expect(invoke).toHaveBeenCalledWith(LIST_SCHEDULES_METHOD, { projectId })
   })
 }
 
@@ -94,10 +111,9 @@ function getScheduleCard(title: string): HTMLElement {
   return scheduleCard
 }
 
-async function editSchedule(title: string) {
+async function editScheduleByTitle(title: string) {
   const scheduleCard = getScheduleCard(title)
-  const editButton = Array.from(scheduleCard.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Edit')
-  if (!editButton) throw new Error(`Edit button for ${title} not found`)
+  const editButton = within(scheduleCard).getByRole('button', { name: 'Edit' })
   await fireEvent.click(editButton)
 }
 
@@ -202,7 +218,7 @@ describe('TaskSchedulesView accessibility polish', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     whenReady.mockResolvedValue(undefined)
-    mockScheduleList([enabledSchedule, disabledSchedule])
+    mockScheduleBackend([enabledSchedule, disabledSchedule])
   })
 
   afterEach(() => {
@@ -222,7 +238,7 @@ describe('TaskSchedulesView accessibility polish', () => {
     renderTaskSchedulesView({ projectName: 'Demo Project' })
     await waitForSchedulesToLoad()
 
-    await editSchedule('Daily dependency triage')
+    await editScheduleByTitle('Daily dependency triage')
 
     await waitFor(() => {
       expect(document.activeElement).toBe(screen.getByLabelText('Title'))
@@ -237,12 +253,12 @@ describe('TaskSchedulesView accessibility polish', () => {
     renderTaskSchedulesView({ projectName: 'Demo Project' })
     await waitForSchedulesToLoad()
 
-    await editSchedule('Daily dependency triage')
+    await editScheduleByTitle('Daily dependency triage')
     const enabledToggle = screen.getByLabelText(/schedule enabled/i) as HTMLInputElement
     expect(enabledToggle.checked).toBe(true)
     expect(screen.queryByText(/^Enabled by default$/i)).toBeNull()
 
-    await editSchedule('Dormant cleanup review')
+    await editScheduleByTitle('Dormant cleanup review')
     const disabledToggle = screen.getByLabelText(/schedule disabled/i) as HTMLInputElement
     expect(disabledToggle.checked).toBe(false)
     expect(screen.queryByText(/^Enabled by default$/i)).toBeNull()
@@ -254,7 +270,7 @@ describe('TaskSchedulesView accessibility polish', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Demo Project — Task Schedules' })).toBeTruthy()
 
     await waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith(LIST_SCHEDULES_METHOD, { projectId: 'project-a' })
+      expect(invoke).toHaveBeenCalledWith(LIST_SCHEDULES_METHOD, { projectId: 'project-1' })
     })
 
     await fireEvent.click(screen.getByRole('button', { name: /refresh/i }))
@@ -262,6 +278,119 @@ describe('TaskSchedulesView accessibility polish', () => {
     await waitFor(() => {
       expect(invoke).toHaveBeenCalledTimes(2)
     })
-    expect(invoke).toHaveBeenLastCalledWith(LIST_SCHEDULES_METHOD, { projectId: 'project-a' })
+    expect(invoke).toHaveBeenLastCalledWith(LIST_SCHEDULES_METHOD, { projectId: 'project-1' })
+  })
+})
+
+describe('TaskSchedulesView UX feedback', () => {
+  beforeEach(() => {
+    cleanup()
+    vi.clearAllMocks()
+    whenReady.mockResolvedValue(undefined)
+  })
+
+  it('shows inline cron validation help and does not save invalid custom cron', async () => {
+    mockScheduleBackend([])
+    renderTaskSchedulesView()
+    await waitForInitialLoad()
+
+    await fireEvent.input(screen.getByLabelText('Title'), { target: { value: 'Every minute' } })
+    await fireEvent.input(screen.getByLabelText('Plain prompt'), { target: { value: 'Check the queue' } })
+    await fireEvent.click(screen.getByLabelText('Advanced: use a cron expression'))
+    await fireEvent.input(screen.getByLabelText('Cron expression'), { target: { value: 'not a cron' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Save Task Schedule' }))
+
+    expect(await screen.findByText('Use five fields: minute hour day-of-month month day-of-week.')).toBeTruthy()
+    expect(screen.getByLabelText('Cron expression').getAttribute('aria-invalid')).toBe('true')
+    expect(invoke).not.toHaveBeenCalledWith('saveSchedule', expect.anything())
+  })
+
+  it('announces async save failures without exposing raw cron parser wording', async () => {
+    invoke.mockImplementation(async (method: string) => {
+      if (method === LIST_SCHEDULES_METHOD) return []
+      if (method === 'saveSchedule') throw new Error('Custom Schedule Preset must use five-field cron syntax')
+      throw new Error(`Unexpected method ${method}`)
+    })
+
+    renderTaskSchedulesView()
+    await waitForInitialLoad()
+
+    await fireEvent.input(screen.getByLabelText('Title'), { target: { value: 'Bad backend cron' } })
+    await fireEvent.input(screen.getByLabelText('Plain prompt'), { target: { value: 'Check the queue' } })
+    await fireEvent.click(screen.getByLabelText('Advanced: use a cron expression'))
+    await fireEvent.input(screen.getByLabelText('Cron expression'), { target: { value: '* * * * *' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Save Task Schedule' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('Fix the highlighted schedule fields and try again.')
+    expect(alert.textContent).not.toContain('Custom Schedule Preset')
+    expect(screen.getByText('Use five fields: minute hour day-of-month month day-of-week.')).toBeTruthy()
+  })
+
+  it('shows per-action pending feedback for run now and refresh', async () => {
+    let resolveRunNow!: (value: unknown) => void
+    const runNow = new Promise((resolve) => { resolveRunNow = resolve })
+    invoke.mockImplementation(async (method: string) => {
+      if (method === LIST_SCHEDULES_METHOD) return [makeSchedule()]
+      if (method === 'runNow') return runNow
+      throw new Error(`Unexpected method ${method}`)
+    })
+
+    renderTaskSchedulesView()
+    await screen.findByText('Daily dependency triage')
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Refresh' })).toBeTruthy()
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: /Run now/ }))
+    expect(screen.getByRole('button', { name: 'Running now…' })).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Refresh' }) as HTMLButtonElement).disabled).toBe(false)
+
+    resolveRunNow({ id: 'fire-1', firedAt: Date.UTC(2026, 0, 1, 10), trigger: 'manual', status: 'started', taskId: 'T-1', message: 'Created and started scheduled Task T-1' })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Run now/ })).toBeTruthy()
+    })
+  })
+
+  it('clarifies Run now side effects for create-only and create-and-start schedules', async () => {
+    mockScheduleBackend([
+      makeSchedule({ id: 'create-only', title: 'Create only', mode: 'create-only' }),
+      makeSchedule({ id: 'create-start', title: 'Create start', mode: 'create-and-start' }),
+    ])
+    renderTaskSchedulesView()
+
+    expect(await screen.findByText('Creates a scheduled board Task immediately without starting implementation.')).toBeTruthy()
+    expect(screen.getByText('Creates a scheduled board Task immediately and starts implementation if no previous scheduled Task is still open.')).toBeTruthy()
+  })
+
+  it('requires delete confirmation and offers undo after deletion', async () => {
+    mockScheduleBackend([makeSchedule()])
+    renderTaskSchedulesView()
+    const card = (await screen.findByText('Daily dependency triage')).closest('article') as HTMLElement
+
+    await fireEvent.click(within(card).getByRole('button', { name: 'Delete' }))
+    expect(within(card).getByText('Delete this Task Schedule?')).toBeTruthy()
+    expect(invoke).not.toHaveBeenCalledWith('deleteSchedule', expect.anything())
+
+    await fireEvent.click(within(card).getByRole('button', { name: 'Confirm delete' }))
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('deleteSchedule', { projectId: 'project-1', scheduleId: 'schedule-1' })
+    })
+    expect(await screen.findByRole('button', { name: 'Undo delete' })).toBeTruthy()
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Undo delete' }))
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('saveSchedule', expect.objectContaining({
+        projectId: 'project-1',
+        schedule: expect.objectContaining({
+          id: 'schedule-1',
+          title: 'Daily dependency triage',
+          createdAt: Date.UTC(2026, 0, 1, 8),
+          history: [],
+        }),
+      }))
+    })
+    expect(await screen.findByText('Daily dependency triage')).toBeTruthy()
   })
 })
