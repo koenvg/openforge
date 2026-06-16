@@ -113,23 +113,23 @@ The core claim of the **Marketing Site**: run AI coding agents without losing co
 _Avoid_: Autonomous software factory, AI developer replacement, productivity dashboard
 
 **Marketing Site Plugin Customization Pillar**:
-A top-level **Marketing Site** reason to use OpenForge: the task-based operator console stays stable while **Trusted Plugins** let users shape the workspace around their own workflow.
+A top-level **Marketing Site** reason to use OpenForge: the task-based operator console stays stable while **Trusted Plugins** let users shape the workspace around their own workflow, shown as both a top-reason card and a small concrete section.
 _Avoid_: Arbitrary untrusted extensions, hosted marketplace promise, plugin-only product
 
 **Marketing Site Top Reasons**:
-The three primary reasons the **Marketing Site** gives for using OpenForge: stay in control of agent work, work locally with visible state, and customize the operator console with **Trusted Plugins**.
-_Avoid_: Generic productivity claims, enterprise collaboration claims, review-only positioning
+The three primary reasons the **Marketing Site** gives for using OpenForge, presented with control first: stay in control of agent work, let agents manage OpenForge **Tasks** through the CLI, and customize OpenForge to your workflow with **Trusted Plugins**.
+_Avoid_: Generic productivity claims, enterprise collaboration claims, review-only positioning, full-app agent control claims
 
 **Marketing Site Workspace**:
 The repository location for website implementation: an Astro monorepo workspace app at `apps/website`.
 _Avoid_: Desktop renderer, docs folder site, separate repository
 
 **Marketing Site First Milestone**:
-The first website implementation target: a static one-page **Marketing Site** with hero, top reasons, workflow, plugin customization, screenshots, local-first trust, install block, and footer links.
-_Avoid_: Blog, hosted docs system, plugin marketplace, analytics, mailing list, interactive demo
+The first website implementation target: a small static one-page **Marketing Site** ordered as hero with the existing workflow visual, top reasons, product screenshot proof, a small plugin customization section, install/GitHub call-to-action block, and footer links.
+_Avoid_: Blog, hosted docs system, plugin marketplace, analytics, mailing list, interactive demo, standalone workflow section, standalone local-first trust section
 
 **Marketing Site Visual Direction**:
-A calm developer-tool aesthetic for the **Marketing Site** that foregrounds product screenshots and focused workflow rather than flashy AI imagery.
+A calm developer-tool aesthetic for the **Marketing Site** that uses the workflow hero visual and product screenshots rather than flashy AI imagery.
 _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot art
 
 ## Relationships
@@ -172,9 +172,10 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - The **Marketing Site Primary Conversion** is supported by source-code credibility, documentation, and philosophy rather than replacing them.
 - The **Marketing Site Promise** emphasizes human control over coding-agent workflow, not autonomous replacement.
 - The **Marketing Site Plugin Customization Pillar** depends on **Trusted Plugins** and explicit host capabilities rather than implying unrestricted sandboxed code.
+- **Marketing Site Top Reasons** frame CLI task management as agent-facing task coordination, not unrestricted app control.
 - **Marketing Site Top Reasons** frame PR review and self-review as part of staying in control, not as the sole product category.
 - The **Marketing Site Workspace** keeps website implementation separate from the desktop renderer while staying version-aligned with product language and assets.
-- The **Marketing Site First Milestone** validates positioning before adding multi-page content, analytics, or marketplace-like surfaces.
+- The **Marketing Site First Milestone** validates positioning before adding standalone workflow education, standalone local-first trust messaging, multi-page content, analytics, or marketplace-like surfaces.
 - The **Marketing Site Visual Direction** should make OpenForge feel precise, grounded, and calm rather than autonomous or noisy.
 
 ## Example dialogue
@@ -201,4 +202,6 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - "Terminal API" could mean a host `openforge.terminal` capability, a normal package dependency, or the shared runtime — resolved: **Terminal Runtime** names the shared runtime; lower-level shell/event APIs remain capability primitives.
 - "Latest hash" in self-review could mean branch HEAD, latest commit, or the last accepted file version — resolved: use **Reviewed File Snapshot** for the last accepted file version.
 - "Website" could mean a hosted product surface or public promotion — resolved: the current website direction is a **Marketing Site**, not a web version of OpenForge.
+- The **Marketing Site First Milestone** could mean the broader ADR 0003 section list or a smaller launch page — resolved: keep the first implementation small and avoid standalone workflow and local-first trust sections.
+- "Agent controls OpenForge through the CLI" could imply unrestricted app automation — resolved: the **Marketing Site Top Reasons** should say agents manage OpenForge **Tasks** through the CLI.
 - The **Marketing Site Promise** could be inflated into agent autonomy claims — resolved: avoid promises of autonomous engineering teams, code-review replacement, one-click shipping, hosted control planes, universal provider support, or enterprise collaboration suites.
