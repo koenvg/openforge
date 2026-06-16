@@ -1,12 +1,14 @@
 <script lang="ts">
   import type { Task, PullRequestInfo, PrComment } from '../../lib/types'
-  import { parseCheckRuns, splitCheckRuns } from '../../lib/types'
   import { getTaskDependentSummaries, getTaskDependencySummaries, getWaitingDependencyCount } from '../../lib/taskDependencies'
-  import { getPrComments, markCommentAddressed, openUrl } from '../../lib/ipc'
+  import { openUrl } from '../../lib/ipc'
   import MarkdownContent from '../shared/content/MarkdownContent.svelte'
   import { getPrStatusChips } from '../../lib/prStatusPresentation'
   import { getGitHubMarkdownImageBaseUrl } from '../../lib/githubMarkdown'
+  import { createPrCommentLoader } from '../../lib/prComments.svelte'
   import PrStatusChip from '../shared/ui/PrStatusChip.svelte'
+  import PrCommentsList from '../shared/pr/PrCommentsList.svelte'
+  import PrPipelineChecks from '../shared/pr/PrPipelineChecks.svelte'
   import TaskRelationshipDetailSection from '../shared/tasks/TaskRelationshipDetailSection.svelte'
 
   interface Props {
@@ -18,36 +20,19 @@
 
   let { task, allTasks = [], pullRequests, onOpenFullView }: Props = $props()
 
-  let comments = $state<PrComment[]>([])
-  let unaddressedComments = $derived(comments.filter(c => c.addressed === 0))
+  const commentLoader = createPrCommentLoader({
+    getPullRequests: () => pullRequests,
+    isEnabled: () => task !== null,
+  })
+
   let markdownImageBaseUrlsByPrId = $derived(new Map(pullRequests.map((pr) => [pr.id, getGitHubMarkdownImageBaseUrl(pr)])))
   let dependencies = $derived(task ? getTaskDependencySummaries(task, allTasks) : [])
   let waitingDependencyCount = $derived(task ? getWaitingDependencyCount(task, allTasks) : 0)
   let dependents = $derived(task ? getTaskDependentSummaries(task, allTasks) : [])
 
-  async function fetchComments() {
-    if (!task || pullRequests.length === 0) {
-      comments = []
-      return
-    }
-    const results = await Promise.all(pullRequests.map((pr) => getPrComments(pr.id)))
-    comments = results.flat()
-  }
-
-  async function handleMarkAddressed(commentId: number) {
-    await markCommentAddressed(commentId)
-    await fetchComments()
-  }
-
   function getCommentImageBaseUrl(comment: PrComment): string | null {
     return markdownImageBaseUrlsByPrId.get(comment.pr_id) ?? null
   }
-
-  $effect(() => {
-    void task
-    void pullRequests
-    fetchComments()
-  })
 </script>
 
 {#if task === null}
@@ -126,8 +111,6 @@
         <span class="font-mono text-[10px] font-bold text-primary">// PIPELINE_STATUS</span>
         {#each pullRequests as pr (pr.id)}
           {#if pr.ci_status}
-            {@const checkRuns = parseCheckRuns(pr.ci_check_runs)}
-            {@const { visible, passingCount } = splitCheckRuns(checkRuns)}
             {@const ciChip = getPrStatusChips(pr, 'detail').find(c => c.type === 'ci')}
             <div class="flex flex-col gap-1.5">
               <div class="flex items-center justify-between gap-2">
@@ -143,26 +126,7 @@
                   </span>
                 {/if}
               </div>
-              {#if visible.length > 0 || passingCount > 0}
-                <div class="flex flex-col gap-1 pl-1">
-                  {#each visible as check (check.id)}
-                    <div class="flex items-center gap-1.5 font-mono text-[10px]">
-                      <span class="{check.conclusion === 'failure' ? 'text-error' : check.status !== 'completed' ? 'text-warning' : 'text-base-content/40'}">
-                        {#if check.conclusion === 'failure'}✗
-                        {:else if check.status !== 'completed'}⏳
-                        {:else}—{/if}
-                      </span>
-                      <span class="text-base-content/70">{check.name}</span>
-                    </div>
-                  {/each}
-                  {#if passingCount > 0}
-                    <div class="flex items-center gap-1.5 font-mono text-[10px]">
-                      <span class="text-success">✓</span>
-                      <span class="text-base-content/40">{passingCount} passing</span>
-                    </div>
-                  {/if}
-                </div>
-              {/if}
+              <PrPipelineChecks ciCheckRuns={pr.ci_check_runs} variant="compact" />
             </div>
           {/if}
         {/each}
@@ -172,33 +136,20 @@
     <section class="flex flex-col gap-2">
       <div class="flex items-center gap-2">
         <span class="font-mono text-[10px] font-bold text-primary">// PR_COMMENTS</span>
-        {#if unaddressedComments.length > 0}
-          <span class="badge badge-error badge-sm text-[10px] font-mono">{unaddressedComments.length}</span>
+        {#if commentLoader.unaddressedComments.length > 0}
+          <span class="badge badge-error badge-sm text-[10px] font-mono">{commentLoader.unaddressedComments.length}</span>
         {/if}
       </div>
-      {#if unaddressedComments.length === 0}
+      {#if commentLoader.unaddressedComments.length === 0}
         <p class="text-xs text-base-content/40">No comments.</p>
       {:else}
-        <div class="flex flex-col gap-2">
-          {#each unaddressedComments as comment (comment.id)}
-            <div class="rounded-xl bg-base-200/50 border border-base-300/40 p-3 flex flex-col gap-1.5">
-              <div class="flex items-center justify-between gap-2">
-                <span class="text-[0.65rem] font-semibold text-base-content/60">{comment.author}</span>
-                {#if comment.addressed === 0}
-                  <button
-                    class="btn btn-ghost btn-xs text-success text-[0.65rem] h-auto min-h-0 py-0.5"
-                    onclick={() => handleMarkAddressed(comment.id)}
-                  >
-                    ✓ Mark addressed
-                  </button>
-                {/if}
-              </div>
-              <div class="text-xs text-base-content/70 leading-relaxed [&_.markdown-body]:text-xs [&_.markdown-body_pre]:text-[10px] [&_.markdown-body_code]:text-[10px] [&_.markdown-body_p]:m-0">
-                <MarkdownContent content={comment.body} imageBaseUrl={getCommentImageBaseUrl(comment)} />
-              </div>
-            </div>
-          {/each}
-        </div>
+        <PrCommentsList
+          comments={commentLoader.unaddressedComments}
+          imageBaseUrlForComment={getCommentImageBaseUrl}
+          onMarkAddressed={commentLoader.markAddressedAndRefresh}
+          showMarkAddressed={true}
+          density="compact"
+        />
       {/if}
     </section>
 
