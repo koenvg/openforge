@@ -53,6 +53,30 @@ describe('SettingsGeneralCard', () => {
     expect(screen.getByRole('radio', { name: 'Rose project color' }).getAttribute('aria-checked')).toBe('true')
   })
 
+  it('uses roving tabindex for project color radio swatches', () => {
+    render(SettingsGeneralCard, { props: defaultProps({ projectColor: 'rose' }) })
+
+    expect(screen.getByRole('radio', { name: 'Default Gray project color' }).getAttribute('tabindex')).toBe('-1')
+    expect(screen.getByRole('radio', { name: 'Rose project color' }).getAttribute('tabindex')).toBe('0')
+  })
+
+  it('moves project color selection with radio-group arrow keys', async () => {
+    const onProjectColorChange = vi.fn()
+    render(SettingsGeneralCard, { props: defaultProps({ projectColor: 'rose', onProjectColorChange }) })
+
+    await fireEvent.keyDown(screen.getByRole('radio', { name: 'Rose project color' }), { key: 'ArrowRight' })
+    expect(onProjectColorChange).toHaveBeenLastCalledWith('amber')
+
+    await fireEvent.keyDown(screen.getByRole('radio', { name: 'Rose project color' }), { key: 'ArrowLeft' })
+    expect(onProjectColorChange).toHaveBeenLastCalledWith('slate')
+
+    await fireEvent.keyDown(screen.getByRole('radio', { name: 'Rose project color' }), { key: 'Home' })
+    expect(onProjectColorChange).toHaveBeenLastCalledWith('')
+
+    await fireEvent.keyDown(screen.getByRole('radio', { name: 'Rose project color' }), { key: 'End' })
+    expect(onProjectColorChange).toHaveBeenLastCalledWith('indigo')
+  })
+
   describe('git worktrees toggle', () => {
     it('renders Git Worktrees label', () => {
       render(SettingsGeneralCard, { props: defaultProps() })

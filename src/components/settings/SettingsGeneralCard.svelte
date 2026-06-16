@@ -47,6 +47,56 @@
     onUseWorktreesChange,
     onProjectColorChange,
   }: Props = $props()
+
+  interface ProjectColorOption {
+    id: string
+    label: string
+    swatch: string
+  }
+
+  const projectColorOptions: ProjectColorOption[] = [
+    { id: '', label: DEFAULT_PROJECT_COLOR.label, swatch: DEFAULT_PROJECT_COLOR.swatch },
+    ...PROJECT_COLORS.map((color) => ({ id: color.id, label: color.label, swatch: color.swatch })),
+  ]
+
+  const selectedProjectColor = $derived(
+    projectColorOptions.some((color) => color.id === projectColor) ? projectColor : ''
+  )
+
+  function focusProjectColorRadio(event: KeyboardEvent, optionIndex: number) {
+    const target = event.currentTarget
+    if (!(target instanceof HTMLElement)) return
+
+    const radioGroup = target.parentElement
+    const radios = radioGroup
+      ? Array.from(radioGroup.querySelectorAll<HTMLButtonElement>('button[role="radio"]'))
+      : []
+
+    radios[optionIndex]?.focus()
+  }
+
+  function handleProjectColorKeydown(event: KeyboardEvent, value: string) {
+    const currentIndex = projectColorOptions.findIndex((color) => color.id === value)
+    if (currentIndex === -1) return
+
+    let nextIndex: number | null = null
+
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+      nextIndex = (currentIndex + 1) % projectColorOptions.length
+    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+      nextIndex = (currentIndex - 1 + projectColorOptions.length) % projectColorOptions.length
+    } else if (event.key === 'Home') {
+      nextIndex = 0
+    } else if (event.key === 'End') {
+      nextIndex = projectColorOptions.length - 1
+    }
+
+    if (nextIndex === null) return
+
+    event.preventDefault()
+    onProjectColorChange(projectColorOptions[nextIndex].id)
+    focusProjectColorRadio(event, nextIndex)
+  }
 </script>
 
 <div id="section-general" class="rounded-lg border border-base-300 overflow-hidden" style="background-color: var(--project-bg, oklch(var(--b1)))">
@@ -171,26 +221,18 @@
     <div class="flex flex-col gap-2">
       <span class="text-[0.7rem] text-base-content/50 uppercase tracking-wider">Project Color</span>
       <div class="flex gap-2 flex-wrap" role="radiogroup" aria-label="Project Color">
-        <button
-          type="button"
-          role="radio"
-          aria-label="{DEFAULT_PROJECT_COLOR.label} project color"
-          aria-checked={projectColor === ''}
-          class="w-7 h-7 rounded-full border-2 transition-all duration-150 cursor-pointer hover:scale-110 {projectColor === '' ? 'border-primary ring-2 ring-primary/30 scale-110' : 'border-base-content/20'}"
-          style="background-color: {DEFAULT_PROJECT_COLOR.swatch}"
-          title={DEFAULT_PROJECT_COLOR.label}
-          onclick={() => onProjectColorChange('')}
-        ></button>
-        {#each PROJECT_COLORS as color (color.id)}
+        {#each projectColorOptions as color (color.id)}
           <button
             type="button"
             role="radio"
             aria-label="{color.label} project color"
-            aria-checked={projectColor === color.id}
-            class="w-7 h-7 rounded-full border-2 transition-all duration-150 cursor-pointer hover:scale-110 {projectColor === color.id ? 'border-primary ring-2 ring-primary/30 scale-110' : 'border-base-content/20'}"
+            aria-checked={selectedProjectColor === color.id}
+            tabindex={selectedProjectColor === color.id ? 0 : -1}
+            class="w-7 h-7 rounded-full border-2 transition-all duration-150 cursor-pointer hover:scale-110 {selectedProjectColor === color.id ? 'border-primary ring-2 ring-primary/30 scale-110' : 'border-base-content/20'}"
             style="background-color: {color.swatch}"
             title={color.label}
             onclick={() => onProjectColorChange(color.id)}
+            onkeydown={(event) => handleProjectColorKeydown(event, color.id)}
           ></button>
         {/each}
       </div>
