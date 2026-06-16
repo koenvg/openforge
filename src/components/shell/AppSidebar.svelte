@@ -118,9 +118,6 @@
       <div class="w-7 h-7 bg-primary flex items-center justify-center rounded shrink-0">
          <span class="text-black font-bold text-xs">&gt;_</span>
        </div>
-       {#if !collapsed}
-         <span class="text-xs font-semibold text-base-content truncate">open_forge</span>
-       {/if}
     </div>
     <button
       type="button"

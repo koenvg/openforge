@@ -87,12 +87,11 @@ describe('AppSidebar', () => {
     expect(screen.queryByText('PROJECTS')).toBeNull()
   })
 
-  it('shows "open_forge" text when expanded', () => {
-    renderSidebar({ collapsed: false })
-    expect(screen.getByText('open_forge')).toBeTruthy()
-  })
+  it('does not show the open_forge title when expanded or collapsed', () => {
+    const { unmount } = renderSidebar({ collapsed: false })
+    expect(screen.queryByText('open_forge')).toBeNull()
 
-  it('does NOT show "open_forge" text when collapsed', () => {
+    unmount()
     renderSidebar({ collapsed: true })
     expect(screen.queryByText('open_forge')).toBeNull()
   })

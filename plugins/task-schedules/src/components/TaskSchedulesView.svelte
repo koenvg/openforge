@@ -152,7 +152,7 @@
   }
 </script>
 
-<div class="h-full overflow-auto p-6">
+<div class="h-full overflow-auto px-3 py-6 sm:px-4">
   <div class="mx-auto max-w-7xl">
   <div class="mb-6 flex items-start justify-between gap-4">
     <div>
@@ -174,18 +174,18 @@
       <div class="alert alert-error mb-4">{error}</div>
     {/if}
 
-    <div class="grid items-start gap-6 md:grid-cols-[minmax(18rem,1fr)_minmax(22rem,28rem)]">
+    <div class="grid items-start gap-y-6 gap-x-4 md:grid-cols-[minmax(18rem,1fr)_minmax(22rem,28rem)]">
       <section class="min-w-0 space-y-3">
         {#if loading}
           <div class="loading loading-spinner loading-md" aria-label="Loading Task Schedules"></div>
         {:else if sortedSchedules.length === 0}
-          <div class="rounded-box border border-dashed border-base-300 bg-base-100 p-6 text-sm text-base-content/70">
+          <div class="rounded-box border border-dashed border-base-300 bg-base-100 px-4 py-6 text-sm text-base-content/70">
             <h2 class="text-base font-semibold text-base-content">No Task Schedules yet</h2>
             <p class="mt-1">Create the first project-scoped Task Schedule with the composer.</p>
           </div>
         {:else}
           {#each sortedSchedules as schedule (schedule.id)}
-            <article class="rounded-box border border-base-300 bg-base-100 p-4 shadow-sm">
+            <article class="rounded-box border border-base-300 bg-base-100 px-3 py-4 shadow-sm">
               <div class="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h2 class="text-lg font-semibold">{schedule.title}</h2>
@@ -236,7 +236,7 @@
         {/if}
       </section>
 
-      <aside class="rounded-box border border-base-300 bg-base-100 p-5 shadow-sm md:sticky md:top-4">
+      <aside class="rounded-box border border-base-300 bg-base-100 px-4 py-5 shadow-sm md:sticky md:top-4">
         <div class="space-y-1">
           <h2 class="text-lg font-semibold">{composerTitle}</h2>
           <p class="text-xs leading-relaxed text-base-content/60">Use a plain prompt and simple cadence. Scheduled Fires create normal board Tasks.</p>
