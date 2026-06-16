@@ -33,6 +33,27 @@ pnpm exec electron --remote-debugging-port=9224 .
 
 Use a free backend/debugging port if those are already taken.
 
+For plugin-page audits, build bundled plugin artifacts before launch so built-in views can register:
+
+```bash
+pnpm dev:plugin-artifacts
+```
+
+When using a custom dev launch, isolate app data and user data so audits can safely create projects or enable plugins without mutating the installed app:
+
+```bash
+OPENFORGE_APP_DATA_DIR="$PWD/.openforge-dev/sidecar-app-data" \
+OPENFORGE_ELECTRON_USER_DATA_DIR="$PWD/.openforge-dev/user-data" \
+OPENFORGE_BACKEND_PORT=17645 \
+OPENFORGE_HTTP_PORT=17645 \
+OPENFORGE_SIDECAR_PATH=/path/to/openforge-sidecar \
+OPENFORGE_ELECTRON_SIDECAR=1 \
+ELECTRON_RENDERER_URL=http://127.0.0.1:1420 \
+pnpm exec electron --remote-debugging-port=9224 .
+```
+
+Before restarting custom CDP launches, stop stale Vite/Electron/sidecar processes for the same worktree/ports. A stale sidecar can make the new Electron instance fail readiness with an invalid backend authorization token.
+
 ## Confirm the CLI bridge
 
 In a second shell, use the installed launcher only:
@@ -68,8 +89,9 @@ Click around only enough to prove the changed area works. Prefer observation ove
 ### Sidebar and projects
 
 - Click project/avatar dots in the left rail and confirm the selected project changes or project context remains coherent.
-- Click the main navigation icons: Board, Files, PR/GitHub review, Skills, Terminal, and Settings where present.
+- Click the main navigation icons: Board, Files, PR/GitHub review, Skills, Terminal, Task Schedules, and Settings where present.
 - Check that the active icon, page title, and content agree after navigation.
+- For audits that need plugin pages, do not stop at the empty/default app state. Add or select a real project and enable built-in plugins for that project when the user has approved state mutation.
 
 ### Board and task detail
 
@@ -102,6 +124,7 @@ find .agents/skills -maxdepth 2 -name SKILL.md | sort
 
 - Open Files and expand a project tree if available.
 - Select a safe text/markdown file and confirm the viewer renders content.
+- In a freshly seeded dev app, Files may be absent until the File Viewer plugin is enabled for the active project.
 - Do not edit or delete files from the app during a smoke check.
 
 ### Terminal and provider runtime
@@ -134,6 +157,24 @@ If native screenshots are unavailable in the harness, use Electron/Chromium DevT
 5. Use `Runtime.evaluate`, `Input.dispatchMouseEvent`, and `Page.captureScreenshot` for read-only click-through and screenshots.
 
 Initial `ECONNREFUSED` during startup is not an app failure until readiness polling times out. Record the screenshot path and the views clicked.
+
+For approved stateful audits, CDP can use the Electron preload bridge instead of brittle form clicking. Use camelCase payload keys exactly as renderer IPC wrappers do:
+
+```js
+const invoke = window.openforge.invoke.bind(window.openforge)
+const projectPath = '/absolute/path/to/project-worktree'
+const projectName = 'openforge/KVG-1450'
+const projects = await invoke('get_projects', null)
+const project = projects.find((row) => row.path === projectPath)
+  ?? await invoke('create_project', { name: projectName, path: projectPath })
+const plugins = await invoke('list_plugins', null)
+for (const plugin of plugins) {
+  await invoke('set_plugin_enabled', { projectId: project.id, pluginId: plugin.id, enabled: true })
+}
+const enabled = await invoke('get_enabled_plugins', { projectId: project.id })
+```
+
+After enabling plugins, reload the renderer and verify the rail contains Files, Pull Requests, Skills, Terminal, and Task Schedules. Capture one screenshot/text summary per reachable page, not just the initial Board/Settings state.
 
 ## Conditional verification gates
 
