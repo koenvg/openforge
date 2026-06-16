@@ -2,9 +2,11 @@
   import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
   import { activeProjectId, fileBrowserStates, pendingFileReveal } from './lib/stores'
   import {
+    countDefaultHiddenRootEntries,
     createEmptyFileBrowserProjectState,
     flattenFileBrowserEntries,
     getFileBrowserProjectState,
+    isDefaultHiddenRootPath,
     updateFileBrowserProjectState,
     type FileBrowserProjectState,
   } from './lib/fileExplorer'
@@ -37,6 +39,9 @@
   const expandedPaths = $derived(projectState.expandedPaths)
   const selectedPath = $derived(projectState.selectedPath)
   const fileContent = $derived(projectState.fileContent)
+  const showHiddenRootEntries = $derived(projectState.showHiddenRootEntries)
+  const hiddenRootEntryCount = $derived(countDefaultHiddenRootEntries(rootEntries))
+  const visibleRootEntryCount = $derived(showHiddenRootEntries ? rootEntries.length : rootEntries.length - hiddenRootEntryCount)
   const flatEntries = $derived(flattenFileBrowserEntries(projectState))
   const selectedEntry = $derived(
     selectedPath ? flatEntries.find((entry) => entry.path === selectedPath) ?? null : null
@@ -164,12 +169,28 @@
     }))
   }
 
+  function setShowHiddenRootEntries(showHidden: boolean) {
+    const projectId = $activeProjectId
+    if (!projectId) return
+    updateProjectState(projectId, (state) => ({
+      ...state,
+      showHiddenRootEntries: showHidden,
+    }))
+  }
+
+  function toggleHiddenRootEntries() {
+    setShowHiddenRootEntries(!showHiddenRootEntries)
+  }
+
   async function revealPath(targetPath: string) {
     const revealProjectId = $activeProjectId
     if (!revealProjectId) return
 
     processingRevealPath = targetPath
     failedRevealPath = null
+    if (isDefaultHiddenRootPath(targetPath)) {
+      setShowHiddenRootEntries(true)
+    }
     try {
       const parts = targetPath.split('/')
       const parentPaths: string[] = []
@@ -249,10 +270,22 @@
 </script>
 
 <div class="flex flex-col h-full min-h-0 overflow-hidden">
-  <div class="flex items-center justify-between px-4 py-2 border-b border-base-300 shrink-0 bg-base-200">
-    <h2 class="text-sm font-semibold text-base-content">{projectName} — Files</h2>
+  <div class="flex items-center justify-between gap-3 px-4 py-2 border-b border-base-300 shrink-0 bg-base-200">
+    <h2 class="text-sm font-semibold text-base-content min-w-0 truncate">{projectName} — Files</h2>
     {#if hasLoaded && !loading}
-      <span class="badge badge-neutral badge-sm">{rootEntries.length} {rootEntries.length === 1 ? 'item' : 'items'}</span>
+      <div class="flex items-center gap-2 shrink-0">
+        {#if hiddenRootEntryCount > 0}
+          <button
+            class="btn btn-ghost btn-xs"
+            type="button"
+            onclick={toggleHiddenRootEntries}
+            aria-pressed={showHiddenRootEntries}
+          >
+            {showHiddenRootEntries ? 'Hide generated folders' : `Show generated folders (${hiddenRootEntryCount})`}
+          </button>
+        {/if}
+        <span class="badge badge-neutral badge-sm">{visibleRootEntryCount} {visibleRootEntryCount === 1 ? 'item' : 'items'}</span>
+      </div>
     {/if}
   </div>
 
