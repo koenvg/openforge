@@ -29,8 +29,10 @@
 <div class="w-16 h-full border-r border-base-300/50 flex flex-col items-center py-4 gap-5" style="background-color: {railBg}">
   {#each navItems as { view, Icon, shortcut, label }}
     <button
-       class="relative cursor-pointer {currentView === view ? 'text-primary' : 'text-base-content/35'}"
+      class="relative cursor-pointer {currentView === view ? 'text-primary' : 'text-base-content/35'}"
       title={label}
+      aria-label={label}
+      aria-current={currentView === view ? 'page' : undefined}
       onclick={() => onNavigate(view)}
     >
       <Icon size={24} />

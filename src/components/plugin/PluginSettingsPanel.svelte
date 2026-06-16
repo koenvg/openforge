@@ -268,15 +268,15 @@
 
                 <div class="flex flex-col items-end gap-2 shrink-0">
                   {#if isEnabled}
-                    <button class="btn btn-outline btn-xs" type="button" onclick={() => handleDisable(plugin.manifest.id)}>Disable for this project</button>
+                    <button class="btn btn-outline btn-xs" type="button" aria-label="Disable {plugin.manifest.name} for this project" onclick={() => handleDisable(plugin.manifest.id)}>Disable for this project</button>
                   {:else}
-                    <button class="btn btn-primary btn-xs" type="button" onclick={() => handleEnable(plugin.manifest.id)}>Enable for this project</button>
+                    <button class="btn btn-primary btn-xs" type="button" aria-label="Enable {plugin.manifest.name} for this project" onclick={() => handleEnable(plugin.manifest.id)}>Enable for this project</button>
                   {/if}
-                  <button class="btn btn-ghost btn-xs" type="button" onclick={() => handleReload(plugin.manifest.id)}>Reload plugin</button>
+                  <button class="btn btn-ghost btn-xs" type="button" aria-label="Reload {plugin.manifest.name}" onclick={() => handleReload(plugin.manifest.id)}>Reload plugin</button>
                   {#if !isBuiltIn}
-                    <button class="btn btn-error btn-outline btn-xs" type="button" onclick={() => handleUninstall(plugin.manifest.id)}>Uninstall plugin</button>
+                    <button class="btn btn-error btn-outline btn-xs" type="button" aria-label="Uninstall {plugin.manifest.name}" onclick={() => handleUninstall(plugin.manifest.id)}>Uninstall plugin</button>
                   {/if}
-                  <button class="btn btn-ghost btn-xs" type="button" onclick={() => copyDiagnostics(plugin, isEnabled)}>Copy diagnostics</button>
+                  <button class="btn btn-ghost btn-xs" type="button" aria-label="Copy diagnostics for {plugin.manifest.name}" onclick={() => copyDiagnostics(plugin, isEnabled)}>Copy diagnostics</button>
                 </div>
               </div>
 

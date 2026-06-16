@@ -45,6 +45,14 @@ describe('SettingsGeneralCard', () => {
     expect(source).not.toContain('background-color: #9ca3af')
   })
 
+  it('exposes project color swatches as a named single-select group', () => {
+    render(SettingsGeneralCard, { props: defaultProps({ projectColor: 'rose' }) })
+
+    expect(screen.getByRole('radiogroup', { name: 'Project Color' })).toBeTruthy()
+    expect(screen.getByRole('radio', { name: 'Default Gray project color' }).getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByRole('radio', { name: 'Rose project color' }).getAttribute('aria-checked')).toBe('true')
+  })
+
   describe('git worktrees toggle', () => {
     it('renders Git Worktrees label', () => {
       render(SettingsGeneralCard, { props: defaultProps() })

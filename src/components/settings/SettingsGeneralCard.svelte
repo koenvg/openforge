@@ -170,9 +170,12 @@
 
     <div class="flex flex-col gap-2">
       <span class="text-[0.7rem] text-base-content/50 uppercase tracking-wider">Project Color</span>
-      <div class="flex gap-2 flex-wrap">
+      <div class="flex gap-2 flex-wrap" role="radiogroup" aria-label="Project Color">
         <button
           type="button"
+          role="radio"
+          aria-label="{DEFAULT_PROJECT_COLOR.label} project color"
+          aria-checked={projectColor === ''}
           class="w-7 h-7 rounded-full border-2 transition-all duration-150 cursor-pointer hover:scale-110 {projectColor === '' ? 'border-primary ring-2 ring-primary/30 scale-110' : 'border-base-content/20'}"
           style="background-color: {DEFAULT_PROJECT_COLOR.swatch}"
           title={DEFAULT_PROJECT_COLOR.label}
@@ -181,6 +184,9 @@
         {#each PROJECT_COLORS as color (color.id)}
           <button
             type="button"
+            role="radio"
+            aria-label="{color.label} project color"
+            aria-checked={projectColor === color.id}
             class="w-7 h-7 rounded-full border-2 transition-all duration-150 cursor-pointer hover:scale-110 {projectColor === color.id ? 'border-primary ring-2 ring-primary/30 scale-110' : 'border-base-content/20'}"
             style="background-color: {color.swatch}"
             title={color.label}

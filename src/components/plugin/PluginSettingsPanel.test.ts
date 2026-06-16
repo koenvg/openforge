@@ -87,12 +87,12 @@ describe('PluginSettingsPanel', () => {
     
     render(PluginSettingsPanel, { projectId: 'proj-1' })
     
-    await fireEvent.click(screen.getByRole('button', { name: /Enable for this project/i }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Enable Test Plugin for this project' }))
     expect(enablePluginForProject).toHaveBeenCalledWith('proj-1', 'test-plugin')
     expect(installPluginFromNpm).not.toHaveBeenCalled()
     
     enabledPluginIds.set(new Set(['test-plugin']))
-    await fireEvent.click(await screen.findByRole('button', { name: /Disable for this project/i }))
+    await fireEvent.click(await screen.findByRole('button', { name: 'Disable Test Plugin for this project' }))
     expect(disablePluginForProject).toHaveBeenCalledWith('proj-1', 'test-plugin')
   })
 
@@ -142,7 +142,7 @@ describe('PluginSettingsPanel', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Install package' }))
     expect(screen.getByText('npm install failed')).toBeTruthy()
 
-    await fireEvent.click(screen.getByRole('button', { name: /Copy diagnostics/i }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Copy diagnostics for Test Plugin' }))
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('activation failed'))
   })
 
@@ -152,7 +152,7 @@ describe('PluginSettingsPanel', () => {
 
     render(PluginSettingsPanel, { projectId: 'proj-1' })
 
-    await fireEvent.click(screen.getByRole('button', { name: /Reload plugin/i }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Reload Test Plugin' }))
     expect(reloadPluginForProject).toHaveBeenCalledWith('proj-1', 'test-plugin')
   })
 
@@ -162,7 +162,7 @@ describe('PluginSettingsPanel', () => {
 
     render(PluginSettingsPanel, { projectId: 'proj-1' })
 
-    await fireEvent.click(screen.getByRole('button', { name: /Uninstall plugin/i }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Uninstall Test Plugin' }))
     expect(uninstallPlugin).toHaveBeenCalledWith('test-plugin')
   })
 
@@ -172,7 +172,7 @@ describe('PluginSettingsPanel', () => {
 
     render(PluginSettingsPanel, { projectId: 'proj-1' })
 
-    await fireEvent.click(screen.getByRole('button', { name: /Uninstall plugin/i }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Uninstall Test Plugin' }))
     expect(screen.getByText('uninstall failed')).toBeTruthy()
   })
 
