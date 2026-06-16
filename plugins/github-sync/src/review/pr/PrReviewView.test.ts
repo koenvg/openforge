@@ -353,6 +353,108 @@ describe('PrReviewView reviewed files', () => {
   })
 })
 
+describe('PrReviewView empty and recovery states', () => {
+  beforeEach(() => {
+    resetStores()
+    vi.clearAllMocks()
+  })
+
+  it('explains that GitHub is not connected instead of presenting a true-zero review state', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    registerPrReviewBackends(registry, () => [], [])
+
+    render(PrReviewView, {
+      props: {
+        api: registry.frontendApi,
+        context: registry.frontendApi.context.getSnapshot(),
+        projectName: 'Demo Project',
+        projectId: 'project-1',
+      },
+    })
+
+    expect(await screen.findByText('Connect GitHub to check review requests')).toBeTruthy()
+    expect(screen.getAllByText(/No GitHub token is configured/).length).toBeGreaterThan(0)
+    expect(screen.queryByText("You're all caught up!")).toBeNull()
+
+    await fireEvent.click(screen.getAllByRole('button', { name: 'Open GitHub settings' })[0])
+    expect(registry.calls.navigationRequests).toContainEqual({ viewId: 'global_settings' })
+  })
+
+  it('keeps true-zero review requests distinct when GitHub is connected', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    await registry.frontendApi.config.set('github_token', 'ghp_test')
+    registerPrReviewBackends(registry, () => [], [])
+
+    render(PrReviewView, {
+      props: {
+        api: registry.frontendApi,
+        context: registry.frontendApi.context.getSnapshot(),
+        projectName: 'Demo Project',
+        projectId: 'project-1',
+      },
+    })
+
+    expect(await screen.findByText('No PRs requesting your review')).toBeTruthy()
+    expect(screen.getByText(/GitHub is connected for Demo Project/)).toBeTruthy()
+    expect(screen.queryByText('Connect GitHub to check review requests')).toBeNull()
+  })
+
+  it('explains when repository filters hide every review request', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    await registry.frontendApi.config.set('github_token', 'ghp_test')
+    await registry.frontendApi.projectConfig.set('pr_excluded_repos', JSON.stringify(['acme/repo']), 'project-1')
+    registerPrReviewBackends(registry, () => [baseDiff], [basePr])
+
+    render(PrReviewView, {
+      props: {
+        api: registry.frontendApi,
+        context: registry.frontendApi.context.getSnapshot(),
+        projectName: 'Demo Project',
+        projectId: 'project-1',
+      },
+    })
+
+    expect(await screen.findByText('All review requests are hidden by filters')).toBeTruthy()
+    expect(screen.getByText(/1 PR from acme\/repo is currently unchecked/)).toBeTruthy()
+
+    await fireEvent.click(screen.getAllByRole('button', { name: 'Review repository filters' })[0])
+    expect(screen.getByText('Excluded Repositories')).toBeTruthy()
+  })
+
+  it('shows a sync recovery path when review requests cannot be loaded', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    await registry.frontendApi.config.set('github_token', 'ghp_test')
+    const backend = registry.backendApi.backend
+    backend.registerMethod('getReviewPrs', { handler: async () => { throw new Error('GitHub API unavailable') } })
+    backend.registerMethod('fetchReviewPrs', { handler: async () => [] })
+    backend.registerMethod('getAuthoredPrs', { handler: async () => [] })
+    backend.registerMethod('fetchAuthoredPrs', { handler: async () => [] })
+    backend.registerMethod('forceGithubSync', { handler: async () => ({
+      new_comments: 0,
+      ci_changes: 0,
+      review_changes: 0,
+      pr_changes: 0,
+      errors: 0,
+      rate_limited: false,
+      rate_limit_reset_at: null,
+    }) })
+
+    render(PrReviewView, {
+      props: {
+        api: registry.frontendApi,
+        context: registry.frontendApi.context.getSnapshot(),
+        projectName: 'Demo Project',
+        projectId: 'project-1',
+      },
+    })
+
+    expect(await screen.findByText('Unable to load review requests')).toBeTruthy()
+    expect(screen.getByText(/GitHub API unavailable/)).toBeTruthy()
+    await fireEvent.click(screen.getByRole('button', { name: 'Retry loading review requests' }))
+    await waitFor(() => expect(screen.getByText('No PRs requesting your review')).toBeTruthy())
+  })
+})
+
 describe('PrReviewView submit review', () => {
   beforeEach(() => {
     resetStores()
