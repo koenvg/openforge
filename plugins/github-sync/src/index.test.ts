@@ -19,7 +19,15 @@ import packageJson from '../package.json'
 const pluginSrcDir = dirname(fileURLToPath(import.meta.url))
 const repoRoot = join(pluginSrcDir, '../../..')
 
+function getPackageMetadata() {
+  if (!isOpenForgePackageMetadata(packageJson.openforge)) {
+    throw new Error('GitHub Sync package metadata is invalid')
+  }
+  return packageJson.openforge
+}
+
 function makeRuntimeHarness() {
+  const packageMetadata = getPackageMetadata()
   const subscriptions = { add: vi.fn() }
   const invokeGlobal = vi.fn(async () => null)
   const backendInvoke = vi.fn(async () => null)
@@ -32,7 +40,7 @@ function makeRuntimeHarness() {
     events: { onGlobal },
     navigation: { get: vi.fn(() => ({ activeProjectId: 'project-1', currentView: 'board', selectedTaskId: null })) },
   } as unknown as FrontendOpenForgeAPI
-  const context = { pluginId: packageJson.openforge.id, apiVersion: 1, packageMetadata: packageJson.openforge, subscriptions } as FrontendPluginContext
+  const context = { pluginId: packageMetadata.id, apiVersion: packageMetadata.apiVersion, packageMetadata, subscriptions } as FrontendPluginContext
   return { api, context, subscriptions, invokeGlobal, backendInvoke, backendWhenReady, onGlobal }
 }
 
@@ -121,7 +129,8 @@ describe('github-sync plugin', () => {
       commands: { invokeGlobal: vi.fn(async () => null) },
     }
 
-    await backend.activate(api as never, { pluginId: packageJson.openforge.id, apiVersion: 1, packageMetadata: packageJson.openforge, subscriptions })
+    const packageMetadata = getPackageMetadata()
+    await backend.activate(api as never, { pluginId: packageMetadata.id, apiVersion: packageMetadata.apiVersion, packageMetadata, subscriptions })
 
     expect(api.backend.registerMethod).toHaveBeenCalledWith('forceGithubSync', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('fetchReviewPrs', expect.objectContaining({ handler: expect.any(Function) }))
