@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cronForPreset, getNextScheduledFireAt, timeOfDayFromCron, validateFiveFieldCron } from './cron'
+import { cronForPreset, dayOfWeekFromCron, getNextScheduledFireAt, timeOfDayFromCron, validateFiveFieldCron } from './cron'
 
 describe('Task Schedule cron utilities', () => {
   it('compiles Schedule Presets with a selected time to private five-field cron expressions', () => {
@@ -12,10 +12,23 @@ describe('Task Schedule cron utilities', () => {
     expect(cronForPreset('daily')).toBe('0 9 * * *')
   })
 
+  it('compiles weekly Schedule Presets with a selected day and keeps Monday as the default', () => {
+    expect(cronForPreset('weekly', '10:15')).toBe('15 10 * * 1')
+    expect(cronForPreset('weekly', '10:15', 5)).toBe('15 10 * * 5')
+    expect(cronForPreset('weekly', '10:15', 7)).toBe('15 10 * * 0')
+  })
+
   it('derives the time picker value from simple preset cron expressions', () => {
     expect(timeOfDayFromCron('30 14 * * *')).toBe('14:30')
     expect(timeOfDayFromCron('5 8 * * 1')).toBe('08:05')
     expect(timeOfDayFromCron('*/15 * * * *')).toBe('09:00')
+  })
+
+  it('derives the weekly day picker value from simple weekly cron expressions', () => {
+    expect(dayOfWeekFromCron('30 14 * * 5')).toBe(5)
+    expect(dayOfWeekFromCron('0 9 * * 7')).toBe(0)
+    expect(dayOfWeekFromCron('*/15 * * * *')).toBe(1)
+    expect(dayOfWeekFromCron('0 9 * * 1,3')).toBe(1)
   })
 
   it('validates custom five-field cron syntax without accepting nicknames', () => {

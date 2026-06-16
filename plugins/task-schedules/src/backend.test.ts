@@ -81,6 +81,26 @@ describe('Task Schedules backend plugin', () => {
     ]))
   })
 
+  it('saves selected weekly Task Schedule days into the cron-backed schedule', async () => {
+    const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
+
+    const saved = await saveTaskSchedule(api, {
+      projectId,
+      schedule: {
+        title: 'Friday cleanup',
+        prompt: 'Clean up stale branches',
+        preset: 'weekly',
+        timeOfDay: '14:30',
+        dayOfWeek: 5,
+      },
+    }, Date.UTC(2026, 0, 1, 8))
+
+    expect(saved).toMatchObject({
+      preset: 'weekly',
+      cron: '30 14 * * 5',
+    })
+  })
+
   it('preserves last Task and history when editing a Task Schedule', async () => {
     const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
     const previous = makeSchedule({
