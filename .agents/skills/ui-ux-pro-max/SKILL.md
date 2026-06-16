@@ -9,7 +9,7 @@ Comprehensive design guide for web, desktop, and mobile applications. Contains 5
 
 ## OpenForge/Pi Project Adapter
 
-This repository installs the skill as a **Pi project skill** under `.agents/skills/ui-ux-pro-max/`. For OpenForge work:
+This repository installs the skill as a **Pi project skill** under `.agents/skills/ui-ux-pro-max/`. It is synced to upstream `nextlevelbuilder/ui-ux-pro-max-skill` v2.5.0 / `main` commit `b7e3af80` using `src/ui-ux-pro-max` as the source for data, scripts, and templates. For OpenForge work:
 
 - Use project-local paths from the worktree root: `.agents/skills/ui-ux-pro-max/SKILL.md`, `.agents/skills/ui-ux-pro-max/scripts/search.py`, and `.agents/skills/ui-ux-pro-max/data/...`.
 - Do **not** copy upstream examples from other harnesses that omit the leading `.agents/` directory; those paths will be wrong in Pi/OpenForge.
