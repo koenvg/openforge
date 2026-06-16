@@ -5,7 +5,7 @@ import { requireElement } from '../../test-utils/dom'
 import TaskInfoPanel from './TaskInfoPanel.svelte'
 import type { Task, PullRequestInfo, PrComment, TaskLabel } from '../../lib/types'
 import { mergingTaskIds, tasks, ticketPrs } from '../../lib/stores'
-import { addTaskLabel, forceGithubSync, getPrComments, getPullRequests, mergePullRequest, removeTaskLabel } from '../../lib/ipc'
+import { addTaskLabel, forceGithubSync, getPrComments, getPullRequests, linkPullRequest, mergePullRequest, removeTaskLabel } from '../../lib/ipc'
 
 vi.mock('../../lib/stores', () => ({
   ticketPrs: writable(new Map()),
@@ -26,6 +26,7 @@ vi.mock('../../lib/ipc', () => ({
   }),
   getPullRequests: vi.fn().mockResolvedValue([]),
   getPrComments: vi.fn().mockResolvedValue([]),
+  linkPullRequest: vi.fn().mockResolvedValue(undefined),
   mergePullRequest: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn().mockResolvedValue(undefined),
   getProjectTaskLabels: vi.fn().mockResolvedValue([]),
@@ -62,6 +63,7 @@ describe('TaskInfoPanel', () => {
     tasks.set([])
     vi.mocked(getPullRequests).mockResolvedValue([])
     vi.mocked(getPrComments).mockResolvedValue([])
+    vi.mocked(linkPullRequest).mockResolvedValue(createPullRequest())
   })
 
   function createPullRequest(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
@@ -130,6 +132,26 @@ describe('TaskInfoPanel', () => {
       const element = document.querySelector(`[data-task-info-card="${card}"]`)
       expect(element?.getAttribute('data-card-sizing')).toBe('natural')
     }
+  })
+
+  it('refreshes task pull requests after linking a PR from the empty state', async () => {
+    const linkedPr = createPullRequest({ title: 'Linked PR from URL', pr_number: 123, url: 'https://github.com/owner/repo/pull/123' })
+    vi.mocked(linkPullRequest).mockResolvedValue(linkedPr)
+    vi.mocked(getPullRequests).mockResolvedValue([linkedPr])
+
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Add PR' }))
+    await fireEvent.input(screen.getByLabelText('GitHub pull request URL'), {
+      target: { value: 'https://github.com/owner/repo/pull/123' },
+    })
+    await fireEvent.click(screen.getByRole('button', { name: 'Link PR' }))
+
+    await waitFor(() => {
+      expect(linkPullRequest).toHaveBeenCalledWith('T-42', 'https://github.com/owner/repo/pull/123')
+      expect(getPullRequests).toHaveBeenCalled()
+      expect(screen.getByText('Linked PR from URL')).toBeTruthy()
+    })
   })
 
   it('renders multiple pull requests as equal cards without marking a primary PR', async () => {

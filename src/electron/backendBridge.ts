@@ -81,6 +81,7 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'get_pty_buffer',
   'force_github_sync',
   'get_pull_requests',
+  'link_pull_request',
   'get_pr_comments',
   'mark_comment_addressed',
   'merge_pull_request',

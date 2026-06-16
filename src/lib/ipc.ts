@@ -126,6 +126,10 @@ export async function getPullRequests(): Promise<PullRequestInfo[]> {
   return invoke<PullRequestInfo[]>("get_pull_requests");
 }
 
+export async function linkPullRequest(taskId: string, prUrl: string): Promise<PullRequestInfo> {
+  return invoke<PullRequestInfo>("link_pull_request", { taskId, prUrl });
+}
+
 export async function openUrl(url: string): Promise<void> {
   return invoke("open_url", { url });
 }

@@ -5,6 +5,7 @@ import type { PrComment, PullRequestInfo } from '../../lib/types'
 vi.mock('../../lib/ipc', () => ({
   getPrComments: vi.fn().mockResolvedValue([]),
   markCommentAddressed: vi.fn().mockResolvedValue(undefined),
+  linkPullRequest: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn().mockResolvedValue(undefined),
 }))
 
@@ -66,11 +67,12 @@ describe('TaskPullRequestStatus', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(ipc.getPrComments).mockResolvedValue([])
+    vi.mocked(ipc.linkPullRequest).mockResolvedValue(createPullRequest())
     vi.mocked(ipc.openUrl).mockResolvedValue(undefined)
   })
 
   it('renders PR links and titles', () => {
-    render(TaskPullRequestStatus, { props: { taskPrs: [createPullRequest()] } })
+    render(TaskPullRequestStatus, { props: { taskId: 'T-42', taskPrs: [createPullRequest()] } })
     expect(screen.getByText('Test PR')).toBeTruthy()
     expect(screen.getByText('https://github.com/owner/repo/pull/42')).toBeTruthy()
   })
@@ -82,11 +84,44 @@ describe('TaskPullRequestStatus', () => {
   })
 
   it('opens PR links through the typed openUrl IPC wrapper', async () => {
-    render(TaskPullRequestStatus, { props: { taskPrs: [createPullRequest()] } })
+    render(TaskPullRequestStatus, { props: { taskId: 'T-42', taskPrs: [createPullRequest()] } })
 
     await fireEvent.click(screen.getByText('https://github.com/owner/repo/pull/42'))
 
     expect(ipc.openUrl).toHaveBeenCalledWith('https://github.com/owner/repo/pull/42')
+  })
+
+  it('links a GitHub pull request URL for the current task from the empty state', async () => {
+    const onPullRequestLinked = vi.fn().mockResolvedValue(undefined)
+    render(TaskPullRequestStatus, { props: { taskId: 'T-42', taskPrs: [], onPullRequestLinked } })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Add PR' }))
+    await fireEvent.input(screen.getByLabelText('GitHub pull request URL'), {
+      target: { value: ' https://github.com/owner/repo/pull/123 ' },
+    })
+    await fireEvent.click(screen.getByRole('button', { name: 'Link PR' }))
+
+    await waitFor(() => {
+      expect(ipc.linkPullRequest).toHaveBeenCalledWith('T-42', 'https://github.com/owner/repo/pull/123')
+      expect(onPullRequestLinked).toHaveBeenCalled()
+    })
+    expect(screen.queryByLabelText('GitHub pull request URL')).toBeNull()
+  })
+
+  it('keeps the Add PR form open and displays link errors', async () => {
+    vi.mocked(ipc.linkPullRequest).mockRejectedValueOnce(new Error('Invalid pull request URL'))
+    render(TaskPullRequestStatus, { props: { taskId: 'T-42', taskPrs: [] } })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Add PR' }))
+    await fireEvent.input(screen.getByLabelText('GitHub pull request URL'), {
+      target: { value: 'not-a-github-pr' },
+    })
+    await fireEvent.click(screen.getByRole('button', { name: 'Link PR' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Invalid pull request URL')).toBeTruthy()
+    })
+    expect(screen.getByLabelText('GitHub pull request URL')).toBeTruthy()
   })
 
   it('fetches comments for every PR and renders only unaddressed comments', async () => {
@@ -102,7 +137,7 @@ describe('TaskPullRequestStatus', () => {
       return [createComment({ id: 3, pr_id: 99, author: 'carol', body: 'Fix second PR', addressed: 0 })]
     })
 
-    render(TaskPullRequestStatus, { props: { taskPrs: [firstPr, secondPr] } })
+    render(TaskPullRequestStatus, { props: { taskId: 'T-42', taskPrs: [firstPr, secondPr] } })
 
     await waitFor(() => {
       expect(ipc.getPrComments).toHaveBeenCalledWith(42)
@@ -119,7 +154,7 @@ describe('TaskPullRequestStatus', () => {
     ])
 
     const { container } = render(TaskPullRequestStatus, {
-      props: { taskPrs: [createPullRequest({ repo_owner: 'org', repo_name: 'repo', head_sha: 'def456' })] },
+      props: { taskId: 'T-42', taskPrs: [createPullRequest({ repo_owner: 'org', repo_name: 'repo', head_sha: 'def456' })] },
     })
 
     await waitFor(() => {
@@ -135,7 +170,7 @@ describe('TaskPullRequestStatus', () => {
       return [createComment({ id: 3, pr_id: 99, author: 'carol', body: 'Second PR comment', addressed: 0 })]
     })
 
-    render(TaskPullRequestStatus, { props: { taskPrs: [firstPr, secondPr] } })
+    render(TaskPullRequestStatus, { props: { taskId: 'T-42', taskPrs: [firstPr, secondPr] } })
 
     await waitFor(() => {
       expect(screen.getByText('First PR')).toBeTruthy()
@@ -152,11 +187,11 @@ describe('TaskPullRequestStatus', () => {
       .mockReturnValueOnce(secondLoad.promise)
 
     const { rerender } = render(TaskPullRequestStatus, {
-      props: { taskPrs: [createPullRequest({ updated_at: 1000, unaddressed_comment_count: 1 })] },
+      props: { taskId: 'T-42', taskPrs: [createPullRequest({ updated_at: 1000, unaddressed_comment_count: 1 })] },
     })
 
     await waitFor(() => expect(ipc.getPrComments).toHaveBeenCalledTimes(1))
-    await rerender({ taskPrs: [createPullRequest({ updated_at: 2000, unaddressed_comment_count: 1 })] })
+    await rerender({ taskId: 'T-42', taskPrs: [createPullRequest({ updated_at: 2000, unaddressed_comment_count: 1 })] })
     await waitFor(() => expect(ipc.getPrComments).toHaveBeenCalledTimes(2))
 
     secondLoad.resolve([createComment({ id: 2, body: 'Fresh feedback', addressed: 0 })])

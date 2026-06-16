@@ -71,6 +71,7 @@ export const ipcCommandContracts = [
   { functionName: 'abortSession', ipcCommand: 'abort_session', payloadKeys: ['sessionId'], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },
   { functionName: 'forceGithubSync', ipcCommand: 'force_github_sync', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'getPullRequests', ipcCommand: 'get_pull_requests', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'github-review' },
+  { functionName: 'linkPullRequest', ipcCommand: 'link_pull_request', payloadKeys: ['taskId', 'prUrl'], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'openUrl', ipcCommand: 'open_url', payloadKeys: ['url'], targetOwner: 'electron-main', domain: 'misc' },
   { functionName: 'quitApp', ipcCommand: 'quit_app', payloadKeys: [], targetOwner: 'electron-main', domain: 'app-shell' },
   { functionName: 'selectDirectory', ipcCommand: 'select_directory', payloadKeys: ['defaultPath', 'buttonLabel', 'message'], targetOwner: 'electron-main', domain: 'app-shell' },

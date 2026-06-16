@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { PullRequestInfo } from '../../lib/types'
   import { hasMergeConflicts } from '../../lib/types'
-  import { openUrl } from '../../lib/ipc'
+  import { linkPullRequest, openUrl } from '../../lib/ipc'
   import { getPrStatusChips } from '../../lib/prStatusPresentation'
   import { getGitHubMarkdownImageBaseUrl } from '../../lib/githubMarkdown'
   import { createPrCommentLoader } from '../../lib/prComments.svelte'
@@ -10,10 +10,16 @@
   import PrPipelineChecks from '../shared/pr/PrPipelineChecks.svelte'
 
   interface Props {
+    taskId: string
     taskPrs: PullRequestInfo[]
+    onPullRequestLinked?: () => Promise<void> | void
   }
 
-  let { taskPrs }: Props = $props()
+  let { taskId, taskPrs, onPullRequestLinked }: Props = $props()
+  let isAddingPr = $state(false)
+  let prUrl = $state('')
+  let linkError = $state<string | null>(null)
+  let isLinking = $state(false)
 
   const commentLoader = createPrCommentLoader({ getPullRequests: () => taskPrs })
 
@@ -44,6 +50,27 @@
     if (pr.ci_status === 'success') return 'border-l-success'
     return 'border-l-base-300'
   }
+
+  async function submitPullRequestLink() {
+    const trimmedUrl = prUrl.trim()
+    if (!trimmedUrl) {
+      linkError = 'Enter a GitHub pull request URL'
+      return
+    }
+
+    isLinking = true
+    linkError = null
+    try {
+      await linkPullRequest(taskId, trimmedUrl)
+      await onPullRequestLinked?.()
+      prUrl = ''
+      isAddingPr = false
+    } catch (error) {
+      linkError = error instanceof Error ? error.message : String(error)
+    } finally {
+      isLinking = false
+    }
+  }
 </script>
 
 <section data-task-info-card="pull-requests" data-card-sizing="natural" class="flex flex-col gap-2.5 border-b border-base-300/70 pb-3 shrink-0" aria-label="Pull Requests">
@@ -55,9 +82,34 @@
   </div>
 
   {#if taskPrs.length === 0}
-    <div class="flex items-center justify-between gap-2 rounded-lg border border-dashed border-base-300 bg-base-100/60 px-3 py-2">
-      <span class="text-xs text-base-content/55">No linked pull requests yet</span>
-      <span class="text-xs font-medium text-primary">Add PR</span>
+    <div class="flex flex-col gap-2 rounded-lg border border-dashed border-base-300 bg-base-100/60 px-3 py-2">
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-xs text-base-content/55">No linked pull requests yet</span>
+        <button type="button" class="btn btn-link btn-xs p-0 h-auto min-h-0 text-primary no-underline hover:underline" onclick={() => { isAddingPr = !isAddingPr; linkError = null }}>
+          Add PR
+        </button>
+      </div>
+      {#if isAddingPr}
+        <form class="flex flex-col gap-2" novalidate onsubmit={(event) => { event.preventDefault(); void submitPullRequestLink() }}>
+          <label class="form-control w-full">
+            <span class="label-text text-xs">GitHub pull request URL</span>
+            <input
+              class="input input-bordered input-sm w-full"
+              type="url"
+              placeholder="https://github.com/owner/repo/pull/123"
+              bind:value={prUrl}
+              disabled={isLinking}
+            />
+          </label>
+          {#if linkError}
+            <p class="m-0 text-xs text-error" role="alert">{linkError}</p>
+          {/if}
+          <div class="flex items-center justify-end gap-2">
+            <button type="button" class="btn btn-ghost btn-xs" disabled={isLinking} onclick={() => { isAddingPr = false; prUrl = ''; linkError = null }}>Cancel</button>
+            <button type="submit" class="btn btn-primary btn-xs" disabled={isLinking}>{isLinking ? 'Linking…' : 'Link PR'}</button>
+          </div>
+        </form>
+      {/if}
     </div>
   {:else}
     <div class="flex flex-col gap-2.5">
