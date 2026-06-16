@@ -17,7 +17,7 @@
     <p class="text-xs text-base-content/40">Select a task to see details</p>
   </div>
 {:else}
-  <div class="rounded-[20px] border border-base-300/60 shadow-sm overflow-y-auto h-full">
+  <div class="rounded-[20px] bg-base-100 border border-base-300/60 shadow-sm overflow-y-auto h-full">
     <TaskInfoPanel
       {task}
       workspacePath={null}
