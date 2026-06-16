@@ -302,6 +302,8 @@
             {api}
             content={fileContent}
             fileName={selectedFileName}
+            filePath={selectedPath}
+            projectId={$activeProjectId}
             {error}
             modifiedAt={selectedEntry?.modifiedAt ?? null}
             scrollTop={projectState.contentScrollTop}

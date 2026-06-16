@@ -8,16 +8,19 @@
     api: FrontendOpenForgeAPI
     content: FileContent | null
     fileName: string
+    filePath: string
+    projectId: string | null
     error: string | null
     modifiedAt: number | null
     scrollTop?: number
     onScrollTopChange?: (scrollTop: number) => void
   }
 
-  let { api, content, fileName, error, modifiedAt = null, scrollTop = 0, onScrollTopChange }: Props = $props()
+  let { api, content, fileName, filePath, projectId, error, modifiedAt = null, scrollTop = 0, onScrollTopChange }: Props = $props()
 
   let scrollRegion = $state<HTMLDivElement | null>(null)
   let appliedScrollKey = $state<string | null>(null)
+  let markdownImageResolutionId = 0
 
   const textLines = $derived(content?.type === 'text' ? content.content.split('\n') : [])
   const language = $derived(getLanguageForFile(fileName))
@@ -48,6 +51,64 @@
     }
   }
 
+  function hasAbsoluteOrSpecialUrl(value: string): boolean {
+    return /^[a-z][a-z\d+.-]*:/i.test(value) || value.startsWith('//') || value.startsWith('#')
+  }
+
+  function decodeImagePath(value: string): string {
+    try {
+      return decodeURI(value)
+    } catch {
+      return value
+    }
+  }
+
+  function resolveMarkdownImageProjectPath(src: string | null, markdownFilePath: string): string | null {
+    if (!src) return null
+
+    const trimmedSrc = src.trim()
+    if (!trimmedSrc || hasAbsoluteOrSpecialUrl(trimmedSrc)) return null
+
+    const [pathWithoutQueryOrHash] = trimmedSrc.split(/[?#]/, 1)
+    const imagePath = decodeImagePath(pathWithoutQueryOrHash)
+    const markdownDir = markdownFilePath.split('/').slice(0, -1).join('/')
+    const candidate = imagePath.startsWith('/')
+      ? imagePath.slice(1)
+      : [markdownDir, imagePath].filter(Boolean).join('/')
+    const parts: string[] = []
+
+    for (const segment of candidate.split('/')) {
+      if (!segment || segment === '.') continue
+      if (segment === '..') {
+        if (parts.length === 0) return null
+        parts.pop()
+      } else {
+        parts.push(segment)
+      }
+    }
+
+    return parts.length > 0 ? parts.join('/') : null
+  }
+
+  async function resolveMarkdownImages(runId: number, markdownFilePath: string) {
+    if (!scrollRegion || !projectId) return
+
+    const images = Array.from(scrollRegion.querySelectorAll('img[src]'))
+    await Promise.all(images.map(async (image) => {
+      const imagePath = resolveMarkdownImageProjectPath(image.getAttribute('src'), markdownFilePath)
+      if (!imagePath) return
+
+      try {
+        const imageContent = await api.fs.readFile({ projectId, path: imagePath })
+        if (runId !== markdownImageResolutionId || imageContent.type !== 'image' || !imageContent.content) return
+
+        image.setAttribute('src', `data:${imageContent.mimeType ?? 'image/*'};base64,${imageContent.content}`)
+      } catch {
+        // Keep the original src when a referenced image is missing or cannot be previewed.
+      }
+    }))
+  }
+
   const scrollKey = $derived(`${fileName}:${content?.type ?? 'none'}:${scrollTop}`)
 
   $effect(() => {
@@ -55,6 +116,14 @@
       scrollRegion.scrollTop = scrollTop
       appliedScrollKey = scrollKey
     }
+  })
+
+  $effect(() => {
+    const runId = ++markdownImageResolutionId
+    const markdownContent = content?.type === 'text' ? content.content : null
+    if (markdownContent === null || !isMarkdown || !scrollRegion || !projectId) return
+
+    void resolveMarkdownImages(runId, filePath)
   })
 </script>
 

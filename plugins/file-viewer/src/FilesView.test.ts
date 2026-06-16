@@ -325,6 +325,61 @@ describe('plugin FilesView', () => {
     })
   })
 
+  it('resolves markdown file preview images relative to the selected project file through the typed fs API', async () => {
+    vi.mocked(fsReadDir)
+      .mockResolvedValueOnce([makeFileEntry({ name: 'docs', path: 'docs', isDir: true, size: null })])
+      .mockResolvedValueOnce([makeFileEntry({ name: 'guides', path: 'docs/guides', isDir: true, size: null })])
+      .mockResolvedValueOnce([makeFileEntry({ name: 'README.md', path: 'docs/guides/README.md' })])
+
+    vi.mocked(fsReadFile).mockImplementation(async (request: { path: string }) => {
+      switch (request.path) {
+        case 'docs/guides/README.md':
+          return {
+            type: 'text',
+            content: [
+              '![Same directory](./diagram.png)',
+              '![Parent directory](../assets/logo.png)',
+              '![Project root](/images/root.png)',
+            ].join('\n'),
+            mimeType: 'text/markdown',
+            size: 111,
+          }
+        case 'docs/guides/diagram.png':
+          return { type: 'image', content: 'same-image', mimeType: 'image/png', size: 10 }
+        case 'docs/assets/logo.png':
+          return { type: 'image', content: 'parent-image', mimeType: 'image/png', size: 12 }
+        case 'images/root.png':
+          return { type: 'image', content: 'root-image', mimeType: 'image/png', size: 14 }
+        default:
+          throw new Error(`Unexpected file read: ${request.path}`)
+      }
+    })
+
+    renderFilesView()
+
+    await waitFor(() => {
+      expect(screen.getByText('docs/')).toBeTruthy()
+    })
+
+    pendingFileReveal.set('docs/guides/README.md')
+
+    await waitFor(() => {
+      expect(fsReadFile).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'docs/guides/README.md' })
+    })
+
+    await waitFor(() => {
+      expect(fsReadFile).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'docs/guides/diagram.png' })
+      expect(fsReadFile).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'docs/assets/logo.png' })
+      expect(fsReadFile).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'images/root.png' })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('img', { name: 'Same directory' }).getAttribute('src')).toBe('data:image/png;base64,same-image')
+      expect(screen.getByRole('img', { name: 'Parent directory' }).getAttribute('src')).toBe('data:image/png;base64,parent-image')
+      expect(screen.getByRole('img', { name: 'Project root' }).getAttribute('src')).toBe('data:image/png;base64,root-image')
+    })
+  })
+
   it('clears pendingFileReveal after processing', async () => {
     vi.mocked(fsReadDir).mockResolvedValue([makeFileEntry({ name: 'README.md', path: 'README.md' })])
     vi.mocked(fsReadFile).mockResolvedValue(sampleFileContent)
