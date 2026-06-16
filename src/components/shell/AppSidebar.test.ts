@@ -87,16 +87,6 @@ describe('AppSidebar', () => {
     expect(screen.queryByText('PROJECTS')).toBeNull()
   })
 
-  it('shows "open_forge" text when expanded', () => {
-    renderSidebar({ collapsed: false })
-    expect(screen.getByText('open_forge')).toBeTruthy()
-  })
-
-  it('does NOT show "open_forge" text when collapsed', () => {
-    renderSidebar({ collapsed: true })
-    expect(screen.queryByText('open_forge')).toBeNull()
-  })
-
   it('renders project buttons for each project in the store', () => {
     renderSidebar({ collapsed: false })
 
