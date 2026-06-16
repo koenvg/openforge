@@ -1,8 +1,9 @@
 <script lang="ts">
   import type { Task, TaskLabel, PullRequestInfo } from '../../lib/types'
-  import { hasMergeConflicts, isReadyToMerge, preservePullRequestState } from '../../lib/types'
+  import { hasMergeConflicts, isReadyToMerge } from '../../lib/types'
   import { tasks as allTasks, ticketPrs } from '../../lib/stores'
   import { addTaskLabel, getPullRequests, removeTaskLabel } from '../../lib/ipc'
+  import { buildTicketPullRequestMap } from '../../lib/pullRequestStore'
   import { getTaskLabels, hasLabelNamed } from '../../lib/taskLabels'
   import { getTaskDependentSummaries, getTaskDependencySummaries, getWaitingDependencyCount } from '../../lib/taskDependencies'
   import CopyButton from '../shared/ui/CopyButton.svelte'
@@ -142,19 +143,7 @@
 
   async function refreshLinkedPullRequests() {
     const prs = await getPullRequests()
-    const previousPrs = $ticketPrs
-    const grouped = new Map<string, PullRequestInfo[]>()
-
-    for (const pr of prs) {
-      const oldList = previousPrs.get(pr.ticket_id) || []
-      const oldPr = oldList.find((candidate) => candidate.id === pr.id)
-      const preservedPr = preservePullRequestState(oldPr, pr)
-      const existing = grouped.get(preservedPr.ticket_id) || []
-      existing.push(preservedPr)
-      grouped.set(preservedPr.ticket_id, existing)
-    }
-
-    ticketPrs.set(grouped)
+    ticketPrs.set(buildTicketPullRequestMap(prs, $ticketPrs))
   }
 
 </script>

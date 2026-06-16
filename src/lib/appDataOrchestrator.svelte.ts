@@ -24,8 +24,9 @@ import {
   getTasksForProject,
 } from './ipc'
 import { applyProjectOrder } from './projectOrder'
-import { hasMergeConflicts, preservePullRequestState } from './types'
-import type { ProjectAttention, PullRequestInfo } from './types'
+import { buildTicketPullRequestMap } from './pullRequestStore'
+import { hasMergeConflicts } from './types'
+import type { ProjectAttention } from './types'
 
 type LogError = (message: string, error: unknown) => void
 
@@ -120,20 +121,7 @@ export function useAppDataOrchestrator(options: AppDataOrchestratorOptions) {
   async function loadPullRequests(): Promise<void> {
     try {
       const prs = await getPullRequests()
-      const grouped = new Map<string, PullRequestInfo[]>()
-      const previousPrs = get(ticketPrs)
-
-      for (const pr of prs) {
-        const oldList = previousPrs.get(pr.ticket_id) || []
-        const oldPr = oldList.find(p => p.id === pr.id)
-        const preservedPr = preservePullRequestState(oldPr, pr)
-
-        const existing = grouped.get(preservedPr.ticket_id) || []
-        existing.push(preservedPr)
-        grouped.set(preservedPr.ticket_id, existing)
-      }
-
-      ticketPrs.set(grouped)
+      ticketPrs.set(buildTicketPullRequestMap(prs, get(ticketPrs)))
     } catch (e) {
       logError('Failed to load pull requests:', e)
     }
