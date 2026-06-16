@@ -1,10 +1,12 @@
 <script lang="ts">
   import type { PullRequestInfo } from '../../lib/types'
-  import { hasMergeConflicts } from '../../lib/types'
+  import { hasMergeConflicts, isReadyToMerge, isQueuedForMerge } from '../../lib/types'
   import { linkPullRequest, openUrl } from '../../lib/ipc'
   import { getPrStatusChips } from '../../lib/prStatusPresentation'
   import { getGitHubMarkdownImageBaseUrl } from '../../lib/githubMarkdown'
   import { createPrCommentLoader } from '../../lib/prComments.svelte'
+  import { mergingTaskIds } from '../../lib/stores'
+  import { useMergeOrchestration } from './useMergeOrchestration.svelte'
   import PrStatusChip from '../shared/ui/PrStatusChip.svelte'
   import PrCommentsList from '../shared/pr/PrCommentsList.svelte'
   import PrPipelineChecks from '../shared/pr/PrPipelineChecks.svelte'
@@ -22,6 +24,8 @@
   let isLinking = $state(false)
 
   const commentLoader = createPrCommentLoader({ getPullRequests: () => taskPrs })
+  const orchestration = useMergeOrchestration()
+  const showMergeSmokeControls = typeof window !== 'undefined' && window.location.protocol.startsWith('http')
 
   function prNumberLabel(pr: PullRequestInfo): string {
     const match = pr.url.match(/\/pull\/(\d+)/)
@@ -71,6 +75,16 @@
       isLinking = false
     }
   }
+
+  function formatDate(timestamp: number): string {
+    return new Date(timestamp * 1000).toLocaleDateString()
+  }
+
+  function shouldShowMergeDetails(pr: PullRequestInfo): boolean {
+    return (pr.state === 'merged' && pr.merged_at !== null)
+      || (!isQueuedForMerge(pr) && isReadyToMerge(pr))
+      || orchestration.mergeFeedbackByPr.has(pr.id)
+  }
 </script>
 
 <section data-task-info-card="pull-requests" data-card-sizing="natural" class="flex flex-col gap-2.5 border-b border-base-300/70 pb-3 shrink-0" aria-label="Pull Requests">
@@ -114,7 +128,7 @@
   {:else}
     <div class="flex flex-col gap-2.5">
       {#each taskPrs as pr (pr.id)}
-        {@const chips = getPrStatusChips(pr, 'detail').filter((chip) => chip.type !== 'merge')}
+        {@const chips = getPrStatusChips(pr, 'detail')}
         {@const unaddressedComments = commentLoader.unaddressedCommentsForPr(pr.id)}
         <article data-testid="task-attention-pr-card" data-card-sizing="natural" class="rounded-lg border border-l-2 {cardSurfaceClass(pr)} {cardAccentClass(pr)} overflow-hidden shrink-0" aria-label={prCardAriaLabel(pr)}>
           <div class="flex items-start justify-between gap-2 p-2.5">
@@ -141,6 +155,48 @@
           </div>
 
           <PrPipelineChecks ciCheckRuns={pr.ci_check_runs} variant="detail" />
+
+          {#if shouldShowMergeDetails(pr)}
+            {@const feedback = orchestration.mergeFeedbackByPr.get(pr.id)}
+            <div class="border-t border-base-300/70 bg-base-200/35 p-2.5 flex flex-col gap-2" aria-label="Pull request merge status">
+              {#if pr.state === 'merged' && pr.merged_at}
+                <div class="text-[0.7rem] text-base-content/60">Merged on {formatDate(pr.merged_at)}</div>
+              {/if}
+
+              {#if !isQueuedForMerge(pr) && isReadyToMerge(pr)}
+                <div class="flex items-center gap-2">
+                  <button
+                    class="btn btn-success btn-xs"
+                    disabled={orchestration.mergingPrId !== null || $mergingTaskIds.has(taskId)}
+                    onclick={() => orchestration.handleMerge(taskId, pr)}
+                  >
+                    {#if orchestration.mergingPrId === pr.id || $mergingTaskIds.has(taskId)}
+                      <span class="loading loading-spinner loading-xs"></span>
+                      Merging...
+                    {:else}
+                      Merge
+                    {/if}
+                  </button>
+                  {#if feedback}
+                    <span class="text-[0.7rem] {feedback.kind === 'success' ? 'text-success' : feedback.kind === 'warning' ? 'text-warning' : 'text-error'}">{feedback.message}</span>
+                  {/if}
+                </div>
+
+                {#if showMergeSmokeControls}
+                  <div class="flex flex-wrap items-center gap-1.5 rounded-md border border-base-300 bg-base-100 px-2 py-1.5">
+                    <span class="text-[0.65rem] font-mono text-base-content/50">smoke:</span>
+                    <button class="btn btn-ghost btn-xs" onclick={() => orchestration.runMergeSmokeTest(taskId, pr, 'success')}>Success</button>
+                    <button class="btn btn-ghost btn-xs" onclick={() => orchestration.runMergeSmokeTest(taskId, pr, 'warning')}>Warning</button>
+                    <button class="btn btn-ghost btn-xs" onclick={() => orchestration.runMergeSmokeTest(taskId, pr, 'error')}>Failure</button>
+                  </div>
+                {/if}
+              {:else if feedback}
+                <div class="text-[0.7rem] {feedback.kind === 'success' ? 'text-success' : feedback.kind === 'warning' ? 'text-warning' : 'text-error'}">
+                  {feedback.message}
+                </div>
+              {/if}
+            </div>
+          {/if}
 
           {#if unaddressedComments.length > 0}
             <div class="border-t border-base-300/70 bg-base-200/35 p-2.5 flex flex-col gap-2" aria-label="Unaddressed comments">
