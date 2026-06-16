@@ -1,8 +1,8 @@
 <script lang="ts">
-  import MarkdownContent from '@openforge/plugin-sdk/ui/MarkdownContent.svelte'
   import type { FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
   import type { FileContent } from '@openforge/plugin-sdk/domain'
   import { getLanguageForFile, highlightCode } from './lib/fileHighlighter'
+  import MarkdownFilePreview from './MarkdownFilePreview.svelte'
 
   interface Props {
     api: FrontendOpenForgeAPI
@@ -20,7 +20,6 @@
 
   let scrollRegion = $state<HTMLDivElement | null>(null)
   let appliedScrollKey = $state<string | null>(null)
-  let markdownImageResolutionId = 0
 
   const textLines = $derived(content?.type === 'text' ? content.content.split('\n') : [])
   const language = $derived(getLanguageForFile(fileName))
@@ -51,64 +50,6 @@
     }
   }
 
-  function hasAbsoluteOrSpecialUrl(value: string): boolean {
-    return /^[a-z][a-z\d+.-]*:/i.test(value) || value.startsWith('//') || value.startsWith('#')
-  }
-
-  function decodeImagePath(value: string): string {
-    try {
-      return decodeURI(value)
-    } catch {
-      return value
-    }
-  }
-
-  function resolveMarkdownImageProjectPath(src: string | null, markdownFilePath: string): string | null {
-    if (!src) return null
-
-    const trimmedSrc = src.trim()
-    if (!trimmedSrc || hasAbsoluteOrSpecialUrl(trimmedSrc)) return null
-
-    const [pathWithoutQueryOrHash] = trimmedSrc.split(/[?#]/, 1)
-    const imagePath = decodeImagePath(pathWithoutQueryOrHash)
-    const markdownDir = markdownFilePath.split('/').slice(0, -1).join('/')
-    const candidate = imagePath.startsWith('/')
-      ? imagePath.slice(1)
-      : [markdownDir, imagePath].filter(Boolean).join('/')
-    const parts: string[] = []
-
-    for (const segment of candidate.split('/')) {
-      if (!segment || segment === '.') continue
-      if (segment === '..') {
-        if (parts.length === 0) return null
-        parts.pop()
-      } else {
-        parts.push(segment)
-      }
-    }
-
-    return parts.length > 0 ? parts.join('/') : null
-  }
-
-  async function resolveMarkdownImages(runId: number, markdownFilePath: string) {
-    if (!scrollRegion || !projectId) return
-
-    const images = Array.from(scrollRegion.querySelectorAll('img[src]'))
-    await Promise.all(images.map(async (image) => {
-      const imagePath = resolveMarkdownImageProjectPath(image.getAttribute('src'), markdownFilePath)
-      if (!imagePath) return
-
-      try {
-        const imageContent = await api.fs.readFile({ projectId, path: imagePath })
-        if (runId !== markdownImageResolutionId || imageContent.type !== 'image' || !imageContent.content) return
-
-        image.setAttribute('src', `data:${imageContent.mimeType ?? 'image/*'};base64,${imageContent.content}`)
-      } catch {
-        // Keep the original src when a referenced image is missing or cannot be previewed.
-      }
-    }))
-  }
-
   const scrollKey = $derived(`${fileName}:${content?.type ?? 'none'}:${scrollTop}`)
 
   $effect(() => {
@@ -116,14 +57,6 @@
       scrollRegion.scrollTop = scrollTop
       appliedScrollKey = scrollKey
     }
-  })
-
-  $effect(() => {
-    const runId = ++markdownImageResolutionId
-    const markdownContent = content?.type === 'text' ? content.content : null
-    if (markdownContent === null || !isMarkdown || !scrollRegion || !projectId) return
-
-    void resolveMarkdownImages(runId, filePath)
   })
 </script>
 
@@ -161,15 +94,14 @@
 
       {#if content.type === 'text'}
         {#if isMarkdown}
-          <div
-            class="flex-1 min-h-0 overflow-auto p-6"
-            role="region"
-            aria-label="Markdown file content"
-            bind:this={scrollRegion}
-            onscroll={handleScroll}
-          >
-            <MarkdownContent content={content.content} onOpenUrl={(url) => api.system.openUrl(url)} />
-          </div>
+          <MarkdownFilePreview
+            {api}
+            content={content.content}
+            {filePath}
+            {projectId}
+            {scrollTop}
+            onScrollTopChange={onScrollTopChange}
+          />
         {:else}
           <div
             class="flex-1 min-h-0 overflow-auto p-4"
