@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { KeyRound, Github } from 'lucide-svelte';
+	import { KeyRound, GitBranch } from '@lucide/svelte';
 
 	interface Props {
 		githubToken: string;
@@ -25,7 +25,7 @@
 			<!-- GitHub Column -->
 			<div class="flex flex-col gap-4">
 				<div class="flex items-center gap-2">
-					<Github size={14} />
+					<GitBranch size={14} />
 					<span class="text-xs font-semibold text-base-content uppercase tracking-wider">GitHub</span>
 				</div>
 

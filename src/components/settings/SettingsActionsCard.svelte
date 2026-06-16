@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Zap } from 'lucide-svelte';
+	import { Zap } from '@lucide/svelte';
 	import type { Action } from '../../lib/types';
 
 	interface Props {

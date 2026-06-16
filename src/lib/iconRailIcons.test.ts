@@ -1,4 +1,4 @@
-import { Clock, Plug } from 'lucide-svelte'
+import { Clock, Plug } from '@lucide/svelte'
 import { describe, expect, it } from 'vitest'
 import { resolveIconRailIcon } from './iconRailIcons'
 

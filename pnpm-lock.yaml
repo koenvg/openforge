@@ -25,6 +25,9 @@ importers:
       '@git-diff-view/svelte':
         specifier: ^0.1.5
         version: 0.1.5(patch_hash=b9f2ff64426fc738c0d2a125cbc38561a37a141c68e7d1d9b076e09cf837dc2b)(svelte@5.56.3)
+      '@lucide/svelte':
+        specifier: ^1.17.0
+        version: 1.17.0(svelte@5.56.3)
       '@openforge/plugin-runtime':
         specifier: workspace:*
         version: link:packages/plugin-runtime
@@ -64,9 +67,6 @@ importers:
       es-module-lexer:
         specifier: 2.1.0
         version: 2.1.0
-      lucide-svelte:
-        specifier: ^0.577.0
-        version: 0.577.0(svelte@5.56.3)
       marked:
         specifier: ^18.0.5
         version: 18.0.5
@@ -170,15 +170,15 @@ importers:
       '@git-diff-view/svelte':
         specifier: ^0.1.5
         version: 0.1.5(patch_hash=b9f2ff64426fc738c0d2a125cbc38561a37a141c68e7d1d9b076e09cf837dc2b)(svelte@5.56.3)
+      '@lucide/svelte':
+        specifier: ^1.17.0
+        version: 1.17.0(svelte@5.56.3)
       '@openforge/plugin-sdk':
         specifier: workspace:*
         version: link:../plugin-sdk
       '@tanstack/virtual-core':
         specifier: ^3.17.0
         version: 3.17.0
-      lucide-svelte:
-        specifier: ^0.577.0
-        version: 0.577.0(svelte@5.56.3)
       svelte:
         specifier: ^5.0.0
         version: 5.56.3
@@ -225,6 +225,9 @@ importers:
 
   plugins/file-viewer:
     dependencies:
+      '@lucide/svelte':
+        specifier: ^1.17.0
+        version: 1.17.0(svelte@5.56.3)
       '@openforge/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
@@ -247,6 +250,9 @@ importers:
 
   plugins/github-sync:
     dependencies:
+      '@lucide/svelte':
+        specifier: ^1.17.0
+        version: 1.17.0(svelte@5.56.3)
       '@openforge/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
@@ -1028,6 +1034,11 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@lucide/svelte@1.17.0':
+    resolution: {integrity: sha512-q06YCFBN5CO8cd1ADmLCxWRVMVb7xxvHzqC0lvNoxGa+FLW6Cd1Y1AOxgbQk4Iwe68vkAMCRveNHint4WoaVKg==}
+    peerDependencies:
+      svelte: ^5
 
   '@mariozechner/clipboard-darwin-arm64@0.3.9':
     resolution: {integrity: sha512-BfgV7vCEWZwJwZJw03r6bP5+tf0iI/ANuQYCxi9RNn7FrWB3yzGuMKCrNLRl6V761vXRdL8+OqZ0wd4TqlsNOQ==}
@@ -2918,12 +2929,6 @@ packages:
   lru-cache@7.18.3:
     resolution: {integrity: sha512-jumlc0BIUrS3qJGgIkWZsyfAM7NCWiBcCDhnd+3NNM5KbBmLTgHVfWBcg6W+rLUsIpzpERPsvwUP7CckAQSOoA==}
     engines: {node: '>=12'}
-
-  lucide-svelte@0.577.0:
-    resolution: {integrity: sha512-0i88o57KsaHWnc80J57fY99CWzlZsSdtH5kKjLUJa7z8dum/9/AbINNLzJ7NiRFUdOgMnfAmJt8jFbW2zeC5qQ==}
-    deprecated: Package deprecated. Please use @lucide/svelte instead.
-    peerDependencies:
-      svelte: ^3 || ^4 || ^5.0.0-next.42
 
   lz-string@1.5.0:
     resolution: {integrity: sha512-h5bgJWpxJNswbU7qCrV0tIKQCaS3blPDrqKWx+QxzuzL1zGUzij9XCWLrSLsJPu5t+eWA/ycetzYAO5IOMcWAQ==}
@@ -5012,6 +5017,10 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
+  '@lucide/svelte@1.17.0(svelte@5.56.3)':
+    dependencies:
+      svelte: 5.56.3
+
   '@mariozechner/clipboard-darwin-arm64@0.3.9':
     optional: true
 
@@ -6977,10 +6986,6 @@ snapshots:
   lru-cache@11.5.1: {}
 
   lru-cache@7.18.3: {}
-
-  lucide-svelte@0.577.0(svelte@5.56.3):
-    dependencies:
-      svelte: 5.56.3
 
   lz-string@1.5.0: {}
 

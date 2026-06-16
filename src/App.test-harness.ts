@@ -354,7 +354,7 @@ vi.mock('./lib/terminalPool', () => ({
   release: vi.fn(),
 }))
 
-vi.mock('lucide-svelte', () => {
+vi.mock('@lucide/svelte', () => {
   const stub = vi.fn()
   return {
     RefreshCw: stub,

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Brain } from 'lucide-svelte'
+  import { Brain } from '@lucide/svelte'
   import ModelDownloadProgress from '../shared/input/ModelDownloadProgress.svelte'
   import type { WhisperModelStatus, WhisperModelSizeId } from '../../lib/types'
 

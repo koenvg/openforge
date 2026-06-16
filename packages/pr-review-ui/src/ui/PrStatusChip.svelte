@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Check, X, Clock } from 'lucide-svelte';
+  import { Check, X, Clock } from '@lucide/svelte';
   import type { PrStatusChipSpec } from '../prStatusPresentation';
 
   let { chip }: { chip: PrStatusChipSpec } = $props();

@@ -8,6 +8,7 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
+    "@lucide/svelte": "^1.17.0",
     "@openforge/plugin-sdk": "workspace:*"
   },
   "peerDependencies": {

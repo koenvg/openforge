@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { FolderOpen } from 'lucide-svelte'
+  import { FolderOpen } from '@lucide/svelte'
   import { DEFAULT_PROJECT_COLOR, PROJECT_COLORS } from '../../lib/projectColors'
 
   interface Props {
