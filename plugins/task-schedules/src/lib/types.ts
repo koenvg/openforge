@@ -35,6 +35,7 @@ export interface TaskScheduleDraft {
   preset: SchedulePreset
   cron?: string | null
   timeOfDay?: string | null
+  dayOfWeek?: number | null
   mode?: TaskScheduleMode | null
   enabled?: boolean | null
 }

@@ -15,13 +15,13 @@ type CronField = {
 
 type ParsedCron = [CronField, CronField, CronField, CronField, CronField]
 
-export function cronForPreset(preset: Exclude<SchedulePreset, 'custom'>, timeOfDay = '09:00'): string {
+export function cronForPreset(preset: Exclude<SchedulePreset, 'custom'>, timeOfDay = '09:00', dayOfWeek = 1): string {
   const { hour, minute } = parseTimeOfDay(timeOfDay)
   switch (preset) {
     case 'daily':
       return `${minute} ${hour} * * *`
     case 'weekly':
-      return `${minute} ${hour} * * 1`
+      return `${minute} ${hour} * * ${normalizeDayOfWeek(dayOfWeek)}`
     case 'monthly':
       return `${minute} ${hour} 1 * *`
   }
@@ -40,6 +40,19 @@ export function timeOfDayFromCron(cron: string): string {
   }
 
   return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`
+}
+
+export function dayOfWeekFromCron(cron: string): number {
+  const fields = cron.trim().split(/\s+/)
+  if (fields.length !== 5 || !/^\d+$/.test(fields[4])) {
+    return 1
+  }
+
+  try {
+    return normalizeDayOfWeek(Number(fields[4]))
+  } catch {
+    return 1
+  }
 }
 
 export function validateFiveFieldCron(cron: string): { valid: boolean; error: string | null } {
@@ -81,6 +94,13 @@ function parseTimeOfDay(timeOfDay: string): { hour: number; minute: number } {
   }
 
   return { hour, minute }
+}
+
+function normalizeDayOfWeek(dayOfWeek: number): number {
+  if (!Number.isInteger(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 7) {
+    throw new Error('Weekly Schedule Preset day must be between 0 and 7')
+  }
+  return dayOfWeek === 7 ? 0 : dayOfWeek
 }
 
 function parseCron(cron: string): ParsedCron {

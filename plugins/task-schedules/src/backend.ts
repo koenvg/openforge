@@ -203,7 +203,7 @@ function normalizeScheduleDraft(draft: TaskScheduleDraft, existing: TaskSchedule
   if (!isSchedulePreset(preset)) {
     throw new Error('Task Schedule preset must be daily, weekly, monthly, or custom')
   }
-  const cron = preset === 'custom' ? (draft.cron ?? '').trim() : cronForPreset(preset, draft.timeOfDay ?? '09:00')
+  const cron = preset === 'custom' ? (draft.cron ?? '').trim() : cronForPreset(preset, draft.timeOfDay ?? '09:00', draft.dayOfWeek ?? 1)
   const validation = validateFiveFieldCron(cron)
   if (!validation.valid) {
     throw new Error(validation.error ?? 'Invalid custom Schedule Preset')

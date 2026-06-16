@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
-  import { timeOfDayFromCron } from '../lib/cron'
+  import { dayOfWeekFromCron, timeOfDayFromCron } from '../lib/cron'
   import type { ScheduledFireOutcome, SchedulePreset, TaskSchedule, TaskScheduleMode } from '../lib/types'
 
   interface Props {
@@ -24,6 +24,7 @@
     preset: SchedulePreset
     cron: string
     timeOfDay: string
+    dayOfWeek: number
     advancedCron: boolean
     mode: TaskScheduleMode
     enabled: boolean
@@ -35,6 +36,16 @@
     return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`
   })
 
+  const dayOfWeekOptions = [
+    { value: 1, label: 'Monday' },
+    { value: 2, label: 'Tuesday' },
+    { value: 3, label: 'Wednesday' },
+    { value: 4, label: 'Thursday' },
+    { value: 5, label: 'Friday' },
+    { value: 6, label: 'Saturday' },
+    { value: 0, label: 'Sunday' },
+  ]
+
   const emptyDraft = (): Draft => ({
     id: null,
     title: '',
@@ -42,6 +53,7 @@
     preset: 'daily',
     cron: '0 9 * * *',
     timeOfDay: '09:00',
+    dayOfWeek: 1,
     advancedCron: false,
     mode: 'create-and-start',
     enabled: true,
@@ -94,6 +106,7 @@
           preset: draft.advancedCron ? 'custom' : draft.preset,
           cron: draft.advancedCron ? draft.cron : null,
           timeOfDay: draft.advancedCron ? null : draft.timeOfDay,
+          dayOfWeek: !draft.advancedCron && draft.preset === 'weekly' ? draft.dayOfWeek : null,
           mode: draft.mode,
           enabled: draft.enabled,
         },
@@ -117,6 +130,7 @@
       preset: schedule.preset === 'custom' ? 'daily' : schedule.preset,
       cron: schedule.cron,
       timeOfDay: timeOfDayFromCron(schedule.cron),
+      dayOfWeek: schedule.preset === 'weekly' ? dayOfWeekFromCron(schedule.cron) : 1,
       advancedCron: schedule.preset === 'custom',
       mode: schedule.mode,
       enabled: schedule.enabled,
@@ -276,6 +290,17 @@
                   {/each}
                 </select>
               </label>
+
+              {#if draft.preset === 'weekly'}
+                <label class="form-control flex w-full flex-col gap-1">
+                  <span class="label-text text-xs font-medium uppercase tracking-wide text-base-content/60">Day</span>
+                  <select class="select select-bordered w-full" bind:value={draft.dayOfWeek}>
+                    {#each dayOfWeekOptions as day}
+                      <option value={day.value}>{day.label}</option>
+                    {/each}
+                  </select>
+                </label>
+              {/if}
             </div>
           {/if}
 
