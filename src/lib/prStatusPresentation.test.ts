@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getPrStatusChips } from './prStatusPresentation';
+import { getPrStatusChips } from '@openforge/plugin-sdk/prStatusPresentation';
 import type { PullRequestInfo } from './types';
 
 describe('getPrStatusChips', () => {

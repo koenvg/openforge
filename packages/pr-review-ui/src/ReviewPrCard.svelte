@@ -2,7 +2,7 @@
   import type { ReviewPullRequest } from '@openforge/plugin-sdk/domain'
   import Card from './ui/Card.svelte'
   import { timeAgoFromSeconds } from './timeAgo'
-  import { getPrStatusChips } from './prStatusPresentation'
+  import { getPrStatusChips } from '@openforge/plugin-sdk/prStatusPresentation'
   import PrStatusChip from './ui/PrStatusChip.svelte'
 
   interface Props {

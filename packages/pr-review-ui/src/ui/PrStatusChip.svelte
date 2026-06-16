@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Check, X, Clock } from '@lucide/svelte';
-  import type { PrStatusChipSpec } from '../prStatusPresentation';
+  import type { PrStatusChipSpec } from '@openforge/plugin-sdk/prStatusPresentation';
 
   let { chip }: { chip: PrStatusChipSpec } = $props();
 

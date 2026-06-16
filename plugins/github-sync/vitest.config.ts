@@ -14,6 +14,7 @@ export default defineConfig({
       { find: '@openforge/plugin-sdk/frontend', replacement: sourcePath('packages/plugin-sdk/src/frontend.ts') },
       { find: '@openforge/plugin-sdk/backend', replacement: sourcePath('packages/plugin-sdk/src/backend.ts') },
       { find: '@openforge/plugin-sdk/domain', replacement: sourcePath('packages/plugin-sdk/src/domain.ts') },
+      { find: '@openforge/plugin-sdk/prStatusPresentation', replacement: sourcePath('packages/plugin-sdk/src/prStatusPresentation.ts') },
       { find: '@openforge/plugin-sdk/testing', replacement: sourcePath('packages/plugin-sdk/src/testing.ts') },
       { find: '@openforge/plugin-sdk/vite', replacement: sourcePath('packages/plugin-sdk/src/vite.ts') },
       { find: '@openforge/plugin-sdk/markdown', replacement: sourcePath('packages/plugin-sdk/src/markdown.ts') },
