@@ -23,15 +23,25 @@
   }
 
   function stateClass(pr: PullRequestInfo): string {
-    if (pr.state === 'merged') return 'badge-secondary badge-outline'
+    if (pr.state === 'merged') return 'badge-ghost'
     if (pr.state === 'open') return 'badge-success badge-outline'
     return 'badge-ghost'
   }
 
+  function prCardAriaLabel(pr: PullRequestInfo): string {
+    const label = prNumberLabel(pr)
+    return pr.state === 'merged' ? `Merged pull request ${label} (done)` : `Pull request ${label}`
+  }
+
+  function cardSurfaceClass(pr: PullRequestInfo): string {
+    return pr.state === 'merged' ? 'bg-base-200/50 border-base-300/60' : 'bg-base-100 border-base-300/70'
+  }
+
   function cardAccentClass(pr: PullRequestInfo): string {
+    if (pr.state === 'merged') return 'border-l-base-300'
     if (pr.ci_status === 'failure' || hasMergeConflicts(pr)) return 'border-l-error'
     if ((pr.unaddressed_comment_count ?? 0) > 0 || pr.review_status === 'changes_requested') return 'border-l-warning'
-    if (pr.state === 'merged' || pr.ci_status === 'success') return 'border-l-success'
+    if (pr.ci_status === 'success') return 'border-l-success'
     return 'border-l-base-300'
   }
 </script>
@@ -54,7 +64,7 @@
       {#each taskPrs as pr (pr.id)}
         {@const chips = getPrStatusChips(pr, 'detail').filter((chip) => chip.type !== 'merge')}
         {@const unaddressedComments = commentLoader.unaddressedCommentsForPr(pr.id)}
-        <article data-testid="task-attention-pr-card" data-card-sizing="natural" class="rounded-lg bg-base-100 border border-base-300/70 border-l-2 {cardAccentClass(pr)} overflow-hidden shrink-0" aria-label={`Pull request ${prNumberLabel(pr)}`}>
+        <article data-testid="task-attention-pr-card" data-card-sizing="natural" class="rounded-lg border border-l-2 {cardSurfaceClass(pr)} {cardAccentClass(pr)} overflow-hidden shrink-0" aria-label={prCardAriaLabel(pr)}>
           <div class="flex items-start justify-between gap-2 p-2.5">
             <div class="min-w-0 flex-1 flex flex-col gap-1">
               <div class="flex items-center gap-2 min-w-0">
