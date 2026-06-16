@@ -132,6 +132,23 @@ describe('TaskDetailPane', () => {
     expect(screen.getByRole('button', { name: 'Merge' })).toBeTruthy()
   })
 
+  it('exposes a full-view action for the selected focus-board task', async () => {
+    const onOpenFullView = vi.fn()
+
+    render(TaskDetailPane, {
+      props: {
+        task: baseTask,
+        allTasks: [baseTask],
+        pullRequests: [],
+        onOpenFullView,
+      },
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: /open full view/i }))
+
+    expect(onOpenFullView).toHaveBeenCalledOnce()
+  })
+
   it('matches the full Task Attention Pane information order', async () => {
     render(TaskDetailPane, {
       props: {

@@ -9,7 +9,7 @@
     onOpenFullView?: () => void
   }
 
-  let { task, allTasks = [], pullRequests = [] }: Props = $props()
+  let { task, allTasks = [], pullRequests = [], onOpenFullView }: Props = $props()
 </script>
 
 {#if task === null}
@@ -17,7 +17,14 @@
     <p class="text-xs text-base-content/40">Select a task to see details</p>
   </div>
 {:else}
-  <div class="rounded-[20px] bg-base-100 border border-base-300/60 shadow-sm overflow-y-auto h-full">
+  <div class="rounded-[20px] bg-base-100 border border-base-300/60 shadow-sm overflow-y-auto h-full flex flex-col">
+    {#if onOpenFullView}
+      <div class="flex justify-end p-3 pb-0 shrink-0">
+        <button class="btn btn-ghost btn-xs" type="button" onclick={onOpenFullView}>Open full view</button>
+      </div>
+    {/if}
+
+
     <TaskInfoPanel
       {task}
       workspacePath={null}
