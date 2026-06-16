@@ -30,6 +30,60 @@ async fn handler_uses_shared_boundary() {
 }
 
 #[tokio::test]
+async fn link_pull_request_persists_pr_for_task() {
+    let (state, path) = test_state("app_invoke_link_pull_request");
+    let task_id = {
+        let db = state.db.lock().expect("db lock");
+        db.create_task("Link PR task", "doing", None, None, None)
+            .expect("create task")
+            .id
+    };
+
+    let value = invoke_ok(
+        &state,
+        "link_pull_request",
+        json!({ "taskId": task_id, "prUrl": "https://github.com/owner/repo/pull/123" }),
+    )
+    .await;
+
+    assert_eq!(value["ticket_id"], task_id);
+    assert_eq!(value["repo_owner"], "owner");
+    assert_eq!(value["repo_name"], "repo");
+    assert_eq!(value["pr_number"], 123);
+    assert_eq!(value["url"], "https://github.com/owner/repo/pull/123");
+
+    let prs = invoke_ok(&state, "get_pull_requests", serde_json::Value::Null).await;
+    assert_eq!(prs[0]["ticket_id"], task_id);
+    assert_eq!(prs[0]["pr_number"], 123);
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn link_pull_request_rejects_invalid_url() {
+    let (state, path) = test_state("app_invoke_link_pull_request_invalid_url");
+    let task_id = {
+        let db = state.db.lock().expect("db lock");
+        db.create_task("Link PR task", "doing", None, None, None)
+            .expect("create task")
+            .id
+    };
+
+    let err = invoke(
+        &state,
+        "link_pull_request",
+        json!({ "taskId": task_id, "prUrl": "https://example.com/owner/repo/pull/123" }),
+    )
+    .await
+    .expect_err("non-GitHub PR URL should be rejected");
+
+    assert_eq!(err.0, StatusCode::BAD_REQUEST);
+    assert!(err.1.contains("Invalid pull request URL"));
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn submit_pr_review_rejects_null_comments_before_runtime() {
     let (state, path) = test_state("app_invoke_submit_pr_review_null_comments");
 

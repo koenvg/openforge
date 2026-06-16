@@ -9,6 +9,16 @@ fn runtime_error(error: String) -> (StatusCode, String) {
     (StatusCode::INTERNAL_SERVER_ERROR, error)
 }
 
+fn link_pull_request_error(error: String) -> (StatusCode, String) {
+    if error.starts_with("Invalid pull request URL") {
+        (StatusCode::BAD_REQUEST, error)
+    } else if error.starts_with("Task not found") {
+        (StatusCode::NOT_FOUND, error)
+    } else {
+        runtime_error(error)
+    }
+}
+
 fn publish_comment_addressed(state: &AppState) {
     let payload = serde_json::Value::Null;
     publish_app_event_to_runtime(
@@ -31,6 +41,14 @@ pub(super) async fn handle_app_github_review_command(
         "get_pull_requests" => to_app_value(
             crate::github_runtime::get_pull_requests(&state.db).map_err(runtime_error)?,
         )?,
+        "link_pull_request" => {
+            let task_id = payload_string(&request.payload, "taskId")?;
+            let pr_url = payload_string(&request.payload, "prUrl")?;
+            to_app_value(
+                crate::github_runtime::link_pull_request(&state.db, &task_id, &pr_url)
+                    .map_err(link_pull_request_error)?,
+            )?
+        }
         "get_pr_comments" => {
             let pr_id = payload_i64(&request.payload, "prId")?;
             to_app_value(
