@@ -59,14 +59,14 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "dompurify": "^3.4.8",
-    "marked": "^17.0.3"
+    "dompurify": "^3.4.9",
+    "marked": "^18.0.5"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.3.3",
-    "vitest": "^4.1.0"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
   }
 }

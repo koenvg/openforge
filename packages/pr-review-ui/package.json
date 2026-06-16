@@ -28,10 +28,10 @@
   },
   "dependencies": {
     "@git-diff-view/core": "0.1.5",
-    "@git-diff-view/lowlight": "^0.0.39",
-    "@git-diff-view/svelte": "^0.0.13",
+    "@git-diff-view/lowlight": "^0.1.5",
+    "@git-diff-view/svelte": "^0.1.5",
     "@openforge/plugin-sdk": "workspace:*",
-    "@tanstack/virtual-core": "^3.13.21",
+    "@tanstack/virtual-core": "^3.17.0",
     "lucide-svelte": "^0.577.0"
   },
   "peerDependencies": {

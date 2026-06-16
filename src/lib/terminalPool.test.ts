@@ -231,6 +231,7 @@ const MockIntersectionObserver: typeof IntersectionObserver = class MockIntersec
 {
 	readonly root: Element | Document | null = null;
 	readonly rootMargin = "";
+	readonly scrollMargin = "";
 	readonly thresholds: number[] = [];
 
 	disconnect = vi.fn<() => void>();
