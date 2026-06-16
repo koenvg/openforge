@@ -45,6 +45,14 @@ const sampleEntries: FileEntry[] = [
   makeFileEntry({ name: 'README.md', path: 'README.md', isDir: false, size: 1024 }),
 ]
 
+const noisyRootEntries: FileEntry[] = [
+  makeFileEntry({ name: '.openforge-dev', path: '.openforge-dev', isDir: true, size: null }),
+  makeFileEntry({ name: 'node_modules', path: 'node_modules', isDir: true, size: null }),
+  makeFileEntry({ name: 'dist-electron', path: 'dist-electron', isDir: true, size: null }),
+  makeFileEntry({ name: 'src', path: 'src', isDir: true, size: null }),
+  makeFileEntry({ name: 'README.md', path: 'README.md', isDir: false, size: 1024 }),
+]
+
 const sampleFileContent: FileContent = {
   type: 'text',
   content: 'Hello world',
@@ -121,6 +129,55 @@ describe('plugin FilesView', () => {
 
     await waitFor(() => {
       expect(fsReadFile).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'README.md' })
+    })
+  })
+
+  it('hides generated and vendor root folders by default with a full-access toggle', async () => {
+    vi.mocked(fsReadDir).mockResolvedValue(noisyRootEntries)
+
+    renderFilesView()
+
+    await waitFor(() => {
+      expect(screen.getByText('src/')).toBeTruthy()
+      expect(screen.getByText('README.md')).toBeTruthy()
+    })
+
+    expect(screen.queryByText('.openforge-dev/')).toBeNull()
+    expect(screen.queryByText('node_modules/')).toBeNull()
+    expect(screen.queryByText('dist-electron/')).toBeNull()
+
+    await fireEvent.click(screen.getByRole('button', { name: /Show generated folders \(3\)/ }))
+
+    expect(screen.getByText('.openforge-dev/')).toBeTruthy()
+    expect(screen.getByText('node_modules/')).toBeTruthy()
+    expect(screen.getByText('dist-electron/')).toBeTruthy()
+
+    await fireEvent.click(screen.getByRole('button', { name: /Hide generated folders/ }))
+
+    expect(screen.queryByText('.openforge-dev/')).toBeNull()
+    expect(screen.queryByText('node_modules/')).toBeNull()
+    expect(screen.queryByText('dist-electron/')).toBeNull()
+  })
+
+  it('shows hidden root folders automatically when revealing a file inside one', async () => {
+    vi.mocked(fsReadDir)
+      .mockResolvedValueOnce(noisyRootEntries)
+      .mockResolvedValueOnce([makeFileEntry({ name: 'log.txt', path: '.openforge-dev/log.txt' })])
+
+    renderFilesView()
+
+    await waitFor(() => {
+      expect(screen.getByText('src/')).toBeTruthy()
+    })
+
+    expect(screen.queryByText('.openforge-dev/')).toBeNull()
+
+    pendingFileReveal.set('.openforge-dev/log.txt')
+
+    await waitFor(() => {
+      expect(screen.getByText('.openforge-dev/')).toBeTruthy()
+      expect(screen.getByText('log.txt')).toBeTruthy()
+      expect(fsReadFile).toHaveBeenCalledWith({ projectId: 'test-project-id', path: '.openforge-dev/log.txt' })
     })
   })
 
