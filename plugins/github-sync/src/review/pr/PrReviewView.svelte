@@ -16,7 +16,7 @@
   import ReviewSubmitPanel from '@openforge/pr-review-ui/ReviewSubmitPanel.svelte'
   import PrOverviewTab from '@openforge/pr-review-ui/PrOverviewTab.svelte'
   import { hasMergeConflicts } from '@openforge/plugin-sdk/domain'
-  import type { ReviewPullRequest, AuthoredPullRequest, PrFileDiff, PrOverviewComment, ReviewSubmissionComment } from '@openforge/plugin-sdk/domain'
+  import type { ReviewPullRequest, AuthoredPullRequest, PrFileDiff, PrOverviewComment, ReviewComment, ReviewSubmissionComment } from '@openforge/plugin-sdk/domain'
   import { createGithubSyncPrReviewClient } from './githubSyncClient'
   import {
     getPrReviewFilesKey,
@@ -437,6 +437,94 @@
     })
   }
 
+  function submittedInlineCommentKey(comment: ReviewSubmissionComment): string {
+    return JSON.stringify([
+      comment.path,
+      comment.line,
+      comment.side.toUpperCase(),
+      comment.body.trim(),
+    ])
+  }
+
+  function existingInlineCommentKey(comment: ReviewComment): string | null {
+    if (comment.line === null) return null
+
+    return JSON.stringify([
+      comment.path,
+      comment.line,
+      (comment.side ?? '').toUpperCase(),
+      comment.body.trim(),
+    ])
+  }
+
+  function incrementCount(counts: Map<string, number>, key: string) {
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+
+  function countSubmittedInlineComments(comments: ReviewSubmissionComment[]): Map<string, number> {
+    const counts = new Map<string, number>()
+    for (const comment of comments) {
+      incrementCount(counts, submittedInlineCommentKey(comment))
+    }
+    return counts
+  }
+
+  function countExistingInlineComments(comments: ReviewComment[]): Map<string, number> {
+    const counts = new Map<string, number>()
+    for (const comment of comments) {
+      const key = existingInlineCommentKey(comment)
+      if (key) incrementCount(counts, key)
+    }
+    return counts
+  }
+
+  function hasNewlySubmittedInlineComments(request: {
+    previousComments: ReviewComment[]
+    latestComments: ReviewComment[]
+    submittedComments: ReviewSubmissionComment[]
+  }): boolean {
+    const submittedCounts = countSubmittedInlineComments(request.submittedComments)
+    const previousCounts = countExistingInlineComments(request.previousComments)
+    const latestCounts = countExistingInlineComments(request.latestComments)
+
+    for (const [key, submittedCount] of submittedCounts) {
+      const previousCount = previousCounts.get(key) ?? 0
+      const latestCount = latestCounts.get(key) ?? 0
+      if (latestCount < previousCount + submittedCount) return false
+    }
+
+    return true
+  }
+
+  async function recoverAlreadySubmittedInlineComments(request: {
+    repoOwner: string
+    repoName: string
+    prNumber: number
+    comments: ReviewSubmissionComment[]
+    previousComments: ReviewComment[]
+  }): Promise<boolean> {
+    if (request.comments.length === 0) return false
+
+    try {
+      const latestComments = await githubSync.listReviewComments({
+        owner: request.repoOwner,
+        repo: request.repoName,
+        prNumber: request.prNumber,
+      })
+      const allSubmittedCommentsWereAdded = hasNewlySubmittedInlineComments({
+        previousComments: request.previousComments,
+        latestComments,
+        submittedComments: request.comments,
+      })
+      if (!allSubmittedCommentsWereAdded) return false
+
+      $reviewComments = latestComments
+      return true
+    } catch {
+      return false
+    }
+  }
+
   async function submitReview(request: {
     repoOwner: string
     repoName: string
@@ -446,15 +534,22 @@
     comments: ReviewSubmissionComment[]
     commitId: string
   }): Promise<void> {
-    await githubSync.submitPullRequestReview({
-      owner: request.repoOwner,
-      repo: request.repoName,
-      prNumber: request.prNumber,
-      event: request.event,
-      body: request.body,
-      comments: request.comments,
-      commitId: request.commitId,
-    })
+    const previousComments = $reviewComments
+
+    try {
+      await githubSync.submitPullRequestReview({
+        owner: request.repoOwner,
+        repo: request.repoName,
+        prNumber: request.prNumber,
+        event: request.event,
+        body: request.body,
+        comments: request.comments,
+        commitId: request.commitId,
+      })
+    } catch (error) {
+      if (await recoverAlreadySubmittedInlineComments({ ...request, previousComments })) return
+      throw error
+    }
   }
 
   async function fetchPrFileContents(file: PrFileDiff): Promise<FileContents> {
