@@ -173,11 +173,6 @@
   <section data-task-info-card="details" data-card-sizing="natural" class="rounded-lg border border-base-300/70 bg-base-100 overflow-hidden shrink-0" aria-label="Details">
     <h3 class="m-0 px-3 py-2 text-sm font-semibold text-base-content border-b border-base-300/70">Details</h3>
 
-    <div class="grid grid-cols-[6.25rem_minmax(0,1fr)] items-start gap-2 px-3 py-2 border-b border-base-300/70">
-      <div class="text-xs text-base-content/55">Status</div>
-      <div class="justify-self-end badge badge-primary badge-outline capitalize badge-sm">{task.status}</div>
-    </div>
-
     <div class="px-3 py-2 border-b border-base-300/70">
       <TaskLabelEditor
         projectId={task.project_id}
@@ -194,11 +189,6 @@
         <CopyButton text={workspacePath} label="Copy workspace path" />
       </div>
     {/if}
-
-    <div class="grid grid-cols-[6.25rem_minmax(0,1fr)] items-center gap-2 px-3 py-2">
-      <div class="text-xs text-base-content/55">Pull requests</div>
-      <div class="justify-self-end text-xs text-base-content/70">{taskPrs.length === 0 ? 'None' : taskPrs.length}</div>
-    </div>
   </section>
 
   <TaskRelationshipDetailSection

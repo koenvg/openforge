@@ -645,6 +645,17 @@ describe('TaskInfoPanel', () => {
     expect(screen.queryByText('Draft')).toBeNull()
   })
 
+  it('omits status and pull request counts from the details section', () => {
+    ticketPrs.set(new Map([['T-42', [createPullRequest()]]]))
+
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
+
+    const detailsSection = screen.getByLabelText('Details')
+    expect(detailsSection.textContent).not.toContain('Status')
+    expect(detailsSection.textContent).not.toContain('Pull requests')
+    expect(detailsSection.textContent).not.toContain('backlog')
+  })
+
   it('renders workspace path section when workspacePath is provided', () => {
     render(TaskInfoPanel, { props: { task: baseTask, workspacePath: '/home/user/worktrees/T-42' } })
     expect(screen.getByText('Workspace')).toBeTruthy()
