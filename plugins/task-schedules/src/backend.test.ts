@@ -126,6 +126,44 @@ describe('Task Schedules backend plugin', () => {
     expect(saved).toMatchObject({ title: 'Daily edited', prompt: 'New prompt', mode: 'create-only' })
   })
 
+  it('restores deleted Task Schedule identity and history when undo re-saves a schedule draft', async () => {
+    const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
+    const deleted = makeSchedule({
+      id: 'schedule-deleted',
+      createdAt: Date.UTC(2025, 11, 31, 8),
+      lastFireAt: Date.UTC(2026, 0, 1, 8),
+      lastTaskId: 'T-previous',
+      history: [{ id: 'outcome-1', firedAt: 1, trigger: 'scheduled', status: 'started', taskId: 'T-previous', message: 'Started T-previous' }],
+    })
+    await setStoredSchedules(api, [])
+
+    const saved = await saveTaskSchedule(api, {
+      projectId,
+      schedule: {
+        id: deleted.id,
+        title: deleted.title,
+        prompt: deleted.prompt,
+        preset: deleted.preset,
+        timeOfDay: '09:00',
+        mode: deleted.mode,
+        enabled: deleted.enabled,
+        createdAt: deleted.createdAt,
+        lastFireAt: deleted.lastFireAt,
+        lastTaskId: deleted.lastTaskId,
+        history: deleted.history,
+      },
+    }, Date.UTC(2026, 0, 1, 10))
+
+    expect(saved).toMatchObject({
+      id: 'schedule-deleted',
+      createdAt: deleted.createdAt,
+      lastFireAt: deleted.lastFireAt,
+      lastTaskId: 'T-previous',
+      history: deleted.history,
+    })
+    await expect(listTaskSchedules(api, { projectId })).resolves.toContainEqual(expect.objectContaining({ id: 'schedule-deleted' }))
+  })
+
   it('Run now creates a normal Task with the scheduled label and starts implementation by default', async () => {
     const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
     await setStoredSchedules(api, [makeSchedule()])
