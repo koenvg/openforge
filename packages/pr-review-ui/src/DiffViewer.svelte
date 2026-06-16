@@ -517,8 +517,8 @@
             style="position: absolute; top: {row.start}px; width: 100%; padding: 0 0 12px 0;"
             use:virtualizer.measureAction
           >
-            <div class="border border-base-300 rounded-md overflow-hidden">
-              <div class="w-full flex items-center gap-2 px-4 py-3 bg-base-200 border-b border-base-300">
+            <div class="border border-base-300 rounded-md">
+              <div class="sticky top-0 z-20 w-full flex items-center gap-2 px-4 py-3 bg-base-200 border-b border-base-300 rounded-t-md shadow-sm">
                 <button class="min-w-0 flex flex-1 items-center gap-2 text-left hover:text-primary transition-colors" onclick={() => toggleCollapse(file.filename)}>
                   <span class="text-xs text-base-content/50 flex-shrink-0">{collapsedFiles.has(file.filename) ? '▶' : '▼'}</span>
                   <span class="font-bold text-sm" style="color: {getFileStatusColor(file.status)}">
