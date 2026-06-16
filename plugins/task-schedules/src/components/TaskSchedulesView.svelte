@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte'
   import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
   import { dayOfWeekFromCron, timeOfDayFromCron } from '../lib/cron'
   import type { ScheduledFireOutcome, SchedulePreset, TaskSchedule, TaskScheduleMode } from '../lib/types'
@@ -66,9 +67,12 @@
   let error = $state<string | null>(null)
   let previousProjectId: string | null = null
   let loadRequestId = 0
+  let titleInput = $state<HTMLInputElement | null>(null)
+  let editAnnouncement = $state('')
 
   let sortedSchedules = $derived([...schedules].sort((a, b) => a.nextFireAt - b.nextFireAt || a.title.localeCompare(b.title)))
   let composerTitle = $derived(draft.id ? 'Edit Task Schedule' : 'New Task Schedule')
+  let enabledToggleLabel = $derived(draft.id ? (draft.enabled ? 'Schedule enabled' : 'Schedule disabled') : 'Enabled by default')
 
   $effect(() => {
     if (projectId === previousProjectId) return
@@ -134,7 +138,7 @@
     }
   }
 
-  function editSchedule(schedule: TaskSchedule) {
+  async function editSchedule(schedule: TaskSchedule) {
     draft = {
       id: schedule.id,
       title: schedule.title,
@@ -147,6 +151,9 @@
       mode: schedule.mode,
       enabled: schedule.enabled,
     }
+    editAnnouncement = `Editing ${schedule.title}`
+    await tick()
+    titleInput?.focus()
   }
 
   async function deleteSchedule(scheduleId: string) {
@@ -178,21 +185,20 @@
   }
 </script>
 
-<div class="h-full overflow-auto px-3 py-6 sm:px-4">
-  <div class="mx-auto max-w-7xl">
-  <div class="mb-6 flex items-start justify-between gap-4">
+<div class="flex h-full min-h-0 flex-col overflow-hidden">
+  <div class="flex items-center justify-between border-b border-base-300 bg-base-200 px-4 py-2 shrink-0">
     <div>
-      <p class="text-sm uppercase tracking-wide text-base-content/60">{projectName || 'Project'}</p>
-      <h1 class="text-2xl font-semibold">Task Schedules</h1>
-      <p class="mt-2 max-w-2xl text-sm text-base-content/70">
-        Create recurring project Task Schedules that create normal board Tasks and optionally start an Implementation Run.
-      </p>
+      <h2 class="text-sm font-semibold text-base-content">{projectName || 'Project'} — Task Schedules</h2>
+      <p class="text-xs text-base-content/60">Create recurring project tasks and optional implementation runs.</p>
     </div>
     {#if projectId}
       <button class="btn btn-sm" type="button" onclick={() => loadSchedules(projectId)}>Refresh</button>
     {/if}
   </div>
 
+  <div role="status" aria-live="polite" class="sr-only">{editAnnouncement}</div>
+
+  <div class="flex-1 overflow-auto px-3 py-6 sm:px-4">
   {#if !projectId}
     <div class="alert alert-info">Select a project to manage Task Schedules.</div>
   {:else}
@@ -201,7 +207,7 @@
     {/if}
 
     <div class="grid items-start gap-y-6 gap-x-4 md:grid-cols-[minmax(18rem,1fr)_minmax(22rem,28rem)]">
-      <section class="min-w-0 space-y-3">
+      <section class="min-w-0 space-y-3" aria-label="Task schedules list">
         {#if loading}
           <div class="loading loading-spinner loading-md" aria-label="Loading Task Schedules"></div>
         {:else if sortedSchedules.length === 0}
@@ -254,7 +260,7 @@
 
               <div class="mt-4 flex flex-wrap gap-2">
                 <button class="btn btn-primary btn-sm" type="button" onclick={() => runNow(schedule.id)}>Run now</button>
-                <button class="btn btn-sm" type="button" onclick={() => editSchedule(schedule)}>Edit</button>
+                <button class="btn btn-sm" type="button" onclick={() => { void editSchedule(schedule) }}>Edit</button>
                 <button class="btn btn-ghost btn-sm" type="button" onclick={() => deleteSchedule(schedule.id)}>Delete</button>
               </div>
             </article>
@@ -262,7 +268,7 @@
         {/if}
       </section>
 
-      <aside class="rounded-box border border-base-300 bg-base-100 px-4 py-5 shadow-sm md:sticky md:top-4">
+      <aside class="rounded-box border border-base-300 bg-base-100 px-4 py-5 shadow-sm md:sticky md:top-4" role="region" aria-label="Task schedule composer">
         <div class="space-y-1">
           <h2 class="text-lg font-semibold">{composerTitle}</h2>
           <p class="text-xs leading-relaxed text-base-content/60">Use a plain prompt and simple cadence. Scheduled Fires create normal board Tasks.</p>
@@ -270,7 +276,7 @@
         <form class="mt-5 flex flex-col gap-4" onsubmit={(event) => { event.preventDefault(); void saveSchedule() }}>
           <label class="form-control flex w-full flex-col gap-1">
             <span class="label-text text-xs font-medium uppercase tracking-wide text-base-content/60">Title</span>
-            <input class="input input-bordered w-full" bind:value={draft.title} placeholder="Daily dependency triage" required />
+            <input bind:this={titleInput} class="input input-bordered w-full" bind:value={draft.title} placeholder="Daily dependency triage" required />
           </label>
 
           <label class="form-control flex w-full flex-col gap-1">
@@ -331,7 +337,7 @@
 
           <label class="flex min-h-11 items-center gap-3 rounded-box bg-base-200/60 px-3 text-sm">
             <input class="toggle toggle-primary" type="checkbox" bind:checked={draft.enabled} />
-            <span>Enabled by default</span>
+            <span>{enabledToggleLabel}</span>
           </label>
 
           <div class="flex flex-wrap gap-2 pt-1">
