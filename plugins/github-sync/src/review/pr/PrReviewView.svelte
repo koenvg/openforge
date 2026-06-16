@@ -48,6 +48,7 @@
   let isLoadingAuthored = $state(false)
   let error = $state<string | null>(null)
   let authoredError = $state<string | null>(null)
+  let githubTokenConfigured = $state<boolean | null>(null)
   let diffViewer = $state<DiffViewer>()
   let fileTreeVisible = $state(true)
   let activeTab = $state<PrDetailTab>('overview')
@@ -183,6 +184,52 @@
 
   let groupedPrs = $derived(groupByRepo(filteredReviewPrs))
   let groupedAuthoredPrs = $derived(groupAuthoredByRepo(filteredAuthoredPrs))
+  let hiddenReviewRepos = $derived(getHiddenRepos($reviewPrs))
+  let hiddenAuthoredRepos = $derived(getHiddenRepos($authoredPrs))
+
+  function getHiddenRepos(prs: Array<ReviewPullRequest | AuthoredPullRequest>): string[] {
+    const repos = new Set<string>()
+    for (const pr of prs) {
+      const repo = `${pr.repo_owner}/${pr.repo_name}`
+      if (excludedRepos.has(repo)) repos.add(repo)
+    }
+    return [...repos].sort()
+  }
+
+  function pluralize(count: number, singular: string, plural = `${singular}s`): string {
+    return count === 1 ? singular : plural
+  }
+
+  function formatUnknownError(e: unknown): string {
+    return e instanceof Error ? e.message : String(e)
+  }
+
+  function formatPrLoadError(scope: 'review' | 'authored', e: unknown): string {
+    const message = formatUnknownError(e)
+    if (message.toLowerCase().includes('github_token not configured')) {
+      return 'No GitHub token is configured. Add a token in Global Settings, then retry.'
+    }
+    const label = scope === 'review' ? 'review requests' : 'authored pull requests'
+    return `GitHub could not load ${label}: ${message}`
+  }
+
+  function openGithubSettings() {
+    void api.navigation.navigate({ viewId: 'global_settings' })
+  }
+
+  function openRepositoryFilters() {
+    showFilterDropdown = true
+  }
+
+  async function loadGithubConfiguration() {
+    try {
+      const token = await api.config.get<string>('github_token')
+      githubTokenConfigured = Boolean(token?.trim())
+    } catch (e) {
+      console.error('Failed to load GitHub configuration:', e)
+      githubTokenConfigured = null
+    }
+  }
 
   function groupByRepo(prs: ReviewPullRequest[]): Map<string, ReviewPullRequest[]> {
     const grouped = new Map<string, ReviewPullRequest[]>()
@@ -288,7 +335,7 @@
       $reviewPrs = prs
     } catch (e) {
       console.error('Failed to load PRs:', e)
-      error = 'Failed to load pull requests. Please try again.'
+      error = formatPrLoadError('review', e)
     } finally {
       isLoading = false
     }
@@ -302,7 +349,7 @@
       $reviewPrs = prs
     } catch (e) {
       console.error('Failed to refresh PRs:', e)
-      error = 'Failed to refresh pull requests. Please try again.'
+      error = formatPrLoadError('review', e)
     } finally {
       isLoading = false
     }
@@ -327,7 +374,7 @@
       // count is updated reactively via $effect
     } catch (e) {
       console.error('Failed to load authored PRs:', e)
-      authoredError = 'Failed to load pull requests. Please try again.'
+      authoredError = formatPrLoadError('authored', e)
     } finally {
       isLoadingAuthored = false
     }
@@ -342,7 +389,7 @@
       // count is updated reactively via $effect
     } catch (e) {
       console.error('Failed to refresh authored PRs:', e)
-      authoredError = 'Failed to refresh pull requests. Please try again.'
+      authoredError = formatPrLoadError('authored', e)
     } finally {
       isLoadingAuthored = false
     }
@@ -597,6 +644,7 @@
   }
 
   onMount(async () => {
+    loadGithubConfiguration()
     loadPrs()
     loadAuthoredPrs()
     unlisteners.push(
@@ -804,8 +852,8 @@
               <h3 class="text-sm font-semibold text-base-content m-0">Review Requests</h3>
               <span class="badge badge-primary badge-xs">{filteredReviewPrs.length}</span>
             </div>
-            <button class="btn btn-xs btn-ghost text-base-content/50" onclick={refreshPrs} disabled={isLoading}>
-              {isLoading ? '⟳' : '↻'}
+            <button class="btn btn-xs btn-ghost text-base-content/50" aria-label="Refresh review requests" onclick={refreshPrs} disabled={isLoading}>
+              {isLoading ? 'Refreshing' : 'Refresh'}
             </button>
           </div>
 
@@ -816,15 +864,40 @@
                 <span>Loading PRs...</span>
               </div>
             {:else if error}
-              <div class="flex flex-col items-center justify-center h-full gap-3 text-error text-sm text-center p-5">
-                <span class="text-5xl">⚠</span>
-                <span>{error}</span>
+              <div class="flex flex-col items-center justify-center h-full gap-3 text-error text-sm text-center p-5" role="alert">
+                <div class="badge badge-error badge-lg">Sync issue</div>
+                <h3 class="text-xl font-semibold text-base-content m-0">Unable to load review requests</h3>
+                <p class="text-sm m-0 max-w-md text-base-content/70">{error}</p>
+                <div class="flex flex-wrap items-center justify-center gap-2 pt-1">
+                  <button class="btn btn-primary btn-sm" onclick={refreshPrs}>Retry loading review requests</button>
+                  <button class="btn btn-ghost btn-sm" onclick={openGithubSettings}>Open GitHub settings</button>
+                </div>
+              </div>
+            {:else if filteredReviewPrs.length === 0 && $reviewPrs.length > 0 && hiddenReviewRepos.length > 0}
+              <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/70 text-center">
+                <div class="badge badge-warning badge-lg">Filtered</div>
+                <h3 class="text-xl font-semibold text-base-content m-0">All review requests are hidden by filters</h3>
+                <p class="text-sm m-0 max-w-md">
+                  {$reviewPrs.length} {pluralize($reviewPrs.length, 'PR')} from {hiddenReviewRepos.join(', ')} {pluralize(hiddenReviewRepos.length, 'is', 'are')} currently unchecked for this project.
+                </p>
+                <button class="btn btn-primary btn-sm" onclick={openRepositoryFilters}>Review repository filters</button>
+              </div>
+            {:else if filteredReviewPrs.length === 0 && githubTokenConfigured === false}
+              <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/70 text-center">
+                <div class="badge badge-warning badge-lg">Not connected</div>
+                <h3 class="text-xl font-semibold text-base-content m-0">Connect GitHub to check review requests</h3>
+                <p class="text-sm m-0 max-w-md">No GitHub token is configured, so OpenForge cannot check review requests for {projectName}.</p>
+                <button class="btn btn-primary btn-sm" onclick={openGithubSettings}>Open GitHub settings</button>
               </div>
             {:else if filteredReviewPrs.length === 0}
-              <div class="flex flex-col items-center justify-center h-full gap-4 text-base-content/50 text-center">
-                <span class="text-6xl text-success">✓</span>
+              <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/70 text-center">
+                <div class="badge badge-success badge-lg">Checked</div>
                 <h3 class="text-xl font-semibold text-base-content m-0">No PRs requesting your review</h3>
-                <p class="text-sm m-0">You're all caught up!</p>
+                <p class="text-sm m-0 max-w-md">GitHub is connected for {projectName}. Sync again if you expected review requests, or check repository filters for hidden repos.</p>
+                <div class="flex flex-wrap items-center justify-center gap-2 pt-1">
+                  <button class="btn btn-primary btn-sm" onclick={refreshPrs}>Sync review requests</button>
+                  <button class="btn btn-ghost btn-sm" onclick={openRepositoryFilters}>Review repository filters</button>
+                </div>
               </div>
             {:else}
               {#each [...groupedPrs.entries()] as [repo, prs]}
@@ -855,8 +928,8 @@
               <h3 class="text-sm font-semibold text-base-content m-0">My Pull Requests</h3>
               <span class="badge badge-primary badge-xs">{filteredAuthoredPrs.length}</span>
             </div>
-            <button class="btn btn-xs btn-ghost text-base-content/50" onclick={refreshAuthoredPrs} disabled={isLoadingAuthored}>
-              {isLoadingAuthored ? '⟳' : '↻'}
+            <button class="btn btn-xs btn-ghost text-base-content/50" aria-label="Refresh authored pull requests" onclick={refreshAuthoredPrs} disabled={isLoadingAuthored}>
+              {isLoadingAuthored ? 'Refreshing' : 'Refresh'}
             </button>
           </div>
 
@@ -867,15 +940,40 @@
                 <span>Loading PRs...</span>
               </div>
             {:else if authoredError}
-              <div class="flex flex-col items-center justify-center h-full gap-3 text-error text-sm text-center p-5">
-                <span class="text-5xl">⚠</span>
-                <span>{authoredError}</span>
+              <div class="flex flex-col items-center justify-center h-full gap-3 text-error text-sm text-center p-5" role="alert">
+                <div class="badge badge-error badge-lg">Sync issue</div>
+                <h3 class="text-xl font-semibold text-base-content m-0">Unable to load your pull requests</h3>
+                <p class="text-sm m-0 max-w-md text-base-content/70">{authoredError}</p>
+                <div class="flex flex-wrap items-center justify-center gap-2 pt-1">
+                  <button class="btn btn-primary btn-sm" onclick={refreshAuthoredPrs}>Retry loading your pull requests</button>
+                  <button class="btn btn-ghost btn-sm" onclick={openGithubSettings}>Open GitHub settings</button>
+                </div>
+              </div>
+            {:else if filteredAuthoredPrs.length === 0 && $authoredPrs.length > 0 && hiddenAuthoredRepos.length > 0}
+              <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/70 text-center">
+                <div class="badge badge-warning badge-lg">Filtered</div>
+                <h3 class="text-xl font-semibold text-base-content m-0">All authored PRs are hidden by filters</h3>
+                <p class="text-sm m-0 max-w-md">
+                  {$authoredPrs.length} {pluralize($authoredPrs.length, 'PR')} from {hiddenAuthoredRepos.join(', ')} {pluralize(hiddenAuthoredRepos.length, 'is', 'are')} currently unchecked for this project.
+                </p>
+                <button class="btn btn-primary btn-sm" onclick={openRepositoryFilters}>Review repository filters</button>
+              </div>
+            {:else if filteredAuthoredPrs.length === 0 && githubTokenConfigured === false}
+              <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/70 text-center">
+                <div class="badge badge-warning badge-lg">Not connected</div>
+                <h3 class="text-xl font-semibold text-base-content m-0">Connect GitHub to check your PRs</h3>
+                <p class="text-sm m-0 max-w-md">No GitHub token is configured, so OpenForge cannot check pull requests authored by your account.</p>
+                <button class="btn btn-primary btn-sm" onclick={openGithubSettings}>Open GitHub settings</button>
               </div>
             {:else if filteredAuthoredPrs.length === 0}
-              <div class="flex flex-col items-center justify-center h-full gap-4 text-base-content/50 text-center">
-                <span class="text-6xl">🚀</span>
+              <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/70 text-center">
+                <div class="badge badge-success badge-lg">Checked</div>
                 <h3 class="text-xl font-semibold text-base-content m-0">No open pull requests</h3>
-                <p class="text-sm m-0">You don't have any open PRs right now.</p>
+                <p class="text-sm m-0 max-w-md">GitHub is connected for your account. Sync again if you expected authored PRs, or check repository filters for hidden repos.</p>
+                <div class="flex flex-wrap items-center justify-center gap-2 pt-1">
+                  <button class="btn btn-primary btn-sm" onclick={refreshAuthoredPrs}>Sync my pull requests</button>
+                  <button class="btn btn-ghost btn-sm" onclick={openRepositoryFilters}>Review repository filters</button>
+                </div>
               </div>
             {:else}
               {#each [...groupedAuthoredPrs.entries()] as [repo, prs]}
