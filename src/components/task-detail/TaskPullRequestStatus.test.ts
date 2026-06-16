@@ -75,6 +75,12 @@ describe('TaskPullRequestStatus', () => {
     expect(screen.getByText('https://github.com/owner/repo/pull/42')).toBeTruthy()
   })
 
+  it('labels merged PR cards as done instead of active pull requests', () => {
+    render(TaskPullRequestStatus, { props: { taskPrs: [createPullRequest({ state: 'merged', merged_at: 3000 })] } })
+
+    expect(screen.getByLabelText('Merged pull request #42 (done)')).toBeTruthy()
+  })
+
   it('opens PR links through the typed openUrl IPC wrapper', async () => {
     render(TaskPullRequestStatus, { props: { taskPrs: [createPullRequest()] } })
 
