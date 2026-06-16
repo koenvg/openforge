@@ -1,5 +1,9 @@
 use super::*;
 
+fn shell_single_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
+
 #[tokio::test]
 async fn handles_commands_that_do_not_require_spawn() {
     let (state, path) = test_state("app_invoke_pty_commands");
@@ -104,35 +108,29 @@ async fn spawns_shell_in_workspace_path_with_spaces() {
     .await;
     assert!(instance_id.as_u64().expect("instance id") > 0);
 
-    let mut events = state
-        .app_event_tx
-        .as_ref()
-        .expect("event sender")
-        .subscribe();
+    let output_path = temp_dir.path().join("shell cwd.txt");
+    let command = format!(
+        "pwd -P > {}\n",
+        shell_single_quote(&output_path.to_string_lossy())
+    );
     state
         .pty_manager
         .as_ref()
         .expect("pty manager")
-        .write_pty("T-space-shell-0", b"pwd -P\n")
+        .write_pty("T-space-shell-0", command.as_bytes())
         .await
         .expect("write shell command");
 
-    let mut saw_workspace_cwd = false;
-    for _ in 0..12 {
-        let Ok(event) =
-            tokio::time::timeout(std::time::Duration::from_secs(2), events.recv()).await
-        else {
-            break;
-        };
-        let event = event.expect("event should be available");
-        if event.event_name == "pty-output-T-space-shell-0"
-            && event.payload["data"]
-                .as_str()
-                .is_some_and(|data| data.contains(&expected_cwd))
-        {
-            saw_workspace_cwd = true;
-            break;
+    let mut observed_cwd = None;
+    for _ in 0..200 {
+        if let Ok(contents) = std::fs::read_to_string(&output_path) {
+            let trimmed = contents.trim_end_matches(&['\r', '\n'][..]).to_string();
+            if !trimmed.is_empty() {
+                observed_cwd = Some(trimmed);
+                break;
+            }
         }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
 
     let _ = state
@@ -141,9 +139,10 @@ async fn spawns_shell_in_workspace_path_with_spaces() {
         .expect("pty manager")
         .kill_shells_for_task("T-space")
         .await;
-    assert!(
-        saw_workspace_cwd,
-        "shell PTY should start with actual cwd at workspace containing spaces: {expected_cwd}"
+    assert_eq!(
+        observed_cwd.as_deref(),
+        Some(expected_cwd.as_str()),
+        "shell PTY should start with actual cwd at workspace containing spaces"
     );
     let _ = std::fs::remove_file(path);
 }
