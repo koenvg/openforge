@@ -5,6 +5,7 @@
   "exports": {
     "./AuthoredPrCard.svelte": "./src/AuthoredPrCard.svelte",
     "./ReviewPrCard.svelte": "./src/ReviewPrCard.svelte",
+    "./PrStatusChip.svelte": "./src/ui/PrStatusChip.svelte",
     "./FileTree.svelte": "./src/FileTree.svelte",
     "./ReviewSubmitPanel.svelte": "./src/ReviewSubmitPanel.svelte",
     "./PrOverviewTab.svelte": "./src/PrOverviewTab.svelte",

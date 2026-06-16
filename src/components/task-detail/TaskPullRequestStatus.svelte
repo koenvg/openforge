@@ -7,7 +7,7 @@
   import { createPrCommentLoader } from '../../lib/prComments.svelte'
   import { mergingTaskIds } from '../../lib/stores'
   import { useMergeOrchestration } from './useMergeOrchestration.svelte'
-  import PrStatusChip from '../shared/ui/PrStatusChip.svelte'
+  import PrStatusChip from '@openforge/pr-review-ui/PrStatusChip.svelte'
   import PrCommentsList from '../shared/pr/PrCommentsList.svelte'
   import PrPipelineChecks from '../shared/pr/PrPipelineChecks.svelte'
 
