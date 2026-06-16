@@ -14,18 +14,21 @@
   interface Props {
     task: Task
     workspacePath: string | null
+    allTasksOverride?: Task[]
+    taskPrsOverride?: PullRequestInfo[]
   }
 
-  let { task, workspacePath }: Props = $props()
+  let { task, workspacePath, allTasksOverride, taskPrsOverride }: Props = $props()
 
   let labels = $state<TaskLabel[]>([])
   let previousTaskId: string | null = null
   let previousTaskLabelSignature = ''
 
-  let taskPrs = $derived($ticketPrs.get(task.id) || [])
-  let dependencies = $derived(getTaskDependencySummaries(task, $allTasks))
-  let waitingDependencyCount = $derived(getWaitingDependencyCount(task, $allTasks))
-  let dependents = $derived(getTaskDependentSummaries(task, $allTasks))
+  let taskPrs = $derived((taskPrsOverride ?? $ticketPrs.get(task.id)) || [])
+  let taskList = $derived(allTasksOverride ?? $allTasks)
+  let dependencies = $derived(getTaskDependencySummaries(task, taskList))
+  let waitingDependencyCount = $derived(getWaitingDependencyCount(task, taskList))
+  let dependents = $derived(getTaskDependentSummaries(task, taskList))
 
   function labelSignature(nextLabels: TaskLabel[]): string {
     return JSON.stringify(nextLabels.map((label) => [label.id, label.name, label.color]))
