@@ -361,6 +361,17 @@ describe('TaskDetailView', () => {
     expect(screen.getByText('Initial Prompt')).toBeTruthy()
   })
 
+  it('owns right info pane scrolling at the sidebar boundary', () => {
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+
+    const scrollContainer = screen.getByTestId('task-info-scroll-container')
+    const infoPanel = screen.getByTestId('task-info-panel')
+
+    expect(scrollContainer.getAttribute('data-scroll-owner')).toBe('task-info-panel')
+    expect(infoPanel.getAttribute('data-scroll-owner')).toBe('false')
+    expect(scrollContainer.contains(infoPanel)).toBe(true)
+  })
+
   it('shows Start Task button for backlog tasks', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     expect(screen.getByText('Start Task')).toBeTruthy()

@@ -36,7 +36,7 @@
   }
 </script>
 
-<section class="flex flex-col gap-2.5 border-b border-base-300/70 pb-3" aria-label="Pull Requests">
+<section data-task-info-card="pull-requests" data-card-sizing="natural" class="flex flex-col gap-2.5 border-b border-base-300/70 pb-3 shrink-0" aria-label="Pull Requests">
   <div class="flex items-center justify-between gap-2">
     <h3 class="m-0 text-sm font-semibold text-base-content">Pull Requests</h3>
     {#if taskPrs.length > 0}
@@ -54,7 +54,7 @@
       {#each taskPrs as pr (pr.id)}
         {@const chips = getPrStatusChips(pr, 'detail').filter((chip) => chip.type !== 'merge')}
         {@const unaddressedComments = commentLoader.unaddressedCommentsForPr(pr.id)}
-        <article data-testid="task-attention-pr-card" class="rounded-lg bg-base-100 border border-base-300/70 border-l-2 {cardAccentClass(pr)} overflow-hidden" aria-label={`Pull request ${prNumberLabel(pr)}`}>
+        <article data-testid="task-attention-pr-card" data-card-sizing="natural" class="rounded-lg bg-base-100 border border-base-300/70 border-l-2 {cardAccentClass(pr)} overflow-hidden shrink-0" aria-label={`Pull request ${prNumberLabel(pr)}`}>
           <div class="flex items-start justify-between gap-2 p-2.5">
             <div class="min-w-0 flex-1 flex flex-col gap-1">
               <div class="flex items-center gap-2 min-w-0">

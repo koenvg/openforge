@@ -290,15 +290,15 @@
       {/if}
     </div>
 
-  <div class="flex flex-col flex-1 overflow-hidden">
+  <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
     {#if activeView === 'agent' || activeView === 'review'}
-      <div data-testid="upper-area" class="flex flex-1 overflow-hidden max-[800px]:flex-col">
+      <div data-testid="upper-area" class="flex flex-1 min-h-0 overflow-hidden max-[800px]:flex-col">
         {#if activeView === 'review'}
           {#key task.id}
             <SelfReviewView {task} {agentStatus} onSendToAgent={handleSendToAgent} />
           {/key}
         {:else}
-          <div class="relative flex-1 p-5 overflow-hidden max-[800px]:p-4">
+          <div class="relative flex-1 min-h-0 p-5 overflow-hidden max-[800px]:p-4">
             {#key task.id}
               <AgentPanel taskId={task.id} {isStarting} />
             {/key}
@@ -307,10 +307,12 @@
             {/if}
           </div>
           <ResizablePanel storageKey="task-detail-sidebar" defaultWidth={360} minWidth={200} maxWidth={600} side="right">
-            <div class="overflow-hidden bg-base-200 border-l border-base-300 flex flex-col h-full">
-              <div class="flex-1 overflow-y-auto">
-                <TaskInfoPanel task={task} {workspacePath} />
-              </div>
+            <div
+              data-testid="task-info-scroll-container"
+              data-scroll-owner="task-info-panel"
+              class="h-full min-h-0 overflow-y-auto bg-base-200 border-l border-base-300"
+            >
+              <TaskInfoPanel task={task} {workspacePath} />
             </div>
           </ResizablePanel>
         {/if}

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/svelte'
 import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { writable } from 'svelte/store'
 import { requireElement } from '../../test-utils/dom'
@@ -123,6 +123,15 @@ describe('TaskInfoPanel', () => {
     expect(screen.getByText('Review PR comments before merge')).toBeTruthy()
   })
 
+  it('marks right-pane information cards as natural-size flow items', () => {
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
+
+    for (const card of ['summary', 'attention', 'pull-requests', 'documents', 'details']) {
+      const element = document.querySelector(`[data-task-info-card="${card}"]`)
+      expect(element?.getAttribute('data-card-sizing')).toBe('natural')
+    }
+  })
+
   it('renders multiple pull requests as equal cards without marking a primary PR', async () => {
     const firstPr = createPullRequest({ id: 42, title: 'First PR', unaddressed_comment_count: 0 })
     const secondPr = createPullRequest({ id: 99, title: 'Second PR', url: 'https://github.com/owner/repo/pull/99', unaddressed_comment_count: 0 })
@@ -169,12 +178,12 @@ describe('TaskInfoPanel', () => {
     expect(handoffSection?.textContent).toContain('Current summary')
     expect(handoffSection?.textContent).not.toContain('Follow-up tasks: none')
 
-    const expandButton = screen.getByRole('button', { name: 'Expand Handoff Notes' })
+    const expandButton = screen.getByRole('button', { name: 'Show full Handoff Notes' })
     expect(expandButton.getAttribute('aria-expanded')).toBe('false')
     await fireEvent.click(expandButton)
 
     expect(screen.getByText(/Follow-up tasks: none/)).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Collapse Handoff Notes' }).getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Show less Handoff Notes' }).getAttribute('aria-expanded')).toBe('true')
   })
 
   it('previews the initial prompt by default and expands it on request', async () => {
@@ -189,9 +198,37 @@ describe('TaskInfoPanel', () => {
     expect(promptSection?.textContent).toContain('Build a calm task attention pane')
     expect(promptSection?.textContent).not.toContain('before long-form task documents')
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Expand Initial Prompt' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Show full Initial Prompt' }))
 
     expect(screen.getByText(/before long-form task documents/)).toBeTruthy()
+  })
+
+  it('keeps document content in a separate full-width region before expand controls', () => {
+    const longDocumentTask = {
+      ...baseTask,
+      summary: 'Current summary: implementation started. Review focus: ordering and comments. Risks: lifecycle fetching. Open questions: none. Follow-up tasks: none.',
+      initial_prompt: 'Build a calm task attention pane that starts with an attention summary, then pull request status cards, then handoff notes, then the original initial prompt so reviewers see the active signals before long-form task documents.',
+    }
+
+    render(TaskInfoPanel, { props: { task: longDocumentTask, workspacePath: null } })
+
+    const handoffSection = requireElement(screen.getByLabelText('Handoff Notes').closest('section'), HTMLElement, 'Expected Handoff Notes section')
+    const handoffContent = within(handoffSection).getByRole('region', { name: 'Handoff Notes content' })
+    const handoffControls = within(handoffSection).getByRole('group', { name: 'Handoff Notes actions' })
+    const handoffButton = within(handoffControls).getByRole('button', { name: 'Show full Handoff Notes' })
+
+    expect(handoffContent.contains(handoffButton)).toBe(false)
+    expect(handoffContent.parentElement).toBe(handoffControls.parentElement)
+    expect(Boolean(handoffContent.compareDocumentPosition(handoffControls) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+
+    const promptSection = requireElement(screen.getByLabelText('Initial Prompt').closest('section'), HTMLElement, 'Expected Initial Prompt section')
+    const promptContent = within(promptSection).getByRole('region', { name: 'Initial Prompt content' })
+    const promptControls = within(promptSection).getByRole('group', { name: 'Initial Prompt actions' })
+    const promptButton = within(promptControls).getByRole('button', { name: 'Show full Initial Prompt' })
+
+    expect(promptContent.contains(promptButton)).toBe(false)
+    expect(promptContent.parentElement).toBe(promptControls.parentElement)
+    expect(Boolean(promptContent.compareDocumentPosition(promptControls) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
   })
 
   it('renders Initial Prompt section with task initial_prompt', () => {

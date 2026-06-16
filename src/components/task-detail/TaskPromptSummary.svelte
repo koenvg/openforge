@@ -38,22 +38,25 @@
   })
 </script>
 
-<section class="rounded-lg border border-base-300/70 bg-base-100 overflow-hidden" aria-label="Documents">
+<section data-task-info-card="documents" data-card-sizing="natural" class="rounded-lg border border-base-300/70 bg-base-100 overflow-hidden shrink-0" aria-label="Documents">
   <h3 class="m-0 px-3 py-2 text-sm font-semibold text-base-content border-b border-base-300/70">Documents</h3>
 
-  <section class="px-3 py-2 border-b border-base-300/70" aria-label="Handoff Notes">
-    <div class="flex items-start justify-between gap-2">
-      <div class="min-w-0 flex-1">
-        <h4 class="m-0 text-sm font-semibold text-base-content">Handoff Notes</h4>
-        {#if handoffNotes}
-          <div id={handoffContentId} class="mt-1 text-xs text-base-content/65 leading-relaxed break-words [&_.markdown-body]:text-xs [&_.markdown-body_pre]:text-[10px] [&_.markdown-body_code]:text-[10px] [&_.markdown-body_p]:my-1">
-            <MarkdownContent content={visibleHandoffNotes} />
-          </div>
-        {:else}
-          <div id={handoffContentId} class="mt-1 text-xs text-base-content/45">No handoff notes yet</div>
-        {/if}
+  <section class="px-3 py-2 border-b border-base-300/70 flex flex-col gap-2" aria-label="Handoff Notes">
+    <h4 class="m-0 text-sm font-semibold text-base-content">Handoff Notes</h4>
+    {#if handoffNotes}
+      <div
+        id={handoffContentId}
+        role="region"
+        aria-label="Handoff Notes content"
+        class="text-xs text-base-content/65 leading-relaxed break-words [&_.markdown-body]:text-xs [&_.markdown-body_pre]:text-[10px] [&_.markdown-body_code]:text-[10px] [&_.markdown-body_p]:my-1"
+      >
+        <MarkdownContent content={visibleHandoffNotes} />
       </div>
-      {#if handoffHasOverflow}
+    {:else}
+      <div id={handoffContentId} role="region" aria-label="Handoff Notes content" class="text-xs text-base-content/45">No handoff notes yet</div>
+    {/if}
+    {#if handoffHasOverflow}
+      <div role="group" aria-label="Handoff Notes actions" class="flex justify-start">
         <button
           type="button"
           class="btn btn-outline btn-xs focus-visible:ring-2 focus-visible:ring-primary rounded"
@@ -61,19 +64,17 @@
           aria-controls={handoffContentId}
           onclick={() => { handoffExpanded = !handoffExpanded }}
         >
-          {handoffExpanded ? 'Collapse Handoff Notes' : 'Expand Handoff Notes'}
+          {handoffExpanded ? 'Show less Handoff Notes' : 'Show full Handoff Notes'}
         </button>
-      {/if}
-    </div>
+      </div>
+    {/if}
   </section>
 
-  <section class="px-3 py-2" aria-label="Initial Prompt">
-    <div class="flex items-start justify-between gap-2">
-      <div class="min-w-0 flex-1">
-        <h4 class="m-0 text-sm font-semibold text-base-content">Initial Prompt</h4>
-        <div id={promptContentId} class="mt-1 text-xs text-base-content/65 leading-relaxed whitespace-pre-wrap break-words">{visiblePrompt}</div>
-      </div>
-      {#if promptHasOverflow}
+  <section class="px-3 py-2 flex flex-col gap-2" aria-label="Initial Prompt">
+    <h4 class="m-0 text-sm font-semibold text-base-content">Initial Prompt</h4>
+    <div id={promptContentId} role="region" aria-label="Initial Prompt content" class="text-xs text-base-content/65 leading-relaxed whitespace-pre-wrap break-words">{visiblePrompt}</div>
+    {#if promptHasOverflow}
+      <div role="group" aria-label="Initial Prompt actions" class="flex justify-start">
         <button
           type="button"
           class="btn btn-outline btn-xs focus-visible:ring-2 focus-visible:ring-primary rounded"
@@ -81,9 +82,9 @@
           aria-controls={promptContentId}
           onclick={() => { promptExpanded = !promptExpanded }}
         >
-          {promptExpanded ? 'Collapse Initial Prompt' : 'Expand Initial Prompt'}
+          {promptExpanded ? 'Show less Initial Prompt' : 'Show full Initial Prompt'}
         </button>
-      {/if}
-    </div>
+      </div>
+    {/if}
   </section>
 </section>

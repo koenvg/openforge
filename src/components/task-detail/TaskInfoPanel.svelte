@@ -139,8 +139,8 @@
 
 </script>
 
-<div class="flex flex-col gap-3 p-3 overflow-y-auto bg-base-200 h-full">
-  <header class="flex flex-col gap-2 border-b border-base-300/70 pb-3" aria-label="Task Attention">
+<div data-testid="task-info-panel" data-scroll-owner="false" class="flex flex-col gap-3 p-3 bg-base-200 min-h-max">
+  <header data-task-info-card="summary" data-card-sizing="natural" class="flex flex-col gap-2 border-b border-base-300/70 pb-3 shrink-0" aria-label="Task Attention">
     <div class="flex items-center justify-between gap-2">
       <h2 class="m-0 font-mono text-lg font-bold text-base-content tracking-tight">{task.id}</h2>
       <span class="badge badge-primary badge-outline capitalize px-2 py-2 text-xs shrink-0">{task.status}</span>
@@ -148,7 +148,7 @@
     <p class="m-0 text-xs text-base-content/65">{attentionTitle(taskPrs)}</p>
   </header>
 
-  <section class="flex flex-col gap-2 border-b border-base-300/70 pb-3" aria-label="Attention">
+  <section data-task-info-card="attention" data-card-sizing="natural" class="flex flex-col gap-2 border-b border-base-300/70 pb-3 shrink-0" aria-label="Attention">
     <h3 class="m-0 text-sm font-semibold text-base-content">Attention</h3>
     <div class="flex flex-wrap items-center gap-1.5" aria-label="Attention signals">
       {#each attentionSignalChips(taskPrs) as chip (chip.label)}
@@ -163,7 +163,7 @@
 
   <TaskPromptSummary {task} />
 
-  <section class="rounded-lg border border-base-300/70 bg-base-100 overflow-hidden" aria-label="Details">
+  <section data-task-info-card="details" data-card-sizing="natural" class="rounded-lg border border-base-300/70 bg-base-100 overflow-hidden shrink-0" aria-label="Details">
     <h3 class="m-0 px-3 py-2 text-sm font-semibold text-base-content border-b border-base-300/70">Details</h3>
 
     <div class="grid grid-cols-[6.25rem_minmax(0,1fr)] items-start gap-2 px-3 py-2 border-b border-base-300/70">
