@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "type": "module",
   "main": "dist-electron/main.js",
-  "packageManager": "pnpm@10.33.4",
+  "packageManager": "pnpm@10.34.3",
   "scripts": {
     "build:plugin-sdk-runtime": "node scripts/build-plugin-sdk-runtime.mjs",
     "build:plugins": "pnpm --filter @openforge/plugin-sdk build && pnpm -r --filter './plugins/*' --if-present build:bundle",
