@@ -316,7 +316,9 @@ describe('FocusBoard', () => {
     await waitFor(() => {
       expect(screen.queryByText('Select a task to see details')).toBeNull()
     })
-    expect(screen.getByText('// INITIAL_PROMPT')).toBeTruthy()
+    const detailPane = screen.getByTestId('task-info-panel')
+    expect(within(detailPane).getByText('Initial Prompt')).toBeTruthy()
+    expect(within(detailPane).getByRole('region', { name: 'Initial Prompt content' }).textContent).toContain('Focus task')
   })
 
   it('moves vim focus down on j key', async () => {
