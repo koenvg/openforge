@@ -15,9 +15,10 @@
     taskId: string
     taskPrs: PullRequestInfo[]
     onPullRequestLinked?: () => Promise<void> | void
+    allowCommentAddressing?: boolean
   }
 
-  let { taskId, taskPrs, onPullRequestLinked }: Props = $props()
+  let { taskId, taskPrs, onPullRequestLinked, allowCommentAddressing = false }: Props = $props()
   let isAddingPr = $state(false)
   let prUrl = $state('')
   let linkError = $state<string | null>(null)
@@ -204,7 +205,9 @@
               <PrCommentsList
                 comments={unaddressedComments}
                 imageBaseUrlForComment={() => getGitHubMarkdownImageBaseUrl(pr)}
+                onMarkAddressed={commentLoader.markAddressedAndRefresh}
                 showLocation={true}
+                showMarkAddressed={allowCommentAddressing}
                 density="detail"
               />
             </div>

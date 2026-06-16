@@ -168,6 +168,28 @@ describe('TaskPullRequestStatus', () => {
       expect(screen.getByText('Fix second PR')).toBeTruthy()
     })
     expect(screen.queryByText('Already handled')).toBeNull()
+    expect(screen.queryByRole('button', { name: /mark addressed/i })).toBeNull()
+  })
+
+  it('marks comments addressed and refreshes when comment addressing is enabled', async () => {
+    const comment = createComment({ id: 123, body: 'Focus-board triage comment', addressed: 0 })
+    vi.mocked(ipc.getPrComments).mockResolvedValue([comment])
+
+    render(TaskPullRequestStatus, {
+      props: {
+        taskId: 'T-42',
+        taskPrs: [createPullRequest({ unaddressed_comment_count: 1 })],
+        allowCommentAddressing: true,
+      },
+    })
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /mark addressed/i })).toBeTruthy())
+    await fireEvent.click(screen.getByRole('button', { name: /mark addressed/i }))
+
+    await waitFor(() => {
+      expect(ipc.markCommentAddressed).toHaveBeenCalledWith(123)
+      expect(ipc.getPrComments).toHaveBeenCalledTimes(2)
+    })
   })
 
   it('resolves relative comment images against the related PR head commit', async () => {

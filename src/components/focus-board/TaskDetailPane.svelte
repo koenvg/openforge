@@ -23,6 +23,7 @@
       workspacePath={null}
       allTasksOverride={allTasks}
       taskPrsOverride={pullRequests}
+      allowCommentAddressing={true}
     />
   </div>
 {/if}

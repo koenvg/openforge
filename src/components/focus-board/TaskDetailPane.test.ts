@@ -1,8 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/svelte'
+import { render, screen, waitFor, fireEvent } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { writable } from 'svelte/store'
-import type { PullRequestInfo, Task, TaskLabel } from '../../lib/types'
+import type { PrComment, PullRequestInfo, Task, TaskLabel } from '../../lib/types'
 import TaskDetailPane from './TaskDetailPane.svelte'
+import * as ipc from '../../lib/ipc'
 
 vi.mock('../../lib/stores', () => ({
   ticketPrs: writable(new Map()),
@@ -77,6 +78,21 @@ const basePr: PullRequestInfo = {
   unaddressed_comment_count: 0,
 }
 
+function makeComment(overrides: Partial<PrComment> = {}): PrComment {
+  return {
+    id: 501,
+    pr_id: 101,
+    author: 'reviewer',
+    body: 'Please address this from focus mode.',
+    comment_type: 'review',
+    file_path: 'src/App.svelte',
+    line_number: 42,
+    addressed: 0,
+    created_at: 1700000000,
+    ...overrides,
+  }
+}
+
 describe('TaskDetailPane', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
@@ -143,5 +159,24 @@ describe('TaskDetailPane', () => {
     })
 
     expect((await screen.findAllByText('Prop-provided PR')).length).toBeGreaterThan(0)
+  })
+
+  it('preserves focus-board PR comment addressing in the shared pane', async () => {
+    vi.mocked(ipc.getPrComments).mockResolvedValue([makeComment()])
+
+    render(TaskDetailPane, {
+      props: {
+        task: baseTask,
+        allTasks: [baseTask],
+        pullRequests: [{ ...basePr, unaddressed_comment_count: 1 }],
+      },
+    })
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /mark addressed/i })).toBeTruthy())
+    await fireEvent.click(screen.getByRole('button', { name: /mark addressed/i }))
+
+    await waitFor(() => {
+      expect(ipc.markCommentAddressed).toHaveBeenCalledWith(501)
+    })
   })
 })

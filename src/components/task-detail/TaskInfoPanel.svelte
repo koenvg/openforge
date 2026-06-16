@@ -16,9 +16,10 @@
     workspacePath: string | null
     allTasksOverride?: Task[]
     taskPrsOverride?: PullRequestInfo[]
+    allowCommentAddressing?: boolean
   }
 
-  let { task, workspacePath, allTasksOverride, taskPrsOverride }: Props = $props()
+  let { task, workspacePath, allTasksOverride, taskPrsOverride, allowCommentAddressing = false }: Props = $props()
 
   let labels = $state<TaskLabel[]>([])
   let previousTaskId: string | null = null
@@ -176,7 +177,7 @@
     </div>
   </section>
 
-  <TaskPullRequestStatus taskId={task.id} {taskPrs} onPullRequestLinked={refreshLinkedPullRequests} />
+  <TaskPullRequestStatus taskId={task.id} {taskPrs} onPullRequestLinked={refreshLinkedPullRequests} {allowCommentAddressing} />
 
   <TaskPromptSummary {task} />
 
