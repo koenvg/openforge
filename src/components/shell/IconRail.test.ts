@@ -11,19 +11,24 @@ describe('IconRail', () => {
     expect(buttons).toHaveLength(2)
   })
 
+  it('exposes accessible names and current page state for static navigation buttons', () => {
+    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn() } })
+
+    expect(screen.getByRole('button', { name: 'Board' }).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('button', { name: 'Settings' }).hasAttribute('aria-current')).toBe(false)
+  })
+
   it('clicking first button (board) calls onNavigate with "board"', () => {
     const onNavigate = vi.fn()
     render(IconRail, { props: { currentView: 'settings' as AppView, onNavigate } })
-    const buttons = screen.getAllByRole('button')
-    fireEvent.click(buttons[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Board' }))
     expect(onNavigate).toHaveBeenCalledWith('board')
   })
 
   it('clicking second button (settings) calls onNavigate with "settings"', () => {
     const onNavigate = vi.fn()
     render(IconRail, { props: { currentView: 'board' as AppView, onNavigate } })
-    const buttons = screen.getAllByRole('button')
-    fireEvent.click(buttons[1])
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     expect(onNavigate).toHaveBeenCalledWith('settings')
   })
 
