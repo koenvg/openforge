@@ -8,7 +8,15 @@
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,
     "resolveJsonModule": true,
-    "types": ["vitest/globals", "node"]
+    "types": ["vitest/globals", "node"],
+    "paths": {
+      "@openforge/plugin-sdk": ["../../packages/plugin-sdk/src/index.ts"],
+      "@openforge/plugin-sdk/backend": ["../../packages/plugin-sdk/src/backend.ts"],
+      "@openforge/plugin-sdk/domain": ["../../packages/plugin-sdk/src/domain.ts"],
+      "@openforge/plugin-sdk/frontend": ["../../packages/plugin-sdk/src/frontend.ts"],
+      "@openforge/plugin-sdk/prStatusPresentation": ["../../packages/plugin-sdk/src/prStatusPresentation.ts"],
+      "@openforge/plugin-sdk/testing": ["../../packages/plugin-sdk/src/testing.ts"]
+    }
   },
   "include": ["src"]
 }

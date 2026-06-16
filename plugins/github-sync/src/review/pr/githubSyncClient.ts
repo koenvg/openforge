@@ -10,26 +10,26 @@ import type {
   ReviewSubmissionComment,
 } from '@openforge/plugin-sdk/domain'
 
-export interface PullRequestRepositoryRequest {
+export type PullRequestRepositoryRequest = {
   owner: string
   repo: string
   prNumber: number
 }
 
-export interface FileContentRequest {
+export type FileContentRequest = {
   owner: string
   repo: string
   sha: string
 }
 
-export interface FileAtRefRequest {
+export type FileAtRefRequest = {
   owner: string
   repo: string
   path: string
   refSha: string
 }
 
-export interface SubmitPullRequestReviewRequest extends PullRequestRepositoryRequest {
+export type SubmitPullRequestReviewRequest = PullRequestRepositoryRequest & {
   event: 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES'
   body: string
   comments: ReviewSubmissionComment[]
