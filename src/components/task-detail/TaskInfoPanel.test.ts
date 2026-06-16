@@ -108,7 +108,8 @@ describe('TaskInfoPanel', () => {
   }
 
   async function findPullRequestCard(prNumber: number): Promise<HTMLElement> {
-    return await screen.findByRole('article', { name: `Pull request #${prNumber}` })
+    const prNumberElement = await screen.findByText(`#${prNumber}`)
+    return requireElement(prNumberElement.closest('article'), HTMLElement)
   }
 
   it('renders Docket List attention and PR signals before handoff notes and initial prompt', async () => {

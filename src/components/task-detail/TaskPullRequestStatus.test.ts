@@ -3,9 +3,20 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { PrComment, PullRequestInfo } from '../../lib/types'
 
 vi.mock('../../lib/ipc', () => ({
+  forceGithubSync: vi.fn().mockResolvedValue({
+    new_comments: 0,
+    ci_changes: 0,
+    review_changes: 0,
+    pr_changes: 0,
+    errors: 0,
+    rate_limited: false,
+    rate_limit_reset_at: null,
+  }),
+  getPullRequests: vi.fn().mockResolvedValue([]),
   getPrComments: vi.fn().mockResolvedValue([]),
   markCommentAddressed: vi.fn().mockResolvedValue(undefined),
   linkPullRequest: vi.fn().mockResolvedValue(undefined),
+  mergePullRequest: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn().mockResolvedValue(undefined),
 }))
 
@@ -66,8 +77,19 @@ function createDeferred<T>() {
 describe('TaskPullRequestStatus', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(ipc.forceGithubSync).mockResolvedValue({
+      new_comments: 0,
+      ci_changes: 0,
+      review_changes: 0,
+      pr_changes: 0,
+      errors: 0,
+      rate_limited: false,
+      rate_limit_reset_at: null,
+    })
+    vi.mocked(ipc.getPullRequests).mockResolvedValue([])
     vi.mocked(ipc.getPrComments).mockResolvedValue([])
     vi.mocked(ipc.linkPullRequest).mockResolvedValue(createPullRequest())
+    vi.mocked(ipc.mergePullRequest).mockResolvedValue(undefined)
     vi.mocked(ipc.openUrl).mockResolvedValue(undefined)
   })
 
@@ -78,7 +100,7 @@ describe('TaskPullRequestStatus', () => {
   })
 
   it('labels merged PR cards as done instead of active pull requests', () => {
-    render(TaskPullRequestStatus, { props: { taskPrs: [createPullRequest({ state: 'merged', merged_at: 3000 })] } })
+    render(TaskPullRequestStatus, { props: { taskId: 'T-42', taskPrs: [createPullRequest({ state: 'merged', merged_at: 3000 })] } })
 
     expect(screen.getByLabelText('Merged pull request #42 (done)')).toBeTruthy()
   })
