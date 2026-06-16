@@ -8,7 +8,6 @@
   import CopyButton from '../shared/ui/CopyButton.svelte'
   import TaskPromptSummary from './TaskPromptSummary.svelte'
   import TaskPullRequestStatus from './TaskPullRequestStatus.svelte'
-  import TaskMergeStatus from './TaskMergeStatus.svelte'
   import TaskLabelEditor from '../shared/tasks/TaskLabelEditor.svelte'
   import TaskRelationshipDetailSection from '../shared/tasks/TaskRelationshipDetailSection.svelte'
 
@@ -175,8 +174,6 @@
   </section>
 
   <TaskPullRequestStatus taskId={task.id} {taskPrs} onPullRequestLinked={refreshLinkedPullRequests} />
-
-  <TaskMergeStatus {task} {taskPrs} />
 
   <TaskPromptSummary {task} />
 

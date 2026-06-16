@@ -107,6 +107,10 @@ describe('TaskInfoPanel', () => {
     }
   }
 
+  async function findPullRequestCard(prNumber: number): Promise<HTMLElement> {
+    return await screen.findByRole('article', { name: `Pull request #${prNumber}` })
+  }
+
   it('renders Docket List attention and PR signals before handoff notes and initial prompt', async () => {
     ticketPrs.set(new Map([['T-42', [createPullRequest({
       ci_status: 'failure',
@@ -156,17 +160,104 @@ describe('TaskInfoPanel', () => {
 
   it('renders multiple pull requests as equal cards without marking a primary PR', async () => {
     const firstPr = createPullRequest({ id: 42, title: 'First PR', unaddressed_comment_count: 0 })
-    const secondPr = createPullRequest({ id: 99, title: 'Second PR', url: 'https://github.com/owner/repo/pull/99', unaddressed_comment_count: 0 })
+    const secondPr = createPullRequest({ id: 99, pr_number: 99, title: 'Second PR', url: 'https://github.com/owner/repo/pull/99', unaddressed_comment_count: 0 })
     ticketPrs.set(new Map([['T-42', [firstPr, secondPr]]]))
 
     render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
 
-    await screen.findByText('First PR')
-    const prCards = document.querySelectorAll('[data-testid="task-attention-pr-card"]')
-    expect(prCards).toHaveLength(2)
-    expect(prCards[0].textContent).toContain('First PR')
-    expect(prCards[1].textContent).toContain('Second PR')
+    const firstCard = await findPullRequestCard(42)
+    const secondCard = await findPullRequestCard(99)
+    expect(firstCard.textContent).toContain('First PR')
+    expect(secondCard.textContent).toContain('Second PR')
     expect(document.body.textContent?.toLowerCase()).not.toContain('primary pr')
+  })
+
+  it('renders ready-to-merge controls inside the matching PR card without a separate merge status section', async () => {
+    const readyPr = createPullRequest({
+      ci_status: 'success',
+      review_status: 'approved',
+      mergeable: true,
+      mergeable_state: 'clean',
+    })
+    ticketPrs.set(new Map([['T-42', [readyPr]]]))
+
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
+
+    const prCard = await findPullRequestCard(42)
+    expect(within(prCard).getByText('Ready to Merge')).toBeTruthy()
+    expect(within(prCard).getByRole('button', { name: 'Merge' })).toBeTruthy()
+    expect(within(prCard).getByText('smoke:')).toBeTruthy()
+    expect(within(prCard).getByRole('button', { name: 'Success' })).toBeTruthy()
+    expect(within(prCard).getByRole('button', { name: 'Warning' })).toBeTruthy()
+    expect(within(prCard).getByRole('button', { name: 'Failure' })).toBeTruthy()
+    expect(screen.queryByLabelText('Merge Status')).toBeNull()
+  })
+
+  it('keeps conflict, queue, and merged status inside their related PR cards', async () => {
+    const conflictedPr = createPullRequest({
+      id: 42,
+      pr_number: 42,
+      title: 'Conflicted PR',
+      mergeable: false,
+      mergeable_state: 'dirty',
+    })
+    const queuedPr = createPullRequest({
+      id: 99,
+      pr_number: 99,
+      title: 'Queued PR',
+      url: 'https://github.com/owner/repo/pull/99',
+      ci_status: 'success',
+      review_status: 'approved',
+      mergeable: null,
+      mergeable_state: null,
+      is_queued: true,
+    })
+    const mergedPr = createPullRequest({
+      id: 123,
+      pr_number: 123,
+      title: 'Merged PR',
+      url: 'https://github.com/owner/repo/pull/123',
+      state: 'merged',
+      merged_at: 3000,
+    })
+    ticketPrs.set(new Map([['T-42', [conflictedPr, queuedPr, mergedPr]]]))
+
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
+
+    const conflictedCard = await findPullRequestCard(42)
+    const queuedCard = await findPullRequestCard(99)
+    const mergedCard = await findPullRequestCard(123)
+
+    expect(within(conflictedCard).getByText('Merge Conflict')).toBeTruthy()
+    expect(within(conflictedCard).queryByText('In Merge Queue')).toBeNull()
+    expect(within(conflictedCard).queryByText(/Merged on/)).toBeNull()
+
+    expect(within(queuedCard).getByText('In Merge Queue')).toBeTruthy()
+    expect(within(queuedCard).queryByRole('button', { name: 'Merge' })).toBeNull()
+    expect(within(queuedCard).queryByText('Merge Conflict')).toBeNull()
+
+    expect(within(mergedCard).getByText(/Merged on/)).toBeTruthy()
+    expect(within(mergedCard).queryByRole('button', { name: 'Merge' })).toBeNull()
+    expect(screen.queryByLabelText('Merge Status')).toBeNull()
+  })
+
+  it('keeps merge feedback inside the PR card after a merge failure', async () => {
+    const readyPr = createPullRequest({
+      ci_status: 'success',
+      review_status: 'approved',
+      mergeable: true,
+      mergeable_state: 'clean',
+    })
+    vi.mocked(mergePullRequest).mockRejectedValueOnce(new Error('merge blocked by branch protection'))
+    ticketPrs.set(new Map([['T-42', [readyPr]]]))
+
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
+
+    const prCard = await findPullRequestCard(42)
+    await fireEvent.click(within(prCard).getByRole('button', { name: 'Merge' }))
+
+    expect(await within(prCard).findByText('merge blocked by branch protection')).toBeTruthy()
+    expect(screen.queryByLabelText('Merge Status')).toBeNull()
   })
 
   it('renders full unaddressed PR comments inline under their related PR card', async () => {
