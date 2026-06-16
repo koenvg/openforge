@@ -15,43 +15,117 @@ import '../styles/global.css';
     <title>OpenForge — Run AI coding agents without losing control</title>
   </head>
   <body>
-    <main class="hero-shell" aria-labelledby="hero-title">
-      <header class="site-header" aria-label="OpenForge home">
-        <a class="wordmark" href="/" aria-label="OpenForge home">OpenForge</a>
-      </header>
+    <main aria-labelledby="hero-title">
+      <div class="hero-shell">
+        <header class="site-header" aria-label="OpenForge home">
+          <a class="wordmark" href="/" aria-label="OpenForge home">OpenForge</a>
+        </header>
 
-      <section class="hero" aria-describedby="hero-description">
-        <div class="hero-copy">
-          <h1 id="hero-title">Run AI coding<br />agents without losing<br />control of the work</h1>
-          <p id="hero-description" class="lede">
-            OpenForge keeps the work local, visible, and ready for human review.
-          </p>
+        <section class="hero" aria-describedby="hero-description">
+          <div class="hero-copy">
+            <h1 id="hero-title">Run AI coding<br />agents without losing<br />control of the work</h1>
+            <p id="hero-description" class="lede">
+              OpenForge keeps the work local, visible, and ready for human review.
+            </p>
 
-          <div class="actions" aria-label="Primary actions">
-            <a class="button button-primary" href="https://github.com/koenvg/openforge/releases" aria-label="Install OpenForge from releases">
-              Install OpenForge
-            </a>
-            <a class="button button-secondary" href="https://github.com/koenvg/openforge" aria-label="View OpenForge on GitHub">
-              <svg aria-hidden="true" viewBox="0 0 24 24" class="button-icon">
-                <path
-                  fill="currentColor"
-                  d="M12 .5A11.5 11.5 0 0 0 8.36 22.4c.58.11.8-.25.8-.56v-2.17c-3.25.71-3.94-1.38-3.94-1.38-.53-1.35-1.3-1.71-1.3-1.71-1.06-.72.08-.71.08-.71 1.17.08 1.79 1.2 1.79 1.2 1.04 1.78 2.73 1.27 3.4.97.1-.76.4-1.27.74-1.56-2.6-.3-5.33-1.3-5.33-5.77 0-1.27.46-2.31 1.2-3.13-.12-.3-.52-1.52.12-3.08 0 0 .98-.31 3.2 1.2a11.1 11.1 0 0 1 5.84 0c2.22-1.51 3.2-1.2 3.2-1.2.64 1.56.24 2.78.12 3.08.75.82 1.2 1.86 1.2 3.13 0 4.48-2.74 5.47-5.35 5.76.42.36.8 1.08.8 2.18v3.23c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"
-                />
-              </svg>
-              GitHub
-            </a>
+            <div class="actions" aria-label="Primary actions">
+              <a class="button button-primary" href="https://github.com/koenvg/openforge/releases" aria-label="Install OpenForge from releases">
+                Install OpenForge
+              </a>
+              <a class="button button-secondary" href="https://github.com/koenvg/openforge" aria-label="View OpenForge on GitHub">
+                <svg aria-hidden="true" viewBox="0 0 24 24" class="button-icon">
+                  <path
+                    fill="currentColor"
+                    d="M12 .5A11.5 11.5 0 0 0 8.36 22.4c.58.11.8-.25.8-.56v-2.17c-3.25.71-3.94-1.38-3.94-1.38-.53-1.35-1.3-1.71-1.3-1.71-1.06-.72.08-.71.08-.71 1.17.08 1.79 1.2 1.79 1.2 1.04 1.78 2.73 1.27 3.4.97.1-.76.4-1.27.74-1.56-2.6-.3-5.33-1.3-5.33-5.77 0-1.27.46-2.31 1.2-3.13-.12-.3-.52-1.52.12-3.08 0 0 .98-.31 3.2 1.2a11.1 11.1 0 0 1 5.84 0c2.22-1.51 3.2-1.2 3.2-1.2.64 1.56.24 2.78.12 3.08.75.82 1.2 1.86 1.2 3.13 0 4.48-2.74 5.47-5.35 5.76.42.36.8 1.08.8 2.18v3.23c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"
+                  />
+                </svg>
+                GitHub
+              </a>
+            </div>
           </div>
+
+          <div class="approval-stage" aria-label="Task to review workflow illustration">
+            <img
+              class="hero-visual-image"
+              src="/images/openforge-approval-workflow.png"
+              width="1100"
+              height="500"
+              alt="Task, agent, handoff, and review workflow with a human approval gate and diff summary"
+            />
+          </div>
+        </section>
+      </div>
+
+      <section class="top-reasons" aria-labelledby="top-reasons-title">
+        <div class="section-heading">
+          <p class="eyebrow">Top reasons</p>
+          <h2 id="top-reasons-title" class="section-title">Top reasons to use OpenForge</h2>
         </div>
 
-        <div class="approval-stage" aria-label="Task to review workflow illustration">
-          <img
-            class="hero-visual-image"
-            src="/images/openforge-approval-workflow.png"
-            width="1100"
-            height="500"
-            alt="Task, agent, handoff, and review workflow with a human approval gate and diff summary"
-          />
-        </div>
+        <ol class="reason-rail" aria-label="Top reasons to use OpenForge">
+          <li class="reason-step">
+            <article class="reason-card">
+              <span class="step-badge" aria-hidden="true">01</span>
+              <div class="reason-visual control-visual" aria-hidden="true">
+                <div class="visual-window">
+                  <div class="visual-header">
+                    <span>src/task-review.ts</span>
+                    <span class="status-pill amber-pill">Review</span>
+                  </div>
+                  <div class="diff-row removed-line"><span>−</span><span>skip handoff notes</span></div>
+                  <div class="diff-row added-line"><span>+</span><span>require review gate</span></div>
+                  <div class="review-actions">
+                    <span>Awaiting human review</span>
+                    <span class="status-pill green-pill">Approve</span>
+                  </div>
+                </div>
+              </div>
+              <h3>Stay in control of agent work.</h3>
+              <p>Keep scoped changes, Handoff Notes, and review gates visible before work moves forward.</p>
+            </article>
+          </li>
+
+          <li class="reason-step">
+            <article class="reason-card">
+              <span class="step-badge" aria-hidden="true">02</span>
+              <div class="reason-visual cli-visual" aria-hidden="true">
+                <div class="terminal-window">
+                  <div class="terminal-bar"><span></span><span></span><span></span></div>
+                  <code>$ openforge list-tasks --state doing</code>
+                  <code>$ openforge update-task --task-id KVG-1474</code>
+                  <code class="terminal-result">✓ Task handoff updated · ready for review</code>
+                </div>
+              </div>
+              <h3>Let agents manage OpenForge tasks through the CLI.</h3>
+              <p>Agents can coordinate Task status and Handoff Notes from command-line workflows.</p>
+            </article>
+          </li>
+
+          <li class="reason-step">
+            <article class="reason-card">
+              <span class="step-badge" aria-hidden="true">03</span>
+              <div class="reason-visual plugin-visual" aria-hidden="true">
+                <div class="plugin-boundary">
+                  <div class="boundary-title">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M12 3 20 6.5v5.7c0 4.5-3.1 7.4-8 8.8-4.9-1.4-8-4.3-8-8.8V6.5L12 3Z" />
+                      <path d="m8.8 12.1 2 2 4.6-4.8" />
+                    </svg>
+                    Trusted Plugin boundary
+                  </div>
+                  <div class="plugin-chip-grid">
+                    <span>Review checklist</span>
+                    <span>Repo insights</span>
+                    <span>Task labels</span>
+                    <span>Handoff helpers</span>
+                  </div>
+                </div>
+              </div>
+              <h3>Customize OpenForge to your workflow with Trusted Plugins.</h3>
+              <p>Add approved capabilities around the stable task-based operator console.</p>
+            </article>
+          </li>
+        </ol>
       </section>
     </main>
   </body>
@@ -203,6 +277,285 @@ import '../styles/global.css';
       linear-gradient(to right, transparent 0, #000 3rem, #000 calc(100% - 2rem), transparent 100%),
       linear-gradient(to bottom, transparent 0, #000 1.25rem, #000 calc(100% - 2rem), transparent 100%);
     mask-composite: intersect;
+  }
+
+  .top-reasons {
+    width: min(100% - clamp(2rem, 6vw, 6.5rem), 94rem);
+    margin: 0 auto;
+    padding: clamp(4.5rem, 8vw, 7.5rem) 0 clamp(5rem, 9vw, 8rem);
+  }
+
+  .section-heading {
+    display: grid;
+    justify-items: center;
+    gap: 0.85rem;
+    text-align: center;
+  }
+
+  .eyebrow {
+    margin: 0;
+    color: var(--green-deep);
+    font-size: 0.82rem;
+    font-weight: 780;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+  }
+
+  .section-title {
+    max-width: 13em;
+    margin: 0;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: clamp(3rem, 5vw, 5.1rem);
+    font-weight: 500;
+    line-height: 0.98;
+    letter-spacing: -0.058em;
+  }
+
+  .reason-rail {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(1.4rem, 2.2vw, 2rem);
+    margin: clamp(3.5rem, 6vw, 5.25rem) 0 0;
+    padding: 4.25rem 0 0;
+    list-style: none;
+  }
+
+  .reason-rail::before {
+    content: "";
+    position: absolute;
+    top: 1.9rem;
+    left: 1rem;
+    right: 1rem;
+    height: 1.5px;
+    background: linear-gradient(90deg, transparent, rgba(15, 111, 56, 0.74) 9%, rgba(15, 111, 56, 0.74) 91%, transparent);
+  }
+
+  .reason-step {
+    position: relative;
+    min-width: 0;
+  }
+
+  .step-badge {
+    position: absolute;
+    top: -4.25rem;
+    left: 50%;
+    z-index: 2;
+    width: 3.9rem;
+    height: 3.9rem;
+    display: grid;
+    place-items: center;
+    transform: translateX(-50%);
+    border: 1.5px solid rgba(15, 111, 56, 0.72);
+    border-radius: 999rem;
+    background: rgba(255, 250, 240, 0.94);
+    box-shadow: 0 0.85rem 1.7rem rgba(46, 36, 24, 0.12);
+    color: var(--green-deep);
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 1.15rem;
+    font-weight: 760;
+  }
+
+  .reason-card {
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 1.35rem;
+    border: 1px solid rgba(30, 41, 59, 0.18);
+    border-radius: 1rem;
+    padding: clamp(1.05rem, 1.6vw, 1.55rem);
+    background: rgba(255, 250, 240, 0.74);
+    box-shadow: 0 1.5rem 4.5rem rgba(46, 36, 24, 0.1);
+  }
+
+  .reason-card h3 {
+    margin: 0;
+    color: var(--ink);
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: clamp(1.65rem, 2.1vw, 2.25rem);
+    font-weight: 600;
+    line-height: 1.03;
+    letter-spacing: -0.052em;
+  }
+
+  .reason-card p {
+    max-width: 27rem;
+    margin: -0.55rem 0 0;
+    color: var(--muted);
+    font-size: clamp(1rem, 1.15vw, 1.08rem);
+    line-height: 1.5;
+  }
+
+  .reason-visual {
+    min-height: 16rem;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(30, 41, 59, 0.12);
+    border-radius: 0.75rem;
+    background:
+      radial-gradient(circle at 18% 18%, rgba(15, 111, 56, 0.08), transparent 9rem),
+      rgba(247, 242, 232, 0.5);
+    overflow: hidden;
+  }
+
+  .visual-window,
+  .plugin-boundary {
+    width: min(100% - 1.3rem, 23.5rem);
+    border: 1px solid rgba(30, 41, 59, 0.18);
+    border-radius: 0.6rem;
+    background: rgba(255, 250, 240, 0.86);
+    box-shadow: 0 0.9rem 2.5rem rgba(46, 36, 24, 0.08);
+  }
+
+  .visual-header,
+  .review-actions,
+  .boundary-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .visual-header {
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid rgba(30, 41, 59, 0.12);
+    color: var(--muted);
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 0.78rem;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid currentColor;
+    border-radius: 999rem;
+    padding: 0.25rem 0.55rem;
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    font-size: 0.72rem;
+    font-weight: 730;
+    line-height: 1;
+  }
+
+  .amber-pill {
+    color: var(--amber);
+    background: rgba(191, 114, 0, 0.08);
+  }
+
+  .green-pill {
+    color: var(--green-deep);
+    background: rgba(15, 111, 56, 0.08);
+  }
+
+  .diff-row {
+    display: grid;
+    grid-template-columns: 1.5rem 1fr;
+    gap: 0.45rem;
+    padding: 0.5rem 1rem;
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 0.82rem;
+  }
+
+  .removed-line {
+    background: rgba(191, 114, 0, 0.1);
+    color: var(--amber);
+  }
+
+  .added-line {
+    background: rgba(15, 111, 56, 0.1);
+    color: var(--green-deep);
+  }
+
+  .review-actions {
+    margin: 1rem;
+    border: 1px solid rgba(15, 111, 56, 0.24);
+    border-radius: 0.5rem;
+    padding: 0.85rem;
+    color: var(--ink);
+    font-size: 0.86rem;
+    font-weight: 650;
+  }
+
+  .terminal-window {
+    width: min(100% - 1.35rem, 24rem);
+    display: grid;
+    gap: 0.85rem;
+    border: 1px solid rgba(30, 41, 59, 0.32);
+    border-radius: 0.65rem;
+    padding: 0.85rem 1rem 1.1rem;
+    background: var(--ink);
+    box-shadow: 0 1.1rem 3rem rgba(16, 21, 31, 0.2);
+    color: var(--paper);
+  }
+
+  .terminal-bar {
+    display: flex;
+    gap: 0.4rem;
+    padding-bottom: 0.25rem;
+  }
+
+  .terminal-bar span {
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 999rem;
+    background: rgba(255, 250, 240, 0.42);
+  }
+
+  .terminal-window code {
+    display: block;
+    color: var(--paper);
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: clamp(0.74rem, 0.88vw, 0.86rem);
+    line-height: 1.45;
+    white-space: normal;
+  }
+
+  .terminal-result {
+    color: rgba(255, 250, 240, 0.72) !important;
+  }
+
+  .plugin-boundary {
+    display: grid;
+    gap: 1rem;
+    padding: 1rem;
+    border-style: dashed;
+    border-color: rgba(15, 111, 56, 0.42);
+  }
+
+  .boundary-title {
+    justify-content: center;
+    color: var(--green-deep);
+    font-size: 0.86rem;
+    font-weight: 720;
+  }
+
+  .boundary-title svg {
+    width: 1.35rem;
+    height: 1.35rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.8;
+  }
+
+  .plugin-chip-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .plugin-chip-grid span {
+    min-height: 3.5rem;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(30, 41, 59, 0.12);
+    border-radius: 0.55rem;
+    padding: 0.65rem;
+    background: rgba(255, 250, 240, 0.72);
+    color: var(--ink);
+    font-size: 0.82rem;
+    font-weight: 680;
+    text-align: center;
   }
 
   .approval-label {
@@ -460,6 +813,47 @@ import '../styles/global.css';
       bottom: 9%;
       width: min(22rem, 82vw);
     }
+
+    .top-reasons {
+      width: min(100% - 2.5rem, 44rem);
+      padding-top: clamp(3.75rem, 10vw, 5rem);
+    }
+
+    .section-heading {
+      justify-items: start;
+      text-align: left;
+    }
+
+    .section-title {
+      max-width: 10em;
+    }
+
+    .reason-rail {
+      grid-template-columns: 1fr;
+      gap: 1.5rem;
+      margin-top: 2rem;
+      padding: 0;
+    }
+
+    .reason-rail::before {
+      display: none;
+    }
+
+    .reason-card {
+      position: relative;
+      padding-top: 4.9rem;
+    }
+
+    .step-badge {
+      top: 1.2rem;
+      left: 1.2rem;
+      transform: none;
+    }
+
+    .reason-card h3,
+    .reason-card p {
+      max-width: 100%;
+    }
   }
 
   @media (max-width: 35rem) {
@@ -493,6 +887,32 @@ import '../styles/global.css';
       left: 55%;
       top: 45%;
       width: 8rem;
+    }
+
+    .top-reasons {
+      width: min(100% - 2rem, 32rem);
+    }
+
+    .section-title {
+      font-size: clamp(2.45rem, 13vw, 3.25rem);
+    }
+
+    .reason-card {
+      padding: 4.75rem 1rem 1.15rem;
+    }
+
+    .reason-visual {
+      min-height: 13.5rem;
+    }
+
+    .review-actions,
+    .visual-header {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .plugin-chip-grid {
+      grid-template-columns: 1fr;
     }
   }
 </style>
