@@ -10,15 +10,15 @@ OpenForge is a local-first desktop command center for coordinating task work and
 
 ## Decision
 
-Create a **Marketing Site** for OpenForge as an Astro monorepo workspace app at `apps/website`, not as a separate repository and not as a hosted web companion. The first milestone is a static one-page site focused on the promise “Run AI coding agents without losing control of the work,” with install and GitHub CTAs, top-three reasons to use OpenForge, the core task-to-review workflow, plugin customization, product screenshots, local-first trust language, and footer links.
+Create a **Marketing Site** for OpenForge as an Astro monorepo workspace app at `apps/website`, not as a separate repository and not as a hosted web companion. The first milestone is a small static one-page site focused on the promise “Run AI coding agents without losing control of the work,” ordered as hero with install/GitHub CTAs and the existing workflow visual, top-three reasons to use OpenForge, product screenshot proof, a small concrete plugin customization section, final install/GitHub CTA, and footer links.
 
 The top-three homepage reasons are:
 
 1. Stay in control of agent work.
-2. Work locally with visible state.
-3. Customize the operator console with Trusted Plugins.
+2. Let agents manage OpenForge tasks through the CLI.
+3. Customize OpenForge to your workflow with Trusted Plugins.
 
-Plugin customization should be positioned as a first-class reason to use OpenForge: OpenForge provides the stable task-based operator console, access/management boundaries, terminal pools, and coordination primitives; Trusted Plugins let users shape the rest of the workspace around their own workflow.
+Plugin customization should be positioned as a first-class reason to use OpenForge: OpenForge provides the stable task-based operator console, access/management boundaries, terminal pools, and coordination primitives; Trusted Plugins let users shape the rest of the workspace around their own workflow. On the first milestone page, this should appear as both a top-reason card and a compact concrete section, not a marketplace-style surface.
 
 ## Considered Options
 
@@ -42,6 +42,7 @@ Rejected because the site is a product marketing surface rather than project doc
 
 - Website implementation should live outside `src/` so it does not become part of the desktop renderer.
 - The first website stack should be Astro rather than SvelteKit because the first milestone is static marketing content, not an app-like interactive surface.
-- Initial scope should avoid blog, hosted docs system, plugin marketplace, analytics, mailing list, interactive demo, and multi-page content architecture.
+- Initial scope should avoid standalone workflow education, standalone local-first trust messaging, blog, hosted docs system, plugin marketplace, analytics, mailing list, interactive demo, and multi-page content architecture.
+- The final call-to-action should repeat both Install OpenForge and GitHub, with Install OpenForge as the primary action and GitHub as secondary credibility/due diligence.
 - Copy should avoid claims about autonomous engineering teams, replacing review, one-click shipping, hosted control planes, universal provider support, or enterprise collaboration suites.
-- Visual direction should be a calm developer-tool aesthetic with product screenshots and focused workflow, not flashy AI SaaS imagery.
+- Visual direction should be a calm developer-tool aesthetic with the workflow hero visual and product screenshots, not flashy AI SaaS imagery.
