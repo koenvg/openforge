@@ -10,6 +10,7 @@ export default defineConfig({
       '@openforge/plugin-sdk/testing': sourceAlias('./src/testing.ts'),
       '@openforge/plugin-sdk/vite': sourceAlias('./src/vite.ts'),
       '@openforge/plugin-sdk/domain': sourceAlias('./src/domain.ts'),
+      '@openforge/plugin-sdk/prStatusPresentation': sourceAlias('./src/prStatusPresentation.ts'),
       '@openforge/plugin-sdk/markdown': sourceAlias('./src/markdown.ts'),
       '@openforge/plugin-sdk/numberParsing': sourceAlias('./src/numberParsing.ts'),
       '@openforge/plugin-sdk/sanitize': sourceAlias('./src/sanitize.ts'),

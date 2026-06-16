@@ -32,6 +32,10 @@ function createOpenForgeRootAliases() {
       replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/domain.ts'),
     },
     {
+      find: /^@openforge\/plugin-sdk\/prStatusPresentation$/,
+      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/prStatusPresentation.ts'),
+    },
+    {
       find: /^@openforge\/plugin-sdk\/frontend$/,
       replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/frontend.ts'),
     },

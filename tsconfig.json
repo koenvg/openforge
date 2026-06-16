@@ -21,6 +21,7 @@
       "@openforge/plugin-sdk": ["packages/plugin-sdk/src/index.ts"],
       "@openforge/plugin-sdk/backend": ["packages/plugin-sdk/src/backend.ts"],
       "@openforge/plugin-sdk/domain": ["packages/plugin-sdk/src/domain.ts"],
+      "@openforge/plugin-sdk/prStatusPresentation": ["packages/plugin-sdk/src/prStatusPresentation.ts"],
       "@openforge/plugin-sdk/frontend": ["packages/plugin-sdk/src/frontend.ts"],
       "@openforge/plugin-sdk/markdown": ["packages/plugin-sdk/src/markdown.ts"],
       "@openforge/plugin-sdk/numberParsing": ["packages/plugin-sdk/src/numberParsing.ts"],

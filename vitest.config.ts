@@ -21,6 +21,7 @@ const pluginSdkAliases = {
   '@openforge/plugin-sdk/frontend': new URL('./packages/plugin-sdk/src/frontend.ts', import.meta.url).pathname,
   '@openforge/plugin-sdk/backend': new URL('./packages/plugin-sdk/src/backend.ts', import.meta.url).pathname,
   '@openforge/plugin-sdk/domain': new URL('./packages/plugin-sdk/src/domain.ts', import.meta.url).pathname,
+  '@openforge/plugin-sdk/prStatusPresentation': new URL('./packages/plugin-sdk/src/prStatusPresentation.ts', import.meta.url).pathname,
   '@openforge/plugin-sdk/testing': new URL('./packages/plugin-sdk/src/testing.ts', import.meta.url).pathname,
   '@openforge/plugin-sdk/vite': new URL('./packages/plugin-sdk/src/vite.ts', import.meta.url).pathname,
   '@openforge/plugin-sdk/markdown': new URL('./packages/plugin-sdk/src/markdown.ts', import.meta.url).pathname,

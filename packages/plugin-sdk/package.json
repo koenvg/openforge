@@ -30,6 +30,10 @@
       "types": "./dist/domain.d.ts",
       "default": "./dist/domain.js"
     },
+    "./prStatusPresentation": {
+      "types": "./dist/prStatusPresentation.d.ts",
+      "default": "./dist/prStatusPresentation.js"
+    },
     "./markdown": {
       "types": "./dist/markdown.d.ts",
       "default": "./dist/markdown.js"

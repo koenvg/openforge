@@ -2,7 +2,7 @@
   import type { PullRequestInfo } from '../../lib/types'
   import { hasMergeConflicts, isReadyToMerge, isQueuedForMerge } from '../../lib/types'
   import { linkPullRequest, openUrl } from '../../lib/ipc'
-  import { getPrStatusChips } from '../../lib/prStatusPresentation'
+  import { getPrStatusChips } from '@openforge/plugin-sdk/prStatusPresentation'
   import { getGitHubMarkdownImageBaseUrl } from '../../lib/githubMarkdown'
   import { createPrCommentLoader } from '../../lib/prComments.svelte'
   import { mergingTaskIds } from '../../lib/stores'
