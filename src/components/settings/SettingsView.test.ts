@@ -457,6 +457,47 @@ describe('SettingsView', () => {
       expect(updatedProject?.name).toBe('Second Name')
     })
 
+    it('does not merge a stale project name while a newer save is still in flight', async () => {
+      let resolveFirstSave!: () => void
+      let resolveSecondSave!: () => void
+      vi.mocked(updateProject)
+        .mockImplementationOnce(() => new Promise<void>((resolve) => {
+          resolveFirstSave = resolve
+        }))
+        .mockImplementationOnce(() => new Promise<void>((resolve) => {
+          resolveSecondSave = resolve
+        }))
+
+      render(SettingsView, { props: defaultProps })
+
+      await vi.advanceTimersByTimeAsync(50)
+
+      const nameInput = requireElement(screen.getByPlaceholderText('My Project'), HTMLInputElement)
+      await fireEvent.input(nameInput, { target: { value: 'First Name' } })
+
+      await vi.advanceTimersByTimeAsync(600)
+      await vi.waitFor(() => {
+        expect(updateProject).toHaveBeenCalledTimes(1)
+      })
+
+      await fireEvent.input(nameInput, { target: { value: 'Second Name' } })
+
+      resolveFirstSave()
+      await vi.advanceTimersByTimeAsync(0)
+      await vi.waitFor(() => {
+        expect(updateProject).toHaveBeenCalledTimes(2)
+      })
+
+      expect(nameInput.value).toBe('Second Name')
+      expect(get(projects).find(p => p.id === 'test-project-id')?.name).not.toBe('First Name')
+
+      resolveSecondSave()
+      await vi.advanceTimersByTimeAsync(0)
+      await vi.waitFor(() => {
+        expect(get(projects).find(p => p.id === 'test-project-id')?.name).toBe('Second Name')
+      })
+    })
+
     it('saves global settings after debounce when a field changes', async () => {
       activeProjectId.set(null)
       projects.set([])

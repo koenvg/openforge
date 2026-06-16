@@ -283,6 +283,19 @@
     return false
   }
 
+  function isLatestProjectIdentityPayload(payload: ProjectSettingsSavePayload): boolean {
+    const newerPendingProjectSave = pendingProjectSettingsSave
+    if (newerPendingProjectSave?.projectId === payload.projectId) {
+      return newerPendingProjectSave.projectName === payload.projectName && newerPendingProjectSave.projectPath === payload.projectPath
+    }
+
+    if ($activeProjectId === payload.projectId) {
+      return projectName === payload.projectName && projectPath === payload.projectPath
+    }
+
+    return true
+  }
+
   async function save() {
     const projectPayload = pendingProjectSettingsSave
     const globalPayload = pendingGlobalSettingsSave
@@ -295,11 +308,13 @@
     try {
       if (projectPayload) {
         await saveProjectSettings(projectPayload)
-        $projects = mergeUpdatedProject($projects, {
-          id: projectPayload.projectId,
-          name: projectPayload.projectName,
-          path: projectPayload.projectPath,
-        })
+        if (isLatestProjectIdentityPayload(projectPayload)) {
+          $projects = mergeUpdatedProject($projects, {
+            id: projectPayload.projectId,
+            name: projectPayload.projectName,
+            path: projectPayload.projectPath,
+          })
+        }
       }
       if (globalPayload) {
         await saveGlobalSettings(globalPayload)
