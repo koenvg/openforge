@@ -20,7 +20,7 @@
   let isDependencies = $derived(kind === 'dependencies')
   let sectionLabel = $derived(isDependencies ? 'Dependencies' : 'Dependent tasks')
   let sectionHeading = $derived(isDependencies ? '// DEPENDS_ON' : '// DEPENDENTS')
-  let sectionElementClass = $derived(isFull ? 'flex flex-col gap-2.5' : 'flex flex-col gap-2')
+  let sectionElementClass = $derived(isFull ? 'flex flex-col gap-2.5 shrink-0' : 'flex flex-col gap-2 shrink-0')
   let headingElementClass = $derived(isFull
     ? 'text-[10px] font-bold text-primary font-mono tracking-[1.2px] m-0'
     : 'font-mono text-[10px] font-bold text-primary'
@@ -53,7 +53,7 @@
 </script>
 
 {#if items.length > 0}
-  <section class={sectionElementClass} aria-label={sectionLabel} aria-live="polite">
+  <section data-task-info-card={kind} data-card-sizing="natural" class={sectionElementClass} aria-label={sectionLabel} aria-live="polite">
     {#if isFull}
       <h3 class={headingElementClass}>{sectionHeading}</h3>
     {:else}

@@ -23,7 +23,7 @@
 </script>
 
 {#if taskPrs.some((pr) => pr.state === 'merged' || hasMergeConflicts(pr) || isReadyToMerge(pr) || isQueuedForMerge(pr))}
-  <section class="flex flex-col gap-2.5">
+  <section data-task-info-card="merge-status" data-card-sizing="natural" class="flex flex-col gap-2.5 shrink-0">
     <h3 class="text-[10px] font-bold text-primary font-mono tracking-[1.2px] m-0" aria-label="Merge Status">// MERGE_STATUS</h3>
     {#each taskPrs as pr (pr.id)}
       {#if pr.state === 'merged'}
