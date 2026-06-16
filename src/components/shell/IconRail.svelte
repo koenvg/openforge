@@ -1,12 +1,10 @@
 <script lang="ts">
-  import { Boxes, Code, FileText, FolderOpen, GitPullRequest, LayoutDashboard, Plug, Puzzle, Settings, Sparkles, Terminal, Wrench } from 'lucide-svelte'
   import { GITHUB_SYNC_VIEW_KEY } from '../../lib/githubSyncPlugin'
   import type { AppView } from '../../lib/types'
   import { commandHeld } from '../../lib/stores'
   import { getIconRailNavItems } from '../../lib/iconRailNav'
   import type { IconRailPluginNavItem } from '../../lib/iconRailNav'
-
-  type IconComponent = typeof LayoutDashboard
+  import { resolveIconRailIcon } from '../../lib/iconRailIcons'
 
   interface Props {
     currentView: AppView
@@ -20,25 +18,10 @@
 
   let { currentView, onNavigate, reviewRequestCount = 0, authoredPrCount = 0, pluginNavItems = [], modalsOpen = false, railBg = 'oklch(var(--b2))' }: Props = $props()
 
-  const iconRegistry: Record<string, IconComponent> = {
-    'layout-dashboard': LayoutDashboard,
-    'folder-open': FolderOpen,
-    'git-pull-request': GitPullRequest,
-    sparkles: Sparkles,
-    settings: Settings,
-    terminal: Terminal,
-    code: Code,
-    'file-text': FileText,
-    plug: Plug,
-    puzzle: Puzzle,
-    boxes: Boxes,
-    wrench: Wrench,
-  }
-
   let navItems = $derived(
     getIconRailNavItems(pluginNavItems).map((item) => ({
       ...item,
-      Icon: iconRegistry[item.icon] ?? Plug,
+      Icon: resolveIconRailIcon(item.icon),
     }))
   )
 </script>
