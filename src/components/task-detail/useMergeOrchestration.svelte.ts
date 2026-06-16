@@ -1,6 +1,6 @@
 import { getPullRequests, mergePullRequest, forceGithubSync } from '../../lib/ipc'
+import { updateTaskPullRequestsInMap } from '../../lib/pullRequestStore'
 import { setTaskMerging, ticketPrs } from '../../lib/stores'
-import { preservePullRequestState } from '../../lib/types'
 import type { PullRequestInfo } from '../../lib/types'
 
 type PullRequestUpdater = (currentTaskPrs: PullRequestInfo[]) => PullRequestInfo[]
@@ -36,19 +36,7 @@ export function useMergeOrchestration() {
 
   async function refreshTaskPullRequests(taskId: string) {
     const prs = await getPullRequests()
-    const taskPrsToUpdate = prs.filter((pr) => pr.ticket_id === taskId)
-    ticketPrs.update((map) => {
-      const currentTaskPrs = map.get(taskId) || []
-      const nextMap = new Map(map)
-      nextMap.set(
-        taskId,
-        taskPrsToUpdate.map((pr) => {
-          const oldPr = currentTaskPrs.find((p) => p.id === pr.id)
-          return preservePullRequestState(oldPr, pr)
-        })
-      )
-      return nextMap
-    })
+    ticketPrs.update((map) => updateTaskPullRequestsInMap(map, taskId, prs))
   }
 
   async function handleMerge(taskId: string, pr: PullRequestInfo) {
