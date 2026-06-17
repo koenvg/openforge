@@ -8,6 +8,8 @@ package-lock.json
 bun.lock
 .sisyphus/
 .openforge-dev/
+__pycache__/
+*.py[cod]
 
 # --- babysitter managed ---
 .a5c/creds.env
