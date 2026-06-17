@@ -6,6 +6,7 @@
   import ModelDownloadProgress from '../shared/input/ModelDownloadProgress.svelte'
   import ActionDropdown from '../shared/ui/ActionDropdown.svelte'
   import { useAutocomplete } from '../../lib/useAutocomplete.svelte'
+  import type { CommandTrigger } from '../../lib/useAutocomplete.svelte'
   import { useListNavigation } from '../../lib/useListNavigation.svelte'
 
   interface Props {
@@ -19,6 +20,7 @@
     autofocus?: boolean
     extras?: Snippet
     actions?: Action[]
+    commandTrigger?: CommandTrigger
   }
 
   let {
@@ -31,7 +33,8 @@
     onCancel,
     autofocus = false,
     extras,
-    actions = []
+    actions = [],
+    commandTrigger = 'slash'
   }: Props = $props()
 
   const getInitialTextValue = () => value
@@ -44,7 +47,8 @@
   let textareaEl = $state<HTMLTextAreaElement | null>(null)
 
   // ── Autocomplete composable ───────────────────────────────────────────────────
-  const ac = useAutocomplete(getAutocompleteProjectId())
+  const ac = useAutocomplete(getAutocompleteProjectId(), () => commandTrigger)
+  const commandTriggerPrefix = $derived(commandTrigger === 'dollar' ? '$' : '/')
 
   // ── Auto-focus ───────────────────────────────────────────────────────────────
   // Use requestAnimationFrame to ensure focus happens after the component's DOM settles.
@@ -89,9 +93,9 @@
   function handleSelect(item: AutocompleteItem) {
     if (!textareaEl) return
 
-    if (ac.activeTrigger === 'slash') {
-      // Replace entire input with /command + trailing space
-      textValue = `/${item.label} `
+    if (ac.activeTrigger === 'slash' || ac.activeTrigger === 'dollar') {
+      // Replace entire input with the provider-specific command trigger + command + trailing space
+      textValue = `${commandTriggerPrefix}${item.label} `
     } else if (ac.activeTrigger === 'at') {
       const text = textareaEl.value
       const cursorPos = textareaEl.selectionStart ?? text.length

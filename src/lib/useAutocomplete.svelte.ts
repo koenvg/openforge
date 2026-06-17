@@ -3,7 +3,8 @@ import type { AutocompleteAgentInfo, AutocompleteItem, CommandInfo } from './typ
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-export type TriggerType = 'at' | 'slash' | null
+export type CommandTrigger = 'slash' | 'dollar'
+export type TriggerType = 'at' | CommandTrigger | null
 
 export interface AutocompleteState {
   readonly activeTrigger: TriggerType
@@ -20,13 +21,22 @@ export interface AutocompleteState {
 
 // ── Pure helper — exported for testing ────────────────────────────────────────
 
-export function detectTrigger(text: string, cursorPos: number): { trigger: TriggerType; query: string } {
-  // `/` trigger: ONLY when entire input is `/` + optional word (nothing else)
-  if (/^\/(\S*)$/.test(text)) {
+function commandTriggerCharacter(trigger: CommandTrigger): '/' | '$' {
+  return trigger === 'dollar' ? '$' : '/'
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+export function detectTrigger(text: string, cursorPos: number, commandTrigger: CommandTrigger = 'slash'): { trigger: TriggerType; query: string } {
+  const commandChar = commandTriggerCharacter(commandTrigger)
+  const commandPattern = new RegExp(`^${escapeRegExp(commandChar)}(\\S*)$`)
+  if (commandPattern.test(text)) {
     const query = text.slice(1)
-    // Cursor must be within the slash+word
+    // Cursor must be within the command trigger + word
     if (cursorPos <= text.length) {
-      return { trigger: 'slash', query }
+      return { trigger: commandTrigger, query }
     }
   }
 
@@ -42,7 +52,7 @@ export function detectTrigger(text: string, cursorPos: number): { trigger: Trigg
 
 // ── Composable ────────────────────────────────────────────────────────────────
 
-export function useAutocomplete(projectId: string): AutocompleteState {
+export function useAutocomplete(projectId: string, getCommandTrigger: () => CommandTrigger = () => 'slash'): AutocompleteState {
   let activeTrigger = $state<TriggerType>(null)
   let autocompleteItems = $state<AutocompleteItem[]>([])
   let popoverVisible = $state(false)
@@ -54,10 +64,10 @@ export function useAutocomplete(projectId: string): AutocompleteState {
   let fileSearchTimer: ReturnType<typeof setTimeout> | null = null
 
   async function handleTriggerDetection(text: string, cursorPos: number): Promise<void> {
-    const { trigger, query } = detectTrigger(text, cursorPos)
+    const { trigger, query } = detectTrigger(text, cursorPos, getCommandTrigger())
     activeTrigger = trigger
 
-    if (trigger === 'slash') {
+    if (trigger === 'slash' || trigger === 'dollar') {
       await handleSlashTrigger(query)
     } else if (trigger === 'at') {
       await handleAtTrigger(query)

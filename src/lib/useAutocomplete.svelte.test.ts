@@ -27,6 +27,17 @@ describe('detectTrigger', () => {
     expect(result.query).toBe('')
   })
 
+  it('detects Codex dollar trigger when configured for Codex commands', () => {
+    const result = detectTrigger('$skill:grill', 12, 'dollar')
+    expect(result.trigger).toBe('dollar')
+    expect(result.query).toBe('skill:grill')
+  })
+
+  it('does not treat slash as a command trigger when configured for Codex dollar commands', () => {
+    const result = detectTrigger('/skill:grill', 12, 'dollar')
+    expect(result.trigger).toBeNull()
+  })
+
   it('does NOT detect slash trigger when input has space after slash word', () => {
     const result = detectTrigger('/fix something', 14)
     expect(result.trigger).toBeNull()

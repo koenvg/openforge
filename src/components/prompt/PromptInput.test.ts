@@ -307,6 +307,32 @@ describe('PromptInput', () => {
       expect(textarea.value).toBe('@beta')
     })
 
+    it('inserts Codex skill commands with the dollar trigger', async () => {
+      const { listOpenCodeCommands } = await import('../../lib/ipc')
+      vi.mocked(listOpenCodeCommands).mockResolvedValue([
+        { name: 'skill:grill-with-docs', description: 'Grill with docs', source: 'skill', agent: null },
+      ])
+
+      render(PromptInput, { props: { ...baseProps, commandTrigger: 'dollar' } })
+      const textarea = requireElement(
+        screen.getByPlaceholderText('Describe what you want to implement...'),
+        HTMLTextAreaElement,
+      )
+
+      textarea.value = '$skill'
+      textarea.selectionStart = 6
+      textarea.selectionEnd = 6
+      await fireEvent.input(textarea)
+
+      await waitFor(() => {
+        expect(screen.queryAllByRole('option').length).toBeGreaterThan(0)
+      })
+
+      await fireEvent.keyDown(textarea, { key: 'Enter' })
+
+      expect(textarea.value).toBe('$skill:grill-with-docs ')
+    })
+
     it('navigates autocomplete popover with ArrowDown/ArrowUp and Ctrl+J/Ctrl+K', async () => {
       const { listOpenCodeCommands } = await import('../../lib/ipc')
       vi.mocked(listOpenCodeCommands).mockResolvedValue([

@@ -91,6 +91,7 @@
       value={mode === 'edit' && task ? getTaskPromptText(task) : ''}
       autofocus={false}
       actions={mode === 'edit' ? [] : availableActions}
+      commandTrigger={aiProvider === 'codex' ? 'dollar' : 'slash'}
       onSubmit={(prompt) => handleCreateOrUpdate(prompt)}
       onStartTask={mode === 'edit' ? undefined : (prompt) => handleCreateOrUpdate(prompt, '', true)}
       onRunAction={mode === 'edit' ? undefined : (prompt, actionPrompt) => handleCreateOrUpdate(prompt, actionPrompt, true)}
