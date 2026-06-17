@@ -344,9 +344,15 @@ describe('loadFocusFilterStates', () => {
   })
 
   it('returns parsed states when valid config stored', async () => {
-    vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify(['idle', 'active']))
+    vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify(['idle', 'needs-input']))
     const result = await loadFocusFilterStates('proj-1')
-    expect(result).toEqual(['idle', 'active'])
+    expect(result).toEqual(['idle', 'needs-input'])
+  })
+
+  it('strips active from stored focus filter states because running agents are not focusable', async () => {
+    vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify(['idle', 'active', 'needs-input']))
+    const result = await loadFocusFilterStates('proj-1')
+    expect(result).toEqual(['idle', 'needs-input'])
   })
 
   it('migrates legacy default stored states to include merge-conflict', async () => {
@@ -379,10 +385,10 @@ describe('loadFocusFilterStates', () => {
 })
 
 describe('saveFocusFilterStates', () => {
-  it('calls setProjectConfig with serialized states', async () => {
+  it('strips active before saving focus filter states because running agents are not focusable', async () => {
     vi.mocked(setProjectConfig).mockResolvedValue(undefined)
     await saveFocusFilterStates('proj-1', ['idle', 'active'])
-    expect(setProjectConfig).toHaveBeenCalledWith('proj-1', 'focus_filter_states', JSON.stringify(['idle', 'active']))
+    expect(setProjectConfig).toHaveBeenCalledWith('proj-1', 'focus_filter_states', JSON.stringify(['idle']))
   })
 })
 

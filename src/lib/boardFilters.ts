@@ -19,6 +19,12 @@ const LEGACY_DEFAULT_FOCUS_STATES: TaskState[] = [
 
 const FOCUS_FILTER_CONFIG_KEY = 'focus_filter_states'
 
+export const FOCUS_FILTER_STATES: TaskState[] = ALL_TASK_STATES.filter((state) => state !== 'active')
+
+function removeNonFocusableStates(states: TaskState[]): TaskState[] {
+  return states.filter((state) => FOCUS_FILTER_STATES.includes(state))
+}
+
 function isLegacyDefaultFocusStateSet(states: TaskState[]): boolean {
   return states.length === LEGACY_DEFAULT_FOCUS_STATES.length
     && LEGACY_DEFAULT_FOCUS_STATES.every((state, index) => states[index] === state)
@@ -113,12 +119,12 @@ export async function loadFocusFilterStates(projectId: string): Promise<TaskStat
       if (isLegacyDefaultFocusStateSet(parsedStates)) {
         return DEFAULT_FOCUS_STATES
       }
-      return parsedStates
+      return removeNonFocusableStates(parsedStates)
     }
   } catch { /* ignore */ }
   return DEFAULT_FOCUS_STATES
 }
 
 export async function saveFocusFilterStates(projectId: string, states: TaskState[]): Promise<void> {
-  await setProjectConfig(projectId, FOCUS_FILTER_CONFIG_KEY, JSON.stringify(states))
+  await setProjectConfig(projectId, FOCUS_FILTER_CONFIG_KEY, JSON.stringify(removeNonFocusableStates(states)))
 }

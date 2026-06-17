@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { ListFilter } from '@lucide/svelte';
-	import { ALL_TASK_STATES, type TaskState } from '../../lib/taskState';
+	import type { TaskState } from '../../lib/taskState';
 	import { TASK_STATE_LABELS } from '../../lib/taskStatePresentation';
-	import { DEFAULT_FOCUS_STATES } from '../../lib/boardFilters';
+	import { DEFAULT_FOCUS_STATES, FOCUS_FILTER_STATES } from '../../lib/boardFilters';
 
 	interface Props {
 		focusStates: TaskState[];
@@ -32,7 +32,7 @@
 		<p class="text-xs text-base-content/50">Choose which task states appear in the "Focus now" filter chip on the board.</p>
 
 		<div class="flex flex-col gap-1">
-			{#each ALL_TASK_STATES as state}
+			{#each FOCUS_FILTER_STATES as state}
 				<label class="flex items-center gap-2 cursor-pointer">
 					<input
 						type="checkbox"

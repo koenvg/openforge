@@ -26,6 +26,7 @@ vi.mock('../../lib/taskState', () => ({
 
 vi.mock('../../lib/boardFilters', () => ({
 	DEFAULT_FOCUS_STATES: ['idle', 'needs-input', 'paused', 'agent-done', 'failed', 'interrupted', 'pr-draft', 'pr-open', 'ci-failed', 'changes-requested', 'unaddressed-comments', 'ready-to-merge', 'pr-merged'],
+	FOCUS_FILTER_STATES: ['idle', 'needs-input', 'ci-failed', 'changes-requested', 'failed'],
 }))
 
 import SettingsFocusFilterCard from './SettingsFocusFilterCard.svelte'
@@ -50,11 +51,12 @@ describe('SettingsFocusFilterCard', () => {
 		expect(screen.getByText('Focus Filter States')).toBeTruthy()
 	})
 
-	it('renders checkboxes for task states', () => {
+	it('renders checkboxes for focusable task states', () => {
 		render(SettingsFocusFilterCard, { props: defaultProps() })
 		expect(screen.getByLabelText('Idle')).toBeTruthy()
 		expect(screen.getByLabelText('Needs Input')).toBeTruthy()
 		expect(screen.getByLabelText('CI Failed')).toBeTruthy()
+		expect(screen.queryByLabelText('Running')).toBeNull()
 	})
 
 	it('checked states match focusStates prop', () => {
