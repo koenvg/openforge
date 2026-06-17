@@ -25,7 +25,7 @@ function isLegacyDefaultFocusStateSet(states: TaskState[]): boolean {
 }
 
 export function isFocusTask(_task: Task, state: TaskState, prs: PullRequestInfo[], focusStates: TaskState[] = DEFAULT_FOCUS_STATES): boolean {
-  if (state === 'done') {
+  if (state === 'done' || state === 'active') {
     return false
   }
 
