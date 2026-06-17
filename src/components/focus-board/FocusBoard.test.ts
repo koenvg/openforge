@@ -430,6 +430,21 @@ describe('FocusBoard', () => {
     expect(await screen.findByText('All clear')).toBeTruthy()
   })
 
+  it('keeps running agents with unaddressed comments in In progress instead of Focus now', async () => {
+    renderBoard({
+      tasks: [taskDoing],
+      sessions: new Map([[taskDoing.id, makeSession(taskDoing.id, 'running', null)]]),
+      prs: new Map([[taskDoing.id, [makePr(taskDoing.id, 2)]]]),
+    })
+
+    expect(await screen.findByRole('button', { name: /Focus now 0/i })).toBeTruthy()
+    expect(screen.queryByText('Doing task')).toBeNull()
+
+    await fireEvent.click(screen.getByRole('button', { name: /In progress 1/i }))
+
+    expect(screen.getAllByText('Doing task').length).toBeGreaterThan(0)
+  })
+
   it('opens task context menu on right click', async () => {
     renderBoard()
 

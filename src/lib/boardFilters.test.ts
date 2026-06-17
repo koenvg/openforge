@@ -132,16 +132,18 @@ describe('isFocusTask', () => {
     expect(result).toBe(false)
   })
 
-  it('returns false for active state with no unaddressed comments', () => {
+  it('returns false for active state even with unaddressed comments', () => {
     const task = makeTask({ id: 'T-1' })
-    const result = isFocusTask(task, 'active', [])
+    const pr = makePr({ id: 1, ticket_id: 'T-1', unaddressed_comment_count: 2 })
+    const result = isFocusTask(task, 'active', [pr])
     expect(result).toBe(false)
   })
 
-  it('respects custom focusStates parameter', () => {
+  it('does not allow custom focus states to put active agents in focus', () => {
     const task = makeTask({ id: 'T-1' })
     expect(isFocusTask(task, 'idle', [], ['idle'])).toBe(true)
     expect(isFocusTask(task, 'idle', [], ['active'])).toBe(false)
+    expect(isFocusTask(task, 'active', [], ['active'])).toBe(false)
   })
 })
 
@@ -202,7 +204,7 @@ describe('filterTasks', () => {
     expect(filtered).toEqual([])
   })
 
-  it('focus filter includes tasks with unaddressed PR comments', () => {
+  it('focus filter excludes running agents even with unaddressed PR comments', () => {
     const sessions = new Map<string, AgentSession>([
       ['T-1', makeSession({ id: 's-1', ticket_id: 'T-1', status: 'running' })],
     ])
@@ -212,8 +214,25 @@ describe('filterTasks', () => {
 
     const tasks = [makeTask({ id: 'T-1' })]
 
-    const filtered = filterTasks(tasks, 'focus', sessions, prs)
-    expect(filtered.map((t: Task) => t.id)).toEqual(['T-1'])
+    const focusTasks = filterTasks(tasks, 'focus', sessions, prs)
+    expect(focusTasks.map((t: Task) => t.id)).toEqual([])
+
+    const inProgressTasks = filterTasks(tasks, 'in-progress', sessions, prs)
+    expect(inProgressTasks.map((t: Task) => t.id)).toEqual(['T-1'])
+  })
+
+  it('focus filter excludes running agents even when active is a custom focus state', () => {
+    const sessions = new Map<string, AgentSession>([
+      ['T-1', makeSession({ id: 's-1', ticket_id: 'T-1', status: 'running' })],
+    ])
+    const prs = new Map<string, PullRequestInfo[]>()
+    const tasks = [makeTask({ id: 'T-1' })]
+
+    const focusTasks = filterTasks(tasks, 'focus', sessions, prs, ['active'])
+    expect(focusTasks.map((t: Task) => t.id)).toEqual([])
+
+    const inProgressTasks = filterTasks(tasks, 'in-progress', sessions, prs, ['active'])
+    expect(inProgressTasks.map((t: Task) => t.id)).toEqual(['T-1'])
   })
 
   it('does not mutate original array', () => {
@@ -277,7 +296,7 @@ describe('getFilterCounts', () => {
     })
   })
 
-  it('counts tasks with unaddressed PR comments as focus', () => {
+  it('counts running agents with unaddressed PR comments as in-progress instead of focus', () => {
     const sessions = new Map<string, AgentSession>([
       ['T-1', makeSession({ id: 's-1', ticket_id: 'T-1', status: 'running' })],
     ])
@@ -288,7 +307,11 @@ describe('getFilterCounts', () => {
     const tasks = [makeTask({ id: 'T-1' })]
 
     const counts = getFilterCounts(tasks, sessions, prs)
-    expect(counts.focus).toBe(1)
+    expect(counts).toEqual({
+      focus: 0,
+      'in-progress': 1,
+      backlog: 0,
+    })
   })
 
   it('handles tasks with no sessions', () => {
@@ -321,9 +344,15 @@ describe('loadFocusFilterStates', () => {
   })
 
   it('returns parsed states when valid config stored', async () => {
-    vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify(['idle', 'active']))
+    vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify(['idle', 'needs-input']))
     const result = await loadFocusFilterStates('proj-1')
-    expect(result).toEqual(['idle', 'active'])
+    expect(result).toEqual(['idle', 'needs-input'])
+  })
+
+  it('strips active from stored focus filter states because running agents are not focusable', async () => {
+    vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify(['idle', 'active', 'needs-input']))
+    const result = await loadFocusFilterStates('proj-1')
+    expect(result).toEqual(['idle', 'needs-input'])
   })
 
   it('migrates legacy default stored states to include merge-conflict', async () => {
@@ -356,10 +385,10 @@ describe('loadFocusFilterStates', () => {
 })
 
 describe('saveFocusFilterStates', () => {
-  it('calls setProjectConfig with serialized states', async () => {
+  it('strips active before saving focus filter states because running agents are not focusable', async () => {
     vi.mocked(setProjectConfig).mockResolvedValue(undefined)
     await saveFocusFilterStates('proj-1', ['idle', 'active'])
-    expect(setProjectConfig).toHaveBeenCalledWith('proj-1', 'focus_filter_states', JSON.stringify(['idle', 'active']))
+    expect(setProjectConfig).toHaveBeenCalledWith('proj-1', 'focus_filter_states', JSON.stringify(['idle']))
   })
 })
 
