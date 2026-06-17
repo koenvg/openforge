@@ -68,28 +68,12 @@ fn startup_resume_database_lock_message(context: &str, error: impl std::fmt::Dis
     format!("{context}: database lock error: {error}")
 }
 
-fn provider_name_for_resume(latest_session: Option<&db::AgentSessionRow>) -> &str {
-    latest_session
-        .map(|session| session.provider.as_str())
-        .unwrap_or("claude-code")
+fn is_startup_resumable_session_status(status: &str) -> bool {
+    db::STARTUP_RESUMABLE_AGENT_SESSION_STATUSES.contains(&status)
 }
 
-fn fallback_resume_session(target: &ResumeTarget, provider_name: &str) -> db::AgentSessionRow {
-    db::AgentSessionRow {
-        id: String::new(),
-        ticket_id: target.task_id.clone(),
-        opencode_session_id: None,
-        stage: "implementing".to_string(),
-        status: "running".to_string(),
-        checkpoint_data: None,
-        pty_instance_id: None,
-        error_message: None,
-        created_at: 0,
-        updated_at: 0,
-        provider: provider_name.to_string(),
-        claude_session_id: None,
-        pi_session_id: None,
-    }
+fn latest_session_allows_startup_resume(latest_session: Option<&db::AgentSessionRow>) -> bool {
+    latest_session.is_some_and(|session| is_startup_resumable_session_status(&session.status))
 }
 
 pub(crate) fn persist_resumed_session_state(
@@ -216,18 +200,25 @@ pub(crate) async fn resume_task_sessions(
                 .ok()
                 .flatten()
         };
-        let provider_name = provider_name_for_resume(latest_session.as_ref());
-
-        // Build a dummy session for the case where no session exists in the DB.
-        // ClaudeCodeProvider uses claude_session_id=None → spawns with --continue.
-        let dummy_session;
-        let session_ref: &db::AgentSessionRow = match &latest_session {
-            Some(session) => session,
-            None => {
-                dummy_session = fallback_resume_session(&target, provider_name);
-                &dummy_session
+        if !latest_session_allows_startup_resume(latest_session.as_ref()) {
+            if let Some(session) = latest_session.as_ref() {
+                info!(
+                    "[startup] Skipping resume for task {} because latest {} session {} is {}",
+                    target.task_id, session.provider, session.id, session.status
+                );
+            } else {
+                warn!(
+                    "[startup] Skipping resume for task {} because no latest session was found",
+                    target.task_id
+                );
             }
+            continue;
+        }
+
+        let Some(session_ref) = latest_session.as_ref() else {
+            continue;
         };
+        let provider_name = session_ref.provider.as_str();
 
         let provider = match providers::Provider::from_name(
             provider_name,
@@ -451,13 +442,47 @@ pub(crate) fn restore_resumed_session_state(
 #[cfg(test)]
 mod tests {
     use super::{
-        load_resume_targets, persist_resumed_session_state, restore_resumed_session_state,
-        resume_task_sessions, ResumeTarget,
+        latest_session_allows_startup_resume, load_resume_targets, persist_resumed_session_state,
+        restore_resumed_session_state, resume_task_sessions, ResumeTarget,
     };
     use crate::app_events::{AppEventError, AppEventId, EmitReceipt, RustAppEventAdapter};
+    use crate::db;
     use crate::db::test_helpers::make_test_db;
     use std::fs;
     use std::sync::{Arc, Mutex};
+
+    fn test_agent_session_with_status(status: &str) -> db::AgentSessionRow {
+        db::AgentSessionRow {
+            id: format!("ses-{status}"),
+            ticket_id: "T-100".to_string(),
+            opencode_session_id: None,
+            stage: "implement".to_string(),
+            status: status.to_string(),
+            checkpoint_data: None,
+            pty_instance_id: None,
+            error_message: None,
+            created_at: 0,
+            updated_at: 0,
+            provider: "opencode".to_string(),
+            claude_session_id: None,
+            pi_session_id: None,
+        }
+    }
+
+    #[test]
+    fn latest_session_allows_startup_resume_only_for_active_statuses() {
+        for status in ["running", "paused", "interrupted"] {
+            let session = test_agent_session_with_status(status);
+            assert!(latest_session_allows_startup_resume(Some(&session)));
+        }
+
+        for status in ["completed", "failed"] {
+            let session = test_agent_session_with_status(status);
+            assert!(!latest_session_allows_startup_resume(Some(&session)));
+        }
+
+        assert!(!latest_session_allows_startup_resume(None));
+    }
 
     #[derive(Default)]
     struct RecordingEventAdapter {
