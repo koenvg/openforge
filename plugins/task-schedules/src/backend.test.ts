@@ -12,7 +12,7 @@ import backendPlugin, {
   saveTaskSchedule,
 } from './backend'
 import type { BackendOpenForgeAPI } from '@openforge/plugin-sdk/backend'
-import type { TaskSchedule } from './lib/types'
+import type { TaskSchedule, TaskScheduleDraft } from './lib/types'
 
 const projectId = 'P-1'
 
@@ -32,6 +32,17 @@ function makeSchedule(overrides: Partial<TaskSchedule> = {}): TaskSchedule {
     lastTaskId: null,
     history: [],
     ...overrides,
+  }
+}
+
+function restoredOutcome(index: number) {
+  return {
+    id: `valid-outcome-${index}`,
+    firedAt: index,
+    trigger: 'manual' as const,
+    status: 'created' as const,
+    taskId: `T-${index}`,
+    message: `Created T-${index}`,
   }
 }
 
@@ -162,6 +173,83 @@ describe('Task Schedules backend plugin', () => {
       history: deleted.history,
     })
     await expect(listTaskSchedules(api, { projectId })).resolves.toContainEqual(expect.objectContaining({ id: 'schedule-deleted' }))
+  })
+
+  it('sanitizes malformed deleted Task Schedule restore metadata instead of persisting it', async () => {
+    const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
+    const now = Date.UTC(2026, 0, 1, 10)
+    const malformedRestoreDraft = {
+      id: 42,
+      title: 'Daily triage',
+      prompt: 'Review incoming dependencies',
+      preset: 'daily',
+      timeOfDay: '09:00',
+      mode: 'create-and-start',
+      enabled: true,
+      createdAt: 'not-a-timestamp',
+      lastFireAt: { firedAt: Date.UTC(2026, 0, 1, 8) },
+      lastTaskId: ['T-previous'],
+      history: { id: 'outcome-1', firedAt: 1, trigger: 'scheduled', status: 'started', taskId: 'T-previous', message: 'Started T-previous' },
+    } as unknown as TaskScheduleDraft
+
+    const saved = await saveTaskSchedule(api, {
+      projectId,
+      schedule: malformedRestoreDraft,
+    }, now)
+
+    expect(saved.id).toMatch(/^schedule-/)
+    expect(saved).toMatchObject({
+      createdAt: now,
+      lastFireAt: null,
+      lastTaskId: null,
+      history: [],
+    })
+    await expect(listTaskSchedules(api, { projectId })).resolves.toEqual([saved])
+  })
+
+  it('drops malformed restored history entries and keeps only the latest five valid outcomes', async () => {
+    const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
+    const restoredHistory = [
+      restoredOutcome(0),
+      { id: 'bad-fired-at', firedAt: 'later', trigger: 'manual', status: 'created', message: 'Bad firedAt' },
+      restoredOutcome(1),
+      { id: 'bad-trigger', firedAt: 2, trigger: 'automatic', status: 'created', message: 'Bad trigger' },
+      { ...restoredOutcome(2), debug: { unsafe: true } },
+      { id: 'bad-status', firedAt: 3, trigger: 'manual', status: 'done', message: 'Bad status' },
+      restoredOutcome(3),
+      { id: 'bad-message', firedAt: 4, trigger: 'manual', status: 'created', message: null },
+      restoredOutcome(4),
+      restoredOutcome(5),
+    ] as unknown as TaskScheduleDraft['history']
+
+    const saved = await saveTaskSchedule(api, {
+      projectId,
+      schedule: {
+        id: 'schedule-restored-history',
+        title: 'Daily triage',
+        prompt: 'Review incoming dependencies',
+        preset: 'daily',
+        timeOfDay: '09:00',
+        mode: 'create-only',
+        enabled: true,
+        createdAt: Date.UTC(2025, 11, 31, 8),
+        lastFireAt: Date.UTC(2026, 0, 1, 8),
+        lastTaskId: 'T-previous',
+        history: restoredHistory,
+      },
+    }, Date.UTC(2026, 0, 1, 10))
+
+    expect(saved.history).toEqual([
+      restoredOutcome(1),
+      restoredOutcome(2),
+      restoredOutcome(3),
+      restoredOutcome(4),
+      restoredOutcome(5),
+    ])
+    await expect(listTaskSchedules(api, { projectId })).resolves.toContainEqual(expect.objectContaining({
+      id: 'schedule-restored-history',
+      history: saved.history,
+    }))
   })
 
   it('Run now creates a normal Task with the scheduled label and starts implementation by default', async () => {

@@ -215,19 +215,19 @@ function normalizeScheduleDraft(draft: TaskScheduleDraft, existing: TaskSchedule
   }
 
   return {
-    id: existing?.id ?? normalizeDraftId(draft.id) ?? createId('schedule', now),
+    id: existing?.id ?? normalizeNonEmptyString(draft.id) ?? createId('schedule', now),
     title,
     prompt,
     preset,
     cron,
     mode,
     enabled: draft.enabled ?? existing?.enabled ?? true,
-    createdAt: existing?.createdAt ?? draft.createdAt ?? now,
+    createdAt: existing?.createdAt ?? normalizeRestoreTimestamp(draft.createdAt, now),
     updatedAt: now,
     nextFireAt: getNextScheduledFireAt(cron, now),
-    lastFireAt: existing?.lastFireAt ?? draft.lastFireAt ?? null,
-    lastTaskId: existing?.lastTaskId ?? draft.lastTaskId ?? null,
-    history: existing?.history ?? draft.history ?? [],
+    lastFireAt: existing?.lastFireAt ?? normalizeOptionalRestoreTimestamp(draft.lastFireAt),
+    lastTaskId: existing?.lastTaskId ?? normalizeNonEmptyString(draft.lastTaskId),
+    history: existing?.history ?? normalizeRestoredHistory(draft.history),
   }
 }
 
@@ -235,9 +235,51 @@ function isSchedulePreset(value: unknown): value is TaskSchedule['preset'] {
   return value === 'daily' || value === 'weekly' || value === 'monthly' || value === 'custom'
 }
 
-function normalizeDraftId(id: string | null | undefined): string | null {
-  const trimmed = id?.trim()
+function normalizeNonEmptyString(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
   return trimmed ? trimmed : null
+}
+
+function normalizeRestoreTimestamp(value: unknown, fallback: number): number {
+  return isValidRestoreTimestamp(value) ? value : fallback
+}
+
+function normalizeOptionalRestoreTimestamp(value: unknown): number | null {
+  return isValidRestoreTimestamp(value) ? value : null
+}
+
+function isValidRestoreTimestamp(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+}
+
+function normalizeRestoredHistory(value: unknown): ScheduledFireOutcome[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((outcome) => {
+    const normalized = normalizeScheduledFireOutcome(outcome)
+    return normalized ? [normalized] : []
+  }).slice(-HISTORY_LIMIT)
+}
+
+function normalizeScheduledFireOutcome(value: unknown): ScheduledFireOutcome | null {
+  if (!value || typeof value !== 'object') return null
+  const outcome = value as Partial<ScheduledFireOutcome>
+  const id = normalizeNonEmptyString(outcome.id)
+  if (!id) return null
+  if (!isValidRestoreTimestamp(outcome.firedAt)) return null
+  if (outcome.trigger !== 'scheduled' && outcome.trigger !== 'manual') return null
+  if (outcome.status !== 'started' && outcome.status !== 'created' && outcome.status !== 'skipped' && outcome.status !== 'failed') return null
+  if (typeof outcome.message !== 'string') return null
+  const taskId = 'taskId' in outcome ? normalizeNonEmptyString(outcome.taskId) : null
+  if ('taskId' in outcome && outcome.taskId !== undefined && !taskId) return null
+  return {
+    id,
+    firedAt: outcome.firedAt,
+    trigger: outcome.trigger,
+    status: outcome.status,
+    ...(taskId ? { taskId } : {}),
+    message: outcome.message,
+  }
 }
 
 function createOutcome(
