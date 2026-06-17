@@ -186,6 +186,19 @@ describe('registerAppDesktopEventListeners', () => {
     expect(get(activeSessions).get('task-1')?.status).toBe('running')
   })
 
+  it('refreshes project attention even when a provider-neutral status event leaves local session state unchanged', async () => {
+    const { deps, handlers } = createHarness()
+    activeSessions.set(new Map([['task-1', createSession({ status: 'running' })]]))
+
+    await registerAppDesktopEventListeners(deps)
+    await handlers.get('agent-status-changed')?.({
+      payload: { task_id: 'task-1', status: 'running', kind: 'became_busy' },
+    })
+
+    expect(get(activeSessions).get('task-1')?.status).toBe('running')
+    expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
+  })
+
   it('raises a permission notification for provider-neutral paused permission events', async () => {
     const { deps, handlers } = createHarness()
     activeSessions.set(new Map([['task-1', createSession({ provider: 'claude-code', status: 'running' })]]))

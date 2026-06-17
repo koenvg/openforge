@@ -265,11 +265,13 @@ impl super::Database {
                 LEFT JOIN (
                     SELECT s1.ticket_id, s1.status, s1.checkpoint_data
                     FROM agent_sessions s1
-                    INNER JOIN (
-                        SELECT ticket_id, MAX(created_at) as max_created
-                        FROM agent_sessions
-                        GROUP BY ticket_id
-                    ) s2 ON s1.ticket_id = s2.ticket_id AND s1.created_at = s2.max_created
+                    WHERE s1.rowid = (
+                        SELECT s2.rowid
+                        FROM agent_sessions s2
+                        WHERE s2.ticket_id = s1.ticket_id
+                        ORDER BY s2.created_at DESC, s2.rowid DESC
+                        LIMIT 1
+                    )
                 ) ls ON ls.ticket_id = t.id
                 WHERE t.project_id IS NOT NULL AND t.status = 'doing'
                 GROUP BY t.project_id"
@@ -637,6 +639,58 @@ mod tests {
         assert_eq!(summary.ci_failures, 1);
         assert_eq!(summary.unaddressed_comments, 1);
         assert_eq!(summary.completed_agents, 1);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn project_attention_uses_latest_session_rowid_when_created_at_ties() {
+        let (db, path) = make_test_db("attention_latest_session_rowid_tie");
+
+        let project = db
+            .create_project("Active Project", "/tmp/active")
+            .expect("create failed");
+        let task = db
+            .create_task("Doing task", "doing", Some(&project.id), None, None)
+            .expect("create task failed");
+
+        db.create_agent_session(
+            "ses-completed",
+            &task.id,
+            None,
+            "implement",
+            "completed",
+            "opencode",
+        )
+        .expect("create completed session failed");
+        db.create_agent_session(
+            "ses-running",
+            &task.id,
+            None,
+            "implement",
+            "running",
+            "opencode",
+        )
+        .expect("create running session failed");
+
+        {
+            let conn = db.conn.lock().unwrap();
+            conn.execute(
+                "UPDATE agent_sessions SET created_at = 1234 WHERE id IN ('ses-completed', 'ses-running')",
+                [],
+            )
+            .expect("force created_at tie failed");
+        }
+
+        let summaries = db.get_project_attention_summaries().expect("query failed");
+        let summary = summaries
+            .iter()
+            .find(|s| s.project_id == project.id)
+            .expect("project not found");
+
+        assert_eq!(summary.running_agents, 1);
+        assert_eq!(summary.completed_agents, 0);
 
         drop(db);
         let _ = fs::remove_file(&path);
