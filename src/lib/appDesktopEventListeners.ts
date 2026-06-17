@@ -301,29 +301,33 @@ export async function registerAppDesktopEventListeners(deps: AppDesktopEventDeps
       }
 
       if (status === 'completed') {
-        if (session.status === 'completed') return
-        setActiveSession(taskId, { ...session, status: 'completed' })
-        clearCheckpointForTask(taskId)
-        void deps.loadTasks()
+        if (session.status !== 'completed') {
+          setActiveSession(taskId, { ...session, status: 'completed' })
+          clearCheckpointForTask(taskId)
+          void deps.loadTasks()
+        }
       } else if (status === 'running') {
-        if (session.status === 'running') return
-        setActiveSession(taskId, { ...session, status: 'running', checkpoint_data: null })
-        clearCheckpointForTask(taskId)
+        if (session.status !== 'running') {
+          setActiveSession(taskId, { ...session, status: 'running', checkpoint_data: null })
+          clearCheckpointForTask(taskId)
+        }
       } else if (status === 'paused') {
         if (session.status !== 'paused') {
           setActiveSession(taskId, { ...session, status: 'paused' })
         }
-        if (!setAgentNeedsPermissionNotification(taskId, session)) return
+        setAgentNeedsPermissionNotification(taskId, session)
       } else if (status === 'interrupted') {
-        if (session.status === 'interrupted') return
-        setActiveSession(taskId, { ...session, status: 'interrupted' })
-        clearCheckpointForTask(taskId)
-        void deps.loadTasks()
+        if (session.status !== 'interrupted') {
+          setActiveSession(taskId, { ...session, status: 'interrupted' })
+          clearCheckpointForTask(taskId)
+          void deps.loadTasks()
+        }
       } else if (status === 'failed') {
-        if (session.status === 'failed') return
-        setActiveSession(taskId, { ...session, status: 'failed', checkpoint_data: null })
-        clearCheckpointForTask(taskId)
-        void deps.loadTasks()
+        if (session.status !== 'failed') {
+          setActiveSession(taskId, { ...session, status: 'failed', checkpoint_data: null })
+          clearCheckpointForTask(taskId)
+          void deps.loadTasks()
+        }
       }
       void deps.loadProjectAttention()
     }),
