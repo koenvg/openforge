@@ -56,6 +56,7 @@ export const ipcCommandContracts = [
   { functionName: 'deleteProject', ipcCommand: 'delete_project', payloadKeys: ['id'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'getProjectAttention', ipcCommand: 'get_project_attention', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'getProjectConfig', ipcCommand: 'get_project_config', payloadKeys: ['projectId', 'key'], targetOwner: 'rust-sidecar', domain: 'config' },
+  { functionName: 'getResolvedAiProvider', ipcCommand: 'resolve_ai_provider', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'setProjectConfig', ipcCommand: 'set_project_config', payloadKeys: ['projectId', 'key', 'value'], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'getAllTasks', ipcCommand: 'get_tasks', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'getTasksForProject', ipcCommand: 'get_tasks_for_project', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },

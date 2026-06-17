@@ -73,10 +73,12 @@ pub fn parse_skill_frontmatter(content: &str) -> (Option<String>, Option<String>
 
 pub const GENERIC_SKILLS_SOURCE_DIR: &str = ".agents";
 pub const PI_SKILLS_SOURCE_DIR: &str = ".pi";
-pub const SKILL_SOURCE_DIRS: [&str; 4] = [
+pub const CODEX_SKILLS_SOURCE_DIR: &str = ".codex";
+pub const SKILL_SOURCE_DIRS: [&str; 5] = [
     GENERIC_SKILLS_SOURCE_DIR,
     ".claude",
     ".opencode",
+    CODEX_SKILLS_SOURCE_DIR,
     PI_SKILLS_SOURCE_DIR,
 ];
 

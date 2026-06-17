@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import type { Task, PermissionMode, Action } from '../lib/types'
-  import { createTask, updateTask, getProjectConfig } from '../lib/ipc'
+  import { createTask, updateTask, getResolvedAiProvider } from '../lib/ipc'
   import { getTaskPromptText } from '../lib/taskPrompt'
   import { activeProjectId } from '../lib/stores'
   import Modal from './shared/ui/Modal.svelte'
@@ -27,8 +27,7 @@
     selectedPermissionMode = 'default'
     try {
       if ($activeProjectId) {
-        const provider = await getProjectConfig($activeProjectId, 'ai_provider')
-        aiProvider = provider ?? 'claude-code'
+        aiProvider = await getResolvedAiProvider($activeProjectId)
 
         const allActions = await loadActions($activeProjectId)
         availableActions = getEnabledActions(allActions)
@@ -91,6 +90,7 @@
       value={mode === 'edit' && task ? getTaskPromptText(task) : ''}
       autofocus={false}
       actions={mode === 'edit' ? [] : availableActions}
+      commandTrigger={aiProvider === 'codex' ? 'dollar' : 'slash'}
       onSubmit={(prompt) => handleCreateOrUpdate(prompt)}
       onStartTask={mode === 'edit' ? undefined : (prompt) => handleCreateOrUpdate(prompt, '', true)}
       onRunAction={mode === 'edit' ? undefined : (prompt, actionPrompt) => handleCreateOrUpdate(prompt, actionPrompt, true)}

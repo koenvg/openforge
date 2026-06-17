@@ -310,6 +310,7 @@ describe('Electron backend bridge command forwarding', () => {
     expect(isSidecarBackedCommand('clear_done_tasks')).toBe(true)
     expect(isSidecarBackedCommand('delete_project')).toBe(true)
     expect(isSidecarBackedCommand('get_config')).toBe(true)
+    expect(isSidecarBackedCommand('resolve_ai_provider')).toBe(true)
     expect(isSidecarBackedCommand('get_app_mode')).toBe(true)
     expect(isSidecarBackedCommand('get_git_branch')).toBe(true)
     expect(isSidecarBackedCommand('get_latest_session')).toBe(true)

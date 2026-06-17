@@ -23,6 +23,20 @@ async fn handles_config_projects_tasks_and_unmatched_commands() {
     .await;
     assert_eq!(project["name"], "Open Forge");
     let project_id = project["id"].as_str().expect("project id");
+    {
+        let db = crate::db::acquire_db(&state.db);
+        db.set_config("ai_provider", "codex")
+            .expect("set global provider");
+    }
+    assert_eq!(
+        invoke_ok(
+            &state,
+            "resolve_ai_provider",
+            json!({ "projectId": project_id })
+        )
+        .await,
+        "codex"
+    );
 
     let task = invoke_ok(
         &state,

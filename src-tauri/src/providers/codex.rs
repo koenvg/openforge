@@ -109,9 +109,52 @@ impl CodexProvider {
 
     pub fn list_commands(
         &self,
-        _project_path: Option<&str>,
+        project_path: Option<&str>,
     ) -> Vec<crate::opencode_client::CommandInfo> {
-        Vec::new()
+        use crate::command_discovery::{scan_skills_directory, CODEX_SKILLS_SOURCE_DIR};
+        use std::collections::HashMap;
+
+        let mut commands_map = HashMap::<String, crate::opencode_client::CommandInfo>::new();
+
+        if let Some(codex_home) = crate::codex_hooks::codex_home_dir() {
+            for skill in
+                scan_skills_directory(&codex_home.join("skills"), "user", CODEX_SKILLS_SOURCE_DIR)
+            {
+                commands_map
+                    .entry(format!("skill:{}", skill.name))
+                    .or_insert(crate::opencode_client::CommandInfo {
+                        name: format!("skill:{}", skill.name),
+                        description: skill.description,
+                        source: Some("skill".to_string()),
+                        agent: skill.agent,
+                        extra: serde_json::Map::new(),
+                    });
+            }
+        }
+
+        if let Some(proj_path) = project_path {
+            let proj = Path::new(proj_path);
+            for skill in scan_skills_directory(
+                &proj.join(CODEX_SKILLS_SOURCE_DIR).join("skills"),
+                "project",
+                CODEX_SKILLS_SOURCE_DIR,
+            ) {
+                commands_map.insert(
+                    format!("skill:{}", skill.name),
+                    crate::opencode_client::CommandInfo {
+                        name: format!("skill:{}", skill.name),
+                        description: skill.description,
+                        source: Some("skill".to_string()),
+                        agent: skill.agent,
+                        extra: serde_json::Map::new(),
+                    },
+                );
+            }
+        }
+
+        let mut commands: Vec<_> = commands_map.into_values().collect();
+        commands.sort_by(|left, right| left.name.cmp(&right.name));
+        commands
     }
 
     pub fn list_agents(
@@ -125,6 +168,28 @@ impl CodexProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct EnvVarGuard {
+        key: &'static str,
+        previous: Option<std::ffi::OsString>,
+    }
+
+    impl EnvVarGuard {
+        fn set(key: &'static str, value: &std::path::Path) -> Self {
+            let previous = std::env::var_os(key);
+            std::env::set_var(key, value);
+            Self { key, previous }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            match &self.previous {
+                Some(value) => std::env::set_var(self.key, value),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
 
     fn make_session() -> AgentSessionRow {
         AgentSessionRow {
@@ -156,5 +221,49 @@ mod tests {
         let provider = CodexProvider::new(PtyManager::new());
 
         assert_eq!(provider.provider_session_id(&make_session()), None);
+    }
+
+    #[test]
+    fn list_commands_includes_user_codex_home_skills_for_dollar_invocation() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let codex_home = temp_dir.path().join("custom-codex-home");
+        let skill_dir = codex_home.join("skills/home-only-skill");
+        std::fs::create_dir_all(&skill_dir).expect("create skill dir");
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: home-only-skill\ndescription: Skill from CODEX_HOME\n---\n# Home skill",
+        )
+        .expect("write skill");
+        let _guard = EnvVarGuard::set("CODEX_HOME", &codex_home);
+
+        let provider = CodexProvider::new(PtyManager::new());
+        let commands = provider.list_commands(None);
+
+        assert!(commands.iter().any(|command| {
+            command.name == "skill:home-only-skill"
+                && command.source.as_deref() == Some("skill")
+                && command.description.as_deref() == Some("Skill from CODEX_HOME")
+        }));
+    }
+
+    #[test]
+    fn list_commands_includes_project_codex_skills_for_dollar_invocation() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let skill_dir = temp_dir.path().join(".codex/skills/grill-with-docs");
+        std::fs::create_dir_all(&skill_dir).expect("create skill dir");
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: grill-with-docs\ndescription: Grill plans against docs\n---\n# Grill with docs",
+        )
+        .expect("write skill");
+
+        let provider = CodexProvider::new(PtyManager::new());
+        let commands = provider.list_commands(temp_dir.path().to_str());
+
+        assert!(commands.iter().any(|command| {
+            command.name == "skill:grill-with-docs"
+                && command.source.as_deref() == Some("skill")
+                && command.description.as_deref() == Some("Grill plans against docs")
+        }));
     }
 }

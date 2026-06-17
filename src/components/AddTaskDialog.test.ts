@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import AddTaskDialog from './AddTaskDialog.svelte'
 import type { Action, Task } from '../lib/types'
-import { createTask, updateTask, getProjectConfig } from '../lib/ipc'
+import { createTask, updateTask, getProjectConfig, getResolvedAiProvider, listOpenCodeCommands } from '../lib/ipc'
 import { loadActions } from '../lib/actions'
 
 vi.mock('../lib/ipc', () => ({
@@ -21,7 +21,11 @@ vi.mock('../lib/ipc', () => ({
   }),
   updateTask: vi.fn().mockResolvedValue(undefined),
   getProjectConfig: vi.fn().mockResolvedValue('claude-code'),
+  getResolvedAiProvider: vi.fn().mockResolvedValue('claude-code'),
   getProjectTaskLabels: vi.fn().mockResolvedValue([]),
+  listOpenCodeCommands: vi.fn().mockResolvedValue([]),
+  searchOpenCodeFiles: vi.fn().mockResolvedValue([]),
+  listOpenCodeAgents: vi.fn().mockResolvedValue([]),
 }))
 
 vi.mock('../lib/actions', () => ({
@@ -62,7 +66,10 @@ const mockTask = {
 describe('AddTaskDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    Element.prototype.scrollIntoView = vi.fn()
     vi.mocked(getProjectConfig).mockImplementation(async () => 'claude-code')
+    vi.mocked(getResolvedAiProvider).mockResolvedValue('claude-code')
+    vi.mocked(listOpenCodeCommands).mockResolvedValue([])
     vi.mocked(loadActions).mockResolvedValue([
       { id: 'act-1', name: 'Test Action', prompt: 'Do test', builtin: false, enabled: true },
     ])
@@ -187,9 +194,31 @@ describe('AddTaskDialog', () => {
     })
   })
 
+  it('uses the resolved Codex provider for dollar-trigger skill autocomplete when project config inherits global provider', async () => {
+    vi.mocked(getProjectConfig).mockResolvedValue(null)
+    vi.mocked(getResolvedAiProvider).mockResolvedValue('codex')
+    vi.mocked(listOpenCodeCommands).mockResolvedValue([
+      { name: 'skill:grill-with-docs', description: 'Grill with docs', source: 'skill', agent: null },
+    ])
+
+    render(AddTaskDialog, { props: { mode: 'create' } })
+
+    const textbox = await findPromptTextbox()
+    await fireEvent.input(textbox, { target: { value: '$skill' } })
+
+    await waitFor(() => {
+      expect(screen.queryAllByRole('option').length).toBeGreaterThan(0)
+    })
+
+    await fireEvent.keyDown(textbox, { key: 'Enter' })
+
+    expect(textbox.value).toBe('$skill:grill-with-docs ')
+    expect(getResolvedAiProvider).toHaveBeenCalledWith('test-project-id')
+  })
+
   it('uses direct task creation defaults and no agent when starting a task for opencode', async () => {
     const onRunAction = vi.fn()
-    vi.mocked(getProjectConfig).mockResolvedValue('opencode')
+    vi.mocked(getResolvedAiProvider).mockResolvedValue('opencode')
     render(AddTaskDialog, { props: { mode: 'create', onRunAction } })
 
     const textbox = await findPromptTextbox()

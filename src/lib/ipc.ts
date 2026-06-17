@@ -63,6 +63,10 @@ export async function getProjectConfig(projectId: string, key: string): Promise<
   return invoke<string | null>("get_project_config", { projectId, key });
 }
 
+export async function getResolvedAiProvider(projectId: string): Promise<string> {
+  return invoke<string>("resolve_ai_provider", { projectId });
+}
+
 export async function setProjectConfig(projectId: string, key: string, value: string): Promise<void> {
   return invoke("set_project_config", { projectId, key, value });
 }

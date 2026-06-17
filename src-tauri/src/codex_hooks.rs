@@ -6,14 +6,17 @@ const OPENFORGE_CODEX_SANDBOX_MODE: &str = "danger-full-access";
 const OPENFORGE_CODEX_APPROVAL_POLICY: &str = "never";
 const CODEX_HOOK_SOURCE: &str = include_str!("codex-hooks/openforge-hook.js");
 
-fn codex_home_from(codex_home: Option<&Path>, home_dir: Option<&Path>) -> Option<PathBuf> {
+pub(crate) fn codex_home_from(
+    codex_home: Option<&Path>,
+    home_dir: Option<&Path>,
+) -> Option<PathBuf> {
     codex_home
         .filter(|path| !path.as_os_str().is_empty())
         .map(PathBuf::from)
         .or_else(|| home_dir.map(|home| home.join(".codex")))
 }
 
-fn codex_home_dir() -> Option<PathBuf> {
+pub(crate) fn codex_home_dir() -> Option<PathBuf> {
     let codex_home = std::env::var_os("CODEX_HOME")
         .filter(|path| !path.is_empty())
         .map(PathBuf::from);
