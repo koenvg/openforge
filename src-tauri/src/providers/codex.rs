@@ -116,12 +116,10 @@ impl CodexProvider {
 
         let mut commands_map = HashMap::<String, crate::opencode_client::CommandInfo>::new();
 
-        if let Some(home) = dirs::home_dir() {
-            for skill in scan_skills_directory(
-                &home.join(CODEX_SKILLS_SOURCE_DIR).join("skills"),
-                "user",
-                CODEX_SKILLS_SOURCE_DIR,
-            ) {
+        if let Some(codex_home) = crate::codex_hooks::codex_home_dir() {
+            for skill in
+                scan_skills_directory(&codex_home.join("skills"), "user", CODEX_SKILLS_SOURCE_DIR)
+            {
                 commands_map
                     .entry(format!("skill:{}", skill.name))
                     .or_insert(crate::opencode_client::CommandInfo {
@@ -171,6 +169,28 @@ impl CodexProvider {
 mod tests {
     use super::*;
 
+    struct EnvVarGuard {
+        key: &'static str,
+        previous: Option<std::ffi::OsString>,
+    }
+
+    impl EnvVarGuard {
+        fn set(key: &'static str, value: &std::path::Path) -> Self {
+            let previous = std::env::var_os(key);
+            std::env::set_var(key, value);
+            Self { key, previous }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            match &self.previous {
+                Some(value) => std::env::set_var(self.key, value),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+
     fn make_session() -> AgentSessionRow {
         AgentSessionRow {
             id: "session-1".to_string(),
@@ -201,6 +221,29 @@ mod tests {
         let provider = CodexProvider::new(PtyManager::new());
 
         assert_eq!(provider.provider_session_id(&make_session()), None);
+    }
+
+    #[test]
+    fn list_commands_includes_user_codex_home_skills_for_dollar_invocation() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let codex_home = temp_dir.path().join("custom-codex-home");
+        let skill_dir = codex_home.join("skills/home-only-skill");
+        std::fs::create_dir_all(&skill_dir).expect("create skill dir");
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: home-only-skill\ndescription: Skill from CODEX_HOME\n---\n# Home skill",
+        )
+        .expect("write skill");
+        let _guard = EnvVarGuard::set("CODEX_HOME", &codex_home);
+
+        let provider = CodexProvider::new(PtyManager::new());
+        let commands = provider.list_commands(None);
+
+        assert!(commands.iter().any(|command| {
+            command.name == "skill:home-only-skill"
+                && command.source.as_deref() == Some("skill")
+                && command.description.as_deref() == Some("Skill from CODEX_HOME")
+        }));
     }
 
     #[test]

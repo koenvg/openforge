@@ -21,6 +21,7 @@ import {
 	getCommitBatchFileContents,
 	getTaskBatchFileContents,
 	getPtyBuffer,
+	getResolvedAiProvider,
 	registerBuiltinPlugin,
 	installPluginFromGit,
 	installPluginFromLocal,
@@ -51,6 +52,19 @@ function ptyFixture(command: string, name: string): PtyPayloadFixture {
 	if (!fixture) throw new Error(`Missing PTY payload fixture ${command}/${name}`);
 	return fixture;
 }
+
+describe("ipc resolved provider", () => {
+	beforeEach(() => {
+		invokeMock.mockReset();
+		invokeMock.mockResolvedValue("codex");
+	});
+
+	it("requests the backend-resolved provider for a project", async () => {
+		await expect(getResolvedAiProvider("P-1")).resolves.toBe("codex");
+
+		expect(invokeMock).toHaveBeenCalledWith("resolve_ai_provider", { projectId: "P-1" });
+	});
+});
 
 describe("ipc spawnShellPty", () => {
 	beforeEach(() => {

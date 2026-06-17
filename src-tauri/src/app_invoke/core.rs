@@ -190,6 +190,10 @@ pub(super) async fn handle_app_unmatched_command(
                 )
             })?)?
         }
+        "resolve_ai_provider" => {
+            let project_id = payload_string(&request.payload, "projectId")?;
+            json_value(db.resolve_ai_provider(&project_id))?
+        }
         "set_project_config" => {
             let project_id = payload_string(&request.payload, "projectId")?;
             let key = payload_string(&request.payload, "key")?;
