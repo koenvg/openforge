@@ -256,25 +256,35 @@ impl super::Database {
         // Query 1: Task/agent attention for "doing" tasks
         {
             let mut stmt = conn.prepare(
-                "SELECT
-                    t.project_id,
+                "WITH doing_tasks AS (
+                    SELECT id, project_id
+                    FROM tasks
+                    WHERE project_id IS NOT NULL AND status = 'doing'
+                ),
+                latest_sessions AS (
+                    SELECT ticket_id, status, checkpoint_data
+                    FROM (
+                        SELECT
+                            s.ticket_id,
+                            s.status,
+                            s.checkpoint_data,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY s.ticket_id
+                                ORDER BY s.created_at DESC, s.rowid DESC
+                            ) AS rn
+                        FROM agent_sessions s
+                        JOIN doing_tasks dt ON dt.id = s.ticket_id
+                    )
+                    WHERE rn = 1
+                )
+                SELECT
+                    dt.project_id,
                     COALESCE(SUM(CASE WHEN ls.status = 'paused' AND ls.checkpoint_data IS NOT NULL THEN 1 ELSE 0 END), 0),
                     COALESCE(SUM(CASE WHEN ls.status = 'running' THEN 1 ELSE 0 END), 0),
                     COALESCE(SUM(CASE WHEN ls.status = 'completed' THEN 1 ELSE 0 END), 0)
-                FROM tasks t
-                LEFT JOIN (
-                    SELECT s1.ticket_id, s1.status, s1.checkpoint_data
-                    FROM agent_sessions s1
-                    WHERE s1.rowid = (
-                        SELECT s2.rowid
-                        FROM agent_sessions s2
-                        WHERE s2.ticket_id = s1.ticket_id
-                        ORDER BY s2.created_at DESC, s2.rowid DESC
-                        LIMIT 1
-                    )
-                ) ls ON ls.ticket_id = t.id
-                WHERE t.project_id IS NOT NULL AND t.status = 'doing'
-                GROUP BY t.project_id"
+                FROM doing_tasks dt
+                LEFT JOIN latest_sessions ls ON ls.ticket_id = dt.id
+                GROUP BY dt.project_id"
             )?;
 
             let rows = stmt.query_map([], |row| {
