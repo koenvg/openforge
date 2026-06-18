@@ -105,6 +105,13 @@ describe('TaskPullRequestStatus', () => {
     expect(screen.getByLabelText('Merged pull request #42 (done)')).toBeTruthy()
   })
 
+  it('labels closed PR cards as merged/done for user-facing status', () => {
+    render(TaskPullRequestStatus, { props: { taskId: 'T-42', taskPrs: [createPullRequest({ state: 'closed' })] } })
+
+    expect(screen.getByLabelText('Merged pull request #42 (done)')).toBeTruthy()
+    expect(screen.getByText('merged')).toBeTruthy()
+  })
+
   it('opens PR links through the typed openUrl IPC wrapper', async () => {
     render(TaskPullRequestStatus, { props: { taskId: 'T-42', taskPrs: [createPullRequest()] } })
 

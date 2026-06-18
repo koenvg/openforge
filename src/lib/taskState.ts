@@ -1,5 +1,5 @@
 import type { Task, AgentSession, PullRequestInfo } from './types'
-import { isReadyToMerge, hasMergeConflicts } from './types'
+import { isReadyToMerge, hasMergeConflicts, isClosedOrMergedPullRequest } from './types'
 
 export type TaskState =
   | 'egg' | 'idle' | 'active' | 'needs-input' | 'paused' | 'agent-done' | 'failed' | 'interrupted' | 'done'
@@ -29,8 +29,8 @@ export const ALL_TASK_STATES: TaskState[] = [
 
 export function getStateDrivingPr(prs: PullRequestInfo[]): PullRequestInfo | null {
   const openPr = prs.find(pr => pr.state === 'open')
-  const mergedPr = prs.find(pr => pr.state === 'merged')
-  return openPr ?? mergedPr ?? null
+  const donePr = prs.find(pr => isClosedOrMergedPullRequest(pr.state))
+  return openPr ?? donePr ?? null
 }
 
 function getPrState(prs: PullRequestInfo[]): TaskState | null {
@@ -38,7 +38,7 @@ function getPrState(prs: PullRequestInfo[]): TaskState | null {
 
   if (!pr) return null
 
-  if (pr.state === 'merged') return 'pr-merged'
+  if (isClosedOrMergedPullRequest(pr.state)) return 'pr-merged'
 
   // CI failures always take priority over merge readiness
   if (pr.ci_status === 'failure') return 'ci-failed'

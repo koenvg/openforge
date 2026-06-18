@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type PullRequestInfo, type CheckRunInfo, hasMergeConflicts, isReadyToMerge, isQueuedForMerge, splitCheckRuns, preservePullRequestState } from './types'
+import { type PullRequestInfo, type CheckRunInfo, hasMergeConflicts, isReadyToMerge, isQueuedForMerge, splitCheckRuns, preservePullRequestState, isClosedOrMergedPullRequest } from './types'
 
 function createPullRequest(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
   return {
@@ -108,6 +108,17 @@ describe('pull request merge conflict helpers', () => {
   })
 })
 
+describe('isClosedOrMergedPullRequest', () => {
+  it('treats closed and merged pull requests as user-facing done states', () => {
+    expect(isClosedOrMergedPullRequest('closed')).toBe(true)
+    expect(isClosedOrMergedPullRequest('merged')).toBe(true)
+  })
+
+  it('does not treat open pull requests as user-facing done states', () => {
+    expect(isClosedOrMergedPullRequest('open')).toBe(false)
+  })
+})
+
 describe('isQueuedForMerge', () => {
   it('returns true when state is open and is_queued is true with mergeable null', () => {
     const pr = createPullRequest({ state: 'open', is_queued: true, mergeable: null, mergeable_state: null })
@@ -142,6 +153,14 @@ describe('preservePullRequestState', () => {
     const result = preservePullRequestState(oldPr, newPr)
     expect(result.state).toBe('merged')
     expect(result.merged_at).toBe(12345)
+  })
+
+  it('allows a previously closed unmerged PR to reopen', () => {
+    const oldPr = createPullRequest({ state: 'closed', merged_at: null })
+    const newPr = createPullRequest({ state: 'open' })
+    const result = preservePullRequestState(oldPr, newPr)
+    expect(result.state).toBe('open')
+    expect(result.merged_at).toBeNull()
   })
 
   it('preserves definitive clean mergeability when new PR state is unknown', () => {

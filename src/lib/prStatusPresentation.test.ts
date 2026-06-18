@@ -54,6 +54,14 @@ describe('getPrStatusChips', () => {
       .toContainEqual(expect.objectContaining({ type: 'draft', label: 'Draft', variant: 'muted' }));
   });
 
+  it('presents closed pull requests as merged/done status', () => {
+    expect(getPrStatusChips({ ...basePr, state: 'closed' }, 'detail'))
+      .toContainEqual(expect.objectContaining({ type: 'merge', label: 'Merged', variant: 'merged', icon: 'check' }));
+
+    expect(getPrStatusChips({ ...basePr, state: 'closed' }, 'compact'))
+      .toContainEqual(expect.objectContaining({ type: 'merge', label: 'merged', variant: 'merged' }));
+  });
+
   it('ignores null and none statuses', () => {
     const chips = getPrStatusChips({ ...basePr, ci_status: 'none', review_status: null }, 'compact');
     expect(chips.some(c => c.type === 'ci')).toBe(false);
