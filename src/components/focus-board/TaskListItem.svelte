@@ -75,7 +75,7 @@
   {/if}
 
   {#if dependencyHint}
-    <div class="text-xs text-info truncate">{dependencyHint}</div>
+    <div class="text-xs text-warning truncate">{dependencyHint}</div>
   {/if}
 
   {#if showLabels && labels.length > 0}
