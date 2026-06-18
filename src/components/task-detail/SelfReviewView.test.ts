@@ -1,7 +1,11 @@
+import { DiffFile } from "@git-diff-view/core";
+import { highlighter } from "@git-diff-view/lowlight";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { writable } from "svelte/store";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { configureDiffHighlighter } from "@openforge/pr-review-ui/diffHighlightConfig";
 import { requireElement } from "../../test-utils/dom";
+import type { DiffWorkerRequest, DiffWorkerResponse } from "@openforge/pr-review-ui/diffWorker";
 import type {
 	PrComment,
 	PrFileDiff,
@@ -99,6 +103,59 @@ const baseDiff: PrFileDiff = {
 	is_truncated: false,
 	patch_line_count: null,
 };
+
+class InlineDiffWorker {
+	onmessage: ((ev: MessageEvent<DiffWorkerResponse>) => void) | null = null;
+	onerror: ((ev: ErrorEvent) => void) | null = null;
+
+	postMessage(message: DiffWorkerRequest): void {
+		queueMicrotask(() => {
+			try {
+				if (message.type !== "process") return;
+
+				const file = new DiffFile(
+					message.data.oldFile.fileName,
+					message.data.oldFile.content ?? "",
+					message.data.newFile.fileName,
+					message.data.newFile.content ?? "",
+					message.data.hunks,
+					message.data.oldFile.fileLang,
+					message.data.newFile.fileLang,
+				);
+
+				file.initTheme(message.theme);
+				file.initRaw();
+				file.initSyntax({ registerHighlighter: highlighter });
+				file.buildSplitDiffLines();
+				file.buildUnifiedDiffLines();
+
+				this.onmessage?.({
+					data: { type: "result", id: message.id, bundle: file._getFullBundle() },
+				} as MessageEvent<DiffWorkerResponse>);
+				file.clearId();
+			} catch (error) {
+				this.onmessage?.({
+					data: { type: "error", id: message.id, error: String(error) },
+				} as MessageEvent<DiffWorkerResponse>);
+			}
+		});
+	}
+
+	terminate(): void {}
+	addEventListener(): void {}
+	removeEventListener(): void {}
+	dispatchEvent(): boolean { return false; }
+}
+
+const defaultWorker = globalThis.Worker;
+
+beforeAll(() => {
+	configureDiffHighlighter(highlighter);
+});
+
+afterEach(() => {
+	globalThis.Worker = defaultWorker;
+});
 
 describe("SelfReviewView uncommitted toggle", () => {
 	beforeEach(() => {
@@ -541,6 +598,7 @@ describe("SelfReviewView pane restoration", () => {
 	});
 
 	it("can compare current changes against the last reviewed file snapshot", async () => {
+		globalThis.Worker = InlineDiffWorker as unknown as typeof Worker;
 		const originalDiff = {
 			...baseDiff,
 			sha: "",
@@ -574,21 +632,48 @@ describe("SelfReviewView pane restoration", () => {
 
 		firstRender.unmount();
 
-		render(SelfReviewView, {
+		const currentRender = render(SelfReviewView, {
 			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
 		});
 
-		const sinceReviewedButton = await screen.findByRole("button", { name: /Since reviewed/ });
+		await waitFor(() => {
+			expect(currentRender.container.textContent).toContain("changed content");
+			expect(currentRender.container.textContent).not.toContain("reviewed content");
+		});
+
+		expect(screen.queryByText("Comparing with last reviewed version")).toBeNull();
+		expect(screen.queryByRole("button", { name: "Back to all changes" })).toBeNull();
+
+		const sinceReviewedButton = await screen.findByRole("button", {
+			name: "Compare src/main.rs with Reviewed File Snapshot",
+		});
 		await fireEvent.click(sinceReviewedButton);
 
 		await waitFor(() => {
-			expect(screen.getByText("Comparing with last reviewed version")).toBeTruthy();
-			expect(screen.getByRole("button", { name: "Back to all changes" })).toBeTruthy();
+			expect(screen.queryByText("Comparing with last reviewed version")).toBeNull();
+			expect(screen.queryByRole("button", { name: "Back to all changes" })).toBeNull();
+			expect(screen.getByRole("button", { name: "Show normal diff for src/main.rs" })).toBeTruthy();
 			expect(vi.mocked(getTaskBatchFileContents)).toHaveBeenCalledWith(
 				baseTask.id,
 				[{ path: changedDiff.filename, oldPath: changedDiff.previous_filename, status: changedDiff.status }],
 				false,
 			);
+			expect(currentRender.container.textContent).toContain("reviewed content");
+			expect(currentRender.container.textContent).toContain("changed content");
+			expect(currentRender.container.textContent).not.toContain("base content");
+		});
+
+		await fireEvent.click(screen.getByRole("button", { name: "Show normal diff for src/main.rs" }));
+
+		await waitFor(() => {
+			expect(screen.getByRole("button", { name: "Compare src/main.rs with Reviewed File Snapshot" })).toBeTruthy();
+			expect(currentRender.container.textContent).toContain("changed content");
+			expect(currentRender.container.textContent).not.toContain("reviewed content");
+		});
+
+		await fireEvent.click(screen.getByRole("button", { name: "Compare src/main.rs with Reviewed File Snapshot" }));
+		await waitFor(() => {
+			expect(currentRender.container.textContent).toContain("reviewed content");
 		});
 
 		await fireEvent.click(screen.getByLabelText("Mark src/main.rs reviewed"));
@@ -597,12 +682,8 @@ describe("SelfReviewView pane restoration", () => {
 			expect(getTaskReviewPaneState(baseTask.id).reviewedFileShas.get(changedDiff.filename)).toBe(
 				getTaskReviewFileIdentity(changedDiff),
 			);
-			expect(screen.queryByRole("button", { name: /Since reviewed/ })).toBeNull();
-		});
-
-		await fireEvent.click(screen.getByRole("button", { name: "Back to all changes" }));
-
-		await waitFor(() => {
+			expect(screen.queryByRole("button", { name: "Compare src/main.rs with Reviewed File Snapshot" })).toBeNull();
+			expect(screen.queryByRole("button", { name: "Show normal diff for src/main.rs" })).toBeNull();
 			const allChangesCheckbox = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
 			expect(allChangesCheckbox.checked).toBe(true);
 		});

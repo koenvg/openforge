@@ -201,4 +201,48 @@ describe('DiffViewer integration', () => {
       expect(screen.getByText('2 of 2')).toBeTruthy()
     })
   })
+
+  it('re-renders the same filename when switching a Diff File Section to a Reviewed File Snapshot comparison', async () => {
+    const firstFetch = vi.fn().mockResolvedValue(new Map([
+      ['src/example.ts', {
+        oldContent: 'const value = "base"\n',
+        newContent: 'const value = "reviewed"\n',
+      }],
+    ]))
+    const comparisonFetch = vi.fn().mockResolvedValue(new Map([
+      ['src/example.ts', {
+        oldContent: 'const value = "reviewed"\n',
+        newContent: 'const value = "changed since review"\n',
+      }],
+    ]))
+    const comparisonFile: PrFileDiff = {
+      ...fileWithPatch,
+      patch: '@@ -1,1 +1,1 @@\n-const value = "reviewed"\n+const value = "changed since review"',
+      additions: 1,
+      deletions: 1,
+      changes: 2,
+    }
+
+    const { container, rerender } = render(DiffViewer, {
+      props: {
+        files: [fileWithPatch],
+        batchFetchFileContents: firstFetch,
+      },
+    })
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('const value = "reviewed"')
+    })
+
+    await rerender({
+      files: [comparisonFile],
+      batchFetchFileContents: comparisonFetch,
+    })
+
+    await waitFor(() => {
+      expect(comparisonFetch).toHaveBeenCalledWith([comparisonFile])
+      expect(container.textContent).toContain('const value = "changed since review"')
+      expect(container.textContent).toContain('const value = "reviewed"')
+    })
+  })
 })

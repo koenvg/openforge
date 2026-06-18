@@ -368,6 +368,89 @@ describe('createFileContentsFetcher', () => {
     cleanup()
   })
 
+  it('discards in-flight contents when the same filename changes comparison context before results arrive', async () => {
+    const comparisonFile: PrFileDiff = {
+      ...fileWithPatch,
+      patch: '@@ -1,1 +1,1 @@\n-reviewed\n+changed since review',
+      additions: 1,
+      deletions: 1,
+      changes: 2,
+    }
+    let resolveFirst!: (value: Map<string, FileContents>) => void
+    const firstPromise = new Promise<Map<string, FileContents>>(resolve => { resolveFirst = resolve })
+    let files = $state<PrFileDiff[]>([fileWithPatch])
+    const batchFn = vi.fn<(files: PrFileDiff[]) => Promise<Map<string, FileContents>>>()
+      .mockReturnValueOnce(firstPromise)
+      .mockResolvedValueOnce(new Map([
+        ['src/test.ts', { oldContent: 'reviewed', newContent: 'changed since review' }],
+      ]))
+
+    let fetcher!: FileContentsFetcherState
+    const cleanup = $effect.root(() => {
+      fetcher = createFileContentsFetcher({
+        getFiles: () => files,
+        getIncludeUncommitted: () => false,
+        getFetchFileContents: () => undefined,
+        getBatchFetchFileContents: () => batchFn,
+      })
+    })
+
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    files = [comparisonFile]
+    flushSync()
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    resolveFirst(new Map([
+      ['src/test.ts', { oldContent: 'base', newContent: 'reviewed' }],
+    ]))
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    expect(batchFn).toHaveBeenCalledTimes(2)
+    expect(fetcher.fileContentsMap.get('src/test.ts')?.newContent).toBe('changed since review')
+    cleanup()
+  })
+
+  it('refetches contents when the same filename changes comparison context', async () => {
+    const comparisonFile: PrFileDiff = {
+      ...fileWithPatch,
+      patch: '@@ -1,1 +1,1 @@\n-reviewed\n+changed since review',
+      additions: 1,
+      deletions: 1,
+      changes: 2,
+    }
+    let files = $state<PrFileDiff[]>([fileWithPatch])
+    const batchFn = vi.fn<(files: PrFileDiff[]) => Promise<Map<string, FileContents>>>()
+      .mockResolvedValueOnce(new Map([
+        ['src/test.ts', { oldContent: 'base', newContent: 'reviewed' }],
+      ]))
+      .mockResolvedValueOnce(new Map([
+        ['src/test.ts', { oldContent: 'reviewed', newContent: 'changed since review' }],
+      ]))
+
+    let fetcher!: FileContentsFetcherState
+    const cleanup = $effect.root(() => {
+      fetcher = createFileContentsFetcher({
+        getFiles: () => files,
+        getIncludeUncommitted: () => false,
+        getFetchFileContents: () => undefined,
+        getBatchFetchFileContents: () => batchFn,
+      })
+    })
+
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(fetcher.fileContentsMap.get('src/test.ts')?.newContent).toBe('reviewed')
+
+    files = [comparisonFile]
+    flushSync()
+
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(batchFn).toHaveBeenCalledTimes(2)
+    expect(batchFn).toHaveBeenLastCalledWith([comparisonFile])
+    expect(fetcher.fileContentsMap.get('src/test.ts')?.newContent).toBe('changed since review')
+    cleanup()
+  })
+
   it('clears fileContentsMap when includeUncommitted toggles', async () => {
     let includeUncommitted = $state(false)
 

@@ -26,6 +26,7 @@
     fetchFileContents?: (file: PrFileDiff) => Promise<FileContents>
     batchFetchFileContents?: (files: PrFileDiff[]) => Promise<Map<string, FileContents>>
     toolbarExtra?: Snippet
+    fileHeaderExtra?: Snippet<[PrFileDiff]>
     includeUncommitted?: boolean
     agentComments?: AgentReviewComment[]
     pendingComments?: ReviewSubmissionComment[]
@@ -45,7 +46,7 @@
     getFileReviewIdentity?: (file: PrFileDiff) => string | null
   }
   type Props = BaseProps
-  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onAgentCommentsChange, onUpdateAgentCommentStatus, onOpenUrl, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, diffTheme, reviewedFileShas = new Map(), onToggleFileReviewed, getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null }: Props = $props()
+  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, fileHeaderExtra, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onAgentCommentsChange, onUpdateAgentCommentStatus, onOpenUrl, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, diffTheme, reviewedFileShas = new Map(), onToggleFileReviewed, getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null }: Props = $props()
   let internalPendingComments = $state<ReviewSubmissionComment[]>([])
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
   let diffViewWrap = $state(false)
@@ -532,6 +533,9 @@
                     {file.filename}
                   </span>
                 </button>
+                {#if fileHeaderExtra}
+                  {@render fileHeaderExtra(file)}
+                {/if}
                 {#if onToggleFileReviewed}
                   <label class="flex items-center gap-1.5 text-xs text-base-content/70 cursor-pointer flex-shrink-0">
                     <input
