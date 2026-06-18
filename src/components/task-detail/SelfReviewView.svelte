@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte'
-  import { selfReviewStateByTask, setPendingSelfReviewComments } from '../../lib/taskScopedSelfReviewState'
+  import { mergeVisiblePendingSelfReviewComments, selfReviewStateByTask, setPendingSelfReviewComments } from '../../lib/taskScopedSelfReviewState'
   import { getTaskFileContents, getTaskBatchFileContents, getCommitFileContents, getCommitBatchFileContents, openUrl } from '../../lib/ipc'
   import { timeAgo } from '../../lib/timeAgo'
   import { createDiffLoader } from '../../lib/useDiffLoader.svelte'
@@ -214,7 +214,14 @@
   }
 
   function handlePendingInlineCommentsChange(comments: ReviewSubmissionComment[]) {
-    setPendingSelfReviewComments(task.id, comments)
+    setPendingSelfReviewComments(
+      task.id,
+      mergeVisiblePendingSelfReviewComments(
+        pendingInlineComments,
+        comments,
+        new Set(reviewedComparisonByFilename.keys()),
+      ),
+    )
   }
 
   function syncReviewedFileShas() {
