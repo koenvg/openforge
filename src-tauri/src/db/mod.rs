@@ -29,6 +29,9 @@ pub use task_workspaces::TaskWorkspaceRow;
 pub use tasks::{TaskLabelRow, TaskRow};
 pub use worktrees::WorktreeRow;
 
+pub(crate) const STARTUP_RESUMABLE_AGENT_SESSION_STATUSES: [&str; 3] =
+    ["running", "paused", "interrupted"];
+
 /// Database connection wrapper for thread-safe access
 pub struct Database {
     pub(crate) conn: Arc<Mutex<Connection>>,
