@@ -5,7 +5,7 @@
 <h1 align="center">Open Forge</h1>
 
 <p align="center">
-  A calm desktop command center for AI-assisted development. Turn a task into an isolated agent run, watch the terminal, review the diff, and decide what ships — without losing the thread. Review stays close to the work. Koen Is here
+  A calm desktop command center for AI-assisted development. Turn a task into an isolated agent run, watch the terminal, review the diff, and decide what ships — without losing the thread. Review stays close to the work.
 </p>
 
 <p align="center">
