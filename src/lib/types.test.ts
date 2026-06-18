@@ -155,11 +155,11 @@ describe('preservePullRequestState', () => {
     expect(result.merged_at).toBe(12345)
   })
 
-  it('preserves closed state when new PR is transiently open', () => {
+  it('allows a previously closed unmerged PR to reopen', () => {
     const oldPr = createPullRequest({ state: 'closed', merged_at: null })
     const newPr = createPullRequest({ state: 'open' })
     const result = preservePullRequestState(oldPr, newPr)
-    expect(result.state).toBe('closed')
+    expect(result.state).toBe('open')
     expect(result.merged_at).toBeNull()
   })
 

@@ -134,9 +134,10 @@ export function preservePullRequestState(oldPr: PullRequestInfo | undefined, new
 
   const result = { ...newPr };
 
-  // Preserve terminal done states if new PR hasn't caught up
-  if (isClosedOrMergedPullRequest(oldPr.state) && result.state === 'open') {
-    result.state = oldPr.state;
+  // Preserve irreversible merged state if new PR hasn't caught up.
+  // Closed-but-unmerged PRs can be reopened, so a fresh open state must win.
+  if (oldPr.state === 'merged' && result.state === 'open') {
+    result.state = 'merged';
     result.merged_at = oldPr.merged_at;
   }
 
