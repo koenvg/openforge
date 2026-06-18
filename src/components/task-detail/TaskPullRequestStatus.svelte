@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { PullRequestInfo } from '../../lib/types'
-  import { hasMergeConflicts, isReadyToMerge, isQueuedForMerge } from '../../lib/types'
+  import { hasMergeConflicts, isClosedOrMergedPullRequest, isReadyToMerge, isQueuedForMerge } from '../../lib/types'
   import { linkPullRequest, openUrl } from '../../lib/ipc'
   import { getPrStatusChips } from '@openforge/plugin-sdk/prStatusPresentation'
   import { getGitHubMarkdownImageBaseUrl } from '../../lib/githubMarkdown'
@@ -33,23 +33,27 @@
     return match ? `#${match[1]}` : `PR ${pr.id}`
   }
 
+  function displayStateLabel(pr: PullRequestInfo): string {
+    return isClosedOrMergedPullRequest(pr.state) ? 'merged' : pr.state
+  }
+
   function stateClass(pr: PullRequestInfo): string {
-    if (pr.state === 'merged') return 'badge-ghost'
+    if (isClosedOrMergedPullRequest(pr.state)) return 'badge-ghost'
     if (pr.state === 'open') return 'badge-success badge-outline'
     return 'badge-ghost'
   }
 
   function prCardAriaLabel(pr: PullRequestInfo): string {
     const label = prNumberLabel(pr)
-    return pr.state === 'merged' ? `Merged pull request ${label} (done)` : `Pull request ${label}`
+    return isClosedOrMergedPullRequest(pr.state) ? `Merged pull request ${label} (done)` : `Pull request ${label}`
   }
 
   function cardSurfaceClass(pr: PullRequestInfo): string {
-    return pr.state === 'merged' ? 'bg-base-200/50 border-base-300/60' : 'bg-base-100 border-base-300/70'
+    return isClosedOrMergedPullRequest(pr.state) ? 'bg-base-200/50 border-base-300/60' : 'bg-base-100 border-base-300/70'
   }
 
   function cardAccentClass(pr: PullRequestInfo): string {
-    if (pr.state === 'merged') return 'border-l-base-300'
+    if (isClosedOrMergedPullRequest(pr.state)) return 'border-l-base-300'
     if (pr.ci_status === 'failure' || hasMergeConflicts(pr)) return 'border-l-error'
     if ((pr.unaddressed_comment_count ?? 0) > 0 || pr.review_status === 'changes_requested') return 'border-l-warning'
     if (pr.ci_status === 'success') return 'border-l-success'
@@ -82,7 +86,7 @@
   }
 
   function shouldShowMergeDetails(pr: PullRequestInfo): boolean {
-    return (pr.state === 'merged' && pr.merged_at !== null)
+    return (isClosedOrMergedPullRequest(pr.state) && pr.merged_at !== null)
       || (!isQueuedForMerge(pr) && isReadyToMerge(pr))
       || orchestration.mergeFeedbackByPr.has(pr.id)
   }
@@ -142,7 +146,7 @@
                 {pr.url}
               </button>
             </div>
-            <span class="badge badge-xs capitalize {stateClass(pr)}">{pr.state}</span>
+            <span class="badge badge-xs capitalize {stateClass(pr)}">{displayStateLabel(pr)}</span>
           </div>
 
           <div class="flex flex-wrap items-center gap-1.5 px-2.5 pb-2.5" aria-label="Pull request signals">
@@ -160,7 +164,7 @@
           {#if shouldShowMergeDetails(pr)}
             {@const feedback = orchestration.mergeFeedbackByPr.get(pr.id)}
             <div class="border-t border-base-300/70 bg-base-200/35 p-2.5 flex flex-col gap-2" aria-label="Pull request merge status">
-              {#if pr.state === 'merged' && pr.merged_at}
+              {#if isClosedOrMergedPullRequest(pr.state) && pr.merged_at}
                 <div class="text-[0.7rem] text-base-content/60">Merged on {formatDate(pr.merged_at)}</div>
               {/if}
 

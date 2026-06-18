@@ -100,6 +100,10 @@ export interface MergeStatusInfo {
   mergeable_state: string | null;
 }
 
+export function isClosedOrMergedPullRequest(state: string): boolean {
+  return state === 'closed' || state === 'merged'
+}
+
 export function hasMergeConflicts(pr: MergeStatusInfo): boolean {
   if (pr.state !== 'open') return false
 
@@ -130,9 +134,9 @@ export function preservePullRequestState(oldPr: PullRequestInfo | undefined, new
 
   const result = { ...newPr };
 
-  // Preserve optimistic 'merged' state if new PR hasn't caught up
-  if (oldPr.state === 'merged' && result.state === 'open') {
-    result.state = 'merged';
+  // Preserve terminal done states if new PR hasn't caught up
+  if (isClosedOrMergedPullRequest(oldPr.state) && result.state === 'open') {
+    result.state = oldPr.state;
     result.merged_at = oldPr.merged_at;
   }
 

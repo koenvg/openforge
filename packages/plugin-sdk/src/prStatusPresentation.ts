@@ -1,4 +1,4 @@
-import { hasMergeConflicts, isReadyToMerge, type MergeStatusInfo } from './domain'
+import { hasMergeConflicts, isClosedOrMergedPullRequest, isReadyToMerge, type MergeStatusInfo } from './domain'
 
 export type PrChipSurface = 'compact' | 'detail'
 
@@ -106,7 +106,7 @@ export function getPrStatusChips(pr: PrInput, surface: PrChipSurface): PrStatusC
     }
   }
 
-  if (pr.state === 'merged') {
+  if (isClosedOrMergedPullRequest(pr.state)) {
     chips.push({
       type: 'merge',
       label: surface === 'compact' ? 'merged' : 'Merged',

@@ -165,13 +165,13 @@ describe('computeTaskState - getPrState behavior (PART 1)', () => {
       expect(state).toBe('ci-failed')
     })
 
-    it('test 9: closed PR (not merged) → falls to agent-done', () => {
+    it('test 9: closed PR → pr-merged for user-facing state', () => {
       const task = createTask({ status: 'doing' })
       const session = createSession({ status: 'completed' })
       const prs = [createPr({ state: 'closed' })]
 
       const state = computeTaskState(task, session, prs)
-      expect(state).toBe('agent-done')
+      expect(state).toBe('pr-merged')
     })
 
     it('test 10: prefers open PR over merged PR when both exist', () => {
@@ -731,11 +731,11 @@ describe('computeTaskState - merge-conflict (PART 6)', () => {
     expect(computeTaskState(task, session, prs)).toBe('merge-conflict')
   })
 
-  it('test 6: closed PR with dirty state does not trigger merge-conflict', () => {
+  it('test 6: closed PR with dirty state is still user-facing merged, not merge-conflict', () => {
     const task = createTask({ status: 'doing' })
     const session = createSession({ status: 'completed' })
     const prs = [createPr({ state: 'closed', mergeable_state: 'dirty' })]
-    expect(computeTaskState(task, session, prs)).toBe('agent-done') // fallback since no open PR
+    expect(computeTaskState(task, session, prs)).toBe('pr-merged')
   })
 })
 
@@ -748,9 +748,9 @@ describe('getStateDrivingPr', () => {
     expect(getStateDrivingPr([])).toBeNull()
   })
 
-  it('returns null when all PRs are closed (not merged)', () => {
-    const prs = [createPr({ state: 'closed' })]
-    expect(getStateDrivingPr(prs)).toBeNull()
+  it('returns a closed PR as the done-state driver when no open PR exists', () => {
+    const closed = createPr({ state: 'closed' })
+    expect(getStateDrivingPr([closed])).toBe(closed)
   })
 
   it('returns the open PR', () => {
@@ -775,7 +775,7 @@ describe('getStateDrivingPr', () => {
     expect(getStateDrivingPr([first, second])).toBe(first)
   })
 
-  it('ignores closed PRs and returns open PR later in array', () => {
+  it('prefers an open PR over a closed PR later in array', () => {
     const closed = createPr({ state: 'closed', id: 1 })
     const open = createPr({ state: 'open', id: 2 })
     expect(getStateDrivingPr([closed, open])).toBe(open)
