@@ -127,6 +127,30 @@ import '../styles/global.css';
           </li>
         </ol>
       </section>
+
+      <section class="product-proof" aria-labelledby="product-proof-title">
+        <div class="product-proof-copy">
+          <p class="eyebrow">Product proof</p>
+          <h2 id="product-proof-title" class="section-title">See the work without chasing it</h2>
+          <p class="proof-lede">
+            OpenForge keeps task attention and review blockers in one quiet desktop surface.
+          </p>
+        </div>
+
+        <figure class="proof-figure" aria-label="OpenForge Task Attention Pane screenshot">
+          <div class="proof-screenshot-shell">
+            <img
+              class="proof-screenshot"
+              src="/images/openforge-task-attention-pane.png"
+              width="793"
+              height="1020"
+              loading="lazy"
+              alt="OpenForge Task Attention Pane showing the current task, pull request review blockers, and reviewer comments"
+            />
+          </div>
+          <figcaption class="proof-callout">Review blockers stay readable at a glance.</figcaption>
+        </figure>
+      </section>
     </main>
   </body>
 </html>
@@ -558,6 +582,112 @@ import '../styles/global.css';
     text-align: center;
   }
 
+  .product-proof {
+    width: min(100% - clamp(2rem, 6vw, 6.5rem), 96rem);
+    display: grid;
+    grid-template-columns: minmax(20rem, 0.95fr) minmax(24rem, 1.05fr);
+    align-items: center;
+    gap: clamp(2.5rem, 5vw, 6.25rem);
+    margin: 0 auto;
+    padding: clamp(3rem, 5vw, 4.5rem) 0 clamp(3.5rem, 6vw, 5rem);
+    overflow: visible;
+  }
+
+  .product-proof-copy {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    gap: 1.15rem;
+  }
+
+  .product-proof-copy .section-title {
+    max-width: 8.8em;
+    font-size: clamp(3.15rem, 5.2vw, 5.6rem);
+  }
+
+  .proof-lede {
+    max-width: 32rem;
+    margin: 0;
+    color: var(--muted);
+    font-size: clamp(1.08rem, 1.4vw, 1.42rem);
+    line-height: 1.45;
+  }
+
+  .proof-figure {
+    position: relative;
+    z-index: 1;
+    min-width: 0;
+    max-width: 32rem;
+    justify-self: center;
+    margin: 0;
+    perspective: 80rem;
+  }
+
+  .proof-figure::before {
+    content: "";
+    position: absolute;
+    inset: 12% -5% -9% 8%;
+    z-index: -2;
+    border-radius: 999rem;
+    background:
+      radial-gradient(circle at 78% 50%, rgba(191, 114, 0, 0.1), transparent 15rem),
+      radial-gradient(circle at 36% 44%, rgba(15, 111, 56, 0.12), transparent 19rem);
+    filter: blur(0.25rem);
+  }
+
+  .proof-screenshot-shell {
+    position: relative;
+    display: inline-flex;
+    overflow: hidden;
+    border: 1px solid rgba(30, 41, 59, 0.22);
+    border-radius: 1.05rem;
+    background: rgba(16, 21, 31, 0.94);
+    box-shadow: 0 2rem 5rem rgba(46, 36, 24, 0.18), 0 0.55rem 1rem rgba(16, 21, 31, 0.08);
+    transform: rotateY(-9deg) rotateZ(1.2deg) translateX(1.4rem);
+    transform-origin: center left;
+  }
+
+  .proof-screenshot-shell::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(115deg, rgba(255, 250, 240, 0.16), transparent 28%, transparent 74%, rgba(16, 21, 31, 0.06));
+  }
+
+  .proof-screenshot {
+    width: auto;
+    max-width: 100%;
+    max-height: min(68dvh, 40rem);
+    display: block;
+  }
+
+  .proof-callout {
+    position: absolute;
+    right: clamp(-1rem, -1.2vw, -0.35rem);
+    top: 21%;
+    max-width: 15rem;
+    border: 1px solid rgba(191, 114, 0, 0.44);
+    border-radius: 0.75rem;
+    padding: 0.85rem 1rem;
+    background: rgba(255, 250, 240, 0.94);
+    box-shadow: 0 1rem 2.5rem rgba(79, 52, 12, 0.14);
+    color: var(--ink);
+    font-size: clamp(0.9rem, 1vw, 1rem);
+    font-weight: 700;
+    line-height: 1.32;
+  }
+
+  .proof-callout::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: 100%;
+    width: clamp(2.5rem, 6vw, 5.5rem);
+    height: 1px;
+    background: rgba(191, 114, 0, 0.68);
+  }
+
   @media (max-width: 62rem) {
     .hero-shell {
       min-height: auto;
@@ -601,6 +731,39 @@ import '../styles/global.css';
     .top-reasons {
       width: min(100% - 2.5rem, 44rem);
       padding-top: clamp(3.75rem, 10vw, 5rem);
+    }
+
+    .product-proof {
+      width: min(100% - 2.5rem, 54rem);
+      grid-template-columns: 1fr;
+      gap: 2.25rem;
+      padding-top: clamp(3.75rem, 10vw, 5rem);
+    }
+
+    .product-proof-copy .section-title {
+      max-width: 10em;
+    }
+
+    .proof-figure {
+      max-width: min(100%, 30rem);
+      justify-self: center;
+    }
+
+    .proof-screenshot-shell {
+      transform: none;
+    }
+
+    .proof-callout {
+      position: relative;
+      right: auto;
+      top: auto;
+      width: fit-content;
+      max-width: min(100%, 22rem);
+      margin: 1rem 0 0 auto;
+    }
+
+    .proof-callout::before {
+      display: none;
     }
 
     .section-heading {
@@ -658,7 +821,8 @@ import '../styles/global.css';
       transform: translateX(-14%) scale(0.9);
     }
 
-    .top-reasons {
+    .top-reasons,
+    .product-proof {
       width: min(100% - 2rem, 32rem);
     }
 
@@ -672,6 +836,19 @@ import '../styles/global.css';
 
     .reason-visual {
       min-height: 13.5rem;
+    }
+
+    .product-proof-copy .section-title {
+      font-size: clamp(2.45rem, 13vw, 3.25rem);
+    }
+
+    .proof-figure {
+      max-width: min(100%, 26rem);
+    }
+
+    .proof-callout {
+      width: 100%;
+      margin-left: 0;
     }
 
     .review-actions,
