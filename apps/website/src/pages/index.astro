@@ -151,6 +151,91 @@ import '../styles/global.css';
           <figcaption class="proof-callout">Review blockers stay readable at a glance.</figcaption>
         </figure>
       </section>
+
+      <section class="plugin-customization" aria-labelledby="plugin-customization-title">
+        <div class="plugin-customization-heading">
+          <p class="eyebrow">Trusted Plugins</p>
+          <h2 id="plugin-customization-title" class="section-title">Bring your workflow into OpenForge</h2>
+          <p class="plugin-customization-lede">
+            Your workflow. Your plugin. Your way of working — around the same stable OpenForge Tasks.
+          </p>
+          <p class="plugin-customization-copy">
+            OpenForge's stable task-based operator console stays predictable while Trusted Plugins shape the workspace around how you already work.
+          </p>
+        </div>
+
+        <div class="capability-ledger" aria-label="Trusted Plugin customization examples">
+          <div class="ledger-bracket ledger-bracket-left" aria-hidden="true">
+            <span>stable task-based operator console</span>
+          </div>
+
+          <ol class="ledger-list">
+            <li class="ledger-row">
+              <span class="ledger-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M4 5.5h16v13H4z" />
+                  <path d="M4 10h16" />
+                  <path d="M9 10v8.5" />
+                </svg>
+              </span>
+              <div class="ledger-row-copy">
+                <h3>Your views</h3>
+                <p><code>views.register</code> · project dashboards, review queues, repo lenses</p>
+              </div>
+              <span class="ledger-dot" aria-hidden="true"></span>
+            </li>
+
+            <li class="ledger-row">
+              <span class="ledger-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M5 4.5h14v15H5z" />
+                  <path d="M10 4.5v15" />
+                  <path d="M13 9h3" />
+                  <path d="M13 13h3" />
+                </svg>
+              </span>
+              <div class="ledger-row-copy">
+                <h3>Your task context</h3>
+                <p><code>taskPane.registerTab</code> · notes, checklists, docs, review rituals</p>
+              </div>
+              <span class="ledger-dot" aria-hidden="true"></span>
+            </li>
+
+            <li class="ledger-row">
+              <span class="ledger-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M6 16.5a3.5 3.5 0 0 1 0-7 5.5 5.5 0 0 1 10.7-1.8A4.2 4.2 0 1 1 18 16.5h-2.2" />
+                  <path d="M9 16.5h3" />
+                  <path d="m11 13.5 3 3-3 3" />
+                </svg>
+              </span>
+              <div class="ledger-row-copy">
+                <h3>Your automations</h3>
+                <p><code>background.register</code> · handoffs, CI, stale work, recurring prompts</p>
+              </div>
+              <span class="ledger-dot" aria-hidden="true"></span>
+            </li>
+
+            <li class="ledger-row">
+              <span class="ledger-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M12 3 20 6.5v5.7c0 4.5-3.1 7.4-8 8.8-4.9-1.4-8-4.3-8-8.8V6.5L12 3Z" />
+                  <path d="m8.8 12.1 2 2 4.6-4.8" />
+                </svg>
+              </span>
+              <div class="ledger-row-copy">
+                <h3>Your host capabilities</h3>
+                <p><code>tasks · fs · shell · notifications</code> · explicit access for trusted plugins</p>
+              </div>
+              <span class="ledger-dot" aria-hidden="true"></span>
+            </li>
+          </ol>
+
+          <div class="ledger-bracket ledger-bracket-right" aria-hidden="true">
+            <span>trusted package runtime</span>
+          </div>
+        </div>
+      </section>
     </main>
   </body>
 </html>
@@ -688,6 +773,201 @@ import '../styles/global.css';
     background: rgba(191, 114, 0, 0.68);
   }
 
+  .plugin-customization {
+    width: min(100% - clamp(2rem, 6vw, 6.5rem), 96rem);
+    margin: 0 auto;
+    padding: clamp(4.5rem, 8vw, 7.25rem) 0 clamp(5.25rem, 9vw, 8rem);
+  }
+
+  .plugin-customization-heading {
+    display: grid;
+    justify-items: center;
+    gap: 1rem;
+    text-align: center;
+  }
+
+  .plugin-customization-heading .section-title {
+    max-width: 12em;
+  }
+
+  .plugin-customization-lede {
+    max-width: 52rem;
+    margin: 0;
+    color: var(--ink);
+    font-size: clamp(1.18rem, 1.7vw, 1.62rem);
+    font-weight: 620;
+    line-height: 1.42;
+  }
+
+  .plugin-customization-copy {
+    max-width: 47rem;
+    margin: 0;
+    color: var(--muted);
+    font-size: clamp(1rem, 1.2vw, 1.15rem);
+    line-height: 1.55;
+  }
+
+  .capability-ledger {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(7rem, 0.28fr) minmax(0, 1fr) minmax(7rem, 0.28fr);
+    align-items: center;
+    gap: clamp(1.5rem, 3vw, 2.75rem);
+    margin: clamp(2.75rem, 5vw, 4rem) auto 0;
+  }
+
+  .ledger-list {
+    position: relative;
+    display: grid;
+    gap: 0.75rem;
+    margin: 0;
+    border: 1px solid rgba(30, 41, 59, 0.2);
+    border-radius: 1rem;
+    padding: clamp(0.9rem, 1.4vw, 1.25rem);
+    background: rgba(255, 250, 240, 0.72);
+    box-shadow: 0 1.6rem 4.5rem rgba(46, 36, 24, 0.12);
+    list-style: none;
+  }
+
+  .ledger-list::before {
+    content: "";
+    position: absolute;
+    inset: 0.35rem;
+    z-index: -1;
+    border: 1px solid rgba(255, 250, 240, 0.72);
+    border-radius: 0.85rem;
+  }
+
+  .ledger-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: clamp(0.85rem, 1.6vw, 1.25rem);
+    min-height: 5.7rem;
+    border: 1px solid rgba(30, 41, 59, 0.16);
+    border-radius: 0.75rem;
+    padding: clamp(0.85rem, 1.4vw, 1.05rem) clamp(0.9rem, 1.6vw, 1.25rem);
+    background: rgba(255, 250, 240, 0.78);
+    box-shadow: 0 0.55rem 1.5rem rgba(46, 36, 24, 0.06);
+  }
+
+  .ledger-icon {
+    width: 3.2rem;
+    height: 3.2rem;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(15, 111, 56, 0.18);
+    border-radius: 0.6rem;
+    background:
+      radial-gradient(circle at 35% 28%, rgba(15, 111, 56, 0.12), transparent 2rem),
+      rgba(247, 242, 232, 0.75);
+    color: var(--green-deep);
+    box-shadow: inset 0 0 1.5rem rgba(15, 111, 56, 0.05);
+  }
+
+  .ledger-icon svg {
+    width: 1.7rem;
+    height: 1.7rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.8;
+  }
+
+  .ledger-row-copy {
+    min-width: 0;
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .ledger-row-copy h3 {
+    margin: 0;
+    color: var(--ink);
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: clamp(1.25rem, 1.7vw, 1.65rem);
+    font-weight: 600;
+    line-height: 1.05;
+    letter-spacing: -0.042em;
+  }
+
+  .ledger-row-copy p {
+    margin: 0;
+    color: var(--muted);
+    font-size: clamp(0.95rem, 1.1vw, 1.08rem);
+    line-height: 1.45;
+  }
+
+  .ledger-row-copy code {
+    color: var(--green-deep);
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 0.94em;
+    font-weight: 720;
+  }
+
+  .ledger-dot {
+    width: 0.72rem;
+    height: 0.72rem;
+    border: 1px solid rgba(79, 52, 12, 0.25);
+    border-radius: 999rem;
+    background: var(--amber);
+    box-shadow: 0 0 0 0.26rem rgba(191, 114, 0, 0.1);
+  }
+
+  .ledger-bracket {
+    position: relative;
+    min-height: 19rem;
+    display: grid;
+    place-items: center;
+    color: var(--green-deep);
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: clamp(0.82rem, 0.95vw, 0.98rem);
+    font-weight: 680;
+    line-height: 1.4;
+    text-align: center;
+  }
+
+  .ledger-bracket span {
+    max-width: 8.75rem;
+  }
+
+  .ledger-bracket::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1.25rem;
+    border-color: rgba(15, 111, 56, 0.72);
+    border-style: solid;
+  }
+
+  .ledger-bracket::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    width: clamp(2.2rem, 4vw, 4.6rem);
+    height: 1.5px;
+    background: repeating-linear-gradient(90deg, rgba(15, 111, 56, 0.6) 0 0.45rem, transparent 0.45rem 0.75rem);
+  }
+
+  .ledger-bracket-left::before {
+    left: 0;
+    border-width: 1.5px 0 1.5px 1.5px;
+  }
+
+  .ledger-bracket-left::after {
+    right: -1.8rem;
+  }
+
+  .ledger-bracket-right::before {
+    right: 0;
+    border-width: 1.5px 1.5px 1.5px 0;
+  }
+
+  .ledger-bracket-right::after {
+    left: -1.8rem;
+  }
+
   @media (max-width: 62rem) {
     .hero-shell {
       min-height: auto;
@@ -742,6 +1022,25 @@ import '../styles/global.css';
 
     .product-proof-copy .section-title {
       max-width: 10em;
+    }
+
+    .plugin-customization {
+      width: min(100% - 2.5rem, 54rem);
+      padding-top: clamp(3.75rem, 10vw, 5rem);
+    }
+
+    .plugin-customization-heading {
+      justify-items: start;
+      text-align: left;
+    }
+
+    .capability-ledger {
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+
+    .ledger-bracket {
+      display: none;
     }
 
     .proof-figure {
@@ -822,12 +1121,37 @@ import '../styles/global.css';
     }
 
     .top-reasons,
-    .product-proof {
+    .product-proof,
+    .plugin-customization {
       width: min(100% - 2rem, 32rem);
     }
 
     .section-title {
       font-size: clamp(2.45rem, 13vw, 3.25rem);
+    }
+
+    .plugin-customization-lede {
+      font-size: 1.08rem;
+    }
+
+    .ledger-list {
+      padding: 0.75rem;
+    }
+
+    .ledger-row {
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: start;
+      min-height: auto;
+      padding: 0.85rem;
+    }
+
+    .ledger-icon {
+      width: 2.75rem;
+      height: 2.75rem;
+    }
+
+    .ledger-dot {
+      display: none;
     }
 
     .reason-card {
