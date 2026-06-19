@@ -158,7 +158,7 @@ impl super::Database {
               )
              WHERE tw.status = 'active'
                AND t.status = 'doing'
-               AND latest_session.status IN (?1, ?2, ?3)
+               AND latest_session.status IN (?1, ?2, ?3, ?4)
              ORDER BY tw.updated_at DESC",
         )?;
 
@@ -167,6 +167,7 @@ impl super::Database {
                 super::STARTUP_RESUMABLE_AGENT_SESSION_STATUSES[0],
                 super::STARTUP_RESUMABLE_AGENT_SESSION_STATUSES[1],
                 super::STARTUP_RESUMABLE_AGENT_SESSION_STATUSES[2],
+                super::STARTUP_RESUMABLE_AGENT_SESSION_STATUSES[3],
             ],
             |row| {
                 Ok(TaskWorkspaceRow {
@@ -390,7 +391,8 @@ mod tests {
         let resumable = db
             .get_resumable_task_workspaces()
             .expect("get resumable failed");
-        assert!(resumable.is_empty());
+        assert_eq!(resumable.len(), 1);
+        assert_eq!(resumable[0].task_id, completed_task.id);
 
         drop(db);
         let _ = fs::remove_file(&path);

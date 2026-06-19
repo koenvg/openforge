@@ -29,8 +29,8 @@ pub use task_workspaces::TaskWorkspaceRow;
 pub use tasks::{TaskLabelRow, TaskRow};
 pub use worktrees::WorktreeRow;
 
-pub(crate) const STARTUP_RESUMABLE_AGENT_SESSION_STATUSES: [&str; 3] =
-    ["running", "paused", "interrupted"];
+pub(crate) const STARTUP_RESUMABLE_AGENT_SESSION_STATUSES: [&str; 4] =
+    ["running", "paused", "interrupted", "completed"];
 
 /// Database connection wrapper for thread-safe access
 pub struct Database {

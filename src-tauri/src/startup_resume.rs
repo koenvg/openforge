@@ -470,13 +470,13 @@ mod tests {
     }
 
     #[test]
-    fn latest_session_allows_startup_resume_only_for_active_statuses() {
-        for status in ["running", "paused", "interrupted"] {
+    fn latest_session_allows_startup_resume_for_reopenable_statuses() {
+        for status in ["running", "paused", "interrupted", "completed"] {
             let session = test_agent_session_with_status(status);
             assert!(latest_session_allows_startup_resume(Some(&session)));
         }
 
-        for status in ["completed", "failed"] {
+        for status in ["failed"] {
             let session = test_agent_session_with_status(status);
             assert!(!latest_session_allows_startup_resume(Some(&session)));
         }
