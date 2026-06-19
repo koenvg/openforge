@@ -6,6 +6,7 @@ import {
 	clearPendingSelfReviewComments,
 	getPendingSelfReviewComments,
 	getSelfReviewArchivedComments,
+	mergeVisiblePendingSelfReviewComments,
 	getSelfReviewDiffFiles,
 	getSelfReviewGeneralComments,
 	pendingSelfReviewCommentsByTask,
@@ -120,6 +121,26 @@ describe("task-scoped self-review state", () => {
 				["task-2", [taskTwoComment]],
 			]),
 		);
+	});
+
+	it("preserves hidden pending inline comments when applying visible review updates", () => {
+		const hiddenComment: ReviewSubmissionComment = {
+			...taskOneComment,
+			path: "src/hidden.ts",
+			body: "hidden while comparing snapshot",
+		};
+		const visibleUpdate: ReviewSubmissionComment = {
+			...taskTwoComment,
+			body: "visible file update",
+		};
+
+		expect(
+			mergeVisiblePendingSelfReviewComments(
+				[hiddenComment, taskOneComment],
+				[visibleUpdate],
+				new Set(["src/hidden.ts"]),
+			),
+		).toEqual([hiddenComment, visibleUpdate]);
 	});
 
 	it("clears only the selected task pending inline comments", () => {

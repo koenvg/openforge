@@ -1,5 +1,6 @@
 import { DiffFile } from '@git-diff-view/core'
 import { toGitDiffViewData, type FileContents } from './diffAdapter'
+import { getDiffFileSectionInputKey } from './diffFileSectionIdentity'
 import type { PrFileDiff } from '@openforge/plugin-sdk/domain'
 import type { DiffWorkerResponse } from './diffWorker'
 
@@ -16,7 +17,10 @@ export function createDiffWorker(deps: {
   let diffFileMap = $state<Map<string, DiffFile>>(new Map())
   let pendingCount = $state(0)
 
-  const sentKeys = new Map<string, FileContents | undefined>()
+  const sentKeys = new Map<string, { fileKey: string; contents: FileContents | undefined }>()
+  const pendingRequestKeys = new Map<string, { filename: string; fileKey: string }>()
+  const latestRequestIds = new Map<string, string>()
+  let nextRequestId = 0
   let lastSentTheme: string | null = null
 
   const worker = new Worker(
@@ -24,16 +28,30 @@ export function createDiffWorker(deps: {
     { type: 'module' }
   )
 
+  function clearDiffFile(filename: string) {
+    if (!diffFileMap.has(filename)) return
+
+    const next = new Map(diffFileMap)
+    next.get(filename)?.clearId()
+    next.delete(filename)
+    diffFileMap = next
+  }
+
   worker.onmessage = (e: MessageEvent<DiffWorkerResponse>) => {
     const msg = e.data
+    const pending = pendingRequestKeys.get(msg.id)
+    pendingRequestKeys.delete(msg.id)
+
     if (msg.type === 'result') {
-      const diffFile = DiffFile.createInstance({}, msg.bundle)
-      const next = new Map(diffFileMap)
-      next.set(msg.id, diffFile)
-      diffFileMap = next
+      if (pending && sentKeys.get(pending.filename)?.fileKey === pending.fileKey && latestRequestIds.get(pending.filename) === msg.id) {
+        const diffFile = DiffFile.createInstance({}, msg.bundle)
+        const next = new Map(diffFileMap)
+        next.set(pending.filename, diffFile)
+        diffFileMap = next
+      }
       pendingCount = Math.max(0, pendingCount - 1)
     } else if (msg.type === 'error') {
-      console.error(`[DiffWorker] Failed to process ${msg.id}:`, msg.error)
+      console.error(`[DiffWorker] Failed to process ${pending?.filename ?? msg.id}:`, msg.error)
       pendingCount = Math.max(0, pendingCount - 1)
     }
   }
@@ -44,19 +62,21 @@ export function createDiffWorker(deps: {
     const theme = deps.getDiffTheme()
 
     const themeChanged = lastSentTheme !== null && lastSentTheme !== theme
-    if (themeChanged) sentKeys.clear()
+    if (themeChanged) {
+      sentKeys.clear()
+      pendingRequestKeys.clear()
+      latestRequestIds.clear()
+      for (const df of diffFileMap.values()) df.clearId()
+      diffFileMap = new Map()
+    }
     lastSentTheme = theme
 
     const currentFilenames = new Set(files.map(f => f.filename))
     for (const key of sentKeys.keys()) {
       if (!currentFilenames.has(key)) {
         sentKeys.delete(key)
-        if (diffFileMap.has(key)) {
-          const next = new Map(diffFileMap)
-          next.get(key)?.clearId()
-          next.delete(key)
-          diffFileMap = next
-        }
+        latestRequestIds.delete(key)
+        clearDiffFile(key)
       }
     }
 
@@ -64,15 +84,21 @@ export function createDiffWorker(deps: {
       if (!file.patch) continue
 
       const contents = contentsMap.get(file.filename)
-      if (sentKeys.has(file.filename) && sentKeys.get(file.filename) === contents) continue
+      const fileKey = getDiffFileSectionInputKey(file)
+      const sent = sentKeys.get(file.filename)
+      if (sent?.fileKey === fileKey && sent.contents === contents) continue
 
-      sentKeys.set(file.filename, contents)
+      clearDiffFile(file.filename)
+      sentKeys.set(file.filename, { fileKey, contents })
 
       const data = toGitDiffViewData(file, contents)
+      const requestId = `${file.filename}:${++nextRequestId}`
+      pendingRequestKeys.set(requestId, { filename: file.filename, fileKey })
+      latestRequestIds.set(file.filename, requestId)
 
       worker.postMessage({
         type: 'process',
-        id: file.filename,
+        id: requestId,
         data,
         theme,
       })

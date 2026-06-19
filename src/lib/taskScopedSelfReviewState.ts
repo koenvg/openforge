@@ -177,6 +177,18 @@ export function getPendingSelfReviewComments(
 	return getSelfReviewTaskState(taskId).pendingInlineComments;
 }
 
+export function mergeVisiblePendingSelfReviewComments(
+	currentComments: ReviewSubmissionComment[],
+	visibleComments: ReviewSubmissionComment[],
+	hiddenPaths: Set<string>,
+): ReviewSubmissionComment[] {
+	if (hiddenPaths.size === 0) return visibleComments;
+	return [
+		...currentComments.filter((comment) => hiddenPaths.has(comment.path)),
+		...visibleComments,
+	];
+}
+
 export function setPendingSelfReviewComments(
 	taskId: string,
 	pendingInlineComments: ReviewSubmissionComment[],
