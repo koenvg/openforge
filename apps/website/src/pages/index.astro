@@ -236,7 +236,78 @@ import '../styles/global.css';
           </div>
         </div>
       </section>
+
+      <section class="final-cta" aria-labelledby="final-cta-title">
+        <div class="final-cta-copy">
+          <p class="eyebrow">Keep the work in hand</p>
+          <h2 id="final-cta-title" class="section-title">Bring OpenForge to your desktop</h2>
+          <p class="final-cta-lede">
+            Install the local command center for visible, reviewable agent work.
+          </p>
+
+          <div class="actions final-cta-actions" aria-label="Final actions">
+            <a class="button button-primary" href="https://github.com/koenvg/openforge/releases" aria-label="Install OpenForge from releases">
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="button-icon download-icon">
+                <path d="M12 3v11" />
+                <path d="m7.5 9.5 4.5 4.5 4.5-4.5" />
+                <path d="M5 18.5h14" />
+              </svg>
+              Install OpenForge
+            </a>
+            <a class="button button-secondary" href="https://github.com/koenvg/openforge" aria-label="View OpenForge source on GitHub">
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="button-icon github-icon">
+                <path
+                  fill="currentColor"
+                  d="M12 .5A11.5 11.5 0 0 0 8.36 22.4c.58.11.8-.25.8-.56v-2.17c-3.25.71-3.94-1.38-3.94-1.38-.53-1.35-1.3-1.71-1.3-1.71-1.06-.72.08-.71.08-.71 1.17.08 1.79 1.2 1.79 1.2 1.04 1.78 2.73 1.27 3.4.97.1-.76.4-1.27.74-1.56-2.6-.3-5.33-1.3-5.33-5.77 0-1.27.46-2.31 1.2-3.13-.12-.3-.52-1.52.12-3.08 0 0 .98-.31 3.2 1.2a11.1 11.1 0 0 1 5.84 0c2.22-1.51 3.2-1.2 3.2-1.2.64 1.56.24 2.78.12 3.08.75.82 1.2 1.86 1.2 3.13 0 4.48-2.74 5.47-5.35 5.76.42.36.8 1.08.8 2.18v3.23c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"
+                />
+              </svg>
+              GitHub
+            </a>
+          </div>
+        </div>
+
+        <article class="source-card" aria-labelledby="source-card-title">
+          <div class="source-card-heading">
+            <div>
+              <p class="source-card-kicker">Source due diligence</p>
+              <h3 id="source-card-title">Check the source first</h3>
+            </div>
+            <svg aria-hidden="true" viewBox="0 0 24 24" class="source-github-icon">
+              <path
+                fill="currentColor"
+                d="M12 .5A11.5 11.5 0 0 0 8.36 22.4c.58.11.8-.25.8-.56v-2.17c-3.25.71-3.94-1.38-3.94-1.38-.53-1.35-1.3-1.71-1.3-1.71-1.06-.72.08-.71.08-.71 1.17.08 1.79 1.2 1.79 1.2 1.04 1.78 2.73 1.27 3.4.97.1-.76.4-1.27.74-1.56-2.6-.3-5.33-1.3-5.33-5.77 0-1.27.46-2.31 1.2-3.13-.12-.3-.52-1.52.12-3.08 0 0 .98-.31 3.2 1.2a11.1 11.1 0 0 1 5.84 0c2.22-1.51 3.2-1.2 3.2-1.2.64 1.56.24 2.78.12 3.08.75.82 1.2 1.86 1.2 3.13 0 4.48-2.74 5.47-5.35 5.76.42.36.8 1.08.8 2.18v3.23c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"
+              />
+            </svg>
+          </div>
+
+          <div class="source-card-divider" aria-hidden="true"></div>
+
+          <dl class="source-details">
+            <div>
+              <dt>Repository</dt>
+              <dd><a href="https://github.com/koenvg/openforge">github.com/koenvg/openforge</a></dd>
+            </div>
+            <div>
+              <dt>Purpose</dt>
+              <dd>Local desktop command center for agent work.</dd>
+            </div>
+            <div>
+              <dt>Review posture</dt>
+              <dd>Visible. Reviewable. Yours.</dd>
+            </div>
+          </dl>
+        </article>
+      </section>
     </main>
+
+    <footer class="site-footer" aria-label="OpenForge footer">
+      <a class="footer-wordmark" href="/" aria-label="OpenForge home">OpenForge</a>
+      <p>Local-first tools for developers who value control.</p>
+      <nav class="footer-links" aria-label="Footer links">
+        <a href="https://github.com/koenvg/openforge/releases">Releases</a>
+        <a href="https://github.com/koenvg/openforge">GitHub</a>
+      </nav>
+    </footer>
   </body>
 </html>
 
@@ -968,6 +1039,224 @@ import '../styles/global.css';
     left: -1.8rem;
   }
 
+  .final-cta {
+    position: relative;
+    width: min(100% - clamp(2rem, 6vw, 6.5rem), 96rem);
+    display: grid;
+    grid-template-columns: minmax(22rem, 0.95fr) minmax(24rem, 0.82fr);
+    align-items: center;
+    gap: clamp(2.5rem, 5vw, 6rem);
+    margin: 0 auto;
+    border-top: 1px solid rgba(30, 41, 59, 0.14);
+    padding: clamp(4rem, 7vw, 7rem) 0 clamp(4.75rem, 8vw, 7.5rem);
+  }
+
+  .final-cta::before {
+    content: "";
+    position: absolute;
+    inset: 12% -8% 6% auto;
+    z-index: -1;
+    width: min(44rem, 52vw);
+    border-radius: 999rem;
+    background:
+      radial-gradient(circle at 30% 34%, rgba(15, 111, 56, 0.1), transparent 15rem),
+      radial-gradient(circle at 72% 70%, rgba(191, 114, 0, 0.08), transparent 12rem);
+    filter: blur(0.15rem);
+  }
+
+  .final-cta-copy {
+    display: grid;
+    gap: 1.15rem;
+  }
+
+  .final-cta-copy .eyebrow {
+    position: relative;
+    width: fit-content;
+  }
+
+  .final-cta-copy .eyebrow::after,
+  .source-card-kicker::after {
+    content: "";
+    display: block;
+    width: 3rem;
+    height: 2px;
+    margin-top: 0.85rem;
+    background: var(--amber);
+  }
+
+  .final-cta-copy .section-title {
+    max-width: 8.8em;
+    font-size: clamp(3.15rem, 5vw, 5.75rem);
+  }
+
+  .final-cta-lede {
+    max-width: 34rem;
+    margin: 0;
+    color: var(--ink);
+    font-size: clamp(1.08rem, 1.45vw, 1.42rem);
+    line-height: 1.48;
+  }
+
+  .final-cta-actions {
+    margin-top: clamp(1.25rem, 2.4vw, 2rem);
+  }
+
+  .download-icon {
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2;
+  }
+
+  .source-card {
+    position: relative;
+    display: grid;
+    gap: 1.45rem;
+    border: 1px solid rgba(30, 41, 59, 0.22);
+    border-radius: 1rem;
+    padding: clamp(1.45rem, 2.5vw, 2.35rem);
+    background: rgba(255, 250, 240, 0.76);
+    box-shadow: 0 1.6rem 4rem rgba(46, 36, 24, 0.12);
+    overflow: hidden;
+  }
+
+  .source-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(90deg, rgba(191, 114, 0, 0.12), transparent 5.5rem),
+      radial-gradient(circle at 92% 18%, rgba(15, 111, 56, 0.08), transparent 9rem);
+    opacity: 0.72;
+  }
+
+  .source-card > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .source-card-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1.25rem;
+  }
+
+  .source-card-kicker {
+    margin: 0 0 1rem;
+    color: var(--green-deep);
+    font-size: 0.78rem;
+    font-weight: 780;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+
+  .source-card h3 {
+    max-width: 10em;
+    margin: 0;
+    color: var(--ink);
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: clamp(2rem, 3vw, 3rem);
+    font-weight: 600;
+    line-height: 1.02;
+    letter-spacing: -0.052em;
+  }
+
+  .source-github-icon {
+    flex: 0 0 auto;
+    width: clamp(2.75rem, 4vw, 3.75rem);
+    height: clamp(2.75rem, 4vw, 3.75rem);
+    color: var(--ink);
+  }
+
+  .source-card-divider {
+    height: 1px;
+    background: rgba(30, 41, 59, 0.16);
+  }
+
+  .source-details {
+    display: grid;
+    gap: 1rem;
+    margin: 0;
+    font-family: "SFMono-Regular", Consolas, monospace;
+  }
+
+  .source-details div {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .source-details dt {
+    color: var(--muted);
+    font-size: 0.78rem;
+  }
+
+  .source-details dd {
+    margin: 0;
+    color: var(--ink);
+    font-size: clamp(0.95rem, 1.15vw, 1.08rem);
+    line-height: 1.5;
+  }
+
+  .source-details a {
+    text-decoration-color: rgba(15, 111, 56, 0.34);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.25rem;
+  }
+
+  .source-details a:hover {
+    color: var(--green-deep);
+    text-decoration-color: currentColor;
+  }
+
+  .site-footer {
+    width: min(100% - clamp(2rem, 6vw, 6.5rem), 96rem);
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 1.5rem;
+    margin: 0 auto;
+    border-top: 1px solid rgba(30, 41, 59, 0.16);
+    padding: clamp(1.5rem, 3vw, 2.5rem) 0 clamp(1.75rem, 3vw, 2.75rem);
+    color: var(--muted);
+  }
+
+  .footer-wordmark {
+    color: var(--ink);
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: clamp(1.45rem, 2vw, 1.9rem);
+    font-weight: 650;
+    letter-spacing: -0.055em;
+    text-decoration: none;
+  }
+
+  .site-footer p {
+    margin: 0;
+    font-size: 0.98rem;
+    line-height: 1.4;
+    text-align: center;
+  }
+
+  .footer-links {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: clamp(1rem, 2vw, 1.75rem);
+  }
+
+  .footer-links a {
+    color: var(--ink);
+    font-size: 0.95rem;
+    font-weight: 620;
+    text-decoration: none;
+  }
+
+  .footer-links a:hover {
+    color: var(--green-deep);
+  }
+
   @media (max-width: 62rem) {
     .hero-shell {
       min-height: auto;
@@ -1027,6 +1316,35 @@ import '../styles/global.css';
     .plugin-customization {
       width: min(100% - 2.5rem, 54rem);
       padding-top: clamp(3.75rem, 10vw, 5rem);
+    }
+
+    .final-cta {
+      width: min(100% - 2.5rem, 54rem);
+      grid-template-columns: 1fr;
+      align-items: start;
+      gap: 2.25rem;
+    }
+
+    .final-cta-copy .section-title {
+      max-width: 10em;
+    }
+
+    .source-card {
+      width: 100%;
+    }
+
+    .site-footer {
+      width: min(100% - 2.5rem, 54rem);
+      grid-template-columns: 1fr;
+      justify-items: start;
+    }
+
+    .site-footer p {
+      text-align: left;
+    }
+
+    .footer-links {
+      justify-content: flex-start;
     }
 
     .plugin-customization-heading {
@@ -1122,12 +1440,41 @@ import '../styles/global.css';
 
     .top-reasons,
     .product-proof,
-    .plugin-customization {
+    .plugin-customization,
+    .final-cta,
+    .site-footer {
       width: min(100% - 2rem, 32rem);
     }
 
     .section-title {
       font-size: clamp(2.45rem, 13vw, 3.25rem);
+    }
+
+    .final-cta-copy .section-title,
+    .source-card h3 {
+      font-size: clamp(2.45rem, 13vw, 3.25rem);
+    }
+
+    .final-cta-lede {
+      font-size: 1.08rem;
+    }
+
+    .source-card {
+      padding: 1.1rem;
+    }
+
+    .source-card-heading {
+      gap: 1rem;
+    }
+
+    .source-github-icon {
+      width: 2.5rem;
+      height: 2.5rem;
+    }
+
+    .source-details dd {
+      font-size: 0.9rem;
+      overflow-wrap: anywhere;
     }
 
     .plugin-customization-lede {
