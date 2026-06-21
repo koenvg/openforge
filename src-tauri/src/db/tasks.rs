@@ -32,6 +32,8 @@ pub struct TaskRow {
     pub summary: Option<String>,
     pub agent: Option<String>,
     pub permission_mode: Option<String>,
+    /// Explicit display title; `None` means fall back to the prompt-derived title.
+    pub title: Option<String>,
     pub depends_on: Vec<String>,
     pub labels: Vec<TaskLabelRow>,
 }
@@ -201,7 +203,7 @@ impl super::Database {
     pub fn get_tasks_for_project(&self, project_id: &str) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode 
+            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title
              FROM tasks WHERE project_id = ?1 ORDER BY updated_at DESC",
         )?;
 
@@ -217,6 +219,7 @@ impl super::Database {
                 summary: row.get(7)?,
                 agent: row.get(8)?,
                 permission_mode: row.get(9)?,
+                title: row.get(10)?,
                 depends_on: Vec::new(),
                 labels: Vec::new(),
             })
@@ -239,7 +242,7 @@ impl super::Database {
     ) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode
+            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title
              FROM tasks WHERE project_id = ?1 AND status = ?2 ORDER BY updated_at DESC",
         )?;
         let tasks = stmt.query_map([project_id, state], |row| {
@@ -254,6 +257,7 @@ impl super::Database {
                 summary: row.get(7)?,
                 agent: row.get(8)?,
                 permission_mode: row.get(9)?,
+                title: row.get(10)?,
                 depends_on: Vec::new(),
                 labels: Vec::new(),
             })
@@ -343,6 +347,7 @@ impl super::Database {
             summary: None,
             agent: None,
             permission_mode: permission_mode.map(|s| s.to_string()),
+            title: None,
             depends_on: Vec::new(),
             labels: Vec::new(),
         })
@@ -351,7 +356,7 @@ impl super::Database {
     pub fn get_all_tasks(&self) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode 
+            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title
              FROM tasks ORDER BY updated_at DESC"
         )?;
 
@@ -367,6 +372,7 @@ impl super::Database {
                 summary: row.get(7)?,
                 agent: row.get(8)?,
                 permission_mode: row.get(9)?,
+                title: row.get(10)?,
                 depends_on: Vec::new(),
                 labels: Vec::new(),
             })
@@ -385,7 +391,7 @@ impl super::Database {
     pub fn get_task(&self, id: &str) -> Result<Option<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode 
+            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title
              FROM tasks WHERE id = ?1"
         )?;
         let mut rows = stmt.query([id])?;
@@ -401,6 +407,7 @@ impl super::Database {
                 summary: row.get(7)?,
                 agent: row.get(8)?,
                 permission_mode: row.get(9)?,
+                title: row.get(10)?,
                 depends_on: load_task_dependency_ids(&conn, id)?,
                 labels: load_task_labels(&conn, id)?,
             }))
@@ -580,9 +587,33 @@ impl super::Database {
             .duration_since(std::time::UNIX_EPOCH)
             .expect("time went backwards")
             .as_secs() as i64;
+        // For never-started (backlog) tasks the prompt has not been injected into a
+        // session yet, so editing replaces the prompt of record (initial_prompt) too
+        // and the change is visible everywhere. Once a task has started, initial_prompt
+        // is frozen as the historical original and only the working prompt changes.
         conn.execute(
-            "UPDATE tasks SET prompt = ?1, updated_at = ?2 WHERE id = ?3",
+            "UPDATE tasks SET prompt = ?1, \
+             initial_prompt = CASE WHEN status = 'backlog' THEN ?1 ELSE initial_prompt END, \
+             updated_at = ?2 WHERE id = ?3",
             rusqlite::params![prompt, now, id],
+        )?;
+        Ok(())
+    }
+
+    /// Update a task's explicit display title. Editable at any status because the
+    /// title is decoupled from the prompt. A blank title clears it back to `NULL`
+    /// so the UI falls back to the prompt-derived title.
+    pub fn update_task_title(&self, id: &str, title: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs() as i64;
+        let trimmed = title.trim();
+        let stored_title: Option<&str> = if trimmed.is_empty() { None } else { Some(trimmed) };
+        conn.execute(
+            "UPDATE tasks SET title = ?1, updated_at = ?2 WHERE id = ?3",
+            rusqlite::params![stored_title, now, id],
         )?;
         Ok(())
     }
@@ -822,8 +853,8 @@ mod tests {
     }
 
     #[test]
-    fn test_update_task_updates_prompt_and_preserves_initial_prompt() {
-        let (db, path) = make_test_db("update_task_prompt_preserves_initial_prompt");
+    fn test_update_task_backlog_replaces_initial_prompt_and_prompt() {
+        let (db, path) = make_test_db("update_task_backlog_replaces_initial_prompt");
 
         let task = db
             .create_task("Original", "backlog", None, None, None)
@@ -832,8 +863,10 @@ mod tests {
         db.update_task(&task.id, "Updated prompt")
             .expect("update prompt failed");
 
+        // A never-started (backlog) task has no separate "original" yet, so editing
+        // replaces the prompt of record (initial_prompt) as well as the working prompt.
         let updated = db.get_task(&task.id).expect("get failed").unwrap();
-        assert_eq!(updated.initial_prompt, "Original");
+        assert_eq!(updated.initial_prompt, "Updated prompt");
         assert_eq!(updated.prompt, Some("Updated prompt".to_string()));
 
         drop(db);
@@ -882,12 +915,15 @@ mod tests {
     }
 
     #[test]
-    fn test_update_task_preserves_initial_prompt_in_task_list() {
-        let (db, path) = make_test_db("update_task_preserves_initial_prompt_in_task_list");
+    fn test_update_task_started_task_preserves_initial_prompt() {
+        let (db, path) = make_test_db("update_task_started_preserves_initial_prompt");
 
         let task = db
             .create_task("Original", "backlog", None, None, None)
             .expect("create failed");
+        // Once a task has started (left backlog), its initial_prompt is frozen.
+        db.update_task_status(&task.id, "doing")
+            .expect("update status failed");
 
         db.update_task(&task.id, "Updated prompt")
             .expect("update failed");
@@ -896,6 +932,68 @@ mod tests {
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].initial_prompt, "Original");
         assert_eq!(tasks[0].prompt, Some("Updated prompt".to_string()));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_create_task_title_defaults_to_null() {
+        let (db, path) = make_test_db("create_task_title_null");
+
+        let task = db
+            .create_task("Original", "backlog", None, None, None)
+            .expect("create failed");
+
+        assert_eq!(task.title, None);
+        let retrieved = db.get_task(&task.id).expect("get failed").unwrap();
+        assert_eq!(retrieved.title, None);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_update_task_title_sets_title_regardless_of_status() {
+        let (db, path) = make_test_db("update_task_title_any_status");
+
+        let task = db
+            .create_task("Original", "backlog", None, None, None)
+            .expect("create failed");
+        // The title is editable even after the task has started.
+        db.update_task_status(&task.id, "doing")
+            .expect("update status failed");
+
+        db.update_task_title(&task.id, "Renamed while running")
+            .expect("update title failed");
+
+        let updated = db.get_task(&task.id).expect("get failed").unwrap();
+        assert_eq!(updated.title, Some("Renamed while running".to_string()));
+        // Renaming must not touch the prompt of record.
+        assert_eq!(updated.initial_prompt, "Original");
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_update_task_title_empty_clears_to_null() {
+        let (db, path) = make_test_db("update_task_title_empty_clears");
+
+        let task = db
+            .create_task("Original", "done", None, None, None)
+            .expect("create failed");
+        db.update_task_title(&task.id, "Has title")
+            .expect("set title failed");
+        assert_eq!(
+            db.get_task(&task.id).expect("get failed").unwrap().title,
+            Some("Has title".to_string())
+        );
+
+        // Clearing the title (blank input) reverts to the derived title.
+        db.update_task_title(&task.id, "   ")
+            .expect("clear title failed");
+        assert_eq!(db.get_task(&task.id).expect("get failed").unwrap().title, None);
 
         drop(db);
         let _ = fs::remove_file(&path);

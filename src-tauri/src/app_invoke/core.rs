@@ -274,6 +274,17 @@ pub(super) async fn handle_app_unmatched_command(
             })?;
             serde_json::Value::Null
         }
+        "update_task_title" => {
+            let id = payload_string(&request.payload, "id")?;
+            let title = payload_string(&request.payload, "title")?;
+            db.update_task_title(&id, &title).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to update task title: {e}"),
+                )
+            })?;
+            serde_json::Value::Null
+        }
         "update_task_summary" => {
             let id = payload_string(&request.payload, "id")?;
             let summary = payload_string(&request.payload, "summary")?;

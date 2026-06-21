@@ -7,6 +7,7 @@
   import { getTaskListItemPresentation, getTaskStateBadgeClass } from '../../lib/taskStatePresentation'
   import { timeAgoFromSeconds } from '../../lib/timeAgo'
   import { getTaskTitle } from '../../lib/taskTitle'
+  import { createTaskTitleRename } from '../../lib/useTaskTitleRename.svelte'
 
   interface Props {
     task: Task
@@ -21,9 +22,17 @@
     isMerging: boolean
     onSelect: () => void
     onContextMenu: (e: MouseEvent) => void
+    onTaskUpdated?: () => void | Promise<void>
   }
 
-  let { task, state, session, pullRequests, reasonText, dependencyHint = null, showLabels = false, isSelected, isFocused, isMerging, onSelect, onContextMenu }: Props = $props()
+  let { task, state, session, pullRequests, reasonText, dependencyHint = null, showLabels = false, isSelected, isFocused, isMerging, onSelect, onContextMenu, onTaskUpdated }: Props = $props()
+
+  const titleRename = createTaskTitleRename(() => task, () => onTaskUpdated?.())
+
+  function focusAndSelect(node: HTMLInputElement) {
+    node.focus()
+    node.select()
+  }
 
   function truncate(text: string, max: number): string {
     return text.length > max ? text.slice(0, max) + '...' : text
@@ -66,8 +75,29 @@
     <span class="font-mono text-xs text-base-content/50 ml-auto">{timeAgoFromSeconds(task.updated_at)}</span>
   </div>
 
-  <div class="{isSelected ? 'text-lg font-semibold' : 'text-sm font-medium'} leading-snug text-base-content">
-    {title}
+  <div class="flex items-start gap-1.5">
+    {#if titleRename.editing}
+      <input
+        class="input input-xs input-bordered flex-1 min-w-0 {isSelected ? 'text-lg font-semibold' : 'text-sm font-medium'}"
+        aria-label="Task title"
+        value={titleRename.draft}
+        oninput={(e) => titleRename.draft = e.currentTarget.value}
+        onkeydown={(e) => { e.stopPropagation(); titleRename.handleKeydown(e) }}
+        onblur={() => titleRename.finish(true)}
+        onclick={(e) => e.stopPropagation()}
+        use:focusAndSelect
+      />
+    {:else}
+      <div class="flex-1 min-w-0 {isSelected ? 'text-lg font-semibold' : 'text-sm font-medium'} leading-snug text-base-content">
+        {title}
+      </div>
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs btn-square shrink-0 text-base-content/40 hover:text-base-content"
+        aria-label="Rename task"
+        onclick={(e) => { e.stopPropagation(); titleRename.start() }}
+      >✎</button>
+    {/if}
   </div>
 
   {#if presentation.reasonText}

@@ -54,6 +54,7 @@ const mockTask = {
   initial_prompt: 'Existing Task',
   status: 'doing',
   prompt: null,
+  title: null,
   summary: null,
   agent: null,
   permission_mode: null,

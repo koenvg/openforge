@@ -7,6 +7,7 @@ describe('getTaskPromptText', () => {
     id: 'T-123',
     status: 'backlog' as const,
     agent: null,
+    title: null,
     summary: null,
     permission_mode: null,
     depends_on: [],

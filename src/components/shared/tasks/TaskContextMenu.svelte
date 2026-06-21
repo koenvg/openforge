@@ -13,18 +13,25 @@
     taskId: string
     onClose: () => void
     onStart?: (taskId: string) => void
+    onEdit?: (taskId: string) => void
     onDelete?: (taskId: string) => void
     actions?: Action[]
     onRunAction?: (data: { taskId: string; actionPrompt: string; agent: string | null }) => void
   }
 
-  let { visible, x, y, taskId, onClose, onStart, onDelete, actions = [], onRunAction }: Props = $props()
+  let { visible, x, y, taskId, onClose, onStart, onEdit, onDelete, actions = [], onRunAction }: Props = $props()
 
   let taskStatus = $derived<BoardStatus | ''>($tasks.find(t => t.id === taskId)?.status ?? '')
 
   function handleStart() {
     onClose()
     onStart?.(taskId)
+  }
+
+  function handleEdit() {
+    const id = taskId
+    onClose()
+    onEdit?.(id)
   }
 
   function handleRunAction(action: Action) {
@@ -61,6 +68,9 @@
     {#each actions as action (action.id)}
       <ContextMenuItem label={action.name} description={action.prompt} onclick={() => handleRunAction(action)} />
     {/each}
+  {/if}
+  {#if taskStatus === 'backlog' && onEdit}
+    <ContextMenuItem label="Edit Task" onclick={handleEdit} />
   {/if}
   {#if taskStatus === 'doing'}
     <ContextMenuItem label="Move to Done" onclick={handleMoveToDone} />

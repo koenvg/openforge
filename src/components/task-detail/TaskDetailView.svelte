@@ -3,6 +3,8 @@
   import { get } from 'svelte/store'
   import { activeProjectId, activeSessions, commandHeld, error, startingTasks, taskActiveView, taskRuntimeInfo } from '../../lib/stores'
   import { getTaskWorkspace, updateTaskStatus } from '../../lib/ipc'
+  import { getTaskTitle } from '../../lib/taskTitle'
+  import { createTaskTitleRename } from '../../lib/useTaskTitleRename.svelte'
   import { useAppRouter } from '../../lib/router.svelte'
   import { moveTaskToComplete } from '../../lib/moveToComplete'
   import { isInputFocused } from '../../lib/domUtils'
@@ -24,9 +26,18 @@
   interface Props {
     task: Task
     onRunAction: (data: { taskId: string; actionPrompt: string; agent: string | null }) => void
+    onEdit?: (taskId: string) => void
+    onTaskUpdated?: () => void | Promise<void>
   }
 
-  let { task, onRunAction }: Props = $props()
+  let { task, onRunAction, onEdit, onTaskUpdated }: Props = $props()
+
+  const titleRename = createTaskTitleRename(() => task, () => onTaskUpdated?.())
+
+  function focusAndSelect(node: HTMLInputElement) {
+    node.focus()
+    node.select()
+  }
   const router = useAppRouter()
 
   let activeView = $state('agent')
@@ -36,7 +47,7 @@
   let actions = $state<Action[]>([])
   const taskShortcuts = useShortcutRegistry()
 
-  let displayTitle = $derived(task.initial_prompt || (task.prompt ? task.prompt.split('\n')[0] : '') || task.id)
+  let displayTitle = $derived(getTaskTitle(task))
   let enabledPluginContributionSources = $derived(
     Array.from($enabledPluginIds)
       .map((id) => $runtimeContributionSources.get(id))
@@ -226,7 +237,26 @@
         </button>
         <span class="text-base-content/20 select-none">|</span>
         <span class="text-[0.8125rem] font-semibold text-primary font-mono shrink-0">{task.id}</span>
-        <h1 class="text-lg font-semibold text-base-content m-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap min-w-0" title={displayTitle}>{displayTitle}</h1>
+        {#if titleRename.editing}
+          <input
+            class="input input-sm input-bordered text-lg font-semibold flex-1 min-w-0"
+            aria-label="Task title"
+            value={titleRename.draft}
+            oninput={(e) => titleRename.draft = e.currentTarget.value}
+            onkeydown={titleRename.handleKeydown}
+            onblur={() => titleRename.finish(true)}
+            use:focusAndSelect
+          />
+        {:else}
+          <div class="flex items-center gap-1 min-w-0 flex-1">
+            <h1 class="text-lg font-semibold text-base-content m-0 overflow-hidden text-ellipsis whitespace-nowrap min-w-0" title={displayTitle}>{displayTitle}</h1>
+            <button
+              class="btn btn-ghost btn-xs btn-square shrink-0 text-base-content/50 hover:text-base-content"
+              aria-label="Rename task"
+              onclick={() => titleRename.start()}
+            >✎</button>
+          </div>
+        {/if}
         {#if task.status === 'backlog'}
           <button
             class="btn btn-primary btn-sm shrink-0 shadow-sm hover:shadow-md transition-shadow"
@@ -312,7 +342,7 @@
               data-scroll-owner="task-info-panel"
               class="h-full min-h-0 overflow-y-auto bg-base-200 border-l border-base-300"
             >
-              <TaskInfoPanel task={task} {workspacePath} />
+              <TaskInfoPanel task={task} {workspacePath} onEditPrompt={onEdit ? () => onEdit?.(task.id) : undefined} />
             </div>
           </ResizablePanel>
         {/if}

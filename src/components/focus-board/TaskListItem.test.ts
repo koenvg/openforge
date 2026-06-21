@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
+import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
 import TaskListItem from './TaskListItem.svelte'
 import type { Task, PullRequestInfo } from '../../lib/types'
@@ -6,6 +6,7 @@ import type { TaskState } from '../../lib/taskState'
 
 vi.mock('../../lib/ipc', () => ({
   openUrl: vi.fn(),
+  updateTaskTitle: vi.fn().mockResolvedValue(undefined),
 }))
 
 const baseTask: Task = {
@@ -13,6 +14,7 @@ const baseTask: Task = {
   initial_prompt: 'Fix login bug',
   status: 'doing',
   prompt: null,
+  title: null,
   summary: null,
   agent: null,
   permission_mode: null,
@@ -69,6 +71,47 @@ describe('TaskListItem', () => {
     expect(screen.getByText('Fix login bug')).toBeTruthy()
   })
 
+  it('shows a Rename task button', () => {
+    render(TaskListItem, { props: baseProps })
+    expect(screen.getByRole('button', { name: 'Rename task' })).toBeTruthy()
+  })
+
+  it('clicking Rename reveals a title input pre-filled with the title without selecting the card', async () => {
+    const onSelect = vi.fn()
+    render(TaskListItem, { props: { ...baseProps, onSelect } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Rename task' }))
+    const input = screen.getByRole('textbox', { name: 'Task title' }) as HTMLInputElement
+    expect(input.value).toBe('Fix login bug')
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('saves the renamed title on Enter and refreshes', async () => {
+    const { updateTaskTitle } = await import('../../lib/ipc')
+    vi.mocked(updateTaskTitle).mockClear()
+    const onTaskUpdated = vi.fn()
+    render(TaskListItem, { props: { ...baseProps, onTaskUpdated } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Rename task' }))
+    const input = screen.getByRole('textbox', { name: 'Task title' })
+    await fireEvent.input(input, { target: { value: 'Renamed from board' } })
+    await fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => {
+      expect(updateTaskTitle).toHaveBeenCalledWith('T-100', 'Renamed from board')
+    })
+    expect(onTaskUpdated).toHaveBeenCalled()
+  })
+
+  it('Escape cancels renaming on the card without saving', async () => {
+    const { updateTaskTitle } = await import('../../lib/ipc')
+    vi.mocked(updateTaskTitle).mockClear()
+    render(TaskListItem, { props: baseProps })
+    await fireEvent.click(screen.getByRole('button', { name: 'Rename task' }))
+    const input = screen.getByRole('textbox', { name: 'Task title' })
+    await fireEvent.input(input, { target: { value: 'Discard' } })
+    await fireEvent.keyDown(input, { key: 'Escape' })
+    expect(updateTaskTitle).not.toHaveBeenCalled()
+    expect(screen.queryByRole('textbox', { name: 'Task title' })).toBeNull()
+  })
+
   it('renders only first line of initial_prompt as title', () => {
     const task = { ...baseTask, initial_prompt: 'First line\nSecond line' }
     render(TaskListItem, { props: { ...baseProps, task } })
@@ -100,7 +143,7 @@ describe('TaskListItem', () => {
 
   it('keeps the full reasonText available when selected', () => {
     render(TaskListItem, { props: { ...baseProps, isSelected: true, reasonText: 'A very long reason text that should be ellipsized' } })
-    const item = screen.getByRole('button')
+    const item = document.querySelector('[data-vim-item]') as HTMLElement
     expect(item.getAttribute('data-selected')).toBe('true')
     expect(screen.getByText('A very long reason text that should be ellipsized')).toBeTruthy()
   })
@@ -108,7 +151,7 @@ describe('TaskListItem', () => {
   it('calls onSelect when clicked', async () => {
     const onSelect = vi.fn()
     render(TaskListItem, { props: { ...baseProps, onSelect } })
-    const item = screen.getByRole('button')
+    const item = document.querySelector('[data-vim-item]') as HTMLElement
     await fireEvent.click(item)
     expect(onSelect).toHaveBeenCalled()
   })
@@ -116,7 +159,7 @@ describe('TaskListItem', () => {
   it('calls onSelect from keyboard activation', async () => {
     const onSelect = vi.fn()
     render(TaskListItem, { props: { ...baseProps, onSelect } })
-    const item = screen.getByRole('button')
+    const item = document.querySelector('[data-vim-item]') as HTMLElement
     await fireEvent.keyDown(item, { key: 'Enter' })
     await fireEvent.keyDown(item, { key: ' ' })
     expect(onSelect).toHaveBeenCalledTimes(2)
@@ -125,32 +168,32 @@ describe('TaskListItem', () => {
   it('calls onContextMenu on right-click', async () => {
     const onContextMenu = vi.fn()
     render(TaskListItem, { props: { ...baseProps, onContextMenu } })
-    const item = screen.getByRole('button')
+    const item = document.querySelector('[data-vim-item]') as HTMLElement
     await fireEvent.contextMenu(item)
     expect(onContextMenu).toHaveBeenCalled()
   })
 
   it('sets data-selected attribute to "true" when isSelected is true', () => {
     render(TaskListItem, { props: { ...baseProps, isSelected: true } })
-    const item = screen.getByRole('button')
+    const item = document.querySelector('[data-vim-item]') as HTMLElement
     expect(item.getAttribute('data-selected')).toBe('true')
   })
 
   it('does not set data-selected when isSelected is false', () => {
     render(TaskListItem, { props: { ...baseProps, isSelected: false } })
-    const item = screen.getByRole('button')
+    const item = document.querySelector('[data-vim-item]') as HTMLElement
     expect(item.getAttribute('data-selected')).toBeNull()
   })
 
   it('sets data-focused when isFocused is true', () => {
     render(TaskListItem, { props: { ...baseProps, isFocused: true } })
-    const item = screen.getByRole('button')
+    const item = document.querySelector('[data-vim-item]') as HTMLElement
     expect(item.getAttribute('data-focused')).toBe('true')
   })
 
   it('does not set data-focused when isFocused is false', () => {
     render(TaskListItem, { props: { ...baseProps, isFocused: false } })
-    const item = screen.getByRole('button')
+    const item = document.querySelector('[data-vim-item]') as HTMLElement
     expect(item.getAttribute('data-focused')).toBeNull()
   })
 

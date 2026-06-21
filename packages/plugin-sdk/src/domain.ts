@@ -8,6 +8,8 @@ export interface Task {
   initial_prompt: string;
   status: BoardStatus;
   prompt: string | null;
+  /** Explicit display title; null means fall back to the prompt-derived title. */
+  title: string | null;
   summary: string | null;
   agent: string | null;
   permission_mode: string | null;

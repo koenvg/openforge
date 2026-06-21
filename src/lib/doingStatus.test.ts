@@ -7,6 +7,7 @@ const makeTask = (id: string, status: BoardStatus): Task => ({
   initial_prompt: `Task ${id}`,
   status,
   prompt: null,
+  title: null,
   summary: null,
   agent: null,
   permission_mode: null,

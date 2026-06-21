@@ -7,6 +7,7 @@ describe('getTaskTitle', () => {
     id: 'T-123',
     status: 'backlog' as const,
     agent: null,
+    title: null,
     summary: null,
     permission_mode: null,
     depends_on: [],
@@ -48,5 +49,25 @@ describe('getTaskTitle', () => {
   it('works with carriage returns', () => {
     const task: Task = { ...baseTask, initial_prompt: '\r\n\r\nHello\r\nWorld', prompt: null }
     expect(getTaskTitle(task)).toBe('Hello')
+  })
+
+  it('prefers an explicit title over the prompt-derived title', () => {
+    const task: Task = { ...baseTask, initial_prompt: 'Long prompt text', prompt: 'Other', title: 'My Title' }
+    expect(getTaskTitle(task)).toBe('My Title')
+  })
+
+  it('trims an explicit title', () => {
+    const task: Task = { ...baseTask, initial_prompt: 'Prompt', prompt: null, title: '  Padded Title  ' }
+    expect(getTaskTitle(task)).toBe('Padded Title')
+  })
+
+  it('falls back to the prompt-derived title when title is null', () => {
+    const task: Task = { ...baseTask, initial_prompt: 'Derived from prompt', prompt: null, title: null }
+    expect(getTaskTitle(task)).toBe('Derived from prompt')
+  })
+
+  it('ignores a whitespace-only title and falls back to the prompt-derived title', () => {
+    const task: Task = { ...baseTask, initial_prompt: 'Derived', prompt: null, title: '   ' }
+    expect(getTaskTitle(task)).toBe('Derived')
   })
 })

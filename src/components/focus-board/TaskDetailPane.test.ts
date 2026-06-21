@@ -44,6 +44,7 @@ const baseTask: Task = {
   summary: 'Applied reactive fix.',
   status: 'doing',
   prompt: null,
+  title: null,
   agent: null,
   permission_mode: null,
   depends_on: [],
@@ -130,6 +131,29 @@ describe('TaskDetailPane', () => {
     expect(screen.getByText('Labels')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Remove label bug' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Merge' })).toBeTruthy()
+  })
+
+  it('shows an Edit prompt pencil for backlog tasks when onEditTask is provided', async () => {
+    const onEditTask = vi.fn()
+    render(TaskDetailPane, {
+      props: {
+        task: { ...baseTask, status: 'backlog' },
+        allTasks: [],
+        pullRequests: [],
+        onEditTask,
+      },
+    })
+
+    const pencil = await screen.findByRole('button', { name: 'Edit prompt' })
+    await fireEvent.click(pencil)
+    expect(onEditTask).toHaveBeenCalledWith('T-748')
+  })
+
+  it('does not show an Edit prompt pencil for non-backlog tasks', () => {
+    render(TaskDetailPane, {
+      props: { task: baseTask, allTasks: [], pullRequests: [], onEditTask: vi.fn() },
+    })
+    expect(screen.queryByRole('button', { name: 'Edit prompt' })).toBeNull()
   })
 
   it('exposes a full-view action for the selected focus-board task', async () => {

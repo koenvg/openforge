@@ -46,6 +46,7 @@ const task: Task = {
   id: 'T-42',
   initial_prompt: 'Prompt',
   prompt: null,
+  title: null,
   summary: null,
   status: 'doing',
   agent: null,

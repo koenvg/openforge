@@ -251,6 +251,14 @@
     router.navigateToTask(taskId)
   }
 
+  function openEditTask(taskId: string) {
+    const task = $tasks.find((t) => t.id === taskId)
+    // Only never-started (backlog) tasks may have their prompt edited.
+    if (!task || task.status !== 'backlog') return
+    editingTask = task
+    showAddDialog = true
+  }
+
   function handleKeydown(e: KeyboardEvent) {
     if (shortcuts) {
       shortcuts.handleKeydown(e)
@@ -389,7 +397,7 @@
         {:else if pluginViewActive}
           <PluginSlot slotType="views" slotId={$currentView} />
         {:else if selectedTask}
-          <TaskDetailView task={selectedTask} onRunAction={handleRunAction} />
+          <TaskDetailView task={selectedTask} onRunAction={handleRunAction} onEdit={openEditTask} onTaskUpdated={async () => { await appData.loadTasks() }} />
         {:else}
           <div class="flex-1 overflow-hidden">
             {#if $isLoading && $tasks.length === 0}
@@ -405,6 +413,8 @@
                 activeSessions={$activeSessions}
                 ticketPrs={$ticketPrs}
                 onOpenTask={handleOpenTask}
+                onEditTask={openEditTask}
+                onTaskUpdated={async () => { await appData.loadTasks() }}
                 onRunAction={handleRunAction}
               />
             {/if}

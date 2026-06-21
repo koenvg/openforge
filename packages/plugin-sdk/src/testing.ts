@@ -324,6 +324,7 @@ export class TestingOpenForgeRegistryFake {
             initial_prompt: request.initialPrompt,
             status: 'backlog',
             prompt: null,
+            title: null,
             summary: null,
             agent: null,
             permission_mode: null,

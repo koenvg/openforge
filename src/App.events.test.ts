@@ -111,6 +111,7 @@ describe('App desktop events', () => {
         id: 'T-99',
         initial_prompt: '',
         prompt: 'Prompt from task detail',
+        title: null,
         summary: null,
         status: 'backlog',
         agent: null,

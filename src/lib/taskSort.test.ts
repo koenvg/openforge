@@ -7,6 +7,7 @@ function makeTask(overrides: Partial<Task> & { id: string }): Task {
     initial_prompt: overrides.id,
     status: 'doing',
     prompt: null,
+    title: null,
     summary: null,
     agent: null,
     permission_mode: null,

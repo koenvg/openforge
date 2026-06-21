@@ -19,9 +19,10 @@
     taskPrsOverride?: PullRequestInfo[]
     allowCommentAddressing?: boolean
     surface?: 'default' | 'transparent'
+    onEditPrompt?: () => void
   }
 
-  let { task, workspacePath, allTasksOverride, taskPrsOverride, allowCommentAddressing = false, surface = 'default' }: Props = $props()
+  let { task, workspacePath, allTasksOverride, taskPrsOverride, allowCommentAddressing = false, surface = 'default', onEditPrompt }: Props = $props()
 
   let labels = $state<TaskLabel[]>([])
   let previousTaskId: string | null = null
@@ -170,7 +171,7 @@
 
   <TaskPullRequestStatus taskId={task.id} {taskPrs} onPullRequestLinked={refreshLinkedPullRequests} {allowCommentAddressing} />
 
-  <TaskPromptSummary {task} />
+  <TaskPromptSummary {task} {onEditPrompt} />
 
   <section data-task-info-card="details" data-card-sizing="natural" class="rounded-lg border border-base-300/70 bg-base-100 overflow-hidden shrink-0" aria-label="Details">
     <h3 class="m-0 px-3 py-2 text-sm font-semibold text-base-content border-b border-base-300/70">Details</h3>
