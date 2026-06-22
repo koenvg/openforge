@@ -697,7 +697,7 @@
                       <div class="review-inline-comment-form p-3 mx-4 my-2 bg-base-100 border border-base-300 rounded-md">
                         <textarea
                           class="textarea textarea-bordered w-full min-h-[60px] text-[0.8rem] leading-relaxed resize-y"
-                          placeholder="Leave a comment… (⇧Enter to submit)"
+                          placeholder="Leave a comment… (Cmd/Ctrl+Enter to submit)"
                           rows="3"
                           value={getInlineCommentText(file.filename, lineNumber, side)}
                           use:autofocus
@@ -706,7 +706,7 @@
                             setInlineCommentText(file.filename, lineNumber, side, e.currentTarget.value)
                           }}
                           onkeydown={(e: KeyboardEvent) => {
-                            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey || e.shiftKey)) {
+                            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                               e.preventDefault()
                               submitInlineComment(file.filename, lineNumber, side, onClose)
                             }
