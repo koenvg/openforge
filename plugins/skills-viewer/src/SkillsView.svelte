@@ -14,7 +14,7 @@
   import { useVimNavigation } from './lib/useVimNavigation.svelte'
   import ProjectPageHeader from './ProjectPageHeader.svelte'
   import MarkdownContent from '@openforge/plugin-sdk/ui/MarkdownContent.svelte'
-  import { getSkillIdentity, getSkillSourcePath, groupSkillsBySource, isSameSkillIdentity, type SkillInfo } from './lib/skillDomain'
+  import { getPreferredSkillIdentity, getSkillIdentity, getSkillSourcePath, groupSkillsBySource, isSameSkillIdentity, type SkillInfo } from './lib/skillDomain'
 
   $effect(() => {
     $activeProjectId = projectId
@@ -48,10 +48,11 @@
   // Collapsible state: track collapsed sections by key like "project" / "user" / "project:.agents"
   let collapsed = $state(new Map<string, boolean>())
 
-  // Auto-select first filtered skill when current selection is filtered out
+  // Auto-select a repository skill when the current selection is filtered out
   $effect(() => {
-    if ($selectedSkillIdentity && filteredSkills.length > 0 && !filteredSkills.find(s => isSameSkillIdentity(s, $selectedSkillIdentity))) {
-      $selectedSkillIdentity = getSkillIdentity(filteredSkills[0])
+    const preferredIdentity = getPreferredSkillIdentity(filteredSkills, $selectedSkillIdentity)
+    if (preferredIdentity && !filteredSkills.find(s => isSameSkillIdentity(s, $selectedSkillIdentity))) {
+      $selectedSkillIdentity = preferredIdentity
     }
   })
 
@@ -63,10 +64,8 @@
       await api.backend.whenReady()
       const result = await api.backend.invoke<SkillInfo[]>('listSkills', { projectId: $activeProjectId })
       $skills = result
-      // Auto-select first skill if none selected
-      if (!$selectedSkillIdentity && result.length > 0) {
-        $selectedSkillIdentity = getSkillIdentity(result[0])
-      }
+      // Auto-select a repository skill by default while preserving an existing valid selection
+      $selectedSkillIdentity = getPreferredSkillIdentity(result, $selectedSkillIdentity)
     } catch (e) {
       console.error('Failed to load skills:', e)
       error = 'Failed to load skills. Check the skills-viewer backend and project access.'
