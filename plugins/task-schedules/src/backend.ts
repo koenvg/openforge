@@ -194,16 +194,16 @@ async function getOpenPreviousTask(openforge: BackendOpenForgeAPI, schedule: Tas
 }
 
 function normalizeScheduleDraft(draft: TaskScheduleDraft, existing: TaskSchedule | null, now: number): TaskSchedule {
-  const title = draft.title.trim()
-  const prompt = draft.prompt.trim()
-  if (!title) throw new Error('Task Schedule title is required')
-  if (!prompt) throw new Error('Task Schedule prompt is required')
+  const title = requireTrimmedString(draft.title, 'Task Schedule title is required')
+  const prompt = requireTrimmedString(draft.prompt, 'Task Schedule prompt is required')
 
   const preset = draft.preset
   if (!isSchedulePreset(preset)) {
     throw new Error('Task Schedule preset must be daily, weekly, monthly, or custom')
   }
-  const cron = preset === 'custom' ? (draft.cron ?? '').trim() : cronForPreset(preset, draft.timeOfDay ?? '09:00', draft.dayOfWeek ?? 1)
+  const cron = preset === 'custom'
+    ? requireTrimmedString(draft.cron, 'Custom Task Schedule cron is required')
+    : cronForPreset(preset, draft.timeOfDay ?? '09:00', draft.dayOfWeek ?? 1)
   const validation = validateFiveFieldCron(cron)
   if (!validation.valid) {
     throw new Error(validation.error ?? 'Invalid custom Schedule Preset')
@@ -233,6 +233,13 @@ function normalizeScheduleDraft(draft: TaskScheduleDraft, existing: TaskSchedule
 
 function isSchedulePreset(value: unknown): value is TaskSchedule['preset'] {
   return value === 'daily' || value === 'weekly' || value === 'monthly' || value === 'custom'
+}
+
+function requireTrimmedString(value: unknown, message: string): string {
+  if (typeof value !== 'string') throw new Error(message)
+  const trimmed = value.trim()
+  if (!trimmed) throw new Error(message)
+  return trimmed
 }
 
 function normalizeNonEmptyString(value: unknown): string | null {
