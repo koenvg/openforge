@@ -135,18 +135,40 @@ describe('ReviewSubmitPanel', () => {
     })
   })
 
-  it('submits as comment with keyboard shortcut', async () => {
+  it('submits as comment with Cmd+Enter or Ctrl+Enter keyboard shortcut', async () => {
+    for (const shortcut of [{ metaKey: true }, { ctrlKey: true }]) {
+      const { container, onSubmitReview, unmount } = renderPanel()
+
+      const textarea = requireTextarea(container)
+      await fireEvent.input(textarea, { target: { value: 'Quick comment' } })
+      await fireEvent.keyDown(textarea, { key: 'Enter', ...shortcut })
+
+      await waitFor(() => {
+        expect(onSubmitReview).toHaveBeenCalledWith(expect.objectContaining({
+          event: 'COMMENT',
+          body: 'Quick comment',
+        }))
+      })
+
+      unmount()
+    }
+  })
+
+  it('does not submit or prevent default on Shift+Enter', async () => {
     const { container, onSubmitReview } = renderPanel()
 
     const textarea = requireTextarea(container)
-    await fireEvent.input(textarea, { target: { value: 'Quick comment' } })
-    await fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true })
+    await fireEvent.input(textarea, { target: { value: 'Draft with newline' } })
 
-    await waitFor(() => {
-      expect(onSubmitReview).toHaveBeenCalledWith(expect.objectContaining({
-        event: 'COMMENT',
-        body: 'Quick comment',
-      }))
+    const event = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
     })
+    textarea.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(false)
+    expect(onSubmitReview).not.toHaveBeenCalled()
   })
 })

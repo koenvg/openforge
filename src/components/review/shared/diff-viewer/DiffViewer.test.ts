@@ -492,7 +492,7 @@ describe('DiffViewer inline textarea drafts', () => {
       },
     })
 
-    const textarea = await screen.findByPlaceholderText('Leave a comment… (⇧Enter to submit)')
+    const textarea = await screen.findByPlaceholderText('Leave a comment… (Cmd/Ctrl+Enter to submit)')
     await fireEvent.input(textarea, { target: { value: 'draft before add comment' } })
 
     expect(getSelfReviewInlineCommentDraft('task-1', 'src/test.ts', 2, 'RIGHT')).toBe('draft before add comment')
@@ -521,7 +521,7 @@ describe('DiffViewer inline textarea drafts', () => {
       },
     })
 
-    const textarea = await screen.findByPlaceholderText('Leave a comment… (⇧Enter to submit)')
+    const textarea = await screen.findByPlaceholderText('Leave a comment… (Cmd/Ctrl+Enter to submit)')
     await fireEvent.input(textarea, { target: { value: 'task one draft' } })
     firstRender.unmount()
 
@@ -533,7 +533,7 @@ describe('DiffViewer inline textarea drafts', () => {
       },
     })
 
-    const taskTwoTextarea = await screen.findByPlaceholderText('Leave a comment… (⇧Enter to submit)')
+    const taskTwoTextarea = await screen.findByPlaceholderText('Leave a comment… (Cmd/Ctrl+Enter to submit)')
     expect(taskTwoTextarea).toBeInstanceOf(HTMLTextAreaElement)
     expect((taskTwoTextarea as HTMLTextAreaElement).value).toBe('')
   })
@@ -550,7 +550,7 @@ describe('DiffViewer inline textarea drafts', () => {
       },
     })
 
-    const textarea = await screen.findByPlaceholderText('Leave a comment… (⇧Enter to submit)')
+    const textarea = await screen.findByPlaceholderText('Leave a comment… (Cmd/Ctrl+Enter to submit)')
     await fireEvent.input(textarea, { target: { value: 'pending comment body' } })
     await fireEvent.click(screen.getByRole('button', { name: 'Add Comment' }))
 

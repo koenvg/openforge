@@ -92,7 +92,7 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey || e.shiftKey)) {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault()
       handleCommentClick()
     }
@@ -110,7 +110,7 @@
   <div class="flex flex-col gap-3 px-6 py-4">
     <textarea
       class="textarea textarea-bordered w-full min-h-[70px] text-[0.85rem] leading-relaxed resize-y disabled:opacity-60 disabled:cursor-not-allowed"
-      placeholder="Leave a summary comment… (⇧Enter to submit)"
+      placeholder="Leave a summary comment… (Cmd/Ctrl+Enter to submit)"
       rows="3"
       bind:value={summary}
       disabled={isSubmitting}
