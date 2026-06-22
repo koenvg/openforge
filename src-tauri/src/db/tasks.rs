@@ -610,7 +610,11 @@ impl super::Database {
             .expect("time went backwards")
             .as_secs() as i64;
         let trimmed = title.trim();
-        let stored_title: Option<&str> = if trimmed.is_empty() { None } else { Some(trimmed) };
+        let stored_title: Option<&str> = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        };
         conn.execute(
             "UPDATE tasks SET title = ?1, updated_at = ?2 WHERE id = ?3",
             rusqlite::params![stored_title, now, id],
@@ -993,7 +997,10 @@ mod tests {
         // Clearing the title (blank input) reverts to the derived title.
         db.update_task_title(&task.id, "   ")
             .expect("clear title failed");
-        assert_eq!(db.get_task(&task.id).expect("get failed").unwrap().title, None);
+        assert_eq!(
+            db.get_task(&task.id).expect("get failed").unwrap().title,
+            None
+        );
 
         drop(db);
         let _ = fs::remove_file(&path);
