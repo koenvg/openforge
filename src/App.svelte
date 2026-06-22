@@ -6,7 +6,7 @@
   import type { DesktopWindowTarget } from './lib/desktopWindow'
   import { tasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, isLoading, projects, activeProjectId, activeProjectColorId, currentView, reviewRequestCount, authoredPrCount, codeCleanupTasksEnabled, focusBoardFilters } from './lib/stores'
   import { getAppMode, getConfig, getProjectConfig, resumeStartupSessions } from './lib/ipc'
-  import type { Task, AppView } from './lib/types'
+  import type { Task, AppView, Project } from './lib/types'
   import FocusBoard from './components/focus-board/FocusBoard.svelte'
   import TaskDetailView from './components/task-detail/TaskDetailView.svelte'
   import AddTaskDialog from './components/AddTaskDialog.svelte'
@@ -238,9 +238,11 @@
     return color.lightAlt
   })
 
-  function handleProjectCreated() {
+  async function handleProjectCreated(project: Project) {
     showProjectSetup = false
-    appData.loadProjects()
+    $activeProjectId = project.id
+    router.resetToBoard()
+    await appData.loadProjects()
   }
 
   function handleNavigate(view: AppView) {

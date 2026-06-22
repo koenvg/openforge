@@ -11,6 +11,8 @@
     initialFocus?: ModalInitialFocus
     ariaLabel?: string
     showHeader?: boolean
+    closeLabel?: string
+    closeDisabled?: boolean
     onKeydown?: (event: KeyboardEvent) => boolean | void
     testId?: string
     modalClass?: string
@@ -19,7 +21,7 @@
     children: Snippet
   }
 
-  let { onClose, maxWidth = '500px', overflowVisible = false, initialFocus, ariaLabel, showHeader = true, onKeydown, testId, modalClass = '', boxClass = '', header, children }: Props = $props()
+  let { onClose, maxWidth = '500px', overflowVisible = false, initialFocus, ariaLabel, showHeader = true, closeLabel = 'Close dialog', closeDisabled = false, onKeydown, testId, modalClass = '', boxClass = '', header, children }: Props = $props()
 
   let modalElement: HTMLDivElement | null = $state(null)
   let hasAppliedInitialFocus = false
@@ -39,10 +41,16 @@
   }
 
   function focusInitialTarget() {
-    resolveInitialFocusTarget()?.focus()
+    const target = resolveInitialFocusTarget()
+    target?.focus()
 
     if (initialFocus !== undefined) {
-      void tick().then(() => resolveInitialFocusTarget()?.focus())
+      void tick().then(() => {
+        const active = document.activeElement
+        if (active === document.body || active === modalElement || (active && !modalElement?.contains(active))) {
+          resolveInitialFocusTarget()?.focus()
+        }
+      })
     }
   }
 
@@ -52,6 +60,43 @@
     hasAppliedInitialFocus = true
     void focusInitialTarget()
   })
+
+  function getFocusableElements(): HTMLElement[] {
+    if (!modalElement) return []
+
+    const selector = [
+      'a[href]',
+      'button:not([disabled])',
+      'textarea:not([disabled])',
+      'input:not([disabled])',
+      'select:not([disabled])',
+      '[tabindex]:not([tabindex="-1"])',
+    ].join(',')
+
+    return Array.from(modalElement.querySelectorAll<HTMLElement>(selector))
+      .filter((element) => !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true')
+  }
+
+  function keepFocusInsideModal(e: KeyboardEvent) {
+    const focusable = getFocusableElements()
+    if (focusable.length === 0) {
+      e.preventDefault()
+      modalElement?.focus()
+      return
+    }
+
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    const active = document.activeElement
+
+    if (e.shiftKey && (active === first || active === modalElement || !modalElement?.contains(active))) {
+      e.preventDefault()
+      last.focus()
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault()
+      first.focus()
+    }
+  }
 
   function handleKeydown(e: KeyboardEvent) {
     if (onKeydown?.(e)) {
@@ -64,12 +109,14 @@
     e.stopPropagation()
 
     if (e.key === 'Escape') {
-      onClose()
+      if (!closeDisabled) onClose()
+    } else if (e.key === 'Tab') {
+      keepFocusInsideModal(e)
     }
   }
 
   function handleOverlayClick(e: MouseEvent) {
-    if (e.target === e.currentTarget) {
+    if (!closeDisabled && e.target === e.currentTarget) {
       onClose()
     }
   }
@@ -82,7 +129,7 @@
         {#if header}
           {@render header()}
         {/if}
-        <button class="btn btn-ghost btn-xs shrink-0" onclick={onClose} type="button">✕</button>
+        <button class="btn btn-ghost btn-xs shrink-0" aria-label={closeLabel} onclick={onClose} type="button" disabled={closeDisabled}>✕</button>
       </div>
     {/if}
     {@render children()}
