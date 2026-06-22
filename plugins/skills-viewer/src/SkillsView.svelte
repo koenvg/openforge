@@ -16,10 +16,6 @@
   import MarkdownContent from '@openforge/plugin-sdk/ui/MarkdownContent.svelte'
   import { getPreferredSkillIdentity, getSkillIdentity, getSkillSourcePath, groupSkillsBySource, isSameSkillIdentity, type SkillInfo } from './lib/skillDomain'
 
-  $effect(() => {
-    $activeProjectId = projectId
-  })
-
   let isLoading = $state(false)
   let error = $state<string | null>(null)
   let searchFilter = $state('')
@@ -27,8 +23,13 @@
   let editContent = $state('')
   let isSaving = $state(false)
   let saveError = $state<string | null>(null)
+  let loadRequestId = 0
+  let saveRequestId = 0
+  let previousProjectId: string | null | undefined = undefined
+  let pendingUserSkillSaveKeys = $state(new Set<string>())
 
   let selectedSkill = $derived($skills.find(s => isSameSkillIdentity(s, $selectedSkillIdentity)) || null)
+  let selectedSkillSavePending = $derived(isSaving || hasPendingUserSkillSave(selectedSkill))
 
   let filteredSkills = $derived(
     searchFilter.trim()
@@ -48,29 +49,86 @@
   // Collapsible state: track collapsed sections by key like "project" / "user" / "project:.agents"
   let collapsed = $state(new Map<string, boolean>())
 
+  function getUserSkillSaveKey(skill: SkillInfo): string | null {
+    if (skill.level !== 'user') return null
+    return JSON.stringify([skill.name, skill.source_dir, skill.file_name])
+  }
+
+  function hasPendingUserSkillSave(skill: SkillInfo | null): boolean {
+    if (!skill) return false
+    const key = getUserSkillSaveKey(skill)
+    return key ? pendingUserSkillSaveKeys.has(key) : false
+  }
+
+  function lockUserSkillSave(key: string | null) {
+    if (!key) return
+    pendingUserSkillSaveKeys = new Set(pendingUserSkillSaveKeys).add(key)
+  }
+
+  function unlockUserSkillSave(key: string | null) {
+    if (!key) return
+    const next = new Set(pendingUserSkillSaveKeys)
+    next.delete(key)
+    pendingUserSkillSaveKeys = next
+  }
+
   // Auto-select a repository skill when the current selection is filtered out
   $effect(() => {
+    if (!$activeProjectId) {
+      if ($selectedSkillIdentity !== null) $selectedSkillIdentity = null
+      return
+    }
+
+    if (filteredSkills.length === 0) {
+      if ($skills.length === 0 && $selectedSkillIdentity !== null) $selectedSkillIdentity = null
+      return
+    }
+
     const preferredIdentity = getPreferredSkillIdentity(filteredSkills, $selectedSkillIdentity)
-    if (preferredIdentity && !filteredSkills.find(s => isSameSkillIdentity(s, $selectedSkillIdentity))) {
+    const selectionIsVisible = filteredSkills.find(s => isSameSkillIdentity(s, $selectedSkillIdentity))
+    if (preferredIdentity && !selectionIsVisible) {
       $selectedSkillIdentity = preferredIdentity
     }
   })
 
-  async function loadSkills() {
-    if (!$activeProjectId) return
+  function resetProjectState() {
+    $skills = []
+    $selectedSkillIdentity = null
+    error = null
+    saveError = null
+    editMode = false
+    editContent = ''
+    searchFilter = ''
+    isSaving = false
+    saveRequestId += 1
+  }
+
+  async function loadSkills(projectIdToLoad = $activeProjectId) {
+    if (!projectIdToLoad) {
+      loadRequestId += 1
+      isLoading = false
+      resetProjectState()
+      return
+    }
+
+    const requestId = ++loadRequestId
     isLoading = true
     error = null
     try {
       await api.backend.whenReady()
-      const result = await api.backend.invoke<SkillInfo[]>('listSkills', { projectId: $activeProjectId })
+      const result = await api.backend.invoke<SkillInfo[]>('listSkills', { projectId: projectIdToLoad })
+      if (requestId !== loadRequestId || projectIdToLoad !== $activeProjectId) return
       $skills = result
       // Auto-select a repository skill by default while preserving an existing valid selection
       $selectedSkillIdentity = getPreferredSkillIdentity(result, $selectedSkillIdentity)
     } catch (e) {
+      if (requestId !== loadRequestId || projectIdToLoad !== $activeProjectId) return
       console.error('Failed to load skills:', e)
       error = 'Failed to load skills. Check the skills-viewer backend and project access.'
     } finally {
-      isLoading = false
+      if (requestId === loadRequestId && projectIdToLoad === $activeProjectId) {
+        isLoading = false
+      }
     }
   }
 
@@ -95,30 +153,52 @@
 
   async function saveEdit() {
     if (!selectedSkill || !$activeProjectId) return
+
+    const projectIdToSave = $activeProjectId
+    const skillToSave = selectedSkill
+    const skillIdentity = getSkillIdentity(skillToSave)
+    const contentToSave = editContent
+    const userSkillSaveKey = getUserSkillSaveKey(skillToSave)
+    const requestId = ++saveRequestId
+
+    if (userSkillSaveKey && pendingUserSkillSaveKeys.has(userSkillSaveKey)) return
+
+    lockUserSkillSave(userSkillSaveKey)
     isSaving = true
     saveError = null
     try {
       await api.backend.whenReady()
       await api.backend.invoke('saveSkillContent', {
-        projectId: $activeProjectId,
-        name: selectedSkill.name,
-        level: selectedSkill.level,
-        sourceDir: selectedSkill.source_dir,
-        content: editContent,
-        fileName: selectedSkill.file_name,
+        projectId: projectIdToSave,
+        name: skillToSave.name,
+        level: skillToSave.level,
+        sourceDir: skillToSave.source_dir,
+        content: contentToSave,
+        fileName: skillToSave.file_name,
       })
+      const shouldReflectSave = userSkillSaveKey
+        ? isSameSkillIdentity(skillToSave, $selectedSkillIdentity)
+        : requestId === saveRequestId && projectIdToSave === $activeProjectId
+      if (!shouldReflectSave) return
       // Update the local skill data with new content
       $skills = $skills.map(s =>
-        isSameSkillIdentity(s, getSkillIdentity(selectedSkill!))
-          ? { ...s, template: editContent }
+        isSameSkillIdentity(s, skillIdentity)
+          ? { ...s, template: contentToSave }
           : s
       )
       editMode = false
     } catch (e) {
+      const shouldShowError = userSkillSaveKey
+        ? isSameSkillIdentity(skillToSave, $selectedSkillIdentity)
+        : requestId === saveRequestId && projectIdToSave === $activeProjectId && isSameSkillIdentity(skillToSave, $selectedSkillIdentity)
+      if (!shouldShowError) return
       console.error('Failed to save skill:', e)
       saveError = String(e)
     } finally {
-      isSaving = false
+      unlockUserSkillSave(userSkillSaveKey)
+      if (requestId === saveRequestId) {
+        isSaving = false
+      }
     }
   }
 
@@ -146,9 +226,18 @@
 
   // Reload skills when active project changes (also handles initial load)
   $effect(() => {
-    const _pid = $activeProjectId
-    if (_pid) {
-      loadSkills()
+    const currentProjectId = projectId
+    if (currentProjectId === previousProjectId) return
+
+    previousProjectId = currentProjectId
+    $activeProjectId = currentProjectId
+    loadRequestId += 1
+    resetProjectState()
+
+    if (currentProjectId) {
+      void loadSkills(currentProjectId)
+    } else {
+      isLoading = false
     }
   })
 </script>
@@ -158,13 +247,13 @@
 <div class="flex flex-col h-full overflow-hidden">
   <!-- Header -->
   <ProjectPageHeader
-    title={`${projectName} — Skills`}
-    subtitle="View and edit project and personal skills"
+    title={projectName ? `${projectName} — Skills` : 'Skills'}
+    subtitle={$activeProjectId ? 'View and edit project and personal skills' : 'Select a project to view skills'}
   >
     {#snippet actions()}
       <div class="flex items-center gap-2">
         <span class="badge badge-primary badge-sm">{$skills.length} {$skills.length === 1 ? 'skill' : 'skills'}</span>
-        <button class="btn btn-sm border border-base-300" onclick={loadSkills} disabled={isLoading}>
+        <button class="btn btn-sm border border-base-300" onclick={() => loadSkills()} disabled={isLoading || !$activeProjectId}>
           {isLoading ? '⟳' : '↻'} Refresh
         </button>
       </div>
@@ -187,15 +276,22 @@
 
       <!-- Skill list -->
       <div class="flex-1 overflow-y-auto">
-        {#if isLoading && $skills.length === 0}
-          <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm">
+        {#if !$activeProjectId}
+          <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm text-center p-5">
+            <span class="text-3xl">📁</span>
+            <span class="font-medium text-base-content/70">Select a project</span>
+            <span>Choose a project to view and edit its skills.</span>
+          </div>
+        {:else if isLoading && $skills.length === 0}
+          <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm" role="status" aria-live="polite">
             <span class="loading loading-spinner loading-md text-primary"></span>
             <span>Loading skills...</span>
           </div>
         {:else if error}
-          <div class="flex flex-col items-center justify-center h-full gap-3 text-error text-sm text-center p-5">
+          <div class="flex flex-col items-center justify-center h-full gap-3 text-error text-sm text-center p-5" role="alert">
             <span class="text-3xl">⚠</span>
             <span>{error}</span>
+            <button class="btn btn-sm btn-outline" onclick={() => loadSkills()} disabled={isLoading}>Retry loading skills</button>
           </div>
         {:else if $skills.length === 0}
           <div class="flex flex-col items-center justify-center h-full gap-4 text-base-content/50 text-center p-6">
@@ -294,7 +390,7 @@
 
     <!-- Right panel: Skill detail -->
     <div class="flex-1 flex flex-col overflow-hidden" style="background-color: var(--project-bg, oklch(var(--b1)))">
-      {#if selectedSkill}
+      {#if $activeProjectId && selectedSkill}
         <!-- Skill detail header -->
         <div class="flex items-center justify-between px-6 py-3 border-b border-base-300 shrink-0" style="background-color: var(--project-bg-alt, oklch(var(--b2)))">
           <div class="flex items-center gap-3 min-w-0">
@@ -307,25 +403,31 @@
               <button
                 class="btn btn-ghost btn-sm text-base-content/70"
                 onclick={cancelEdit}
-                disabled={isSaving}
+                disabled={selectedSkillSavePending}
               >Cancel</button>
               <button
                 class="btn btn-primary btn-sm"
                 onclick={saveEdit}
-                disabled={isSaving}
-              >{isSaving ? 'Saving...' : 'Save'}</button>
+                disabled={selectedSkillSavePending}
+              >{selectedSkillSavePending ? 'Saving...' : 'Save'}</button>
             {:else}
               <button
                 class="btn btn-ghost btn-sm text-base-content/70"
                 onclick={enterEditMode}
-              >Manually Edit</button>
+                disabled={selectedSkillSavePending}
+              >{selectedSkillSavePending ? 'Saving...' : 'Manually Edit'}</button>
             {/if}
           </div>
         </div>
 
         {#if saveError}
-          <div class="px-6 py-2 bg-error/10 border-b border-error/20 shrink-0">
-            <p class="text-xs text-error m-0">{saveError}</p>
+          <div class="px-6 py-2 bg-error/10 border-b border-error/20 shrink-0" role="alert">
+            <div class="flex items-center justify-between gap-3">
+              <p class="text-xs text-error m-0">{saveError}</p>
+              {#if editMode}
+                <button class="btn btn-xs btn-error btn-outline" onclick={saveEdit} disabled={selectedSkillSavePending}>Retry saving skill</button>
+              {/if}
+            </div>
           </div>
         {/if}
 
@@ -362,7 +464,11 @@
       {:else}
         <!-- No skill selected -->
         <div class="flex flex-col items-center justify-center h-full gap-4 text-base-content/50 text-center">
-          {#if $skills.length > 0}
+          {#if !$activeProjectId}
+            <span class="text-5xl">📁</span>
+            <h3 class="text-lg font-semibold text-base-content/70 m-0">Select a project</h3>
+            <p class="text-sm m-0">Choose a project to view and edit its skills.</p>
+          {:else if $skills.length > 0}
             <span class="text-5xl">👈</span>
             <h3 class="text-lg font-semibold text-base-content/70 m-0">Select a skill</h3>
             <p class="text-sm m-0">Choose a skill from the list to view its content.</p>
