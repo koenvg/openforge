@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getPreferredSkillIdentity, getSkillIdentity, getSkillLocationLabel, getSkillSourcePath, groupSkillsBySource, type SkillInfo } from './skillDomain'
+import { getPreferredSkillIdentity, getSkillIdentity, getSkillLocationLabel, getSkillSourcePath, groupSkillsBySource, stripSkillFrontmatter, type SkillInfo } from './skillDomain'
 
 function makeSkill(name: string, source_dir: string, level: SkillInfo['level'] = 'project'): SkillInfo {
   return { name, source_dir, level, description: null, agent: null, template: null, file_name: null }
@@ -72,5 +72,23 @@ describe('skills-viewer skill domain helpers', () => {
     const missingSelection = getSkillIdentity(makeSkill('missing-personal', '.pi', 'user'))
 
     expect(getPreferredSkillIdentity(filteredSkills, missingSelection)).toEqual(getSkillIdentity(filteredSkills[1]))
+  })
+
+  it('strips complete YAML frontmatter for rendered skill markdown', () => {
+    const content = '---\nname: review\ndescription: Review code\n---\n# Review\nUse [docs](https://example.com).\n'
+
+    expect(stripSkillFrontmatter(content)).toBe('# Review\nUse [docs](https://example.com).\n')
+  })
+
+  it('leaves non-frontmatter and malformed frontmatter-like content unchanged', () => {
+    const bodyOnly = '# Review\n---\nKeep separator in the body.\n'
+    const malformed = '---\nname: missing-close\n# Review\n'
+
+    expect(stripSkillFrontmatter(bodyOnly)).toBe(bodyOnly)
+    expect(stripSkillFrontmatter(malformed)).toBe(malformed)
+  })
+
+  it('strips frontmatter with CRLF line endings without changing the body', () => {
+    expect(stripSkillFrontmatter('---\r\nname: review\r\n---\r\n# Review\r\n')).toBe('# Review\r\n')
   })
 })

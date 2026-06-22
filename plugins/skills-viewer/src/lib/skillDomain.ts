@@ -53,6 +53,16 @@ export function groupSkillsBySource(skills: SkillInfo[]): SkillSourceGroup[] {
   return groups
 }
 
+export function stripSkillFrontmatter(content: string): string {
+  if (!content.startsWith('---\n') && !content.startsWith('---\r\n')) return content
+
+  const delimiterMatch = /\r?\n---(?:\r?\n|$)/.exec(content.slice(3))
+  if (!delimiterMatch) return content
+
+  const bodyStart = 3 + delimiterMatch.index + delimiterMatch[0].length
+  return content.slice(bodyStart)
+}
+
 export function getSkillIdentity(skill: SkillInfo): SkillIdentity {
   return {
     name: skill.name,

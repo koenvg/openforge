@@ -14,7 +14,7 @@
   import { useVimNavigation } from './lib/useVimNavigation.svelte'
   import ProjectPageHeader from './ProjectPageHeader.svelte'
   import MarkdownContent from '@openforge/plugin-sdk/ui/MarkdownContent.svelte'
-  import { getPreferredSkillIdentity, getSkillIdentity, getSkillLocationLabel, getSkillSourcePath, groupSkillsBySource, isSameSkillIdentity, type SkillInfo } from './lib/skillDomain'
+  import { getPreferredSkillIdentity, getSkillIdentity, getSkillLocationLabel, getSkillSourcePath, groupSkillsBySource, isSameSkillIdentity, stripSkillFrontmatter, type SkillInfo } from './lib/skillDomain'
 
   let isLoading = $state(false)
   let error = $state<string | null>(null)
@@ -30,6 +30,10 @@
 
   let selectedSkill = $derived($skills.find(s => isSameSkillIdentity(s, $selectedSkillIdentity)) || null)
   let selectedSkillSavePending = $derived(isSaving || hasPendingUserSkillSave(selectedSkill))
+  let selectedSkillSourcePath = $derived(selectedSkill ? getSkillSourcePath(selectedSkill.source_dir, selectedSkill.level) : '')
+  let selectedSkillFileLabel = $derived(selectedSkill?.file_name || 'SKILL.md')
+  let renderedSkillMarkdown = $derived(selectedSkill?.template ? stripSkillFrontmatter(selectedSkill.template) : '')
+  let skillMarkdownHeadingId = $derived(selectedSkill ? `skill-markdown-${selectedSkill.level}-${selectedSkill.source_dir.replace(/[^a-zA-Z0-9_-]/g, '-')}-${selectedSkill.name.replace(/[^a-zA-Z0-9_-]/g, '-')}` : 'skill-markdown-content')
 
   let filteredSkills = $derived(
     searchFilter.trim()
@@ -441,11 +445,25 @@
           </div>
         {/if}
 
-        <!-- Description -->
-        {#if selectedSkill.description && !editMode}
-          <div class="px-6 py-3 border-b border-base-300 shrink-0">
-            <p class="text-sm text-base-content/70 m-0">{selectedSkill.description}</p>
-          </div>
+        <!-- Metadata -->
+        {#if !editMode}
+          <section class="px-6 py-3 border-b border-base-300 shrink-0" aria-label="Skill metadata">
+            {#if selectedSkill.description}
+              <p class="text-sm text-base-content/75 leading-relaxed m-0 mb-3">{selectedSkill.description}</p>
+            {/if}
+            <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+              <dt class="font-medium text-base-content/50">Scope</dt>
+              <dd class="text-base-content/75 m-0">{selectedSkill.level === 'project' ? 'Repository' : 'Personal'}</dd>
+              <dt class="font-medium text-base-content/50">Source</dt>
+              <dd class="text-base-content/75 m-0 font-mono break-all">{selectedSkillSourcePath}</dd>
+              <dt class="font-medium text-base-content/50">File</dt>
+              <dd class="text-base-content/75 m-0 font-mono break-all">{selectedSkillFileLabel}</dd>
+              {#if selectedSkill.agent}
+                <dt class="font-medium text-base-content/50">Agent</dt>
+                <dd class="text-base-content/75 m-0 font-mono break-all">{selectedSkill.agent}</dd>
+              {/if}
+            </dl>
+          </section>
         {/if}
 
         {#if editMode}
@@ -460,9 +478,15 @@
           </div>
         {:else}
           <!-- Read mode: rendered markdown -->
-          <div class="flex-1 overflow-y-auto px-6 py-4">
+          <div class="flex-1 overflow-y-auto px-6 py-4" role="region" aria-labelledby={skillMarkdownHeadingId}>
             {#if selectedSkill.template}
-              <MarkdownContent content={selectedSkill.template} onOpenUrl={(url) => api.system.openUrl(url)} />
+              <article
+                class="max-w-3xl text-base-content leading-relaxed [&_.markdown-body]:text-sm [&_.markdown-body]:leading-relaxed [&_.markdown-body_a]:rounded-sm [&_.markdown-body_a]:focus-visible:outline-none [&_.markdown-body_a]:focus-visible:ring-2 [&_.markdown-body_a]:focus-visible:ring-primary [&_.markdown-body_a]:focus-visible:ring-offset-2 [&_.markdown-body_a]:focus-visible:ring-offset-base-100"
+                aria-labelledby={skillMarkdownHeadingId}
+              >
+                <h4 id={skillMarkdownHeadingId} class="sr-only">{selectedSkill.name} skill markdown</h4>
+                <MarkdownContent content={renderedSkillMarkdown} onOpenUrl={(url) => api.system.openUrl(url)} />
+              </article>
             {:else}
               <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-center">
                 <span class="text-3xl">📄</span>
