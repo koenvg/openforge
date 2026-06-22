@@ -64,9 +64,18 @@ const { taskTabSessions } = vi.hoisted(() => ({
 const { lastTaskTerminalProps } = vi.hoisted(() => ({
   lastTaskTerminalProps: {
     all: null as null | Record<string, unknown>,
-    onExit: null as null | (() => void),
   },
 }))
+
+const { shellLifecycleCallbacks, shellLifecycleStates } = vi.hoisted(() => ({
+  shellLifecycleCallbacks: new Map<string, (state: { ptyActive: boolean, shellExited: boolean, currentPtyInstance: number | null }) => void>(),
+  shellLifecycleStates: new Map<string, { ptyActive: boolean, shellExited: boolean, currentPtyInstance: number | null }>(),
+}))
+
+function emitShellLifecycle(terminalKey: string, state: { ptyActive: boolean, shellExited: boolean, currentPtyInstance: number | null }) {
+  shellLifecycleStates.set(terminalKey, state)
+  shellLifecycleCallbacks.get(terminalKey)?.(state)
+}
 
 vi.mock('../../lib/terminalPool', () => ({
   acquire: vi.fn().mockResolvedValue({
@@ -108,8 +117,13 @@ vi.mock('../../lib/terminalPool', () => ({
     entry.ptyActive = true
     entry.needsClear = false
   }),
-  subscribeShellLifecycle: vi.fn(() => () => {}),
-  getShellLifecycleState: vi.fn(() => ({
+  subscribeShellLifecycle: vi.fn((terminalKey: string, callback) => {
+    shellLifecycleCallbacks.set(terminalKey, callback)
+    return () => {
+      shellLifecycleCallbacks.delete(terminalKey)
+    }
+  }),
+  getShellLifecycleState: vi.fn((terminalKey: string) => shellLifecycleStates.get(terminalKey) ?? ({
     ptyActive: false,
     shellExited: false,
     currentPtyInstance: null,
@@ -138,7 +152,6 @@ vi.mock('../../lib/terminalPool', () => ({
 vi.mock('./TaskTerminal.svelte', () => ({
   default: vi.fn((_node, props) => {
     lastTaskTerminalProps.all = props
-    lastTaskTerminalProps.onExit = props.onExit
     return { update() {}, destroy() {} }
   }),
 }))
@@ -206,7 +219,7 @@ describe('TerminalTabs', () => {
     expect(screen.getByText('Shell 1')).toBeTruthy()
   })
 
-  it('closes the only tab automatically when onExit is called', async () => {
+  it('keeps the active tab visible and marks it exited when the shell exits', async () => {
     render(TerminalTabs, {
       props: {
         taskId: 'T-1',
@@ -220,18 +233,17 @@ describe('TerminalTabs', () => {
       expect(screen.getByText('Shell 1')).toBeTruthy()
     })
 
-    if (!lastTaskTerminalProps.onExit) {
-      throw new Error('Expected TaskTerminal to receive onExit callback')
-    }
-
-    lastTaskTerminalProps.onExit()
+    emitShellLifecycle('T-1-shell-0', { ptyActive: false, shellExited: true, currentPtyInstance: 1 })
 
     await vi.waitFor(() => {
-      expect(screen.queryByText('Shell 1')).toBeNull()
+      expect(screen.getByText('Shell 1')).toBeTruthy()
+      expect(screen.getByText('exited')).toBeTruthy()
     })
+    expect(killPtyMock).not.toHaveBeenCalled()
+    expect(releaseMock).not.toHaveBeenCalled()
   })
 
-  it('closes a later tab automatically when onExit is called', async () => {
+  it('keeps an inactive tab visible and marks it exited when its shell exits', async () => {
     render(TerminalTabs, {
       props: {
         taskId: 'T-1',
@@ -252,16 +264,48 @@ describe('TerminalTabs', () => {
       expect(screen.getByText('Shell 2')).toBeTruthy()
     })
 
-    if (!lastTaskTerminalProps.onExit) {
-      throw new Error('Expected TaskTerminal to receive onExit callback')
-    }
+    const shellOneButton = screen.getByRole('button', { name: 'Shell 1' })
+    await fireEvent.click(shellOneButton)
 
-    lastTaskTerminalProps.onExit()
+    emitShellLifecycle('T-1-shell-1', { ptyActive: false, shellExited: true, currentPtyInstance: 1 })
 
     await vi.waitFor(() => {
-      expect(screen.queryByText('Shell 2')).toBeNull()
+      expect(screen.getByText('Shell 1')).toBeTruthy()
+      expect(screen.getByText('Shell 2')).toBeTruthy()
+      expect(screen.getByText('exited')).toBeTruthy()
+    })
+    expect(killPtyMock).not.toHaveBeenCalled()
+    expect(releaseMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps the last tab visible after exit until the user explicitly closes it', async () => {
+    render(TerminalTabs, {
+      props: {
+        taskId: 'T-1',
+        workspacePath: '/path/to/worktree',
+        onTabChange: null,
+        onTabCountChange: null,
+      },
+    })
+
+    await vi.waitFor(() => {
       expect(screen.getByText('Shell 1')).toBeTruthy()
     })
+
+    emitShellLifecycle('T-1-shell-0', { ptyActive: false, shellExited: true, currentPtyInstance: 1 })
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Shell 1')).toBeTruthy()
+      expect(screen.getByText('exited')).toBeTruthy()
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: '×' }))
+
+    await vi.waitFor(() => {
+      expect(screen.queryByText('Shell 1')).toBeNull()
+    })
+    expect(killPtyMock).toHaveBeenCalledWith('T-1-shell-0')
+    expect(releaseMock).toHaveBeenCalledWith('T-1-shell-0')
   })
 
   beforeEach(() => {
@@ -269,8 +313,9 @@ describe('TerminalTabs', () => {
     killPtyMock.mockResolvedValue(undefined)
     releaseMock.mockReturnValue(undefined)
     taskTabSessions.clear()
+    shellLifecycleCallbacks.clear()
+    shellLifecycleStates.clear()
     lastTaskTerminalProps.all = null
-    lastTaskTerminalProps.onExit = null
     commandHeld.set(false)
   })
 
@@ -313,7 +358,6 @@ describe('TerminalTabs', () => {
     })
     expect(Object.keys(requireDefined(lastTaskTerminalProps.all)).sort()).toEqual([
       'isActive',
-      'onExit',
       'taskId',
       'terminalIndex',
       'terminalKey',
