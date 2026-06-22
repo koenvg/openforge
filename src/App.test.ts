@@ -3,7 +3,7 @@ import { get } from 'svelte/store'
 import { describe, expect, it, vi } from 'vitest'
 import type { AuthoredPullRequest, Project, Task } from './lib/types'
 import { requireDefined } from './test-utils/dom'
-import { callOrder, eventListeners, installAppTestLifecycle, mockActivatePlugin, mockLoadEnabledForProject, persistInstalledPluginRow } from './App.test-harness'
+import { callOrder, eventListeners, installAppTestLifecycle, mockActivatePlugin, mockLoadEnabledForProject, mockRouterResetToBoard, persistInstalledPluginRow } from './App.test-harness'
 
 async function withSuppressedExpectedConsoleError(run: () => Promise<void>) {
   const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -12,6 +12,15 @@ async function withSuppressedExpectedConsoleError(run: () => Promise<void>) {
   } finally {
     consoleErrorSpy.mockRestore()
   }
+}
+
+function getLatestComponentProps<T extends Record<string, unknown>>(mockComponent: { mock: { calls: unknown[][] } }, propName: keyof T): T {
+  for (const call of [...mockComponent.mock.calls].reverse()) {
+    const props = call.find((arg): arg is T => typeof arg === 'object' && arg !== null && propName in arg)
+    if (props) return props
+  }
+
+  throw new Error(`Expected mocked component props with ${String(propName)}`)
 }
 
 describe('App startup data loading', () => {
@@ -234,6 +243,43 @@ describe('App startup data loading', () => {
     expect(firstListen).toBeLessThan(firstResumeStartupSessions)
     expect(firstResumeStartupSessions).toBeLessThan(firstGetProjects)
     expect(firstListen).toBeLessThan(firstGetAppMode)
+  }, 15000)
+
+  it('activates the created project and returns to the board after Add Project succeeds', async () => {
+    const App = (await import('./App.svelte')).default
+    const stores = await import('./lib/stores')
+    const ipc = await import('./lib/ipc')
+    const sidebarModule = await import('./components/shell/AppSidebar.svelte')
+    const setupDialogModule = await import('./components/project/ProjectSetupDialog.svelte')
+    const { get } = await import('svelte/store')
+
+    const existingProject: Project = { id: 'proj-old', name: 'Old Project', path: '/test/old', created_at: 0, updated_at: 0 }
+    const createdProject: Project = { id: 'proj-new', name: 'New Project', path: '/test/new', created_at: 1, updated_at: 1 }
+    stores.activeProjectId.set(existingProject.id)
+    vi.mocked(ipc.getProjects)
+      .mockResolvedValueOnce([existingProject])
+      .mockResolvedValueOnce([existingProject, createdProject])
+
+    render(App)
+
+    await vi.waitFor(() => {
+      expect(sidebarModule.default).toHaveBeenCalled()
+    })
+
+    const sidebarProps = getLatestComponentProps<{ onNewProject: () => void }>(vi.mocked(sidebarModule.default), 'onNewProject')
+    sidebarProps.onNewProject()
+
+    await vi.waitFor(() => {
+      expect(setupDialogModule.default).toHaveBeenCalled()
+    })
+
+    const dialogProps = getLatestComponentProps<{ onProjectCreated: (project: Project) => Promise<void> | void }>(vi.mocked(setupDialogModule.default), 'onProjectCreated')
+    await dialogProps.onProjectCreated(createdProject)
+
+    await vi.waitFor(() => {
+      expect(get(stores.activeProjectId)).toBe(createdProject.id)
+    })
+    expect(mockRouterResetToBoard).toHaveBeenCalled()
   }, 15000)
 
   describe('selected task clearing', () => {
