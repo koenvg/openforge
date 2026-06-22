@@ -108,25 +108,29 @@
   </div>
 
   <div class="flex flex-col gap-3 px-6 py-4">
+    <label for="review-summary-comment" class="text-xs font-medium text-base-content/70">Review summary comment</label>
     <textarea
+      id="review-summary-comment"
       class="textarea textarea-bordered w-full min-h-[70px] text-[0.85rem] leading-relaxed resize-y disabled:opacity-60 disabled:cursor-not-allowed"
       placeholder="Leave a summary comment… (Cmd/Ctrl+Enter to submit)"
+      aria-describedby="review-summary-comment-help"
       rows="3"
       bind:value={summary}
       disabled={isSubmitting}
       onkeydown={handleKeydown}
     ></textarea>
+    <p id="review-summary-comment-help" class="text-xs text-base-content/50 m-0">Submit with Command+Enter or Control+Enter. A summary is required for comments and change requests unless you have pending inline comments.</p>
 
     {#if error}
-      <div class="flex items-center gap-2 px-3 py-2.5 bg-error/10 border border-error/30 rounded-md text-error text-[0.8rem]">
-        <span>⚠</span>
+      <div class="flex items-center gap-2 px-3 py-2.5 bg-error/10 border border-error/30 rounded-md text-error text-[0.8rem]" role="alert" aria-live="assertive">
+        <span aria-hidden="true">⚠</span>
         <span>{error}</span>
       </div>
     {/if}
 
     {#if successMessage}
-      <div class="flex items-center gap-2 px-3 py-2.5 bg-success/10 border border-success/30 rounded-md text-success text-[0.8rem]">
-        <span>✓</span>
+      <div class="flex items-center gap-2 px-3 py-2.5 bg-success/10 border border-success/30 rounded-md text-success text-[0.8rem]" role="status" aria-live="polite">
+        <span aria-hidden="true">✓</span>
         <span>{successMessage}</span>
       </div>
     {/if}

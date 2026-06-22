@@ -693,12 +693,16 @@
             <span>{timeAgoFromSeconds($selectedReviewPr.created_at)}</span>
           </div>
           <span class="flex-1"></span>
-          <div class="flex gap-1">
+          <div class="flex gap-1" role="tablist" aria-label="Pull request detail sections">
             <button
+              role="tab"
+              aria-selected={activeTab === 'overview'}
               class="btn btn-ghost btn-xs {activeTab === 'overview' ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
               onclick={() => { activeTab = 'overview' }}
             >Overview</button>
             <button
+              role="tab"
+              aria-selected={activeTab === 'files'}
               class="btn btn-ghost btn-xs {activeTab === 'files' ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
               onclick={() => { activeTab = 'files' }}
             >Files changed <span class="badge badge-xs ml-1">{$prFileDiffs.length}</span></button>
@@ -717,13 +721,13 @@
       {:else}
         <div class="flex flex-1 min-h-0 overflow-hidden">
           {#if isLoading}
-            <div class="flex flex-col items-center justify-center flex-1 gap-3 text-base-content/50 text-sm">
-              <span class="loading loading-spinner loading-md text-primary"></span>
+            <div class="flex flex-col items-center justify-center flex-1 gap-3 text-base-content/50 text-sm" role="status" aria-live="polite" aria-atomic="true">
+              <span class="loading loading-spinner loading-md text-primary" aria-hidden="true"></span>
               <span>Loading diffs...</span>
             </div>
           {:else if error}
-            <div class="flex flex-col items-center justify-center h-full gap-3 text-error text-sm text-center p-5">
-              <span class="text-5xl">⚠</span>
+            <div class="flex flex-col items-center justify-center h-full gap-3 text-error text-sm text-center p-5" role="alert" aria-live="assertive">
+              <span class="text-5xl" aria-hidden="true">⚠</span>
               <span>{error}</span>
             </div>
           {:else}
@@ -781,6 +785,9 @@
             <button
               class="btn btn-ghost btn-sm gap-1 {excludedRepos.size > 0 ? 'text-warning' : 'text-base-content/50'}"
               title="Filter repositories"
+              aria-label="Filter repositories"
+              aria-haspopup="dialog"
+              aria-expanded={showFilterDropdown}
               onclick={() => { showFilterDropdown = !showFilterDropdown }}
             >
               {#if excludedRepos.size > 0}
@@ -792,7 +799,7 @@
                 <!-- Invisible backdrop to close dropdown on outside click -->
                <!-- svelte-ignore a11y_click_events_have_key_events -->
                <div role="presentation" class="fixed inset-0 z-40" onclick={() => { showFilterDropdown = false }}></div>
-               <div class="absolute right-0 top-full mt-1 z-50 bg-base-100 border border-base-300 rounded-lg shadow-lg w-[320px] p-3">
+               <div class="absolute right-0 top-full mt-1 z-50 bg-base-100 border border-base-300 rounded-lg shadow-lg w-[320px] p-3" role="dialog" aria-label="Excluded repositories filter">
                 <div class="text-xs font-semibold text-base-content/50 mb-2">Excluded Repositories</div>
 
                 <!-- Manual input to add a repo -->
@@ -800,6 +807,7 @@
                   <input
                     type="text"
                     class="input input-bordered input-xs flex-1"
+                    aria-label="Repository to exclude"
                     placeholder="owner/repo"
                     bind:value={newRepoInput}
                   />
@@ -816,7 +824,8 @@
                           class="btn btn-ghost btn-xs text-base-content/40 hover:text-error"
                           onclick={() => removeExcludedRepo(repo)}
                           title="Remove from exclusion list"
-                        >✕</button>
+                          aria-label="Remove {repo} from excluded repositories"
+                        ><span aria-hidden="true">✕</span></button>
                       </div>
                     {/each}
                   </div>
@@ -832,6 +841,7 @@
                       {#each suggestedRepos() as repo}
                         <button
                           class="btn btn-ghost btn-xs text-base-content/60"
+                          aria-label="Exclude {repo} from pull request lists"
                           onclick={() => addExcludedRepo(repo)}
                         >+ {repo}</button>
                       {/each}
