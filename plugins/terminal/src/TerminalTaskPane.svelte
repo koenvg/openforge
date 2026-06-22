@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte'
   import { getTaskWorkspace } from './lib/ipc'
+  import { releaseAllForTask } from './lib/terminalPool'
   import { createTerminalShortcutController } from './terminalShortcutController'
   import TerminalTabs from './TerminalTabs.svelte'
   import { registerTerminalTaskPaneController, unregisterTerminalTaskPaneController } from './terminalTaskPaneController'
@@ -12,6 +13,7 @@
   let { taskId }: Props = $props()
   let workspacePath = $state<string | null>(null)
   let previousTaskId = $state<string | null>(null)
+  let workspaceLookupToken = 0
 
   const terminalShortcuts = createTerminalShortcutController()
   const controller = terminalShortcuts.controller
@@ -21,20 +23,27 @@
     terminalShortcuts.terminalTabsRef = terminalTabsRef
   })
 
+  function releaseTaskPaneTerminalResources(taskIdToRelease: string) {
+    unregisterTerminalTaskPaneController(taskIdToRelease, controller)
+    releaseAllForTask(taskIdToRelease)
+  }
+
   $effect(() => {
     if (taskId === previousTaskId) {
       return
     }
 
     if (previousTaskId !== null) {
-      unregisterTerminalTaskPaneController(previousTaskId, controller)
+      releaseTaskPaneTerminalResources(previousTaskId)
     }
 
     previousTaskId = taskId
     workspacePath = null
     registerTerminalTaskPaneController(taskId, controller)
 
+    const lookupToken = ++workspaceLookupToken
     void getTaskWorkspace(taskId).then((workspace) => {
+      if (lookupToken !== workspaceLookupToken || previousTaskId !== taskId) return
       workspacePath = workspace?.workspace_path ?? null
     })
   })
@@ -42,7 +51,10 @@
   onMount(() => terminalShortcuts.registerWindowKeydown())
 
   onDestroy(() => {
-    unregisterTerminalTaskPaneController(taskId, controller)
+    workspaceLookupToken += 1
+    const taskIdToRelease = previousTaskId ?? taskId
+    releaseTaskPaneTerminalResources(taskIdToRelease)
+    previousTaskId = null
   })
 </script>
 
