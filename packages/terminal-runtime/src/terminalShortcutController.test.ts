@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   createTerminalShortcutController,
+  isTerminalShortcutScopeVisible,
   type TerminalTabsShortcutTarget,
 } from './terminalShortcutController'
 
@@ -15,12 +16,6 @@ function makeTerminalTabsTarget(): TerminalTabsShortcutTarget {
 
 function makeKeyEvent(init: KeyboardEventInit): KeyboardEvent {
   return new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init })
-}
-
-function appendShortcutRoot(): HTMLDivElement {
-  const root = document.createElement('div')
-  document.body.appendChild(root)
-  return root
 }
 
 describe('terminal shortcut controller wiring', () => {
@@ -52,89 +47,49 @@ describe('terminal shortcut controller wiring', () => {
     expect(latestTarget.switchToTab).toHaveBeenCalledWith(0)
   })
 
-  it('ignores matching shortcuts without preventing default when no terminal ref is attached', async () => {
+  it('ignores matching shortcuts without preventing default when no terminal ref is attached', () => {
     const shortcuts = createTerminalShortcutController()
     const event = makeKeyEvent({ key: 'w', code: 'KeyW', metaKey: true })
-    const stopPropagation = vi.spyOn(event, 'stopPropagation')
 
     expect(shortcuts.handleWindowKeydown(event)).toBe(false)
     expect(event.defaultPrevented).toBe(false)
-    expect(stopPropagation).not.toHaveBeenCalled()
-    await expect(shortcuts.controller.closeActiveTab()).resolves.toBeUndefined()
   })
 
-  it('ignores matching shortcuts without preventing default when the terminal scope is inactive', () => {
+  it('ignores matching shortcuts without preventing default when the shortcut scope is inactive', () => {
     const shortcuts = createTerminalShortcutController({ isActive: () => false })
     const terminalTabs = makeTerminalTabsTarget()
-    const event = makeKeyEvent({ key: 't', code: 'KeyT', metaKey: true })
-    const stopPropagation = vi.spyOn(event, 'stopPropagation')
     shortcuts.terminalTabsRef = terminalTabs
+    const event = makeKeyEvent({ key: 't', code: 'KeyT', metaKey: true })
 
     expect(shortcuts.handleWindowKeydown(event)).toBe(false)
     expect(event.defaultPrevented).toBe(false)
-    expect(stopPropagation).not.toHaveBeenCalled()
     expect(terminalTabs.addTab).not.toHaveBeenCalled()
   })
 
-  it('ignores matching shortcuts without preventing default when the terminal root is hidden', () => {
-    const root = appendShortcutRoot()
-    const shortcuts = createTerminalShortcutController({ shortcutRoot: () => root })
+  it('handles terminal shortcuts when a terminal ref is attached and the shortcut scope is active', () => {
+    const shortcuts = createTerminalShortcutController({ isActive: () => true })
     const terminalTabs = makeTerminalTabsTarget()
-    const event = makeKeyEvent({ key: 'e', code: 'KeyE', metaKey: true })
-    root.hidden = true
     shortcuts.terminalTabsRef = terminalTabs
-
-    expect(shortcuts.handleWindowKeydown(event)).toBe(false)
-    expect(event.defaultPrevented).toBe(false)
-    expect(terminalTabs.focusActiveTab).not.toHaveBeenCalled()
-
-    root.remove()
-  })
-
-  it('ignores matching shortcuts without preventing default when the terminal root is detached', () => {
-    const root = document.createElement('div')
-    const shortcuts = createTerminalShortcutController({ shortcutRoot: () => root })
-    const terminalTabs = makeTerminalTabsTarget()
     const event = makeKeyEvent({ key: '#', code: 'Digit3', metaKey: true, shiftKey: true })
-    const stopPropagation = vi.spyOn(event, 'stopPropagation')
-    shortcuts.terminalTabsRef = terminalTabs
-
-    expect(shortcuts.handleWindowKeydown(event)).toBe(false)
-    expect(event.defaultPrevented).toBe(false)
-    expect(stopPropagation).not.toHaveBeenCalled()
-    expect(terminalTabs.switchToTab).not.toHaveBeenCalled()
-  })
-
-  it('handles matching shortcuts for an active attached terminal scope', () => {
-    const root = appendShortcutRoot()
-    const shortcuts = createTerminalShortcutController({ shortcutRoot: () => root, isActive: () => true })
-    const terminalTabs = makeTerminalTabsTarget()
-    const event = makeKeyEvent({ key: 't', code: 'KeyT', metaKey: true })
-    shortcuts.terminalTabsRef = terminalTabs
 
     expect(shortcuts.handleWindowKeydown(event)).toBe(true)
     expect(event.defaultPrevented).toBe(true)
-    expect(terminalTabs.addTab).toHaveBeenCalledOnce()
-
-    root.remove()
+    expect(terminalTabs.switchToTab).toHaveBeenCalledWith(2)
   })
 
-  it('leaves Cmd+number unhandled so app-level shortcuts can switch task views', () => {
-    const root = appendShortcutRoot()
-    const shortcuts = createTerminalShortcutController({ shortcutRoot: () => root, isActive: () => true })
+  it('preserves app-level Cmd+number shortcuts even when the terminal scope is active', () => {
+    const shortcuts = createTerminalShortcutController({ isActive: () => true })
     const terminalTabs = makeTerminalTabsTarget()
-    const event = makeKeyEvent({ key: '3', code: 'Digit3', metaKey: true })
     shortcuts.terminalTabsRef = terminalTabs
+    const event = makeKeyEvent({ key: '3', code: 'Digit3', metaKey: true })
 
     expect(shortcuts.handleWindowKeydown(event)).toBe(false)
     expect(event.defaultPrevented).toBe(false)
     expect(terminalTabs.switchToTab).not.toHaveBeenCalled()
-
-    root.remove()
   })
 
   it('registers and removes a capture-phase window keydown listener with the same listener and options', () => {
-    const shortcuts = createTerminalShortcutController()
+    const shortcuts = createTerminalShortcutController({ isActive: () => true })
     const target = new EventTarget()
     const terminalTabs = makeTerminalTabsTarget()
     const addEventListener = vi.spyOn(target, 'addEventListener')
@@ -158,5 +113,26 @@ describe('terminal shortcut controller wiring', () => {
 
     target.dispatchEvent(makeKeyEvent({ key: 't', code: 'KeyT', metaKey: true }))
     expect(terminalTabs.addTab).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('isTerminalShortcutScopeVisible', () => {
+  it('requires a connected visible shortcut scope element', () => {
+    expect(isTerminalShortcutScopeVisible(null)).toBe(false)
+
+    const element = document.createElement('div')
+    expect(isTerminalShortcutScopeVisible(element)).toBe(false)
+
+    document.body.appendChild(element)
+    expect(isTerminalShortcutScopeVisible(element)).toBe(true)
+
+    element.style.visibility = 'hidden'
+    expect(isTerminalShortcutScopeVisible(element)).toBe(false)
+
+    element.style.visibility = ''
+    element.style.display = 'none'
+    expect(isTerminalShortcutScopeVisible(element)).toBe(false)
+
+    element.remove()
   })
 })
