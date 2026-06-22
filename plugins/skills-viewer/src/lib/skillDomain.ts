@@ -63,3 +63,11 @@ export function isSameSkillIdentity(skill: SkillInfo, identity: SkillIdentity | 
     skill.source_dir === identity.source_dir &&
     skill.file_name === identity.file_name
 }
+
+export function getPreferredSkillIdentity(skills: SkillInfo[], currentIdentity: SkillIdentity | null): SkillIdentity | null {
+  const currentSkill = skills.find((skill) => isSameSkillIdentity(skill, currentIdentity))
+  if (currentSkill) return currentIdentity
+
+  const projectSkill = skills.find((skill) => skill.level === 'project')
+  return projectSkill ? getSkillIdentity(projectSkill) : (skills[0] ? getSkillIdentity(skills[0]) : null)
+}
