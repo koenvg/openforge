@@ -26,8 +26,10 @@
   let loadRequestId = 0
   let saveRequestId = 0
   let previousProjectId: string | null | undefined = undefined
+  let pendingUserSkillSaveKeys = $state(new Set<string>())
 
   let selectedSkill = $derived($skills.find(s => isSameSkillIdentity(s, $selectedSkillIdentity)) || null)
+  let selectedSkillSavePending = $derived(isSaving || hasPendingUserSkillSave(selectedSkill))
 
   let filteredSkills = $derived(
     searchFilter.trim()
@@ -46,6 +48,29 @@
 
   // Collapsible state: track collapsed sections by key like "project" / "user" / "project:.agents"
   let collapsed = $state(new Map<string, boolean>())
+
+  function getUserSkillSaveKey(skill: SkillInfo): string | null {
+    if (skill.level !== 'user') return null
+    return JSON.stringify([skill.name, skill.source_dir, skill.file_name])
+  }
+
+  function hasPendingUserSkillSave(skill: SkillInfo | null): boolean {
+    if (!skill) return false
+    const key = getUserSkillSaveKey(skill)
+    return key ? pendingUserSkillSaveKeys.has(key) : false
+  }
+
+  function lockUserSkillSave(key: string | null) {
+    if (!key) return
+    pendingUserSkillSaveKeys = new Set(pendingUserSkillSaveKeys).add(key)
+  }
+
+  function unlockUserSkillSave(key: string | null) {
+    if (!key) return
+    const next = new Set(pendingUserSkillSaveKeys)
+    next.delete(key)
+    pendingUserSkillSaveKeys = next
+  }
 
   // Auto-select a repository skill when the current selection is filtered out
   $effect(() => {
@@ -133,8 +158,12 @@
     const skillToSave = selectedSkill
     const skillIdentity = getSkillIdentity(skillToSave)
     const contentToSave = editContent
+    const userSkillSaveKey = getUserSkillSaveKey(skillToSave)
     const requestId = ++saveRequestId
 
+    if (userSkillSaveKey && pendingUserSkillSaveKeys.has(userSkillSaveKey)) return
+
+    lockUserSkillSave(userSkillSaveKey)
     isSaving = true
     saveError = null
     try {
@@ -147,7 +176,10 @@
         content: contentToSave,
         fileName: skillToSave.file_name,
       })
-      if (requestId !== saveRequestId || projectIdToSave !== $activeProjectId) return
+      const shouldReflectSave = userSkillSaveKey
+        ? isSameSkillIdentity(skillToSave, $selectedSkillIdentity)
+        : requestId === saveRequestId && projectIdToSave === $activeProjectId
+      if (!shouldReflectSave) return
       // Update the local skill data with new content
       $skills = $skills.map(s =>
         isSameSkillIdentity(s, skillIdentity)
@@ -156,10 +188,14 @@
       )
       editMode = false
     } catch (e) {
-      if (requestId !== saveRequestId || projectIdToSave !== $activeProjectId || !isSameSkillIdentity(skillToSave, $selectedSkillIdentity)) return
+      const shouldShowError = userSkillSaveKey
+        ? isSameSkillIdentity(skillToSave, $selectedSkillIdentity)
+        : requestId === saveRequestId && projectIdToSave === $activeProjectId && isSameSkillIdentity(skillToSave, $selectedSkillIdentity)
+      if (!shouldShowError) return
       console.error('Failed to save skill:', e)
       saveError = String(e)
     } finally {
+      unlockUserSkillSave(userSkillSaveKey)
       if (requestId === saveRequestId) {
         isSaving = false
       }
@@ -367,18 +403,19 @@
               <button
                 class="btn btn-ghost btn-sm text-base-content/70"
                 onclick={cancelEdit}
-                disabled={isSaving}
+                disabled={selectedSkillSavePending}
               >Cancel</button>
               <button
                 class="btn btn-primary btn-sm"
                 onclick={saveEdit}
-                disabled={isSaving}
-              >{isSaving ? 'Saving...' : 'Save'}</button>
+                disabled={selectedSkillSavePending}
+              >{selectedSkillSavePending ? 'Saving...' : 'Save'}</button>
             {:else}
               <button
                 class="btn btn-ghost btn-sm text-base-content/70"
                 onclick={enterEditMode}
-              >Manually Edit</button>
+                disabled={selectedSkillSavePending}
+              >{selectedSkillSavePending ? 'Saving...' : 'Manually Edit'}</button>
             {/if}
           </div>
         </div>
@@ -388,7 +425,7 @@
             <div class="flex items-center justify-between gap-3">
               <p class="text-xs text-error m-0">{saveError}</p>
               {#if editMode}
-                <button class="btn btn-xs btn-error btn-outline" onclick={saveEdit} disabled={isSaving}>Retry saving skill</button>
+                <button class="btn btn-xs btn-error btn-outline" onclick={saveEdit} disabled={selectedSkillSavePending}>Retry saving skill</button>
               {/if}
             </div>
           </div>

@@ -159,4 +159,33 @@ describe('SkillsView project and async states', () => {
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
     expect(invoke).toHaveBeenLastCalledWith('saveSkillContent', expect.objectContaining({ projectId: 'P-1', content: 'after' }))
   })
+
+  it('keeps a shared personal skill locked while its save is in flight across project switches', async () => {
+    const sharedSkill = makeSkill({ name: 'shared-user-skill', level: 'user', template: 'before' })
+    const save = deferred<void>()
+    const invoke = vi.fn((method: string, request: { projectId: string }) => {
+      if (method === 'listSkills' && request.projectId === 'P-1') return Promise.resolve([sharedSkill])
+      if (method === 'saveSkillContent') return save.promise
+      if (method === 'listSkills' && request.projectId === 'P-2') return Promise.resolve([{ ...sharedSkill, template: 'still-before' }])
+      return Promise.resolve([])
+    })
+    const view = renderView({ api: makeApi(invoke), projectId: 'P-1' })
+
+    await waitFor(() => expect(screen.getAllByText('shared-user-skill').length).toBeGreaterThan(0))
+    await fireEvent.click(screen.getByRole('button', { name: /manually edit/i }))
+    const textboxes = screen.getAllByRole('textbox')
+    await fireEvent.input(textboxes[textboxes.length - 1], { target: { value: 'first save' } })
+    await fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('saveSkillContent', expect.objectContaining({ content: 'first save' })))
+
+    await view.rerender({ api: makeApi(invoke), context, projectName: 'Project Two', projectId: 'P-2' })
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('listSkills', { projectId: 'P-2' }))
+    await waitFor(() => expect(screen.getAllByText('shared-user-skill').length).toBeGreaterThan(0))
+
+    const editButton = screen.getByRole('button', { name: /saving/i })
+    expect(editButton.hasAttribute('disabled')).toBe(true)
+
+    save.resolve()
+    await waitFor(() => expect(screen.getByRole('button', { name: /manually edit/i }).hasAttribute('disabled')).toBe(false))
+  })
 })
