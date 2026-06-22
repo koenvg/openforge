@@ -145,7 +145,14 @@
     radios[optionIndex]?.focus()
   }
 
+  function handleProjectColorClick(value: string) {
+    if (disabled) return
+    onProjectColorChange(value)
+  }
+
   function handleProjectColorKeydown(event: KeyboardEvent, value: string) {
+    if (disabled) return
+
     const currentIndex = projectColorOptions.findIndex((color) => color.id === value)
     if (currentIndex === -1) return
 
@@ -182,9 +189,13 @@
         <input
           type="text"
           value={projectName}
-          oninput={(e) => onProjectNameChange(e.currentTarget.value)}
+          oninput={(e) => {
+            if (disabled) return
+            onProjectNameChange(e.currentTarget.value)
+          }}
           placeholder="My Project"
           class="input input-bordered input-sm w-full"
+          disabled={disabled}
         />
       </label>
 
@@ -193,9 +204,13 @@
         <input
           type="text"
           value={projectPath}
-          oninput={(e) => onProjectPathChange(e.currentTarget.value)}
+          oninput={(e) => {
+            if (disabled) return
+            onProjectPathChange(e.currentTarget.value)
+          }}
           placeholder="/path/to/project"
           class="input input-bordered input-sm w-full"
+          disabled={disabled}
         />
       </label>
     </div>
@@ -207,8 +222,9 @@
         <select
           class="select select-bordered select-sm w-full max-w-xs"
           value={aiProvider}
+          disabled={disabled}
           onchange={(e) => {
-            if (!(e.currentTarget instanceof HTMLSelectElement)) return
+            if (disabled || !(e.currentTarget instanceof HTMLSelectElement)) return
             onAiProviderChange(e.currentTarget.value)
           }}
         >
@@ -282,8 +298,11 @@
             <button
               type="button"
               class="btn btn-xs btn-warning"
-              onclick={onRefreshInstallationStatus}
-              disabled={installationStatusLoading}
+              onclick={() => {
+                if (disabled) return
+                onRefreshInstallationStatus()
+              }}
+              disabled={disabled || installationStatusLoading}
             >
               {installationStatusLoading ? 'Refreshing…' : 'Refresh install status'}
             </button>
@@ -292,7 +311,11 @@
                 <button
                   type="button"
                   class="btn btn-xs btn-ghost"
-                  onclick={() => onAiProviderChange(provider.id)}
+                  onclick={() => {
+                    if (disabled) return
+                    onAiProviderChange(provider.id)
+                  }}
+                  disabled={disabled}
                 >
                   Switch to {provider.label}
                 </button>
@@ -316,7 +339,11 @@
         type="checkbox"
         class="toggle toggle-primary toggle-sm"
         checked={useWorktrees}
-        onchange={onUseWorktreesChange}
+        disabled={disabled}
+        onchange={() => {
+          if (disabled) return
+          onUseWorktreesChange()
+        }}
         data-testid="use-worktrees-toggle"
       />
     </label>
@@ -332,11 +359,12 @@
             role="radio"
             aria-label="{color.label} project color"
             aria-checked={selectedProjectColor === color.id}
-            tabindex={selectedProjectColor === color.id ? 0 : -1}
+            aria-disabled={disabled}
+            tabindex={disabled ? -1 : selectedProjectColor === color.id ? 0 : -1}
             class="w-7 h-7 rounded-full border-2 transition-all duration-150 cursor-pointer hover:scale-110 {selectedProjectColor === color.id ? 'border-primary ring-2 ring-primary/30 scale-110' : 'border-base-content/20'}"
             style="background-color: {color.swatch}"
             title={color.label}
-            onclick={() => onProjectColorChange(color.id)}
+            onclick={() => handleProjectColorClick(color.id)}
             onkeydown={(event) => handleProjectColorKeydown(event, color.id)}
           ></button>
         {/each}

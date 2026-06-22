@@ -54,4 +54,33 @@ describe('SettingsInstructionsCard', () => {
 
     expect(onHandoffNotesTemplateChange).toHaveBeenCalledWith('')
   })
+
+  it('uses native disabled semantics for editable controls when disabled', async () => {
+    const onInstructionsChange = vi.fn()
+    const onHandoffNotesTemplateChange = vi.fn()
+    render(SettingsInstructionsCard, {
+      props: {
+        agentInstructions: 'Use TDD',
+        handoffNotesTemplate: '## Current summary\nCustom template',
+        disabled: true,
+        onInstructionsChange,
+        onHandoffNotesTemplateChange,
+      },
+    })
+
+    const instructions = screen.getByLabelText('Instructions') as HTMLTextAreaElement
+    const handoffTemplate = screen.getByLabelText('Handoff Notes Template') as HTMLTextAreaElement
+    const resetButton = screen.getByRole('button', { name: /reset to default template/i }) as HTMLButtonElement
+
+    expect(instructions.disabled).toBe(true)
+    expect(handoffTemplate.disabled).toBe(true)
+    expect(resetButton.disabled).toBe(true)
+
+    await fireEvent.input(instructions, { target: { value: 'Changed' } })
+    await fireEvent.input(handoffTemplate, { target: { value: 'Changed template' } })
+    await fireEvent.click(resetButton)
+
+    expect(onInstructionsChange).not.toHaveBeenCalled()
+    expect(onHandoffNotesTemplateChange).not.toHaveBeenCalled()
+  })
 })
