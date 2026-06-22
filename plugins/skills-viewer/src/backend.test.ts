@@ -1,8 +1,23 @@
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { describe, expect, it, vi } from 'vitest'
+import { dirname, join } from 'node:path'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const mockedUserHome = vi.hoisted(() => ({ path: '' }))
+
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>()
+  return {
+    ...actual,
+    default: { ...actual, homedir: () => mockedUserHome.path },
+    homedir: () => mockedUserHome.path,
+  }
+})
+
 import backend from './backend'
+
+function tempRoot(): string {
+  return process.env.TMPDIR || '/tmp'
+}
 
 type BackendMethodHandler = (input: unknown) => Promise<unknown> | unknown
 
@@ -35,9 +50,19 @@ async function activateBackendWithProject(projectPath: string): Promise<Map<stri
   return methods
 }
 
+async function createSkillFile(root: string, sourcePath: string, content: string): Promise<void> {
+  const fullPath = join(root, sourcePath)
+  await mkdir(dirname(fullPath), { recursive: true })
+  await writeFile(fullPath, content)
+}
+
 describe('skills-viewer backend skill discovery', () => {
+  beforeEach(async () => {
+    mockedUserHome.path = await mkdtemp(join(tempRoot(), 'skills-viewer-user-home-'))
+  })
+
   it('preserves literal multiline frontmatter descriptions', async () => {
-    const projectPath = await mkdtemp(join(tmpdir(), 'skills-viewer-project-'))
+    const projectPath = await mkdtemp(join(tempRoot(), 'skills-viewer-project-'))
     const skillDir = join(projectPath, '.agents', 'skills', 'review')
     await mkdir(skillDir, { recursive: true })
     await writeFile(join(skillDir, 'SKILL.md'), `---\nname: review\ndescription: |\n  Review code carefully.\n  Preserve context.\n---\n# Review\n`)
@@ -51,7 +76,7 @@ describe('skills-viewer backend skill discovery', () => {
   })
 
   it('preserves folded multiline frontmatter descriptions', async () => {
-    const projectPath = await mkdtemp(join(tmpdir(), 'skills-viewer-project-'))
+    const projectPath = await mkdtemp(join(tempRoot(), 'skills-viewer-project-'))
     const skillDir = join(projectPath, '.agents', 'skills', 'plan')
     await mkdir(skillDir, { recursive: true })
     await writeFile(join(skillDir, 'SKILL.md'), `---\nname: plan\ndescription: >\n  Plan the work.\n  Then execute.\n---\n# Plan\n`)
@@ -62,5 +87,45 @@ describe('skills-viewer backend skill discovery', () => {
     expect(Array.isArray(skills)).toBe(true)
     expect((skills as Array<{ name: string; description: string | null }>).find((skill) => skill.name === 'plan'))
       .toMatchObject({ name: 'plan', description: 'Plan the work. Then execute.' })
+  })
+
+  it('returns same-name project and personal skills as distinct override entries', async () => {
+    const projectPath = await mkdtemp(join(tempRoot(), 'skills-viewer-project-'))
+    const userPath = await mkdtemp(join(tempRoot(), 'skills-viewer-user-'))
+    mockedUserHome.path = userPath
+
+    await createSkillFile(projectPath, '.agents/skills/review/SKILL.md', `---\nname: review\ndescription: Repository review skill\n---\n# Project review\n`)
+    await createSkillFile(userPath, '.pi/agent/skills/review/SKILL.md', `---\nname: review\ndescription: Personal review skill\n---\n# Personal review\n`)
+
+    const methods = await activateBackendWithProject(projectPath)
+    const skills = await methods.get('listSkills')?.({ projectId: 'P-1' })
+
+    expect((skills as Array<{ name: string; level: string; source_dir: string; file_name: string | null }>)
+      .filter((skill) => skill.name === 'review')
+      .map(({ name, level, source_dir, file_name }) => ({ name, level, source_dir, file_name })))
+      .toEqual([
+        { name: 'review', level: 'project', source_dir: '.agents', file_name: null },
+        { name: 'review', level: 'user', source_dir: '.pi', file_name: null },
+      ])
+  })
+
+  it('returns same-name Pi directory and root markdown skills as distinct entries', async () => {
+    const projectPath = await mkdtemp(join(tempRoot(), 'skills-viewer-project-'))
+    const userPath = await mkdtemp(join(tempRoot(), 'skills-viewer-user-'))
+    mockedUserHome.path = userPath
+
+    await createSkillFile(userPath, '.pi/agent/skills/review/SKILL.md', `---\nname: review\ndescription: Directory skill\n---\n# Directory skill\n`)
+    await createSkillFile(userPath, '.pi/agent/skills/review.md', `---\nname: review\ndescription: Root markdown skill\n---\n# Root markdown skill\n`)
+
+    const methods = await activateBackendWithProject(projectPath)
+    const skills = await methods.get('listSkills')?.({ projectId: 'P-1' })
+
+    expect((skills as Array<{ name: string; level: string; source_dir: string; file_name: string | null }>)
+      .filter((skill) => skill.name === 'review')
+      .map(({ name, level, source_dir, file_name }) => ({ name, level, source_dir, file_name })))
+      .toEqual([
+        { name: 'review', level: 'user', source_dir: '.pi', file_name: null },
+        { name: 'review', level: 'user', source_dir: '.pi', file_name: 'review.md' },
+      ])
   })
 })

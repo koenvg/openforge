@@ -29,6 +29,12 @@ export function getSkillSourcePath(source: string, level: SkillInfo['level']): s
   return `${source}/skills`
 }
 
+export function getSkillLocationLabel(skill: SkillInfo): string {
+  const sourcePath = getSkillSourcePath(skill.source_dir, skill.level)
+  const skillFilePath = skill.file_name ? `${sourcePath}/${skill.file_name}` : `${sourcePath}/${skill.name}/SKILL.md`
+  return skill.level === 'user' ? `~/${skillFilePath}` : skillFilePath
+}
+
 export function groupSkillsBySource(skills: SkillInfo[]): SkillSourceGroup[] {
   const groups: SkillSourceGroup[] = []
   for (const source of SKILL_SOURCE_DIRS) {

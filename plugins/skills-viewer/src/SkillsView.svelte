@@ -14,7 +14,7 @@
   import { useVimNavigation } from './lib/useVimNavigation.svelte'
   import ProjectPageHeader from './ProjectPageHeader.svelte'
   import MarkdownContent from '@openforge/plugin-sdk/ui/MarkdownContent.svelte'
-  import { getPreferredSkillIdentity, getSkillIdentity, getSkillSourcePath, groupSkillsBySource, isSameSkillIdentity, type SkillInfo } from './lib/skillDomain'
+  import { getPreferredSkillIdentity, getSkillIdentity, getSkillLocationLabel, getSkillSourcePath, groupSkillsBySource, isSameSkillIdentity, type SkillInfo } from './lib/skillDomain'
 
   $effect(() => {
     $activeProjectId = projectId
@@ -72,6 +72,10 @@
     } finally {
       isLoading = false
     }
+  }
+
+  function hasNameCollision(skill: SkillInfo) {
+    return filteredSkills.some(candidate => candidate !== skill && candidate.name === skill.name)
   }
 
   function selectSkill(skill: SkillInfo) {
@@ -238,6 +242,9 @@
                       onclick={() => selectSkill(skill)}
                     >
                       <span class="text-sm font-medium text-base-content truncate block">{skill.name}</span>
+                      {#if hasNameCollision(skill)}
+                        <p class="text-xs text-base-content/50 m-0 mt-0.5 line-clamp-1">{getSkillLocationLabel(skill)}</p>
+                      {/if}
                       {#if skill.description}
                         <p class="text-xs text-base-content/50 m-0 mt-0.5 line-clamp-1">{skill.description}</p>
                       {/if}
@@ -279,6 +286,9 @@
                       onclick={() => selectSkill(skill)}
                     >
                       <span class="text-sm font-medium text-base-content truncate block">{skill.name}</span>
+                      {#if hasNameCollision(skill)}
+                        <p class="text-xs text-base-content/50 m-0 mt-0.5 line-clamp-1">{getSkillLocationLabel(skill)}</p>
+                      {/if}
                       {#if skill.description}
                         <p class="text-xs text-base-content/50 m-0 mt-0.5 line-clamp-1">{skill.description}</p>
                       {/if}
@@ -300,7 +310,7 @@
           <div class="flex items-center gap-3 min-w-0">
             <h3 class="text-base font-semibold text-base-content m-0 truncate">{selectedSkill.name}</h3>
             <span class="badge badge-sm {selectedSkill.level === 'project' ? 'badge-primary' : 'badge-secondary'} shrink-0">{selectedSkill.level === 'project' ? 'repository' : 'personal'}</span>
-            <span class="text-xs text-base-content/40 shrink-0">{getSkillSourcePath(selectedSkill.source_dir, selectedSkill.level)}</span>
+            <span class="text-xs text-base-content/40 shrink-0">{getSkillLocationLabel(selectedSkill)}</span>
           </div>
           <div class="flex items-center gap-2 shrink-0">
             {#if editMode}
