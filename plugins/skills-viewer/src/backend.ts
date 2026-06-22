@@ -159,20 +159,31 @@ async function scanSkillRoot(root: string, level: SkillLevel): Promise<SkillInfo
   return skills
 }
 
+function compareSkillSource(left: SkillInfo, right: SkillInfo): number {
+  const nameOrder = left.name.localeCompare(right.name)
+  if (nameOrder !== 0) return nameOrder
+
+  if (left.level !== right.level) return left.level === 'project' ? -1 : 1
+
+  const leftSourceIndex = SKILL_SOURCE_DIRS.indexOf(left.source_dir as SkillSourceDir)
+  const rightSourceIndex = SKILL_SOURCE_DIRS.indexOf(right.source_dir as SkillSourceDir)
+  const sourceOrder = (leftSourceIndex === -1 ? SKILL_SOURCE_DIRS.length : leftSourceIndex) -
+    (rightSourceIndex === -1 ? SKILL_SOURCE_DIRS.length : rightSourceIndex)
+  if (sourceOrder !== 0) return sourceOrder
+
+  return (left.file_name ?? '').localeCompare(right.file_name ?? '')
+}
+
 async function listSkills(api: BackendOpenForgeAPI, request: ListSkillsRequest): Promise<SkillInfo[]> {
-  const skillsByName = new Map<string, SkillInfo>()
+  const skills: SkillInfo[] = []
   const project = await api.projects.get(request.projectId)
   if (project) {
-    for (const skill of await scanSkillRoot(project.path, 'project')) {
-      if (!skillsByName.has(skill.name)) skillsByName.set(skill.name, skill)
-    }
+    skills.push(...await scanSkillRoot(project.path, 'project'))
   }
 
-  for (const skill of await scanSkillRoot(homedir(), 'user')) {
-    if (!skillsByName.has(skill.name)) skillsByName.set(skill.name, skill)
-  }
+  skills.push(...await scanSkillRoot(homedir(), 'user'))
 
-  return Array.from(skillsByName.values()).sort((left, right) => left.name.localeCompare(right.name))
+  return skills.sort(compareSkillSource)
 }
 
 function isValidRootMarkdownSkillFileName(fileName: string): boolean {

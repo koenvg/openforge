@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getPreferredSkillIdentity, getSkillIdentity, getSkillSourcePath, groupSkillsBySource, type SkillInfo } from './skillDomain'
+import { getPreferredSkillIdentity, getSkillIdentity, getSkillLocationLabel, getSkillSourcePath, groupSkillsBySource, type SkillInfo } from './skillDomain'
 
 function makeSkill(name: string, source_dir: string, level: SkillInfo['level'] = 'project'): SkillInfo {
   return { name, source_dir, level, description: null, agent: null, template: null, file_name: null }
@@ -27,6 +27,15 @@ describe('skills-viewer skill domain helpers', () => {
     expect(getSkillSourcePath('.pi', 'user')).toBe('.pi/agent/skills')
     expect(getSkillSourcePath('.pi', 'project')).toBe('.pi/skills')
     expect(getSkillSourcePath('.agents', 'user')).toBe('.agents/skills')
+  })
+
+  it('formats skill locations with root markdown file names for duplicate disambiguation', () => {
+    const directorySkill = makeSkill('review', '.pi', 'user')
+    const rootMarkdownSkill = makeSkill('review', '.pi', 'user')
+    rootMarkdownSkill.file_name = 'review.md'
+
+    expect(getSkillLocationLabel(directorySkill)).toBe('~/.pi/agent/skills/review/SKILL.md')
+    expect(getSkillLocationLabel(rootMarkdownSkill)).toBe('~/.pi/agent/skills/review.md')
   })
 
   it('builds stable identities for duplicate skill names', () => {
