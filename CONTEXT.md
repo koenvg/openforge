@@ -64,6 +64,14 @@ _Avoid_: Sandboxed widget, project-only script
 A product area whose language, contracts, and workflows belong to a **Trusted Plugin** rather than OpenForge core.
 _Avoid_: Core capability, host feature
 
+**Rust Sidecar**:
+The supervised Rust process that owns OpenForge backend domain logic for the Electron desktop app.
+_Avoid_: Tauri backend, `src-tauri`, backend service
+
+**Backend Crate**:
+The Rust package that contains the **Rust Sidecar** implementation and build metadata.
+_Avoid_: `src-tauri`, generic backend folder
+
 **Terminal Runtime**:
 The shared OpenForge runtime that owns terminal session lifecycle for **Terminal Surfaces**.
 _Avoid_: Terminal plugin internals, ordinary plugin dependency, private terminal pool, private forwarding package
@@ -150,6 +158,8 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - A new **Implementation Run** uses the **Project Agent Settings** rather than plugin-supplied provider or agent overrides.
 - A **Trusted Plugin** may start an **Implementation Run** for any **Task** when using the host-provided task capability.
 - A **Trusted Plugin** may own a **Plugin-owned Domain** when the concept is not shared across plugins or core workflows.
+- The **Backend Crate** builds the **Rust Sidecar**.
+- Electron main supervises the **Rust Sidecar** rather than embedding backend domain logic in the renderer or relying on a Tauri shell.
 - A **Terminal Surface** uses the **Terminal Runtime** and does not own shell process state.
 - The **Terminal Runtime** is shared across **Terminal Surfaces** when they need one terminal lifecycle owner.
 - The **Terminal Runtime** uses **Shell Session Keys** to distinguish terminal shell tabs/sessions.
@@ -198,6 +208,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - "Status cockpit" was used for the task detail sidebar redesign — resolved: use **Task Attention Pane** for the compact attention-first task detail area.
 - Worktree branch names were considered for prompt-derived descriptions — resolved: **Task Branches** should be stable task identifiers because they are visible as PR source branches.
 - "Skill" was considered as a core OpenForge platform concept because one built-in plugin manages skills — resolved: skill discovery and editing are a **Plugin-owned Domain** unless multiple plugins need a shared platform contract.
+- `src-tauri` was used to describe both a historical directory and the active Rust process — resolved: use **Rust Sidecar** for the supervised runtime process and **Backend Crate** for the Rust package that builds it.
 - "Terminal pooling" was used for plugin UI, shell process state, and reusable terminal lifecycle — resolved: **Terminal Surface** names the UI, while **Terminal Runtime** names the shared lifecycle owner.
 - "Terminal API" could mean a host `openforge.terminal` capability, a normal package dependency, or the shared runtime — resolved: **Terminal Runtime** names the shared runtime; lower-level shell/event APIs remain capability primitives.
 - "Latest hash" in self-review could mean branch HEAD, latest commit, or the last accepted file version — resolved: use **Reviewed File Snapshot** for the last accepted file version.
