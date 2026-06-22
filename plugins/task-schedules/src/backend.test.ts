@@ -92,6 +92,39 @@ describe('Task Schedules backend plugin', () => {
     ]))
   })
 
+  it('rejects malformed required Task Schedule fields at the backend boundary', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.task-schedules', projectId })
+    await registry.activateBackend(backendPlugin)
+
+    await expect(registry.frontendApi.backend.invoke(SAVE_SCHEDULE_METHOD, {
+      projectId,
+      schedule: {
+        title: { text: 'Daily triage' },
+        prompt: 'Review incoming dependencies',
+        preset: 'daily',
+      },
+    })).rejects.toThrow('Task Schedule title is required')
+
+    await expect(registry.frontendApi.backend.invoke(SAVE_SCHEDULE_METHOD, {
+      projectId,
+      schedule: {
+        title: 'Daily triage',
+        prompt: ['Review incoming dependencies'],
+        preset: 'daily',
+      },
+    })).rejects.toThrow('Task Schedule prompt is required')
+
+    await expect(registry.frontendApi.backend.invoke(SAVE_SCHEDULE_METHOD, {
+      projectId,
+      schedule: {
+        title: 'Daily triage',
+        prompt: 'Review incoming dependencies',
+        preset: 'custom',
+        cron: { expression: '*/15 * * * *' },
+      },
+    })).rejects.toThrow('Custom Task Schedule cron is required')
+  })
+
   it('saves selected weekly Task Schedule days into the cron-backed schedule', async () => {
     const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
 
