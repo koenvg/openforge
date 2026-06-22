@@ -5,7 +5,7 @@ import { get } from 'svelte/store'
 import { describe, expect, it, vi } from 'vitest'
 import { OPENFORGE_FRONTEND_PLUGIN_MARKER } from '@openforge/plugin-sdk/frontend'
 import { isOpenForgePackageMetadata } from '@openforge/plugin-sdk'
-import type { FrontendOpenForgeAPI, FrontendPluginContext } from '@openforge/plugin-sdk/frontend'
+import type { CommandRegistration, FrontendOpenForgeAPI, FrontendPluginContext } from '@openforge/plugin-sdk/frontend'
 
 const { mockFilesView } = vi.hoisted(() => ({
   mockFilesView: { name: 'FilesViewComponent' },
@@ -23,7 +23,11 @@ const pluginSrcDir = dirname(fileURLToPath(import.meta.url))
 function makeRuntimeHarness() {
   const subscriptions = { add: vi.fn() }
   const invokeGlobal = vi.fn()
-  const registerCommand = vi.fn(() => ({ dispose: vi.fn() }))
+  const registeredCommands: CommandRegistration[] = []
+  const registerCommand = vi.fn((registration: CommandRegistration) => {
+    registeredCommands.push(registration)
+    return { dispose: vi.fn() }
+  })
   const api = {
     views: { register: vi.fn(() => ({ dispose: vi.fn() })) },
     commands: { register: registerCommand, invokeGlobal },
@@ -36,7 +40,7 @@ function makeRuntimeHarness() {
     subscriptions,
   } as FrontendPluginContext
 
-  return { api, context, subscriptions, invokeGlobal, registerCommand }
+  return { api, context, subscriptions, invokeGlobal, registerCommand, registeredCommands }
 }
 
 describe('file-viewer plugin', () => {
@@ -76,7 +80,7 @@ describe('file-viewer plugin', () => {
   it('registers a plugin-owned revealFile command that updates reveal state', async () => {
     pendingFileReveal.set(null)
     const { default: plugin, FILE_VIEWER_REVEAL_FILE_COMMAND_ID } = await import('./index')
-    const { api, context, registerCommand, subscriptions } = makeRuntimeHarness()
+    const { api, context, registerCommand, registeredCommands, subscriptions } = makeRuntimeHarness()
 
     await plugin.activate(api, context)
 
@@ -92,7 +96,7 @@ describe('file-viewer plugin', () => {
       handler: expect.any(Function),
     }))
 
-    const registration = registerCommand.mock.calls[0]?.[0]
+    const [registration] = registeredCommands
     await registration.handler({ path: 'src/lib/fileViewerPlugin.ts' })
 
     expect(get(pendingFileReveal)).toBe('src/lib/fileViewerPlugin.ts')
