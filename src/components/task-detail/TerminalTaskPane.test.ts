@@ -1,9 +1,9 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte'
+import { cleanup, fireEvent, render, screen } from '@testing-library/svelte'
 import { tick } from 'svelte'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import TerminalTaskPane from './TerminalTaskPane.svelte'
 
-const { getTaskWorkspaceMock, terminalTabsRenderProps, shortcutCleanupMock, controllerRegistry, terminalPoolMocks } = vi.hoisted(() => ({
+const { getTaskWorkspaceMock, terminalTabsRenderProps, shortcutCleanupMock, controllerRegistry } = vi.hoisted(() => ({
   getTaskWorkspaceMock: vi.fn(),
   terminalTabsRenderProps: [] as Array<Record<string, unknown>>,
   shortcutCleanupMock: vi.fn(),
@@ -11,20 +11,13 @@ const { getTaskWorkspaceMock, terminalTabsRenderProps, shortcutCleanupMock, cont
     register: vi.fn(),
     unregister: vi.fn(),
   },
-  terminalPoolMocks: {
-    releaseAllForTask: vi.fn().mockReturnValue(0),
-  },
 }))
 
-vi.mock('./lib/ipc', () => ({
+vi.mock('../../lib/ipc', () => ({
   getTaskWorkspace: getTaskWorkspaceMock,
 }))
 
-vi.mock('./lib/terminalPool', () => ({
-  releaseAllForTask: terminalPoolMocks.releaseAllForTask,
-}))
-
-vi.mock('./terminalShortcutController', () => ({
+vi.mock('../../lib/terminalShortcutController', () => ({
   createTerminalShortcutController: vi.fn(() => ({
     controller: {
       addTab: vi.fn(),
@@ -58,7 +51,7 @@ vi.mock('./TerminalTabs.svelte', () => ({
   }),
 }))
 
-function makeWorkspace(taskId: string, workspacePath = `/worktrees/${taskId}`) {
+function makeWorkspace(taskId: string, workspacePath: string) {
   return {
     id: 1,
     task_id: taskId,
@@ -91,12 +84,10 @@ async function flushAsync() {
 
 beforeEach(() => {
   getTaskWorkspaceMock.mockReset()
-  getTaskWorkspaceMock.mockImplementation(async (taskId: string) => makeWorkspace(taskId))
   terminalTabsRenderProps.length = 0
   shortcutCleanupMock.mockClear()
   controllerRegistry.register.mockClear()
   controllerRegistry.unregister.mockClear()
-  terminalPoolMocks.releaseAllForTask.mockClear()
 })
 
 afterEach(() => {
@@ -104,45 +95,7 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('TerminalTaskPane task terminal lifecycle', () => {
-  it('releases plugin task shell pool entries when navigating away from a task pane', async () => {
-    const { unmount } = render(TerminalTaskPane, { props: { taskId: 'T-1' } })
-
-    await waitFor(() => expect(getTaskWorkspaceMock).toHaveBeenCalledWith('T-1'))
-
-    unmount()
-    await tick()
-
-    expect(terminalPoolMocks.releaseAllForTask).toHaveBeenCalledTimes(1)
-    expect(terminalPoolMocks.releaseAllForTask).toHaveBeenCalledWith('T-1')
-  })
-
-  it('releases previous plugin task shell pool entries when switching tasks', async () => {
-    const { rerender } = render(TerminalTaskPane, { props: { taskId: 'T-1' } })
-
-    await waitFor(() => expect(getTaskWorkspaceMock).toHaveBeenCalledWith('T-1'))
-    expect(terminalPoolMocks.releaseAllForTask).not.toHaveBeenCalled()
-
-    await rerender({ taskId: 'T-2' })
-    await waitFor(() => expect(getTaskWorkspaceMock).toHaveBeenCalledWith('T-2'))
-
-    expect(terminalPoolMocks.releaseAllForTask).toHaveBeenCalledTimes(1)
-    expect(terminalPoolMocks.releaseAllForTask).toHaveBeenCalledWith('T-1')
-  })
-
-  it('does not release task shells when the task object refreshes with the same ID', async () => {
-    const { rerender } = render(TerminalTaskPane, { props: { taskId: 'T-1' } })
-
-    await waitFor(() => expect(getTaskWorkspaceMock).toHaveBeenCalledWith('T-1'))
-
-    await rerender({ taskId: 'T-1' })
-    await tick()
-
-    expect(terminalPoolMocks.releaseAllForTask).not.toHaveBeenCalled()
-  })
-})
-
-describe('terminal plugin TerminalTaskPane workspace resolution', () => {
+describe('TerminalTaskPane workspace resolution', () => {
   it('shows an unavailable state and retry when workspace lookup resolves null', async () => {
     getTaskWorkspaceMock
       .mockResolvedValueOnce(null)
