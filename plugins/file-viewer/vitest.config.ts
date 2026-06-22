@@ -16,6 +16,7 @@ export default defineConfig({
     globals: true,
     include: ['src/**/*.test.ts'],
     alias: {
+      '@openforge/plugin-sdk/frontend': new URL('../../packages/plugin-sdk/src/frontend.ts', import.meta.url).pathname,
       '@openforge/plugin-sdk/domain': new URL('../../packages/plugin-sdk/src/domain.ts', import.meta.url).pathname,
       '@openforge/plugin-sdk/numberParsing': new URL('../../packages/plugin-sdk/src/numberParsing.ts', import.meta.url).pathname,
       '@openforge/plugin-sdk/sanitize': new URL('../../packages/plugin-sdk/src/sanitize.ts', import.meta.url).pathname,

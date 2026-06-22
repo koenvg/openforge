@@ -8,7 +8,12 @@
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,
     "resolveJsonModule": true,
-    "types": ["vitest/globals"]
+    "types": ["vitest/globals", "node"],
+    "paths": {
+      "@openforge/plugin-sdk": ["../../packages/plugin-sdk/src/index.ts"],
+      "@openforge/plugin-sdk/frontend": ["../../packages/plugin-sdk/src/frontend.ts"],
+      "@openforge/plugin-sdk/domain": ["../../packages/plugin-sdk/src/domain.ts"]
+    }
   },
   "include": ["src"]
 }
