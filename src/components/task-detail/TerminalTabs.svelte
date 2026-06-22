@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte'
+  import { onMount, onDestroy, tick } from 'svelte'
   import { commandHeld } from '../../lib/stores'
   import { killPty } from '../../lib/ipc'
-  import { release, focusTerminal, getTaskTerminalTabsSession, updateTaskTerminalTabsSession, type TerminalTab, type TaskTerminalTabsSession } from '../../lib/terminalPool'
+  import { release, focusTerminal, getTaskTerminalTabsSession, getShellLifecycleState, subscribeShellLifecycle, updateTaskTerminalTabsSession, type ShellLifecycleState, type TerminalTab, type TaskTerminalTabsSession } from '../../lib/terminalPool'
   import TaskTerminal from './TaskTerminal.svelte'
 
   interface Props {
@@ -18,9 +18,55 @@
   let tabs = $state<TerminalTab[]>([])
   let activeTabIndex = $state(0)
   let nextIndex = $state(0)
+  let tabLifecycleByKey = $state(new Map<string, ShellLifecycleState>())
+  const tabLifecycleUnsubscribers = new Map<string, () => void>()
 
   interface CloseTabOptions {
     allowClosingLastTab?: boolean
+  }
+
+  function setTabLifecycle(terminalKey: string, state: ShellLifecycleState) {
+    const next = new Map(tabLifecycleByKey)
+    next.set(terminalKey, state)
+    tabLifecycleByKey = next
+  }
+
+  function removeTabLifecycle(terminalKey: string) {
+    const next = new Map(tabLifecycleByKey)
+    next.delete(terminalKey)
+    tabLifecycleByKey = next
+  }
+
+  function isTabExited(terminalKey: string): boolean {
+    return tabLifecycleByKey.get(terminalKey)?.shellExited ?? false
+  }
+
+  function syncTabLifecycleSubscriptions() {
+    const currentKeys = new Set(tabs.map(tab => tab.key))
+
+    for (const [terminalKey, unsubscribe] of tabLifecycleUnsubscribers) {
+      if (!currentKeys.has(terminalKey)) {
+        unsubscribe()
+        tabLifecycleUnsubscribers.delete(terminalKey)
+        removeTabLifecycle(terminalKey)
+      }
+    }
+
+    for (const tab of tabs) {
+      if (tabLifecycleUnsubscribers.has(tab.key)) continue
+      setTabLifecycle(tab.key, getShellLifecycleState(tab.key))
+      tabLifecycleUnsubscribers.set(tab.key, subscribeShellLifecycle(tab.key, (state) => {
+        setTabLifecycle(tab.key, state)
+      }))
+    }
+  }
+
+  function clearTabLifecycleSubscriptions() {
+    for (const unsubscribe of tabLifecycleUnsubscribers.values()) {
+      unsubscribe()
+    }
+    tabLifecycleUnsubscribers.clear()
+    tabLifecycleByKey = new Map()
   }
 
   function hydrateFromSession(taskId: string) {
@@ -28,6 +74,7 @@
     tabs = session.tabs
     activeTabIndex = session.activeTabIndex
     nextIndex = session.nextIndex
+    syncTabLifecycleSubscriptions()
   }
 
   function syncSession() {
@@ -38,6 +85,7 @@
       nextIndex,
     })
     session = getTaskTerminalTabsSession(taskId)
+    syncTabLifecycleSubscriptions()
   }
 
   function createTab(): TerminalTab {
@@ -59,24 +107,24 @@
   }
 
   export function addTab() {
-      const tab = createTab()
-      tabs = [...tabs, tab]
+    const tab = createTab()
+    tabs = [...tabs, tab]
+    activeTabIndex = tab.index
+    syncSession()
+    onTabChange?.(tab.index)
+    onTabCountChange?.(tabs.length)
+    void focusTerminalTab(tab.key)
+  }
+
+  function switchToTabByPosition(tabPosition: number) {
+    const tab = tabs[tabPosition]
+    if (tab) {
       activeTabIndex = tab.index
       syncSession()
       onTabChange?.(tab.index)
-      onTabCountChange?.(tabs.length)
       void focusTerminalTab(tab.key)
     }
-
-  function switchToTabByPosition(tabPosition: number) {
-      const tab = tabs[tabPosition]
-      if (tab) {
-        activeTabIndex = tab.index
-        syncSession()
-        onTabChange?.(tab.index)
-        void focusTerminalTab(tab.key)
-      }
-   }
+  }
 
   export function switchToTab(tabPosition: number) {
     switchToTabByPosition(tabPosition)
@@ -91,42 +139,46 @@
     const activeTab = tabs.find(tab => tab.index === activeTabIndex)
     if (!activeTab) return
 
-    await closeTab(activeTab)
+    await closeTab(activeTab, { allowClosingLastTab: isTabExited(activeTab.key) })
   }
 
   async function closeTab(tab: TerminalTab, options: CloseTabOptions = {}) {
-      const { allowClosingLastTab = false } = options
-      if (tabs.length <= 1 && !allowClosingLastTab) return
+    const { allowClosingLastTab = false } = options
+    if (tabs.length <= 1 && !allowClosingLastTab) return
 
-      const tabArrayIndex = tabs.findIndex(t => t.index === tab.index)
-      if (tabArrayIndex === -1) return
+    const tabArrayIndex = tabs.findIndex(t => t.index === tab.index)
+    if (tabArrayIndex === -1) return
 
-      await killPty(tab.key).catch(e => {
-        console.error('[TerminalTabs] Failed to kill PTY on close:', e)
-      })
-      release(tab.key)
+    await killPty(tab.key).catch(e => {
+      console.error('[TerminalTabs] Failed to kill PTY on close:', e)
+    })
+    release(tab.key)
 
-      const newTabs = tabs.filter(t => t.index !== tab.index)
-      tabs = newTabs
+    const newTabs = tabs.filter(t => t.index !== tab.index)
+    tabs = newTabs
 
-      if (activeTabIndex === tab.index) {
-        const nextTab = newTabs[tabArrayIndex] ?? newTabs[tabArrayIndex - 1]
-        if (nextTab) {
-          activeTabIndex = nextTab.index
-          onTabChange?.(nextTab.index)
-          await focusTerminalTab(nextTab.key)
-        } else {
-          activeTabIndex = 0
-        }
+    if (activeTabIndex === tab.index) {
+      const nextTab = newTabs[tabArrayIndex] ?? newTabs[tabArrayIndex - 1]
+      if (nextTab) {
+        activeTabIndex = nextTab.index
+        onTabChange?.(nextTab.index)
+        await focusTerminalTab(nextTab.key)
+      } else {
+        activeTabIndex = 0
       }
-
-      syncSession()
-      onTabCountChange?.(tabs.length)
     }
+
+    syncSession()
+    onTabCountChange?.(tabs.length)
+  }
 
   onMount(() => {
     hydrateFromSession(taskId)
     onTabCountChange?.(tabs.length)
+  })
+
+  onDestroy(() => {
+    clearTabLifecycleSubscriptions()
   })
 </script>
 
@@ -134,21 +186,21 @@
   <div class="flex items-center overflow-x-auto border-b border-base-300 bg-base-200 shrink-0">
     {#each tabs as tab, tabPosition (tab.index)}
       <div class="flex items-center whitespace-nowrap">
-          <button
-            class="flex items-center gap-1 px-3 py-1.5 text-sm {activeTabIndex === tab.index ? 'border-b-2 border-primary text-base-content font-semibold' : 'text-base-content/50'}"
-            onclick={() => {
-              activeTabIndex = tab.index
-              syncSession()
-              onTabChange?.(tab.index)
-              void focusTerminalTab(tab.key)
-            }}
-         >
-           {tab.label}{#if $commandHeld && tabPosition < 9}<kbd class="kbd kbd-xs opacity-50">⌘⇧{tabPosition + 1}</kbd>{/if}
-         </button>
+        <button
+          class="flex items-center gap-1 px-3 py-1.5 text-sm {activeTabIndex === tab.index ? 'border-b-2 border-primary text-base-content font-semibold' : 'text-base-content/50'}"
+          onclick={() => {
+            activeTabIndex = tab.index
+            syncSession()
+            onTabChange?.(tab.index)
+            void focusTerminalTab(tab.key)
+          }}
+        >
+          {tab.label}{#if isTabExited(tab.key)}<span class="badge badge-sm badge-warning font-mono">exited</span>{/if}{#if $commandHeld && tabPosition < 9}<kbd class="kbd kbd-xs opacity-50">⌘⇧{tabPosition + 1}</kbd>{/if}
+        </button>
         <button
           class="pr-2 text-xs leading-none opacity-60 hover:opacity-100"
-          disabled={tabs.length <= 1}
-          onclick={() => closeTab(tab)}
+          disabled={tabs.length <= 1 && !isTabExited(tab.key)}
+          onclick={() => closeTab(tab, { allowClosingLastTab: isTabExited(tab.key) })}
           aria-label="×"
         >
           ×
@@ -172,7 +224,6 @@
           terminalKey={tab.key}
           terminalIndex={tab.index}
           isActive={tab.index === activeTabIndex}
-          onExit={() => closeTab(tab, { allowClosingLastTab: true })}
         />
       </div>
     {/each}

@@ -127,15 +127,13 @@ import TaskTerminal from './TaskTerminal.svelte'
 import type { PoolEntry } from '../../lib/terminalPool'
 
 describe('TaskTerminal', () => {
-  it('calls onExit when the pool reports a matching shell exit', async () => {
-    const onExitMock = vi.fn()
-    
-    render(TaskTerminal, { 
-      props: { 
-        taskId: 'T-1', workspacePath: '/path/to/worktree', 
-        terminalKey: 'T-1-shell-2', terminalIndex: 2, 
-        isActive: true, onExit: onExitMock 
-      } 
+  it('marks the terminal exited when the pool reports a matching shell exit', async () => {
+    render(TaskTerminal, {
+      props: {
+        taskId: 'T-1', workspacePath: '/path/to/worktree',
+        terminalKey: 'T-1-shell-2', terminalIndex: 2,
+        isActive: true,
+      }
     })
 
     await vi.waitFor(() => {
@@ -146,14 +144,16 @@ describe('TaskTerminal', () => {
     mockPoolEntry.ptyActive = true
     mockPoolEntry.needsClear = false
     ;(mockPoolEntry as unknown as PoolEntry).currentPtyInstance = 1
-    
+
     if (!listenCallback) {
       throw new Error('Expected pty-exit listener to be registered')
     }
 
     listenCallback({ payload: { instance_id: 1 } })
 
-    expect(onExitMock).toHaveBeenCalled()
+    await vi.waitFor(() => {
+      expect(screen.getByText('Shell exited')).toBeTruthy()
+    })
   })
 
   beforeEach(() => {
@@ -715,6 +715,25 @@ describe('TaskTerminal', () => {
     await fireEvent.click(restartButton)
 
     expect(mockPoolEntry.ptyActive).toBe(true)
+  })
+
+  it('restart clears the previous exited output before starting the fresh shell', async () => {
+    render(TaskTerminal, { props: { taskId: 'T-1', workspacePath: '/path/to/worktree', terminalKey: 'T-1-shell-2', terminalIndex: 2, isActive: true } })
+
+    await vi.waitFor(() => {
+      expect(listenCallback).not.toBeNull()
+    })
+
+    emitPtyExit()
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Restart' })).toBeTruthy()
+    })
+
+    mockPoolEntry.terminal.reset.mockClear()
+    await fireEvent.click(screen.getByRole('button', { name: 'Restart' }))
+
+    expect(mockPoolEntry.terminal.reset).toHaveBeenCalledTimes(1)
   })
 
   it('does not spawn the same shell twice while the initial spawn is still in flight', async () => {

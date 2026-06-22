@@ -10,10 +10,9 @@
     terminalKey: string
     terminalIndex: number
     isActive: boolean
-    onExit?: () => void
   }
 
-  let { taskId, workspacePath, terminalKey, terminalIndex, isActive, onExit }: Props = $props()
+  let { taskId, workspacePath, terminalKey, terminalIndex, isActive }: Props = $props()
 
   let terminalEl: HTMLDivElement
   let unsubscribeShellLifecycle: (() => void) | null = null
@@ -112,9 +111,7 @@
 
     unsubscribeShellLifecycle = subscribeShellLifecycle(nextTerminalKey, (state: ShellLifecycleState) => {
       if (!poolEntry || boundTerminalKey !== nextTerminalKey) return
-      const wasExited = lifecycle.shellExited
       lifecycle = state
-      if (!wasExited && state.shellExited) onExit?.()
     })
 
     if (isActive) {
@@ -178,6 +175,7 @@
       await killPty(context.terminalKey).catch(e => {
         console.error('[TaskTerminal] Failed to kill PTY on restart:', e)
       })
+      entry.terminal.reset()
       markPtySpawnPending(entry)
       const instanceId = await spawnShellPty(context.taskId, context.workspacePath, entry.terminal.cols, entry.terminal.rows, context.terminalIndex)
       markShellPtyStarted(entry, instanceId)
@@ -194,7 +192,7 @@
   <div class="flex-1 overflow-hidden min-h-0 relative">
     <div class="shell-terminal-wrapper w-full h-full p-3 bg-base-100" bind:this={terminalEl}></div>
     {#if lifecycle.shellExited}
-      <div class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-base-100/90 z-[1]">
+      <div class="absolute bottom-3 right-3 flex items-center gap-2 rounded-box bg-base-200/95 px-3 py-2 shadow z-[1]">
         <span class="text-sm font-mono text-base-content/70">Shell exited</span>
         <button class="btn btn-sm btn-ghost text-primary font-mono" onclick={handleRestart}>
           Restart
