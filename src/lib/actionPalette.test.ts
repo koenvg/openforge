@@ -9,6 +9,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     initial_prompt: 'Test task',
     status: 'backlog',
     prompt: null,
+    title: null,
     summary: null,
     agent: null,
     permission_mode: null,

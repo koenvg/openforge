@@ -83,6 +83,7 @@ const baseTask: Task = {
 	status: "doing",
 	project_id: "proj-1",
 	prompt: null,
+	title: null,
 	summary: null,
 	agent: null,
 	permission_mode: null,

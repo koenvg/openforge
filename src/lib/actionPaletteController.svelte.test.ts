@@ -14,6 +14,7 @@ const selectedTask: Task = {
   id: 'T-1',
   initial_prompt: 'Prompt',
   prompt: null,
+  title: null,
   summary: null,
   status: 'doing',
   agent: null,

@@ -403,6 +403,7 @@ mod tests {
             summary: None,
             agent: agent.map(str::to_string),
             permission_mode: permission_mode.map(str::to_string),
+            title: None,
             depends_on: Vec::new(),
             labels: Vec::new(),
         }

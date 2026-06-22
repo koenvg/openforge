@@ -89,6 +89,7 @@ vi.mock('../../lib/stores', () => ({
 vi.mock('../../lib/ipc', () => ({
   updateTaskFields: vi.fn().mockResolvedValue(undefined),
   updateTaskStatus: vi.fn().mockResolvedValue(undefined),
+  updateTaskTitle: vi.fn().mockResolvedValue(undefined),
   deleteTask: vi.fn().mockResolvedValue(undefined),
   getPrComments: vi.fn().mockResolvedValue([]),
   markCommentAddressed: vi.fn().mockResolvedValue(undefined),
@@ -237,6 +238,7 @@ const baseTask: Task = {
   initial_prompt: 'Implement auth middleware',
   status: 'backlog',
   prompt: null,
+  title: null,
   summary: null,
   agent: null,
   permission_mode: null,
@@ -378,12 +380,81 @@ describe('TaskDetailView', () => {
     expect(screen.queryByText('Move to Done')).toBeNull()
   })
 
+  it('does not render a header Edit button (prompt editing lives in the info panel)', () => {
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onEdit: vi.fn() } })
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
+  })
+
+  it('exposes Edit prompt in the info panel for backlog tasks when onEdit is provided', async () => {
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onEdit: vi.fn() } })
+    expect(await screen.findByRole('button', { name: 'Edit prompt' })).toBeTruthy()
+  })
+
+  it('does not expose Edit prompt for doing tasks', () => {
+    render(TaskDetailView, { props: { task: { ...baseTask, status: 'doing' }, onRunAction: mockOnRunAction, onEdit: vi.fn() } })
+    expect(screen.queryByRole('button', { name: 'Edit prompt' })).toBeNull()
+  })
+
+  it('Edit prompt in the info panel calls onEdit with the task id', async () => {
+    const onEdit = vi.fn()
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onEdit } })
+    await fireEvent.click(await screen.findByRole('button', { name: 'Edit prompt' }))
+    expect(onEdit).toHaveBeenCalledWith('T-42')
+  })
+
   it('hides all action buttons for done tasks', () => {
     const doneTask = { ...baseTask, status: 'done' }
     render(TaskDetailView, { props: { task: doneTask, onRunAction: mockOnRunAction } })
     expect(screen.queryByText('Move to Done')).toBeNull()
     expect(screen.queryByText('Start Task')).toBeNull()
     expect(screen.queryByText('Go')).toBeNull()
+  })
+
+  it('shows a Rename task button for backlog tasks', () => {
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    expect(screen.getByRole('button', { name: 'Rename task' })).toBeTruthy()
+  })
+
+  it('shows a Rename task button regardless of status', () => {
+    const { unmount } = render(TaskDetailView, { props: { task: { ...baseTask, status: 'doing' }, onRunAction: mockOnRunAction } })
+    expect(screen.getByRole('button', { name: 'Rename task' })).toBeTruthy()
+    unmount()
+    render(TaskDetailView, { props: { task: { ...baseTask, status: 'done' }, onRunAction: mockOnRunAction } })
+    expect(screen.getByRole('button', { name: 'Rename task' })).toBeTruthy()
+  })
+
+  it('clicking Rename reveals a title input pre-filled with the current title', async () => {
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Rename task' }))
+    const input = screen.getByRole('textbox', { name: 'Task title' }) as HTMLInputElement
+    expect(input.value).toBe('Implement auth middleware')
+  })
+
+  it('saves the new title on Enter and refreshes', async () => {
+    const { updateTaskTitle } = await import('../../lib/ipc')
+    vi.mocked(updateTaskTitle).mockClear()
+    const onTaskUpdated = vi.fn()
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onTaskUpdated } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Rename task' }))
+    const input = screen.getByRole('textbox', { name: 'Task title' })
+    await fireEvent.input(input, { target: { value: 'Renamed task' } })
+    await fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => {
+      expect(updateTaskTitle).toHaveBeenCalledWith('T-42', 'Renamed task')
+    })
+    expect(onTaskUpdated).toHaveBeenCalled()
+  })
+
+  it('Escape cancels renaming without saving', async () => {
+    const { updateTaskTitle } = await import('../../lib/ipc')
+    vi.mocked(updateTaskTitle).mockClear()
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Rename task' }))
+    const input = screen.getByRole('textbox', { name: 'Task title' })
+    await fireEvent.input(input, { target: { value: 'Discard me' } })
+    await fireEvent.keyDown(input, { key: 'Escape' })
+    expect(updateTaskTitle).not.toHaveBeenCalled()
+    expect(screen.queryByRole('textbox', { name: 'Task title' })).toBeNull()
   })
 
   it('Start Task calls onRunAction with empty prompt', () => {

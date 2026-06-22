@@ -46,6 +46,7 @@ const baseTask: Task = {
   initial_prompt: 'Implement auth middleware',
   status: 'backlog',
   prompt: 'Build the auth middleware implementation with JWT support',
+  title: null,
   summary: null,
   agent: null,
   permission_mode: null,

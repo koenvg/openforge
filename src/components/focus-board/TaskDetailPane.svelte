@@ -7,9 +7,10 @@
     allTasks?: Task[]
     pullRequests?: PullRequestInfo[]
     onOpenFullView?: () => void
+    onEditTask?: (taskId: string) => void
   }
 
-  let { task, allTasks = [], pullRequests = [], onOpenFullView }: Props = $props()
+  let { task, allTasks = [], pullRequests = [], onOpenFullView, onEditTask }: Props = $props()
 </script>
 
 {#if task === null}
@@ -32,6 +33,7 @@
       taskPrsOverride={pullRequests}
       allowCommentAddressing={true}
       surface="transparent"
+      onEditPrompt={onEditTask ? () => onEditTask?.(task.id) : undefined}
     />
   </div>
 {/if}

@@ -14,6 +14,10 @@ export async function updateTask(id: string, prompt: string): Promise<void> {
   return invoke("update_task", { id, prompt });
 }
 
+export async function updateTaskTitle(id: string, title: string): Promise<void> {
+  return invoke("update_task_title", { id, title });
+}
+
 export async function updateTaskSummary(id: string, summary: string): Promise<void> {
   return invoke("update_task_summary", { id, summary });
 }

@@ -994,6 +994,34 @@ DROP TABLE plugin_storage_legacy;
 
         Ok(())
     }),
+    // Editable display title, decoupled from the prompt so it can be renamed at any
+    // status. NULL means "no explicit title" and the UI falls back to the prompt.
+    // Idempotent because some legacy fixtures/databases still carry a `title` column.
+    M::up_with_hook("", |tx| {
+        let tasks_table_exists: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='tasks'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if !tasks_table_exists {
+            return Ok(());
+        }
+
+        let has_title: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'title'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+        if !has_title {
+            tx.execute("ALTER TABLE tasks ADD COLUMN title TEXT", [])
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -1287,7 +1315,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = LATEST_USER_VERSION - 1;
+            let previous_version = LATEST_USER_VERSION - 2;
             conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
                 .expect("set user_version");
             conn.execute(
@@ -1351,7 +1379,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = LATEST_USER_VERSION - 2;
+            let previous_version = LATEST_USER_VERSION - 3;
             conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
                 .expect("set user_version");
             conn.execute("CREATE TABLE plugins (id TEXT PRIMARY KEY)", [])
@@ -1530,7 +1558,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = LATEST_USER_VERSION - 3;
+            let previous_version = LATEST_USER_VERSION - 4;
             conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
                 .expect("set user_version");
             conn.execute_batch(
@@ -2383,7 +2411,7 @@ mod tests {
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
             conn.execute(
-                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 6),
+                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 7),
                 [],
             )
             .expect("set pre-upgrade user_version");
@@ -2429,7 +2457,7 @@ mod tests {
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
             conn.execute(
-                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 6),
+                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 7),
                 [],
             )
             .expect("set pre-upgrade user_version");

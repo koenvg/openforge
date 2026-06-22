@@ -4,9 +4,13 @@
 
   interface Props {
     task: Task
+    onEditPrompt?: () => void
   }
 
-  let { task }: Props = $props()
+  let { task, onEditPrompt }: Props = $props()
+
+  // The prompt can only be edited before it has been injected into a session.
+  let canEditPrompt = $derived(task.status === 'backlog' && !!onEditPrompt)
 
   const HANDOFF_PREVIEW_LENGTH = 112
   const PROMPT_PREVIEW_LENGTH = 148
@@ -71,7 +75,17 @@
   </section>
 
   <section class="px-3 py-2 flex flex-col gap-2" aria-label="Initial Prompt">
-    <h4 class="m-0 text-sm font-semibold text-base-content">Initial Prompt</h4>
+    <div class="flex items-center gap-1.5">
+      <h4 class="m-0 text-sm font-semibold text-base-content">Initial Prompt</h4>
+      {#if canEditPrompt}
+        <button
+          type="button"
+          class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-base-content"
+          aria-label="Edit prompt"
+          onclick={() => onEditPrompt?.()}
+        >✎</button>
+      {/if}
+    </div>
     <div id={promptContentId} role="region" aria-label="Initial Prompt content" class="text-xs text-base-content/65 leading-relaxed whitespace-pre-wrap break-words">{visiblePrompt}</div>
     {#if promptHasOverflow}
       <div role="group" aria-label="Initial Prompt actions" class="flex justify-start">

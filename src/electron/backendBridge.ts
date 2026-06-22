@@ -38,6 +38,7 @@ export interface ElectronInvokeDeps {
 const SIDECAR_BACKED_COMMANDS = new Set([
   'create_task',
   'update_task',
+  'update_task_title',
   'update_task_summary',
   'update_task_status',
   'delete_task',

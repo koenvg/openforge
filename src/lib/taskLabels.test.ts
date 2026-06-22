@@ -11,6 +11,7 @@ function task(id: string, status: Task['status'], labels: TaskLabel[] = []): Tas
     initial_prompt: id,
     status,
     prompt: null,
+    title: null,
     summary: null,
     agent: null,
     permission_mode: null,

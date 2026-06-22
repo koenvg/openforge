@@ -21,6 +21,7 @@ const makeTask = (id: string, status: BoardStatus): Task => ({
   created_at: 1000,
   updated_at: 2000,
   prompt: '',
+  title: null,
   summary: null,
   agent: null,
   permission_mode: 'default',
@@ -66,6 +67,40 @@ describe('TaskContextMenu', () => {
     render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose, onStart } })
     await fireEvent.click(screen.getByText('Start Task'))
     expect(onStart).toHaveBeenCalledWith('T-1')
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('shows Edit Task for backlog tasks when onEdit is provided', () => {
+    tasks.set([makeTask('T-1', 'backlog')])
+    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn(), onEdit: vi.fn() } })
+    expect(screen.getByText('Edit Task')).toBeTruthy()
+  })
+
+  it('does not show Edit Task for doing tasks', () => {
+    tasks.set([makeTask('T-1', 'doing')])
+    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn(), onEdit: vi.fn() } })
+    expect(screen.queryByText('Edit Task')).toBeNull()
+  })
+
+  it('does not show Edit Task for done tasks', () => {
+    tasks.set([makeTask('T-1', 'done')])
+    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn(), onEdit: vi.fn() } })
+    expect(screen.queryByText('Edit Task')).toBeNull()
+  })
+
+  it('does not show Edit Task when onEdit is not provided', () => {
+    tasks.set([makeTask('T-1', 'backlog')])
+    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
+    expect(screen.queryByText('Edit Task')).toBeNull()
+  })
+
+  it('calls onEdit with taskId and closes when Edit Task is clicked', async () => {
+    const onEdit = vi.fn()
+    const onClose = vi.fn()
+    tasks.set([makeTask('T-1', 'backlog')])
+    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose, onEdit } })
+    await fireEvent.click(screen.getByText('Edit Task'))
+    expect(onEdit).toHaveBeenCalledWith('T-1')
     expect(onClose).toHaveBeenCalled()
   })
 

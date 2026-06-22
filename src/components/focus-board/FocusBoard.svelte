@@ -26,6 +26,8 @@
     activeSessions: Map<string, AgentSession>
     ticketPrs: Map<string, PullRequestInfo[]>
     onOpenTask: (taskId: string) => void
+    onEditTask?: (taskId: string) => void
+    onTaskUpdated?: () => void | Promise<void>
     onRunAction: (data: { taskId: string; actionPrompt: string; agent: string | null }) => void
   }
 
@@ -35,7 +37,7 @@
     { value: 'backlog' as BoardFilter, label: 'Backlog', shortcut: '⌘3' },
   ] as const
 
-  let { projectId, projectName, tasks, activeSessions, ticketPrs, onOpenTask, onRunAction }: Props = $props()
+  let { projectId, projectName, tasks, activeSessions, ticketPrs, onOpenTask, onEditTask, onTaskUpdated, onRunAction }: Props = $props()
 
   let selectedTaskIdLocal: string | null = $state(null)
   let paneHasFocus = $state(false)
@@ -333,6 +335,7 @@
               }
             }}
             onContextMenu={(e) => handleContextMenu(e, task.id)}
+            {onTaskUpdated}
           />
         {/each}
       {/if}
@@ -343,6 +346,7 @@
         task={selectedTask}
         allTasks={tasks}
         pullRequests={selectedTask ? ticketPrs.get(selectedTask.id) ?? [] : []}
+        onEditTask={onEditTask}
         onOpenFullView={() => {
           if (selectedTaskIdLocal) onOpenTask(selectedTaskIdLocal)
         }}
@@ -357,6 +361,7 @@
     taskId={contextMenu.taskId}
     onClose={() => contextMenu = { ...contextMenu, visible: false }}
     onStart={(taskId) => onRunAction({ taskId, actionPrompt: '', agent: null })}
+    onEdit={onEditTask}
     onDelete={() => contextMenu = { ...contextMenu, visible: false }}
     actions={projectActions}
     {onRunAction}

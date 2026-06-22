@@ -33,6 +33,7 @@ const makeTask = (id: string, status: BoardStatus, prompt: string, labels: TaskL
   initial_prompt: prompt,
   status,
   prompt: null,
+  title: null,
   summary: null,
   agent: null,
   permission_mode: null,
