@@ -78,6 +78,35 @@ describe('SettingsGeneralCard', () => {
     expect(onProjectColorChange).toHaveBeenLastCalledWith('indigo')
   })
 
+  it('uses native disabled semantics for form controls when disabled', () => {
+    render(SettingsGeneralCard, { props: defaultProps({ disabled: true }) })
+
+    expect(requireElement(screen.getByLabelText('Project Name'), HTMLInputElement).disabled).toBe(true)
+    expect(requireElement(screen.getByLabelText('Project Path'), HTMLInputElement).disabled).toBe(true)
+    expect(requireElement(screen.getByRole('combobox'), HTMLSelectElement).disabled).toBe(true)
+    expect(requireElement(screen.getByTestId('use-worktrees-toggle'), HTMLInputElement).disabled).toBe(true)
+  })
+
+  it('removes project color radios from tab order and suppresses activation when disabled', async () => {
+    const onProjectColorChange = vi.fn()
+    render(SettingsGeneralCard, {
+      props: defaultProps({ disabled: true, projectColor: 'rose', onProjectColorChange }),
+    })
+
+    const selectedRadio = screen.getByRole('radio', { name: 'Rose project color' })
+    const defaultRadio = screen.getByRole('radio', { name: 'Default Gray project color' })
+
+    expect(selectedRadio.getAttribute('aria-disabled')).toBe('true')
+    expect(selectedRadio.getAttribute('tabindex')).toBe('-1')
+    expect(defaultRadio.getAttribute('aria-disabled')).toBe('true')
+    expect(defaultRadio.getAttribute('tabindex')).toBe('-1')
+
+    await fireEvent.click(defaultRadio)
+    await fireEvent.keyDown(selectedRadio, { key: 'ArrowRight' })
+
+    expect(onProjectColorChange).not.toHaveBeenCalled()
+  })
+
   describe('git worktrees toggle', () => {
     it('renders Git Worktrees label', () => {
       render(SettingsGeneralCard, { props: defaultProps() })

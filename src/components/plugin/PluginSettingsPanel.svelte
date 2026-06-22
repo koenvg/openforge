@@ -53,6 +53,8 @@
   async function handleInstall(event: SubmitEvent) {
     event.preventDefault()
 
+    if (disabled) return
+
     const source = sourceInput.trim()
     installError = null
     installMessage = null
@@ -83,6 +85,8 @@
   }
 
   async function handleEnable(pluginId: string) {
+    if (disabled) return
+
     actionError = null
     try {
       await enablePluginForProject(projectId, pluginId)
@@ -92,6 +96,8 @@
   }
 
   async function handleDisable(pluginId: string) {
+    if (disabled) return
+
     actionError = null
     try {
       await disablePluginForProject(projectId, pluginId)
@@ -101,6 +107,8 @@
   }
 
   async function handleReload(pluginId: string) {
+    if (disabled) return
+
     actionError = null
     try {
       await reloadPluginForProject(projectId, pluginId)
@@ -110,6 +118,8 @@
   }
 
   async function handleUninstall(pluginId: string) {
+    if (disabled) return
+
     actionError = null
     try {
       await uninstallPlugin(pluginId)
@@ -148,6 +158,8 @@
   }
 
   async function copyDiagnostics(plugin: PluginEntry, isEnabled: boolean) {
+    if (disabled) return
+
     actionError = null
     try {
       await navigator.clipboard.writeText(diagnosticsFor(plugin, isEnabled))
@@ -173,7 +185,7 @@
       <div class="grid grid-cols-1 md:grid-cols-[10rem_1fr_auto] gap-3 items-end">
         <label class="form-control flex flex-col gap-1">
           <span class="label-text text-xs">Source type</span>
-          <select class="select select-bordered select-sm" bind:value={sourceType} disabled={isInstalling}>
+          <select class="select select-bordered select-sm" bind:value={sourceType} disabled={disabled || isInstalling}>
             <option value="npm">npm</option>
             <option value="git">git</option>
             <option value="local">local path</option>
@@ -186,11 +198,11 @@
             class="input input-bordered input-sm font-mono"
             bind:value={sourceInput}
             placeholder={sourcePlaceholder}
-            disabled={isInstalling}
+            disabled={disabled || isInstalling}
           />
         </label>
 
-        <button class="btn btn-primary btn-sm" type="submit" disabled={isInstalling}>
+        <button class="btn btn-primary btn-sm" type="submit" disabled={disabled || isInstalling}>
           {isInstalling ? 'Installing…' : 'Install package'}
         </button>
       </div>
@@ -268,15 +280,15 @@
 
                 <div class="flex flex-col items-end gap-2 shrink-0">
                   {#if isEnabled}
-                    <button class="btn btn-outline btn-xs" type="button" aria-label="Disable for this project: {plugin.manifest.name}" onclick={() => handleDisable(plugin.manifest.id)}>Disable for this project</button>
+                    <button class="btn btn-outline btn-xs" type="button" aria-label="Disable for this project: {plugin.manifest.name}" disabled={disabled} onclick={() => handleDisable(plugin.manifest.id)}>Disable for this project</button>
                   {:else}
-                    <button class="btn btn-primary btn-xs" type="button" aria-label="Enable for this project: {plugin.manifest.name}" onclick={() => handleEnable(plugin.manifest.id)}>Enable for this project</button>
+                    <button class="btn btn-primary btn-xs" type="button" aria-label="Enable for this project: {plugin.manifest.name}" disabled={disabled} onclick={() => handleEnable(plugin.manifest.id)}>Enable for this project</button>
                   {/if}
-                  <button class="btn btn-ghost btn-xs" type="button" aria-label="Reload plugin: {plugin.manifest.name}" onclick={() => handleReload(plugin.manifest.id)}>Reload plugin</button>
+                  <button class="btn btn-ghost btn-xs" type="button" aria-label="Reload plugin: {plugin.manifest.name}" disabled={disabled} onclick={() => handleReload(plugin.manifest.id)}>Reload plugin</button>
                   {#if !isBuiltIn}
-                    <button class="btn btn-error btn-outline btn-xs" type="button" aria-label="Uninstall plugin: {plugin.manifest.name}" onclick={() => handleUninstall(plugin.manifest.id)}>Uninstall plugin</button>
+                    <button class="btn btn-error btn-outline btn-xs" type="button" aria-label="Uninstall plugin: {plugin.manifest.name}" disabled={disabled} onclick={() => handleUninstall(plugin.manifest.id)}>Uninstall plugin</button>
                   {/if}
-                  <button class="btn btn-ghost btn-xs" type="button" aria-label="Copy diagnostics: {plugin.manifest.name}" onclick={() => copyDiagnostics(plugin, isEnabled)}>Copy diagnostics</button>
+                  <button class="btn btn-ghost btn-xs" type="button" aria-label="Copy diagnostics: {plugin.manifest.name}" disabled={disabled} onclick={() => copyDiagnostics(plugin, isEnabled)}>Copy diagnostics</button>
                 </div>
               </div>
 

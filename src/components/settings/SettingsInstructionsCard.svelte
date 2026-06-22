@@ -17,6 +17,11 @@
     onInstructionsChange,
     onHandoffNotesTemplateChange,
   }: Props = $props()
+
+  function resetHandoffNotesTemplate() {
+    if (disabled) return
+    onHandoffNotesTemplateChange('')
+  }
 </script>
 
 <div id="section-instructions" class="rounded-lg border border-base-300 overflow-hidden" style="background-color: var(--project-bg, oklch(var(--b1)))">
@@ -36,12 +41,13 @@
       <textarea
         bind:value={agentInstructions}
         oninput={(e) => {
-          if (!(e.currentTarget instanceof HTMLTextAreaElement)) return
+          if (disabled || !(e.currentTarget instanceof HTMLTextAreaElement)) return
           onInstructionsChange(e.currentTarget.value)
         }}
         placeholder="Optional instructions prepended to the first prompt when starting a new task..."
         rows="4"
         class="textarea textarea-bordered w-full text-sm resize-y {disabled ? 'opacity-50 pointer-events-none' : ''}"
+        disabled={disabled}
       ></textarea>
     </label>
 
@@ -50,12 +56,13 @@
       <textarea
         bind:value={handoffNotesTemplate}
         oninput={(e) => {
-          if (!(e.currentTarget instanceof HTMLTextAreaElement)) return
+          if (disabled || !(e.currentTarget instanceof HTMLTextAreaElement)) return
           onHandoffNotesTemplateChange(e.currentTarget.value)
         }}
         placeholder={DEFAULT_HANDOFF_NOTES_TEMPLATE}
         rows="10"
         class="textarea textarea-bordered w-full text-sm resize-y font-mono {disabled ? 'opacity-50 pointer-events-none' : ''}"
+        disabled={disabled}
       ></textarea>
     </label>
     <div class="flex items-center justify-between gap-3">
@@ -66,7 +73,7 @@
         type="button"
         class="btn btn-ghost btn-xs shrink-0"
         disabled={disabled || handoffNotesTemplate.length === 0}
-        onclick={() => onHandoffNotesTemplateChange('')}
+        onclick={resetHandoffNotesTemplate}
       >
         Reset to default template
       </button>

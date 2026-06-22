@@ -82,6 +82,33 @@ describe('PluginSettingsPanel', () => {
     expect(screen.getByText('read:files')).toBeTruthy()
   })
 
+  it('uses native disabled semantics for install and plugin action controls when disabled', () => {
+    installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
+
+    render(PluginSettingsPanel, { projectId: 'proj-1', disabled: true })
+
+    expect((screen.getByLabelText('Source type') as HTMLSelectElement).disabled).toBe(true)
+    expect((screen.getByLabelText('Package source') as HTMLInputElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Install package' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Enable for this project: Test Plugin' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Reload plugin: Test Plugin' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Uninstall plugin: Test Plugin' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Copy diagnostics: Test Plugin' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('does not submit plugin installs while disabled', async () => {
+    vi.mocked(installPluginFromNpm).mockResolvedValue(undefined)
+    render(PluginSettingsPanel, { projectId: 'proj-1', disabled: true })
+
+    const submitButton = screen.getByRole('button', { name: 'Install package' })
+    const form = submitButton.closest('form')
+    expect(form).toBeTruthy()
+
+    await fireEvent.submit(form as HTMLFormElement)
+
+    expect(installPluginFromNpm).not.toHaveBeenCalled()
+  })
+
   it('enables plugins through an explicit project CTA without using install as enablement', async () => {
     installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
     

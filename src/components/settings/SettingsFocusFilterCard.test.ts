@@ -102,4 +102,25 @@ describe('SettingsFocusFilterCard', () => {
 		await fireEvent.click(resetButton)
 		expect(onFocusStatesChange).toHaveBeenCalledWith(DEFAULT_FOCUS_STATES)
 	})
+
+	it('uses native disabled semantics and suppresses changes when disabled', async () => {
+		const onFocusStatesChange = vi.fn()
+		render(SettingsFocusFilterCard, {
+			props: defaultProps({ focusStates: ['needs-input'], disabled: true, onFocusStatesChange }),
+		})
+
+		const idleBox = requireElement(screen.getByLabelText('Idle'), HTMLInputElement)
+		const needsInputBox = requireElement(screen.getByLabelText('Needs Input'), HTMLInputElement)
+		const resetButton = requireElement(screen.getByRole('button', { name: /reset to default/i }), HTMLButtonElement)
+
+		expect(idleBox.disabled).toBe(true)
+		expect(needsInputBox.disabled).toBe(true)
+		expect(resetButton.disabled).toBe(true)
+
+		await fireEvent.click(idleBox)
+		await fireEvent.click(needsInputBox)
+		await fireEvent.click(resetButton)
+
+		expect(onFocusStatesChange).not.toHaveBeenCalled()
+	})
 })

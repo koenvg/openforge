@@ -22,7 +22,14 @@
 		onResetActions
 	}: Props = $props();
 
+	function handleAddAction() {
+		if (disabled) return;
+		onAddAction();
+	}
+
 	function handleDelete(action: Action) {
+		if (disabled) return;
+
 		if (action.builtin) {
 			if (!confirm('Delete built-in action "' + action.name + '"? You can restore it with Reset to Defaults.')) {
 				return;
@@ -31,7 +38,19 @@
 		void onDeleteAction(action.id);
 	}
 
+	function handleToggle(actionId: string) {
+		if (disabled) return;
+		onToggleAction(actionId);
+	}
+
+	function handleUpdate(actionId: string, field: string, value: string) {
+		if (disabled) return;
+		onUpdateAction(actionId, field, value);
+	}
+
 	function handleReset() {
+		if (disabled) return;
+
 		if (!confirm('Reset all actions to defaults? This will remove any custom actions.')) {
 			return;
 		}
@@ -47,7 +66,8 @@
 		</div>
 		<button
 			class="btn btn-sm bg-neutral text-neutral-content"
-			onclick={onAddAction}
+			disabled={disabled}
+			onclick={handleAddAction}
 		>
 			Add Action
 		</button>
@@ -65,13 +85,15 @@
 						<input
 							type="checkbox"
 							checked={action.enabled}
-							onchange={() => onToggleAction(action.id)}
+							disabled={disabled}
+							onchange={() => handleToggle(action.id)}
 							class="checkbox checkbox-primary checkbox-sm"
 						/>
 						<span class="text-sm font-semibold text-base-content">{action.name}</span>
 					</label>
 					<button
 						class="btn btn-ghost btn-xs text-base-content/50 hover:bg-error hover:text-error-content"
+						disabled={disabled}
 						onclick={() => handleDelete(action)}
 						title="Delete action"
 					>
@@ -84,7 +106,8 @@
 					<input
 						type="text"
 						value={action.name}
-						oninput={(e) => onUpdateAction(action.id, 'name', e.currentTarget.value)}
+						disabled={disabled}
+						oninput={(e) => handleUpdate(action.id, 'name', e.currentTarget.value)}
 						placeholder="Action name"
 						class="input input-bordered input-sm w-full"
 					/>
@@ -94,7 +117,8 @@
 				<span class="text-[0.7rem] text-base-content/50">Prompt</span>
 				<textarea
 					value={action.prompt}
-					oninput={(e) => onUpdateAction(action.id, 'prompt', e.currentTarget.value)}
+					disabled={disabled}
+					oninput={(e) => handleUpdate(action.id, 'prompt', e.currentTarget.value)}
 					placeholder="Instruction for the AI provider..."
 					rows="3"
 					class="textarea textarea-bordered w-full text-sm resize-y"
@@ -105,6 +129,7 @@
 
 		<button
 			class="btn btn-ghost btn-sm border border-base-300 text-base-content/50 hover:border-base-content hover:text-base-content"
+			disabled={disabled}
 			onclick={handleReset}
 		>
 			Reset to Defaults

@@ -13,10 +13,17 @@
 	const { focusStates, onFocusStatesChange, disabled }: Props = $props();
 
 	function toggleState(state: TaskState, checked: boolean) {
+		if (disabled) return;
+
 		const updated = checked
 			? [...focusStates, state]
 			: focusStates.filter((s) => s !== state);
 		onFocusStatesChange(updated);
+	}
+
+	function resetToDefault() {
+		if (disabled) return;
+		onFocusStatesChange(DEFAULT_FOCUS_STATES);
 	}
 </script>
 
@@ -37,6 +44,7 @@
 					<input
 						type="checkbox"
 						checked={focusStates.includes(state)}
+						disabled={disabled}
 						onchange={(e) => toggleState(state, e.currentTarget.checked)}
 						class="checkbox checkbox-sm"
 					/>
@@ -47,7 +55,8 @@
 
 		<button
 			class="btn btn-ghost btn-sm border border-base-300 text-base-content/50 hover:border-base-content hover:text-base-content"
-			onclick={() => onFocusStatesChange(DEFAULT_FOCUS_STATES)}
+			disabled={disabled}
+			onclick={resetToDefault}
 		>
 			Reset to Default
 		</button>
