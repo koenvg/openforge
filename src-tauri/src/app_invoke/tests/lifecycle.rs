@@ -162,10 +162,12 @@ fn ensure_windows_pathext_resolves_cmd(original_pathext: Option<&OsString>) {
     std::env::set_var("PATHEXT", extensions.join(";"));
 }
 
+const PROVIDER_RECORD_COMPLETE: &str = "openforge-provider-record=complete";
+
 #[cfg(unix)]
 fn install_fake_provider(bin_dir: &Path, command: &str, log_path: &Path) {
     let script = format!(
-        "#!/bin/sh\n{{\n  printf 'provider={command}\\n'\n  printf 'cwd=%s\\n' \"$PWD\"\n  i=0\n  for arg in \"$@\"; do\n    i=$((i + 1))\n    printf 'arg%s=%s\\n' \"$i\" \"$arg\"\n  done\n}} >> '{}'\nexit 0\n",
+        "#!/bin/sh\n{{\n  printf 'provider={command}\\n'\n  printf 'cwd=%s\\n' \"$PWD\"\n  i=0\n  for arg in \"$@\"; do\n    i=$((i + 1))\n    printf 'arg%s=%s\\n' \"$i\" \"$arg\"\n  done\n  printf '{PROVIDER_RECORD_COMPLETE}\\n'\n}} >> '{}'\nexit 0\n",
         log_path.display()
     );
     let path = bin_dir.join(command);
@@ -179,18 +181,38 @@ fn install_fake_provider(bin_dir: &Path, command: &str, log_path: &Path) {
 fn install_fake_provider(bin_dir: &Path, command: &str, log_path: &Path) {
     let escaped_log_path = log_path.to_string_lossy().replace('\'', "''");
     let script = format!(
-        "@echo off\r\npowershell -NoProfile -ExecutionPolicy Bypass -Command \"$log = '{}'; Add-Content -LiteralPath $log -Value 'provider={}'; Add-Content -LiteralPath $log -Value ('cwd=' + (Get-Location).Path); $i = 0; foreach ($arg in $args) {{ $i += 1; Add-Content -LiteralPath $log -Value ('arg' + $i + '=' + $arg) }}\" -- %*\r\nexit /b 0\r\n",
-        escaped_log_path, command
+        "@echo off\r\npowershell -NoProfile -ExecutionPolicy Bypass -Command \"$log = '{}'; Add-Content -LiteralPath $log -Value 'provider={}'; Add-Content -LiteralPath $log -Value ('cwd=' + (Get-Location).Path); $i = 0; foreach ($arg in $args) {{ $i += 1; Add-Content -LiteralPath $log -Value ('arg' + $i + '=' + $arg) }}; Add-Content -LiteralPath $log -Value '{}'\" -- %*\r\nexit /b 0\r\n",
+        escaped_log_path, command, PROVIDER_RECORD_COMPLETE
     );
     fs::write(bin_dir.join(format!("{command}.cmd")), script)
         .expect("fake provider should be written");
 }
 
-async fn wait_for_provider_log_containing(log_path: &Path, required_content: &str) -> String {
+fn provider_log_has_complete_record(
+    contents: &str,
+    provider: &str,
+    required_content: &str,
+) -> bool {
+    let provider_line = format!("provider={provider}");
+    contents
+        .match_indices(PROVIDER_RECORD_COMPLETE)
+        .any(|(complete_marker_index, _)| {
+            let completed_prefix = &contents[..complete_marker_index];
+            let record_start = completed_prefix.rfind("provider=").unwrap_or(0);
+            let record = &completed_prefix[record_start..];
+            record.contains(&provider_line) && record.contains(required_content)
+        })
+}
+
+async fn wait_for_provider_log_record(
+    log_path: &Path,
+    provider: &str,
+    required_content: &str,
+) -> String {
     let mut last_contents = String::new();
     for _ in 0..50 {
         if let Ok(contents) = fs::read_to_string(log_path) {
-            if contents.contains(required_content) {
+            if provider_log_has_complete_record(&contents, provider, required_content) {
                 return contents;
             }
             last_contents = contents;
@@ -198,9 +220,26 @@ async fn wait_for_provider_log_containing(log_path: &Path, required_content: &st
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     panic!(
-        "fake provider log at {} should contain {required_content:?}, got: {last_contents}",
+        "fake provider log at {} should contain completed {provider:?} record with {required_content:?}, got: {last_contents}",
         log_path.display()
     );
+}
+
+#[test]
+fn provider_log_requires_prompt_in_completed_invocation_record() {
+    let incomplete_record = "provider=codex\ncwd=/repo\narg1=Start through Codex provider\n";
+    assert!(!provider_log_has_complete_record(
+        incomplete_record,
+        "codex",
+        "Start through Codex provider"
+    ));
+
+    let complete_record = format!("{incomplete_record}{PROVIDER_RECORD_COMPLETE}\n");
+    assert!(provider_log_has_complete_record(
+        &complete_record,
+        "codex",
+        "Start through Codex provider"
+    ));
 }
 
 fn provider_repo_dir() -> (tempfile::TempDir, PathBuf) {
@@ -256,7 +295,7 @@ async fn start_implementation_starts_configured_pi_provider_through_app_invoke_b
     assert_eq!(response["port"], 0);
 
     let log =
-        wait_for_provider_log_containing(&sandbox.log_path, "Start through Pi provider").await;
+        wait_for_provider_log_record(&sandbox.log_path, "pi", "Start through Pi provider").await;
     assert!(log.contains("provider=pi"), "got provider log: {log}");
     let canonical_repo_dir = fs::canonicalize(&repo_dir).expect("repo dir should canonicalize");
     assert!(
@@ -343,9 +382,12 @@ async fn start_implementation_passes_task_agent_to_configured_opencode_provider(
     )
     .await;
 
-    let log =
-        wait_for_provider_log_containing(&sandbox.log_path, "Start through OpenCode provider")
-            .await;
+    let log = wait_for_provider_log_record(
+        &sandbox.log_path,
+        "opencode",
+        "Start through OpenCode provider",
+    )
+    .await;
     assert!(log.contains("provider=opencode"), "got provider log: {log}");
     assert!(log.contains("arg1=--agent"), "got provider log: {log}");
     assert!(
@@ -420,7 +462,8 @@ async fn start_implementation_starts_configured_codex_provider_through_app_invok
     assert_eq!(response["port"], 0);
 
     let log =
-        wait_for_provider_log_containing(&sandbox.log_path, "Start through Codex provider").await;
+        wait_for_provider_log_record(&sandbox.log_path, "codex", "Start through Codex provider")
+            .await;
     assert!(log.contains("provider=codex"), "got provider log: {log}");
     assert!(
         log.contains("Start through Codex provider"),
