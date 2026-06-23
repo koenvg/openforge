@@ -100,26 +100,27 @@ afterEach(() => {
 })
 
 describe('TerminalTaskPane workspace resolution', () => {
-  it('shows an unavailable state and retry when workspace lookup resolves null', async () => {
+  it('shows an unavailable state, focus path, and retry when workspace lookup resolves null', async () => {
     getTaskWorkspaceMock
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(makeWorkspace('T-1', '/repo/.worktrees/T-1'))
 
     render(TerminalTaskPane, { props: { taskId: 'T-1' } })
 
-    expect(screen.getByRole('status').textContent).toBe('Loading terminal workspace…')
+    expect(screen.getAllByRole('status')[0]?.textContent).toBe('Loading terminal workspace…')
 
     await screen.findAllByText('Terminal workspace unavailable for this task.')
     expect(screen.getByText('Start or repair the task workspace, then retry loading the terminal.')).toBeTruthy()
+    expect(screen.getByText(/Keyboard focus path:/)).toBeTruthy()
 
     await fireEvent.click(screen.getByRole('button', { name: 'Retry workspace lookup' }))
 
-    await vi.waitFor(() => expect(screen.getByRole('status').textContent).toBe('Terminal workspace ready.'))
+    await vi.waitFor(() => expect(screen.getAllByRole('status')[0]?.textContent).toBe('Terminal workspace ready.'))
     expect(getTaskWorkspaceMock).toHaveBeenCalledTimes(2)
     expect(terminalTabsRenderProps.at(-1)).toMatchObject({ taskId: 'T-1', workspacePath: '/repo/.worktrees/T-1' })
   })
 
-  it('shows an error state and retry when workspace lookup rejects', async () => {
+  it('shows an error state, announces the error, and retries when workspace lookup rejects', async () => {
     getTaskWorkspaceMock
       .mockRejectedValueOnce(new Error('workspace bridge offline'))
       .mockResolvedValueOnce(makeWorkspace('T-1', '/repo/.worktrees/T-1'))
@@ -128,10 +129,12 @@ describe('TerminalTaskPane workspace resolution', () => {
 
     await screen.findAllByText('Terminal workspace lookup failed.')
     expect(screen.getByText('workspace bridge offline')).toBeTruthy()
+    expect(screen.getByText(/Terminal workspace error/)).toBeTruthy()
+    expect(screen.getByText(/Keyboard focus path:/)).toBeTruthy()
 
     await fireEvent.click(screen.getByRole('button', { name: 'Retry workspace lookup' }))
 
-    await vi.waitFor(() => expect(screen.getByRole('status').textContent).toBe('Terminal workspace ready.'))
+    await vi.waitFor(() => expect(screen.getAllByRole('status')[0]?.textContent).toBe('Terminal workspace ready.'))
     expect(terminalTabsRenderProps.at(-1)).toMatchObject({ taskId: 'T-1', workspacePath: '/repo/.worktrees/T-1' })
   })
 

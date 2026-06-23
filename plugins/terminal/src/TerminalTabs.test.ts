@@ -87,7 +87,7 @@ describe('Terminal plugin TerminalTabs', () => {
 
     await vi.waitFor(() => {
       expect(screen.getByText('Shell 1')).toBeTruthy()
-      expect(screen.getByText('exited')).toBeTruthy()
+      expect(screen.getByText('Exited')).toBeTruthy()
     })
     expect(killPtyMock).not.toHaveBeenCalled()
     expect(releaseMock).not.toHaveBeenCalled()
@@ -107,18 +107,18 @@ describe('Terminal plugin TerminalTabs', () => {
       expect(screen.getByText('Shell 1')).toBeTruthy()
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: '+' }))
+    await fireEvent.click(screen.getByRole('button', { name: /Open new shell/ }))
     await vi.waitFor(() => {
       expect(screen.getByText('Shell 2')).toBeTruthy()
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Shell 1' }))
+    await fireEvent.click(screen.getByRole('tab', { name: /Shell 1/ }))
     emitShellLifecycle('T-1-shell-1', { ptyActive: false, shellExited: true, currentPtyInstance: 1 })
 
     await vi.waitFor(() => {
       expect(screen.getByText('Shell 1')).toBeTruthy()
       expect(screen.getByText('Shell 2')).toBeTruthy()
-      expect(screen.getByText('exited')).toBeTruthy()
+      expect(screen.getByText('Exited')).toBeTruthy()
     })
     expect(killPtyMock).not.toHaveBeenCalled()
     expect(releaseMock).not.toHaveBeenCalled()
@@ -142,10 +142,10 @@ describe('Terminal plugin TerminalTabs', () => {
 
     await vi.waitFor(() => {
       expect(screen.getByText('Shell 1')).toBeTruthy()
-      expect(screen.getByText('exited')).toBeTruthy()
+      expect(screen.getByText('Exited')).toBeTruthy()
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: '×' }))
+    await fireEvent.click(screen.getByRole('button', { name: /Close Shell/ }))
 
     await vi.waitFor(() => {
       expect(screen.queryByText('Shell 1')).toBeNull()

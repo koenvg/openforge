@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/svelte'
+import { cleanup, fireEvent, render, screen } from '@testing-library/svelte'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import TaskTerminal from './TaskTerminal.svelte'
 
@@ -181,6 +181,40 @@ describe('TaskTerminal ready affordance', () => {
     await vi.waitFor(() => {
       expect(screen.queryByText('Shell ready')).toBeNull()
       expect(screen.getByText('Shell exited')).toBeTruthy()
+    })
+  })
+
+  it('exposes the terminal as a named focusable region with focus path instructions', async () => {
+    renderTaskTerminal()
+
+    await vi.waitFor(() => {
+      const region = screen.getByRole('region', { name: /Terminal region for Shell 1/ })
+      expect(region.getAttribute('title')).toContain('Terminal region for Shell 1')
+      expect(region.getAttribute('tabindex')).toBe('0')
+      const describedBy = region.getAttribute('aria-describedby')
+      expect(describedBy).toBeTruthy()
+      expect(document.getElementById(describedBy ?? '')?.textContent).toContain('Terminal focus:')
+      expect(screen.getByText(/Terminal focus:/)).toBeTruthy()
+    })
+  })
+
+  it('uses descriptive restart control labels and restarts the shell PTY', async () => {
+    mockEntry.ptyActive = false
+    mockEntry.needsClear = true
+    lifecycleState.ptyActive = false
+    lifecycleState.shellExited = true
+    lifecycleState.currentPtyInstance = 1
+
+    renderTaskTerminal()
+
+    const restartButton = await screen.findByRole('button', { name: /Restart Shell 1/ })
+    expect(restartButton.getAttribute('title')).toBe('Restart Shell 1')
+
+    await fireEvent.click(restartButton)
+
+    await vi.waitFor(() => {
+      expect(ipcMocks.killPty).toHaveBeenCalledWith('T-1-shell-0')
+      expect(ipcMocks.spawnShellPty).toHaveBeenLastCalledWith('T-1', '/worktree/T-1', 80, 24, 0)
     })
   })
 })

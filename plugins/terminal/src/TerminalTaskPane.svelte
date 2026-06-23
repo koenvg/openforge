@@ -72,7 +72,7 @@
 </script>
 
 <div bind:this={shortcutRoot} class="flex flex-col flex-1 overflow-hidden h-full">
-  <p class="sr-only" role="status" aria-live="polite">{workspaceStatusText}</p>
+  <p class="sr-only" role="status" aria-live="polite" aria-atomic="true">{workspaceStatusText}</p>
 
   {#if workspaceLookupState === 'ready' && workspacePath !== null}
     <TerminalTabs
@@ -83,20 +83,26 @@
       onTabCountChange={null}
     />
   {:else if workspaceLookupState === 'loading'}
-    <div class="flex flex-1 items-center justify-center p-6 text-center text-sm text-base-content/70">
+    <div class="flex flex-1 items-center justify-center p-6 text-center text-sm text-base-content/70" role="status">
       <div class="flex flex-col items-center gap-3">
         <span class="loading loading-spinner loading-md" aria-hidden="true"></span>
         <p>{workspaceStatusText}</p>
       </div>
     </div>
   {:else}
-    <div class="flex flex-1 items-center justify-center p-6 text-center">
+    <div class="flex flex-1 items-center justify-center p-6 text-center" role="status" aria-live="polite">
       <div class="max-w-sm space-y-3">
         <p class="font-medium">{workspaceStatusText}</p>
         {#if workspaceLookupState === 'error' && workspaceLookupError !== null}
           <p class="text-sm text-base-content/70">{workspaceLookupError}</p>
         {:else}
           <p class="text-sm text-base-content/70">Start or repair the task workspace, then retry loading the terminal.</p>
+        {/if}
+        <p class="text-xs text-base-content/50">
+          <span class="font-semibold">Keyboard focus path:</span> resolve the workspace first, then Tab to shell tabs, choose New shell, and Tab into the terminal region.
+        </p>
+        {#if workspaceLookupState === 'error'}
+          <p class="sr-only">Terminal workspace error</p>
         {/if}
         <button type="button" class="btn btn-sm btn-primary" onclick={retryWorkspaceLookup}>Retry workspace lookup</button>
       </div>

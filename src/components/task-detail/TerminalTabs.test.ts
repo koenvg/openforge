@@ -174,7 +174,7 @@ describe('TerminalTabs', () => {
       expect(screen.getByText('Shell 1')).toBeTruthy()
     })
 
-    const addButton = screen.getByRole('button', { name: '+' })
+    const addButton = screen.getByRole('button', { name: /Open new shell/ })
     await fireEvent.click(addButton)
 
     await vi.waitFor(() => {
@@ -237,7 +237,7 @@ describe('TerminalTabs', () => {
 
     await vi.waitFor(() => {
       expect(screen.getByText('Shell 1')).toBeTruthy()
-      expect(screen.getByText('exited')).toBeTruthy()
+      expect(screen.getByText('Exited')).toBeTruthy()
     })
     expect(killPtyMock).not.toHaveBeenCalled()
     expect(releaseMock).not.toHaveBeenCalled()
@@ -257,14 +257,14 @@ describe('TerminalTabs', () => {
       expect(screen.getByText('Shell 1')).toBeTruthy()
     })
 
-    const addButton = screen.getByRole('button', { name: '+' })
+    const addButton = screen.getByRole('button', { name: /Open new shell/ })
     await fireEvent.click(addButton)
 
     await vi.waitFor(() => {
       expect(screen.getByText('Shell 2')).toBeTruthy()
     })
 
-    const shellOneButton = screen.getByRole('button', { name: 'Shell 1' })
+    const shellOneButton = screen.getByRole('tab', { name: /Shell 1/ })
     await fireEvent.click(shellOneButton)
 
     emitShellLifecycle('T-1-shell-1', { ptyActive: false, shellExited: true, currentPtyInstance: 1 })
@@ -272,7 +272,7 @@ describe('TerminalTabs', () => {
     await vi.waitFor(() => {
       expect(screen.getByText('Shell 1')).toBeTruthy()
       expect(screen.getByText('Shell 2')).toBeTruthy()
-      expect(screen.getByText('exited')).toBeTruthy()
+      expect(screen.getByText('Exited')).toBeTruthy()
     })
     expect(killPtyMock).not.toHaveBeenCalled()
     expect(releaseMock).not.toHaveBeenCalled()
@@ -296,10 +296,10 @@ describe('TerminalTabs', () => {
 
     await vi.waitFor(() => {
       expect(screen.getByText('Shell 1')).toBeTruthy()
-      expect(screen.getByText('exited')).toBeTruthy()
+      expect(screen.getByText('Exited')).toBeTruthy()
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: '×' }))
+    await fireEvent.click(screen.getByRole('button', { name: /Close Shell/ }))
 
     await vi.waitFor(() => {
       expect(screen.queryByText('Shell 1')).toBeNull()
@@ -365,7 +365,7 @@ describe('TerminalTabs', () => {
     ])
   })
 
-  it('"+" button adds new tab with incremented label', async () => {
+  it('New shell button adds new tab with incremented label', async () => {
     render(TerminalTabs, {
       props: {
         taskId: 'T-1',
@@ -379,7 +379,7 @@ describe('TerminalTabs', () => {
       expect(screen.getByText('Shell 1')).toBeTruthy()
     })
 
-    const addButton = screen.getByRole('button', { name: '+' })
+    const addButton = screen.getByRole('button', { name: /Open new shell/ })
     await fireEvent.click(addButton)
 
     await vi.waitFor(() => {
@@ -403,7 +403,7 @@ describe('TerminalTabs', () => {
     })
 
     // Add a second tab
-    const addButton = screen.getByRole('button', { name: '+' })
+    const addButton = screen.getByRole('button', { name: /Open new shell/ })
     await fireEvent.click(addButton)
 
     await vi.waitFor(() => {
@@ -434,7 +434,7 @@ describe('TerminalTabs', () => {
     })
 
     // With only 1 tab, close button should be disabled or hidden
-    const closeButtons = screen.queryAllByRole('button', { name: '×' })
+    const closeButtons = screen.queryAllByRole('button', { name: /Close Shell/ })
     if (closeButtons.length > 0) {
       expect(requireElement(requireDefined(closeButtons[0]), HTMLButtonElement).disabled).toBe(true)
     } else {
@@ -456,7 +456,7 @@ describe('TerminalTabs', () => {
       expect(screen.getByText('Shell 1')).toBeTruthy()
     })
 
-    const addButton = screen.getByRole('button', { name: '+' })
+    const addButton = screen.getByRole('button', { name: /Open new shell/ })
     await fireEvent.click(addButton)
 
     await vi.waitFor(() => {
@@ -464,7 +464,7 @@ describe('TerminalTabs', () => {
     })
 
     // With 2 tabs, close buttons should be visible and enabled
-    const closeButtons = screen.getAllByRole('button', { name: '×' })
+    const closeButtons = screen.getAllByRole('button', { name: /Close Shell/ })
     expect(closeButtons.length).toBeGreaterThanOrEqual(1)
     closeButtons.forEach(btn => {
       expect(requireElement(btn, HTMLButtonElement).disabled).toBe(false)
@@ -486,7 +486,7 @@ describe('TerminalTabs', () => {
     })
 
     // Add a second tab
-    const addButton = screen.getByRole('button', { name: '+' })
+    const addButton = screen.getByRole('button', { name: /Open new shell/ })
     await fireEvent.click(addButton)
 
     await vi.waitFor(() => {
@@ -494,7 +494,7 @@ describe('TerminalTabs', () => {
     })
 
     // Close Shell 2 (the active tab)
-    const closeButtons = screen.getAllByRole('button', { name: '×' })
+    const closeButtons = screen.getAllByRole('button', { name: /Close Shell/ })
     await fireEvent.click(closeButtons[closeButtons.length - 1])
 
     await vi.waitFor(() => {
@@ -518,7 +518,7 @@ describe('TerminalTabs', () => {
     })
 
     // Add Shell 2
-    const addButton = screen.getByRole('button', { name: '+' })
+    const addButton = screen.getByRole('button', { name: /Open new shell/ })
     await fireEvent.click(addButton)
 
     await vi.waitFor(() => {
@@ -526,7 +526,7 @@ describe('TerminalTabs', () => {
     })
 
     // Close Shell 2
-    const closeButtons = screen.getAllByRole('button', { name: '×' })
+    const closeButtons = screen.getAllByRole('button', { name: /Close Shell/ })
     await fireEvent.click(closeButtons[closeButtons.length - 1])
 
     await vi.waitFor(() => {
@@ -557,7 +557,7 @@ describe('TerminalTabs', () => {
       expect(screen.getByText('Shell 1')).toBeTruthy()
     })
 
-    const addButton = screen.getByRole('button', { name: '+' })
+    const addButton = screen.getByRole('button', { name: /Open new shell/ })
     await fireEvent.click(addButton)
     await fireEvent.click(addButton)
 
@@ -565,7 +565,7 @@ describe('TerminalTabs', () => {
       expect(screen.getByText('Shell 3')).toBeTruthy()
     })
 
-    const closeButtons = screen.getAllByRole('button', { name: '×' })
+    const closeButtons = screen.getAllByRole('button', { name: /Close Shell/ })
     await fireEvent.click(closeButtons[1])
 
     await vi.waitFor(() => {
@@ -594,7 +594,7 @@ describe('TerminalTabs', () => {
       expect(screen.getByText('Shell 1')).toBeTruthy()
     })
 
-    const addButton = screen.getByRole('button', { name: '+' })
+    const addButton = screen.getByRole('button', { name: /Open new shell/ })
     await fireEvent.click(addButton)
 
     await vi.waitFor(() => {
@@ -647,7 +647,7 @@ describe('TerminalTabs', () => {
     })
 
     // Add second tab (switches to it automatically)
-    const addButton = screen.getByRole('button', { name: '+' })
+    const addButton = screen.getByRole('button', { name: /Open new shell/ })
     await fireEvent.click(addButton)
 
     await vi.waitFor(() => {
@@ -676,7 +676,7 @@ describe('TerminalTabs', () => {
     })
 
     // Add second tab
-    const addButton = screen.getByRole('button', { name: '+' })
+    const addButton = screen.getByRole('button', { name: /Open new shell/ })
     await fireEvent.click(addButton)
 
     await vi.waitFor(() => {
@@ -699,7 +699,7 @@ describe('TerminalTabs', () => {
     })
 
     // Add second tab
-    const addButton = screen.getByRole('button', { name: '+' })
+    const addButton = screen.getByRole('button', { name: /Open new shell/ })
     await fireEvent.click(addButton)
 
     await vi.waitFor(() => {
@@ -707,7 +707,7 @@ describe('TerminalTabs', () => {
     })
 
     // Close Shell 2
-    const closeButtons = screen.getAllByRole('button', { name: '×' })
+    const closeButtons = screen.getAllByRole('button', { name: /Close Shell/ })
     await fireEvent.click(closeButtons[closeButtons.length - 1])
 
     await vi.waitFor(() => {
@@ -732,7 +732,7 @@ describe('TerminalTabs', () => {
     })
 
     // Add second tab (becomes active)
-    const addButton = screen.getByRole('button', { name: '+' })
+    const addButton = screen.getByRole('button', { name: /Open new shell/ })
     await fireEvent.click(addButton)
 
     await vi.waitFor(() => {
@@ -742,7 +742,7 @@ describe('TerminalTabs', () => {
     onTabChange.mockClear()
 
     // Close Shell 2 (active) — should switch to Shell 1
-    const closeButtons = screen.getAllByRole('button', { name: '×' })
+    const closeButtons = screen.getAllByRole('button', { name: /Close Shell/ })
     await fireEvent.click(closeButtons[closeButtons.length - 1])
 
     await vi.waitFor(() => {
@@ -765,7 +765,7 @@ describe('TerminalTabs', () => {
       expect(screen.getByText('Shell 1')).toBeTruthy()
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: '+' }))
+    await fireEvent.click(screen.getByRole('button', { name: /Open new shell/ }))
 
     await vi.waitFor(() => {
       expect(screen.getByText('Shell 2')).toBeTruthy()
@@ -803,7 +803,7 @@ describe('TerminalTabs', () => {
       expect(screen.getByText('⌘⇧1')).toBeTruthy()
     })
 
-    const addButton = screen.getByRole('button', { name: '+' })
+    const addButton = screen.getByRole('button', { name: /Open new shell/ })
     await fireEvent.click(addButton)
 
     await vi.waitFor(() => {
