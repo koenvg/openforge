@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { getPreferredSkillIdentity, getSkillIdentity, getSkillLocationLabel, getSkillSourcePath, groupSkillsBySource, type SkillInfo } from './skillDomain'
 
 function makeSkill(name: string, source_dir: string, level: SkillInfo['level'] = 'project'): SkillInfo {
-  return { name, source_dir, level, description: null, agent: null, template: null, file_name: null }
+  return { name, source_dir, level, description: null, agent: null, template: null, directory_name: name, file_name: null }
 }
 
 describe('skills-viewer skill domain helpers', () => {
@@ -41,8 +41,18 @@ describe('skills-viewer skill domain helpers', () => {
   it('builds stable identities for duplicate skill names', () => {
     const skill = makeSkill('review', '.pi', 'user')
     skill.file_name = 'review.md'
+    skill.directory_name = null
 
-    expect(getSkillIdentity(skill)).toEqual({ name: 'review', level: 'user', source_dir: '.pi', file_name: 'review.md' })
+    expect(getSkillIdentity(skill)).toEqual({ name: 'review', level: 'user', source_dir: '.pi', directory_name: null, file_name: 'review.md' })
+  })
+
+  it('distinguishes same-name directory skills by directory identity', () => {
+    const alpha = makeSkill('review', '.agents', 'project')
+    const beta = makeSkill('review', '.agents', 'project')
+    alpha.directory_name = 'alpha-review'
+    beta.directory_name = 'beta-review'
+
+    expect(getSkillIdentity(alpha)).not.toEqual(getSkillIdentity(beta))
   })
 
   it('defaults to a project skill when mixed project and user skills are present', () => {

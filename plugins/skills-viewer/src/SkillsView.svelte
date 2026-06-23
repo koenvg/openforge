@@ -109,6 +109,7 @@
         level: selectedSkill.level,
         sourceDir: selectedSkill.source_dir,
         content: editContent,
+        directoryName: selectedSkill.directory_name,
         fileName: selectedSkill.file_name,
       })
       // Update the local skill data with new content

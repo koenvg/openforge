@@ -17,7 +17,8 @@ interface SaveSkillContentRequest {
   level: SkillLevel
   sourceDir: string
   content: string
-  fileName?: string | null
+  directoryName: string | null
+  fileName: string | null
 }
 
 function skillSourceDir(root: string, sourceDir: string, level: SkillLevel): string {
@@ -104,6 +105,7 @@ async function scanSkillDirectory(dir: string, level: SkillLevel, sourceDir: str
       template: content,
       level,
       source_dir: sourceDir,
+      directory_name: entry.name,
       file_name: null,
     })
   }
@@ -139,6 +141,7 @@ async function scanPiSkillDirectory(dir: string, level: SkillLevel): Promise<Ski
       template: content,
       level,
       source_dir: '.pi',
+      directory_name: null,
       file_name: entry.name,
     })
   }
@@ -170,6 +173,12 @@ function compareSkillSource(left: SkillInfo, right: SkillInfo): number {
   const sourceOrder = (leftSourceIndex === -1 ? SKILL_SOURCE_DIRS.length : leftSourceIndex) -
     (rightSourceIndex === -1 ? SKILL_SOURCE_DIRS.length : rightSourceIndex)
   if (sourceOrder !== 0) return sourceOrder
+
+  if (left.file_name === null && right.file_name !== null) return -1
+  if (left.file_name !== null && right.file_name === null) return 1
+
+  const directoryOrder = (left.directory_name ?? '').localeCompare(right.directory_name ?? '')
+  if (directoryOrder !== 0) return directoryOrder
 
   return (left.file_name ?? '').localeCompare(right.file_name ?? '')
 }
@@ -229,8 +238,9 @@ async function saveSkillContent(api: BackendOpenForgeAPI, request: SaveSkillCont
     return
   }
 
-  assertSafeSkillName(request.name)
-  const skillDir = join(skillsDir, request.name)
+  const directoryName = request.directoryName ?? request.name
+  assertSafeSkillName(directoryName)
+  const skillDir = join(skillsDir, directoryName)
   await mkdir(skillDir, { recursive: true })
   await writeFile(join(skillDir, 'SKILL.md'), request.content, 'utf8')
 }
@@ -256,6 +266,7 @@ export default defineBackendPlugin({
           level: { enum: ['project', 'user'] },
           sourceDir: { type: 'string' },
           content: { type: 'string' },
+          directoryName: { type: ['string', 'null'] },
           fileName: { type: ['string', 'null'] },
         },
       },

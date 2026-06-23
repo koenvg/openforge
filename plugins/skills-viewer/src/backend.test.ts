@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -120,12 +120,53 @@ describe('skills-viewer backend skill discovery', () => {
     const methods = await activateBackendWithProject(projectPath)
     const skills = await methods.get('listSkills')?.({ projectId: 'P-1' })
 
-    expect((skills as Array<{ name: string; level: string; source_dir: string; file_name: string | null }>)
+    expect((skills as Array<{ name: string; level: string; source_dir: string; directory_name: string | null; file_name: string | null }>)
       .filter((skill) => skill.name === 'review')
-      .map(({ name, level, source_dir, file_name }) => ({ name, level, source_dir, file_name })))
+      .map(({ name, level, source_dir, directory_name, file_name }) => ({ name, level, source_dir, directory_name, file_name })))
       .toEqual([
-        { name: 'review', level: 'user', source_dir: '.pi', file_name: null },
-        { name: 'review', level: 'user', source_dir: '.pi', file_name: 'review.md' },
+        { name: 'review', level: 'user', source_dir: '.pi', directory_name: 'review', file_name: null },
+        { name: 'review', level: 'user', source_dir: '.pi', directory_name: null, file_name: 'review.md' },
       ])
+  })
+
+  it('returns same-name directory skills from the same source with distinct directory identities', async () => {
+    const projectPath = await mkdtemp(join(tempRoot(), 'skills-viewer-project-'))
+
+    await createSkillFile(projectPath, '.agents/skills/alpha-review/SKILL.md', `---\nname: review\ndescription: Alpha review\n---\n# Alpha review\n`)
+    await createSkillFile(projectPath, '.agents/skills/beta-review/SKILL.md', `---\nname: review\ndescription: Beta review\n---\n# Beta review\n`)
+
+    const methods = await activateBackendWithProject(projectPath)
+    const skills = await methods.get('listSkills')?.({ projectId: 'P-1' })
+
+    expect((skills as Array<{ name: string; level: string; source_dir: string; directory_name: string | null; file_name: string | null }>)
+      .filter((skill) => skill.name === 'review')
+      .map(({ name, level, source_dir, directory_name, file_name }) => ({ name, level, source_dir, directory_name, file_name })))
+      .toEqual([
+        { name: 'review', level: 'project', source_dir: '.agents', directory_name: 'alpha-review', file_name: null },
+        { name: 'review', level: 'project', source_dir: '.agents', directory_name: 'beta-review', file_name: null },
+      ])
+  })
+
+  it('saves directory-backed skills to their original directory identity', async () => {
+    const projectPath = await mkdtemp(join(tempRoot(), 'skills-viewer-project-'))
+
+    await createSkillFile(projectPath, '.agents/skills/alpha-review/SKILL.md', `---\nname: review\ndescription: Alpha review\n---\n# Alpha review\n`)
+    await createSkillFile(projectPath, '.agents/skills/beta-review/SKILL.md', `---\nname: review\ndescription: Beta review\n---\n# Beta review\n`)
+
+    const methods = await activateBackendWithProject(projectPath)
+    await methods.get('saveSkillContent')?.({
+      projectId: 'P-1',
+      name: 'review',
+      level: 'project',
+      sourceDir: '.agents',
+      directoryName: 'beta-review',
+      fileName: null,
+      content: '# Updated beta review\n',
+    })
+
+    await expect(readFile(join(projectPath, '.agents', 'skills', 'alpha-review', 'SKILL.md'), 'utf8'))
+      .resolves.toContain('# Alpha review')
+    await expect(readFile(join(projectPath, '.agents', 'skills', 'beta-review', 'SKILL.md'), 'utf8'))
+      .resolves.toBe('# Updated beta review\n')
   })
 })
