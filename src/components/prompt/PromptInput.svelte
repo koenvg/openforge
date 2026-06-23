@@ -16,6 +16,10 @@
     onSubmit: (prompt: string) => void
     onStartTask?: (prompt: string) => void
     onRunAction?: (prompt: string, actionPrompt: string) => void
+    onTextChange?: (prompt: string) => void
+    onPasteImage?: (file: File) => string | null | void | Promise<string | null | void>
+    onImageMarkerClick?: (marker: string) => void
+    imageMarkerInsertRequest?: { id: number, marker: string } | null
     onCancel: () => void
     autofocus?: boolean
     extras?: Snippet
@@ -30,6 +34,10 @@
     onSubmit,
     onStartTask,
     onRunAction,
+    onTextChange,
+    onPasteImage,
+    onImageMarkerClick,
+    imageMarkerInsertRequest = null,
     onCancel,
     autofocus = false,
     extras,
@@ -48,6 +56,18 @@
   let textareaEl = $state<HTMLTextAreaElement | null>(null)
   let moreActionsEl = $state<HTMLElement | null>(null)
   const promptReady = $derived(textValue.trim().length > 0)
+  let lastImageMarkerInsertRequestId = 0
+
+  interface TextSelectionSnapshot {
+    text: string
+    selectionStart: number
+    selectionEnd: number
+  }
+
+  function setTextValue(nextValue: string) {
+    textValue = nextValue
+    onTextChange?.(nextValue)
+  }
 
   // ── Autocomplete composable ───────────────────────────────────────────────────
   const ac = useAutocomplete(getAutocompleteProjectId(), () => commandTrigger)
@@ -73,13 +93,59 @@
     const before = textValue.slice(0, cursorPos)
     const after = textValue.slice(cursorPos)
     const separator = before.length > 0 && !before.endsWith(' ') && !before.endsWith('\n') ? ' ' : ''
-    textValue = before + separator + text + after
+    setTextValue(before + separator + text + after)
     const newPos = cursorPos + separator.length + text.length
     setTimeout(() => {
       textareaEl?.setSelectionRange(newPos, newPos)
       autoGrow()
     }, 0)
   }
+
+  function imageMarkerInsertionText(marker: string, before: string, after: string): string {
+    const prefix = before.length > 0 && !/\s$/.test(before) ? ' ' : ''
+    const suffix = after.length === 0 || !/^\s/.test(after) ? ' ' : ''
+    return `${prefix}${marker}${suffix}`
+  }
+
+  function insertImageMarkerAtCursor(marker: string, selectionSnapshot: TextSelectionSnapshot | null = null) {
+    if (!textareaEl || !marker.trim()) return
+
+    const sourceText = selectionSnapshot?.text ?? textValue
+    const selectionStart = selectionSnapshot?.selectionStart ?? textareaEl.selectionStart ?? sourceText.length
+    const selectionEnd = selectionSnapshot?.selectionEnd ?? selectionStart
+    const before = sourceText.slice(0, selectionStart)
+    const after = sourceText.slice(selectionEnd)
+    const insertion = imageMarkerInsertionText(marker.trim(), before, after)
+    setTextValue(`${before}${insertion}${after}`)
+    const nextCursorPos = before.length + insertion.length
+
+    setTimeout(() => {
+      textareaEl?.focus()
+      textareaEl?.setSelectionRange(nextCursorPos, nextCursorPos)
+      autoGrow()
+    }, 0)
+  }
+
+  function imageMarkerAtPosition(text: string, position: number): string | null {
+    const markerPattern = /\[image#\d+\]/g
+    let match: RegExpExecArray | null
+
+    while ((match = markerPattern.exec(text)) !== null) {
+      const start = match.index
+      const end = start + match[0].length
+      if (position >= start && position < end) return match[0]
+    }
+
+    return null
+  }
+
+  $effect(() => {
+    const request = imageMarkerInsertRequest
+    if (!request || request.id === lastImageMarkerInsertRequestId || !textareaEl) return
+
+    lastImageMarkerInsertRequestId = request.id
+    insertImageMarkerAtCursor(request.marker)
+  })
 
   // ── Auto-grow ────────────────────────────────────────────────────────────────
   function autoGrow() {
@@ -94,8 +160,37 @@
     if (!textareaEl) return
     if (!promptReady) showMoreMenu = false
     const text = textareaEl.value
+    setTextValue(text)
     const cursorPos = textareaEl.selectionStart ?? text.length
     await ac.handleTriggerDetection(text, cursorPos)
+  }
+
+  async function handlePaste(e: ClipboardEvent) {
+    if (!onPasteImage) return
+
+    const imageItem = Array.from(e.clipboardData?.items ?? [])
+      .find((item) => item.kind === 'file' && item.type.startsWith('image/'))
+    const file = imageItem?.getAsFile()
+    if (!file) return
+
+    e.preventDefault()
+    const selectionSnapshot = {
+      text: textValue,
+      selectionStart: textareaEl?.selectionStart ?? textValue.length,
+      selectionEnd: textareaEl?.selectionEnd ?? textValue.length,
+    }
+    const marker = await onPasteImage(file)
+    if (typeof marker === 'string') {
+      insertImageMarkerAtCursor(marker, selectionSnapshot)
+    }
+  }
+
+  function handleClick() {
+    if (!onImageMarkerClick || !textareaEl) return
+    if (textareaEl.selectionStart !== textareaEl.selectionEnd) return
+
+    const marker = imageMarkerAtPosition(textValue, textareaEl.selectionStart ?? 0)
+    if (marker) onImageMarkerClick(marker)
   }
 
   // ── Item selection ────────────────────────────────────────────────────────────
@@ -104,7 +199,7 @@
 
     if (ac.activeTrigger === 'slash' || ac.activeTrigger === 'dollar') {
       // Replace entire input with the provider-specific command trigger + command + trailing space
-      textValue = `${commandTriggerPrefix}${item.label} `
+      setTextValue(`${commandTriggerPrefix}${item.label} `)
     } else if (ac.activeTrigger === 'at') {
       const text = textareaEl.value
       const cursorPos = textareaEl.selectionStart ?? text.length
@@ -115,7 +210,7 @@
         const atIndex = textBeforeCursor.lastIndexOf('@')
         const beforeAt = text.slice(0, atIndex)
         const afterCursor = text.slice(cursorPos)
-        textValue = `${beforeAt}@${item.label}${afterCursor}`
+        setTextValue(`${beforeAt}@${item.label}${afterCursor}`)
 
         // Move cursor to just after the inserted label
         const newCursorPos = atIndex + 1 + item.label.length
@@ -227,6 +322,8 @@
       style="max-height: 15rem; overflow-y: auto;"
       oninput={handleInput}
       onkeydown={handleKeydown}
+      onpaste={handlePaste}
+      onclick={handleClick}
     ></textarea>
 
     <AutocompletePopover

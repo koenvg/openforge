@@ -1,13 +1,157 @@
 use crate::db::{self, AgentSessionRow};
+use base64::{engine::general_purpose, Engine as _};
+use once_cell::sync::Lazy;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 
 pub const DEFAULT_HANDOFF_NOTES_TEMPLATE: &str =
     include_str!("../../shared/defaultHandoffNotesTemplate.md");
+
+static IMAGE_REFERENCE_LINE_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+        r"^(\[image#([0-9]+)\]):\s*data:(image/([A-Za-z0-9.+-]+));base64,([A-Za-z0-9+/=]+)\s*$",
+    )
+    .expect("image reference regex should compile")
+});
 
 fn effective_handoff_notes_template(project_template: Option<&str>) -> &str {
     project_template
         .filter(|template| !template.trim().is_empty())
         .unwrap_or(DEFAULT_HANDOFF_NOTES_TEMPLATE)
+}
+
+fn safe_task_prompt_image_path_component(task_id: &str) -> String {
+    let safe_id: String = task_id
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect();
+
+    if safe_id.is_empty() {
+        "task".to_string()
+    } else {
+        safe_id
+    }
+}
+
+pub(crate) fn task_prompt_image_attachment_dir(root_dir: &Path, task_id: &str) -> PathBuf {
+    root_dir
+        .join("task-image-attachments")
+        .join(safe_task_prompt_image_path_component(task_id))
+}
+
+fn image_file_extension(mime_type: &str) -> String {
+    match mime_type.to_ascii_lowercase().as_str() {
+        "image/png" => "png".to_string(),
+        "image/jpeg" | "image/jpg" => "jpg".to_string(),
+        "image/gif" => "gif".to_string(),
+        "image/webp" => "webp".to_string(),
+        "image/bmp" => "bmp".to_string(),
+        "image/heic" => "heic".to_string(),
+        "image/heif" => "heif".to_string(),
+        mime => {
+            let subtype = mime
+                .strip_prefix("image/")
+                .unwrap_or("img")
+                .split('+')
+                .next()
+                .unwrap_or("img");
+            let extension: String = subtype
+                .chars()
+                .filter(|ch| ch.is_ascii_alphanumeric())
+                .collect();
+            if extension.is_empty() {
+                "img".to_string()
+            } else {
+                extension
+            }
+        }
+    }
+}
+
+fn markdown_reference_path(path: &Path) -> String {
+    let path = path.to_string_lossy();
+    if path.chars().any(char::is_whitespace) {
+        format!("<{}>", path.replace('>', "%3E"))
+    } else {
+        path.into_owned()
+    }
+}
+
+fn materialize_task_prompt_image_reference_line(
+    task_id: &str,
+    line: &str,
+    attachment_dir: &Path,
+) -> Result<Option<String>, String> {
+    let Some(captures) = IMAGE_REFERENCE_LINE_RE.captures(line) else {
+        return Ok(None);
+    };
+
+    let marker = captures
+        .get(1)
+        .map(|capture| capture.as_str())
+        .unwrap_or("[image]");
+    let image_number = captures
+        .get(2)
+        .map(|capture| capture.as_str())
+        .unwrap_or("0");
+    let mime_type = captures
+        .get(3)
+        .map(|capture| capture.as_str())
+        .unwrap_or("image");
+    let base64_payload = captures
+        .get(5)
+        .map(|capture| capture.as_str())
+        .unwrap_or_default();
+
+    let bytes = general_purpose::STANDARD
+        .decode(base64_payload)
+        .map_err(|e| format!("failed to decode pasted image {marker}: {e}"))?;
+    std::fs::create_dir_all(attachment_dir).map_err(|e| {
+        format!("failed to create image attachment directory for task {task_id}: {e}")
+    })?;
+
+    let image_path = attachment_dir.join(format!(
+        "image-{image_number}.{}",
+        image_file_extension(mime_type)
+    ));
+    std::fs::write(&image_path, bytes)
+        .map_err(|e| format!("failed to write pasted image {marker}: {e}"))?;
+
+    Ok(Some(format!(
+        "{marker}: {}",
+        markdown_reference_path(&image_path)
+    )))
+}
+
+pub(crate) fn materialize_task_prompt_images(
+    task_id: &str,
+    prompt: &str,
+    attachment_dir: &Path,
+) -> Result<String, String> {
+    if !prompt.contains("data:image/") {
+        return Ok(prompt.to_string());
+    }
+
+    let mut materialized_lines = Vec::new();
+    for line in prompt.lines() {
+        match materialize_task_prompt_image_reference_line(task_id, line, attachment_dir)? {
+            Some(materialized_line) => materialized_lines.push(materialized_line),
+            None => materialized_lines.push(line.to_string()),
+        }
+    }
+
+    let mut materialized = materialized_lines.join("\n");
+    if prompt.ends_with('\n') {
+        materialized.push('\n');
+    }
+    Ok(materialized)
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -435,6 +579,26 @@ mod tests {
         assert!(mgmt_pos < instructions_pos);
         assert!(instructions_pos < task_prompt_pos);
         assert!(!prompt.contains("External ticket:"));
+    }
+
+    #[test]
+    fn materialize_task_prompt_images_writes_files_and_replaces_data_uri_references() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let prompt =
+            "Describe [image#1] inline\n\n[image#1]: data:image/png;base64,aW1hZ2UtYnl0ZXM=\n";
+
+        let materialized =
+            materialize_task_prompt_images("T-500", prompt, temp_dir.path()).expect("materialize");
+
+        let image_path = temp_dir.path().join("image-1.png");
+        assert_eq!(
+            std::fs::read(&image_path).expect("materialized image file"),
+            b"image-bytes"
+        );
+        assert!(materialized.contains("Describe [image#1] inline"));
+        assert!(materialized.contains("[image#1]: "));
+        assert!(materialized.contains(image_path.to_string_lossy().as_ref()));
+        assert!(!materialized.contains("data:image/png;base64"));
     }
 
     #[test]

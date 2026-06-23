@@ -181,6 +181,73 @@ describe('PromptInput', () => {
     expect(textarea.value).toBe('Fix the bug')
   })
 
+  it('inserts pasted image markers at the original paste position after async processing', async () => {
+    let resolveMarker: (marker: string) => void = () => {}
+    const onPasteImage = vi.fn(() => new Promise<string>((resolve) => {
+      resolveMarker = resolve
+    }))
+
+    render(PromptInput, {
+      props: {
+        ...baseProps,
+        onPasteImage,
+      },
+    })
+
+    const textarea = requireElement(
+      screen.getByPlaceholderText('Describe what you want to implement...'),
+      HTMLTextAreaElement,
+    )
+    textarea.value = 'Use this screenshot'
+    textarea.setSelectionRange('Use this'.length, 'Use this'.length)
+    await fireEvent.input(textarea)
+
+    const paste = fireEvent.paste(textarea, {
+      clipboardData: {
+        items: [
+          {
+            kind: 'file',
+            type: 'image/png',
+            getAsFile: () => new File(['image-bytes'], 'screenshot.png', { type: 'image/png' }),
+          },
+        ],
+      },
+    })
+    textarea.setSelectionRange(0, 0)
+    resolveMarker('[image#1]')
+    await paste
+
+    await waitFor(() => {
+      expect(textarea.value).toBe('Use this [image#1] screenshot')
+    })
+  })
+
+  it('only opens an image marker preview when the caret is inside the marker text', async () => {
+    const onImageMarkerClick = vi.fn()
+    render(PromptInput, {
+      props: {
+        ...baseProps,
+        value: 'Inspect [image#1] now',
+        onImageMarkerClick,
+      },
+    })
+
+    const textarea = requireElement(
+      screen.getByPlaceholderText('Describe what you want to implement...'),
+      HTMLTextAreaElement,
+    )
+    const markerStart = textarea.value.indexOf('[image#1]')
+    const markerEnd = markerStart + '[image#1]'.length
+
+    textarea.setSelectionRange(markerEnd, markerEnd)
+    await fireEvent.click(textarea)
+    expect(onImageMarkerClick).not.toHaveBeenCalled()
+
+    textarea.setSelectionRange(markerStart + 2, markerStart + 2)
+    await fireEvent.click(textarea)
+    expect(onImageMarkerClick).toHaveBeenCalledWith('[image#1]')
+  })
+
   describe('create flow actions (onStartTask provided)', () => {
     it('shows Start Task as the only visible submit action before text is entered', () => {
       render(PromptInput, {

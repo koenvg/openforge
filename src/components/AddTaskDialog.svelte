@@ -1,8 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import { ImagePlus } from '@lucide/svelte'
   import type { Task, PermissionMode, Action, GitBranchInfo, WorktreeSource } from '../lib/types'
   import { createTask, updateTask, getResolvedAiProvider, listGitBranches } from '../lib/ipc'
-  import { getTaskPromptText } from '../lib/taskPrompt'
+  import {
+    formatTaskPromptWithImageReferences,
+    getTaskPromptImageReferences,
+    getTaskPromptText,
+  } from '../lib/taskPrompt'
+  import type { TaskPromptImageReference } from '../lib/taskPrompt'
   import { activeProjectId } from '../lib/stores'
   import Modal from './shared/ui/Modal.svelte'
   import PromptInput from './prompt/PromptInput.svelte'
@@ -16,6 +22,12 @@
     onTaskSaved?: (task?: Task) => void | Promise<void>
     onRunAction?: (taskId: string, actionPrompt: string, agent: string | null) => Promise<void>
   }
+
+  interface PastedTaskImage extends TaskPromptImageReference {
+    id: number
+  }
+
+  const MAX_PASTED_IMAGE_BYTES = 5 * 1024 * 1024
 
   let { mode = 'create', task = null, projectPath = null, onClose, onTaskSaved, onRunAction }: Props = $props()
 
@@ -71,6 +83,21 @@
     return { worktreeSource: 'newBranchFromMain', worktreeBranch: null }
   }
 
+  let pastedImages = $state<PastedTaskImage[]>([])
+  let previewImage = $state<PastedTaskImage | null>(null)
+  let imagePasteError = $state<string | null>(null)
+  let imagePastePending = $state(false)
+  let imageMarkerInsertRequest = $state<{ id: number, marker: string } | null>(null)
+  let loadedPromptSourceKey = $state<string | null>(null)
+  let nextPastedImageId = 1
+  let nextImageMarkerInsertRequestId = 1
+
+  let pastedImageSummary = $derived(
+    pastedImages.length === 0
+      ? ''
+      : `${pastedImages.length} image${pastedImages.length === 1 ? '' : 's'} ready`
+  )
+
   onMount(async () => {
     selectedPermissionMode = 'default'
     try {
@@ -108,15 +135,161 @@
     }
   })
 
+  function markerId(marker: string): number {
+    return Number(marker.match(/\[image#(\d+)\]/)?.[1] ?? '0')
+  }
+
+  function taskPromptSourceKey(): string {
+    if (mode !== 'edit' || !task) return 'create'
+    return `${task.id}\u0000${task.prompt ?? ''}\u0000${task.initial_prompt ?? ''}`
+  }
+
+  function imageFromReference(reference: TaskPromptImageReference): PastedTaskImage {
+    return {
+      ...reference,
+      id: markerId(reference.marker),
+    }
+  }
+
+  $effect(() => {
+    const sourceKey = taskPromptSourceKey()
+    if (sourceKey === loadedPromptSourceKey) return
+
+    loadedPromptSourceKey = sourceKey
+    previewImage = null
+    imagePasteError = null
+    imageMarkerInsertRequest = null
+
+    if (mode === 'edit' && task) {
+      const promptText = getTaskPromptText(task)
+      const restoredImages = getTaskPromptImageReferences(task)
+        .filter((image) => promptText.includes(image.marker))
+        .map(imageFromReference)
+      pastedImages = restoredImages
+      nextPastedImageId = Math.max(0, ...restoredImages.map((image) => image.id)) + 1
+      return
+    }
+
+    pastedImages = []
+    nextPastedImageId = 1
+  })
+
+  function formatBytes(size: number): string {
+    if (size < 1024) return `${size} B`
+    if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  function readBlobAsDataUrl(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onerror = () => reject(reader.error ?? new Error('Failed to read image'))
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          resolve(reader.result)
+        } else {
+          reject(new Error('Failed to read image'))
+        }
+      }
+      reader.readAsDataURL(blob)
+    })
+  }
+
+  async function attachPastedImage(blob: Blob): Promise<string | null> {
+    imagePasteError = null
+    imagePastePending = true
+    const mimeType = blob.type || 'image/png'
+    if (!mimeType.startsWith('image/')) {
+      imagePasteError = 'Clipboard item is not an image.'
+      imagePastePending = false
+      return null
+    }
+    if (blob.size > MAX_PASTED_IMAGE_BYTES) {
+      imagePasteError = `Pasted image is too large. Keep images under ${formatBytes(MAX_PASTED_IMAGE_BYTES)}.`
+      imagePastePending = false
+      return null
+    }
+
+    try {
+      const dataUrl = await readBlobAsDataUrl(blob)
+      const id = nextPastedImageId
+      nextPastedImageId += 1
+      const marker = `[image#${id}]`
+      pastedImages = [...pastedImages, { id, marker, dataUrl, mimeType, size: blob.size }]
+      return marker
+    } catch {
+      imagePasteError = 'Could not read the pasted image.'
+      return null
+    } finally {
+      imagePastePending = false
+    }
+  }
+
+  async function pasteImageFromClipboard() {
+    imagePasteError = null
+    imagePastePending = true
+
+    try {
+      if (!navigator.clipboard?.read) {
+        imagePasteError = 'Clipboard image paste is unavailable here.'
+        return
+      }
+
+      const items = await navigator.clipboard.read()
+      for (const item of items) {
+        const imageType = item.types.find((type) => type.startsWith('image/'))
+        if (imageType) {
+          const marker = await attachPastedImage(await item.getType(imageType))
+          if (marker) {
+            imageMarkerInsertRequest = {
+              id: nextImageMarkerInsertRequestId,
+              marker,
+            }
+            nextImageMarkerInsertRequestId += 1
+          }
+          return
+        }
+      }
+      imagePasteError = 'Clipboard does not contain an image.'
+    } catch {
+      imagePasteError = 'Could not read an image from the clipboard.'
+    } finally {
+      imagePastePending = false
+    }
+  }
+
+  function openImagePreview(marker: string) {
+    previewImage = pastedImages.find((image) => image.marker === marker) ?? null
+  }
+
+  function syncPastedImagesWithPrompt(prompt: string) {
+    const retainedImages = pastedImages.filter((image) => prompt.includes(image.marker))
+    if (retainedImages.length === pastedImages.length) return
+
+    pastedImages = retainedImages
+    if (previewImage && !retainedImages.some((image) => image.marker === previewImage?.marker)) {
+      previewImage = null
+    }
+  }
+
+  function promptWithPastedImageReferences(prompt: string): string {
+    return formatTaskPromptWithImageReferences(prompt, pastedImages)
+  }
+
   async function handleCreateOrUpdate(prompt: string, actionPrompt: string | null = null, autoStart: boolean = false) {
     if (!$activeProjectId) return
     error = null
+    if (imagePastePending) {
+      error = 'Wait for the pasted image to finish processing.'
+      return
+    }
 
     try {
       let savedTask: Task
+      const taskPrompt = promptWithPastedImageReferences(prompt)
 
       if (mode === 'edit' && task) {
-        await updateTask(task.id, prompt)
+        await updateTask(task.id, taskPrompt)
         savedTask = task
         await onTaskSaved?.()
       } else {
@@ -126,7 +299,7 @@
         }
 
         savedTask = await createTask(
-          prompt,
+          taskPrompt,
           'backlog',
           $activeProjectId,
           selectedPermissionMode,
@@ -164,139 +337,191 @@
       autofocus={false}
       actions={mode === 'edit' ? [] : availableActions}
       commandTrigger={aiProvider === 'codex' ? 'dollar' : 'slash'}
+      onTextChange={syncPastedImagesWithPrompt}
+      onPasteImage={attachPastedImage}
+      onImageMarkerClick={openImagePreview}
+      imageMarkerInsertRequest={imageMarkerInsertRequest}
       onSubmit={(prompt) => handleCreateOrUpdate(prompt)}
       onStartTask={mode === 'edit' ? undefined : (prompt) => handleCreateOrUpdate(prompt, '', true)}
       onRunAction={mode === 'edit' ? undefined : (prompt, actionPrompt) => handleCreateOrUpdate(prompt, actionPrompt, true)}
       onCancel={() => onClose?.()}
     >
       {#snippet extras()}
-        {#if mode === 'create'}
-          <div class="space-y-2">
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center gap-2">
             <button
               type="button"
-              class="btn btn-outline btn-sm h-auto min-h-8 justify-start gap-2 text-left font-normal"
-              aria-expanded={environmentExpanded}
-              aria-controls="create-task-environment"
-              onclick={() => { environmentExpanded = !environmentExpanded }}
+              class="btn btn-ghost btn-xs min-h-8"
+              onclick={pasteImageFromClipboard}
+              disabled={imagePastePending}
             >
-              <span class="text-base-content/50">Environment:</span>
-              <span>{environmentSummary}</span>
-              <span class="text-base-content/50">{environmentExpanded ? '⌃' : '⌄'}</span>
+              <ImagePlus size={14} aria-hidden="true" />
+              Paste image
             </button>
-
-            {#if environmentExpanded}
-              <div id="create-task-environment" class="space-y-3 rounded-lg border border-base-300 bg-base-200/50 p-3">
-                {#if aiProvider === 'claude-code'}
-                  <div class="flex items-center gap-2">
-                    <label for="create-task-permission-mode" class="text-xs font-medium text-base-content/50 shrink-0">Mode</label>
-                    <select
-                      id="create-task-permission-mode"
-                      class="select select-bordered select-xs flex-1"
-                      bind:value={selectedPermissionMode}
-                    >
-                      <option value="default">Default</option>
-                      <option value="auto">Autorun</option>
-                      <option value="acceptEdits">Accept Edits</option>
-                      <option value="plan">Plan</option>
-                      <option value="bypassPermissions">Bypass Permissions</option>
-                      <option value="dontAsk">Don't Ask (dangerous)</option>
-                    </select>
-                  </div>
-                {/if}
-
-                <div class="grid grid-cols-[4.75rem_minmax(0,1fr)] items-start gap-x-3 gap-y-2">
-                  <span class="pt-1.5 text-xs font-medium text-base-content/50">Workspace</span>
-
-                  <div class="min-w-0 space-y-2">
-                    <div class="flex min-h-7 items-center justify-between gap-3">
-                      <label class="flex min-w-0 items-center gap-2 text-xs font-medium text-base-content/80">
-                        <input
-                          type="checkbox"
-                          class="toggle toggle-primary toggle-xs"
-                          aria-label="Worktree"
-                          bind:checked={useWorktree}
-                        />
-                        <span>Worktree</span>
-                      </label>
-
-                      {#if !useWorktree}
-                        <span class="badge badge-ghost badge-xs shrink-0">Project directory</span>
-                      {/if}
-                    </div>
-
-                    {#if useWorktree}
-                      <div class="grid grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-2">
-                        <span class="text-xs font-medium text-base-content/50">Base</span>
-                        <div
-                          role="radiogroup"
-                          aria-label="Worktree source"
-                          class="join grid min-w-0 grid-cols-2"
-                        >
-                          <label
-                            class="btn join-item btn-xs h-8 min-h-8 flex-1 text-xs focus-within:ring-2 focus-within:ring-primary"
-                            class:btn-primary={selectedWorktreeSource === 'newBranchFromMain'}
-                            class:btn-ghost={selectedWorktreeSource !== 'newBranchFromMain'}
-                            class:border-base-300={selectedWorktreeSource !== 'newBranchFromMain'}
-                            class:bg-base-100={selectedWorktreeSource !== 'newBranchFromMain'}
-                          >
-                            <input
-                              type="radio"
-                              class="sr-only"
-                              aria-label="New branch from latest main"
-                              bind:group={selectedWorktreeSource}
-                              value="newBranchFromMain"
-                            />
-                            <span>Latest main</span>
-                          </label>
-                          <label
-                            class="btn join-item btn-xs h-8 min-h-8 flex-1 text-xs focus-within:ring-2 focus-within:ring-primary"
-                            class:btn-primary={selectedWorktreeSource === 'existingBranch'}
-                            class:btn-ghost={selectedWorktreeSource !== 'existingBranch'}
-                            class:border-base-300={selectedWorktreeSource !== 'existingBranch'}
-                            class:bg-base-100={selectedWorktreeSource !== 'existingBranch'}
-                          >
-                            <input
-                              type="radio"
-                              class="sr-only"
-                              aria-label="Existing branch"
-                              bind:group={selectedWorktreeSource}
-                              value="existingBranch"
-                            />
-                            <span>Existing branch</span>
-                          </label>
-                        </div>
-                      </div>
-
-                      {#if selectedWorktreeSource === 'existingBranch'}
-                        <div class="grid grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-2">
-                          <span class="text-xs font-medium text-base-content/50">Branch</span>
-                          <select
-                            aria-label="Branch"
-                            class="select select-bordered select-xs min-w-0 flex-1"
-                            bind:value={selectedExistingBranch}
-                            disabled={gitBranches.length === 0}
-                          >
-                            {#if gitBranches.length === 0}
-                              <option value="">No branches available</option>
-                            {:else}
-                              {#each gitBranches as branch}
-                                <option value={branch.name}>{branch.name}{branch.is_remote ? ' (remote)' : ''}</option>
-                              {/each}
-                            {/if}
-                          </select>
-                        </div>
-                        {#if branchLoadError}
-                          <span class="mt-1 block text-xs text-error">{branchLoadError}</span>
-                        {/if}
-                      {/if}
-                    {/if}
-                  </div>
-                </div>
-              </div>
+            {#if pastedImages.length > 0}
+              <span class="text-xs text-base-content/60 truncate" aria-live="polite">{pastedImageSummary}</span>
             {/if}
           </div>
-        {/if}
+          {#if pastedImages.length > 0}
+            <div class="flex flex-wrap items-center gap-1" aria-label="Pasted image markers">
+              {#each pastedImages as image (image.id)}
+                <button
+                  type="button"
+                  class="btn btn-outline btn-xs"
+                  aria-label="Preview {image.marker}"
+                  onclick={() => { previewImage = image }}
+                >{image.marker}</button>
+              {/each}
+            </div>
+          {/if}
+          {#if imagePasteError}
+            <p class="m-0 text-xs text-error" role="status" aria-live="polite">{imagePasteError}</p>
+          {/if}
+          {#if mode === 'create'}
+            <div class="space-y-2">
+              <button
+                type="button"
+                class="btn btn-outline btn-sm h-auto min-h-8 justify-start gap-2 text-left font-normal"
+                aria-expanded={environmentExpanded}
+                aria-controls="create-task-environment"
+                onclick={() => { environmentExpanded = !environmentExpanded }}
+              >
+                <span class="text-base-content/50">Environment:</span>
+                <span>{environmentSummary}</span>
+                <span class="text-base-content/50">{environmentExpanded ? '⌃' : '⌄'}</span>
+              </button>
+
+              {#if environmentExpanded}
+                <div id="create-task-environment" class="space-y-3 rounded-lg border border-base-300 bg-base-200/50 p-3">
+                  {#if aiProvider === 'claude-code'}
+                    <div class="flex items-center gap-2">
+                      <label for="create-task-permission-mode" class="text-xs font-medium text-base-content/50 shrink-0">Mode</label>
+                      <select
+                        id="create-task-permission-mode"
+                        class="select select-bordered select-xs flex-1"
+                        bind:value={selectedPermissionMode}
+                      >
+                        <option value="default">Default</option>
+                        <option value="auto">Autorun</option>
+                        <option value="acceptEdits">Accept Edits</option>
+                        <option value="plan">Plan</option>
+                        <option value="bypassPermissions">Bypass Permissions</option>
+                        <option value="dontAsk">Don't Ask (dangerous)</option>
+                      </select>
+                    </div>
+                  {/if}
+
+                  <div class="grid grid-cols-[4.75rem_minmax(0,1fr)] items-start gap-x-3 gap-y-2">
+                    <span class="pt-1.5 text-xs font-medium text-base-content/50">Workspace</span>
+
+                    <div class="min-w-0 space-y-2">
+                      <div class="flex min-h-7 items-center justify-between gap-3">
+                        <label class="flex min-w-0 items-center gap-2 text-xs font-medium text-base-content/80">
+                          <input
+                            type="checkbox"
+                            class="toggle toggle-primary toggle-xs"
+                            aria-label="Worktree"
+                            bind:checked={useWorktree}
+                          />
+                          <span>Worktree</span>
+                        </label>
+
+                        {#if !useWorktree}
+                          <span class="badge badge-ghost badge-xs shrink-0">Project directory</span>
+                        {/if}
+                      </div>
+
+                      {#if useWorktree}
+                        <div class="grid grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-2">
+                          <span class="text-xs font-medium text-base-content/50">Base</span>
+                          <div
+                            role="radiogroup"
+                            aria-label="Worktree source"
+                            class="join grid min-w-0 grid-cols-2"
+                          >
+                            <label
+                              class="btn join-item btn-xs h-8 min-h-8 flex-1 text-xs focus-within:ring-2 focus-within:ring-primary"
+                              class:btn-primary={selectedWorktreeSource === 'newBranchFromMain'}
+                              class:btn-ghost={selectedWorktreeSource !== 'newBranchFromMain'}
+                              class:border-base-300={selectedWorktreeSource !== 'newBranchFromMain'}
+                              class:bg-base-100={selectedWorktreeSource !== 'newBranchFromMain'}
+                            >
+                              <input
+                                type="radio"
+                                class="sr-only"
+                                aria-label="New branch from latest main"
+                                bind:group={selectedWorktreeSource}
+                                value="newBranchFromMain"
+                              />
+                              <span>Latest main</span>
+                            </label>
+                            <label
+                              class="btn join-item btn-xs h-8 min-h-8 flex-1 text-xs focus-within:ring-2 focus-within:ring-primary"
+                              class:btn-primary={selectedWorktreeSource === 'existingBranch'}
+                              class:btn-ghost={selectedWorktreeSource !== 'existingBranch'}
+                              class:border-base-300={selectedWorktreeSource !== 'existingBranch'}
+                              class:bg-base-100={selectedWorktreeSource !== 'existingBranch'}
+                            >
+                              <input
+                                type="radio"
+                                class="sr-only"
+                                aria-label="Existing branch"
+                                bind:group={selectedWorktreeSource}
+                                value="existingBranch"
+                              />
+                              <span>Existing branch</span>
+                            </label>
+                          </div>
+                        </div>
+
+                        {#if selectedWorktreeSource === 'existingBranch'}
+                          <div class="grid grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-2">
+                            <span class="text-xs font-medium text-base-content/50">Branch</span>
+                            <select
+                              aria-label="Branch"
+                              class="select select-bordered select-xs min-w-0 flex-1"
+                              bind:value={selectedExistingBranch}
+                              disabled={gitBranches.length === 0}
+                            >
+                              {#if gitBranches.length === 0}
+                                <option value="">No branches available</option>
+                              {:else}
+                                {#each gitBranches as branch}
+                                  <option value={branch.name}>{branch.name}{branch.is_remote ? ' (remote)' : ''}</option>
+                                {/each}
+                              {/if}
+                            </select>
+                          </div>
+                          {#if branchLoadError}
+                            <span class="mt-1 block text-xs text-error">{branchLoadError}</span>
+                          {/if}
+                        {/if}
+                      {/if}
+                    </div>
+                  </div>
+                </div>
+              {/if}
+            </div>
+          {/if}
+        </div>
       {/snippet}
     </PromptInput>
   </div>
 </Modal>
+
+{#if previewImage}
+  <Modal onClose={() => { previewImage = null }} maxWidth="720px" ariaLabel="Pasted image {previewImage.marker}" initialFocus={null}>
+    {#snippet header()}
+      <h3 class="text-[0.95rem] font-semibold text-base-content m-0">Pasted image {previewImage.marker}</h3>
+    {/snippet}
+
+    <div class="p-4 flex flex-col gap-3">
+      <img
+        src={previewImage.dataUrl}
+        alt="Pasted image {previewImage.marker}"
+        class="max-h-[70vh] w-full object-contain rounded border border-base-300 bg-base-200"
+      />
+      <p class="m-0 text-xs text-base-content/60">{previewImage.mimeType} · {formatBytes(previewImage.size)}</p>
+    </div>
+  </Modal>
+{/if}

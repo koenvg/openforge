@@ -28,6 +28,21 @@ describe('TaskPromptSummary', () => {
     expect(screen.getByText('Implemented JWT auth')).toBeTruthy()
   })
 
+  it('hides persisted image reference definitions from the initial prompt preview', () => {
+    render(TaskPromptSummary, {
+      props: {
+        task: {
+          ...baseTask,
+          initial_prompt: 'Inspect [image#1] carefully\n\n[image#1]: data:image/png;base64,aW1hZ2UtYnl0ZXM=',
+        },
+      },
+    })
+
+    const promptContent = screen.getByRole('region', { name: 'Initial Prompt content' })
+    expect(promptContent.textContent).toBe('Inspect [image#1] carefully')
+    expect(promptContent.textContent).not.toContain('data:image/png;base64')
+  })
+
   it('renders handoff notes fallback when summary is empty', () => {
     render(TaskPromptSummary, { props: { task: { ...baseTask, summary: null } } })
     expect(screen.getByText(/no handoff notes yet/i)).toBeTruthy()

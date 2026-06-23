@@ -347,6 +347,26 @@ pub(super) async fn handle_app_start_implementation_command(
         start_context.code_cleanup_enabled,
         start_context.handoff_notes_template.as_deref(),
     );
+    let image_attachment_root = state
+        .app
+        .as_ref()
+        .map(|app| app.path().app_data_dir())
+        .transpose()
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to resolve app data directory: {e}"),
+            )
+        })?
+        .unwrap_or_else(|| std::env::temp_dir().join("openforge"));
+    let image_attachment_dir =
+        crate::agent_lifecycle::task_prompt_image_attachment_dir(&image_attachment_root, &task_id);
+    let prompt = crate::agent_lifecycle::materialize_task_prompt_images(
+        &task_id,
+        &prompt,
+        &image_attachment_dir,
+    )
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
     let provider_options = provider_run_options_for_task(&start_context.task);
 
     let provider =
