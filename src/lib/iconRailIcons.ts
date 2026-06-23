@@ -1,4 +1,4 @@
-import { Boxes, Clock, Code, FileText, FolderOpen, GitPullRequest, LayoutDashboard, Plug, Puzzle, Settings, Sparkles, Terminal, Wrench } from '@lucide/svelte'
+import { Boxes, Clock, Code, FileText, FolderOpen, GitPullRequest, Kanban, LayoutDashboard, Plug, Puzzle, Settings, Sparkles, Terminal, Wrench } from '@lucide/svelte'
 
 type IconComponent = typeof LayoutDashboard
 
@@ -16,6 +16,7 @@ const iconRegistry: Record<string, IconComponent> = {
   boxes: Boxes,
   wrench: Wrench,
   clock: Clock,
+  kanban: Kanban,
 }
 
 export function resolveIconRailIcon(icon: string): IconComponent {

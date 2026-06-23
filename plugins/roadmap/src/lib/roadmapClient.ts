@@ -1,0 +1,40 @@
+import type { FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
+import type {
+  CreateIssueRequest,
+  EditIssueRequest,
+  RoadmapBoard,
+  RoadmapConfig,
+  RoadmapIssue,
+} from './types'
+
+export interface RoadmapClient {
+  getBoard(projectId: string): Promise<RoadmapBoard>
+  setValue(request: { projectId: string; issueNumber: number; value: number | null }): Promise<void>
+  getConfig(projectId: string): Promise<RoadmapConfig>
+  setColumnLabels(request: { projectId: string; labels: string[] }): Promise<void>
+  createIssue(request: CreateIssueRequest): Promise<RoadmapIssue>
+  editIssue(request: EditIssueRequest): Promise<void>
+}
+
+async function invokeBackend<TOutput>(
+  api: Pick<FrontendOpenForgeAPI, 'backend'>,
+  method: string,
+  payload?: unknown,
+): Promise<TOutput> {
+  await api.backend.whenReady()
+  return api.backend.invoke<TOutput>(method, payload)
+}
+
+export function createRoadmapClient(api: Pick<FrontendOpenForgeAPI, 'backend'>): RoadmapClient {
+  return {
+    getBoard: (projectId) => invokeBackend<RoadmapBoard>(api, 'roadmap_get_board', { projectId }),
+    setValue: ({ projectId, issueNumber, value }) =>
+      invokeBackend<void>(api, 'roadmap_set_value', { projectId, issueNumber, value }),
+    getConfig: (projectId) => invokeBackend<RoadmapConfig>(api, 'roadmap_get_config', { projectId }),
+    setColumnLabels: ({ projectId, labels }) =>
+      invokeBackend<void>(api, 'roadmap_set_column_labels', { projectId, labels }),
+    createIssue: (request) =>
+      invokeBackend<{ issue: RoadmapIssue }>(api, 'roadmap_create_issue', request).then((r) => r.issue),
+    editIssue: (request) => invokeBackend<void>(api, 'roadmap_edit_issue', request),
+  }
+}
