@@ -63,7 +63,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "dompurify": "^3.4.9",
+    "dompurify": "^3.4.11",
     "marked": "^18.0.5"
   },
   "peerDependencies": {
@@ -71,6 +71,6 @@
   },
   "devDependencies": {
     "typescript": "^6.0.3",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.9"
   }
 }
