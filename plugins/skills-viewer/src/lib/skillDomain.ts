@@ -53,6 +53,56 @@ export function groupSkillsBySource(skills: SkillInfo[]): SkillSourceGroup[] {
   return groups
 }
 
+export interface SkillFrontmatterMetadata {
+  name: string | null
+  description: string | null
+}
+
+export function parseSkillFrontmatter(content: string): SkillFrontmatterMetadata {
+  const trimmed = content.trimStart()
+  if (!trimmed.startsWith('---')) return { name: null, description: null }
+
+  const afterFirst = trimmed.slice(3)
+  const endIndex = afterFirst.indexOf('\n---')
+  if (endIndex < 0) return { name: null, description: null }
+
+  const frontmatter = afterFirst.slice(0, endIndex)
+  let name: string | null = null
+  let description = ''
+  let inDescription = false
+
+  for (const line of frontmatter.split(/\r?\n/)) {
+    const trimmedLine = line.trim()
+    if (trimmedLine.startsWith('name:')) {
+      const value = trimmedLine.slice('name:'.length).trim().replace(/^["']|["']$/g, '')
+      name = value || null
+      inDescription = false
+      continue
+    }
+
+    if (trimmedLine.startsWith('description:')) {
+      const value = trimmedLine.slice('description:'.length).trim().replace(/^["']|["']$/g, '')
+      if (value === '|' || value === '>' || value === '') {
+        inDescription = true
+      } else {
+        description = value
+        inDescription = false
+      }
+      continue
+    }
+
+    if (inDescription) {
+      if (trimmedLine && (line.startsWith(' ') || line.startsWith('\t'))) {
+        description = description ? `${description} ${trimmedLine}` : trimmedLine
+      } else {
+        inDescription = false
+      }
+    }
+  }
+
+  return { name, description: description || null }
+}
+
 export function stripSkillFrontmatter(content: string): string {
   if (!content.startsWith('---\n') && !content.startsWith('---\r\n')) return content
 

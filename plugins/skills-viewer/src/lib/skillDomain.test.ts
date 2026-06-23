@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getPreferredSkillIdentity, getSkillIdentity, getSkillLocationLabel, getSkillSourcePath, groupSkillsBySource, stripSkillFrontmatter, type SkillInfo } from './skillDomain'
+import { getPreferredSkillIdentity, getSkillIdentity, getSkillLocationLabel, getSkillSourcePath, groupSkillsBySource, parseSkillFrontmatter, stripSkillFrontmatter, type SkillInfo } from './skillDomain'
 
 function makeSkill(name: string, source_dir: string, level: SkillInfo['level'] = 'project'): SkillInfo {
   return { name, source_dir, level, description: null, agent: null, template: null, file_name: null }
@@ -72,6 +72,18 @@ describe('skills-viewer skill domain helpers', () => {
     const missingSelection = getSkillIdentity(makeSkill('missing-personal', '.pi', 'user'))
 
     expect(getPreferredSkillIdentity(filteredSkills, missingSelection)).toEqual(getSkillIdentity(filteredSkills[1]))
+  })
+
+  it('parses frontmatter metadata for saved skill content', () => {
+    expect(parseSkillFrontmatter('---\nname: updated-review\ndescription: Updated review helper\n---\n# Review\n'))
+      .toEqual({ name: 'updated-review', description: 'Updated review helper' })
+  })
+
+  it('parses literal and folded multiline frontmatter descriptions', () => {
+    expect(parseSkillFrontmatter('---\nname: review\ndescription: |\n  Review code carefully.\n  Preserve context.\n---\n# Review\n'))
+      .toEqual({ name: 'review', description: 'Review code carefully. Preserve context.' })
+    expect(parseSkillFrontmatter('---\nname: plan\ndescription: >\n  Plan the work.\n  Then execute.\n---\n# Plan\n'))
+      .toEqual({ name: 'plan', description: 'Plan the work. Then execute.' })
   })
 
   it('strips complete YAML frontmatter for rendered skill markdown', () => {

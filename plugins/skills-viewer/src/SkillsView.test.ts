@@ -160,6 +160,31 @@ describe('SkillsView project and async states', () => {
     expect(invoke).toHaveBeenLastCalledWith('saveSkillContent', expect.objectContaining({ projectId: 'P-1', content: 'after' }))
   })
 
+  it('refreshes displayed metadata from saved frontmatter before returning to read mode', async () => {
+    const skill = makeSkill({
+      name: 'old-review',
+      description: 'Old description',
+      template: '---\nname: old-review\ndescription: Old description\n---\n# Old body\n',
+    })
+    const invoke = vi.fn()
+      .mockResolvedValueOnce([skill])
+      .mockResolvedValueOnce(undefined)
+    const updatedContent = '---\nname: updated-review\ndescription: Updated description\n---\n# Updated body\n'
+
+    renderView({ api: makeApi(invoke), projectId: 'P-1' })
+
+    await waitFor(() => expect(screen.getAllByText('old-review').length).toBeGreaterThan(0))
+    await fireEvent.click(screen.getByRole('button', { name: /manually edit/i }))
+    const textboxes = screen.getAllByRole('textbox')
+    await fireEvent.input(textboxes[textboxes.length - 1], { target: { value: updatedContent } })
+    await fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+
+    await waitFor(() => expect(screen.getAllByText('updated-review').length).toBeGreaterThan(0))
+    expect(screen.getAllByText('Updated description').length).toBeGreaterThan(0)
+    expect(get(skills)[0]).toMatchObject({ name: 'updated-review', description: 'Updated description', template: updatedContent })
+    expect(get(selectedSkillIdentity)).toEqual({ name: 'updated-review', level: 'project', source_dir: '.agents', file_name: null })
+  })
+
   it('keeps a shared personal skill locked while its save is in flight across project switches', async () => {
     const sharedSkill = makeSkill({ name: 'shared-user-skill', level: 'user', template: 'before' })
     const save = deferred<void>()

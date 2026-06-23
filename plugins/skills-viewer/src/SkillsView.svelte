@@ -14,7 +14,7 @@
   import { useVimNavigation } from './lib/useVimNavigation.svelte'
   import ProjectPageHeader from './ProjectPageHeader.svelte'
   import MarkdownContent from '@openforge/plugin-sdk/ui/MarkdownContent.svelte'
-  import { getPreferredSkillIdentity, getSkillIdentity, getSkillLocationLabel, getSkillSourcePath, groupSkillsBySource, isSameSkillIdentity, stripSkillFrontmatter, type SkillInfo } from './lib/skillDomain'
+  import { getPreferredSkillIdentity, getSkillIdentity, getSkillLocationLabel, getSkillSourcePath, groupSkillsBySource, isSameSkillIdentity, parseSkillFrontmatter, stripSkillFrontmatter, type SkillInfo } from './lib/skillDomain'
 
   let isLoading = $state(false)
   let error = $state<string | null>(null)
@@ -188,12 +188,25 @@
         ? isSameSkillIdentity(skillToSave, $selectedSkillIdentity)
         : requestId === saveRequestId && projectIdToSave === $activeProjectId
       if (!shouldReflectSave) return
-      // Update the local skill data with new content
-      $skills = $skills.map(s =>
-        isSameSkillIdentity(s, skillIdentity)
-          ? { ...s, template: contentToSave }
-          : s
-      )
+      const savedFrontmatter = parseSkillFrontmatter(contentToSave)
+      let savedSkillIdentity = skillIdentity
+
+      // Update the local skill data with new content and freshly parsed metadata.
+      $skills = $skills.map(s => {
+        if (!isSameSkillIdentity(s, skillIdentity)) return s
+
+        const savedSkill = {
+          ...s,
+          name: savedFrontmatter.name ?? s.name,
+          description: savedFrontmatter.description,
+          template: contentToSave,
+        }
+        savedSkillIdentity = getSkillIdentity(savedSkill)
+        return savedSkill
+      })
+      if (isSameSkillIdentity(skillToSave, $selectedSkillIdentity)) {
+        $selectedSkillIdentity = savedSkillIdentity
+      }
       editMode = false
     } catch (e) {
       const shouldShowError = userSkillSaveKey
