@@ -1324,6 +1324,17 @@ import '../styles/global.css';
     text-decoration-color: currentColor;
   }
 
+  @media (max-width: 80rem) {
+    .site-footer {
+      grid-template-columns: 1fr;
+    }
+
+    .footer-links ul {
+      grid-template-columns: repeat(2, minmax(10rem, 1fr));
+      gap: 2rem clamp(2rem, 8vw, 4rem);
+    }
+  }
+
   @media (max-width: 62rem) {
     .hero-shell {
       min-height: auto;
