@@ -81,6 +81,16 @@ describe('skills-viewer plugin', () => {
     expect(skillsViewSource).toContain('api.navigation.navigate')
   })
 
+  it('keeps skill edit content raw while rendering a labelled markdown article from frontmatter-stripped content', () => {
+    const skillsViewSource = readFileSync(join(pluginSrcDir, 'SkillsView.svelte'), 'utf8')
+
+    expect(skillsViewSource).toContain('editContent = selectedSkill.template')
+    expect(skillsViewSource).toContain('stripSkillFrontmatter')
+    expect(skillsViewSource).toContain('<article')
+    expect(skillsViewSource).toContain('aria-labelledby={skillMarkdownHeadingId}')
+    expect(skillsViewSource).toContain('aria-label="Skill metadata"')
+  })
+
   it('registers plugin-owned backend methods for skill list and save contracts', async () => {
     const { default: backend } = await import('./backend')
     const subscriptions = { add: vi.fn() }
