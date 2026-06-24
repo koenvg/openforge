@@ -533,7 +533,7 @@
         <div class="flex flex-col gap-2">
           <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">Move down / up</span>
-            <div class="flex gap-0.5"><kbd class="kbd kbd-sm">j</kbd><kbd class="kbd kbd-sm">k</kbd></div>
+            <div class="flex gap-0.5"><kbd class="kbd kbd-sm">j</kbd><kbd class="kbd kbd-sm">k</kbd><kbd class="kbd kbd-sm">↓</kbd><kbd class="kbd kbd-sm">↑</kbd></div>
           </div>
           <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">Left / right column</span>

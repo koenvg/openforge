@@ -23,6 +23,7 @@ export interface VimNavigationState {
 
 /**
  * Reusable Svelte 5 composable for vim-style j/k/G/gg/Enter/Escape/q/x/h/l navigation.
+ * ArrowDown and ArrowUp mirror j/k for conventional list navigation.
  * Returns reactive focusedIndex and a keydown handler to wire into svelte:window or element.
  */
 export function useVimNavigation(callbacks: VimNavigationCallbacks): VimNavigationState {
@@ -64,6 +65,7 @@ export function useVimNavigation(callbacks: VimNavigationCallbacks): VimNavigati
     }
 
     switch (e.key) {
+      case 'ArrowDown':
       case 'j':
         e.preventDefault()
         if (count > 0) {
@@ -71,6 +73,7 @@ export function useVimNavigation(callbacks: VimNavigationCallbacks): VimNavigati
         }
         break
 
+      case 'ArrowUp':
       case 'k':
         e.preventDefault()
         if (count > 0) {
