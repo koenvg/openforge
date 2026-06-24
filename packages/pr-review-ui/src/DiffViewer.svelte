@@ -84,6 +84,10 @@
     return 'light'
   }
 
+  function inlineCommentHelpId(filename: string, lineNumber: number, side: SplitSide): string {
+    return `inline-comment-help-${filename.replace(/[^a-zA-Z0-9_-]/g, '-')}-${lineNumber}-${String(side).replace(/[^a-zA-Z0-9_-]/g, '-')}`
+  }
+
   const diffWorker = createDiffWorker({
     getFiles: () => files,
     getFileContentsMap: () => fileContentsFetcher.fileContentsMap,
@@ -413,20 +417,26 @@
       <button
         class="btn btn-ghost btn-xs {fileTreeVisible ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
         title={fileTreeVisible ? 'Hide file tree' : 'Show file tree'}
+        aria-label={fileTreeVisible ? 'Hide file tree' : 'Show file tree'}
+        aria-expanded={fileTreeVisible}
         onclick={() => onToggleFileTree!()}
       >
-        {fileTreeVisible ? '◧' : '☰'}
+        <span aria-hidden="true">{fileTreeVisible ? '◧' : '☰'}</span>
       </button>
       <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
     {/if}
     <button
       class="btn btn-ghost btn-xs {diffViewMode === DiffModeEnum.Split ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
+      aria-label="Split diff view"
+      aria-pressed={diffViewMode === DiffModeEnum.Split}
       onclick={() => (diffViewMode = DiffModeEnum.Split)}
     >
       Split
     </button>
     <button
       class="btn btn-ghost btn-xs {diffViewMode === DiffModeEnum.Unified ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
+      aria-label="Unified diff view"
+      aria-pressed={diffViewMode === DiffModeEnum.Unified}
       onclick={() => (diffViewMode = DiffModeEnum.Unified)}
     >
       Unified
@@ -436,6 +446,8 @@
       class="btn btn-ghost btn-xs {diffViewWrap ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
       onclick={() => (diffViewWrap = !diffViewWrap)}
       title={diffViewWrap ? 'Disable line wrapping' : 'Enable line wrapping'}
+      aria-label={diffViewWrap ? 'Disable line wrapping' : 'Enable line wrapping'}
+      aria-pressed={diffViewWrap}
     >
       Wrap
     </button>
@@ -444,11 +456,13 @@
       class="btn btn-ghost btn-xs text-base-content/50"
       onclick={search.open}
       title="Search (⌘F)"
-    >🔍</button>
+      aria-label="Search diff"
+    ><span aria-hidden="true">🔍</span></button>
     {#if search.visible}
       <input
         type="text"
         class="input input-xs input-bordered w-40"
+        aria-label="Search diff text"
         placeholder="Search diff..."
         value={search.query}
         oninput={(e: Event) => {
@@ -470,18 +484,21 @@
         onclick={search.goToPrev}
         disabled={search.matchCount === 0}
         title="Previous match (Shift+Enter)"
-      >▲</button>
+        aria-label="Previous search match"
+      ><span aria-hidden="true">▲</span></button>
       <button
         class="btn btn-ghost btn-xs"
         onclick={search.goToNext}
         disabled={search.matchCount === 0}
         title="Next match (Enter)"
-      >▼</button>
+        aria-label="Next search match"
+      ><span aria-hidden="true">▼</span></button>
       <button
         class="btn btn-ghost btn-xs"
         onclick={search.close}
         title="Close search (Escape)"
-      >✕</button>
+        aria-label="Close diff search"
+      ><span aria-hidden="true">✕</span></button>
     {/if}
     {#if toolbarExtra}
       <div class="ml-auto"></div>
@@ -520,8 +537,13 @@
           >
             <div class="border border-base-300 rounded-md">
               <div class="sticky top-0 z-20 w-full flex items-center gap-2 px-4 py-3 bg-base-200 border-b border-base-300 rounded-t-md shadow-sm">
-                <button class="min-w-0 flex flex-1 items-center gap-2 text-left hover:text-primary transition-colors" onclick={() => toggleCollapse(file.filename)}>
-                  <span class="text-xs text-base-content/50 flex-shrink-0">{collapsedFiles.has(file.filename) ? '▶' : '▼'}</span>
+                <button
+                  class="min-w-0 flex flex-1 items-center gap-2 text-left hover:text-primary transition-colors"
+                  aria-label="{collapsedFiles.has(file.filename) ? 'Expand' : 'Collapse'} diff for {file.filename}"
+                  aria-expanded={!collapsedFiles.has(file.filename)}
+                  onclick={() => toggleCollapse(file.filename)}
+                >
+                  <span class="text-xs text-base-content/50 flex-shrink-0" aria-hidden="true">{collapsedFiles.has(file.filename) ? '▶' : '▼'}</span>
                   <span class="font-bold text-sm" style="color: {getFileStatusColor(file.status)}">
                     {getFileStatusIcon(file.status)}
                   </span>
@@ -639,6 +661,7 @@
                                     <button
                                       class="btn btn-ghost btn-xs text-success hover:text-success/80"
                                       title="Approve — add to pending comments"
+                                      aria-label="Approve AI review comment and add to pending comments"
                                       onclick={async () => {
                                         if (comment.commentId === undefined) return
                                         try {
@@ -661,6 +684,7 @@
                                   <button
                                     class="btn btn-ghost btn-xs text-base-content/50 hover:text-error"
                                     title="Dismiss"
+                                    aria-label="Dismiss AI review comment"
                                     onclick={async () => {
                                       if (comment.commentId === undefined) return
                                       try {
@@ -678,6 +702,7 @@
                                 <span class="badge badge-warning badge-sm">Pending</span>
                                 <button
                                   class="btn btn-ghost btn-xs text-base-content/50 hover:text-error ml-auto"
+                                  aria-label="Remove pending comment"
                                   onclick={() => {
                                     setVisiblePendingComments(visiblePendingComments.filter(
                                       (_, i) => i !== comment.index
@@ -697,6 +722,8 @@
                       <div class="review-inline-comment-form p-3 mx-4 my-2 bg-base-100 border border-base-300 rounded-md">
                         <textarea
                           class="textarea textarea-bordered w-full min-h-[60px] text-[0.8rem] leading-relaxed resize-y"
+                          aria-label="Inline review comment for {file.filename} line {lineNumber}"
+                          aria-describedby={inlineCommentHelpId(file.filename, lineNumber, side)}
                           placeholder="Leave a comment… (Cmd/Ctrl+Enter to submit)"
                           rows="3"
                           value={getInlineCommentText(file.filename, lineNumber, side)}
@@ -712,6 +739,7 @@
                             }
                           }}
                         ></textarea>
+                        <p id={inlineCommentHelpId(file.filename, lineNumber, side)} class="text-xs text-base-content/50 mt-1 mb-0">Submit with Command+Enter or Control+Enter.</p>
                         <div class="flex justify-end gap-2.5 mt-2">
                           <button
                             type="button"

@@ -184,7 +184,7 @@ async function openFilesTab(registry: TestingOpenForgeRegistryFake) {
 
   const title = await screen.findByText('Fix authentication middleware')
   await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
-  await fireEvent.click(await screen.findByRole('button', { name: /Files changed/i }))
+  await fireEvent.click(await screen.findByRole('tab', { name: /Files changed/i }))
   return requireElement(await screen.findByLabelText('Mark src/main.rs reviewed'), HTMLInputElement)
 }
 
@@ -241,7 +241,7 @@ describe('PrReviewView reviewed files', () => {
 
     const title = await screen.findByText('Fix authentication middleware')
     await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
-    await fireEvent.click(await screen.findByRole('button', { name: /Files changed/i }))
+    await fireEvent.click(await screen.findByRole('tab', { name: /Files changed/i }))
 
     const newPreview = requireElement(await screen.findByRole('img', { name: 'assets/screenshot.png new preview' }), HTMLImageElement)
     const oldPreview = requireElement(await screen.findByRole('img', { name: 'assets/screenshot.png old preview' }), HTMLImageElement)
@@ -279,7 +279,7 @@ describe('PrReviewView reviewed files', () => {
 
     const firstTitle = await screen.findByText('Fix authentication middleware')
     await fireEvent.click(requireElement(firstTitle.closest('button'), HTMLButtonElement))
-    await fireEvent.click(await screen.findByRole('button', { name: /Files changed/i }))
+    await fireEvent.click(await screen.findByRole('tab', { name: /Files changed/i }))
     await screen.findByLabelText('Mark src/main.rs reviewed')
 
     selectedReviewPr.set(null)
@@ -315,7 +315,7 @@ describe('PrReviewView reviewed files', () => {
     })
     const title = await screen.findByText('Fix authentication middleware')
     await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
-    await fireEvent.click(await screen.findByRole('button', { name: /Files changed/i }))
+    await fireEvent.click(await screen.findByRole('tab', { name: /Files changed/i }))
     await fireEvent.click(await screen.findByLabelText('Mark src/main.rs reviewed'))
     await waitFor(() => {
       expect(requireElement(screen.getByLabelText('Mark src/main.rs reviewed'), HTMLInputElement).checked).toBe(true)
@@ -343,7 +343,7 @@ describe('PrReviewView reviewed files', () => {
     })
     const changedTitle = await screen.findByText('Fix authentication middleware')
     await fireEvent.click(requireElement(changedTitle.closest('button'), HTMLButtonElement))
-    await fireEvent.click(await screen.findByRole('button', { name: /Files changed/i }))
+    await fireEvent.click(await screen.findByRole('tab', { name: /Files changed/i }))
 
     await waitFor(() => {
       const changedCheckbox = requireElement(screen.getByLabelText('Mark src/main.rs reviewed'), HTMLInputElement)
@@ -399,6 +399,29 @@ describe('PrReviewView empty and recovery states', () => {
     expect(screen.queryByText('Connect GitHub to check review requests')).toBeNull()
   })
 
+  it('labels repository filter controls and exposes dropdown expanded state', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    await registry.frontendApi.config.set('github_token', 'ghp_test')
+    registerPrReviewBackends(registry, () => [], [])
+
+    render(PrReviewView, {
+      props: {
+        api: registry.frontendApi,
+        context: registry.frontendApi.context.getSnapshot(),
+        projectName: 'Demo Project',
+        projectId: 'project-1',
+      },
+    })
+
+    const filterButton = await screen.findByRole('button', { name: 'Filter repositories' })
+    expect(filterButton.getAttribute('aria-expanded')).toBe('false')
+
+    await fireEvent.click(filterButton)
+
+    expect(screen.getByRole('button', { name: 'Filter repositories' }).getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByRole('textbox', { name: 'Repository to exclude' })).toBeTruthy()
+  })
+
   it('explains when repository filters hide every review request', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
     await registry.frontendApi.config.set('github_token', 'ghp_test')
@@ -419,6 +442,7 @@ describe('PrReviewView empty and recovery states', () => {
 
     await fireEvent.click(screen.getAllByRole('button', { name: 'Review repository filters' })[0])
     expect(screen.getByText('Excluded Repositories')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Remove acme/repo from excluded repositories' })).toBeTruthy()
   })
 
   it('shows a sync recovery path when review requests cannot be loaded', async () => {

@@ -57,6 +57,14 @@ describe('ReviewSubmitPanel', () => {
     expect(screen.getByText('1 comment will be submitted')).toBeTruthy()
   })
 
+  it('labels the review summary textarea and describes the keyboard shortcut', () => {
+    renderPanel()
+
+    const textarea = screen.getByRole('textbox', { name: 'Review summary comment' })
+    expect(textarea.getAttribute('aria-describedby')).toBeTruthy()
+    expect(screen.getByText(/Submit with/)).toBeTruthy()
+  })
+
   it('only enables comment and request changes when a summary or pending comments exist', async () => {
     const { container } = renderPanel()
 
@@ -122,7 +130,7 @@ describe('ReviewSubmitPanel', () => {
     await fireEvent.click(screen.getByText('Approve'))
 
     await waitFor(() => {
-      expect(screen.getByText('Review submitted successfully (Approved)')).toBeTruthy()
+      expect(screen.getByRole('status').textContent).toContain('Review submitted successfully (Approved)')
     })
 
     success.unmount()
@@ -131,7 +139,7 @@ describe('ReviewSubmitPanel', () => {
     await fireEvent.click(screen.getByText('Approve'))
 
     await waitFor(() => {
-      expect(screen.getByText('Failed to submit review. Please try again.')).toBeTruthy()
+      expect(screen.getByRole('alert').textContent).toContain('Failed to submit review. Please try again.')
     })
   })
 

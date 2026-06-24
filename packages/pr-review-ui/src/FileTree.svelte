@@ -130,22 +130,31 @@
     </div>
   </div>
 
-  <div class="flex-1 overflow-y-auto py-2">
+  <div class="flex-1 overflow-y-auto py-2" role="tree" aria-label="Changed files">
     {#each flattenedNodes as { node, depth }}
       {#if node.isDir}
+        {@const expanded = expandedDirs.has(node.fullPath)}
         <button
           class="w-full flex items-center gap-2 text-xs text-base-content cursor-pointer hover:bg-base-content/5 transition-colors py-1.5 pr-3"
           style="padding-left: {12 + depth * 16}px"
+          role="treeitem"
+          aria-label="{expanded ? 'Collapse' : 'Expand'} {node.fullPath}"
+          aria-expanded={expanded}
+          aria-selected={false}
           onclick={() => toggleDir(node.fullPath)}
         >
-          <span class="text-[0.6rem] text-base-content/50 shrink-0">{expandedDirs.has(node.fullPath) ? '▼' : '▶'}</span>
+          <span class="text-[0.6rem] text-base-content/50 shrink-0" aria-hidden="true">{expanded ? '▼' : '▶'}</span>
           <span class="text-base-content/50 font-medium flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">{node.name}/</span>
         </button>
       {:else if node.file}
         {@const reviewed = isFileReviewed(node.file)}
+        {@const selected = selectedFile === node.file.filename}
         <button
-          class="w-full flex items-center gap-2 text-xs transition-colors py-1.5 pr-3 text-base-content {selectedFile === node.file.filename ? 'bg-primary/10 border-l-2 border-l-primary' : 'hover:bg-primary/5'}"
-          style="padding-left: {selectedFile === node.file.filename ? 10 + depth * 16 : 12 + depth * 16}px"
+          class="w-full flex items-center gap-2 text-xs transition-colors py-1.5 pr-3 text-base-content {selected ? 'bg-primary/10 border-l-2 border-l-primary' : 'hover:bg-primary/5'}"
+          style="padding-left: {selected ? 10 + depth * 16 : 12 + depth * 16}px"
+          role="treeitem"
+          aria-label="{selected ? 'Selected' : 'Select'} file {node.file.filename}{reviewed ? ' (reviewed)' : ''}"
+          aria-selected={selected}
           onclick={() => node.file && handleFileClick(node.file)}
         >
           <span class="font-bold text-sm w-4 text-center shrink-0 {getFileStatusClass(node.file.status)}">

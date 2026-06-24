@@ -296,7 +296,7 @@ describe('FileTree', () => {
       },
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: /auth\.ts/ }))
+    await fireEvent.click(screen.getByRole('treeitem', { name: /auth\.ts/ }))
 
     expect(selected).toBe('src/lib/auth.ts')
     expect(screen.queryByRole('checkbox', { name: 'Mark src/lib/auth.ts reviewed' })).toBeNull()
