@@ -206,7 +206,10 @@
       }
     } else {
       const activeTab = newTabs.find(t => t.index === activeTabIndex)
-      focusTargetLabel = activeTab?.label ?? focusTargetLabel
+      if (activeTab) {
+        focusTargetLabel = activeTab.label
+        await focusTerminalTab(activeTab.key)
+      }
     }
 
     syncSession()

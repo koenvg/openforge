@@ -154,6 +154,41 @@ describe('Terminal plugin TerminalTabs', () => {
     expect(releaseMock).toHaveBeenCalledWith('T-1-shell-0')
   })
 
+  it('moves focus to the active terminal when closing an inactive tab', async () => {
+    const { focusTerminal } = await import('./lib/terminalPool')
+    render(TerminalTabs, {
+      props: {
+        taskId: 'T-1',
+        workspacePath: '/path/to/worktree',
+        onTabChange: null,
+        onTabCountChange: null,
+      },
+    })
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Shell 1')).toBeTruthy()
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: /Open new shell/ }))
+    await vi.waitFor(() => {
+      expect(screen.getByText('Shell 2')).toBeTruthy()
+    })
+
+    await fireEvent.click(screen.getByRole('tab', { name: /Shell 1/ }))
+    await vi.waitFor(() => {
+      expect(vi.mocked(focusTerminal)).toHaveBeenCalledWith('T-1-shell-0')
+    })
+
+    vi.mocked(focusTerminal).mockClear()
+    await fireEvent.click(screen.getByRole('button', { name: 'Close Shell 2' }))
+
+    await vi.waitFor(() => {
+      expect(screen.queryByText('Shell 2')).toBeNull()
+      expect(vi.mocked(focusTerminal)).toHaveBeenCalledWith('T-1-shell-0')
+      expect(screen.getByText('Shell 2 closed. Focus moved to Shell 1.')).toBeTruthy()
+    })
+  })
+
   it('does not pass exit callbacks to TaskTerminal children', async () => {
     render(TerminalTabs, {
       props: {
