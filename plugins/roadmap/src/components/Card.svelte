@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ExternalLink, Copy } from '@lucide/svelte'
+  import { ExternalLink, Copy, MoreVertical } from '@lucide/svelte'
   import type { BoardCard } from '../lib/board'
 
   interface Props {
@@ -8,9 +8,10 @@
     onOpen: () => void
     onOpenUrl: (url: string) => void
     onCopyLink: (issueNumber: number) => void
+    onContextMenu: (event: MouseEvent) => void
   }
 
-  let { card, repo, onOpen, onOpenUrl, onCopyLink }: Props = $props()
+  let { card, repo, onOpen, onOpenUrl, onCopyLink, onContextMenu }: Props = $props()
 
   let issueUrl = $derived(`https://github.com/${repo}/issues/${card.issueNumber}`)
 
@@ -29,6 +30,7 @@
   tabindex="0"
   onclick={onOpen}
   onkeydown={handleKeydown}
+  oncontextmenu={onContextMenu}
 >
   <div class="card-body p-3 gap-2">
     <div class="flex items-start gap-2">
@@ -40,6 +42,15 @@
     <div class="flex items-center gap-1">
       <span class="text-xs text-base-content/40">#{card.issueNumber}</span>
       <div class="ml-auto flex items-center gap-1">
+        <button
+          type="button"
+          class="btn btn-ghost btn-xs btn-square"
+          title="Issue actions"
+          aria-label="Issue actions"
+          onclick={(e) => { e.stopPropagation(); onContextMenu(e) }}
+        >
+          <MoreVertical size={14} />
+        </button>
         <button
           type="button"
           class="btn btn-ghost btn-xs btn-square"

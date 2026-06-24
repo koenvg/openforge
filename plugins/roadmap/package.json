@@ -36,6 +36,8 @@
       "backend",
       "commands",
       "events",
+      "tasks",
+      "projectConfig",
       "system.openUrl",
       "navigation",
       "context"

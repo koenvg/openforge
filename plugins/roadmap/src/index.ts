@@ -11,7 +11,7 @@ export default defineFrontendPlugin({
         title: 'Roadmap',
         icon: 'kanban',
         placement: 'rail',
-        order: 40,
+        order: 21,
         shortcut: 'Cmd+R',
         component: RoadmapView,
       }),

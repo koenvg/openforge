@@ -36,7 +36,7 @@ describe('roadmap plugin metadata', () => {
     expect(packageJson.openforge.frontend).toBe('./dist/frontend.js')
     expect(packageJson.openforge.backend).toBe('./dist/backend.js')
     expect(packageJson.openforge.requires).toEqual(
-      expect.arrayContaining(['views', 'backend', 'commands', 'events', 'system.openUrl', 'context']),
+      expect.arrayContaining(['views', 'backend', 'commands', 'events', 'tasks', 'projectConfig', 'system.openUrl', 'context']),
     )
   })
 })
@@ -55,6 +55,7 @@ describe('roadmap frontend plugin', () => {
         title: 'Roadmap',
         icon: 'kanban',
         placement: 'rail',
+        order: 21,
         shortcut: 'Cmd+R',
         component: RoadmapViewComponent,
       }),
@@ -77,11 +78,12 @@ describe('roadmap frontend plugin', () => {
     expect(viewSource).not.toContain('lib/ipc')
     expect(clientSource).toContain('api.backend.invoke')
     expect(clientSource).toContain("'roadmap_get_board'")
+    expect(clientSource).toContain("'roadmap_update_label_color'")
   })
 })
 
 describe('roadmap backend plugin', () => {
-  it('registers all six roadmap backend methods proxying the camelCase host commands', async () => {
+  it('registers all seven roadmap backend methods proxying the camelCase host commands', async () => {
     const { default: backend } = await import('./backend')
     const subscriptions = { add: vi.fn() }
     const invokeGlobal = vi.fn(() => Promise.resolve(null))
@@ -98,11 +100,11 @@ describe('roadmap backend plugin', () => {
 
     await backend.activate(api, context)
 
-    const methods = ['roadmap_get_board', 'roadmap_set_value', 'roadmap_get_config', 'roadmap_set_column_labels', 'roadmap_create_issue', 'roadmap_edit_issue']
+    const methods = ['roadmap_get_board', 'roadmap_set_value', 'roadmap_get_config', 'roadmap_set_column_labels', 'roadmap_create_issue', 'roadmap_edit_issue', 'roadmap_update_label_color']
     for (const method of methods) {
       expect(api.backend.registerMethod).toHaveBeenCalledWith(method, expect.objectContaining({ handler: expect.any(Function) }))
     }
-    expect(subscriptions.add).toHaveBeenCalledTimes(6)
+    expect(subscriptions.add).toHaveBeenCalledTimes(7)
 
     // Invoking the registered roadmap_get_board handler must proxy to the
     // camelCase host command id the core callback router expects.
@@ -110,5 +112,13 @@ describe('roadmap backend plugin', () => {
     const getBoard = registerCalls.find((c) => c[0] === 'roadmap_get_board')![1] as { handler: (p: unknown) => unknown }
     await getBoard.handler({ projectId: 'P-1' })
     expect(invokeGlobal).toHaveBeenCalledWith('openforge.roadmapGetBoard', { projectId: 'P-1' })
+
+    const updateColor = registerCalls.find((c) => c[0] === 'roadmap_update_label_color')![1] as { handler: (p: unknown) => unknown }
+    await updateColor.handler({ projectId: 'P-1', name: 'bug', color: '0e8a16' })
+    expect(invokeGlobal).toHaveBeenCalledWith('openforge.roadmapUpdateLabelColor', {
+      projectId: 'P-1',
+      name: 'bug',
+      color: '0e8a16',
+    })
   })
 })

@@ -328,6 +328,22 @@ pub(super) async fn handle_app_roadmap_command(
                 .map_err(|e| runtime_error(format!("failed to edit issue: {e}")))?;
             serde_json::Value::Null
         }
+        "roadmap_update_label_color" => {
+            let project_id = payload_string(&request.payload, "projectId")?;
+            let name = payload_string(&request.payload, "name")?;
+            let color = roadmap_label_color_field(&request.payload)?;
+            let repo = resolve_repo_ref(state, &project_id)
+                .await
+                .map_err(bad_request)?;
+            let token = token()?;
+
+            state
+                .github_client
+                .update_label_color(&repo.owner, &repo.name, &name, &color, &token)
+                .await
+                .map_err(|e| runtime_error(format!("failed to update label color: {e}")))?;
+            serde_json::Value::Null
+        }
         _ => return Ok(None),
     };
 
@@ -350,6 +366,20 @@ fn roadmap_value_field(payload: &serde_json::Value) -> AppResult<Option<i64>> {
             Ok(Some(value))
         }
     }
+}
+
+/// Read the `color` payload field as a normalized GitHub six-digit hex string.
+fn roadmap_label_color_field(payload: &serde_json::Value) -> AppResult<String> {
+    let color = payload_string(payload, "color")?
+        .trim()
+        .trim_start_matches('#')
+        .to_lowercase();
+    if color.len() != 6 || !color.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(bad_request(
+            "payload.color must be a six-digit hex color".to_string(),
+        ));
+    }
+    Ok(color)
 }
 
 #[cfg(test)]
@@ -470,5 +500,22 @@ mod tests {
         assert!(roadmap_value_field(&serde_json::json!({ "value": 0 })).is_err());
         assert!(roadmap_value_field(&serde_json::json!({ "value": 11 })).is_err());
         assert!(roadmap_value_field(&serde_json::json!({ "value": "x" })).is_err());
+    }
+
+    #[test]
+    fn roadmap_label_color_field_accepts_six_hex_digits_and_rejects_other_values() {
+        assert_eq!(
+            roadmap_label_color_field(&serde_json::json!({ "color": "0E8A16" })).unwrap(),
+            "0e8a16"
+        );
+        assert_eq!(
+            roadmap_label_color_field(&serde_json::json!({ "color": "#c5def5" })).unwrap(),
+            "c5def5"
+        );
+
+        assert!(roadmap_label_color_field(&serde_json::json!({})).is_err());
+        assert!(roadmap_label_color_field(&serde_json::json!({ "color": "fff" })).is_err());
+        assert!(roadmap_label_color_field(&serde_json::json!({ "color": "nothex" })).is_err());
+        assert!(roadmap_label_color_field(&serde_json::json!({ "color": 7 })).is_err());
     }
 }

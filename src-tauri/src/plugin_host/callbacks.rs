@@ -34,6 +34,7 @@ fn openforge_global_command_to_app_invoke(qualified_id: &str) -> Result<&'static
         "roadmapSetColumnLabels" => Ok("roadmap_set_column_labels"),
         "roadmapCreateIssue" => Ok("roadmap_create_issue"),
         "roadmapEditIssue" => Ok("roadmap_edit_issue"),
+        "roadmapUpdateLabelColor" => Ok("roadmap_update_label_color"),
         _ => Err(format!(
             "unsupported plugin host global command id: {qualified_id}"
         )),
@@ -491,6 +492,10 @@ mod tests {
             openforge_global_command_to_app_invoke("openforge.roadmapEditIssue").unwrap(),
             "roadmap_edit_issue"
         );
+        assert_eq!(
+            openforge_global_command_to_app_invoke("openforge.roadmapUpdateLabelColor").unwrap(),
+            "roadmap_update_label_color"
+        );
     }
 
     #[test]
@@ -517,6 +522,10 @@ mod tests {
         assert!(plugin_may_invoke_command(
             ROADMAP_PLUGIN_ID,
             "roadmap_edit_issue"
+        ));
+        assert!(plugin_may_invoke_command(
+            ROADMAP_PLUGIN_ID,
+            "roadmap_update_label_color"
         ));
         assert!(!plugin_may_invoke_command(
             ROADMAP_PLUGIN_ID,

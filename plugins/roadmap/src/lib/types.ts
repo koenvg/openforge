@@ -79,3 +79,9 @@ export interface EditIssueRequest {
   addLabels?: string[]
   removeLabels?: string[]
 }
+
+export interface UpdateLabelColorRequest {
+  projectId: string
+  name: string
+  color: string
+}

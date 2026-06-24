@@ -2,6 +2,7 @@
   import { onDestroy } from 'svelte'
   import { RefreshCw, Plus, Columns3 } from '@lucide/svelte'
   import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
+  import type { Action } from '@openforge/plugin-sdk'
   import {
     buildBoard,
     applyCreate,
@@ -11,6 +12,8 @@
     type BoardModel,
   } from '../lib/board'
   import type { LabelUsage, RepoLabel, RoadmapBoard } from '../lib/types'
+  import { normalizeLabelColor } from '../lib/labelColors'
+  import { loadRoadmapActions, startRoadmapIssueAction } from '../lib/roadmapActions'
   import { createRoadmapClient } from '../lib/roadmapClient'
   import Board from './Board.svelte'
   import CardDrawer from './CardDrawer.svelte'
@@ -34,6 +37,7 @@
 
   let board = $state<BoardModel | null>(null)
   let repoLabels = $state<RepoLabel[]>([])
+  let actions = $state<Action[]>([])
   let isLoading = $state(false)
   let error = $state<string | null>(null)
   let busy = $state(false)
@@ -60,6 +64,7 @@
   // Track the previous projectId to guard the load effect (a board refresh can
   // pass a new prop object with the same logical projectId).
   let lastProjectId = $state<string | null | undefined>(undefined)
+  let actionLoadRequest = 0
 
   function modelFromBoard(raw: RoadmapBoard): BoardModel {
     const values: Record<number, number> = {}
@@ -101,6 +106,20 @@
     }
   }
 
+  async function loadActionsForProject(pid: string | null) {
+    const requestId = ++actionLoadRequest
+    if (!pid) {
+      actions = []
+      return
+    }
+    try {
+      const loaded = await loadRoadmapActions(api, pid)
+      if (requestId === actionLoadRequest) actions = loaded
+    } catch {
+      if (requestId === actionLoadRequest) actions = []
+    }
+  }
+
   // Reload when the active project changes (also handles initial load). Guarded
   // by explicit previous-value comparison so a store refresh that re-passes the
   // same projectId does not retrigger a load.
@@ -112,6 +131,7 @@
       showCreate = false
       showColumns = false
       void loadBoard()
+      void loadActionsForProject(pid)
     }
   })
 
@@ -212,6 +232,58 @@
     })
   }
 
+  async function runIssueAction(card: BoardCard, actionPrompt: string) {
+    if (!projectId || !repoSlug) return
+    await withBusy(async () => {
+      await startRoadmapIssueAction(api, {
+        projectId,
+        repo: repoSlug,
+        card,
+        actionPrompt,
+      })
+    })
+  }
+
+  function patchLabelColor(name: string, color: string) {
+    repoLabels = repoLabels.map((label) => (label.name === name ? { ...label, color } : label))
+    configLabels = configLabels.map((label) => (label.name === name ? { ...label, color } : label))
+    if (board) {
+      board = {
+        ...board,
+        columns: board.columns.map((column) =>
+          column.label === name ? { ...column, color } : column,
+        ),
+      }
+    }
+  }
+
+  async function recolorLabel(name: string, rawColor: string) {
+    if (!projectId) return
+    const color = normalizeLabelColor(rawColor)
+    if (!color) {
+      error = 'Label color must be a six-digit hex color.'
+      return
+    }
+
+    const previousBoard = board
+    const previousRepoLabels = repoLabels
+    const previousConfigLabels = configLabels
+    patchLabelColor(name, color)
+    busy = true
+    try {
+      await client.updateLabelColor({ projectId, name, color })
+      await loadBoard()
+    } catch (e) {
+      board = previousBoard
+      repoLabels = previousRepoLabels
+      configLabels = previousConfigLabels
+      error = String(e instanceof Error ? e.message : e)
+      throw e
+    } finally {
+      busy = false
+    }
+  }
+
   async function openColumns() {
     if (!projectId) return
     error = null
@@ -282,9 +354,17 @@
       <Board
         columns={board.columns}
         repo={repoSlug}
+        {actions}
+        {busy}
         onCardClick={(c) => (selectedIssueNumber = c.issueNumber)}
         onOpenUrl={openUrl}
         onCopyLink={copyLink}
+        onRecolor={(name, color) => {
+          void recolorLabel(name, color).catch(() => undefined)
+        }}
+        onRunAction={(card, actionPrompt) => {
+          void runIssueAction(card, actionPrompt)
+        }}
       />
     {/if}
   </div>
@@ -324,5 +404,6 @@
     {busy}
     onClose={() => (showColumns = false)}
     onSave={saveColumns}
+    onRecolor={recolorLabel}
   />
 {/if}

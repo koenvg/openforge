@@ -7,6 +7,7 @@ import type {
   RoadmapConfig,
   SetColumnLabelsRequest,
   SetValueRequest,
+  UpdateLabelColorRequest,
 } from './lib/types'
 
 // The plugin host maps camelCase qualified command ids to the core app-invoke
@@ -63,6 +64,12 @@ export default defineBackendPlugin({
     context.subscriptions.add(
       openforge.backend.registerMethod<EditIssueRequest, null>('roadmap_edit_issue', {
         handler: (request) => invokeHostCommand<null>(openforge, 'roadmapEditIssue', request),
+      }),
+    )
+
+    context.subscriptions.add(
+      openforge.backend.registerMethod<UpdateLabelColorRequest, null>('roadmap_update_label_color', {
+        handler: (request) => invokeHostCommand<null>(openforge, 'roadmapUpdateLabelColor', request),
       }),
     )
   },

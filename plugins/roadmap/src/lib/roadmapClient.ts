@@ -5,6 +5,7 @@ import type {
   RoadmapBoard,
   RoadmapConfig,
   RoadmapIssue,
+  UpdateLabelColorRequest,
 } from './types'
 
 export interface RoadmapClient {
@@ -14,6 +15,7 @@ export interface RoadmapClient {
   setColumnLabels(request: { projectId: string; labels: string[] }): Promise<void>
   createIssue(request: CreateIssueRequest): Promise<RoadmapIssue>
   editIssue(request: EditIssueRequest): Promise<void>
+  updateLabelColor(request: UpdateLabelColorRequest): Promise<void>
 }
 
 async function invokeBackend<TOutput>(
@@ -36,5 +38,6 @@ export function createRoadmapClient(api: Pick<FrontendOpenForgeAPI, 'backend'>):
     createIssue: (request) =>
       invokeBackend<{ issue: RoadmapIssue }>(api, 'roadmap_create_issue', request).then((r) => r.issue),
     editIssue: (request) => invokeBackend<void>(api, 'roadmap_edit_issue', request),
+    updateLabelColor: (request) => invokeBackend<void>(api, 'roadmap_update_label_color', request),
   }
 }

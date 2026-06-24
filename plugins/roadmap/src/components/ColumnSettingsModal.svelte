@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { LabelUsage } from '../lib/types'
+  import ColorPicker from './ColorPicker.svelte'
 
   interface Props {
     repo: string
@@ -8,19 +9,26 @@
     busy: boolean
     onClose: () => void
     onSave: (labels: string[]) => void
+    onRecolor: (name: string, color: string) => Promise<void>
   }
 
-  let { repo, labels, initialColumnLabels, busy, onClose, onSave }: Props = $props()
+  let { repo, labels, initialColumnLabels, busy, onClose, onSave, onRecolor }: Props = $props()
 
   // Seed editable local order from the initial prop; the modal re-mounts per open.
   // svelte-ignore state_referenced_locally
   let selected = $state<string[]>([...initialColumnLabels])
+  // Seed editable labels so color changes can update/revert locally while the
+  // GitHub label update runs.
+  // svelte-ignore state_referenced_locally
+  let editableLabels = $state<LabelUsage[]>(labels.map((label) => ({ ...label })))
+  let openColorName = $state<string | null>(null)
+  let colorBusyName = $state<string | null>(null)
 
-  let available = $derived(labels.filter((l) => !selected.includes(l.name)))
+  let available = $derived(editableLabels.filter((l) => !selected.includes(l.name)))
 
   const HEX6 = /^[0-9a-fA-F]{6}$/
   function colorOf(name: string): string | null {
-    return labels.find((l) => l.name === name)?.color ?? null
+    return editableLabels.find((l) => l.name === name)?.color ?? null
   }
   function swatchStyle(color: string | null): string {
     if (!color || !HEX6.test(color)) return ''
@@ -39,6 +47,20 @@
   }
   function add(name: string) {
     selected = [...selected, name]
+  }
+
+  async function recolor(name: string, color: string) {
+    openColorName = null
+    colorBusyName = name
+    const previous = editableLabels
+    editableLabels = editableLabels.map((label) => (label.name === name ? { ...label, color } : label))
+    try {
+      await onRecolor(name, color)
+    } catch {
+      editableLabels = previous
+    } finally {
+      colorBusyName = null
+    }
   }
 
   function handleOverlayClick(e: MouseEvent) {
@@ -83,9 +105,24 @@
           {#each selected as name, i (name)}
             <div class="flex items-center gap-2 rounded-box border border-base-300 px-2 py-1.5">
               <span class="text-xs text-base-content/40 w-5 text-center">{i + 1}</span>
-              {#if colorOf(name)}
-                <span class="w-3 h-3 rounded-sm shrink-0" style={swatchStyle(colorOf(name))}></span>
-              {/if}
+              <span class="relative inline-flex shrink-0">
+                <button
+                  type="button"
+                  class="h-3.5 w-3.5 rounded-md border border-base-content/20 transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+                  style={swatchStyle(colorOf(name))}
+                  aria-label={`Change color of ${name}`}
+                  title={`Change "${name}" color`}
+                  disabled={busy || colorBusyName !== null}
+                  onclick={() => (openColorName = openColorName === name ? null : name)}
+                ></button>
+                {#if openColorName === name}
+                  <ColorPicker
+                    current={colorOf(name)}
+                    onPick={(color) => recolor(name, color)}
+                    onClose={() => (openColorName = null)}
+                  />
+                {/if}
+              </span>
               <span class="text-sm flex-1 truncate">{name}</span>
               <div class="flex items-center gap-1">
                 <button class="btn btn-ghost btn-xs btn-square" disabled={i === 0} aria-label={`Move ${name} up`} onclick={() => move(i, -1)}>↑</button>
