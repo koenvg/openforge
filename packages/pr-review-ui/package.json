@@ -31,9 +31,9 @@
     "@git-diff-view/core": "0.1.5",
     "@git-diff-view/lowlight": "^0.1.5",
     "@git-diff-view/svelte": "^0.1.5",
-    "@lucide/svelte": "^1.17.0",
+    "@lucide/svelte": "^1.20.0",
     "@openforge/plugin-sdk": "workspace:*",
-    "@tanstack/virtual-core": "^3.17.0"
+    "@tanstack/virtual-core": "^3.17.1"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"
