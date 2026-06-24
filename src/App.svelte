@@ -431,6 +431,8 @@
             onTaskSaved={async () => { await appData.loadTasks() }}
             onRunAction={async (taskId, actionPrompt, agent) => {
               await appData.loadTasks()
+              router.resetToBoard()
+              router.navigateToTask(taskId)
               await handleRunAction({ taskId, actionPrompt, agent })
             }}
           />
