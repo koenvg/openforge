@@ -146,6 +146,7 @@ describe('SkillsView project and async states', () => {
       agent: 'worker',
       template: '---\nname: guide\ndescription: Hidden frontmatter\n---\n# Usage\nRead [docs](https://example.com/docs) before starting.',
       file_name: 'guide.md',
+      relative_path: 'guide.md',
     })]))
 
     renderView({ api, projectId: 'P-1' })
