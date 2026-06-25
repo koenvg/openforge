@@ -143,6 +143,24 @@ describe('terminal runtime shell output lifecycle', () => {
     expect(lifecycleUpdates.at(-1)).toMatchObject({ hasOutput: true, currentPtyInstance: 7 })
   })
 
+  it('preserves output observed while a fresh shell spawn is pending', async () => {
+    const host = createHost()
+    const runtime = createTerminalRuntime(host)
+    const entry = await runtime.acquire('T-1-shell-0')
+
+    runtime.markPtySpawnPending(entry)
+    host.emit('pty-output-T-1-shell-0', { data: '$ ', instance_id: 1 })
+    expect(runtime.getShellLifecycleState('T-1-shell-0').hasOutput).toBe(true)
+
+    runtime.markShellPtyStarted(entry, 1)
+
+    expect(runtime.getShellLifecycleState('T-1-shell-0')).toMatchObject({
+      ptyActive: true,
+      currentPtyInstance: 1,
+      hasOutput: true,
+    })
+  })
+
   it('resets output observed when a fresh shell instance starts', async () => {
     const host = createHost()
     const runtime = createTerminalRuntime(host)
@@ -152,6 +170,7 @@ describe('terminal runtime shell output lifecycle', () => {
     host.emit('pty-output-T-1-shell-0', { data: '$ ', instance_id: 1 })
     expect(runtime.getShellLifecycleState('T-1-shell-0').hasOutput).toBe(true)
 
+    runtime.markPtySpawnPending(entry)
     runtime.markShellPtyStarted(entry, 2)
 
     expect(runtime.getShellLifecycleState('T-1-shell-0')).toMatchObject({

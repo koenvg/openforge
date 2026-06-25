@@ -542,6 +542,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
   
   function markPtySpawnPending(entry: PoolEntry): void {
     entry.spawnPending = true
+    entry.hasOutput = false
   }
   
   function clearPtySpawnPending(entry: PoolEntry): void {
@@ -556,7 +557,6 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     entry.currentPtyInstance = instanceId
     entry.ptyActive = true
     entry.needsClear = false
-    entry.hasOutput = false
     notifyShellLifecycleListeners(entry.taskId)
   }
   
