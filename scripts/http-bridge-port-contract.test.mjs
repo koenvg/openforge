@@ -7,7 +7,8 @@ import {
   DEFAULT_HTTP_BRIDGE_PORT_STRING,
   HTTP_BRIDGE_PORT_CONTRACT,
 } from './openforge-http-bridge-ports.mjs'
-import { syncHttpBridgePortContract } from './sync-http-bridge-port-contract.mjs'
+import { httpBridgePortContractTargets, syncHttpBridgePortContract } from './sync-http-bridge-port-contract.mjs'
+import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 import {
   DEFAULT_DEV_BACKEND_PORT,
   DEFAULT_PRODUCTION_BACKEND_PORT,
@@ -36,16 +37,17 @@ describe('OpenForge HTTP bridge port contract', () => {
     expect(DEFAULT_PRODUCTION_BACKEND_PORT).toBe(DEFAULT_HTTP_BRIDGE_PORT_STRING)
     expect(DEFAULT_DEV_BACKEND_PORT).toBe(DEFAULT_DEV_HTTP_BRIDGE_PORT)
 
-    expect(read('src-tauri/src/http_bridge_port_contract.rs')).toContain(
+    const layout = resolveRustSidecarLayout()
+    expect(read(`${layout.backendCrateRootPath}/src/http_bridge_port_contract.rs`)).toContain(
       `pub const DEFAULT_HTTP_BRIDGE_PORT: u16 = ${DEFAULT_HTTP_BRIDGE_PORT};`,
     )
-    expect(read('src-tauri/src/openforge-cli/cli.js')).toContain(
+    expect(read(`${layout.backendCrateRootPath}/src/openforge-cli/cli.js`)).toContain(
       `const DEFAULT_OPENFORGE_HTTP_PORT = '${DEFAULT_HTTP_BRIDGE_PORT_STRING}';`,
     )
-    expect(read('src-tauri/src/openforge-cli/openforge-skill.md')).toContain(
+    expect(read(`${layout.backendCrateRootPath}/src/openforge-cli/openforge-skill.md`)).toContain(
       `The default is \`${DEFAULT_HTTP_BRIDGE_PORT_STRING}\`.`,
     )
-    expect(read('src-tauri/src/pi-extension/openforge.ts')).toContain(
+    expect(read(`${layout.backendCrateRootPath}/src/pi-extension/openforge.ts`)).toContain(
       `const DEFAULT_OPENFORGE_HTTP_PORT = "${DEFAULT_HTTP_BRIDGE_PORT_STRING}";`,
     )
   })
@@ -60,11 +62,33 @@ describe('OpenForge HTTP bridge port contract', () => {
     expect(read('scripts/cargo-target-env.mjs')).toContain(
       'export const DEFAULT_DEV_BACKEND_PORT = DEFAULT_DEV_HTTP_BRIDGE_PORT',
     )
-    expect(read('src-tauri/src/http_server.rs')).toContain(
+    const layout = resolveRustSidecarLayout()
+    expect(read(`${layout.backendCrateRootPath}/src/http_server.rs`)).toContain(
       'unwrap_or(crate::http_bridge_port_contract::DEFAULT_HTTP_BRIDGE_PORT)',
     )
-    expect(read('src-tauri/src/claude_hooks.rs')).toContain(
+    expect(read(`${layout.backendCrateRootPath}/src/claude_hooks.rs`)).toContain(
       'unwrap_or(crate::http_bridge_port_contract::DEFAULT_HTTP_BRIDGE_PORT)',
     )
+  })
+
+  it('derives generated backend contract target paths from the shared Backend Crate layout', () => {
+    const targets = httpBridgePortContractTargets(resolveRustSidecarLayout({
+      repoRoot: '/repo/openforge',
+      config: {
+        backendCrateRoot: 'crates/openforge-backend',
+        manifestPath: 'crates/openforge-backend/Cargo.toml',
+        binaryName: 'openforge-backend',
+        iconPath: 'crates/openforge-backend/icons/icon.icns',
+        electronBundleRoot: 'target/electron/macos',
+      },
+    })).map(([filePath]) => filePath)
+
+    expect(targets).toEqual([
+      '/repo/openforge/src/electron/httpBridgePortContract.ts',
+      '/repo/openforge/crates/openforge-backend/src/http_bridge_port_contract.rs',
+      '/repo/openforge/crates/openforge-backend/src/openforge-cli/cli.js',
+      '/repo/openforge/crates/openforge-backend/src/openforge-cli/openforge-skill.md',
+      '/repo/openforge/crates/openforge-backend/src/pi-extension/openforge.ts',
+    ])
   })
 })
