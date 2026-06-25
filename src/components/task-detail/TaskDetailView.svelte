@@ -99,8 +99,16 @@
   const taskTerminalLifecycle = createTaskTerminalPaneLifecycle<string>({
     getInitialWorkspacePath: (taskId) => get(taskRuntimeInfo).get(taskId)?.workspacePath ?? null,
     getTaskWorkspace: async (taskId) => {
-      const workspace = await getTaskWorkspace(taskId)
-      return get(taskRuntimeInfo).get(taskId)?.workspacePath ?? workspace?.workspace_path ?? null
+      try {
+        const workspace = await getTaskWorkspace(taskId)
+        return get(taskRuntimeInfo).get(taskId)?.workspacePath ?? workspace?.workspace_path ?? null
+      } catch (lookupError) {
+        const runtimeWorkspacePath = get(taskRuntimeInfo).get(taskId)?.workspacePath ?? null
+        if (runtimeWorkspacePath !== null) {
+          return runtimeWorkspacePath
+        }
+        throw lookupError
+      }
     },
     getWorkspacePath: (path) => path,
     releaseAllForTask,
