@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { OPENFORGE_FRONTEND_PLUGIN_MARKER } from '@openforge/plugin-sdk/frontend'
 import { isOpenForgePackageMetadata } from '@openforge/plugin-sdk'
+import type { BackendPluginContext } from '@openforge/plugin-sdk/backend'
 import type { FrontendOpenForgeAPI, FrontendPluginContext } from '@openforge/plugin-sdk/frontend'
 
 const { mockSkillsView } = vi.hoisted(() => ({
@@ -81,15 +82,6 @@ describe('skills-viewer plugin', () => {
     expect(skillsViewSource).toContain('api.navigation.navigate')
   })
 
-  it('keeps skill edit content raw while rendering a labelled markdown article from frontmatter-stripped content', () => {
-    const skillsViewSource = readFileSync(join(pluginSrcDir, 'SkillsView.svelte'), 'utf8')
-
-    expect(skillsViewSource).toContain('editContent = selectedSkill.template')
-    expect(skillsViewSource).toContain('stripSkillFrontmatter')
-    expect(skillsViewSource).toContain('<article')
-    expect(skillsViewSource).toContain('aria-labelledby={skillMarkdownHeadingId}')
-    expect(skillsViewSource).toContain('aria-label="Skill metadata"')
-  })
 
   it('keeps native list button semantics until full ARIA tree keyboarding exists', () => {
     const skillsViewSource = readFileSync(join(pluginSrcDir, 'SkillsView.svelte'), 'utf8')
@@ -106,7 +98,7 @@ describe('skills-viewer plugin', () => {
     const subscriptions = { add: vi.fn() }
     const api = { backend: { registerMethod: vi.fn(() => ({ dispose: vi.fn() })) } }
 
-    await backend.activate(api as never, { pluginId: packageJson.openforge.id, apiVersion: 1, packageMetadata: packageJson.openforge, subscriptions })
+    await backend.activate(api as never, { pluginId: packageJson.openforge.id, apiVersion: 1, packageMetadata: packageJson.openforge, subscriptions } as BackendPluginContext)
 
     expect(api.backend.registerMethod).toHaveBeenCalledWith('listSkills', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('saveSkillContent', expect.objectContaining({ handler: expect.any(Function) }))

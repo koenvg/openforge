@@ -15,5 +15,11 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     include: ['src/**/*.test.ts'],
+    alias: {
+      '@openforge/plugin-sdk/frontend': new URL('../../packages/plugin-sdk/src/frontend.ts', import.meta.url).pathname,
+      '@openforge/plugin-sdk/backend': new URL('../../packages/plugin-sdk/src/backend.ts', import.meta.url).pathname,
+      '@openforge/plugin-sdk/ui/MarkdownContent.svelte': new URL('../../packages/plugin-sdk/src/ui/MarkdownContent.svelte', import.meta.url).pathname,
+      '@openforge/plugin-sdk': new URL('../../packages/plugin-sdk/src/index.ts', import.meta.url).pathname,
+    },
   },
 })
