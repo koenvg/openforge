@@ -10,7 +10,6 @@ function defaultProps(overrides: Record<string, unknown> = {}) {
     projectName: 'Test Project',
     projectPath: '/tmp/test',
     aiProvider: 'claude-code',
-    useWorktrees: true,
     projectColor: '',
     disabled: false,
     opencodeInstalled: false,
@@ -25,7 +24,6 @@ function defaultProps(overrides: Record<string, unknown> = {}) {
     onProjectNameChange: vi.fn(),
     onProjectPathChange: vi.fn(),
     onAiProviderChange: vi.fn(),
-    onUseWorktreesChange: vi.fn(),
     onProjectColorChange: vi.fn(),
     onRefreshInstallationStatus: vi.fn(),
     ...overrides,
@@ -84,7 +82,6 @@ describe('SettingsGeneralCard', () => {
     expect(requireElement(screen.getByLabelText('Project Name'), HTMLInputElement).disabled).toBe(true)
     expect(requireElement(screen.getByLabelText('Project Path'), HTMLInputElement).disabled).toBe(true)
     expect(requireElement(screen.getByRole('combobox'), HTMLSelectElement).disabled).toBe(true)
-    expect(requireElement(screen.getByTestId('use-worktrees-toggle'), HTMLInputElement).disabled).toBe(true)
   })
 
   it('removes project color radios from tab order and suppresses activation when disabled', async () => {
@@ -107,51 +104,12 @@ describe('SettingsGeneralCard', () => {
     expect(onProjectColorChange).not.toHaveBeenCalled()
   })
 
-  describe('git worktrees toggle', () => {
-    it('renders Git Worktrees label', () => {
+  describe('repository-level worktree setting', () => {
+    it('does not render the removed Git Worktrees toggle', () => {
       render(SettingsGeneralCard, { props: defaultProps() })
 
-      expect(screen.getByText('Git Worktrees')).toBeTruthy()
-    })
-
-    it('renders toggle checked when useWorktrees is true', () => {
-      render(SettingsGeneralCard, {
-        props: defaultProps({ useWorktrees: true }),
-      })
-
-      const toggle = requireElement(screen.getByTestId('use-worktrees-toggle'), HTMLInputElement)
-      expect(toggle.checked).toBe(true)
-    })
-
-    it('renders toggle unchecked when useWorktrees is false', () => {
-      render(SettingsGeneralCard, {
-        props: defaultProps({ useWorktrees: false }),
-      })
-
-      const toggle = requireElement(screen.getByTestId('use-worktrees-toggle'), HTMLInputElement)
-      expect(toggle.checked).toBe(false)
-    })
-
-    it('calls onUseWorktreesChange when toggle is clicked', async () => {
-      const onUseWorktreesChange = vi.fn()
-      render(SettingsGeneralCard, {
-        props: defaultProps({ onUseWorktreesChange }),
-      })
-
-      const toggle = screen.getByTestId('use-worktrees-toggle')
-      await fireEvent.click(toggle)
-
-      expect(onUseWorktreesChange).toHaveBeenCalledOnce()
-    })
-
-    it('renders description text for worktrees toggle', () => {
-      render(SettingsGeneralCard, { props: defaultProps() })
-
-      expect(
-        screen.getByText(
-          'Run agents in isolated git worktrees. When disabled, agents work directly in the project directory.'
-        )
-      ).toBeTruthy()
+      expect(screen.queryByText('Git Worktrees')).toBeNull()
+      expect(screen.queryByTestId('use-worktrees-toggle')).toBeNull()
     })
   })
 

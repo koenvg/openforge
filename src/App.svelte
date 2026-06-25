@@ -427,6 +427,7 @@
           <AddTaskDialog
             mode={editingTask ? 'edit' : 'create'}
             task={editingTask}
+            projectPath={activeProject?.path ?? null}
             onClose={() => { showAddDialog = false; editingTask = null }}
             onTaskSaved={async () => { await appData.loadTasks() }}
             onRunAction={async (taskId, actionPrompt, agent) => {

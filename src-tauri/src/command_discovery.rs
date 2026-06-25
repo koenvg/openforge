@@ -164,7 +164,7 @@ pub fn scan_skills_directory(
             None => continue,
         };
         let (fm_name, fm_desc) = parse_skill_frontmatter(&content);
-        let name = fm_name.unwrap_or(dir_name);
+        let name = fm_name.unwrap_or_else(|| dir_name.clone());
         skills.push(crate::opencode_client::SkillInfo {
             name,
             description: fm_desc,
@@ -172,6 +172,7 @@ pub fn scan_skills_directory(
             template: Some(content),
             level: level.to_string(),
             source_dir: source_dir.to_string(),
+            source_path: dir_name,
             file_name: None,
         });
     }
@@ -215,6 +216,7 @@ pub fn scan_pi_skills_directory(dir: &Path, level: &str) -> Vec<crate::opencode_
             template: Some(content),
             level: level.to_string(),
             source_dir: PI_SKILLS_SOURCE_DIR.to_string(),
+            source_path: file_name.clone(),
             file_name: Some(file_name),
         });
     }
@@ -903,6 +905,7 @@ mod tests {
         assert_eq!(skills[0].description, Some("Generic path".to_string()));
         assert_eq!(skills[0].level, "project");
         assert_eq!(skills[0].source_dir, ".agents");
+        assert_eq!(skills[0].source_path, "generic-skill");
         assert_eq!(skills[0].file_name, None);
         assert_eq!(skills[1].name, "legacy-claude");
         assert_eq!(skills[1].source_dir, ".claude");
@@ -914,6 +917,7 @@ mod tests {
         assert_eq!(skills[4].name, "pi-root");
         assert_eq!(skills[4].description, Some("Pi root file".to_string()));
         assert_eq!(skills[4].source_dir, ".pi");
+        assert_eq!(skills[4].source_path, "pi-root.md");
         assert_eq!(skills[4].file_name, Some("pi-root.md".to_string()));
         assert!(!skills.iter().any(|skill| skill.name == "agents-root"));
     }
@@ -949,7 +953,28 @@ mod tests {
         assert_eq!(skills[1].name, "pi-user-root");
         assert_eq!(skills[1].level, "user");
         assert_eq!(skills[1].source_dir, ".pi");
+        assert_eq!(skills[1].source_path, "pi-user-root.md");
         assert_eq!(skills[1].file_name, Some("pi-user-root.md".to_string()));
+    }
+
+    #[test]
+    fn test_scan_skills_directory_preserves_source_folder_when_frontmatter_name_differs() {
+        let dir = tempfile::tempdir().unwrap();
+        let skills_dir = dir.path().join(".agents").join("skills");
+        let skill_dir = skills_dir.join("folder-review");
+        std::fs::create_dir_all(&skill_dir).unwrap();
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: display-review\ndescription: Display name\n---\n# Body",
+        )
+        .unwrap();
+
+        let skills = scan_skills_directory(&skills_dir, "project", ".agents");
+
+        assert_eq!(skills.len(), 1);
+        assert_eq!(skills[0].name, "display-review");
+        assert_eq!(skills[0].source_path, "folder-review");
+        assert_eq!(skills[0].file_name, None);
     }
 
     // ── scan_commands_directory ──────────────────────────────────────────────

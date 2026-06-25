@@ -1,15 +1,79 @@
 import { createServer } from 'node:http';
 import { execFile } from 'node:child_process';
-import { resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 
 const execFileAsync = promisify(execFile);
 const CLI_PATH = resolve(process.cwd(), 'src-tauri/src/openforge-cli/cli.js');
+const CLI_TEST_LOCAL_STORAGE_FILE = join(tmpdir(), `openforge-cli-vitest-${process.pid}.localstorage`);
+
+function normalizeNodeOptionsForCliBridgeTests(nodeOptions) {
+  if (!nodeOptions) return undefined;
+
+  const tokens = nodeOptions.split(/\s+/u).filter(Boolean);
+  const normalized = [];
+  let sawWebStorageOption = false;
+  let hasValidLocalStorageFile = false;
+
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i];
+
+    if (token === '--experimental-webstorage') {
+      sawWebStorageOption = true;
+      normalized.push(token);
+      continue;
+    }
+
+    if (token === '--localstorage-file') {
+      sawWebStorageOption = true;
+      const value = tokens[i + 1];
+      if (value && !value.startsWith('--')) {
+        normalized.push(token, value);
+        hasValidLocalStorageFile = true;
+        i += 1;
+      }
+      continue;
+    }
+
+    if (token.startsWith('--localstorage-file=')) {
+      sawWebStorageOption = true;
+      if (token.slice('--localstorage-file='.length)) {
+        normalized.push(token);
+        hasValidLocalStorageFile = true;
+      }
+      continue;
+    }
+
+    normalized.push(token);
+  }
+
+  if (sawWebStorageOption && !hasValidLocalStorageFile) {
+    normalized.push('--localstorage-file', CLI_TEST_LOCAL_STORAGE_FILE);
+  }
+
+  if (sawWebStorageOption && !normalized.includes('--disable-warning=ExperimentalWarning')) {
+    normalized.push('--disable-warning=ExperimentalWarning');
+  }
+
+  return normalized.length > 0 ? normalized.join(' ') : undefined;
+}
+
+function buildCliBridgeTestEnv(env = {}) {
+  const merged = { ...process.env, ...env };
+  const normalizedNodeOptions = normalizeNodeOptionsForCliBridgeTests(merged.NODE_OPTIONS);
+  if (normalizedNodeOptions) {
+    merged.NODE_OPTIONS = normalizedNodeOptions;
+  } else {
+    delete merged.NODE_OPTIONS;
+  }
+  return merged;
+}
 
 async function runCli(args, env = {}) {
   return execFileAsync('node', [CLI_PATH, ...args], {
-    env: { ...process.env, ...env },
+    env: buildCliBridgeTestEnv(env),
   });
 }
 
@@ -39,6 +103,33 @@ describe('OpenForge CLI', () => {
     expect(stdout).toContain('openforge list-projects');
     expect(stdout).not.toContain('node cli.js');
     expect(stdout).not.toContain('openforge mcp');
+  });
+
+  it.each([
+    ['empty assignment', '--experimental-webstorage --localstorage-file='],
+    ['bare flag', '--experimental-webstorage --localstorage-file'],
+  ])('keeps inherited Node web storage options with %s from breaking CLI bridge child processes', async (_label, nodeOptions) => {
+    const { stdout, stderr } = await runCli(['--help'], {
+      NODE_OPTIONS: nodeOptions,
+    });
+
+    expect(stdout).toContain('Usage:\n  openforge create-task');
+    expect(stderr).not.toContain('--localstorage-file');
+  });
+
+  it.each([
+    ['empty assignment', '--experimental-webstorage --localstorage-file='],
+    ['bare flag', '--experimental-webstorage --localstorage-file'],
+  ])('provides a valid localStorage backing file for inherited Node web storage options with %s', async (_label, nodeOptions) => {
+    const { stdout, stderr } = await execFileAsync('node', [
+      '--eval',
+      "localStorage.setItem('openforge-cli-test', 'ok'); console.log(localStorage.getItem('openforge-cli-test'))",
+    ], {
+      env: buildCliBridgeTestEnv({ NODE_OPTIONS: nodeOptions }),
+    });
+
+    expect(stdout.trim()).toBe('ok');
+    expect(stderr).toBe('');
   });
 
   it('prints help for command-specific --help before contacting the HTTP bridge', async () => {

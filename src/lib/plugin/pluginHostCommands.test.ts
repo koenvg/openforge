@@ -26,6 +26,8 @@ describe('plugin host commands', () => {
       summary: null,
       agent: null,
       permission_mode: null,
+      worktree_source: null,
+      worktree_branch: null,
       depends_on: ['T-1'],
       project_id: 'P-1',
       created_at: 1,
@@ -49,6 +51,8 @@ describe('plugin host commands', () => {
       permissionMode: null,
       dependsOn: ['T-1'],
       labelNames: ['scheduler'],
+      worktreeSource: null,
+      worktreeBranch: null,
     })
 
     invoke.mockResolvedValueOnce(task)

@@ -52,7 +52,6 @@
   let agentInstructions = $state('')
   let handoffNotesTemplate = $state('')
   let aiProvider = $state('claude-code')
-  let useWorktrees = $state(true)
   let projectColor = $state('')
 
   // Global state
@@ -203,7 +202,6 @@
           agentInstructions = settings.agentInstructions
           handoffNotesTemplate = settings.handoffNotesTemplate
           aiProvider = settings.aiProvider
-          useWorktrees = settings.useWorktrees
           projectColor = settings.projectColor
           actions = settings.actions
           focusFilterStates = settings.focusFilterStates
@@ -223,7 +221,6 @@
       agentInstructions = ''
       handoffNotesTemplate = ''
       aiProvider = 'claude-code'
-      useWorktrees = true
       projectColor = ''
       actions = []
       focusFilterStates = [...DEFAULT_FOCUS_STATES]
@@ -317,7 +314,6 @@
         agentInstructions,
         handoffNotesTemplate,
         aiProvider,
-        useWorktrees,
         projectColor,
         actions,
         focusFilterStates,
@@ -532,7 +528,6 @@
           {projectName}
           {projectPath}
           {aiProvider}
-          {useWorktrees}
           {projectColor}
           disabled={!hasProject}
           {opencodeInstalled}
@@ -549,7 +544,6 @@
           onProjectNameChange={(v) => { projectName = v; scheduleSave() }}
           onProjectPathChange={(v) => { projectPath = v; scheduleSave() }}
           onAiProviderChange={(v) => { aiProvider = v; scheduleSave() }}
-          onUseWorktreesChange={() => { useWorktrees = !useWorktrees; scheduleSave() }}
           onProjectColorChange={handleProjectColorChange}
           onRefreshInstallationStatus={refreshInstallationStatus}
         />

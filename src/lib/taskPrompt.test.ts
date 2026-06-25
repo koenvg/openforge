@@ -10,6 +10,8 @@ describe('getTaskPromptText', () => {
     title: null,
     summary: null,
     permission_mode: null,
+    worktree_source: null,
+    worktree_branch: null,
     depends_on: [],
     project_id: null,
     created_at: 0,

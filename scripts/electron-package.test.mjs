@@ -29,6 +29,10 @@ async function writeExecutable(path, content = '#!/bin/sh\n') {
   await writeFile(path, content, { mode: 0o755 })
 }
 
+async function writeBackendLayoutConfig(repoRoot, config = currentLayoutConfig) {
+  await writeFile(join(repoRoot, BACKEND_LAYOUT_CONFIG_FILE), `${JSON.stringify(config, null, 2)}\n`)
+}
+
 async function writeElectronBuildOutputs(repoRoot) {
   await mkdir(join(repoRoot, 'dist'), { recursive: true })
   await writeFile(join(repoRoot, 'dist/index.html'), '<!doctype html>')
@@ -287,6 +291,41 @@ describe('Electron macOS packaging helpers', () => {
       electronTemplatePath: template,
     }])
     await expect(stat(join(electronBundlePath(root), 'Contents/MacOS/Open Forge'))).resolves.toBeTruthy()
+  })
+
+  it('copies OpenForge CLI assets from the configured Backend Crate root', async () => {
+    const root = await import('node:os').then(os => os.tmpdir()).then(tmp => join(tmp, `openforge-electron-package-cli-alt-backend-${process.pid}-${Date.now()}`))
+    const template = join(root, 'node_modules/electron/dist/Electron.app')
+    const alternateLayoutConfig = {
+      backendCrateRoot: 'crates/openforge-backend',
+      manifestPath: 'crates/openforge-backend/Cargo.toml',
+      binaryName: 'openforge-backend',
+      iconPath: 'crates/openforge-backend/icons/icon.icns',
+      electronBundleRoot: 'target/electron/macos',
+    }
+    await mkdir(root, { recursive: true })
+    await writeBackendLayoutConfig(root, alternateLayoutConfig)
+    await writeCurrentDataIdentityManifest(root)
+    await mkdir(join(template, 'Contents/MacOS'), { recursive: true })
+    await mkdir(join(template, 'Contents/Resources'), { recursive: true })
+    await writeExecutable(join(template, 'Contents/MacOS/Electron'))
+    await writeFile(join(template, 'Contents/Info.plist'), '<plist><dict><key>CFBundleExecutable</key><string>Electron</string><key>CFBundleName</key><string>Electron</string><key>CFBundleDisplayName</key><string>Electron</string></dict></plist>')
+    await writeElectronBuildOutputs(root)
+    await writeElectronRuntimeDependencyArtifacts(root)
+    await writeBuiltinPluginCatalog(root, [])
+    await mkdir(join(root, 'crates/openforge-backend/target/release'), { recursive: true })
+    await writeExecutable(join(root, 'crates/openforge-backend/target/release/openforge-backend'), '#!/bin/sh\necho sidecar\n')
+    await mkdir(join(root, 'crates/openforge-backend/src/openforge-cli'), { recursive: true })
+    await writeFile(join(root, 'crates/openforge-backend/src/openforge-cli/cli.js'), '#!/usr/bin/env node\nconsole.log("configured openforge cli")\n')
+    await writeFile(join(root, 'crates/openforge-backend/src/openforge-cli/openforge-skill.md'), 'configured openforge skill docs\n')
+    await writeFile(join(root, 'crates/openforge-backend/src/openforge-cli/openforge-plugin-dev-skill.md'), 'configured openforge plugin dev skill docs\n')
+
+    await packageElectronApp({ repoRoot: root })
+
+    const output = electronBundlePath(root)
+    await expect(readFile(join(output, 'Contents/Resources/openforge-cli/cli.js'), 'utf8')).resolves.toContain('configured openforge cli')
+    await expect(readFile(join(output, 'Contents/Resources/openforge-cli/openforge-skill.md'), 'utf8')).resolves.toContain('configured openforge skill docs')
+    await expect(readFile(join(output, 'Contents/Resources/openforge-cli/openforge-plugin-dev-skill.md'), 'utf8')).resolves.toContain('configured openforge plugin dev skill docs')
   })
 
   it('packages the compiled renderer, Electron main process, and Rust sidecar into a macOS .app bundle', async () => {

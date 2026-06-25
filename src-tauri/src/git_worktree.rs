@@ -2,6 +2,7 @@ use crate::user_environment::user_tool_path;
 use dashmap::DashMap;
 use log::{info, warn};
 use once_cell::sync::Lazy;
+use serde::Serialize;
 use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -47,6 +48,13 @@ impl From<io::Error> for GitWorktreeError {
 // ============================================================================
 // Data Structures
 // ============================================================================
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct GitBranchInfo {
+    pub name: String,
+    pub is_current: bool,
+    pub is_remote: bool,
+}
 
 // ============================================================================
 // Per-Path Locking
@@ -135,6 +143,92 @@ async fn git_ref_exists(repo_path: &Path, git_ref: &str) -> Result<bool, GitWork
     Ok(output.status.success())
 }
 
+fn normalize_branch_ref(branch_ref: &str) -> Result<&str, GitWorktreeError> {
+    let branch_ref = branch_ref.trim();
+    if branch_ref.is_empty() {
+        return Err(GitWorktreeError::WorktreeAddFailed(
+            "branch is required for existing branch worktrees".to_string(),
+        ));
+    }
+    if branch_ref.starts_with('-') {
+        return Err(GitWorktreeError::WorktreeAddFailed(
+            "branch names starting with '-' are not supported".to_string(),
+        ));
+    }
+    Ok(branch_ref)
+}
+
+fn local_branch_from_remote_ref(remote_ref: &str) -> Option<&str> {
+    let (_remote, branch_name) = remote_ref.split_once('/')?;
+    if branch_name.is_empty() {
+        return None;
+    }
+    Some(branch_name)
+}
+
+async fn fetch_origin_best_effort(repo_path: &Path) -> Result<(), GitWorktreeError> {
+    let fetch_output = git_command()
+        .arg("-C")
+        .arg(repo_path)
+        .arg("fetch")
+        .arg("origin")
+        .output()
+        .await?;
+
+    if !fetch_output.status.success() {
+        let stderr = String::from_utf8_lossy(&fetch_output.stderr);
+        warn!("Warning: git fetch origin failed: {}", stderr);
+    }
+
+    Ok(())
+}
+
+pub async fn list_git_branches(repo_path: &Path) -> Result<Vec<GitBranchInfo>, GitWorktreeError> {
+    validate_repository_path_access(repo_path)?;
+    fetch_origin_best_effort(repo_path).await?;
+
+    let output = git_command()
+        .arg("-C")
+        .arg(repo_path)
+        .arg("branch")
+        .arg("--all")
+        .arg("--format=%(HEAD)%09%(refname)%09%(refname:short)")
+        .output()
+        .await?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(GitWorktreeError::WorktreeAddFailed(stderr.to_string()));
+    }
+
+    let mut branches = Vec::new();
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        let mut parts = line.splitn(3, '\t');
+        let head = parts.next().unwrap_or("").trim();
+        let full_ref = parts.next().unwrap_or("").trim();
+        let short_ref = parts.next().unwrap_or("").trim();
+        if short_ref.is_empty() {
+            continue;
+        }
+        if full_ref.starts_with("refs/remotes/") && short_ref.ends_with("/HEAD") {
+            continue;
+        }
+        if branches
+            .iter()
+            .any(|branch: &GitBranchInfo| branch.name == short_ref)
+        {
+            continue;
+        }
+        branches.push(GitBranchInfo {
+            name: short_ref.to_string(),
+            is_current: head == "*",
+            is_remote: full_ref.starts_with("refs/remotes/"),
+        });
+    }
+
+    Ok(branches)
+}
+
 fn remote_name_from_ref(git_ref: &str) -> Option<&str> {
     let (remote_name, branch_name) = git_ref.split_once('/')?;
     if remote_name.is_empty() || branch_name.is_empty() {
@@ -163,6 +257,103 @@ async fn git_remote_names(repo_path: &Path) -> Result<Vec<String>, GitWorktreeEr
         .filter(|remote_name| !remote_name.is_empty())
         .map(ToOwned::to_owned)
         .collect())
+}
+
+async fn current_worktree_branch(worktree_path: &Path) -> Result<String, GitWorktreeError> {
+    let output = git_command()
+        .arg("-C")
+        .arg(worktree_path)
+        .arg("rev-parse")
+        .arg("--abbrev-ref")
+        .arg("HEAD")
+        .output()
+        .await?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(GitWorktreeError::WorktreeAddFailed(format!(
+            "worktree path '{}' already exists but its current branch could not be read: {}",
+            worktree_path.display(),
+            stderr.trim()
+        )));
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+async fn worktree_has_local_changes(worktree_path: &Path) -> Result<bool, GitWorktreeError> {
+    let output = git_command()
+        .arg("-C")
+        .arg(worktree_path)
+        .arg("status")
+        .arg("--porcelain")
+        .output()
+        .await?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(GitWorktreeError::WorktreeAddFailed(format!(
+            "worktree path '{}' already exists but its status could not be read: {}",
+            worktree_path.display(),
+            stderr.trim()
+        )));
+    }
+
+    Ok(!String::from_utf8_lossy(&output.stdout).trim().is_empty())
+}
+
+async fn existing_worktree_path_matches_branch(
+    repo_path: &Path,
+    worktree_path: &Path,
+    expected_branch: &str,
+) -> Result<bool, GitWorktreeError> {
+    if !worktree_path.exists() {
+        return Ok(false);
+    }
+
+    let current_branch = current_worktree_branch(worktree_path).await?;
+    if current_branch == expected_branch {
+        return Ok(true);
+    }
+
+    if worktree_has_local_changes(worktree_path).await? {
+        return Err(GitWorktreeError::WorktreeAddFailed(format!(
+            "worktree path '{}' already exists on branch '{}' instead of '{}' and has local changes; clean or remove it before starting this task",
+            worktree_path.display(),
+            current_branch,
+            expected_branch
+        )));
+    }
+
+    let remove_output = git_command()
+        .arg("-C")
+        .arg(repo_path)
+        .arg("worktree")
+        .arg("remove")
+        .arg(worktree_path)
+        .output()
+        .await?;
+
+    if !remove_output.status.success() {
+        let stderr = String::from_utf8_lossy(&remove_output.stderr);
+        return Err(GitWorktreeError::WorktreeAddFailed(format!(
+            "worktree path '{}' already exists on branch '{}' instead of '{}' and could not be removed: {}",
+            worktree_path.display(),
+            current_branch,
+            expected_branch,
+            stderr.trim()
+        )));
+    }
+
+    let _ = git_command()
+        .arg("-C")
+        .arg(repo_path)
+        .arg("worktree")
+        .arg("prune")
+        .output()
+        .await;
+
+    Ok(false)
 }
 
 async fn resolve_remote_head_ref(
@@ -285,18 +476,7 @@ pub async fn create_worktree(
     }
 
     // Fetch latest from origin so the base ref (e.g. origin/main) is up to date
-    let fetch_output = git_command()
-        .arg("-C")
-        .arg(repo_path)
-        .arg("fetch")
-        .arg("origin")
-        .output()
-        .await?;
-
-    if !fetch_output.status.success() {
-        let stderr = String::from_utf8_lossy(&fetch_output.stderr);
-        warn!("Warning: git fetch origin failed: {}", stderr);
-    }
+    fetch_origin_best_effort(repo_path).await?;
 
     if worktree_path.exists() {
         return Ok(());
@@ -337,6 +517,109 @@ pub async fn create_worktree(
     }
 
     result
+}
+
+pub async fn create_worktree_from_existing_branch(
+    repo_path: &Path,
+    worktree_path: &Path,
+    branch_ref: &str,
+) -> Result<String, GitWorktreeError> {
+    let branch_ref = normalize_branch_ref(branch_ref)?;
+    let lock = acquire_lock(repo_path);
+    let _guard = lock.lock().await;
+
+    validate_repository_path_access(repo_path)?;
+
+    let prune_output = git_command()
+        .arg("-C")
+        .arg(repo_path)
+        .arg("worktree")
+        .arg("prune")
+        .output()
+        .await?;
+
+    if !prune_output.status.success() {
+        let stderr = String::from_utf8_lossy(&prune_output.stderr);
+        warn!("Warning: worktree prune failed: {}", stderr);
+    }
+
+    fetch_origin_best_effort(repo_path).await?;
+
+    if git_ref_exists(repo_path, &format!("refs/heads/{branch_ref}")).await? {
+        if existing_worktree_path_matches_branch(repo_path, worktree_path, branch_ref).await? {
+            return Ok(branch_ref.to_string());
+        }
+
+        let output = git_command()
+            .arg("-C")
+            .arg(repo_path)
+            .arg("worktree")
+            .arg("add")
+            .arg(worktree_path)
+            .arg(branch_ref)
+            .output()
+            .await?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(GitWorktreeError::WorktreeAddFailed(stderr.to_string()));
+        }
+
+        return Ok(branch_ref.to_string());
+    }
+
+    if git_ref_exists(repo_path, &format!("refs/remotes/{branch_ref}")).await? {
+        let local_branch = local_branch_from_remote_ref(branch_ref).ok_or_else(|| {
+            GitWorktreeError::WorktreeAddFailed(format!(
+                "remote branch '{}' cannot be converted to a local branch name",
+                branch_ref
+            ))
+        })?;
+        if existing_worktree_path_matches_branch(repo_path, worktree_path, local_branch).await? {
+            return Ok(local_branch.to_string());
+        }
+
+        if git_ref_exists(repo_path, &format!("refs/heads/{local_branch}")).await? {
+            return Err(GitWorktreeError::WorktreeAddFailed(format!(
+                "local branch '{}' already exists while creating a worktree for '{}'",
+                local_branch, branch_ref
+            )));
+        }
+
+        let output = git_command()
+            .arg("-C")
+            .arg(repo_path)
+            .arg("worktree")
+            .arg("add")
+            .arg("-b")
+            .arg(local_branch)
+            .arg(worktree_path)
+            .arg(branch_ref)
+            .output()
+            .await?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(GitWorktreeError::WorktreeAddFailed(stderr.to_string()));
+        }
+
+        let _ = git_command()
+            .arg("-C")
+            .arg(worktree_path)
+            .arg("branch")
+            .arg("--set-upstream-to")
+            .arg(branch_ref)
+            .arg(local_branch)
+            .output()
+            .await;
+
+        return Ok(local_branch.to_string());
+    }
+
+    Err(GitWorktreeError::WorktreeAddFailed(format!(
+        "branch '{}' does not exist",
+        branch_ref
+    )))
 }
 
 async fn try_create_worktree_inner(
@@ -673,6 +956,65 @@ mod tests {
             String::from_utf8_lossy(&branch_output.stdout).trim(),
             "T-1272/space-bearing-paths"
         );
+    }
+
+    #[tokio::test]
+    async fn list_git_branches_returns_local_and_remote_branches() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("repo");
+        init_committed_repo(&repo_path);
+        assert_git_success(&repo_path, &["checkout", "-b", "feature/open-pr"]);
+        assert_git_success(
+            &repo_path,
+            &["update-ref", "refs/remotes/origin/review-branch", "HEAD"],
+        );
+
+        let branches = list_git_branches(&repo_path)
+            .await
+            .expect("branches should list");
+
+        assert!(branches.iter().any(|branch| {
+            branch.name == "feature/open-pr" && branch.is_current && !branch.is_remote
+        }));
+        assert!(branches.iter().any(|branch| {
+            branch.name == "origin/review-branch" && !branch.is_current && branch.is_remote
+        }));
+        assert!(
+            !branches.iter().any(|branch| branch.name == "origin/HEAD"),
+            "remote HEAD aliases should not be shown as selectable branches"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_worktree_from_existing_branch_checks_out_branch_without_deleting_it() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("repo");
+        init_committed_repo(&repo_path);
+        assert_git_success(&repo_path, &["checkout", "-b", "feature/open-pr"]);
+        std::fs::write(repo_path.join("README.md"), "feature branch\n")
+            .expect("fixture file should be written");
+        assert_git_success(&repo_path, &["commit", "-am", "feature change"]);
+        assert_git_success(&repo_path, &["checkout", "main"]);
+        let worktree_path = temp.path().join("worktree");
+
+        let branch_name =
+            create_worktree_from_existing_branch(&repo_path, &worktree_path, "feature/open-pr")
+                .await
+                .expect("existing branch should create worktree");
+
+        assert_eq!(branch_name, "feature/open-pr");
+        let branch_output = git(&worktree_path, &["rev-parse", "--abbrev-ref", "HEAD"]);
+        assert!(branch_output.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&branch_output.stdout).trim(),
+            "feature/open-pr"
+        );
+        assert!(git(
+            &repo_path,
+            &["show-ref", "--verify", "refs/heads/feature/open-pr"]
+        )
+        .status
+        .success());
     }
 
     #[tokio::test]

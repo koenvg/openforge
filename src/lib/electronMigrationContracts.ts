@@ -42,7 +42,7 @@ export interface DynamicShellEventContract {
 }
 
 export const ipcCommandContracts = [
-  { functionName: 'createTask', ipcCommand: 'create_task', payloadKeys: ['initialPrompt', 'status', 'projectId', 'permissionMode', 'dependsOn', 'labelNames'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
+  { functionName: 'createTask', ipcCommand: 'create_task', payloadKeys: ['initialPrompt', 'status', 'projectId', 'permissionMode', 'dependsOn', 'labelNames', 'worktreeSource', 'worktreeBranch'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'updateTask', ipcCommand: 'update_task', payloadKeys: ['id', 'prompt'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'updateTaskTitle', ipcCommand: 'update_task_title', payloadKeys: ['id', 'title'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'updateTaskSummary', ipcCommand: 'update_task_summary', payloadKeys: ['id', 'summary'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
@@ -68,6 +68,7 @@ export const ipcCommandContracts = [
   { functionName: 'startImplementation', ipcCommand: 'start_implementation', payloadKeys: ['taskId', 'repoPath'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'resumeStartupSessions', ipcCommand: 'resume_startup_sessions', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },
   { functionName: 'getWorktreeForTask', ipcCommand: 'get_worktree_for_task', payloadKeys: ['taskId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
+  { functionName: 'listGitBranches', ipcCommand: 'list_git_branches', payloadKeys: ['repoPath'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'getTaskWorkspace', ipcCommand: 'get_task_workspace', payloadKeys: ['taskId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'getSessionStatus', ipcCommand: 'get_session_status', payloadKeys: ['sessionId'], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },
   { functionName: 'abortSession', ipcCommand: 'abort_session', payloadKeys: ['sessionId'], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },

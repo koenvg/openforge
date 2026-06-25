@@ -17,6 +17,10 @@ vi.mock('../../lib/ipc', () => ({
   getTaskWorkspace: getTaskWorkspaceMock,
 }))
 
+vi.mock('../../lib/terminalPool', () => ({
+  releaseAllForTask: vi.fn().mockReturnValue(0),
+}))
+
 vi.mock('../../lib/terminalShortcutController', () => ({
   createTerminalShortcutController: vi.fn(() => ({
     controller: {

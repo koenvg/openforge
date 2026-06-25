@@ -13,7 +13,8 @@ import { _resetPluginLoaderForTests, _setModuleLoader } from '../src/lib/plugin/
 import { installedPlugins, enabledPluginIds, runtimeContributionSources } from '../src/lib/plugin/pluginStore.ts'
 import { activeProjectId } from '../src/lib/stores.ts'
 import { rendererImportMapHtml, svelteHostRuntimeBuildEntries } from '../packages/plugin-sdk/src/svelteHostRuntimeContract.mjs'
-import { buildSvelteHostRuntimeAssets, copyElectronMainRuntimeAssets, copyHostRuntimeAssets, svelteHostRuntimeImportMapEntries } from './electron-build.mjs'
+import { buildBackendPluginHostRuntime, buildSvelteHostRuntimeAssets, copyElectronMainRuntimeAssets, copyHostRuntimeAssets, svelteHostRuntimeImportMapEntries } from './electron-build.mjs'
+import { BACKEND_LAYOUT_CONFIG_FILE } from './rust-sidecar-layout.mjs'
 
 const sidecarConfig = {
   command: 'openforge-sidecar',
@@ -28,11 +29,19 @@ const sidecarConfig = {
   eventUrl: 'http://127.0.0.1:17642/app/events',
 }
 
-async function writeMinimalHostRuntimeInputs(repoRoot) {
+async function writeMinimalHostRuntimeInputs(repoRoot, { backendCrateRoot = 'src-tauri' } = {}) {
+  await mkdir(repoRoot, { recursive: true })
+  await writeFile(join(repoRoot, BACKEND_LAYOUT_CONFIG_FILE), JSON.stringify({
+    backendCrateRoot,
+    manifestPath: `${backendCrateRoot}/Cargo.toml`,
+    binaryName: backendCrateRoot === 'src-tauri' ? 'openforge' : 'openforge-backend',
+    iconPath: `${backendCrateRoot}/icons/icon.icns`,
+    electronBundleRoot: `${backendCrateRoot}/target/release/bundle/electron/macos`,
+  }))
   await mkdir(join(repoRoot, 'packages', 'plugin-sdk', 'src'), { recursive: true })
   await mkdir(join(repoRoot, 'packages', 'plugin-runtime', 'src'), { recursive: true })
   await mkdir(join(repoRoot, 'packages', 'terminal-runtime', 'src'), { recursive: true })
-  await mkdir(join(repoRoot, 'src-tauri', 'plugin-host'), { recursive: true })
+  await mkdir(join(repoRoot, backendCrateRoot, 'plugin-host'), { recursive: true })
   await writeFile(join(repoRoot, 'packages', 'plugin-sdk', 'src', 'index.ts'), 'export const pluginSdk = true;')
   await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'index.ts'), 'export const terminalRuntime = true;')
   await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'terminalRuntime.ts'), 'export const terminalRuntimeCore = true;')
@@ -41,7 +50,7 @@ async function writeMinimalHostRuntimeInputs(repoRoot) {
   await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'terminalShortcuts.ts'), 'export const terminalShortcuts = true;')
   await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'terminalShortcutController.ts'), 'export const terminalShortcutController = true;')
   await writeFile(join(repoRoot, 'packages', 'plugin-runtime', 'src', 'commandValidation.ts'), 'export function validateSchemaValue() { return { valid: true, bundledRuntimeMarker: true }; }')
-  await writeFile(join(repoRoot, 'src-tauri', 'plugin-host', 'index.ts'), "import { validateSchemaValue } from '@openforge/plugin-runtime/commandValidation'\nconsole.log(validateSchemaValue())\n")
+  await writeFile(join(repoRoot, backendCrateRoot, 'plugin-host', 'index.ts'), "import { validateSchemaValue } from '@openforge/plugin-runtime/commandValidation'\nconsole.log(validateSchemaValue())\n")
 
   const svelteFiles = Object.fromEntries(
     Object.values(svelteHostRuntimeBuildEntries()).map(relPath => [relPath, `export const stub = ${JSON.stringify(`svelte:${relPath}`)};`]),
@@ -333,6 +342,18 @@ describe('Electron build host-runtime assets', () => {
     const copiedContract = await readFile(join(outDir, 'svelteHostRuntimeContract.mjs'), 'utf8')
     expect(copiedContract).toContain('SVELTE_HOST_RUNTIME_MODULES')
     expect(copiedContract).not.toContain('packages/plugin-sdk')
+  })
+
+  it('builds the backend plugin-host runtime from the configured Backend Crate root', async () => {
+    const repoRoot = join(tmpdir(), `openforge-electron-build-alt-backend-${process.pid}-${Date.now()}`)
+    const outDir = join(repoRoot, 'dist-electron', 'plugin-host')
+    await writeMinimalHostRuntimeInputs(repoRoot, { backendCrateRoot: 'crates/openforge-backend' })
+
+    await buildBackendPluginHostRuntime(repoRoot, outDir)
+
+    const backendHost = await readFile(join(outDir, 'index.js'), 'utf8')
+    expect(backendHost).toContain('bundledRuntimeMarker')
+    expect(backendHost).not.toContain('@openforge/plugin-runtime')
   })
 
   it('generates plugin SDK, bundles backend plugin-host runtime dependencies, and builds browser-ready Svelte host-runtime assets into dist-electron resources', async () => {
