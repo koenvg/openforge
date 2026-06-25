@@ -50,7 +50,7 @@ describe('agent terminal panel helpers', () => {
   })
 
   it('syncs session statuses into panel state and terminal activity from terminalPool', () => {
-    vi.mocked(getShellLifecycleState).mockReturnValue({ ptyActive: true, shellExited: false, currentPtyInstance: 7 })
+    vi.mocked(getShellLifecycleState).mockReturnValue({ ptyActive: true, shellExited: false, currentPtyInstance: 7, hasOutput: false })
     const setStatus = vi.fn()
     const setTerminalActive = vi.fn()
 
@@ -68,7 +68,7 @@ describe('agent terminal panel helpers', () => {
   })
 
   it('syncs paused sessions into the paused panel state', () => {
-    vi.mocked(getShellLifecycleState).mockReturnValue({ ptyActive: true, shellExited: false, currentPtyInstance: 7 })
+    vi.mocked(getShellLifecycleState).mockReturnValue({ ptyActive: true, shellExited: false, currentPtyInstance: 7, hasOutput: false })
     const setStatus = vi.fn()
 
     const nextStatus = syncAgentPanelStatusFromSession({
@@ -82,17 +82,17 @@ describe('agent terminal panel helpers', () => {
   })
 
   it('writes transcription only when terminalPool reports an active PTY', async () => {
-    vi.mocked(getShellLifecycleState).mockReturnValue({ ptyActive: false, shellExited: false, currentPtyInstance: null })
+    vi.mocked(getShellLifecycleState).mockReturnValue({ ptyActive: false, shellExited: false, currentPtyInstance: null, hasOutput: false })
     await writeAgentTerminalTranscription('T-1', 'hello', 'TestPanel')
     expect(writePty).not.toHaveBeenCalled()
 
-    vi.mocked(getShellLifecycleState).mockReturnValue({ ptyActive: true, shellExited: false, currentPtyInstance: null })
+    vi.mocked(getShellLifecycleState).mockReturnValue({ ptyActive: true, shellExited: false, currentPtyInstance: null, hasOutput: false })
     await writeAgentTerminalTranscription('T-1', 'hello', 'TestPanel')
     expect(writePty).toHaveBeenCalledWith('T-1', 'hello')
   })
 
   it('hydrates current PTY instance through terminalPool lifecycle state', () => {
-    vi.mocked(getShellLifecycleState).mockReturnValue({ ptyActive: false, shellExited: true, currentPtyInstance: null })
+    vi.mocked(getShellLifecycleState).mockReturnValue({ ptyActive: false, shellExited: true, currentPtyInstance: null, hasOutput: false })
 
     hydrateAgentTerminalPtyInstance('T-1', 123)
 
@@ -100,6 +100,7 @@ describe('agent terminal panel helpers', () => {
       ptyActive: true,
       shellExited: false,
       currentPtyInstance: 123,
+      hasOutput: false,
     })
   })
 })

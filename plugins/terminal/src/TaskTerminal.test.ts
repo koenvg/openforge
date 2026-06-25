@@ -1,0 +1,186 @@
+import { cleanup, render, screen } from '@testing-library/svelte'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import TaskTerminal from './TaskTerminal.svelte'
+
+const { ipcMocks, terminalPoolMocks, mockEntry, lifecycleState } = vi.hoisted(() => {
+  const state = {
+    ptyActive: false,
+    shellExited: false,
+    currentPtyInstance: null as number | null,
+    hasOutput: false,
+  }
+
+  return {
+    lifecycleState: state,
+    ipcMocks: {
+      spawnShellPty: vi.fn().mockResolvedValue(1),
+      killPty: vi.fn().mockResolvedValue(undefined),
+    },
+    mockEntry: {
+      taskId: 'T-1-shell-0',
+      terminal: {
+        cols: 80,
+        rows: 24,
+        reset: vi.fn(),
+      },
+      hostDiv: document.createElement('div'),
+      ptyActive: false,
+      needsClear: false,
+      attached: false,
+      spawnPending: false,
+      currentPtyInstance: null as number | null,
+    },
+    terminalPoolMocks: {
+      acquire: vi.fn(),
+      attach: vi.fn(),
+      detach: vi.fn(),
+      recoverActiveTerminal: vi.fn(),
+      shouldSpawnPty: vi.fn(),
+      markPtySpawnPending: vi.fn(),
+      clearPtySpawnPending: vi.fn(),
+      markShellPtyStarted: vi.fn(),
+      getShellLifecycleState: vi.fn(),
+      subscribeShellLifecycle: vi.fn(),
+      emitLifecycle: null as null | ((state: typeof state) => void),
+    },
+  }
+})
+
+vi.mock('@openforge/terminal-runtime/xterm.css', () => ({}))
+
+vi.mock('./lib/ipc', () => ({
+  spawnShellPty: ipcMocks.spawnShellPty,
+  killPty: ipcMocks.killPty,
+}))
+
+vi.mock('./lib/terminalPool', () => ({
+  acquire: terminalPoolMocks.acquire,
+  attach: terminalPoolMocks.attach,
+  detach: terminalPoolMocks.detach,
+  recoverActiveTerminal: terminalPoolMocks.recoverActiveTerminal,
+  markPtySpawnPending: terminalPoolMocks.markPtySpawnPending,
+  clearPtySpawnPending: terminalPoolMocks.clearPtySpawnPending,
+  shouldSpawnPty: terminalPoolMocks.shouldSpawnPty,
+  markShellPtyStarted: terminalPoolMocks.markShellPtyStarted,
+  getShellLifecycleState: terminalPoolMocks.getShellLifecycleState,
+  subscribeShellLifecycle: terminalPoolMocks.subscribeShellLifecycle,
+}))
+
+function resetReadyState() {
+  lifecycleState.ptyActive = false
+  lifecycleState.shellExited = false
+  lifecycleState.currentPtyInstance = null
+  lifecycleState.hasOutput = false
+  mockEntry.ptyActive = false
+  mockEntry.needsClear = false
+  mockEntry.attached = false
+  mockEntry.spawnPending = false
+  mockEntry.currentPtyInstance = null
+}
+
+function renderTaskTerminal(props: Partial<Parameters<typeof render>[1]['props']> = {}) {
+  return render(TaskTerminal, {
+    props: {
+      taskId: 'T-1',
+      workspacePath: '/worktree/T-1',
+      terminalKey: 'T-1-shell-0',
+      terminalIndex: 0,
+      isActive: true,
+      ...props,
+    },
+  })
+}
+
+describe('TaskTerminal ready affordance', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetReadyState()
+
+    terminalPoolMocks.acquire.mockResolvedValue(mockEntry)
+    terminalPoolMocks.attach.mockImplementation(async () => {
+      mockEntry.attached = true
+    })
+    terminalPoolMocks.shouldSpawnPty.mockImplementation(() => !mockEntry.ptyActive && !mockEntry.spawnPending && !mockEntry.needsClear)
+    terminalPoolMocks.markPtySpawnPending.mockImplementation(() => {
+      mockEntry.spawnPending = true
+    })
+    terminalPoolMocks.clearPtySpawnPending.mockImplementation(() => {
+      mockEntry.spawnPending = false
+    })
+    terminalPoolMocks.markShellPtyStarted.mockImplementation((_entry, instanceId: number) => {
+      mockEntry.ptyActive = true
+      mockEntry.needsClear = false
+      mockEntry.currentPtyInstance = instanceId
+      lifecycleState.ptyActive = true
+      lifecycleState.shellExited = false
+      lifecycleState.currentPtyInstance = instanceId
+      lifecycleState.hasOutput = false
+    })
+    terminalPoolMocks.getShellLifecycleState.mockImplementation(() => ({ ...lifecycleState }))
+    terminalPoolMocks.subscribeShellLifecycle.mockImplementation((_key, callback: (state: typeof lifecycleState) => void) => {
+      terminalPoolMocks.emitLifecycle = (nextState: typeof lifecycleState) => {
+        Object.assign(lifecycleState, nextState)
+        callback({ ...lifecycleState })
+      }
+      return () => {
+        terminalPoolMocks.emitLifecycle = null
+      }
+    })
+  })
+
+  afterEach(() => {
+    cleanup()
+    terminalPoolMocks.emitLifecycle = null
+  })
+
+  it('shows a subtle ready message when the active shell has started but has not output yet', async () => {
+    renderTaskTerminal()
+
+    expect(await screen.findByText('Shell ready')).toBeTruthy()
+    expect(screen.getByText('Type a command to begin')).toBeTruthy()
+  })
+
+  it('hides the ready message after terminal output is observed', async () => {
+    renderTaskTerminal()
+
+    expect(await screen.findByText('Shell ready')).toBeTruthy()
+    terminalPoolMocks.emitLifecycle?.({
+      ptyActive: true,
+      shellExited: false,
+      currentPtyInstance: 1,
+      hasOutput: true,
+    })
+
+    await vi.waitFor(() => {
+      expect(screen.queryByText('Shell ready')).toBeNull()
+    })
+  })
+
+  it('does not show the ready message for inactive or exited shells', async () => {
+    const { rerender } = renderTaskTerminal({ isActive: false })
+
+    await vi.waitFor(() => expect(terminalPoolMocks.acquire).toHaveBeenCalled())
+    expect(screen.queryByText('Shell ready')).toBeNull()
+
+    await rerender({
+      taskId: 'T-1',
+      workspacePath: '/worktree/T-1',
+      terminalKey: 'T-1-shell-0',
+      terminalIndex: 0,
+      isActive: true,
+    })
+
+    expect(await screen.findByText('Shell ready')).toBeTruthy()
+    terminalPoolMocks.emitLifecycle?.({
+      ptyActive: false,
+      shellExited: true,
+      currentPtyInstance: 1,
+      hasOutput: false,
+    })
+
+    await vi.waitFor(() => {
+      expect(screen.queryByText('Shell ready')).toBeNull()
+      expect(screen.getByText('Shell exited')).toBeTruthy()
+    })
+  })
+})

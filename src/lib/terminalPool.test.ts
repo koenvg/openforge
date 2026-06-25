@@ -737,6 +737,7 @@ describe("terminalPool", () => {
 			ptyActive: true,
 			shellExited: false,
 			currentPtyInstance: 42,
+			hasOutput: false,
 		});
 
 		const outputCb = getListenCallback("pty-output-task-10-hydrated-output");
@@ -792,6 +793,7 @@ describe("terminalPool", () => {
 			ptyActive: false,
 			shellExited: true,
 			currentPtyInstance: 2,
+			hasOutput: false,
 		});
 
 		unsubscribe();
@@ -943,6 +945,7 @@ describe("terminalPool", () => {
 			expect(state.ptyActive).toBe(false);
 			expect(state.shellExited).toBe(true);
 			expect(state.currentPtyInstance).toBeNull();
+			expect(state.hasOutput).toBe(false);
 		});
 
 		it("updates pool-owned shell lifecycle state through helper", async () => {
@@ -952,6 +955,7 @@ describe("terminalPool", () => {
 				ptyActive: true,
 				shellExited: false,
 				currentPtyInstance: 42,
+				hasOutput: false,
 			});
 
 			const state = getShellLifecycleState("task-shell-update");

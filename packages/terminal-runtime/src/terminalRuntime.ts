@@ -41,6 +41,7 @@ export interface PoolEntry {
   attached: boolean
   spawnPending: boolean
   currentPtyInstance: number | null
+  hasOutput: boolean
   webglAddon: WebglAddon | null
   webglContextLossDisposable: IDisposable | null
   webglUnavailable: boolean
@@ -62,6 +63,7 @@ export interface ShellLifecycleState {
   ptyActive: boolean
   shellExited: boolean
   currentPtyInstance: number | null
+  hasOutput: boolean
 }
 
 type ShellLifecycleListener = (state: ShellLifecycleState) => void
@@ -133,6 +135,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
       ptyActive: entry?.ptyActive ?? false,
       shellExited: entry ? !entry.ptyActive && entry.needsClear : false,
       currentPtyInstance: entry?.currentPtyInstance ?? null,
+      hasOutput: entry?.hasOutput ?? false,
     }
   }
   
@@ -299,6 +302,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
       entry.needsClear = false
       entry.terminal.write(buffered)
       entry.ptyActive = true
+      entry.hasOutput = true
       notifyShellLifecycleListeners(entry.taskId)
       if (entry.attached) refreshTerminal(entry)
     } catch (e) {
@@ -376,6 +380,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
       attached: false,
       spawnPending: false,
       currentPtyInstance: null,
+      hasOutput: false,
       webglAddon: null,
       webglContextLossDisposable: null,
       webglUnavailable: false,
@@ -387,6 +392,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
       if (buffered) {
         terminal.write(buffered)
         entry.ptyActive = true
+        entry.hasOutput = true
       }
     } catch (e) {
       console.error('[terminalPool] Failed to get PTY buffer:', e)
@@ -405,6 +411,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
         }
         entry.terminal.write(event.payload.data)
         entry.ptyActive = true
+        entry.hasOutput = true
         notifyShellLifecycleListeners(taskId)
       }
     }))
@@ -535,6 +542,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
   
   function markPtySpawnPending(entry: PoolEntry): void {
     entry.spawnPending = true
+    entry.hasOutput = false
   }
   
   function clearPtySpawnPending(entry: PoolEntry): void {
@@ -586,6 +594,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     entry.ptyActive = state.ptyActive
     entry.needsClear = state.shellExited
     entry.currentPtyInstance = state.currentPtyInstance
+    entry.hasOutput = state.hasOutput
     notifyShellLifecycleListeners(taskId)
   }
   

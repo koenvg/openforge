@@ -18,7 +18,8 @@
   let unsubscribeShellLifecycle: (() => void) | null = null
   let poolEntry = $state.raw<PoolEntry | null>(null)
   let mounted = $state(false)
-  let lifecycle = $state({ ptyActive: false, shellExited: false, currentPtyInstance: null as number | null })
+  let lifecycle = $state({ ptyActive: false, shellExited: false, currentPtyInstance: null as number | null, hasOutput: false })
+  let showReadyAffordance = $derived(isActive && lifecycle.ptyActive && !lifecycle.shellExited && !lifecycle.hasOutput)
   let previousIsActive: boolean | null = null
   let activatingEntry: PoolEntry | null = null
   let boundTerminalKey = $state<string | null>(null)
@@ -191,6 +192,15 @@
 <div class="flex flex-col h-full">
   <div class="flex-1 overflow-hidden min-h-0 relative">
     <div class="shell-terminal-wrapper w-full h-full p-3 bg-base-100" bind:this={terminalEl}></div>
+    {#if showReadyAffordance}
+      <div class="pointer-events-none absolute bottom-3 left-3 flex items-center gap-3 rounded-box bg-base-200/90 px-3 py-2 shadow-sm z-[1]">
+        <span class="font-mono text-sm text-primary" aria-hidden="true">$</span>
+        <div class="flex flex-col leading-tight">
+          <span class="text-sm font-medium text-base-content">Shell ready</span>
+          <span class="text-xs text-base-content/60">Type a command to begin</span>
+        </div>
+      </div>
+    {/if}
     {#if lifecycle.shellExited}
       <div class="absolute bottom-3 right-3 flex items-center gap-2 rounded-box bg-base-200/95 px-3 py-2 shadow z-[1]">
         <span class="text-sm font-mono text-base-content/70">Shell exited</span>
