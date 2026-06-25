@@ -22,6 +22,7 @@ import {
 	getTaskBatchFileContents,
 	getPtyBuffer,
 	getResolvedAiProvider,
+	listGitBranches,
 	registerBuiltinPlugin,
 	installPluginFromGit,
 	installPluginFromLocal,
@@ -120,6 +121,8 @@ describe("ipc spawnShellPty", () => {
 				summary: null,
 				agent: null,
 				permission_mode: null,
+				worktree_source: null,
+				worktree_branch: null,
 				depends_on: [],
 				project_id: null,
 				created_at: 1000,
@@ -142,6 +145,8 @@ describe("ipc spawnShellPty", () => {
 				summary: null,
 				agent: null,
 				permission_mode: null,
+				worktree_source: null,
+				worktree_branch: null,
 				depends_on: [],
 				project_id: null,
 				created_at: 1000,
@@ -161,6 +166,8 @@ describe("ipc spawnShellPty", () => {
 			summary: null,
 			agent: null,
 			permission_mode: null,
+			worktree_source: null,
+			worktree_branch: null,
 			depends_on: [],
 			project_id: null,
 			created_at: 1000,
@@ -177,7 +184,87 @@ describe("ipc spawnShellPty", () => {
 			permissionMode: null,
 			dependsOn: [],
 			labelNames: [],
+			worktreeSource: null,
+			worktreeBranch: null,
 		});
+	});
+
+	it("sends persisted worktree branch source when creating a task", async () => {
+		invokeMock.mockResolvedValueOnce({
+			id: "T-5",
+			initial_prompt: "Continue PR",
+			status: "backlog",
+			prompt: null,
+			summary: null,
+			agent: null,
+			permission_mode: null,
+			worktree_source: "existingBranch",
+			worktree_branch: "feature/open-pr",
+			depends_on: [],
+			project_id: "P-1",
+			created_at: 1000,
+			updated_at: 1000,
+		});
+
+		await createTask("Continue PR", "backlog", "P-1", "default", {
+			worktreeSource: "existingBranch",
+			worktreeBranch: "feature/open-pr",
+		});
+
+		expect(invokeMock).toHaveBeenCalledWith("create_task", {
+			initialPrompt: "Continue PR",
+			status: "backlog",
+			projectId: "P-1",
+			permissionMode: "default",
+			dependsOn: [],
+			labelNames: [],
+			worktreeSource: "existingBranch",
+			worktreeBranch: "feature/open-pr",
+		});
+	});
+
+	it("sends disabled worktree source when creating a project-directory task", async () => {
+		invokeMock.mockResolvedValueOnce({
+			id: "T-6",
+			initial_prompt: "Run without a worktree",
+			status: "backlog",
+			prompt: null,
+			summary: null,
+			agent: null,
+			permission_mode: null,
+			worktree_source: "disabled",
+			worktree_branch: null,
+			depends_on: [],
+			project_id: "P-1",
+			created_at: 1000,
+			updated_at: 1000,
+		});
+
+		await createTask("Run without a worktree", "backlog", "P-1", "default", {
+			worktreeSource: "disabled",
+			worktreeBranch: null,
+		});
+
+		expect(invokeMock).toHaveBeenCalledWith("create_task", {
+			initialPrompt: "Run without a worktree",
+			status: "backlog",
+			projectId: "P-1",
+			permissionMode: "default",
+			dependsOn: [],
+			labelNames: [],
+			worktreeSource: "disabled",
+			worktreeBranch: null,
+		});
+	});
+
+	it("requests git branches through the typed IPC wrapper", async () => {
+		invokeMock.mockResolvedValueOnce([{ name: "feature/open-pr", is_current: false, is_remote: false }]);
+
+		await expect(listGitBranches("/repo")).resolves.toEqual([
+			{ name: "feature/open-pr", is_current: false, is_remote: false },
+		]);
+
+		expect(invokeMock).toHaveBeenCalledWith("list_git_branches", { repoPath: "/repo" });
 	});
 
 	it("sends task edits as mutable prompt updates, not initialPrompt updates", async () => {

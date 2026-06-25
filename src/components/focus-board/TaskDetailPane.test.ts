@@ -47,6 +47,8 @@ const baseTask: Task = {
   title: null,
   agent: null,
   permission_mode: null,
+  worktree_source: null,
+  worktree_branch: null,
   depends_on: [],
   project_id: 'project-1',
   created_at: 1700000000,

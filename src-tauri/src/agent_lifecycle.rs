@@ -327,6 +327,8 @@ mod tests {
             summary: None,
             agent: None,
             permission_mode: None,
+            worktree_source: None,
+            worktree_branch: None,
             title: None,
             depends_on: Vec::new(),
             labels: Vec::new(),

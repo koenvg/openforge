@@ -87,6 +87,8 @@ const baseTask: Task = {
 	summary: null,
 	agent: null,
 	permission_mode: null,
+	worktree_source: null,
+	worktree_branch: null,
 	depends_on: [],
 	created_at: Date.now(),
 	updated_at: Date.now(),

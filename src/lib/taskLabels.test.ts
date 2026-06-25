@@ -15,6 +15,8 @@ function task(id: string, status: Task['status'], labels: TaskLabel[] = []): Tas
     summary: null,
     agent: null,
     permission_mode: null,
+    worktree_source: null,
+    worktree_branch: null,
     depends_on: [],
     project_id: 'proj-1',
     created_at: 1000,

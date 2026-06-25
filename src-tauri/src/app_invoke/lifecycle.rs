@@ -11,20 +11,32 @@ pub(super) async fn cleanup_task_runtime_for_app(
         let _ = pty_manager.kill_pty(task_id).await;
         pty_manager.kill_shells_for_task(task_id).await;
     }
-    let worktree = {
+    let (worktree, delete_worktree_branch) = {
         let db = crate::db::acquire_db(&state.db);
-        db.get_worktree_for_task(task_id).map_err(|e| {
+        let worktree = db.get_worktree_for_task(task_id).map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Failed to get worktree: {e}"),
             )
-        })?
+        })?;
+        let task_uses_existing_branch = db
+            .get_task(task_id)
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to get task: {e}"),
+                )
+            })?
+            .and_then(|task| task.worktree_source)
+            .as_deref()
+            == Some("existingBranch");
+        (worktree, remove_branch && !task_uses_existing_branch)
     };
 
     if let Some(worktree) = worktree {
         let repo_path = std::path::Path::new(&worktree.repo_path);
         let worktree_path = std::path::Path::new(&worktree.worktree_path);
-        let remove_result = if remove_branch {
+        let remove_result = if delete_worktree_branch {
             crate::git_worktree::remove_worktree_with_branch(
                 repo_path,
                 worktree_path,
@@ -42,7 +54,7 @@ pub(super) async fn cleanup_task_runtime_for_app(
             );
         }
 
-        if !remove_branch {
+        if !remove_branch || !delete_worktree_branch {
             let db = crate::db::acquire_db(&state.db);
             if let Err(e) = db.delete_worktree_record(task_id) {
                 error!(
@@ -77,7 +89,6 @@ struct StartImplementationContext {
     additional_instructions: Option<String>,
     handoff_notes_template: Option<String>,
     code_cleanup_enabled: bool,
-    use_worktrees: bool,
     provider_name: String,
 }
 
@@ -163,7 +174,6 @@ fn load_start_implementation_context(
         .flatten()
         .map(|value| value == "true")
         .unwrap_or(false);
-    let use_worktrees = db.resolve_use_worktrees(&project_id);
     let provider_name = db.resolve_ai_provider(&project_id);
 
     Ok(StartImplementationContext {
@@ -172,7 +182,6 @@ fn load_start_implementation_context(
         additional_instructions,
         handoff_notes_template,
         code_cleanup_enabled,
-        use_worktrees,
         provider_name,
     })
 }
@@ -182,9 +191,10 @@ async fn prepare_start_workspace(
     project_id: &str,
     task_id: &str,
     repo_path: &str,
-    use_worktrees: bool,
+    worktree_source: Option<&str>,
+    worktree_branch: Option<&str>,
 ) -> AppResult<PreparedWorkspace> {
-    if !use_worktrees {
+    if worktree_source == Some("disabled") {
         return Ok(PreparedWorkspace {
             working_dir: PathBuf::from(repo_path),
             kind: "project_dir",
@@ -192,7 +202,6 @@ async fn prepare_start_workspace(
         });
     }
 
-    let branch = crate::git_worktree::task_branch_name(task_id);
     let home = dirs::home_dir().ok_or_else(|| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -209,14 +218,35 @@ async fn prepare_start_workspace(
         .join(repo_name)
         .join(task_id);
 
-    crate::git_worktree::create_worktree(
-        Path::new(repo_path),
-        &working_dir,
-        &branch,
-        "origin/main",
-    )
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let branch = if worktree_source == Some("existingBranch") {
+        let branch = worktree_branch
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    "Existing branch worktrees require a branch".to_string(),
+                )
+            })?;
+        crate::git_worktree::create_worktree_from_existing_branch(
+            Path::new(repo_path),
+            &working_dir,
+            branch,
+        )
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    } else {
+        let branch = crate::git_worktree::task_branch_name(task_id);
+        crate::git_worktree::create_worktree(
+            Path::new(repo_path),
+            &working_dir,
+            &branch,
+            "origin/main",
+        )
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        branch
+    };
 
     {
         let db = crate::db::acquire_db(&state.db);
@@ -306,7 +336,8 @@ pub(super) async fn handle_app_start_implementation_command(
         &start_context.project_id,
         &task_id,
         &repo_path,
-        start_context.use_worktrees,
+        start_context.task.worktree_source.as_deref(),
+        start_context.task.worktree_branch.as_deref(),
     )
     .await?;
 
@@ -403,6 +434,8 @@ mod tests {
             summary: None,
             agent: agent.map(str::to_string),
             permission_mode: permission_mode.map(str::to_string),
+            worktree_source: None,
+            worktree_branch: None,
             title: None,
             depends_on: Vec::new(),
             labels: Vec::new(),

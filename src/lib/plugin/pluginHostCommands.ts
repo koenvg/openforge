@@ -53,8 +53,10 @@ function createTaskFromPluginRequest(request: CreateTaskRequest) {
     'backlog',
     request.projectId,
     null,
-    request.dependsOn ?? [],
-    request.labelNames ?? [],
+    {
+      dependsOn: request.dependsOn ?? [],
+      labelNames: request.labelNames ?? [],
+    },
   )
 }
 
@@ -266,8 +268,10 @@ export async function invokePluginHostCommand(command: string, payload: unknown)
         'backlog',
         projectId,
         null,
-        stringArray(commandPayload?.dependsOn),
-        stringArray(commandPayload?.labelNames),
+        {
+          dependsOn: stringArray(commandPayload?.dependsOn),
+          labelNames: stringArray(commandPayload?.labelNames),
+        },
       )
     }
     case 'startImplementation':
