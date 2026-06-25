@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it, beforeEach } from 'vitest'
 import { get } from 'svelte/store'
 
@@ -32,6 +34,7 @@ import {
   registerTerminalTaskPaneController as registerPluginController,
   unregisterTerminalTaskPaneController as unregisterPluginController,
 } from '../../plugins/terminal/src/terminalTaskPaneController'
+import { createTaskTerminalPaneLifecycle as runtimeTaskPaneLifecycle } from '@openforge/terminal-runtime'
 import { handleTerminalShortcutKeydown as runtimeShortcutHandler } from '@openforge/terminal-runtime/shortcuts'
 import { handleTerminalShortcutKeydown as appShortcutHandler } from './terminalShortcuts'
 import { handleTerminalShortcutKeydown as pluginShortcutHandler } from '../../plugins/terminal/src/terminalShortcuts'
@@ -53,6 +56,18 @@ describe('terminal plugin implementation boundary', () => {
 
     expect(appShortcutHandler).toBe(runtimeShortcutHandler)
     expect(pluginShortcutHandler).toBe(runtimeShortcutHandler)
+    expect(typeof runtimeTaskPaneLifecycle).toBe('function')
+  })
+
+  it('keeps task terminal pane lifecycle policy on the shared runtime helper', () => {
+    const appDetailSource = readFileSync(join(process.cwd(), 'src/components/task-detail/TaskDetailView.svelte'), 'utf8')
+    const appPaneSource = readFileSync(join(process.cwd(), 'src/components/task-detail/TerminalTaskPane.svelte'), 'utf8')
+    const pluginPaneSource = readFileSync(join(process.cwd(), 'plugins/terminal/src/TerminalTaskPane.svelte'), 'utf8')
+
+    for (const source of [appDetailSource, appPaneSource, pluginPaneSource]) {
+      expect(source).toContain("createTaskTerminalPaneLifecycle")
+      expect(source).toContain("@openforge/terminal-runtime")
+    }
   })
 
   it('uses a plugin-owned command-held store and listener setup', () => {

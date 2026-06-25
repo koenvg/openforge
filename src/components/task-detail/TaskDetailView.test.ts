@@ -757,6 +757,28 @@ describe('TaskDetailView', () => {
     })
   })
 
+  it('preserves the runtime workspace and active terminal tab when workspace lookup fails', async () => {
+    const { getTaskWorkspace } = await import('../../lib/ipc')
+    vi.mocked(getTaskWorkspace).mockRejectedValue(new Error('workspace lookup failed'))
+    taskRuntimeInfo.set(new Map([[
+      'T-42',
+      { workspacePath: '/path/to/worktree' },
+    ]]))
+    taskActiveView.set(new Map([['T-42', TERMINAL_VIEW_ID]]))
+
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+
+    await waitFor(() => expect(vi.mocked(getTaskWorkspace)).toHaveBeenCalledWith('T-42'))
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await waitFor(() => {
+      const breadcrumb = screen.getByText('$ cd board').closest('div')
+      expect(breadcrumb?.textContent).toContain('terminal')
+      expect(screen.getByRole('button', { name: /^terminal\b/i })).toBeTruthy()
+    })
+
+    vi.mocked(getTaskWorkspace).mockResolvedValue(null)
+  })
+
   it('falls back to first line of prompt when title is empty', () => {
     const taskNoTitle = { ...baseTask, initial_prompt: '', prompt: 'First prompt line\nSecond line' }
     render(TaskDetailView, { props: { task: taskNoTitle, onRunAction: mockOnRunAction } })

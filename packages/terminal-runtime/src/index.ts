@@ -53,3 +53,9 @@ export {
   type TerminalTaskPaneWorkspaceResult,
   type TerminalTaskPaneWorkspaceSnapshot,
 } from './taskPaneWorkspaceLookup'
+export {
+  createTaskTerminalPaneLifecycle,
+  type TaskTerminalPaneLifecycle,
+  type TaskTerminalPaneLifecycleOptions,
+  type TerminalTaskPaneController,
+} from './taskTerminalPaneLifecycle'
