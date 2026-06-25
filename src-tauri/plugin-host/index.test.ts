@@ -11,6 +11,22 @@ async function writeBackendModule(source: string): Promise<string> {
   return file
 }
 
+async function expectOnlyPluginHostStderr(expectedLines: string[], operation: () => Promise<void>): Promise<void> {
+  const chunks: string[] = []
+  const stderr = vi.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Uint8Array) => {
+    chunks.push(String(chunk))
+    return true
+  })
+
+  try {
+    await operation()
+  } finally {
+    stderr.mockRestore()
+  }
+
+  expect(chunks.join('')).toBe(expectedLines.map(line => `${line}\n`).join(''))
+}
+
 describe('plugin-host backend runtime', () => {
   it('activates backend entries and invokes registered plugin-local RPC methods when ready', async () => {
     const backendPath = await writeBackendModule(`
@@ -136,9 +152,13 @@ describe('plugin-host backend runtime', () => {
       }
     `)
 
-    await expect(createPluginHostRuntime().invokeBackend({ pluginId: 'scheduler', backendPath, command: 'schedule' })).rejects.toThrow(
-      'OpenForge host capability is unavailable: openforge.tasks.create'
-    )
+    await expectOnlyPluginHostStderr([
+      '[plugin:scheduler] handler error in scheduler.schedule: OpenForge host capability is unavailable: openforge.tasks.create',
+    ], async () => {
+      await expect(createPluginHostRuntime().invokeBackend({ pluginId: 'scheduler', backendPath, command: 'schedule' })).rejects.toThrow(
+        'OpenForge host capability is unavailable: openforge.tasks.create'
+      )
+    })
   })
 
   it('routes remaining backend core OpenForge APIs through durable host callbacks', async () => {
@@ -575,10 +595,17 @@ describe('plugin-host backend runtime', () => {
     `)
     const runtime = createPluginHostRuntime({ crashLoopLimit: 2 })
 
-    await expect(runtime.activateBackend({ pluginId: 'crashy', backendPath })).rejects.toThrow(/service crash 1/)
-    await expect(runtime.activateBackend({ pluginId: 'crashy', backendPath })).rejects.toThrow(/service crash 2/)
-    await expect(runtime.activateBackend({ pluginId: 'crashy', backendPath })).rejects.toThrow(/crash-loop guard/i)
-    expect(await runtime.getBackendState('crashy')).toMatchObject({ state: 'error', crashLoopGuardTripped: true })
+    await expectOnlyPluginHostStderr([
+      '[plugin:crashy] background service start error in crashy.crasher: service crash 1',
+      '[plugin:crashy] activation error: service crash 1',
+      '[plugin:crashy] background service start error in crashy.crasher: service crash 2',
+      '[plugin:crashy] activation error: service crash 2',
+    ], async () => {
+      await expect(runtime.activateBackend({ pluginId: 'crashy', backendPath })).rejects.toThrow(/service crash 1/)
+      await expect(runtime.activateBackend({ pluginId: 'crashy', backendPath })).rejects.toThrow(/service crash 2/)
+      await expect(runtime.activateBackend({ pluginId: 'crashy', backendPath })).rejects.toThrow(/crash-loop guard/i)
+      expect(await runtime.getBackendState('crashy')).toMatchObject({ state: 'error', crashLoopGuardTripped: true })
+    })
   })
 
   it('exposes backend readiness through explicit JSON-RPC state and whenReady methods without hijacking dotted plugin methods', async () => {
