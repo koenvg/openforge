@@ -291,3 +291,68 @@ describe('SkillsView project and async states', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /manually edit/i }).hasAttribute('disabled')).toBe(false))
   })
 })
+
+describe('SkillsView collapse-aware component navigation and ARIA semantics', () => {
+  beforeEach(() => {
+    skills.set([])
+    selectedSkillIdentity.set(null)
+    activeProjectId.set(null)
+    vi.clearAllMocks()
+  })
+
+  function renderLoadedSkills(skillList: SkillInfo[]) {
+    const invoke = vi.fn(async () => skillList)
+    renderView({ api: makeApi(invoke), projectId: 'P-1' })
+    return invoke
+  }
+
+  const navigationSkills = [
+    makeSkill({ name: 'alpha-review', description: 'First repository skill', source_dir: '.agents', source_path: 'alpha-review' }),
+    makeSkill({ name: 'beta-review', description: 'Second repository skill', source_dir: '.agents', source_path: 'beta-review' }),
+    makeSkill({ name: 'gamma-pi', description: 'Pi repository skill', source_dir: '.pi', source_path: 'gamma-pi' }),
+    makeSkill({ name: 'delta-personal', description: 'Personal skill', level: 'user', source_dir: '.agents', source_path: 'delta-personal' }),
+  ]
+
+  it('exposes collapse controls with expanded state and controlled regions', async () => {
+    renderLoadedSkills(navigationSkills)
+
+    await screen.findByRole('button', { name: /alpha-review/i })
+    const repositoryToggle = screen.getByRole('button', { name: /repository\s+3/i })
+    const personalToggle = screen.getByRole('button', { name: /personal\s+1/i })
+    const agentsToggle = screen.getByRole('button', { name: /\.agents\/skills\s+2/i })
+
+    expect(repositoryToggle.getAttribute('aria-expanded')).toBe('true')
+    expect(repositoryToggle.getAttribute('aria-controls')).toBe('skills-project-groups')
+    expect(document.getElementById('skills-project-groups')).not.toBeNull()
+    expect(personalToggle.getAttribute('aria-expanded')).toBe('true')
+    expect(personalToggle.getAttribute('aria-controls')).toBe('skills-user-groups')
+    expect(agentsToggle.getAttribute('aria-expanded')).toBe('true')
+    expect(agentsToggle.getAttribute('aria-controls')).toBe('skills-project--agents')
+
+    await fireEvent.click(agentsToggle)
+
+    expect(screen.getByRole('button', { name: /\.agents\/skills\s+2/i }).getAttribute('aria-expanded')).toBe('false')
+    expect(document.getElementById('skills-project--agents')).toBeNull()
+    expect(screen.queryByRole('button', { name: /alpha-review/i })).toBeNull()
+    expect(screen.getByRole('button', { name: /gamma-pi/i })).not.toBeNull()
+  })
+
+  it('uses only rendered, uncollapsed skill rows for vim keyboard selection', async () => {
+    renderLoadedSkills(navigationSkills)
+
+    await screen.findByRole('button', { name: /alpha-review/i })
+    await fireEvent.keyDown(window, { key: 'G' })
+    await fireEvent.keyDown(window, { key: 'Enter' })
+    await waitFor(() => expect(screen.getByRole('button', { name: /delta-personal/i }).getAttribute('aria-current')).toBe('true'))
+
+    await fireEvent.click(screen.getByRole('button', { name: /personal\s+1/i }))
+    expect(screen.queryByRole('button', { name: /delta-personal/i })).toBeNull()
+
+    await fireEvent.keyDown(window, { key: 'G' })
+    await fireEvent.keyDown(window, { key: 'Enter' })
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /gamma-pi/i }).getAttribute('aria-current')).toBe('true'))
+    expect(screen.getByRole('button', { name: /alpha-review/i }).getAttribute('aria-current')).toBeNull()
+    expect(screen.getByRole('button', { name: /beta-review/i }).getAttribute('aria-current')).toBeNull()
+  })
+})
