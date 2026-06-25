@@ -109,7 +109,7 @@ describe('plugin FilesView', () => {
       expect(screen.getByText('src/')).toBeTruthy()
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: /src\// }))
+    await fireEvent.click(screen.getByRole('treeitem', { name: /src\// }))
 
     await waitFor(() => {
       expect(fsReadDir).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'src' })
@@ -125,7 +125,7 @@ describe('plugin FilesView', () => {
       expect(screen.getByText('README.md')).toBeTruthy()
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: /README.md/ }))
+    await fireEvent.click(screen.getByRole('treeitem', { name: /README.md/ }))
 
     await waitFor(() => {
       expect(fsReadFile).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'README.md' })
@@ -204,12 +204,12 @@ describe('plugin FilesView', () => {
       expect(screen.getByText('src/')).toBeTruthy()
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: /src\// }))
+    await fireEvent.click(screen.getByRole('treeitem', { name: /src\// }))
     await waitFor(() => {
       expect(screen.getByText('main.ts')).toBeTruthy()
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: /main.ts/ }))
+    await fireEvent.click(screen.getByRole('treeitem', { name: /main.ts/ }))
     await waitFor(() => {
       expect(screen.getByLabelText('File text content').textContent).toContain('Hello world')
     })
@@ -260,7 +260,7 @@ describe('plugin FilesView', () => {
     await waitFor(() => {
       expect(screen.getByText('src/')).toBeTruthy()
     })
-    await fireEvent.click(screen.getByRole('button', { name: /src\// }))
+    await fireEvent.click(screen.getByRole('treeitem', { name: /src\// }))
     await waitFor(() => {
       expect(screen.getByText('main.ts')).toBeTruthy()
     })
@@ -318,7 +318,7 @@ describe('plugin FilesView', () => {
     await waitFor(() => {
       expect(screen.getByText('README.md')).toBeTruthy()
     })
-    await fireEvent.click(screen.getByRole('button', { name: /README.md/ }))
+    await fireEvent.click(screen.getByRole('treeitem', { name: /README.md/ }))
     await waitFor(() => {
       expect(fsReadFile).toHaveBeenCalledWith({ projectId: 'project-a', path: 'README.md' })
     })
@@ -366,7 +366,7 @@ describe('plugin FilesView', () => {
       expect(screen.getByText('src/')).toBeTruthy()
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: /src\// }))
+    await fireEvent.click(screen.getByRole('treeitem', { name: /src\// }))
     await waitFor(() => {
       expect(screen.getByText('utils.ts')).toBeTruthy()
     })

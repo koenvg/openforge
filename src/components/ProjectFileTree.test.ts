@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
+import { render, screen, fireEvent, within } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
 import ProjectFileTree from './ProjectFileTree.svelte'
 import type { FileEntry } from '../lib/types'
@@ -48,21 +48,17 @@ describe('ProjectFileTree', () => {
     expect(screen.getByText('README.md')).toBeTruthy()
   })
 
-  it('exposes directories as expandable buttons', () => {
+  it('exposes the file list as a named tree with treeitems', () => {
     renderTree({
-      entries: [makeEntry({ name: 'src', path: 'src', isDir: true, size: null })],
+      entries: [
+        makeEntry({ name: 'src', path: 'src', isDir: true, size: null }),
+        makeEntry({ name: 'README.md', path: 'README.md', isDir: false, size: 1536 }),
+      ],
     })
 
-    const directory = screen.getByRole('button', { name: /src\// })
-    expect(directory.getAttribute('aria-expanded')).toBe('false')
-  })
-
-  it('exposes files as buttons with accessible names and sizes', () => {
-    renderTree({
-      entries: [makeEntry({ name: 'README.md', path: 'README.md', isDir: false, size: 1536 })],
-    })
-
-    expect(screen.getByRole('button', { name: /README\.md.*1\.5 KB/ })).toBeTruthy()
+    expect(screen.getByRole('tree', { name: 'Project files' })).toBeTruthy()
+    expect(screen.getByRole('treeitem', { name: /src\// }).getAttribute('aria-expanded')).toBe('false')
+    expect(screen.getByRole('treeitem', { name: /README\.md.*1\.5 KB/ })).toBeTruthy()
   })
 
   it('clicking a directory calls onToggleDir', async () => {
@@ -72,7 +68,7 @@ describe('ProjectFileTree', () => {
       onToggleDir,
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: /src\// }))
+    await fireEvent.click(screen.getByRole('treeitem', { name: /src\// }))
 
     expect(onToggleDir).toHaveBeenCalledWith('src')
     expect(onToggleDir).toHaveBeenCalledOnce()
@@ -85,7 +81,7 @@ describe('ProjectFileTree', () => {
       onSelectFile,
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: /README.md/ }))
+    await fireEvent.click(screen.getByRole('treeitem', { name: /README.md/ }))
 
     expect(onSelectFile).toHaveBeenCalledWith('README.md')
     expect(onSelectFile).toHaveBeenCalledOnce()
@@ -97,8 +93,9 @@ describe('ProjectFileTree', () => {
       selectedPath: 'README.md',
     })
 
-    const selected = screen.getByRole('button', { name: /README\.md/ })
+    const selected = screen.getByRole('treeitem', { name: /README\.md/ })
     expect(selected.getAttribute('aria-current')).toBe('true')
+    expect(selected.getAttribute('aria-selected')).toBe('true')
   })
 
   it('preserves the incoming entry order', () => {
@@ -122,10 +119,33 @@ describe('ProjectFileTree', () => {
         makeEntry({ name: 'main.ts', path: 'src/main.ts', isDir: false }),
         makeEntry({ name: 'README.md', path: 'README.md', isDir: false }),
       ],
+      expandedDirs: new Set<string>(['src', 'src/lib']),
     })
 
     const labels = screen.getAllByTestId('entry-label').map((node) => node.textContent)
     expect(labels).toEqual(['src/', 'lib/', 'utils.ts', 'main.ts', 'README.md'])
+
+    const src = screen.getByRole('treeitem', { name: /src\// })
+    const srcGroup = within(src).getAllByRole('group')[0] as HTMLElement
+    expect(src.getAttribute('aria-level')).toBe('1')
+    expect(src.getAttribute('aria-setsize')).toBe('2')
+    expect(src.getAttribute('aria-posinset')).toBe('1')
+    expect(within(srcGroup).getByRole('treeitem', { name: /lib\// }).getAttribute('aria-level')).toBe('2')
+    expect(screen.getByRole('treeitem', { name: /utils\.ts/ }).getAttribute('aria-level')).toBe('3')
+  })
+
+  it('does not expose child groups for collapsed directories', () => {
+    renderTree({
+      entries: [
+        makeEntry({ name: 'src', path: 'src', isDir: true, size: null }),
+        makeEntry({ name: 'main.ts', path: 'src/main.ts', isDir: false }),
+      ],
+      expandedDirs: new Set<string>(),
+    })
+
+    const src = screen.getByRole('treeitem', { name: /src\// })
+    expect(within(src).queryByRole('group')).toBeNull()
+    expect(screen.queryByRole('treeitem', { name: /main\.ts/ })).toBeNull()
   })
 
   it('shows no entry rows for empty entries', () => {
@@ -139,7 +159,7 @@ describe('ProjectFileTree', () => {
       expandedDirs: new Set<string>(),
     })
 
-    expect(screen.getByRole('button', { name: /src\// }).getAttribute('aria-expanded')).toBe('false')
+    expect(screen.getByRole('treeitem', { name: /src\// }).getAttribute('aria-expanded')).toBe('false')
 
     rerender({
       entries: [makeEntry({ name: 'src', path: 'src', isDir: true, size: null })],
@@ -149,7 +169,7 @@ describe('ProjectFileTree', () => {
       onSelectFile: () => {},
     })
 
-    expect(screen.getByRole('button', { name: /src\// }).getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByRole('treeitem', { name: /src\// }).getAttribute('aria-expanded')).toBe('true')
   })
 
   it('selects nested files using their full paths', async () => {
@@ -161,14 +181,103 @@ describe('ProjectFileTree', () => {
         makeEntry({ name: 'lib', path: 'src/lib', isDir: true, size: null }),
         makeEntry({ name: 'utils.ts', path: 'src/lib/utils.ts', isDir: false }),
       ],
+      expandedDirs: new Set<string>(['src', 'src/lib']),
       onSelectFile,
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: /index\.ts/ }))
-    await fireEvent.click(screen.getByRole('button', { name: /utils\.ts/ }))
+    await fireEvent.click(screen.getByRole('treeitem', { name: /index\.ts/ }))
+    await fireEvent.click(screen.getByRole('treeitem', { name: /utils\.ts/ }))
 
     expect(onSelectFile).toHaveBeenNthCalledWith(1, 'src/index.ts')
     expect(onSelectFile).toHaveBeenNthCalledWith(2, 'src/lib/utils.ts')
+  })
+
+  it('uses roving tabindex and arrow key navigation across visible treeitems', async () => {
+    renderTree({
+      entries: [
+        makeEntry({ name: 'src', path: 'src', isDir: true, size: null }),
+        makeEntry({ name: 'main.ts', path: 'src/main.ts', isDir: false }),
+        makeEntry({ name: 'README.md', path: 'README.md', isDir: false }),
+      ],
+      expandedDirs: new Set<string>(['src']),
+    })
+
+    const src = screen.getByRole('treeitem', { name: /src\// }) as HTMLElement
+    const main = screen.getByRole('treeitem', { name: /main\.ts/ }) as HTMLElement
+    const readme = screen.getByRole('treeitem', { name: /README\.md/ }) as HTMLElement
+
+    expect(src.tabIndex).toBe(0)
+    expect(main.tabIndex).toBe(-1)
+    expect(readme.tabIndex).toBe(-1)
+
+    await fireEvent.keyDown(src, { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(main)
+    expect(main.tabIndex).toBe(0)
+    expect(src.tabIndex).toBe(-1)
+
+    await fireEvent.keyDown(main, { key: 'ArrowUp' })
+    expect(document.activeElement).toBe(src)
+
+    await fireEvent.keyDown(src, { key: 'ArrowDown' })
+    await fireEvent.keyDown(main, { key: 'End' })
+    expect(document.activeElement).toBe(readme)
+
+    await fireEvent.keyDown(readme, { key: 'Home' })
+    expect(document.activeElement).toBe(src)
+  })
+
+  it('uses left and right arrows to expand, collapse, and move between parent and child items', async () => {
+    const onToggleDir = vi.fn()
+    const { rerender } = renderTree({
+      entries: [makeEntry({ name: 'src', path: 'src', isDir: true, size: null })],
+      expandedDirs: new Set<string>(),
+      onToggleDir,
+    })
+
+    const collapsedSrc = screen.getByRole('treeitem', { name: /src\// }) as HTMLElement
+    await fireEvent.keyDown(collapsedSrc, { key: 'ArrowRight' })
+    expect(onToggleDir).toHaveBeenCalledWith('src')
+
+    await rerender({
+      entries: [
+        makeEntry({ name: 'src', path: 'src', isDir: true, size: null }),
+        makeEntry({ name: 'main.ts', path: 'src/main.ts', isDir: false }),
+      ],
+      expandedDirs: new Set<string>(['src']),
+      selectedPath: null,
+      onToggleDir,
+      onSelectFile: () => {},
+    })
+
+    const expandedSrc = screen.getByRole('treeitem', { name: /src\// }) as HTMLElement
+    const child = screen.getByRole('treeitem', { name: /main\.ts/ }) as HTMLElement
+    await fireEvent.keyDown(expandedSrc, { key: 'ArrowRight' })
+    expect(document.activeElement).toBe(child)
+
+    await fireEvent.keyDown(child, { key: 'ArrowLeft' })
+    expect(document.activeElement).toBe(expandedSrc)
+
+    await fireEvent.keyDown(expandedSrc, { key: 'ArrowLeft' })
+    expect(onToggleDir).toHaveBeenLastCalledWith('src')
+  })
+
+  it('activates the focused treeitem with Enter and Space', async () => {
+    const onToggleDir = vi.fn()
+    const onSelectFile = vi.fn()
+    renderTree({
+      entries: [
+        makeEntry({ name: 'src', path: 'src', isDir: true, size: null }),
+        makeEntry({ name: 'README.md', path: 'README.md', isDir: false }),
+      ],
+      onToggleDir,
+      onSelectFile,
+    })
+
+    await fireEvent.keyDown(screen.getByRole('treeitem', { name: /src\// }), { key: 'Enter' })
+    await fireEvent.keyDown(screen.getByRole('treeitem', { name: /README\.md/ }), { key: ' ' })
+
+    expect(onToggleDir).toHaveBeenCalledWith('src')
+    expect(onSelectFile).toHaveBeenCalledWith('README.md')
   })
 
   it('restores initial scroll position and reports scroll changes', async () => {
@@ -200,7 +309,9 @@ describe('ProjectFileTree', () => {
       selectedPath: 'src/lib/utils.ts',
     })
 
-    expect(screen.getByRole('button', { name: /index\.ts/ }).getAttribute('aria-current')).toBeNull()
-    expect(screen.getByRole('button', { name: /utils\.ts/ }).getAttribute('aria-current')).toBe('true')
+    expect(screen.getByRole('treeitem', { name: /index\.ts/ }).getAttribute('aria-current')).toBeNull()
+    expect(screen.getByRole('treeitem', { name: /index\.ts/ }).getAttribute('aria-selected')).toBe('false')
+    expect(screen.getByRole('treeitem', { name: /utils\.ts/ }).getAttribute('aria-current')).toBe('true')
+    expect(screen.getByRole('treeitem', { name: /utils\.ts/ }).getAttribute('aria-selected')).toBe('true')
   })
 })
