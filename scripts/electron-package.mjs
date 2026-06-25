@@ -218,8 +218,8 @@ async function copyIcon(rustSidecarLayout, resourcesDir) {
   await cp(rustSidecarLayout.iconPath, join(resourcesDir, 'electron.icns'))
 }
 
-async function copyOpenForgeCliAssets(repoRoot, resourcesDir) {
-  const cliSourceDir = join(repoRoot, 'src-tauri', 'src', 'openforge-cli')
+async function copyOpenForgeCliAssets(repoRoot, resourcesDir, rustSidecarLayout = resolveRustSidecarLayout({ repoRoot })) {
+  const cliSourceDir = join(rustSidecarLayout.backendCrateRootPath, 'src', 'openforge-cli')
   const cliSourcePath = join(cliSourceDir, 'cli.js')
   if (!(await pathExists(cliSourcePath))) return
 
@@ -369,7 +369,7 @@ export async function packageElectronApp({
     bundleIdentifier: packageIdentity.bundleIdentifier,
   })
   await copyIcon(rustSidecarLayout, resourcesDir)
-  await copyOpenForgeCliAssets(repoRoot, resourcesDir)
+  await copyOpenForgeCliAssets(repoRoot, resourcesDir, rustSidecarLayout)
 
   return { appPath: outputAppPath, sidecarPath: sidecarTargetPath }
 }
