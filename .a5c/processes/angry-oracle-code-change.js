@@ -40,7 +40,7 @@ export const MANUAL_APP_VERIFICATION_EXACT_FILES = [
 
 export function hasBlockingOracleFindings(review = {}) {
   const verdict = String(review.verdict || '').toLowerCase();
-  if (verdict && !['approve', 'approved', 'pass', 'passed'].includes(verdict)) {
+  if (!['approve', 'approved', 'pass', 'passed'].includes(verdict)) {
     return true;
   }
 

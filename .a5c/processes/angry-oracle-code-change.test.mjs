@@ -36,6 +36,8 @@ describe('angry oracle code-change process', () => {
       true
     );
     assert.equal(hasBlockingOracleFindings({ verdict: 'changes_requested', findings: [] }), true);
+    assert.equal(hasBlockingOracleFindings({ score: 99, findings: [] }), true);
+    assert.equal(hasBlockingOracleFindings({ verdict: 'needs_work', score: 99, findings: [] }), true);
     assert.equal(hasBlockingOracleFindings({ verdict: 'approve', blockers: ['tests do not cover failure path'] }), true);
     assert.equal(hasBlockingOracleFindings({ verdict: 'approve', requiredFixes: ['split orchestration concerns'] }), true);
     assert.equal(hasBlockingArchitectureFindings({ verdict: 'approve', score: 95, findings: [] }), false);
@@ -311,6 +313,74 @@ describe('angry oracle code-change process', () => {
     assert.equal(result.architectureApproved, true);
     assert.deepEqual(result.manualVerification, manualVerification);
     assert.deepEqual(result.finalArchitectureReview, architectureReview);
+  });
+
+  it('blocks high-scoring oracle reviews with missing or invalid verdicts before approval', async () => {
+    for (const oracleReview of [
+      { score: 99, summary: 'High-scoring oracle forgot to emit an approve verdict', findings: [] },
+      { verdict: 'needs_work', score: 99, summary: 'Oracle emitted an invalid verdict', findings: [] }
+    ]) {
+      const taskOrder = [];
+      const breakpoints = [];
+      const architectureReview = { verdict: 'approve', score: 95, summary: 'Architecture fits', findings: [] };
+
+      const result = await runProcess(
+        {
+          request: 'Tighten oracle gate verdict handling',
+          verificationCommands: ['node --test .a5c/processes/angry-oracle-code-change.test.mjs'],
+          targetOracleScore: 90,
+          maxOracleIterations: 1
+        },
+        {
+          runId: `run-oracle-${oracleReview.verdict || 'missing'}`,
+          now: () => '2026-05-06T00:00:00.000Z',
+          task: async (task) => {
+            if (task === projectContextTask) {
+              taskOrder.push('project-context');
+              return { summary: 'context' };
+            }
+            if (task === implementationTask) {
+              taskOrder.push('implementation');
+              return { summary: 'implemented', changedFiles: ['.a5c/processes/angry-oracle-code-change.js'] };
+            }
+            if (task === changeInventoryTask) {
+              taskOrder.push('change-inventory');
+              return {};
+            }
+            if (task === runVerificationCommandTask) {
+              taskOrder.push('automated-verification');
+              return { status: 'ok' };
+            }
+            if (task === architectureReviewTask) {
+              taskOrder.push('architecture-review');
+              return architectureReview;
+            }
+            if (task === angryOracleReviewTask) {
+              taskOrder.push('oracle-review');
+              return oracleReview;
+            }
+            throw new Error(`Unexpected task: ${task?.id || task?.title || 'unknown'}`);
+          },
+          breakpoint: async (details) => {
+            breakpoints.push(details);
+          }
+        }
+      );
+
+      assert.deepEqual(taskOrder, [
+        'project-context',
+        'implementation',
+        'change-inventory',
+        'automated-verification',
+        'architecture-review',
+        'oracle-review'
+      ]);
+      assert.equal(result.architectureApproved, true);
+      assert.equal(result.oracleApproved, false);
+      assert.deepEqual(result.finalOracleReview, oracleReview);
+      assert.equal(result.oracleAttempts[0].blocking, true);
+      assert.equal(breakpoints.length, 1);
+    }
   });
 
   it('blocks a high-scoring architecture review with a missing verdict before oracle review', async () => {
