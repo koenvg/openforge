@@ -16,7 +16,6 @@ export interface ProjectSettingsConfig {
   agentInstructions: string
   handoffNotesTemplate: string
   aiProvider: string
-  useWorktrees: boolean
   projectColor: string
   actions: Action[]
   focusFilterStates: TaskState[]
@@ -78,7 +77,6 @@ const DEFAULT_PROJECT_SETTINGS: Omit<ProjectSettingsConfig, 'actions' | 'focusFi
   agentInstructions: '',
   handoffNotesTemplate: '',
   aiProvider: 'claude-code',
-  useWorktrees: true,
   projectColor: '',
 }
 
@@ -90,11 +88,10 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettingsConfig = {
 }
 
 export async function loadProjectSettings(projectId: string): Promise<ProjectSettingsConfig> {
-  const [instructions, handoffTemplate, provider, worktrees, color, actions, focusFilterStates] = await Promise.all([
+  const [instructions, handoffTemplate, provider, color, actions, focusFilterStates] = await Promise.all([
     getProjectConfig(projectId, 'additional_instructions'),
     getProjectConfig(projectId, 'handoff_notes_template'),
     getProjectConfig(projectId, 'ai_provider'),
-    getProjectConfig(projectId, 'use_worktrees'),
     getProjectConfig(projectId, 'project_color'),
     loadActions(projectId),
     loadFocusFilterStates(projectId),
@@ -104,7 +101,6 @@ export async function loadProjectSettings(projectId: string): Promise<ProjectSet
     agentInstructions: instructions ?? DEFAULT_PROJECT_SETTINGS.agentInstructions,
     handoffNotesTemplate: handoffTemplate ?? DEFAULT_PROJECT_SETTINGS.handoffNotesTemplate,
     aiProvider: provider ?? DEFAULT_PROJECT_SETTINGS.aiProvider,
-    useWorktrees: worktrees !== 'false',
     projectColor: color ?? DEFAULT_PROJECT_SETTINGS.projectColor,
     actions,
     focusFilterStates,

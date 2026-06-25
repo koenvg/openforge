@@ -1,12 +1,25 @@
 import { invokeDesktopCommand as invoke, isElectronDesktopBridgeAvailable } from "./desktopIpc";
 import { normalizeTask } from "./boardStatus"
 import type { JsonValue } from '@openforge/plugin-sdk'
-import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, FileContent, FileEntry, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo } from "./types";
+import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, FileContent, FileEntry, GitBranchInfo, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource } from "./types";
 
 type RawTask = Omit<Task, 'status'> & { status: string }
 
-export async function createTask(initialPrompt: string, status: BoardStatus, projectId: string | null, permissionMode: string | null, dependsOn: string[] = [], labelNames: string[] = []): Promise<Task> {
-  const task = await invoke<RawTask>("create_task", { initialPrompt, status, projectId, permissionMode, dependsOn, labelNames });
+export interface CreateTaskOptions {
+  dependsOn?: string[]
+  labelNames?: string[]
+  worktreeSource?: WorktreeSource | null
+  worktreeBranch?: string | null
+}
+
+export async function createTask(initialPrompt: string, status: BoardStatus, projectId: string | null, permissionMode: string | null, options: CreateTaskOptions = {}): Promise<Task> {
+  const {
+    dependsOn = [],
+    labelNames = [],
+    worktreeSource = null,
+    worktreeBranch = null,
+  } = options
+  const task = await invoke<RawTask>("create_task", { initialPrompt, status, projectId, permissionMode, dependsOn, labelNames, worktreeSource, worktreeBranch });
   return normalizeTask(task)
 }
 
@@ -112,6 +125,10 @@ export async function resumeStartupSessions(): Promise<void> {
 
 export async function getWorktreeForTask(taskId: string): Promise<WorktreeInfo | null> {
   return invoke<WorktreeInfo | null>("get_worktree_for_task", { taskId });
+}
+
+export async function listGitBranches(repoPath: string): Promise<GitBranchInfo[]> {
+  return invoke<GitBranchInfo[]>("list_git_branches", { repoPath });
 }
 
 export async function getTaskWorkspace(taskId: string): Promise<TaskWorkspaceInfo | null> {

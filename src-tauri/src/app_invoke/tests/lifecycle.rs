@@ -65,6 +65,7 @@ use std::{
     ffi::OsString,
     fs,
     path::{Path, PathBuf},
+    process::{Command as StdCommand, Output},
     time::Duration,
 };
 use tokio::sync::Mutex as TokioMutex;
@@ -140,6 +141,28 @@ impl Drop for PathEnvGuard {
         match self.original_pathext.as_ref() {
             Some(path) => std::env::set_var("PATHEXT", path),
             None => std::env::remove_var("PATHEXT"),
+        }
+    }
+}
+
+struct EnvVarGuard {
+    key: &'static str,
+    original: Option<OsString>,
+}
+
+impl EnvVarGuard {
+    fn set_path(key: &'static str, value: &Path) -> Self {
+        let original = std::env::var_os(key);
+        std::env::set_var(key, value);
+        Self { key, original }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        match self.original.as_ref() {
+            Some(value) => std::env::set_var(self.key, value),
+            None => std::env::remove_var(self.key),
         }
     }
 }
@@ -249,6 +272,35 @@ fn provider_repo_dir() -> (tempfile::TempDir, PathBuf) {
     (temp, repo_dir)
 }
 
+fn git(repo_path: &Path, args: &[&str]) -> Output {
+    StdCommand::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .args(args)
+        .output()
+        .expect("git command should run")
+}
+
+fn assert_git_success(repo_path: &Path, args: &[&str]) {
+    let output = git(repo_path, args);
+    assert!(
+        output.status.success(),
+        "git {:?} failed: {}",
+        args,
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn init_committed_repo(repo_path: &Path) {
+    fs::create_dir_all(repo_path).expect("repo dir should be created");
+    assert_git_success(repo_path, &["init", "-b", "main"]);
+    assert_git_success(repo_path, &["config", "user.email", "test@example.com"]);
+    assert_git_success(repo_path, &["config", "user.name", "Test User"]);
+    fs::write(repo_path.join("README.md"), "main branch\n").expect("fixture file should write");
+    assert_git_success(repo_path, &["add", "README.md"]);
+    assert_git_success(repo_path, &["commit", "-m", "initial"]);
+}
+
 #[tokio::test]
 async fn start_implementation_starts_configured_pi_provider_through_app_invoke_boundary() {
     let _env_lock = PROVIDER_PATH_ENV_LOCK.lock().await;
@@ -265,15 +317,15 @@ async fn start_implementation_starts_configured_pi_provider_through_app_invoke_b
                 repo_dir.to_str().expect("utf8 repo path"),
             )
             .expect("create project");
-        db.set_project_config(&project.id, "use_worktrees", "false")
-            .expect("disable worktrees");
         db.set_project_config(&project.id, "ai_provider", "pi")
             .expect("set provider");
-        db.create_task(
+        db.create_task_with_worktree_source(
             "Start through Pi provider",
             "backlog",
             Some(&project.id),
             None,
+            None,
+            Some("disabled"),
             None,
         )
         .expect("create task")
@@ -351,16 +403,16 @@ async fn start_implementation_passes_task_agent_to_configured_opencode_provider(
                 repo_dir.to_str().expect("utf8 repo path"),
             )
             .expect("create project");
-        db.set_project_config(&project.id, "use_worktrees", "false")
-            .expect("disable worktrees");
         db.set_project_config(&project.id, "ai_provider", "opencode")
             .expect("set provider");
         let task = db
-            .create_task(
+            .create_task_with_worktree_source(
                 "Start through OpenCode provider",
                 "backlog",
                 Some(&project.id),
                 None,
+                None,
+                Some("disabled"),
                 None,
             )
             .expect("create task");
@@ -432,15 +484,15 @@ async fn start_implementation_starts_configured_codex_provider_through_app_invok
                 repo_dir.to_str().expect("utf8 repo path"),
             )
             .expect("create project");
-        db.set_project_config(&project.id, "use_worktrees", "false")
-            .expect("disable worktrees");
         db.set_project_config(&project.id, "ai_provider", "codex")
             .expect("set provider");
-        db.create_task(
+        db.create_task_with_worktree_source(
             "Start through Codex provider",
             "backlog",
             Some(&project.id),
             None,
+            None,
+            Some("disabled"),
             None,
         )
         .expect("create task")
@@ -490,6 +542,188 @@ async fn start_implementation_starts_configured_codex_provider_through_app_invok
     if let Some(pty_manager) = state.pty_manager.as_ref() {
         let _ = pty_manager.kill_pty(&task_id).await;
     }
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn start_implementation_uses_persisted_existing_worktree_branch() {
+    let _env_lock = PROVIDER_PATH_ENV_LOCK.lock().await;
+    let sandbox = &*PROVIDER_TEST_SANDBOX;
+    sandbox.clear_log();
+    let temp = tempfile::tempdir().expect("tempdir should be created");
+    let home_dir = temp.path().join("home");
+    fs::create_dir(&home_dir).expect("home dir should be created");
+    let repo_dir = temp.path().join("repo");
+    init_committed_repo(&repo_dir);
+    assert_git_success(&repo_dir, &["checkout", "-b", "feature/open-pr"]);
+    fs::write(repo_dir.join("README.md"), "feature branch\n").expect("fixture file should write");
+    assert_git_success(&repo_dir, &["commit", "-am", "feature change"]);
+    assert_git_success(&repo_dir, &["checkout", "main"]);
+    let _home_guard = EnvVarGuard::set_path("HOME", &home_dir);
+    let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
+    let (state, path) = test_state("app_invoke_start_existing_branch_worktree");
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let project = db
+            .create_project(
+                "Existing Branch Project",
+                repo_dir.to_str().expect("utf8 repo path"),
+            )
+            .expect("create project");
+        db.set_project_config(&project.id, "ai_provider", "pi")
+            .expect("set provider");
+        db.create_task_with_worktree_source(
+            "Continue existing PR",
+            "backlog",
+            Some(&project.id),
+            None,
+            None,
+            Some("existingBranch"),
+            Some("feature/open-pr"),
+        )
+        .expect("create task")
+        .id
+    };
+
+    let response = invoke_ok(
+        &state,
+        "start_implementation",
+        json!({ "taskId": task_id, "repoPath": repo_dir.to_string_lossy() }),
+    )
+    .await;
+
+    let workspace_path = response["workspace_path"]
+        .as_str()
+        .expect("workspace path should be string");
+    let branch_output = git(
+        Path::new(workspace_path),
+        &["rev-parse", "--abbrev-ref", "HEAD"],
+    );
+    assert!(branch_output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&branch_output.stdout).trim(),
+        "feature/open-pr"
+    );
+
+    let db = crate::db::acquire_db(&state.db);
+    let worktree = db
+        .get_worktree_for_task(&task_id)
+        .expect("get worktree")
+        .expect("worktree should exist");
+    assert_eq!(worktree.branch_name, "feature/open-pr");
+    let workspace = db
+        .get_task_workspace_for_task(&task_id)
+        .expect("get task workspace")
+        .expect("workspace should exist");
+    assert_eq!(workspace.branch_name.as_deref(), Some("feature/open-pr"));
+    drop(db);
+
+    invoke_ok(&state, "delete_task", json!({ "id": task_id })).await;
+    assert!(
+        git(
+            &repo_dir,
+            &["show-ref", "--verify", "refs/heads/feature/open-pr"]
+        )
+        .status
+        .success(),
+        "deleting a task created from an existing branch must not delete that branch"
+    );
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn start_implementation_replaces_stale_existing_branch_worktree_path() {
+    let _env_lock = PROVIDER_PATH_ENV_LOCK.lock().await;
+    let sandbox = &*PROVIDER_TEST_SANDBOX;
+    sandbox.clear_log();
+    let temp = tempfile::tempdir().expect("tempdir should be created");
+    let home_dir = temp.path().join("home");
+    fs::create_dir(&home_dir).expect("home dir should be created");
+    let repo_dir = temp.path().join("repo");
+    init_committed_repo(&repo_dir);
+    assert_git_success(&repo_dir, &["checkout", "-b", "feature/open-pr"]);
+    fs::write(repo_dir.join("README.md"), "feature branch\n").expect("fixture file should write");
+    assert_git_success(&repo_dir, &["commit", "-am", "feature change"]);
+    assert_git_success(&repo_dir, &["checkout", "main"]);
+    let _home_guard = EnvVarGuard::set_path("HOME", &home_dir);
+    let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
+    let (state, path) = test_state("app_invoke_start_existing_branch_replaces_stale_worktree");
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let project = db
+            .create_project(
+                "Existing Branch Project",
+                repo_dir.to_str().expect("utf8 repo path"),
+            )
+            .expect("create project");
+        db.set_project_config(&project.id, "ai_provider", "pi")
+            .expect("set provider");
+        db.create_task_with_worktree_source(
+            "Continue existing PR",
+            "backlog",
+            Some(&project.id),
+            None,
+            None,
+            Some("existingBranch"),
+            Some("feature/open-pr"),
+        )
+        .expect("create task")
+        .id
+    };
+    let stale_worktree_path = home_dir
+        .join(".openforge")
+        .join("worktrees")
+        .join("repo")
+        .join(&task_id);
+    let stale_worktree_path_str = stale_worktree_path.to_string_lossy().to_string();
+    let stale_branch = crate::git_worktree::task_branch_name(&task_id);
+    assert_git_success(
+        &repo_dir,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            &stale_branch,
+            &stale_worktree_path_str,
+            "main",
+        ],
+    );
+    let stale_branch_output = git(&stale_worktree_path, &["rev-parse", "--abbrev-ref", "HEAD"]);
+    assert!(stale_branch_output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&stale_branch_output.stdout).trim(),
+        stale_branch
+    );
+
+    let response = invoke_ok(
+        &state,
+        "start_implementation",
+        json!({ "taskId": task_id, "repoPath": repo_dir.to_string_lossy() }),
+    )
+    .await;
+
+    let workspace_path = response["workspace_path"]
+        .as_str()
+        .expect("workspace path should be string");
+    assert_eq!(workspace_path, stale_worktree_path_str);
+    let branch_output = git(
+        Path::new(workspace_path),
+        &["rev-parse", "--abbrev-ref", "HEAD"],
+    );
+    assert!(branch_output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&branch_output.stdout).trim(),
+        "feature/open-pr"
+    );
+
+    let db = crate::db::acquire_db(&state.db);
+    let workspace = db
+        .get_task_workspace_for_task(&task_id)
+        .expect("get workspace")
+        .expect("workspace should exist");
+    assert_eq!(workspace.branch_name.as_deref(), Some("feature/open-pr"));
+
     let _ = std::fs::remove_file(path);
 }
 
@@ -630,15 +864,15 @@ async fn start_implementation_reports_invalid_workspace_cwd_as_bad_request() {
                 missing_workspace.to_str().expect("utf8 path"),
             )
             .expect("create project");
-        db.set_project_config(&project.id, "use_worktrees", "false")
-            .expect("disable worktrees");
         db.set_project_config(&project.id, "ai_provider", "pi")
             .expect("set provider");
-        db.create_task(
+        db.create_task_with_worktree_source(
             "Start with missing cwd",
             "backlog",
             Some(&project.id),
             None,
+            None,
+            Some("disabled"),
             None,
         )
         .expect("create task")

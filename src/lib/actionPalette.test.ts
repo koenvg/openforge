@@ -13,6 +13,8 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     summary: null,
     agent: null,
     permission_mode: null,
+    worktree_source: null,
+    worktree_branch: null,
     depends_on: [],
     project_id: null,
     created_at: 0,

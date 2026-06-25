@@ -2,6 +2,7 @@ import type { PluginViewKey } from './types'
 export type { PluginViewKey } from './types'
 
 export type BoardStatus = 'backlog' | 'doing' | 'done'
+export type WorktreeSource = 'newBranchFromMain' | 'existingBranch' | 'disabled'
 
 export interface Task {
   id: string;
@@ -13,10 +14,18 @@ export interface Task {
   summary: string | null;
   agent: string | null;
   permission_mode: string | null;
+  worktree_source: WorktreeSource | null;
+  worktree_branch: string | null;
   depends_on: string[];
   project_id: string | null;
   created_at: number;
   updated_at: number;
+}
+
+export interface GitBranchInfo {
+  name: string;
+  is_current: boolean;
+  is_remote: boolean;
 }
 
 export interface AgentSession {

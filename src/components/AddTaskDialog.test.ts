@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import AddTaskDialog from './AddTaskDialog.svelte'
 import type { Action, Task } from '../lib/types'
-import { createTask, updateTask, getProjectConfig, getResolvedAiProvider, listOpenCodeCommands } from '../lib/ipc'
+import { createTask, updateTask, getResolvedAiProvider, listGitBranches, listOpenCodeCommands } from '../lib/ipc'
 import { loadActions } from '../lib/actions'
 
 vi.mock('../lib/ipc', () => ({
@@ -14,6 +14,8 @@ vi.mock('../lib/ipc', () => ({
     summary: null,
     agent: null,
     permission_mode: null,
+    worktree_source: null,
+    worktree_branch: null,
     depends_on: [],
     project_id: null,
     created_at: 1000,
@@ -22,11 +24,20 @@ vi.mock('../lib/ipc', () => ({
   updateTask: vi.fn().mockResolvedValue(undefined),
   getProjectConfig: vi.fn().mockResolvedValue('claude-code'),
   getResolvedAiProvider: vi.fn().mockResolvedValue('claude-code'),
+  listGitBranches: vi.fn().mockResolvedValue([
+    { name: 'main', is_current: true, is_remote: false },
+    { name: 'feature/open-pr', is_current: false, is_remote: false },
+  ]),
   getProjectTaskLabels: vi.fn().mockResolvedValue([]),
   listOpenCodeCommands: vi.fn().mockResolvedValue([]),
   searchOpenCodeFiles: vi.fn().mockResolvedValue([]),
   listOpenCodeAgents: vi.fn().mockResolvedValue([]),
 }))
+
+const DEFAULT_WORKTREE_OPTIONS = {
+  worktreeSource: 'newBranchFromMain',
+  worktreeBranch: null,
+}
 
 vi.mock('../lib/actions', () => ({
   loadActions: vi.fn().mockResolvedValue([
@@ -58,6 +69,8 @@ const mockTask = {
   summary: null,
   agent: null,
   permission_mode: null,
+  worktree_source: null,
+  worktree_branch: null,
   depends_on: [],
   project_id: null,
   created_at: 1000,
@@ -68,8 +81,11 @@ describe('AddTaskDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     Element.prototype.scrollIntoView = vi.fn()
-    vi.mocked(getProjectConfig).mockImplementation(async () => 'claude-code')
     vi.mocked(getResolvedAiProvider).mockResolvedValue('claude-code')
+    vi.mocked(listGitBranches).mockResolvedValue([
+      { name: 'main', is_current: true, is_remote: false },
+      { name: 'feature/open-pr', is_current: false, is_remote: false },
+    ])
     vi.mocked(listOpenCodeCommands).mockResolvedValue([])
     vi.mocked(loadActions).mockResolvedValue([
       { id: 'act-1', name: 'Test Action', prompt: 'Do test', builtin: false, enabled: true },
@@ -97,7 +113,7 @@ describe('AddTaskDialog', () => {
     await fireEvent.click(await screen.findByRole('button', { name: /Start Task/ }))
 
     await waitFor(() => {
-      expect(createTask).toHaveBeenCalledWith('Start me', 'backlog', 'test-project-id', 'default')
+      expect(createTask).toHaveBeenCalledWith('Start me', 'backlog', 'test-project-id', 'default', DEFAULT_WORKTREE_OPTIONS)
       expect(onClose).toHaveBeenCalledTimes(1)
       expect(onRunAction).toHaveBeenCalledWith('T-1', '', null)
     })
@@ -118,7 +134,83 @@ describe('AddTaskDialog', () => {
     await fireEvent.click(submitBtn)
     
     await waitFor(() => {
-      expect(createTask).toHaveBeenCalledWith('My new task', 'backlog', 'test-project-id', 'default')
+      expect(createTask).toHaveBeenCalledWith('My new task', 'backlog', 'test-project-id', 'default', DEFAULT_WORKTREE_OPTIONS)
+      expect(onTaskSaved).toHaveBeenCalled()
+    })
+  })
+
+  it('uses new branch from latest main as the default worktree task source', async () => {
+    render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
+
+    const worktreeToggle = await screen.findByLabelText('Worktree') as HTMLInputElement
+    expect(worktreeToggle.checked).toBe(true)
+    expect((screen.getByLabelText('New branch from latest main') as HTMLInputElement).checked).toBe(true)
+
+    const textbox = await findPromptTextbox()
+    await fireEvent.input(textbox, { target: { value: 'Default worktree task' } })
+    await fireEvent.click(await screen.findByRole('button', { name: /Add to Backlog/ }))
+
+    await waitFor(() => {
+      expect(createTask).toHaveBeenCalledWith('Default worktree task', 'backlog', 'test-project-id', 'default', DEFAULT_WORKTREE_OPTIONS)
+    })
+  })
+
+  it('passes the selected existing branch when creating a worktree-backed task', async () => {
+    const onTaskSaved = vi.fn()
+    render(AddTaskDialog, {
+      props: {
+        mode: 'create',
+        projectPath: '/repo',
+        onTaskSaved,
+      },
+    })
+
+    await screen.findByText('Worktree')
+    await fireEvent.click(screen.getByLabelText('Existing branch'))
+    await fireEvent.change(screen.getByLabelText('Branch'), { target: { value: 'feature/open-pr' } })
+
+    const textbox = await findPromptTextbox()
+    await fireEvent.input(textbox, { target: { value: 'Continue PR work' } })
+    await fireEvent.click(await screen.findByRole('button', { name: /Add to Backlog/ }))
+
+    await waitFor(() => {
+      expect(createTask).toHaveBeenCalledWith(
+        'Continue PR work',
+        'backlog',
+        'test-project-id',
+        'default',
+        {
+          worktreeSource: 'existingBranch',
+          worktreeBranch: 'feature/open-pr',
+        },
+      )
+      expect(onTaskSaved).toHaveBeenCalled()
+    })
+  })
+
+  it('creates a project-directory task when the worktree toggle is off', async () => {
+    const onTaskSaved = vi.fn()
+    render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo', onTaskSaved } })
+
+    await fireEvent.click(await screen.findByLabelText('Worktree'))
+    expect(screen.queryByLabelText('New branch from latest main')).toBeNull()
+    expect(screen.queryByLabelText('Existing branch')).toBeNull()
+
+    const textbox = await findPromptTextbox()
+    await fireEvent.input(textbox, { target: { value: 'No worktree task' } })
+    await fireEvent.click(await screen.findByRole('button', { name: /Add to Backlog/ }))
+
+    await waitFor(() => {
+      expect(createTask).toHaveBeenCalledWith(
+        'No worktree task',
+        'backlog',
+        'test-project-id',
+        'default',
+        {
+          worktreeSource: 'disabled',
+          worktreeBranch: null,
+        },
+      )
       expect(onTaskSaved).toHaveBeenCalled()
     })
   })
@@ -191,12 +283,11 @@ describe('AddTaskDialog', () => {
     await fireEvent.click(await screen.findByRole('button', { name: /Add to Backlog/ }))
 
     await waitFor(() => {
-      expect(createTask).toHaveBeenCalledWith('Task with autorun', 'backlog', 'test-project-id', 'auto')
+      expect(createTask).toHaveBeenCalledWith('Task with autorun', 'backlog', 'test-project-id', 'auto', DEFAULT_WORKTREE_OPTIONS)
     })
   })
 
   it('uses the resolved Codex provider for dollar-trigger skill autocomplete when project config inherits global provider', async () => {
-    vi.mocked(getProjectConfig).mockResolvedValue(null)
     vi.mocked(getResolvedAiProvider).mockResolvedValue('codex')
     vi.mocked(listOpenCodeCommands).mockResolvedValue([
       { name: 'skill:grill-with-docs', description: 'Grill with docs', source: 'skill', agent: null },
@@ -232,7 +323,7 @@ describe('AddTaskDialog', () => {
     await fireEvent.click(await screen.findByRole('button', { name: /Start Task/ }))
 
     await waitFor(() => {
-      expect(createTask).toHaveBeenCalledWith('Task for default agent', 'backlog', 'test-project-id', 'default')
+      expect(createTask).toHaveBeenCalledWith('Task for default agent', 'backlog', 'test-project-id', 'default', DEFAULT_WORKTREE_OPTIONS)
       expect(onRunAction).toHaveBeenCalledWith('T-1', '', null)
     })
   })
@@ -248,7 +339,7 @@ describe('AddTaskDialog', () => {
     await fireEvent.click(actionButton)
 
     await waitFor(() => {
-      expect(createTask).toHaveBeenCalledWith('Task with action', 'backlog', 'test-project-id', 'default')
+      expect(createTask).toHaveBeenCalledWith('Task with action', 'backlog', 'test-project-id', 'default', DEFAULT_WORKTREE_OPTIONS)
       expect(onRunAction).toHaveBeenCalledWith('T-1', 'Do test', null)
     })
   })
@@ -264,7 +355,7 @@ describe('AddTaskDialog', () => {
     await fireEvent.click(startBtn)
     
     await waitFor(() => {
-      expect(createTask).toHaveBeenCalledWith('Task to start', 'backlog', 'test-project-id', 'default')
+      expect(createTask).toHaveBeenCalledWith('Task to start', 'backlog', 'test-project-id', 'default', DEFAULT_WORKTREE_OPTIONS)
       expect(onRunAction).toHaveBeenCalledWith('T-1', '', null)
     })
   })

@@ -32,6 +32,8 @@ pub struct TaskRow {
     pub summary: Option<String>,
     pub agent: Option<String>,
     pub permission_mode: Option<String>,
+    pub worktree_source: Option<String>,
+    pub worktree_branch: Option<String>,
     /// Explicit display title; `None` means fall back to the prompt-derived title.
     pub title: Option<String>,
     pub depends_on: Vec<String>,
@@ -198,12 +200,37 @@ fn dedupe_dependency_ids(dependency_ids: &[String]) -> Vec<String> {
     result
 }
 
+fn normalize_worktree_source(
+    worktree_source: Option<&str>,
+    worktree_branch: Option<&str>,
+) -> Result<(Option<String>, Option<String>)> {
+    match worktree_source.map(str::trim).filter(|value| !value.is_empty()) {
+        Some("existingBranch") => {
+            let branch = worktree_branch
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| {
+                    rusqlite::Error::InvalidParameterName(
+                        "worktree branch is required for existing branch worktrees".to_string(),
+                    )
+                })?;
+            Ok((Some("existingBranch".to_string()), Some(branch.to_string())))
+        }
+        Some("newBranchFromMain") => Ok((Some("newBranchFromMain".to_string()), None)),
+        Some("disabled") => Ok((Some("disabled".to_string()), None)),
+        Some(value) => Err(rusqlite::Error::InvalidParameterName(format!(
+            "invalid worktree source '{value}'"
+        ))),
+        None => Ok((None, None)),
+    }
+}
+
 impl super::Database {
     /// Get all tasks for a project
     pub fn get_tasks_for_project(&self, project_id: &str) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title
+            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, worktree_source, worktree_branch
              FROM tasks WHERE project_id = ?1 ORDER BY updated_at DESC",
         )?;
 
@@ -220,6 +247,8 @@ impl super::Database {
                 agent: row.get(8)?,
                 permission_mode: row.get(9)?,
                 title: row.get(10)?,
+                worktree_source: row.get(11)?,
+                worktree_branch: row.get(12)?,
                 depends_on: Vec::new(),
                 labels: Vec::new(),
             })
@@ -242,7 +271,7 @@ impl super::Database {
     ) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title
+            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, worktree_source, worktree_branch
              FROM tasks WHERE project_id = ?1 AND status = ?2 ORDER BY updated_at DESC",
         )?;
         let tasks = stmt.query_map([project_id, state], |row| {
@@ -258,6 +287,8 @@ impl super::Database {
                 agent: row.get(8)?,
                 permission_mode: row.get(9)?,
                 title: row.get(10)?,
+                worktree_source: row.get(11)?,
+                worktree_branch: row.get(12)?,
                 depends_on: Vec::new(),
                 labels: Vec::new(),
             })
@@ -281,7 +312,30 @@ impl super::Database {
         prompt: Option<&str>,
         permission_mode: Option<&str>,
     ) -> Result<TaskRow> {
+        self.create_task_with_worktree_source(
+            initial_prompt,
+            status,
+            project_id,
+            prompt,
+            permission_mode,
+            None,
+            None,
+        )
+    }
+
+    pub fn create_task_with_worktree_source(
+        &self,
+        initial_prompt: &str,
+        status: &str,
+        project_id: Option<&str>,
+        prompt: Option<&str>,
+        permission_mode: Option<&str>,
+        worktree_source: Option<&str>,
+        worktree_branch: Option<&str>,
+    ) -> Result<TaskRow> {
         let conn = self.conn.lock().unwrap();
+        let (worktree_source, worktree_branch) =
+            normalize_worktree_source(worktree_source, worktree_branch)?;
 
         let next_id: i64 = conn.query_row(
             "SELECT value FROM config WHERE key = 'next_task_id'",
@@ -320,8 +374,8 @@ impl super::Database {
         let final_prompt = prompt.unwrap_or(initial_prompt);
 
         conn.execute(
-            "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, worktree_source, worktree_branch)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             rusqlite::params![
                 &task_id,
                 initial_prompt,
@@ -333,6 +387,8 @@ impl super::Database {
                 None::<String>,
                 None::<String>,
                 permission_mode,
+                worktree_source.as_deref(),
+                worktree_branch.as_deref(),
             ],
         )?;
 
@@ -347,6 +403,8 @@ impl super::Database {
             summary: None,
             agent: None,
             permission_mode: permission_mode.map(|s| s.to_string()),
+            worktree_source,
+            worktree_branch,
             title: None,
             depends_on: Vec::new(),
             labels: Vec::new(),
@@ -356,7 +414,7 @@ impl super::Database {
     pub fn get_all_tasks(&self) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title
+            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, worktree_source, worktree_branch
              FROM tasks ORDER BY updated_at DESC"
         )?;
 
@@ -373,6 +431,8 @@ impl super::Database {
                 agent: row.get(8)?,
                 permission_mode: row.get(9)?,
                 title: row.get(10)?,
+                worktree_source: row.get(11)?,
+                worktree_branch: row.get(12)?,
                 depends_on: Vec::new(),
                 labels: Vec::new(),
             })
@@ -391,7 +451,7 @@ impl super::Database {
     pub fn get_task(&self, id: &str) -> Result<Option<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title
+            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, worktree_source, worktree_branch
              FROM tasks WHERE id = ?1"
         )?;
         let mut rows = stmt.query([id])?;
@@ -408,6 +468,8 @@ impl super::Database {
                 agent: row.get(8)?,
                 permission_mode: row.get(9)?,
                 title: row.get(10)?,
+                worktree_source: row.get(11)?,
+                worktree_branch: row.get(12)?,
                 depends_on: load_task_dependency_ids(&conn, id)?,
                 labels: load_task_labels(&conn, id)?,
             }))
@@ -1444,6 +1506,66 @@ mod tests {
         let retrieved = db.get_task(&task.id).expect("get failed").unwrap();
         assert_eq!(retrieved.agent, None);
         assert_eq!(retrieved.permission_mode, Some("auto".to_string()));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_create_task_with_existing_worktree_branch_source() {
+        let (db, path) = make_test_db("create_task_existing_worktree_branch");
+
+        let task = db
+            .create_task_with_worktree_source(
+                "Continue PR",
+                "backlog",
+                None,
+                None,
+                None,
+                Some("existingBranch"),
+                Some("feature/open-pr"),
+            )
+            .expect("create failed");
+
+        assert_eq!(task.worktree_source.as_deref(), Some("existingBranch"));
+        assert_eq!(task.worktree_branch.as_deref(), Some("feature/open-pr"));
+
+        let retrieved = db.get_task(&task.id).expect("get failed").unwrap();
+        assert_eq!(
+            retrieved.worktree_source.as_deref(),
+            Some("existingBranch")
+        );
+        assert_eq!(
+            retrieved.worktree_branch.as_deref(),
+            Some("feature/open-pr")
+        );
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_create_task_with_disabled_worktree_source() {
+        let (db, path) = make_test_db("create_task_disabled_worktree_source");
+
+        let task = db
+            .create_task_with_worktree_source(
+                "Run in project directory",
+                "backlog",
+                None,
+                None,
+                None,
+                Some("disabled"),
+                Some("feature/ignored"),
+            )
+            .expect("create failed");
+
+        assert_eq!(task.worktree_source.as_deref(), Some("disabled"));
+        assert_eq!(task.worktree_branch, None);
+
+        let retrieved = db.get_task(&task.id).expect("get failed").unwrap();
+        assert_eq!(retrieved.worktree_source.as_deref(), Some("disabled"));
+        assert_eq!(retrieved.worktree_branch, None);
 
         drop(db);
         let _ = fs::remove_file(&path);

@@ -46,11 +46,15 @@ async fn handles_config_projects_tasks_and_unmatched_commands() {
             "status": "backlog",
             "projectId": project_id,
             "permissionMode": null,
+            "worktreeSource": "existingBranch",
+            "worktreeBranch": "feature/open-pr",
         }),
     )
     .await;
     assert_eq!(task["initial_prompt"], "Plan migration");
     assert_eq!(task["agent"], serde_json::Value::Null);
+    assert_eq!(task["worktree_source"], "existingBranch");
+    assert_eq!(task["worktree_branch"], "feature/open-pr");
     let task_id = task["id"].as_str().expect("task id");
 
     let tasks = invoke_ok(&state, "get_tasks", serde_json::Value::Null).await;

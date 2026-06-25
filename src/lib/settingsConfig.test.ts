@@ -73,7 +73,6 @@ describe('settingsConfig', () => {
         .mockResolvedValueOnce('Be careful')
         .mockResolvedValueOnce('## Current summary\nCustom handoff format')
         .mockResolvedValueOnce('opencode')
-        .mockResolvedValueOnce('false')
         .mockResolvedValueOnce('amber')
 
       vi.mocked(loadActions).mockResolvedValue([
@@ -83,14 +82,14 @@ describe('settingsConfig', () => {
 
       const result = await loadProjectSettings('project-1')
 
-      expect(getProjectConfig).toHaveBeenCalledTimes(5)
+      expect(getProjectConfig).toHaveBeenCalledTimes(4)
+      expect(getProjectConfig).not.toHaveBeenCalledWith('project-1', 'use_worktrees')
       expect(loadActions).toHaveBeenCalledWith('project-1')
       expect(loadFocusFilterStates).toHaveBeenCalledWith('project-1')
       expect(result).toEqual({
         agentInstructions: 'Be careful',
         handoffNotesTemplate: '## Current summary\nCustom handoff format',
         aiProvider: 'opencode',
-        useWorktrees: false,
         projectColor: 'amber',
         actions: [{ id: 'a1', name: 'Action', prompt: '', builtin: false, enabled: true }],
         focusFilterStates: ['idle'],
@@ -104,7 +103,6 @@ describe('settingsConfig', () => {
         agentInstructions: '',
         handoffNotesTemplate: '',
         aiProvider: 'claude-code',
-        useWorktrees: true,
         projectColor: '',
         actions: [],
         focusFilterStates: [],
