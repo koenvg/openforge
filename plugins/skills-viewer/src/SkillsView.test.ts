@@ -120,6 +120,45 @@ describe('SkillsView project and async states', () => {
     })
   })
 
+  it('preserves duplicate skill row labels and selection for repository and personal sections', async () => {
+    const projectSkill = makeSkill({
+      name: 'review',
+      description: 'Repository duplicate',
+      level: 'project',
+      source_dir: '.agents',
+      template: '# Repository review',
+    })
+    const personalSkill = makeSkill({
+      name: 'review',
+      description: 'Personal duplicate',
+      level: 'user',
+      source_dir: '.pi',
+      template: '# Personal review',
+    })
+    const invoke = vi.fn(async () => [projectSkill, personalSkill])
+    const api = makeApi(invoke)
+
+    renderView({ api, projectId: 'P-1' })
+
+    await waitFor(() => expect(screen.getAllByText('review').length).toBeGreaterThan(0))
+    expect(screen.getAllByText('.agents/skills/review/SKILL.md').length).toBeGreaterThan(0)
+    expect(screen.getByText('~/.pi/agent/skills/review/SKILL.md')).toBeTruthy()
+    expect(screen.getAllByText('Repository duplicate').length).toBeGreaterThan(0)
+    expect(screen.getByText('Personal duplicate')).toBeTruthy()
+
+    const skillRows = Array.from(document.querySelectorAll('[data-vim-skill]'))
+    expect(skillRows).toHaveLength(2)
+    expect(skillRows[0].textContent).toContain('Repository duplicate')
+    expect(skillRows[1].textContent).toContain('Personal duplicate')
+
+    const personalRow = screen.getByText('~/.pi/agent/skills/review/SKILL.md').closest('button')
+    expect(personalRow).toBeTruthy()
+    await fireEvent.click(personalRow as HTMLButtonElement)
+
+    expect(api.navigation.navigate).toHaveBeenCalledWith({ viewId: 'plugin:com.openforge.skills-viewer:skills' })
+    expect(get(selectedSkillIdentity)).toEqual({ name: 'review', level: 'user', source_dir: '.pi', file_name: null })
+  })
+
   it('announces load failures and offers a retry action for the active project', async () => {
     const invoke = vi.fn()
       .mockRejectedValueOnce(new Error('offline'))
