@@ -106,7 +106,7 @@ describe('angry oracle code-change process', () => {
     );
   });
 
-  it('builds an adversarial post-change oracle prompt that requires architectural review and actionable fixes', () => {
+  it('builds an adversarial post-change oracle prompt that requires thermo-nuclear structural review, architectural review, and actionable fixes', () => {
     const prompt = buildOracleReviewPrompt({
       request: 'Add token rotation',
       changedFiles: ['src/auth.ts'],
@@ -115,16 +115,41 @@ describe('angry oracle code-change process', () => {
       iteration: 1
     });
 
-    assert.equal(prompt.role, 'angry principal engineer oracle');
+    assert.equal(prompt.role, 'thermo-nuclear code quality oracle');
     assert.match(prompt.task, /review the completed code changes/i);
     assert.match(prompt.task, /not rubber-stamp/i);
     assert.match(prompt.task, /architectural fit/i);
+    assert.match(prompt.task, /thermo-nuclear code quality/i);
     assert.ok(prompt.instructions.some((instruction) => /actionable fix/i.test(instruction)));
     assert.ok(prompt.instructions.some((instruction) => /project conventions/i.test(instruction)));
     assert.ok(prompt.instructions.some((instruction) => /architecture/i.test(instruction)));
     assert.ok(prompt.instructions.some((instruction) => /manual app verification/i.test(instruction)));
+    assert.ok(prompt.instructions.some((instruction) => /code judo/i.test(instruction)));
+    assert.ok(prompt.instructions.some((instruction) => /spaghetti/i.test(instruction)));
     assert.deepEqual(prompt.context.changedFiles, ['src/auth.ts']);
     assert.deepEqual(prompt.context.manualVerification, { status: 'passed', applicable: true, summary: 'Board smoke checked' });
+  });
+
+  it('uses the repo-local review skill for the adversarial oracle review gate', async () => {
+    const task = await angryOracleReviewTask.build(
+      {
+        request: 'Add token rotation',
+        changedFiles: ['src/auth.ts'],
+        verificationResults: [{ command: 'pnpm test', status: 'ok' }],
+        manualVerification: { status: 'skipped', applicable: false },
+        architectureReview: { verdict: 'approve', score: 95, summary: 'Architecture fits', findings: [] },
+        iteration: 1,
+        targetOracleScore: 90
+      },
+      { effectId: 'effect-review' }
+    );
+
+    assert.equal(task.kind, 'skill');
+    assert.equal(task.skill.name, 'review');
+    assert.equal(task.skill.context.role, 'thermo-nuclear code quality oracle');
+    assert.match(task.skill.context.expectedOutput, /verdict/);
+    assert.match(task.skill.context.expectedOutput, /requiredFixes/);
+    assert.equal(task.io.outputJsonPath, 'tasks/effect-review/output.json');
   });
 
   it('uses the improve-codebase-architecture skill for the explicit architecture review gate', async () => {
@@ -148,8 +173,9 @@ describe('angry oracle code-change process', () => {
     assert.equal(task.io.outputJsonPath, 'tasks/effect-1/output.json');
   });
 
-  it('declares the architecture review skill in the process JSDoc skill markers', async () => {
-    const task = await architectureReviewTask.build({ iteration: 1 }, { effectId: 'effect-1' });
+  it('declares the architecture and thermo-nuclear review skills in the process JSDoc skill markers', async () => {
+    const architectureTask = await architectureReviewTask.build({ iteration: 1 }, { effectId: 'effect-1' });
+    const oracleTask = await angryOracleReviewTask.build({ iteration: 1 }, { effectId: 'effect-2' });
     const source = readFileSync(new URL('./angry-oracle-code-change.js', import.meta.url), 'utf8');
     const processJsDoc = source.match(/^\/\*\*[\s\S]*?\*\//)?.[0] ?? '';
     const skillMarkers = new Map(
@@ -157,13 +183,18 @@ describe('angry oracle code-change process', () => {
     );
 
     assert.ok(
-      skillMarkers.has(task.skill.name),
-      `Expected architectureReviewTask skill "${task.skill.name}" to be declared in process @skill markers`
+      skillMarkers.has(architectureTask.skill.name),
+      `Expected architectureReviewTask skill "${architectureTask.skill.name}" to be declared in process @skill markers`
     );
     assert.equal(
-      skillMarkers.get(task.skill.name),
+      skillMarkers.get(architectureTask.skill.name),
       '/Users/koen/.agents/skills/improve-codebase-architecture/SKILL.md'
     );
+    assert.ok(
+      skillMarkers.has(oracleTask.skill.name),
+      `Expected angryOracleReviewTask skill "${oracleTask.skill.name}" to be declared in process @skill markers`
+    );
+    assert.equal(skillMarkers.get(oracleTask.skill.name), '.agents/skills/review/SKILL.md');
   });
 
   it('requests manual app verification for app-facing and runtime-sensitive changes', () => {

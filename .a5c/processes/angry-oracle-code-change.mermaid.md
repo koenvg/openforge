@@ -16,7 +16,7 @@ flowchart TD
     L -- Yes --> M[Fix architecture gate blockers]
     M --> D
     L -- No --> N[Manual breakpoint with architecture feedback]
-    J -- Yes --> P[Angry principal engineer review]
+    J -- Yes --> P[Project-local review skill: thermo-nuclear code quality review]
     P --> Q{Oracle approved, no required fixes, and score >= target?}
     Q -- Yes --> K[Complete successfully]
     Q -- No --> R{Iterations remaining?}

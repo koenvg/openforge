@@ -1,6 +1,6 @@
 # Angry Oracle Code-Change Process
 
-Purpose: make `/call`-style implementation work converge through context-appropriate verification, an explicit architecture review gate, and then an adversarial post-change review before completion.
+Purpose: make `/call`-style implementation work converge through context-appropriate verification, an explicit architecture review gate, and then a project-local thermo-nuclear code quality review before completion.
 
 ## High-level flow
 
@@ -15,7 +15,7 @@ Purpose: make `/call`-style implementation work converge through context-appropr
    - If not applicable, record an explicit skip rationale so the oracle can review why manual verification was not run.
 6. Run the `improve-codebase-architecture` skill as an explicit architecture review gate against the completed changes, automated verification, and manual app verification result or skip rationale.
 7. If the architecture gate reports any required fixes, critical/high findings, blockers, a non-approval verdict, or a score below the threshold, run an architecture fix task and repeat inventory + verification + manual verification decision + architecture review before the angry oracle can run.
-8. After the architecture gate approves, send the completed changes, automated verification, manual app verification result or skip rationale, and architecture review result to an **angry principal engineer oracle** for code quality and final architectural-fit review.
+8. After the architecture gate approves, send the completed changes, automated verification, manual app verification result or skip rationale, and architecture review result to the project-local `review` skill for a **thermo-nuclear code quality review** and final architectural-fit review.
 9. If the oracle reports any required fixes, critical/high findings, blockers, a non-approval verdict, or a score below the threshold, run a fix task and repeat verification + manual verification decision + architecture review + oracle review.
 10. Stop as successful only when the architecture gate and oracle both approve and the oracle reaches the configured score. If the loop exhausts its retries, pause at a manual breakpoint with the blocking feedback visible.
 
@@ -26,7 +26,7 @@ Purpose: make `/call`-style implementation work converge through context-appropr
 - Manual app verification is conditional rather than unconditional; process-only or documentation-only changes carry an explicit skipped result.
 - Applicable manual verification uses the `openforge-app-operator` skill and stays read-only by default.
 - The architecture gate uses the architecture-focused `improve-codebase-architecture` skill, not a generic reviewer prompt.
-- The oracle is intentionally adversarial and must validate that the code makes architectural sense for this codebase.
+- The oracle uses the project-local `review` skill (`.agents/skills/review/SKILL.md`) and is intentionally adversarial: it must validate that the code makes architectural sense for this codebase and apply the thermo-nuclear review standards for structural simplification, code judo, spaghetti-condition growth, and boundary cleanliness.
 - Required fixes and critical/high findings are hard blockers.
 - The process is generic: callers can override `verificationCommands`, `targetOracleScore`, and `maxOracleIterations` per task.
 - The implementation and fix steps are still constrained by OpenForge project conventions: use TDD for feature, bugfix, business-logic, and product-behavior implementation, but do not invent failing product tests for docs/config/process-only work where targeted verification is more appropriate.
