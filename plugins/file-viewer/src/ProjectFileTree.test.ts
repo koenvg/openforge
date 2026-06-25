@@ -20,6 +20,7 @@ function renderTree(props: Partial<{
   selectedPath: string | null
   onToggleDir: (path: string) => void
   onSelectFile: (path: string) => void
+  focusSelectedRequest: number
 }> = {}) {
   return render(ProjectFileTree, {
     props: {
@@ -207,5 +208,30 @@ describe('plugin ProjectFileTree accessibility', () => {
     expect(screen.getByRole('treeitem', { name: /index\.ts/ }).getAttribute('aria-selected')).toBe('false')
     expect(screen.getByRole('treeitem', { name: /utils\.ts/ }).getAttribute('aria-current')).toBe('true')
     expect(screen.getByRole('treeitem', { name: /utils\.ts/ }).getAttribute('aria-selected')).toBe('true')
+  })
+
+  it('focuses the selected file when focus is requested', async () => {
+    const { rerender } = renderTree({
+      entries: [
+        makeEntry({ name: 'index.ts', path: 'src/index.ts', isDir: false }),
+        makeEntry({ name: 'utils.ts', path: 'src/lib/utils.ts', isDir: false }),
+      ],
+      selectedPath: 'src/lib/utils.ts',
+      focusSelectedRequest: 1,
+    })
+
+    await rerender({
+      entries: [
+        makeEntry({ name: 'index.ts', path: 'src/index.ts', isDir: false }),
+        makeEntry({ name: 'utils.ts', path: 'src/lib/utils.ts', isDir: false }),
+      ],
+      expandedDirs: new Set<string>(),
+      selectedPath: 'src/lib/utils.ts',
+      onToggleDir: () => {},
+      onSelectFile: () => {},
+      focusSelectedRequest: 2,
+    })
+
+    expect(document.activeElement).toBe(screen.getByRole('treeitem', { name: /utils\.ts/ }))
   })
 })

@@ -206,6 +206,24 @@ describe('plugin FilesView', () => {
     expect(await screen.findByText('Loading README.md…')).toBeTruthy()
   })
 
+  it('keeps the tree return path available while the selected file is loading', async () => {
+    vi.mocked(fsReadDir).mockResolvedValue(sampleEntries)
+    vi.mocked(fsReadFile).mockReturnValue(new Promise(() => {}))
+
+    renderFilesView()
+
+    await waitFor(() => {
+      expect(screen.getByText('README.md')).toBeTruthy()
+    })
+
+    await fireEvent.click(screen.getByRole('treeitem', { name: /README.md/ }))
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByRole('region', { name: 'README.md preview pane' }))
+    })
+    expect(screen.getByRole('button', { name: /Return focus to selected file in tree/ })).toBeTruthy()
+  })
+
   it('retries selected file loading from the file failure state', async () => {
     vi.mocked(fsReadDir).mockResolvedValue(sampleEntries)
     vi.mocked(fsReadFile)
@@ -230,6 +248,64 @@ describe('plugin FilesView', () => {
     await waitFor(() => {
       expect(fsReadFile).toHaveBeenCalledTimes(2)
       expect(screen.getByText('Hello world')).toBeTruthy()
+    })
+  })
+
+  it('moves focus to the preview pane after selecting a file and exposes a keyboard return path', async () => {
+    vi.mocked(fsReadDir).mockResolvedValue(sampleEntries)
+
+    renderFilesView()
+
+    await waitFor(() => {
+      expect(screen.getByText('README.md')).toBeTruthy()
+    })
+
+    await fireEvent.click(screen.getByRole('treeitem', { name: /README.md/ }))
+
+    await waitFor(() => {
+      const previewPane = screen.getByRole('region', { name: 'README.md preview pane' })
+      expect(document.activeElement).toBe(previewPane)
+      expect(screen.getByRole('button', { name: /Return focus to selected file in tree/ })).toBeTruthy()
+    })
+  })
+
+  it('moves focus to the preview pane after revealing a file', async () => {
+    vi.mocked(fsReadDir).mockResolvedValue([makeFileEntry({ name: 'README.md', path: 'README.md' })])
+
+    renderFilesView()
+
+    await waitFor(() => {
+      expect(screen.getByText('README.md')).toBeTruthy()
+    })
+
+    pendingFileReveal.set('README.md')
+
+    await waitFor(() => {
+      const previewPane = screen.getByRole('region', { name: 'README.md preview pane' })
+      expect(document.activeElement).toBe(previewPane)
+    })
+  })
+
+  it('returns focus from the preview pane to the selected tree item', async () => {
+    vi.mocked(fsReadDir).mockResolvedValue(sampleEntries)
+
+    renderFilesView()
+
+    await waitFor(() => {
+      expect(screen.getByText('README.md')).toBeTruthy()
+    })
+
+    const selectedFileTreeItem = screen.getByRole('treeitem', { name: /README.md/ })
+    await fireEvent.click(selectedFileTreeItem)
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByRole('region', { name: 'README.md preview pane' }))
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: /Return focus to selected file in tree/ }))
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(selectedFileTreeItem)
     })
   })
 

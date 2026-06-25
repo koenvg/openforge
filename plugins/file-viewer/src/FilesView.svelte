@@ -30,6 +30,8 @@
   let loadedProjectId = $state<string | null>(null)
   let processingRevealPath = $state<string | null>(null)
   let failedRevealPath = $state<string | null>(null)
+  let previewFocusRequest = $state<number | null>(null)
+  let treeFocusRequest = $state<number | null>(null)
   let activeFileRequestId = 0
 
   const projectState = $derived.by((): FileBrowserProjectState => {
@@ -149,6 +151,7 @@
       fileContent: null,
       contentScrollTop: 0,
     }))
+    previewFocusRequest = (previewFocusRequest ?? 0) + 1
     fileError = null
 
     try {
@@ -217,6 +220,10 @@
 
   function toggleHiddenRootEntries() {
     setShowHiddenRootEntries(!showHiddenRootEntries)
+  }
+
+  function returnFocusToSelectedFile() {
+    treeFocusRequest = (treeFocusRequest ?? 0) + 1
   }
 
   async function revealPath(targetPath: string) {
@@ -392,6 +399,7 @@
                 onSelectFile={selectFile}
                 initialScrollTop={projectState.treeScrollTop}
                 onScrollTopChange={updateTreeScrollTop}
+                focusSelectedRequest={treeFocusRequest}
               />
             {/if}
           </div>
@@ -415,6 +423,8 @@
             scrollTop={projectState.contentScrollTop}
             onScrollTopChange={updateContentScrollTop}
             onRetryFile={retrySelectedFile}
+            focusRequestKey={previewFocusRequest}
+            onReturnFocusToTree={returnFocusToSelectedFile}
           />
         {/if}
       </div>
