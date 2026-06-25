@@ -16,6 +16,7 @@ interface SaveSkillContentRequest {
   name: string
   level: SkillLevel
   sourceDir: string
+  sourcePath?: string | null
   content: string
   fileName?: string | null
 }
@@ -59,6 +60,7 @@ async function scanSkillDirectory(dir: string, level: SkillLevel, sourceDir: str
       template: content,
       level,
       source_dir: sourceDir,
+      source_path: entry.name,
       file_name: null,
     })
   }
@@ -94,6 +96,7 @@ async function scanPiSkillDirectory(dir: string, level: SkillLevel): Promise<Ski
       template: content,
       level,
       source_dir: '.pi',
+      source_path: entry.name,
       file_name: entry.name,
     })
   }
@@ -125,6 +128,9 @@ function compareSkillSource(left: SkillInfo, right: SkillInfo): number {
   const sourceOrder = (leftSourceIndex === -1 ? SKILL_SOURCE_DIRS.length : leftSourceIndex) -
     (rightSourceIndex === -1 ? SKILL_SOURCE_DIRS.length : rightSourceIndex)
   if (sourceOrder !== 0) return sourceOrder
+
+  const sourcePathOrder = left.source_path.localeCompare(right.source_path)
+  if (sourcePathOrder !== 0) return sourcePathOrder
 
   return (left.file_name ?? '').localeCompare(right.file_name ?? '')
 }
@@ -184,8 +190,9 @@ async function saveSkillContent(api: BackendOpenForgeAPI, request: SaveSkillCont
     return
   }
 
-  assertSafeSkillName(request.name)
-  const skillDir = join(skillsDir, request.name)
+  const sourcePath = request.sourcePath ?? request.name
+  assertSafeSkillName(sourcePath)
+  const skillDir = join(skillsDir, sourcePath)
   await mkdir(skillDir, { recursive: true })
   await writeFile(join(skillDir, 'SKILL.md'), request.content, 'utf8')
 }
@@ -210,6 +217,7 @@ export default defineBackendPlugin({
           name: { type: 'string' },
           level: { enum: ['project', 'user'] },
           sourceDir: { type: 'string' },
+          sourcePath: { type: ['string', 'null'] },
           content: { type: 'string' },
           fileName: { type: ['string', 'null'] },
         },

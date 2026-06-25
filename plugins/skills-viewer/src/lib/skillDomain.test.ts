@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { getPreferredSkillIdentity, getSkillIdentity, getSkillLocationLabel, getSkillSourcePath, getVisibleSkills, groupSkillsBySource, parseSkillFrontmatter, stripSkillFrontmatter, type SkillInfo } from './skillDomain'
 
 function makeSkill(name: string, source_dir: string, level: SkillInfo['level'] = 'project'): SkillInfo {
-  return { name, source_dir, level, description: null, agent: null, template: null, file_name: null }
+  return { name, source_dir, source_path: name, level, description: null, agent: null, template: null, file_name: null }
 }
 
 describe('skills-viewer skill domain helpers', () => {
@@ -30,19 +30,21 @@ describe('skills-viewer skill domain helpers', () => {
   })
 
   it('formats skill locations with root markdown file names for duplicate disambiguation', () => {
-    const directorySkill = makeSkill('review', '.pi', 'user')
+    const directorySkill = makeSkill('display-review', '.pi', 'user')
+    directorySkill.source_path = 'review-folder'
     const rootMarkdownSkill = makeSkill('review', '.pi', 'user')
+    rootMarkdownSkill.source_path = 'review.md'
     rootMarkdownSkill.file_name = 'review.md'
 
-    expect(getSkillLocationLabel(directorySkill)).toBe('~/.pi/agent/skills/review/SKILL.md')
+    expect(getSkillLocationLabel(directorySkill)).toBe('~/.pi/agent/skills/review-folder/SKILL.md')
     expect(getSkillLocationLabel(rootMarkdownSkill)).toBe('~/.pi/agent/skills/review.md')
   })
 
-  it('builds stable identities for duplicate skill names', () => {
-    const skill = makeSkill('review', '.pi', 'user')
-    skill.file_name = 'review.md'
+  it('builds stable identities from source paths instead of frontmatter names', () => {
+    const skill = makeSkill('display-review', '.pi', 'user')
+    skill.source_path = 'review-folder'
 
-    expect(getSkillIdentity(skill)).toEqual({ name: 'review', level: 'user', source_dir: '.pi', file_name: 'review.md' })
+    expect(getSkillIdentity(skill)).toEqual({ level: 'user', source_dir: '.pi', source_path: 'review-folder', file_name: null })
   })
 
   it('defaults to a project skill when mixed project and user skills are present', () => {

@@ -33,7 +33,7 @@
   let selectedSkillSourcePath = $derived(selectedSkill ? getSkillSourcePath(selectedSkill.source_dir, selectedSkill.level) : '')
   let selectedSkillFileLabel = $derived(selectedSkill?.file_name || 'SKILL.md')
   let renderedSkillMarkdown = $derived(selectedSkill?.template ? stripSkillFrontmatter(selectedSkill.template) : '')
-  let skillMarkdownHeadingId = $derived(selectedSkill ? `skill-markdown-${selectedSkill.level}-${selectedSkill.source_dir.replace(/[^a-zA-Z0-9_-]/g, '-')}-${selectedSkill.name.replace(/[^a-zA-Z0-9_-]/g, '-')}` : 'skill-markdown-content')
+  let skillMarkdownHeadingId = $derived(selectedSkill ? `skill-markdown-${selectedSkill.level}-${selectedSkill.source_dir.replace(/[^a-zA-Z0-9_-]/g, '-')}-${selectedSkill.source_path.replace(/[^a-zA-Z0-9_-]/g, '-')}` : 'skill-markdown-content')
 
   let filteredSkills = $derived(
     searchFilter.trim()
@@ -62,7 +62,7 @@
 
   function getUserSkillSaveKey(skill: SkillInfo): string | null {
     if (skill.level !== 'user') return null
-    return JSON.stringify([skill.name, skill.source_dir, skill.file_name])
+    return JSON.stringify([skill.source_path, skill.source_dir, skill.file_name])
   }
 
   function hasPendingUserSkillSave(skill: SkillInfo | null): boolean {
@@ -188,6 +188,7 @@
         name: skillToSave.name,
         level: skillToSave.level,
         sourceDir: skillToSave.source_dir,
+        sourcePath: skillToSave.source_path,
         content: contentToSave,
         fileName: skillToSave.file_name,
       })

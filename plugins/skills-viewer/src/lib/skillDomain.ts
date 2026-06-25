@@ -5,13 +5,14 @@ export interface SkillInfo {
   template: string | null
   level: 'project' | 'user'
   source_dir: string
+  source_path: string
   file_name: string | null
 }
 
 export interface SkillIdentity {
-  name: string
   level: SkillInfo['level']
   source_dir: string
+  source_path: string
   file_name: string | null
 }
 
@@ -31,7 +32,7 @@ export function getSkillSourcePath(source: string, level: SkillInfo['level']): s
 
 export function getSkillLocationLabel(skill: SkillInfo): string {
   const sourcePath = getSkillSourcePath(skill.source_dir, skill.level)
-  const skillFilePath = skill.file_name ? `${sourcePath}/${skill.file_name}` : `${sourcePath}/${skill.name}/SKILL.md`
+  const skillFilePath = skill.file_name ? `${sourcePath}/${skill.file_name}` : `${sourcePath}/${skill.source_path}/SKILL.md`
   return skill.level === 'user' ? `~/${skillFilePath}` : skillFilePath
 }
 
@@ -131,18 +132,18 @@ export function getVisibleSkills(skills: SkillInfo[], collapsed: ReadonlyMap<str
 
 export function getSkillIdentity(skill: SkillInfo): SkillIdentity {
   return {
-    name: skill.name,
     level: skill.level,
     source_dir: skill.source_dir,
+    source_path: skill.source_path,
     file_name: skill.file_name,
   }
 }
 
 export function isSameSkillIdentity(skill: SkillInfo, identity: SkillIdentity | null): boolean {
   return identity !== null &&
-    skill.name === identity.name &&
     skill.level === identity.level &&
     skill.source_dir === identity.source_dir &&
+    skill.source_path === identity.source_path &&
     skill.file_name === identity.file_name
 }
 
