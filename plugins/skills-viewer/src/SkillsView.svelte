@@ -14,7 +14,7 @@
   import { useVimNavigation } from './lib/useVimNavigation.svelte'
   import ProjectPageHeader from './ProjectPageHeader.svelte'
   import MarkdownContent from '@openforge/plugin-sdk/ui/MarkdownContent.svelte'
-  import { getPreferredSkillIdentity, getSkillIdentity, getSkillLocationLabel, getSkillSourcePath, groupSkillsBySource, isSameSkillIdentity, parseSkillFrontmatter, stripSkillFrontmatter, type SkillInfo } from './lib/skillDomain'
+  import { getPreferredSkillIdentity, getSkillIdentity, getSkillLocationLabel, getSkillSourcePath, getVisibleSkills, groupSkillsBySource, isSameSkillIdentity, parseSkillFrontmatter, stripSkillFrontmatter, type SkillInfo } from './lib/skillDomain'
 
   let isLoading = $state(false)
   let error = $state<string | null>(null)
@@ -52,6 +52,13 @@
 
   // Collapsible state: track collapsed sections by key like "project" / "user" / "project:.agents"
   let collapsed = $state(new Map<string, boolean>())
+  let visibleSkills = $derived(getVisibleSkills(filteredSkills, collapsed))
+
+  const skillFilterId = 'skills-viewer-filter'
+
+  function groupPanelId(level: SkillInfo['level'], source: string) {
+    return `skills-${level}-${source.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+  }
 
   function getUserSkillSaveKey(skill: SkillInfo): string | null {
     if (skill.level !== 'user') return null
@@ -224,11 +231,17 @@
   }
 
   const vimSkills = useVimNavigation({
-    getItemCount: () => filteredSkills.length,
+    getItemCount: () => visibleSkills.length,
     onSelect: (index) => {
-      const skill = filteredSkills[index]
+      const skill = visibleSkills[index]
       if (skill) selectSkill(skill)
     },
+  })
+
+  $effect(() => {
+    // Clamp vim focus whenever filtering or collapsing changes the rendered rows.
+    visibleSkills.length
+    vimSkills.setFocusedIndex(vimSkills.focusedIndex)
   })
 
   function handleSkillsKeydown(e: KeyboardEvent) {
@@ -287,7 +300,9 @@
     <div class="w-72 border-r border-base-300 flex flex-col shrink-0" style="background-color: var(--project-bg, oklch(var(--b1)))">
       <!-- Search -->
       <div class="p-3 border-b border-base-300">
+        <label for={skillFilterId} class="sr-only">Filter skills</label>
         <input
+          id={skillFilterId}
           type="text"
           placeholder="Filter skills..."
           class="input input-sm input-bordered w-full"
@@ -328,6 +343,8 @@
             {@const levelCollapsed = collapsed.get('project') ?? false}
             <button
               class="w-full flex items-center gap-1.5 px-3 pt-3 pb-1 cursor-pointer hover:bg-base-200/50"
+              aria-expanded={!levelCollapsed}
+              aria-controls="skills-project-groups"
               onclick={() => { collapsed = new Map(collapsed).set('project', !levelCollapsed) }}
             >
               <span class="text-xs text-base-content/40 transition-transform {levelCollapsed ? '' : 'rotate-90'}">&rsaquo;</span>
@@ -335,11 +352,14 @@
               <span class="text-xs text-base-content/30 ml-auto">{projectSkills.length}</span>
             </button>
             {#if !levelCollapsed}
+              <div id="skills-project-groups">
               {#each projectGroups as group}
                 {@const groupKey = `project:${group.source}`}
                 {@const groupCollapsed = collapsed.get(groupKey) ?? false}
                 <button
                   class="w-full flex items-center gap-1.5 pl-5 pr-3 pt-2 pb-1 cursor-pointer hover:bg-base-200/50"
+                  aria-expanded={!groupCollapsed}
+                  aria-controls={groupPanelId('project', group.source)}
                   onclick={() => { collapsed = new Map(collapsed).set(groupKey, !groupCollapsed) }}
                 >
                   <span class="text-xs text-base-content/40 transition-transform {groupCollapsed ? '' : 'rotate-90'}">&rsaquo;</span>
@@ -347,11 +367,14 @@
                   <span class="text-xs text-base-content/30 ml-auto">{group.skills.length}</span>
                 </button>
                 {#if !groupCollapsed}
+                  <div id={groupPanelId('project', group.source)}>
                   {#each group.skills as skill}
-                    {@const flatIdx = filteredSkills.indexOf(skill)}
+                    {@const flatIdx = visibleSkills.indexOf(skill)}
+                    {@const selected = isSameSkillIdentity(skill, $selectedSkillIdentity)}
                     <button
                       data-vim-skill
-                      class="w-full text-left pl-8 pr-3 py-2 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {isSameSkillIdentity(skill, $selectedSkillIdentity) ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'vim-focus' : ''}"
+                      aria-current={selected ? 'true' : undefined}
+                      class="w-full text-left pl-8 pr-3 py-2 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {selected ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'vim-focus' : ''}"
                       onclick={() => selectSkill(skill)}
                     >
                       <span class="text-sm font-medium text-base-content truncate block">{skill.name}</span>
@@ -363,8 +386,10 @@
                       {/if}
                     </button>
                   {/each}
+                  </div>
                 {/if}
               {/each}
+              </div>
             {/if}
           {/if}
 
@@ -372,6 +397,8 @@
             {@const levelCollapsed = collapsed.get('user') ?? false}
             <button
               class="w-full flex items-center gap-1.5 px-3 pt-3 pb-1 cursor-pointer hover:bg-base-200/50"
+              aria-expanded={!levelCollapsed}
+              aria-controls="skills-user-groups"
               onclick={() => { collapsed = new Map(collapsed).set('user', !levelCollapsed) }}
             >
               <span class="text-xs text-base-content/40 transition-transform {levelCollapsed ? '' : 'rotate-90'}">&rsaquo;</span>
@@ -379,11 +406,14 @@
               <span class="text-xs text-base-content/30 ml-auto">{userSkills.length}</span>
             </button>
             {#if !levelCollapsed}
+              <div id="skills-user-groups">
               {#each userGroups as group}
                 {@const groupKey = `user:${group.source}`}
                 {@const groupCollapsed = collapsed.get(groupKey) ?? false}
                 <button
                   class="w-full flex items-center gap-1.5 pl-5 pr-3 pt-2 pb-1 cursor-pointer hover:bg-base-200/50"
+                  aria-expanded={!groupCollapsed}
+                  aria-controls={groupPanelId('user', group.source)}
                   onclick={() => { collapsed = new Map(collapsed).set(groupKey, !groupCollapsed) }}
                 >
                   <span class="text-xs text-base-content/40 transition-transform {groupCollapsed ? '' : 'rotate-90'}">&rsaquo;</span>
@@ -391,11 +421,14 @@
                   <span class="text-xs text-base-content/30 ml-auto">{group.skills.length}</span>
                 </button>
                 {#if !groupCollapsed}
+                  <div id={groupPanelId('user', group.source)}>
                   {#each group.skills as skill}
-                    {@const flatIdx = filteredSkills.indexOf(skill)}
+                    {@const flatIdx = visibleSkills.indexOf(skill)}
+                    {@const selected = isSameSkillIdentity(skill, $selectedSkillIdentity)}
                     <button
                       data-vim-skill
-                      class="w-full text-left pl-8 pr-3 py-2 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {isSameSkillIdentity(skill, $selectedSkillIdentity) ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'vim-focus' : ''}"
+                      aria-current={selected ? 'true' : undefined}
+                      class="w-full text-left pl-8 pr-3 py-2 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {selected ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'vim-focus' : ''}"
                       onclick={() => selectSkill(skill)}
                     >
                       <span class="text-sm font-medium text-base-content truncate block">{skill.name}</span>
@@ -407,8 +440,10 @@
                       {/if}
                     </button>
                   {/each}
+                  </div>
                 {/if}
               {/each}
+              </div>
             {/if}
           {/if}
         {/if}

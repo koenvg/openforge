@@ -91,6 +91,16 @@ describe('skills-viewer plugin', () => {
     expect(skillsViewSource).toContain('aria-label="Skill metadata"')
   })
 
+  it('keeps native list button semantics until full ARIA tree keyboarding exists', () => {
+    const skillsViewSource = readFileSync(join(pluginSrcDir, 'SkillsView.svelte'), 'utf8')
+
+    expect(skillsViewSource).not.toContain('role="tree"')
+    expect(skillsViewSource).not.toContain('role="treeitem"')
+    expect(skillsViewSource).not.toContain('aria-selected')
+    expect(skillsViewSource).toContain('aria-expanded')
+    expect(skillsViewSource).toContain('aria-current')
+  })
+
   it('registers plugin-owned backend methods for skill list and save contracts', async () => {
     const { default: backend } = await import('./backend')
     const subscriptions = { add: vi.fn() }

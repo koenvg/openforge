@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getPreferredSkillIdentity, getSkillIdentity, getSkillLocationLabel, getSkillSourcePath, groupSkillsBySource, parseSkillFrontmatter, stripSkillFrontmatter, type SkillInfo } from './skillDomain'
+import { getPreferredSkillIdentity, getSkillIdentity, getSkillLocationLabel, getSkillSourcePath, getVisibleSkills, groupSkillsBySource, parseSkillFrontmatter, stripSkillFrontmatter, type SkillInfo } from './skillDomain'
 
 function makeSkill(name: string, source_dir: string, level: SkillInfo['level'] = 'project'): SkillInfo {
   return { name, source_dir, level, description: null, agent: null, template: null, file_name: null }
@@ -102,5 +102,32 @@ describe('skills-viewer skill domain helpers', () => {
 
   it('strips frontmatter with CRLF line endings without changing the body', () => {
     expect(stripSkillFrontmatter('---\r\nname: review\r\n---\r\n# Review\r\n')).toBe('# Review\r\n')
+  })
+
+  it('derives visible skills in rendered group order while respecting collapsed levels and sources', () => {
+    const skills = [
+      makeSkill('repo-agents', '.agents', 'project'),
+      makeSkill('repo-pi', '.pi', 'project'),
+      makeSkill('personal-agents', '.agents', 'user'),
+      makeSkill('personal-pi', '.pi', 'user'),
+    ]
+
+    expect(getVisibleSkills(skills, new Map())).toEqual(skills)
+
+    expect(getVisibleSkills(skills, new Map([['project:.agents', true]]))).toEqual([
+      skills[1],
+      skills[2],
+      skills[3],
+    ])
+
+    expect(getVisibleSkills(skills, new Map([['project', true]]))).toEqual([
+      skills[2],
+      skills[3],
+    ])
+
+    expect(getVisibleSkills(skills, new Map([['user', true]]))).toEqual([
+      skills[0],
+      skills[1],
+    ])
   })
 })

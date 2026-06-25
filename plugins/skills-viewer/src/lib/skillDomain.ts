@@ -113,6 +113,22 @@ export function stripSkillFrontmatter(content: string): string {
   return content.slice(bodyStart)
 }
 
+export function getVisibleSkills(skills: SkillInfo[], collapsed: ReadonlyMap<string, boolean>): SkillInfo[] {
+  const visible: SkillInfo[] = []
+
+  for (const level of ['project', 'user'] as const) {
+    if (collapsed.get(level)) continue
+
+    const levelSkills = skills.filter((skill) => skill.level === level)
+    for (const group of groupSkillsBySource(levelSkills)) {
+      if (collapsed.get(`${level}:${group.source}`)) continue
+      visible.push(...group.skills)
+    }
+  }
+
+  return visible
+}
+
 export function getSkillIdentity(skill: SkillInfo): SkillIdentity {
   return {
     name: skill.name,
