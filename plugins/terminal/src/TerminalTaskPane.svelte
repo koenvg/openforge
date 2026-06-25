@@ -18,8 +18,9 @@
   let workspaceLookupError = $state<string | null>(null)
   let previousTaskId = $state<string | null>(null)
   let workspaceLookupToken = 0
+  let shortcutRoot = $state<HTMLElement | null>(null)
 
-  const terminalShortcuts = createTerminalShortcutController()
+  const terminalShortcuts = createTerminalShortcutController({ shortcutRoot: () => shortcutRoot })
   const controller = terminalShortcuts.controller
   let terminalTabsRef = $state<TerminalTabs | null>(null)
 
@@ -94,7 +95,7 @@
   })
 </script>
 
-<div class="flex flex-col flex-1 overflow-hidden h-full">
+<div bind:this={shortcutRoot} class="flex flex-col flex-1 overflow-hidden h-full">
   <p class="sr-only" role="status" aria-live="polite">{workspaceStatusText}</p>
 
   {#if workspaceLookupState === 'ready' && workspacePath !== null}

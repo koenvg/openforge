@@ -33,6 +33,7 @@ export {
 } from './terminalShortcuts'
 export {
   createTerminalShortcutController,
+  isTerminalShortcutScopeVisible,
   type TerminalShortcutControllerOptions,
   type TerminalShortcutControllerWiring,
   type TerminalShortcutKeydownTarget,

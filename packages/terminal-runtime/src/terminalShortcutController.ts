@@ -9,6 +9,8 @@ export interface TerminalTabsShortcutTarget {
 
 export interface TerminalShortcutControllerOptions {
   ignoreWhenDetached?: boolean
+  isActive?: () => boolean
+  shortcutRoot?: () => HTMLElement | null
 }
 
 export interface TerminalShortcutKeydownTarget {
@@ -21,6 +23,24 @@ export interface TerminalShortcutControllerWiring {
   controller: TerminalShortcutController
   handleWindowKeydown(event: KeyboardEvent): boolean
   registerWindowKeydown(target?: TerminalShortcutKeydownTarget): () => void
+}
+
+export function isTerminalShortcutScopeVisible(root: HTMLElement | null): boolean {
+  if (!root || !root.isConnected) return false
+
+  let element: HTMLElement | null = root
+  while (element) {
+    if (element.hidden || element.getAttribute('aria-hidden') === 'true') return false
+
+    const styles = globalThis.window?.getComputedStyle(element)
+    if (styles !== undefined && (styles.display === 'none' || styles.visibility === 'hidden')) {
+      return false
+    }
+
+    element = element.parentElement
+  }
+
+  return true
 }
 
 export function createTerminalShortcutController(
@@ -43,8 +63,20 @@ export function createTerminalShortcutController(
     },
   }
 
+  function isRootActive(): boolean {
+    const root = options.shortcutRoot?.()
+    return root === undefined || isTerminalShortcutScopeVisible(root)
+  }
+
+  function isShortcutScopeActive(): boolean {
+    if (terminalTabsRef === null && options.ignoreWhenDetached !== false) return false
+    if (options.isActive?.() === false) return false
+
+    return isRootActive()
+  }
+
   function handleWindowKeydown(event: KeyboardEvent): boolean {
-    if (options.ignoreWhenDetached === true && terminalTabsRef === null) return false
+    if (!isShortcutScopeActive()) return false
 
     return handleTerminalShortcutKeydown(event, controller)
   }

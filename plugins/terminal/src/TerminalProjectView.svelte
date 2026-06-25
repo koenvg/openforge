@@ -14,7 +14,8 @@
 
   const terminalTaskId = $derived(projectId ? getProjectTerminalTaskId(projectId) : null)
 
-  const terminalShortcuts = createTerminalShortcutController({ ignoreWhenDetached: true })
+  let shortcutRoot = $state<HTMLElement | null>(null)
+  const terminalShortcuts = createTerminalShortcutController({ shortcutRoot: () => shortcutRoot })
   let terminalTabsRef = $state<TerminalTabs | null>(null)
 
   $effect(() => {
@@ -24,7 +25,7 @@
   onMount(() => terminalShortcuts.registerWindowKeydown())
 </script>
 
-<div class="flex flex-col h-full min-h-0 overflow-hidden">
+<div bind:this={shortcutRoot} class="flex flex-col h-full min-h-0 overflow-hidden">
   <div class="flex items-center justify-between px-4 py-2 border-b border-base-300 shrink-0 bg-base-200">
     <h2 class="text-sm font-semibold text-base-content">{projectName || 'Project'} — Terminal</h2>
     {#if projectPath}
