@@ -4,9 +4,13 @@ import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/
 import type { FileContent, FileEntry } from '@openforge/plugin-sdk/domain'
 
 vi.mock('@lucide/svelte', () => ({
+  Archive: vi.fn(() => ({})),
+  CircleAlert: vi.fn(() => ({})),
+  FileQuestion: vi.fn(() => ({})),
   FileText: vi.fn(() => ({})),
   Folder: vi.fn(() => ({})),
   FolderOpen: vi.fn(() => ({})),
+  TriangleAlert: vi.fn(() => ({})),
 }))
 
 import FilesView from './FilesView.svelte'
@@ -92,6 +96,34 @@ describe('plugin FilesView', () => {
     })
   })
 
+  it('shows visible copy while the root directory is loading', () => {
+    vi.mocked(fsReadDir).mockReturnValue(new Promise(() => {}))
+
+    renderFilesView()
+
+    expect(screen.getByText('Loading project files…')).toBeTruthy()
+  })
+
+  it('retries the root directory load from the root failure state', async () => {
+    vi.mocked(fsReadDir)
+      .mockRejectedValueOnce(new Error('Permission denied'))
+      .mockResolvedValueOnce(sampleEntries)
+
+    renderFilesView()
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to load files')).toBeTruthy()
+      expect(screen.getByText('Permission denied')).toBeTruthy()
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Retry loading project files' }))
+
+    await waitFor(() => {
+      expect(fsReadDir).toHaveBeenCalledTimes(2)
+      expect(screen.getByText('README.md')).toBeTruthy()
+    })
+  })
+
   it('shows project name in the header', async () => {
     renderFilesView({ projectName: 'My Awesome Project' })
 
@@ -116,6 +148,33 @@ describe('plugin FilesView', () => {
     })
   })
 
+  it('retries directory loading from a contextual directory failure state', async () => {
+    vi.mocked(fsReadDir)
+      .mockResolvedValueOnce(sampleEntries)
+      .mockRejectedValueOnce(new Error('Permission denied'))
+      .mockResolvedValueOnce([makeFileEntry({ name: 'main.ts', path: 'src/main.ts' })])
+
+    renderFilesView()
+
+    await waitFor(() => {
+      expect(screen.getByText('src/')).toBeTruthy()
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: /src\// }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Unable to load directory src')).toBeTruthy()
+      expect(screen.getByText('Permission denied')).toBeTruthy()
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Retry loading src directory' }))
+
+    await waitFor(() => {
+      expect(fsReadDir).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'src' })
+      expect(screen.getByText('main.ts')).toBeTruthy()
+    })
+  })
+
   it('loads selected file content through the typed runtime fs API', async () => {
     vi.mocked(fsReadDir).mockResolvedValue(sampleEntries)
 
@@ -129,6 +188,48 @@ describe('plugin FilesView', () => {
 
     await waitFor(() => {
       expect(fsReadFile).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'README.md' })
+    })
+  })
+
+  it('shows visible copy while selected file content is loading', async () => {
+    vi.mocked(fsReadDir).mockResolvedValue(sampleEntries)
+    vi.mocked(fsReadFile).mockReturnValue(new Promise(() => {}))
+
+    renderFilesView()
+
+    await waitFor(() => {
+      expect(screen.getByText('README.md')).toBeTruthy()
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: /README.md/ }))
+
+    expect(await screen.findByText('Loading README.md…')).toBeTruthy()
+  })
+
+  it('retries selected file loading from the file failure state', async () => {
+    vi.mocked(fsReadDir).mockResolvedValue(sampleEntries)
+    vi.mocked(fsReadFile)
+      .mockRejectedValueOnce(new Error('File not found'))
+      .mockResolvedValueOnce(sampleFileContent)
+
+    renderFilesView()
+
+    await waitFor(() => {
+      expect(screen.getByText('README.md')).toBeTruthy()
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: /README.md/ }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Unable to load file')).toBeTruthy()
+      expect(screen.getByText('File not found')).toBeTruthy()
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Retry loading README.md' }))
+
+    await waitFor(() => {
+      expect(fsReadFile).toHaveBeenCalledTimes(2)
+      expect(screen.getByText('Hello world')).toBeTruthy()
     })
   })
 
@@ -478,6 +579,34 @@ describe('plugin FilesView', () => {
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(fsReadFile).not.toHaveBeenCalled()
     expect(get(pendingFileReveal)).toBe('src/secret.ts')
+  })
+
+  it('retries a failed reveal with the original reveal path', async () => {
+    vi.mocked(fsReadDir)
+      .mockResolvedValueOnce([makeFileEntry({ name: 'src', path: 'src', isDir: true, size: null })])
+      .mockRejectedValueOnce(new Error('Permission denied'))
+      .mockResolvedValueOnce([makeFileEntry({ name: 'secret.ts', path: 'src/secret.ts' })])
+    vi.mocked(fsReadFile).mockResolvedValue(sampleFileContent)
+
+    renderFilesView()
+
+    await waitFor(() => {
+      expect(screen.getByText('src/')).toBeTruthy()
+    })
+
+    pendingFileReveal.set('src/secret.ts')
+
+    await waitFor(() => {
+      expect(screen.getByText('Unable to reveal src/secret.ts')).toBeTruthy()
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Retry revealing src/secret.ts' }))
+
+    await waitFor(() => {
+      expect(fsReadDir).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'src' })
+      expect(fsReadFile).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'src/secret.ts' })
+      expect(get(pendingFileReveal)).toBeNull()
+    })
   })
 
   it('does not reveal before the root directory has loaded', async () => {
