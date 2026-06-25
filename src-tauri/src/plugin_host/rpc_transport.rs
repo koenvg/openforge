@@ -3,9 +3,14 @@ use log::warn;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::oneshot;
 use tokio::time::timeout;
+
+const ROADMAP_PLUGIN_ID: &str = "com.openforge.roadmap";
+const ROADMAP_REFINE_TICKET_COMMAND: &str = "roadmap_refine_ticket";
+const ROADMAP_REFINE_TICKET_TIMEOUT: Duration = Duration::from_secs(150);
 
 #[derive(Default)]
 pub(in crate::plugin_host) struct PluginTransportState {
@@ -13,6 +18,14 @@ pub(in crate::plugin_host) struct PluginTransportState {
     pub(in crate::plugin_host) pending: HashMap<u64, oneshot::Sender<Result<Value, String>>>,
     pub(in crate::plugin_host) session_id: u64,
     pub(in crate::plugin_host) process_token: u64,
+}
+
+fn backend_response_timeout(plugin_id: &str, command: &str) -> Duration {
+    if plugin_id == ROADMAP_PLUGIN_ID && command == ROADMAP_REFINE_TICKET_COMMAND {
+        ROADMAP_REFINE_TICKET_TIMEOUT
+    } else {
+        crate::plugin_rpc::DEFAULT_TIMEOUT
+    }
 }
 
 impl PluginHost {
@@ -36,6 +49,7 @@ impl PluginHost {
             &request,
             &format!("plugin backend response: {plugin_id}.{command}"),
             &format!("invoking {plugin_id}.{command}"),
+            backend_response_timeout(plugin_id, command),
         )
         .await
     }
@@ -57,6 +71,7 @@ impl PluginHost {
             &request,
             &format!("plugin backend readiness: {plugin_id}"),
             &format!("waiting for plugin backend readiness: {plugin_id}"),
+            crate::plugin_rpc::DEFAULT_TIMEOUT,
         )
         .await
     }
@@ -67,6 +82,7 @@ impl PluginHost {
         request: &str,
         timeout_context: &str,
         closed_context: &str,
+        wait_timeout: Duration,
     ) -> Result<Value, String> {
         if !self.is_sidecar_running() {
             self.start_sidecar().await?;
@@ -91,7 +107,7 @@ impl PluginHost {
             return Err(error);
         }
 
-        timeout(crate::plugin_rpc::DEFAULT_TIMEOUT, response_rx)
+        timeout(wait_timeout, response_rx)
             .await
             .map_err(|_| {
                 self.remove_pending_request(request_id);
@@ -308,5 +324,27 @@ impl PluginHost {
         for sender in pending {
             let _ = sender.send(Err(error.to_string()));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn roadmap_refine_ticket_uses_long_backend_timeout() {
+        assert_eq!(
+            backend_response_timeout("com.openforge.roadmap", "roadmap_refine_ticket"),
+            Duration::from_secs(150)
+        );
+        assert_eq!(
+            backend_response_timeout("com.openforge.roadmap", "roadmap_get_board"),
+            crate::plugin_rpc::DEFAULT_TIMEOUT
+        );
+        assert_eq!(
+            backend_response_timeout("com.openforge.github-sync", "roadmap_refine_ticket"),
+            crate::plugin_rpc::DEFAULT_TIMEOUT
+        );
     }
 }

@@ -11,7 +11,7 @@
     type BoardCard,
     type BoardModel,
   } from '../lib/board'
-  import type { LabelUsage, RepoLabel, RoadmapBoard } from '../lib/types'
+  import type { LabelUsage, RefineTicketRequest, RepoLabel, RoadmapBoard, TicketDraft } from '../lib/types'
   import { normalizeLabelColor } from '../lib/labelColors'
   import { loadRoadmapActions, startRoadmapIssueAction } from '../lib/roadmapActions'
   import { createRoadmapClient } from '../lib/roadmapClient'
@@ -45,6 +45,7 @@
   // Modal / drawer state.
   let selectedIssueNumber = $state<number | null>(null)
   let showCreate = $state(false)
+  let createLabels = $state<string[]>([])
   let showColumns = $state(false)
   let configLabels = $state<LabelUsage[]>([])
   let configColumnLabels = $state<string[]>([])
@@ -129,6 +130,7 @@
       lastProjectId = pid
       selectedIssueNumber = null
       showCreate = false
+      createLabels = []
       showColumns = false
       void loadBoard()
       void loadActionsForProject(pid)
@@ -228,8 +230,29 @@
       }
       if (board) board = applyCreate(board, newCard)
       showCreate = false
+      createLabels = []
       await loadBoard()
     })
+  }
+
+  async function refineTicketDraft(request: Omit<RefineTicketRequest, 'projectId'>): Promise<TicketDraft> {
+    if (!projectId) throw new Error('Select a project before refining a ticket.')
+    try {
+      return await client.refineTicket({ projectId, ...request })
+    } catch (e) {
+      error = String(e instanceof Error ? e.message : e)
+      throw e
+    }
+  }
+
+  function openCreate(labels: string[] = []) {
+    createLabels = [...labels]
+    showCreate = true
+  }
+
+  function closeCreate() {
+    showCreate = false
+    createLabels = []
   }
 
   async function runIssueAction(card: BoardCard, actionPrompt: string) {
@@ -322,7 +345,7 @@
       </p>
     </div>
     <div class="flex items-center gap-2 shrink-0">
-      <button class="btn btn-sm" onclick={() => (showCreate = true)} disabled={!board || busy}>
+      <button class="btn btn-sm" onclick={() => openCreate()} disabled={!board || busy}>
         <Plus size={14} /> Create
       </button>
       <button class="btn btn-sm" onclick={openColumns} disabled={!board || busy}>
@@ -365,6 +388,7 @@
         onRunAction={(card, actionPrompt) => {
           void runIssueAction(card, actionPrompt)
         }}
+        onAddCard={(label) => openCreate(label ? [label] : [])}
       />
     {/if}
   </div>
@@ -389,9 +413,11 @@
 {#if showCreate && board}
   <CreateDialog
     labelOptions={repoLabels}
+    initialLabels={createLabels}
     {busy}
-    onClose={() => (showCreate = false)}
+    onClose={closeCreate}
     onCreate={createIssue}
+    onRefine={refineTicketDraft}
     onOpenUrl={openUrl}
   />
 {/if}

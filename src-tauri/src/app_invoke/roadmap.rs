@@ -6,12 +6,16 @@
 //! `github_review.rs`: returns `Ok(None)` for unmatched commands so the
 //! dispatcher can fall through.
 
-use super::{json_value, payload_i64, payload_optional_string, payload_string, AppResult};
+use super::{
+    json_value, payload_field, payload_i64, payload_optional_string, payload_string, AppResult,
+};
 use crate::github_client::{EditIssueInput, GitHubClient, Issue, RepoLabel};
+use crate::roadmap_ai::{TicketDraft, TicketDraftRequest};
 use crate::{http_server::AppInvokeRequest, http_server::AppState};
 use axum::http::StatusCode;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 fn runtime_error(error: String) -> (StatusCode, String) {
     (StatusCode::INTERNAL_SERVER_ERROR, error)
@@ -218,9 +222,10 @@ pub(super) async fn handle_app_roadmap_command(
                             .filter(|usage| usage.used)
                             .map(|usage| usage.name)
                             .collect();
-                        db.set_roadmap_column_labels(&project_id, &seeded).map_err(|e| {
-                            runtime_error(format!("failed to seed roadmap columns: {e}"))
-                        })?;
+                        db.set_roadmap_column_labels(&project_id, &seeded)
+                            .map_err(|e| {
+                                runtime_error(format!("failed to seed roadmap columns: {e}"))
+                            })?;
                         seeded
                     }
                 };
@@ -344,6 +349,42 @@ pub(super) async fn handle_app_roadmap_command(
                 .map_err(|e| runtime_error(format!("failed to update label color: {e}")))?;
             serde_json::Value::Null
         }
+        "roadmap_refine_ticket" => {
+            let project_id = payload_string(&request.payload, "projectId")?;
+            let text = payload_optional_string(&request.payload, "text")?.unwrap_or_default();
+            let feedback =
+                payload_optional_string(&request.payload, "feedback")?.unwrap_or_default();
+            let draft = roadmap_ticket_draft_field(&request.payload)?;
+            let labels =
+                super::payload_optional_string_vec(&request.payload, "labels")?.unwrap_or_default();
+            let repo = resolve_repo_ref(state, &project_id)
+                .await
+                .map_err(bad_request)?;
+
+            let (provider, project_path) = {
+                let db = crate::db::acquire_db(&state.db);
+                let provider = db.resolve_ai_provider(&project_id);
+                let project_path = db
+                    .get_project(&project_id)
+                    .map_err(|e| runtime_error(format!("failed to load project: {e}")))?
+                    .map(|project| PathBuf::from(project.path));
+                (provider, project_path)
+            };
+
+            let request = TicketDraftRequest {
+                repo: format!("{}/{}", repo.owner, repo.name),
+                text,
+                draft,
+                feedback,
+                labels,
+            };
+            let draft =
+                crate::roadmap_ai::refine_ticket(&provider, project_path.as_deref(), &request)
+                    .await
+                    .map_err(runtime_error)?;
+
+            json_value(draft)?
+        }
         _ => return Ok(None),
     };
 
@@ -380,6 +421,15 @@ fn roadmap_label_color_field(payload: &serde_json::Value) -> AppResult<String> {
         ));
     }
     Ok(color)
+}
+
+fn roadmap_ticket_draft_field(payload: &serde_json::Value) -> AppResult<Option<TicketDraft>> {
+    match payload.get("draft") {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(_) => payload_field::<TicketDraft>(payload, "draft")
+            .map(Some)
+            .map_err(|(_, message)| bad_request(format!("payload.draft is invalid: {message}"))),
+    }
 }
 
 #[cfg(test)]

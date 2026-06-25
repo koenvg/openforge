@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Plus } from '@lucide/svelte'
   import type { Action } from '@openforge/plugin-sdk'
   import type { BoardCard, BoardColumn } from '../lib/board'
   import Card from './Card.svelte'
@@ -15,9 +16,21 @@
     actions?: Action[]
     busy?: boolean
     onRunAction: (card: BoardCard, actionPrompt: string) => void
+    onAddCard: (label: string) => void
   }
 
-  let { columns, repo, onCardClick, onOpenUrl, onCopyLink, onRecolor, actions = [], busy = false, onRunAction }: Props = $props()
+  let {
+    columns,
+    repo,
+    onCardClick,
+    onOpenUrl,
+    onCopyLink,
+    onRecolor,
+    actions = [],
+    busy = false,
+    onRunAction,
+    onAddCard,
+  }: Props = $props()
 
   let openColorLabel = $state<string | null>(null)
   let contextMenu = $state<{ visible: boolean; x: number; y: number; card: BoardCard | null }>({
@@ -61,6 +74,11 @@
     closeContextMenu()
     if (card) onRunAction(card, actionPrompt)
   }
+
+  function addCard(event: MouseEvent, label: string) {
+    event.stopPropagation()
+    onAddCard(label)
+  }
 </script>
 
 <div class="roadmap-board p-4 overflow-y-auto h-full">
@@ -94,6 +112,16 @@
         {/if}
         <span class="text-sm font-semibold text-base-content truncate">{column.title}</span>
         <span class="badge badge-ghost badge-sm ml-auto shrink-0">{column.cards.length}</span>
+        <button
+          type="button"
+          class="btn btn-ghost btn-xs btn-square shrink-0"
+          aria-label={column.isOther ? 'Create issue with no label' : `Create issue in ${column.title}`}
+          title={column.isOther ? 'Create issue with no label' : `Create issue in ${column.title}`}
+          disabled={busy}
+          onclick={(e) => addCard(e, column.label)}
+        >
+          <Plus size={14} />
+        </button>
       </div>
       <div class="flex flex-col gap-2 p-2 overflow-y-auto">
         {#each column.cards as card (card.issueNumber)}

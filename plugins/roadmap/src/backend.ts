@@ -5,8 +5,10 @@ import type {
   EditIssueRequest,
   RoadmapBoard,
   RoadmapConfig,
+  RefineTicketRequest,
   SetColumnLabelsRequest,
   SetValueRequest,
+  TicketDraft,
   UpdateLabelColorRequest,
 } from './lib/types'
 
@@ -70,6 +72,12 @@ export default defineBackendPlugin({
     context.subscriptions.add(
       openforge.backend.registerMethod<UpdateLabelColorRequest, null>('roadmap_update_label_color', {
         handler: (request) => invokeHostCommand<null>(openforge, 'roadmapUpdateLabelColor', request),
+      }),
+    )
+
+    context.subscriptions.add(
+      openforge.backend.registerMethod<RefineTicketRequest, TicketDraft>('roadmap_refine_ticket', {
+        handler: (request) => invokeHostCommand<TicketDraft>(openforge, 'roadmapRefineTicket', request),
       }),
     )
   },

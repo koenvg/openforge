@@ -79,11 +79,12 @@ describe('roadmap frontend plugin', () => {
     expect(clientSource).toContain('api.backend.invoke')
     expect(clientSource).toContain("'roadmap_get_board'")
     expect(clientSource).toContain("'roadmap_update_label_color'")
+    expect(clientSource).toContain("'roadmap_refine_ticket'")
   })
 })
 
 describe('roadmap backend plugin', () => {
-  it('registers all seven roadmap backend methods proxying the camelCase host commands', async () => {
+  it('registers all roadmap backend methods proxying the camelCase host commands', async () => {
     const { default: backend } = await import('./backend')
     const subscriptions = { add: vi.fn() }
     const invokeGlobal = vi.fn(() => Promise.resolve(null))
@@ -100,11 +101,11 @@ describe('roadmap backend plugin', () => {
 
     await backend.activate(api, context)
 
-    const methods = ['roadmap_get_board', 'roadmap_set_value', 'roadmap_get_config', 'roadmap_set_column_labels', 'roadmap_create_issue', 'roadmap_edit_issue', 'roadmap_update_label_color']
+    const methods = ['roadmap_get_board', 'roadmap_set_value', 'roadmap_get_config', 'roadmap_set_column_labels', 'roadmap_create_issue', 'roadmap_edit_issue', 'roadmap_update_label_color', 'roadmap_refine_ticket']
     for (const method of methods) {
       expect(api.backend.registerMethod).toHaveBeenCalledWith(method, expect.objectContaining({ handler: expect.any(Function) }))
     }
-    expect(subscriptions.add).toHaveBeenCalledTimes(7)
+    expect(subscriptions.add).toHaveBeenCalledTimes(8)
 
     // Invoking the registered roadmap_get_board handler must proxy to the
     // camelCase host command id the core callback router expects.
@@ -119,6 +120,14 @@ describe('roadmap backend plugin', () => {
       projectId: 'P-1',
       name: 'bug',
       color: '0e8a16',
+    })
+
+    const refineTicket = registerCalls.find((c) => c[0] === 'roadmap_refine_ticket')![1] as { handler: (p: unknown) => unknown }
+    await refineTicket.handler({ projectId: 'P-1', text: 'rough idea', labels: ['bug'] })
+    expect(invokeGlobal).toHaveBeenCalledWith('openforge.roadmapRefineTicket', {
+      projectId: 'P-1',
+      text: 'rough idea',
+      labels: ['bug'],
     })
   })
 })

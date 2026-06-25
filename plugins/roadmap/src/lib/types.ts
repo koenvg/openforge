@@ -85,3 +85,16 @@ export interface UpdateLabelColorRequest {
   name: string
   color: string
 }
+
+export interface TicketDraft {
+  title: string
+  body: string
+}
+
+export interface RefineTicketRequest {
+  projectId: string
+  text: string
+  draft: TicketDraft | null
+  feedback: string
+  labels: string[]
+}

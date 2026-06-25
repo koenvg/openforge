@@ -291,7 +291,8 @@ mod tests {
 
         // No config row yet -> None (first open, eligible for seeding).
         assert_eq!(
-            db.get_roadmap_column_labels_opt(&project).expect("opt none"),
+            db.get_roadmap_column_labels_opt(&project)
+                .expect("opt none"),
             None
         );
 
@@ -299,14 +300,16 @@ mod tests {
         db.set_roadmap_column_labels(&project, &["bug".to_string()])
             .expect("seed");
         assert_eq!(
-            db.get_roadmap_column_labels_opt(&project).expect("opt some"),
+            db.get_roadmap_column_labels_opt(&project)
+                .expect("opt some"),
             Some(vec!["bug".to_string()])
         );
 
         // A user clearing all columns keeps the row -> Some(vec![]), never re-seeded.
         db.set_roadmap_column_labels(&project, &[]).expect("clear");
         assert_eq!(
-            db.get_roadmap_column_labels_opt(&project).expect("opt empty"),
+            db.get_roadmap_column_labels_opt(&project)
+                .expect("opt empty"),
             Some(Vec::new())
         );
 

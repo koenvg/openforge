@@ -2,9 +2,11 @@ import type { FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
 import type {
   CreateIssueRequest,
   EditIssueRequest,
+  RefineTicketRequest,
   RoadmapBoard,
   RoadmapConfig,
   RoadmapIssue,
+  TicketDraft,
   UpdateLabelColorRequest,
 } from './types'
 
@@ -16,6 +18,7 @@ export interface RoadmapClient {
   createIssue(request: CreateIssueRequest): Promise<RoadmapIssue>
   editIssue(request: EditIssueRequest): Promise<void>
   updateLabelColor(request: UpdateLabelColorRequest): Promise<void>
+  refineTicket(request: RefineTicketRequest): Promise<TicketDraft>
 }
 
 async function invokeBackend<TOutput>(
@@ -39,5 +42,6 @@ export function createRoadmapClient(api: Pick<FrontendOpenForgeAPI, 'backend'>):
       invokeBackend<{ issue: RoadmapIssue }>(api, 'roadmap_create_issue', request).then((r) => r.issue),
     editIssue: (request) => invokeBackend<void>(api, 'roadmap_edit_issue', request),
     updateLabelColor: (request) => invokeBackend<void>(api, 'roadmap_update_label_color', request),
+    refineTicket: (request) => invokeBackend<TicketDraft>(api, 'roadmap_refine_ticket', request),
   }
 }
