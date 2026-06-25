@@ -182,37 +182,48 @@
     }
   }
 
+  function hasShortcutModifier(event: KeyboardEvent): boolean {
+    return event.altKey || event.ctrlKey || event.metaKey || event.shiftKey
+  }
+
   function handleKeydown(event: KeyboardEvent, node: TreeNode) {
-    event.stopPropagation()
+    if (hasShortcutModifier(event)) return
 
     switch (event.key) {
       case 'ArrowDown':
         event.preventDefault()
+        event.stopPropagation()
         moveFocusBy(1, node.entry.path)
         break
       case 'ArrowUp':
         event.preventDefault()
+        event.stopPropagation()
         moveFocusBy(-1, node.entry.path)
         break
       case 'Home':
         event.preventDefault()
+        event.stopPropagation()
         focusFirst()
         break
       case 'End':
         event.preventDefault()
+        event.stopPropagation()
         focusLast()
         break
       case 'ArrowRight':
         event.preventDefault()
+        event.stopPropagation()
         handleArrowRight(node)
         break
       case 'ArrowLeft':
         event.preventDefault()
+        event.stopPropagation()
         handleArrowLeft(node)
         break
       case 'Enter':
       case ' ':
         event.preventDefault()
+        event.stopPropagation()
         activateNode(node)
         break
     }

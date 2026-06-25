@@ -107,6 +107,39 @@ describe('plugin ProjectFileTree accessibility', () => {
     expect(document.activeElement).toBe(src)
   })
 
+  it('lets unhandled and modified shortcut keys bubble to app-level handlers', async () => {
+    const onWindowKeydown = vi.fn()
+    window.addEventListener('keydown', onWindowKeydown)
+
+    try {
+      renderTree({
+        entries: [
+          makeEntry({ name: 'src', path: 'src', isDir: true, size: null }),
+          makeEntry({ name: 'main.ts', path: 'src/main.ts', isDir: false }),
+        ],
+        expandedDirs: new Set<string>(['src']),
+      })
+
+      const src = screen.getByRole('treeitem', { name: /src\// }) as HTMLElement
+      const main = screen.getByRole('treeitem', { name: /main\.ts/ }) as HTMLElement
+
+      await fireEvent.keyDown(src, { key: 'x' })
+      await fireEvent.keyDown(src, { key: 'k', metaKey: true })
+      await fireEvent.keyDown(src, { key: 'ArrowDown', metaKey: true })
+
+      expect(onWindowKeydown).toHaveBeenCalledTimes(3)
+      expect(document.activeElement).not.toBe(main)
+
+      onWindowKeydown.mockClear()
+      await fireEvent.keyDown(src, { key: 'ArrowDown' })
+
+      expect(onWindowKeydown).not.toHaveBeenCalled()
+      expect(document.activeElement).toBe(main)
+    } finally {
+      window.removeEventListener('keydown', onWindowKeydown)
+    }
+  })
+
   it('uses right and left arrows to expand, collapse, and move between parent and child treeitems', async () => {
     const onToggleDir = vi.fn()
     const { rerender } = renderTree({
