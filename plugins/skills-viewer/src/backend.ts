@@ -22,9 +22,18 @@ interface SaveSkillContentRequest {
   relativePath?: string | null
 }
 
+function codexHomeDir(): string {
+  const codexHome = process.env.CODEX_HOME
+  return codexHome && codexHome.length > 0 ? codexHome : join(homedir(), '.codex')
+}
+
 function skillSourceDir(root: string, sourceDir: string, level: SkillLevel): string {
   if (sourceDir === '.pi' && level === 'user') {
     return join(root, '.pi', 'agent', 'skills')
+  }
+
+  if (sourceDir === '.codex' && level === 'user') {
+    return join(codexHomeDir(), 'skills')
   }
 
   return join(root, sourceDir, 'skills')
