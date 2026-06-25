@@ -30,6 +30,27 @@ const basePr: ReviewPullRequest = {
 }
 
 describe('PrOverviewTab', () => {
+  it('announces loading and errors while overview comments load', async () => {
+    let rejectComments: (error: Error) => void = () => {}
+    render(PrOverviewTab, {
+      props: {
+        pr: basePr,
+        comments: [],
+        onCommentsChange: vi.fn(),
+        loadComments: vi.fn(() => new Promise<PrOverviewComment[]>((_, reject) => {
+          rejectComments = reject
+        })),
+      },
+    })
+
+    expect((await screen.findByRole('status')).textContent).toContain('Loading comments')
+    rejectComments(new Error('GitHub failed'))
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain('Failed to load PR overview.')
+    })
+  })
+
   it('renders PR body relative markdown images from the pull request head commit', async () => {
     render(PrOverviewTab, {
       props: {
@@ -75,6 +96,7 @@ describe('PrOverviewTab', () => {
     })
 
     expect(screen.getByText('submitted a review')).toBeTruthy()
+    expect(screen.getByRole('img', { name: 'Review summary' })).toBeTruthy()
     expect(screen.getByText('Looks good overall')).toBeTruthy()
   })
 })

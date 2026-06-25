@@ -3,7 +3,7 @@ import { homedir } from 'node:os'
 import { basename, extname, join, sep } from 'node:path'
 import { defineBackendPlugin } from '@openforge/plugin-sdk/backend'
 import type { BackendOpenForgeAPI } from '@openforge/plugin-sdk/backend'
-import { SKILL_SOURCE_DIRS, type SkillInfo, type SkillSourceDir } from './lib/skillDomain'
+import { parseSkillFrontmatter, SKILL_SOURCE_DIRS, type SkillInfo, type SkillSourceDir } from './lib/skillDomain'
 
 type SkillLevel = SkillInfo['level']
 
@@ -30,51 +30,6 @@ function skillSourceDir(root: string, sourceDir: string, level: SkillLevel): str
 
 function isSupportedSkillSourceDir(sourceDir: string): sourceDir is SkillSourceDir {
   return (SKILL_SOURCE_DIRS as readonly string[]).includes(sourceDir)
-}
-
-function parseSkillFrontmatter(content: string): { name: string | null; description: string | null } {
-  const trimmed = content.trimStart()
-  if (!trimmed.startsWith('---')) return { name: null, description: null }
-
-  const afterFirst = trimmed.slice(3)
-  const endIndex = afterFirst.indexOf('\n---')
-  if (endIndex < 0) return { name: null, description: null }
-
-  const frontmatter = afterFirst.slice(0, endIndex)
-  let name: string | null = null
-  let description = ''
-  let inDescription = false
-
-  for (const line of frontmatter.split(/\r?\n/)) {
-    const trimmedLine = line.trim()
-    if (trimmedLine.startsWith('name:')) {
-      const value = trimmedLine.slice('name:'.length).trim().replace(/^['"]|['"]$/g, '')
-      name = value || null
-      inDescription = false
-      continue
-    }
-
-    if (trimmedLine.startsWith('description:')) {
-      const value = trimmedLine.slice('description:'.length).trim().replace(/^['"]|['"]$/g, '')
-      if (value === '|' || value === '>' || value === '') {
-        inDescription = true
-      } else {
-        description = value
-        inDescription = false
-      }
-      continue
-    }
-
-    if (inDescription) {
-      if (trimmedLine && (line.startsWith(' ') || line.startsWith('\t'))) {
-        description = description ? `${description} ${trimmedLine}` : trimmedLine
-      } else {
-        inDescription = false
-      }
-    }
-  }
-
-  return { name, description: description || null }
 }
 
 async function scanSkillDirectory(dir: string, level: SkillLevel, sourceDir: string): Promise<SkillInfo[]> {

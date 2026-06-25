@@ -1,9 +1,9 @@
-import { render } from '@testing-library/svelte'
+import { fireEvent, render, screen } from '@testing-library/svelte'
 import { get } from 'svelte/store'
 import { describe, expect, it, vi } from 'vitest'
 import type { AuthoredPullRequest, Project, Task } from './lib/types'
 import { requireDefined } from './test-utils/dom'
-import { callOrder, eventListeners, installAppTestLifecycle, mockActivatePlugin, mockLoadEnabledForProject, mockRouterResetToBoard, persistInstalledPluginRow } from './App.test-harness'
+import { callOrder, eventListeners, installAppTestLifecycle, mockActivatePlugin, mockCurrentViewStore, mockLoadEnabledForProject, mockRouterNavigateToTask, mockRouterResetToBoard, persistInstalledPluginRow } from './App.test-harness'
 
 async function withSuppressedExpectedConsoleError(run: () => Promise<void>) {
   const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -281,6 +281,100 @@ describe('App startup data loading', () => {
     })
     expect(mockRouterResetToBoard).toHaveBeenCalled()
   }, 15000)
+
+  describe('new task creation dialog navigation', () => {
+    const createdTask: Task = {
+      id: 'T-new',
+      initial_prompt: 'Start this immediately',
+      prompt: null,
+      title: null,
+      summary: null,
+      status: 'backlog',
+      agent: null,
+      permission_mode: null,
+      worktree_source: null,
+      worktree_branch: null,
+      depends_on: [],
+      project_id: 'proj-1',
+      created_at: 1000,
+      updated_at: 1000,
+    }
+
+    async function openCreateTaskDialog(initialView: 'board' | 'plugin:com.openforge.file-viewer:files' = 'board') {
+      const App = (await import('./App.svelte')).default
+      const addTaskDialogModule = await import('./components/AddTaskDialog.svelte')
+      mockCurrentViewStore.set(initialView)
+
+      render(App)
+
+      const createTaskButton = await screen.findByRole('button', { name: 'Create new task' })
+      await fireEvent.click(createTaskButton)
+
+      await vi.waitFor(() => {
+        expect(addTaskDialogModule.default).toHaveBeenCalled()
+      })
+
+      return getLatestComponentProps<{
+        onTaskSaved: (task?: Task) => Promise<void> | void
+        onRunAction: (taskId: string, actionPrompt: string, agent: string | null) => Promise<void>
+      }>(vi.mocked(addTaskDialogModule.default), 'onRunAction')
+    }
+
+    it('navigates to a newly-created task before waiting for its immediate start to finish', async () => {
+      const ipc = await import('./lib/ipc')
+      const stores = await import('./lib/stores')
+      let resolveStart: (value: unknown) => void = () => {}
+      const startPromise = new Promise((resolve) => {
+        resolveStart = resolve
+      })
+      vi.mocked(ipc.getTasksForProject).mockResolvedValue([createdTask])
+      vi.mocked(ipc.startImplementation).mockReturnValue(startPromise as ReturnType<typeof ipc.startImplementation>)
+      vi.mocked(ipc.getSessionStatus).mockResolvedValue({ ticket_id: createdTask.id, status: 'running' } as any)
+
+      const dialogProps = await openCreateTaskDialog()
+      const runPromise = dialogProps.onRunAction(createdTask.id, '', null)
+
+      await vi.waitFor(() => {
+        expect(mockRouterNavigateToTask).toHaveBeenCalledWith(createdTask.id)
+      })
+      expect(ipc.startImplementation).toHaveBeenCalledWith(createdTask.id, '/test')
+      expect(get(stores.selectedTaskId)).toBe(createdTask.id)
+
+      resolveStart({ session_id: 'session-new', workspace_path: '/workspace/T-new', task_id: createdTask.id, port: 0 })
+      await runPromise
+    }, 15000)
+
+    it('resets to the board before navigating to a newly-created task from a plugin view', async () => {
+      const ipc = await import('./lib/ipc')
+      const stores = await import('./lib/stores')
+      vi.mocked(ipc.getTasksForProject).mockResolvedValue([createdTask])
+      vi.mocked(ipc.startImplementation).mockResolvedValue({ session_id: 'session-new', workspace_path: '/workspace/T-new', task_id: createdTask.id, port: 0 } as any)
+      vi.mocked(ipc.getSessionStatus).mockResolvedValue({ ticket_id: createdTask.id, status: 'running' } as any)
+
+      const dialogProps = await openCreateTaskDialog('plugin:com.openforge.file-viewer:files')
+      await dialogProps.onRunAction(createdTask.id, '', null)
+
+      expect(mockRouterResetToBoard).toHaveBeenCalled()
+      expect(mockRouterNavigateToTask).toHaveBeenCalledWith(createdTask.id)
+      expect(mockRouterResetToBoard.mock.invocationCallOrder[0]).toBeLessThan(mockRouterNavigateToTask.mock.invocationCallOrder[0])
+      expect(get(stores.currentView)).toBe('board')
+      expect(get(stores.selectedTaskId)).toBe(createdTask.id)
+    }, 15000)
+
+    it('keeps ordinary Add to Backlog creation on the current route', async () => {
+      const ipc = await import('./lib/ipc')
+      const stores = await import('./lib/stores')
+      vi.mocked(ipc.getTasksForProject).mockResolvedValue([createdTask])
+
+      const dialogProps = await openCreateTaskDialog('plugin:com.openforge.file-viewer:files')
+      await dialogProps.onTaskSaved(createdTask)
+
+      expect(mockRouterResetToBoard).not.toHaveBeenCalled()
+      expect(mockRouterNavigateToTask).not.toHaveBeenCalled()
+      expect(ipc.startImplementation).not.toHaveBeenCalled()
+      expect(get(stores.currentView)).toBe('plugin:com.openforge.file-viewer:files')
+    }, 15000)
+  })
 
   describe('selected task clearing', () => {
     it('clears selectedTaskId when the selected task disappears', async () => {

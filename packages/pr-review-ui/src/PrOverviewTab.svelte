@@ -96,13 +96,13 @@
     </div>
 
     {#if isLoading}
-      <div class="flex flex-col items-center justify-center gap-3 py-10 text-base-content/50 text-sm">
-        <span class="loading loading-spinner loading-md text-primary"></span>
+      <div class="flex flex-col items-center justify-center gap-3 py-10 text-base-content/50 text-sm" role="status" aria-live="polite" aria-atomic="true">
+        <span class="loading loading-spinner loading-md text-primary" aria-hidden="true"></span>
         <span>Loading comments...</span>
       </div>
     {:else if error}
-      <div class="flex flex-col items-center justify-center gap-3 py-10 text-error text-sm text-center">
-        <span class="text-3xl">⚠</span>
+      <div class="flex flex-col items-center justify-center gap-3 py-10 text-error text-sm text-center" role="alert" aria-live="assertive">
+        <span class="text-3xl" aria-hidden="true">⚠</span>
         <span>{error}</span>
       </div>
     {:else if comments.length === 0}
@@ -120,7 +120,7 @@
                 <span class="text-base-content/50">{comment.comment_type === 'review_body' ? 'submitted a review' : 'commented'}</span>
                 <span class="text-base-content/50" title={formatDate(comment.created_at)}>{timeAgo(new Date(comment.created_at).getTime())}</span>
               </div>
-              <span class="text-xs shrink-0" title={commentTypeLabel(comment)}>
+              <span class="text-xs shrink-0" title={commentTypeLabel(comment)} role="img" aria-label={commentTypeLabel(comment)}>
                 {commentIcon(comment)}
               </span>
             </div>

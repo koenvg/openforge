@@ -9,9 +9,14 @@
     taskId: string
   }
 
+  type WorkspaceLookupState = 'loading' | 'ready' | 'unavailable' | 'error'
+
   let { taskId }: Props = $props()
   let workspacePath = $state<string | null>(null)
+  let workspaceLookupState = $state<WorkspaceLookupState>('loading')
+  let workspaceLookupError = $state<string | null>(null)
   let previousTaskId = $state<string | null>(null)
+  let workspaceLookupToken = 0
 
   const terminalShortcuts = createTerminalShortcutController()
   const controller = terminalShortcuts.controller
@@ -20,6 +25,44 @@
   $effect(() => {
     terminalShortcuts.terminalTabsRef = terminalTabsRef
   })
+
+  const workspaceStatusText = $derived.by(() => {
+    if (workspaceLookupState === 'loading') return 'Loading terminal workspace…'
+    if (workspaceLookupState === 'unavailable') return 'Terminal workspace unavailable for this task.'
+    if (workspaceLookupState === 'error') return 'Terminal workspace lookup failed.'
+    return 'Terminal workspace ready.'
+  })
+
+  function formatWorkspaceLookupError(error: unknown): string {
+    return error instanceof Error && error.message.trim() !== ''
+      ? error.message
+      : 'Unable to resolve the workspace for this task.'
+  }
+
+  function loadWorkspaceForTask(taskIdToLoad: string): void {
+    const lookupToken = ++workspaceLookupToken
+    workspacePath = null
+    workspaceLookupState = 'loading'
+    workspaceLookupError = null
+
+    void getTaskWorkspace(taskIdToLoad)
+      .then((workspace) => {
+        if (lookupToken !== workspaceLookupToken) return
+        const resolvedWorkspacePath = workspace?.workspace_path ?? null
+        workspacePath = resolvedWorkspacePath
+        workspaceLookupState = resolvedWorkspacePath === null ? 'unavailable' : 'ready'
+      })
+      .catch((error: unknown) => {
+        if (lookupToken !== workspaceLookupToken) return
+        workspacePath = null
+        workspaceLookupState = 'error'
+        workspaceLookupError = formatWorkspaceLookupError(error)
+      })
+  }
+
+  function retryWorkspaceLookup(): void {
+    loadWorkspaceForTask(taskId)
+  }
 
   $effect(() => {
     if (taskId === previousTaskId) {
@@ -31,23 +74,24 @@
     }
 
     previousTaskId = taskId
-    workspacePath = null
     registerTerminalTaskPaneController(taskId, controller)
-
-    void getTaskWorkspace(taskId).then((workspace) => {
-      workspacePath = workspace?.workspace_path ?? null
-    })
+    loadWorkspaceForTask(taskId)
   })
 
   onMount(() => terminalShortcuts.registerWindowKeydown())
 
   onDestroy(() => {
-    unregisterTerminalTaskPaneController(taskId, controller)
+    workspaceLookupToken += 1
+    if (previousTaskId !== null) {
+      unregisterTerminalTaskPaneController(previousTaskId, controller)
+    }
   })
 </script>
 
-{#if workspacePath !== null}
-  <div class="flex flex-col flex-1 overflow-hidden h-full">
+<div class="flex flex-col flex-1 overflow-hidden h-full">
+  <p class="sr-only" role="status" aria-live="polite">{workspaceStatusText}</p>
+
+  {#if workspaceLookupState === 'ready' && workspacePath !== null}
     <TerminalTabs
       bind:this={terminalTabsRef}
       taskId={taskId}
@@ -55,5 +99,24 @@
       onTabChange={null}
       onTabCountChange={null}
     />
-  </div>
-{/if}
+  {:else if workspaceLookupState === 'loading'}
+    <div class="flex flex-1 items-center justify-center p-6 text-center text-sm text-base-content/70">
+      <div class="flex flex-col items-center gap-3">
+        <span class="loading loading-spinner loading-md" aria-hidden="true"></span>
+        <p>{workspaceStatusText}</p>
+      </div>
+    </div>
+  {:else}
+    <div class="flex flex-1 items-center justify-center p-6 text-center">
+      <div class="max-w-sm space-y-3">
+        <p class="font-medium">{workspaceStatusText}</p>
+        {#if workspaceLookupState === 'error' && workspaceLookupError !== null}
+          <p class="text-sm text-base-content/70">{workspaceLookupError}</p>
+        {:else}
+          <p class="text-sm text-base-content/70">Start or repair the task workspace, then retry loading the terminal.</p>
+        {/if}
+        <button type="button" class="btn btn-sm btn-primary" onclick={retryWorkspaceLookup}>Retry workspace lookup</button>
+      </div>
+    </div>
+  {/if}
+</div>

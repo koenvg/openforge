@@ -8,7 +8,7 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@lucide/svelte": "^1.17.0",
+    "@lucide/svelte": "^1.20.0",
     "@openforge/plugin-sdk": "workspace:*",
     "@openforge/pr-review-ui": "workspace:*"
   },
@@ -22,7 +22,7 @@
     "svelte": "^5.56.3",
     "typescript": "^6.0.3",
     "vite": "^8.0.16",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.9"
   },
   "openforge": {
     "id": "com.openforge.github-sync",
