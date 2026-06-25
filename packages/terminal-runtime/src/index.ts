@@ -39,3 +39,17 @@ export {
   type TerminalShortcutKeydownTarget,
   type TerminalTabsShortcutTarget,
 } from './terminalShortcutController'
+export {
+  createLoadingTerminalTaskPaneWorkspaceSnapshot,
+  createRejectedTerminalTaskPaneWorkspaceSnapshot,
+  createResolvedTerminalTaskPaneWorkspaceSnapshot,
+  createTerminalTaskPaneWorkspaceLookupController,
+  formatTerminalTaskPaneWorkspaceLookupError,
+  getTerminalTaskPaneWorkspaceStatusText,
+  type TerminalTaskPaneTaskSwitch,
+  type TerminalTaskPaneWorkspaceLookupController,
+  type TerminalTaskPaneWorkspaceLookupRequest,
+  type TerminalTaskPaneWorkspaceLookupState,
+  type TerminalTaskPaneWorkspaceResult,
+  type TerminalTaskPaneWorkspaceSnapshot,
+} from './taskPaneWorkspaceLookup'
