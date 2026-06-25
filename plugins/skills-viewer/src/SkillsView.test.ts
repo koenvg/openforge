@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { get } from 'svelte/store'
 import SkillsView from './SkillsView.svelte'
@@ -6,8 +6,8 @@ import { activeProjectId, selectedSkillIdentity, skills } from './lib/stores'
 import type { SkillInfo } from './lib/skillDomain'
 import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
 
-vi.mock('@openforge/plugin-sdk/ui/MarkdownContent.svelte', () => ({
-  default: vi.fn(() => null),
+vi.mock('@openforge/plugin-sdk/ui/MarkdownContent.svelte', async () => ({
+  default: (await import('./test/MarkdownContentTestDouble.svelte')).default,
 }))
 
 function deferred<T>() {
@@ -137,6 +137,57 @@ describe('SkillsView project and async states', () => {
 
     await waitFor(() => expect(screen.getAllByText('retry-loaded').length).toBeGreaterThan(0))
     expect(invoke).toHaveBeenCalledTimes(2)
+  })
+
+  it('renders read-mode metadata and a labelled markdown article through the mounted DOM', async () => {
+    const api = makeApi(vi.fn(async () => [makeSkill({
+      name: 'guide',
+      description: 'Helps reviewers use the project skill.',
+      agent: 'worker',
+      template: '---\nname: guide\ndescription: Hidden frontmatter\n---\n# Usage\nRead [docs](https://example.com/docs) before starting.',
+      file_name: 'guide.md',
+    })]))
+
+    renderView({ api, projectId: 'P-1' })
+
+    const metadata = await screen.findByRole('region', { name: /skill metadata/i })
+    expect(within(metadata).getByText('Helps reviewers use the project skill.')).toBeTruthy()
+    expect(within(metadata).getByText('Repository')).toBeTruthy()
+    expect(within(metadata).getByText('.agents/skills')).toBeTruthy()
+    expect(within(metadata).getByText('guide.md')).toBeTruthy()
+    expect(within(metadata).getByText('worker')).toBeTruthy()
+
+    const article = screen.getByRole('article', { name: /guide skill markdown/i })
+    expect(within(article).getByRole('heading', { name: 'Usage' })).toBeTruthy()
+    expect(within(article).queryByText(/Hidden frontmatter/i)).toBeNull()
+
+    const docsLink = within(article).getByRole('link', { name: 'docs' }) as HTMLAnchorElement
+    docsLink.focus()
+    expect(document.activeElement).toBe(docsLink)
+
+    await fireEvent.click(docsLink)
+    expect(api.system.openUrl).toHaveBeenCalledWith('https://example.com/docs')
+  })
+
+  it('preserves raw skill content when switching from read mode to manual edit mode', async () => {
+    const rawSkillContent = '---\nname: raw-guide\ndescription: Raw frontmatter\n---\n# Usage\nKeep **all** original markdown.'
+    const invoke = vi.fn(async () => [makeSkill({
+      name: 'raw-guide',
+      description: 'Rendered description',
+      template: rawSkillContent,
+    })])
+
+    renderView({ api: makeApi(invoke), projectId: 'P-1' })
+
+    const article = await screen.findByRole('article', { name: /raw-guide skill markdown/i })
+    expect(within(article).queryByText(/Raw frontmatter/i)).toBeNull()
+    expect(within(article).getByRole('heading', { name: 'Usage' })).toBeTruthy()
+
+    await fireEvent.click(screen.getByRole('button', { name: /manually edit/i }))
+
+    const textboxes = screen.getAllByRole('textbox')
+    const editor = textboxes[textboxes.length - 1] as HTMLTextAreaElement
+    expect(editor.value).toBe(rawSkillContent)
   })
 
   it('announces save failures and offers a retry save action', async () => {
