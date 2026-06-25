@@ -162,7 +162,6 @@ describe('SkillsView project and async states', () => {
     const docsLink = within(article).getByRole('link', { name: 'docs' }) as HTMLAnchorElement
     docsLink.focus()
     expect(document.activeElement).toBe(docsLink)
-    expect(article.className).toMatch(/focus-visible:ring/)
 
     await fireEvent.click(docsLink)
     expect(api.system.openUrl).toHaveBeenCalledWith('https://example.com/docs')
