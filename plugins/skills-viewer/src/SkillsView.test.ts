@@ -21,8 +21,9 @@ function deferred<T>() {
 }
 
 function makeSkill(overrides: Partial<SkillInfo> = {}): SkillInfo {
+  const name = overrides.name ?? 'review'
   return {
-    name: 'review',
+    name,
     description: 'Review code',
     agent: null,
     template: '# Review',
@@ -30,6 +31,7 @@ function makeSkill(overrides: Partial<SkillInfo> = {}): SkillInfo {
     source_dir: '.agents',
     source_path: overrides.name ?? 'review',
     file_name: null,
+    relative_path: `${name}/SKILL.md`,
     ...overrides,
   }
 }
@@ -69,7 +71,7 @@ describe('SkillsView project and async states', () => {
   it('clears stale skills and selection and asks for a project when no project is active', async () => {
     const staleSkill = makeSkill({ name: 'stale' })
     skills.set([staleSkill])
-    selectedSkillIdentity.set({ level: staleSkill.level, source_dir: staleSkill.source_dir, source_path: staleSkill.source_path, file_name: staleSkill.file_name })
+    selectedSkillIdentity.set({ level: staleSkill.level, source_dir: staleSkill.source_dir, source_path: staleSkill.source_path, file_name: staleSkill.file_name, relative_path: staleSkill.relative_path })
     const invoke = vi.fn(async () => [makeSkill()])
 
     renderView({ api: makeApi(invoke), projectId: null, projectName: '' })
@@ -158,7 +160,26 @@ describe('SkillsView project and async states', () => {
     await fireEvent.click(screen.getByRole('button', { name: /retry saving skill/i }))
 
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
-    expect(invoke).toHaveBeenLastCalledWith('saveSkillContent', expect.objectContaining({ projectId: 'P-1', content: 'after' }))
+    expect(invoke).toHaveBeenLastCalledWith('saveSkillContent', expect.objectContaining({ projectId: 'P-1', content: 'after', relativePath: 'editable/SKILL.md' }))
+  })
+
+  it('saves the selected duplicate skill using its relative path', async () => {
+    const alpha = makeSkill({ name: 'review', description: 'Alpha skill', relative_path: 'alpha/SKILL.md' })
+    const beta = makeSkill({ name: 'review', description: 'Beta skill', relative_path: 'beta/SKILL.md' })
+    const invoke = vi.fn()
+      .mockResolvedValueOnce([alpha, beta])
+      .mockResolvedValueOnce(undefined)
+
+    renderView({ api: makeApi(invoke), projectId: 'P-1' })
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /review.*beta\/SKILL\.md/i })).toBeTruthy())
+    await fireEvent.click(screen.getByRole('button', { name: /review.*beta\/SKILL\.md/i }))
+    await fireEvent.click(screen.getByRole('button', { name: /manually edit/i }))
+    const textboxes = screen.getAllByRole('textbox')
+    await fireEvent.input(textboxes[textboxes.length - 1], { target: { value: '# Updated beta' } })
+    await fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('saveSkillContent', expect.objectContaining({ relativePath: 'beta/SKILL.md', content: '# Updated beta' })))
   })
 
   it('refreshes displayed metadata from saved frontmatter before returning to read mode', async () => {
@@ -183,8 +204,8 @@ describe('SkillsView project and async states', () => {
     await waitFor(() => expect(screen.getAllByText('updated-review').length).toBeGreaterThan(0))
     expect(screen.getAllByText('Updated description').length).toBeGreaterThan(0)
     expect(get(skills)[0]).toMatchObject({ name: 'updated-review', source_path: 'old-review', description: 'Updated description', template: updatedContent })
-    expect(get(selectedSkillIdentity)).toEqual({ level: 'project', source_dir: '.agents', source_path: 'old-review', file_name: null })
-    expect(invoke).toHaveBeenCalledWith('saveSkillContent', expect.objectContaining({ name: 'old-review', sourcePath: 'old-review' }))
+    expect(get(selectedSkillIdentity)).toEqual({ level: 'project', source_dir: '.agents', source_path: 'old-review', file_name: null, relative_path: 'old-review/SKILL.md' })
+    expect(invoke).toHaveBeenCalledWith('saveSkillContent', expect.objectContaining({ name: 'old-review', sourcePath: 'old-review', relativePath: 'old-review/SKILL.md' }))
   })
 
   it('keeps a shared personal skill locked while its save is in flight across project switches', async () => {

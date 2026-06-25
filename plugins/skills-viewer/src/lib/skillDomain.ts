@@ -7,6 +7,7 @@ export interface SkillInfo {
   source_dir: string
   source_path: string
   file_name: string | null
+  relative_path: string
 }
 
 export interface SkillIdentity {
@@ -14,6 +15,7 @@ export interface SkillIdentity {
   source_dir: string
   source_path: string
   file_name: string | null
+  relative_path: string
 }
 
 export const SKILL_SOURCE_DIRS = ['.agents', '.claude', '.opencode', '.pi'] as const
@@ -32,7 +34,7 @@ export function getSkillSourcePath(source: string, level: SkillInfo['level']): s
 
 export function getSkillLocationLabel(skill: SkillInfo): string {
   const sourcePath = getSkillSourcePath(skill.source_dir, skill.level)
-  const skillFilePath = skill.file_name ? `${sourcePath}/${skill.file_name}` : `${sourcePath}/${skill.source_path}/SKILL.md`
+  const skillFilePath = `${sourcePath}/${skill.relative_path}`
   return skill.level === 'user' ? `~/${skillFilePath}` : skillFilePath
 }
 
@@ -136,6 +138,7 @@ export function getSkillIdentity(skill: SkillInfo): SkillIdentity {
     source_dir: skill.source_dir,
     source_path: skill.source_path,
     file_name: skill.file_name,
+    relative_path: skill.relative_path,
   }
 }
 
@@ -143,8 +146,7 @@ export function isSameSkillIdentity(skill: SkillInfo, identity: SkillIdentity | 
   return identity !== null &&
     skill.level === identity.level &&
     skill.source_dir === identity.source_dir &&
-    skill.source_path === identity.source_path &&
-    skill.file_name === identity.file_name
+    skill.relative_path === identity.relative_path
 }
 
 export function getPreferredSkillIdentity(skills: SkillInfo[], currentIdentity: SkillIdentity | null): SkillIdentity | null {
