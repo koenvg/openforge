@@ -269,6 +269,24 @@ describe('plugin FilesView', () => {
     })
   })
 
+  it('keeps the tree return path available while the selected file is loading', async () => {
+    vi.mocked(fsReadDir).mockResolvedValue(sampleEntries)
+    vi.mocked(fsReadFile).mockReturnValue(new Promise(() => {}))
+
+    renderFilesView()
+
+    await waitFor(() => {
+      expect(screen.getByText('README.md')).toBeTruthy()
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: /README.md/ }))
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByRole('region', { name: 'README.md preview pane' }))
+    })
+    expect(screen.getByRole('button', { name: /Return focus to selected file in tree/ })).toBeTruthy()
+  })
+
   it('moves focus to the preview pane after revealing a file', async () => {
     vi.mocked(fsReadDir).mockResolvedValue([makeFileEntry({ name: 'README.md', path: 'README.md' })])
 
