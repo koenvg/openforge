@@ -19,6 +19,7 @@ interface SaveSkillContentRequest {
   sourcePath?: string | null
   content: string
   fileName?: string | null
+  relativePath?: string | null
 }
 
 function skillSourceDir(root: string, sourceDir: string, level: SkillLevel): string {
@@ -62,6 +63,7 @@ async function scanSkillDirectory(dir: string, level: SkillLevel, sourceDir: str
       source_dir: sourceDir,
       source_path: entry.name,
       file_name: null,
+      relative_path: `${entry.name}/SKILL.md`,
     })
   }
 
@@ -98,6 +100,7 @@ async function scanPiSkillDirectory(dir: string, level: SkillLevel): Promise<Ski
       source_dir: '.pi',
       source_path: entry.name,
       file_name: entry.name,
+      relative_path: entry.name,
     })
   }
 
@@ -132,7 +135,10 @@ function compareSkillSource(left: SkillInfo, right: SkillInfo): number {
   const sourcePathOrder = left.source_path.localeCompare(right.source_path)
   if (sourcePathOrder !== 0) return sourcePathOrder
 
-  return (left.file_name ?? '').localeCompare(right.file_name ?? '')
+  const fileNameOrder = (left.file_name ? 1 : 0) - (right.file_name ? 1 : 0)
+  if (fileNameOrder !== 0) return fileNameOrder
+
+  return left.relative_path.localeCompare(right.relative_path)
 }
 
 async function listSkills(api: BackendOpenForgeAPI, request: ListSkillsRequest): Promise<SkillInfo[]> {
@@ -162,6 +168,31 @@ function assertSafeSkillName(name: string): void {
   }
 }
 
+function getValidatedRelativeSkillPathSegments(relativePath: string, sourceDir: string): string[] {
+  if (!relativePath || relativePath.startsWith('/') || relativePath.includes('\\')) {
+    throw new Error(`Invalid skill relative path: ${relativePath}`)
+  }
+
+  const parts = relativePath.split('/')
+  if (parts.some(part => !part || part === '.' || part === '..')) {
+    throw new Error(`Invalid skill relative path: ${relativePath}`)
+  }
+
+  if (parts.length === 1) {
+    if (sourceDir !== '.pi' || !isValidRootMarkdownSkillFileName(parts[0])) {
+      throw new Error(`Invalid skill relative path: ${relativePath}`)
+    }
+    return parts
+  }
+
+  if (parts.length === 2 && parts[1] === 'SKILL.md') {
+    assertSafeSkillName(parts[0])
+    return parts
+  }
+
+  throw new Error(`Invalid skill relative path: ${relativePath}`)
+}
+
 async function saveSkillContent(api: BackendOpenForgeAPI, request: SaveSkillContentRequest): Promise<void> {
   if (!isSupportedSkillSourceDir(request.sourceDir)) {
     throw new Error(`Unsupported skill source directory: ${request.sourceDir}`)
@@ -178,6 +209,13 @@ async function saveSkillContent(api: BackendOpenForgeAPI, request: SaveSkillCont
   }
 
   const skillsDir = skillSourceDir(root, request.sourceDir, request.level)
+  if (request.relativePath) {
+    const relativePathParts = getValidatedRelativeSkillPathSegments(request.relativePath, request.sourceDir)
+    await mkdir(join(skillsDir, ...relativePathParts.slice(0, -1)), { recursive: true })
+    await writeFile(join(skillsDir, ...relativePathParts), request.content, 'utf8')
+    return
+  }
+
   if (request.fileName) {
     if (request.sourceDir !== '.pi') {
       throw new Error('Root markdown skill files are only supported for .pi skills')
@@ -220,6 +258,7 @@ export default defineBackendPlugin({
           sourcePath: { type: ['string', 'null'] },
           content: { type: 'string' },
           fileName: { type: ['string', 'null'] },
+          relativePath: { type: ['string', 'null'] },
         },
       },
       handler: (request) => saveSkillContent(openforge, request),

@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { getPreferredSkillIdentity, getSkillIdentity, getSkillLocationLabel, getSkillSourcePath, getVisibleSkills, groupSkillsBySource, parseSkillFrontmatter, stripSkillFrontmatter, type SkillInfo } from './skillDomain'
+import { getPreferredSkillIdentity, getSkillIdentity, getSkillLocationLabel, getSkillSourcePath, getVisibleSkills, groupSkillsBySource, isSameSkillIdentity, parseSkillFrontmatter, stripSkillFrontmatter, type SkillInfo } from './skillDomain'
 
-function makeSkill(name: string, source_dir: string, level: SkillInfo['level'] = 'project'): SkillInfo {
-  return { name, source_dir, source_path: name, level, description: null, agent: null, template: null, file_name: null }
+function makeSkill(name: string, source_dir: string, level: SkillInfo['level'] = 'project', relative_path = `${name}/SKILL.md`): SkillInfo {
+  const source_path = relative_path.endsWith('/SKILL.md')
+    ? relative_path.slice(0, -'/SKILL.md'.length)
+    : relative_path
+  return { name, source_dir, source_path, level, description: null, agent: null, template: null, file_name: null, relative_path }
 }
 
 describe('skills-viewer skill domain helpers', () => {
@@ -30,21 +33,33 @@ describe('skills-viewer skill domain helpers', () => {
   })
 
   it('formats skill locations with root markdown file names for duplicate disambiguation', () => {
-    const directorySkill = makeSkill('display-review', '.pi', 'user')
-    directorySkill.source_path = 'review-folder'
-    const rootMarkdownSkill = makeSkill('review', '.pi', 'user')
-    rootMarkdownSkill.source_path = 'review.md'
+    const directorySkill = makeSkill('display-review', '.pi', 'user', 'review-folder/SKILL.md')
+    const rootMarkdownSkill = makeSkill('review', '.pi', 'user', 'review.md')
     rootMarkdownSkill.file_name = 'review.md'
 
     expect(getSkillLocationLabel(directorySkill)).toBe('~/.pi/agent/skills/review-folder/SKILL.md')
     expect(getSkillLocationLabel(rootMarkdownSkill)).toBe('~/.pi/agent/skills/review.md')
   })
 
-  it('builds stable identities from source paths instead of frontmatter names', () => {
-    const skill = makeSkill('display-review', '.pi', 'user')
-    skill.source_path = 'review-folder'
+  it('formats directory skill locations from the discovered path instead of frontmatter name', () => {
+    const skill = makeSkill('frontmatter-name', '.agents', 'project', 'folder-name/SKILL.md')
 
-    expect(getSkillIdentity(skill)).toEqual({ level: 'user', source_dir: '.pi', source_path: 'review-folder', file_name: null })
+    expect(getSkillLocationLabel(skill)).toBe('.agents/skills/folder-name/SKILL.md')
+  })
+
+  it('builds stable identities for duplicate skill names', () => {
+    const skill = makeSkill('review', '.pi', 'user', 'review.md')
+    skill.file_name = 'review.md'
+
+    expect(getSkillIdentity(skill)).toEqual({ level: 'user', source_dir: '.pi', source_path: 'review.md', file_name: 'review.md', relative_path: 'review.md' })
+  })
+
+  it('distinguishes same-source directory skills with the same frontmatter name by relative path', () => {
+    const alpha = makeSkill('review', '.agents', 'project', 'alpha/SKILL.md')
+    const beta = makeSkill('review', '.agents', 'project', 'beta/SKILL.md')
+
+    expect(isSameSkillIdentity(alpha, getSkillIdentity(beta))).toBe(false)
+    expect(isSameSkillIdentity(beta, getSkillIdentity(beta))).toBe(true)
   })
 
   it('defaults to a project skill when mixed project and user skills are present', () => {
@@ -74,6 +89,13 @@ describe('skills-viewer skill domain helpers', () => {
     const missingSelection = getSkillIdentity(makeSkill('missing-personal', '.pi', 'user'))
 
     expect(getPreferredSkillIdentity(filteredSkills, missingSelection)).toEqual(getSkillIdentity(filteredSkills[1]))
+  })
+
+  it('preserves a path-based selection when saved frontmatter renames the skill', () => {
+    const currentIdentity = getSkillIdentity(makeSkill('review', '.agents', 'project', 'folder/SKILL.md'))
+    const renamedSkill = makeSkill('renamed-review', '.agents', 'project', 'folder/SKILL.md')
+
+    expect(getPreferredSkillIdentity([renamedSkill], currentIdentity)).toEqual(currentIdentity)
   })
 
   it('parses frontmatter metadata for saved skill content', () => {
