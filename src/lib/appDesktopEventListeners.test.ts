@@ -12,6 +12,7 @@ vi.mock('./terminalPool', () => ({
     ptyActive: true,
     shellExited: false,
     currentPtyInstance: null,
+    hasOutput: false,
   }),
   release: vi.fn(),
   replayPtyBuffersForActiveTerminals: vi.fn(async () => undefined),
@@ -83,6 +84,7 @@ describe('registerAppDesktopEventListeners', () => {
       ptyActive: true,
       shellExited: false,
       currentPtyInstance: null,
+      hasOutput: false,
     })
   })
 
@@ -182,6 +184,7 @@ describe('registerAppDesktopEventListeners', () => {
       ptyActive: true,
       shellExited: false,
       currentPtyInstance: 42,
+      hasOutput: false,
     })
     expect(get(activeSessions).get('task-1')?.status).toBe('running')
   })
@@ -277,6 +280,7 @@ describe('registerAppDesktopEventListeners', () => {
       ptyActive: false,
       shellExited: true,
       currentPtyInstance: 42,
+      hasOutput: false,
     })
     activeSessions.set(new Map([['task-1', createSession({ status: 'running' })]]))
 
