@@ -145,7 +145,9 @@ describe('SkillsView project and async states', () => {
       description: 'Helps reviewers use the project skill.',
       agent: 'worker',
       template: '---\nname: guide\ndescription: Hidden frontmatter\n---\n# Usage\nRead [docs](https://example.com/docs) before starting.',
+      source_path: 'guide.md',
       file_name: 'guide.md',
+      relative_path: 'guide.md',
     })]))
 
     renderView({ api, projectId: 'P-1' })
