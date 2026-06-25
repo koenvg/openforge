@@ -28,6 +28,7 @@ function makeSkill(overrides: Partial<SkillInfo> = {}): SkillInfo {
     template: '# Review',
     level: 'project',
     source_dir: '.agents',
+    source_path: overrides.name ?? 'review',
     file_name: null,
     ...overrides,
   }
@@ -68,7 +69,7 @@ describe('SkillsView project and async states', () => {
   it('clears stale skills and selection and asks for a project when no project is active', async () => {
     const staleSkill = makeSkill({ name: 'stale' })
     skills.set([staleSkill])
-    selectedSkillIdentity.set({ name: staleSkill.name, level: staleSkill.level, source_dir: staleSkill.source_dir, file_name: staleSkill.file_name })
+    selectedSkillIdentity.set({ level: staleSkill.level, source_dir: staleSkill.source_dir, source_path: staleSkill.source_path, file_name: staleSkill.file_name })
     const invoke = vi.fn(async () => [makeSkill()])
 
     renderView({ api: makeApi(invoke), projectId: null, projectName: '' })
@@ -181,8 +182,9 @@ describe('SkillsView project and async states', () => {
 
     await waitFor(() => expect(screen.getAllByText('updated-review').length).toBeGreaterThan(0))
     expect(screen.getAllByText('Updated description').length).toBeGreaterThan(0)
-    expect(get(skills)[0]).toMatchObject({ name: 'updated-review', description: 'Updated description', template: updatedContent })
-    expect(get(selectedSkillIdentity)).toEqual({ name: 'updated-review', level: 'project', source_dir: '.agents', file_name: null })
+    expect(get(skills)[0]).toMatchObject({ name: 'updated-review', source_path: 'old-review', description: 'Updated description', template: updatedContent })
+    expect(get(selectedSkillIdentity)).toEqual({ level: 'project', source_dir: '.agents', source_path: 'old-review', file_name: null })
+    expect(invoke).toHaveBeenCalledWith('saveSkillContent', expect.objectContaining({ name: 'old-review', sourcePath: 'old-review' }))
   })
 
   it('keeps a shared personal skill locked while its save is in flight across project switches', async () => {

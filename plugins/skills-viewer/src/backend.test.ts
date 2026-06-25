@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -120,12 +120,35 @@ describe('skills-viewer backend skill discovery', () => {
     const methods = await activateBackendWithProject(projectPath)
     const skills = await methods.get('listSkills')?.({ projectId: 'P-1' })
 
-    expect((skills as Array<{ name: string; level: string; source_dir: string; file_name: string | null }>)
+    expect((skills as Array<{ name: string; level: string; source_dir: string; source_path: string; file_name: string | null }>)
       .filter((skill) => skill.name === 'review')
-      .map(({ name, level, source_dir, file_name }) => ({ name, level, source_dir, file_name })))
+      .map(({ name, level, source_dir, source_path, file_name }) => ({ name, level, source_dir, source_path, file_name })))
       .toEqual([
-        { name: 'review', level: 'user', source_dir: '.pi', file_name: null },
-        { name: 'review', level: 'user', source_dir: '.pi', file_name: 'review.md' },
+        { name: 'review', level: 'user', source_dir: '.pi', source_path: 'review', file_name: null },
+        { name: 'review', level: 'user', source_dir: '.pi', source_path: 'review.md', file_name: 'review.md' },
       ])
+  })
+
+  it('saves directory-backed skills by listed source folder instead of frontmatter name', async () => {
+    const projectPath = await mkdtemp(join(tempRoot(), 'skills-viewer-project-'))
+    await createSkillFile(projectPath, '.agents/skills/folder-review/SKILL.md', `---\nname: display-review\ndescription: Display name\n---\n# Before\n`)
+
+    const methods = await activateBackendWithProject(projectPath)
+    const skills = await methods.get('listSkills')?.({ projectId: 'P-1' })
+    const skill = (skills as Array<{ name: string; source_path: string }>).find((candidate) => candidate.name === 'display-review')
+
+    expect(skill).toMatchObject({ name: 'display-review', source_path: 'folder-review' })
+
+    await methods.get('saveSkillContent')?.({
+      projectId: 'P-1',
+      name: 'display-review',
+      sourcePath: 'folder-review',
+      level: 'project',
+      sourceDir: '.agents',
+      content: '# After\n',
+    })
+
+    await expect(readFile(join(projectPath, '.agents/skills/folder-review/SKILL.md'), 'utf8')).resolves.toBe('# After\n')
+    await expect(stat(join(projectPath, '.agents/skills/display-review'))).rejects.toThrow()
   })
 })
