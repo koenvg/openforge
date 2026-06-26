@@ -18,7 +18,7 @@ export interface SkillIdentity {
   relative_path: string
 }
 
-export const SKILL_SOURCE_DIRS = ['.agents', '.claude', '.opencode', '.pi'] as const
+export const SKILL_SOURCE_DIRS = ['.agents', '.claude', '.opencode', '.codex', '.pi'] as const
 
 export type SkillSourceDir = typeof SKILL_SOURCE_DIRS[number]
 

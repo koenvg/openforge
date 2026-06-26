@@ -1,5 +1,8 @@
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { getPreferredSkillIdentity, getSkillIdentity, getSkillLocationLabel, getSkillSourcePath, getVisibleSkills, groupSkillsBySource, isSameSkillIdentity, parseSkillFrontmatter, stripSkillFrontmatter, type SkillInfo } from './skillDomain'
+import { getPreferredSkillIdentity, getSkillIdentity, getSkillLocationLabel, getSkillSourcePath, getVisibleSkills, groupSkillsBySource, isSameSkillIdentity, parseSkillFrontmatter, SKILL_SOURCE_DIRS, stripSkillFrontmatter, type SkillInfo } from './skillDomain'
 
 function makeSkill(name: string, source_dir: string, level: SkillInfo['level'] = 'project', relative_path = `${name}/SKILL.md`): SkillInfo {
   const source_path = relative_path.endsWith('/SKILL.md')
@@ -8,7 +11,26 @@ function makeSkill(name: string, source_dir: string, level: SkillInfo['level'] =
   return { name, source_dir, source_path, level, description: null, agent: null, template: null, file_name: null, relative_path }
 }
 
+function rustCommandDiscoverySkillSourceDirs(): string[] {
+  const testDir = dirname(fileURLToPath(import.meta.url))
+  const rustSource = readFileSync(resolve(testDir, '../../../../src-tauri/src/command_discovery.rs'), 'utf8')
+  const match = /pub const SKILL_SOURCE_DIRS: \[&str; \d+\] = \[([\s\S]*?)\];/.exec(rustSource)
+  expect(match).not.toBeNull()
+
+  return Array.from(match?.[1].matchAll(/"(\.\w+)"|([A-Z_]+_SKILLS_SOURCE_DIR)/g) ?? []).map((sourceMatch) => {
+    if (sourceMatch[1]) return sourceMatch[1]
+    const constantMatch = new RegExp(`pub const ${sourceMatch[2]}: &str = "(\\.\\w+)";`).exec(rustSource)
+    expect(constantMatch).not.toBeNull()
+    return constantMatch?.[1] ?? ''
+  })
+}
+
 describe('skills-viewer skill domain helpers', () => {
+  it('keeps supported provider skill source directories aligned with Rust command discovery', () => {
+    expect(SKILL_SOURCE_DIRS).toEqual(rustCommandDiscoverySkillSourceDirs())
+    expect(SKILL_SOURCE_DIRS).toContain('.codex')
+  })
+
   it('groups skills by known provider source order and appends unknown sources to other', () => {
     const skills = [
       makeSkill('custom', '.custom'),
@@ -16,11 +38,13 @@ describe('skills-viewer skill domain helpers', () => {
       makeSkill('agents', '.agents'),
       makeSkill('other-custom', '.another'),
       makeSkill('opencode', '.opencode'),
+      makeSkill('codex', '.codex'),
     ]
 
     expect(groupSkillsBySource(skills)).toEqual([
       { source: '.agents', skills: [skills[2]] },
       { source: '.opencode', skills: [skills[4]] },
+      { source: '.codex', skills: [skills[5]] },
       { source: '.pi', skills: [skills[1]] },
       { source: 'other', skills: [skills[0], skills[3]] },
     ])

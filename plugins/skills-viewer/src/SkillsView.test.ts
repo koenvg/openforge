@@ -22,6 +22,7 @@ function deferred<T>() {
 
 function makeSkill(overrides: Partial<SkillInfo> = {}): SkillInfo {
   const name = overrides.name ?? 'review'
+  const fileName = overrides.file_name ?? null
   return {
     name,
     description: 'Review code',
@@ -29,9 +30,9 @@ function makeSkill(overrides: Partial<SkillInfo> = {}): SkillInfo {
     template: '# Review',
     level: 'project',
     source_dir: '.agents',
-    source_path: overrides.name ?? 'review',
-    file_name: null,
-    relative_path: `${name}/SKILL.md`,
+    source_path: fileName ?? name,
+    file_name: fileName,
+    relative_path: fileName ?? `${name}/SKILL.md`,
     ...overrides,
   }
 }
