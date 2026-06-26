@@ -11,6 +11,7 @@
     onSelectFile: (path: string) => void
     initialScrollTop?: number
     onScrollTopChange?: (scrollTop: number) => void
+    focusSelectedRequest?: number | null
   }
 
   interface TreeNode {
@@ -30,12 +31,14 @@
     onSelectFile,
     initialScrollTop = 0,
     onScrollTopChange,
+    focusSelectedRequest = null,
   }: Props = $props()
 
   let scrollContainer = $state<HTMLDivElement | null>(null)
   let appliedInitialScrollTop = $state<number | null>(null)
   let focusedPath = $state<string | null>(null)
   let lastSelectedPath = $state<string | null>(null)
+  let appliedFocusSelectedRequest = $state<number | null>(null)
 
   const treeNodes = $derived(buildTree(entries))
   const visibleNodes = $derived(flattenVisibleTree(treeNodes))
@@ -131,8 +134,8 @@
   }
 
   function activateNode(node: TreeNode) {
-    void focusPath(node.entry.path)
     if (node.entry.isDir) {
+      void focusPath(node.entry.path)
       onToggleDir(node.entry.path)
     } else {
       onSelectFile(node.entry.path)
@@ -250,6 +253,14 @@
     }
 
     lastSelectedPath = selectedPath
+  })
+
+  $effect(() => {
+    if (focusSelectedRequest === null || appliedFocusSelectedRequest === focusSelectedRequest) return
+    appliedFocusSelectedRequest = focusSelectedRequest
+    if (selectedPath !== null && visiblePaths.includes(selectedPath)) {
+      void focusPath(selectedPath)
+    }
   })
 </script>
 
