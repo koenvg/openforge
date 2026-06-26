@@ -133,11 +133,11 @@ The repository location for website implementation: an Astro monorepo workspace 
 _Avoid_: Desktop renderer, docs folder site, separate repository
 
 **Marketing Site First Milestone**:
-The first website implementation target: a small static one-page **Marketing Site** ordered as hero with the existing workflow visual, top reasons, product screenshot proof, a small plugin customization section, install/GitHub call-to-action block, and footer links.
+The first website implementation target: a small static one-page **Marketing Site** ordered as hero with a concrete task → agent → handoff → review workflow visual, top reasons, product screenshot proof, a small plugin customization section, install/GitHub call-to-action block, and footer links.
 _Avoid_: Blog, hosted docs system, plugin marketplace, analytics, mailing list, interactive demo, standalone workflow section, standalone local-first trust section
 
 **Marketing Site Visual Direction**:
-A calm developer-tool aesthetic for the **Marketing Site** that uses the workflow hero visual and product screenshots rather than flashy AI imagery.
+A developer-tool aesthetic for the **Marketing Site** that uses a concrete workflow hero visual and product screenshots rather than generic AI imagery; a vibrant block/bento hero is acceptable when it still makes the task → agent → handoff → review path clear.
 _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot art
 
 ## Relationships

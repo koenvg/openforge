@@ -12,6 +12,12 @@ import '../styles/global.css';
       name="description"
       content="OpenForge is a local desktop command center for keeping AI coding-agent work visible, reviewable, and under human control."
     />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
     <title>OpenForge — Run AI coding agents without losing control</title>
   </head>
   <body>
@@ -21,15 +27,20 @@ import '../styles/global.css';
           <a class="wordmark" href="/" aria-label="OpenForge home">OpenForge</a>
         </header>
 
-        <section class="hero" aria-describedby="hero-description">
+        <section class="hero" aria-describedby="hero-description" data-animate-section>
           <div class="hero-copy">
-            <h1 id="hero-title">Run AI coding<br />agents without losing<br />control of the work</h1>
-            <p id="hero-description" class="lede">
-              OpenForge keeps the work local, visible, and ready for human review.
+            <h1 id="hero-title" data-animate-item>Ship with agents. Review like a human.</h1>
+            <p id="hero-description" class="lede" data-animate-item>
+              OpenForge turns parallel AI coding work into clear tasks, handoffs, and approvals.
             </p>
 
-            <div class="actions" aria-label="Primary actions">
+            <div class="actions hero-actions" aria-label="Primary actions" data-animate-item>
               <a class="button button-primary" href="https://github.com/koenvg/openforge/releases" aria-label="Install OpenForge from releases">
+                <svg aria-hidden="true" viewBox="0 0 24 24" class="button-icon download-icon">
+                  <path d="M12 3v11" />
+                  <path d="m7.5 9.5 4.5 4.5 4.5-4.5" />
+                  <path d="M5 18.5h14" />
+                </svg>
                 Install OpenForge
               </a>
               <a class="button button-secondary" href="https://github.com/koenvg/openforge" aria-label="View OpenForge on GitHub">
@@ -39,98 +50,109 @@ import '../styles/global.css';
                     d="M12 .5A11.5 11.5 0 0 0 8.36 22.4c.58.11.8-.25.8-.56v-2.17c-3.25.71-3.94-1.38-3.94-1.38-.53-1.35-1.3-1.71-1.3-1.71-1.06-.72.08-.71.08-.71 1.17.08 1.79 1.2 1.79 1.2 1.04 1.78 2.73 1.27 3.4.97.1-.76.4-1.27.74-1.56-2.6-.3-5.33-1.3-5.33-5.77 0-1.27.46-2.31 1.2-3.13-.12-.3-.52-1.52.12-3.08 0 0 .98-.31 3.2 1.2a11.1 11.1 0 0 1 5.84 0c2.22-1.51 3.2-1.2 3.2-1.2.64 1.56.24 2.78.12 3.08.75.82 1.2 1.86 1.2 3.13 0 4.48-2.74 5.47-5.35 5.76.42.36.8 1.08.8 2.18v3.23c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"
                   />
                 </svg>
-                GitHub
+                See GitHub
               </a>
             </div>
           </div>
 
-          <div class="approval-stage" aria-label="Task to review workflow illustration">
-            <img
-              class="hero-visual-image"
-              src="/images/openforge-approval-workflow.png"
-              width="1100"
-              height="500"
-              alt="Task, agent, handoff, and review workflow with a human approval gate and diff summary"
-            />
+          <div class="bento-stage" aria-label="Task, agent, handoff, and review workflow">
+            <article class="bento-card bento-card-task">
+              <span class="bento-label">Task</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 7h10" />
+                <path d="M8 12h10" />
+                <path d="M8 17h10" />
+                <path d="m3.5 7 1 1 2-2" />
+                <path d="m3.5 12 1 1 2-2" />
+                <path d="m3.5 17 1 1 2-2" />
+              </svg>
+              <p>Define clear work.</p>
+            </article>
+
+            <article class="bento-card bento-card-agent">
+              <span class="bento-label">Agent</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 9a4 4 0 0 1 8 0v3a4 4 0 0 1-8 0Z" />
+                <path d="M9 16h6" />
+                <path d="M12 3v2" />
+                <path d="M5 11H3" />
+                <path d="M21 11h-2" />
+                <path d="M10 10h.01" />
+                <path d="M14 10h.01" />
+              </svg>
+              <p>Run parallel agents.</p>
+            </article>
+
+            <article class="bento-card bento-card-handoff">
+              <span class="bento-label">Handoff</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m7 8-4 4 4 4" />
+                <path d="m17 8 4 4-4 4" />
+                <path d="m14 4-4 16" />
+              </svg>
+              <p>Collect context and diffs.</p>
+            </article>
+
+            <article class="bento-card bento-card-review">
+              <span class="bento-label">Review</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" />
+                <circle cx="12" cy="12" r="3" />
+                <path d="m15.5 17.5 1.5 1.5 3-3" />
+              </svg>
+              <p>Approve with confidence.</p>
+            </article>
+
+            <span class="flow-arrow flow-arrow-task-agent" aria-hidden="true">
+              <span class="flow-line"></span>
+              <span class="flow-dot">→</span>
+            </span>
+            <span class="flow-arrow flow-arrow-agent-handoff" aria-hidden="true">
+              <span class="flow-line"></span>
+              <span class="flow-dot">↓</span>
+            </span>
+            <span class="flow-arrow flow-arrow-handoff-review" aria-hidden="true">
+              <span class="flow-line"></span>
+              <span class="flow-dot">←</span>
+            </span>
           </div>
         </section>
       </div>
 
-      <section class="top-reasons" aria-labelledby="top-reasons-title">
+      <section class="top-reasons" aria-labelledby="top-reasons-title" data-animate-section>
         <div class="section-heading">
-          <p class="eyebrow">Top reasons</p>
-          <h2 id="top-reasons-title" class="section-title">Top reasons to use OpenForge</h2>
+          <h2 id="top-reasons-title" class="section-title">Three ways OpenForge keeps agent work reviewable</h2>
         </div>
 
         <ol class="reason-rail" aria-label="Top reasons to use OpenForge">
           <li class="reason-step">
-            <article class="reason-card">
+            <article class="reason-card" data-animate-card>
               <span class="step-badge" aria-hidden="true">01</span>
-              <div class="reason-visual control-visual" aria-hidden="true">
-                <div class="visual-window">
-                  <div class="visual-header">
-                    <span>src/task-review.ts</span>
-                    <span class="status-pill amber-pill">Review</span>
-                  </div>
-                  <div class="diff-row removed-line"><span>−</span><span>skip handoff notes</span></div>
-                  <div class="diff-row added-line"><span>+</span><span>require review gate</span></div>
-                  <div class="review-actions">
-                    <span>Awaiting human review</span>
-                    <span class="status-pill green-pill">Approve</span>
-                  </div>
-                </div>
-              </div>
               <h3>Stay in control of agent work.</h3>
               <p>Keep scoped changes, Handoff Notes, and review gates visible before work moves forward.</p>
             </article>
           </li>
 
           <li class="reason-step">
-            <article class="reason-card">
+            <article class="reason-card" data-animate-card>
               <span class="step-badge" aria-hidden="true">02</span>
-              <div class="reason-visual cli-visual" aria-hidden="true">
-                <div class="terminal-window">
-                  <div class="terminal-bar"><span></span><span></span><span></span></div>
-                  <code>$ openforge list-tasks --project-id P-4 --state doing</code>
-                  <code>$ openforge update-task --task-id KVG-1474 --summary "Ready for review"</code>
-                  <code class="terminal-result">✓ Task handoff updated · ready for review</code>
-                </div>
-              </div>
               <h3>Let agents manage OpenForge tasks through the CLI.</h3>
               <p>Agents can coordinate Task status and Handoff Notes from command-line workflows.</p>
             </article>
           </li>
 
           <li class="reason-step">
-            <article class="reason-card">
+            <article class="reason-card" data-animate-card>
               <span class="step-badge" aria-hidden="true">03</span>
-              <div class="reason-visual plugin-visual" aria-hidden="true">
-                <div class="plugin-boundary">
-                  <div class="boundary-title">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M12 3 20 6.5v5.7c0 4.5-3.1 7.4-8 8.8-4.9-1.4-8-4.3-8-8.8V6.5L12 3Z" />
-                      <path d="m8.8 12.1 2 2 4.6-4.8" />
-                    </svg>
-                    Trusted Plugin boundary
-                  </div>
-                  <div class="plugin-chip-grid">
-                    <span>Review checklist</span>
-                    <span>Repo insights</span>
-                    <span>Task labels</span>
-                    <span>Handoff helpers</span>
-                  </div>
-                </div>
-              </div>
               <h3>Customize OpenForge to your workflow with Trusted Plugins.</h3>
-              <p>Add approved capabilities around the stable task-based operator console.</p>
+              <p>Shape views, task context, and automations around the stable task-based operator console.</p>
             </article>
           </li>
         </ol>
       </section>
 
-      <section class="product-proof" aria-labelledby="product-proof-title">
+      <section class="product-proof" aria-labelledby="product-proof-title" data-animate-section>
         <div class="product-proof-copy">
-          <p class="eyebrow">Product proof</p>
           <h2 id="product-proof-title" class="section-title">See the work without chasing it</h2>
           <p class="proof-lede">
             OpenForge keeps task attention and review blockers in one quiet desktop surface.
@@ -148,29 +170,20 @@ import '../styles/global.css';
               alt="OpenForge Task Attention Pane showing the current task, pull request review blockers, and reviewer comments"
             />
           </div>
-          <figcaption class="proof-callout">Review blockers stay readable at a glance.</figcaption>
         </figure>
       </section>
 
-      <section class="plugin-customization" aria-labelledby="plugin-customization-title">
+      <section class="plugin-customization" aria-labelledby="plugin-customization-title" data-animate-section>
         <div class="plugin-customization-heading">
-          <p class="eyebrow">Trusted Plugins</p>
           <h2 id="plugin-customization-title" class="section-title">Bring your workflow into OpenForge</h2>
           <p class="plugin-customization-lede">
-            Your workflow. Your plugin. Your way of working — around the same stable OpenForge Tasks.
-          </p>
-          <p class="plugin-customization-copy">
-            OpenForge's stable task-based operator console stays predictable while Trusted Plugins shape the workspace around how you already work.
+            Trusted Plugins add workflow-specific surfaces around the same stable OpenForge Tasks.
           </p>
         </div>
 
         <div class="capability-ledger" aria-label="Trusted Plugin customization examples">
-          <div class="ledger-bracket ledger-bracket-left" aria-hidden="true">
-            <span>stable task-based operator console</span>
-          </div>
-
           <ol class="ledger-list">
-            <li class="ledger-row">
+            <li class="ledger-row" data-animate-card>
               <span class="ledger-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24">
                   <path d="M4 5.5h16v13H4z" />
@@ -185,7 +198,7 @@ import '../styles/global.css';
               <span class="ledger-dot" aria-hidden="true"></span>
             </li>
 
-            <li class="ledger-row">
+            <li class="ledger-row" data-animate-card>
               <span class="ledger-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24">
                   <path d="M5 4.5h14v15H5z" />
@@ -201,7 +214,7 @@ import '../styles/global.css';
               <span class="ledger-dot" aria-hidden="true"></span>
             </li>
 
-            <li class="ledger-row">
+            <li class="ledger-row" data-animate-card>
               <span class="ledger-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24">
                   <path d="M6 16.5a3.5 3.5 0 0 1 0-7 5.5 5.5 0 0 1 10.7-1.8A4.2 4.2 0 1 1 18 16.5h-2.2" />
@@ -216,7 +229,7 @@ import '../styles/global.css';
               <span class="ledger-dot" aria-hidden="true"></span>
             </li>
 
-            <li class="ledger-row">
+            <li class="ledger-row" data-animate-card>
               <span class="ledger-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24">
                   <path d="M12 3 20 6.5v5.7c0 4.5-3.1 7.4-8 8.8-4.9-1.4-8-4.3-8-8.8V6.5L12 3Z" />
@@ -225,21 +238,16 @@ import '../styles/global.css';
               </span>
               <div class="ledger-row-copy">
                 <h3>Your host capabilities</h3>
-                <p><code>tasks · fs · shell · notifications</code> · explicit access for trusted plugins</p>
+                <p><code>tasks · fs · shell · notifications</code> · explicit access for Trusted Plugins</p>
               </div>
               <span class="ledger-dot" aria-hidden="true"></span>
             </li>
           </ol>
-
-          <div class="ledger-bracket ledger-bracket-right" aria-hidden="true">
-            <span>trusted package runtime</span>
-          </div>
         </div>
       </section>
 
-      <section class="final-cta" aria-labelledby="final-cta-title">
+      <section class="final-cta" aria-labelledby="final-cta-title" data-animate-section>
         <div class="final-cta-copy">
-          <p class="eyebrow">Keep the work in hand</p>
           <h2 id="final-cta-title" class="section-title">Bring OpenForge to your desktop</h2>
           <p class="final-cta-lede">
             Install the local command center for visible, reviewable agent work.
@@ -265,38 +273,6 @@ import '../styles/global.css';
             </a>
           </div>
         </div>
-
-        <article class="source-card" aria-labelledby="source-card-title">
-          <div class="source-card-heading">
-            <div>
-              <p class="source-card-kicker">Source due diligence</p>
-              <h3 id="source-card-title">Check the source first</h3>
-            </div>
-            <svg aria-hidden="true" viewBox="0 0 24 24" class="source-github-icon">
-              <path
-                fill="currentColor"
-                d="M12 .5A11.5 11.5 0 0 0 8.36 22.4c.58.11.8-.25.8-.56v-2.17c-3.25.71-3.94-1.38-3.94-1.38-.53-1.35-1.3-1.71-1.3-1.71-1.06-.72.08-.71.08-.71 1.17.08 1.79 1.2 1.79 1.2 1.04 1.78 2.73 1.27 3.4.97.1-.76.4-1.27.74-1.56-2.6-.3-5.33-1.3-5.33-5.77 0-1.27.46-2.31 1.2-3.13-.12-.3-.52-1.52.12-3.08 0 0 .98-.31 3.2 1.2a11.1 11.1 0 0 1 5.84 0c2.22-1.51 3.2-1.2 3.2-1.2.64 1.56.24 2.78.12 3.08.75.82 1.2 1.86 1.2 3.13 0 4.48-2.74 5.47-5.35 5.76.42.36.8 1.08.8 2.18v3.23c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"
-              />
-            </svg>
-          </div>
-
-          <div class="source-card-divider" aria-hidden="true"></div>
-
-          <dl class="source-details">
-            <div>
-              <dt>Repository</dt>
-              <dd><a href="https://github.com/koenvg/openforge">github.com/koenvg/openforge</a></dd>
-            </div>
-            <div>
-              <dt>Purpose</dt>
-              <dd>Local desktop command center for agent work.</dd>
-            </div>
-            <div>
-              <dt>Review posture</dt>
-              <dd>Visible. Reviewable. Yours.</dd>
-            </div>
-          </dl>
-        </article>
       </section>
     </main>
 
@@ -332,13 +308,73 @@ import '../styles/global.css';
           <li>
             <span class="footer-link-label">Orientation</span>
             <a href="https://github.com/koenvg/openforge#why-open-forge-exists">
-              Why OpenForge exists
+              Project orientation
               <span aria-hidden="true">→</span>
             </a>
           </li>
         </ul>
       </nav>
     </footer>
+
+    <script>
+      import { gsap } from 'gsap';
+      import { ScrollTrigger } from 'gsap/ScrollTrigger';
+
+      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      if (!prefersReducedMotion) {
+        gsap.registerPlugin(ScrollTrigger);
+
+        const heroTimeline = gsap.timeline({ defaults: { ease: 'power3.out' } });
+        heroTimeline
+          .from('.wordmark', { autoAlpha: 0, y: -12, duration: 0.45 })
+          .from('#hero-title', { autoAlpha: 0, y: 34, rotate: -1.5, duration: 0.75 }, 0.05)
+          .from('.lede', { autoAlpha: 0, y: 22, duration: 0.62 }, 0.24)
+          .from('.hero-actions .button', { autoAlpha: 0, y: 18, scale: 0.96, duration: 0.5, stagger: 0.07 }, 0.42)
+          .from('.bento-card', {
+            autoAlpha: 0,
+            y: 34,
+            scale: 0.92,
+            rotate: -2,
+            duration: 0.72,
+            ease: 'back.out(1.25)',
+            stagger: 0.08
+          }, 0.28)
+          .from('.flow-line', { scaleX: 0, scaleY: 0, duration: 0.36, stagger: 0.08, transformOrigin: 'center center' }, 0.86)
+          .from('.flow-dot', { autoAlpha: 0, scale: 0.35, duration: 0.34, ease: 'back.out(2)', stagger: 0.08 }, 0.96);
+
+        gsap.to('.bento-card', {
+          y: -6,
+          duration: 2.8,
+          delay: 1.25,
+          repeat: -1,
+          yoyo: true,
+          ease: 'sine.inOut',
+          stagger: { each: 0.14 }
+        });
+
+        gsap.utils.toArray<HTMLElement>('[data-animate-section]').forEach((section) => {
+          if (section.classList.contains('hero')) return;
+
+          const cards = section.querySelectorAll<HTMLElement>('[data-animate-card], .proof-screenshot-shell, .final-cta-copy');
+
+          if (cards.length === 0) return;
+
+          gsap.from(cards, {
+            autoAlpha: 0,
+            y: 18,
+            duration: 0.55,
+            ease: 'power3.out',
+            stagger: 0.07,
+            scrollTrigger: {
+              trigger: section,
+              start: 'top 78%',
+              once: true
+            }
+          });
+        });
+      }
+    </script>
   </body>
 </html>
 
@@ -347,8 +383,13 @@ import '../styles/global.css';
     min-height: 100dvh;
     display: grid;
     grid-template-rows: auto 1fr;
-    padding: clamp(1.5rem, 3vw, 3.25rem);
+    padding: clamp(1.25rem, 2.7vw, 3rem);
     overflow: hidden;
+    background:
+      radial-gradient(circle at 9% 88%, rgba(255, 255, 255, 0.28) 0 0.18rem, transparent 0.2rem) 0 0 / 2rem 2rem,
+      linear-gradient(124deg, #0437e8 0 51%, #fff8df 51% 100%);
+    color: #05070d;
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   }
 
   .site-header {
@@ -360,43 +401,66 @@ import '../styles/global.css';
   .wordmark {
     position: relative;
     z-index: 2;
-    color: var(--ink);
-    font-size: clamp(1.4rem, 2vw, 2rem);
-    font-weight: 760;
-    letter-spacing: -0.06em;
+    color: #fff8df;
+    font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+    font-size: clamp(1.35rem, 1.8vw, 1.85rem);
+    font-weight: 700;
+    letter-spacing: -0.04em;
     text-decoration: none;
+    text-shadow: 0 0.18rem 0 rgba(5, 7, 13, 0.18);
   }
 
   .hero {
     position: relative;
     width: min(100%, 99rem);
     min-height: calc(100dvh - 5rem);
+    display: grid;
+    grid-template-columns: minmax(24rem, 0.92fr) minmax(28rem, 1.08fr);
+    align-items: center;
+    gap: clamp(2rem, 4vw, 5rem);
     margin: 0 auto;
+  }
+
+  .hero::after {
+    content: "";
+    position: absolute;
+    right: max(-8vw, -7rem);
+    bottom: max(-10vw, -9rem);
+    width: min(28rem, 34vw);
+    aspect-ratio: 1;
+    border-radius: 32% 68% 0 0;
+    background: #05070d;
+    transform: rotate(-18deg);
+    pointer-events: none;
   }
 
   .hero-copy {
     position: relative;
     z-index: 2;
-    width: min(55rem, 60vw);
-    padding-top: clamp(2.25rem, 6vh, 3.6rem);
+    width: min(100%, 47rem);
+    padding-block: clamp(3rem, 7vh, 5.5rem);
   }
 
   h1 {
-    max-width: 8.75em;
+    max-width: 10.6em;
     margin: 0;
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: clamp(4.35rem, 5.75vw, 6.05rem);
-    font-weight: 500;
+    color: #fff8df;
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: clamp(3.8rem, 6.25vw, 6.55rem);
+    font-weight: 800;
     line-height: 0.98;
-    letter-spacing: -0.068em;
+    letter-spacing: -0.052em;
+    text-wrap: balance;
+    text-shadow: 0 0.22rem 0 rgba(5, 7, 13, 0.18);
   }
 
   .lede {
-    max-width: 31rem;
-    margin: clamp(1.5rem, 3vw, 2.3rem) 0 0;
-    color: var(--muted);
-    font-size: clamp(1.2rem, 1.6vw, 1.7rem);
-    line-height: 1.35;
+    max-width: 39rem;
+    margin: clamp(1.4rem, 3vw, 2rem) 0 0;
+    color: rgba(255, 248, 223, 0.92);
+    font-size: clamp(1.16rem, 1.45vw, 1.45rem);
+    font-weight: 500;
+    line-height: 1.48;
   }
 
   .actions {
@@ -445,49 +509,179 @@ import '../styles/global.css';
     background: rgba(255, 250, 240, 0.88);
   }
 
+  .hero .button {
+    min-height: clamp(3.6rem, 5vw, 4.6rem);
+    border: 2px solid #05070d;
+    border-radius: 0.8rem;
+    padding-inline: clamp(1.4rem, 2.4vw, 2.35rem);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: clamp(1rem, 1.25vw, 1.16rem);
+    font-weight: 750;
+    box-shadow: 0 0.55rem 0 rgba(5, 7, 13, 0.25);
+  }
+
+  .hero .button-primary {
+    background: #05070d;
+    color: #fff8df;
+  }
+
+  .hero .button-secondary {
+    background: #fff8df;
+    color: #05070d;
+  }
+
+  .hero .button:hover {
+    box-shadow: 0 0.7rem 0 rgba(5, 7, 13, 0.28);
+  }
+
   .button-icon {
     width: 1.35rem;
     height: 1.35rem;
   }
 
-  .approval-stage {
-    position: absolute;
-    left: clamp(29rem, 29vw, 31rem);
-    right: clamp(-3rem, -2vw, -1rem);
-    bottom: clamp(1.25rem, 3.5vh, 2.5rem);
-    min-height: min(31rem, 58vh);
+  .bento-stage {
+    position: relative;
+    z-index: 2;
     display: grid;
-    place-items: center;
-    isolation: isolate;
+    grid-template-columns: minmax(12rem, 1fr) clamp(2.65rem, 3.4vw, 3.25rem) minmax(12rem, 1fr);
+    grid-template-rows: minmax(12.5rem, 1fr) clamp(2.65rem, 3.4vw, 3.25rem) minmax(12.5rem, 1fr);
+    gap: clamp(0.55rem, 1vw, 0.95rem);
+    align-items: stretch;
   }
 
-  .approval-stage::before {
+  .bento-stage::before {
     content: "";
     position: absolute;
-    inset: 7% -4% 2% 2%;
-    z-index: -2;
-    border-radius: 999rem;
-    background:
-      radial-gradient(circle at 54% 48%, rgba(191, 114, 0, 0.1), transparent 10rem),
-      radial-gradient(circle at 36% 56%, rgba(15, 111, 56, 0.08), transparent 16rem);
-    mask-image: linear-gradient(90deg, transparent, black 16%, black 82%, transparent);
+    inset: -4rem -6rem -3rem 7%;
+    z-index: -1;
+    border-radius: 5rem 0 0 5rem;
+    background: #fff8df;
+    transform: skewX(-11deg);
   }
 
-  .hero-visual-image {
-    width: min(100%, 66.25rem);
-    height: auto;
-    display: block;
-    user-select: none;
-    mix-blend-mode: multiply;
-    opacity: 0.98;
-    -webkit-mask-image:
-      linear-gradient(to right, transparent 0, #000 3rem, #000 calc(100% - 2rem), transparent 100%),
-      linear-gradient(to bottom, transparent 0, #000 1.25rem, #000 calc(100% - 2rem), transparent 100%);
-    -webkit-mask-composite: source-in;
-    mask-image:
-      linear-gradient(to right, transparent 0, #000 3rem, #000 calc(100% - 2rem), transparent 100%),
-      linear-gradient(to bottom, transparent 0, #000 1.25rem, #000 calc(100% - 2rem), transparent 100%);
-    mask-composite: intersect;
+  .bento-card {
+    position: relative;
+    min-height: clamp(12.5rem, 16vw, 16rem);
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    gap: clamp(0.7rem, 1.1vw, 1rem);
+    border: 3px solid #05070d;
+    border-radius: 1.2rem;
+    padding: clamp(1rem, 1.65vw, 1.45rem);
+    box-shadow: 0.48rem 0.48rem 0 #05070d;
+    color: #05070d;
+    text-align: center;
+  }
+
+  .bento-card-task {
+    grid-column: 1;
+    grid-row: 1;
+    background: #ff5757;
+  }
+
+  .bento-card-agent {
+    grid-column: 3;
+    grid-row: 1;
+    background: #c9ff39;
+  }
+
+  .bento-card-handoff {
+    grid-column: 3;
+    grid-row: 3;
+    background: #6a5cff;
+  }
+
+  .bento-card-review {
+    grid-column: 1;
+    grid-row: 3;
+    background: #ffd43b;
+  }
+
+  .flow-arrow {
+    position: relative;
+    z-index: 4;
+    width: 100%;
+    height: 100%;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+  }
+
+  .flow-line {
+    position: absolute;
+    border-radius: 999rem;
+    background: #05070d;
+  }
+
+  .flow-dot {
+    position: relative;
+    z-index: 2;
+    width: clamp(2.35rem, 3.25vw, 3rem);
+    height: clamp(2.35rem, 3.25vw, 3rem);
+    display: grid;
+    place-items: center;
+    border: 3px solid #05070d;
+    border-radius: 999rem;
+    background: #05070d;
+    color: #fff8df;
+    font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+    font-size: clamp(1rem, 1.3vw, 1.25rem);
+    font-weight: 700;
+    line-height: 1;
+    box-shadow: 0 0.3rem 0 rgba(5, 7, 13, 0.16);
+  }
+
+  .flow-arrow-task-agent {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .flow-arrow-task-agent .flow-line,
+  .flow-arrow-handoff-review .flow-line {
+    width: calc(100% + clamp(1rem, 1.6vw, 1.6rem));
+    height: 0.22rem;
+  }
+
+  .flow-arrow-agent-handoff {
+    grid-column: 3;
+    grid-row: 2;
+  }
+
+  .flow-arrow-agent-handoff .flow-line {
+    width: 0.22rem;
+    height: calc(100% + clamp(1rem, 1.6vw, 1.6rem));
+  }
+
+  .flow-arrow-handoff-review {
+    grid-column: 2;
+    grid-row: 3;
+  }
+
+  .bento-label {
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: clamp(1.65rem, 2.45vw, 2.55rem);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.045em;
+  }
+
+  .bento-card svg {
+    width: clamp(2.9rem, 4.2vw, 4.25rem);
+    height: clamp(2.9rem, 4.2vw, 4.25rem);
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.9;
+  }
+
+  .bento-card p {
+    max-width: 12rem;
+    margin: 0;
+    font-size: clamp(0.98rem, 1.05vw, 1.05rem);
+    font-weight: 700;
+    line-height: 1.3;
   }
 
   .top-reasons {
@@ -523,23 +717,16 @@ import '../styles/global.css';
   }
 
   .reason-rail {
-    position: relative;
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: clamp(1.4rem, 2.2vw, 2rem);
-    margin: clamp(3.5rem, 6vw, 5.25rem) 0 0;
-    padding: 4.25rem 0 0;
+    gap: clamp(1.2rem, 2vw, 1.6rem);
+    margin: clamp(2.5rem, 5vw, 4rem) 0 0;
+    padding: 0;
     list-style: none;
   }
 
   .reason-rail::before {
-    content: "";
-    position: absolute;
-    top: 1.9rem;
-    left: 1rem;
-    right: 1rem;
-    height: 1.5px;
-    background: linear-gradient(90deg, transparent, rgba(15, 111, 56, 0.74) 9%, rgba(15, 111, 56, 0.74) 91%, transparent);
+    display: none;
   }
 
   .reason-step {
@@ -548,22 +735,16 @@ import '../styles/global.css';
   }
 
   .step-badge {
-    position: absolute;
-    top: -4.25rem;
-    left: 50%;
-    z-index: 2;
-    width: 3.9rem;
-    height: 3.9rem;
-    display: grid;
+    width: fit-content;
+    display: inline-grid;
     place-items: center;
-    transform: translateX(-50%);
-    border: 1.5px solid rgba(15, 111, 56, 0.72);
+    border: 1px solid rgba(15, 111, 56, 0.22);
     border-radius: 999rem;
-    background: rgba(255, 250, 240, 0.94);
-    box-shadow: 0 0.85rem 1.7rem rgba(46, 36, 24, 0.12);
+    padding: 0.35rem 0.65rem;
+    background: rgba(15, 111, 56, 0.07);
     color: var(--green-deep);
     font-family: "SFMono-Regular", Consolas, monospace;
-    font-size: 1.15rem;
+    font-size: 0.82rem;
     font-weight: 760;
   }
 
@@ -571,12 +752,12 @@ import '../styles/global.css';
     min-height: 100%;
     display: flex;
     flex-direction: column;
-    gap: 1.35rem;
-    border: 1px solid rgba(30, 41, 59, 0.18);
+    gap: 1rem;
+    border: 1px solid rgba(30, 41, 59, 0.14);
     border-radius: 1rem;
-    padding: clamp(1.05rem, 1.6vw, 1.55rem);
-    background: rgba(255, 250, 240, 0.74);
-    box-shadow: 0 1.5rem 4.5rem rgba(46, 36, 24, 0.1);
+    padding: clamp(1.25rem, 2vw, 1.8rem);
+    background: rgba(255, 250, 240, 0.66);
+    box-shadow: none;
   }
 
   .reason-card h3 {
@@ -591,183 +772,12 @@ import '../styles/global.css';
 
   .reason-card p {
     max-width: 27rem;
-    margin: -0.55rem 0 0;
+    margin: 0;
     color: var(--muted);
     font-size: clamp(1rem, 1.15vw, 1.08rem);
     line-height: 1.5;
   }
 
-  .reason-visual {
-    min-height: 16rem;
-    display: grid;
-    place-items: center;
-    border: 1px solid rgba(30, 41, 59, 0.12);
-    border-radius: 0.75rem;
-    background:
-      radial-gradient(circle at 18% 18%, rgba(15, 111, 56, 0.08), transparent 9rem),
-      rgba(247, 242, 232, 0.5);
-    overflow: hidden;
-  }
-
-  .visual-window,
-  .plugin-boundary {
-    width: min(100% - 1.3rem, 23.5rem);
-    border: 1px solid rgba(30, 41, 59, 0.18);
-    border-radius: 0.6rem;
-    background: rgba(255, 250, 240, 0.86);
-    box-shadow: 0 0.9rem 2.5rem rgba(46, 36, 24, 0.08);
-  }
-
-  .visual-header,
-  .review-actions,
-  .boundary-title {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-  }
-
-  .visual-header {
-    padding: 0.85rem 1rem;
-    border-bottom: 1px solid rgba(30, 41, 59, 0.12);
-    color: var(--muted);
-    font-family: "SFMono-Regular", Consolas, monospace;
-    font-size: 0.78rem;
-  }
-
-  .status-pill {
-    display: inline-flex;
-    align-items: center;
-    border: 1px solid currentColor;
-    border-radius: 999rem;
-    padding: 0.25rem 0.55rem;
-    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-    font-size: 0.72rem;
-    font-weight: 730;
-    line-height: 1;
-  }
-
-  .amber-pill {
-    color: var(--amber);
-    background: rgba(191, 114, 0, 0.08);
-  }
-
-  .green-pill {
-    color: var(--green-deep);
-    background: rgba(15, 111, 56, 0.08);
-  }
-
-  .diff-row {
-    display: grid;
-    grid-template-columns: 1.5rem 1fr;
-    gap: 0.45rem;
-    padding: 0.5rem 1rem;
-    font-family: "SFMono-Regular", Consolas, monospace;
-    font-size: 0.82rem;
-  }
-
-  .removed-line {
-    background: rgba(191, 114, 0, 0.1);
-    color: var(--amber);
-  }
-
-  .added-line {
-    background: rgba(15, 111, 56, 0.1);
-    color: var(--green-deep);
-  }
-
-  .review-actions {
-    margin: 1rem;
-    border: 1px solid rgba(15, 111, 56, 0.24);
-    border-radius: 0.5rem;
-    padding: 0.85rem;
-    color: var(--ink);
-    font-size: 0.86rem;
-    font-weight: 650;
-  }
-
-  .terminal-window {
-    width: min(100% - 1.35rem, 24rem);
-    display: grid;
-    gap: 0.85rem;
-    border: 1px solid rgba(30, 41, 59, 0.32);
-    border-radius: 0.65rem;
-    padding: 0.85rem 1rem 1.1rem;
-    background: var(--ink);
-    box-shadow: 0 1.1rem 3rem rgba(16, 21, 31, 0.2);
-    color: var(--paper);
-  }
-
-  .terminal-bar {
-    display: flex;
-    gap: 0.4rem;
-    padding-bottom: 0.25rem;
-  }
-
-  .terminal-bar span {
-    width: 0.7rem;
-    height: 0.7rem;
-    border-radius: 999rem;
-    background: rgba(255, 250, 240, 0.42);
-  }
-
-  .terminal-window code {
-    display: block;
-    color: var(--paper);
-    font-family: "SFMono-Regular", Consolas, monospace;
-    font-size: clamp(0.74rem, 0.88vw, 0.86rem);
-    line-height: 1.45;
-    white-space: normal;
-  }
-
-  .terminal-result {
-    color: rgba(255, 250, 240, 0.72) !important;
-  }
-
-  .plugin-boundary {
-    display: grid;
-    gap: 1rem;
-    padding: 1rem;
-    border-style: dashed;
-    border-color: rgba(15, 111, 56, 0.42);
-  }
-
-  .boundary-title {
-    justify-content: center;
-    color: var(--green-deep);
-    font-size: 0.86rem;
-    font-weight: 720;
-  }
-
-  .boundary-title svg {
-    width: 1.35rem;
-    height: 1.35rem;
-    fill: none;
-    stroke: currentColor;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    stroke-width: 1.8;
-  }
-
-  .plugin-chip-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.75rem;
-  }
-
-  .plugin-chip-grid span {
-    min-height: 3.5rem;
-    display: grid;
-    place-items: center;
-    border: 1px solid rgba(30, 41, 59, 0.12);
-    border-radius: 0.55rem;
-    padding: 0.65rem;
-    background: rgba(255, 250, 240, 0.72);
-    color: var(--ink);
-    font-size: 0.82rem;
-    font-weight: 680;
-    text-align: center;
-  }
 
   .product-proof {
     width: min(100% - clamp(2rem, 6vw, 6.5rem), 96rem);
@@ -811,15 +821,7 @@ import '../styles/global.css';
   }
 
   .proof-figure::before {
-    content: "";
-    position: absolute;
-    inset: 12% -5% -9% 8%;
-    z-index: -2;
-    border-radius: 999rem;
-    background:
-      radial-gradient(circle at 78% 50%, rgba(191, 114, 0, 0.1), transparent 15rem),
-      radial-gradient(circle at 36% 44%, rgba(15, 111, 56, 0.12), transparent 19rem);
-    filter: blur(0.25rem);
+    display: none;
   }
 
   .proof-screenshot-shell {
@@ -829,9 +831,9 @@ import '../styles/global.css';
     border: 1px solid rgba(30, 41, 59, 0.22);
     border-radius: 1.05rem;
     background: rgba(16, 21, 31, 0.94);
-    box-shadow: 0 2rem 5rem rgba(46, 36, 24, 0.18), 0 0.55rem 1rem rgba(16, 21, 31, 0.08);
-    transform: rotateY(-9deg) rotateZ(1.2deg) translateX(1.4rem);
-    transform-origin: center left;
+    box-shadow: 0 1.2rem 3rem rgba(46, 36, 24, 0.14);
+    transform: none;
+    transform-origin: center;
   }
 
   .proof-screenshot-shell::after {
@@ -849,31 +851,6 @@ import '../styles/global.css';
     display: block;
   }
 
-  .proof-callout {
-    position: absolute;
-    right: clamp(-1rem, -1.2vw, -0.35rem);
-    top: 21%;
-    max-width: 15rem;
-    border: 1px solid rgba(191, 114, 0, 0.44);
-    border-radius: 0.75rem;
-    padding: 0.85rem 1rem;
-    background: rgba(255, 250, 240, 0.94);
-    box-shadow: 0 1rem 2.5rem rgba(79, 52, 12, 0.14);
-    color: var(--ink);
-    font-size: clamp(0.9rem, 1vw, 1rem);
-    font-weight: 700;
-    line-height: 1.32;
-  }
-
-  .proof-callout::before {
-    content: "";
-    position: absolute;
-    top: 50%;
-    right: 100%;
-    width: clamp(2.5rem, 6vw, 5.5rem);
-    height: 1px;
-    background: rgba(191, 114, 0, 0.68);
-  }
 
   .plugin-customization {
     width: min(100% - clamp(2rem, 6vw, 6.5rem), 96rem);
@@ -901,21 +878,15 @@ import '../styles/global.css';
     line-height: 1.42;
   }
 
-  .plugin-customization-copy {
-    max-width: 47rem;
-    margin: 0;
-    color: var(--muted);
-    font-size: clamp(1rem, 1.2vw, 1.15rem);
-    line-height: 1.55;
-  }
 
   .capability-ledger {
     position: relative;
     display: grid;
-    grid-template-columns: minmax(7rem, 0.28fr) minmax(0, 1fr) minmax(7rem, 0.28fr);
+    grid-template-columns: minmax(0, 1fr);
     align-items: center;
-    gap: clamp(1.5rem, 3vw, 2.75rem);
-    margin: clamp(2.75rem, 5vw, 4rem) auto 0;
+    gap: 0;
+    max-width: 58rem;
+    margin: clamp(2.5rem, 5vw, 3.5rem) auto 0;
   }
 
   .ledger-list {
@@ -1008,112 +979,34 @@ import '../styles/global.css';
   }
 
   .ledger-dot {
-    width: 0.72rem;
-    height: 0.72rem;
-    border: 1px solid rgba(79, 52, 12, 0.25);
-    border-radius: 999rem;
-    background: var(--amber);
-    box-shadow: 0 0 0 0.26rem rgba(191, 114, 0, 0.1);
+    display: none;
   }
 
-  .ledger-bracket {
-    position: relative;
-    min-height: 19rem;
-    display: grid;
-    place-items: center;
-    color: var(--green-deep);
-    font-family: "SFMono-Regular", Consolas, monospace;
-    font-size: clamp(0.82rem, 0.95vw, 0.98rem);
-    font-weight: 680;
-    line-height: 1.4;
-    text-align: center;
-  }
-
-  .ledger-bracket span {
-    max-width: 8.75rem;
-  }
-
-  .ledger-bracket::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 1.25rem;
-    border-color: rgba(15, 111, 56, 0.72);
-    border-style: solid;
-  }
-
-  .ledger-bracket::after {
-    content: "";
-    position: absolute;
-    top: 50%;
-    width: clamp(2.2rem, 4vw, 4.6rem);
-    height: 1.5px;
-    background: repeating-linear-gradient(90deg, rgba(15, 111, 56, 0.6) 0 0.45rem, transparent 0.45rem 0.75rem);
-  }
-
-  .ledger-bracket-left::before {
-    left: 0;
-    border-width: 1.5px 0 1.5px 1.5px;
-  }
-
-  .ledger-bracket-left::after {
-    right: -1.8rem;
-  }
-
-  .ledger-bracket-right::before {
-    right: 0;
-    border-width: 1.5px 1.5px 1.5px 0;
-  }
-
-  .ledger-bracket-right::after {
-    left: -1.8rem;
-  }
 
   .final-cta {
     position: relative;
     width: min(100% - clamp(2rem, 6vw, 6.5rem), 96rem);
     display: grid;
-    grid-template-columns: minmax(22rem, 0.95fr) minmax(24rem, 0.82fr);
+    grid-template-columns: minmax(0, 52rem);
+    justify-content: center;
     align-items: center;
-    gap: clamp(2.5rem, 5vw, 6rem);
+    gap: 0;
     margin: 0 auto;
     border-top: 1px solid rgba(30, 41, 59, 0.14);
-    padding: clamp(4rem, 7vw, 7rem) 0 clamp(4.75rem, 8vw, 7.5rem);
+    padding: clamp(4rem, 7vw, 6rem) 0 clamp(4.75rem, 8vw, 6.5rem);
+    text-align: center;
   }
 
   .final-cta::before {
-    content: "";
-    position: absolute;
-    inset: 12% -8% 6% auto;
-    z-index: -1;
-    width: min(44rem, 52vw);
-    border-radius: 999rem;
-    background:
-      radial-gradient(circle at 30% 34%, rgba(15, 111, 56, 0.1), transparent 15rem),
-      radial-gradient(circle at 72% 70%, rgba(191, 114, 0, 0.08), transparent 12rem);
-    filter: blur(0.15rem);
+    display: none;
   }
 
   .final-cta-copy {
     display: grid;
+    justify-items: center;
     gap: 1.15rem;
   }
 
-  .final-cta-copy .eyebrow {
-    position: relative;
-    width: fit-content;
-  }
-
-  .final-cta-copy .eyebrow::after,
-  .source-card-kicker::after {
-    content: "";
-    display: block;
-    width: 3rem;
-    height: 2px;
-    margin-top: 0.85rem;
-    background: var(--amber);
-  }
 
   .final-cta-copy .section-title {
     max-width: 8.8em;
@@ -1140,107 +1033,6 @@ import '../styles/global.css';
     stroke-width: 2;
   }
 
-  .source-card {
-    position: relative;
-    display: grid;
-    gap: 1.45rem;
-    border: 1px solid rgba(30, 41, 59, 0.22);
-    border-radius: 1rem;
-    padding: clamp(1.45rem, 2.5vw, 2.35rem);
-    background: rgba(255, 250, 240, 0.76);
-    box-shadow: 0 1.6rem 4rem rgba(46, 36, 24, 0.12);
-    overflow: hidden;
-  }
-
-  .source-card::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background:
-      linear-gradient(90deg, rgba(191, 114, 0, 0.12), transparent 5.5rem),
-      radial-gradient(circle at 92% 18%, rgba(15, 111, 56, 0.08), transparent 9rem);
-    opacity: 0.72;
-  }
-
-  .source-card > * {
-    position: relative;
-    z-index: 1;
-  }
-
-  .source-card-heading {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 1.25rem;
-  }
-
-  .source-card-kicker {
-    margin: 0 0 1rem;
-    color: var(--green-deep);
-    font-size: 0.78rem;
-    font-weight: 780;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-  }
-
-  .source-card h3 {
-    max-width: 10em;
-    margin: 0;
-    color: var(--ink);
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: clamp(2rem, 3vw, 3rem);
-    font-weight: 600;
-    line-height: 1.02;
-    letter-spacing: -0.052em;
-  }
-
-  .source-github-icon {
-    flex: 0 0 auto;
-    width: clamp(2.75rem, 4vw, 3.75rem);
-    height: clamp(2.75rem, 4vw, 3.75rem);
-    color: var(--ink);
-  }
-
-  .source-card-divider {
-    height: 1px;
-    background: rgba(30, 41, 59, 0.16);
-  }
-
-  .source-details {
-    display: grid;
-    gap: 1rem;
-    margin: 0;
-    font-family: "SFMono-Regular", Consolas, monospace;
-  }
-
-  .source-details div {
-    display: grid;
-    gap: 0.25rem;
-  }
-
-  .source-details dt {
-    color: var(--muted);
-    font-size: 0.78rem;
-  }
-
-  .source-details dd {
-    margin: 0;
-    color: var(--ink);
-    font-size: clamp(0.95rem, 1.15vw, 1.08rem);
-    line-height: 1.5;
-  }
-
-  .source-details a {
-    text-decoration-color: rgba(15, 111, 56, 0.34);
-    text-decoration-thickness: 1px;
-    text-underline-offset: 0.25rem;
-  }
-
-  .source-details a:hover {
-    color: var(--green-deep);
-    text-decoration-color: currentColor;
-  }
 
   .site-footer {
     width: min(100% - clamp(2rem, 6vw, 6.5rem), 96rem);
@@ -1311,17 +1103,15 @@ import '../styles/global.css';
     font-size: clamp(1rem, 1.3vw, 1.16rem);
     font-weight: 620;
     line-height: 1.25;
-    text-decoration: underline;
-    text-decoration-color: rgba(30, 41, 59, 0.48);
-    text-underline-offset: 0.22em;
+    text-decoration: none;
     transition:
       color 180ms ease,
-      text-decoration-color 180ms ease;
+      opacity 180ms ease;
   }
 
   .footer-links a:hover {
     color: var(--green-deep);
-    text-decoration-color: currentColor;
+    opacity: 0.72;
   }
 
   @media (max-width: 80rem) {
@@ -1338,41 +1128,49 @@ import '../styles/global.css';
   @media (max-width: 62rem) {
     .hero-shell {
       min-height: auto;
-      overflow: visible;
       padding: 1.25rem;
+      overflow: hidden;
+      background: linear-gradient(180deg, #0437e8 0 56%, #fff8df 56% 100%);
     }
 
     .hero {
       min-height: auto;
-      display: grid;
       grid-template-columns: 1fr;
       align-items: start;
-      gap: 1.5rem;
+      gap: 1.75rem;
+    }
+
+    .hero::after {
+      width: 18rem;
+      right: -8rem;
+      bottom: -7rem;
     }
 
     .hero-copy {
       width: 100%;
-      padding-top: clamp(2rem, 6vw, 3rem);
+      padding-block: clamp(2.6rem, 8vw, 4.5rem) 0;
     }
 
     h1 {
-      max-width: 12ch;
+      max-width: 9ch;
     }
 
-    .approval-stage {
-      position: relative;
-      left: auto;
-      right: auto;
-      bottom: auto;
-      min-height: 34rem;
-      overflow: hidden;
-      border-radius: 1.5rem;
+    .bento-stage {
+      grid-template-columns: minmax(0, 1fr) 2.7rem minmax(0, 1fr);
+      grid-template-rows: minmax(11.5rem, auto) 2.7rem minmax(11.5rem, auto);
+      max-width: 44rem;
+      margin: 0 auto;
+      padding-block: 2rem 3rem;
     }
 
-    .hero-visual-image {
-      width: 44rem;
-      max-width: none;
-      transform: translateX(-6%) scale(0.95);
+    .bento-stage::before {
+      inset: 0 -3rem;
+      border-radius: 2.5rem;
+      transform: none;
+    }
+
+    .bento-card {
+      min-height: 11.5rem;
     }
 
     .top-reasons {
@@ -1407,9 +1205,6 @@ import '../styles/global.css';
       max-width: 10em;
     }
 
-    .source-card {
-      width: 100%;
-    }
 
     .site-footer {
       width: min(100% - 2.5rem, 54rem);
@@ -1436,9 +1231,6 @@ import '../styles/global.css';
       gap: 1rem;
     }
 
-    .ledger-bracket {
-      display: none;
-    }
 
     .proof-figure {
       max-width: min(100%, 30rem);
@@ -1449,18 +1241,6 @@ import '../styles/global.css';
       transform: none;
     }
 
-    .proof-callout {
-      position: relative;
-      right: auto;
-      top: auto;
-      width: fit-content;
-      max-width: min(100%, 22rem);
-      margin: 1rem 0 0 auto;
-    }
-
-    .proof-callout::before {
-      display: none;
-    }
 
     .section-heading {
       justify-items: start;
@@ -1484,13 +1264,6 @@ import '../styles/global.css';
 
     .reason-card {
       position: relative;
-      padding-top: 4.9rem;
-    }
-
-    .step-badge {
-      top: 1.2rem;
-      left: 1.2rem;
-      transform: none;
     }
 
     .reason-card h3,
@@ -1508,13 +1281,36 @@ import '../styles/global.css';
       width: 100%;
     }
 
-    .approval-stage {
-      min-height: 30rem;
+    .hero-shell {
+      background: linear-gradient(180deg, #0437e8 0 54%, #fff8df 54% 100%);
     }
 
-    .hero-visual-image {
-      width: 39rem;
-      transform: translateX(-14%) scale(0.9);
+    .bento-stage {
+      grid-template-columns: 1fr;
+      grid-template-rows: none;
+      padding-block: 1.5rem 2.5rem;
+    }
+
+    .bento-stage::before {
+      inset: 0 -1rem;
+    }
+
+    .bento-card-task,
+    .bento-card-agent,
+    .bento-card-handoff,
+    .bento-card-review {
+      grid-column: auto;
+      grid-row: auto;
+    }
+
+    .flow-arrow {
+      display: none;
+    }
+
+    .bento-card {
+      min-height: auto;
+      margin: 0;
+      box-shadow: 0.35rem 0.35rem 0 #05070d;
     }
 
     .top-reasons,
@@ -1529,8 +1325,7 @@ import '../styles/global.css';
       font-size: clamp(2.45rem, 13vw, 3.25rem);
     }
 
-    .final-cta-copy .section-title,
-    .source-card h3 {
+    .final-cta-copy .section-title {
       font-size: clamp(2.45rem, 13vw, 3.25rem);
     }
 
@@ -1538,23 +1333,6 @@ import '../styles/global.css';
       font-size: 1.08rem;
     }
 
-    .source-card {
-      padding: 1.1rem;
-    }
-
-    .source-card-heading {
-      gap: 1rem;
-    }
-
-    .source-github-icon {
-      width: 2.5rem;
-      height: 2.5rem;
-    }
-
-    .source-details dd {
-      font-size: 0.9rem;
-      overflow-wrap: anywhere;
-    }
 
     .site-footer {
       padding: 2.5rem 0 3rem;
@@ -1598,11 +1376,7 @@ import '../styles/global.css';
     }
 
     .reason-card {
-      padding: 4.75rem 1rem 1.15rem;
-    }
-
-    .reason-visual {
-      min-height: 13.5rem;
+      padding: 1rem;
     }
 
     .product-proof-copy .section-title {
@@ -1613,19 +1387,5 @@ import '../styles/global.css';
       max-width: min(100%, 26rem);
     }
 
-    .proof-callout {
-      width: 100%;
-      margin-left: 0;
-    }
-
-    .review-actions,
-    .visual-header {
-      align-items: flex-start;
-      flex-direction: column;
-    }
-
-    .plugin-chip-grid {
-      grid-template-columns: 1fr;
-    }
   }
 </style>
