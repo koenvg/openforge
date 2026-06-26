@@ -5,7 +5,6 @@ import type {
   TerminalTab,
 } from './terminalRuntime'
 
-export const TERMINAL_TABS_KEYBOARD_FOCUS_PATH_TEXT = 'Keyboard focus path: Tab to the shell tabs, choose New shell or press ⌘T, then Tab into the terminal region. Use ⌘⇧1–9 to switch shells.'
 export const TERMINAL_FOCUS_DESCRIPTION_TEXT = 'Terminal focus: after selecting a shell tab, press Tab to focus this terminal region. Type commands when the terminal cursor is active.'
 export const TERMINAL_TASK_PANE_WORKSPACE_RECOVERY_TEXT = 'Start or repair the task workspace, then retry loading the terminal.'
 export const TERMINAL_TASK_PANE_KEYBOARD_FOCUS_PATH_TEXT = 'Keyboard focus path: resolve the workspace first, then Tab to shell tabs, choose New shell, and Tab into the terminal region.'

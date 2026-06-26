@@ -1,6 +1,5 @@
 <script lang="ts">
   import {
-    TERMINAL_TABS_KEYBOARD_FOCUS_PATH_TEXT,
     createTerminalTabsController,
     type CloseTerminalTabOptions,
   } from '@openforge/terminal-runtime'
@@ -92,9 +91,6 @@
 </script>
 
 <div class="flex flex-col h-full">
-  <div class="px-3 py-2 text-xs text-base-content/70 border-b border-base-300 bg-base-100">
-    {TERMINAL_TABS_KEYBOARD_FOCUS_PATH_TEXT}
-  </div>
   <div class="sr-only" aria-live="polite" aria-atomic="true">{liveMessage}</div>
   <div class="flex items-center overflow-x-auto border-b border-base-300 bg-base-200 shrink-0" role="tablist" aria-label="Shell terminals">
     {#each tabs as tab, tabPosition (tab.index)}
