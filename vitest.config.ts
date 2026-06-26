@@ -13,6 +13,7 @@ const terminalRuntimeAliases = {
   '@openforge/terminal-runtime/theme': new URL('./packages/terminal-runtime/src/theme.ts', import.meta.url).pathname,
   '@openforge/terminal-runtime/shortcuts': new URL('./packages/terminal-runtime/src/terminalShortcuts.ts', import.meta.url).pathname,
   '@openforge/terminal-runtime/shortcutController': new URL('./packages/terminal-runtime/src/terminalShortcutController.ts', import.meta.url).pathname,
+  '@openforge/terminal-runtime/TerminalTabsShell': new URL('./packages/terminal-runtime/src/TerminalTabsShell.svelte', import.meta.url).pathname,
   '@openforge/terminal-runtime/xterm.css': new URL('./packages/terminal-runtime/src/xterm.css', import.meta.url).pathname,
   '@openforge/terminal-runtime': new URL('./packages/terminal-runtime/src/index.ts', import.meta.url).pathname,
 }

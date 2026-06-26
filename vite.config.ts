@@ -96,6 +96,10 @@ function createOpenForgeRootAliases() {
       replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/terminalShortcutController.ts'),
     },
     {
+      find: /^@openforge\/terminal-runtime\/TerminalTabsShell$/,
+      replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/TerminalTabsShell.svelte'),
+    },
+    {
       find: /^@openforge\/terminal-runtime\/xterm\.css$/,
       replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/xterm.css'),
     },
