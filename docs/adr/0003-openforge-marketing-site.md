@@ -10,7 +10,7 @@ OpenForge is a local-first desktop command center for coordinating task work and
 
 ## Decision
 
-Create a **Marketing Site** for OpenForge as an Astro monorepo workspace app at `apps/website`, not as a separate repository and not as a hosted web companion. The first milestone is a small static one-page site focused on the promise “Run AI coding agents without losing control of the work,” ordered as hero with install/GitHub CTAs and the existing workflow visual, top-three reasons to use OpenForge, product screenshot proof, a small concrete plugin customization section, final install/GitHub CTA, and footer links.
+Create a **Marketing Site** for OpenForge as an Astro monorepo workspace app at `apps/website`, not as a separate repository and not as a hosted web companion. The first milestone is a small static one-page site focused on the promise “Run AI coding agents without losing control of the work,” ordered as hero with install/GitHub CTAs and a concrete task → agent → handoff → review workflow visual, top-three reasons to use OpenForge, product screenshot proof, a small concrete plugin customization section, final install/GitHub CTA, and footer links.
 
 The top-three homepage reasons are:
 
@@ -45,4 +45,4 @@ Rejected because the site is a product marketing surface rather than project doc
 - Initial scope should avoid standalone workflow education, standalone local-first trust messaging, blog, hosted docs system, plugin marketplace, analytics, mailing list, interactive demo, and multi-page content architecture.
 - The final call-to-action should repeat both Install OpenForge and GitHub, with Install OpenForge as the primary action and GitHub as secondary credibility/due diligence.
 - Copy should avoid claims about autonomous engineering teams, replacing review, one-click shipping, hosted control planes, universal provider support, or enterprise collaboration suites.
-- Visual direction should be a calm developer-tool aesthetic with the workflow hero visual and product screenshots, not flashy AI SaaS imagery.
+- Visual direction should be a developer-tool aesthetic with a concrete workflow hero visual and product screenshots, not generic AI SaaS imagery. The hero may use a vibrant block/bento workflow treatment when it still explains the task → agent → handoff → review path clearly.
