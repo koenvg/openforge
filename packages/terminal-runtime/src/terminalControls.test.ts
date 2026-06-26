@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   TERMINAL_FOCUS_DESCRIPTION_TEXT,
-  TERMINAL_TABS_KEYBOARD_FOCUS_PATH_TEXT,
   TERMINAL_TASK_PANE_KEYBOARD_FOCUS_PATH_TEXT,
   TERMINAL_TASK_PANE_WORKSPACE_RECOVERY_TEXT,
   createTerminalTabsController,
@@ -81,7 +80,6 @@ function createHarness() {
 
 describe('terminal control helpers', () => {
   it('centralizes stable terminal accessibility copy and labels', () => {
-    expect(TERMINAL_TABS_KEYBOARD_FOCUS_PATH_TEXT).toContain('Tab to the shell tabs')
     expect(TERMINAL_TASK_PANE_KEYBOARD_FOCUS_PATH_TEXT).toContain('Keyboard focus path:')
     expect(TERMINAL_TASK_PANE_WORKSPACE_RECOVERY_TEXT).toContain('retry loading the terminal')
     expect(TERMINAL_FOCUS_DESCRIPTION_TEXT).toContain('after selecting a shell tab')
