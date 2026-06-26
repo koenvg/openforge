@@ -255,6 +255,8 @@ vi.mock('./lib/ipc', () => ({
   getSessionStatus: vi.fn(),
   abortSession: vi.fn(),
   forceGithubSync: vi.fn(),
+  setPollContext: vi.fn(),
+  getProjectRepo: vi.fn(),
   getPrComments: vi.fn(),
   markCommentAddressed: vi.fn(),
   checkOpenCodeInstalled: vi.fn(),

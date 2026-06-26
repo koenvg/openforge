@@ -29,7 +29,7 @@
 //! - Skips GitHub syncing when no token is configured
 
 use crate::app_events::{publish_app_event, AppEventSender};
-use crate::db::{Database, PrRow};
+use crate::db::{Database, PrRow, ProjectRow};
 use crate::github_client::{
     aggregate_ci_status, aggregate_review_status, deduplicate_check_runs, filter_to_required,
     CheckRunsResponse, CombinedStatusResponse, GitHubClient, PrComment, PrReview,
@@ -98,6 +98,114 @@ fn parse_poll_interval_seconds(raw: Option<String>) -> u64 {
 }
 
 // ============================================================================
+// Poll context & scope
+// ============================================================================
+
+/// Snapshot of the runtime poll context reported by the frontend.
+///
+/// Drives two efficiency behaviors:
+/// - Focus-gating: when the app window is unfocused/hidden, polling is skipped
+///   entirely so a backgrounded app makes zero GitHub calls.
+/// - View-scoped polling: when the per-repo PR view is active, only the active
+///   project's PRs are polled (collapsing the per-PR detail fan-out); the global
+///   PR view opts back into polling every project.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PollContextSnapshot {
+    /// Whether the frontend has reported context at least once. Until it has, the
+    /// poller falls back to the pre-feature behavior (poll everything) so polling
+    /// never silently stops if the frontend is slow or fails to report.
+    pub reported: bool,
+    pub focused: bool,
+    pub active_project_id: Option<String>,
+    pub global_view_open: bool,
+}
+
+impl Default for PollContextSnapshot {
+    fn default() -> Self {
+        Self {
+            reported: false,
+            focused: true,
+            active_project_id: None,
+            global_view_open: false,
+        }
+    }
+}
+
+/// Shared, cloneable handle to the runtime poll context.
+///
+/// The frontend updates it via the `set_poll_context` command; the poller loop
+/// reads a snapshot each cycle. Follows the same shared-handle pattern as
+/// `StartImplementationClaims`.
+#[derive(Clone, Default)]
+pub struct PollContext {
+    inner: Arc<Mutex<PollContextSnapshot>>,
+}
+
+impl PollContext {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn set(&self, focused: bool, active_project_id: Option<String>, global_view_open: bool) {
+        if let Ok(mut guard) = self.inner.lock() {
+            guard.reported = true;
+            guard.focused = focused;
+            guard.active_project_id = active_project_id;
+            guard.global_view_open = global_view_open;
+        }
+    }
+
+    pub fn snapshot(&self) -> PollContextSnapshot {
+        self.inner.lock().map(|g| g.clone()).unwrap_or_default()
+    }
+}
+
+/// Which repositories a polling cycle should cover.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PollScope {
+    /// Poll every project + unscoped searches (used when the global PR view is open,
+    /// and for manual "sync now").
+    Global,
+    /// Poll only the active project's repo. `None` means no project is active, so no
+    /// project-specific (task-PR) polling happens this cycle.
+    ActiveRepo(Option<String>),
+}
+
+/// What the loop should do for a given cycle, derived from the poll context.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PollDecision {
+    /// App is unfocused/hidden — skip the cycle entirely (no GitHub calls).
+    Skip,
+    /// Run a polling cycle with the given scope.
+    Poll(PollScope),
+}
+
+/// Pure decision: given the current context, decide whether/how to poll.
+pub fn decide_poll(ctx: &PollContextSnapshot) -> PollDecision {
+    // Before the frontend reports, preserve the pre-feature behavior (poll all).
+    if !ctx.reported {
+        return PollDecision::Poll(PollScope::Global);
+    }
+    if !ctx.focused {
+        return PollDecision::Skip;
+    }
+    if ctx.global_view_open {
+        PollDecision::Poll(PollScope::Global)
+    } else {
+        PollDecision::Poll(PollScope::ActiveRepo(ctx.active_project_id.clone()))
+    }
+}
+
+/// Pure project selection: which projects to poll for the given scope.
+fn select_projects(all: Vec<ProjectRow>, scope: &PollScope) -> Vec<ProjectRow> {
+    match scope {
+        PollScope::Global => all,
+        PollScope::ActiveRepo(None) => Vec::new(),
+        PollScope::ActiveRepo(Some(id)) => all.into_iter().filter(|p| &p.id == id).collect(),
+    }
+}
+
+// ============================================================================
 // Public API
 // ============================================================================
 
@@ -118,15 +226,17 @@ pub async fn poll_github_once_for_sidecar(
     db: Arc<Mutex<Database>>,
     github_client: &GitHubClient,
     app_event_tx: Option<AppEventSender>,
+    scope: PollScope,
 ) -> PollResult {
     let events = GitHubEventTarget::sidecar(app_event_tx);
-    poll_github_once_with_state(db, github_client, &events).await
+    poll_github_once_with_state(db, github_client, &events, &scope).await
 }
 
 async fn poll_github_once_with_state(
     db: Arc<Mutex<Database>>,
     github_client: &GitHubClient,
     events: &GitHubEventTarget,
+    scope: &PollScope,
 ) -> PollResult {
     let cycle_start = Instant::now();
     github_client.clear_rate_limit_reset();
@@ -180,9 +290,16 @@ async fn poll_github_once_with_state(
         };
     }
 
+    // Scope the per-project (task-PR) polling to the active repo unless the global
+    // view is open. The review/authored searches below stay global (they are cheap
+    // single calls with no per-PR fan-out) so the global badge and the per-repo
+    // view's filtered list both stay fresh.
+    let projects = select_projects(projects, scope);
+
     debug!(
-        "[GitHub Poller] Polling {} projects for PR updates...",
-        projects.len()
+        "[GitHub Poller] Polling {} projects for PR updates (scope={:?})...",
+        projects.len(),
+        scope
     );
 
     let project_count = projects.len();
@@ -326,15 +443,17 @@ pub async fn start_github_poller_for_sidecar(
     db: Arc<Mutex<Database>>,
     github_client: GitHubClient,
     app_event_tx: Option<AppEventSender>,
+    poll_context: PollContext,
 ) {
     let events = GitHubEventTarget::sidecar(app_event_tx);
-    start_github_poller_with_state(db, github_client, events).await;
+    start_github_poller_with_state(db, github_client, events, poll_context).await;
 }
 
 async fn start_github_poller_with_state(
     db: Arc<Mutex<Database>>,
     github_client: GitHubClient,
     events: GitHubEventTarget,
+    poll_context: PollContext,
 ) {
     loop {
         let poll_interval = {
@@ -342,7 +461,18 @@ async fn start_github_poller_with_state(
             parse_poll_interval_seconds(db_lock.get_config("github_poll_interval").ok().flatten())
         };
 
-        let result = poll_github_once_with_state(db.clone(), &github_client, &events).await;
+        // Focus-gating + view-scoping: skip the cycle entirely when the app is
+        // unfocused/hidden; otherwise poll the scope the active view needs.
+        let scope = match decide_poll(&poll_context.snapshot()) {
+            PollDecision::Skip => {
+                debug!("[GitHub Poller] App unfocused/hidden — skipping cycle");
+                sleep(Duration::from_secs(poll_interval)).await;
+                continue;
+            }
+            PollDecision::Poll(scope) => scope,
+        };
+
+        let result = poll_github_once_with_state(db.clone(), &github_client, &events, &scope).await;
 
         let has_changes = result.new_comments > 0
             || result.ci_changes > 0
@@ -1515,6 +1645,104 @@ mod tests {
     use crate::backend_runtime::AppHandle;
     use crate::db::test_helpers::{insert_test_task, make_test_db};
     use crate::github_client::{GitHubClient, GitHubHead, GitHubUser, PullRequest};
+
+    fn make_project(id: &str) -> ProjectRow {
+        ProjectRow {
+            id: id.to_string(),
+            name: format!("project {id}"),
+            path: format!("/tmp/{id}"),
+            created_at: 0,
+            updated_at: 0,
+        }
+    }
+
+    fn reported_ctx(
+        focused: bool,
+        active_project_id: Option<&str>,
+        global_view_open: bool,
+    ) -> PollContextSnapshot {
+        PollContextSnapshot {
+            reported: true,
+            focused,
+            active_project_id: active_project_id.map(|s| s.to_string()),
+            global_view_open,
+        }
+    }
+
+    #[test]
+    fn test_decide_poll_unreported_falls_back_to_global() {
+        // Before the frontend reports, behave like the pre-feature poller.
+        assert_eq!(
+            decide_poll(&PollContextSnapshot::default()),
+            PollDecision::Poll(PollScope::Global)
+        );
+    }
+
+    #[test]
+    fn test_decide_poll_skips_when_unfocused() {
+        let ctx = reported_ctx(false, Some("p1"), true);
+        assert_eq!(decide_poll(&ctx), PollDecision::Skip);
+    }
+
+    #[test]
+    fn test_decide_poll_global_when_global_view_open() {
+        let ctx = reported_ctx(true, Some("p1"), true);
+        assert_eq!(decide_poll(&ctx), PollDecision::Poll(PollScope::Global));
+    }
+
+    #[test]
+    fn test_decide_poll_active_repo_when_global_view_closed() {
+        let ctx = reported_ctx(true, Some("p1"), false);
+        assert_eq!(
+            decide_poll(&ctx),
+            PollDecision::Poll(PollScope::ActiveRepo(Some("p1".to_string())))
+        );
+    }
+
+    #[test]
+    fn test_decide_poll_active_repo_none_when_no_active_project() {
+        let ctx = reported_ctx(true, None, false);
+        assert_eq!(
+            decide_poll(&ctx),
+            PollDecision::Poll(PollScope::ActiveRepo(None))
+        );
+    }
+
+    #[test]
+    fn test_select_projects_global_returns_all() {
+        let all = vec![make_project("a"), make_project("b")];
+        assert_eq!(select_projects(all, &PollScope::Global).len(), 2);
+    }
+
+    #[test]
+    fn test_select_projects_active_repo_filters_to_one() {
+        let all = vec![make_project("a"), make_project("b")];
+        let got = select_projects(all, &PollScope::ActiveRepo(Some("b".to_string())));
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].id, "b");
+    }
+
+    #[test]
+    fn test_select_projects_active_repo_none_returns_empty() {
+        let all = vec![make_project("a"), make_project("b")];
+        assert!(select_projects(all, &PollScope::ActiveRepo(None)).is_empty());
+    }
+
+    #[test]
+    fn test_poll_context_set_and_snapshot() {
+        let ctx = PollContext::new();
+        assert_eq!(ctx.snapshot(), PollContextSnapshot::default());
+        ctx.set(false, Some("p9".to_string()), true);
+        assert_eq!(
+            ctx.snapshot(),
+            PollContextSnapshot {
+                reported: true,
+                focused: false,
+                active_project_id: Some("p9".to_string()),
+                global_view_open: true,
+            }
+        );
+    }
 
     fn make_stale_detail(state: &str, extra: serde_json::Value) -> PullRequest {
         PullRequest {

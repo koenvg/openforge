@@ -16,6 +16,18 @@ export default defineFrontendPlugin({
       component: PrReviewView,
     }))
 
+    // A second, all-repos view rendered by the same component (it derives its
+    // scope from the active view). Placed last on the rail so it sits just above
+    // the settings gear.
+    context.subscriptions.add(openforge.views.register({
+      id: 'pr_review_global',
+      title: 'All Pull Requests',
+      icon: 'boxes',
+      placement: 'rail',
+      order: 90,
+      component: PrReviewView,
+    }))
+
     const githubSync = createGithubSyncPrReviewClient(openforge)
 
     context.subscriptions.add(openforge.commands.register({

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { GITHUB_SYNC_VIEW_KEY } from '../../lib/githubSyncPlugin'
+  import { GITHUB_SYNC_GLOBAL_VIEW_KEY } from '../../lib/githubSyncPlugin'
   import type { AppView } from '../../lib/types'
   import { commandHeld } from '../../lib/stores'
   import { getIconRailNavItems } from '../../lib/iconRailNav'
@@ -37,10 +37,10 @@
       onclick={() => onNavigate(view)}
     >
       <Icon size={24} />
-      {#if view === GITHUB_SYNC_VIEW_KEY && reviewRequestCount > 0}
+      {#if view === GITHUB_SYNC_GLOBAL_VIEW_KEY && reviewRequestCount > 0}
         <span class="badge badge-error badge-xs absolute -top-2 -right-3 text-[0.6rem] font-bold min-w-4 h-4">{reviewRequestCount}</span>
       {/if}
-      {#if view === GITHUB_SYNC_VIEW_KEY && authoredPrCount > 0}
+      {#if view === GITHUB_SYNC_GLOBAL_VIEW_KEY && authoredPrCount > 0}
         <span class="badge badge-warning badge-xs absolute -bottom-2 -right-3 text-[0.6rem] font-bold min-w-4 h-4">{authoredPrCount}</span>
       {/if}
       {#if shortcut && $commandHeld && !modalsOpen}

@@ -66,6 +66,7 @@ pub struct AppState {
     pub whisper: Option<std::sync::Arc<WhisperManager>>,
     pub sidecar_readiness: SidecarReadinessState,
     pub start_implementation_claims: StartImplementationClaims,
+    pub poll_context: crate::github_poller::PollContext,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1443,6 +1444,7 @@ async fn start_http_server_with_app_state(
         .map(|state| state.inner().clone())
         .unwrap_or_else(GitHubClient::new);
     let start_implementation_claims = StartImplementationClaims::new();
+    let poll_context = crate::github_poller::PollContext::new();
     let plugin_host = Some(PluginHost::with_app_event_sender_and_start_claims(
         app.clone()
             .unwrap_or_else(crate::backend_runtime::AppHandle::new),
@@ -1461,6 +1463,7 @@ async fn start_http_server_with_app_state(
         whisper,
         sidecar_readiness,
         start_implementation_claims,
+        poll_context: poll_context.clone(),
     };
 
     if is_electron_sidecar {
@@ -1468,6 +1471,7 @@ async fn start_http_server_with_app_state(
             db,
             github_client,
             Some(app_event_tx),
+            poll_context,
         ));
     }
 

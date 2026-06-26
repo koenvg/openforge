@@ -78,10 +78,10 @@ describe('IconRail', () => {
         reviewRequestCount: 3,
         pluginNavItems: [
           {
-            viewKey: 'plugin:com.openforge.github-sync:pr_review',
-            icon: 'git-pull-request',
-            title: 'Pull Requests',
-            shortcut: '⌘G',
+            viewKey: 'plugin:com.openforge.github-sync:pr_review_global',
+            icon: 'boxes',
+            title: 'All Pull Requests',
+            shortcut: null,
           },
         ],
       },
@@ -103,10 +103,10 @@ describe('IconRail', () => {
         authoredPrCount: 5,
         pluginNavItems: [
           {
-            viewKey: 'plugin:com.openforge.github-sync:pr_review',
-            icon: 'git-pull-request',
-            title: 'Pull Requests',
-            shortcut: '⌘G',
+            viewKey: 'plugin:com.openforge.github-sync:pr_review_global',
+            icon: 'boxes',
+            title: 'All Pull Requests',
+            shortcut: null,
           },
         ],
       },

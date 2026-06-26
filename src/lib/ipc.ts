@@ -130,6 +130,32 @@ export async function forceGithubSync(): Promise<PollResult> {
   return invoke<PollResult>("force_github_sync");
 }
 
+/**
+ * Report the renderer's poll context to the sidecar so the GitHub poller can
+ * focus-gate and scope its calls: pause when the app is unfocused, poll only the
+ * active project's repo unless the global PR view is open.
+ */
+export async function setPollContext(context: {
+  focused: boolean;
+  activeProjectId: string | null;
+  globalViewOpen: boolean;
+}): Promise<void> {
+  return invoke("set_poll_context", {
+    focused: context.focused,
+    activeProjectId: context.activeProjectId,
+    globalViewOpen: context.globalViewOpen,
+  });
+}
+
+/**
+ * Resolve (and cache) a project's GitHub repo (owner/name) from its git origin
+ * remote. Returns null when the project has no parseable GitHub origin. Used to
+ * scope the per-repo PR view to "the repo you're in".
+ */
+export async function getProjectRepo(projectId: string): Promise<{ owner: string; name: string } | null> {
+  return invoke<{ owner: string; name: string } | null>("get_project_repo", { projectId });
+}
+
 export async function getPullRequests(): Promise<PullRequestInfo[]> {
   return invoke<PullRequestInfo[]>("get_pull_requests");
 }

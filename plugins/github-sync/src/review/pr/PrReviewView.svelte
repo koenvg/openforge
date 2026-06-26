@@ -38,6 +38,16 @@
   }
 
   let { api, context: _context, projectName, projectId = null }: Props = $props()
+
+  // The same component backs two views: the per-repo "Pull Requests" view
+  // (scope 'repo') and the "All Pull Requests" view (scope 'global'). PluginSlot
+  // remounts the component when the active view changes, so reading the current
+  // view at init is sufficient to pick the scope.
+  const scope: 'repo' | 'global' =
+    typeof api.navigation.get().currentView === 'string' &&
+    api.navigation.get().currentView.endsWith('pr_review_global')
+      ? 'global'
+      : 'repo'
   let githubSync = $derived(createGithubSyncPrReviewClient(api))
 
   $effect(() => {
@@ -89,8 +99,30 @@
     return excludedRepos.has(`${repoOwner}/${repoName}`)
   }
 
-  let filteredReviewPrs = $derived($reviewPrs.filter(pr => !isRepoExcluded(pr.repo_owner, pr.repo_name)))
-  let filteredAuthoredPrs = $derived($authoredPrs.filter(pr => !isRepoExcluded(pr.repo_owner, pr.repo_name)))
+  // When scope === 'repo', restrict the lists to the active project's repo. The
+  // sidecar resolves it from the project's git origin into the 'resolved_repo'
+  // project config. Until it's known, fall back to showing all (graceful).
+  let scopedRepo = $state<string | null>(null)
+  $effect(() => {
+    const pid = $activeProjectId
+    if (scope === 'repo' && pid) {
+      api.projectConfig.get<string>('resolved_repo', pid).then((val) => {
+        scopedRepo = typeof val === 'string' && val.includes('/') ? val : null
+      }).catch(() => {
+        scopedRepo = null
+      })
+    } else {
+      scopedRepo = null
+    }
+  })
+
+  function matchesScope(repoOwner: string, repoName: string): boolean {
+    if (scope !== 'repo' || !scopedRepo) return true
+    return `${repoOwner}/${repoName}` === scopedRepo
+  }
+
+  let filteredReviewPrs = $derived($reviewPrs.filter(pr => !isRepoExcluded(pr.repo_owner, pr.repo_name) && matchesScope(pr.repo_owner, pr.repo_name)))
+  let filteredAuthoredPrs = $derived($authoredPrs.filter(pr => !isRepoExcluded(pr.repo_owner, pr.repo_name) && matchesScope(pr.repo_owner, pr.repo_name)))
 
   // Text input for manually adding repos
   let newRepoInput = $state('')

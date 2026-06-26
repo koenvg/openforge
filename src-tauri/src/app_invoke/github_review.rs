@@ -75,14 +75,44 @@ pub(super) async fn handle_app_github_review_command(
         "get_authored_prs" => to_app_value(
             crate::github_runtime::get_authored_prs(&state.db).map_err(runtime_error)?,
         )?,
+        "get_project_repo" => {
+            let project_id = payload_string(&request.payload, "projectId")?;
+            to_app_value(
+                crate::github_runtime::get_project_repo(&state.db, &project_id)
+                    .map_err(runtime_error)?,
+            )?
+        }
         "force_github_sync" => to_app_value(
             crate::github_poller::poll_github_once_for_sidecar(
                 state.db.clone(),
                 &state.github_client,
                 state.app_event_tx.clone(),
+                // A manual "sync now" always does a full, all-repo sync.
+                crate::github_poller::PollScope::Global,
             )
             .await,
         )?,
+        "set_poll_context" => {
+            let focused = request
+                .payload
+                .get("focused")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+            let active_project_id = request
+                .payload
+                .get("activeProjectId")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let global_view_open = request
+                .payload
+                .get("globalViewOpen")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            state
+                .poll_context
+                .set(focused, active_project_id, global_view_open);
+            serde_json::Value::Null
+        }
         "merge_pull_request" => {
             let owner = payload_string(&request.payload, "owner")?;
             let repo = payload_string(&request.payload, "repo")?;
