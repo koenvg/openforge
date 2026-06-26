@@ -10,7 +10,8 @@
     "check": "astro check"
   },
   "dependencies": {
-    "astro": "^6.4.8"
+    "astro": "^6.4.8",
+    "gsap": "^3.15.0"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
