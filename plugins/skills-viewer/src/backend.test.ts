@@ -58,6 +58,7 @@ async function createSkillFile(root: string, sourcePath: string, content: string
 
 describe('skills-viewer backend skill discovery', () => {
   beforeEach(async () => {
+    delete process.env.CODEX_HOME
     mockedUserHome.path = await mkdtemp(join(tempRoot(), 'skills-viewer-user-home-'))
   })
 
@@ -100,13 +101,70 @@ describe('skills-viewer backend skill discovery', () => {
     const methods = await activateBackendWithProject(projectPath)
     const skills = await methods.get('listSkills')?.({ projectId: 'P-1' })
 
-    expect((skills as Array<{ name: string; level: string; source_dir: string; file_name: string | null }>)
+    expect((skills as Array<{ name: string; level: string; source_dir: string; file_name: string | null; relative_path: string }>)
       .filter((skill) => skill.name === 'review')
-      .map(({ name, level, source_dir, file_name }) => ({ name, level, source_dir, file_name })))
+      .map(({ name, level, source_dir, file_name, relative_path }) => ({ name, level, source_dir, file_name, relative_path })))
       .toEqual([
-        { name: 'review', level: 'project', source_dir: '.agents', file_name: null },
-        { name: 'review', level: 'user', source_dir: '.pi', file_name: null },
+        { name: 'review', level: 'project', source_dir: '.agents', file_name: null, relative_path: 'review/SKILL.md' },
+        { name: 'review', level: 'user', source_dir: '.pi', file_name: null, relative_path: 'review/SKILL.md' },
       ])
+  })
+
+  it('returns same-name same-source directory skills as distinct relative-path entries', async () => {
+    const projectPath = await mkdtemp(join(tempRoot(), 'skills-viewer-project-'))
+
+    await createSkillFile(projectPath, '.agents/skills/alpha/SKILL.md', `---\nname: review\ndescription: Alpha review\n---\n# Alpha\n`)
+    await createSkillFile(projectPath, '.agents/skills/beta/SKILL.md', `---\nname: review\ndescription: Beta review\n---\n# Beta\n`)
+
+    const methods = await activateBackendWithProject(projectPath)
+    const skills = await methods.get('listSkills')?.({ projectId: 'P-1' })
+
+    expect((skills as Array<{ name: string; level: string; source_dir: string; file_name: string | null; relative_path: string }>)
+      .filter((skill) => skill.name === 'review')
+      .map(({ name, level, source_dir, file_name, relative_path }) => ({ name, level, source_dir, file_name, relative_path })))
+      .toEqual([
+        { name: 'review', level: 'project', source_dir: '.agents', file_name: null, relative_path: 'alpha/SKILL.md' },
+        { name: 'review', level: 'project', source_dir: '.agents', file_name: null, relative_path: 'beta/SKILL.md' },
+      ])
+  })
+
+  it('saves directory skills to the requested relative path instead of the frontmatter name folder', async () => {
+    const projectPath = await mkdtemp(join(tempRoot(), 'skills-viewer-project-'))
+    const original = `---\nname: review\ndescription: Alpha review\n---\n# Alpha\n`
+    const updated = `---\nname: review\ndescription: Updated alpha\n---\n# Updated Alpha\n`
+    await createSkillFile(projectPath, '.agents/skills/alpha/SKILL.md', original)
+
+    const methods = await activateBackendWithProject(projectPath)
+    await methods.get('saveSkillContent')?.({
+      projectId: 'P-1',
+      name: 'review',
+      level: 'project',
+      sourceDir: '.agents',
+      content: updated,
+      fileName: null,
+      relativePath: 'alpha/SKILL.md',
+    })
+
+    await expect(readFile(join(projectPath, '.agents/skills/alpha/SKILL.md'), 'utf8')).resolves.toBe(updated)
+    await expect(readFile(join(projectPath, '.agents/skills/review/SKILL.md'), 'utf8')).rejects.toThrow()
+  })
+
+  it('rejects unsafe relative save paths', async () => {
+    const projectPath = await mkdtemp(join(tempRoot(), 'skills-viewer-project-'))
+    const methods = await activateBackendWithProject(projectPath)
+    const saveSkillContent = methods.get('saveSkillContent')
+    const baseRequest = {
+      projectId: 'P-1',
+      name: 'review',
+      level: 'project',
+      sourceDir: '.agents',
+      content: '# Unsafe',
+      fileName: null,
+    }
+
+    for (const relativePath of ['../escape/SKILL.md', '/tmp/SKILL.md', 'alpha/../SKILL.md', 'alpha/other.md', 'nested/deeper/SKILL.md', 'root.md']) {
+      await expect(saveSkillContent?.({ ...baseRequest, relativePath })).rejects.toThrow(/Invalid skill relative path/)
+    }
   })
 
   it('returns same-name Pi directory and root markdown skills as distinct entries', async () => {
@@ -120,13 +178,77 @@ describe('skills-viewer backend skill discovery', () => {
     const methods = await activateBackendWithProject(projectPath)
     const skills = await methods.get('listSkills')?.({ projectId: 'P-1' })
 
-    expect((skills as Array<{ name: string; level: string; source_dir: string; source_path: string; file_name: string | null }>)
+    expect((skills as Array<{ name: string; level: string; source_dir: string; source_path: string; file_name: string | null; relative_path: string }>)
       .filter((skill) => skill.name === 'review')
+      .map(({ name, level, source_dir, source_path, file_name, relative_path }) => ({ name, level, source_dir, source_path, file_name, relative_path })))
+      .toEqual([
+        { name: 'review', level: 'user', source_dir: '.pi', source_path: 'review', file_name: null, relative_path: 'review/SKILL.md' },
+        { name: 'review', level: 'user', source_dir: '.pi', source_path: 'review.md', file_name: 'review.md', relative_path: 'review.md' },
+      ])
+  })
+
+  it('discovers Codex skills from project and user source roots', async () => {
+    const projectPath = await mkdtemp(join(tempRoot(), 'skills-viewer-project-'))
+    const userPath = await mkdtemp(join(tempRoot(), 'skills-viewer-user-'))
+    mockedUserHome.path = userPath
+
+    await createSkillFile(projectPath, '.codex/skills/project-codex/SKILL.md', `---\nname: project-codex\ndescription: Project Codex skill\n---\n# Project Codex\n`)
+    await createSkillFile(userPath, '.codex/skills/user-codex/SKILL.md', `---\nname: user-codex\ndescription: User Codex skill\n---\n# User Codex\n`)
+
+    const methods = await activateBackendWithProject(projectPath)
+    const skills = await methods.get('listSkills')?.({ projectId: 'P-1' })
+
+    expect((skills as Array<{ name: string; level: string; source_dir: string; source_path: string; file_name: string | null }>)
+      .filter((skill) => skill.source_dir === '.codex')
       .map(({ name, level, source_dir, source_path, file_name }) => ({ name, level, source_dir, source_path, file_name })))
       .toEqual([
-        { name: 'review', level: 'user', source_dir: '.pi', source_path: 'review', file_name: null },
-        { name: 'review', level: 'user', source_dir: '.pi', source_path: 'review.md', file_name: 'review.md' },
+        { name: 'project-codex', level: 'project', source_dir: '.codex', source_path: 'project-codex', file_name: null },
+        { name: 'user-codex', level: 'user', source_dir: '.codex', source_path: 'user-codex', file_name: null },
       ])
+  })
+
+  it('discovers user Codex skills from CODEX_HOME when configured', async () => {
+    const projectPath = await mkdtemp(join(tempRoot(), 'skills-viewer-project-'))
+    const userPath = await mkdtemp(join(tempRoot(), 'skills-viewer-user-'))
+    const codexHome = await mkdtemp(join(tempRoot(), 'skills-viewer-codex-home-'))
+    mockedUserHome.path = userPath
+    process.env.CODEX_HOME = codexHome
+
+    await createSkillFile(projectPath, '.codex/skills/project-codex/SKILL.md', `---\nname: project-codex\ndescription: Project Codex skill\n---\n# Project Codex\n`)
+    await createSkillFile(userPath, '.codex/skills/home-codex/SKILL.md', `---\nname: home-codex\ndescription: Default home Codex skill\n---\n# Home Codex\n`)
+    await createSkillFile(codexHome, 'skills/env-codex/SKILL.md', `---\nname: env-codex\ndescription: CODEX_HOME skill\n---\n# Env Codex\n`)
+
+    const methods = await activateBackendWithProject(projectPath)
+    const skills = await methods.get('listSkills')?.({ projectId: 'P-1' })
+
+    expect((skills as Array<{ name: string; level: string; source_dir: string; source_path: string; file_name: string | null }>)
+      .filter((skill) => skill.source_dir === '.codex')
+      .map(({ name, level, source_dir, source_path, file_name }) => ({ name, level, source_dir, source_path, file_name })))
+      .toEqual([
+        { name: 'env-codex', level: 'user', source_dir: '.codex', source_path: 'env-codex', file_name: null },
+        { name: 'project-codex', level: 'project', source_dir: '.codex', source_path: 'project-codex', file_name: null },
+      ])
+  })
+
+  it('saves user Codex skills under CODEX_HOME when configured', async () => {
+    const projectPath = await mkdtemp(join(tempRoot(), 'skills-viewer-project-'))
+    const userPath = await mkdtemp(join(tempRoot(), 'skills-viewer-user-'))
+    const codexHome = await mkdtemp(join(tempRoot(), 'skills-viewer-codex-home-'))
+    mockedUserHome.path = userPath
+    process.env.CODEX_HOME = codexHome
+
+    const methods = await activateBackendWithProject(projectPath)
+    await methods.get('saveSkillContent')?.({
+      projectId: 'P-1',
+      name: 'new-codex',
+      level: 'user',
+      sourceDir: '.codex',
+      content: '# New Codex\n',
+      relativePath: 'new-codex/SKILL.md',
+    })
+
+    await expect(readFile(join(codexHome, 'skills', 'new-codex', 'SKILL.md'), 'utf8')).resolves.toBe('# New Codex\n')
+    await expect(readFile(join(userPath, '.codex', 'skills', 'new-codex', 'SKILL.md'), 'utf8')).rejects.toThrow()
   })
 
   it('saves directory-backed skills by listed source folder instead of frontmatter name', async () => {

@@ -1,11 +1,12 @@
 /**
  * @process openforge/angry-oracle-code-change
- * @description Code-change workflow with context-appropriate verification, an explicit architecture review gate, and an adversarial post-change oracle review/fix loop
+ * @description Code-change workflow with context-appropriate verification, an explicit architecture review gate, and a thermo-nuclear post-change review/fix loop
  * @skill rust .agents/skills/rust/SKILL.md
  * @skill ui-ux-pro-max .agents/skills/ui-ux-pro-max/SKILL.md
  * @skill improve-codebase-architecture /Users/koen/.agents/skills/improve-codebase-architecture/SKILL.md
  * @skill openforge /Users/koen/.pi/agent/skills/openforge/SKILL.md
  * @skill openforge-app-operator .agents/skills/openforge-app-operator/SKILL.md
+ * @skill review .agents/skills/review/SKILL.md
  * @inputs { request: string, maxOracleIterations: number, targetOracleScore: number, verificationCommands: string[] }
  * @outputs { success: boolean, architectureApproved: boolean, oracleApproved: boolean, iterations: number, changedFiles: string[], finalArchitectureReview: object, finalOracleReview: object, manualVerification: object }
  */
@@ -39,7 +40,7 @@ export const MANUAL_APP_VERIFICATION_EXACT_FILES = [
 
 export function hasBlockingOracleFindings(review = {}) {
   const verdict = String(review.verdict || '').toLowerCase();
-  if (verdict && !['approve', 'approved', 'pass', 'passed'].includes(verdict)) {
+  if (!['approve', 'approved', 'pass', 'passed'].includes(verdict)) {
     return true;
   }
 
@@ -133,8 +134,8 @@ export function buildManualVerificationSkip(changedFiles = [], iteration = 1) {
 
 export function buildOracleReviewPrompt({ request, changedFiles = [], verificationResults = [], manualVerification = null, architectureReview = null, iteration = 1 }) {
   return {
-    role: 'angry principal engineer oracle',
-    task: 'Review the completed code changes after implementation, including whether the solution has sound architectural fit for this codebase. Be adversarial: do not rubber-stamp the work, and assume subtle bugs, convention violations, missing tests, over-engineering, and misplaced responsibilities are present until proven otherwise.',
+    role: 'thermo-nuclear code quality oracle',
+    task: 'Perform a thermo-nuclear code quality review: review the completed code changes after implementation, including whether the solution has sound architectural fit for this codebase. Be adversarial: do not rubber-stamp the work, and assume subtle bugs, convention violations, missing tests, over-engineering, spaghetti-condition growth, and misplaced responsibilities are present until proven otherwise.',
     context: {
       request,
       changedFiles,
@@ -165,6 +166,7 @@ export function buildOracleReviewPrompt({ request, changedFiles = [], verificati
       'Check project conventions from AGENTS.md and the project profile before judging readiness.',
       'Validate that the explicit architecture review gate was run and that its findings were addressed before this oracle review.',
       'Validate architecture and architectural fit: module boundaries, ownership, separation of concerns, cohesion, coupling, and whether the design makes sense for the requested scope.',
+      'Apply the project-local review skill standards: look for code judo simplifications, unnecessary branching, spaghetti-condition growth, files crossing the 1k-line threshold, weak boundaries, and abstractions that make the change less direct.',
       'Flag any missing test coverage, business logic regressions, race conditions, stale lifecycle state, direct invoke usage, Svelte/Rust convention violations, misplaced responsibilities, or over-engineering.',
       'Every finding must include severity, file/path when applicable, evidence, and an actionable fix.',
       'Treat critical/high severity findings, blockers, required fixes, and requiredFixes entries as blockers that must be fixed before completion.',
@@ -538,46 +540,27 @@ export const architectureFixTask = defineTask('architecture-fix', (args, taskCtx
   labels: ['agent', 'fix', 'architecture-review', `iteration-${args.iteration}`]
 }));
 
-export const angryOracleReviewTask = defineTask('angry-oracle-review', (args, taskCtx) => ({
-  kind: 'agent',
-  title: `Angry oracle review (iteration ${args.iteration})`,
-  description: 'Adversarial post-change review that must find actionable blocking feedback before completion',
-  agent: {
-    name: 'general-purpose',
-    prompt: buildOracleReviewPrompt(args),
-    outputSchema: {
-      type: 'object',
-      required: ['verdict', 'score', 'summary', 'findings'],
-      properties: {
-        verdict: { type: 'string', enum: ['approve', 'changes_requested'] },
-        score: { type: 'number', minimum: 0, maximum: 100 },
-        summary: { type: 'string' },
-        blockers: { type: 'array', items: { type: 'string' } },
-        findings: {
-          type: 'array',
-          items: {
-            type: 'object',
-            required: ['severity', 'message', 'actionableFix'],
-            properties: {
-              severity: { type: 'string', enum: ['critical', 'high', 'medium', 'low'] },
-              file: { type: 'string' },
-              message: { type: 'string' },
-              evidence: { type: 'string' },
-              actionableFix: { type: 'string' }
-            }
-          }
-        },
-        requiredFixes: { type: 'array', items: { type: 'string' } },
-        praiseIfAny: { type: 'array', items: { type: 'string' } }
+export const angryOracleReviewTask = defineTask('angry-oracle-review', (args, taskCtx) => {
+  const prompt = buildOracleReviewPrompt(args);
+
+  return {
+    kind: 'skill',
+    title: `Thermo-nuclear review (iteration ${args.iteration})`,
+    description: 'Project-local thermo-nuclear post-change review that must find actionable blocking feedback before completion',
+    skill: {
+      name: 'review',
+      context: {
+        ...prompt,
+        expectedOutput: 'JSON with verdict (approve|changes_requested), score (0-100), summary, blockers, findings with severity/file/message/evidence/actionableFix, requiredFixes, and praiseIfAny. Return only JSON matching this contract so the Babysitter flow can enforce blocking findings.'
       }
-    }
-  },
-  io: {
-    inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
-    outputJsonPath: `tasks/${taskCtx.effectId}/output.json`
-  },
-  labels: ['agent', 'oracle', 'adversarial-review', `iteration-${args.iteration}`]
-}));
+    },
+    io: {
+      inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
+      outputJsonPath: `tasks/${taskCtx.effectId}/output.json`
+    },
+    labels: ['skill', 'oracle', 'review', 'thermo-nuclear-review', `iteration-${args.iteration}`]
+  };
+});
 
 export const oracleFixTask = defineTask('oracle-fix', (args, taskCtx) => ({
   kind: 'agent',

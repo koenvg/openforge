@@ -1,13 +1,13 @@
 <script lang="ts">
   import {
-    createLoadingTerminalTaskPaneWorkspaceSnapshot,
-    createTerminalTaskPaneWorkspaceLookupController,
+    createTaskTerminalPaneLifecycle,
+    formatTerminalTaskPaneWorkspaceLookupError,
     getTerminalTaskPaneWorkspaceStatusText,
     type TerminalTaskPaneWorkspaceLookupState,
-    type TerminalTaskPaneWorkspaceSnapshot,
   } from '@openforge/terminal-runtime'
   import { onDestroy, onMount } from 'svelte'
   import { getTaskWorkspace } from '../../lib/ipc'
+  import { releaseAllForTask } from '../../lib/terminalPool'
   import { createTerminalShortcutController } from '../../lib/terminalShortcutController'
   import TerminalTabs from './TerminalTabs.svelte'
   import { registerTerminalTaskPaneController, unregisterTerminalTaskPaneController } from './terminalTaskPaneController'
@@ -22,7 +22,6 @@
   let workspaceLookupError = $state<string | null>(null)
   let shortcutRoot = $state<HTMLElement | null>(null)
 
-  const workspaceLookup = createTerminalTaskPaneWorkspaceLookupController()
   const terminalShortcuts = createTerminalShortcutController({ shortcutRoot: () => shortcutRoot })
   const controller = terminalShortcuts.controller
   let terminalTabsRef = $state<TerminalTabs | null>(null)
@@ -35,61 +34,45 @@
     getTerminalTaskPaneWorkspaceStatusText(workspaceLookupState),
   )
 
-  function applyWorkspaceLookupSnapshot(snapshot: TerminalTaskPaneWorkspaceSnapshot): void {
-    workspacePath = snapshot.workspacePath
-    workspaceLookupState = snapshot.workspaceLookupState
-    workspaceLookupError = snapshot.workspaceLookupError
-  }
-
-  function loadWorkspaceForTask(taskIdToLoad: string): void {
-    const request = workspaceLookup.startLookup(taskIdToLoad)
-    applyWorkspaceLookupSnapshot(createLoadingTerminalTaskPaneWorkspaceSnapshot())
-
-    void getTaskWorkspace(taskIdToLoad)
-      .then((workspace) => {
-        const snapshot = workspaceLookup.resolveLookup(request, workspace)
-        if (snapshot === null) return
-        applyWorkspaceLookupSnapshot(snapshot)
-      })
-      .catch((error: unknown) => {
-        const snapshot = workspaceLookup.rejectLookup(request, error)
-        if (snapshot === null) return
-        applyWorkspaceLookupSnapshot(snapshot)
-      })
-  }
+  const terminalPaneLifecycle = createTaskTerminalPaneLifecycle({
+    controller,
+    getTaskWorkspace,
+    getWorkspacePath: (workspace) => workspace?.workspace_path ?? null,
+    registerController: registerTerminalTaskPaneController,
+    unregisterController: unregisterTerminalTaskPaneController,
+    releaseAllForTask,
+    setWorkspacePath: (path) => { workspacePath = path },
+    onWorkspaceLoading: () => {
+      workspaceLookupState = 'loading'
+      workspaceLookupError = null
+    },
+    onWorkspaceResolved: (_taskId, path) => {
+      workspaceLookupState = path === null ? 'unavailable' : 'ready'
+      workspaceLookupError = null
+    },
+    onWorkspaceLookupError: (_taskId, error) => {
+      workspaceLookupState = 'error'
+      workspaceLookupError = formatTerminalTaskPaneWorkspaceLookupError(error)
+    },
+  })
 
   function retryWorkspaceLookup(): void {
-    loadWorkspaceForTask(taskId)
+    terminalPaneLifecycle.retryWorkspaceLookup()
   }
 
   $effect(() => {
-    const taskSwitch = workspaceLookup.switchTask(taskId)
-    if (!taskSwitch.changed) {
-      return
-    }
-
-    if (taskSwitch.previousTaskId !== null) {
-      unregisterTerminalTaskPaneController(taskSwitch.previousTaskId, controller)
-    }
-
-    registerTerminalTaskPaneController(taskId, controller)
-    loadWorkspaceForTask(taskId)
+    terminalPaneLifecycle.syncTask(taskId)
   })
 
   onMount(() => terminalShortcuts.registerWindowKeydown())
 
   onDestroy(() => {
-    workspaceLookup.cancelLookups()
-    const taskIdToUnregister = workspaceLookup.getActiveTaskId()
-    if (taskIdToUnregister !== null) {
-      unregisterTerminalTaskPaneController(taskIdToUnregister, controller)
-    }
-    workspaceLookup.clearTask()
+    terminalPaneLifecycle.destroy()
   })
 </script>
 
 <div bind:this={shortcutRoot} class="flex flex-col flex-1 overflow-hidden h-full">
-  <p class="sr-only" role="status" aria-live="polite">{workspaceStatusText}</p>
+  <p class="sr-only" role="status" aria-live="polite" aria-atomic="true">{workspaceStatusText}</p>
 
   {#if workspaceLookupState === 'ready' && workspacePath !== null}
     <TerminalTabs
@@ -100,20 +83,26 @@
       onTabCountChange={null}
     />
   {:else if workspaceLookupState === 'loading'}
-    <div class="flex flex-1 items-center justify-center p-6 text-center text-sm text-base-content/70">
+    <div class="flex flex-1 items-center justify-center p-6 text-center text-sm text-base-content/70" role="status">
       <div class="flex flex-col items-center gap-3">
         <span class="loading loading-spinner loading-md" aria-hidden="true"></span>
         <p>{workspaceStatusText}</p>
       </div>
     </div>
   {:else}
-    <div class="flex flex-1 items-center justify-center p-6 text-center">
+    <div class="flex flex-1 items-center justify-center p-6 text-center" role="status" aria-live="polite">
       <div class="max-w-sm space-y-3">
         <p class="font-medium">{workspaceStatusText}</p>
         {#if workspaceLookupState === 'error' && workspaceLookupError !== null}
           <p class="text-sm text-base-content/70">{workspaceLookupError}</p>
         {:else}
           <p class="text-sm text-base-content/70">Start or repair the task workspace, then retry loading the terminal.</p>
+        {/if}
+        <p class="text-xs text-base-content/50">
+          <span class="font-semibold">Keyboard focus path:</span> resolve the workspace first, then Tab to shell tabs, choose New shell, and Tab into the terminal region.
+        </p>
+        {#if workspaceLookupState === 'error'}
+          <p class="sr-only">Terminal workspace error</p>
         {/if}
         <button type="button" class="btn btn-sm btn-primary" onclick={retryWorkspaceLookup}>Retry workspace lookup</button>
       </div>

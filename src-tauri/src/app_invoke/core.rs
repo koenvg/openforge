@@ -78,6 +78,14 @@ pub(super) async fn handle_app_core_task_project_command(
             }
             json_value(deleted)?
         }
+        "list_git_branches" => {
+            let repo_path = payload_string(&request.payload, "repoPath")?;
+            json_value(
+                crate::git_worktree::list_git_branches(std::path::Path::new(&repo_path))
+                    .await
+                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?,
+            )?
+        }
         "delete_project" => {
             let id = payload_string(&request.payload, "id")?;
             let db = crate::db::acquire_db(&state.db);
@@ -214,13 +222,17 @@ pub(super) async fn handle_app_unmatched_command(
             let permission_mode = payload_optional_string(&request.payload, "permissionMode")?;
             let depends_on = payload_optional_string_vec(&request.payload, "dependsOn")?;
             let label_names = payload_optional_string_vec(&request.payload, "labelNames")?;
+            let worktree_source = payload_optional_string(&request.payload, "worktreeSource")?;
+            let worktree_branch = payload_optional_string(&request.payload, "worktreeBranch")?;
             let task = db
-                .create_task(
+                .create_task_with_worktree_source(
                     &initial_prompt,
                     &status,
                     project_id.as_deref(),
                     None,
                     permission_mode.as_deref(),
+                    worktree_source.as_deref(),
+                    worktree_branch.as_deref(),
                 )
                 .map_err(|e| {
                     (

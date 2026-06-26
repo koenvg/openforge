@@ -1,11 +1,36 @@
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { getPreferredSkillIdentity, getSkillIdentity, getSkillLocationLabel, getSkillSourcePath, getVisibleSkills, groupSkillsBySource, parseSkillFrontmatter, stripSkillFrontmatter, type SkillInfo } from './skillDomain'
+import { getPreferredSkillIdentity, getSkillIdentity, getSkillLocationLabel, getSkillSourcePath, getVisibleSkills, groupSkillsBySource, isSameSkillIdentity, parseSkillFrontmatter, SKILL_SOURCE_DIRS, stripSkillFrontmatter, type SkillInfo } from './skillDomain'
 
-function makeSkill(name: string, source_dir: string, level: SkillInfo['level'] = 'project'): SkillInfo {
-  return { name, source_dir, source_path: name, level, description: null, agent: null, template: null, file_name: null }
+function makeSkill(name: string, source_dir: string, level: SkillInfo['level'] = 'project', relative_path = `${name}/SKILL.md`): SkillInfo {
+  const source_path = relative_path.endsWith('/SKILL.md')
+    ? relative_path.slice(0, -'/SKILL.md'.length)
+    : relative_path
+  return { name, source_dir, source_path, level, description: null, agent: null, template: null, file_name: null, relative_path }
+}
+
+function rustCommandDiscoverySkillSourceDirs(): string[] {
+  const testDir = dirname(fileURLToPath(import.meta.url))
+  const rustSource = readFileSync(resolve(testDir, '../../../../src-tauri/src/command_discovery.rs'), 'utf8')
+  const match = /pub const SKILL_SOURCE_DIRS: \[&str; \d+\] = \[([\s\S]*?)\];/.exec(rustSource)
+  expect(match).not.toBeNull()
+
+  return Array.from(match?.[1].matchAll(/"(\.\w+)"|([A-Z_]+_SKILLS_SOURCE_DIR)/g) ?? []).map((sourceMatch) => {
+    if (sourceMatch[1]) return sourceMatch[1]
+    const constantMatch = new RegExp(`pub const ${sourceMatch[2]}: &str = "(\\.\\w+)";`).exec(rustSource)
+    expect(constantMatch).not.toBeNull()
+    return constantMatch?.[1] ?? ''
+  })
 }
 
 describe('skills-viewer skill domain helpers', () => {
+  it('keeps supported provider skill source directories aligned with Rust command discovery', () => {
+    expect(SKILL_SOURCE_DIRS).toEqual(rustCommandDiscoverySkillSourceDirs())
+    expect(SKILL_SOURCE_DIRS).toContain('.codex')
+  })
+
   it('groups skills by known provider source order and appends unknown sources to other', () => {
     const skills = [
       makeSkill('custom', '.custom'),
@@ -13,11 +38,13 @@ describe('skills-viewer skill domain helpers', () => {
       makeSkill('agents', '.agents'),
       makeSkill('other-custom', '.another'),
       makeSkill('opencode', '.opencode'),
+      makeSkill('codex', '.codex'),
     ]
 
     expect(groupSkillsBySource(skills)).toEqual([
       { source: '.agents', skills: [skills[2]] },
       { source: '.opencode', skills: [skills[4]] },
+      { source: '.codex', skills: [skills[5]] },
       { source: '.pi', skills: [skills[1]] },
       { source: 'other', skills: [skills[0], skills[3]] },
     ])
@@ -30,21 +57,33 @@ describe('skills-viewer skill domain helpers', () => {
   })
 
   it('formats skill locations with root markdown file names for duplicate disambiguation', () => {
-    const directorySkill = makeSkill('display-review', '.pi', 'user')
-    directorySkill.source_path = 'review-folder'
-    const rootMarkdownSkill = makeSkill('review', '.pi', 'user')
-    rootMarkdownSkill.source_path = 'review.md'
+    const directorySkill = makeSkill('display-review', '.pi', 'user', 'review-folder/SKILL.md')
+    const rootMarkdownSkill = makeSkill('review', '.pi', 'user', 'review.md')
     rootMarkdownSkill.file_name = 'review.md'
 
     expect(getSkillLocationLabel(directorySkill)).toBe('~/.pi/agent/skills/review-folder/SKILL.md')
     expect(getSkillLocationLabel(rootMarkdownSkill)).toBe('~/.pi/agent/skills/review.md')
   })
 
-  it('builds stable identities from source paths instead of frontmatter names', () => {
-    const skill = makeSkill('display-review', '.pi', 'user')
-    skill.source_path = 'review-folder'
+  it('formats directory skill locations from the discovered path instead of frontmatter name', () => {
+    const skill = makeSkill('frontmatter-name', '.agents', 'project', 'folder-name/SKILL.md')
 
-    expect(getSkillIdentity(skill)).toEqual({ level: 'user', source_dir: '.pi', source_path: 'review-folder', file_name: null })
+    expect(getSkillLocationLabel(skill)).toBe('.agents/skills/folder-name/SKILL.md')
+  })
+
+  it('builds stable identities for duplicate skill names', () => {
+    const skill = makeSkill('review', '.pi', 'user', 'review.md')
+    skill.file_name = 'review.md'
+
+    expect(getSkillIdentity(skill)).toEqual({ level: 'user', source_dir: '.pi', source_path: 'review.md', file_name: 'review.md', relative_path: 'review.md' })
+  })
+
+  it('distinguishes same-source directory skills with the same frontmatter name by relative path', () => {
+    const alpha = makeSkill('review', '.agents', 'project', 'alpha/SKILL.md')
+    const beta = makeSkill('review', '.agents', 'project', 'beta/SKILL.md')
+
+    expect(isSameSkillIdentity(alpha, getSkillIdentity(beta))).toBe(false)
+    expect(isSameSkillIdentity(beta, getSkillIdentity(beta))).toBe(true)
   })
 
   it('defaults to a project skill when mixed project and user skills are present', () => {
@@ -74,6 +113,13 @@ describe('skills-viewer skill domain helpers', () => {
     const missingSelection = getSkillIdentity(makeSkill('missing-personal', '.pi', 'user'))
 
     expect(getPreferredSkillIdentity(filteredSkills, missingSelection)).toEqual(getSkillIdentity(filteredSkills[1]))
+  })
+
+  it('preserves a path-based selection when saved frontmatter renames the skill', () => {
+    const currentIdentity = getSkillIdentity(makeSkill('review', '.agents', 'project', 'folder/SKILL.md'))
+    const renamedSkill = makeSkill('renamed-review', '.agents', 'project', 'folder/SKILL.md')
+
+    expect(getPreferredSkillIdentity([renamedSkill], currentIdentity)).toEqual(currentIdentity)
   })
 
   it('parses frontmatter metadata for saved skill content', () => {

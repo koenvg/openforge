@@ -19,16 +19,31 @@
   let activeTabIndex = $state(0)
   let nextIndex = $state(0)
   let tabLifecycleByKey = $state(new Map<string, ShellLifecycleState>())
+  let liveMessage = $state('')
   const tabLifecycleUnsubscribers = new Map<string, () => void>()
 
   interface CloseTabOptions {
     allowClosingLastTab?: boolean
   }
 
-  function setTabLifecycle(terminalKey: string, state: ShellLifecycleState) {
+  function announce(message: string) {
+    liveMessage = message
+  }
+
+  function setTabLifecycle(terminalKey: string, state: ShellLifecycleState, announceTransitions = false) {
+    const previous = tabLifecycleByKey.get(terminalKey)
     const next = new Map(tabLifecycleByKey)
     next.set(terminalKey, state)
     tabLifecycleByKey = next
+
+    if (!announceTransitions) return
+    const tab = tabs.find(candidate => candidate.key === terminalKey)
+    if (!tab) return
+    if (!previous?.shellExited && state.shellExited) {
+      announce(`${tab.label} exited. Use Restart shell to start it again.`)
+    } else if (previous?.shellExited && !state.shellExited && state.ptyActive) {
+      announce(`${tab.label} restarted. Focus returned to ${tab.label} terminal.`)
+    }
   }
 
   function removeTabLifecycle(terminalKey: string) {
@@ -39,6 +54,26 @@
 
   function isTabExited(terminalKey: string): boolean {
     return tabLifecycleByKey.get(terminalKey)?.shellExited ?? false
+  }
+
+  function tabStatus(tab: TerminalTab): string {
+    if (isTabExited(tab.key)) return 'exited'
+    if (activeTabIndex === tab.index) return 'active'
+    return 'inactive'
+  }
+
+  function tabAccessibleLabel(tab: TerminalTab): string {
+    const activeState = activeTabIndex === tab.index ? 'active' : 'inactive'
+    const lifecycleState = isTabExited(tab.key) ? 'exited' : 'running'
+    return `${tab.label}, ${activeState}, ${lifecycleState}`
+  }
+
+  function panelId(tab: TerminalTab): string {
+    return `terminal-panel-${tab.key}`
+  }
+
+  function tabId(tab: TerminalTab): string {
+    return `terminal-tab-${tab.key}`
   }
 
   function syncTabLifecycleSubscriptions() {
@@ -56,7 +91,7 @@
       if (tabLifecycleUnsubscribers.has(tab.key)) continue
       setTabLifecycle(tab.key, getShellLifecycleState(tab.key))
       tabLifecycleUnsubscribers.set(tab.key, subscribeShellLifecycle(tab.key, (state) => {
-        setTabLifecycle(tab.key, state)
+        setTabLifecycle(tab.key, state, true)
       }))
     }
   }
@@ -113,6 +148,7 @@
     syncSession()
     onTabChange?.(tab.index)
     onTabCountChange?.(tabs.length)
+    announce(`${tab.label} created. Focus moved to ${tab.label} terminal.`)
     void focusTerminalTab(tab.key)
   }
 
@@ -157,19 +193,28 @@
     const newTabs = tabs.filter(t => t.index !== tab.index)
     tabs = newTabs
 
+    let focusTargetLabel = 'no shell'
     if (activeTabIndex === tab.index) {
       const nextTab = newTabs[tabArrayIndex] ?? newTabs[tabArrayIndex - 1]
       if (nextTab) {
         activeTabIndex = nextTab.index
+        focusTargetLabel = nextTab.label
         onTabChange?.(nextTab.index)
         await focusTerminalTab(nextTab.key)
       } else {
         activeTabIndex = 0
       }
+    } else {
+      const activeTab = newTabs.find(t => t.index === activeTabIndex)
+      if (activeTab) {
+        focusTargetLabel = activeTab.label
+        await focusTerminalTab(activeTab.key)
+      }
     }
 
     syncSession()
     onTabCountChange?.(tabs.length)
+    announce(`${tab.label} closed. Focus moved to ${focusTargetLabel}.`)
   }
 
   onMount(() => {
@@ -183,11 +228,23 @@
 </script>
 
 <div class="flex flex-col h-full">
-  <div class="flex items-center overflow-x-auto border-b border-base-300 bg-base-200 shrink-0">
+  <div class="px-3 py-2 text-xs text-base-content/70 border-b border-base-300 bg-base-100">
+    <span class="font-semibold">Keyboard focus path:</span> Tab to the shell tabs, choose <span class="font-medium">New shell</span> or press <kbd class="kbd kbd-xs">⌘T</kbd>, then Tab into the terminal region. Use <kbd class="kbd kbd-xs">⌘⇧1–9</kbd> to switch shells.
+  </div>
+  <div class="sr-only" aria-live="polite" aria-atomic="true">{liveMessage}</div>
+  <div class="flex items-center overflow-x-auto border-b border-base-300 bg-base-200 shrink-0" role="tablist" aria-label="Shell terminals">
     {#each tabs as tab, tabPosition (tab.index)}
       <div class="flex items-center whitespace-nowrap">
         <button
-          class="flex items-center gap-1 px-3 py-1.5 text-sm {activeTabIndex === tab.index ? 'border-b-2 border-primary text-base-content font-semibold' : 'text-base-content/50'}"
+          id={tabId(tab)}
+          role="tab"
+          type="button"
+          aria-selected={activeTabIndex === tab.index}
+          aria-current={activeTabIndex === tab.index ? 'page' : undefined}
+          aria-controls={panelId(tab)}
+          aria-label={tabAccessibleLabel(tab)}
+          title={`${tab.label} (${tabStatus(tab)})`}
+          class="flex items-center gap-1 px-3 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-primary rounded {activeTabIndex === tab.index ? 'border-b-2 border-primary text-base-content font-semibold' : 'text-base-content/50'}"
           onclick={() => {
             activeTabIndex = tab.index
             syncSession()
@@ -195,29 +252,42 @@
             void focusTerminalTab(tab.key)
           }}
         >
-          {tab.label}{#if isTabExited(tab.key)}<span class="badge badge-sm badge-warning font-mono">exited</span>{/if}{#if $commandHeld && tabPosition < 9}<kbd class="kbd kbd-xs opacity-50">⌘⇧{tabPosition + 1}</kbd>{/if}
+          <span>{tab.label}</span>
+          {#if activeTabIndex === tab.index}<span class="badge badge-primary badge-xs">Active</span>{/if}
+          {#if isTabExited(tab.key)}<span class="badge badge-warning badge-xs">Exited</span>{/if}
+          {#if $commandHeld && tabPosition < 9}<kbd class="kbd kbd-xs opacity-50">⌘⇧{tabPosition + 1}</kbd>{/if}
         </button>
         <button
-          class="pr-2 text-xs leading-none opacity-60 hover:opacity-100"
+          type="button"
+          class="px-2 py-1.5 text-xs leading-none opacity-70 hover:opacity-100 focus-visible:ring-2 focus-visible:ring-primary rounded"
           disabled={tabs.length <= 1 && !isTabExited(tab.key)}
           onclick={() => closeTab(tab, { allowClosingLastTab: isTabExited(tab.key) })}
-          aria-label="×"
+          aria-label={`Close ${tab.label}`}
+          title={`Close ${tab.label}`}
         >
-          ×
+          <span aria-hidden="true">×</span>
         </button>
       </div>
     {/each}
     <button
-      class="px-2 py-1.5 text-base-content/50 hover:text-base-content text-sm"
+      type="button"
+      class="btn btn-ghost btn-xs mx-2 text-base-content/70 hover:text-base-content focus-visible:ring-2 focus-visible:ring-primary"
       onclick={addTab}
-      aria-label="+"
+      aria-label="Open new shell"
+      title="Open new shell (⌘T)"
     >
-      +
+      <span aria-hidden="true">+</span>
+      <span>New shell</span>
     </button>
   </div>
   <div class="flex-1 min-h-0 overflow-hidden relative">
     {#each tabs as tab (tab.index)}
-      <div class="absolute inset-0 {tab.index === activeTabIndex ? '' : 'invisible pointer-events-none'}">
+      <div
+        id={panelId(tab)}
+        role="tabpanel"
+        aria-labelledby={tabId(tab)}
+        class="absolute inset-0 {tab.index === activeTabIndex ? '' : 'invisible pointer-events-none'}"
+      >
         <TaskTerminal
           {taskId}
           {workspacePath}

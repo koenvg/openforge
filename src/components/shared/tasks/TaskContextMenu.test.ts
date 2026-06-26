@@ -25,6 +25,8 @@ const makeTask = (id: string, status: BoardStatus): Task => ({
   summary: null,
   agent: null,
   permission_mode: 'default',
+  worktree_source: null,
+  worktree_branch: null,
   depends_on: [],
 })
 

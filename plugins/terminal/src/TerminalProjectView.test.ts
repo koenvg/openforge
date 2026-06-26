@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { cleanup, render } from '@testing-library/svelte'
+import { cleanup, render, screen } from '@testing-library/svelte'
 import { tick } from 'svelte'
 import { compile } from 'svelte/compiler'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -105,6 +105,25 @@ describe('TerminalProjectView', () => {
 
     expect(terminalTabsApi.addTab).toHaveBeenCalledTimes(1)
     expect(event.defaultPrevented).toBe(true)
+  })
+
+  it('announces unavailable project terminal workspace states', () => {
+    render(TerminalProjectView, {
+      props: {
+        projectId: 'P-123',
+        projectName: 'Demo',
+        projectPath: '',
+      },
+    })
+
+    expect(screen.getAllByText('Project path unavailable. Terminal shells require a project path.').length).toBeGreaterThan(0)
+    expect(screen.getByText(/Terminal workspace unavailable/)).toBeTruthy()
+  })
+
+  it('documents the keyboard focus path for project terminals', () => {
+    renderProjectTerminalView()
+
+    expect(screen.getByText(/Keyboard focus path:/)).toBeTruthy()
   })
 
   it('handles Cmd+Shift+digit for project terminal tab switching', async () => {

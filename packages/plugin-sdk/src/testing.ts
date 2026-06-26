@@ -328,6 +328,8 @@ export class TestingOpenForgeRegistryFake {
             summary: null,
             agent: null,
             permission_mode: null,
+            worktree_source: null,
+            worktree_branch: null,
             depends_on: request.dependsOn ?? [],
             project_id: request.projectId,
             created_at: 0,

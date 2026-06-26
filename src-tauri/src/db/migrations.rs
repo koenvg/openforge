@@ -1022,6 +1022,38 @@ DROP TABLE plugin_storage_legacy;
         }
         Ok(())
     }),
+    // Persist how a task's git worktree should be created. NULL preserves the
+    // legacy/default behavior: create an OpenForge task branch from latest main.
+    M::up_with_hook("", |tx| {
+        let tasks_table_exists: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='tasks'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if !tasks_table_exists {
+            return Ok(());
+        }
+
+        for column in ["worktree_source", "worktree_branch"] {
+            let exists: bool = tx
+                .query_row(
+                    &format!(
+                        "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = '{}'",
+                        column
+                    ),
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap_or(false);
+            if !exists {
+                tx.execute(&format!("ALTER TABLE tasks ADD COLUMN {} TEXT", column), [])
+                    .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            }
+        }
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -1057,6 +1089,8 @@ pub(super) fn ensure_tasks_columns(conn: &Connection) -> Result<()> {
         ("summary", false),
         ("agent", false),
         ("permission_mode", false),
+        ("worktree_source", false),
+        ("worktree_branch", false),
     ] {
         let exists: bool = conn.query_row(
             &format!(
@@ -1315,7 +1349,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = LATEST_USER_VERSION - 2;
+            let previous_version = LATEST_USER_VERSION - 3;
             conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
                 .expect("set user_version");
             conn.execute(
@@ -1379,7 +1413,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = LATEST_USER_VERSION - 3;
+            let previous_version = LATEST_USER_VERSION - 4;
             conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
                 .expect("set user_version");
             conn.execute("CREATE TABLE plugins (id TEXT PRIMARY KEY)", [])
@@ -1558,7 +1592,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = LATEST_USER_VERSION - 4;
+            let previous_version = LATEST_USER_VERSION - 5;
             conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
                 .expect("set user_version");
             conn.execute_batch(
@@ -2411,7 +2445,7 @@ mod tests {
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
             conn.execute(
-                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 7),
+                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 8),
                 [],
             )
             .expect("set pre-upgrade user_version");
@@ -2457,7 +2491,7 @@ mod tests {
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
             conn.execute(
-                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 7),
+                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 8),
                 [],
             )
             .expect("set pre-upgrade user_version");

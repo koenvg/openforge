@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
   import { get } from 'svelte/store'
+  import { createTaskTerminalPaneLifecycle } from '@openforge/terminal-runtime'
   import { activeProjectId, activeSessions, commandHeld, error, startingTasks, taskActiveView, taskRuntimeInfo } from '../../lib/stores'
   import { getTaskWorkspace, updateTaskStatus } from '../../lib/ipc'
   import { getTaskTitle } from '../../lib/taskTitle'
@@ -43,7 +44,6 @@
   let activeView = $state('agent')
   let workspacePath = $state<string | null>(null)
   let lastTaskId = ''
-  let workspaceLookupToken = 0
   let actions = $state<Action[]>([])
   const taskShortcuts = useShortcutRegistry()
 
@@ -96,23 +96,42 @@
   let agentStatus = $derived(currentSession?.status ?? null)
   let isStarting = $derived($startingTasks.has(task.id))
 
+  const taskTerminalLifecycle = createTaskTerminalPaneLifecycle<string>({
+    getInitialWorkspacePath: (taskId) => get(taskRuntimeInfo).get(taskId)?.workspacePath ?? null,
+    getTaskWorkspace: async (taskId) => {
+      try {
+        const workspace = await getTaskWorkspace(taskId)
+        return get(taskRuntimeInfo).get(taskId)?.workspacePath ?? workspace?.workspace_path ?? null
+      } catch (lookupError) {
+        const runtimeWorkspacePath = get(taskRuntimeInfo).get(taskId)?.workspacePath ?? null
+        if (runtimeWorkspacePath !== null) {
+          return runtimeWorkspacePath
+        }
+        throw lookupError
+      }
+    },
+    getWorkspacePath: (path) => path,
+    releaseAllForTask,
+    setWorkspacePath: (path) => { workspacePath = path },
+    onWorkspaceResolved: (_taskId, path) => {
+      if (activeView !== 'agent' && activeView !== 'review' && path === null) {
+        activeView = 'agent'
+      }
+    },
+    onWorkspaceLookupError: (taskId, lookupError) => {
+      console.error(`[TaskDetailView] Failed to load workspace for ${taskId}:`, lookupError)
+    },
+  })
+
   $effect(() => {
     const taskId = task.id
     if (taskId !== lastTaskId) {
       lastTaskId = taskId
       const stored = (get(taskActiveView) as Map<string, string>).get(taskId) ?? 'agent'
       activeView = normalizeStoredActiveView(stored)
-      workspacePath = $taskRuntimeInfo.get(taskId)?.workspacePath ?? null
-      const lookupToken = ++workspaceLookupToken
-      getTaskWorkspace(taskId).then((workspace) => {
-        if (lookupToken !== workspaceLookupToken) return
-        const runtimeWorkspacePath = get(taskRuntimeInfo).get(taskId)?.workspacePath ?? null
-        workspacePath = runtimeWorkspacePath ?? workspace?.workspace_path ?? null
-        if (activeView !== 'agent' && activeView !== 'review' && workspacePath === null) {
-          activeView = 'agent'
-        }
-      })
     }
+
+    taskTerminalLifecycle.syncTask(taskId)
   })
 
   $effect(() => {
@@ -151,20 +170,8 @@
     }
   })
 
-  let prevTerminalTaskId: string | null = null
-
-  $effect(() => {
-    const taskId = task.id
-    if (prevTerminalTaskId !== null && prevTerminalTaskId !== taskId) {
-      releaseAllForTask(prevTerminalTaskId)
-    }
-    prevTerminalTaskId = taskId
-  })
-
   onDestroy(() => {
-    if (prevTerminalTaskId) {
-      releaseAllForTask(prevTerminalTaskId)
-    }
+    taskTerminalLifecycle.destroy()
   })
 
   function handleBack() {

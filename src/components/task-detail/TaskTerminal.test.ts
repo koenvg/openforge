@@ -184,6 +184,20 @@ describe('TaskTerminal', () => {
     })
   })
 
+  it('exposes the terminal as a named focusable region with focus path instructions', async () => {
+    render(TaskTerminal, { props: { taskId: 'T-1', workspacePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true } })
+
+    await vi.waitFor(() => {
+      const region = screen.getByRole('region', { name: /Terminal region for Shell 1/ })
+      expect(region.getAttribute('title')).toContain('Terminal region for Shell 1')
+      expect(region.getAttribute('tabindex')).toBe('0')
+      const describedBy = region.getAttribute('aria-describedby')
+      expect(describedBy).toBeTruthy()
+      expect(document.getElementById(describedBy ?? '')?.textContent).toContain('Terminal focus:')
+      expect(screen.getByText(/Terminal focus:/)).toBeTruthy()
+    })
+  })
+
   it('calls acquire with terminalKey prop on mount', async () => {
     const { acquire } = await import('../../lib/terminalPool')
 
@@ -383,10 +397,10 @@ describe('TaskTerminal', () => {
     const { rerender } = render(TaskTerminal, { props: { taskId: 'project-P-1', workspacePath: '/path/to/one', terminalKey: 'project-P-1-shell-0', terminalIndex: 0, isActive: true } })
 
     await vi.waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Restart' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: /Restart Shell/ })).toBeTruthy()
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Restart' }))
+    await fireEvent.click(screen.getByRole('button', { name: /Restart Shell/ }))
     await vi.waitFor(() => {
       expect(killPty).toHaveBeenCalledWith('project-P-1-shell-0')
     })
@@ -618,7 +632,7 @@ describe('TaskTerminal', () => {
     emitPtyExit()
 
     await vi.waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Restart' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: /Restart Shell/ })).toBeTruthy()
     })
   })
 
@@ -678,11 +692,11 @@ describe('TaskTerminal', () => {
 
     // Wait for restart button to appear
     await vi.waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Restart' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: /Restart Shell/ })).toBeTruthy()
     })
 
     // Click restart button
-    const restartButton = screen.getByRole('button', { name: 'Restart' })
+    const restartButton = screen.getByRole('button', { name: /Restart Shell/ })
     await fireEvent.click(restartButton)
 
     // Verify killPty was called with terminalKey
@@ -707,11 +721,11 @@ describe('TaskTerminal', () => {
     emitPtyExit()
 
     await vi.waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Restart' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: /Restart Shell/ })).toBeTruthy()
     })
 
     mockPoolEntry.ptyActive = false
-    const restartButton = screen.getByRole('button', { name: 'Restart' })
+    const restartButton = screen.getByRole('button', { name: /Restart Shell/ })
     await fireEvent.click(restartButton)
 
     expect(mockPoolEntry.ptyActive).toBe(true)
@@ -727,11 +741,11 @@ describe('TaskTerminal', () => {
     emitPtyExit()
 
     await vi.waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Restart' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: /Restart Shell/ })).toBeTruthy()
     })
 
     mockPoolEntry.terminal.reset.mockClear()
-    await fireEvent.click(screen.getByRole('button', { name: 'Restart' }))
+    await fireEvent.click(screen.getByRole('button', { name: /Restart Shell/ }))
 
     expect(mockPoolEntry.terminal.reset).toHaveBeenCalledTimes(1)
   })
