@@ -134,8 +134,8 @@
   }
 
   function activateNode(node: TreeNode) {
-    void focusPath(node.entry.path)
     if (node.entry.isDir) {
+      void focusPath(node.entry.path)
       onToggleDir(node.entry.path)
     } else {
       onSelectFile(node.entry.path)

@@ -279,7 +279,7 @@ describe('plugin FilesView', () => {
       expect(screen.getByText('README.md')).toBeTruthy()
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: /README.md/ }))
+    await fireEvent.click(screen.getByRole('treeitem', { name: /README.md/ }))
 
     await waitFor(() => {
       expect(document.activeElement).toBe(screen.getByRole('region', { name: 'README.md preview pane' }))
