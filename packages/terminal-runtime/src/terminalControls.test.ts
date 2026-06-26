@@ -28,6 +28,7 @@ function createHarness() {
   const killed: string[] = []
   const released: string[] = []
   const focused: string[] = []
+  const focusSnapshots: TerminalTabsControllerSnapshot[] = []
 
   const controller = createTerminalTabsController({
     taskId: 'T-1',
@@ -59,7 +60,11 @@ function createHarness() {
     },
     killPty: async (terminalKey) => { killed.push(terminalKey) },
     releaseTerminal: (terminalKey) => { released.push(terminalKey) },
-    focusTerminal: (terminalKey) => { focused.push(terminalKey) },
+    focusTerminal: (terminalKey) => {
+      focused.push(terminalKey)
+      const latestSnapshot = snapshots.at(-1)
+      if (latestSnapshot) focusSnapshots.push(latestSnapshot)
+    },
     waitForDomUpdate: async () => undefined,
     onTabChange: (index) => changes.push(index),
     onTabCountChange: (count) => counts.push(count),
@@ -71,7 +76,7 @@ function createHarness() {
     lifecycleSubscribers.get(terminalKey)?.(state)
   }
 
-  return { controller, sessions, snapshots, changes, counts, killed, released, focused, emitLifecycle, lifecycleSubscribers }
+  return { controller, sessions, snapshots, changes, counts, killed, released, focused, focusSnapshots, emitLifecycle, lifecycleSubscribers }
 }
 
 describe('terminal control helpers', () => {
@@ -150,6 +155,19 @@ describe('createTerminalTabsController', () => {
     expect(focused).toEqual(['T-1-shell-0'])
     expect(changes).toEqual([1, 0])
     expect(counts).toEqual([1, 2, 1])
+  })
+
+  it('publishes the adjacent active tab snapshot before focusing when closing the active tab', async () => {
+    const { controller, focusSnapshots } = createHarness()
+
+    controller.hydrate()
+    await controller.addTab()
+    focusSnapshots.length = 0
+
+    await controller.closeActiveTab()
+
+    expect(focusSnapshots[0]?.tabs.map(tab => tab.label)).toEqual(['Shell 1'])
+    expect(focusSnapshots[0]?.activeTabIndex).toBe(0)
   })
 
   it('keeps the final running shell open but allows closing the final exited shell', async () => {

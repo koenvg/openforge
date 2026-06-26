@@ -287,13 +287,15 @@ export function createTerminalTabsController(options: TerminalTabsControllerOpti
       tabs = newTabs
 
       let focusTargetLabel = 'no shell'
+      let focusTargetKey: string | null = null
+      let nextActiveTabIndex: number | null = null
       if (activeTabIndex === tab.index) {
         const nextTab = newTabs[tabArrayIndex] ?? newTabs[tabArrayIndex - 1]
         if (nextTab) {
           activeTabIndex = nextTab.index
+          nextActiveTabIndex = nextTab.index
           focusTargetLabel = nextTab.label
-          options.onTabChange?.(nextTab.index)
-          await focusTerminalTab(nextTab.key)
+          focusTargetKey = nextTab.key
         } else {
           activeTabIndex = 0
         }
@@ -301,11 +303,13 @@ export function createTerminalTabsController(options: TerminalTabsControllerOpti
         const activeTab = newTabs.find(candidate => candidate.index === activeTabIndex)
         if (activeTab) {
           focusTargetLabel = activeTab.label
-          await focusTerminalTab(activeTab.key)
+          focusTargetKey = activeTab.key
         }
       }
 
       syncSession()
+      if (nextActiveTabIndex !== null) options.onTabChange?.(nextActiveTabIndex)
+      if (focusTargetKey !== null) await focusTerminalTab(focusTargetKey)
       options.onTabCountChange?.(tabs.length)
       announce(`${tab.label} closed. Focus moved to ${focusTargetLabel}.`)
     },
