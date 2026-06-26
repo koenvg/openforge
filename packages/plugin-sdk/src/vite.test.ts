@@ -3,10 +3,35 @@ import {
   OPENFORGE_HOST_RUNTIME_SVELTE_SPECIFIERS,
   OPENFORGE_HOST_SHARED_SVELTE_IMPORTS,
   OPENFORGE_HOST_SHARED_TERMINAL_RUNTIME_IMPORTS,
+  createOpenForgePluginSdkSourceAliases,
   isOpenForgeHostRuntimeExternal,
 } from '@openforge/plugin-sdk/vite'
 
 describe('OpenForge plugin Vite author tooling', () => {
+  it('creates exact source aliases for public plugin SDK entrypoints', () => {
+    const aliases = createOpenForgePluginSdkSourceAliases(new URL('file:///repo/'))
+
+    expect(aliases).toEqual([
+      { find: '@openforge/plugin-sdk/frontend', replacement: '/repo/packages/plugin-sdk/src/frontend.ts' },
+      { find: '@openforge/plugin-sdk/backend', replacement: '/repo/packages/plugin-sdk/src/backend.ts' },
+      { find: '@openforge/plugin-sdk/testing', replacement: '/repo/packages/plugin-sdk/src/testing.ts' },
+      { find: '@openforge/plugin-sdk/vite', replacement: '/repo/packages/plugin-sdk/src/vite.ts' },
+      { find: '@openforge/plugin-sdk/domain', replacement: '/repo/packages/plugin-sdk/src/domain.ts' },
+      { find: '@openforge/plugin-sdk/prStatusPresentation', replacement: '/repo/packages/plugin-sdk/src/prStatusPresentation.ts' },
+      { find: '@openforge/plugin-sdk/markdown', replacement: '/repo/packages/plugin-sdk/src/markdown.ts' },
+      { find: '@openforge/plugin-sdk/numberParsing', replacement: '/repo/packages/plugin-sdk/src/numberParsing.ts' },
+      { find: '@openforge/plugin-sdk/sanitize', replacement: '/repo/packages/plugin-sdk/src/sanitize.ts' },
+      { find: '@openforge/plugin-sdk/ui/MarkdownContent.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/MarkdownContent.svelte' },
+      { find: '@openforge/plugin-sdk/ui/ResizablePanel.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/ResizablePanel.svelte' },
+      { find: '@openforge/plugin-sdk', replacement: '/repo/packages/plugin-sdk/src/index.ts' },
+    ])
+    expect(aliases.every((alias) => typeof alias.find === 'string')).toBe(true)
+    expect(aliases.some((alias) => alias.find === '@openforge/plugin-runtime')).toBe(false)
+    expect(aliases.some((alias) => alias.find === '@openforge/pr-review-ui')).toBe(false)
+    expect(aliases.some((alias) => alias.find === '@openforge/terminal-runtime')).toBe(false)
+    expect(createOpenForgePluginSdkSourceAliases(new URL('file:///repo'))[0]?.replacement).toBe('/repo/packages/plugin-sdk/src/frontend.ts')
+  })
+
   it('externalizes only the documented host-shared Svelte runtime imports', () => {
     expect(OPENFORGE_HOST_SHARED_SVELTE_IMPORTS).toContain('svelte/internal/client')
     expect(OPENFORGE_HOST_SHARED_SVELTE_IMPORTS).toContain('svelte/internal/disclose-version')
