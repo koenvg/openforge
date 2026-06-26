@@ -166,6 +166,104 @@ fn local_branch_from_remote_ref(remote_ref: &str) -> Option<&str> {
     Some(branch_name)
 }
 
+/// Relationship between an existing local branch and a requested remote ref,
+/// used to decide whether a stale local branch can be safely reused for a
+/// worktree or whether reusing it would silently discard or merge local work.
+enum LocalBranchRelation {
+    /// Local equals the remote, or is purely behind it (fast-forwardable).
+    /// Reusing the local branch is safe.
+    EqualOrBehind,
+    /// Local is strictly ahead of, or has diverged from, the remote. Reusing
+    /// the local branch would require destroying or merging local commits, so
+    /// the caller must refuse and leave everything untouched.
+    AheadOrDiverged { ahead: usize, behind: usize },
+}
+
+/// Returns whether `ancestor` is an ancestor of (or equal to) `descendant`,
+/// using `git merge-base --is-ancestor` (exit status 0 => ancestor).
+async fn git_ref_is_ancestor(
+    repo_path: &Path,
+    ancestor: &str,
+    descendant: &str,
+) -> Result<bool, GitWorktreeError> {
+    let output = git_command()
+        .arg("-C")
+        .arg(repo_path)
+        .arg("merge-base")
+        .arg("--is-ancestor")
+        .arg(ancestor)
+        .arg(descendant)
+        .output()
+        .await?;
+
+    Ok(output.status.success())
+}
+
+/// Computes how many commits the local branch is ahead/behind the remote ref.
+///
+/// `git rev-list --left-right --count {local}...{remote}` prints two numbers:
+/// the left count is commits reachable only from `local` (ahead) and the right
+/// count is commits reachable only from `remote` (behind).
+async fn git_ahead_behind(
+    repo_path: &Path,
+    local_full_ref: &str,
+    remote_ref: &str,
+) -> Result<(usize, usize), GitWorktreeError> {
+    let range = format!("{local_full_ref}...{remote_ref}");
+    let output = git_command()
+        .arg("-C")
+        .arg(repo_path)
+        .arg("rev-list")
+        .arg("--left-right")
+        .arg("--count")
+        .arg(range)
+        .output()
+        .await?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(GitWorktreeError::WorktreeAddFailed(format!(
+            "failed to compare local branch '{local_full_ref}' with '{remote_ref}': {stderr}"
+        )));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut counts = stdout.split_whitespace();
+    let ahead = counts
+        .next()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(0);
+    let behind = counts
+        .next()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(0);
+
+    Ok((ahead, behind))
+}
+
+/// Classifies the existing local branch against the requested remote ref by
+/// git ancestry. The local side is resolved to its full `refs/heads/{local}`
+/// form; `remote_ref` is the already-validated remote-tracking ref (e.g.
+/// `origin/<branch>`), which resolves unambiguously here because this is only
+/// reached after confirming `refs/remotes/{remote_ref}` exists and ruling out a
+/// local branch of that name. Reuses `git_ref_is_ancestor` / `git_ahead_behind`.
+async fn classify_local_branch_against_remote(
+    repo_path: &Path,
+    local_branch: &str,
+    remote_ref: &str,
+) -> Result<LocalBranchRelation, GitWorktreeError> {
+    let local_full_ref = format!("refs/heads/{local_branch}");
+
+    // Local is equal to or purely behind the remote when it is an ancestor of
+    // the remote (equality counts as an ancestor for --is-ancestor).
+    if git_ref_is_ancestor(repo_path, &local_full_ref, remote_ref).await? {
+        return Ok(LocalBranchRelation::EqualOrBehind);
+    }
+
+    let (ahead, behind) = git_ahead_behind(repo_path, &local_full_ref, remote_ref).await?;
+    Ok(LocalBranchRelation::AheadOrDiverged { ahead, behind })
+}
+
 async fn fetch_origin_best_effort(repo_path: &Path) -> Result<(), GitWorktreeError> {
     let fetch_output = git_command()
         .arg("-C")
@@ -580,10 +678,68 @@ pub async fn create_worktree_from_existing_branch(
         }
 
         if git_ref_exists(repo_path, &format!("refs/heads/{local_branch}")).await? {
-            return Err(GitWorktreeError::WorktreeAddFailed(format!(
-                "local branch '{}' already exists while creating a worktree for '{}'",
-                local_branch, branch_ref
-            )));
+            // A stale local branch of the same name already exists. Decide
+            // whether it can be safely reused for the worktree based on how it
+            // relates to the requested remote ref.
+            match classify_local_branch_against_remote(repo_path, local_branch, branch_ref).await? {
+                LocalBranchRelation::EqualOrBehind => {
+                    // Reuse the existing local branch (no -b) and fast-forward it
+                    // to the remote tip. --ff-only is a no-op when already equal
+                    // and can never create a merge commit.
+                    let output = git_command()
+                        .arg("-C")
+                        .arg(repo_path)
+                        .arg("worktree")
+                        .arg("add")
+                        .arg(worktree_path)
+                        .arg(local_branch)
+                        .output()
+                        .await?;
+
+                    if !output.status.success() {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        return Err(GitWorktreeError::WorktreeAddFailed(stderr.to_string()));
+                    }
+
+                    let merge_output = git_command()
+                        .arg("-C")
+                        .arg(worktree_path)
+                        .arg("merge")
+                        .arg("--ff-only")
+                        .arg(branch_ref)
+                        .output()
+                        .await?;
+
+                    if !merge_output.status.success() {
+                        let stderr = String::from_utf8_lossy(&merge_output.stderr);
+                        return Err(GitWorktreeError::WorktreeAddFailed(format!(
+                            "failed to fast-forward local branch '{local_branch}' to '{branch_ref}': {stderr}"
+                        )));
+                    }
+
+                    let _ = git_command()
+                        .arg("-C")
+                        .arg(worktree_path)
+                        .arg("branch")
+                        .arg("--set-upstream-to")
+                        .arg(branch_ref)
+                        .arg(local_branch)
+                        .output()
+                        .await;
+
+                    return Ok(local_branch.to_string());
+                }
+                LocalBranchRelation::AheadOrDiverged { ahead, behind } => {
+                    // Reusing this branch would discard or merge local work, so
+                    // mutate nothing and ask the user to resolve it explicitly.
+                    return Err(GitWorktreeError::WorktreeAddFailed(format!(
+                        "local branch '{local_branch}' has diverged from '{branch_ref}' \
+                         (local is {ahead} commit(s) ahead, {behind} behind); delete or rename \
+                         the local branch to use the remote version, or start the task from the \
+                         local branch '{local_branch}' to keep your local work"
+                    )));
+                }
+            }
         }
 
         let output = git_command()
@@ -1015,6 +1171,201 @@ mod tests {
         )
         .status
         .success());
+    }
+
+    #[tokio::test]
+    async fn create_worktree_from_existing_branch_reuses_local_branch_equal_to_remote() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("repo");
+        init_committed_repo(&repo_path);
+
+        // Local branch and the simulated remote ref point at the same commit.
+        assert_git_success(&repo_path, &["branch", "feature/equal"]);
+        let local_sha = git_stdout(&repo_path, &["rev-parse", "refs/heads/feature/equal"]);
+        assert_git_success(
+            &repo_path,
+            &["update-ref", "refs/remotes/origin/feature/equal", &local_sha],
+        );
+        let worktree_path = temp.path().join("worktree");
+
+        let branch_name =
+            create_worktree_from_existing_branch(&repo_path, &worktree_path, "origin/feature/equal")
+                .await
+                .expect("equal local branch should reuse the local branch");
+
+        assert_eq!(branch_name, "feature/equal");
+        // Worktree was created on the local branch, not a remote-tracking checkout.
+        assert_eq!(
+            git_stdout(&worktree_path, &["rev-parse", "--abbrev-ref", "HEAD"]),
+            "feature/equal"
+        );
+        // Local branch still exists and is unchanged.
+        assert!(git(
+            &repo_path,
+            &["show-ref", "--verify", "refs/heads/feature/equal"]
+        )
+        .status
+        .success());
+        assert_eq!(
+            git_stdout(&worktree_path, &["rev-parse", "HEAD"]),
+            local_sha
+        );
+    }
+
+    #[tokio::test]
+    async fn create_worktree_from_existing_branch_fast_forwards_local_branch_behind_remote() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("repo");
+        init_committed_repo(&repo_path);
+
+        // Create the local branch at the base commit (behind), then advance the
+        // simulated remote ref with an extra commit on top of it.
+        assert_git_success(&repo_path, &["branch", "feature/behind"]);
+        let base_sha = git_stdout(&repo_path, &["rev-parse", "refs/heads/feature/behind"]);
+
+        assert_git_success(&repo_path, &["checkout", "-b", "tmp-remote", "feature/behind"]);
+        std::fs::write(repo_path.join("README.md"), "remote ahead\n")
+            .expect("fixture file should be written");
+        assert_git_success(&repo_path, &["commit", "-am", "remote advance"]);
+        let remote_sha = git_stdout(&repo_path, &["rev-parse", "HEAD"]);
+        assert_git_success(&repo_path, &["checkout", "main"]);
+        assert_git_success(&repo_path, &["branch", "-D", "tmp-remote"]);
+        assert_git_success(
+            &repo_path,
+            &["update-ref", "refs/remotes/origin/feature/behind", &remote_sha],
+        );
+        // Sanity: local branch is still behind the remote ref.
+        assert_ne!(base_sha, remote_sha);
+        let worktree_path = temp.path().join("worktree");
+
+        let branch_name = create_worktree_from_existing_branch(
+            &repo_path,
+            &worktree_path,
+            "origin/feature/behind",
+        )
+        .await
+        .expect("local branch behind remote should be reused and fast-forwarded");
+
+        assert_eq!(branch_name, "feature/behind");
+        // Worktree HEAD was fast-forwarded to the remote tip.
+        assert_eq!(
+            git_stdout(&worktree_path, &["rev-parse", "HEAD"]),
+            remote_sha
+        );
+        // Local branch ref now equals the remote tip too.
+        assert_eq!(
+            git_stdout(&repo_path, &["rev-parse", "refs/heads/feature/behind"]),
+            remote_sha
+        );
+        // Still on the local branch name (reused, not a detached/remote checkout).
+        assert_eq!(
+            git_stdout(&worktree_path, &["rev-parse", "--abbrev-ref", "HEAD"]),
+            "feature/behind"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_worktree_from_existing_branch_errors_when_local_branch_ahead_of_remote() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("repo");
+        init_committed_repo(&repo_path);
+
+        // Remote ref at the base commit; local branch one commit ahead.
+        let base_sha = git_stdout(&repo_path, &["rev-parse", "HEAD"]);
+        assert_git_success(
+            &repo_path,
+            &["update-ref", "refs/remotes/origin/feature/ahead", &base_sha],
+        );
+        assert_git_success(&repo_path, &["checkout", "-b", "feature/ahead"]);
+        std::fs::write(repo_path.join("README.md"), "local ahead\n")
+            .expect("fixture file should be written");
+        assert_git_success(&repo_path, &["commit", "-am", "local advance"]);
+        let local_ahead_sha = git_stdout(&repo_path, &["rev-parse", "refs/heads/feature/ahead"]);
+        assert_git_success(&repo_path, &["checkout", "main"]);
+        let worktree_path = temp.path().join("worktree");
+
+        let error = create_worktree_from_existing_branch(
+            &repo_path,
+            &worktree_path,
+            "origin/feature/ahead",
+        )
+        .await
+        .expect_err("local branch ahead of remote should not be silently mutated");
+
+        let message = error.to_string();
+        assert!(
+            message.contains("diverged")
+                && message.contains("ahead")
+                && message.contains("feature/ahead"),
+            "error should explain divergence with ahead/behind context, got: {message}"
+        );
+        // Local branch ref is unchanged (still pointing at the ahead commit).
+        assert_eq!(
+            git_stdout(&repo_path, &["rev-parse", "refs/heads/feature/ahead"]),
+            local_ahead_sha
+        );
+        // No worktree directory was created.
+        assert!(
+            !worktree_path.exists(),
+            "no worktree should be created when the local branch is ahead"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_worktree_from_existing_branch_errors_when_local_branch_diverged_from_remote() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("repo");
+        init_committed_repo(&repo_path);
+
+        // Build a remote ref with a unique commit on top of the shared base.
+        assert_git_success(&repo_path, &["checkout", "-b", "tmp-remote"]);
+        std::fs::write(repo_path.join("remote.txt"), "remote only\n")
+            .expect("fixture file should be written");
+        assert_git_success(&repo_path, &["add", "remote.txt"]);
+        assert_git_success(&repo_path, &["commit", "-m", "remote-only commit"]);
+        let remote_sha = git_stdout(&repo_path, &["rev-parse", "HEAD"]);
+        assert_git_success(&repo_path, &["checkout", "main"]);
+        assert_git_success(&repo_path, &["branch", "-D", "tmp-remote"]);
+        assert_git_success(
+            &repo_path,
+            &["update-ref", "refs/remotes/origin/feature/diverged", &remote_sha],
+        );
+
+        // Build the local branch with its own unique commit on top of the shared base.
+        assert_git_success(&repo_path, &["checkout", "-b", "feature/diverged"]);
+        std::fs::write(repo_path.join("local.txt"), "local only\n")
+            .expect("fixture file should be written");
+        assert_git_success(&repo_path, &["add", "local.txt"]);
+        assert_git_success(&repo_path, &["commit", "-m", "local-only commit"]);
+        let local_sha = git_stdout(&repo_path, &["rev-parse", "refs/heads/feature/diverged"]);
+        assert_git_success(&repo_path, &["checkout", "main"]);
+        assert_ne!(local_sha, remote_sha);
+        let worktree_path = temp.path().join("worktree");
+
+        let error = create_worktree_from_existing_branch(
+            &repo_path,
+            &worktree_path,
+            "origin/feature/diverged",
+        )
+        .await
+        .expect_err("diverged local branch should not be silently mutated");
+
+        let message = error.to_string();
+        assert!(
+            message.contains("diverged")
+                && message.contains("ahead")
+                && message.contains("behind"),
+            "error should mention divergence with ahead/behind counts, got: {message}"
+        );
+        // Nothing mutated: local branch ref unchanged and no worktree directory.
+        assert_eq!(
+            git_stdout(&repo_path, &["rev-parse", "refs/heads/feature/diverged"]),
+            local_sha
+        );
+        assert!(
+            !worktree_path.exists(),
+            "no worktree should be created when the local branch has diverged"
+        );
     }
 
     #[tokio::test]
