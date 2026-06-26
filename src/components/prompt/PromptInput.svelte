@@ -4,7 +4,6 @@
   import AutocompletePopover from './AutocompletePopover.svelte'
   import VoiceInput from '../shared/input/VoiceInput.svelte'
   import ModelDownloadProgress from '../shared/input/ModelDownloadProgress.svelte'
-  import ActionDropdown from '../shared/ui/ActionDropdown.svelte'
   import { useAutocomplete } from '../../lib/useAutocomplete.svelte'
   import type { CommandTrigger } from '../../lib/useAutocomplete.svelte'
   import { useListNavigation } from '../../lib/useListNavigation.svelte'
@@ -43,8 +42,10 @@
   // ── Local state ──────────────────────────────────────────────────────────────
   let textValue = $state(getInitialTextValue())
   let showModelDownload = $state(false)
+  let showMoreMenu = $state(false)
 
   let textareaEl = $state<HTMLTextAreaElement | null>(null)
+  const promptReady = $derived(textValue.trim().length > 0)
 
   // ── Autocomplete composable ───────────────────────────────────────────────────
   const ac = useAutocomplete(getAutocompleteProjectId(), () => commandTrigger)
@@ -84,6 +85,7 @@
   async function handleInput() {
     autoGrow()
     if (!textareaEl) return
+    if (!promptReady) showMoreMenu = false
     const text = textareaEl.value
     const cursorPos = textareaEl.selectionStart ?? text.length
     await ac.handleTriggerDetection(text, cursorPos)
@@ -143,7 +145,9 @@
 
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault()
-      if (onStartTask) {
+      if (onStartTask && e.shiftKey) {
+        handleSubmit()
+      } else if (onStartTask) {
         handleStart()
       } else {
         handleSubmit()
@@ -151,14 +155,12 @@
       return
     }
 
-    if (e.key === 'Enter' && e.shiftKey && onStartTask) {
-      e.preventDefault()
-      handleSubmit()
-      return
-    }
-
     if (e.key === 'Escape') {
       e.preventDefault()
+      if (showMoreMenu) {
+        showMoreMenu = false
+        return
+      }
       onCancel()
     }
   }
@@ -167,23 +169,35 @@
   function handleSubmit() {
     const prompt = textValue.trim()
     if (!prompt) return
+    showMoreMenu = false
     onSubmit(prompt)
   }
 
   function handleStart() {
     const prompt = textValue.trim()
     if (!prompt) return
+    showMoreMenu = false
     onStartTask?.(prompt)
   }
 
   function handleCustomAction(actionPrompt: string) {
     const prompt = textValue.trim()
     if (!prompt) return
+    showMoreMenu = false
     onRunAction?.(prompt, actionPrompt)
   }
 
-  function handleActionFromDropdown(action: Action) {
-    handleCustomAction(action.prompt)
+  function toggleMoreMenu() {
+    if (!promptReady) return
+    showMoreMenu = !showMoreMenu
+  }
+
+  function handleMoreMenuKeydown(e: KeyboardEvent) {
+    if (e.key !== 'Escape') return
+    e.preventDefault()
+    e.stopPropagation()
+    showMoreMenu = false
+    textareaEl?.focus()
   }
 </script>
 
@@ -215,23 +229,58 @@
     </div>
   {/if}
 
-  <div class="flex items-center justify-between px-3 pb-2">
-    <div class="flex items-center gap-2">
+  <div class="flex items-center justify-between gap-3 px-3 pb-2">
+    <div class="flex min-w-0 items-center gap-2">
       <VoiceInput onTranscription={handleTranscription} listenToHotkey />
-    </div>
-    <div class="flex items-center gap-2">
       {#if onStartTask}
-        <button
-          class="btn btn-ghost btn-sm"
-          type="button"
-          disabled={!textValue.trim()}
-          onclick={handleSubmit}
-          title="⇧Enter"
-        >Add to Backlog <kbd class="kbd kbd-xs ml-1 bg-base-content/5 text-base-content/50 border-base-content/10">⇧↵</kbd></button>
+        <span class="truncate text-xs text-base-content/60">Press ⌘↵ to start, or use More for backlog/templates.</span>
+      {/if}
+    </div>
+    <div class="flex shrink-0 items-center gap-2">
+      {#if onStartTask}
+        {#if promptReady}
+          <div class="relative">
+            <button
+              class="btn btn-ghost btn-sm"
+              type="button"
+              onclick={toggleMoreMenu}
+              aria-expanded={showMoreMenu}
+              aria-haspopup="menu"
+              aria-controls="prompt-more-actions"
+              onkeydown={handleMoreMenuKeydown}
+            >More</button>
+
+            {#if showMoreMenu}
+              <div
+                id="prompt-more-actions"
+                role="menu"
+                class="absolute bottom-[calc(100%+0.5rem)] right-0 z-[100] min-w-48 overflow-hidden rounded-lg border border-base-300 bg-base-100 shadow-lg"
+              >
+                <button
+                  class="block w-full px-3 py-2 text-left text-sm text-base-content hover:bg-base-200 focus:bg-base-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  type="button"
+                  role="menuitem"
+                  onclick={handleSubmit}
+                  onkeydown={handleMoreMenuKeydown}
+                >Add to Backlog</button>
+                {#each actions as action (action.id)}
+                  <button
+                    class="block w-full px-3 py-2 text-left text-sm text-base-content hover:bg-base-200 focus:bg-base-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    type="button"
+                    role="menuitem"
+                    title={action.prompt || action.name}
+                    onclick={() => handleCustomAction(action.prompt)}
+                    onkeydown={handleMoreMenuKeydown}
+                  >{action.name}</button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/if}
         <button
           class="btn btn-primary btn-sm"
           type="button"
-          disabled={!textValue.trim()}
+          disabled={!promptReady}
           onclick={handleStart}
           title="⌘Enter"
         >Start Task <kbd class="kbd kbd-xs ml-1 bg-primary-content text-primary border-primary-content/30">⌘↵</kbd></button>
@@ -240,18 +289,12 @@
         <button
           class="btn btn-primary btn-sm"
           type="button"
-          disabled={!textValue.trim()}
+          disabled={!promptReady}
           onclick={handleSubmit}
         >Submit</button>
       {/if}
     </div>
   </div>
-
-  {#if onStartTask && actions.length > 0}
-    <div class="flex items-center justify-end px-3 pb-2">
-      <ActionDropdown {actions} disabled={!textValue.trim()} onAction={handleActionFromDropdown} />
-    </div>
-  {/if}
 
   {#if showModelDownload}
     <div class="px-3 pb-2">

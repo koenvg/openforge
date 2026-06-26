@@ -181,20 +181,22 @@ describe('PromptInput', () => {
     expect(textarea.value).toBe('Fix the bug')
   })
 
-  describe('dual buttons (onStartTask provided)', () => {
-    it('shows Add to Backlog and Start Task buttons', () => {
+  describe('create flow actions (onStartTask provided)', () => {
+    it('shows Start Task as the only visible submit action before text is entered', () => {
       render(PromptInput, {
         props: {
           ...baseProps,
           onStartTask: vi.fn(),
         },
       })
-      expect(screen.getByText('Add to Backlog', { exact: false })).toBeTruthy()
       expect(screen.getByText('Start Task', { exact: false })).toBeTruthy()
+      expect(screen.getByText('Press ⌘↵ to start, or use More for backlog/templates.')).toBeTruthy()
+      expect(screen.queryByText('Add to Backlog', { exact: false })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'More' })).toBeNull()
       expect(screen.queryByRole('button', { name: 'Submit' })).toBeNull()
     })
 
-    it('calls onSubmit when Add to Backlog is clicked', async () => {
+    it('moves Add to Backlog behind the More menu', async () => {
       const onSubmit = vi.fn()
       render(PromptInput, {
         props: {
@@ -209,7 +211,8 @@ describe('PromptInput', () => {
       )
       textarea.value = 'New feature'
       await fireEvent.input(textarea)
-      await fireEvent.click(screen.getByText('Add to Backlog', { exact: false }))
+      await fireEvent.click(screen.getByRole('button', { name: 'More' }))
+      await fireEvent.click(screen.getByRole('menuitem', { name: 'Add to Backlog' }))
       expect(onSubmit).toHaveBeenCalledWith('New feature')
     })
 
@@ -252,7 +255,7 @@ describe('PromptInput', () => {
       expect(onSubmit).not.toHaveBeenCalled()
     })
 
-    it('Shift+Enter calls onSubmit (add to backlog)', async () => {
+    it('does not steal Shift+Enter from textarea newline entry', async () => {
       const onSubmit = vi.fn()
       const onStartTask = vi.fn()
       render(PromptInput, {
@@ -269,6 +272,27 @@ describe('PromptInput', () => {
       textarea.value = 'New feature'
       await fireEvent.input(textarea)
       await fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true })
+      expect(onSubmit).not.toHaveBeenCalled()
+      expect(onStartTask).not.toHaveBeenCalled()
+    })
+
+    it('uses Cmd+Shift+Enter as the backlog shortcut', async () => {
+      const onSubmit = vi.fn()
+      const onStartTask = vi.fn()
+      render(PromptInput, {
+        props: {
+          ...baseProps,
+          onSubmit,
+          onStartTask,
+        },
+      })
+      const textarea = requireElement(
+        screen.getByPlaceholderText('Describe what you want to implement...'),
+        HTMLTextAreaElement,
+      )
+      textarea.value = 'New feature'
+      await fireEvent.input(textarea)
+      await fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true, shiftKey: true })
       expect(onSubmit).toHaveBeenCalledWith('New feature')
       expect(onStartTask).not.toHaveBeenCalled()
     })
