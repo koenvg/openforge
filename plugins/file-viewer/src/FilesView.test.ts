@@ -160,7 +160,7 @@ describe('plugin FilesView', () => {
       expect(screen.getByText('src/')).toBeTruthy()
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: /src\// }))
+    await fireEvent.click(screen.getByRole('treeitem', { name: /src\// }))
 
     await waitFor(() => {
       expect(screen.getByText('Unable to load directory src')).toBeTruthy()
@@ -201,7 +201,7 @@ describe('plugin FilesView', () => {
       expect(screen.getByText('README.md')).toBeTruthy()
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: /README.md/ }))
+    await fireEvent.click(screen.getByRole('treeitem', { name: /README.md/ }))
 
     expect(await screen.findByText('Loading README.md…')).toBeTruthy()
   })
@@ -218,7 +218,7 @@ describe('plugin FilesView', () => {
       expect(screen.getByText('README.md')).toBeTruthy()
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: /README.md/ }))
+    await fireEvent.click(screen.getByRole('treeitem', { name: /README.md/ }))
 
     await waitFor(() => {
       expect(screen.getByText('Unable to load file')).toBeTruthy()
