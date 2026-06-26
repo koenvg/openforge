@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { get } from 'svelte/store'
 import SkillsView from './SkillsView.svelte'
 import { activeProjectId, selectedSkillIdentity, skills } from './lib/stores'
-import type { SkillInfo } from './lib/skillDomain'
+import { getSkillIdentity, type SkillInfo } from './lib/skillDomain'
 import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
 
 vi.mock('@openforge/plugin-sdk/ui/MarkdownContent.svelte', () => ({
@@ -156,7 +156,7 @@ describe('SkillsView project and async states', () => {
     await fireEvent.click(personalRow as HTMLButtonElement)
 
     expect(api.navigation.navigate).toHaveBeenCalledWith({ viewId: 'plugin:com.openforge.skills-viewer:skills' })
-    expect(get(selectedSkillIdentity)).toEqual({ name: 'review', level: 'user', source_dir: '.pi', file_name: null })
+    expect(get(selectedSkillIdentity)).toEqual(getSkillIdentity(personalSkill))
   })
 
   it('announces load failures and offers a retry action for the active project', async () => {
