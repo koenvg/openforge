@@ -1,8 +1,13 @@
 <script lang="ts">
+  import {
+    TERMINAL_TABS_KEYBOARD_FOCUS_PATH_TEXT,
+    createTerminalTabsController,
+    type CloseTerminalTabOptions,
+  } from '@openforge/terminal-runtime'
   import { onMount, onDestroy, tick } from 'svelte'
   import { commandHeld } from '../../lib/stores'
   import { killPty } from '../../lib/ipc'
-  import { release, focusTerminal, getTaskTerminalTabsSession, getShellLifecycleState, subscribeShellLifecycle, updateTaskTerminalTabsSession, type ShellLifecycleState, type TerminalTab, type TaskTerminalTabsSession } from '../../lib/terminalPool'
+  import { release, focusTerminal, getTaskTerminalTabsSession, getShellLifecycleState, subscribeShellLifecycle, updateTaskTerminalTabsSession, type TerminalTab } from '../../lib/terminalPool'
   import TaskTerminal from './TaskTerminal.svelte'
 
   interface Props {
@@ -14,222 +19,81 @@
 
   let { taskId, workspacePath, onTabChange, onTabCountChange }: Props = $props()
 
-  let session: TaskTerminalTabsSession | null = null
   let tabs = $state<TerminalTab[]>([])
   let activeTabIndex = $state(0)
-  let nextIndex = $state(0)
-  let tabLifecycleByKey = $state(new Map<string, ShellLifecycleState>())
   let liveMessage = $state('')
-  const tabLifecycleUnsubscribers = new Map<string, () => void>()
 
-  interface CloseTabOptions {
-    allowClosingLastTab?: boolean
-  }
-
-  function announce(message: string) {
-    liveMessage = message
-  }
-
-  function setTabLifecycle(terminalKey: string, state: ShellLifecycleState, announceTransitions = false) {
-    const previous = tabLifecycleByKey.get(terminalKey)
-    const next = new Map(tabLifecycleByKey)
-    next.set(terminalKey, state)
-    tabLifecycleByKey = next
-
-    if (!announceTransitions) return
-    const tab = tabs.find(candidate => candidate.key === terminalKey)
-    if (!tab) return
-    if (!previous?.shellExited && state.shellExited) {
-      announce(`${tab.label} exited. Use Restart shell to start it again.`)
-    } else if (previous?.shellExited && !state.shellExited && state.ptyActive) {
-      announce(`${tab.label} restarted. Focus returned to ${tab.label} terminal.`)
-    }
-  }
-
-  function removeTabLifecycle(terminalKey: string) {
-    const next = new Map(tabLifecycleByKey)
-    next.delete(terminalKey)
-    tabLifecycleByKey = next
-  }
-
-  function isTabExited(terminalKey: string): boolean {
-    return tabLifecycleByKey.get(terminalKey)?.shellExited ?? false
-  }
-
-  function tabStatus(tab: TerminalTab): string {
-    if (isTabExited(tab.key)) return 'exited'
-    if (activeTabIndex === tab.index) return 'active'
-    return 'inactive'
-  }
-
-  function tabAccessibleLabel(tab: TerminalTab): string {
-    const activeState = activeTabIndex === tab.index ? 'active' : 'inactive'
-    const lifecycleState = isTabExited(tab.key) ? 'exited' : 'running'
-    return `${tab.label}, ${activeState}, ${lifecycleState}`
-  }
-
-  function panelId(tab: TerminalTab): string {
-    return `terminal-panel-${tab.key}`
-  }
-
-  function tabId(tab: TerminalTab): string {
-    return `terminal-tab-${tab.key}`
-  }
-
-  function syncTabLifecycleSubscriptions() {
-    const currentKeys = new Set(tabs.map(tab => tab.key))
-
-    for (const [terminalKey, unsubscribe] of tabLifecycleUnsubscribers) {
-      if (!currentKeys.has(terminalKey)) {
-        unsubscribe()
-        tabLifecycleUnsubscribers.delete(terminalKey)
-        removeTabLifecycle(terminalKey)
-      }
-    }
-
-    for (const tab of tabs) {
-      if (tabLifecycleUnsubscribers.has(tab.key)) continue
-      setTabLifecycle(tab.key, getShellLifecycleState(tab.key))
-      tabLifecycleUnsubscribers.set(tab.key, subscribeShellLifecycle(tab.key, (state) => {
-        setTabLifecycle(tab.key, state, true)
-      }))
-    }
-  }
-
-  function clearTabLifecycleSubscriptions() {
-    for (const unsubscribe of tabLifecycleUnsubscribers.values()) {
-      unsubscribe()
-    }
-    tabLifecycleUnsubscribers.clear()
-    tabLifecycleByKey = new Map()
-  }
-
-  function hydrateFromSession(taskId: string) {
-    session = getTaskTerminalTabsSession(taskId)
-    tabs = session.tabs
-    activeTabIndex = session.activeTabIndex
-    nextIndex = session.nextIndex
-    syncTabLifecycleSubscriptions()
-  }
-
-  function syncSession() {
-    if (!session) return
-    updateTaskTerminalTabsSession(taskId, {
-      tabs,
-      activeTabIndex,
-      nextIndex,
-    })
-    session = getTaskTerminalTabsSession(taskId)
-    syncTabLifecycleSubscriptions()
-  }
-
-  function createTab(): TerminalTab {
-    const index = nextIndex
-    nextIndex = nextIndex + 1
-    return {
-      index,
-      key: `${taskId}-shell-${index}`,
-      label: `Shell ${index + 1}`,
-    }
-  }
-
-  async function focusTerminalTab(terminalKey: string) {
-    await tick()
-    const activeTab = tabs.find(tab => tab.index === activeTabIndex) ?? tabs[0]
-    if (activeTab?.key === terminalKey) {
-      focusTerminal(terminalKey)
-    }
-  }
+  const terminalTabsController = createTerminalTabsController({
+    taskId: () => taskId,
+    getTaskTerminalTabsSession,
+    updateTaskTerminalTabsSession,
+    getShellLifecycleState,
+    subscribeShellLifecycle,
+    killPty,
+    releaseTerminal: release,
+    focusTerminal,
+    waitForDomUpdate: tick,
+    onTabChange: (index) => onTabChange?.(index),
+    onTabCountChange: (count) => onTabCountChange?.(count),
+    onSnapshot: (snapshot) => {
+      tabs = snapshot.tabs
+      activeTabIndex = snapshot.activeTabIndex
+      liveMessage = snapshot.liveMessage
+    },
+  })
 
   export function addTab() {
-    const tab = createTab()
-    tabs = [...tabs, tab]
-    activeTabIndex = tab.index
-    syncSession()
-    onTabChange?.(tab.index)
-    onTabCountChange?.(tabs.length)
-    announce(`${tab.label} created. Focus moved to ${tab.label} terminal.`)
-    void focusTerminalTab(tab.key)
-  }
-
-  function switchToTabByPosition(tabPosition: number) {
-    const tab = tabs[tabPosition]
-    if (tab) {
-      activeTabIndex = tab.index
-      syncSession()
-      onTabChange?.(tab.index)
-      void focusTerminalTab(tab.key)
-    }
+    void terminalTabsController.addTab()
   }
 
   export function switchToTab(tabPosition: number) {
-    switchToTabByPosition(tabPosition)
+    void terminalTabsController.switchToTab(tabPosition)
   }
 
   export function focusActiveTab() {
-    const activeTab = tabs.find(tab => tab.index === activeTabIndex) ?? tabs[0]
-    if (activeTab) void focusTerminalTab(activeTab.key)
+    void terminalTabsController.focusActiveTab()
   }
 
   export async function closeActiveTab() {
-    const activeTab = tabs.find(tab => tab.index === activeTabIndex)
-    if (!activeTab) return
-
-    await closeTab(activeTab, { allowClosingLastTab: isTabExited(activeTab.key) })
+    await terminalTabsController.closeActiveTab()
   }
 
-  async function closeTab(tab: TerminalTab, options: CloseTabOptions = {}) {
-    const { allowClosingLastTab = false } = options
-    if (tabs.length <= 1 && !allowClosingLastTab) return
+  function closeTab(tab: TerminalTab, options: CloseTerminalTabOptions = {}) {
+    void terminalTabsController.closeTab(tab, options)
+  }
 
-    const tabArrayIndex = tabs.findIndex(t => t.index === tab.index)
-    if (tabArrayIndex === -1) return
+  function isTabExited(terminalKey: string): boolean {
+    return terminalTabsController.isTabExited(terminalKey)
+  }
 
-    await killPty(tab.key).catch(e => {
-      console.error('[TerminalTabs] Failed to kill PTY on close:', e)
-    })
-    release(tab.key)
+  function tabStatus(tab: TerminalTab): string {
+    return terminalTabsController.tabStatus(tab)
+  }
 
-    const newTabs = tabs.filter(t => t.index !== tab.index)
-    tabs = newTabs
+  function tabAccessibleLabel(tab: TerminalTab): string {
+    return terminalTabsController.tabAccessibleLabel(tab)
+  }
 
-    let focusTargetLabel = 'no shell'
-    if (activeTabIndex === tab.index) {
-      const nextTab = newTabs[tabArrayIndex] ?? newTabs[tabArrayIndex - 1]
-      if (nextTab) {
-        activeTabIndex = nextTab.index
-        focusTargetLabel = nextTab.label
-        onTabChange?.(nextTab.index)
-        await focusTerminalTab(nextTab.key)
-      } else {
-        activeTabIndex = 0
-      }
-    } else {
-      const activeTab = newTabs.find(t => t.index === activeTabIndex)
-      if (activeTab) {
-        focusTargetLabel = activeTab.label
-        await focusTerminalTab(activeTab.key)
-      }
-    }
+  function panelId(tab: TerminalTab): string {
+    return terminalTabsController.panelId(tab)
+  }
 
-    syncSession()
-    onTabCountChange?.(tabs.length)
-    announce(`${tab.label} closed. Focus moved to ${focusTargetLabel}.`)
+  function tabId(tab: TerminalTab): string {
+    return terminalTabsController.tabId(tab)
   }
 
   onMount(() => {
-    hydrateFromSession(taskId)
-    onTabCountChange?.(tabs.length)
+    terminalTabsController.hydrate()
   })
 
   onDestroy(() => {
-    clearTabLifecycleSubscriptions()
+    terminalTabsController.destroy()
   })
 </script>
 
 <div class="flex flex-col h-full">
   <div class="px-3 py-2 text-xs text-base-content/70 border-b border-base-300 bg-base-100">
-    <span class="font-semibold">Keyboard focus path:</span> Tab to the shell tabs, choose <span class="font-medium">New shell</span> or press <kbd class="kbd kbd-xs">⌘T</kbd>, then Tab into the terminal region. Use <kbd class="kbd kbd-xs">⌘⇧1–9</kbd> to switch shells.
+    {TERMINAL_TABS_KEYBOARD_FOCUS_PATH_TEXT}
   </div>
   <div class="sr-only" aria-live="polite" aria-atomic="true">{liveMessage}</div>
   <div class="flex items-center overflow-x-auto border-b border-base-300 bg-base-200 shrink-0" role="tablist" aria-label="Shell terminals">
@@ -245,12 +109,7 @@
           aria-label={tabAccessibleLabel(tab)}
           title={`${tab.label} (${tabStatus(tab)})`}
           class="flex items-center gap-1 px-3 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-primary rounded {activeTabIndex === tab.index ? 'border-b-2 border-primary text-base-content font-semibold' : 'text-base-content/50'}"
-          onclick={() => {
-            activeTabIndex = tab.index
-            syncSession()
-            onTabChange?.(tab.index)
-            void focusTerminalTab(tab.key)
-          }}
+          onclick={() => switchToTab(tabPosition)}
         >
           <span>{tab.label}</span>
           {#if activeTabIndex === tab.index}<span class="badge badge-primary badge-xs">Active</span>{/if}
