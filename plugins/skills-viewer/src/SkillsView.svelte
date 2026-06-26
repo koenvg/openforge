@@ -312,6 +312,25 @@
         />
       </div>
 
+      {#snippet skillRow(skill: SkillInfo)}
+        {@const flatIdx = visibleSkills.indexOf(skill)}
+        {@const selected = isSameSkillIdentity(skill, $selectedSkillIdentity)}
+        <button
+          data-vim-skill
+          aria-current={selected ? 'true' : undefined}
+          class="w-full text-left pl-8 pr-3 py-2 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {selected ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'vim-focus' : ''}"
+          onclick={() => selectSkill(skill)}
+        >
+          <span class="text-sm font-medium text-base-content truncate block">{skill.name}</span>
+          {#if hasNameCollision(skill)}
+            <p class="text-xs text-base-content/50 m-0 mt-0.5 line-clamp-1">{getSkillLocationLabel(skill)}</p>
+          {/if}
+          {#if skill.description}
+            <p class="text-xs text-base-content/50 m-0 mt-0.5 line-clamp-1">{skill.description}</p>
+          {/if}
+        </button>
+      {/snippet}
+
       <!-- Skill list -->
       <div class="flex-1 overflow-y-auto">
         {#if !$activeProjectId}
@@ -371,22 +390,7 @@
                 {#if !groupCollapsed}
                   <div id={groupPanelId('project', group.source)}>
                   {#each group.skills as skill}
-                    {@const flatIdx = visibleSkills.indexOf(skill)}
-                    {@const selected = isSameSkillIdentity(skill, $selectedSkillIdentity)}
-                    <button
-                      data-vim-skill
-                      aria-current={selected ? 'true' : undefined}
-                      class="w-full text-left pl-8 pr-3 py-2 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {selected ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'vim-focus' : ''}"
-                      onclick={() => selectSkill(skill)}
-                    >
-                      <span class="text-sm font-medium text-base-content truncate block">{skill.name}</span>
-                      {#if hasNameCollision(skill)}
-                        <p class="text-xs text-base-content/50 m-0 mt-0.5 line-clamp-1">{getSkillLocationLabel(skill)}</p>
-                      {/if}
-                      {#if skill.description}
-                        <p class="text-xs text-base-content/50 m-0 mt-0.5 line-clamp-1">{skill.description}</p>
-                      {/if}
-                    </button>
+                    {@render skillRow(skill)}
                   {/each}
                   </div>
                 {/if}
@@ -425,22 +429,7 @@
                 {#if !groupCollapsed}
                   <div id={groupPanelId('user', group.source)}>
                   {#each group.skills as skill}
-                    {@const flatIdx = visibleSkills.indexOf(skill)}
-                    {@const selected = isSameSkillIdentity(skill, $selectedSkillIdentity)}
-                    <button
-                      data-vim-skill
-                      aria-current={selected ? 'true' : undefined}
-                      class="w-full text-left pl-8 pr-3 py-2 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {selected ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'vim-focus' : ''}"
-                      onclick={() => selectSkill(skill)}
-                    >
-                      <span class="text-sm font-medium text-base-content truncate block">{skill.name}</span>
-                      {#if hasNameCollision(skill)}
-                        <p class="text-xs text-base-content/50 m-0 mt-0.5 line-clamp-1">{getSkillLocationLabel(skill)}</p>
-                      {/if}
-                      {#if skill.description}
-                        <p class="text-xs text-base-content/50 m-0 mt-0.5 line-clamp-1">{skill.description}</p>
-                      {/if}
-                    </button>
+                    {@render skillRow(skill)}
                   {/each}
                   </div>
                 {/if}
