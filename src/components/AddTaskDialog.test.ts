@@ -158,6 +158,22 @@ describe('AddTaskDialog', () => {
     expect(screen.queryByRole('combobox')).toBeNull()
   })
 
+  it('dismisses the More menu when expanding Environment', async () => {
+    render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
+
+    const textbox = await findPromptTextbox()
+    await fireEvent.input(textbox, { target: { value: 'Task with environment changes' } })
+    await fireEvent.click(await screen.findByRole('button', { name: 'More' }))
+    expect(screen.getByRole('menuitem', { name: 'Add to Backlog' })).toBeTruthy()
+
+    const environmentButton = await screen.findByRole('button', { name: /Environment:/ })
+    await fireEvent.pointerDown(environmentButton)
+    await fireEvent.click(environmentButton)
+
+    expect(screen.queryByRole('menuitem', { name: 'Add to Backlog' })).toBeNull()
+    expect(await screen.findByLabelText('Worktree')).toBeTruthy()
+  })
+
   it('uses new branch from latest main as the default worktree task source', async () => {
     render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
 

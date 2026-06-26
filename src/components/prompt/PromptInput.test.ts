@@ -216,6 +216,27 @@ describe('PromptInput', () => {
       expect(onSubmit).toHaveBeenCalledWith('New feature')
     })
 
+    it('dismisses the More menu when clicking back into the prompt', async () => {
+      render(PromptInput, {
+        props: {
+          ...baseProps,
+          onStartTask: vi.fn(),
+        },
+      })
+      const textarea = requireElement(
+        screen.getByPlaceholderText('Describe what you want to implement...'),
+        HTMLTextAreaElement,
+      )
+      textarea.value = 'New feature'
+      await fireEvent.input(textarea)
+      await fireEvent.click(screen.getByRole('button', { name: 'More' }))
+      expect(screen.getByRole('menuitem', { name: 'Add to Backlog' })).toBeTruthy()
+
+      await fireEvent.pointerDown(textarea)
+
+      expect(screen.queryByRole('menuitem', { name: 'Add to Backlog' })).toBeNull()
+    })
+
     it('calls onStartTask when Start Task is clicked', async () => {
       const onStartTask = vi.fn()
       render(PromptInput, {

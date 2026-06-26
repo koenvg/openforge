@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte'
   import type { Snippet } from 'svelte'
   import type { AutocompleteItem, Action } from '../../lib/types'
   import AutocompletePopover from './AutocompletePopover.svelte'
@@ -45,6 +46,7 @@
   let showMoreMenu = $state(false)
 
   let textareaEl = $state<HTMLTextAreaElement | null>(null)
+  let moreActionsEl = $state<HTMLElement | null>(null)
   const promptReady = $derived(textValue.trim().length > 0)
 
   // ── Autocomplete composable ───────────────────────────────────────────────────
@@ -57,6 +59,11 @@
     if (textareaEl && autofocus) {
       requestAnimationFrame(() => textareaEl?.focus())
     }
+  })
+
+  onMount(() => {
+    document.addEventListener('pointerdown', handleDocumentPointerDown)
+    return () => document.removeEventListener('pointerdown', handleDocumentPointerDown)
   })
 
   // ── Transcription ────────────────────────────────────────────────────────────
@@ -199,6 +206,14 @@
     showMoreMenu = false
     textareaEl?.focus()
   }
+
+  function handleDocumentPointerDown(e: PointerEvent) {
+    if (!showMoreMenu) return
+    const target = e.target
+    if (!(target instanceof Node)) return
+    if (moreActionsEl?.contains(target)) return
+    showMoreMenu = false
+  }
 </script>
 
 <div class="bg-base-100">
@@ -239,7 +254,7 @@
     <div class="flex shrink-0 items-center gap-2">
       {#if onStartTask}
         {#if promptReady}
-          <div class="relative">
+          <div class="relative" bind:this={moreActionsEl}>
             <button
               class="btn btn-ghost btn-sm"
               type="button"
