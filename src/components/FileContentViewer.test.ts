@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/svelte'
-import { describe, expect, it } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/svelte'
+import { describe, expect, it, vi } from 'vitest'
 import FileContentViewer from './FileContentViewer.svelte'
 import type { FileContent } from '../lib/types'
 
@@ -10,8 +10,8 @@ const formattedModifiedAt = new Date(sampleModifiedAt).toLocaleString('en-US', {
 })
 
 describe('FileContentViewer', () => {
-  it('shows loading spinner when content is null and no error', () => {
-    const { container } = render(FileContentViewer, {
+  it('shows visible loading copy when content is null and no error', () => {
+    render(FileContentViewer, {
       props: {
         content: null,
         fileName: 'README.md',
@@ -19,7 +19,24 @@ describe('FileContentViewer', () => {
       },
     })
 
-    expect(container.querySelector('.loading.loading-spinner')).toBeTruthy()
+    expect(screen.getByText('Loading README.md…')).toBeTruthy()
+  })
+
+  it('shows contextual retry action when file loading fails', async () => {
+    const retry = vi.fn()
+
+    render(FileContentViewer, {
+      props: {
+        content: null,
+        fileName: 'missing.txt',
+        error: 'File not found',
+        onRetryFile: retry,
+      },
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Retry loading missing.txt' }))
+
+    expect(retry).toHaveBeenCalledTimes(1)
   })
 
   it('shows error message when error is set', () => {

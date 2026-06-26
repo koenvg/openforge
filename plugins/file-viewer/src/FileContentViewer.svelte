@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Archive, CircleAlert, FileQuestion, TriangleAlert } from '@lucide/svelte'
   import type { FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
   import type { FileContent } from '@openforge/plugin-sdk/domain'
   import { getLanguageForFile, highlightCode } from './lib/fileHighlighter'
@@ -14,9 +15,10 @@
     modifiedAt: number | null
     scrollTop?: number
     onScrollTopChange?: (scrollTop: number) => void
+    onRetryFile?: () => void
   }
 
-  let { api, content, fileName, filePath, projectId, error, modifiedAt = null, scrollTop = 0, onScrollTopChange }: Props = $props()
+  let { api, content, fileName, filePath, projectId, error, modifiedAt = null, scrollTop = 0, onScrollTopChange, onRetryFile }: Props = $props()
 
   let scrollRegion = $state<HTMLDivElement | null>(null)
   let appliedScrollKey = $state<string | null>(null)
@@ -62,16 +64,26 @@
 
 <div class="flex-1 min-h-0 overflow-hidden bg-base-100">
   {#if content === null && error === null}
-    <div class="h-full flex items-center justify-center" aria-label="Loading file content">
-      <span class="loading loading-spinner loading-md text-primary"></span>
+    <div class="h-full flex items-center justify-center p-6" aria-label="Loading file content">
+      <div class="flex flex-col items-center gap-3 text-center">
+        <span class="loading loading-spinner loading-md text-primary" aria-hidden="true"></span>
+        <p class="text-sm text-base-content/70">Loading {fileName}…</p>
+      </div>
     </div>
   {:else if error !== null}
     <div class="h-full flex items-center justify-center p-6">
-      <div class="max-w-lg text-center space-y-2">
-        <div class="text-warning text-2xl" aria-hidden="true">!</div>
-        <h3 class="text-base font-semibold">Unable to load file</h3>
-        <p class="text-sm text-base-content/70 break-all">{fileName}</p>
-        <p class="text-sm text-error">{error}</p>
+      <div class="max-w-lg text-center space-y-3">
+        <CircleAlert class="mx-auto h-8 w-8 text-warning" aria-hidden="true" />
+        <div class="space-y-2">
+          <h3 class="text-base font-semibold">Unable to load file</h3>
+          <p class="text-sm text-base-content/70 break-all">{fileName}</p>
+          <p class="text-sm text-error">{error}</p>
+        </div>
+        {#if onRetryFile}
+          <button class="btn btn-sm btn-outline" type="button" onclick={onRetryFile}>
+            Retry loading {fileName}
+          </button>
+        {/if}
       </div>
     </div>
   {:else if content !== null}
@@ -142,7 +154,7 @@
       {:else if content.type === 'binary'}
         <div class="flex-1 flex items-center justify-center p-6">
           <div class="max-w-md text-center space-y-2">
-            <div class="text-2xl text-base-content/50" aria-hidden="true">[]</div>
+            <Archive class="mx-auto h-8 w-8 text-base-content/50" aria-hidden="true" />
             <h3 class="text-base font-semibold">Binary preview unavailable</h3>
             <p class="text-sm text-base-content/60">
               This file is stored as binary data and cannot be rendered in the preview pane.
@@ -152,7 +164,7 @@
       {:else if content.type === 'document'}
         <div class="flex-1 flex items-center justify-center p-6">
           <div class="max-w-md text-center space-y-2">
-            <div class="text-2xl text-base-content/50" aria-hidden="true">📄</div>
+            <FileQuestion class="mx-auto h-8 w-8 text-base-content/50" aria-hidden="true" />
             <h3 class="text-base font-semibold">Document preview unavailable</h3>
             <p class="text-sm text-base-content/60">
               PDFs and similar document formats are shown as metadata-only previews for now.
@@ -162,7 +174,7 @@
       {:else if content.type === 'large-file'}
         <div class="flex-1 flex items-center justify-center p-6">
           <div class="max-w-md text-center space-y-2">
-            <div class="text-2xl text-base-content/50" aria-hidden="true">⚠️</div>
+            <TriangleAlert class="mx-auto h-8 w-8 text-base-content/50" aria-hidden="true" />
             <h3 class="text-base font-semibold">File too large to preview</h3>
             <p class="text-sm text-base-content/60">
               This file exceeds the in-app preview limit, so only its metadata is shown.

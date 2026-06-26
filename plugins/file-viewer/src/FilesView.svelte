@@ -24,7 +24,9 @@
   let { api, context: _context, projectName, projectId = null }: Props = $props()
 
   let loading = $state(true)
-  let error = $state<string | null>(null)
+  let rootError = $state<string | null>(null)
+  let directoryError = $state<{ path: string; message: string } | null>(null)
+  let fileError = $state<string | null>(null)
   let loadedProjectId = $state<string | null>(null)
   let processingRevealPath = $state<string | null>(null)
   let failedRevealPath = $state<string | null>(null)
@@ -57,9 +59,14 @@
     fileBrowserStates.update((states) => updateFileBrowserProjectState(states, projectId, updater))
   }
 
+  function formatError(error: unknown): string {
+    return error instanceof Error ? error.message : String(error)
+  }
+
   async function loadRoot(projectId: string) {
     loading = true
-    error = null
+    rootError = null
+    directoryError = null
     try {
       const entries = await api.fs.readDir({ projectId, path: null })
       if ($activeProjectId !== projectId) return
@@ -70,7 +77,7 @@
       }))
     } catch (e) {
       if ($activeProjectId === projectId) {
-        error = String(e)
+        rootError = formatError(e)
       }
     } finally {
       if ($activeProjectId === projectId) {
@@ -92,6 +99,9 @@
         ...current,
         expandedPaths: nextExpanded,
       }))
+      if (directoryError?.path === path) {
+        directoryError = null
+      }
       return true
     }
 
@@ -101,7 +111,14 @@
         ...current,
         expandedPaths: nextExpanded,
       }))
+      if (directoryError?.path === path) {
+        directoryError = null
+      }
       return true
+    }
+
+    if (directoryError?.path === path) {
+      directoryError = null
     }
 
     try {
@@ -115,7 +132,7 @@
       return true
     } catch (e) {
       if ($activeProjectId === projectId) {
-        error = String(e)
+        directoryError = { path, message: formatError(e) }
       }
       return false
     }
@@ -132,7 +149,7 @@
       fileContent: null,
       contentScrollTop: 0,
     }))
-    error = null
+    fileError = null
 
     try {
       const nextContent = await api.fs.readFile({ projectId, path })
@@ -146,9 +163,29 @@
     } catch (e) {
       const currentState = getFileBrowserProjectState($fileBrowserStates, projectId)
       if (requestId !== activeFileRequestId || $activeProjectId !== projectId || currentState.selectedPath !== path) return false
-      error = String(e)
+      fileError = formatError(e)
       return true
     }
+  }
+
+  function retryRootLoad() {
+    const projectId = $activeProjectId
+    if (!projectId) return
+    void loadRoot(projectId)
+  }
+
+  function retryDirectoryLoad(path: string) {
+    void toggleDir(path)
+  }
+
+  function retrySelectedFile() {
+    const path = selectedPath
+    if (!path) return
+    void selectFile(path)
+  }
+
+  function retryRevealPath(path: string) {
+    void revealPath(path)
   }
 
   function updateTreeScrollTop(scrollTop: number) {
@@ -234,7 +271,9 @@
 
     loadedProjectId = currentProjectId
     activeFileRequestId++
-    error = null
+    rootError = null
+    directoryError = null
+    fileError = null
 
     if (!currentProjectId) {
       loading = false
@@ -295,34 +334,68 @@
         Select a project to browse files
       </div>
     {:else if loading}
-      <div class="flex-1 flex items-center justify-center">
-        <span class="loading loading-spinner loading-md text-primary"></span>
-      </div>
-    {:else if error !== null && rootEntries.length === 0}
       <div class="flex-1 flex items-center justify-center p-6">
-        <div class="text-center space-y-2 max-w-sm">
-          <div class="text-warning text-2xl" aria-hidden="true">!</div>
-          <h3 class="text-base font-semibold">Failed to load files</h3>
-          <p class="text-sm text-error">{error}</p>
+        <div class="flex flex-col items-center gap-3 text-center">
+          <span class="loading loading-spinner loading-md text-primary" aria-hidden="true"></span>
+          <p class="text-sm text-base-content/70">Loading project files…</p>
+        </div>
+      </div>
+    {:else if rootError !== null && rootEntries.length === 0}
+      <div class="flex-1 flex items-center justify-center p-6">
+        <div class="text-center space-y-3 max-w-sm">
+          <div class="space-y-2">
+            <h3 class="text-base font-semibold">Failed to load files</h3>
+            <p class="text-sm text-error">{rootError}</p>
+          </div>
+          <button class="btn btn-sm btn-outline" type="button" onclick={retryRootLoad}>
+            Retry loading project files
+          </button>
         </div>
       </div>
     {:else}
       <ResizablePanel storageKey="files-tree" defaultWidth={240} side="left">
-        {#if rootEntries.length === 0}
-          <div class="flex items-center justify-center h-full text-base-content/50 text-xs p-4 text-center">
-            This project folder is empty
+        <div class="flex h-full min-h-0 flex-col">
+          {#if directoryError !== null}
+            <div class="border-b border-base-300 bg-base-100 p-3 text-xs">
+              <div class="space-y-2">
+                <div>
+                  <p class="font-medium text-base-content break-all">Unable to load directory {directoryError.path}</p>
+                  <p class="mt-1 text-error break-words">{directoryError.message}</p>
+                </div>
+                <button class="btn btn-xs btn-outline" type="button" onclick={() => retryDirectoryLoad(directoryError?.path ?? '')}>
+                  Retry loading {directoryError.path} directory
+                </button>
+              </div>
+            </div>
+          {/if}
+          {#if failedRevealPath !== null}
+            <div class="border-b border-base-300 bg-base-100 p-3 text-xs">
+              <div class="space-y-2">
+                <p class="font-medium text-base-content break-all">Unable to reveal {failedRevealPath}</p>
+                <button class="btn btn-xs btn-outline" type="button" onclick={() => retryRevealPath(failedRevealPath ?? '')}>
+                  Retry revealing {failedRevealPath}
+                </button>
+              </div>
+            </div>
+          {/if}
+          <div class="min-h-0 flex-1">
+            {#if rootEntries.length === 0}
+              <div class="flex items-center justify-center h-full text-base-content/50 text-xs p-4 text-center">
+                This project folder is empty
+              </div>
+            {:else}
+              <ProjectFileTree
+                entries={flatEntries}
+                expandedDirs={expandedPaths}
+                {selectedPath}
+                onToggleDir={toggleDir}
+                onSelectFile={selectFile}
+                initialScrollTop={projectState.treeScrollTop}
+                onScrollTopChange={updateTreeScrollTop}
+              />
+            {/if}
           </div>
-        {:else}
-          <ProjectFileTree
-            entries={flatEntries}
-            expandedDirs={expandedPaths}
-            {selectedPath}
-            onToggleDir={toggleDir}
-            onSelectFile={selectFile}
-            initialScrollTop={projectState.treeScrollTop}
-            onScrollTopChange={updateTreeScrollTop}
-          />
-        {/if}
+        </div>
       </ResizablePanel>
 
       <div class="flex-1 min-h-0 overflow-hidden flex flex-col">
@@ -337,10 +410,11 @@
             fileName={selectedFileName}
             filePath={selectedPath}
             projectId={$activeProjectId}
-            {error}
+            error={fileError}
             modifiedAt={selectedEntry?.modifiedAt ?? null}
             scrollTop={projectState.contentScrollTop}
             onScrollTopChange={updateContentScrollTop}
+            onRetryFile={retrySelectedFile}
           />
         {/if}
       </div>
