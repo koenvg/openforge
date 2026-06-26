@@ -28,6 +28,36 @@
   let aiProvider = $state<string | null>(null)
   let availableActions = $state<Action[]>([])
   let error = $state<string | null>(null)
+  let environmentExpanded = $state(false)
+
+  const permissionModeSummary = $derived(getPermissionModeSummary(selectedPermissionMode))
+  const workspaceSummary = $derived(getWorkspaceSummary())
+  const environmentSummary = $derived(`${workspaceSummary} · ${permissionModeSummary}`)
+
+  function getPermissionModeSummary(mode: PermissionMode): string {
+    switch (mode) {
+      case 'auto':
+        return 'autorun'
+      case 'acceptEdits':
+        return 'accept edits'
+      case 'plan':
+        return 'plan only'
+      case 'bypassPermissions':
+        return 'bypass permissions'
+      case 'dontAsk':
+        return "don't ask"
+      default:
+        return 'default permissions'
+    }
+  }
+
+  function getWorkspaceSummary(): string {
+    if (!useWorktree) return 'Project directory'
+    if (selectedWorktreeSource === 'existingBranch') {
+      return `Worktree · ${selectedExistingBranch.trim() || 'existing branch'}`
+    }
+    return 'Worktree · latest main'
+  }
 
   function buildWorktreeOptions(): { worktreeSource: WorktreeSource; worktreeBranch: string | null } {
     if (!useWorktree) {
@@ -140,110 +170,130 @@
       onCancel={() => onClose?.()}
     >
       {#snippet extras()}
-        {#if mode === 'create' && aiProvider === 'claude-code'}
-          <div class="flex items-center gap-2">
-            <span class="text-xs text-base-content/50 font-medium shrink-0">Mode</span>
-            <select
-              class="select select-bordered select-xs flex-1"
-              bind:value={selectedPermissionMode}
-            >
-              <option value="default">Default</option>
-              <option value="auto">Autorun</option>
-              <option value="acceptEdits">Accept Edits</option>
-              <option value="plan">Plan</option>
-              <option value="bypassPermissions">Bypass Permissions</option>
-              <option value="dontAsk">Don't Ask (dangerous)</option>
-            </select>
-          </div>
-        {/if}
         {#if mode === 'create'}
-          <div class="grid grid-cols-[4.75rem_minmax(0,1fr)] items-start gap-x-3 gap-y-2">
-            <span class="pt-1.5 text-xs font-medium text-base-content/50">Workspace</span>
+          <div class="space-y-2">
+            <button
+              type="button"
+              class="btn btn-outline btn-sm h-auto min-h-8 justify-start gap-2 text-left font-normal"
+              aria-expanded={environmentExpanded}
+              aria-controls="create-task-environment"
+              onclick={() => { environmentExpanded = !environmentExpanded }}
+            >
+              <span class="text-base-content/50">Environment:</span>
+              <span>{environmentSummary}</span>
+              <span class="text-base-content/50">{environmentExpanded ? '⌃' : '⌄'}</span>
+            </button>
 
-            <div class="min-w-0 space-y-2">
-              <div class="flex min-h-7 items-center justify-between gap-3">
-                <label class="flex min-w-0 items-center gap-2 text-xs font-medium text-base-content/80">
-                  <input
-                    type="checkbox"
-                    class="toggle toggle-primary toggle-xs"
-                    aria-label="Worktree"
-                    bind:checked={useWorktree}
-                  />
-                  <span>Worktree</span>
-                </label>
-
-                {#if !useWorktree}
-                  <span class="badge badge-ghost badge-xs shrink-0">Project directory</span>
-                {/if}
-              </div>
-
-              {#if useWorktree}
-                <div class="grid grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-2">
-                  <span class="text-xs font-medium text-base-content/50">Base</span>
-                  <div
-                    role="radiogroup"
-                    aria-label="Worktree source"
-                    class="join grid min-w-0 grid-cols-2"
-                  >
-                    <label
-                      class="btn join-item btn-xs h-8 min-h-8 flex-1 text-xs focus-within:ring-2 focus-within:ring-primary"
-                      class:btn-primary={selectedWorktreeSource === 'newBranchFromMain'}
-                      class:btn-ghost={selectedWorktreeSource !== 'newBranchFromMain'}
-                      class:border-base-300={selectedWorktreeSource !== 'newBranchFromMain'}
-                      class:bg-base-100={selectedWorktreeSource !== 'newBranchFromMain'}
-                    >
-                      <input
-                        type="radio"
-                        class="sr-only"
-                        aria-label="New branch from latest main"
-                        bind:group={selectedWorktreeSource}
-                        value="newBranchFromMain"
-                      />
-                      <span>Latest main</span>
-                    </label>
-                    <label
-                      class="btn join-item btn-xs h-8 min-h-8 flex-1 text-xs focus-within:ring-2 focus-within:ring-primary"
-                      class:btn-primary={selectedWorktreeSource === 'existingBranch'}
-                      class:btn-ghost={selectedWorktreeSource !== 'existingBranch'}
-                      class:border-base-300={selectedWorktreeSource !== 'existingBranch'}
-                      class:bg-base-100={selectedWorktreeSource !== 'existingBranch'}
-                    >
-                      <input
-                        type="radio"
-                        class="sr-only"
-                        aria-label="Existing branch"
-                        bind:group={selectedWorktreeSource}
-                        value="existingBranch"
-                      />
-                      <span>Existing branch</span>
-                    </label>
-                  </div>
-                </div>
-
-                {#if selectedWorktreeSource === 'existingBranch'}
-                  <div class="grid grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-2">
-                    <span class="text-xs font-medium text-base-content/50">Branch</span>
+            {#if environmentExpanded}
+              <div id="create-task-environment" class="space-y-3 rounded-lg border border-base-300 bg-base-200/50 p-3">
+                {#if aiProvider === 'claude-code'}
+                  <div class="flex items-center gap-2">
+                    <label for="create-task-permission-mode" class="text-xs font-medium text-base-content/50 shrink-0">Mode</label>
                     <select
-                      aria-label="Branch"
-                      class="select select-bordered select-xs min-w-0 flex-1"
-                      bind:value={selectedExistingBranch}
-                      disabled={gitBranches.length === 0}
+                      id="create-task-permission-mode"
+                      class="select select-bordered select-xs flex-1"
+                      bind:value={selectedPermissionMode}
                     >
-                      {#if gitBranches.length === 0}
-                        <option value="">No branches available</option>
-                      {:else}
-                        {#each gitBranches as branch}
-                          <option value={branch.name}>{branch.name}{branch.is_remote ? ' (remote)' : ''}</option>
-                        {/each}
-                      {/if}
+                      <option value="default">Default</option>
+                      <option value="auto">Autorun</option>
+                      <option value="acceptEdits">Accept Edits</option>
+                      <option value="plan">Plan</option>
+                      <option value="bypassPermissions">Bypass Permissions</option>
+                      <option value="dontAsk">Don't Ask (dangerous)</option>
                     </select>
                   </div>
-                  {#if branchLoadError}
-                    <span class="mt-1 block text-xs text-error">{branchLoadError}</span>
-                  {/if}
                 {/if}
-              {/if}
-            </div>
+
+                <div class="grid grid-cols-[4.75rem_minmax(0,1fr)] items-start gap-x-3 gap-y-2">
+                  <span class="pt-1.5 text-xs font-medium text-base-content/50">Workspace</span>
+
+                  <div class="min-w-0 space-y-2">
+                    <div class="flex min-h-7 items-center justify-between gap-3">
+                      <label class="flex min-w-0 items-center gap-2 text-xs font-medium text-base-content/80">
+                        <input
+                          type="checkbox"
+                          class="toggle toggle-primary toggle-xs"
+                          aria-label="Worktree"
+                          bind:checked={useWorktree}
+                        />
+                        <span>Worktree</span>
+                      </label>
+
+                      {#if !useWorktree}
+                        <span class="badge badge-ghost badge-xs shrink-0">Project directory</span>
+                      {/if}
+                    </div>
+
+                    {#if useWorktree}
+                      <div class="grid grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-2">
+                        <span class="text-xs font-medium text-base-content/50">Base</span>
+                        <div
+                          role="radiogroup"
+                          aria-label="Worktree source"
+                          class="join grid min-w-0 grid-cols-2"
+                        >
+                          <label
+                            class="btn join-item btn-xs h-8 min-h-8 flex-1 text-xs focus-within:ring-2 focus-within:ring-primary"
+                            class:btn-primary={selectedWorktreeSource === 'newBranchFromMain'}
+                            class:btn-ghost={selectedWorktreeSource !== 'newBranchFromMain'}
+                            class:border-base-300={selectedWorktreeSource !== 'newBranchFromMain'}
+                            class:bg-base-100={selectedWorktreeSource !== 'newBranchFromMain'}
+                          >
+                            <input
+                              type="radio"
+                              class="sr-only"
+                              aria-label="New branch from latest main"
+                              bind:group={selectedWorktreeSource}
+                              value="newBranchFromMain"
+                            />
+                            <span>Latest main</span>
+                          </label>
+                          <label
+                            class="btn join-item btn-xs h-8 min-h-8 flex-1 text-xs focus-within:ring-2 focus-within:ring-primary"
+                            class:btn-primary={selectedWorktreeSource === 'existingBranch'}
+                            class:btn-ghost={selectedWorktreeSource !== 'existingBranch'}
+                            class:border-base-300={selectedWorktreeSource !== 'existingBranch'}
+                            class:bg-base-100={selectedWorktreeSource !== 'existingBranch'}
+                          >
+                            <input
+                              type="radio"
+                              class="sr-only"
+                              aria-label="Existing branch"
+                              bind:group={selectedWorktreeSource}
+                              value="existingBranch"
+                            />
+                            <span>Existing branch</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      {#if selectedWorktreeSource === 'existingBranch'}
+                        <div class="grid grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-2">
+                          <span class="text-xs font-medium text-base-content/50">Branch</span>
+                          <select
+                            aria-label="Branch"
+                            class="select select-bordered select-xs min-w-0 flex-1"
+                            bind:value={selectedExistingBranch}
+                            disabled={gitBranches.length === 0}
+                          >
+                            {#if gitBranches.length === 0}
+                              <option value="">No branches available</option>
+                            {:else}
+                              {#each gitBranches as branch}
+                                <option value={branch.name}>{branch.name}{branch.is_remote ? ' (remote)' : ''}</option>
+                              {/each}
+                            {/if}
+                          </select>
+                        </div>
+                        {#if branchLoadError}
+                          <span class="mt-1 block text-xs text-error">{branchLoadError}</span>
+                        {/if}
+                      {/if}
+                    {/if}
+                  </div>
+                </div>
+              </div>
+            {/if}
           </div>
         {/if}
       {/snippet}

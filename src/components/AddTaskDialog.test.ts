@@ -60,6 +60,15 @@ async function findPromptTextbox(): Promise<HTMLTextAreaElement> {
   return screen.getAllByRole('textbox')[0] as HTMLTextAreaElement
 }
 
+async function clickAddToBacklogFromMore() {
+  await fireEvent.click(await screen.findByRole('button', { name: 'More' }))
+  await fireEvent.click(await screen.findByRole('menuitem', { name: 'Add to Backlog' }))
+}
+
+async function expandEnvironment() {
+  await fireEvent.click(await screen.findByRole('button', { name: /Environment:/ }))
+}
+
 const mockTask = {
   id: 'T-42',
   initial_prompt: 'Existing Task',
@@ -130,8 +139,7 @@ describe('AddTaskDialog', () => {
     await fireEvent.input(textbox, { target: { value: 'My new task' } })
     
     // The "Add to Backlog" button calls onSubmit
-    const submitBtn = await screen.findByRole('button', { name: /Add to Backlog/ })
-    await fireEvent.click(submitBtn)
+    await clickAddToBacklogFromMore()
     
     await waitFor(() => {
       expect(createTask).toHaveBeenCalledWith('My new task', 'backlog', 'test-project-id', 'default', DEFAULT_WORKTREE_OPTIONS)
@@ -139,16 +147,44 @@ describe('AddTaskDialog', () => {
     })
   })
 
+  it('collapses environment controls behind a summary by default', async () => {
+    render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
+
+    await findPromptTextbox()
+
+    expect(screen.getByRole('button', { name: /Environment: Worktree · latest main · default permissions/ })).toBeTruthy()
+    expect(screen.queryByLabelText('Worktree')).toBeNull()
+    expect(screen.queryByLabelText('New branch from latest main')).toBeNull()
+    expect(screen.queryByRole('combobox')).toBeNull()
+  })
+
+  it('dismisses the More menu when expanding Environment', async () => {
+    render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
+
+    const textbox = await findPromptTextbox()
+    await fireEvent.input(textbox, { target: { value: 'Task with environment changes' } })
+    await fireEvent.click(await screen.findByRole('button', { name: 'More' }))
+    expect(screen.getByRole('menuitem', { name: 'Add to Backlog' })).toBeTruthy()
+
+    const environmentButton = await screen.findByRole('button', { name: /Environment:/ })
+    await fireEvent.pointerDown(environmentButton)
+    await fireEvent.click(environmentButton)
+
+    expect(screen.queryByRole('menuitem', { name: 'Add to Backlog' })).toBeNull()
+    expect(await screen.findByLabelText('Worktree')).toBeTruthy()
+  })
+
   it('uses new branch from latest main as the default worktree task source', async () => {
     render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
 
+    await expandEnvironment()
     const worktreeToggle = await screen.findByLabelText('Worktree') as HTMLInputElement
     expect(worktreeToggle.checked).toBe(true)
     expect((screen.getByLabelText('New branch from latest main') as HTMLInputElement).checked).toBe(true)
 
     const textbox = await findPromptTextbox()
     await fireEvent.input(textbox, { target: { value: 'Default worktree task' } })
-    await fireEvent.click(await screen.findByRole('button', { name: /Add to Backlog/ }))
+    await clickAddToBacklogFromMore()
 
     await waitFor(() => {
       expect(createTask).toHaveBeenCalledWith('Default worktree task', 'backlog', 'test-project-id', 'default', DEFAULT_WORKTREE_OPTIONS)
@@ -165,13 +201,14 @@ describe('AddTaskDialog', () => {
       },
     })
 
-    await screen.findByText('Worktree')
+    await expandEnvironment()
     await fireEvent.click(screen.getByLabelText('Existing branch'))
     await fireEvent.change(screen.getByLabelText('Branch'), { target: { value: 'feature/open-pr' } })
+    expect(screen.getByRole('button', { name: /Environment: Worktree · feature\/open-pr · default permissions/ })).toBeTruthy()
 
     const textbox = await findPromptTextbox()
     await fireEvent.input(textbox, { target: { value: 'Continue PR work' } })
-    await fireEvent.click(await screen.findByRole('button', { name: /Add to Backlog/ }))
+    await clickAddToBacklogFromMore()
 
     await waitFor(() => {
       expect(createTask).toHaveBeenCalledWith(
@@ -192,13 +229,15 @@ describe('AddTaskDialog', () => {
     const onTaskSaved = vi.fn()
     render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo', onTaskSaved } })
 
+    await expandEnvironment()
     await fireEvent.click(await screen.findByLabelText('Worktree'))
+    expect(screen.getByRole('button', { name: /Environment: Project directory · default permissions/ })).toBeTruthy()
     expect(screen.queryByLabelText('New branch from latest main')).toBeNull()
     expect(screen.queryByLabelText('Existing branch')).toBeNull()
 
     const textbox = await findPromptTextbox()
     await fireEvent.input(textbox, { target: { value: 'No worktree task' } })
-    await fireEvent.click(await screen.findByRole('button', { name: /Add to Backlog/ }))
+    await clickAddToBacklogFromMore()
 
     await waitFor(() => {
       expect(createTask).toHaveBeenCalledWith(
@@ -256,8 +295,11 @@ describe('AddTaskDialog', () => {
     })
   })
 
-  it('shows permission mode dropdown when ai_provider is claude-code', async () => {
+  it('shows permission mode dropdown when the environment is expanded for claude-code', async () => {
     render(AddTaskDialog, { props: { mode: 'create' } })
+
+    await expandEnvironment()
+
     await waitFor(() => {
       expect(screen.getByRole('combobox')).toBeTruthy() // Mode select
     })
@@ -266,6 +308,7 @@ describe('AddTaskDialog', () => {
   it('includes autorun as a Claude Code permission mode using Claude\'s auto value', async () => {
     render(AddTaskDialog, { props: { mode: 'create' } })
 
+    await expandEnvironment()
     const select = await screen.findByRole('combobox') as HTMLSelectElement
     const autorunOption = Array.from(select.options).find((option) => option.textContent === 'Autorun')
 
@@ -276,11 +319,13 @@ describe('AddTaskDialog', () => {
     render(AddTaskDialog, { props: { mode: 'create' } })
 
     const textbox = await findPromptTextbox()
+    await expandEnvironment()
     const select = await screen.findByRole('combobox') as HTMLSelectElement
 
     await fireEvent.change(select, { target: { value: 'auto' } })
+    expect(screen.getByRole('button', { name: /Environment: Worktree · latest main · autorun/ })).toBeTruthy()
     await fireEvent.input(textbox, { target: { value: 'Task with autorun' } })
-    await fireEvent.click(await screen.findByRole('button', { name: /Add to Backlog/ }))
+    await clickAddToBacklogFromMore()
 
     await waitFor(() => {
       expect(createTask).toHaveBeenCalledWith('Task with autorun', 'backlog', 'test-project-id', 'auto', DEFAULT_WORKTREE_OPTIONS)
@@ -335,7 +380,8 @@ describe('AddTaskDialog', () => {
     const textbox = await findPromptTextbox()
     await fireEvent.input(textbox, { target: { value: 'Task with action' } })
 
-    const actionButton = await screen.findByRole('button', { name: 'Test Action' })
+    await fireEvent.click(await screen.findByRole('button', { name: 'More' }))
+    const actionButton = await screen.findByRole('menuitem', { name: 'Test Action' })
     await fireEvent.click(actionButton)
 
     await waitFor(() => {
