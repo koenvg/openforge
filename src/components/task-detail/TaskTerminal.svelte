@@ -2,6 +2,15 @@
   import { onMount, onDestroy } from 'svelte'
   import { spawnShellPty, killPty } from '../../lib/ipc'
   import '@openforge/terminal-runtime/xterm.css'
+  import {
+    TERMINAL_FOCUS_DESCRIPTION_TEXT,
+    getRestartShellAriaLabel,
+    getRestartShellTitle,
+    getShellLabel,
+    getTerminalFocusDescriptionId,
+    getTerminalRegionAriaLabel,
+    getTerminalRegionTitle,
+  } from '@openforge/terminal-runtime'
   import { acquire, attach, detach, recoverActiveTerminal, markPtySpawnPending, clearPtySpawnPending, shouldSpawnPty, markShellPtyStarted, getShellLifecycleState, subscribeShellLifecycle, type PoolEntry, type ShellLifecycleState } from '../../lib/terminalPool'
 
   interface Props {
@@ -18,15 +27,19 @@
   let unsubscribeShellLifecycle: (() => void) | null = null
   let poolEntry = $state.raw<PoolEntry | null>(null)
   let mounted = $state(false)
-  let lifecycle = $state({ ptyActive: false, shellExited: false, currentPtyInstance: null as number | null })
+  let lifecycle = $state<ShellLifecycleState>({ ptyActive: false, shellExited: false, currentPtyInstance: null, hasOutput: false })
   let previousIsActive: boolean | null = null
   let activatingEntry: PoolEntry | null = null
   let boundTerminalKey = $state<string | null>(null)
   let boundContextSignature = $state<string | null>(null)
   let bindRun = 0
 
-  const shellLabel = $derived(`Shell ${terminalIndex + 1}`)
-  const focusDescriptionId = $derived(`terminal-focus-description-${terminalKey}`)
+  const shellLabel = $derived(getShellLabel(terminalIndex))
+  const focusDescriptionId = $derived(getTerminalFocusDescriptionId(terminalKey))
+  const terminalRegionLabel = $derived(getTerminalRegionAriaLabel(shellLabel))
+  const terminalRegionTitle = $derived(getTerminalRegionTitle(shellLabel))
+  const restartShellLabel = $derived(getRestartShellAriaLabel(shellLabel))
+  const restartShellTitle = $derived(getRestartShellTitle(shellLabel))
 
   interface TerminalBindingContext {
     taskId: string
@@ -192,17 +205,15 @@
 </script>
 
 <div class="flex flex-col h-full">
-  <p id={focusDescriptionId} class="sr-only">
-    Terminal focus: after selecting a shell tab, press Tab to focus this terminal region. Type commands when the terminal cursor is active.
-  </p>
+  <p id={focusDescriptionId} class="sr-only">{TERMINAL_FOCUS_DESCRIPTION_TEXT}</p>
   <!-- svelte-ignore a11y_no_noninteractive_tabindex (terminal regions are intentionally keyboard-focusable landmarks) -->
   <div
     class="flex-1 overflow-hidden min-h-0 relative rounded focus-within:ring-2 focus-within:ring-primary focus-visible:ring-2 focus-visible:ring-primary focus:outline-none"
     role="region"
     tabindex="0"
-    aria-label={`Terminal region for ${shellLabel}`}
+    aria-label={terminalRegionLabel}
     aria-describedby={focusDescriptionId}
-    title={`Terminal region for ${shellLabel}`}
+    title={terminalRegionTitle}
   >
     <div class="shell-terminal-wrapper w-full h-full p-3 bg-base-100" bind:this={terminalEl}></div>
     {#if lifecycle.shellExited}
@@ -212,8 +223,8 @@
           type="button"
           class="btn btn-sm btn-ghost text-primary font-mono focus-visible:ring-2 focus-visible:ring-primary"
           onclick={handleRestart}
-          aria-label={`Restart ${shellLabel}`}
-          title={`Restart ${shellLabel}`}
+          aria-label={restartShellLabel}
+          title={restartShellTitle}
         >
           Restart shell
         </button>

@@ -1,5 +1,7 @@
 <script lang="ts">
   import {
+    TERMINAL_TASK_PANE_KEYBOARD_FOCUS_PATH_TEXT,
+    TERMINAL_TASK_PANE_WORKSPACE_RECOVERY_TEXT,
     createTaskTerminalPaneLifecycle,
     formatTerminalTaskPaneWorkspaceLookupError,
     getTerminalTaskPaneWorkspaceStatusText,
@@ -96,10 +98,10 @@
         {#if workspaceLookupState === 'error' && workspaceLookupError !== null}
           <p class="text-sm text-base-content/70">{workspaceLookupError}</p>
         {:else}
-          <p class="text-sm text-base-content/70">Start or repair the task workspace, then retry loading the terminal.</p>
+          <p class="text-sm text-base-content/70">{TERMINAL_TASK_PANE_WORKSPACE_RECOVERY_TEXT}</p>
         {/if}
         <p class="text-xs text-base-content/50">
-          <span class="font-semibold">Keyboard focus path:</span> resolve the workspace first, then Tab to shell tabs, choose New shell, and Tab into the terminal region.
+          {TERMINAL_TASK_PANE_KEYBOARD_FOCUS_PATH_TEXT}
         </p>
         {#if workspaceLookupState === 'error'}
           <p class="sr-only">Terminal workspace error</p>
