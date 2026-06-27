@@ -49,6 +49,7 @@ const baseTask: Task = {
   permission_mode: null,
   worktree_source: null,
   worktree_branch: null,
+  handoff_notes_enabled: true,
   depends_on: [],
   project_id: 'project-1',
   created_at: 1700000000,

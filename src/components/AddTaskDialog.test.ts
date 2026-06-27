@@ -37,6 +37,8 @@ vi.mock('../lib/ipc', () => ({
 const DEFAULT_WORKTREE_OPTIONS = {
   worktreeSource: 'newBranchFromMain',
   worktreeBranch: null,
+  title: null,
+  handoffNotesEnabled: true,
 }
 
 vi.mock('../lib/actions', () => ({
@@ -57,7 +59,13 @@ async function findPromptTextbox(): Promise<HTMLTextAreaElement> {
   await waitFor(() => {
     expect(screen.getAllByRole('textbox').length).toBeGreaterThan(0)
   })
-  return screen.getAllByRole('textbox')[0] as HTMLTextAreaElement
+  // The prompt is a <textarea>; the optional title field is an <input>, so target
+  // the textarea specifically rather than relying on textbox ordering.
+  const textarea = screen
+    .getAllByRole('textbox')
+    .find((element): element is HTMLTextAreaElement => element.tagName === 'TEXTAREA')
+  if (!textarea) throw new Error('prompt textarea not found')
+  return textarea
 }
 
 async function clickAddToBacklogFromMore() {
@@ -87,6 +95,7 @@ const mockTask = {
   permission_mode: null,
   worktree_source: null,
   worktree_branch: null,
+  handoff_notes_enabled: true,
   depends_on: [],
   project_id: null,
   created_at: 1000,
@@ -215,7 +224,8 @@ describe('AddTaskDialog', () => {
 
     await expandEnvironment()
     await fireEvent.click(screen.getByLabelText('Existing branch'))
-    await fireEvent.change(screen.getByLabelText('Branch'), { target: { value: 'feature/open-pr' } })
+    await fireEvent.click(screen.getByRole('combobox', { name: 'Branch' }))
+    await fireEvent.click(await screen.findByRole('option', { name: 'feature/open-pr' }))
     expect(screen.getByRole('button', { name: /Environment: Worktree · feature\/open-pr · default permissions/ })).toBeTruthy()
 
     const textbox = await findPromptTextbox()
@@ -231,6 +241,8 @@ describe('AddTaskDialog', () => {
         {
           worktreeSource: 'existingBranch',
           worktreeBranch: 'feature/open-pr',
+          title: null,
+          handoffNotesEnabled: true,
         },
       )
       expect(onTaskSaved).toHaveBeenCalled()
@@ -260,6 +272,8 @@ describe('AddTaskDialog', () => {
         {
           worktreeSource: 'disabled',
           worktreeBranch: null,
+          title: null,
+          handoffNotesEnabled: true,
         },
       )
       expect(onTaskSaved).toHaveBeenCalled()
@@ -396,6 +410,75 @@ describe('AddTaskDialog', () => {
       const prompt = vi.mocked(createTask).mock.calls[0][0]
       expect(prompt).toBe('Use this screenshot')
       expect(prompt).not.toContain('[image#1]: data:image/png;base64,')
+    })
+  })
+
+  it('passes the entered title when creating a task', async () => {
+    render(AddTaskDialog, { props: { mode: 'create' } })
+
+    const textbox = await findPromptTextbox()
+    const titleInput = screen.getByLabelText('Task title') as HTMLInputElement
+    await fireEvent.input(titleInput, { target: { value: '  My titled task  ' } })
+    await fireEvent.input(textbox, { target: { value: 'Body of task' } })
+    await clickAddToBacklogFromMore()
+
+    await waitFor(() => {
+      expect(createTask).toHaveBeenCalledWith('Body of task', 'backlog', 'test-project-id', 'default', {
+        ...DEFAULT_WORKTREE_OPTIONS,
+        title: 'My titled task',
+      })
+    })
+  })
+
+  it('omits the title (null) when none is entered', async () => {
+    render(AddTaskDialog, { props: { mode: 'create' } })
+
+    const textbox = await findPromptTextbox()
+    await fireEvent.input(textbox, { target: { value: 'Untitled body' } })
+    await clickAddToBacklogFromMore()
+
+    await waitFor(() => {
+      expect(createTask).toHaveBeenCalledWith('Untitled body', 'backlog', 'test-project-id', 'default', DEFAULT_WORKTREE_OPTIONS)
+    })
+  })
+
+  it('opts out of handoff notes when the toggle is disabled', async () => {
+    render(AddTaskDialog, { props: { mode: 'create' } })
+
+    const textbox = await findPromptTextbox()
+    await expandEnvironment()
+    const handoffToggle = await screen.findByLabelText('Handoff notes') as HTMLInputElement
+    expect(handoffToggle.checked).toBe(true)
+    await fireEvent.click(handoffToggle)
+    expect(screen.getByRole('button', { name: /Environment:.*no handoff notes/ })).toBeTruthy()
+
+    await fireEvent.input(textbox, { target: { value: 'No handoff task' } })
+    await clickAddToBacklogFromMore()
+
+    await waitFor(() => {
+      expect(createTask).toHaveBeenCalledWith('No handoff task', 'backlog', 'test-project-id', 'default', {
+        ...DEFAULT_WORKTREE_OPTIONS,
+        handoffNotesEnabled: false,
+      })
+    })
+  })
+
+  it('filters the existing branch list when searching', async () => {
+    render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
+
+    await expandEnvironment()
+    await fireEvent.click(screen.getByLabelText('Existing branch'))
+    await fireEvent.click(screen.getByRole('combobox', { name: 'Branch' }))
+
+    expect(await screen.findByRole('option', { name: 'feature/open-pr' })).toBeTruthy()
+    expect(screen.getByRole('option', { name: 'main' })).toBeTruthy()
+
+    const search = screen.getByPlaceholderText('Search...')
+    await fireEvent.input(search, { target: { value: 'feature' } })
+
+    await waitFor(() => {
+      expect(screen.queryByRole('option', { name: 'main' })).toBeNull()
+      expect(screen.getByRole('option', { name: 'feature/open-pr' })).toBeTruthy()
     })
   })
 

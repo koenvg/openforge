@@ -11,6 +11,7 @@
   import type { TaskPromptImageReference } from '../lib/taskPrompt'
   import { activeProjectId } from '../lib/stores'
   import Modal from './shared/ui/Modal.svelte'
+  import SearchableSelect from './shared/ui/SearchableSelect.svelte'
   import PromptInput from './prompt/PromptInput.svelte'
   import { getEnabledActions, loadActions } from '../lib/actions'
 
@@ -53,12 +54,16 @@
   let loadedPromptSourceKey = $state<string | null>(null)
   let nextPastedImageId = 1
   let nextImageMarkerInsertRequestId = 1
+  let taskTitle = $state('')
+  let handoffNotesEnabled = $state(true)
 
   const initialPrompt = $derived(mode === 'edit' && task ? getTaskPromptText(task) : '')
   const promptReady = $derived(promptDraft.trim().length > 0)
   const permissionModeSummary = $derived(getPermissionModeSummary(selectedPermissionMode))
   const workspaceSummary = $derived(getWorkspaceSummary())
-  const environmentSummary = $derived(`${workspaceSummary} · ${permissionModeSummary}`)
+  const environmentSummary = $derived(
+    `${workspaceSummary} · ${permissionModeSummary}${handoffNotesEnabled ? '' : ' · no handoff notes'}`
+  )
   let pastedImageSummary = $derived(
     pastedImages.length === 0
       ? ''
@@ -360,7 +365,7 @@
           'backlog',
           $activeProjectId,
           selectedPermissionMode,
-          buildWorktreeOptions()
+          { ...buildWorktreeOptions(), title: taskTitle.trim() || null, handoffNotesEnabled }
         )
 
         if (autoStart && onRunAction) {
@@ -387,6 +392,15 @@
   <div class="p-4 overflow-visible">
     {#if error}
       <div class="text-error text-sm mb-4">{error}</div>
+    {/if}
+    {#if mode === 'create'}
+      <input
+        type="text"
+        class="input input-bordered input-sm mb-3 w-full"
+        placeholder="Title (optional)"
+        aria-label="Task title"
+        bind:value={taskTitle}
+      />
     {/if}
     <PromptInput
       projectId={$activeProjectId || ''}
@@ -597,20 +611,28 @@
                         {#if selectedWorktreeSource === 'existingBranch'}
                           <div class="grid grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-2">
                             <span class="text-xs font-medium text-base-content/50">Branch</span>
-                            <select
-                              aria-label="Branch"
-                              class="select select-bordered select-xs min-w-0 flex-1"
-                              bind:value={selectedExistingBranch}
-                              disabled={gitBranches.length === 0}
-                            >
-                              {#if gitBranches.length === 0}
-                                <option value="">No branches available</option>
-                              {:else}
-                                {#each gitBranches as branch}
-                                  <option value={branch.name}>{branch.name}{branch.is_remote ? ' (remote)' : ''}</option>
-                                {/each}
-                              {/if}
-                            </select>
+                            {#if gitBranches.length === 0}
+                              <div
+                                class="select select-bordered select-xs flex min-w-0 flex-1 items-center text-base-content/40"
+                                aria-label="Branch"
+                              >
+                                No branches available
+                              </div>
+                            {:else}
+                              <div class="min-w-0">
+                                <SearchableSelect
+                                  ariaLabel="Branch"
+                                  size="xs"
+                                  placeholder="Search branches…"
+                                  options={gitBranches.map((branch) => ({
+                                    value: branch.name,
+                                    label: `${branch.name}${branch.is_remote ? ' (remote)' : ''}`,
+                                  }))}
+                                  value={selectedExistingBranch}
+                                  onSelect={(value) => { selectedExistingBranch = value }}
+                                />
+                              </div>
+                            {/if}
                           </div>
                           {#if branchLoadError}
                             <span class="mt-1 block text-xs text-error">{branchLoadError}</span>
@@ -618,6 +640,19 @@
                         {/if}
                       {/if}
                     </div>
+                  </div>
+
+                  <div class="grid grid-cols-[4.75rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
+                    <span class="text-xs font-medium text-base-content/50">Handoff</span>
+                    <label class="flex min-w-0 items-center gap-2 text-xs font-medium text-base-content/80">
+                      <input
+                        type="checkbox"
+                        class="toggle toggle-primary toggle-xs"
+                        aria-label="Handoff notes"
+                        bind:checked={handoffNotesEnabled}
+                      />
+                      <span>Include handoff notes</span>
+                    </label>
                   </div>
                 </div>
               {/if}

@@ -228,16 +228,25 @@ pub(super) async fn handle_app_unmatched_command(
             let label_names = payload_optional_string_vec(&request.payload, "labelNames")?;
             let worktree_source = payload_optional_string(&request.payload, "worktreeSource")?;
             let worktree_branch = payload_optional_string(&request.payload, "worktreeBranch")?;
+            let title = payload_optional_string(&request.payload, "title")?;
+            // Default to enabled so callers that omit the flag keep handoff notes.
+            let handoff_notes_enabled = request
+                .payload
+                .get("handoffNotesEnabled")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(true);
             let task = db
-                .create_task_with_worktree_source(
-                    &initial_prompt,
-                    &status,
-                    project_id.as_deref(),
-                    None,
-                    permission_mode.as_deref(),
-                    worktree_source.as_deref(),
-                    worktree_branch.as_deref(),
-                )
+                .create_task_with_options(crate::db::NewTaskOptions {
+                    initial_prompt: &initial_prompt,
+                    status: &status,
+                    project_id: project_id.as_deref(),
+                    prompt: None,
+                    permission_mode: permission_mode.as_deref(),
+                    worktree_source: worktree_source.as_deref(),
+                    worktree_branch: worktree_branch.as_deref(),
+                    title: title.as_deref(),
+                    handoff_notes_enabled,
+                })
                 .map_err(|e| {
                     (
                         StatusCode::INTERNAL_SERVER_ERROR,

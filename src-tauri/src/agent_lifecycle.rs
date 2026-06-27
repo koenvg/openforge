@@ -342,9 +342,14 @@ pub fn build_task_prompt(
     handoff_notes_template: Option<&str>,
 ) -> String {
     let mut prompt = String::new();
-    let handoff_notes_template = effective_handoff_notes_template(handoff_notes_template);
 
-    prompt.push_str(&format!(r###"<openforge_task_management>
+    // The handoff-notes (task management) block can be opted out per task. When
+    // disabled, the start prompt omits the block entirely so the agent is not
+    // instructed to maintain Handoff Notes.
+    if task.handoff_notes_enabled {
+        let handoff_notes_template = effective_handoff_notes_template(handoff_notes_template);
+
+        prompt.push_str(&format!(r###"<openforge_task_management>
 This task is {task_id}. OpenForge stores this task's user-facing Handoff Notes in the task summary field. You MUST update the OpenForge task at both points below — the task is not complete without these updates.
 
 <handoff_notes_template>
@@ -368,6 +373,7 @@ Task is incomplete unless both Handoff Notes updates were made. If the openforge
 </openforge_task_management>
 
 "###, task_id = task.id, handoff_notes_template = handoff_notes_template));
+    }
 
     if code_cleanup_enabled {
         prompt.push_str(&format!(r#"<openforge_code_cleanup>
@@ -474,6 +480,7 @@ mod tests {
             worktree_source: None,
             worktree_branch: None,
             title: None,
+            handoff_notes_enabled: true,
             depends_on: Vec::new(),
             labels: Vec::new(),
         }
@@ -508,6 +515,44 @@ mod tests {
         assert!(prompt.contains("T-123"));
         assert!(!prompt.contains("initial_prompt=\"...\""));
         assert!(!prompt.contains("External ticket:"));
+    }
+
+    #[test]
+    fn test_build_task_prompt_omits_management_block_when_handoff_disabled() {
+        let mut task = sample_task("T-200", "Opted out of handoff notes", None);
+        task.handoff_notes_enabled = false;
+
+        let prompt = build_task_prompt(&task, None, false, None);
+
+        // The task body is still present, but the entire handoff-notes block is gone.
+        assert!(prompt.contains("Opted out of handoff notes"));
+        assert!(!prompt.contains("<openforge_task_management>"));
+        assert!(!prompt.contains("<handoff_notes_template>"));
+        assert!(!prompt.contains("Handoff Notes"));
+        assert!(!prompt.contains("openforge update-task"));
+        assert!(!prompt.contains("## Current summary"));
+    }
+
+    #[test]
+    fn test_build_task_prompt_includes_management_block_when_handoff_enabled() {
+        let task = sample_task("T-201", "Keeps handoff notes", None);
+        assert!(task.handoff_notes_enabled);
+
+        let prompt = build_task_prompt(&task, None, false, None);
+
+        assert!(prompt.contains("<openforge_task_management>"));
+        assert!(prompt.contains("openforge update-task --task-id \"T-201\" --summary \"...\""));
+    }
+
+    #[test]
+    fn test_build_task_prompt_omits_management_block_but_keeps_code_cleanup() {
+        let mut task = sample_task("T-202", "No handoff, yes cleanup", None);
+        task.handoff_notes_enabled = false;
+
+        let prompt = build_task_prompt(&task, None, true, None);
+
+        assert!(!prompt.contains("<openforge_task_management>"));
+        assert!(prompt.contains("<openforge_code_cleanup>"));
     }
 
     #[test]

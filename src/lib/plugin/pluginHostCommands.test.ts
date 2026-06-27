@@ -53,6 +53,8 @@ describe('plugin host commands', () => {
       labelNames: ['scheduler'],
       worktreeSource: null,
       worktreeBranch: null,
+      title: null,
+      handoffNotesEnabled: true,
     })
 
     invoke.mockResolvedValueOnce(task)

@@ -13,10 +13,11 @@
     value: string
     placeholder?: string
     size?: 'xs' | 'sm' | 'md'
+    ariaLabel?: string
     onSelect: (value: string) => void
   }
 
-  let { options, value, placeholder = 'Search...', size = 'sm', onSelect }: Props = $props()
+  let { options, value, placeholder = 'Search...', size = 'sm', ariaLabel, onSelect }: Props = $props()
 
   let query = $state('')
   let open = $state(false)
@@ -89,6 +90,7 @@
     onclick={openDropdown}
     onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openDropdown() } }}
     role="combobox"
+    aria-label={ariaLabel}
     aria-controls={listboxId}
     aria-expanded={open}
     tabindex="0"

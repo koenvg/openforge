@@ -18,6 +18,7 @@ function createTask(overrides: Partial<Task> = {}): Task {
     permission_mode: null,
     worktree_source: null,
     worktree_branch: null,
+    handoff_notes_enabled: true,
     depends_on: [],
     project_id: null,
     created_at: 1000,

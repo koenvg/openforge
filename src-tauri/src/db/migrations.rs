@@ -1075,6 +1075,37 @@ CREATE TABLE IF NOT EXISTS roadmap_repo_config (
 );
         "#,
     ),
+    // Per-task opt-out of the OpenForge handoff-notes (task management) prompt
+    // block. Defaults to 1 (enabled) so existing tasks keep their current
+    // behavior; the create dialog can set it to 0 to omit the block at start.
+    M::up_with_hook("", |tx| {
+        let tasks_table_exists: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='tasks'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if !tasks_table_exists {
+            return Ok(());
+        }
+
+        let has_column: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'handoff_notes_enabled'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+        if !has_column {
+            tx.execute(
+                "ALTER TABLE tasks ADD COLUMN handoff_notes_enabled INTEGER NOT NULL DEFAULT 1",
+                [],
+            )
+            .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -1410,7 +1441,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = LATEST_USER_VERSION - 4;
+            let previous_version = LATEST_USER_VERSION - 5;
             conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
                 .expect("set user_version");
             conn.execute(
@@ -1474,7 +1505,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = LATEST_USER_VERSION - 5;
+            let previous_version = LATEST_USER_VERSION - 6;
             conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
                 .expect("set user_version");
             conn.execute("CREATE TABLE plugins (id TEXT PRIMARY KEY)", [])
@@ -1653,7 +1684,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = LATEST_USER_VERSION - 6;
+            let previous_version = LATEST_USER_VERSION - 7;
             conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
                 .expect("set user_version");
             conn.execute_batch(
@@ -2553,7 +2584,7 @@ mod tests {
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
             conn.execute(
-                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 9),
+                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 10),
                 [],
             )
             .expect("set pre-upgrade user_version");
@@ -2599,7 +2630,7 @@ mod tests {
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
             conn.execute(
-                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 9),
+                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 10),
                 [],
             )
             .expect("set pre-upgrade user_version");
