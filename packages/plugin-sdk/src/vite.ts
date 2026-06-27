@@ -15,6 +15,7 @@ export const OPENFORGE_HOST_SHARED_TERMINAL_RUNTIME_IMPORTS = Object.freeze([
   '@openforge/terminal-runtime/theme',
   '@openforge/terminal-runtime/shortcuts',
   '@openforge/terminal-runtime/shortcutController',
+  '@openforge/terminal-runtime/TerminalTabsShell',
 ])
 
 export type OpenForgeHostRuntimeSvelteSpecifier = typeof OPENFORGE_HOST_RUNTIME_SVELTE_SPECIFIERS[number]

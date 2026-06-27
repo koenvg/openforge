@@ -1,5 +1,6 @@
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { build } from 'vite'
 
 const defaultWorkspaceRoot = path.resolve(import.meta.dirname, '..')
@@ -16,6 +17,7 @@ export async function buildTerminalRuntime(options = {}) {
     root: workspaceRoot,
     publicDir: false,
     logLevel: options.logLevel ?? 'info',
+    plugins: [svelte()],
     resolve: {
       alias: {
         '@openforge/terminal-runtime': path.join(workspaceRoot, 'packages/terminal-runtime/src/index.ts'),
@@ -31,6 +33,7 @@ export async function buildTerminalRuntime(options = {}) {
           theme: path.join(workspaceRoot, 'packages/terminal-runtime/src/theme.ts'),
           shortcuts: path.join(workspaceRoot, 'packages/terminal-runtime/src/terminalShortcuts.ts'),
           shortcutController: path.join(workspaceRoot, 'packages/terminal-runtime/src/terminalShortcutController.ts'),
+          TerminalTabsShell: path.join(workspaceRoot, 'packages/terminal-runtime/src/TerminalTabsShell.svelte'),
         },
         formats: ['es'],
       },

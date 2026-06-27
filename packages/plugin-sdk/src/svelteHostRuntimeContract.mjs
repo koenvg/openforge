@@ -50,6 +50,7 @@ export function terminalRuntimeImportMapEntries() {
     '@openforge/terminal-runtime/theme': 'plugin://host-runtime/terminal-runtime/theme.js',
     '@openforge/terminal-runtime/shortcuts': 'plugin://host-runtime/terminal-runtime/shortcuts.js',
     '@openforge/terminal-runtime/shortcutController': 'plugin://host-runtime/terminal-runtime/shortcutController.js',
+    '@openforge/terminal-runtime/TerminalTabsShell': 'plugin://host-runtime/terminal-runtime/TerminalTabsShell.js',
   }
 }
 

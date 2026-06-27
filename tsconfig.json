@@ -37,6 +37,7 @@
       "@openforge/terminal-runtime/theme": ["packages/terminal-runtime/src/theme.ts"],
       "@openforge/terminal-runtime/shortcuts": ["packages/terminal-runtime/src/terminalShortcuts.ts"],
       "@openforge/terminal-runtime/shortcutController": ["packages/terminal-runtime/src/terminalShortcutController.ts"],
+      "@openforge/terminal-runtime/TerminalTabsShell": ["packages/terminal-runtime/src/TerminalTabsShell.svelte"],
       "@openforge/terminal-runtime/xterm.css": ["packages/terminal-runtime/src/xterm.css"]
     },
 
