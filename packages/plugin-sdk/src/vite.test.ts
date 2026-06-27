@@ -34,6 +34,7 @@ describe('OpenForge plugin Vite author tooling', () => {
   it('externalizes the host-shared terminal runtime contract', () => {
     expect(OPENFORGE_HOST_SHARED_TERMINAL_RUNTIME_IMPORTS).toContain('@openforge/terminal-runtime')
     expect(OPENFORGE_HOST_SHARED_TERMINAL_RUNTIME_IMPORTS).toContain('@openforge/terminal-runtime/shortcuts')
+    expect(OPENFORGE_HOST_SHARED_TERMINAL_RUNTIME_IMPORTS).toContain('@openforge/terminal-runtime/TerminalTabsShell')
 
     for (const specifier of OPENFORGE_HOST_SHARED_TERMINAL_RUNTIME_IMPORTS) {
       expect(isOpenForgeHostRuntimeExternal(specifier), `${specifier} should be host-shared`).toBe(true)

@@ -49,6 +49,7 @@ async function writeMinimalHostRuntimeInputs(repoRoot, { backendCrateRoot = 'src
   await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'theme.ts'), 'export const terminalTheme = true;')
   await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'terminalShortcuts.ts'), 'export const terminalShortcuts = true;')
   await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'terminalShortcutController.ts'), 'export const terminalShortcutController = true;')
+  await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'TerminalTabsShell.svelte'), '<script>export const terminalTabsShell = true;</script>')
   await writeFile(join(repoRoot, 'packages', 'plugin-runtime', 'src', 'commandValidation.ts'), 'export function validateSchemaValue() { return { valid: true, bundledRuntimeMarker: true }; }')
   await writeFile(join(repoRoot, backendCrateRoot, 'plugin-host', 'index.ts'), "import { validateSchemaValue } from '@openforge/plugin-runtime/commandValidation'\nconsole.log(validateSchemaValue())\n")
 
@@ -367,6 +368,7 @@ describe('Electron build host-runtime assets', () => {
     await expect(stat(join(outDir, 'plugin-host', 'plugin-sdk', 'index.js'))).resolves.toBeTruthy()
     await expect(stat(join(outDir, 'plugin-host', 'terminal-runtime', 'index.js'))).resolves.toBeTruthy()
     await expect(stat(join(outDir, 'plugin-host', 'terminal-runtime', 'shortcuts.js'))).resolves.toBeTruthy()
+    await expect(stat(join(outDir, 'plugin-host', 'terminal-runtime', 'TerminalTabsShell.js'))).resolves.toBeTruthy()
     await expect(stat(join(outDir, 'plugin-host', 'svelte', 'index.js'))).resolves.toBeTruthy()
     await expect(stat(join(outDir, 'plugin-host', 'svelte', 'internal.js'))).resolves.toBeTruthy()
     await expect(stat(join(outDir, 'plugin-host', 'svelte', 'internal', 'client', 'index.js'))).resolves.toBeTruthy()

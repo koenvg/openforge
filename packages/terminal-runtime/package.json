@@ -9,6 +9,7 @@
     "./theme": "./src/theme.ts",
     "./shortcuts": "./src/terminalShortcuts.ts",
     "./shortcutController": "./src/terminalShortcutController.ts",
+    "./TerminalTabsShell": "./src/TerminalTabsShell.svelte",
     "./xterm.css": "./src/xterm.css"
   },
   "dependencies": {
