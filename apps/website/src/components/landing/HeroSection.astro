@@ -1,0 +1,93 @@
+---
+import ButtonLink from '../common/ButtonLink.astro';
+import DownloadIcon from '../icons/DownloadIcon.astro';
+import GitHubIcon from '../icons/GitHubIcon.astro';
+import { GITHUB_RELEASES_URL, GITHUB_REPOSITORY_URL } from '../../lib/urls';
+import SiteHeader from './SiteHeader.astro';
+---
+
+<div class="hero-shell">
+  <SiteHeader />
+
+  <section class="hero" aria-describedby="hero-description" data-animate-section>
+    <div class="hero-copy">
+      <h1 id="hero-title" data-animate-item>Ship with agents. Review like a human.</h1>
+      <p id="hero-description" class="lede" data-animate-item>
+        OpenForge turns parallel AI coding work into clear tasks, handoffs, and approvals.
+      </p>
+
+      <div class="actions hero-actions" aria-label="Primary actions" data-animate-item>
+        <ButtonLink href={GITHUB_RELEASES_URL} ariaLabel="Install OpenForge from releases" variant="primary">
+          <DownloadIcon class="button-icon download-icon" />
+          Install OpenForge
+        </ButtonLink>
+        <ButtonLink href={GITHUB_REPOSITORY_URL} ariaLabel="View OpenForge on GitHub" variant="secondary">
+          <GitHubIcon class="button-icon" />
+          See GitHub
+        </ButtonLink>
+      </div>
+    </div>
+
+    <div class="bento-stage" aria-label="Task, agent, handoff, and review workflow">
+      <article class="bento-card bento-card-task">
+        <span class="bento-label">Task</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M8 7h10" />
+          <path d="M8 12h10" />
+          <path d="M8 17h10" />
+          <path d="m3.5 7 1 1 2-2" />
+          <path d="m3.5 12 1 1 2-2" />
+          <path d="m3.5 17 1 1 2-2" />
+        </svg>
+        <p>Define clear work.</p>
+      </article>
+
+      <article class="bento-card bento-card-agent">
+        <span class="bento-label">Agent</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M8 9a4 4 0 0 1 8 0v3a4 4 0 0 1-8 0Z" />
+          <path d="M9 16h6" />
+          <path d="M12 3v2" />
+          <path d="M5 11H3" />
+          <path d="M21 11h-2" />
+          <path d="M10 10h.01" />
+          <path d="M14 10h.01" />
+        </svg>
+        <p>Run parallel agents.</p>
+      </article>
+
+      <article class="bento-card bento-card-handoff">
+        <span class="bento-label">Handoff</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m7 8-4 4 4 4" />
+          <path d="m17 8 4 4-4 4" />
+          <path d="m14 4-4 16" />
+        </svg>
+        <p>Collect context and diffs.</p>
+      </article>
+
+      <article class="bento-card bento-card-review">
+        <span class="bento-label">Review</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" />
+          <circle cx="12" cy="12" r="3" />
+          <path d="m15.5 17.5 1.5 1.5 3-3" />
+        </svg>
+        <p>Approve with confidence.</p>
+      </article>
+
+      <span class="flow-arrow flow-arrow-task-agent" aria-hidden="true">
+        <span class="flow-line"></span>
+        <span class="flow-dot">→</span>
+      </span>
+      <span class="flow-arrow flow-arrow-agent-handoff" aria-hidden="true">
+        <span class="flow-line"></span>
+        <span class="flow-dot">↓</span>
+      </span>
+      <span class="flow-arrow flow-arrow-handoff-review" aria-hidden="true">
+        <span class="flow-line"></span>
+        <span class="flow-dot">←</span>
+      </span>
+    </div>
+  </section>
+</div>

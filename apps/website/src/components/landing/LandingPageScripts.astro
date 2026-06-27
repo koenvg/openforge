@@ -1,0 +1,62 @@
+---
+---
+
+<script>
+      import { gsap } from 'gsap';
+      import { ScrollTrigger } from 'gsap/ScrollTrigger';
+
+      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      if (!prefersReducedMotion) {
+        gsap.registerPlugin(ScrollTrigger);
+
+        const heroTimeline = gsap.timeline({ defaults: { ease: 'power3.out' } });
+        heroTimeline
+          .from('.wordmark', { autoAlpha: 0, y: -12, duration: 0.45 })
+          .from('#hero-title', { autoAlpha: 0, y: 34, rotate: -1.5, duration: 0.75 }, 0.05)
+          .from('.lede', { autoAlpha: 0, y: 22, duration: 0.62 }, 0.24)
+          .from('.hero-actions .button', { autoAlpha: 0, y: 18, scale: 0.96, duration: 0.5, stagger: 0.07 }, 0.42)
+          .from('.bento-card', {
+            autoAlpha: 0,
+            y: 34,
+            scale: 0.92,
+            rotate: -2,
+            duration: 0.72,
+            ease: 'back.out(1.25)',
+            stagger: 0.08
+          }, 0.28)
+          .from('.flow-line', { scaleX: 0, scaleY: 0, duration: 0.36, stagger: 0.08, transformOrigin: 'center center' }, 0.86)
+          .from('.flow-dot', { autoAlpha: 0, scale: 0.35, duration: 0.34, ease: 'back.out(2)', stagger: 0.08 }, 0.96);
+
+        gsap.to('.bento-card', {
+          y: -6,
+          duration: 2.8,
+          delay: 1.25,
+          repeat: -1,
+          yoyo: true,
+          ease: 'sine.inOut',
+          stagger: { each: 0.14 }
+        });
+
+        gsap.utils.toArray<HTMLElement>('[data-animate-section]').forEach((section) => {
+          if (section.classList.contains('hero')) return;
+
+          const cards = section.querySelectorAll<HTMLElement>('[data-animate-card], .proof-screenshot-shell, .final-cta-copy');
+
+          if (cards.length === 0) return;
+
+          gsap.from(cards, {
+            autoAlpha: 0,
+            y: 18,
+            duration: 0.55,
+            ease: 'power3.out',
+            stagger: 0.07,
+            scrollTrigger: {
+              trigger: section,
+              start: 'top 78%',
+              once: true
+            }
+          });
+        });
+      }
+    </script>
