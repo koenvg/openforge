@@ -812,6 +812,190 @@ async fn try_create_worktree_inner(
     Ok(())
 }
 
+// ============================================================================
+// Safe Branch Deletion on Teardown
+// ============================================================================
+
+/// Why an OpenForge-owned branch was preserved instead of deleted during a
+/// worktree teardown. Used for logging so the reason a branch survived cleanup
+/// is always observable.
+#[derive(Debug, PartialEq, Eq)]
+enum BranchPreservedReason {
+    /// The branch is checked out in another worktree (including the main repo).
+    CheckedOutElsewhere(String),
+    /// The branch's own worktree has uncommitted changes.
+    UncommittedChanges,
+    /// The branch has commits not present on its upstream (unpushed/diverged).
+    UnpushedOrDiverged { ahead: usize, behind: usize },
+    /// The safety evaluation itself failed; preserve out of caution.
+    SafetyCheckFailed,
+}
+
+impl fmt::Display for BranchPreservedReason {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BranchPreservedReason::CheckedOutElsewhere(path) => {
+                write!(f, "it is checked out in another worktree ({path})")
+            }
+            BranchPreservedReason::UncommittedChanges => {
+                write!(f, "its worktree has uncommitted changes")
+            }
+            BranchPreservedReason::UnpushedOrDiverged { ahead, behind } => write!(
+                f,
+                "it has commits not on its upstream ({ahead} ahead, {behind} behind)"
+            ),
+            BranchPreservedReason::SafetyCheckFailed => {
+                write!(f, "its deletion-safety could not be verified")
+            }
+        }
+    }
+}
+
+/// Decision about whether an OpenForge-owned branch can be safely deleted when
+/// its worktree is torn down.
+enum BranchDeletionPlan {
+    /// No local-only work is at risk; the branch may be deleted (still via the
+    /// non-force `git branch -d`, which refuses unmerged branches as a backstop).
+    Delete,
+    /// Deleting the branch would (or might) destroy live work; keep it.
+    Preserve(BranchPreservedReason),
+}
+
+/// Returns true when both paths refer to the same location, canonicalizing when
+/// possible (worktree paths reported by git are canonical, while OpenForge
+/// stores the path it created — on macOS these differ via the /private symlink).
+fn paths_equivalent(a: &Path, b: &Path) -> bool {
+    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        (Ok(canonical_a), Ok(canonical_b)) => canonical_a == canonical_b,
+        _ => a == b,
+    }
+}
+
+/// Returns the worktree path that currently has `branch` checked out, if any, by
+/// parsing `git worktree list --porcelain`. Only one worktree can hold a given
+/// branch at a time, so the first match is authoritative.
+async fn worktree_path_with_branch(
+    repo_path: &Path,
+    branch: &str,
+) -> Result<Option<String>, GitWorktreeError> {
+    let output = git_command()
+        .arg("-C")
+        .arg(repo_path)
+        .arg("worktree")
+        .arg("list")
+        .arg("--porcelain")
+        .output()
+        .await?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(GitWorktreeError::WorktreeRemoveFailed(format!(
+            "failed to list worktrees for '{}': {}",
+            repo_path.display(),
+            stderr.trim()
+        )));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let target_ref = format!("refs/heads/{branch}");
+    let mut current_path: Option<&str> = None;
+    for line in stdout.lines() {
+        if let Some(path) = line.strip_prefix("worktree ") {
+            current_path = Some(path.trim());
+        } else if let Some(branch_ref) = line.strip_prefix("branch ") {
+            if branch_ref.trim() == target_ref {
+                return Ok(current_path.map(|path| path.to_string()));
+            }
+        }
+    }
+
+    Ok(None)
+}
+
+/// Returns the worktree path where `branch` is checked out if it is anywhere
+/// other than `worktree_path` (the worktree being torn down).
+async fn branch_checked_out_elsewhere(
+    repo_path: &Path,
+    worktree_path: &Path,
+    branch: &str,
+) -> Result<Option<String>, GitWorktreeError> {
+    match worktree_path_with_branch(repo_path, branch).await? {
+        Some(path) if !paths_equivalent(Path::new(&path), worktree_path) => Ok(Some(path)),
+        _ => Ok(None),
+    }
+}
+
+/// Resolves the upstream tracking ref of `branch` (e.g. `origin/<branch>`), or
+/// `None` when the branch has no configured upstream.
+async fn branch_upstream_ref(
+    repo_path: &Path,
+    branch: &str,
+) -> Result<Option<String>, GitWorktreeError> {
+    let output = git_command()
+        .arg("-C")
+        .arg(repo_path)
+        .arg("rev-parse")
+        .arg("--abbrev-ref")
+        .arg("--symbolic-full-name")
+        .arg(format!("{branch}@{{upstream}}"))
+        .output()
+        .await?;
+
+    if !output.status.success() {
+        return Ok(None);
+    }
+
+    let upstream = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if upstream.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(upstream))
+    }
+}
+
+/// Decides whether `branch` can be safely deleted when `worktree_path` is torn
+/// down. Must be called BEFORE the worktree is removed so uncommitted changes
+/// and the worktree's own checkout are still observable.
+async fn evaluate_branch_deletion(
+    repo_path: &Path,
+    worktree_path: &Path,
+    branch: &str,
+) -> Result<BranchDeletionPlan, GitWorktreeError> {
+    // 1. Never delete a branch that is checked out somewhere else (e.g. the user
+    //    adopted it as their active branch in the main repo).
+    if let Some(path) = branch_checked_out_elsewhere(repo_path, worktree_path, branch).await? {
+        return Ok(BranchDeletionPlan::Preserve(
+            BranchPreservedReason::CheckedOutElsewhere(path),
+        ));
+    }
+
+    // 2. Never delete a branch whose worktree still holds uncommitted work.
+    if worktree_path.exists() {
+        if let Ok(current_branch) = current_worktree_branch(worktree_path).await {
+            if current_branch == branch && worktree_has_local_changes(worktree_path).await? {
+                return Ok(BranchDeletionPlan::Preserve(
+                    BranchPreservedReason::UncommittedChanges,
+                ));
+            }
+        }
+    }
+
+    // 3. Never delete a branch carrying commits its upstream does not have
+    //    (unpushed or diverged). A branch purely behind its upstream is fully
+    //    contained remotely and remains safe to delete.
+    if let Some(upstream) = branch_upstream_ref(repo_path, branch).await? {
+        let local_full_ref = format!("refs/heads/{branch}");
+        let (ahead, behind) = git_ahead_behind(repo_path, &local_full_ref, &upstream).await?;
+        if ahead > 0 {
+            return Ok(BranchDeletionPlan::Preserve(
+                BranchPreservedReason::UnpushedOrDiverged { ahead, behind },
+            ));
+        }
+    }
+
+    Ok(BranchDeletionPlan::Delete)
+}
+
 /// Removes a git worktree and cleans up all associated metadata.
 /// Performs a 4-step cleanup process to ensure complete removal.
 ///
@@ -835,6 +1019,26 @@ pub async fn remove_worktree_with_branch(
 ) -> Result<(), GitWorktreeError> {
     let lock = acquire_lock(repo_path);
     let _guard = lock.lock().await;
+
+    // Decide the branch's fate BEFORE anything is destroyed: uncommitted changes
+    // and the worktree's own checkout are only observable while the worktree
+    // still exists. A failed evaluation conservatively preserves the branch.
+    let branch_decision = match branch_name {
+        Some(branch) => {
+            let plan = match evaluate_branch_deletion(repo_path, worktree_path, branch).await {
+                Ok(plan) => plan,
+                Err(e) => {
+                    warn!(
+                        "Could not evaluate deletion safety for branch '{}'; preserving it: {}",
+                        branch, e
+                    );
+                    BranchDeletionPlan::Preserve(BranchPreservedReason::SafetyCheckFailed)
+                }
+            };
+            Some((branch, plan))
+        }
+        None => None,
+    };
 
     // Step 1: Force remove the worktree via git
     let remove_output = git_command()
@@ -889,19 +1093,38 @@ pub async fn remove_worktree_with_branch(
         warn!("Warning: worktree prune failed: {}", stderr);
     }
 
-    if let Some(branch) = branch_name {
-        let branch_output = git_command()
-            .arg("-C")
-            .arg(repo_path)
-            .arg("branch")
-            .arg("-D")
-            .arg(branch)
-            .output()
-            .await?;
+    if let Some((branch, plan)) = branch_decision {
+        match plan {
+            BranchDeletionPlan::Delete => {
+                // Use the non-force `-d`: it refuses to delete a branch that is
+                // not merged into its upstream/HEAD, giving a final backstop even
+                // if the explicit checks above missed something.
+                let branch_output = git_command()
+                    .arg("-C")
+                    .arg(repo_path)
+                    .arg("branch")
+                    .arg("-d")
+                    .arg(branch)
+                    .output()
+                    .await?;
 
-        if !branch_output.status.success() {
-            let stderr = String::from_utf8_lossy(&branch_output.stderr);
-            warn!("Warning: branch delete failed for {}: {}", branch, stderr);
+                if branch_output.status.success() {
+                    info!("Deleted OpenForge branch '{}' during teardown", branch);
+                } else {
+                    let stderr = String::from_utf8_lossy(&branch_output.stderr);
+                    warn!(
+                        "Preserving branch '{}': safe delete was refused by git: {}",
+                        branch,
+                        stderr.trim()
+                    );
+                }
+            }
+            BranchDeletionPlan::Preserve(reason) => {
+                warn!(
+                    "Preserving OpenForge branch '{}' during teardown because {}",
+                    branch, reason
+                );
+            }
         }
     }
 
@@ -1577,5 +1800,223 @@ mod tests {
     fn task_branch_name_does_not_include_unicode_prompt_text() {
         let result = task_branch_name("T-7");
         assert_eq!(result, "openforge/T-7");
+    }
+
+    // ========================================================================
+    // Safe branch deletion on worktree teardown (AVIV-102)
+    //
+    // OpenForge-created branches are deleted when a task's worktree is torn
+    // down, but only when doing so cannot destroy live work. These tests pin
+    // the safety contract: fully pushed/clean branches are deleted, while
+    // branches with unpushed/diverged commits, uncommitted worktree changes, or
+    // a checkout elsewhere are preserved.
+    // ========================================================================
+
+    fn branch_exists(repo_path: &Path, branch: &str) -> bool {
+        git(
+            repo_path,
+            &["show-ref", "--verify", &format!("refs/heads/{branch}")],
+        )
+        .status
+        .success()
+    }
+
+    fn branch_tip(repo_path: &Path, branch: &str) -> String {
+        git_stdout(repo_path, &["rev-parse", &format!("refs/heads/{branch}")])
+    }
+
+    fn ensure_origin_remote(repo_path: &Path) {
+        let _ = git(
+            repo_path,
+            &["remote", "add", "origin", "https://example.invalid/openforge.git"],
+        );
+    }
+
+    /// Simulates that `branch` has been pushed: point `origin/<branch>` at `sha`
+    /// and configure the branch upstream so `@{upstream}` resolves.
+    fn set_remote_tracking_upstream(repo_path: &Path, branch: &str, sha: &str) {
+        ensure_origin_remote(repo_path);
+        assert_git_success(
+            repo_path,
+            &["update-ref", &format!("refs/remotes/origin/{branch}"), sha],
+        );
+        assert_git_success(
+            repo_path,
+            &[
+                "branch",
+                &format!("--set-upstream-to=origin/{branch}"),
+                branch,
+            ],
+        );
+    }
+
+    #[tokio::test]
+    async fn remove_worktree_with_branch_deletes_fully_pushed_clean_branch() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("repo");
+        init_committed_repo(&repo_path);
+        let worktree_path = temp.path().join("wt");
+        let branch = "openforge/T-pushed";
+        create_worktree(&repo_path, &worktree_path, branch, "origin/main")
+            .await
+            .expect("worktree should be created");
+        // Upstream equals the branch tip: nothing local-only, safe to delete.
+        let sha = branch_tip(&repo_path, branch);
+        set_remote_tracking_upstream(&repo_path, branch, &sha);
+
+        remove_worktree_with_branch(&repo_path, &worktree_path, Some(branch))
+            .await
+            .expect("teardown should succeed");
+
+        assert!(
+            !branch_exists(&repo_path, branch),
+            "a fully pushed, clean OpenForge branch should be deleted on teardown"
+        );
+        assert!(
+            !worktree_path.exists(),
+            "the worktree directory should still be removed"
+        );
+    }
+
+    #[tokio::test]
+    async fn remove_worktree_with_branch_preserves_branch_with_unpushed_commits() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("repo");
+        init_committed_repo(&repo_path);
+        let worktree_path = temp.path().join("wt");
+        let branch = "openforge/T-unpushed";
+        create_worktree(&repo_path, &worktree_path, branch, "origin/main")
+            .await
+            .expect("worktree should be created");
+        // Upstream pinned at the base tip, then add a local-only commit.
+        let base_sha = branch_tip(&repo_path, branch);
+        set_remote_tracking_upstream(&repo_path, branch, &base_sha);
+        std::fs::write(worktree_path.join("README.md"), "local-only work\n")
+            .expect("fixture file should be written");
+        assert_git_success(&worktree_path, &["commit", "-am", "local-only commit"]);
+
+        remove_worktree_with_branch(&repo_path, &worktree_path, Some(branch))
+            .await
+            .expect("teardown should succeed");
+
+        assert!(
+            branch_exists(&repo_path, branch),
+            "a branch with unpushed local commits must be preserved, never force-deleted"
+        );
+    }
+
+    #[tokio::test]
+    async fn remove_worktree_with_branch_preserves_diverged_branch() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("repo");
+        init_committed_repo(&repo_path);
+        let worktree_path = temp.path().join("wt");
+        let branch = "openforge/T-diverged";
+        create_worktree(&repo_path, &worktree_path, branch, "origin/main")
+            .await
+            .expect("worktree should be created");
+        let base_sha = branch_tip(&repo_path, branch);
+        // Build a remote-only commit on top of the base and point the upstream at it.
+        assert_git_success(&repo_path, &["checkout", "-b", "tmp-remote", &base_sha]);
+        std::fs::write(repo_path.join("remote-only.txt"), "remote only\n")
+            .expect("fixture file should be written");
+        assert_git_success(&repo_path, &["add", "remote-only.txt"]);
+        assert_git_success(&repo_path, &["commit", "-m", "remote-only commit"]);
+        let remote_sha = git_stdout(&repo_path, &["rev-parse", "HEAD"]);
+        assert_git_success(&repo_path, &["checkout", "main"]);
+        assert_git_success(&repo_path, &["branch", "-D", "tmp-remote"]);
+        set_remote_tracking_upstream(&repo_path, branch, &remote_sha);
+        // Local-only commit in the worktree, so local has diverged from the remote.
+        std::fs::write(worktree_path.join("README.md"), "local divergent work\n")
+            .expect("fixture file should be written");
+        assert_git_success(&worktree_path, &["commit", "-am", "local divergent commit"]);
+
+        remove_worktree_with_branch(&repo_path, &worktree_path, Some(branch))
+            .await
+            .expect("teardown should succeed");
+
+        assert!(
+            branch_exists(&repo_path, branch),
+            "a branch that has diverged from its upstream must be preserved"
+        );
+    }
+
+    #[tokio::test]
+    async fn remove_worktree_with_branch_preserves_branch_with_uncommitted_changes() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("repo");
+        init_committed_repo(&repo_path);
+        let worktree_path = temp.path().join("wt");
+        let branch = "openforge/T-dirty";
+        create_worktree(&repo_path, &worktree_path, branch, "origin/main")
+            .await
+            .expect("worktree should be created");
+        // Fully pushed at the tip, so the ONLY unsafe condition is the dirty worktree.
+        let sha = branch_tip(&repo_path, branch);
+        set_remote_tracking_upstream(&repo_path, branch, &sha);
+        std::fs::write(worktree_path.join("README.md"), "uncommitted change\n")
+            .expect("fixture file should be written");
+
+        remove_worktree_with_branch(&repo_path, &worktree_path, Some(branch))
+            .await
+            .expect("teardown should succeed");
+
+        assert!(
+            branch_exists(&repo_path, branch),
+            "a branch whose worktree has uncommitted changes must be preserved"
+        );
+    }
+
+    #[tokio::test]
+    async fn remove_worktree_with_branch_preserves_branch_checked_out_in_main_repo() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("repo");
+        init_committed_repo(&repo_path);
+        // The branch is the user's active branch, checked out in the main repo,
+        // mirroring the DEV-182634 cautionary case.
+        let branch = "DEV-182634-display-operational-health-trust-score";
+        assert_git_success(&repo_path, &["checkout", "-b", branch]);
+        // A leftover task worktree references this branch but sits on its own branch.
+        let worktree_path = temp.path().join("wt");
+        assert_git_success(
+            &repo_path,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "scratch",
+                worktree_path.to_str().expect("utf8 worktree path"),
+            ],
+        );
+
+        remove_worktree_with_branch(&repo_path, &worktree_path, Some(branch))
+            .await
+            .expect("teardown should succeed");
+
+        assert!(
+            branch_exists(&repo_path, branch),
+            "a branch checked out in the main repo must never be deleted on teardown"
+        );
+    }
+
+    #[tokio::test]
+    async fn remove_worktree_without_branch_never_deletes_branch() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("repo");
+        init_committed_repo(&repo_path);
+        let worktree_path = temp.path().join("wt");
+        let branch = "openforge/T-keep";
+        create_worktree(&repo_path, &worktree_path, branch, "origin/main")
+            .await
+            .expect("worktree should be created");
+
+        remove_worktree(&repo_path, &worktree_path)
+            .await
+            .expect("teardown should succeed");
+
+        assert!(
+            branch_exists(&repo_path, branch),
+            "remove_worktree without a branch must never delete the branch"
+        );
     }
 }

@@ -24,7 +24,11 @@ pub(super) async fn handle_app_core_task_project_command(
             }
             publish_task_changed(state, &id);
             if status == db::BoardStatus::Done {
-                cleanup_task_runtime_for_app(state, &id, false).await?;
+                // Clean up the worktree AND its OpenForge-created branch on
+                // move-to-Done, matching the delete path. Branch deletion is
+                // still gated by safety checks in git_worktree, so adopted or
+                // in-progress branches are never destroyed.
+                cleanup_task_runtime_for_app(state, &id, true).await?;
             }
             serde_json::Value::Null
         }

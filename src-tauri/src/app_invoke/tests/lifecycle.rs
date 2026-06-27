@@ -1154,3 +1154,233 @@ async fn finalize_agent_session_does_not_override_paused_lifecycle_state() {
 
     let _ = std::fs::remove_file(path);
 }
+
+// ============================================================================
+// remove_branch propagation + safety on teardown (AVIV-102)
+// ============================================================================
+
+fn git_stdout_lifecycle(repo_path: &Path, args: &[&str]) -> String {
+    let output = git(repo_path, args);
+    assert!(
+        output.status.success(),
+        "git {:?} failed: {}",
+        args,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
+fn branch_exists_lifecycle(repo_path: &Path, branch: &str) -> bool {
+    git(
+        repo_path,
+        &["show-ref", "--verify", &format!("refs/heads/{branch}")],
+    )
+    .status
+    .success()
+}
+
+/// Marks branch <branch> as fully pushed: points origin/<branch> at its tip and
+/// configures the upstream so teardown treats it as safe to delete.
+fn mark_branch_pushed(repo_path: &Path, branch: &str) {
+    let sha = git_stdout_lifecycle(repo_path, &["rev-parse", &format!("refs/heads/{branch}")]);
+    let _ = git(
+        repo_path,
+        &["remote", "add", "origin", "https://example.invalid/openforge.git"],
+    );
+    assert_git_success(
+        repo_path,
+        &["update-ref", &format!("refs/remotes/origin/{branch}"), &sha],
+    );
+    assert_git_success(
+        repo_path,
+        &["branch", &format!("--set-upstream-to=origin/{branch}"), branch],
+    );
+}
+
+/// Creates a committed repo, a "doing" task with an OpenForge worktree on its
+/// `openforge/<task>` branch, and persists the worktree record. When `safe` the
+/// branch is marked fully pushed so teardown may delete it. Returns the task id,
+/// branch name, and worktree path.
+async fn setup_owned_worktree_task(
+    state: &crate::http_server::AppState,
+    repo_dir: &Path,
+    worktree_dir: &Path,
+    safe: bool,
+) -> (String, String) {
+    init_committed_repo(repo_dir);
+    let (project_id, task_id) = {
+        let db = crate::db::acquire_db(&state.db);
+        let project = db
+            .create_project("Cleanup Project", repo_dir.to_str().expect("utf8 repo path"))
+            .expect("create project");
+        let task = db
+            .create_task("owned branch task", "doing", Some(&project.id), None, None)
+            .expect("create task");
+        (project.id, task.id)
+    };
+    let branch = crate::git_worktree::task_branch_name(&task_id);
+    crate::git_worktree::create_worktree(repo_dir, worktree_dir, &branch, "origin/main")
+        .await
+        .expect("create worktree");
+    {
+        let db = crate::db::acquire_db(&state.db);
+        db.create_worktree_record(
+            &task_id,
+            &project_id,
+            repo_dir.to_str().expect("utf8 repo path"),
+            worktree_dir.to_str().expect("utf8 worktree path"),
+            &branch,
+        )
+        .expect("create worktree record");
+    }
+    if safe {
+        mark_branch_pushed(repo_dir, &branch);
+    }
+    (task_id, branch)
+}
+
+#[tokio::test]
+async fn move_to_done_deletes_owned_branch_when_safe() {
+    let temp = tempfile::tempdir().expect("tempdir should be created");
+    let repo_dir = temp.path().join("repo");
+    let worktree_dir = temp.path().join("wt");
+    let (state, db_path) = test_state("app_invoke_done_deletes_owned_branch");
+    let (task_id, branch) =
+        setup_owned_worktree_task(&state, &repo_dir, &worktree_dir, true).await;
+
+    invoke_ok(
+        &state,
+        "update_task_status",
+        json!({ "id": task_id, "status": "done" }),
+    )
+    .await;
+
+    assert!(
+        !branch_exists_lifecycle(&repo_dir, &branch),
+        "moving an OpenForge task to Done must clean up its safe owned branch"
+    );
+    assert!(
+        !worktree_dir.exists(),
+        "the worktree directory should be removed when moving to Done"
+    );
+    let db = crate::db::acquire_db(&state.db);
+    assert!(
+        db.get_worktree_for_task(&task_id)
+            .expect("get worktree")
+            .is_none(),
+        "the stale worktree record must be removed after moving to Done"
+    );
+    drop(db);
+
+    let _ = std::fs::remove_file(db_path);
+}
+
+#[tokio::test]
+async fn delete_task_deletes_owned_branch_when_safe() {
+    let temp = tempfile::tempdir().expect("tempdir should be created");
+    let repo_dir = temp.path().join("repo");
+    let worktree_dir = temp.path().join("wt");
+    let (state, db_path) = test_state("app_invoke_delete_deletes_owned_branch");
+    let (task_id, branch) =
+        setup_owned_worktree_task(&state, &repo_dir, &worktree_dir, true).await;
+
+    invoke_ok(&state, "delete_task", json!({ "id": task_id })).await;
+
+    assert!(
+        !branch_exists_lifecycle(&repo_dir, &branch),
+        "deleting an OpenForge task must clean up its safe owned branch"
+    );
+
+    let _ = std::fs::remove_file(db_path);
+}
+
+#[tokio::test]
+async fn move_to_done_preserves_owned_branch_with_unpushed_work() {
+    let temp = tempfile::tempdir().expect("tempdir should be created");
+    let repo_dir = temp.path().join("repo");
+    let worktree_dir = temp.path().join("wt");
+    let (state, db_path) = test_state("app_invoke_done_preserves_unpushed_branch");
+    // Not marked pushed: the branch carries local-only commits.
+    let (task_id, branch) =
+        setup_owned_worktree_task(&state, &repo_dir, &worktree_dir, false).await;
+    std::fs::write(worktree_dir.join("README.md"), "local-only work\n")
+        .expect("fixture file should write");
+    assert_git_success(&worktree_dir, &["commit", "-am", "local-only commit"]);
+
+    invoke_ok(
+        &state,
+        "update_task_status",
+        json!({ "id": task_id, "status": "done" }),
+    )
+    .await;
+
+    assert!(
+        branch_exists_lifecycle(&repo_dir, &branch),
+        "moving to Done must never delete a branch with unpushed local work"
+    );
+
+    let _ = std::fs::remove_file(db_path);
+}
+
+#[tokio::test]
+async fn move_to_done_preserves_existing_branch_source_branch() {
+    let temp = tempfile::tempdir().expect("tempdir should be created");
+    let repo_dir = temp.path().join("repo");
+    let worktree_dir = temp.path().join("wt");
+    init_committed_repo(&repo_dir);
+    // A pre-existing branch the task was started FROM.
+    assert_git_success(&repo_dir, &["branch", "feature/keep"]);
+    assert_git_success(
+        &repo_dir,
+        &[
+            "worktree",
+            "add",
+            worktree_dir.to_str().expect("utf8 worktree path"),
+            "feature/keep",
+        ],
+    );
+    let (state, db_path) = test_state("app_invoke_done_preserves_existing_branch");
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let project = db
+            .create_project(
+                "Existing Branch Project",
+                repo_dir.to_str().expect("utf8 repo path"),
+            )
+            .expect("create project");
+        let task = db
+            .create_task_with_worktree_source(
+                "continue existing branch",
+                "doing",
+                Some(&project.id),
+                None,
+                None,
+                Some("existingBranch"),
+                Some("feature/keep"),
+            )
+            .expect("create task");
+        db.create_worktree_record(
+            &task.id,
+            &project.id,
+            repo_dir.to_str().expect("utf8 repo path"),
+            worktree_dir.to_str().expect("utf8 worktree path"),
+            "feature/keep",
+        )
+        .expect("create worktree record");
+        task.id
+    };
+
+    invoke_ok(
+        &state,
+        "update_task_status",
+        json!({ "id": task_id, "status": "done" }),
+    )
+    .await;
+
+    assert!(
+        branch_exists_lifecycle(&repo_dir, "feature/keep"),
+        "moving an existingBranch-sourced task to Done must never delete that branch"
+    );
+
+    let _ = std::fs::remove_file(db_path);
+}
