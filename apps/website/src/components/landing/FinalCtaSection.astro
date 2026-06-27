@@ -1,0 +1,27 @@
+---
+import ButtonLink from '../common/ButtonLink.astro';
+import DownloadIcon from '../icons/DownloadIcon.astro';
+import GitHubIcon from '../icons/GitHubIcon.astro';
+import { GITHUB_RELEASES_URL, GITHUB_REPOSITORY_URL } from '../../lib/urls';
+---
+
+<section class="final-cta" aria-labelledby="final-cta-title" data-animate-section>
+  <div class="final-cta-copy">
+    <h2 id="final-cta-title" class="section-title">Bring OpenForge to your desktop</h2>
+    <p class="final-cta-lede">
+      Install the local command center for visible, reviewable agent work.
+    </p>
+
+    <div class="actions final-cta-actions" aria-label="Final actions">
+      <ButtonLink href={GITHUB_RELEASES_URL} ariaLabel="Install OpenForge from releases" variant="primary">
+        <DownloadIcon class="button-icon download-icon" />
+        Install OpenForge
+      </ButtonLink>
+      <ButtonLink href={GITHUB_REPOSITORY_URL} ariaLabel="View OpenForge source on GitHub" variant="secondary">
+        <GitHubIcon class="button-icon github-icon" />
+        GitHub
+      </ButtonLink>
+    </div>
+  </div>
+</section>
+    </main>

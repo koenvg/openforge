@@ -1,0 +1,49 @@
+---
+import {
+  GITHUB_README_URL,
+  GITHUB_RELEASES_URL,
+  GITHUB_REPOSITORY_URL,
+  GITHUB_WHY_OPEN_FORGE_EXISTS_URL,
+  HOME_PATH
+} from '../../lib/urls';
+---
+
+<footer class="site-footer" aria-label="OpenForge footer">
+  <div class="footer-brand">
+    <a class="footer-wordmark" href={HOME_PATH} aria-label="OpenForge home">OpenForge</a>
+    <p>Local-first tools for visible, reviewable agent work.</p>
+  </div>
+
+  <nav class="footer-links" aria-label="Stable OpenForge links">
+    <ul>
+      <li>
+        <span class="footer-link-label">Install</span>
+        <a href={GITHUB_RELEASES_URL}>
+          Releases
+          <span aria-hidden="true">→</span>
+        </a>
+      </li>
+      <li>
+        <span class="footer-link-label">Source</span>
+        <a href={GITHUB_REPOSITORY_URL}>
+          GitHub
+          <span aria-hidden="true">→</span>
+        </a>
+      </li>
+      <li>
+        <span class="footer-link-label">Docs</span>
+        <a href={GITHUB_README_URL}>
+          README
+          <span aria-hidden="true">→</span>
+        </a>
+      </li>
+      <li>
+        <span class="footer-link-label">Orientation</span>
+        <a href={GITHUB_WHY_OPEN_FORGE_EXISTS_URL}>
+          Project orientation
+          <span aria-hidden="true">→</span>
+        </a>
+      </li>
+    </ul>
+  </nav>
+</footer>

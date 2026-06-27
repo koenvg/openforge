@@ -1,0 +1,16 @@
+---
+type ButtonVariant = 'primary' | 'secondary';
+
+interface Props {
+  href: string;
+  ariaLabel: string;
+  variant?: ButtonVariant;
+  class?: string;
+}
+
+const { href, ariaLabel, variant = 'primary', class: className } = Astro.props;
+---
+
+<a class:list={[`button button-${variant}`, className]} href={href} aria-label={ariaLabel}>
+  <slot />
+</a>
