@@ -4,7 +4,7 @@ vi.mock('./ipc', () => ({ getProjectConfig: vi.fn(), setProjectConfig: vi.fn() }
 
 import { describe, it, expect } from 'vitest'
 import type { Task, AgentSession, PullRequestInfo } from './types'
-import { isFocusTask, filterTasks, getFilterCounts, DEFAULT_FOCUS_STATES, loadFocusFilterStates, saveFocusFilterStates } from './boardFilters'
+import { isFocusTask, filterTasks, getFilterCounts, DEFAULT_FOCUS_STATES, loadFocusFilterStates, saveFocusFilterStates, loadLowFireTaskIds, saveLowFireTaskIds } from './boardFilters'
 import { getProjectConfig, setProjectConfig } from './ipc'
 
 function makeTask(overrides: Partial<Task> & { id: string }): Task {
@@ -149,26 +149,29 @@ describe('isFocusTask', () => {
 })
 
 describe('filterTasks', () => {
-  it('filters focus tasks correctly', () => {
+  it('filters focus lane tasks outside low-fire, including in-flight tasks', () => {
     const sessions = new Map<string, AgentSession>([
       ['T-1', makeSession({ id: 's-1', ticket_id: 'T-1', status: 'paused', checkpoint_data: '{}' })],
       ['T-2', makeSession({ id: 's-2', ticket_id: 'T-2', status: 'running' })],
+      ['T-3', makeSession({ id: 's-3', ticket_id: 'T-3', status: 'failed' })],
     ])
     const prs = new Map<string, PullRequestInfo[]>()
 
     const tasks = [
       makeTask({ id: 'T-1' }),
       makeTask({ id: 'T-2' }),
+      makeTask({ id: 'T-3' }),
     ]
 
-    const filtered = filterTasks(tasks, 'focus', sessions, prs)
-    expect(filtered.map((t: Task) => t.id)).toEqual(['T-1'])
+    const filtered = filterTasks(tasks, 'focus', sessions, prs, DEFAULT_FOCUS_STATES, new Set(['T-3']))
+    expect(filtered.map((t: Task) => t.id)).toEqual(['T-1', 'T-2'])
   })
 
-  it('filters in-progress tasks (excludes backlog and focus tasks)', () => {
+  it('filters low-fire lane tasks from the manual task set', () => {
     const sessions = new Map<string, AgentSession>([
       ['T-1', makeSession({ id: 's-1', ticket_id: 'T-1', status: 'running' })],
       ['T-2', makeSession({ id: 's-2', ticket_id: 'T-2', status: 'paused', checkpoint_data: '{}' })],
+      ['T-3', makeSession({ id: 's-3', ticket_id: 'T-3', status: 'running' })],
     ])
     const prs = new Map<string, PullRequestInfo[]>()
 
@@ -179,8 +182,8 @@ describe('filterTasks', () => {
       makeTask({ id: 'T-4', status: 'backlog' }),
     ]
 
-    const filtered = filterTasks(tasks, 'in-progress', sessions, prs)
-    expect(filtered.map((t: Task) => t.id)).toEqual(['T-1'])
+    const filtered = filterTasks(tasks, 'low-fire', sessions, prs, DEFAULT_FOCUS_STATES, new Set(['T-1', 'T-2', 'T-3', 'T-4']))
+    expect(filtered.map((t: Task) => t.id)).toEqual(['T-1', 'T-2'])
   })
 
   it('filters backlog tasks (status === backlog)', () => {
@@ -205,7 +208,7 @@ describe('filterTasks', () => {
     expect(filtered).toEqual([])
   })
 
-  it('focus filter excludes running agents even with unaddressed PR comments', () => {
+  it('keeps running agents in the focus lane in-flight group even with unaddressed PR comments', () => {
     const sessions = new Map<string, AgentSession>([
       ['T-1', makeSession({ id: 's-1', ticket_id: 'T-1', status: 'running' })],
     ])
@@ -216,13 +219,10 @@ describe('filterTasks', () => {
     const tasks = [makeTask({ id: 'T-1' })]
 
     const focusTasks = filterTasks(tasks, 'focus', sessions, prs)
-    expect(focusTasks.map((t: Task) => t.id)).toEqual([])
-
-    const inProgressTasks = filterTasks(tasks, 'in-progress', sessions, prs)
-    expect(inProgressTasks.map((t: Task) => t.id)).toEqual(['T-1'])
+    expect(focusTasks.map((t: Task) => t.id)).toEqual(['T-1'])
   })
 
-  it('focus filter excludes running agents even when active is a custom focus state', () => {
+  it('keeps active agents in the focus lane even when active is a custom focus state', () => {
     const sessions = new Map<string, AgentSession>([
       ['T-1', makeSession({ id: 's-1', ticket_id: 'T-1', status: 'running' })],
     ])
@@ -230,10 +230,7 @@ describe('filterTasks', () => {
     const tasks = [makeTask({ id: 'T-1' })]
 
     const focusTasks = filterTasks(tasks, 'focus', sessions, prs, ['active'])
-    expect(focusTasks.map((t: Task) => t.id)).toEqual([])
-
-    const inProgressTasks = filterTasks(tasks, 'in-progress', sessions, prs, ['active'])
-    expect(inProgressTasks.map((t: Task) => t.id)).toEqual(['T-1'])
+    expect(focusTasks.map((t: Task) => t.id)).toEqual(['T-1'])
   })
 
   it('does not mutate original array', () => {
@@ -263,7 +260,7 @@ describe('getFilterCounts', () => {
     const counts = getFilterCounts(tasks, sessions, prs)
     expect(counts).toEqual({
       focus: 1,
-      'in-progress': 1,
+      'low-fire': 0,
       backlog: 1,
     })
   })
@@ -275,7 +272,7 @@ describe('getFilterCounts', () => {
     const counts = getFilterCounts([], sessions, prs)
     expect(counts).toEqual({
       focus: 0,
-      'in-progress': 0,
+      'low-fire': 0,
       backlog: 0,
     })
   })
@@ -292,26 +289,35 @@ describe('getFilterCounts', () => {
     const counts = getFilterCounts(tasks, sessions, prs)
     expect(counts).toEqual({
       focus: 0,
-      'in-progress': 0,
+      'low-fire': 0,
       backlog: 2,
     })
   })
 
-  it('counts running agents with unaddressed PR comments as in-progress instead of focus', () => {
+  it('counts only attention items in focus and low-fire lane chips', () => {
     const sessions = new Map<string, AgentSession>([
       ['T-1', makeSession({ id: 's-1', ticket_id: 'T-1', status: 'running' })],
+      ['T-2', makeSession({ id: 's-2', ticket_id: 'T-2', status: 'failed' })],
+      ['T-3', makeSession({ id: 's-3', ticket_id: 'T-3', status: 'paused', checkpoint_data: '{}' })],
+      ['T-4', makeSession({ id: 's-4', ticket_id: 'T-4', status: 'running' })],
     ])
     const prs = new Map<string, PullRequestInfo[]>([
       ['T-1', [makePr({ id: 1, ticket_id: 'T-1', unaddressed_comment_count: 2 })]],
     ])
 
-    const tasks = [makeTask({ id: 'T-1' })]
+    const tasks = [
+      makeTask({ id: 'T-1' }),
+      makeTask({ id: 'T-2' }),
+      makeTask({ id: 'T-3' }),
+      makeTask({ id: 'T-4' }),
+      makeTask({ id: 'T-5', status: 'backlog' }),
+    ]
 
-    const counts = getFilterCounts(tasks, sessions, prs)
+    const counts = getFilterCounts(tasks, sessions, prs, DEFAULT_FOCUS_STATES, new Set(['T-3', 'T-4']))
     expect(counts).toEqual({
-      focus: 0,
-      'in-progress': 1,
-      backlog: 0,
+      focus: 1,
+      'low-fire': 1,
+      backlog: 1,
     })
   })
 
@@ -327,7 +333,7 @@ describe('getFilterCounts', () => {
     const counts = getFilterCounts(tasks, sessions, prs)
     expect(counts).toEqual({
       focus: 1,
-      'in-progress': 0,
+      'low-fire': 0,
       backlog: 1,
     })
   })
@@ -390,6 +396,34 @@ describe('saveFocusFilterStates', () => {
     vi.mocked(setProjectConfig).mockResolvedValue(undefined)
     await saveFocusFilterStates('proj-1', ['idle', 'active'])
     expect(setProjectConfig).toHaveBeenCalledWith('proj-1', 'focus_filter_states', JSON.stringify(['idle']))
+  })
+})
+
+describe('loadLowFireTaskIds', () => {
+  it('returns an empty set when no config stored', async () => {
+    vi.mocked(getProjectConfig).mockResolvedValue(null)
+    const result = await loadLowFireTaskIds('proj-1')
+    expect(result).toEqual(new Set())
+  })
+
+  it('returns parsed task ids when valid config stored', async () => {
+    vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify(['T-1', 'T-2']))
+    const result = await loadLowFireTaskIds('proj-1')
+    expect(result).toEqual(new Set(['T-1', 'T-2']))
+  })
+
+  it('returns an empty set when invalid JSON stored', async () => {
+    vi.mocked(getProjectConfig).mockResolvedValue('not-json')
+    const result = await loadLowFireTaskIds('proj-1')
+    expect(result).toEqual(new Set())
+  })
+})
+
+describe('saveLowFireTaskIds', () => {
+  it('saves task ids as a JSON array', async () => {
+    vi.mocked(setProjectConfig).mockResolvedValue(undefined)
+    await saveLowFireTaskIds('proj-1', new Set(['T-2', 'T-1']))
+    expect(setProjectConfig).toHaveBeenCalledWith('proj-1', 'low_fire_task_ids', JSON.stringify(['T-2', 'T-1']))
   })
 })
 

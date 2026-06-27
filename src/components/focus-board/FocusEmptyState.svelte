@@ -9,7 +9,7 @@
 
   const messages: Record<BoardFilter, { title: string; subtitle: string }> = {
     'focus': { title: 'All clear', subtitle: 'Nothing needs your attention right now' },
-    'in-progress': { title: 'Nothing in progress', subtitle: 'Start working on a task to see it here' },
+    'low-fire': { title: 'Low-Fire is clear', subtitle: 'No set-aside tasks in this lane' },
     'backlog': { title: 'Backlog is empty', subtitle: 'Create a task with \u2318T to get started' },
   }
 

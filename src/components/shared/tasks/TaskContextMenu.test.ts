@@ -130,6 +130,59 @@ describe('TaskContextMenu', () => {
     expect(moveTaskToComplete).toHaveBeenCalledWith('T-1', { resetToBoard: false })
   })
 
+  it('shows Move to Low-Fire for doing tasks outside low-fire', () => {
+    tasks.set([makeTask('T-1', 'doing')])
+    render(TaskContextMenu, {
+      props: {
+        visible: true,
+        x: 0,
+        y: 0,
+        taskId: 'T-1',
+        onClose: vi.fn(),
+        lowFireTaskIds: new Set(),
+        onMoveToLowFire: vi.fn(),
+      },
+    })
+    expect(screen.getByText('Move to Low-Fire')).toBeTruthy()
+  })
+
+  it('shows Move to Focus for doing tasks already in low-fire', () => {
+    tasks.set([makeTask('T-1', 'doing')])
+    render(TaskContextMenu, {
+      props: {
+        visible: true,
+        x: 0,
+        y: 0,
+        taskId: 'T-1',
+        onClose: vi.fn(),
+        lowFireTaskIds: new Set(['T-1']),
+        onMoveToFocus: vi.fn(),
+      },
+    })
+    expect(screen.getByText('Move to Focus')).toBeTruthy()
+    expect(screen.queryByText('Move to Low-Fire')).toBeNull()
+  })
+
+  it('calls onMoveToLowFire and closes when Move to Low-Fire is clicked', async () => {
+    const onMoveToLowFire = vi.fn()
+    const onClose = vi.fn()
+    tasks.set([makeTask('T-1', 'doing')])
+    render(TaskContextMenu, {
+      props: {
+        visible: true,
+        x: 0,
+        y: 0,
+        taskId: 'T-1',
+        onClose,
+        lowFireTaskIds: new Set(),
+        onMoveToLowFire,
+      },
+    })
+    await fireEvent.click(screen.getByText('Move to Low-Fire'))
+    expect(onMoveToLowFire).toHaveBeenCalledWith('T-1')
+    expect(onClose).toHaveBeenCalled()
+  })
+
   it('always shows Delete option', () => {
     tasks.set([makeTask('T-1', 'doing')])
     render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
