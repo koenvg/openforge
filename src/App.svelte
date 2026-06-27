@@ -111,6 +111,17 @@
         shortcut: view.shortcut,
       }))
   )
+  let sidebarPluginNavItems = $derived(
+    [...resolvedPluginContributions.views]
+      .filter((view) => view.showInSidebar)
+      .sort((a, b) => a.railOrder - b.railOrder || a.title.localeCompare(b.title))
+      .map((view) => ({
+        viewKey: makePluginViewKey(view.pluginId, view.contributionId),
+        icon: view.icon,
+        title: view.title,
+        shortcut: view.shortcut,
+      }))
+  )
   let activeViewEntry = $derived($currentView === 'board' ? null : resolvedViews[$currentView] ?? null)
   let renderedActiveView = $derived.by(() => {
     if (activeViewEntry === null) {
@@ -433,9 +444,12 @@
     onToggleCollapse={() => { appSidebarCollapsed = !appSidebarCollapsed; localStorage.setItem('appSidebarCollapsed', String(appSidebarCollapsed)) }}
     onNewProject={() => showProjectSetup = true}
     onNavigate={handleNavigate}
+    pluginNavItems={sidebarPluginNavItems}
+    reviewRequestCount={$reviewRequestCount}
+    authoredPrCount={$authoredPrCount}
   />
   {#if !ICON_RAIL_HIDDEN_VIEWS.has($currentView)}
-    <IconRail currentView={$currentView} onNavigate={handleNavigate} reviewRequestCount={$reviewRequestCount} authoredPrCount={$authoredPrCount} pluginNavItems={pluginNavItems} modalsOpen={showCommandPalette || showProjectSwitcher || actionPalette.showActionPalette || showAddDialog || showFileQuickOpen} railBg={iconRailBg} />
+    <IconRail currentView={$currentView} onNavigate={handleNavigate} pluginNavItems={pluginNavItems} modalsOpen={showCommandPalette || showProjectSwitcher || actionPalette.showActionPalette || showAddDialog || showFileQuickOpen} railBg={iconRailBg} />
   {/if}
 
   <div class="flex flex-col flex-1 min-w-0 relative" style="background: linear-gradient(180deg, var(--project-bg-alt) 0%, var(--project-bg) 100%)">

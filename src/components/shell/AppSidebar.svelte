@@ -4,6 +4,9 @@
   import { getProjectAttention, getGitBranch, setConfig } from '../../lib/ipc'
   import { useAppRouter } from '../../lib/router.svelte'
   import { ChevronLeft, ChevronRight, Settings, Plus, ArrowUp, ArrowDown } from '@lucide/svelte'
+  import { resolveIconRailIcon } from '../../lib/iconRailIcons'
+  import { GITHUB_SYNC_GLOBAL_VIEW_KEY } from '../../lib/githubSyncPlugin'
+  import type { IconRailPluginNavItem } from '../../lib/iconRailNav'
   import type { ProjectAttention, AppView } from '../../lib/types'
 
   interface Props {
@@ -13,10 +16,30 @@
     onToggleCollapse: () => void
     onNewProject?: () => void
     onNavigate: (view: AppView) => void
+    pluginNavItems?: IconRailPluginNavItem[]
+    reviewRequestCount?: number
+    authoredPrCount?: number
   }
 
-  let { collapsed, currentView, appMode, onToggleCollapse, onNewProject, onNavigate }: Props = $props()
+  let {
+    collapsed,
+    currentView,
+    appMode,
+    onToggleCollapse,
+    onNewProject,
+    onNavigate,
+    pluginNavItems = [],
+    reviewRequestCount = 0,
+    authoredPrCount = 0,
+  }: Props = $props()
   const router = useAppRouter()
+
+  let sidebarPluginNavItems = $derived(
+    pluginNavItems.map((item) => ({
+      ...item,
+      Icon: resolveIconRailIcon(item.icon),
+    }))
+  )
 
   let branchName = $state<string | null>(null)
   let isSavingProjectOrder = $state(false)
@@ -206,6 +229,41 @@
   </div>
 
   <div class="border-t border-base-300/50 py-2">
+    {#each sidebarPluginNavItems as { viewKey, Icon, title }}
+      {@const isActive = currentView === viewKey}
+      <button
+        type="button"
+        class="relative w-full flex items-center {collapsed ? 'justify-center px-0' : 'px-3'} gap-2 py-2 transition-colors {isActive ? 'text-primary' : 'text-base-content/50 hover:text-base-content/80'}"
+        title={collapsed ? title : undefined}
+        aria-label={title}
+        aria-current={isActive ? 'page' : undefined}
+        onclick={() => onNavigate(viewKey)}
+      >
+        <span class="relative shrink-0">
+          <Icon size={18} />
+          <!-- When collapsed there is no text label, so the counts overlay the icon. -->
+          {#if collapsed && viewKey === GITHUB_SYNC_GLOBAL_VIEW_KEY && reviewRequestCount > 0}
+            <span class="badge badge-error badge-xs absolute -top-2 -right-2 text-[0.6rem] font-bold min-w-4 h-4">{reviewRequestCount}</span>
+          {/if}
+          {#if collapsed && viewKey === GITHUB_SYNC_GLOBAL_VIEW_KEY && authoredPrCount > 0}
+            <span class="badge badge-warning badge-xs absolute -bottom-2 -right-2 text-[0.6rem] font-bold min-w-4 h-4">{authoredPrCount}</span>
+          {/if}
+        </span>
+        {#if !collapsed}
+          <span class="text-xs font-medium">{title}</span>
+          {#if viewKey === GITHUB_SYNC_GLOBAL_VIEW_KEY && (reviewRequestCount > 0 || authoredPrCount > 0)}
+            <span class="ml-auto flex items-center gap-1 shrink-0">
+              {#if reviewRequestCount > 0}
+                <span class="badge badge-error badge-xs text-[0.6rem] font-bold min-w-4 h-4">{reviewRequestCount}</span>
+              {/if}
+              {#if authoredPrCount > 0}
+                <span class="badge badge-warning badge-xs text-[0.6rem] font-bold min-w-4 h-4">{authoredPrCount}</span>
+              {/if}
+            </span>
+          {/if}
+        {/if}
+      </button>
+    {/each}
     {#each bottomNavItems as { view, Icon, label }}
       {@const isActive = currentView === view}
       <button

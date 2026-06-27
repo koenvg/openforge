@@ -38,6 +38,8 @@ export interface TestingOpenForgeApiOptions {
   pluginId?: string
   projectId?: string | null
   taskId?: string | null
+  /** The active view key reported by `navigation.get().currentView`. Defaults to `'board'`. */
+  viewId?: string
   packageMetadata?: OpenForgePackageMetadata
   storage?: PluginStorage
 }
@@ -150,6 +152,7 @@ export class TestingOpenForgeRegistryFake {
   readonly pluginId: string
   readonly projectId: string | null
   readonly taskId: string | null
+  readonly viewId: string
   readonly packageMetadata: OpenForgePackageMetadata
   readonly calls: TestingOpenForgeApiCalls
   readonly storage: PluginStorage
@@ -174,6 +177,7 @@ export class TestingOpenForgeRegistryFake {
     this.pluginId = options.pluginId ?? 'test-plugin'
     this.projectId = options.projectId ?? null
     this.taskId = options.taskId ?? null
+    this.viewId = options.viewId ?? 'board'
     this.packageMetadata = options.packageMetadata ?? {
       id: this.pluginId,
       apiVersion: 1,
@@ -430,7 +434,7 @@ export class TestingOpenForgeRegistryFake {
   private getNavigationSnapshot(overrides: OpenForgeNavigationRequest = {}): OpenForgeNavigationSnapshot {
     return {
       activeProjectId: overrides.projectId ?? this.projectId,
-      currentView: overrides.viewId ?? 'board',
+      currentView: overrides.viewId ?? this.viewId,
       selectedTaskId: overrides.taskId ?? this.taskId,
     }
   }

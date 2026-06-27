@@ -48,6 +48,18 @@
     api.navigation.get().currentView.endsWith('pr_review_global')
       ? 'global'
       : 'repo'
+  // The repo-exclusion filter only makes sense for the all-repos view. The
+  // per-repo view is already scoped to a single repo, so its filter control is
+  // hidden and exclusions are not applied.
+  const showFilters = scope === 'global'
+  // The all-repos view spans every repository, so its header must not be tied to
+  // the active project's name.
+  let headerTitle = $derived(scope === 'global' ? 'All Pull Requests' : `${projectName} — Pull Requests`)
+  let headerSubtitle = $derived(
+    scope === 'global'
+      ? 'Review open pull requests across all your repositories'
+      : 'Review open pull requests for this project',
+  )
   let githubSync = $derived(createGithubSyncPrReviewClient(api))
 
   $effect(() => {
@@ -121,8 +133,8 @@
     return `${repoOwner}/${repoName}` === scopedRepo
   }
 
-  let filteredReviewPrs = $derived($reviewPrs.filter(pr => !isRepoExcluded(pr.repo_owner, pr.repo_name) && matchesScope(pr.repo_owner, pr.repo_name)))
-  let filteredAuthoredPrs = $derived($authoredPrs.filter(pr => !isRepoExcluded(pr.repo_owner, pr.repo_name) && matchesScope(pr.repo_owner, pr.repo_name)))
+  let filteredReviewPrs = $derived($reviewPrs.filter(pr => matchesScope(pr.repo_owner, pr.repo_name) && (!showFilters || !isRepoExcluded(pr.repo_owner, pr.repo_name))))
+  let filteredAuthoredPrs = $derived($authoredPrs.filter(pr => matchesScope(pr.repo_owner, pr.repo_name) && (!showFilters || !isRepoExcluded(pr.repo_owner, pr.repo_name))))
 
   // Text input for manually adding repos
   let newRepoInput = $state('')
@@ -216,8 +228,8 @@
 
   let groupedPrs = $derived(groupByRepo(filteredReviewPrs))
   let groupedAuthoredPrs = $derived(groupAuthoredByRepo(filteredAuthoredPrs))
-  let hiddenReviewRepos = $derived(getHiddenRepos($reviewPrs))
-  let hiddenAuthoredRepos = $derived(getHiddenRepos($authoredPrs))
+  let hiddenReviewRepos = $derived(showFilters ? getHiddenRepos($reviewPrs) : [])
+  let hiddenAuthoredRepos = $derived(showFilters ? getHiddenRepos($authoredPrs) : [])
 
   function getHiddenRepos(prs: Array<ReviewPullRequest | AuthoredPullRequest>): string[] {
     const repos = new Set<string>()
@@ -809,10 +821,11 @@
   {:else}
     <div class="flex flex-col h-full overflow-hidden">
       <ProjectPageHeader
-        title={`${projectName} — Pull Requests`}
-        subtitle="Review open pull requests for this project"
+        title={headerTitle}
+        subtitle={headerSubtitle}
       >
         {#snippet actions()}
+          {#if showFilters}
           <div class="relative">
             <button
               class="btn btn-ghost btn-sm gap-1 {excludedRepos.size > 0 ? 'text-warning' : 'text-base-content/50'}"
@@ -883,6 +896,7 @@
               </div>
             {/if}
           </div>
+          {/if}
         {/snippet}
       </ProjectPageHeader>
 
@@ -938,7 +952,7 @@
                 <p class="text-sm m-0 max-w-md">GitHub is connected for {projectName}. Sync again if you expected review requests, or check repository filters for hidden repos.</p>
                 <div class="flex flex-wrap items-center justify-center gap-2 pt-1">
                   <button class="btn btn-primary btn-sm" onclick={refreshPrs}>Sync review requests</button>
-                  <button class="btn btn-ghost btn-sm" onclick={openRepositoryFilters}>Review repository filters</button>
+                  {#if showFilters}<button class="btn btn-ghost btn-sm" onclick={openRepositoryFilters}>Review repository filters</button>{/if}
                 </div>
               </div>
             {:else}
@@ -1014,7 +1028,7 @@
                 <p class="text-sm m-0 max-w-md">GitHub is connected for your account. Sync again if you expected authored PRs, or check repository filters for hidden repos.</p>
                 <div class="flex flex-wrap items-center justify-center gap-2 pt-1">
                   <button class="btn btn-primary btn-sm" onclick={refreshAuthoredPrs}>Sync my pull requests</button>
-                  <button class="btn btn-ghost btn-sm" onclick={openRepositoryFilters}>Review repository filters</button>
+                  {#if showFilters}<button class="btn btn-ghost btn-sm" onclick={openRepositoryFilters}>Review repository filters</button>{/if}
                 </div>
               </div>
             {:else}

@@ -211,6 +211,7 @@ var TestingOpenForgeRegistryFake = class {
 	pluginId;
 	projectId;
 	taskId;
+	viewId;
 	packageMetadata;
 	calls;
 	storage;
@@ -233,6 +234,7 @@ var TestingOpenForgeRegistryFake = class {
 		this.pluginId = options.pluginId ?? "test-plugin";
 		this.projectId = options.projectId ?? null;
 		this.taskId = options.taskId ?? null;
+		this.viewId = options.viewId ?? "board";
 		this.packageMetadata = options.packageMetadata ?? {
 			id: this.pluginId,
 			apiVersion: 1,
@@ -473,7 +475,7 @@ var TestingOpenForgeRegistryFake = class {
 	getNavigationSnapshot(overrides = {}) {
 		return {
 			activeProjectId: overrides.projectId ?? this.projectId,
-			currentView: overrides.viewId ?? "board",
+			currentView: overrides.viewId ?? this.viewId,
 			selectedTaskId: overrides.taskId ?? this.taskId
 		};
 	}

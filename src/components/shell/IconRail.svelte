@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { GITHUB_SYNC_GLOBAL_VIEW_KEY } from '../../lib/githubSyncPlugin'
   import type { AppView } from '../../lib/types'
   import { commandHeld } from '../../lib/stores'
   import { getIconRailNavItems } from '../../lib/iconRailNav'
@@ -9,14 +8,12 @@
   interface Props {
     currentView: AppView
     onNavigate: (view: AppView) => void
-    reviewRequestCount: number
-    authoredPrCount: number
     pluginNavItems?: IconRailPluginNavItem[]
     modalsOpen?: boolean
     railBg?: string
   }
 
-  let { currentView, onNavigate, reviewRequestCount = 0, authoredPrCount = 0, pluginNavItems = [], modalsOpen = false, railBg = 'oklch(var(--b2))' }: Props = $props()
+  let { currentView, onNavigate, pluginNavItems = [], modalsOpen = false, railBg = 'oklch(var(--b2))' }: Props = $props()
 
   let navItems = $derived(
     getIconRailNavItems(pluginNavItems).map((item) => ({
@@ -37,12 +34,6 @@
       onclick={() => onNavigate(view)}
     >
       <Icon size={24} />
-      {#if view === GITHUB_SYNC_GLOBAL_VIEW_KEY && reviewRequestCount > 0}
-        <span class="badge badge-error badge-xs absolute -top-2 -right-3 text-[0.6rem] font-bold min-w-4 h-4">{reviewRequestCount}</span>
-      {/if}
-      {#if view === GITHUB_SYNC_GLOBAL_VIEW_KEY && authoredPrCount > 0}
-        <span class="badge badge-warning badge-xs absolute -bottom-2 -right-3 text-[0.6rem] font-bold min-w-4 h-4">{authoredPrCount}</span>
-      {/if}
       {#if shortcut && $commandHeld && !modalsOpen}
         <kbd class="kbd kbd-xs absolute -bottom-2 -left-3 bg-base-content/10 text-base-content/40 border-base-content/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none">{shortcut}</kbd>
       {/if}

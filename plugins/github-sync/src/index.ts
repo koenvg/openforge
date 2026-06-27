@@ -17,14 +17,13 @@ export default defineFrontendPlugin({
     }))
 
     // A second, all-repos view rendered by the same component (it derives its
-    // scope from the active view). Placed last on the rail so it sits just above
-    // the settings gear.
+    // scope from the active view). Placed in the left projects sidebar rather
+    // than the icon rail; the host surfaces it there with the PR count badges.
     context.subscriptions.add(openforge.views.register({
       id: 'pr_review_global',
       title: 'All Pull Requests',
       icon: 'boxes',
-      placement: 'rail',
-      order: 90,
+      placement: 'sidebar',
       component: PrReviewView,
     }))
 

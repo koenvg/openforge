@@ -193,6 +193,23 @@ describe('resolveContributions', () => {
     expect(result.views[0]?.railOrder).toBe(100)
   })
 
+  it('treats a sidebar-placed view as off-rail and in the sidebar', () => {
+    const source = makeSource({ views: [makeView({ placement: 'sidebar' })] })
+
+    const result = resolveContributions([source])
+
+    expect(result.views[0]?.showInRail).toBe(false)
+    expect(result.views[0]?.showInSidebar).toBe(true)
+  })
+
+  it('treats a rail-placed view as not in the sidebar', () => {
+    const source = makeSource({ views: [makeView({ placement: 'rail' })] })
+
+    const result = resolveContributions([source])
+
+    expect(result.views[0]?.showInSidebar).toBe(false)
+  })
+
   it('skips malformed contributions missing required id', () => {
     const malformedView: Record<string, unknown> = makeView({ title: 'Broken' })
     Reflect.deleteProperty(malformedView, 'id')
