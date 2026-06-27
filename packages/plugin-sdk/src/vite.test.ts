@@ -30,6 +30,7 @@ describe('OpenForge plugin Vite author tooling', () => {
     expect(aliases.some((alias) => alias.find === '@openforge/pr-review-ui')).toBe(false)
     expect(aliases.some((alias) => alias.find === '@openforge/terminal-runtime')).toBe(false)
     expect(createOpenForgePluginSdkSourceAliases(new URL('file:///repo'))[0]?.replacement).toBe('/repo/packages/plugin-sdk/src/frontend.ts')
+    expect(() => createOpenForgePluginSdkSourceAliases(String.raw`C:\repo`)).not.toThrow()
   })
 
   it('externalizes only the documented host-shared Svelte runtime imports', () => {

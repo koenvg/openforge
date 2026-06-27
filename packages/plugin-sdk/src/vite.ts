@@ -3,7 +3,7 @@
  * share with the host renderer. The Electron renderer import map and packaged
  * plugin://host-runtime assets are derived from the same host-runtime contract.
  */
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { OPENFORGE_HOST_RUNTIME_SVELTE_SPECIFIERS as HOST_RUNTIME_SVELTE_SPECIFIERS } from './svelteHostRuntimeContract.mjs'
 
 export const OPENFORGE_HOST_RUNTIME_SVELTE_SPECIFIERS = HOST_RUNTIME_SVELTE_SPECIFIERS
@@ -58,11 +58,27 @@ function repoRootUrl(repoRoot: URL | string): URL {
     return new URL(repoRoot.href.endsWith('/') ? repoRoot.href : `${repoRoot.href}/`)
   }
 
-  if (/^[a-z][a-z\d+.-]*:/i.test(repoRoot)) {
+  if (isUrlString(repoRoot)) {
     return new URL(repoRoot.endsWith('/') ? repoRoot : `${repoRoot}/`)
   }
 
-  return pathToFileURL(repoRoot.endsWith('/') ? repoRoot : `${repoRoot}/`)
+  return pathToFileURL(hasTrailingPathSeparator(repoRoot) ? repoRoot : `${repoRoot}/`)
+}
+
+function isUrlString(value: string): boolean {
+  return /^[a-z][a-z\d+.-]*:\/\//i.test(value) || /^file:/i.test(value)
+}
+
+function hasTrailingPathSeparator(value: string): boolean {
+  return value.endsWith('/') || value.endsWith('\\')
+}
+
+function sourceAliasReplacement(sourceUrl: URL): string {
+  if (sourceUrl.protocol === 'file:') {
+    return fileURLToPath(sourceUrl)
+  }
+
+  return sourceUrl.pathname
 }
 
 export function createOpenForgePluginSdkSourceAliases(repoRoot: URL | string): OpenForgePluginSdkSourceAlias[] {
@@ -70,6 +86,6 @@ export function createOpenForgePluginSdkSourceAliases(repoRoot: URL | string): O
 
   return OPENFORGE_PLUGIN_SDK_SOURCE_ENTRYPOINTS.map(([find, sourcePath]) => ({
     find,
-    replacement: new URL(sourcePath, rootUrl).pathname,
+    replacement: sourceAliasReplacement(new URL(sourcePath, rootUrl)),
   }))
 }
