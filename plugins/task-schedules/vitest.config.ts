@@ -1,9 +1,15 @@
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { svelteTesting } from '@testing-library/svelte/vite'
+import { createOpenForgePluginSdkSourceAliases } from '../../packages/plugin-sdk/src/vite'
 import { defineConfig } from 'vitest/config'
+
+const repoRoot = new URL('../..', import.meta.url)
 
 export default defineConfig({
   plugins: [svelte(), svelteTesting()],
+  resolve: {
+    alias: createOpenForgePluginSdkSourceAliases(repoRoot),
+  },
   build: {
     lib: {
       entry: 'src/index.ts',
@@ -16,11 +22,5 @@ export default defineConfig({
     globals: true,
     setupFiles: ['../../src/test-setup.ts'],
     include: ['src/**/*.test.ts'],
-    alias: {
-      '@openforge/plugin-sdk/backend': new URL('../../packages/plugin-sdk/src/backend.ts', import.meta.url).pathname,
-      '@openforge/plugin-sdk/frontend': new URL('../../packages/plugin-sdk/src/frontend.ts', import.meta.url).pathname,
-      '@openforge/plugin-sdk/testing': new URL('../../packages/plugin-sdk/src/testing.ts', import.meta.url).pathname,
-      '@openforge/plugin-sdk': new URL('../../packages/plugin-sdk/src/index.ts', import.meta.url).pathname,
-    },
   },
 })

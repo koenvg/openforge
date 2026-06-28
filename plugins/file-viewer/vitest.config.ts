@@ -1,9 +1,15 @@
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { svelteTesting } from '@testing-library/svelte/vite'
+import { createOpenForgePluginSdkSourceAliases } from '../../packages/plugin-sdk/src/vite'
 import { defineConfig } from 'vitest/config'
+
+const repoRoot = new URL('../..', import.meta.url)
 
 export default defineConfig({
   plugins: [svelte(), svelteTesting()],
+  resolve: {
+    alias: createOpenForgePluginSdkSourceAliases(repoRoot),
+  },
   build: {
     lib: {
       entry: 'src/index.ts',
@@ -15,14 +21,5 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     include: ['src/**/*.test.ts'],
-    alias: {
-      '@openforge/plugin-sdk/frontend': new URL('../../packages/plugin-sdk/src/frontend.ts', import.meta.url).pathname,
-      '@openforge/plugin-sdk/domain': new URL('../../packages/plugin-sdk/src/domain.ts', import.meta.url).pathname,
-      '@openforge/plugin-sdk/numberParsing': new URL('../../packages/plugin-sdk/src/numberParsing.ts', import.meta.url).pathname,
-      '@openforge/plugin-sdk/sanitize': new URL('../../packages/plugin-sdk/src/sanitize.ts', import.meta.url).pathname,
-      '@openforge/plugin-sdk/ui/MarkdownContent.svelte': new URL('../../packages/plugin-sdk/src/ui/MarkdownContent.svelte', import.meta.url).pathname,
-      '@openforge/plugin-sdk/ui/ResizablePanel.svelte': new URL('../../packages/plugin-sdk/src/ui/ResizablePanel.svelte', import.meta.url).pathname,
-      '@openforge/plugin-sdk': new URL('../../packages/plugin-sdk/src/index.ts', import.meta.url).pathname,
-    },
   },
 })
