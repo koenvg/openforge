@@ -210,5 +210,113 @@ describe('SettingsGeneralCard', () => {
 
       expect(screen.queryByRole('button', { name: /switch to claude code/i })).toBeNull()
     })
+
+    describe('provider availability gating', () => {
+      function optionByValue(value: string) {
+        const select = requireElement(screen.getByRole('combobox'), HTMLSelectElement)
+        const option = Array.from(select.options).find((o) => o.value === value)
+        if (!option) throw new Error(`Option for provider "${value}" not found`)
+        return option
+      }
+
+      it('disables not-installed providers and keeps installed ones selectable', () => {
+        render(SettingsGeneralCard, {
+          props: defaultProps({
+            claudeInstalled: true,
+            claudeAuthenticated: true,
+            opencodeInstalled: false,
+            piInstalled: false,
+            codexInstalled: false,
+          }),
+        })
+
+        expect(optionByValue('claude-code').disabled).toBe(false)
+        expect(optionByValue('opencode').disabled).toBe(true)
+        expect(optionByValue('pi').disabled).toBe(true)
+        expect(optionByValue('codex').disabled).toBe(true)
+      })
+
+      it('keeps installed-but-unauthenticated Claude Code selectable', () => {
+        render(SettingsGeneralCard, {
+          props: defaultProps({ claudeInstalled: true, claudeAuthenticated: false }),
+        })
+
+        expect(optionByValue('claude-code').disabled).toBe(false)
+      })
+
+      it('labels a not-installed provider option to explain why it is unavailable', () => {
+        render(SettingsGeneralCard, {
+          props: defaultProps({ opencodeInstalled: false, claudeInstalled: true }),
+        })
+
+        expect(optionByValue('opencode').textContent).toMatch(/not installed/i)
+        expect(optionByValue('claude-code').textContent).not.toMatch(/not installed/i)
+      })
+
+      it('does not disable any option while install status is still loading', () => {
+        render(SettingsGeneralCard, {
+          props: defaultProps({
+            installationStatusLoading: true,
+            opencodeInstalled: false,
+            piInstalled: false,
+            codexInstalled: false,
+          }),
+        })
+
+        expect(optionByValue('opencode').disabled).toBe(false)
+        expect(optionByValue('pi').disabled).toBe(false)
+        expect(optionByValue('codex').disabled).toBe(false)
+      })
+
+      it('does not disable any option when the install status check errored', () => {
+        render(SettingsGeneralCard, {
+          props: defaultProps({
+            installationStatusError: 'spawn check failed',
+            opencodeInstalled: false,
+            piInstalled: false,
+            codexInstalled: false,
+          }),
+        })
+
+        expect(optionByValue('opencode').disabled).toBe(false)
+        expect(optionByValue('pi').disabled).toBe(false)
+        expect(optionByValue('codex').disabled).toBe(false)
+      })
+
+      it('ignores selection of a not-installed provider', async () => {
+        const onAiProviderChange = vi.fn()
+        render(SettingsGeneralCard, {
+          props: defaultProps({
+            aiProvider: 'claude-code',
+            claudeInstalled: true,
+            opencodeInstalled: false,
+            onAiProviderChange,
+          }),
+        })
+
+        const select = requireElement(screen.getByRole('combobox'), HTMLSelectElement)
+        await fireEvent.change(select, { target: { value: 'opencode' } })
+
+        expect(onAiProviderChange).not.toHaveBeenCalled()
+      })
+
+      it('still applies selection of an installed provider', async () => {
+        const onAiProviderChange = vi.fn()
+        render(SettingsGeneralCard, {
+          props: defaultProps({
+            aiProvider: 'claude-code',
+            claudeInstalled: true,
+            piInstalled: true,
+            piVersion: '1.2.3',
+            onAiProviderChange,
+          }),
+        })
+
+        const select = requireElement(screen.getByRole('combobox'), HTMLSelectElement)
+        await fireEvent.change(select, { target: { value: 'pi' } })
+
+        expect(onAiProviderChange).toHaveBeenCalledWith('pi')
+      })
+    })
   })
 })

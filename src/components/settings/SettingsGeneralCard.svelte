@@ -124,6 +124,12 @@
     },
   ])
 
+  // Only enforce dropdown gating once the install check has produced a definitive
+  // result. While loading (flags still default to false) or after an errored check
+  // we cannot trust `installed`, so we keep every provider selectable to avoid
+  // greying out a provider that is actually installed.
+  const installStatusKnown = $derived(!installationStatusLoading && !installationStatusError)
+
   const selectedProviderRecovery = $derived(providerRecoveryInfo.find((provider) => provider.id === aiProvider) ?? null)
   const installedProviderAlternatives = $derived(providerRecoveryInfo.filter((provider) => provider.id !== aiProvider && provider.installed && provider.authenticated))
   const selectedProviderNeedsInstall = $derived(!!selectedProviderRecovery && !selectedProviderRecovery.installed)
@@ -221,13 +227,20 @@
           disabled={disabled}
           onchange={(e) => {
             if (disabled || !(e.currentTarget instanceof HTMLSelectElement)) return
-            onAiProviderChange(e.currentTarget.value)
+            const value = e.currentTarget.value
+            const next = providerRecoveryInfo.find((provider) => provider.id === value)
+            // Defense-in-depth beyond the native `disabled` option: never adopt a
+            // provider whose binary is missing — that selection silently fails at
+            // task-start time with no usable agent.
+            if (installStatusKnown && next && !next.installed) return
+            onAiProviderChange(value)
           }}
         >
-          <option value="claude-code">Claude Code</option>
-          <option value="opencode">OpenCode</option>
-          <option value="pi">Pi Coding Agent</option>
-          <option value="codex">Codex</option>
+          {#each providerRecoveryInfo as provider (provider.id)}
+            <option value={provider.id} disabled={installStatusKnown && !provider.installed}>
+              {installStatusKnown && !provider.installed ? `${provider.label} — not installed` : provider.label}
+            </option>
+          {/each}
         </select>
       </label>
 
