@@ -1450,3 +1450,78 @@ async fn move_to_done_preserves_existing_branch_source_branch() {
 
     let _ = std::fs::remove_file(db_path);
 }
+
+#[tokio::test]
+async fn rollback_failed_start_workspace_removes_fresh_worktree_and_record() {
+    let (state, path) = test_state("app_invoke_rollback_failed_start");
+    let (_temp, repo_dir) = provider_repo_dir();
+    init_committed_repo(&repo_dir);
+
+    // Mirror what prepare_start_workspace produces for a default (fresh-branch)
+    // start: a real git worktree on a fresh openforge/<task> branch plus the
+    // matching worktrees DB record.
+    let (task_id, branch, worktree_path) = {
+        let db = crate::db::acquire_db(&state.db);
+        let project = db
+            .create_project("Rollback Project", repo_dir.to_str().expect("utf8 repo path"))
+            .expect("create project");
+        let task = db
+            .create_task("Rollback task", "backlog", Some(&project.id), None, None)
+            .expect("create task");
+        let branch = crate::git_worktree::task_branch_name(&task.id);
+        let worktree_path = repo_dir
+            .parent()
+            .expect("repo parent")
+            .join(format!("wt-{}", task.id));
+        assert_git_success(
+            &repo_dir,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                branch.as_str(),
+                worktree_path.to_str().expect("utf8 worktree path"),
+                "HEAD",
+            ],
+        );
+        db.create_worktree_record(
+            &task.id,
+            &project.id,
+            repo_dir.to_str().expect("utf8 repo path"),
+            worktree_path.to_str().expect("utf8 worktree path"),
+            &branch,
+        )
+        .expect("create worktree record");
+        (task.id, branch, worktree_path)
+    };
+    assert!(worktree_path.exists(), "worktree should exist before rollback");
+
+    let workspace = crate::app_invoke::lifecycle::PreparedWorkspace {
+        working_dir: worktree_path.clone(),
+        kind: "git_worktree",
+        branch_name: Some(branch),
+    };
+    crate::app_invoke::lifecycle::rollback_failed_start_workspace(
+        &state,
+        &task_id,
+        repo_dir.to_str().expect("utf8 repo path"),
+        &workspace,
+        false,
+    )
+    .await;
+
+    let db = crate::db::acquire_db(&state.db);
+    assert!(
+        db.get_worktree_for_task(&task_id)
+            .expect("query worktree")
+            .is_none(),
+        "worktree record should be rolled back after a failed start"
+    );
+    drop(db);
+    assert!(
+        !worktree_path.exists(),
+        "physical worktree should be removed after a failed start"
+    );
+
+    let _ = std::fs::remove_file(path);
+}
