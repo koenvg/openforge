@@ -1,9 +1,12 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { requireElement } from '../../test-utils/dom'
 import SettingsGeneralCard from './SettingsGeneralCard.svelte'
+import { openUrl } from '../../lib/ipc'
+
+vi.mock('../../lib/ipc', () => ({ openUrl: vi.fn() }))
 
 function defaultProps(overrides: Record<string, unknown> = {}) {
   return {
@@ -316,6 +319,36 @@ describe('SettingsGeneralCard', () => {
         await fireEvent.change(select, { target: { value: 'pi' } })
 
         expect(onAiProviderChange).toHaveBeenCalledWith('pi')
+      })
+    })
+
+    describe('install links for not-installed providers', () => {
+      beforeEach(() => {
+        vi.mocked(openUrl).mockClear()
+      })
+
+      it('opens the install site for a not-installed provider', async () => {
+        render(SettingsGeneralCard, { props: defaultProps({ opencodeInstalled: false }) })
+
+        await fireEvent.click(screen.getByRole('button', { name: /install opencode/i }))
+
+        expect(openUrl).toHaveBeenCalledWith('https://opencode.ai')
+      })
+
+      it('opens the Pi quickstart for a not-installed Pi', async () => {
+        render(SettingsGeneralCard, { props: defaultProps({ piInstalled: false }) })
+
+        await fireEvent.click(screen.getByRole('button', { name: /install pi/i }))
+
+        expect(openUrl).toHaveBeenCalledWith('https://pi.dev/docs/latest/quickstart')
+      })
+
+      it('does not show an install link for an installed provider', () => {
+        render(SettingsGeneralCard, {
+          props: defaultProps({ claudeInstalled: true, claudeVersion: '1.0.0' }),
+        })
+
+        expect(screen.queryByRole('button', { name: /install claude code/i })).toBeNull()
       })
     })
   })

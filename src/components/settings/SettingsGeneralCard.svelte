@@ -1,6 +1,16 @@
 <script lang="ts">
   import { FolderOpen } from '@lucide/svelte'
   import { DEFAULT_PROJECT_COLOR, PROJECT_COLORS } from '../../lib/projectColors'
+  import { openUrl } from '../../lib/ipc'
+
+  // Where to send a user to install each provider when it is not on PATH. Opened
+  // externally via openUrl() so Electron main handles open_url consistently.
+  const PROVIDER_INSTALL_URLS: Record<string, string> = {
+    'claude-code': 'https://docs.claude.com/en/docs/claude-code',
+    opencode: 'https://opencode.ai',
+    pi: 'https://pi.dev/docs/latest/quickstart',
+    codex: 'https://github.com/openai/codex',
+  }
 
   interface Props {
     projectName: string
@@ -244,6 +254,16 @@
         </select>
       </label>
 
+      {#snippet installLink(url: string, providerLabel: string)}
+        <button
+          type="button"
+          class="btn btn-link btn-xs p-0 h-auto min-h-0 text-primary no-underline hover:underline"
+          onclick={() => openUrl(url)}
+          disabled={disabled}
+          aria-label={`Install ${providerLabel} (opens in browser)`}
+        >Install ↗</button>
+      {/snippet}
+
       <div class="flex flex-col gap-1 text-xs" aria-live="polite">
         <div class="flex items-center gap-2">
           {#if opencodeInstalled}
@@ -252,6 +272,7 @@
           {:else}
             <span class="text-error">✗</span>
             <span class="text-base-content/50">OpenCode not installed</span>
+            {@render installLink(PROVIDER_INSTALL_URLS['opencode'], 'OpenCode')}
           {/if}
         </div>
         <div class="flex items-center gap-2">
@@ -266,6 +287,7 @@
           {:else}
             <span class="text-error">✗</span>
             <span class="text-base-content/50">Claude Code not installed</span>
+            {@render installLink(PROVIDER_INSTALL_URLS['claude-code'], 'Claude Code')}
           {/if}
         </div>
         <div class="flex items-center gap-2">
@@ -275,6 +297,7 @@
           {:else}
             <span class="text-error">✗</span>
             <span class="text-base-content/50">Pi not installed</span>
+            {@render installLink(PROVIDER_INSTALL_URLS['pi'], 'Pi')}
           {/if}
         </div>
         <div class="flex items-center gap-2">
@@ -284,6 +307,7 @@
           {:else}
             <span class="text-error">✗</span>
             <span class="text-base-content/50">Codex not installed</span>
+            {@render installLink(PROVIDER_INSTALL_URLS['codex'], 'Codex')}
           {/if}
         </div>
         {#if installationStatusLoading}
