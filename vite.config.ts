@@ -48,6 +48,10 @@ function createOpenForgeRootAliases() {
       replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/numberParsing.ts'),
     },
     {
+      find: /^@openforge\/plugin-sdk\/projectFileTree$/,
+      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/projectFileTree.ts'),
+    },
+    {
       find: /^@openforge\/plugin-sdk\/package-metadata-schema\.json$/,
       replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/openforgePackageMetadataSchema.json'),
     },

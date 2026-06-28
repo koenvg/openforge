@@ -12,7 +12,8 @@
     "paths": {
       "@openforge/plugin-sdk": ["../../packages/plugin-sdk/src/index.ts"],
       "@openforge/plugin-sdk/frontend": ["../../packages/plugin-sdk/src/frontend.ts"],
-      "@openforge/plugin-sdk/domain": ["../../packages/plugin-sdk/src/domain.ts"]
+      "@openforge/plugin-sdk/domain": ["../../packages/plugin-sdk/src/domain.ts"],
+      "@openforge/plugin-sdk/projectFileTree": ["../../packages/plugin-sdk/src/projectFileTree.ts"]
     }
   },
   "include": ["src"]

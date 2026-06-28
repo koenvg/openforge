@@ -25,6 +25,7 @@
       "@openforge/plugin-sdk/frontend": ["packages/plugin-sdk/src/frontend.ts"],
       "@openforge/plugin-sdk/markdown": ["packages/plugin-sdk/src/markdown.ts"],
       "@openforge/plugin-sdk/numberParsing": ["packages/plugin-sdk/src/numberParsing.ts"],
+      "@openforge/plugin-sdk/projectFileTree": ["packages/plugin-sdk/src/projectFileTree.ts"],
       "@openforge/plugin-sdk/package-metadata-schema.json": ["packages/plugin-sdk/src/openforgePackageMetadataSchema.json"],
       "@openforge/plugin-sdk/sanitize": ["packages/plugin-sdk/src/sanitize.ts"],
       "@openforge/plugin-sdk/testing": ["packages/plugin-sdk/src/testing.ts"],
