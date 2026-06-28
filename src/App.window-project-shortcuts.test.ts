@@ -213,7 +213,7 @@ describe('App window and project shortcuts', () => {
 
       stores.focusBoardFilters.set(new Map([
         ['proj-1', 'backlog'],
-        ['proj-2', 'in-progress'],
+        ['proj-2', 'low-fire'],
       ]))
 
       stores.activeProjectId.set('proj-1')
@@ -223,7 +223,7 @@ describe('App window and project shortcuts', () => {
 
       stores.focusBoardFilters.set(new Map([
         ['proj-1', 'backlog'],
-        ['proj-2', 'in-progress'],
+        ['proj-2', 'low-fire'],
       ]))
 
       stores.activeProjectId.set('proj-2')

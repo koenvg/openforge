@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { requireElement } from '../../test-utils/dom'
 import FocusBoard from './FocusBoard.svelte'
 import type { Task, AgentSession, PullRequestInfo, BoardStatus, TaskLabel } from '../../lib/types'
-import { backlogLabelFilters, commandHeld, focusBoardFilters } from '../../lib/stores'
+import { backlogLabelFilters, commandHeld, focusBoardFilters, lowFireTaskIdsByProject, tasks as taskStore } from '../../lib/stores'
 
 vi.mock('../../lib/ipc', () => ({
   getPrComments: vi.fn().mockResolvedValue([]),
@@ -110,6 +110,7 @@ function renderBoard(overrides?: {
     [taskDoing.id, makeSession(taskDoing.id, 'running', null)],
   ])
   const prs = overrides?.prs ?? new Map<string, PullRequestInfo[]>()
+  taskStore.set(tasks)
 
   return render(FocusBoard, {
     props: {
@@ -130,9 +131,12 @@ describe('FocusBoard', () => {
     vi.clearAllMocks()
     const ipc = await import('../../lib/ipc')
     vi.mocked(ipc.getProjectTaskLabels).mockResolvedValue([])
+    vi.mocked(ipc.getProjectConfig).mockResolvedValue(null)
     commandHeld.set(false)
     focusBoardFilters.set(new Map())
+    lowFireTaskIdsByProject.set(new Map())
     backlogLabelFilters.set(new Map())
+    taskStore.set([])
   })
 
   it('renders the project name as the board heading', async () => {
@@ -140,22 +144,42 @@ describe('FocusBoard', () => {
     expect(await screen.findByRole('heading', { name: 'Test Project' })).toBeTruthy()
   })
 
-  it('has Focus now chip active by default', async () => {
+  it('has Focus chip active by default', async () => {
     renderBoard()
-    const chip = await screen.findByRole('button', { name: /Focus now 1/i })
+    const chip = await screen.findByRole('button', { name: /Focus 1/i })
     expect(chip).toBeTruthy()
     expect(chip.getAttribute('aria-pressed')).toBe('true')
   })
 
-  it('changes list when In progress chip is clicked', async () => {
+  it('shows focus tasks first and in-flight tasks below the divider', async () => {
     renderBoard()
 
-    await fireEvent.click(await screen.findByRole('button', { name: /In progress 1/i }))
-
+    await waitFor(() => {
+      expect(screen.getAllByText('Focus task').length).toBeGreaterThan(0)
+    })
+    expect(screen.getByText('In-flight')).toBeTruthy()
     expect(screen.getAllByText('Doing task').length).toBeGreaterThan(0)
-    expect(screen.queryByText('Focus task')).toBeNull()
     expect(screen.queryByText('Backlog task')).toBeNull()
     expect(screen.queryByText('Done task')).toBeNull()
+  })
+
+  it('moves tasks to Low-Fire from the task context menu', async () => {
+    const ipc = await import('../../lib/ipc')
+    renderBoard()
+
+    await fireEvent.contextMenu((await screen.findAllByText('Doing task'))[0])
+    await fireEvent.click(screen.getByText('Move to Low-Fire'))
+
+    await waitFor(() => {
+      expect(get(lowFireTaskIdsByProject).get('proj-1')).toEqual(new Set(['T-2']))
+    })
+    expect(ipc.setProjectConfig).toHaveBeenCalledWith('proj-1', 'low_fire_task_ids', JSON.stringify(['T-2']))
+
+    await fireEvent.click(screen.getByRole('button', { name: /Low-Fire 0/i }))
+
+    expect(screen.getByText('In-flight')).toBeTruthy()
+    expect(screen.getAllByText('Doing task').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Focus task')).toBeNull()
   })
 
   it('shows only backlog tasks when Backlog chip is clicked', async () => {
@@ -424,34 +448,31 @@ describe('FocusBoard', () => {
   })
 
   it('shows empty state when no tasks match active filter', async () => {
+    focusBoardFilters.set(new Map([['proj-1', 'low-fire']]))
     renderBoard({
       tasks: [taskDoing, taskDone],
       sessions: new Map([[taskDoing.id, makeSession(taskDoing.id, 'running', null)]]),
       prs: new Map(),
     })
 
-    expect(await screen.findByText('All clear')).toBeTruthy()
+    expect(await screen.findByText('Low-Fire is clear')).toBeTruthy()
   })
 
-  it('keeps running agents with unaddressed comments in In progress instead of Focus now', async () => {
+  it('keeps running agents with unaddressed comments in the Focus in-flight section', async () => {
     renderBoard({
       tasks: [taskDoing],
       sessions: new Map([[taskDoing.id, makeSession(taskDoing.id, 'running', null)]]),
       prs: new Map([[taskDoing.id, [makePr(taskDoing.id, 2)]]]),
     })
 
-    expect(await screen.findByRole('button', { name: /Focus now 0/i })).toBeTruthy()
-    expect(screen.queryByText('Doing task')).toBeNull()
-
-    await fireEvent.click(screen.getByRole('button', { name: /In progress 1/i }))
-
+    expect(await screen.findByRole('button', { name: /Focus 0/i })).toBeTruthy()
+    expect(screen.getByText('In-flight')).toBeTruthy()
     expect(screen.getAllByText('Doing task').length).toBeGreaterThan(0)
   })
 
   it('opens task context menu on right click', async () => {
     renderBoard()
 
-    await fireEvent.click(await screen.findByRole('button', { name: /In progress 1/i }))
     const doingTaskElements = screen.getAllByText('Doing task')
     await fireEvent.contextMenu(doingTaskElements[0])
 
@@ -479,7 +500,7 @@ describe('FocusBoard', () => {
       prs: new Map([[taskDoing.id, [makePr(taskDoing.id, 2)]]]),
     })
 
-    expect(await screen.findByRole('button', { name: /Focus now 1/i })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: /Focus 1/i })).toBeTruthy()
     expect(screen.getAllByText('Doing task').length).toBeGreaterThan(0)
   })
 
@@ -496,7 +517,7 @@ describe('FocusBoard', () => {
       ]]),
     })
 
-    expect(await screen.findByRole('button', { name: /Focus now 1/i })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: /Focus 1/i })).toBeTruthy()
     const boardCard = requireElement(document.querySelector('[data-vim-item]'), HTMLElement)
     expect(boardCard).toBeTruthy()
     expect(within(boardCard).getByText('Doing task')).toBeTruthy()
@@ -504,20 +525,20 @@ describe('FocusBoard', () => {
     expect(within(boardCard).getByText('Pull request has merge conflicts that must be resolved.')).toBeTruthy()
   })
 
-  it('CMD+1 activates Focus now filter', async () => {
+  it('CMD+1 activates Focus filter', async () => {
     renderBoard()
     // First switch away from focus
-    await fireEvent.click(await screen.findByRole('button', { name: /In progress/i }))
+    await fireEvent.click(await screen.findByRole('button', { name: /Low-Fire/i }))
     // Now CMD+1 should switch back
     await fireEvent.keyDown(window, { key: '1', metaKey: true })
-    const focusChip = screen.getByRole('button', { name: /Focus now/i })
+    const focusChip = screen.getByRole('button', { name: /^Focus 1$/i })
     expect(focusChip.getAttribute('aria-pressed')).toBe('true')
   })
 
-  it('CMD+2 activates In progress filter', async () => {
+  it('CMD+2 activates Low-Fire filter', async () => {
     renderBoard()
     await fireEvent.keyDown(window, { key: '2', metaKey: true })
-    const chip = screen.getByRole('button', { name: /In progress/i })
+    const chip = screen.getByRole('button', { name: /Low-Fire/i })
     expect(chip.getAttribute('aria-pressed')).toBe('true')
   })
 
@@ -558,13 +579,13 @@ describe('FocusBoard', () => {
   it('does not carry the selected filter over to a different project board', async () => {
     const firstRender = renderBoard({ projectId: 'proj-1' })
 
-    await fireEvent.click(await screen.findByRole('button', { name: /In progress 1/i }))
-    expect(screen.getByRole('button', { name: /In progress 1/i }).getAttribute('aria-pressed')).toBe('true')
+    await fireEvent.click(await screen.findByRole('button', { name: /Low-Fire 0/i }))
+    expect(screen.getByRole('button', { name: /Low-Fire 0/i }).getAttribute('aria-pressed')).toBe('true')
 
     firstRender.unmount()
 
     const secondRender = renderBoard({ projectId: 'proj-2' })
-    expect((await screen.findByRole('button', { name: /Focus now 1/i })).getAttribute('aria-pressed')).toBe('true')
+    expect((await screen.findByRole('button', { name: /Focus 1/i })).getAttribute('aria-pressed')).toBe('true')
     secondRender.unmount()
   })
 

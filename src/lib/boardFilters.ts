@@ -3,7 +3,7 @@ import type { TaskState } from './taskState'
 import { computeTaskState, ALL_TASK_STATES } from './taskState'
 import { getProjectConfig, setProjectConfig } from './ipc'
 
-export type BoardFilter = 'focus' | 'in-progress' | 'backlog'
+export type BoardFilter = 'focus' | 'low-fire' | 'backlog'
 
 export const DEFAULT_FOCUS_STATES: TaskState[] = [
   'idle', 'needs-input', 'paused', 'agent-done', 'failed', 'interrupted',
@@ -18,6 +18,7 @@ const LEGACY_DEFAULT_FOCUS_STATES: TaskState[] = [
 ]
 
 const FOCUS_FILTER_CONFIG_KEY = 'focus_filter_states'
+const LOW_FIRE_TASK_IDS_CONFIG_KEY = 'low_fire_task_ids'
 
 export const FOCUS_FILTER_STATES: TaskState[] = ALL_TASK_STATES.filter((state) => state !== 'active')
 
@@ -45,26 +46,22 @@ export function isFocusTask(_task: Task, state: TaskState, prs: PullRequestInfo[
 export function filterTasks(
   tasks: Task[],
   filter: BoardFilter,
-  sessions: Map<string, AgentSession>,
-  prs: Map<string, PullRequestInfo[]>,
-  focusStates: TaskState[] = DEFAULT_FOCUS_STATES
+  _sessions: Map<string, AgentSession>,
+  _prs: Map<string, PullRequestInfo[]>,
+  _focusStates: TaskState[] = DEFAULT_FOCUS_STATES,
+  lowFireTaskIds: Set<string> = new Set()
 ): Task[] {
   if (filter === 'focus') {
     return tasks.filter(task => {
-      const session = sessions.get(task.id) ?? null
-      const taskPrs = prs.get(task.id) ?? []
-      const state = computeTaskState(task, session, taskPrs)
-      return isFocusTask(task, state, taskPrs, focusStates)
+      if (task.status === 'done' || task.status === 'backlog') return false
+      return !lowFireTaskIds.has(task.id)
     })
   }
 
-  if (filter === 'in-progress') {
+  if (filter === 'low-fire') {
     return tasks.filter(task => {
       if (task.status === 'done' || task.status === 'backlog') return false
-      const session = sessions.get(task.id) ?? null
-      const taskPrs = prs.get(task.id) ?? []
-      const state = computeTaskState(task, session, taskPrs)
-      return !isFocusTask(task, state, taskPrs, focusStates)
+      return lowFireTaskIds.has(task.id)
     })
   }
 
@@ -79,11 +76,12 @@ export function getFilterCounts(
   tasks: Task[],
   sessions: Map<string, AgentSession>,
   prs: Map<string, PullRequestInfo[]>,
-  focusStates: TaskState[] = DEFAULT_FOCUS_STATES
+  focusStates: TaskState[] = DEFAULT_FOCUS_STATES,
+  lowFireTaskIds: Set<string> = new Set()
 ): Record<BoardFilter, number> {
   const counts: Record<BoardFilter, number> = {
     focus: 0,
-    'in-progress': 0,
+    'low-fire': 0,
     backlog: 0,
   }
 
@@ -99,10 +97,13 @@ export function getFilterCounts(
     const session = sessions.get(task.id) ?? null
     const taskPrs = prs.get(task.id) ?? []
     const state = computeTaskState(task, session, taskPrs)
-    if (isFocusTask(task, state, taskPrs, focusStates)) {
-      counts.focus++
+    if (!isFocusTask(task, state, taskPrs, focusStates)) {
+      continue
+    }
+    if (lowFireTaskIds.has(task.id)) {
+      counts['low-fire']++
     } else {
-      counts['in-progress']++
+      counts.focus++
     }
   }
 
@@ -127,4 +128,20 @@ export async function loadFocusFilterStates(projectId: string): Promise<TaskStat
 
 export async function saveFocusFilterStates(projectId: string, states: TaskState[]): Promise<void> {
   await setProjectConfig(projectId, FOCUS_FILTER_CONFIG_KEY, JSON.stringify(removeNonFocusableStates(states)))
+}
+
+export async function loadLowFireTaskIds(projectId: string): Promise<Set<string>> {
+  const stored = await getProjectConfig(projectId, LOW_FIRE_TASK_IDS_CONFIG_KEY)
+  if (!stored) return new Set()
+  try {
+    const parsed = JSON.parse(stored)
+    if (Array.isArray(parsed) && parsed.every((taskId: unknown) => typeof taskId === 'string')) {
+      return new Set(parsed)
+    }
+  } catch { /* ignore */ }
+  return new Set()
+}
+
+export async function saveLowFireTaskIds(projectId: string, taskIds: Set<string>): Promise<void> {
+  await setProjectConfig(projectId, LOW_FIRE_TASK_IDS_CONFIG_KEY, JSON.stringify(Array.from(taskIds)))
 }

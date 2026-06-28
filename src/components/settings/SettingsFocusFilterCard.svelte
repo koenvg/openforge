@@ -36,7 +36,7 @@
 	</div>
 
 	<div class="p-5 flex flex-col gap-3 {disabled ? 'opacity-50 pointer-events-none' : ''}">
-		<p class="text-xs text-base-content/50">Choose which task states appear in the "Focus now" filter chip on the board.</p>
+		<p class="text-xs text-base-content/50">Choose which task states appear in the "Focus" filter chip on the board.</p>
 
 		<div class="flex flex-col gap-1">
 			{#each FOCUS_FILTER_STATES as state}
