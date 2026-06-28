@@ -13,3 +13,5 @@ This repository includes Railway config-as-code for a GitHub-connected static de
 - Redeploy triggers: website files plus root package/workspace lockfiles from `railway.json`
 
 The Railway service intentionally runs from the repository root so Railpack can use the monorepo `pnpm-lock.yaml` and workspace configuration. Because Railpack detects the root `package.json` as a Node app, `pnpm website:deploy` builds the Astro site directly into root `dist/`, which is Railpack's default Node static-site output directory. No custom Node start command is configured; Railpack serves the built static files with Caddy.
+
+Astro uses the deployment URL to generate absolute canonical and Open Graph URLs. Set `OPENFORGE_WEBSITE_URL` to the public website origin once it is assigned; Railway's `RAILWAY_PUBLIC_DOMAIN` is also accepted and normalized to `https://...` during the build.
