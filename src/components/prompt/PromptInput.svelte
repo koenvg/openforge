@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
   import type { Snippet } from 'svelte'
-  import type { AutocompleteItem, Action } from '../../lib/types'
+  import type { AutocompleteItem } from '../../lib/types'
   import AutocompletePopover from './AutocompletePopover.svelte'
   import VoiceInput from '../shared/input/VoiceInput.svelte'
   import ModelDownloadProgress from '../shared/input/ModelDownloadProgress.svelte'
@@ -14,8 +13,7 @@
     placeholder?: string
     projectId: string
     onSubmit: (prompt: string) => void
-    onStartTask?: (prompt: string) => void
-    onRunAction?: (prompt: string, actionPrompt: string) => void
+    onValueChange?: (value: string) => void
     onTextChange?: (prompt: string) => void
     onPasteImage?: (file: File) => string | null | void | Promise<string | null | void>
     onImageMarkerClick?: (marker: string) => void
@@ -23,7 +21,8 @@
     onCancel: () => void
     autofocus?: boolean
     extras?: Snippet
-    actions?: Action[]
+    footerHelp?: Snippet
+    controls?: Snippet
     commandTrigger?: CommandTrigger
   }
 
@@ -32,8 +31,7 @@
     placeholder = 'Describe what you want to implement...',
     projectId,
     onSubmit,
-    onStartTask,
-    onRunAction,
+    onValueChange,
     onTextChange,
     onPasteImage,
     onImageMarkerClick,
@@ -41,7 +39,8 @@
     onCancel,
     autofocus = false,
     extras,
-    actions = [],
+    footerHelp,
+    controls,
     commandTrigger = 'slash'
   }: Props = $props()
 
@@ -51,10 +50,8 @@
   // ── Local state ──────────────────────────────────────────────────────────────
   let textValue = $state(getInitialTextValue())
   let showModelDownload = $state(false)
-  let showMoreMenu = $state(false)
 
   let textareaEl = $state<HTMLTextAreaElement | null>(null)
-  let moreActionsEl = $state<HTMLElement | null>(null)
   const promptReady = $derived(textValue.trim().length > 0)
   let lastImageMarkerInsertRequestId = 0
 
@@ -64,8 +61,9 @@
     selectionEnd: number
   }
 
-  function setTextValue(nextValue: string) {
+  function updateTextValue(nextValue: string) {
     textValue = nextValue
+    onValueChange?.(nextValue)
     onTextChange?.(nextValue)
   }
 
@@ -81,11 +79,6 @@
     }
   })
 
-  onMount(() => {
-    document.addEventListener('pointerdown', handleDocumentPointerDown)
-    return () => document.removeEventListener('pointerdown', handleDocumentPointerDown)
-  })
-
   // ── Transcription ────────────────────────────────────────────────────────────
   function handleTranscription(text: string) {
     if (!textareaEl) return
@@ -93,7 +86,7 @@
     const before = textValue.slice(0, cursorPos)
     const after = textValue.slice(cursorPos)
     const separator = before.length > 0 && !before.endsWith(' ') && !before.endsWith('\n') ? ' ' : ''
-    setTextValue(before + separator + text + after)
+    updateTextValue(before + separator + text + after)
     const newPos = cursorPos + separator.length + text.length
     setTimeout(() => {
       textareaEl?.setSelectionRange(newPos, newPos)
@@ -116,7 +109,7 @@
     const before = sourceText.slice(0, selectionStart)
     const after = sourceText.slice(selectionEnd)
     const insertion = imageMarkerInsertionText(marker.trim(), before, after)
-    setTextValue(`${before}${insertion}${after}`)
+    updateTextValue(`${before}${insertion}${after}`)
     const nextCursorPos = before.length + insertion.length
 
     setTimeout(() => {
@@ -158,9 +151,8 @@
   async function handleInput() {
     autoGrow()
     if (!textareaEl) return
-    if (!promptReady) showMoreMenu = false
     const text = textareaEl.value
-    setTextValue(text)
+    updateTextValue(text)
     const cursorPos = textareaEl.selectionStart ?? text.length
     await ac.handleTriggerDetection(text, cursorPos)
   }
@@ -199,7 +191,7 @@
 
     if (ac.activeTrigger === 'slash' || ac.activeTrigger === 'dollar') {
       // Replace entire input with the provider-specific command trigger + command + trailing space
-      setTextValue(`${commandTriggerPrefix}${item.label} `)
+      updateTextValue(`${commandTriggerPrefix}${item.label} `)
     } else if (ac.activeTrigger === 'at') {
       const text = textareaEl.value
       const cursorPos = textareaEl.selectionStart ?? text.length
@@ -210,7 +202,7 @@
         const atIndex = textBeforeCursor.lastIndexOf('@')
         const beforeAt = text.slice(0, atIndex)
         const afterCursor = text.slice(cursorPos)
-        setTextValue(`${beforeAt}@${item.label}${afterCursor}`)
+        updateTextValue(`${beforeAt}@${item.label}${afterCursor}`)
 
         // Move cursor to just after the inserted label
         const newCursorPos = atIndex + 1 + item.label.length
@@ -247,22 +239,12 @@
 
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault()
-      if (onStartTask && e.shiftKey) {
-        handleSubmit()
-      } else if (onStartTask) {
-        handleStart()
-      } else {
-        handleSubmit()
-      }
+      handleSubmit()
       return
     }
 
     if (e.key === 'Escape') {
       e.preventDefault()
-      if (showMoreMenu) {
-        showMoreMenu = false
-        return
-      }
       onCancel()
     }
   }
@@ -271,43 +253,7 @@
   function handleSubmit() {
     const prompt = textValue.trim()
     if (!prompt) return
-    showMoreMenu = false
     onSubmit(prompt)
-  }
-
-  function handleStart() {
-    const prompt = textValue.trim()
-    if (!prompt) return
-    showMoreMenu = false
-    onStartTask?.(prompt)
-  }
-
-  function handleCustomAction(actionPrompt: string) {
-    const prompt = textValue.trim()
-    if (!prompt) return
-    showMoreMenu = false
-    onRunAction?.(prompt, actionPrompt)
-  }
-
-  function toggleMoreMenu() {
-    if (!promptReady) return
-    showMoreMenu = !showMoreMenu
-  }
-
-  function handleMoreMenuKeydown(e: KeyboardEvent) {
-    if (e.key !== 'Escape') return
-    e.preventDefault()
-    e.stopPropagation()
-    showMoreMenu = false
-    textareaEl?.focus()
-  }
-
-  function handleDocumentPointerDown(e: PointerEvent) {
-    if (!showMoreMenu) return
-    const target = e.target
-    if (!(target instanceof Node)) return
-    if (moreActionsEl?.contains(target)) return
-    showMoreMenu = false
   }
 </script>
 
@@ -344,58 +290,13 @@
   <div class="flex items-center justify-between gap-3 px-3 pb-2">
     <div class="flex min-w-0 items-center gap-2">
       <VoiceInput onTranscription={handleTranscription} listenToHotkey />
-      {#if onStartTask}
-        <span class="truncate text-xs text-base-content/60">Press ⌘↵ to start, or use More for backlog/templates.</span>
+      {#if footerHelp}
+        {@render footerHelp()}
       {/if}
     </div>
     <div class="flex shrink-0 items-center gap-2">
-      {#if onStartTask}
-        {#if promptReady}
-          <div class="relative" bind:this={moreActionsEl}>
-            <button
-              class="btn btn-ghost btn-sm"
-              type="button"
-              onclick={toggleMoreMenu}
-              aria-expanded={showMoreMenu}
-              aria-haspopup="menu"
-              aria-controls="prompt-more-actions"
-              onkeydown={handleMoreMenuKeydown}
-            >More</button>
-
-            {#if showMoreMenu}
-              <div
-                id="prompt-more-actions"
-                role="menu"
-                class="absolute bottom-[calc(100%+0.5rem)] right-0 z-[100] min-w-48 overflow-hidden rounded-lg border border-base-300 bg-base-100 shadow-lg"
-              >
-                <button
-                  class="block w-full px-3 py-2 text-left text-sm text-base-content hover:bg-base-200 focus:bg-base-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                  type="button"
-                  role="menuitem"
-                  onclick={handleSubmit}
-                  onkeydown={handleMoreMenuKeydown}
-                >Add to Backlog</button>
-                {#each actions as action (action.id)}
-                  <button
-                    class="block w-full px-3 py-2 text-left text-sm text-base-content hover:bg-base-200 focus:bg-base-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                    type="button"
-                    role="menuitem"
-                    title={action.prompt || action.name}
-                    onclick={() => handleCustomAction(action.prompt)}
-                    onkeydown={handleMoreMenuKeydown}
-                  >{action.name}</button>
-                {/each}
-              </div>
-            {/if}
-          </div>
-        {/if}
-        <button
-          class="btn btn-primary btn-sm"
-          type="button"
-          disabled={!promptReady}
-          onclick={handleStart}
-          title="⌘Enter"
-        >Start Task <kbd class="kbd kbd-xs ml-1 bg-primary-content text-primary border-primary-content/30">⌘↵</kbd></button>
+      {#if controls}
+        {@render controls()}
       {:else}
         <span class="text-xs text-base-content opacity-70">⌘Enter to submit</span>
         <button

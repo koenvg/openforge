@@ -108,11 +108,16 @@ describe('AddTaskDialog', () => {
     ])
   })
 
-  it('renders in create mode with empty fields via PromptInput', async () => {
+  it('renders create mode with a single primary Start Task action before text entry', async () => {
     render(AddTaskDialog, { props: { mode: 'create' } })
     expect(screen.getByRole('heading', { name: 'Create Task' })).toBeTruthy()
     const textbox = await findPromptTextbox()
     expect(textbox.value).toBe('')
+    expect(screen.getByText('Start Task', { exact: false })).toBeTruthy()
+    expect(screen.getByText('Press ⌘↵ to start, or use More for backlog/templates.')).toBeTruthy()
+    expect(screen.queryByText('Add to Backlog', { exact: false })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'More' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Submit' })).toBeNull()
   })
 
   it('closes before awaiting the async start flow', async () => {
@@ -125,7 +130,7 @@ describe('AddTaskDialog', () => {
     render(AddTaskDialog, { props: { mode: 'create', onClose, onRunAction } })
 
     const textbox = await findPromptTextbox()
-    await fireEvent.input(textbox, { target: { value: 'Start me' } })
+    await fireEvent.input(textbox, { target: { value: '  Start me  ' } })
     await fireEvent.click(await screen.findByRole('button', { name: /Start Task/ }))
 
     await waitFor(() => {
@@ -143,9 +148,9 @@ describe('AddTaskDialog', () => {
     
     const textbox = await findPromptTextbox()
     // Svelte bind:value needs the value to be updated, or we fire `input` event
-    await fireEvent.input(textbox, { target: { value: 'My new task' } })
+    await fireEvent.input(textbox, { target: { value: '  My new task  ' } })
     
-    // The "Add to Backlog" button calls onSubmit
+    // The "Add to Backlog" button creates a backlog task
     await clickAddToBacklogFromMore()
     
     await waitFor(() => {
@@ -663,7 +668,7 @@ describe('AddTaskDialog', () => {
     render(AddTaskDialog, { props: { mode: 'create', onRunAction } })
 
     const textbox = await findPromptTextbox()
-    await fireEvent.input(textbox, { target: { value: 'Task with action' } })
+    await fireEvent.input(textbox, { target: { value: '  Task with action  ' } })
 
     await fireEvent.click(await screen.findByRole('button', { name: 'More' }))
     const actionButton = await screen.findByRole('menuitem', { name: 'Test Action' })

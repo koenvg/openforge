@@ -41,10 +41,35 @@
   let availableActions = $state<Action[]>([])
   let error = $state<string | null>(null)
   let environmentExpanded = $state(false)
+  let promptDraft = $state('')
+  let lastInitialPrompt = $state<string | null>(null)
+  let showMoreMenu = $state(false)
+  let createActionsEl = $state<HTMLElement | null>(null)
+  let pastedImages = $state<PastedTaskImage[]>([])
+  let previewImage = $state<PastedTaskImage | null>(null)
+  let imagePasteError = $state<string | null>(null)
+  let imagePastePending = $state(false)
+  let imageMarkerInsertRequest = $state<{ id: number, marker: string } | null>(null)
+  let loadedPromptSourceKey = $state<string | null>(null)
+  let nextPastedImageId = 1
+  let nextImageMarkerInsertRequestId = 1
 
+  const initialPrompt = $derived(mode === 'edit' && task ? getTaskPromptText(task) : '')
+  const promptReady = $derived(promptDraft.trim().length > 0)
   const permissionModeSummary = $derived(getPermissionModeSummary(selectedPermissionMode))
   const workspaceSummary = $derived(getWorkspaceSummary())
   const environmentSummary = $derived(`${workspaceSummary} · ${permissionModeSummary}`)
+  let pastedImageSummary = $derived(
+    pastedImages.length === 0
+      ? ''
+      : `${pastedImages.length} image${pastedImages.length === 1 ? '' : 's'} ready`
+  )
+
+  $effect(() => {
+    if (initialPrompt === lastInitialPrompt) return
+    promptDraft = initialPrompt
+    lastInitialPrompt = initialPrompt
+  })
 
   function getPermissionModeSummary(mode: PermissionMode): string {
     switch (mode) {
@@ -83,22 +108,13 @@
     return { worktreeSource: 'newBranchFromMain', worktreeBranch: null }
   }
 
-  let pastedImages = $state<PastedTaskImage[]>([])
-  let previewImage = $state<PastedTaskImage | null>(null)
-  let imagePasteError = $state<string | null>(null)
-  let imagePastePending = $state(false)
-  let imageMarkerInsertRequest = $state<{ id: number, marker: string } | null>(null)
-  let loadedPromptSourceKey = $state<string | null>(null)
-  let nextPastedImageId = 1
-  let nextImageMarkerInsertRequestId = 1
+  onMount(() => {
+    document.addEventListener('pointerdown', handleDocumentPointerDown)
+    void initializeDialog()
+    return () => document.removeEventListener('pointerdown', handleDocumentPointerDown)
+  })
 
-  let pastedImageSummary = $derived(
-    pastedImages.length === 0
-      ? ''
-      : `${pastedImages.length} image${pastedImages.length === 1 ? '' : 's'} ready`
-  )
-
-  onMount(async () => {
+  async function initializeDialog() {
     selectedPermissionMode = 'default'
     try {
       if ($activeProjectId) {
@@ -133,7 +149,46 @@
       gitBranches = []
       selectedExistingBranch = ''
     }
-  })
+  }
+
+  function handlePromptDraftChange(value: string) {
+    promptDraft = value
+    if (value.trim().length === 0) showMoreMenu = false
+  }
+
+  function toggleMoreMenu() {
+    if (!promptReady) return
+    showMoreMenu = !showMoreMenu
+  }
+
+  function handleMoreMenuKeydown(e: KeyboardEvent) {
+    if (e.key !== 'Escape') return
+    e.preventDefault()
+    e.stopPropagation()
+    showMoreMenu = false
+  }
+
+  function handleDocumentPointerDown(e: PointerEvent) {
+    if (!showMoreMenu) return
+    const target = e.target
+    if (!(target instanceof Node)) return
+    if (createActionsEl?.contains(target)) return
+    showMoreMenu = false
+  }
+
+  async function handleStartTaskFromDraft() {
+    await handleCreateOrUpdate(promptDraft, '', true)
+  }
+
+  async function handleAddToBacklogFromDraft() {
+    showMoreMenu = false
+    await handleCreateOrUpdate(promptDraft)
+  }
+
+  async function handleCustomActionFromDraft(actionPrompt: string) {
+    showMoreMenu = false
+    await handleCreateOrUpdate(promptDraft, actionPrompt, true)
+  }
 
   function markerId(marker: string): number {
     return Number(marker.match(/\[image#(\d+)\]/)?.[1] ?? '0')
@@ -278,6 +333,8 @@
 
   async function handleCreateOrUpdate(prompt: string, actionPrompt: string | null = null, autoStart: boolean = false) {
     if (!$activeProjectId) return
+    const normalizedPrompt = prompt.trim()
+    if (!normalizedPrompt) return
     error = null
     if (imagePastePending) {
       error = 'Wait for the pasted image to finish processing.'
@@ -286,7 +343,7 @@
 
     try {
       let savedTask: Task
-      const taskPrompt = promptWithPastedImageReferences(prompt)
+      const taskPrompt = promptWithPastedImageReferences(normalizedPrompt)
 
       if (mode === 'edit' && task) {
         await updateTask(task.id, taskPrompt)
@@ -333,19 +390,82 @@
     {/if}
     <PromptInput
       projectId={$activeProjectId || ''}
-      value={mode === 'edit' && task ? getTaskPromptText(task) : ''}
+      value={initialPrompt}
       autofocus={false}
-      actions={mode === 'edit' ? [] : availableActions}
       commandTrigger={aiProvider === 'codex' ? 'dollar' : 'slash'}
       onTextChange={syncPastedImagesWithPrompt}
       onPasteImage={attachPastedImage}
       onImageMarkerClick={openImagePreview}
       imageMarkerInsertRequest={imageMarkerInsertRequest}
-      onSubmit={(prompt) => handleCreateOrUpdate(prompt)}
-      onStartTask={mode === 'edit' ? undefined : (prompt) => handleCreateOrUpdate(prompt, '', true)}
-      onRunAction={mode === 'edit' ? undefined : (prompt, actionPrompt) => handleCreateOrUpdate(prompt, actionPrompt, true)}
+      onSubmit={(prompt) => mode === 'create' ? handleCreateOrUpdate(prompt, '', true) : handleCreateOrUpdate(prompt)}
+      onValueChange={handlePromptDraftChange}
       onCancel={() => onClose?.()}
     >
+      {#snippet footerHelp()}
+        {#if mode === 'create'}
+          <span class="truncate text-xs text-base-content/60">Press ⌘↵ to start, or use More for backlog/templates.</span>
+        {/if}
+      {/snippet}
+
+      {#snippet controls()}
+        {#if mode === 'create'}
+          {#if promptReady}
+            <div class="relative" bind:this={createActionsEl}>
+              <button
+                class="btn btn-ghost btn-sm"
+                type="button"
+                onclick={toggleMoreMenu}
+                aria-expanded={showMoreMenu}
+                aria-haspopup="menu"
+                aria-controls="create-task-more-actions"
+                onkeydown={handleMoreMenuKeydown}
+              >More</button>
+
+              {#if showMoreMenu}
+                <div
+                  id="create-task-more-actions"
+                  role="menu"
+                  class="absolute bottom-[calc(100%+0.5rem)] right-0 z-[100] min-w-48 overflow-hidden rounded-lg border border-base-300 bg-base-100 shadow-lg"
+                >
+                  <button
+                    class="block w-full px-3 py-2 text-left text-sm text-base-content hover:bg-base-200 focus:bg-base-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    type="button"
+                    role="menuitem"
+                    onclick={handleAddToBacklogFromDraft}
+                    onkeydown={handleMoreMenuKeydown}
+                  >Add to Backlog</button>
+                  {#each availableActions as action (action.id)}
+                    <button
+                      class="block w-full px-3 py-2 text-left text-sm text-base-content hover:bg-base-200 focus:bg-base-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      type="button"
+                      role="menuitem"
+                      title={action.prompt || action.name}
+                      onclick={() => handleCustomActionFromDraft(action.prompt)}
+                      onkeydown={handleMoreMenuKeydown}
+                    >{action.name}</button>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {/if}
+          <button
+            class="btn btn-primary btn-sm"
+            type="button"
+            disabled={!promptReady}
+            onclick={handleStartTaskFromDraft}
+            title="⌘Enter"
+          >Start Task <kbd class="kbd kbd-xs ml-1 bg-primary-content text-primary border-primary-content/30">⌘↵</kbd></button>
+        {:else}
+          <span class="text-xs text-base-content opacity-70">⌘Enter to submit</span>
+          <button
+            class="btn btn-primary btn-sm"
+            type="button"
+            disabled={!promptReady}
+            onclick={() => handleCreateOrUpdate(promptDraft)}
+          >Submit</button>
+        {/if}
+      {/snippet}
+
       {#snippet extras()}
         <div class="flex flex-col gap-2">
           <div class="flex items-center gap-2">

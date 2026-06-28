@@ -1,7 +1,14 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { createRawSnippet } from 'svelte'
 import { requireElement } from '../../test-utils/dom'
 import PromptInput from './PromptInput.svelte'
+
+function createSnippet(text: string) {
+  return createRawSnippet(() => ({
+    render: () => `<span>${text}</span>`,
+  }))
+}
 
 // Mock IPC functions
 vi.mock('../../lib/ipc', () => ({
@@ -248,141 +255,40 @@ describe('PromptInput', () => {
     expect(onImageMarkerClick).toHaveBeenCalledWith('[image#1]')
   })
 
-  describe('create flow actions (onStartTask provided)', () => {
-    it('shows Start Task as the only visible submit action before text is entered', () => {
+  describe('composer extension points', () => {
+    it('renders parent-provided footer help and controls without owning create-task outcomes', () => {
       render(PromptInput, {
         props: {
           ...baseProps,
-          onStartTask: vi.fn(),
+          footerHelp: createSnippet('Parent owns outcome help'),
+          controls: createSnippet('Parent Primary Action'),
         },
       })
-      expect(screen.getByText('Start Task', { exact: false })).toBeTruthy()
-      expect(screen.getByText('Press ⌘↵ to start, or use More for backlog/templates.')).toBeTruthy()
-      expect(screen.queryByText('Add to Backlog', { exact: false })).toBeNull()
+
+      expect(screen.getByText('Parent owns outcome help')).toBeTruthy()
+      expect(screen.getByText('Parent Primary Action')).toBeTruthy()
+      expect(screen.queryByText('Start Task', { exact: false })).toBeNull()
       expect(screen.queryByRole('button', { name: 'More' })).toBeNull()
-      expect(screen.queryByRole('button', { name: 'Submit' })).toBeNull()
-    })
-
-    it('moves Add to Backlog behind the More menu', async () => {
-      const onSubmit = vi.fn()
-      render(PromptInput, {
-        props: {
-          ...baseProps,
-          onSubmit,
-          onStartTask: vi.fn(),
-        },
-      })
-      const textarea = requireElement(
-        screen.getByPlaceholderText('Describe what you want to implement...'),
-        HTMLTextAreaElement,
-      )
-      textarea.value = 'New feature'
-      await fireEvent.input(textarea)
-      await fireEvent.click(screen.getByRole('button', { name: 'More' }))
-      await fireEvent.click(screen.getByRole('menuitem', { name: 'Add to Backlog' }))
-      expect(onSubmit).toHaveBeenCalledWith('New feature')
-    })
-
-    it('dismisses the More menu when clicking back into the prompt', async () => {
-      render(PromptInput, {
-        props: {
-          ...baseProps,
-          onStartTask: vi.fn(),
-        },
-      })
-      const textarea = requireElement(
-        screen.getByPlaceholderText('Describe what you want to implement...'),
-        HTMLTextAreaElement,
-      )
-      textarea.value = 'New feature'
-      await fireEvent.input(textarea)
-      await fireEvent.click(screen.getByRole('button', { name: 'More' }))
-      expect(screen.getByRole('menuitem', { name: 'Add to Backlog' })).toBeTruthy()
-
-      await fireEvent.pointerDown(textarea)
-
       expect(screen.queryByRole('menuitem', { name: 'Add to Backlog' })).toBeNull()
     })
 
-    it('calls onStartTask when Start Task is clicked', async () => {
-      const onStartTask = vi.fn()
+    it('reports draft changes to parent-owned controls', async () => {
+      const onValueChange = vi.fn()
       render(PromptInput, {
         props: {
           ...baseProps,
-          onStartTask,
+          onValueChange,
+          controls: createSnippet('Parent Primary Action'),
         },
       })
-      const textarea = requireElement(
-        screen.getByPlaceholderText('Describe what you want to implement...'),
-        HTMLTextAreaElement,
-      )
-      textarea.value = 'New feature'
-      await fireEvent.input(textarea)
-      await fireEvent.click(screen.getByText('Start Task', { exact: false }))
-      expect(onStartTask).toHaveBeenCalledWith('New feature')
-    })
 
-    it('Cmd+Enter calls onStartTask (primary action)', async () => {
-      const onSubmit = vi.fn()
-      const onStartTask = vi.fn()
-      render(PromptInput, {
-        props: {
-          ...baseProps,
-          onSubmit,
-          onStartTask,
-        },
-      })
       const textarea = requireElement(
         screen.getByPlaceholderText('Describe what you want to implement...'),
         HTMLTextAreaElement,
       )
-      textarea.value = 'New feature'
-      await fireEvent.input(textarea)
-      await fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true })
-      expect(onStartTask).toHaveBeenCalledWith('New feature')
-      expect(onSubmit).not.toHaveBeenCalled()
-    })
+      await fireEvent.input(textarea, { target: { value: 'New feature' } })
 
-    it('does not steal Shift+Enter from textarea newline entry', async () => {
-      const onSubmit = vi.fn()
-      const onStartTask = vi.fn()
-      render(PromptInput, {
-        props: {
-          ...baseProps,
-          onSubmit,
-          onStartTask,
-        },
-      })
-      const textarea = requireElement(
-        screen.getByPlaceholderText('Describe what you want to implement...'),
-        HTMLTextAreaElement,
-      )
-      textarea.value = 'New feature'
-      await fireEvent.input(textarea)
-      await fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true })
-      expect(onSubmit).not.toHaveBeenCalled()
-      expect(onStartTask).not.toHaveBeenCalled()
-    })
-
-    it('uses Cmd+Shift+Enter as the backlog shortcut', async () => {
-      const onSubmit = vi.fn()
-      const onStartTask = vi.fn()
-      render(PromptInput, {
-        props: {
-          ...baseProps,
-          onSubmit,
-          onStartTask,
-        },
-      })
-      const textarea = requireElement(
-        screen.getByPlaceholderText('Describe what you want to implement...'),
-        HTMLTextAreaElement,
-      )
-      textarea.value = 'New feature'
-      await fireEvent.input(textarea)
-      await fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true, shiftKey: true })
-      expect(onSubmit).toHaveBeenCalledWith('New feature')
-      expect(onStartTask).not.toHaveBeenCalled()
+      expect(onValueChange).toHaveBeenLastCalledWith('New feature')
     })
   })
 
