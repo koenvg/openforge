@@ -45,13 +45,26 @@ vi.mock('@lucide/svelte', () => {
   }
 })
 
+vi.mock('../../lib/iconRailIcons', () => ({
+  resolveIconRailIcon: () => vi.fn(),
+}))
+
+const GLOBAL_PR_VIEW_KEY = 'plugin:com.openforge.github-sync:pr_review_global'
+
+const globalPrNavItem = {
+  viewKey: GLOBAL_PR_VIEW_KEY as AppView,
+  icon: 'boxes',
+  title: 'All Pull Requests',
+  shortcut: null,
+}
+
 const sampleProjects: Project[] = [
   { id: 'proj-1', name: 'Alpha Project', path: '/users/alice/alpha', created_at: 0, updated_at: 0 },
   { id: 'proj-2', name: 'Beta Project', path: '/users/bob/beta', created_at: 0, updated_at: 0 },
   { id: 'proj-3', name: 'Gamma Project', path: '/users/charlie/gamma', created_at: 0, updated_at: 0 },
 ]
 
-function renderSidebar(props?: Partial<{ collapsed: boolean; currentView: AppView; onToggleCollapse: () => void; onNewProject?: () => void; onNavigate: (view: AppView) => void }>) {
+function renderSidebar(props?: Partial<{ collapsed: boolean; currentView: AppView; onToggleCollapse: () => void; onNewProject?: () => void; onNavigate: (view: AppView) => void; pluginNavItems: typeof globalPrNavItem[]; reviewRequestCount: number; authoredPrCount: number }>) {
   const defaultProps = {
     collapsed: false,
     currentView: 'board' as AppView,
@@ -206,6 +219,46 @@ describe('AppSidebar', () => {
 
     const activeProjectButton = screen.getByRole('button', { name: /^alpha project$/i })
     expect(activeProjectButton.getAttribute('aria-current')).toBe('true')
+  })
+
+  describe('sidebar plugin nav items', () => {
+    it('renders a sidebar plugin nav item with its title', () => {
+      renderSidebar({ pluginNavItems: [globalPrNavItem] })
+      expect(screen.getByRole('button', { name: /all pull requests/i })).toBeTruthy()
+    })
+
+    it('clicking a sidebar plugin nav item navigates to its view key', async () => {
+      const onNavigate = vi.fn()
+      renderSidebar({ pluginNavItems: [globalPrNavItem], onNavigate })
+
+      await fireEvent.click(screen.getByRole('button', { name: /all pull requests/i }))
+      expect(onNavigate).toHaveBeenCalledWith(GLOBAL_PR_VIEW_KEY)
+    })
+
+    it('marks the sidebar plugin nav item current when its view is active', () => {
+      renderSidebar({ pluginNavItems: [globalPrNavItem], currentView: GLOBAL_PR_VIEW_KEY as AppView })
+      expect(screen.getByRole('button', { name: /all pull requests/i }).getAttribute('aria-current')).toBe('page')
+    })
+
+    it('shows the review request count badge on the all-repos item', () => {
+      renderSidebar({ pluginNavItems: [globalPrNavItem], reviewRequestCount: 3 })
+      expect(screen.getByText('3')).toBeTruthy()
+    })
+
+    it('shows the authored PR count badge on the all-repos item', () => {
+      renderSidebar({ pluginNavItems: [globalPrNavItem], authoredPrCount: 5 })
+      expect(screen.getByText('5')).toBeTruthy()
+    })
+
+    it('does not show count badges when counts are zero', () => {
+      renderSidebar({ pluginNavItems: [globalPrNavItem], reviewRequestCount: 0, authoredPrCount: 0 })
+      expect(screen.queryByText('0')).toBeNull()
+    })
+
+    it('renders no extra nav buttons when there are no sidebar plugin items', () => {
+      renderSidebar({ pluginNavItems: [] })
+      expect(screen.queryByRole('button', { name: /all pull requests/i })).toBeNull()
+    })
   })
 
   describe('Project reordering', () => {

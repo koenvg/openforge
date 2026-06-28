@@ -110,6 +110,7 @@ impl PluginHost {
             whisper: None,
             sidecar_readiness: crate::http_server::SidecarReadinessState::default(),
             start_implementation_claims: self.start_implementation_claims.clone(),
+            poll_context: crate::github_poller::PollContext::new(),
         })
     }
 

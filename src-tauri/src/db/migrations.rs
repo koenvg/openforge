@@ -1204,6 +1204,46 @@ pub(super) fn ensure_mergeability_columns(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// Backfills the `is_queued` column on the PR tables for databases that were
+/// already migrated past the (mid-list) column-adding migration, which
+/// `rusqlite_migration` skips once `user_version` is beyond it. Idempotent and
+/// version-independent, so it heals existing databases on startup. Mirrors
+/// [`ensure_mergeability_columns`].
+pub(super) fn ensure_is_queued_columns(conn: &Connection) -> Result<()> {
+    for table in ["pull_requests", "authored_prs"] {
+        let has_table: bool = conn.query_row(
+            &format!(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='{}'",
+                table
+            ),
+            [],
+            |r| r.get(0),
+        )?;
+
+        if !has_table {
+            continue;
+        }
+
+        let exists: bool = conn.query_row(
+            &format!(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('{}') WHERE name = 'is_queued'",
+                table
+            ),
+            [],
+            |r| r.get(0),
+        )?;
+
+        if !exists {
+            conn.execute(
+                &format!("ALTER TABLE {} ADD COLUMN is_queued INTEGER NOT NULL DEFAULT 0", table),
+                [],
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
 pub(super) fn ensure_task_dependency_table(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"
@@ -1891,6 +1931,53 @@ mod tests {
             "Fresh DB should have user_version={} after migrations, got {}",
             LATEST_USER_VERSION, uv
         );
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_is_queued_columns_backfilled_for_upgraded_db() {
+        // Reproduces the real-world bug: the is_queued column-adding migration was
+        // inserted mid-list, so databases whose user_version is already past it
+        // (e.g. the seeded dev DB at v28) never had the column added. A fully
+        // migrated DB that predates the fix is missing is_queued on both PR tables.
+        let path = std::env::temp_dir().join(format!(
+            "test_is_queued_backfill_{}.db",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+
+        {
+            let conn = rusqlite::Connection::open(&path).expect("open raw db");
+            conn.execute(&format!("PRAGMA user_version = {LATEST_USER_VERSION}"), [])
+                .expect("set user_version");
+            conn.execute("CREATE TABLE pull_requests (id INTEGER PRIMARY KEY)", [])
+                .expect("create legacy pull_requests table");
+            conn.execute("CREATE TABLE authored_prs (id INTEGER PRIMARY KEY)", [])
+                .expect("create legacy authored_prs table");
+        }
+
+        let db = Database::new(path.clone()).expect("Database::new");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        for table in ["pull_requests", "authored_prs"] {
+            let has_is_queued: bool = conn
+                .query_row(
+                    &format!(
+                        "SELECT COUNT(*) > 0 FROM pragma_table_info('{table}') WHERE name = 'is_queued'"
+                    ),
+                    [],
+                    |r| r.get(0),
+                )
+                .expect("query is_queued column");
+            assert!(
+                has_is_queued,
+                "{table} should have an is_queued column after upgrading an existing DB"
+            );
+        }
 
         drop(conn);
         drop(db);

@@ -30,6 +30,7 @@ fn test_state(name: &str) -> (AppState, std::path::PathBuf) {
             ))),
             sidecar_readiness: SidecarReadinessState::new(),
             start_implementation_claims: StartImplementationClaims::new(),
+            poll_context: crate::github_poller::PollContext::new(),
         },
         path,
     )

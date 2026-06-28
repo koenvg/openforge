@@ -70,12 +70,11 @@ describe('IconRail', () => {
     expect(onNavigate).toHaveBeenCalledWith('settings')
   })
 
-  it('shows review request count badge when reviewRequestCount > 0', () => {
+  it('does not render PR count badges on the rail (they live in the left sidebar now)', () => {
     render(IconRail, {
       props: {
         currentView: 'board' as AppView,
         onNavigate: vi.fn(),
-        reviewRequestCount: 3,
         pluginNavItems: [
           {
             viewKey: 'plugin:com.openforge.github-sync:pr_review',
@@ -86,32 +85,9 @@ describe('IconRail', () => {
         ],
       },
     })
-    expect(screen.getByText('3')).toBeTruthy()
-  })
-
-  it('does not show badge when reviewRequestCount is 0', () => {
-    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), reviewRequestCount: 0 } })
-    expect(screen.queryByText('0')).toBeNull()
-  })
-
-  it('shows authored PR count badge when authoredPrCount > 0', () => {
-    render(IconRail, {
-      props: {
-        currentView: 'board' as AppView,
-        onNavigate: vi.fn(),
-        reviewRequestCount: 0,
-        authoredPrCount: 5,
-        pluginNavItems: [
-          {
-            viewKey: 'plugin:com.openforge.github-sync:pr_review',
-            icon: 'git-pull-request',
-            title: 'Pull Requests',
-            shortcut: '⌘G',
-          },
-        ],
-      },
-    })
-    expect(screen.getByText('5')).toBeTruthy()
+    // The repo-scoped rail item carries no review/authored count badges.
+    expect(screen.queryByText('3')).toBeNull()
+    expect(screen.queryByText('5')).toBeNull()
   })
 
   describe('shortcut badges', () => {
@@ -151,28 +127,6 @@ describe('IconRail', () => {
       expect(screen.queryByText(',')).toBeNull()
 
       commandHeld.set(false)
-    })
-
-    it('shows PR badges on the github sync plugin item', () => {
-      render(IconRail, {
-        props: {
-          currentView: 'board' as AppView,
-          onNavigate: vi.fn(),
-          reviewRequestCount: 3,
-          authoredPrCount: 5,
-          pluginNavItems: [
-            {
-              viewKey: 'plugin:com.openforge.github-sync:pr_review',
-              icon: 'git-pull-request',
-              title: 'Pull Requests',
-              shortcut: '⌘G',
-            },
-          ],
-        },
-      })
-
-      expect(screen.getByText('3')).toBeTruthy()
-      expect(screen.getByText('5')).toBeTruthy()
     })
 
     it('shows plugin shortcut badges when commandHeld is true', () => {

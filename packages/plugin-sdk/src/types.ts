@@ -217,7 +217,12 @@ export interface PluginViewRegistration {
   id: string
   title: string
   icon: string
-  placement: 'rail'
+  /**
+   * Where the host surfaces the view's nav entry. `'rail'` (default) places it on
+   * the icon rail; `'sidebar'` places it in the left projects sidebar. Either way
+   * the view itself is registered and routable by its key.
+   */
+  placement: 'rail' | 'sidebar'
   order?: number
   shortcut?: string
   component: PluginComponentLoader<PluginViewProps> | PluginComponent<PluginViewProps>

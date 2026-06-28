@@ -16,6 +16,17 @@ export default defineFrontendPlugin({
       component: PrReviewView,
     }))
 
+    // A second, all-repos view rendered by the same component (it derives its
+    // scope from the active view). Placed in the left projects sidebar rather
+    // than the icon rail; the host surfaces it there with the PR count badges.
+    context.subscriptions.add(openforge.views.register({
+      id: 'pr_review_global',
+      title: 'All Pull Requests',
+      icon: 'boxes',
+      placement: 'sidebar',
+      component: PrReviewView,
+    }))
+
     const githubSync = createGithubSyncPrReviewClient(openforge)
 
     context.subscriptions.add(openforge.commands.register({

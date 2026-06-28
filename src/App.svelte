@@ -5,7 +5,9 @@
   import { createDesktopWindow } from './lib/desktopWindow'
   import type { DesktopWindowTarget } from './lib/desktopWindow'
   import { tasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, isLoading, projects, activeProjectId, activeProjectColorId, currentView, reviewRequestCount, authoredPrCount, codeCleanupTasksEnabled, focusBoardFilters } from './lib/stores'
-  import { getAppMode, getConfig, getProjectConfig, resumeStartupSessions } from './lib/ipc'
+  import { getAppMode, getConfig, getProjectConfig, resumeStartupSessions, setPollContext, getProjectRepo } from './lib/ipc'
+  import { computePollContext, pollContextEquals, type PollContextPayload } from './lib/pollContext'
+  import { GITHUB_SYNC_GLOBAL_VIEW_KEY } from './lib/githubSyncPlugin'
   import type { Task, AppView, Project } from './lib/types'
   import FocusBoard from './components/focus-board/FocusBoard.svelte'
   import TaskDetailView from './components/task-detail/TaskDetailView.svelte'
@@ -109,6 +111,17 @@
         shortcut: view.shortcut,
       }))
   )
+  let sidebarPluginNavItems = $derived(
+    [...resolvedPluginContributions.views]
+      .filter((view) => view.showInSidebar)
+      .sort((a, b) => a.railOrder - b.railOrder || a.title.localeCompare(b.title))
+      .map((view) => ({
+        viewKey: makePluginViewKey(view.pluginId, view.contributionId),
+        icon: view.icon,
+        title: view.title,
+        shortcut: view.shortcut,
+      }))
+  )
   let activeViewEntry = $derived($currentView === 'board' ? null : resolvedViews[$currentView] ?? null)
   let renderedActiveView = $derived.by(() => {
     if (activeViewEntry === null) {
@@ -161,6 +174,40 @@
     }
 
     previousPluginProjectId = projectId
+  })
+
+  // Report the renderer's poll context to the sidecar so the GitHub poller can
+  // focus-gate (pause when unfocused) and scope its calls (active repo unless the
+  // global PR view is open). Deduped so redundant store updates don't spam IPC.
+  let windowFocused = $state(true)
+  let lastPollContext: PollContextPayload | null = null
+
+  function refreshWindowFocus() {
+    windowFocused =
+      typeof document === 'undefined'
+        ? true
+        : document.visibilityState === 'visible' && document.hasFocus()
+  }
+
+  $effect(() => {
+    const payload = computePollContext({
+      focused: windowFocused,
+      activeProjectId: $activeProjectId,
+      currentView: $currentView,
+      globalPrViewKey: GITHUB_SYNC_GLOBAL_VIEW_KEY,
+    })
+    if (lastPollContext && pollContextEquals(lastPollContext, payload)) return
+    lastPollContext = payload
+    void setPollContext(payload)
+  })
+
+  // Resolve + cache the active project's GitHub repo (written to project config
+  // 'resolved_repo' by the sidecar) so the per-repo PR view can scope to it.
+  $effect(() => {
+    const projectId = $activeProjectId
+    if (projectId) {
+      void getProjectRepo(projectId).catch(() => {})
+    }
   })
 
   $effect(() => {
@@ -313,6 +360,17 @@
     window.addEventListener('keydown', handleKeydown)
     unlisteners.push(() => window.removeEventListener('keydown', handleKeydown))
 
+    // Track window focus/visibility so the poll-context effect can focus-gate polling.
+    refreshWindowFocus()
+    window.addEventListener('focus', refreshWindowFocus)
+    window.addEventListener('blur', refreshWindowFocus)
+    document.addEventListener('visibilitychange', refreshWindowFocus)
+    unlisteners.push(() => {
+      window.removeEventListener('focus', refreshWindowFocus)
+      window.removeEventListener('blur', refreshWindowFocus)
+      document.removeEventListener('visibilitychange', refreshWindowFocus)
+    })
+
     registerAppShortcuts(shortcuts, {
       showShortcuts: () => { showShortcutsDialog = true },
       openActionPalette: actionPalette.openActionPalette,
@@ -386,9 +444,12 @@
     onToggleCollapse={() => { appSidebarCollapsed = !appSidebarCollapsed; localStorage.setItem('appSidebarCollapsed', String(appSidebarCollapsed)) }}
     onNewProject={() => showProjectSetup = true}
     onNavigate={handleNavigate}
+    pluginNavItems={sidebarPluginNavItems}
+    reviewRequestCount={$reviewRequestCount}
+    authoredPrCount={$authoredPrCount}
   />
   {#if !ICON_RAIL_HIDDEN_VIEWS.has($currentView)}
-    <IconRail currentView={$currentView} onNavigate={handleNavigate} reviewRequestCount={$reviewRequestCount} authoredPrCount={$authoredPrCount} pluginNavItems={pluginNavItems} modalsOpen={showCommandPalette || showProjectSwitcher || actionPalette.showActionPalette || showAddDialog || showFileQuickOpen} railBg={iconRailBg} />
+    <IconRail currentView={$currentView} onNavigate={handleNavigate} pluginNavItems={pluginNavItems} modalsOpen={showCommandPalette || showProjectSwitcher || actionPalette.showActionPalette || showAddDialog || showFileQuickOpen} railBg={iconRailBg} />
   {/if}
 
   <div class="flex flex-col flex-1 min-w-0 relative" style="background: linear-gradient(180deg, var(--project-bg-alt) 0%, var(--project-bg) 100%)">

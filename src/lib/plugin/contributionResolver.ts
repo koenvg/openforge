@@ -22,6 +22,7 @@ export interface ResolvedView {
   icon: string
   shortcut: string | null
   showInRail: boolean
+  showInSidebar: boolean
   railOrder: number
 }
 
@@ -147,6 +148,7 @@ function resolveView(pluginId: string, item: unknown): ResolvedView | null {
     icon,
     shortcut: isNonEmptyString(shortcut) ? normalizeShortcut(shortcut) : null,
     showInRail: placement === undefined || placement === 'rail',
+    showInSidebar: placement === 'sidebar',
     railOrder: isNumber(order) ? order : 100,
   }
 }

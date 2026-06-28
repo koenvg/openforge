@@ -106,6 +106,14 @@ describe('github-sync plugin', () => {
       order: 20,
       component: PrReviewViewComponent,
     }))
+    // The all-repos view lives in the left projects sidebar, not the icon rail.
+    expect(api.views.register).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'pr_review_global',
+      title: 'All Pull Requests',
+      icon: 'boxes',
+      placement: 'sidebar',
+      component: PrReviewViewComponent,
+    }))
     expect(api.commands.register).toHaveBeenCalledWith(expect.objectContaining({
       id: 'refresh',
       title: 'Refresh Pull Requests',

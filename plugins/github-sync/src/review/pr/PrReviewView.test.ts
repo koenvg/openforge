@@ -72,6 +72,8 @@ import {
   selectedReviewPr,
 } from '../../lib/stores'
 
+const GLOBAL_VIEW_ID = 'plugin:com.openforge.github-sync:pr_review_global'
+
 const basePr: ReviewPullRequest = {
   id: 12345,
   number: 42,
@@ -400,7 +402,7 @@ describe('PrReviewView empty and recovery states', () => {
   })
 
   it('labels repository filter controls and exposes dropdown expanded state', async () => {
-    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1', viewId: GLOBAL_VIEW_ID })
     await registry.frontendApi.config.set('github_token', 'ghp_test')
     registerPrReviewBackends(registry, () => [], [])
 
@@ -423,7 +425,7 @@ describe('PrReviewView empty and recovery states', () => {
   })
 
   it('explains when repository filters hide every review request', async () => {
-    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1', viewId: GLOBAL_VIEW_ID })
     await registry.frontendApi.config.set('github_token', 'ghp_test')
     await registry.frontendApi.projectConfig.set('pr_excluded_repos', JSON.stringify(['acme/repo']), 'project-1')
     registerPrReviewBackends(registry, () => [baseDiff], [basePr])
@@ -564,5 +566,93 @@ describe('PrReviewView submit review', () => {
       expect(get(pendingManualComments)).toEqual([submittedComment])
       expect(screen.getByText('Failed to submit review. Please try again.')).toBeTruthy()
     })
+  })
+})
+
+function renderPrReviewView(registry: TestingOpenForgeRegistryFake) {
+  return render(PrReviewView, {
+    props: {
+      api: registry.frontendApi,
+      context: registry.frontendApi.context.getSnapshot(),
+      projectName: 'Demo Project',
+      projectId: 'project-1',
+    },
+  })
+}
+
+describe('PrReviewView repository filter scope', () => {
+  beforeEach(() => {
+    resetStores()
+    vi.clearAllMocks()
+  })
+
+  it('hides the repository filter control in the repo-scoped view', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    registerPrReviewBackends(registry, () => [baseDiff])
+
+    renderPrReviewView(registry)
+
+    await screen.findByText('Fix authentication middleware')
+    expect(screen.queryByRole('button', { name: /filter repositories/i })).toBeNull()
+  })
+
+  it('shows the repository filter control in the all-repos view', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1', viewId: GLOBAL_VIEW_ID })
+    registerPrReviewBackends(registry, () => [baseDiff])
+
+    renderPrReviewView(registry)
+
+    await screen.findByText('Fix authentication middleware')
+    expect(screen.getByRole('button', { name: /filter repositories/i })).toBeTruthy()
+  })
+
+  it('ignores excluded-repo filters in the repo-scoped view', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    await registry.frontendApi.projectConfig.set('pr_excluded_repos', JSON.stringify([`${basePr.repo_owner}/${basePr.repo_name}`]), 'project-1')
+    registerPrReviewBackends(registry, () => [baseDiff])
+
+    renderPrReviewView(registry)
+
+    // The PR's repo is on the exclusion list, but exclusions don't apply to the
+    // single-repo view, so the PR is still listed.
+    expect(await screen.findByText('Fix authentication middleware')).toBeTruthy()
+  })
+
+  it('applies excluded-repo filters in the all-repos view', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1', viewId: GLOBAL_VIEW_ID })
+    await registry.frontendApi.projectConfig.set('pr_excluded_repos', JSON.stringify([`${basePr.repo_owner}/${basePr.repo_name}`]), 'project-1')
+    registerPrReviewBackends(registry, () => [baseDiff])
+
+    renderPrReviewView(registry)
+
+    // In the all-repos view the exclusion hides the PR behind the filtered state.
+    await screen.findByText(/hidden by filters/i)
+    expect(screen.queryByText('Fix authentication middleware')).toBeNull()
+  })
+})
+
+describe('PrReviewView header title', () => {
+  beforeEach(() => {
+    resetStores()
+    vi.clearAllMocks()
+  })
+
+  it('titles the repo-scoped view with the active project name', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    registerPrReviewBackends(registry, () => [baseDiff])
+
+    renderPrReviewView(registry)
+
+    expect(await screen.findByText('Demo Project — Pull Requests')).toBeTruthy()
+  })
+
+  it('titles the all-repos view independently of the active project', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1', viewId: GLOBAL_VIEW_ID })
+    registerPrReviewBackends(registry, () => [baseDiff])
+
+    renderPrReviewView(registry)
+
+    expect(await screen.findByText('All Pull Requests')).toBeTruthy()
+    expect(screen.queryByText('Demo Project — Pull Requests')).toBeNull()
   })
 })
