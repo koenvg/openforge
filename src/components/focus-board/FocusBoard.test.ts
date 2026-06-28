@@ -371,6 +371,26 @@ describe('FocusBoard', () => {
     expect(onOpenTask).toHaveBeenCalledWith('T-2')
   })
 
+  it('moves board focus down on ArrowDown key', async () => {
+    renderBoard({
+      tasks: [taskFocus, taskDoing, taskDone],
+      sessions: new Map([
+        [taskFocus.id, makeSession(taskFocus.id, 'paused', 'needs-review')],
+        [taskDoing.id, makeSession(taskDoing.id, 'failed', null)],
+      ]),
+    })
+
+    await waitFor(() => {
+      expect(getCurrentVimItem().getAttribute('aria-current')).toBe('true')
+    })
+
+    await fireEvent.keyDown(window, { key: 'ArrowDown' })
+
+    const currentItem = getCurrentVimItem()
+    expect(currentItem.getAttribute('aria-current')).toBe('true')
+    expect(within(currentItem).getByText('Doing task')).toBeTruthy()
+  })
+
   it('moves vim focus up on k key', async () => {
     renderBoard({
       tasks: [taskFocus, taskDoing, taskDone],
@@ -389,6 +409,40 @@ describe('FocusBoard', () => {
 
     await fireEvent.keyDown(window, { key: 'Enter' })
     expect(onOpenTask).toHaveBeenCalledWith('T-1')
+  })
+
+  it('moves board focus up on ArrowUp key', async () => {
+    renderBoard({
+      tasks: [taskFocus, taskDoing, taskDone],
+      sessions: new Map([
+        [taskFocus.id, makeSession(taskFocus.id, 'paused', 'needs-review')],
+        [taskDoing.id, makeSession(taskDoing.id, 'failed', null)],
+      ]),
+    })
+
+    await fireEvent.keyDown(window, { key: 'j' })
+    await fireEvent.keyDown(window, { key: 'ArrowUp' })
+
+    const currentItem = getCurrentVimItem()
+    expect(currentItem.getAttribute('aria-current')).toBe('true')
+    expect(within(currentItem).getByText('Focus task')).toBeTruthy()
+  })
+
+  it('does not move board focus with ArrowDown while the detail pane has focus', async () => {
+    renderBoard({
+      tasks: [taskFocus, taskDoing, taskDone],
+      sessions: new Map([
+        [taskFocus.id, makeSession(taskFocus.id, 'paused', 'needs-review')],
+        [taskDoing.id, makeSession(taskDoing.id, 'failed', null)],
+      ]),
+    })
+
+    const openFullViewButton = await screen.findByRole('button', { name: 'Open full view' })
+    await fireEvent.focusIn(openFullViewButton)
+    await fireEvent.keyDown(window, { key: 'ArrowDown' })
+
+    const currentItem = getCurrentVimItem()
+    expect(within(currentItem).getByText('Focus task')).toBeTruthy()
   })
 
   it('opens focused task on Enter', async () => {
