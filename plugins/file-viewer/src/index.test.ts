@@ -19,6 +19,7 @@ import packageJson from '../package.json'
 import { pendingFileReveal } from './lib/stores'
 
 const pluginSrcDir = dirname(fileURLToPath(import.meta.url))
+const repoRoot = join(pluginSrcDir, '..', '..', '..')
 
 function makeRuntimeHarness() {
   const subscriptions = { add: vi.fn() }
@@ -110,5 +111,10 @@ describe('file-viewer plugin', () => {
     expect(existsSync(join(pluginSrcDir, 'lib/ipc.ts'))).toBe(false)
     expect(filesViewSource).not.toContain('./lib/ipc')
     expect(fileContentViewerSource).not.toContain('./lib/ipc')
+  })
+
+  it('does not retain the stale host FileContentViewer copy after plugin migration', () => {
+    expect(existsSync(join(repoRoot, 'src/components/FileContentViewer.svelte'))).toBe(false)
+    expect(existsSync(join(repoRoot, 'src/components/FileContentViewer.test.ts'))).toBe(false)
   })
 })
