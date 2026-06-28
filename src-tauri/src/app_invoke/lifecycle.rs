@@ -54,14 +54,16 @@ pub(super) async fn cleanup_task_runtime_for_app(
             );
         }
 
-        if !remove_branch || !delete_worktree_branch {
-            let db = crate::db::acquire_db(&state.db);
-            if let Err(e) = db.delete_worktree_record(task_id) {
-                error!(
-                    "[app_invoke] Failed to delete worktree record for {}: {}",
-                    task_id, e
-                );
-            }
+        // The worktree directory is gone, so its DB record is now stale and must
+        // be dropped regardless of whether the branch was deleted or preserved.
+        // On the delete-task path `delete_task` deletes it again inside its own
+        // transaction, which is a harmless no-op.
+        let db = crate::db::acquire_db(&state.db);
+        if let Err(e) = db.delete_worktree_record(task_id) {
+            error!(
+                "[app_invoke] Failed to delete worktree record for {}: {}",
+                task_id, e
+            );
         }
     }
 
