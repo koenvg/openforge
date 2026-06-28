@@ -388,6 +388,72 @@ async fn start_implementation_starts_configured_pi_provider_through_app_invoke_b
 }
 
 #[tokio::test]
+async fn start_implementation_materializes_pasted_image_references_for_provider_prompt() {
+    let _env_lock = PROVIDER_PATH_ENV_LOCK.lock().await;
+    let sandbox = &*PROVIDER_TEST_SANDBOX;
+    sandbox.clear_log();
+    let (_temp, repo_dir) = provider_repo_dir();
+    let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
+    let (state, path, app_dir) =
+        test_state_with_backend_app("app_invoke_start_materializes_image_references");
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let project = db
+            .create_project(
+                "Image Provider Project",
+                repo_dir.to_str().expect("utf8 repo path"),
+            )
+            .expect("create project");
+        db.set_project_config(&project.id, "ai_provider", "pi")
+            .expect("set provider");
+        db.create_task_with_worktree_source(
+            "Inspect [image#1]\n\n[image#1]: data:image/png;base64,aW1hZ2UtYnl0ZXM=",
+            "backlog",
+            Some(&project.id),
+            None,
+            None,
+            Some("disabled"),
+            None,
+        )
+        .expect("create task")
+        .id
+    };
+
+    invoke_ok(
+        &state,
+        "start_implementation",
+        json!({ "taskId": task_id, "repoPath": repo_dir.to_string_lossy() }),
+    )
+    .await;
+
+    let log = wait_for_provider_log_record(&sandbox.log_path, "pi", "Inspect [image#1]").await;
+    assert!(log.contains("provider=pi"), "got provider log: {log}");
+    assert!(
+        !log.contains("data:image/png;base64"),
+        "provider prompt should not include raw data URI, got provider log: {log}"
+    );
+
+    let image_path = app_dir
+        .path()
+        .join("task-image-attachments")
+        .join(&task_id)
+        .join("image-1.png");
+    assert_eq!(
+        fs::read(&image_path).expect("materialized image file"),
+        b"image-bytes"
+    );
+    assert!(
+        log.contains(image_path.to_string_lossy().as_ref()),
+        "provider prompt should include materialized file path, got provider log: {log}"
+    );
+
+    if let Some(pty_manager) = state.pty_manager.as_ref() {
+        let _ = pty_manager.kill_pty(&task_id).await;
+    }
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn start_implementation_passes_task_agent_to_configured_opencode_provider() {
     let _env_lock = PROVIDER_PATH_ENV_LOCK.lock().await;
     let sandbox = &*PROVIDER_TEST_SANDBOX;

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Task } from '../../lib/types'
+  import { parseTaskPrompt } from '../../lib/taskPrompt'
   import MarkdownContent from '../shared/content/MarkdownContent.svelte'
 
   interface Props {
@@ -25,10 +26,11 @@
     ? handoffNotes
     : `${handoffNotes.slice(0, HANDOFF_PREVIEW_LENGTH).trimEnd()}…`)
 
-  let promptHasOverflow = $derived(task.initial_prompt.length > PROMPT_PREVIEW_LENGTH)
+  let initialPromptText = $derived(parseTaskPrompt(task.initial_prompt).text)
+  let promptHasOverflow = $derived(initialPromptText.length > PROMPT_PREVIEW_LENGTH)
   let visiblePrompt = $derived(promptExpanded || !promptHasOverflow
-    ? task.initial_prompt
-    : `${task.initial_prompt.slice(0, PROMPT_PREVIEW_LENGTH).trimEnd()}…`)
+    ? initialPromptText
+    : `${initialPromptText.slice(0, PROMPT_PREVIEW_LENGTH).trimEnd()}…`)
 
   let handoffContentId = $derived(`handoff-notes-${task.id}`)
   let promptContentId = $derived(`initial-prompt-${task.id}`)
