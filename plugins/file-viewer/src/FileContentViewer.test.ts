@@ -22,6 +22,12 @@ const textContent: FileContent = {
   size: 11,
 }
 
+const sampleModifiedAt = Date.UTC(2024, 2, 9, 15, 30)
+const formattedModifiedAt = new Date(sampleModifiedAt).toLocaleString('en-US', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+})
+
 function renderViewer(props: Partial<{
   content: FileContent | null
   fileName: string
@@ -87,6 +93,118 @@ describe('plugin FileContentViewer recovery and accessibility states', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Retry loading missing.txt' }))
 
     expect(retry).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows file loading errors with the selected file name', () => {
+    renderViewer({ content: null, error: 'File not found', fileName: 'missing.txt' })
+
+    expect(screen.getByText('File not found')).toBeTruthy()
+    expect(screen.getByText('missing.txt')).toBeTruthy()
+  })
+
+  it('renders text content with line numbers and metadata', () => {
+    const content: FileContent = {
+      type: 'text',
+      content: 'line1\nline2',
+      mimeType: 'text/plain',
+      size: 11,
+    }
+
+    renderViewer({ content, error: null, fileName: 'notes.txt', modifiedAt: sampleModifiedAt })
+
+    expect(screen.getByText(/line1/)).toBeTruthy()
+    expect(screen.getByText(/line2/)).toBeTruthy()
+    expect(screen.getByText('1')).toBeTruthy()
+    expect(screen.getByText('2')).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'File text content' })).toBeTruthy()
+    expect(screen.getByText('11 B')).toBeTruthy()
+    expect(screen.getByText('text/plain')).toBeTruthy()
+    expect(screen.getByText('2 lines')).toBeTruthy()
+    expect(screen.getByText(`Modified ${formattedModifiedAt}`)).toBeTruthy()
+  })
+
+  it('renders supported text files in the plain text preview region', () => {
+    const content: FileContent = {
+      type: 'text',
+      content: 'const total = 1',
+      mimeType: 'text/plain',
+      size: 15,
+    }
+
+    renderViewer({ content, error: null, fileName: 'notes.ts', filePath: 'notes.ts' })
+
+    const textRegion = screen.getByRole('region', { name: 'File text content' })
+    expect(textRegion.textContent).toContain('const total = 1')
+  })
+
+  it('preserves plugin-specific MarkdownFilePreview behavior for markdown files', () => {
+    const content: FileContent = {
+      type: 'text',
+      content: '# Hello World\n\nThis is **bold**.',
+      mimeType: 'text/markdown',
+      size: 34,
+    }
+
+    renderViewer({ content, error: null, fileName: 'README.md', filePath: 'docs/README.md' })
+
+    expect(screen.getByRole('region', { name: 'Markdown file content' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Hello World' })).toBeTruthy()
+    expect(screen.getByText('bold')).toBeTruthy()
+    expect(screen.queryByText('1')).toBeNull()
+  })
+
+  it('shows image previews with file metadata', () => {
+    const content: FileContent = {
+      type: 'image',
+      content: 'base64data',
+      mimeType: 'image/png',
+      size: 128,
+    }
+
+    renderViewer({ content, error: null, fileName: 'logo.png', modifiedAt: sampleModifiedAt })
+
+    const image = screen.getByRole('img', { name: 'logo.png preview' })
+    expect(image.getAttribute('src')).toBe('data:image/png;base64,base64data')
+    expect(screen.getByText('128 B')).toBeTruthy()
+    expect(screen.getByText('image/png')).toBeTruthy()
+    expect(screen.getByText(`Modified ${formattedModifiedAt}`)).toBeTruthy()
+  })
+
+  it('shows metadata-only preview fallbacks for binary, document, and large files', () => {
+    const fallbackCases: Array<{ content: FileContent, fileName: string, expected: RegExp | string, metadata: string }> = [
+      {
+        content: { type: 'binary', content: '', mimeType: 'application/octet-stream', size: 2048 },
+        fileName: 'archive.bin',
+        expected: /Binary preview unavailable/i,
+        metadata: '2.0 KB',
+      },
+      {
+        content: { type: 'document', content: '', mimeType: 'application/pdf', size: 4096 },
+        fileName: 'manual.pdf',
+        expected: /Document preview unavailable/i,
+        metadata: '4.0 KB',
+      },
+      {
+        content: { type: 'large-file', content: '', mimeType: 'text/plain', size: 10 * 1024 * 1024 },
+        fileName: 'huge_log.txt',
+        expected: /File too large to preview/i,
+        metadata: '10.0 MB',
+      },
+    ]
+
+    for (const previewCase of fallbackCases) {
+      const { unmount } = renderViewer({
+        content: previewCase.content,
+        error: null,
+        fileName: previewCase.fileName,
+      })
+
+      expect(screen.getByText(previewCase.expected)).toBeTruthy()
+      expect(screen.getByText(previewCase.fileName)).toBeTruthy()
+      expect(screen.getByText(previewCase.metadata)).toBeTruthy()
+
+      unmount()
+    }
   })
 
   it('focuses the preview pane when requested and describes the keyboard path', async () => {
