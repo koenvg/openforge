@@ -1,0 +1,19 @@
+---
+import type { TopReason } from '../../lib/landingContent';
+
+interface Props {
+  reason: TopReason;
+  index: number;
+}
+
+const { reason, index } = Astro.props;
+const stepNumber = String(index + 1).padStart(2, '0');
+---
+
+<li class="reason-step">
+  <article class="reason-card" data-animate-card>
+    <span class="step-badge" aria-hidden="true">{stepNumber}</span>
+    <h3>{reason.title}</h3>
+    <p>{reason.description}</p>
+  </article>
+</li>

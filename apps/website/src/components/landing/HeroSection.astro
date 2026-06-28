@@ -1,8 +1,6 @@
 ---
-import ButtonLink from '../common/ButtonLink.astro';
-import DownloadIcon from '../icons/DownloadIcon.astro';
-import GitHubIcon from '../icons/GitHubIcon.astro';
-import { GITHUB_RELEASES_URL, GITHUB_REPOSITORY_URL } from '../../lib/urls';
+import { HERO_CTA_LINKS } from '../../lib/landingContent';
+import LandingActions from './LandingActions.astro';
 import SiteHeader from './SiteHeader.astro';
 ---
 
@@ -16,16 +14,7 @@ import SiteHeader from './SiteHeader.astro';
         OpenForge turns parallel AI coding work into clear tasks, handoffs, and approvals.
       </p>
 
-      <div class="actions hero-actions" aria-label="Primary actions" data-animate-item>
-        <ButtonLink href={GITHUB_RELEASES_URL} ariaLabel="Install OpenForge from releases" variant="primary">
-          <DownloadIcon class="button-icon download-icon" />
-          Install OpenForge
-        </ButtonLink>
-        <ButtonLink href={GITHUB_REPOSITORY_URL} ariaLabel="View OpenForge on GitHub" variant="secondary">
-          <GitHubIcon class="button-icon" />
-          See GitHub
-        </ButtonLink>
-      </div>
+      <LandingActions links={HERO_CTA_LINKS} ariaLabel="Primary actions" class="hero-actions" animateItem />
     </div>
 
     <div class="bento-stage" aria-label="Task, agent, handoff, and review workflow">

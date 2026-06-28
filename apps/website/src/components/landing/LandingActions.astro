@@ -1,0 +1,25 @@
+---
+import type { LandingActionLink } from '../../lib/landingContent';
+import ButtonLink from '../common/ButtonLink.astro';
+import LandingActionIcon from './LandingActionIcon.astro';
+
+interface Props {
+  links: readonly LandingActionLink[];
+  ariaLabel: string;
+  class?: string;
+  animateItem?: boolean;
+}
+
+const { links, ariaLabel, class: className, animateItem = false } = Astro.props;
+---
+
+<div class:list={['actions', className]} aria-label={ariaLabel} data-animate-item={animateItem ? '' : undefined}>
+  {
+    links.map((link) => (
+      <ButtonLink href={link.href} ariaLabel={link.ariaLabel} variant={link.variant}>
+        <LandingActionIcon icon={link.icon} class={link.iconClass} />
+        {link.label}
+      </ButtonLink>
+    ))
+  }
+</div>
