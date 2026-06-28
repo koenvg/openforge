@@ -4,6 +4,7 @@ use serde_json::Value;
 use std::sync::{Arc, Mutex};
 
 const GITHUB_SYNC_PLUGIN_ID: &str = "com.openforge.github-sync";
+const ROADMAP_PLUGIN_ID: &str = "com.openforge.roadmap";
 
 fn openforge_global_command_to_app_invoke(qualified_id: &str) -> Result<&'static str, String> {
     let command = qualified_id
@@ -27,6 +28,14 @@ fn openforge_global_command_to_app_invoke(qualified_id: &str) -> Result<&'static
         "submitPrReview" => Ok("submit_pr_review"),
         "getAgentReviewComments" => Ok("get_agent_review_comments"),
         "updateAgentReviewCommentStatus" => Ok("update_agent_review_comment_status"),
+        "roadmapGetBoard" => Ok("roadmap_get_board"),
+        "roadmapSetValue" => Ok("roadmap_set_value"),
+        "roadmapGetConfig" => Ok("roadmap_get_config"),
+        "roadmapSetColumnLabels" => Ok("roadmap_set_column_labels"),
+        "roadmapCreateIssue" => Ok("roadmap_create_issue"),
+        "roadmapEditIssue" => Ok("roadmap_edit_issue"),
+        "roadmapUpdateLabelColor" => Ok("roadmap_update_label_color"),
+        "roadmapRefineTicket" => Ok("roadmap_refine_ticket"),
         _ => Err(format!(
             "unsupported plugin host global command id: {qualified_id}"
         )),
@@ -38,6 +47,23 @@ fn is_files_review_app_command(command: &str) -> bool {
         command,
         "get_agent_review_comments" | "update_agent_review_comment_status"
     )
+}
+
+fn is_roadmap_app_command(command: &str) -> bool {
+    command.starts_with("roadmap_")
+}
+
+/// Whether `plugin_id` may invoke the given resolved app command.
+///
+/// Each built-in plugin owns a set of command prefixes; a plugin may only invoke
+/// commands within its own namespace. This keeps the github-sync authorization
+/// intact while letting the roadmap plugin reach its `roadmap_*` commands.
+fn plugin_may_invoke_command(plugin_id: &str, command: &str) -> bool {
+    match plugin_id {
+        GITHUB_SYNC_PLUGIN_ID => !is_roadmap_app_command(command),
+        ROADMAP_PLUGIN_ID => is_roadmap_app_command(command),
+        _ => false,
+    }
 }
 
 fn required_shell_session_key(params: &Value) -> Result<String, String> {
@@ -94,19 +120,21 @@ impl PluginHost {
     async fn invoke_global_command_for_host(&self, params: &Value) -> Result<Value, String> {
         let qualified_id = required_param_string(params, "qualifiedId")?;
         let caller_plugin_id = required_param_string(params, "callerPluginId")?;
-        if caller_plugin_id != GITHUB_SYNC_PLUGIN_ID {
+        let command = openforge_global_command_to_app_invoke(&qualified_id)?;
+        if !plugin_may_invoke_command(&caller_plugin_id, command) {
             return Err(format!(
-                "plugin {caller_plugin_id} is not authorized to invoke private GitHub Sync host command {qualified_id}"
+                "plugin {caller_plugin_id} is not authorized to invoke private host command {qualified_id}"
             ));
         }
-        let command = openforge_global_command_to_app_invoke(&qualified_id)?;
         let payload = params.get("payload").cloned().unwrap_or(Value::Null);
         let request = crate::http_server::AppInvokeRequest {
             command: command.to_string(),
             payload,
         };
         let state = self.app_state_for_host_callback()?;
-        let result = if is_files_review_app_command(command) {
+        let result = if is_roadmap_app_command(command) {
+            crate::app_invoke::handle_roadmap_command(&state, &request).await
+        } else if is_files_review_app_command(command) {
             crate::app_invoke::handle_files_review_command(&state, &request).await
         } else {
             crate::app_invoke::handle_github_review_command(&state, &request).await
@@ -437,5 +465,90 @@ mod tests {
             required_shell_session_key(&params).expect_err("terminalIndex should be required"),
             "plugin host callback missing integer param: terminalIndex"
         );
+    }
+
+    #[test]
+    fn roadmap_qualified_commands_map_to_app_invoke_commands() {
+        assert_eq!(
+            openforge_global_command_to_app_invoke("openforge.roadmapGetBoard").unwrap(),
+            "roadmap_get_board"
+        );
+        assert_eq!(
+            openforge_global_command_to_app_invoke("openforge.roadmapSetValue").unwrap(),
+            "roadmap_set_value"
+        );
+        assert_eq!(
+            openforge_global_command_to_app_invoke("openforge.roadmapGetConfig").unwrap(),
+            "roadmap_get_config"
+        );
+        assert_eq!(
+            openforge_global_command_to_app_invoke("openforge.roadmapSetColumnLabels").unwrap(),
+            "roadmap_set_column_labels"
+        );
+        assert_eq!(
+            openforge_global_command_to_app_invoke("openforge.roadmapCreateIssue").unwrap(),
+            "roadmap_create_issue"
+        );
+        assert_eq!(
+            openforge_global_command_to_app_invoke("openforge.roadmapEditIssue").unwrap(),
+            "roadmap_edit_issue"
+        );
+        assert_eq!(
+            openforge_global_command_to_app_invoke("openforge.roadmapUpdateLabelColor").unwrap(),
+            "roadmap_update_label_color"
+        );
+        assert_eq!(
+            openforge_global_command_to_app_invoke("openforge.roadmapRefineTicket").unwrap(),
+            "roadmap_refine_ticket"
+        );
+    }
+
+    #[test]
+    fn authorization_gate_scopes_each_plugin_to_its_own_commands() {
+        // github-sync keeps access to its existing commands but cannot reach roadmap.
+        assert!(plugin_may_invoke_command(
+            GITHUB_SYNC_PLUGIN_ID,
+            "fetch_review_prs"
+        ));
+        assert!(plugin_may_invoke_command(
+            GITHUB_SYNC_PLUGIN_ID,
+            "get_agent_review_comments"
+        ));
+        assert!(!plugin_may_invoke_command(
+            GITHUB_SYNC_PLUGIN_ID,
+            "roadmap_get_board"
+        ));
+
+        // roadmap may invoke roadmap_* but nothing else.
+        assert!(plugin_may_invoke_command(
+            ROADMAP_PLUGIN_ID,
+            "roadmap_get_board"
+        ));
+        assert!(plugin_may_invoke_command(
+            ROADMAP_PLUGIN_ID,
+            "roadmap_edit_issue"
+        ));
+        assert!(plugin_may_invoke_command(
+            ROADMAP_PLUGIN_ID,
+            "roadmap_update_label_color"
+        ));
+        assert!(plugin_may_invoke_command(
+            ROADMAP_PLUGIN_ID,
+            "roadmap_refine_ticket"
+        ));
+        assert!(!plugin_may_invoke_command(
+            ROADMAP_PLUGIN_ID,
+            "fetch_review_prs"
+        ));
+
+        // Unknown plugins are denied everything.
+        assert!(!plugin_may_invoke_command(
+            "com.example.evil",
+            "roadmap_get_board"
+        ));
+        assert!(!plugin_may_invoke_command(
+            "com.example.evil",
+            "fetch_review_prs"
+        ));
     }
 }

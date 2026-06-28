@@ -450,7 +450,7 @@ async fn plugin_host_global_command_callback_routes_github_sync_backend_bridge()
         )
         .await
         .expect_err("third-party global command should fail");
-    assert!(unauthorized.contains("not authorized to invoke private GitHub Sync host command"));
+    assert!(unauthorized.contains("not authorized to invoke private host command"));
 
     let unsupported = host
         .handle_host_callback(

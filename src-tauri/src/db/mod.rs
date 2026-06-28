@@ -13,6 +13,7 @@ mod plugins;
 mod projects;
 mod pull_requests;
 mod review;
+mod roadmap;
 mod self_review;
 mod task_workspaces;
 mod tasks;

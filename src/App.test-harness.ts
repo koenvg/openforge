@@ -374,7 +374,7 @@ vi.mock('@lucide/svelte', () => {
 })
 
 export function installAppTestLifecycle() {
-  beforeEach(() => {
+  beforeEach(async () => {
     callOrder.length = 0
     installedPluginRows.length = 0
     eventListeners.clear()
@@ -384,6 +384,12 @@ export function installAppTestLifecycle() {
     mockSelectedTaskIdStore.set(null)
     mockSelectedReviewPrStore.set(null)
     vi.clearAllMocks()
+    const pluginStore = await import('./lib/plugin/pluginStore')
+    pluginStore.installedPlugins.set(new Map())
+    pluginStore.enabledPluginIds.set(new Set())
+    pluginStore.runtimeContributionSources.set(new Map())
+    pluginStore.loading.set(false)
+    pluginStore.error.set(null)
     vi.mocked(registerBuiltinPlugin).mockImplementation(async (plugin) => {
       persistInstalledPluginRow(plugin)
     })

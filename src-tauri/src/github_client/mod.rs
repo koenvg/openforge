@@ -18,6 +18,8 @@
 mod checks;
 pub mod error;
 mod events;
+mod issues;
+mod labels;
 mod pulls;
 mod reviews;
 pub mod types;

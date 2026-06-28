@@ -244,6 +244,112 @@ pub struct PrReview {
     pub extra: serde_json::Value,
 }
 
+/// A GitHub repository issue (Roadmap board).
+///
+/// The REST `GET /repos/{owner}/{repo}/issues` endpoint returns both issues and
+/// pull requests; PRs are distinguished by the presence of a `pull_request`
+/// field. Callers should filter PRs out using [`Issue::is_pull_request`].
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Issue {
+    pub number: i64,
+    pub title: String,
+    #[serde(default)]
+    pub body: Option<String>,
+    pub state: String,
+    pub html_url: String,
+    pub user: GitHubUser,
+    #[serde(default)]
+    pub labels: Vec<IssueLabel>,
+    /// Present only when the entry is actually a pull request.
+    #[serde(default, rename = "pull_request")]
+    pub pull_request: Option<serde_json::Value>,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub updated_at: String,
+}
+
+impl Issue {
+    /// Whether this issues-endpoint entry is actually a pull request.
+    pub fn is_pull_request(&self) -> bool {
+        self.pull_request.is_some()
+    }
+}
+
+/// A label attached to an issue (subset of repo label fields).
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct IssueLabel {
+    pub name: String,
+    #[serde(default)]
+    pub color: String,
+}
+
+/// A repository label (Roadmap board column source).
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RepoLabel {
+    pub name: String,
+    #[serde(default)]
+    pub color: String,
+}
+
+/// Request body for creating an issue.
+#[derive(Debug, Serialize)]
+pub(crate) struct CreateIssueRequest {
+    pub title: String,
+    pub body: String,
+    pub labels: Vec<String>,
+}
+
+/// Input for editing an issue. Only the populated fields are sent to GitHub.
+///
+/// `add_labels`/`remove_labels` are applied to the issue's existing labels to
+/// move a card between columns; the resolved label set is sent via the issue's
+/// `labels` field.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct EditIssueInput {
+    pub title: Option<String>,
+    pub body: Option<String>,
+    pub state: Option<String>,
+    pub add_labels: Vec<String>,
+    pub remove_labels: Vec<String>,
+}
+
+impl EditIssueInput {
+    /// Whether any field would change as part of this edit.
+    pub fn is_empty(&self) -> bool {
+        self.title.is_none()
+            && self.body.is_none()
+            && self.state.is_none()
+            && self.add_labels.is_empty()
+            && self.remove_labels.is_empty()
+    }
+
+    /// Compute the resulting label set from a starting set, applying removals
+    /// then additions. The result is de-duplicated and preserves a stable order
+    /// (surviving existing labels first, in their original order, then any new
+    /// additions in the order given).
+    pub fn resolve_labels(&self, current: &[String]) -> Vec<String> {
+        let mut result: Vec<String> = Vec::new();
+        for label in current {
+            if self.remove_labels.iter().any(|r| r == label) {
+                continue;
+            }
+            if !result.iter().any(|existing| existing == label) {
+                result.push(label.clone());
+            }
+        }
+        for label in &self.add_labels {
+            if self.remove_labels.iter().any(|r| r == label) {
+                continue;
+            }
+            if !result.iter().any(|existing| existing == label) {
+                result.push(label.clone());
+            }
+        }
+        result
+    }
+}
+
 /// Check runs response from GitHub API
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CheckRunsResponse {
@@ -852,6 +958,117 @@ mod tests {
         assert!(comment.body.contains("suggestion"));
         assert_eq!(comment.user.login, "copilot[bot]");
         assert!(comment.in_reply_to_id.is_none());
+    }
+
+    #[test]
+    fn test_issue_deserialization_and_pull_request_detection() {
+        let issue_json = r#"{
+            "number": 12,
+            "title": "Add roadmap board",
+            "body": "Some description",
+            "state": "open",
+            "html_url": "https://github.com/acme/repo/issues/12",
+            "user": { "login": "octocat" },
+            "labels": [
+                { "name": "feature", "color": "00ff00" },
+                { "name": "p1", "color": "ff0000" }
+            ],
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-02T00:00:00Z"
+        }"#;
+        let issue: Issue = serde_json::from_str(issue_json).unwrap();
+        assert_eq!(issue.number, 12);
+        assert_eq!(issue.title, "Add roadmap board");
+        assert_eq!(issue.state, "open");
+        assert_eq!(issue.labels.len(), 2);
+        assert_eq!(issue.labels[0].name, "feature");
+        assert!(!issue.is_pull_request());
+
+        let pr_json = r#"{
+            "number": 13,
+            "title": "A PR not an issue",
+            "state": "open",
+            "html_url": "https://github.com/acme/repo/pull/13",
+            "user": { "login": "octocat" },
+            "pull_request": { "url": "https://api.github.com/repos/acme/repo/pulls/13" }
+        }"#;
+        let pr_entry: Issue = serde_json::from_str(pr_json).unwrap();
+        assert!(pr_entry.is_pull_request());
+    }
+
+    #[test]
+    fn test_repo_label_deserialization() {
+        let json = r#"[
+            { "name": "bug", "color": "d73a4a", "default": true },
+            { "name": "enhancement", "color": "a2eeef" }
+        ]"#;
+        let labels: Vec<RepoLabel> = serde_json::from_str(json).unwrap();
+        assert_eq!(labels.len(), 2);
+        assert_eq!(labels[0].name, "bug");
+        assert_eq!(labels[0].color, "d73a4a");
+        assert_eq!(labels[1].name, "enhancement");
+    }
+
+    #[test]
+    fn test_edit_issue_input_is_empty() {
+        assert!(EditIssueInput::default().is_empty());
+        assert!(!EditIssueInput {
+            title: Some("New".to_string()),
+            ..Default::default()
+        }
+        .is_empty());
+        assert!(!EditIssueInput {
+            add_labels: vec!["x".to_string()],
+            ..Default::default()
+        }
+        .is_empty());
+    }
+
+    #[test]
+    fn test_edit_issue_input_resolve_labels_adds_removes_and_dedupes() {
+        let current = vec!["feature".to_string(), "p1".to_string(), "stale".to_string()];
+
+        // Remove one, add one (move card between columns).
+        let input = EditIssueInput {
+            remove_labels: vec!["p1".to_string()],
+            add_labels: vec!["p2".to_string()],
+            ..Default::default()
+        };
+        assert_eq!(
+            input.resolve_labels(&current),
+            vec!["feature".to_string(), "stale".to_string(), "p2".to_string()]
+        );
+
+        // Adding a label already present is a no-op (deduped, order preserved).
+        let input = EditIssueInput {
+            add_labels: vec!["feature".to_string()],
+            ..Default::default()
+        };
+        assert_eq!(input.resolve_labels(&current), current);
+
+        // Remove wins over add when the same label is in both lists.
+        let input = EditIssueInput {
+            add_labels: vec!["p1".to_string()],
+            remove_labels: vec!["p1".to_string()],
+            ..Default::default()
+        };
+        assert_eq!(
+            input.resolve_labels(&current),
+            vec!["feature".to_string(), "stale".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_create_issue_request_serialization() {
+        let request = CreateIssueRequest {
+            title: "Title".to_string(),
+            body: "Body".to_string(),
+            labels: vec!["a".to_string(), "b".to_string()],
+        };
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.contains("\"title\":\"Title\""));
+        assert!(json.contains("\"body\":\"Body\""));
+        assert!(json.contains("\"labels\":[\"a\",\"b\"]"));
     }
 
     #[test]

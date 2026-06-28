@@ -1054,6 +1054,27 @@ DROP TABLE plugin_storage_legacy;
         }
         Ok(())
     }),
+    // Roadmap board: per-project local app-state for the Roadmap rail view.
+    // GitHub remains the source of truth for issues/labels; only per-issue value
+    // and the curated column-label ordering are persisted locally.
+    M::up(
+        r#"
+CREATE TABLE IF NOT EXISTS roadmap_item_value (
+    project_id   TEXT NOT NULL,
+    issue_number INTEGER NOT NULL,
+    value        INTEGER CHECK (value IS NULL OR (value BETWEEN 1 AND 10)),
+    updated_at   INTEGER NOT NULL,
+    PRIMARY KEY (project_id, issue_number),
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+CREATE TABLE IF NOT EXISTS roadmap_repo_config (
+    project_id     TEXT PRIMARY KEY,
+    column_labels  TEXT NOT NULL DEFAULT '[]',
+    last_opened_at INTEGER,
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+        "#,
+    ),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -1389,7 +1410,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = LATEST_USER_VERSION - 3;
+            let previous_version = LATEST_USER_VERSION - 4;
             conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
                 .expect("set user_version");
             conn.execute(
@@ -1453,7 +1474,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = LATEST_USER_VERSION - 4;
+            let previous_version = LATEST_USER_VERSION - 5;
             conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
                 .expect("set user_version");
             conn.execute("CREATE TABLE plugins (id TEXT PRIMARY KEY)", [])
@@ -1632,7 +1653,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = LATEST_USER_VERSION - 5;
+            let previous_version = LATEST_USER_VERSION - 6;
             conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
                 .expect("set user_version");
             conn.execute_batch(
@@ -2532,7 +2553,7 @@ mod tests {
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
             conn.execute(
-                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 8),
+                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 9),
                 [],
             )
             .expect("set pre-upgrade user_version");
@@ -2578,7 +2599,7 @@ mod tests {
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
             conn.execute(
-                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 8),
+                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 9),
                 [],
             )
             .expect("set pre-upgrade user_version");
