@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitest/config'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { svelteTesting } from '@testing-library/svelte/vite'
+import { createOpenForgePluginSdkSourceAliasRecord } from './packages/plugin-sdk/src/vite'
 
 const pluginRuntimeAliases = {
   '@openforge/plugin-runtime/commandValidation': new URL('./packages/plugin-runtime/src/commandValidation.ts', import.meta.url).pathname,
@@ -18,20 +19,7 @@ const terminalRuntimeAliases = {
   '@openforge/terminal-runtime': new URL('./packages/terminal-runtime/src/index.ts', import.meta.url).pathname,
 }
 
-const pluginSdkAliases = {
-  '@openforge/plugin-sdk/frontend': new URL('./packages/plugin-sdk/src/frontend.ts', import.meta.url).pathname,
-  '@openforge/plugin-sdk/backend': new URL('./packages/plugin-sdk/src/backend.ts', import.meta.url).pathname,
-  '@openforge/plugin-sdk/domain': new URL('./packages/plugin-sdk/src/domain.ts', import.meta.url).pathname,
-  '@openforge/plugin-sdk/prStatusPresentation': new URL('./packages/plugin-sdk/src/prStatusPresentation.ts', import.meta.url).pathname,
-  '@openforge/plugin-sdk/testing': new URL('./packages/plugin-sdk/src/testing.ts', import.meta.url).pathname,
-  '@openforge/plugin-sdk/vite': new URL('./packages/plugin-sdk/src/vite.ts', import.meta.url).pathname,
-  '@openforge/plugin-sdk/markdown': new URL('./packages/plugin-sdk/src/markdown.ts', import.meta.url).pathname,
-  '@openforge/plugin-sdk/numberParsing': new URL('./packages/plugin-sdk/src/numberParsing.ts', import.meta.url).pathname,
-  '@openforge/plugin-sdk/sanitize': new URL('./packages/plugin-sdk/src/sanitize.ts', import.meta.url).pathname,
-  '@openforge/plugin-sdk/ui/MarkdownContent.svelte': new URL('./packages/plugin-sdk/src/ui/MarkdownContent.svelte', import.meta.url).pathname,
-  '@openforge/plugin-sdk/ui/ResizablePanel.svelte': new URL('./packages/plugin-sdk/src/ui/ResizablePanel.svelte', import.meta.url).pathname,
-  '@openforge/plugin-sdk': new URL('./packages/plugin-sdk/src/index.ts', import.meta.url).pathname,
-}
+const pluginSdkAliases = createOpenForgePluginSdkSourceAliasRecord(new URL('./', import.meta.url))
 
 export default defineConfig({
   test: {

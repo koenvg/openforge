@@ -4,6 +4,7 @@ import {
   OPENFORGE_HOST_SHARED_SVELTE_IMPORTS,
   OPENFORGE_HOST_SHARED_TERMINAL_RUNTIME_IMPORTS,
   createOpenForgePluginSdkSourceAliases,
+  createOpenForgePluginSdkSourceAliasRecord,
   isOpenForgeHostRuntimeExternal,
 } from '@openforge/plugin-sdk/vite'
 
@@ -31,6 +32,23 @@ describe('OpenForge plugin Vite author tooling', () => {
     expect(aliases.some((alias) => alias.find === '@openforge/terminal-runtime')).toBe(false)
     expect(createOpenForgePluginSdkSourceAliases(new URL('file:///repo'))[0]?.replacement).toBe('/repo/packages/plugin-sdk/src/frontend.ts')
     expect(() => createOpenForgePluginSdkSourceAliases(String.raw`C:\repo`)).not.toThrow()
+  })
+
+  it('creates a record-shaped source alias map for Vitest configs', () => {
+    expect(createOpenForgePluginSdkSourceAliasRecord(new URL('file:///repo/'))).toEqual({
+      '@openforge/plugin-sdk/frontend': '/repo/packages/plugin-sdk/src/frontend.ts',
+      '@openforge/plugin-sdk/backend': '/repo/packages/plugin-sdk/src/backend.ts',
+      '@openforge/plugin-sdk/testing': '/repo/packages/plugin-sdk/src/testing.ts',
+      '@openforge/plugin-sdk/vite': '/repo/packages/plugin-sdk/src/vite.ts',
+      '@openforge/plugin-sdk/domain': '/repo/packages/plugin-sdk/src/domain.ts',
+      '@openforge/plugin-sdk/prStatusPresentation': '/repo/packages/plugin-sdk/src/prStatusPresentation.ts',
+      '@openforge/plugin-sdk/markdown': '/repo/packages/plugin-sdk/src/markdown.ts',
+      '@openforge/plugin-sdk/numberParsing': '/repo/packages/plugin-sdk/src/numberParsing.ts',
+      '@openforge/plugin-sdk/sanitize': '/repo/packages/plugin-sdk/src/sanitize.ts',
+      '@openforge/plugin-sdk/ui/MarkdownContent.svelte': '/repo/packages/plugin-sdk/src/ui/MarkdownContent.svelte',
+      '@openforge/plugin-sdk/ui/ResizablePanel.svelte': '/repo/packages/plugin-sdk/src/ui/ResizablePanel.svelte',
+      '@openforge/plugin-sdk': '/repo/packages/plugin-sdk/src/index.ts',
+    })
   })
 
   it('externalizes only the documented host-shared Svelte runtime imports', () => {
