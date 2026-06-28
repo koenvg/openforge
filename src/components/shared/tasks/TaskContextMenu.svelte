@@ -20,9 +20,10 @@
     lowFireTaskIds?: Set<string>
     onMoveToLowFire?: (taskId: string) => void
     onMoveToFocus?: (taskId: string) => void
+    onReopen?: (taskId: string) => void
   }
 
-  let { visible, x, y, taskId, onClose, onStart, onEdit, onDelete, actions = [], onRunAction, lowFireTaskIds = new Set(), onMoveToLowFire, onMoveToFocus }: Props = $props()
+  let { visible, x, y, taskId, onClose, onStart, onEdit, onDelete, actions = [], onRunAction, lowFireTaskIds = new Set(), onMoveToLowFire, onMoveToFocus, onReopen }: Props = $props()
 
   let taskStatus = $derived<BoardStatus | ''>($tasks.find(t => t.id === taskId)?.status ?? '')
   let isLowFireTask = $derived(lowFireTaskIds.has(taskId))
@@ -62,6 +63,12 @@
     onMoveToFocus?.(id)
   }
 
+  function handleReopen() {
+    const id = taskId
+    onClose()
+    onReopen?.(id)
+  }
+
   async function handleDelete() {
     const id = taskId
     onClose()
@@ -95,6 +102,9 @@
       <ContextMenuItem label="Move to Low-Fire" onclick={handleMoveToLowFire} />
     {/if}
     <ContextMenuItem label="Move to Done" onclick={handleMoveToDone} />
+  {/if}
+  {#if taskStatus === 'done' && onReopen}
+    <ContextMenuItem label="Reopen" onclick={handleReopen} />
   {/if}
   <div class="border-t border-base-content/10 my-1"></div>
   <ContextMenuItem label="Delete" variant="danger" onclick={handleDelete} />

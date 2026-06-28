@@ -193,6 +193,41 @@ describe('FocusBoard', () => {
     expect(screen.queryByText('Done task')).toBeNull()
   })
 
+  it('shows only done tasks when the Done chip is clicked', async () => {
+    renderBoard()
+
+    await fireEvent.click(await screen.findByRole('button', { name: /Done 1/i }))
+
+    expect(screen.getAllByText('Done task').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Focus task')).toBeNull()
+    expect(screen.queryByText('Doing task')).toBeNull()
+    expect(screen.queryByText('Backlog task')).toBeNull()
+  })
+
+  it('reopens a done task to doing and clears its low-fire membership', async () => {
+    const ipc = await import('../../lib/ipc')
+    vi.mocked(ipc.getProjectConfig).mockImplementation(
+      (_projectId: string, key: string) =>
+        Promise.resolve(key === 'low_fire_task_ids' ? JSON.stringify(['T-3']) : null),
+    )
+    renderBoard()
+
+    await waitFor(() => {
+      expect(get(lowFireTaskIdsByProject).get('proj-1')).toEqual(new Set(['T-3']))
+    })
+
+    await fireEvent.click(await screen.findByRole('button', { name: /Done 1/i }))
+    await fireEvent.contextMenu((await screen.findAllByText('Done task'))[0])
+    await fireEvent.click(screen.getByText('Reopen'))
+
+    await waitFor(() => {
+      expect(ipc.updateTaskStatus).toHaveBeenCalledWith('T-3', 'doing')
+    })
+    await waitFor(() => {
+      expect((get(lowFireTaskIdsByProject).get('proj-1') ?? new Set()).has('T-3')).toBe(false)
+    })
+  })
+
   it('filters backlog tasks by selected label chips using OR semantics and shows backlog counts', async () => {
     const ipc = await import('../../lib/ipc')
     vi.mocked(ipc.getProjectTaskLabels).mockResolvedValue([bugLabel, uiLabel])

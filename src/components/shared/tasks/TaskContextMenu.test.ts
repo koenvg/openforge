@@ -185,6 +185,65 @@ describe('TaskContextMenu', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
+  it('shows Reopen for done tasks when onReopen is provided', () => {
+    tasks.set([makeTask('T-1', 'done')])
+    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn(), onReopen: vi.fn() } })
+    expect(screen.getByText('Reopen')).toBeTruthy()
+  })
+
+  it('does not show Reopen for doing tasks', () => {
+    tasks.set([makeTask('T-1', 'doing')])
+    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn(), onReopen: vi.fn() } })
+    expect(screen.queryByText('Reopen')).toBeNull()
+  })
+
+  it('does not show Reopen for backlog tasks', () => {
+    tasks.set([makeTask('T-1', 'backlog')])
+    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn(), onReopen: vi.fn() } })
+    expect(screen.queryByText('Reopen')).toBeNull()
+  })
+
+  it('does not show Reopen when onReopen is not provided', () => {
+    tasks.set([makeTask('T-1', 'done')])
+    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
+    expect(screen.queryByText('Reopen')).toBeNull()
+  })
+
+  it('calls onReopen with taskId and closes when Reopen is clicked', async () => {
+    const onReopen = vi.fn()
+    const onClose = vi.fn()
+    tasks.set([makeTask('T-1', 'done')])
+    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose, onReopen } })
+    await fireEvent.click(screen.getByText('Reopen'))
+    expect(onReopen).toHaveBeenCalledWith('T-1')
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('offers no path back to backlog for done tasks (only Reopen and Delete)', () => {
+    tasks.set([makeTask('T-1', 'done')])
+    render(TaskContextMenu, {
+      props: {
+        visible: true,
+        x: 0,
+        y: 0,
+        taskId: 'T-1',
+        onClose: vi.fn(),
+        onStart: vi.fn(),
+        onEdit: vi.fn(),
+        onReopen: vi.fn(),
+        onMoveToLowFire: vi.fn(),
+        onMoveToFocus: vi.fn(),
+      },
+    })
+    expect(screen.queryByText('Start Task')).toBeNull()
+    expect(screen.queryByText('Edit Task')).toBeNull()
+    expect(screen.queryByText('Move to Done')).toBeNull()
+    expect(screen.queryByText('Move to Low-Fire')).toBeNull()
+    expect(screen.queryByText('Backlog')).toBeNull()
+    expect(screen.getByText('Reopen')).toBeTruthy()
+    expect(screen.getByText('Delete')).toBeTruthy()
+  })
+
   it('always shows Delete option', () => {
     tasks.set([makeTask('T-1', 'doing')])
     render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
