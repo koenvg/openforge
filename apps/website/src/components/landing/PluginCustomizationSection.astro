@@ -1,3 +1,8 @@
+---
+import { PLUGIN_CAPABILITIES } from '../../lib/landingContent';
+import PluginCapabilityRow from './PluginCapabilityRow.astro';
+---
+
 <section class="plugin-customization" aria-labelledby="plugin-customization-title" data-animate-section>
   <div class="plugin-customization-heading">
     <h2 id="plugin-customization-title" class="section-title">Bring your workflow into OpenForge</h2>
@@ -8,65 +13,7 @@
 
   <div class="capability-ledger" aria-label="Trusted Plugin customization examples">
     <ol class="ledger-list">
-      <li class="ledger-row" data-animate-card>
-        <span class="ledger-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24">
-            <path d="M4 5.5h16v13H4z" />
-            <path d="M4 10h16" />
-            <path d="M9 10v8.5" />
-          </svg>
-        </span>
-        <div class="ledger-row-copy">
-          <h3>Your views</h3>
-          <p><code>views.register</code> · project dashboards, review queues, repo lenses</p>
-        </div>
-        <span class="ledger-dot" aria-hidden="true"></span>
-      </li>
-
-      <li class="ledger-row" data-animate-card>
-        <span class="ledger-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24">
-            <path d="M5 4.5h14v15H5z" />
-            <path d="M10 4.5v15" />
-            <path d="M13 9h3" />
-            <path d="M13 13h3" />
-          </svg>
-        </span>
-        <div class="ledger-row-copy">
-          <h3>Your task context</h3>
-          <p><code>taskPane.registerTab</code> · notes, checklists, docs, review rituals</p>
-        </div>
-        <span class="ledger-dot" aria-hidden="true"></span>
-      </li>
-
-      <li class="ledger-row" data-animate-card>
-        <span class="ledger-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24">
-            <path d="M6 16.5a3.5 3.5 0 0 1 0-7 5.5 5.5 0 0 1 10.7-1.8A4.2 4.2 0 1 1 18 16.5h-2.2" />
-            <path d="M9 16.5h3" />
-            <path d="m11 13.5 3 3-3 3" />
-          </svg>
-        </span>
-        <div class="ledger-row-copy">
-          <h3>Your automations</h3>
-          <p><code>background.register</code> · handoffs, CI, stale work, recurring prompts</p>
-        </div>
-        <span class="ledger-dot" aria-hidden="true"></span>
-      </li>
-
-      <li class="ledger-row" data-animate-card>
-        <span class="ledger-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24">
-            <path d="M12 3 20 6.5v5.7c0 4.5-3.1 7.4-8 8.8-4.9-1.4-8-4.3-8-8.8V6.5L12 3Z" />
-            <path d="m8.8 12.1 2 2 4.6-4.8" />
-          </svg>
-        </span>
-        <div class="ledger-row-copy">
-          <h3>Your host capabilities</h3>
-          <p><code>tasks · fs · shell · notifications</code> · explicit access for Trusted Plugins</p>
-        </div>
-        <span class="ledger-dot" aria-hidden="true"></span>
-      </li>
+      {PLUGIN_CAPABILITIES.map((capability) => <PluginCapabilityRow capability={capability} />)}
     </ol>
   </div>
 </section>

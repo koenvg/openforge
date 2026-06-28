@@ -1,0 +1,15 @@
+---
+import type { LandingActionIcon } from '../../lib/landingContent';
+import DownloadIcon from '../icons/DownloadIcon.astro';
+import GitHubIcon from '../icons/GitHubIcon.astro';
+
+interface Props {
+  icon: LandingActionIcon;
+  class?: string;
+}
+
+const { icon, class: className } = Astro.props;
+const Icon = icon === 'download' ? DownloadIcon : GitHubIcon;
+---
+
+<Icon class={className} />
