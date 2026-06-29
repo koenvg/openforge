@@ -806,6 +806,172 @@ function parseStrictFiniteNumber(value) {
 	return Number.isFinite(parsed) ? parsed : null;
 }
 //#endregion
+//#region packages/plugin-sdk/src/projectFileTree.ts
+function getProjectFileTreeDepth(path) {
+	return path.split("/").length - 1;
+}
+function getProjectFileTreeParentPath(path) {
+	const lastSlash = path.lastIndexOf("/");
+	return lastSlash === -1 ? null : path.slice(0, lastSlash);
+}
+function buildProjectFileTree(flatEntries) {
+	const nodesByPath = /* @__PURE__ */ new Map();
+	const roots = [];
+	for (const entry of flatEntries) nodesByPath.set(entry.path, {
+		entry,
+		children: [],
+		level: 1,
+		parentPath: getProjectFileTreeParentPath(entry.path),
+		posInSet: 1,
+		setSize: 1
+	});
+	for (const entry of flatEntries) {
+		const node = nodesByPath.get(entry.path);
+		if (!node) continue;
+		const parent = node.parentPath ? nodesByPath.get(node.parentPath) : null;
+		if (parent) parent.children.push(node);
+		else roots.push(node);
+	}
+	assignProjectFileTreeMetadata(roots, 1);
+	return roots;
+}
+function assignProjectFileTreeMetadata(nodes, level) {
+	const setSize = nodes.length;
+	nodes.forEach((node, index) => {
+		node.level = level;
+		node.posInSet = index + 1;
+		node.setSize = setSize;
+		assignProjectFileTreeMetadata(node.children, level + 1);
+	});
+}
+function flattenVisibleProjectFileTree(nodes, expandedDirs) {
+	const result = [];
+	function visit(items) {
+		for (const item of items) {
+			result.push(item);
+			if (item.entry.isDir && expandedDirs.has(item.entry.path)) visit(item.children);
+		}
+	}
+	visit(nodes);
+	return result;
+}
+function getProjectFileTreeItemAccessibility(node, state) {
+	const isSelectedFile = !node.entry.isDir && state.selectedPath === node.entry.path;
+	return {
+		level: node.level,
+		setSize: node.setSize,
+		posInSet: node.posInSet,
+		expanded: node.entry.isDir ? state.expandedDirs.has(node.entry.path) : void 0,
+		current: isSelectedFile ? "true" : void 0,
+		selected: !node.entry.isDir ? isSelectedFile ? "true" : "false" : void 0,
+		labelledBy: !node.entry.isDir && node.entry.size !== null ? `${state.labelId} ${state.sizeId}` : state.labelId
+	};
+}
+function formatProjectFileTreeSize(size) {
+	if (size === null) return "";
+	if (size < 1024) return `${size} B`;
+	if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+	return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+function projectFileTreePathToId(path) {
+	return `project-file-tree-${Array.from(path).map((char) => char.charCodeAt(0).toString(36)).join("-")}`;
+}
+function hasProjectFileTreeShortcutModifier(event) {
+	return event.altKey || event.ctrlKey || event.metaKey || event.shiftKey;
+}
+function getProjectFileTreeKeyboardAction(event, node, state) {
+	if (hasProjectFileTreeShortcutModifier(event)) return { handled: false };
+	switch (event.key) {
+		case "ArrowDown": return focusByOffset(node.entry.path, state.visiblePaths, 1);
+		case "ArrowUp": return focusByOffset(node.entry.path, state.visiblePaths, -1);
+		case "Home": return focusFirst(state.visiblePaths);
+		case "End": return focusLast(state.visiblePaths);
+		case "ArrowRight": return getArrowRightAction(node, state.expandedDirs);
+		case "ArrowLeft": return getArrowLeftAction(node, state.expandedDirs, state.visiblePaths);
+		case "Enter":
+		case " ": return {
+			handled: true,
+			type: "activate",
+			path: node.entry.path
+		};
+		default: return { handled: false };
+	}
+}
+function focusByOffset(currentPath, visiblePaths, offset) {
+	const currentIndex = visiblePaths.indexOf(currentPath);
+	if (currentIndex === -1) return {
+		handled: true,
+		type: "none"
+	};
+	const nextPath = visiblePaths[Math.max(0, Math.min(visiblePaths.length - 1, currentIndex + offset))];
+	return nextPath ? {
+		handled: true,
+		type: "focus",
+		path: nextPath
+	} : {
+		handled: true,
+		type: "none"
+	};
+}
+function focusFirst(visiblePaths) {
+	const firstPath = visiblePaths[0];
+	return firstPath ? {
+		handled: true,
+		type: "focus",
+		path: firstPath
+	} : {
+		handled: true,
+		type: "none"
+	};
+}
+function focusLast(visiblePaths) {
+	const lastPath = visiblePaths.at(-1);
+	return lastPath ? {
+		handled: true,
+		type: "focus",
+		path: lastPath
+	} : {
+		handled: true,
+		type: "none"
+	};
+}
+function getArrowRightAction(node, expandedDirs) {
+	if (!node.entry.isDir) return {
+		handled: true,
+		type: "none"
+	};
+	if (!expandedDirs.has(node.entry.path)) return {
+		handled: true,
+		type: "toggle",
+		path: node.entry.path
+	};
+	const firstChild = node.children[0];
+	return firstChild ? {
+		handled: true,
+		type: "focus",
+		path: firstChild.entry.path
+	} : {
+		handled: true,
+		type: "none"
+	};
+}
+function getArrowLeftAction(node, expandedDirs, visiblePaths) {
+	if (node.entry.isDir && expandedDirs.has(node.entry.path)) return {
+		handled: true,
+		type: "toggle",
+		path: node.entry.path
+	};
+	if (node.parentPath && visiblePaths.includes(node.parentPath)) return {
+		handled: true,
+		type: "focus",
+		path: node.parentPath
+	};
+	return {
+		handled: true,
+		type: "none"
+	};
+}
+//#endregion
 //#region packages/plugin-sdk/src/domain.ts
 function hasMergeConflicts(pr) {
 	if (pr.state !== "open") return false;
@@ -858,4 +1024,4 @@ function splitCheckRuns(checks) {
 	};
 }
 //#endregion
-export { MAX_SUPPORTED_API_VERSION, MIN_SUPPORTED_API_VERSION, OPENFORGE_PACKAGE_METADATA_SCHEMA, OPENFORGE_PLUGIN_API_VERSION, OPENFORGE_PLUGIN_CAPABILITIES, SUPPORTED_OPENFORGE_API_VERSIONS, TestingOpenForgeRegistryFake, TestingSubscriptionSink, createMemoryPluginStorage, createMockBackendOpenForgeApi, createMockFrontendOpenForgeApi, createMockOpenForgeApi, createMockPluginContext, createOpenForgeRegistryFake, createTestingCalls, hasMergeConflicts, isOpenForgePackageMetadata, isPluginPackageMetadata, isPluginViewKey, isQueuedForMerge, isReadyToMerge, isSupportedOpenForgeApiVersion, makePluginViewKey, parseCheckRuns, parsePluginViewKey, parseStrictFiniteNumber, preservePullRequestState, splitCheckRuns, validateOpenForgePackageMetadata, validatePluginPackageMetadata };
+export { MAX_SUPPORTED_API_VERSION, MIN_SUPPORTED_API_VERSION, OPENFORGE_PACKAGE_METADATA_SCHEMA, OPENFORGE_PLUGIN_API_VERSION, OPENFORGE_PLUGIN_CAPABILITIES, SUPPORTED_OPENFORGE_API_VERSIONS, TestingOpenForgeRegistryFake, TestingSubscriptionSink, buildProjectFileTree, createMemoryPluginStorage, createMockBackendOpenForgeApi, createMockFrontendOpenForgeApi, createMockOpenForgeApi, createMockPluginContext, createOpenForgeRegistryFake, createTestingCalls, flattenVisibleProjectFileTree, formatProjectFileTreeSize, getProjectFileTreeDepth, getProjectFileTreeItemAccessibility, getProjectFileTreeKeyboardAction, getProjectFileTreeParentPath, hasMergeConflicts, hasProjectFileTreeShortcutModifier, isOpenForgePackageMetadata, isPluginPackageMetadata, isPluginViewKey, isQueuedForMerge, isReadyToMerge, isSupportedOpenForgeApiVersion, makePluginViewKey, parseCheckRuns, parsePluginViewKey, parseStrictFiniteNumber, preservePullRequestState, projectFileTreePathToId, splitCheckRuns, validateOpenForgePackageMetadata, validatePluginPackageMetadata };

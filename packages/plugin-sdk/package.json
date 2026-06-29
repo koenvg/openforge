@@ -34,6 +34,10 @@
       "types": "./dist/prStatusPresentation.d.ts",
       "default": "./dist/prStatusPresentation.js"
     },
+    "./projectFileTree": {
+      "types": "./dist/projectFileTree.d.ts",
+      "default": "./dist/projectFileTree.js"
+    },
     "./markdown": {
       "types": "./dist/markdown.d.ts",
       "default": "./dist/markdown.js"

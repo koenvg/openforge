@@ -50,6 +50,7 @@ const OPENFORGE_PLUGIN_SDK_SOURCE_ENTRYPOINTS = Object.freeze([
   ['@openforge/plugin-sdk/prStatusPresentation', 'packages/plugin-sdk/src/prStatusPresentation.ts'],
   ['@openforge/plugin-sdk/markdown', 'packages/plugin-sdk/src/markdown.ts'],
   ['@openforge/plugin-sdk/numberParsing', 'packages/plugin-sdk/src/numberParsing.ts'],
+  ['@openforge/plugin-sdk/projectFileTree', 'packages/plugin-sdk/src/projectFileTree.ts'],
   ['@openforge/plugin-sdk/sanitize', 'packages/plugin-sdk/src/sanitize.ts'],
   ['@openforge/plugin-sdk/ui/MarkdownContent.svelte', 'packages/plugin-sdk/src/ui/MarkdownContent.svelte'],
   ['@openforge/plugin-sdk/ui/ResizablePanel.svelte', 'packages/plugin-sdk/src/ui/ResizablePanel.svelte'],

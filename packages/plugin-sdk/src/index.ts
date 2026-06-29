@@ -102,6 +102,23 @@ export type {
 
 export { parseStrictFiniteNumber } from './numberParsing'
 export {
+  buildProjectFileTree,
+  flattenVisibleProjectFileTree,
+  formatProjectFileTreeSize,
+  getProjectFileTreeDepth,
+  getProjectFileTreeItemAccessibility,
+  getProjectFileTreeKeyboardAction,
+  getProjectFileTreeParentPath,
+  hasProjectFileTreeShortcutModifier,
+  projectFileTreePathToId,
+} from './projectFileTree'
+export type {
+  ProjectFileTreeEntry,
+  ProjectFileTreeItemAccessibility,
+  ProjectFileTreeKeyboardAction,
+  ProjectFileTreeNode,
+} from './projectFileTree'
+export {
   hasMergeConflicts,
   isQueuedForMerge,
   isReadyToMerge,

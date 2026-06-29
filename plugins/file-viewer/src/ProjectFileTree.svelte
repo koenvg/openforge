@@ -1,6 +1,16 @@
 <script lang="ts">
   import { tick } from 'svelte'
   import { FileText, Folder, FolderOpen } from '@lucide/svelte'
+  import {
+    buildProjectFileTree,
+    flattenVisibleProjectFileTree,
+    formatProjectFileTreeSize,
+    getProjectFileTreeDepth,
+    getProjectFileTreeItemAccessibility,
+    getProjectFileTreeKeyboardAction,
+    projectFileTreePathToId,
+    type ProjectFileTreeNode,
+  } from '@openforge/plugin-sdk/projectFileTree'
   import type { FileEntry } from '@openforge/plugin-sdk/domain'
 
   interface Props {
@@ -14,14 +24,7 @@
     focusSelectedRequest?: number | null
   }
 
-  interface TreeNode {
-    entry: FileEntry
-    children: TreeNode[]
-    level: number
-    parentPath: string | null
-    posInSet: number
-    setSize: number
-  }
+  type TreeNode = ProjectFileTreeNode<FileEntry>
 
   const {
     entries,
@@ -40,86 +43,9 @@
   let lastSelectedPath = $state<string | null>(null)
   let appliedFocusSelectedRequest = $state<number | null>(null)
 
-  const treeNodes = $derived(buildTree(entries))
-  const visibleNodes = $derived(flattenVisibleTree(treeNodes))
+  const treeNodes = $derived(buildProjectFileTree(entries))
+  const visibleNodes = $derived(flattenVisibleProjectFileTree(treeNodes, expandedDirs))
   const visiblePaths = $derived(visibleNodes.map((node) => node.entry.path))
-
-  function getDepth(path: string): number {
-    return path.split('/').length - 1
-  }
-
-  function getParentPath(path: string): string | null {
-    const lastSlash = path.lastIndexOf('/')
-    return lastSlash === -1 ? null : path.slice(0, lastSlash)
-  }
-
-  function buildTree(flatEntries: FileEntry[]): TreeNode[] {
-    const nodesByPath = new Map<string, TreeNode>()
-    const roots: TreeNode[] = []
-
-    for (const entry of flatEntries) {
-      nodesByPath.set(entry.path, {
-        entry,
-        children: [],
-        level: 1,
-        parentPath: getParentPath(entry.path),
-        posInSet: 1,
-        setSize: 1,
-      })
-    }
-
-    for (const entry of flatEntries) {
-      const node = nodesByPath.get(entry.path)
-      if (!node) continue
-
-      const parent = node.parentPath ? nodesByPath.get(node.parentPath) : null
-      if (parent) {
-        parent.children.push(node)
-      } else {
-        roots.push(node)
-      }
-    }
-
-    assignTreeMetadata(roots, 1)
-    return roots
-  }
-
-  function assignTreeMetadata(nodes: TreeNode[], level: number) {
-    const setSize = nodes.length
-    nodes.forEach((node, index) => {
-      node.level = level
-      node.posInSet = index + 1
-      node.setSize = setSize
-      assignTreeMetadata(node.children, level + 1)
-    })
-  }
-
-  function flattenVisibleTree(nodes: TreeNode[]): TreeNode[] {
-    const result: TreeNode[] = []
-
-    function visit(items: TreeNode[]) {
-      for (const item of items) {
-        result.push(item)
-        if (item.entry.isDir && expandedDirs.has(item.entry.path)) {
-          visit(item.children)
-        }
-      }
-    }
-
-    visit(nodes)
-    return result
-  }
-
-  function formatSize(size: number | null): string {
-    if (size === null) return ''
-    if (size < 1024) return `${size} B`
-    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
-    return `${(size / (1024 * 1024)).toFixed(1)} MB`
-  }
-
-  function pathToId(path: string): string {
-    return `project-file-tree-${Array.from(path).map((char) => char.charCodeAt(0).toString(36)).join('-')}`
-  }
 
   function getTreeItemElement(path: string): HTMLElement | null {
     const index = visiblePaths.indexOf(path)
@@ -142,90 +68,24 @@
     }
   }
 
-  function moveFocusBy(offset: number, currentPath: string) {
-    const currentIndex = visiblePaths.indexOf(currentPath)
-    if (currentIndex === -1) return
-    const nextIndex = Math.max(0, Math.min(visiblePaths.length - 1, currentIndex + offset))
-    const nextPath = visiblePaths[nextIndex]
-    if (nextPath) void focusPath(nextPath)
-  }
-
-  function focusFirst() {
-    const firstPath = visiblePaths[0]
-    if (firstPath) void focusPath(firstPath)
-  }
-
-  function focusLast() {
-    const lastPath = visiblePaths.at(-1)
-    if (lastPath) void focusPath(lastPath)
-  }
-
-  function handleArrowRight(node: TreeNode) {
-    if (!node.entry.isDir) return
-
-    if (!expandedDirs.has(node.entry.path)) {
-      onToggleDir(node.entry.path)
-      return
-    }
-
-    const firstChild = node.children[0]
-    if (firstChild) void focusPath(firstChild.entry.path)
-  }
-
-  function handleArrowLeft(node: TreeNode) {
-    if (node.entry.isDir && expandedDirs.has(node.entry.path)) {
-      onToggleDir(node.entry.path)
-      return
-    }
-
-    if (node.parentPath && visiblePaths.includes(node.parentPath)) {
-      void focusPath(node.parentPath)
-    }
-  }
-
-  function hasShortcutModifier(event: KeyboardEvent): boolean {
-    return event.altKey || event.ctrlKey || event.metaKey || event.shiftKey
-  }
-
   function handleKeydown(event: KeyboardEvent, node: TreeNode) {
-    if (hasShortcutModifier(event)) return
+    const action = getProjectFileTreeKeyboardAction(event, node, { expandedDirs, visiblePaths })
+    if (!action.handled) return
 
-    switch (event.key) {
-      case 'ArrowDown':
-        event.preventDefault()
-        event.stopPropagation()
-        moveFocusBy(1, node.entry.path)
-        break
-      case 'ArrowUp':
-        event.preventDefault()
-        event.stopPropagation()
-        moveFocusBy(-1, node.entry.path)
-        break
-      case 'Home':
-        event.preventDefault()
-        event.stopPropagation()
-        focusFirst()
-        break
-      case 'End':
-        event.preventDefault()
-        event.stopPropagation()
-        focusLast()
-        break
-      case 'ArrowRight':
-        event.preventDefault()
-        event.stopPropagation()
-        handleArrowRight(node)
-        break
-      case 'ArrowLeft':
-        event.preventDefault()
-        event.stopPropagation()
-        handleArrowLeft(node)
-        break
-      case 'Enter':
-      case ' ':
-        event.preventDefault()
-        event.stopPropagation()
+    event.preventDefault()
+    event.stopPropagation()
+
+    switch (action.type) {
+      case 'activate':
         activateNode(node)
+        break
+      case 'focus':
+        void focusPath(action.path)
+        break
+      case 'toggle':
+        onToggleDir(action.path)
+        break
+      case 'none':
         break
     }
   }
@@ -278,18 +138,19 @@
         {@const isExpanded = expandedDirs.has(entry.path)}
         {@const isSelected = selectedPath === entry.path}
         {@const treeIndex = visiblePaths.indexOf(entry.path)}
-        {@const labelId = `${pathToId(entry.path)}-label`}
-        {@const sizeId = `${pathToId(entry.path)}-size`}
+        {@const labelId = `${projectFileTreePathToId(entry.path)}-label`}
+        {@const sizeId = `${projectFileTreePathToId(entry.path)}-size`}
+        {@const a11y = getProjectFileTreeItemAccessibility(node, { expandedDirs, selectedPath, labelId, sizeId })}
         <div
           role="treeitem"
           tabindex={focusedPath === entry.path ? 0 : -1}
-          aria-level={node.level}
-          aria-setsize={node.setSize}
-          aria-posinset={node.posInSet}
-          aria-expanded={entry.isDir ? isExpanded : undefined}
-          aria-current={!entry.isDir && isSelected ? 'true' : undefined}
-          aria-selected={!entry.isDir ? (isSelected ? 'true' : 'false') : undefined}
-          aria-labelledby={!entry.isDir && entry.size !== null ? `${labelId} ${sizeId}` : labelId}
+          aria-level={a11y.level}
+          aria-setsize={a11y.setSize}
+          aria-posinset={a11y.posInSet}
+          aria-expanded={a11y.expanded}
+          aria-current={a11y.current}
+          aria-selected={a11y.selected}
+          aria-labelledby={a11y.labelledBy}
           data-testid="tree-entry"
           data-tree-index={treeIndex}
           onclick={(event) => {
@@ -303,7 +164,7 @@
         >
           <div
             class="w-full flex items-center gap-2 text-xs text-base-content cursor-pointer transition-colors py-1.5 pr-3 {entry.isDir ? 'hover:bg-base-content/5' : isSelected ? 'bg-primary/10 border-l-2 border-l-primary' : 'hover:bg-base-content/5'}"
-            style="padding-left: {entry.isDir || !isSelected ? 12 + getDepth(entry.path) * 16 : 10 + getDepth(entry.path) * 16}px"
+            style="padding-left: {entry.isDir || !isSelected ? 12 + getProjectFileTreeDepth(entry.path) * 16 : 10 + getProjectFileTreeDepth(entry.path) * 16}px"
           >
             {#if entry.isDir}
               <span class="text-[0.6rem] text-base-content/50 shrink-0" data-testid={`dir-indicator-${entry.path}`} aria-hidden="true">{isExpanded ? '▼' : '▶'}</span>
@@ -316,7 +177,7 @@
             {:else}
               <FileText class="w-3.5 h-3.5 text-base-content/60 shrink-0" data-testid={`file-icon-${entry.path}`} aria-hidden="true" />
               <span id={labelId} class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left" data-testid="entry-label">{entry.name}</span>
-              <span id={sizeId} class="text-base-content/50 text-[0.7rem] ml-auto">{formatSize(entry.size)}</span>
+              <span id={sizeId} class="text-base-content/50 text-[0.7rem] ml-auto">{formatProjectFileTreeSize(entry.size)}</span>
             {/if}
           </div>
 
