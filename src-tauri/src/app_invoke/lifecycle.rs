@@ -94,10 +94,10 @@ struct StartImplementationContext {
     provider_name: String,
 }
 
-struct PreparedWorkspace {
-    working_dir: PathBuf,
-    kind: &'static str,
-    branch_name: Option<String>,
+pub(super) struct PreparedWorkspace {
+    pub(super) working_dir: PathBuf,
+    pub(super) kind: &'static str,
+    pub(super) branch_name: Option<String>,
 }
 
 struct ProviderRunOptions<'a> {
@@ -274,6 +274,54 @@ async fn prepare_start_workspace(
     })
 }
 
+/// Roll back the workspace prepared for a start attempt whose provider failed to
+/// launch. Without this, a failed start leaves an orphaned `worktrees` row (and
+/// physical worktree) behind. On the next attempt the leftover row collides with
+/// the new INSERT and surfaces a `UNIQUE constraint failed: worktrees.task_id`
+/// error that masks the real failure (e.g. the provider binary not being
+/// installed). Rolling back keeps a failed start from poisoning the task.
+pub(super) async fn rollback_failed_start_workspace(
+    state: &AppState,
+    task_id: &str,
+    repo_path: &str,
+    workspace: &PreparedWorkspace,
+    uses_existing_branch: bool,
+) {
+    // A project-directory start ("disabled" worktree source) creates neither a
+    // worktree nor a record, so there is nothing to roll back.
+    if workspace.kind != "git_worktree" {
+        return;
+    }
+
+    let repo = Path::new(repo_path);
+    let worktree_path = workspace.working_dir.as_path();
+    let remove_result = if uses_existing_branch {
+        // Never delete a user's pre-existing branch; only detach the worktree.
+        crate::git_worktree::remove_worktree(repo, worktree_path).await
+    } else {
+        crate::git_worktree::remove_worktree_with_branch(
+            repo,
+            worktree_path,
+            workspace.branch_name.as_deref(),
+        )
+        .await
+    };
+    if let Err(e) = remove_result {
+        error!(
+            "[app_invoke] Failed to remove worktree during failed-start rollback for {}: {}",
+            task_id, e
+        );
+    }
+
+    let db = crate::db::acquire_db(&state.db);
+    if let Err(e) = db.delete_worktree_record(task_id) {
+        error!(
+            "[app_invoke] Failed to delete worktree record during failed-start rollback for {}: {}",
+            task_id, e
+        );
+    }
+}
+
 fn persist_active_task_workspace(
     state: &AppState,
     task_id: &str,
@@ -376,7 +424,7 @@ pub(super) async fn handle_app_start_implementation_command(
             .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     let provider_start_context =
         crate::providers::ProviderStartContext::new(state.app.clone(), state.app_event_tx.clone());
-    let provider_result = provider
+    let provider_result = match provider
         .start(
             &task_id,
             &workspace.working_dir,
@@ -387,13 +435,30 @@ pub(super) async fn handle_app_start_implementation_command(
             &provider_start_context,
         )
         .await
-        .map_err(|e| {
-            if e.is_invalid_workspace_cwd() {
+    {
+        Ok(result) => result,
+        Err(e) => {
+            // The provider never launched, so undo the workspace prepared for this
+            // attempt. Leaving the worktree record behind would block (and mask)
+            // every future start with a UNIQUE constraint error instead of
+            // resurfacing the real cause.
+            let uses_existing_branch =
+                start_context.task.worktree_source.as_deref() == Some("existingBranch");
+            rollback_failed_start_workspace(
+                state,
+                &task_id,
+                &repo_path,
+                &workspace,
+                uses_existing_branch,
+            )
+            .await;
+            return Err(if e.is_invalid_workspace_cwd() {
                 (StatusCode::BAD_REQUEST, e.to_string())
             } else {
                 (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-            }
-        })?;
+            });
+        }
+    };
 
     persist_active_task_workspace(
         state,

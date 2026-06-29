@@ -1,6 +1,16 @@
 <script lang="ts">
   import { FolderOpen } from '@lucide/svelte'
   import { DEFAULT_PROJECT_COLOR, PROJECT_COLORS } from '../../lib/projectColors'
+  import { openUrl } from '../../lib/ipc'
+
+  // Where to send a user to install each provider when it is not on PATH. Opened
+  // externally via openUrl() so Electron main handles open_url consistently.
+  const PROVIDER_INSTALL_URLS: Record<string, string> = {
+    'claude-code': 'https://docs.claude.com/en/docs/claude-code',
+    opencode: 'https://opencode.ai',
+    pi: 'https://pi.dev/docs/latest/quickstart',
+    codex: 'https://github.com/openai/codex',
+  }
 
   interface Props {
     projectName: string
@@ -124,6 +134,12 @@
     },
   ])
 
+  // Only enforce dropdown gating once the install check has produced a definitive
+  // result. While loading (flags still default to false) or after an errored check
+  // we cannot trust `installed`, so we keep every provider selectable to avoid
+  // greying out a provider that is actually installed.
+  const installStatusKnown = $derived(!installationStatusLoading && !installationStatusError)
+
   const selectedProviderRecovery = $derived(providerRecoveryInfo.find((provider) => provider.id === aiProvider) ?? null)
   const installedProviderAlternatives = $derived(providerRecoveryInfo.filter((provider) => provider.id !== aiProvider && provider.installed && provider.authenticated))
   const selectedProviderNeedsInstall = $derived(!!selectedProviderRecovery && !selectedProviderRecovery.installed)
@@ -221,15 +237,32 @@
           disabled={disabled}
           onchange={(e) => {
             if (disabled || !(e.currentTarget instanceof HTMLSelectElement)) return
-            onAiProviderChange(e.currentTarget.value)
+            const value = e.currentTarget.value
+            const next = providerRecoveryInfo.find((provider) => provider.id === value)
+            // Defense-in-depth beyond the native `disabled` option: never adopt a
+            // provider whose binary is missing — that selection silently fails at
+            // task-start time with no usable agent.
+            if (installStatusKnown && next && !next.installed) return
+            onAiProviderChange(value)
           }}
         >
-          <option value="claude-code">Claude Code</option>
-          <option value="opencode">OpenCode</option>
-          <option value="pi">Pi Coding Agent</option>
-          <option value="codex">Codex</option>
+          {#each providerRecoveryInfo as provider (provider.id)}
+            <option value={provider.id} disabled={installStatusKnown && !provider.installed}>
+              {installStatusKnown && !provider.installed ? `${provider.label} — not installed` : provider.label}
+            </option>
+          {/each}
         </select>
       </label>
+
+      {#snippet installLink(url: string, providerLabel: string)}
+        <button
+          type="button"
+          class="btn btn-link btn-xs p-0 h-auto min-h-0 text-primary no-underline hover:underline"
+          onclick={() => openUrl(url)}
+          disabled={disabled}
+          aria-label={`Install ${providerLabel} (opens in browser)`}
+        >Install ↗</button>
+      {/snippet}
 
       <div class="flex flex-col gap-1 text-xs" aria-live="polite">
         <div class="flex items-center gap-2">
@@ -239,6 +272,7 @@
           {:else}
             <span class="text-error">✗</span>
             <span class="text-base-content/50">OpenCode not installed</span>
+            {@render installLink(PROVIDER_INSTALL_URLS['opencode'], 'OpenCode')}
           {/if}
         </div>
         <div class="flex items-center gap-2">
@@ -253,6 +287,7 @@
           {:else}
             <span class="text-error">✗</span>
             <span class="text-base-content/50">Claude Code not installed</span>
+            {@render installLink(PROVIDER_INSTALL_URLS['claude-code'], 'Claude Code')}
           {/if}
         </div>
         <div class="flex items-center gap-2">
@@ -262,6 +297,7 @@
           {:else}
             <span class="text-error">✗</span>
             <span class="text-base-content/50">Pi not installed</span>
+            {@render installLink(PROVIDER_INSTALL_URLS['pi'], 'Pi')}
           {/if}
         </div>
         <div class="flex items-center gap-2">
@@ -271,6 +307,7 @@
           {:else}
             <span class="text-error">✗</span>
             <span class="text-base-content/50">Codex not installed</span>
+            {@render installLink(PROVIDER_INSTALL_URLS['codex'], 'Codex')}
           {/if}
         </div>
         {#if installationStatusLoading}

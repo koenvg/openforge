@@ -31,13 +31,32 @@ impl super::Database {
             .expect("time went backwards")
             .as_secs() as i64;
 
+        // Upsert keyed on the UNIQUE task_id. A blind INSERT would fail with a
+        // "UNIQUE constraint failed: worktrees.task_id" error whenever a record
+        // already exists for the task (e.g. a prior start that aborted before
+        // cleanup), masking the real start error on every retry. Reconciling the
+        // existing record in place keeps a re-start idempotent.
         conn.execute(
             "INSERT INTO worktrees (task_id, project_id, repo_path, worktree_path, branch_name, status, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, 'active', ?6, ?7)",
+             VALUES (?1, ?2, ?3, ?4, ?5, 'active', ?6, ?7)
+             ON CONFLICT(task_id) DO UPDATE SET
+                 project_id = excluded.project_id,
+                 repo_path = excluded.repo_path,
+                 worktree_path = excluded.worktree_path,
+                 branch_name = excluded.branch_name,
+                 status = 'active',
+                 updated_at = excluded.updated_at",
             rusqlite::params![task_id, project_id, repo_path, worktree_path, branch_name, now, now],
         )?;
 
-        Ok(conn.last_insert_rowid())
+        // last_insert_rowid() is unreliable after an ON CONFLICT update, so read
+        // the row id back explicitly to keep the returned id correct in both the
+        // insert and reconcile paths.
+        conn.query_row(
+            "SELECT id FROM worktrees WHERE task_id = ?1",
+            [task_id],
+            |row| row.get(0),
+        )
     }
 
     /// Get worktree for a task
@@ -191,6 +210,38 @@ impl super::Database {
 mod tests {
     use crate::db::test_helpers::*;
     use std::fs;
+
+    #[test]
+    fn create_worktree_record_reconciles_existing_record_for_same_task() {
+        let (db, path) = make_test_db("worktree_record_idempotent");
+
+        let project = db
+            .create_project("Test Project", "/tmp/test")
+            .expect("create project failed");
+        let task = db
+            .create_task("Idempotent task", "doing", Some(&project.id), None, None)
+            .expect("create task failed");
+
+        db.create_worktree_record(&task.id, &project.id, "/tmp/repo", "/tmp/wt-old", "branch-old")
+            .expect("first create should succeed");
+
+        // A second create for the same task must not fail on the UNIQUE(task_id)
+        // constraint; it should reconcile the existing record in place so a
+        // retried start cannot be blocked (and the real error masked).
+        db.create_worktree_record(&task.id, &project.id, "/tmp/repo", "/tmp/wt-new", "branch-new")
+            .expect("second create should reconcile, not violate UNIQUE(task_id)");
+
+        let worktree = db
+            .get_worktree_for_task(&task.id)
+            .expect("query worktree")
+            .expect("worktree should exist");
+        assert_eq!(worktree.worktree_path, "/tmp/wt-new");
+        assert_eq!(worktree.branch_name, "branch-new");
+        assert_eq!(worktree.status, "active");
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
 
     #[test]
     fn test_get_resumable_worktrees_only_doing_tasks() {
