@@ -329,8 +329,13 @@ pub fn scan_commands_directory(dir: &Path) -> Vec<crate::opencode_client::Comman
 }
 
 /// Search tracked files and directories in a git repository by path substring (case-insensitive).
-/// Returns up to `limit` matching paths. Directory paths end with `/` so the UI can distinguish them.
+/// Returns up to `limit` matching file paths plus matching directories. Directory paths end with `/`
+/// so the UI can distinguish them.
 pub fn search_project_files(project_path: &str, query: &str, limit: usize) -> Vec<String> {
+    if limit == 0 {
+        return vec![];
+    }
+
     let repo = match git2::Repository::open(project_path) {
         Ok(r) => r,
         Err(_) => return vec![],
@@ -342,14 +347,17 @@ pub fn search_project_files(project_path: &str, query: &str, limit: usize) -> Ve
     let lower_query = query.to_lowercase();
     let mut results = Vec::new();
     let mut seen = HashSet::new();
+    let mut matching_file_count = 0;
 
     for entry in index.iter() {
-        if results.len() >= limit {
+        if matching_file_count >= limit {
             break;
         }
         let path = std::str::from_utf8(&entry.path).unwrap_or_default();
-        push_matching_directories(path, &lower_query, limit, &mut results, &mut seen);
-        push_matching_path(path, &lower_query, limit, &mut results, &mut seen);
+        push_matching_directories(path, &lower_query, &mut results, &mut seen);
+        if push_matching_path(path, &lower_query, &mut results, &mut seen) {
+            matching_file_count += 1;
+        }
     }
     results
 }
@@ -357,7 +365,6 @@ pub fn search_project_files(project_path: &str, query: &str, limit: usize) -> Ve
 fn push_matching_directories(
     path: &str,
     lower_query: &str,
-    limit: usize,
     results: &mut Vec<String>,
     seen: &mut HashSet<String>,
 ) {
@@ -365,31 +372,33 @@ fn push_matching_directories(
     let mut parts = path.split('/').peekable();
 
     while let Some(part) = parts.next() {
-        if parts.peek().is_none() || results.len() >= limit {
+        if parts.peek().is_none() {
             break;
         }
         if !directory.is_empty() {
             directory.push('/');
         }
         directory.push_str(part);
-        push_matching_path(&format!("{directory}/"), lower_query, limit, results, seen);
+        push_matching_path(&format!("{directory}/"), lower_query, results, seen);
     }
 }
 
 fn push_matching_path(
     path: &str,
     lower_query: &str,
-    limit: usize,
     results: &mut Vec<String>,
     seen: &mut HashSet<String>,
-) {
-    if results.len() >= limit || !path.to_lowercase().contains(lower_query) {
-        return;
+) -> bool {
+    if !path.to_lowercase().contains(lower_query) {
+        return false;
     }
 
     if seen.insert(path.to_string()) {
         results.push(path.to_string());
+        return true;
     }
+
+    false
 }
 
 /// Parse installed plugins from Claude Code's installed_plugins.json format.
@@ -1104,17 +1113,49 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let repo = git2::Repository::init(dir.path()).unwrap();
 
-        let nested_file_path = dir.path().join("src").join("components").join("Button.svelte");
+        let nested_file_path = dir
+            .path()
+            .join("src")
+            .join("components")
+            .join("Button.svelte");
         std::fs::create_dir_all(nested_file_path.parent().unwrap()).unwrap();
         std::fs::write(&nested_file_path, "<button>Save</button>").unwrap();
 
         let mut index = repo.index().unwrap();
-        index.add_path(Path::new("src/components/Button.svelte")).unwrap();
+        index
+            .add_path(Path::new("src/components/Button.svelte"))
+            .unwrap();
         index.write().unwrap();
 
         let results = search_project_files(dir.path().to_str().unwrap(), "src", 10);
         assert!(results.iter().any(|path| path == "src/"));
         assert!(results.iter().any(|path| path == "src/components/"));
+    }
+
+    #[test]
+    fn test_search_project_files_directories_do_not_consume_file_limit() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = git2::Repository::init(dir.path()).unwrap();
+
+        let nested_file_path = dir
+            .path()
+            .join("src")
+            .join("components")
+            .join("Button.svelte");
+        std::fs::create_dir_all(nested_file_path.parent().unwrap()).unwrap();
+        std::fs::write(&nested_file_path, "<button>Save</button>").unwrap();
+
+        let mut index = repo.index().unwrap();
+        index
+            .add_path(Path::new("src/components/Button.svelte"))
+            .unwrap();
+        index.write().unwrap();
+
+        let results = search_project_files(dir.path().to_str().unwrap(), "src", 1);
+        assert!(results.iter().any(|path| path == "src/"));
+        assert!(results
+            .iter()
+            .any(|path| path == "src/components/Button.svelte"));
     }
 
     #[test]
