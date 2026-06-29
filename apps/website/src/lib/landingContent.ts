@@ -30,16 +30,16 @@ export interface PluginCapability {
 
 export const TOP_REASONS = [
   {
-    title: 'Stay in control of agent work.',
-    description: 'Keep scoped changes, Handoff Notes, and review gates visible before work moves forward.'
+    title: 'See every task state.',
+    description: 'Tasks, agent owners, and Handoff Notes stay visible so scoped work never turns into guesswork.'
   },
   {
-    title: 'Let agents manage OpenForge tasks through the CLI.',
-    description: 'Agents can coordinate Task status and Handoff Notes from command-line workflows.'
+    title: 'Run agents in parallel.',
+    description: 'Start, pause, and compare multiple agent threads without losing the active task or context.'
   },
   {
-    title: 'Customize OpenForge to your workflow with extensions.',
-    description: 'Shape views, task context, and automations around the stable task-based operator console.'
+    title: 'Review before it lands.',
+    description: 'Human checkpoints keep handoffs, CI failures, and risky decisions in front of you.'
   }
 ] satisfies readonly TopReason[];
 

@@ -38,6 +38,29 @@
           stagger: { each: 0.14 }
         });
 
+        const topReasonsSection = document.querySelector<HTMLElement>('.top-reasons');
+
+        if (topReasonsSection) {
+          const title = topReasonsSection.querySelector<HTMLElement>('#top-reasons-title');
+          const reasonCards = Array.from(topReasonsSection.querySelectorAll<HTMLElement>('[data-animate-card]'));
+          const revealTargets = [title, ...reasonCards].filter((target): target is HTMLElement => Boolean(target));
+
+          if (revealTargets.length > 0) {
+            gsap.from(revealTargets, {
+              autoAlpha: 0,
+              y: 16,
+              duration: 0.5,
+              ease: 'power3.out',
+              stagger: 0.06,
+              scrollTrigger: {
+                trigger: topReasonsSection,
+                start: 'top 78%',
+                once: true
+              }
+            });
+          }
+        }
+
         const finalCta = document.querySelector<HTMLElement>('.final-cta');
 
         if (finalCta) {
@@ -64,7 +87,7 @@
         }
 
         gsap.utils.toArray<HTMLElement>('[data-animate-section]').forEach((section) => {
-          if (section.classList.contains('hero') || section.classList.contains('final-cta')) return;
+          if (section.classList.contains('hero') || section.classList.contains('top-reasons') || section.classList.contains('final-cta')) return;
 
           const isPluginCustomization = section.classList.contains('plugin-customization');
           const cards = isPluginCustomization
