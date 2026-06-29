@@ -38,6 +38,7 @@ describe('settingsSaver', () => {
       handoffNotesTemplate: '## Current summary\nCustom template',
       aiProvider: 'opencode',
       projectColor: 'violet',
+      useWorktrees: false,
       actions: [{ id: 'a1', name: 'Action', prompt: '', builtin: false, enabled: true }],
       focusFilterStates: ['idle'],
     })
@@ -47,7 +48,7 @@ describe('settingsSaver', () => {
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'additional_instructions', 'Do the thing')
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'handoff_notes_template', '## Current summary\nCustom template')
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'ai_provider', 'opencode')
-    expect(setProjectConfig).not.toHaveBeenCalledWith('project-1', 'use_worktrees', expect.anything())
+    expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'use_worktrees', 'false')
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'project_color', 'violet')
     expect(saveActions).toHaveBeenCalledWith('project-1', [
       { id: 'a1', name: 'Action', prompt: '', builtin: false, enabled: true },

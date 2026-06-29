@@ -27,7 +27,9 @@ function defaultProps(overrides: Record<string, unknown> = {}) {
     onProjectNameChange: vi.fn(),
     onProjectPathChange: vi.fn(),
     onAiProviderChange: vi.fn(),
+    useWorktrees: true,
     onProjectColorChange: vi.fn(),
+    onUseWorktreesChange: vi.fn(),
     onRefreshInstallationStatus: vi.fn(),
     ...overrides,
   }
@@ -107,12 +109,22 @@ describe('SettingsGeneralCard', () => {
     expect(onProjectColorChange).not.toHaveBeenCalled()
   })
 
-  describe('repository-level worktree setting', () => {
-    it('does not render the removed Git Worktrees toggle', () => {
-      render(SettingsGeneralCard, { props: defaultProps() })
+  describe('default workspace setting', () => {
+    it('renders a per-project default worktree toggle', () => {
+      render(SettingsGeneralCard, { props: defaultProps({ useWorktrees: false }) })
 
-      expect(screen.queryByText('Git Worktrees')).toBeNull()
-      expect(screen.queryByTestId('use-worktrees-toggle')).toBeNull()
+      const toggle = requireElement(screen.getByLabelText('Default new tasks to worktrees'), HTMLInputElement)
+      expect(toggle.checked).toBe(false)
+      expect(screen.getByText('New tasks default to the project directory')).toBeTruthy()
+    })
+
+    it('notifies when the default worktree toggle changes', async () => {
+      const onUseWorktreesChange = vi.fn()
+      render(SettingsGeneralCard, { props: defaultProps({ useWorktrees: true, onUseWorktreesChange }) })
+
+      await fireEvent.click(screen.getByLabelText('Default new tasks to worktrees'))
+
+      expect(onUseWorktreesChange).toHaveBeenCalledWith(false)
     })
   })
 

@@ -27,13 +27,15 @@
     "Run pnpm exec tsc --noEmit for frontend/type changes",
     "Run pnpm test for frontend/business-logic changes",
     "Run cargo test from src-tauri for Rust/backend changes",
-    "Run pnpm build:plugins plus targeted host/runtime tests for plugin platform changes"
+    "Run pnpm build:plugins plus targeted host/runtime tests for plugin platform changes",
+    "Run a Babysitter-tracked review step for product-code or behavior implementation changes before final handoff"
   ],
   "deployGates": [
     "Frontend typecheck and tests pass",
     "Rust tests pass",
     "Relevant plugin builds/tests pass when plugin platform code changed",
-    "No unreviewed changes to CI/release packaging"
+    "No unreviewed changes to CI/release packaging",
+    "Review findings from the Babysitter-tracked review step are resolved or explicitly documented"
   ],
   "cicdIntegration": {
     "enabled": false,

@@ -2,7 +2,7 @@
   import { onMount } from 'svelte'
   import { ImagePlus } from '@lucide/svelte'
   import type { Task, PermissionMode, Action, GitBranchInfo, WorktreeSource } from '../lib/types'
-  import { createTask, updateTask, getResolvedAiProvider, listGitBranches } from '../lib/ipc'
+  import { createTask, updateTask, getProjectConfig, getResolvedAiProvider, listGitBranches } from '../lib/ipc'
   import {
     formatTaskPromptWithImageReferences,
     getTaskPromptImageReferences,
@@ -121,8 +121,11 @@
 
   async function initializeDialog() {
     selectedPermissionMode = 'default'
+    useWorktree = true
     try {
       if ($activeProjectId) {
+        const defaultUseWorktrees = await getProjectConfig($activeProjectId, 'use_worktrees')
+        useWorktree = defaultUseWorktrees == null ? true : defaultUseWorktrees === 'true'
         aiProvider = await getResolvedAiProvider($activeProjectId)
 
         const allActions = await loadActions($activeProjectId)

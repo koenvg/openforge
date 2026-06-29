@@ -13,6 +13,7 @@ export interface ProjectSettingsSavePayload {
   handoffNotesTemplate: string
   aiProvider: string
   projectColor: string
+  useWorktrees: boolean
   actions: Action[]
   focusFilterStates: TaskState[]
 }
@@ -29,6 +30,7 @@ export async function saveProjectSettings(payload: ProjectSettingsSavePayload): 
   await setProjectConfig(payload.projectId, 'additional_instructions', payload.agentInstructions)
   await setProjectConfig(payload.projectId, 'handoff_notes_template', payload.handoffNotesTemplate)
   await setProjectConfig(payload.projectId, 'ai_provider', payload.aiProvider)
+  await setProjectConfig(payload.projectId, 'use_worktrees', payload.useWorktrees ? 'true' : 'false')
   await setProjectConfig(payload.projectId, 'project_color', payload.projectColor)
   await saveActions(payload.projectId, payload.actions)
   await saveFocusFilterStates(payload.projectId, payload.focusFilterStates)
