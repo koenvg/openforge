@@ -41,16 +41,20 @@
         gsap.utils.toArray<HTMLElement>('[data-animate-section]').forEach((section) => {
           if (section.classList.contains('hero')) return;
 
-          const cards = section.querySelectorAll<HTMLElement>('[data-animate-card], .proof-screenshot-shell, .final-cta-copy');
+          const isPluginCustomization = section.classList.contains('plugin-customization');
+          const cards = isPluginCustomization
+            ? section.querySelectorAll<HTMLElement>('[data-extension-card]')
+            : section.querySelectorAll<HTMLElement>('[data-animate-card], .proof-screenshot-shell, .final-cta-copy');
 
           if (cards.length === 0) return;
 
           gsap.from(cards, {
             autoAlpha: 0,
-            y: 18,
-            duration: 0.55,
+            y: isPluginCustomization ? 24 : 18,
+            scale: isPluginCustomization ? 0.97 : 1,
+            duration: isPluginCustomization ? 0.62 : 0.55,
             ease: 'power3.out',
-            stagger: 0.07,
+            stagger: isPluginCustomization ? 0.09 : 0.07,
             scrollTrigger: {
               trigger: section,
               start: 'top 78%',
