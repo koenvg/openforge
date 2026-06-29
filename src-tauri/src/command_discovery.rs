@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 /// Represents an installed Claude Code plugin with its metadata.
@@ -327,8 +328,8 @@ pub fn scan_commands_directory(dir: &Path) -> Vec<crate::opencode_client::Comman
     commands
 }
 
-/// Search tracked files in a git repository by path substring (case-insensitive).
-/// Returns up to `limit` matching file paths.
+/// Search tracked files and directories in a git repository by path substring (case-insensitive).
+/// Returns up to `limit` matching paths. Directory paths end with `/` so the UI can distinguish them.
 pub fn search_project_files(project_path: &str, query: &str, limit: usize) -> Vec<String> {
     let repo = match git2::Repository::open(project_path) {
         Ok(r) => r,
@@ -340,16 +341,55 @@ pub fn search_project_files(project_path: &str, query: &str, limit: usize) -> Ve
     };
     let lower_query = query.to_lowercase();
     let mut results = Vec::new();
+    let mut seen = HashSet::new();
+
     for entry in index.iter() {
         if results.len() >= limit {
             break;
         }
         let path = std::str::from_utf8(&entry.path).unwrap_or_default();
-        if path.to_lowercase().contains(&lower_query) {
-            results.push(path.to_string());
-        }
+        push_matching_directories(path, &lower_query, limit, &mut results, &mut seen);
+        push_matching_path(path, &lower_query, limit, &mut results, &mut seen);
     }
     results
+}
+
+fn push_matching_directories(
+    path: &str,
+    lower_query: &str,
+    limit: usize,
+    results: &mut Vec<String>,
+    seen: &mut HashSet<String>,
+) {
+    let mut directory = String::new();
+    let mut parts = path.split('/').peekable();
+
+    while let Some(part) = parts.next() {
+        if parts.peek().is_none() || results.len() >= limit {
+            break;
+        }
+        if !directory.is_empty() {
+            directory.push('/');
+        }
+        directory.push_str(part);
+        push_matching_path(&format!("{directory}/"), lower_query, limit, results, seen);
+    }
+}
+
+fn push_matching_path(
+    path: &str,
+    lower_query: &str,
+    limit: usize,
+    results: &mut Vec<String>,
+    seen: &mut HashSet<String>,
+) {
+    if results.len() >= limit || !path.to_lowercase().contains(lower_query) {
+        return;
+    }
+
+    if seen.insert(path.to_string()) {
+        results.push(path.to_string());
+    }
 }
 
 /// Parse installed plugins from Claude Code's installed_plugins.json format.
@@ -1057,6 +1097,24 @@ mod tests {
         let results = search_project_files(dir.path().to_str().unwrap(), "main", 10);
         assert!(!results.is_empty());
         assert!(results.iter().any(|p| p.contains("main.rs")));
+    }
+
+    #[test]
+    fn test_search_project_files_includes_matching_directories() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = git2::Repository::init(dir.path()).unwrap();
+
+        let nested_file_path = dir.path().join("src").join("components").join("Button.svelte");
+        std::fs::create_dir_all(nested_file_path.parent().unwrap()).unwrap();
+        std::fs::write(&nested_file_path, "<button>Save</button>").unwrap();
+
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("src/components/Button.svelte")).unwrap();
+        index.write().unwrap();
+
+        let results = search_project_files(dir.path().to_str().unwrap(), "src", 10);
+        assert!(results.iter().any(|path| path == "src/"));
+        assert!(results.iter().any(|path| path == "src/components/"));
     }
 
     #[test]
