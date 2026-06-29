@@ -359,12 +359,12 @@ This task is {task_id}. OpenForge stores this task's user-facing Handoff Notes i
 <analysis_update trigger="after_initial_analysis">
 Once you understand the scope, run: openforge update-task --task-id "{task_id}" --summary "..."
 Write concise initial Handoff Notes reflecting the actual work and the active template, not the original request verbatim.
-Good: "## Current summary\nScoped JWT refresh token rotation in auth middleware\n\n## Review focus\nInspect auth middleware expiry handling." — Bad: "implement the auth thing"
+Good: "## Current summary\nScoped JWT refresh token rotation in auth middleware\n\n## Decisions made\nKept rotation inside existing auth middleware." — Bad: "implement the auth thing"
 </analysis_update>
 
 <summary_update trigger="before_finalizing">
 Before reporting completion, run: openforge update-task --task-id "{task_id}" --summary "..."
-Replace the task's Handoff Notes with an accurate, up-to-date reviewer brief using the active template. Cover decisions made, risky files or lines, tricky API calls or casts, skipped or weak tests, open questions, and follow-up tasks. Keep it current rather than appending run history.
+Replace the task's Handoff Notes with an accurate, up-to-date reviewer brief using the active template. Cover the active template's requested sections, including current status, decisions made, open questions, and follow-up tasks when applicable. Keep it current rather than appending run history.
 </summary_update>
 
 <completeness_check>
@@ -494,6 +494,10 @@ mod tests {
         );
         assert!(DEFAULT_HANDOFF_NOTES_TEMPLATE.contains("## Current summary"));
         assert!(DEFAULT_HANDOFF_NOTES_TEMPLATE.contains("## Follow-up tasks"));
+        assert!(!DEFAULT_HANDOFF_NOTES_TEMPLATE.contains("## Review focus"));
+        assert!(!DEFAULT_HANDOFF_NOTES_TEMPLATE.contains("## Risky files or lines"));
+        assert!(!DEFAULT_HANDOFF_NOTES_TEMPLATE.contains("## Tricky API calls or casts"));
+        assert!(!DEFAULT_HANDOFF_NOTES_TEMPLATE.contains("## Tests skipped or weak"));
     }
 
     #[test]
@@ -506,7 +510,16 @@ mod tests {
         assert!(prompt.contains("<openforge_task_management>"));
         assert!(prompt.contains("<handoff_notes_template>"));
         assert!(prompt.contains("## Current summary"));
-        assert!(prompt.contains("## Review focus"));
+        assert!(prompt.contains("## Decisions made"));
+        assert!(prompt.contains("## Open questions"));
+        assert!(prompt.contains("## Follow-up tasks"));
+        assert!(!prompt.contains("## Review focus"));
+        assert!(!prompt.contains("## Risky files or lines"));
+        assert!(!prompt.contains("## Tricky API calls or casts"));
+        assert!(!prompt.contains("## Tests skipped or weak"));
+        assert!(!prompt.contains("risky files or lines"));
+        assert!(!prompt.contains("tricky API calls or casts"));
+        assert!(!prompt.contains("skipped or weak tests"));
         assert!(prompt.contains(
             "OpenForge stores this task's user-facing Handoff Notes in the task summary field"
         ));
