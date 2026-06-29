@@ -40,18 +40,19 @@
   let { api, context: _context, projectName, projectId = null }: Props = $props()
 
   // The same component backs two views: the per-repo "Pull Requests" view
-  // (scope 'repo') and the "All Pull Requests" view (scope 'global'). PluginSlot
-  // remounts the component when the active view changes, so reading the current
-  // view at init is sufficient to pick the scope.
-  const scope: 'repo' | 'global' =
-    typeof api.navigation.get().currentView === 'string' &&
-    api.navigation.get().currentView.endsWith('pr_review_global')
+  // (scope 'repo') and the "All Pull Requests" view (scope 'global'). Derive the
+  // scope from the navigation snapshot reactively so this does not rely on a
+  // one-time capture of api/navigation state at component initialization.
+  let scope: 'repo' | 'global' = $derived.by(() => {
+    const currentView = api.navigation.get().currentView
+    return typeof currentView === 'string' && currentView.endsWith('pr_review_global')
       ? 'global'
       : 'repo'
+  })
   // The repo-exclusion filter only makes sense for the all-repos view. The
   // per-repo view is already scoped to a single repo, so its filter control is
   // hidden and exclusions are not applied.
-  const showFilters = scope === 'global'
+  let showFilters = $derived(scope === 'global')
   // The all-repos view spans every repository, so its header must not be tied to
   // the active project's name.
   let headerTitle = $derived(scope === 'global' ? 'All Pull Requests' : `${projectName} — Pull Requests`)
