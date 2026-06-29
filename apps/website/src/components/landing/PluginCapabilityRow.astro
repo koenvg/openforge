@@ -8,7 +8,7 @@ interface Props {
 const { capability } = Astro.props;
 ---
 
-<li class="ledger-row" data-animate-card>
+<li class="ledger-row" data-extension-card>
   <span class="ledger-icon" aria-hidden="true">
     <svg viewBox="0 0 24 24">
       {capability.iconPaths.map((path) => <path d={path} />)}
@@ -16,7 +16,6 @@ const { capability } = Astro.props;
   </span>
   <div class="ledger-row-copy">
     <h3>{capability.title}</h3>
-    <p><code>{capability.code}</code> · {capability.description}</p>
+    <p><code>{capability.code}</code><span>{capability.description}</span></p>
   </div>
-  <span class="ledger-dot" aria-hidden="true"></span>
 </li>

@@ -5,13 +5,13 @@ import PluginCapabilityRow from './PluginCapabilityRow.astro';
 
 <section class="landing-section plugin-customization" aria-labelledby="plugin-customization-title" data-animate-section>
   <div class="plugin-customization-heading">
-    <h2 id="plugin-customization-title" class="section-title">Bring your workflow into OpenForge</h2>
+    <h2 id="plugin-customization-title" class="section-title">Extend OpenForge around your workflow</h2>
     <p class="plugin-customization-lede">
-      Trusted Plugins add workflow-specific surfaces around the same stable OpenForge Tasks.
+      Extensions add workflow-specific surfaces around the same stable OpenForge Tasks.
     </p>
   </div>
 
-  <div class="capability-ledger" aria-label="Trusted Plugin customization examples">
+  <div class="capability-ledger" aria-label="Extension customization examples">
     <ol class="ledger-list">
       {PLUGIN_CAPABILITIES.map((capability) => <PluginCapabilityRow capability={capability} />)}
     </ol>

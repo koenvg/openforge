@@ -49,7 +49,7 @@ export const TOP_REASONS = [
     description: 'Agents can coordinate Task status and Handoff Notes from command-line workflows.'
   },
   {
-    title: 'Customize OpenForge to your workflow with Trusted Plugins.',
+    title: 'Customize OpenForge to your workflow with extensions.',
     description: 'Shape views, task context, and automations around the stable task-based operator console.'
   }
 ] satisfies readonly TopReason[];
@@ -121,7 +121,7 @@ export const PLUGIN_CAPABILITIES = [
   {
     title: 'Your host capabilities',
     code: 'tasks · fs · shell · notifications',
-    description: 'explicit access for Trusted Plugins',
+    description: 'explicit access for extensions',
     iconPaths: ['M12 3 20 6.5v5.7c0 4.5-3.1 7.4-8 8.8-4.9-1.4-8-4.3-8-8.8V6.5L12 3Z', 'm8.8 12.1 2 2 4.6-4.8']
   }
 ] satisfies readonly PluginCapability[];
