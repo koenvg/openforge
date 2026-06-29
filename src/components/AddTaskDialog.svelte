@@ -2,7 +2,7 @@
   import { onMount } from 'svelte'
   import { ImagePlus } from '@lucide/svelte'
   import type { Task, PermissionMode, Action, GitBranchInfo, WorktreeSource } from '../lib/types'
-  import { createTask, updateTask, getResolvedAiProvider, listGitBranches } from '../lib/ipc'
+  import { createTask, updateTask, getProjectConfig, getResolvedAiProvider, listGitBranches } from '../lib/ipc'
   import {
     formatTaskPromptWithImageReferences,
     getTaskPromptImageReferences,
@@ -56,9 +56,11 @@
   let nextImageMarkerInsertRequestId = 1
   let taskTitle = $state('')
   let handoffNotesEnabled = $state(true)
+  let taskDefaultsLoading = $state(true)
 
   const initialPrompt = $derived(mode === 'edit' && task ? getTaskPromptText(task) : '')
   const promptReady = $derived(promptDraft.trim().length > 0)
+  const createReady = $derived(mode !== 'create' || !taskDefaultsLoading)
   const permissionModeSummary = $derived(getPermissionModeSummary(selectedPermissionMode))
   const workspaceSummary = $derived(getWorkspaceSummary())
   const environmentSummary = $derived(
@@ -121,8 +123,12 @@
 
   async function initializeDialog() {
     selectedPermissionMode = 'default'
+    taskDefaultsLoading = mode === 'create'
+    useWorktree = true
     try {
       if ($activeProjectId) {
+        const defaultUseWorktrees = await getProjectConfig($activeProjectId, 'use_worktrees')
+        useWorktree = defaultUseWorktrees == null ? true : defaultUseWorktrees === 'true'
         aiProvider = await getResolvedAiProvider($activeProjectId)
 
         const allActions = await loadActions($activeProjectId)
@@ -153,6 +159,8 @@
       availableActions = []
       gitBranches = []
       selectedExistingBranch = ''
+    } finally {
+      taskDefaultsLoading = false
     }
   }
 
@@ -162,7 +170,7 @@
   }
 
   function toggleMoreMenu() {
-    if (!promptReady) return
+    if (!promptReady || !createReady) return
     showMoreMenu = !showMoreMenu
   }
 
@@ -341,6 +349,10 @@
     const normalizedPrompt = prompt.trim()
     if (!normalizedPrompt) return
     error = null
+    if (mode === 'create' && taskDefaultsLoading) {
+      error = 'Task defaults are still loading.'
+      return
+    }
     if (imagePastePending) {
       error = 'Wait for the pasted image to finish processing.'
       return
@@ -417,13 +429,17 @@
     >
       {#snippet footerHelp()}
         {#if mode === 'create'}
-          <span class="truncate text-xs text-base-content/60">Press ⌘↵ to start, or use More for backlog/templates.</span>
+          {#if taskDefaultsLoading}
+            <span class="truncate text-xs text-base-content/60">Loading task defaults…</span>
+          {:else}
+            <span class="truncate text-xs text-base-content/60">Press ⌘↵ to start, or use More for backlog/templates.</span>
+          {/if}
         {/if}
       {/snippet}
 
       {#snippet controls()}
         {#if mode === 'create'}
-          {#if promptReady}
+          {#if promptReady && createReady}
             <div class="relative" bind:this={createActionsEl}>
               <button
                 class="btn btn-ghost btn-sm"
@@ -465,7 +481,7 @@
           <button
             class="btn btn-primary btn-sm"
             type="button"
-            disabled={!promptReady}
+            disabled={!promptReady || !createReady}
             onclick={handleStartTaskFromDraft}
             title="⌘Enter"
           >Start Task <kbd class="kbd kbd-xs ml-1 bg-primary-content text-primary border-primary-content/30">⌘↵</kbd></button>
@@ -474,7 +490,7 @@
           <button
             class="btn btn-primary btn-sm"
             type="button"
-            disabled={!promptReady}
+            disabled={!promptReady || !createReady}
             onclick={() => handleCreateOrUpdate(promptDraft)}
           >Submit</button>
         {/if}

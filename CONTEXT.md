@@ -56,6 +56,10 @@ _Avoid_: Global summary format, additional instructions
 The project-owned choice of provider, agent, and permission mode for new **Implementation Runs**.
 _Avoid_: Plugin run options, per-call agent override
 
+**Project Task Creation Settings**:
+Project-owned defaults used when starting **Task Creation**, such as the default workspace choice for new **Tasks**.
+_Avoid_: Agent run settings, global task defaults, plugin task policy
+
 **Trusted Plugin**:
 An installed OpenForge extension that may act across tasks when using explicit host capabilities.
 _Avoid_: Sandboxed widget, project-only script
@@ -143,6 +147,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 ## Relationships
 
 - **Task Creation** creates a project-owned backlog **Task**, not an **Implementation Run**.
+- **Project Task Creation Settings** provide defaults for **Task Creation** while still allowing a specific new **Task** to override them before it is saved.
 - A **Task Schedule** creates a new normal board **Task** for each **Scheduled Fire** rather than mutating or reusing an existing **Task**.
 - A **Task Schedule** belongs to the active project context where it is configured; it is not selected globally from inside the schedule composer.
 - A **Task Schedule** may request an **Implementation Run** only after the scheduled **Task Creation** succeeds.

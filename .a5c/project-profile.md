@@ -135,7 +135,7 @@ Build and draft macOS releases.
 ## Processes
 
 - **Project Install** (`cradle/project-install`, onboarding) - Project onboarding/profile generation process used to configure babysitter for this repository.
-- **TDD Quality Convergence** (`tdd-quality-convergence`, methodology) - Recommended default methodology for feature and bugfix tasks: write/update tests first, implement, verify, refine.
+- **TDD Quality Convergence** (`tdd-quality-convergence`, methodology) - Recommended default methodology for feature and bugfix tasks: write/update tests first, implement, verify, review, refine.
 
 ## Tools
 
@@ -216,6 +216,8 @@ Build and draft macOS releases.
 
 **Testing:** Use TDD for feature work, bugfixes, and business-logic or product-behavior implementation. Write/update tests first and verify failure where practical, then implement. For documentation-only, configuration-only, planning, metadata, process-only, or similarly low-risk changes, do not invent failing product tests; use targeted verification that fits the artifact. Cover business logic and behavior; do not assert Tailwind/CSS visual classes. Run `pnpm test` and/or `cargo test` depending on touched area.
 
+**Review:** Implementation Babysitter runs that change product code or behavior include an explicit review task after objective verification and before final handoff. Use the review skill, a reviewer subagent, or a code-review agent; post findings into the run and resolve blocking findings before completion.
+
 ### Additional Rules
 
 - All frontend backend calls go through `src/lib/ipc.ts` wrappers; do not call raw Electron, preload, HTTP sidecar endpoints, or other command/sidecar transport APIs directly from Svelte code.
@@ -235,7 +237,7 @@ Build and draft macOS releases.
 
 - Open Forge product goal: coordinate multiple projects and AI agents while preserving one-thing-at-a-time focus and low-noise timely nudges.
 - Use `/babysitter:project-install` to refresh project profile artifacts after major architecture, workflow, or product-direction changes.
-- Prefer TDD-driven iterative convergence for feature, bugfix, business-logic, and product-behavior implementation tasks. Use lighter targeted verification for docs/config/process-only work, and run the relevant pnpm/electron/cargo verification gates.
+- Prefer TDD-driven iterative convergence for feature, bugfix, business-logic, and product-behavior implementation tasks. Use lighter targeted verification for docs/config/process-only work, run the relevant pnpm/electron/cargo verification gates, and include a Babysitter-tracked review step for product-code implementation changes before final handoff.
 - Map code before broad changes touching high-churn integration points: `App.svelte`, `src/electron/main.ts`, `main.rs`, ipc/types, github_poller, and terminalPool.
 - CI/CD babysitter integration was intentionally skipped; do not add GitHub Actions babysitter automation without a future explicit task.
 

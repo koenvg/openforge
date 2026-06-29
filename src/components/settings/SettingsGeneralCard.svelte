@@ -17,6 +17,7 @@
     projectPath: string
     aiProvider: string
     projectColor: string
+    useWorktrees: boolean
     disabled: boolean
     opencodeInstalled: boolean
     opencodeVersion: string | null
@@ -33,6 +34,7 @@
     onProjectPathChange: (value: string) => void
     onAiProviderChange: (value: string) => void
     onProjectColorChange: (value: string) => void
+    onUseWorktreesChange: (value: boolean) => void
     onRefreshInstallationStatus: () => void
   }
 
@@ -53,6 +55,7 @@
     projectPath,
     aiProvider,
     projectColor,
+    useWorktrees,
     disabled,
     opencodeInstalled,
     opencodeVersion,
@@ -69,6 +72,7 @@
     onProjectPathChange,
     onAiProviderChange,
     onProjectColorChange,
+    onUseWorktreesChange,
     onRefreshInstallationStatus,
   }: Props = $props()
 
@@ -359,6 +363,29 @@
           </div>
         </div>
       {/if}
+    </div>
+
+    <div class="flex flex-col gap-2">
+      <span class="text-[0.7rem] text-base-content/50 uppercase tracking-wider">Default Workspace</span>
+      <label class="flex max-w-xl items-start justify-between gap-4 rounded-lg border border-base-300 bg-base-200/40 p-3">
+        <span class="flex min-w-0 flex-col gap-1">
+          <span class="text-sm font-medium text-base-content">Default new tasks to worktrees</span>
+          <span class="text-xs text-base-content/60">
+            {useWorktrees ? 'New tasks default to isolated worktrees' : 'New tasks default to the project directory'}
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          class="toggle toggle-primary toggle-sm"
+          aria-label="Default new tasks to worktrees"
+          checked={useWorktrees}
+          disabled={disabled}
+          onchange={(e) => {
+            if (disabled) return
+            onUseWorktreesChange(e.currentTarget.checked)
+          }}
+        />
+      </label>
     </div>
 
     <div class="flex flex-col gap-2">

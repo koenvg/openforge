@@ -29,6 +29,7 @@ For implementation tasks, loading the Babysitter skill is not enough. Before edi
 - Run `babysitter run:create ... --harness pi` from the project root using an absolute `--entry` path to the current worktree process file.
 - Report the created run id before implementation work begins.
 - Continue with `babysitter run:iterate`, execute/post effects with `babysitter task:post`, and keep iterating until the run reaches a terminal state or requires explicit user input.
+- For implementation tasks that change product code or behavior, the Babysitter process must include an explicit post-implementation review effect after objective verification and before final handoff. Use the `review` skill, a reviewer subagent, or a code-review agent task; post the findings into the run and resolve any blocking findings before completing.
 - Do not bypass the Babysitter orchestration model with direct implementation. If `run:create` or iteration cannot proceed, stop and ask the user instead of continuing.
 
 Project profile: Open Forge is an Electron desktop command center with a Rust sidecar for coordinating multiple projects and AI coding agents while keeping the user focused on one active thing at a time. Babysitter guidance should preserve that product goal: timely nudges for meaningful handoffs, blocked agents, review readiness, CI failures, and destructive decisions; otherwise stay quiet.
@@ -39,6 +40,7 @@ Recommended local Babysitter usage:
 - Use repo mapping before broad changes touching high-churn integration points such as `src/App.svelte`, `src/electron/main.ts`, `src-tauri/src/main.rs`, `src/lib/ipc.ts`, `src/lib/types.ts`, `src-tauri/src/github_poller.rs`, or `src/lib/terminalPool.ts`.
 
 Recommended verification gates:
+- Product-code or behavior implementation changes: include a Babysitter-tracked review step after tests/typecheck and before final Handoff Notes.
 - Frontend/type changes: `pnpm exec tsc --noEmit` and `pnpm test`.
 - Electron shell changes: targeted `pnpm test src/electron` or relevant `scripts/electron-*.test.mjs` tests.
 - Rust sidecar/backend changes: `cargo test` from `src-tauri/`.

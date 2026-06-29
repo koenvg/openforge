@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import AddTaskDialog from './AddTaskDialog.svelte'
 import type { Action, Task } from '../lib/types'
-import { createTask, updateTask, getResolvedAiProvider, listGitBranches, listOpenCodeCommands } from '../lib/ipc'
+import { createTask, updateTask, getProjectConfig, getResolvedAiProvider, listGitBranches, listOpenCodeCommands } from '../lib/ipc'
 import { loadActions } from '../lib/actions'
 
 vi.mock('../lib/ipc', () => ({
@@ -22,7 +22,7 @@ vi.mock('../lib/ipc', () => ({
     updated_at: 1000,
   }),
   updateTask: vi.fn().mockResolvedValue(undefined),
-  getProjectConfig: vi.fn().mockResolvedValue('claude-code'),
+  getProjectConfig: vi.fn().mockResolvedValue(null),
   getResolvedAiProvider: vi.fn().mockResolvedValue('claude-code'),
   listGitBranches: vi.fn().mockResolvedValue([
     { name: 'main', is_current: true, is_remote: false },
@@ -106,6 +106,7 @@ describe('AddTaskDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     Element.prototype.scrollIntoView = vi.fn()
+    vi.mocked(getProjectConfig).mockResolvedValue(null)
     vi.mocked(getResolvedAiProvider).mockResolvedValue('claude-code')
     vi.mocked(listGitBranches).mockResolvedValue([
       { name: 'main', is_current: true, is_remote: false },
@@ -123,7 +124,7 @@ describe('AddTaskDialog', () => {
     const textbox = await findPromptTextbox()
     expect(textbox.value).toBe('')
     expect(screen.getByText('Start Task', { exact: false })).toBeTruthy()
-    expect(screen.getByText('Press ⌘↵ to start, or use More for backlog/templates.')).toBeTruthy()
+    expect(await screen.findByText('Press ⌘↵ to start, or use More for backlog/templates.')).toBeTruthy()
     expect(screen.queryByText('Add to Backlog', { exact: false })).toBeNull()
     expect(screen.queryByRole('button', { name: 'More' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Submit' })).toBeNull()
@@ -209,6 +210,75 @@ describe('AddTaskDialog', () => {
 
     await waitFor(() => {
       expect(createTask).toHaveBeenCalledWith('Default worktree task', 'backlog', 'test-project-id', 'default', DEFAULT_WORKTREE_OPTIONS)
+    })
+  })
+
+  it('gates task creation until the project workspace default has loaded', async () => {
+    let resolveProjectConfig: (value: string | null) => void = () => {}
+    vi.mocked(getProjectConfig).mockReturnValue(new Promise((resolve) => {
+      resolveProjectConfig = resolve
+    }))
+    render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
+
+    const textbox = await findPromptTextbox()
+    await fireEvent.input(textbox, { target: { value: 'Create after defaults' } })
+    const startButton = await screen.findByRole('button', { name: /Start Task/ }) as HTMLButtonElement
+    expect(startButton.disabled).toBe(true)
+    expect(screen.getByText('Loading task defaults…')).toBeTruthy()
+
+    await fireEvent.click(startButton)
+    expect(createTask).not.toHaveBeenCalled()
+
+    resolveProjectConfig('false')
+    await waitFor(() => {
+      expect(startButton.disabled).toBe(false)
+    })
+
+    await fireEvent.click(startButton)
+    await waitFor(() => {
+      expect(createTask).toHaveBeenCalledWith(
+        'Create after defaults',
+        'backlog',
+        'test-project-id',
+        'default',
+        {
+          worktreeSource: 'disabled',
+          worktreeBranch: null,
+          title: null,
+          handoffNotesEnabled: true,
+        },
+      )
+    })
+  })
+
+  it('uses the project default when new tasks should start in the project directory', async () => {
+    vi.mocked(getProjectConfig).mockResolvedValue('false')
+    const onTaskSaved = vi.fn()
+    render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo', onTaskSaved } })
+
+    await expandEnvironment()
+    const worktreeToggle = await screen.findByLabelText('Worktree') as HTMLInputElement
+    expect(worktreeToggle.checked).toBe(false)
+    expect(screen.getByRole('button', { name: /Environment: Project directory · default permissions/ })).toBeTruthy()
+
+    const textbox = await findPromptTextbox()
+    await fireEvent.input(textbox, { target: { value: 'Default project-directory task' } })
+    await clickAddToBacklogFromMore()
+
+    await waitFor(() => {
+      expect(createTask).toHaveBeenCalledWith(
+        'Default project-directory task',
+        'backlog',
+        'test-project-id',
+        'default',
+        {
+          worktreeSource: 'disabled',
+          worktreeBranch: null,
+          title: null,
+          handoffNotesEnabled: true,
+        },
+      )
+      expect(onTaskSaved).toHaveBeenCalled()
     })
   })
 
