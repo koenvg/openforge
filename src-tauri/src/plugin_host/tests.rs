@@ -467,6 +467,36 @@ async fn plugin_host_global_command_callback_routes_github_sync_backend_bridge()
 }
 
 #[tokio::test]
+async fn plugin_host_create_task_uses_project_worktree_default() {
+    let (database, _path) =
+        crate::db::test_helpers::make_test_db("plugin_host_create_task_worktree_default");
+    let project = database
+        .create_project("Plugin Tasks", "/tmp/plugin-tasks")
+        .expect("project fixture");
+    database
+        .set_project_config(&project.id, "use_worktrees", "false")
+        .expect("set worktree default");
+
+    let app = AppHandle::new();
+    app.manage(Arc::new(Mutex::new(database)));
+    let host = PluginHost::new(app.clone());
+
+    let created = host
+        .handle_host_callback(
+            "openforge.tasks.create",
+            &json!({
+                "initialPrompt": "Scheduled backend task",
+                "projectId": project.id,
+            }),
+        )
+        .await
+        .expect("task create callback");
+
+    assert_eq!(created["worktree_source"], "disabled");
+    assert_eq!(created["worktree_branch"], Value::Null);
+}
+
+#[tokio::test]
 async fn plugin_host_task_callbacks_create_start_and_read_state() {
     let (database, _path) = crate::db::test_helpers::make_test_db("plugin_host_task_callbacks");
     let project_dir = tempfile::tempdir().expect("project dir");

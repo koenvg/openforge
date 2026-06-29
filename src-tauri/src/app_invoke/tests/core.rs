@@ -140,6 +140,40 @@ async fn handles_config_projects_tasks_and_unmatched_commands() {
 }
 
 #[tokio::test]
+async fn app_invoke_create_task_uses_project_worktree_default_when_source_omitted() {
+    let (state, path) = test_state("app_invoke_create_task_project_worktree_default");
+    let project = invoke_ok(
+        &state,
+        "create_project",
+        json!({ "name": "Open Forge", "path": "/tmp/openforge-default" }),
+    )
+    .await;
+    let project_id = project["id"].as_str().expect("project id");
+    {
+        let db = crate::db::acquire_db(&state.db);
+        db.set_project_config(project_id, "use_worktrees", "false")
+            .expect("set worktree default");
+    }
+
+    let task = invoke_ok(
+        &state,
+        "create_task",
+        json!({
+            "initialPrompt": "Plan without worktree",
+            "status": "backlog",
+            "projectId": project_id,
+            "permissionMode": null,
+        }),
+    )
+    .await;
+
+    assert_eq!(task["worktree_source"], "disabled");
+    assert_eq!(task["worktree_branch"], serde_json::Value::Null);
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn task_label_commands_round_trip_labels_on_tasks() {
     let (state, path) = test_state("app_invoke_task_labels");
     let project = invoke_ok(

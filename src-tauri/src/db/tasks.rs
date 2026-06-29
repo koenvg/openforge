@@ -219,6 +219,37 @@ fn dedupe_dependency_ids(dependency_ids: &[String]) -> Vec<String> {
     result
 }
 
+fn project_defaulted_worktree_source(
+    conn: &rusqlite::Connection,
+    project_id: Option<&str>,
+    worktree_source: Option<&str>,
+) -> Result<Option<String>> {
+    if let Some(source) = worktree_source
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        return Ok(Some(source.to_string()));
+    }
+
+    let Some(project_id) = project_id else {
+        return Ok(None);
+    };
+
+    let default = conn
+        .query_row(
+            "SELECT value FROM project_config WHERE project_id = ?1 AND key = 'use_worktrees'",
+            [project_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?;
+
+    if default.as_deref() == Some("false") {
+        Ok(Some("disabled".to_string()))
+    } else {
+        Ok(None)
+    }
+}
+
 fn normalize_worktree_source(
     worktree_source: Option<&str>,
     worktree_branch: Option<&str>,
@@ -380,8 +411,10 @@ impl super::Database {
             handoff_notes_enabled,
         } = opts;
         let conn = self.conn.lock().unwrap();
+        let defaulted_worktree_source =
+            project_defaulted_worktree_source(&conn, project_id, worktree_source)?;
         let (worktree_source, worktree_branch) =
-            normalize_worktree_source(worktree_source, worktree_branch)?;
+            normalize_worktree_source(defaulted_worktree_source.as_deref(), worktree_branch)?;
         // Normalize a blank title to NULL so the UI falls back to the derived title.
         let title = title
             .map(str::trim)

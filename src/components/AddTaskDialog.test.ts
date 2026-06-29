@@ -124,7 +124,7 @@ describe('AddTaskDialog', () => {
     const textbox = await findPromptTextbox()
     expect(textbox.value).toBe('')
     expect(screen.getByText('Start Task', { exact: false })).toBeTruthy()
-    expect(screen.getByText('Press ⌘↵ to start, or use More for backlog/templates.')).toBeTruthy()
+    expect(await screen.findByText('Press ⌘↵ to start, or use More for backlog/templates.')).toBeTruthy()
     expect(screen.queryByText('Add to Backlog', { exact: false })).toBeNull()
     expect(screen.queryByRole('button', { name: 'More' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Submit' })).toBeNull()
@@ -210,6 +210,44 @@ describe('AddTaskDialog', () => {
 
     await waitFor(() => {
       expect(createTask).toHaveBeenCalledWith('Default worktree task', 'backlog', 'test-project-id', 'default', DEFAULT_WORKTREE_OPTIONS)
+    })
+  })
+
+  it('gates task creation until the project workspace default has loaded', async () => {
+    let resolveProjectConfig: (value: string | null) => void = () => {}
+    vi.mocked(getProjectConfig).mockReturnValue(new Promise((resolve) => {
+      resolveProjectConfig = resolve
+    }))
+    render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
+
+    const textbox = await findPromptTextbox()
+    await fireEvent.input(textbox, { target: { value: 'Create after defaults' } })
+    const startButton = await screen.findByRole('button', { name: /Start Task/ }) as HTMLButtonElement
+    expect(startButton.disabled).toBe(true)
+    expect(screen.getByText('Loading task defaults…')).toBeTruthy()
+
+    await fireEvent.click(startButton)
+    expect(createTask).not.toHaveBeenCalled()
+
+    resolveProjectConfig('false')
+    await waitFor(() => {
+      expect(startButton.disabled).toBe(false)
+    })
+
+    await fireEvent.click(startButton)
+    await waitFor(() => {
+      expect(createTask).toHaveBeenCalledWith(
+        'Create after defaults',
+        'backlog',
+        'test-project-id',
+        'default',
+        {
+          worktreeSource: 'disabled',
+          worktreeBranch: null,
+          title: null,
+          handoffNotesEnabled: true,
+        },
+      )
     })
   })
 

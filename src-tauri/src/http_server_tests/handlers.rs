@@ -118,6 +118,49 @@ async fn test_create_task_handler_persists_dependency_ids() {
 }
 
 #[tokio::test]
+async fn http_create_task_handler_uses_project_worktree_default() {
+    let (state, path) = test_state("http_create_task_handler_worktree_default");
+    {
+        let db = state.db.lock().expect("lock db");
+        let project = db
+            .create_project("Project", "/tmp/project")
+            .expect("create project");
+        db.set_config("task_id_prefix", "T")
+            .expect("set task prefix");
+        db.set_project_config(&project.id, "use_worktrees", "false")
+            .expect("set worktree default");
+    }
+
+    let router = create_router(state.clone());
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/create_task")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"initial_prompt":"Project directory task","project_id":"P-1"}"#,
+                ))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let task = state
+        .db
+        .lock()
+        .expect("lock db")
+        .get_task("T-1")
+        .expect("get task")
+        .expect("task exists");
+    assert_eq!(task.worktree_source.as_deref(), Some("disabled"));
+    assert_eq!(task.worktree_branch, None);
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn test_create_task_handler_persists_labels() {
     let (state, path) = test_state("http_create_task_handler_labels");
     {
