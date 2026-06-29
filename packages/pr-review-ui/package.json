@@ -28,10 +28,10 @@
     "./timeAgo": "./src/timeAgo.ts"
   },
   "dependencies": {
-    "@git-diff-view/core": "0.1.5",
-    "@git-diff-view/lowlight": "^0.1.5",
-    "@git-diff-view/svelte": "^0.1.5",
-    "@lucide/svelte": "^1.20.0",
+    "@git-diff-view/core": "0.1.6",
+    "@git-diff-view/lowlight": "^0.1.6",
+    "@git-diff-view/svelte": "^0.1.6",
+    "@lucide/svelte": "^1.21.0",
     "@openforge/plugin-sdk": "workspace:*",
     "@tanstack/virtual-core": "^3.17.1"
   },
