@@ -16,4 +16,4 @@ minimumReleaseAgeExclude:
 allowBuilds:
   electron: true
 patchedDependencies:
-  '@git-diff-view/svelte@0.1.5': patches/@git-diff-view__svelte@0.1.5.patch
+  '@git-diff-view/svelte@0.1.6': patches/@git-diff-view__svelte@0.1.6.patch

@@ -26,9 +26,9 @@
   "dependencies": {
     "@fontsource/inter": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.8",
-    "@git-diff-view/core": "0.1.5",
-    "@git-diff-view/svelte": "^0.1.5",
-    "@lucide/svelte": "^1.20.0",
+    "@git-diff-view/core": "0.1.6",
+    "@git-diff-view/svelte": "^0.1.6",
+    "@lucide/svelte": "^1.21.0",
     "@openforge/plugin-runtime": "workspace:*",
     "@openforge/plugin-sdk": "workspace:*",
     "@openforge/pr-review-ui": "workspace:*",
@@ -44,21 +44,21 @@
     "es-module-lexer": "2.1.0",
     "marked": "^18.0.5",
     "nerdfonts-web": "^1.0.1",
-    "svelte": "^5.56.3",
+    "svelte": "^5.56.4",
     "tailwindcss": "^4.3.1"
   },
   "devDependencies": {
-    "@a5c-ai/babysitter-sdk": "^0.0.187",
-    "@git-diff-view/lowlight": "^0.1.5",
+    "@a5c-ai/babysitter-sdk": "^5.0.0",
+    "@git-diff-view/lowlight": "^0.1.6",
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
     "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/svelte": "^5.3.1",
-    "@types/node": "^25.9.3",
-    "electron": "^42.4.1",
+    "@testing-library/svelte": "^5.4.2",
+    "@types/node": "^26.0.0",
+    "electron": "^42.5.0",
     "jsdom": "^29.1.1",
-    "playwright": "^1.61.0",
+    "playwright": "^1.61.1",
     "typescript": "^6.0.3",
-    "vite": "^8.0.16",
+    "vite": "^8.1.0",
     "vitest": "^4.1.9"
   }
 }
