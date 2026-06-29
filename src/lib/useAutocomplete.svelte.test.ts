@@ -190,4 +190,24 @@ describe('useAutocomplete', () => {
     expect(ac.autocompleteItems.some(i => i.type === 'file')).toBe(true)
     expect(ac.autocompleteItems.some(i => i.label === '/src/index.ts')).toBe(true)
   })
+
+  it('at trigger preserves backend directory suggestions as directory items', async () => {
+    mockListAgents.mockResolvedValue([])
+    mockSearchFiles.mockResolvedValue(['src/', 'src/components/Button.svelte'])
+
+    const ac = useAutocomplete('proj-1')
+    await ac.handleAtTrigger('src')
+    await vi.runAllTimersAsync()
+
+    expect(ac.autocompleteItems).toContainEqual({
+      label: 'src/',
+      description: null,
+      type: 'directory',
+    })
+    expect(ac.autocompleteItems).toContainEqual({
+      label: 'src/components/Button.svelte',
+      description: null,
+      type: 'file',
+    })
+  })
 })
