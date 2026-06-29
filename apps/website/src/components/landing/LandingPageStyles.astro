@@ -2,6 +2,26 @@
 ---
 
 <style is:global>
+  :root {
+    --landing-gutter: clamp(2rem, 6vw, 6.5rem);
+    --landing-container-wide: 96rem;
+    --landing-title-size: clamp(3rem, 5vw, 5.1rem);
+    --landing-title-compact-size: clamp(2.45rem, 13vw, 3.25rem);
+  }
+
+  @media (max-width: 62rem) {
+    :root {
+      --landing-gutter: 2.5rem;
+    }
+  }
+
+  @media (max-width: 35rem) {
+    :root {
+      --landing-gutter: 2rem;
+      --landing-title-size: var(--landing-title-compact-size);
+    }
+  }
+
   .hero-shell {
     min-height: 100dvh;
     display: grid;
@@ -162,6 +182,16 @@
     height: 1.35rem;
   }
 
+  @media (max-width: 35rem) {
+    .actions {
+      flex-direction: column;
+    }
+
+    .button {
+      width: 100%;
+    }
+  }
+
   .bento-stage {
     position: relative;
     z-index: 2;
@@ -307,10 +337,92 @@
     line-height: 1.3;
   }
 
-  .top-reasons {
-    width: min(100% - clamp(2rem, 6vw, 6.5rem), 94rem);
-    margin: 0 auto;
-    padding: clamp(4.5rem, 8vw, 7.5rem) 0 clamp(5rem, 9vw, 8rem);
+  @media (max-width: 62rem) {
+    .hero-shell {
+      min-height: auto;
+      padding: 1.25rem;
+      overflow: hidden;
+      background: linear-gradient(180deg, var(--hero-blue) 0 56%, var(--hero-paper) 56% 100%);
+    }
+
+    .hero {
+      min-height: auto;
+      grid-template-columns: 1fr;
+      align-items: start;
+      gap: 1.75rem;
+    }
+
+    .hero::after {
+      width: 18rem;
+      right: -8rem;
+      bottom: -7rem;
+    }
+
+    .hero-copy {
+      width: 100%;
+      padding-block: clamp(2.6rem, 8vw, 4.5rem) 0;
+    }
+
+    h1 {
+      max-width: 9ch;
+    }
+
+    .bento-stage {
+      grid-template-columns: minmax(0, 1fr) 2.7rem minmax(0, 1fr);
+      grid-template-rows: minmax(11.5rem, auto) 2.7rem minmax(11.5rem, auto);
+      max-width: 44rem;
+      margin: 0 auto;
+      padding-block: 2rem 3rem;
+    }
+
+    .bento-stage::before {
+      inset: 0 -3rem;
+      border-radius: 2.5rem;
+      transform: none;
+    }
+
+    .bento-card {
+      min-height: 11.5rem;
+    }
+  }
+
+  @media (max-width: 35rem) {
+    .hero-shell {
+      background: linear-gradient(180deg, var(--hero-blue) 0 54%, var(--hero-paper) 54% 100%);
+    }
+
+    .bento-stage {
+      grid-template-columns: 1fr;
+      grid-template-rows: none;
+      padding-block: 1.5rem 2.5rem;
+    }
+
+    .bento-stage::before {
+      inset: 0 -1rem;
+    }
+
+    .bento-card-task,
+    .bento-card-agent,
+    .bento-card-handoff,
+    .bento-card-review {
+      grid-column: auto;
+      grid-row: auto;
+    }
+
+    .flow-arrow {
+      display: none;
+    }
+
+    .bento-card {
+      min-height: auto;
+      margin: 0;
+      box-shadow: var(--shadow-bento-compact);
+    }
+  }
+
+  .landing-section {
+    width: min(100% - var(--landing-section-gutter, var(--landing-gutter)), var(--landing-section-max, var(--landing-container-wide)));
+    margin-inline: auto;
   }
 
   .section-heading {
@@ -333,10 +445,26 @@
     max-width: 13em;
     margin: 0;
     font-family: var(--font-serif);
-    font-size: clamp(3rem, 5vw, 5.1rem);
+    font-size: var(--section-title-size, var(--landing-title-size));
     font-weight: 500;
     line-height: 0.98;
     letter-spacing: -0.058em;
+  }
+
+  @media (max-width: 62rem) {
+    .section-heading {
+      justify-items: start;
+      text-align: left;
+    }
+
+    .section-title {
+      max-width: 10em;
+    }
+  }
+
+  .top-reasons {
+    --landing-section-max: 94rem;
+    padding: clamp(4.5rem, 8vw, 7.5rem) 0 clamp(5rem, 9vw, 8rem);
   }
 
   .reason-rail {
@@ -401,14 +529,49 @@
     line-height: 1.5;
   }
 
+  @media (max-width: 62rem) {
+    .top-reasons {
+      --landing-section-max: 44rem;
+      padding-top: clamp(3.75rem, 10vw, 5rem);
+    }
+
+    .reason-rail {
+      grid-template-columns: 1fr;
+      gap: 1.5rem;
+      margin-top: 2rem;
+      padding: 0;
+    }
+
+    .reason-rail::before {
+      display: none;
+    }
+
+    .reason-card {
+      position: relative;
+    }
+
+    .reason-card h3,
+    .reason-card p {
+      max-width: 100%;
+    }
+  }
+
+  @media (max-width: 35rem) {
+    .top-reasons {
+      --landing-section-max: 32rem;
+    }
+
+    .reason-card {
+      padding: 1rem;
+    }
+  }
 
   .product-proof {
-    width: min(100% - clamp(2rem, 6vw, 6.5rem), 96rem);
+    --section-title-size: clamp(3.15rem, 5.2vw, 5.6rem);
     display: grid;
     grid-template-columns: minmax(20rem, 0.95fr) minmax(24rem, 1.05fr);
     align-items: center;
     gap: clamp(2.5rem, 5vw, 6.25rem);
-    margin: 0 auto;
     padding: clamp(3rem, 5vw, 4.5rem) 0 clamp(3.5rem, 6vw, 5rem);
     overflow: visible;
   }
@@ -422,7 +585,6 @@
 
   .product-proof-copy .section-title {
     max-width: 8.8em;
-    font-size: clamp(3.15rem, 5.2vw, 5.6rem);
   }
 
   .proof-lede {
@@ -474,10 +636,40 @@
     display: block;
   }
 
+  @media (max-width: 62rem) {
+    .product-proof {
+      --landing-section-max: 54rem;
+      grid-template-columns: 1fr;
+      gap: 2.25rem;
+      padding-top: clamp(3.75rem, 10vw, 5rem);
+    }
+
+    .product-proof-copy .section-title {
+      max-width: 10em;
+    }
+
+    .proof-figure {
+      max-width: min(100%, 30rem);
+      justify-self: center;
+    }
+
+    .proof-screenshot-shell {
+      transform: none;
+    }
+  }
+
+  @media (max-width: 35rem) {
+    .product-proof {
+      --landing-section-max: 32rem;
+      --section-title-size: var(--landing-title-size);
+    }
+
+    .proof-figure {
+      max-width: min(100%, 26rem);
+    }
+  }
 
   .plugin-customization {
-    width: min(100% - clamp(2rem, 6vw, 6.5rem), 96rem);
-    margin: 0 auto;
     padding: clamp(4.5rem, 8vw, 7.25rem) 0 clamp(5.25rem, 9vw, 8rem);
   }
 
@@ -500,7 +692,6 @@
     font-weight: 620;
     line-height: 1.42;
   }
-
 
   .capability-ledger {
     position: relative;
@@ -605,16 +796,61 @@
     display: none;
   }
 
+  @media (max-width: 62rem) {
+    .plugin-customization {
+      --landing-section-max: 54rem;
+      padding-top: clamp(3.75rem, 10vw, 5rem);
+    }
+
+    .plugin-customization-heading {
+      justify-items: start;
+      text-align: left;
+    }
+
+    .capability-ledger {
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+  }
+
+  @media (max-width: 35rem) {
+    .plugin-customization {
+      --landing-section-max: 32rem;
+    }
+
+    .plugin-customization-lede {
+      font-size: 1.08rem;
+    }
+
+    .ledger-list {
+      padding: 0.75rem;
+    }
+
+    .ledger-row {
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: start;
+      min-height: auto;
+      padding: 0.85rem;
+    }
+
+    .ledger-icon {
+      width: 2.75rem;
+      height: 2.75rem;
+    }
+
+    .ledger-dot {
+      display: none;
+    }
+  }
 
   .final-cta {
+    --section-title-size: clamp(3.15rem, 5vw, 5.75rem);
     position: relative;
-    width: min(100% - clamp(2rem, 6vw, 6.5rem), 96rem);
     display: grid;
     grid-template-columns: minmax(0, 52rem);
     justify-content: center;
     align-items: center;
     gap: 0;
-    margin: 0 auto;
     border-top: 1px solid var(--border-soft);
     padding: clamp(4rem, 7vw, 6rem) 0 clamp(4.75rem, 8vw, 6.5rem);
     text-align: center;
@@ -630,10 +866,8 @@
     gap: 1.15rem;
   }
 
-
   .final-cta-copy .section-title {
     max-width: 8.8em;
-    font-size: clamp(3.15rem, 5vw, 5.75rem);
   }
 
   .final-cta-lede {
@@ -656,14 +890,35 @@
     stroke-width: 2;
   }
 
+  @media (max-width: 62rem) {
+    .final-cta {
+      --landing-section-max: 54rem;
+      grid-template-columns: 1fr;
+      align-items: start;
+      gap: 2.25rem;
+    }
+
+    .final-cta-copy .section-title {
+      max-width: 10em;
+    }
+  }
+
+  @media (max-width: 35rem) {
+    .final-cta {
+      --landing-section-max: 32rem;
+      --section-title-size: var(--landing-title-size);
+    }
+
+    .final-cta-lede {
+      font-size: 1.08rem;
+    }
+  }
 
   .site-footer {
-    width: min(100% - clamp(2rem, 6vw, 6.5rem), 96rem);
     display: grid;
     grid-template-columns: minmax(16rem, 1fr) auto;
     align-items: end;
     gap: clamp(2.5rem, 7vw, 8rem);
-    margin: 0 auto;
     border-top: 1px solid var(--border-medium);
     border-bottom: 1px solid var(--border-subtle);
     padding: clamp(3.25rem, 6vw, 5.25rem) 0 clamp(3rem, 5vw, 4.5rem);
@@ -749,215 +1004,19 @@
   }
 
   @media (max-width: 62rem) {
-    .hero-shell {
-      min-height: auto;
-      padding: 1.25rem;
-      overflow: hidden;
-      background: linear-gradient(180deg, var(--hero-blue) 0 56%, var(--hero-paper) 56% 100%);
-    }
-
-    .hero {
-      min-height: auto;
-      grid-template-columns: 1fr;
-      align-items: start;
-      gap: 1.75rem;
-    }
-
-    .hero::after {
-      width: 18rem;
-      right: -8rem;
-      bottom: -7rem;
-    }
-
-    .hero-copy {
-      width: 100%;
-      padding-block: clamp(2.6rem, 8vw, 4.5rem) 0;
-    }
-
-    h1 {
-      max-width: 9ch;
-    }
-
-    .bento-stage {
-      grid-template-columns: minmax(0, 1fr) 2.7rem minmax(0, 1fr);
-      grid-template-rows: minmax(11.5rem, auto) 2.7rem minmax(11.5rem, auto);
-      max-width: 44rem;
-      margin: 0 auto;
-      padding-block: 2rem 3rem;
-    }
-
-    .bento-stage::before {
-      inset: 0 -3rem;
-      border-radius: 2.5rem;
-      transform: none;
-    }
-
-    .bento-card {
-      min-height: 11.5rem;
-    }
-
-    .top-reasons {
-      width: min(100% - 2.5rem, 44rem);
-      padding-top: clamp(3.75rem, 10vw, 5rem);
-    }
-
-    .product-proof {
-      width: min(100% - 2.5rem, 54rem);
-      grid-template-columns: 1fr;
-      gap: 2.25rem;
-      padding-top: clamp(3.75rem, 10vw, 5rem);
-    }
-
-    .product-proof-copy .section-title {
-      max-width: 10em;
-    }
-
-    .plugin-customization {
-      width: min(100% - 2.5rem, 54rem);
-      padding-top: clamp(3.75rem, 10vw, 5rem);
-    }
-
-    .final-cta {
-      width: min(100% - 2.5rem, 54rem);
-      grid-template-columns: 1fr;
-      align-items: start;
-      gap: 2.25rem;
-    }
-
-    .final-cta-copy .section-title {
-      max-width: 10em;
-    }
-
-
     .site-footer {
-      width: min(100% - 2.5rem, 54rem);
-      grid-template-columns: 1fr;
+      --landing-section-max: 54rem;
       justify-items: start;
     }
 
     .site-footer p {
       text-align: left;
     }
-
-    .footer-links ul {
-      grid-template-columns: repeat(2, minmax(10rem, 1fr));
-      gap: 2rem clamp(2rem, 8vw, 4rem);
-    }
-
-    .plugin-customization-heading {
-      justify-items: start;
-      text-align: left;
-    }
-
-    .capability-ledger {
-      grid-template-columns: 1fr;
-      gap: 1rem;
-    }
-
-
-    .proof-figure {
-      max-width: min(100%, 30rem);
-      justify-self: center;
-    }
-
-    .proof-screenshot-shell {
-      transform: none;
-    }
-
-
-    .section-heading {
-      justify-items: start;
-      text-align: left;
-    }
-
-    .section-title {
-      max-width: 10em;
-    }
-
-    .reason-rail {
-      grid-template-columns: 1fr;
-      gap: 1.5rem;
-      margin-top: 2rem;
-      padding: 0;
-    }
-
-    .reason-rail::before {
-      display: none;
-    }
-
-    .reason-card {
-      position: relative;
-    }
-
-    .reason-card h3,
-    .reason-card p {
-      max-width: 100%;
-    }
   }
 
   @media (max-width: 35rem) {
-    .actions {
-      flex-direction: column;
-    }
-
-    .button {
-      width: 100%;
-    }
-
-    .hero-shell {
-      background: linear-gradient(180deg, var(--hero-blue) 0 54%, var(--hero-paper) 54% 100%);
-    }
-
-    .bento-stage {
-      grid-template-columns: 1fr;
-      grid-template-rows: none;
-      padding-block: 1.5rem 2.5rem;
-    }
-
-    .bento-stage::before {
-      inset: 0 -1rem;
-    }
-
-    .bento-card-task,
-    .bento-card-agent,
-    .bento-card-handoff,
-    .bento-card-review {
-      grid-column: auto;
-      grid-row: auto;
-    }
-
-    .flow-arrow {
-      display: none;
-    }
-
-    .bento-card {
-      min-height: auto;
-      margin: 0;
-      box-shadow: var(--shadow-bento-compact);
-    }
-
-    .top-reasons,
-    .product-proof,
-    .plugin-customization,
-    .final-cta,
     .site-footer {
-      width: min(100% - 2rem, 32rem);
-    }
-
-    .section-title {
-      font-size: clamp(2.45rem, 13vw, 3.25rem);
-    }
-
-    .final-cta-copy .section-title {
-      font-size: clamp(2.45rem, 13vw, 3.25rem);
-    }
-
-    .final-cta-lede {
-      font-size: 1.08rem;
-    }
-
-
-    .site-footer {
+      --landing-section-max: 32rem;
       padding: 2.5rem 0 3rem;
     }
 
@@ -973,42 +1032,5 @@
     .footer-links li {
       gap: 0.65rem;
     }
-
-    .plugin-customization-lede {
-      font-size: 1.08rem;
-    }
-
-    .ledger-list {
-      padding: 0.75rem;
-    }
-
-    .ledger-row {
-      grid-template-columns: auto minmax(0, 1fr);
-      align-items: start;
-      min-height: auto;
-      padding: 0.85rem;
-    }
-
-    .ledger-icon {
-      width: 2.75rem;
-      height: 2.75rem;
-    }
-
-    .ledger-dot {
-      display: none;
-    }
-
-    .reason-card {
-      padding: 1rem;
-    }
-
-    .product-proof-copy .section-title {
-      font-size: clamp(2.45rem, 13vw, 3.25rem);
-    }
-
-    .proof-figure {
-      max-width: min(100%, 26rem);
-    }
-
   }
 </style>
