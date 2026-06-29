@@ -203,6 +203,21 @@ describe('filterTasks', () => {
     expect(filtered.map((t: Task) => t.id)).toEqual(['T-2', 'T-3'])
   })
 
+  it('filters done tasks (status === done) regardless of low-fire membership', () => {
+    const sessions = new Map<string, AgentSession>()
+    const prs = new Map<string, PullRequestInfo[]>()
+
+    const tasks = [
+      makeTask({ id: 'T-1', status: 'doing' }),
+      makeTask({ id: 'T-2', status: 'done' }),
+      makeTask({ id: 'T-3', status: 'backlog' }),
+      makeTask({ id: 'T-4', status: 'done' }),
+    ]
+
+    const filtered = filterTasks(tasks, 'done', sessions, prs, DEFAULT_FOCUS_STATES, new Set(['T-2']))
+    expect(filtered.map((t: Task) => t.id)).toEqual(['T-2', 'T-4'])
+  })
+
   it('returns empty array for empty task list', () => {
     const sessions = new Map<string, AgentSession>()
     const prs = new Map<string, PullRequestInfo[]>()
@@ -265,6 +280,7 @@ describe('getFilterCounts', () => {
       focus: 1,
       'low-fire': 0,
       backlog: 1,
+      done: 0,
     })
   })
 
@@ -277,6 +293,7 @@ describe('getFilterCounts', () => {
       focus: 0,
       'low-fire': 0,
       backlog: 0,
+      done: 0,
     })
   })
 
@@ -294,6 +311,7 @@ describe('getFilterCounts', () => {
       focus: 0,
       'low-fire': 0,
       backlog: 2,
+      done: 0,
     })
   })
 
@@ -321,6 +339,7 @@ describe('getFilterCounts', () => {
       focus: 1,
       'low-fire': 1,
       backlog: 1,
+      done: 0,
     })
   })
 
@@ -338,6 +357,27 @@ describe('getFilterCounts', () => {
       focus: 1,
       'low-fire': 0,
       backlog: 1,
+      done: 0,
+    })
+  })
+
+  it('counts done tasks in the done chip without affecting other lanes', () => {
+    const sessions = new Map<string, AgentSession>()
+    const prs = new Map<string, PullRequestInfo[]>()
+
+    const tasks = [
+      makeTask({ id: 'T-1', status: 'doing' }),
+      makeTask({ id: 'T-2', status: 'done' }),
+      makeTask({ id: 'T-3', status: 'done' }),
+      makeTask({ id: 'T-4', status: 'backlog' }),
+    ]
+
+    const counts = getFilterCounts(tasks, sessions, prs)
+    expect(counts).toEqual({
+      focus: 1,
+      'low-fire': 0,
+      backlog: 1,
+      done: 2,
     })
   })
 

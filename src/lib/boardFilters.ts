@@ -3,7 +3,7 @@ import type { TaskState } from './taskState'
 import { computeTaskState, ALL_TASK_STATES } from './taskState'
 import { getProjectConfig, setProjectConfig } from './ipc'
 
-export type BoardFilter = 'focus' | 'low-fire' | 'backlog'
+export type BoardFilter = 'focus' | 'low-fire' | 'backlog' | 'done'
 
 export const DEFAULT_FOCUS_STATES: TaskState[] = [
   'idle', 'needs-input', 'paused', 'agent-done', 'failed', 'interrupted',
@@ -69,6 +69,10 @@ export function filterTasks(
     return tasks.filter(task => task.status === 'backlog')
   }
 
+  if (filter === 'done') {
+    return tasks.filter(task => task.status === 'done')
+  }
+
   return []
 }
 
@@ -83,6 +87,7 @@ export function getFilterCounts(
     focus: 0,
     'low-fire': 0,
     backlog: 0,
+    done: 0,
   }
 
   for (const task of tasks) {
@@ -91,6 +96,7 @@ export function getFilterCounts(
       continue
     }
     if (task.status === 'done') {
+      counts.done++
       continue
     }
     // task is doing — check if it's a focus task
