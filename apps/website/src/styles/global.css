@@ -42,13 +42,8 @@ body {
     linear-gradient(135deg, rgba(255, 250, 240, 0.82), rgba(247, 242, 232, 0.96));
 }
 
-button,
-a {
+button {
   font: inherit;
-}
-
-a {
-  color: inherit;
 }
 
 :focus-visible {

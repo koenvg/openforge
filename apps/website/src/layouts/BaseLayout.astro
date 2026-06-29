@@ -1,13 +1,35 @@
 ---
 import '../styles/global.css';
 
+type MetadataUrl = string | URL;
+
 interface Props {
   title: string;
   description: string;
-  canonical?: string;
+  canonical: MetadataUrl;
+  siteName?: string;
 }
 
-const { title, description, canonical } = Astro.props;
+const { title, description, canonical, siteName = 'OpenForge' } = Astro.props;
+const canonicalUrl = resolveMetadataUrl(canonical, Astro.site);
+
+function resolveMetadataUrl(value: MetadataUrl, site: URL | undefined): string | undefined {
+  if (value instanceof URL) {
+    return value.toString();
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return undefined;
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return new URL(trimmed).toString();
+  }
+
+  return site ? new URL(trimmed, site).toString() : undefined;
+}
 ---
 
 <!doctype html>
@@ -15,15 +37,23 @@ const { title, description, canonical } = Astro.props;
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
     <meta name="description" content={description} />
-    {canonical ? <link rel="canonical" href={canonical} /> : null}
+    <meta property="og:site_name" content={siteName} />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    {canonicalUrl ? <link rel="canonical" href={canonicalUrl} /> : null}
+    {canonicalUrl ? <meta property="og:url" content={canonicalUrl} /> : null}
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap"
       rel="stylesheet"
     />
-    <title>{title}</title>
   </head>
   <body>
     <slot />
