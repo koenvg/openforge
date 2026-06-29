@@ -741,5 +741,4 @@ mod tests {
         drop(db);
         let _ = fs::remove_file(&path);
     }
-
 }

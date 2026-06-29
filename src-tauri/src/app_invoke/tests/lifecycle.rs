@@ -1251,7 +1251,12 @@ fn mark_branch_pushed(repo_path: &Path, branch: &str) {
     let sha = git_stdout_lifecycle(repo_path, &["rev-parse", &format!("refs/heads/{branch}")]);
     let _ = git(
         repo_path,
-        &["remote", "add", "origin", "https://example.invalid/openforge.git"],
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://example.invalid/openforge.git",
+        ],
     );
     assert_git_success(
         repo_path,
@@ -1259,7 +1264,11 @@ fn mark_branch_pushed(repo_path: &Path, branch: &str) {
     );
     assert_git_success(
         repo_path,
-        &["branch", &format!("--set-upstream-to=origin/{branch}"), branch],
+        &[
+            "branch",
+            &format!("--set-upstream-to=origin/{branch}"),
+            branch,
+        ],
     );
 }
 
@@ -1277,7 +1286,10 @@ async fn setup_owned_worktree_task(
     let (project_id, task_id) = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
-            .create_project("Cleanup Project", repo_dir.to_str().expect("utf8 repo path"))
+            .create_project(
+                "Cleanup Project",
+                repo_dir.to_str().expect("utf8 repo path"),
+            )
             .expect("create project");
         let task = db
             .create_task("owned branch task", "doing", Some(&project.id), None, None)
@@ -1311,8 +1323,7 @@ async fn move_to_done_deletes_owned_branch_when_safe() {
     let repo_dir = temp.path().join("repo");
     let worktree_dir = temp.path().join("wt");
     let (state, db_path) = test_state("app_invoke_done_deletes_owned_branch");
-    let (task_id, branch) =
-        setup_owned_worktree_task(&state, &repo_dir, &worktree_dir, true).await;
+    let (task_id, branch) = setup_owned_worktree_task(&state, &repo_dir, &worktree_dir, true).await;
 
     invoke_ok(
         &state,
@@ -1347,8 +1358,7 @@ async fn delete_task_deletes_owned_branch_when_safe() {
     let repo_dir = temp.path().join("repo");
     let worktree_dir = temp.path().join("wt");
     let (state, db_path) = test_state("app_invoke_delete_deletes_owned_branch");
-    let (task_id, branch) =
-        setup_owned_worktree_task(&state, &repo_dir, &worktree_dir, true).await;
+    let (task_id, branch) = setup_owned_worktree_task(&state, &repo_dir, &worktree_dir, true).await;
 
     invoke_ok(&state, "delete_task", json!({ "id": task_id })).await;
 
@@ -1463,7 +1473,10 @@ async fn rollback_failed_start_workspace_removes_fresh_worktree_and_record() {
     let (task_id, branch, worktree_path) = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
-            .create_project("Rollback Project", repo_dir.to_str().expect("utf8 repo path"))
+            .create_project(
+                "Rollback Project",
+                repo_dir.to_str().expect("utf8 repo path"),
+            )
             .expect("create project");
         let task = db
             .create_task("Rollback task", "backlog", Some(&project.id), None, None)
@@ -1494,7 +1507,10 @@ async fn rollback_failed_start_workspace_removes_fresh_worktree_and_record() {
         .expect("create worktree record");
         (task.id, branch, worktree_path)
     };
-    assert!(worktree_path.exists(), "worktree should exist before rollback");
+    assert!(
+        worktree_path.exists(),
+        "worktree should exist before rollback"
+    );
 
     let workspace = crate::app_invoke::lifecycle::PreparedWorkspace {
         working_dir: worktree_path.clone(),

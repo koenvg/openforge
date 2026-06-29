@@ -1407,14 +1407,21 @@ mod tests {
         let local_sha = git_stdout(&repo_path, &["rev-parse", "refs/heads/feature/equal"]);
         assert_git_success(
             &repo_path,
-            &["update-ref", "refs/remotes/origin/feature/equal", &local_sha],
+            &[
+                "update-ref",
+                "refs/remotes/origin/feature/equal",
+                &local_sha,
+            ],
         );
         let worktree_path = temp.path().join("worktree");
 
-        let branch_name =
-            create_worktree_from_existing_branch(&repo_path, &worktree_path, "origin/feature/equal")
-                .await
-                .expect("equal local branch should reuse the local branch");
+        let branch_name = create_worktree_from_existing_branch(
+            &repo_path,
+            &worktree_path,
+            "origin/feature/equal",
+        )
+        .await
+        .expect("equal local branch should reuse the local branch");
 
         assert_eq!(branch_name, "feature/equal");
         // Worktree was created on the local branch, not a remote-tracking checkout.
@@ -1446,7 +1453,10 @@ mod tests {
         assert_git_success(&repo_path, &["branch", "feature/behind"]);
         let base_sha = git_stdout(&repo_path, &["rev-parse", "refs/heads/feature/behind"]);
 
-        assert_git_success(&repo_path, &["checkout", "-b", "tmp-remote", "feature/behind"]);
+        assert_git_success(
+            &repo_path,
+            &["checkout", "-b", "tmp-remote", "feature/behind"],
+        );
         std::fs::write(repo_path.join("README.md"), "remote ahead\n")
             .expect("fixture file should be written");
         assert_git_success(&repo_path, &["commit", "-am", "remote advance"]);
@@ -1455,7 +1465,11 @@ mod tests {
         assert_git_success(&repo_path, &["branch", "-D", "tmp-remote"]);
         assert_git_success(
             &repo_path,
-            &["update-ref", "refs/remotes/origin/feature/behind", &remote_sha],
+            &[
+                "update-ref",
+                "refs/remotes/origin/feature/behind",
+                &remote_sha,
+            ],
         );
         // Sanity: local branch is still behind the remote ref.
         assert_ne!(base_sha, remote_sha);
@@ -1551,7 +1565,11 @@ mod tests {
         assert_git_success(&repo_path, &["branch", "-D", "tmp-remote"]);
         assert_git_success(
             &repo_path,
-            &["update-ref", "refs/remotes/origin/feature/diverged", &remote_sha],
+            &[
+                "update-ref",
+                "refs/remotes/origin/feature/diverged",
+                &remote_sha,
+            ],
         );
 
         // Build the local branch with its own unique commit on top of the shared base.
@@ -1575,9 +1593,7 @@ mod tests {
 
         let message = error.to_string();
         assert!(
-            message.contains("diverged")
-                && message.contains("ahead")
-                && message.contains("behind"),
+            message.contains("diverged") && message.contains("ahead") && message.contains("behind"),
             "error should mention divergence with ahead/behind counts, got: {message}"
         );
         // Nothing mutated: local branch ref unchanged and no worktree directory.
@@ -1828,7 +1844,12 @@ mod tests {
     fn ensure_origin_remote(repo_path: &Path) {
         let _ = git(
             repo_path,
-            &["remote", "add", "origin", "https://example.invalid/openforge.git"],
+            &[
+                "remote",
+                "add",
+                "origin",
+                "https://example.invalid/openforge.git",
+            ],
         );
     }
 
