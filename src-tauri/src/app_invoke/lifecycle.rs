@@ -524,6 +524,7 @@ mod tests {
             worktree_source: None,
             worktree_branch: None,
             title: None,
+            handoff_notes_enabled: true,
             depends_on: Vec::new(),
             labels: Vec::new(),
         }

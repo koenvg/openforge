@@ -36,8 +36,27 @@ pub struct TaskRow {
     pub worktree_branch: Option<String>,
     /// Explicit display title; `None` means fall back to the prompt-derived title.
     pub title: Option<String>,
+    /// Whether the task's start prompt includes the OpenForge handoff-notes
+    /// (task management) block. Defaults to `true`; `false` opts the task out.
+    pub handoff_notes_enabled: bool,
     pub depends_on: Vec<String>,
     pub labels: Vec<TaskLabelRow>,
+}
+
+/// Full option set for creating a task. Existing `create_task` /
+/// `create_task_with_worktree_source` helpers delegate here with defaults so
+/// their call sites stay stable while new optional fields (display title,
+/// handoff-notes opt-out) flow through a single code path.
+pub struct NewTaskOptions<'a> {
+    pub initial_prompt: &'a str,
+    pub status: &'a str,
+    pub project_id: Option<&'a str>,
+    pub prompt: Option<&'a str>,
+    pub permission_mode: Option<&'a str>,
+    pub worktree_source: Option<&'a str>,
+    pub worktree_branch: Option<&'a str>,
+    pub title: Option<&'a str>,
+    pub handoff_notes_enabled: bool,
 }
 
 fn load_task_dependency_ids(conn: &rusqlite::Connection, task_id: &str) -> Result<Vec<String>> {
@@ -230,7 +249,7 @@ impl super::Database {
     pub fn get_tasks_for_project(&self, project_id: &str) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, worktree_source, worktree_branch
+            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, worktree_source, worktree_branch, handoff_notes_enabled
              FROM tasks WHERE project_id = ?1 ORDER BY updated_at DESC",
         )?;
 
@@ -249,6 +268,7 @@ impl super::Database {
                 title: row.get(10)?,
                 worktree_source: row.get(11)?,
                 worktree_branch: row.get(12)?,
+                handoff_notes_enabled: row.get(13)?,
                 depends_on: Vec::new(),
                 labels: Vec::new(),
             })
@@ -271,7 +291,7 @@ impl super::Database {
     ) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, worktree_source, worktree_branch
+            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, worktree_source, worktree_branch, handoff_notes_enabled
              FROM tasks WHERE project_id = ?1 AND status = ?2 ORDER BY updated_at DESC",
         )?;
         let tasks = stmt.query_map([project_id, state], |row| {
@@ -289,6 +309,7 @@ impl super::Database {
                 title: row.get(10)?,
                 worktree_source: row.get(11)?,
                 worktree_branch: row.get(12)?,
+                handoff_notes_enabled: row.get(13)?,
                 depends_on: Vec::new(),
                 labels: Vec::new(),
             })
@@ -333,9 +354,39 @@ impl super::Database {
         worktree_source: Option<&str>,
         worktree_branch: Option<&str>,
     ) -> Result<TaskRow> {
+        self.create_task_with_options(NewTaskOptions {
+            initial_prompt,
+            status,
+            project_id,
+            prompt,
+            permission_mode,
+            worktree_source,
+            worktree_branch,
+            title: None,
+            handoff_notes_enabled: true,
+        })
+    }
+
+    pub fn create_task_with_options(&self, opts: NewTaskOptions) -> Result<TaskRow> {
+        let NewTaskOptions {
+            initial_prompt,
+            status,
+            project_id,
+            prompt,
+            permission_mode,
+            worktree_source,
+            worktree_branch,
+            title,
+            handoff_notes_enabled,
+        } = opts;
         let conn = self.conn.lock().unwrap();
         let (worktree_source, worktree_branch) =
             normalize_worktree_source(worktree_source, worktree_branch)?;
+        // Normalize a blank title to NULL so the UI falls back to the derived title.
+        let title = title
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string);
 
         let next_id: i64 = conn.query_row(
             "SELECT value FROM config WHERE key = 'next_task_id'",
@@ -374,8 +425,8 @@ impl super::Database {
         let final_prompt = prompt.unwrap_or(initial_prompt);
 
         conn.execute(
-            "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, worktree_source, worktree_branch)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, worktree_source, worktree_branch, title, handoff_notes_enabled)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             rusqlite::params![
                 &task_id,
                 initial_prompt,
@@ -389,6 +440,8 @@ impl super::Database {
                 permission_mode,
                 worktree_source.as_deref(),
                 worktree_branch.as_deref(),
+                title.as_deref(),
+                handoff_notes_enabled,
             ],
         )?;
 
@@ -405,7 +458,8 @@ impl super::Database {
             permission_mode: permission_mode.map(|s| s.to_string()),
             worktree_source,
             worktree_branch,
-            title: None,
+            title,
+            handoff_notes_enabled,
             depends_on: Vec::new(),
             labels: Vec::new(),
         })
@@ -414,7 +468,7 @@ impl super::Database {
     pub fn get_all_tasks(&self) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, worktree_source, worktree_branch
+            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, worktree_source, worktree_branch, handoff_notes_enabled
              FROM tasks ORDER BY updated_at DESC"
         )?;
 
@@ -433,6 +487,7 @@ impl super::Database {
                 title: row.get(10)?,
                 worktree_source: row.get(11)?,
                 worktree_branch: row.get(12)?,
+                handoff_notes_enabled: row.get(13)?,
                 depends_on: Vec::new(),
                 labels: Vec::new(),
             })
@@ -451,7 +506,7 @@ impl super::Database {
     pub fn get_task(&self, id: &str) -> Result<Option<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, worktree_source, worktree_branch
+            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, worktree_source, worktree_branch, handoff_notes_enabled
              FROM tasks WHERE id = ?1"
         )?;
         let mut rows = stmt.query([id])?;
@@ -470,6 +525,7 @@ impl super::Database {
                 title: row.get(10)?,
                 worktree_source: row.get(11)?,
                 worktree_branch: row.get(12)?,
+                handoff_notes_enabled: row.get(13)?,
                 depends_on: load_task_dependency_ids(&conn, id)?,
                 labels: load_task_labels(&conn, id)?,
             }))
@@ -1009,6 +1065,79 @@ mod tests {
 
         let task = db
             .create_task("Original", "backlog", None, None, None)
+            .expect("create failed");
+
+        assert_eq!(task.title, None);
+        let retrieved = db.get_task(&task.id).expect("get failed").unwrap();
+        assert_eq!(retrieved.title, None);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_create_task_defaults_handoff_notes_enabled_true() {
+        let (db, path) = make_test_db("create_task_handoff_default");
+
+        let task = db
+            .create_task("Original", "backlog", None, None, None)
+            .expect("create failed");
+
+        assert!(task.handoff_notes_enabled);
+        let retrieved = db.get_task(&task.id).expect("get failed").unwrap();
+        assert!(retrieved.handoff_notes_enabled);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_create_task_with_options_persists_title_and_handoff_opt_out() {
+        let (db, path) = make_test_db("create_task_options_title_handoff");
+        db.set_config("task_id_prefix", "T").unwrap();
+
+        let task = db
+            .create_task_with_options(super::NewTaskOptions {
+                initial_prompt: "Do the work",
+                status: "backlog",
+                project_id: None,
+                prompt: None,
+                permission_mode: None,
+                worktree_source: None,
+                worktree_branch: None,
+                title: Some("  Custom title  "),
+                handoff_notes_enabled: false,
+            })
+            .expect("create failed");
+
+        // Title is trimmed; the handoff opt-out is persisted.
+        assert_eq!(task.title.as_deref(), Some("Custom title"));
+        assert!(!task.handoff_notes_enabled);
+
+        let retrieved = db.get_task(&task.id).expect("get failed").unwrap();
+        assert_eq!(retrieved.title.as_deref(), Some("Custom title"));
+        assert!(!retrieved.handoff_notes_enabled);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_create_task_with_options_blank_title_falls_back_to_null() {
+        let (db, path) = make_test_db("create_task_options_blank_title");
+
+        let task = db
+            .create_task_with_options(super::NewTaskOptions {
+                initial_prompt: "Do the work",
+                status: "backlog",
+                project_id: None,
+                prompt: None,
+                permission_mode: None,
+                worktree_source: None,
+                worktree_branch: None,
+                title: Some("   "),
+                handoff_notes_enabled: true,
+            })
             .expect("create failed");
 
         assert_eq!(task.title, None);

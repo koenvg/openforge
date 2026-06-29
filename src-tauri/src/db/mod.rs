@@ -27,7 +27,7 @@ pub use projects::{ProjectAttentionRow, ProjectRow};
 pub use pull_requests::{PrCommentRow, PrRow};
 pub use review::ReviewPrRow;
 pub use task_workspaces::TaskWorkspaceRow;
-pub use tasks::{TaskLabelRow, TaskRow};
+pub use tasks::{NewTaskOptions, TaskLabelRow, TaskRow};
 pub use worktrees::WorktreeRow;
 
 pub(crate) const STARTUP_RESUMABLE_AGENT_SESSION_STATUSES: [&str; 4] =

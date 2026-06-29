@@ -16,6 +16,12 @@ export interface Task {
   permission_mode: string | null;
   worktree_source: WorktreeSource | null;
   worktree_branch: string | null;
+  /**
+   * Whether the task's start prompt includes the OpenForge handoff-notes
+   * (task management) block. Defaults to true; false opts the task out so the
+   * agent is not instructed to maintain Handoff Notes.
+   */
+  handoff_notes_enabled: boolean;
   depends_on: string[];
   project_id: string | null;
   created_at: number;

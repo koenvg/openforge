@@ -10,6 +10,10 @@ export interface CreateTaskOptions {
   labelNames?: string[]
   worktreeSource?: WorktreeSource | null
   worktreeBranch?: string | null
+  /** Explicit display title; null/empty falls back to the prompt-derived title. */
+  title?: string | null
+  /** When false, the task's start prompt omits the handoff-notes block. Defaults to true. */
+  handoffNotesEnabled?: boolean
 }
 
 export async function createTask(initialPrompt: string, status: BoardStatus, projectId: string | null, permissionMode: string | null, options: CreateTaskOptions = {}): Promise<Task> {
@@ -18,8 +22,10 @@ export async function createTask(initialPrompt: string, status: BoardStatus, pro
     labelNames = [],
     worktreeSource = null,
     worktreeBranch = null,
+    title = null,
+    handoffNotesEnabled = true,
   } = options
-  const task = await invoke<RawTask>("create_task", { initialPrompt, status, projectId, permissionMode, dependsOn, labelNames, worktreeSource, worktreeBranch });
+  const task = await invoke<RawTask>("create_task", { initialPrompt, status, projectId, permissionMode, dependsOn, labelNames, worktreeSource, worktreeBranch, title, handoffNotesEnabled });
   return normalizeTask(task)
 }
 

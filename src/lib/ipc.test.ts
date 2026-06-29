@@ -186,6 +186,8 @@ describe("ipc spawnShellPty", () => {
 			labelNames: [],
 			worktreeSource: null,
 			worktreeBranch: null,
+			title: null,
+			handoffNotesEnabled: true,
 		});
 	});
 
@@ -220,6 +222,8 @@ describe("ipc spawnShellPty", () => {
 			labelNames: [],
 			worktreeSource: "existingBranch",
 			worktreeBranch: "feature/open-pr",
+			title: null,
+			handoffNotesEnabled: true,
 		});
 	});
 
@@ -254,6 +258,8 @@ describe("ipc spawnShellPty", () => {
 			labelNames: [],
 			worktreeSource: "disabled",
 			worktreeBranch: null,
+			title: null,
+			handoffNotesEnabled: true,
 		});
 	});
 
