@@ -203,18 +203,22 @@ pub fn get_project_repo(
     project_id: &str,
 ) -> Result<Option<ProjectRepo>, String> {
     let project = {
-        let guard = db.lock().map_err(|_| "database lock poisoned".to_string())?;
+        let guard = db
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())?;
         guard.get_project(project_id).map_err(|e| e.to_string())?
     };
     let Some(project) = project else {
         return Ok(None);
     };
 
-    let resolved =
-        resolve_project_repo_from_path(&project.path).map(|(owner, name)| ProjectRepo { owner, name });
+    let resolved = resolve_project_repo_from_path(&project.path)
+        .map(|(owner, name)| ProjectRepo { owner, name });
 
     if let Some(repo) = &resolved {
-        let guard = db.lock().map_err(|_| "database lock poisoned".to_string())?;
+        let guard = db
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())?;
         let _ = guard.set_project_config(
             project_id,
             "resolved_repo",
@@ -918,8 +922,8 @@ pub async fn fetch_authored_prs(
 
 #[cfg(test)]
 mod tests {
-    use super::should_fallback_to_search;
     use super::parse_git_remote_repo;
+    use super::should_fallback_to_search;
     use crate::db::test_helpers::make_test_db;
     use crate::github_client::{GitHubUser, PrComment, PrReviewComment};
 
@@ -965,8 +969,14 @@ mod tests {
 
     #[test]
     fn rejects_non_github_remote() {
-        assert_eq!(parse_git_remote_repo("https://gitlab.com/acme/widgets.git"), None);
-        assert_eq!(parse_git_remote_repo("git@bitbucket.org:acme/widgets.git"), None);
+        assert_eq!(
+            parse_git_remote_repo("https://gitlab.com/acme/widgets.git"),
+            None
+        );
+        assert_eq!(
+            parse_git_remote_repo("git@bitbucket.org:acme/widgets.git"),
+            None
+        );
     }
 
     #[test]

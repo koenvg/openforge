@@ -254,7 +254,10 @@ fn normalize_worktree_source(
     worktree_source: Option<&str>,
     worktree_branch: Option<&str>,
 ) -> Result<(Option<String>, Option<String>)> {
-    match worktree_source.map(str::trim).filter(|value| !value.is_empty()) {
+    match worktree_source
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
         Some("existingBranch") => {
             let branch = worktree_branch
                 .map(str::trim)
@@ -1693,10 +1696,7 @@ mod tests {
         assert_eq!(task.worktree_branch.as_deref(), Some("feature/open-pr"));
 
         let retrieved = db.get_task(&task.id).expect("get failed").unwrap();
-        assert_eq!(
-            retrieved.worktree_source.as_deref(),
-            Some("existingBranch")
-        );
+        assert_eq!(retrieved.worktree_source.as_deref(), Some("existingBranch"));
         assert_eq!(
             retrieved.worktree_branch.as_deref(),
             Some("feature/open-pr")

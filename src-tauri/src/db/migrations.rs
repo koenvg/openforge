@@ -1287,7 +1287,10 @@ pub(super) fn ensure_is_queued_columns(conn: &Connection) -> Result<()> {
 
         if !exists {
             conn.execute(
-                &format!("ALTER TABLE {} ADD COLUMN is_queued INTEGER NOT NULL DEFAULT 0", table),
+                &format!(
+                    "ALTER TABLE {} ADD COLUMN is_queued INTEGER NOT NULL DEFAULT 0",
+                    table
+                ),
                 [],
             )?;
         }
@@ -1995,10 +1998,8 @@ mod tests {
         // inserted mid-list, so databases whose user_version is already past it
         // (e.g. the seeded dev DB at v28) never had the column added. A fully
         // migrated DB that predates the fix is missing is_queued on both PR tables.
-        let path = std::env::temp_dir().join(format!(
-            "test_is_queued_backfill_{}.db",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("test_is_queued_backfill_{}.db", std::process::id()));
         let _ = fs::remove_file(&path);
 
         {

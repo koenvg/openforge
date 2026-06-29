@@ -222,14 +222,26 @@ mod tests {
             .create_task("Idempotent task", "doing", Some(&project.id), None, None)
             .expect("create task failed");
 
-        db.create_worktree_record(&task.id, &project.id, "/tmp/repo", "/tmp/wt-old", "branch-old")
-            .expect("first create should succeed");
+        db.create_worktree_record(
+            &task.id,
+            &project.id,
+            "/tmp/repo",
+            "/tmp/wt-old",
+            "branch-old",
+        )
+        .expect("first create should succeed");
 
         // A second create for the same task must not fail on the UNIQUE(task_id)
         // constraint; it should reconcile the existing record in place so a
         // retried start cannot be blocked (and the real error masked).
-        db.create_worktree_record(&task.id, &project.id, "/tmp/repo", "/tmp/wt-new", "branch-new")
-            .expect("second create should reconcile, not violate UNIQUE(task_id)");
+        db.create_worktree_record(
+            &task.id,
+            &project.id,
+            "/tmp/repo",
+            "/tmp/wt-new",
+            "branch-new",
+        )
+        .expect("second create should reconcile, not violate UNIQUE(task_id)");
 
         let worktree = db
             .get_worktree_for_task(&task.id)
