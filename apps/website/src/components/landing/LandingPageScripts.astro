@@ -61,6 +61,28 @@
           }
         }
 
+        const proofSection = document.querySelector<HTMLElement>('.product-proof');
+
+        if (proofSection) {
+          const proofCopy = proofSection.querySelectorAll<HTMLElement>('.product-proof-copy > *');
+          const proofFrame = proofSection.querySelector<HTMLElement>('.proof-bento-frame');
+          const proofChromeDots = proofSection.querySelectorAll<HTMLElement>('.proof-window-chrome span');
+
+          const proofTimeline = gsap.timeline({
+            defaults: { ease: 'power3.out' },
+            scrollTrigger: {
+              trigger: proofSection,
+              start: 'top 72%',
+              once: true
+            }
+          });
+
+          proofTimeline
+            .from(proofCopy, { autoAlpha: 0, y: 24, duration: 0.58, stagger: 0.08 })
+            .from(proofFrame, { autoAlpha: 0, x: 34, y: 18, rotate: -1.4, scale: 0.96, duration: 0.72, ease: 'back.out(1.08)' }, 0.16)
+            .from(proofChromeDots, { autoAlpha: 0, scale: 0.35, duration: 0.28, ease: 'back.out(2)', stagger: 0.05 }, 0.62);
+        }
+
         const finalCta = document.querySelector<HTMLElement>('.final-cta');
 
         if (finalCta) {
@@ -87,12 +109,17 @@
         }
 
         gsap.utils.toArray<HTMLElement>('[data-animate-section]').forEach((section) => {
-          if (section.classList.contains('hero') || section.classList.contains('top-reasons') || section.classList.contains('final-cta')) return;
+          if (
+            section.classList.contains('hero') ||
+            section.classList.contains('top-reasons') ||
+            section.classList.contains('product-proof') ||
+            section.classList.contains('final-cta')
+          ) return;
 
           const isPluginCustomization = section.classList.contains('plugin-customization');
           const cards = isPluginCustomization
             ? section.querySelectorAll<HTMLElement>('[data-extension-card]')
-            : section.querySelectorAll<HTMLElement>('[data-animate-card], .proof-screenshot-shell');
+            : section.querySelectorAll<HTMLElement>('[data-animate-card]');
 
           if (cards.length === 0) return;
 
