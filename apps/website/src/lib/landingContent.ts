@@ -1,9 +1,4 @@
-import {
-  GITHUB_README_URL,
-  GITHUB_RELEASES_URL,
-  GITHUB_REPOSITORY_URL,
-  GITHUB_WHY_OPEN_FORGE_EXISTS_URL
-} from './urls';
+import { GITHUB_RELEASES_URL, GITHUB_REPOSITORY_URL } from './urls';
 
 type ButtonVariant = 'primary' | 'secondary';
 
@@ -31,12 +26,6 @@ export interface PluginCapability {
   code: string;
   description: string;
   iconPaths: readonly string[];
-}
-
-export interface FooterLink {
-  label: string;
-  href: string;
-  text: string;
 }
 
 export const TOP_REASONS = [
@@ -126,25 +115,3 @@ export const PLUGIN_CAPABILITIES = [
   }
 ] satisfies readonly PluginCapability[];
 
-export const FOOTER_LINKS = [
-  {
-    label: 'Install',
-    href: GITHUB_RELEASES_URL,
-    text: 'Releases'
-  },
-  {
-    label: 'Source',
-    href: GITHUB_REPOSITORY_URL,
-    text: 'GitHub'
-  },
-  {
-    label: 'Docs',
-    href: GITHUB_README_URL,
-    text: 'README'
-  },
-  {
-    label: 'Orientation',
-    href: GITHUB_WHY_OPEN_FORGE_EXISTS_URL,
-    text: 'Project orientation'
-  }
-] satisfies readonly FooterLink[];
