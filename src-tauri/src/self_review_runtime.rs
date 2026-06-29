@@ -508,6 +508,151 @@ pub fn resolve_workspace_path(db: &crate::db::Database, task_id: &str) -> Result
     Err(format!("No workspace found for task {}", task_id))
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct GitStatusSummary {
+    /// Whether the branch has an upstream (remote tracking) branch to compare to.
+    pub has_remote: bool,
+    /// Commits ahead of the remote tracking branch (i.e. waiting to be pushed).
+    pub remote_ahead: i32,
+    /// Commits behind the remote tracking branch (i.e. waiting to be pulled).
+    pub remote_behind: i32,
+    /// Commits on this branch relative to the base it was cut from — the task's
+    /// own work. Counted off the base merge target internally but never surfaced
+    /// as "main" in the UI; lets a fresh, unpushed branch still report its commits.
+    pub local_commits: i32,
+    /// Files with uncommitted changes vs HEAD (staged + unstaged tracked).
+    pub uncommitted_files: i32,
+    /// Inserted lines across uncommitted changes.
+    pub insertions: i32,
+    /// Deleted lines across uncommitted changes.
+    pub deletions: i32,
+}
+
+/// Find the first base-branch candidate (origin/main, origin/HEAD, main, master)
+/// that exists and shares history with HEAD, so ahead/behind can be measured even
+/// when the branch has no upstream tracking branch.
+async fn resolve_base_ref(worktree_path: &str) -> Option<String> {
+    for base_ref in SELF_REVIEW_BASE_CANDIDATES {
+        if let Ok(Some(_)) = merge_base_for_ref(worktree_path, base_ref).await {
+            return Some((*base_ref).to_string());
+        }
+    }
+    None
+}
+
+/// Parse `git diff --shortstat` output, e.g.
+/// " 38 files changed, 1607 insertions(+), 642 deletions(-)", into
+/// (files, insertions, deletions). Missing segments default to 0; empty input
+/// (a clean tree) yields all zeroes.
+pub fn parse_diff_shortstat(shortstat: &str) -> (i32, i32, i32) {
+    let mut files = 0;
+    let mut insertions = 0;
+    let mut deletions = 0;
+    for segment in shortstat.split(',') {
+        let segment = segment.trim();
+        let number = segment
+            .split_whitespace()
+            .next()
+            .and_then(|value| value.parse::<i32>().ok())
+            .unwrap_or(0);
+        if segment.contains("changed") {
+            files = number;
+        } else if segment.contains("insertion") {
+            insertions = number;
+        } else if segment.contains("deletion") {
+            deletions = number;
+        }
+    }
+    (files, insertions, deletions)
+}
+
+/// Parse `git rev-list --left-right --count HEAD...@{upstream}` output
+/// ("<ahead>\t<behind>") into (ahead, behind). Malformed/empty input yields (0, 0).
+pub fn parse_ahead_behind(rev_list: &str) -> (i32, i32) {
+    let mut counts = rev_list.split_whitespace();
+    let ahead = counts.next().and_then(|v| v.parse::<i32>().ok()).unwrap_or(0);
+    let behind = counts.next().and_then(|v| v.parse::<i32>().ok()).unwrap_or(0);
+    (ahead, behind)
+}
+
+/// Summarize a worktree's git state: commits ahead/behind its upstream tracking
+/// branch, plus the uncommitted diff vs HEAD (files / insertions / deletions).
+pub async fn get_task_git_status_for_workspace(
+    worktree_path: &str,
+) -> Result<GitStatusSummary, String> {
+    // Uncommitted changes vs HEAD (staged + unstaged tracked changes).
+    let diff_output = tokio::process::Command::new("git")
+        .arg("-C")
+        .arg(worktree_path)
+        .arg("diff")
+        .arg("HEAD")
+        .arg("--shortstat")
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run git diff: {}", e))?;
+    if !diff_output.status.success() {
+        let stderr = String::from_utf8_lossy(&diff_output.stderr);
+        return Err(format!("git diff failed: {}", stderr.trim()));
+    }
+    let (uncommitted_files, insertions, deletions) =
+        parse_diff_shortstat(&String::from_utf8_lossy(&diff_output.stdout));
+
+    // Ahead/behind vs the branch's own upstream (remote tracking) branch. When the
+    // branch has no upstream, rev-list fails and we report "no remote".
+    let remote_output = tokio::process::Command::new("git")
+        .arg("-C")
+        .arg(worktree_path)
+        .arg("rev-list")
+        .arg("--left-right")
+        .arg("--count")
+        .arg("HEAD...@{upstream}")
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run git rev-list: {}", e))?;
+    let (has_remote, remote_ahead, remote_behind) = if remote_output.status.success() {
+        let (ahead, behind) = parse_ahead_behind(&String::from_utf8_lossy(&remote_output.stdout));
+        (true, ahead, behind)
+    } else {
+        (false, 0, 0)
+    };
+
+    // Commits this branch has produced, counted off the base it was cut from. This
+    // surfaces local work (e.g. "1 commit") even with no remote. The base is only
+    // used to count — it is never surfaced in the UI.
+    let local_commits = match resolve_base_ref(worktree_path).await {
+        Some(base) => {
+            let count_output = tokio::process::Command::new("git")
+                .arg("-C")
+                .arg(worktree_path)
+                .arg("rev-list")
+                .arg("--count")
+                .arg(format!("{base}..HEAD"))
+                .output()
+                .await
+                .map_err(|e| format!("Failed to run git rev-list: {}", e))?;
+            if count_output.status.success() {
+                String::from_utf8_lossy(&count_output.stdout)
+                    .trim()
+                    .parse::<i32>()
+                    .unwrap_or(0)
+            } else {
+                0
+            }
+        }
+        None => 0,
+    };
+
+    Ok(GitStatusSummary {
+        has_remote,
+        remote_ahead,
+        remote_behind,
+        local_commits,
+        uncommitted_files,
+        insertions,
+        deletions,
+    })
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -543,6 +688,103 @@ mod tests {
         run_git(repo.path(), &["config", "user.email", "test@example.com"]);
         run_git(repo.path(), &["config", "user.name", "Test User"]);
         repo
+    }
+
+    #[test]
+    fn git_status_parse_diff_shortstat_full() {
+        let (files, ins, del) =
+            parse_diff_shortstat(" 38 files changed, 1607 insertions(+), 642 deletions(-)\n");
+        assert_eq!(files, 38);
+        assert_eq!(ins, 1607);
+        assert_eq!(del, 642);
+    }
+
+    #[test]
+    fn git_status_parse_diff_shortstat_insertions_only() {
+        let (files, ins, del) = parse_diff_shortstat(" 1 file changed, 5 insertions(+)\n");
+        assert_eq!(files, 1);
+        assert_eq!(ins, 5);
+        assert_eq!(del, 0);
+    }
+
+    #[test]
+    fn git_status_parse_diff_shortstat_deletions_only() {
+        let (files, ins, del) = parse_diff_shortstat(" 2 files changed, 3 deletions(-)\n");
+        assert_eq!(files, 2);
+        assert_eq!(ins, 0);
+        assert_eq!(del, 3);
+    }
+
+    #[test]
+    fn git_status_parse_diff_shortstat_empty_is_zero() {
+        assert_eq!(parse_diff_shortstat(""), (0, 0, 0));
+    }
+
+    #[test]
+    fn git_status_parse_ahead_behind_reads_ahead_then_behind() {
+        // `git rev-list --left-right --count HEAD...@{upstream}` => "<ahead>\t<behind>"
+        assert_eq!(parse_ahead_behind("3\t1\n"), (3, 1));
+        assert_eq!(parse_ahead_behind("0\t0\n"), (0, 0));
+    }
+
+    #[test]
+    fn git_status_parse_ahead_behind_zero_when_empty_or_malformed() {
+        assert_eq!(parse_ahead_behind(""), (0, 0));
+        assert_eq!(parse_ahead_behind("garbage"), (0, 0));
+    }
+
+    #[tokio::test]
+    async fn git_status_summary_reports_no_remote_with_local_commits() {
+        let repo = init_git_repo();
+        // Base commit on main.
+        fs::write(repo.path().join("a.txt"), "1\n").expect("write a.txt");
+        run_git(repo.path(), &["add", "."]);
+        run_git(repo.path(), &["commit", "-m", "base"]);
+        // Task branch with one commit (no remote/upstream configured).
+        run_git(repo.path(), &["checkout", "-b", "task"]);
+        fs::write(repo.path().join("b.txt"), "2\n").expect("write b.txt");
+        run_git(repo.path(), &["add", "."]);
+        run_git(repo.path(), &["commit", "-m", "task commit"]);
+        // One uncommitted modification.
+        fs::write(repo.path().join("a.txt"), "1\nmore\n").expect("modify a.txt");
+
+        let summary = get_task_git_status_for_workspace(repo.path().to_str().unwrap())
+            .await
+            .expect("git status summary");
+
+        assert!(!summary.has_remote);
+        assert_eq!(summary.remote_ahead, 0);
+        assert_eq!(summary.remote_behind, 0);
+        assert_eq!(summary.local_commits, 1);
+        assert_eq!(summary.uncommitted_files, 1);
+        assert_eq!(summary.insertions, 1);
+        assert_eq!(summary.deletions, 0);
+    }
+
+    #[tokio::test]
+    async fn git_status_summary_reports_ahead_of_remote_when_pushed() {
+        let remote = tempdir().expect("create bare remote");
+        run_git(remote.path(), &["init", "--bare"]);
+
+        let repo = init_git_repo();
+        fs::write(repo.path().join("a.txt"), "1\n").expect("write a.txt");
+        run_git(repo.path(), &["add", "."]);
+        run_git(repo.path(), &["commit", "-m", "base"]);
+        run_git(repo.path(), &["remote", "add", "origin", remote.path().to_str().unwrap()]);
+        // Push sets up the upstream tracking branch (origin/main); branch is in sync.
+        run_git(repo.path(), &["push", "-u", "origin", "main"]);
+        // One local commit that has not been pushed.
+        fs::write(repo.path().join("c.txt"), "x\n").expect("write c.txt");
+        run_git(repo.path(), &["add", "."]);
+        run_git(repo.path(), &["commit", "-m", "unpushed"]);
+
+        let summary = get_task_git_status_for_workspace(repo.path().to_str().unwrap())
+            .await
+            .expect("git status summary");
+
+        assert!(summary.has_remote);
+        assert_eq!(summary.remote_ahead, 1);
+        assert_eq!(summary.remote_behind, 0);
     }
 
     fn write_repo_file(repo_path: &Path, path: &str, content: &str) {

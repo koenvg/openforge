@@ -3,82 +3,52 @@
   import type { DesktopUnlistenFn } from '../../lib/desktopIpc'
   import { activeSessions } from '../../lib/stores'
   import '@openforge/terminal-runtime/xterm.css'
-  import { listenToAgentStatusChanged, type AgentPanelStatus } from '../../lib/agentPanelSessionSync'
+  import { listenToAgentStatusChanged } from '../../lib/agentPanelSessionSync'
   import { acquire, attach, detach, isValidTerminalDimensions, type PoolEntry } from '../../lib/terminalPool'
   import {
-    getAgentSessionStatusBadgeClass,
-    getAgentStageLabel,
-    getAgentStatusText,
     hydrateAgentTerminalPtyInstance,
     syncAgentPanelStatusFromSession,
-    writeAgentTerminalTranscription,
-    type AgentStageLabels,
-    type AgentSessionStatusBadgeVariant,
   } from '../../lib/agentTerminalPanel'
-  import VoiceInput from '../shared/input/VoiceInput.svelte'
-  import { getAgentResumeCommand, type AgentResumeCommandProvider } from '../../lib/agentResumeCommand'
   import { parseCheckpointQuestion } from '../../lib/parseCheckpoint'
 
   type ProviderSessionIdKey = 'opencode_session_id' | 'claude_session_id' | 'pi_session_id'
 
   interface Props {
     taskId: string
-    runningText: string
-    logPrefix: string
     sessionIdKey: ProviderSessionIdKey | null
-    stageLabels: AgentStageLabels
     isStarting?: boolean
     rootTestId?: string | null
-    stageLabelPrefix?: string
-    uppercaseSessionStatus?: boolean
-    sessionStatusBadgeVariant?: AgentSessionStatusBadgeVariant
-    resumeCommandProvider?: AgentResumeCommandProvider | null
   }
 
   let {
     taskId,
-    runningText,
-    logPrefix,
     sessionIdKey,
-    stageLabels,
     isStarting = false,
     rootTestId = null,
-    stageLabelPrefix = '// ',
-    uppercaseSessionStatus = true,
-    sessionStatusBadgeVariant = 'soft',
-    resumeCommandProvider = null,
   }: Props = $props()
 
   let terminalEl: HTMLDivElement
   let unlisteners: DesktopUnlistenFn[] = []
   let poolEntry: PoolEntry | null = null
   let poolEntryAttached = $state(false)
-  let status = $state<AgentPanelStatus>('idle')
   let terminalActive = $state(false)
   let destroyed = false
 
   let session = $derived($activeSessions.get(taskId) || null)
-  let providerSessionId = $derived(session && sessionIdKey ? session[sessionIdKey] : null)
-  let resolvedResumeCommandProvider: AgentResumeCommandProvider = $derived(
-    resumeCommandProvider
-      ?? (sessionIdKey === 'opencode_session_id'
-        ? 'opencode'
-        : sessionIdKey === 'claude_session_id'
-          ? 'claude-code'
-          : 'pi')
-  )
-  let resumeCommand = $derived(getAgentResumeCommand(resolvedResumeCommandProvider, providerSessionId))
   let checkpointQuestion = $derived(
     sessionIdKey === 'opencode_session_id' && session?.status === 'paused'
       ? parseCheckpointQuestion(session.checkpoint_data)
       : null
   )
 
+  // The live status no longer renders here (it lives in AgentStatusPill), but the
+  // session/status sync still drives terminalActive + PTY hydration, so we keep
+  // running it with a no-op status setter.
   function syncStatusFromSession(sessionStatus: string | null | undefined) {
     syncAgentPanelStatusFromSession({
       taskId,
       sessionStatus,
-      setStatus: (nextStatus) => { status = nextStatus },
+      setStatus: () => {},
       setTerminalActive: (active) => { terminalActive = active },
     })
   }
@@ -122,7 +92,7 @@
 
     unlisteners.push(await listenToAgentStatusChanged({
       taskId,
-      setStatus: (nextStatus) => { status = nextStatus },
+      setStatus: () => {},
       onRunning: () => { syncStatusFromSession('running') },
       onPtyInstanceId: (ptyInstanceId) => {
         hydrateAgentTerminalPtyInstance(taskId, ptyInstanceId)
@@ -141,54 +111,9 @@
       detach(poolEntry)
     }
   })
-
-  function handleTranscription(text: string) {
-    void writeAgentTerminalTranscription(taskId, text, logPrefix)
-  }
-
-  function getStatusText(): string {
-    return getAgentStatusText(status, runningText)
-  }
-
-  function getStageLabel(stage: string): string {
-    return getAgentStageLabel(stage, stageLabels)
-  }
-
-  function getSessionStatusBadgeClass(sessionStatus: string): string {
-    return getAgentSessionStatusBadgeClass(sessionStatus, sessionStatusBadgeVariant)
-  }
-
-  function getSessionStatusLabel(sessionStatus: string): string {
-    return uppercaseSessionStatus ? sessionStatus.toUpperCase() : sessionStatus
-  }
 </script>
 
 <div class="flex flex-col gap-3 h-full" data-testid={rootTestId}>
-  <div class="flex items-center justify-between px-5 py-3.5 bg-base-200 border border-base-300 rounded-md">
-    <div class="flex items-start gap-2.5">
-      <span class="mt-1.5 shrink-0 {status === 'idle' ? 'status status-neutral' : status === 'running' ? 'status status-success' : status === 'paused' ? 'status status-warning' : status === 'complete' ? 'status status-primary' : 'status status-error'}"></span>
-      <div class="flex flex-col gap-1.5">
-        <span class="text-sm font-semibold text-base-content">{getStatusText()}</span>
-        {#if session}
-          <div class="flex items-center gap-2">
-            <span class="text-xs font-mono text-secondary">{stageLabelPrefix}{getStageLabel(session.stage)}</span>
-            <span class="badge badge-sm font-bold {getSessionStatusBadgeClass(session.status)}">
-              {getSessionStatusLabel(session.status)}
-            </span>
-            {#if resumeCommand}
-              <code class="text-[0.6875rem] font-mono text-secondary whitespace-nowrap select-all" title={resumeCommand}>
-                {resumeCommand}
-              </code>
-            {/if}
-          </div>
-        {/if}
-      </div>
-    </div>
-    <div class="flex items-center gap-3">
-      <VoiceInput onTranscription={handleTranscription} listenToHotkey />
-    </div>
-  </div>
-
   {#if checkpointQuestion}
     <div class="flex items-start gap-3 px-5 py-3 bg-warning/10 border border-warning/30 rounded-md">
       <span class="flex items-center justify-center w-5 h-5 rounded-full bg-warning/20 text-warning text-xs font-bold shrink-0 mt-0.5">?</span>

@@ -14,9 +14,9 @@
   let canEditPrompt = $derived(task.status === 'backlog' && !!onEditPrompt)
 
   const HANDOFF_PREVIEW_LENGTH = 112
-  const PROMPT_PREVIEW_LENGTH = 148
 
   let handoffExpanded = $state(false)
+  // The initial prompt is collapsed by default; its text is revealed on demand.
   let promptExpanded = $state(false)
   let previousTaskId: string | null = null
 
@@ -27,10 +27,6 @@
     : `${handoffNotes.slice(0, HANDOFF_PREVIEW_LENGTH).trimEnd()}…`)
 
   let initialPromptText = $derived(parseTaskPrompt(task.initial_prompt).text)
-  let promptHasOverflow = $derived(initialPromptText.length > PROMPT_PREVIEW_LENGTH)
-  let visiblePrompt = $derived(promptExpanded || !promptHasOverflow
-    ? initialPromptText
-    : `${initialPromptText.slice(0, PROMPT_PREVIEW_LENGTH).trimEnd()}…`)
 
   let handoffContentId = $derived(`handoff-notes-${task.id}`)
   let promptContentId = $derived(`initial-prompt-${task.id}`)
@@ -44,11 +40,9 @@
   })
 </script>
 
-<section data-task-info-card="documents" data-card-sizing="natural" class="rounded-lg border border-base-300/70 bg-base-100 overflow-hidden shrink-0" aria-label="Documents">
-  <h3 class="m-0 px-3 py-2 text-sm font-semibold text-base-content border-b border-base-300/70">Documents</h3>
-
-  <section class="px-3 py-2 border-b border-base-300/70 flex flex-col gap-2" aria-label="Handoff Notes">
-    <h4 class="m-0 text-sm font-semibold text-base-content">Handoff Notes</h4>
+<section data-task-info-card="handoff-notes" data-card-sizing="natural" class="rounded-lg border border-base-300/70 bg-base-100 overflow-hidden shrink-0" aria-label="Handoff Notes">
+  <h3 class="m-0 px-3 py-2 text-sm font-semibold text-base-content border-b border-base-300/70">Handoff Notes</h3>
+  <div class="px-3 py-2 flex flex-col gap-2">
     {#if handoffNotes}
       <div
         id={handoffContentId}
@@ -74,33 +68,35 @@
         </button>
       </div>
     {/if}
-  </section>
+  </div>
+</section>
 
-  <section class="px-3 py-2 flex flex-col gap-2" aria-label="Initial Prompt">
-    <div class="flex items-center gap-1.5">
-      <h4 class="m-0 text-sm font-semibold text-base-content">Initial Prompt</h4>
-      {#if canEditPrompt}
-        <button
-          type="button"
-          class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-base-content"
-          aria-label="Edit prompt"
-          onclick={() => onEditPrompt?.()}
-        >✎</button>
-      {/if}
-    </div>
-    <div id={promptContentId} role="region" aria-label="Initial Prompt content" class="text-xs text-base-content/65 leading-relaxed whitespace-pre-wrap break-words">{visiblePrompt}</div>
-    {#if promptHasOverflow}
-      <div role="group" aria-label="Initial Prompt actions" class="flex justify-start">
-        <button
-          type="button"
-          class="btn btn-outline btn-xs focus-visible:ring-2 focus-visible:ring-primary rounded"
-          aria-expanded={promptExpanded}
-          aria-controls={promptContentId}
-          onclick={() => { promptExpanded = !promptExpanded }}
-        >
-          {promptExpanded ? 'Show less Initial Prompt' : 'Show full Initial Prompt'}
-        </button>
-      </div>
+<section data-task-info-card="initial-prompt" data-card-sizing="natural" class="rounded-lg border border-base-300/70 bg-base-100 overflow-hidden shrink-0" aria-label="Initial Prompt">
+  <div class="flex items-center gap-1.5 px-3 py-2 border-b border-base-300/70">
+    <h3 class="m-0 text-sm font-semibold text-base-content">Initial Prompt</h3>
+    {#if canEditPrompt}
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-base-content"
+        aria-label="Edit prompt"
+        onclick={() => onEditPrompt?.()}
+      >✎</button>
     {/if}
-  </section>
+  </div>
+  <div class="px-3 py-2 flex flex-col gap-2">
+    {#if promptExpanded}
+      <div id={promptContentId} role="region" aria-label="Initial Prompt content" class="text-xs text-base-content/65 leading-relaxed whitespace-pre-wrap break-words">{initialPromptText}</div>
+    {/if}
+    <div role="group" aria-label="Initial Prompt actions" class="flex justify-start">
+      <button
+        type="button"
+        class="btn btn-outline btn-xs focus-visible:ring-2 focus-visible:ring-primary rounded"
+        aria-expanded={promptExpanded}
+        aria-controls={promptContentId}
+        onclick={() => { promptExpanded = !promptExpanded }}
+      >
+        {promptExpanded ? 'Hide Initial Prompt' : 'Show Initial Prompt'}
+      </button>
+    </div>
+  </div>
 </section>

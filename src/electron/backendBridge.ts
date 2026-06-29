@@ -1,4 +1,4 @@
-import { openExternalUrl } from './shellCommands.js'
+import { openExternalUrl, openPathInEditor } from './shellCommands.js'
 import type { SidecarLaunchConfig } from './sidecar.js'
 
 export interface ElectronInvokeRequest {
@@ -108,6 +108,7 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'fs_read_file',
   'fs_search_files',
   'get_task_diff',
+  'get_task_git_status',
   'get_task_file_contents',
   'get_task_batch_file_contents',
   'add_self_review_comment',
@@ -244,6 +245,14 @@ export async function handleElectronInvoke(request: ElectronInvokeRequest, deps:
       : null
     if (!url) throw new Error('open_url requires a url payload')
     return openExternalUrl(url, deps.openExternal)
+  }
+
+  if (command === 'open_in_editor') {
+    const path = typeof (payload as { path?: unknown } | null)?.path === 'string'
+      ? (payload as { path: string }).path
+      : null
+    if (!path) throw new Error('open_in_editor requires a path payload')
+    return openPathInEditor(path, deps.openExternal)
   }
 
   if (command === 'quit_app') {

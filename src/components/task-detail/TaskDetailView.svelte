@@ -3,7 +3,7 @@
   import { get } from 'svelte/store'
   import { createTaskTerminalPaneLifecycle } from '@openforge/terminal-runtime'
   import { activeProjectId, activeSessions, commandHeld, error, startingTasks, taskActiveView, taskRuntimeInfo } from '../../lib/stores'
-  import { getTaskWorkspace, updateTaskStatus } from '../../lib/ipc'
+  import { getTaskWorkspace, openInEditor, updateTaskStatus } from '../../lib/ipc'
   import { getTaskTitle } from '../../lib/taskTitle'
   import { createTaskTitleRename } from '../../lib/useTaskTitleRename.svelte'
   import { useAppRouter } from '../../lib/router.svelte'
@@ -19,6 +19,7 @@
   import { releaseAllForTask } from '../../lib/terminalPool'
   import type { Action, BoardStatus, Task } from '../../lib/types'
   import AgentPanel from './AgentPanel.svelte'
+  import AgentStatusPill from './AgentStatusPill.svelte'
   import TaskInfoPanel from './TaskInfoPanel.svelte'
   import ResizablePanel from '../shared/ui/ResizablePanel.svelte'
   import SelfReviewView from './SelfReviewView.svelte'
@@ -46,6 +47,27 @@
   let lastTaskId = ''
   let actions = $state<Action[]>([])
   const taskShortcuts = useShortcutRegistry()
+
+  const PANEL_HIDDEN_STORAGE_PREFIX = 'task-info-panel-hidden:'
+
+  function readPanelHidden(taskId: string): boolean {
+    try {
+      return localStorage.getItem(`${PANEL_HIDDEN_STORAGE_PREFIX}${taskId}`) === '1'
+    } catch {
+      return false
+    }
+  }
+
+  let panelHidden = $state(false)
+
+  function togglePanel() {
+    panelHidden = !panelHidden
+    try {
+      localStorage.setItem(`${PANEL_HIDDEN_STORAGE_PREFIX}${task.id}`, panelHidden ? '1' : '0')
+    } catch {
+      // ignore persistence failures (e.g. storage disabled)
+    }
+  }
 
   let displayTitle = $derived(getTaskTitle(task))
   let enabledPluginContributionSources = $derived(
@@ -129,6 +151,7 @@
       lastTaskId = taskId
       const stored = (get(taskActiveView) as Map<string, string>).get(taskId) ?? 'agent'
       activeView = normalizeStoredActiveView(stored)
+      panelHidden = readPanelHidden(taskId)
     }
 
     taskTerminalLifecycle.syncTask(taskId)
@@ -161,12 +184,17 @@
           setActiveView(terminalTaskPaneTab.namespacedId)
         })
       }
+
+      taskShortcuts.register('⌘/', () => {
+        togglePanel()
+      })
     }
 
     return () => {
       taskShortcuts.unregister('⌘1')
       taskShortcuts.unregister('⌘2')
       taskShortcuts.unregister('⌘3')
+      taskShortcuts.unregister('⌘/')
     }
   })
 
@@ -176,6 +204,11 @@
 
   function handleBack() {
     router.resetToBoard()
+  }
+
+  function openInVsCode() {
+    if (workspacePath === null) return
+    void openInEditor(workspacePath)
   }
 
   async function handleStatusChange(newStatus: BoardStatus) {
@@ -264,6 +297,7 @@
             >✎</button>
           </div>
         {/if}
+        <span class="badge badge-sm badge-outline capitalize shrink-0" aria-label="Task status">{task.status}</span>
         {#if task.status === 'backlog'}
           <button
             class="btn btn-primary btn-sm shrink-0 shadow-sm hover:shadow-md transition-shadow"
@@ -295,15 +329,6 @@
     </header>
 
     <div class="flex items-center justify-between h-10 px-6 border-b border-base-300 shrink-0">
-      <div class="flex items-center gap-1 font-mono text-xs">
-        <span class="text-base-content/50">$ cd board</span>
-        <span class="text-base-content/20 mx-1">/</span>
-        <span class="text-base-content/50">{task.status}</span>
-        <span class="text-base-content/20 mx-1">/</span>
-        <span class="text-primary font-semibold">{task.id}</span>
-        <span class="text-base-content/20 mx-1">/</span>
-         <span class="text-primary font-semibold">{findTaskPaneTab(activeView)?.title.toLowerCase().replace(/\s+/g, '_') ?? activeView}</span>
-      </div>
       {#if workspacePath !== null}
         <div class="flex items-center gap-1">
           <button
@@ -323,8 +348,32 @@
               onclick={() => setActiveView(tab.namespacedId)}
             >{tab.title}{#if $commandHeld && terminalTaskPaneTab?.namespacedId === tab.namespacedId}<kbd class="kbd kbd-xs opacity-50">⌘3</kbd>{/if}</button>
           {/each}
+          <span class="mx-1 text-base-content/20 select-none" aria-hidden="true">|</span>
+          <button
+            class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-base-content"
+            aria-label="Open in VS Code"
+            title="Open in VS Code"
+            onclick={openInVsCode}
+          >
+            <svg viewBox="0 0 24 24" class="w-4 h-4" fill="currentColor" aria-hidden="true"><path d="M23.15 2.587 18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/></svg>
+          </button>
         </div>
+      {:else}
+        <div></div>
       {/if}
+      <div class="flex items-center gap-3 min-w-0">
+        {#if workspacePath !== null}
+          <AgentStatusPill taskId={task.id} />
+        {/if}
+        {#if activeView === 'agent' && workspacePath !== null}
+          <button
+            class="btn btn-ghost btn-xs gap-1.5 text-base-content/50 border border-base-300 shrink-0"
+            aria-label={panelHidden ? 'Show task info panel' : 'Hide task info panel'}
+            aria-pressed={!panelHidden}
+            onclick={togglePanel}
+          >{panelHidden ? 'show info' : 'hide info'}{#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘/</kbd>{/if}</button>
+        {/if}
+      </div>
     </div>
 
   <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
@@ -343,15 +392,17 @@
               <kbd class="kbd kbd-xs absolute top-2 right-2 bg-base-content/10 text-base-content/40 border-base-content/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none z-10">E</kbd>
             {/if}
           </div>
-          <ResizablePanel storageKey="task-detail-sidebar" defaultWidth={360} minWidth={200} maxWidth={600} side="right">
-            <div
-              data-testid="task-info-scroll-container"
-              data-scroll-owner="task-info-panel"
-              class="h-full min-h-0 overflow-y-auto bg-base-200 border-l border-base-300"
-            >
-              <TaskInfoPanel task={task} {workspacePath} onEditPrompt={onEdit ? () => onEdit?.(task.id) : undefined} />
-            </div>
-          </ResizablePanel>
+          {#if !panelHidden}
+            <ResizablePanel storageKey="task-detail-sidebar" defaultWidth={360} minWidth={200} maxWidth={600} side="right">
+              <div
+                data-testid="task-info-scroll-container"
+                data-scroll-owner="task-info-panel"
+                class="h-full min-h-0 overflow-y-auto bg-base-200 border-l border-base-300"
+              >
+                <TaskInfoPanel task={task} {workspacePath} onEditPrompt={onEdit ? () => onEdit?.(task.id) : undefined} />
+              </div>
+            </ResizablePanel>
+          {/if}
         {/if}
       </div>
     {/if}

@@ -187,7 +187,9 @@ describe('TaskDetailPane', () => {
     await waitFor(() => expect(screen.getByText('Pull Requests')).toBeTruthy())
     const content = document.body.textContent ?? ''
 
-    expect(content.indexOf('Attention')).toBeLessThan(content.indexOf('Pull Requests'))
+    const attentionMessage = 'Ready to merge'
+    expect(screen.getByText(attentionMessage)).toBeTruthy()
+    expect(content.indexOf(attentionMessage)).toBeLessThan(content.indexOf('Pull Requests'))
     expect(content.indexOf('Pull Requests')).toBeLessThan(content.indexOf('Handoff Notes'))
     expect(content.indexOf('Handoff Notes')).toBeLessThan(content.indexOf('Initial Prompt'))
   })

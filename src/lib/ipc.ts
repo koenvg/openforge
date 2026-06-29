@@ -1,7 +1,7 @@
 import { invokeDesktopCommand as invoke, isElectronDesktopBridgeAvailable } from "./desktopIpc";
 import { normalizeTask } from "./boardStatus"
 import type { JsonValue } from '@openforge/plugin-sdk'
-import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, FileContent, FileEntry, GitBranchInfo, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource } from "./types";
+import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource } from "./types";
 
 type RawTask = Omit<Task, 'status'> & { status: string }
 
@@ -181,6 +181,10 @@ export async function linkPullRequest(taskId: string, prUrl: string): Promise<Pu
   return invoke<PullRequestInfo>("link_pull_request", { taskId, prUrl });
 }
 
+export async function openInEditor(path: string): Promise<void> {
+  return invoke("open_in_editor", { path });
+}
+
 export async function openUrl(url: string): Promise<void> {
   return invoke("open_url", { url });
 }
@@ -321,6 +325,10 @@ export async function getPtyBuffer(taskId: string): Promise<string | null> {
 
 export async function getTaskDiff(taskId: string, includeUncommitted: boolean): Promise<PrFileDiff[]> {
   return invoke<PrFileDiff[]>("get_task_diff", { taskId, includeUncommitted });
+}
+
+export async function getTaskGitStatus(taskId: string): Promise<GitStatusSummary> {
+  return invoke<GitStatusSummary>("get_task_git_status", { taskId });
 }
 
 export async function getTaskFileContents(taskId: string, path: string, oldPath: string | null, status: string, includeUncommitted: boolean): Promise<[string, string]> {

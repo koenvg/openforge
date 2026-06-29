@@ -629,7 +629,7 @@
           <div class="flex flex-col gap-2">
             <div class="flex items-center justify-between">
               <span class="text-sm text-base-content">Info panel</span>
-              <kbd class="kbd kbd-sm">⌘I</kbd>
+              <kbd class="kbd kbd-sm">⌘/</kbd>
             </div>
             <div class="flex items-center justify-between">
               <span class="text-sm text-base-content">Focus agent</span>

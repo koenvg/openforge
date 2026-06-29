@@ -19,5 +19,8 @@ __pycache__/
 .a5c/cache/
 # --- end babysitter managed ---
 
+# Superpowers brainstorming companion artifacts
+.superpowers/
+
 # Local screenshot scratch output (scripts/capture-screenshots.mjs)
 /screenshots/

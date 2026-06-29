@@ -153,10 +153,9 @@
             {#each chips as chip (`${pr.id}-${chip.type}-${chip.label}`)}
               <PrStatusChip {chip} />
             {/each}
-            {#if chips.length === 0}
-              <span class="badge badge-ghost badge-sm">No CI or review signals</span>
+            {#if pr.unaddressed_comment_count > 0}
+              <span class="badge badge-ghost badge-sm">{pr.unaddressed_comment_count} {pr.unaddressed_comment_count === 1 ? 'comment' : 'comments'}</span>
             {/if}
-            <span class="badge badge-ghost badge-sm">{pr.unaddressed_comment_count} {pr.unaddressed_comment_count === 1 ? 'comment' : 'comments'}</span>
           </div>
 
           <PrPipelineChecks ciCheckRuns={pr.ci_check_runs} variant="detail" />

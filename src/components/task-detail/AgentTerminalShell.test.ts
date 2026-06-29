@@ -12,13 +12,6 @@ import AgentTerminalShell from './AgentTerminalShell.svelte'
 
 const baseSession = createAgentSession({ provider: 'pi' })
 
-const stageLabels: Record<string, string> = {
-  read_ticket: 'reading ticket',
-  implement: 'implementing',
-  create_pr: 'creating PR',
-  address_comments: 'addressing comments',
-}
-
 describe('AgentTerminalShell', () => {
   beforeEach(() => {
     resetAgentTerminalTestState()
@@ -28,33 +21,21 @@ describe('AgentTerminalShell', () => {
     {
       providerName: 'Pi',
       session: createAgentSession({ provider: 'pi', pi_session_id: 'pi-sess-abc123' }),
-      runningText: 'Pi agent running...',
-      logPrefix: 'AgentPanel:Pi',
       sessionIdKey: 'pi_session_id' as const,
-      expectedCommand: 'pi --session pi-sess-abc123',
     },
     {
       providerName: 'Claude',
       session: createAgentSession({ provider: 'claude-code', claude_session_id: 'claude-sess-abc123' }),
-      runningText: 'Claude agent running...',
-      logPrefix: 'AgentPanel:Claude',
       sessionIdKey: 'claude_session_id' as const,
-      expectedCommand: 'claude --resume claude-sess-abc123',
     },
     {
       providerName: 'OpenCode',
       session: createAgentSession({ provider: 'opencode', opencode_session_id: 'opencode-sess-abc123' }),
-      runningText: 'Agent running...',
-      logPrefix: 'AgentPanel:OpenCode',
       sessionIdKey: 'opencode_session_id' as const,
-      expectedCommand: 'opencode --session opencode-sess-abc123',
     },
   ])('keeps the pooled terminal attached across $providerName unmount/remount without clearing or killing the PTY', async ({
     session,
-    runningText,
-    logPrefix,
     sessionIdKey,
-    expectedCommand,
   }) => {
     setActiveSession(session)
     mockShellLifecycleState.ptyActive = true
@@ -65,14 +46,10 @@ describe('AgentTerminalShell', () => {
     const firstRender = render(AgentTerminalShell, {
       props: {
         taskId: 'T-1',
-        runningText,
-        logPrefix,
         sessionIdKey,
-        stageLabels,
       },
     })
 
-    expect(await screen.findByText(expectedCommand)).toBeTruthy()
     await vi.waitFor(() => {
       expect(attach).toHaveBeenCalledWith(mockPoolEntry, expect.any(HTMLDivElement))
     })
@@ -87,14 +64,10 @@ describe('AgentTerminalShell', () => {
     render(AgentTerminalShell, {
       props: {
         taskId: 'T-1',
-        runningText,
-        logPrefix,
         sessionIdKey,
-        stageLabels,
       },
     })
 
-    expect(await screen.findByText(expectedCommand)).toBeTruthy()
     await vi.waitFor(() => {
       expect(acquire).toHaveBeenCalledTimes(2)
       expect(attach).toHaveBeenCalledTimes(2)
@@ -115,10 +88,7 @@ describe('AgentTerminalShell', () => {
     render(AgentTerminalShell, {
       props: {
         taskId: 'T-1',
-        runningText: 'Agent running...',
-        logPrefix: 'AgentPanel:OpenCode',
         sessionIdKey: 'opencode_session_id',
-        stageLabels,
       },
     })
 
@@ -135,11 +105,10 @@ describe('AgentTerminalShell', () => {
       shellExited: false,
       currentPtyInstance: 42,
     })
-    expect(screen.getByText('Agent running...')).toBeTruthy()
     expect(screen.queryByText('No active agent session')).toBeNull()
   })
 
-  it('preserves provider-specific chrome while sharing terminal shell behavior', async () => {
+  it('mounts the pooled terminal shell for an active session', async () => {
     setActiveSession(baseSession)
 
     const { acquire, attach } = await import('../../lib/terminalPool')
@@ -147,18 +116,11 @@ describe('AgentTerminalShell', () => {
     render(AgentTerminalShell, {
       props: {
         taskId: 'T-1',
-        runningText: 'Pi agent running...',
-        logPrefix: 'AgentPanel:Pi',
         sessionIdKey: 'pi_session_id',
         rootTestId: 'pi-agent-panel',
-        stageLabels,
       },
     })
 
-    expect(await screen.findByText('Pi agent running...')).toBeTruthy()
-    expect(screen.getByText('// implementing')).toBeTruthy()
-    expect(screen.getByText('RUNNING')).toBeTruthy()
-    expect(screen.getByText('pi --session pi-sess-abc123')).toBeTruthy()
     expect(screen.getByTestId('pi-agent-panel')).toBeTruthy()
     expect(document.querySelector('.shell-terminal-wrapper')).toBeTruthy()
 
@@ -173,10 +135,7 @@ describe('AgentTerminalShell', () => {
       props: {
         taskId: 'T-1',
         isStarting: true,
-        runningText: 'Claude agent running...',
-        logPrefix: 'AgentPanel:Claude',
         sessionIdKey: 'claude_session_id',
-        stageLabels,
       },
     })
 
@@ -185,29 +144,7 @@ describe('AgentTerminalShell', () => {
     expect(screen.queryByText('No active agent session')).toBeNull()
   })
 
-  it('shows Claude permission requests as paused instead of still running', () => {
-    setActiveSession(createAgentSession({
-      provider: 'claude-code',
-      status: 'paused',
-      claude_session_id: 'claude-sess-abc123',
-    }))
-
-    render(AgentTerminalShell, {
-      props: {
-        taskId: 'T-1',
-        runningText: 'Claude agent running...',
-        logPrefix: 'AgentPanel:Claude',
-        sessionIdKey: 'claude_session_id',
-        stageLabels,
-      },
-    })
-
-    expect(screen.getByText('Agent paused')).toBeTruthy()
-    expect(screen.getByText('PAUSED')).toBeTruthy()
-    expect(screen.queryByText('Claude agent running...')).toBeNull()
-  })
-
-  it('shows OpenCode question pauses without permission-specific status text', () => {
+  it('shows OpenCode question pauses as a checkpoint question bar', () => {
     setActiveSession(createAgentSession({
       provider: 'opencode',
       status: 'paused',
@@ -218,16 +155,11 @@ describe('AgentTerminalShell', () => {
     render(AgentTerminalShell, {
       props: {
         taskId: 'T-1',
-        runningText: 'Agent running...',
-        logPrefix: 'AgentPanel:OpenCode',
         sessionIdKey: 'opencode_session_id',
-        stageLabels,
       },
     })
 
-    expect(screen.getByText('Agent paused')).toBeTruthy()
     expect(screen.getByText('Which branch should I use?')).toBeTruthy()
-    expect(screen.queryByText('Agent needs permission')).toBeNull()
   })
 
   it('shows OpenCode checkpoint question text from the shared terminal shell', () => {
@@ -241,10 +173,7 @@ describe('AgentTerminalShell', () => {
     render(AgentTerminalShell, {
       props: {
         taskId: 'T-1',
-        runningText: 'Agent running...',
-        logPrefix: 'AgentPanel:OpenCode',
         sessionIdKey: 'opencode_session_id',
-        stageLabels,
       },
     })
 
@@ -261,10 +190,7 @@ describe('AgentTerminalShell', () => {
     render(AgentTerminalShell, {
       props: {
         taskId: 'T-1',
-        runningText: 'Agent running...',
-        logPrefix: 'AgentPanel:OpenCode',
         sessionIdKey: 'opencode_session_id',
-        stageLabels,
       },
     })
 
@@ -281,10 +207,7 @@ describe('AgentTerminalShell', () => {
     render(AgentTerminalShell, {
       props: {
         taskId: 'T-1',
-        runningText: 'Agent running...',
-        logPrefix: 'AgentPanel:OpenCode',
         sessionIdKey: 'opencode_session_id',
-        stageLabels,
       },
     })
 
@@ -301,10 +224,7 @@ describe('AgentTerminalShell', () => {
     render(AgentTerminalShell, {
       props: {
         taskId: 'T-1',
-        runningText: 'Agent running...',
-        logPrefix: 'AgentPanel:OpenCode',
         sessionIdKey: 'opencode_session_id',
-        stageLabels,
       },
     })
 
@@ -321,10 +241,7 @@ describe('AgentTerminalShell', () => {
     render(AgentTerminalShell, {
       props: {
         taskId: 'T-1',
-        runningText: 'Agent running...',
-        logPrefix: 'AgentPanel:OpenCode',
         sessionIdKey: 'opencode_session_id',
-        stageLabels,
       },
     })
 

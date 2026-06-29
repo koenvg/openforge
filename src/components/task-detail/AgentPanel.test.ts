@@ -153,35 +153,6 @@ describe('AgentPanel (router)', () => {
 
     render(AgentPanel, { props: { taskId: 'T-1' } })
     expect(screen.getByTestId('opencode-agent-panel')).toBeTruthy()
-    expect(screen.getByText('Implementing')).toBeTruthy()
-    expect(screen.getByText('running')).toBeTruthy()
-    expect(screen.getByText('opencode --session oc-sess-1')).toBeTruthy()
-  })
-
-  it('routes claude-code provider sessions through the shared terminal shell', () => {
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: null,
-      stage: 'implement',
-      status: 'running',
-      checkpoint_data: null,
-      pty_instance_id: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'claude-code',
-      claude_session_id: 'claude-sess-1',
-      pi_session_id: null,
-    }
-
-    const sessions = new Map<string, AgentSession>()
-    sessions.set('T-1', session)
-    activeSessions.set(sessions)
-
-    render(AgentPanel, { props: { taskId: 'T-1' } })
-    expect(screen.getByText('RUNNING')).toBeTruthy()
-    expect(screen.getByText('claude --resume claude-sess-1')).toBeTruthy()
   })
 
   it('routes pi provider sessions through the shared terminal shell', () => {
@@ -207,7 +178,6 @@ describe('AgentPanel (router)', () => {
 
     render(AgentPanel, { props: { taskId: 'T-1' } })
     expect(screen.getByTestId('pi-agent-panel')).toBeTruthy()
-    expect(screen.getByText('pi --session pi-sess-1')).toBeTruthy()
   })
 
   it('routes codex provider sessions through the shared terminal shell', () => {
@@ -233,8 +203,6 @@ describe('AgentPanel (router)', () => {
 
     render(AgentPanel, { props: { taskId: 'T-1' } })
     expect(screen.getByTestId('codex-agent-panel')).toBeTruthy()
-    expect(screen.getByText('Codex agent running...')).toBeTruthy()
-    expect(screen.queryByText('codex resume codex-sess-1')).toBeNull()
   })
 
 })
@@ -306,32 +274,6 @@ describe('OpenCode shared shell (via router)', () => {
     vi.clearAllMocks()
   })
 
-  it('shows running session status', () => {
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: null,
-      stage: 'implement',
-      status: 'running',
-      checkpoint_data: null,
-      pty_instance_id: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-    pi_session_id: null,
-    }
-
-    const sessions = new Map<string, AgentSession>()
-    sessions.set('T-1', session)
-    activeSessions.set(sessions)
-
-    render(AgentPanel, { props: { taskId: 'T-1' } })
-    expect(screen.getByText('Implementing')).toBeTruthy()
-    expect(screen.getByText('running')).toBeTruthy()
-  })
-
   it('calls attach with the pooled terminal entry for OpenCode sessions', async () => {
     const { attach } = await import('../../lib/terminalPool')
 
@@ -360,86 +302,9 @@ describe('OpenCode shared shell (via router)', () => {
     })
   })
 
-  it('shows different stage labels', () => {
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: null,
-      stage: 'read_ticket',
-      status: 'running',
-      checkpoint_data: null,
-      pty_instance_id: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-    pi_session_id: null,
-    }
-
-    const sessions = new Map<string, AgentSession>()
-    sessions.set('T-1', session)
-    activeSessions.set(sessions)
-
-    render(AgentPanel, { props: { taskId: 'T-1' } })
-    expect(screen.getByText('Reading Ticket')).toBeTruthy()
-  })
-
-  it('shows completed badge when session is completed', () => {
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: 'oc-sess-1',
-      stage: 'implement',
-      status: 'completed',
-      checkpoint_data: null,
-      pty_instance_id: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-    pi_session_id: null,
-    }
-
-    const sessions = new Map<string, AgentSession>()
-    sessions.set('T-1', session)
-    activeSessions.set(sessions)
-
-    render(AgentPanel, { props: { taskId: 'T-1' } })
-    expect(screen.getByText('completed')).toBeTruthy()
-  })
-
-  it('relies on the provider-owned OpenCode PTY for mounted sessions', async () => {
-    mockPoolEntry.ptyActive = false
-    mockShellLifecycleState.ptyActive = true
-
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: 'oc-sess-1',
-      stage: 'implement',
-      status: 'running',
-      checkpoint_data: null,
-      pty_instance_id: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-      pi_session_id: null,
-    }
-
-    activeSessions.set(new Map([['T-1', session]]))
-
-    render(AgentPanel, { props: { taskId: 'T-1' } })
-
-    await vi.waitFor(() => {
-      expect(screen.getByText('running')).toBeTruthy()
-    })
-  })
-
   it('does not expose an Abort action for a running agent session', async () => {
+    const { attach } = await import('../../lib/terminalPool')
+
     const session: AgentSession = {
       id: 'ses-1',
       ticket_id: 'T-1',
@@ -461,7 +326,7 @@ describe('OpenCode shared shell (via router)', () => {
     render(AgentPanel, { props: { taskId: 'T-1' } })
 
     await vi.waitFor(() => {
-      expect(screen.getByText('running')).toBeTruthy()
+      expect(attach).toHaveBeenCalledWith(mockPoolEntry, expect.any(HTMLDivElement))
     })
     expect(screen.queryByRole('button', { name: 'Abort' })).toBeNull()
   })
@@ -601,13 +466,5 @@ describe('OpenCode shared shell (via router)', () => {
 
     render(AgentPanel, { props: { taskId: 'T-1' } })
     expect(screen.getByText('Run or Bike?')).toBeTruthy()
-  })
-
-  it('renders voice input mic button', async () => {
-    render(AgentPanel, { props: { taskId: 'T-1' } })
-    await vi.waitFor(() => {
-      const button = screen.getByRole('button', { name: 'Start voice input' })
-      expect(button).toBeTruthy()
-    })
   })
 })
