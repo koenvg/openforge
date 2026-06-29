@@ -39,6 +39,8 @@ export type OpenForgePluginSdkSourceAlias = Readonly<{
   replacement: string
 }>
 
+export type OpenForgePluginSdkSourceAliasRecord = Readonly<Record<string, string>>
+
 const OPENFORGE_PLUGIN_SDK_SOURCE_ENTRYPOINTS = Object.freeze([
   ['@openforge/plugin-sdk/frontend', 'packages/plugin-sdk/src/frontend.ts'],
   ['@openforge/plugin-sdk/backend', 'packages/plugin-sdk/src/backend.ts'],
@@ -82,11 +84,22 @@ function sourceAliasReplacement(sourceUrl: URL): string {
   return sourceUrl.pathname
 }
 
-export function createOpenForgePluginSdkSourceAliases(repoRoot: URL | string): OpenForgePluginSdkSourceAlias[] {
+function createOpenForgePluginSdkSourceAliasEntries(repoRoot: URL | string): [string, string][] {
   const rootUrl = repoRootUrl(repoRoot)
 
-  return OPENFORGE_PLUGIN_SDK_SOURCE_ENTRYPOINTS.map(([find, sourcePath]) => ({
+  return OPENFORGE_PLUGIN_SDK_SOURCE_ENTRYPOINTS.map(([find, sourcePath]) => [
     find,
-    replacement: sourceAliasReplacement(new URL(sourcePath, rootUrl)),
+    sourceAliasReplacement(new URL(sourcePath, rootUrl)),
+  ])
+}
+
+export function createOpenForgePluginSdkSourceAliases(repoRoot: URL | string): OpenForgePluginSdkSourceAlias[] {
+  return createOpenForgePluginSdkSourceAliasEntries(repoRoot).map(([find, replacement]) => ({
+    find,
+    replacement,
   }))
+}
+
+export function createOpenForgePluginSdkSourceAliasRecord(repoRoot: URL | string): OpenForgePluginSdkSourceAliasRecord {
+  return Object.fromEntries(createOpenForgePluginSdkSourceAliasEntries(repoRoot))
 }
