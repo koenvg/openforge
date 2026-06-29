@@ -38,13 +38,38 @@
           stagger: { each: 0.14 }
         });
 
+        const finalCta = document.querySelector<HTMLElement>('.final-cta');
+
+        if (finalCta) {
+          const finalCtaCopy = finalCta.querySelector<HTMLElement>('.final-cta-copy');
+          const finalCtaItems = finalCta.querySelectorAll<HTMLElement>('#final-cta-title, .final-cta-lede, .final-cta-actions .button');
+          const finalCtaButtons = finalCta.querySelectorAll<HTMLElement>('.final-cta-actions .button');
+
+          const finalCtaTimeline = gsap.timeline({
+            scrollTrigger: {
+              trigger: finalCta,
+              start: 'top 78%',
+              once: true
+            }
+          });
+
+          if (finalCtaCopy) {
+            finalCtaTimeline.from(finalCtaCopy, { autoAlpha: 0, y: 24, scale: 0.98, duration: 0.58, ease: 'power3.out' });
+          }
+
+          finalCtaTimeline
+            .from(finalCtaItems, { autoAlpha: 0, y: 16, duration: 0.46, ease: 'power3.out', stagger: 0.06 }, finalCtaCopy ? '-=0.28' : 0)
+            .to(finalCtaButtons, { y: -3, scale: 1.025, duration: 0.24, ease: 'power2.out', stagger: 0.05 }, '>-0.02')
+            .to(finalCtaButtons, { y: 0, scale: 1, duration: 0.28, ease: 'power2.out', stagger: 0.05 }, '>-0.02');
+        }
+
         gsap.utils.toArray<HTMLElement>('[data-animate-section]').forEach((section) => {
-          if (section.classList.contains('hero')) return;
+          if (section.classList.contains('hero') || section.classList.contains('final-cta')) return;
 
           const isPluginCustomization = section.classList.contains('plugin-customization');
           const cards = isPluginCustomization
             ? section.querySelectorAll<HTMLElement>('[data-extension-card]')
-            : section.querySelectorAll<HTMLElement>('[data-animate-card], .proof-screenshot-shell, .final-cta-copy');
+            : section.querySelectorAll<HTMLElement>('[data-animate-card], .proof-screenshot-shell');
 
           if (cards.length === 0) return;
 
