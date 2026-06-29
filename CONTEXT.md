@@ -108,6 +108,30 @@ _Avoid_: Timezone policy, provider automation type, project selector
 A PR-visible Git branch OpenForge creates for a **Task** workspace.
 _Avoid_: Prompt branch, run branch, title branch
 
+**Merge Readiness**:
+OpenForge's strict assessment that a pull request has a currently valid merge or enqueue action according to known GitHub requirements.
+_Avoid_: Review readiness, mergeable state, ready for review
+
+**Ready to Merge**:
+A **Merge Readiness** outcome where a pull request can be merged directly without known required blockers.
+_Avoid_: Clean, approved, checks passed
+
+**Ready to Enqueue**:
+A **Merge Readiness** outcome where a pull request satisfies known pre-queue requirements but must enter a merge queue instead of direct merge.
+_Avoid_: Ready to merge, queued
+
+**Queued Pull Request**:
+A pull request accepted by GitHub's merge queue where OpenForge should stay quiet unless GitHub reports failed validation, dequeueing, or required input.
+_Avoid_: Ready to merge, auto-merge, CI running
+
+**Closed Pull Request**:
+A pull request that GitHub closed without merging and that does not by itself mean the **Task** is done.
+_Avoid_: Merged, done, completed PR
+
+**Readiness Unknown**:
+A temporary **Merge Readiness** condition where GitHub has not provided authoritative readiness for the current pull request state.
+_Avoid_: Blocked, ready, failed
+
 **Marketing Site**:
 A public web presence that explains OpenForge and guides people toward installation or documentation.
 _Avoid_: Web app, hosted dashboard, web companion
@@ -182,6 +206,25 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - A **Project Handoff Notes Template** defines the required shape of **Handoff Notes** for Tasks in one project.
 - Existing Tasks may have unstructured historical summaries; **Handoff Notes** are the forward-looking reviewer brief, not a migration requirement.
 - A **Task Branch** identifies the **Task**; human-readable context belongs in the **Task**, **Handoff Notes**, PR title, or PR body rather than in prompt-derived branch text.
+- **Merge Readiness** is stricter than review readiness; it should not mark a pull request ready only because a human could start reviewing it.
+- **Ready to Merge** and **Ready to Enqueue** are distinct first-class **Merge Readiness** outcomes because merge queues replace direct merge action with queue entry.
+- **Ready to Enqueue** remains a first-class handoff even before OpenForge can perform the enqueue action itself.
+- **Ready to Enqueue** implies OpenForge should eventually provide an enqueue action; lacking that action is temporary product debt, not the target workflow.
+- When GitHub requires a merge queue, **Merge Readiness** uses **Ready to Enqueue** rather than **Ready to Merge**.
+- A **Queued Pull Request** is not done until GitHub merges it, but it should stay low-noise while GitHub owns progress.
+- A **Queued Pull Request** stops being a user-action handoff until GitHub reports failed validation, dequeueing, or required input.
+- **Readiness Unknown** should appear as pull request detail rather than a board-level handoff unless another definitive signal exists.
+- Unaddressed pull request comments block **Merge Readiness** only when GitHub or repository policy requires conversation resolution.
+- A pull request being behind its base branch blocks **Merge Readiness** only when GitHub requires the branch to be up to date.
+- Unknown repository merge policy prevents first-class **Merge Readiness** handoffs when the repository appears protected, but simple unprotected repositories may use legacy mergeability signals as a fallback.
+- Active changes-requested reviews block **Merge Readiness** unless GitHub's current authoritative review decision says they no longer block the pull request.
+- Auto-merge being enabled is pull request detail only; it is not **Ready to Merge**, **Ready to Enqueue**, **Queued Pull Request**, or done.
+- Draft pull requests block **Merge Readiness** even when checks pass or reviews are approved.
+- A **Closed Pull Request** is distinct from a merged pull request and does not make a **Task** done unless another completion signal exists.
+- The **Rust Sidecar** owns persisted **Merge Readiness** so board state, actions, plugins, and future CLI surfaces share one source of truth.
+- **Merge Readiness** is scoped to the GitHub identity OpenForge will use for merge or enqueue actions, not to an arbitrary administrator.
+- When multiple pull requests belong to one **Task**, OpenForge should evaluate each pull request independently and surface the most attention-worthy pull request rather than the first open pull request.
+- An immediately actionable **Merge Readiness** outcome is more attention-worthy than a blocked pull request; definitive blockers are more attention-worthy than passive waiting or queued states.
 - The **Marketing Site** presents the desktop product; it does not host **Tasks**, **Implementation Runs**, or **Agent Sessions**.
 - The **Marketing Site Primary Visitor** already understands coding agents and needs help coordinating the workflow around them.
 - The **Marketing Site Primary Conversion** is supported by source-code credibility, documentation, and philosophy rather than replacing them.
@@ -200,6 +243,9 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 >
 > **Dev:** "Can the terminal plugin own the shared terminal pool?"
 > **Domain expert:** "No — the plugin may provide a Terminal Surface, but shared lifecycle belongs to the Terminal Runtime."
+>
+> **Dev:** "The PR is approved and checks passed — should the task say it's ready?"
+> **Domain expert:** "Only if **Merge Readiness** says GitHub has a valid merge or enqueue action now; otherwise show review details without creating a ready handoff."
 
 ## Flagged ambiguities
 
@@ -221,3 +267,5 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - The **Marketing Site First Milestone** could mean the broader ADR 0003 section list or a smaller launch page — resolved: keep the first implementation small and avoid standalone workflow and local-first trust sections.
 - "Agent controls OpenForge through the CLI" could imply unrestricted app automation — resolved: the **Marketing Site Top Reasons** should say agents manage OpenForge **Tasks** through the CLI.
 - The **Marketing Site Promise** could be inflated into agent autonomy claims — resolved: avoid promises of autonomous engineering teams, code-review replacement, one-click shipping, hosted control planes, universal provider support, or enterprise collaboration suites.
+- "Ready" for pull requests could mean ready for human review, direct merge, or merge queue entry — resolved: use **Merge Readiness** only for strict GitHub-actionable merge or enqueue handoffs.
+- Closed pull requests were treated like merged pull requests — resolved: a **Closed Pull Request** is closed without merge and is not a completion signal by itself.
