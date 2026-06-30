@@ -41,10 +41,13 @@ export interface DiffLoaderState {
 
 export function createDiffLoader(deps: {
 	getTaskId: () => string;
+	/** Whether committed changes (merge-base..HEAD) are part of the diff. Defaults to true. */
+	getIncludeCommitted?: () => boolean;
 	getIncludeUncommitted: () => boolean;
 	initialSelectedCommitSha?: string | null;
 	onSelectedCommitShaChange?: (sha: string | null) => void;
 }): DiffLoaderState {
+	const getIncludeCommitted = deps.getIncludeCommitted ?? (() => true);
 	let isLoading = $state(false);
 	let error = $state<string | null>(null);
 	let prComments = $state<PrComment[]>([]);
@@ -72,7 +75,11 @@ export function createDiffLoader(deps: {
 			const diffs =
 				selectedCommitSha !== null
 					? await getCommitDiff(taskId, selectedCommitSha)
-					: await getTaskDiff(taskId, deps.getIncludeUncommitted());
+					: await getTaskDiff(
+							taskId,
+							getIncludeCommitted(),
+							deps.getIncludeUncommitted(),
+						);
 			if (isStale(generation)) return;
 			setSelfReviewDiffFiles(taskId, diffs);
 
@@ -152,7 +159,11 @@ export function createDiffLoader(deps: {
 			const diffs =
 				selectedCommitSha !== null
 					? await getCommitDiff(taskId, selectedCommitSha)
-					: await getTaskDiff(taskId, deps.getIncludeUncommitted());
+					: await getTaskDiff(
+							taskId,
+							getIncludeCommitted(),
+							deps.getIncludeUncommitted(),
+						);
 			if (isStale(generation)) return;
 			setSelfReviewDiffFiles(taskId, diffs);
 		} catch (e) {

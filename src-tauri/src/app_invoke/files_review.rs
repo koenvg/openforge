@@ -184,11 +184,13 @@ pub(super) async fn handle_app_files_review_command(
         }
         "get_task_diff" => {
             let task_id = payload_string(&request.payload, "taskId")?;
+            let include_committed = payload_bool(&request.payload, "includeCommitted")?;
             let include_uncommitted = payload_bool(&request.payload, "includeUncommitted")?;
             let worktree_path = app_task_workspace_path(state, &task_id)?;
             json_value(
                 crate::self_review_runtime::get_task_diff_for_workspace(
                     &worktree_path,
+                    include_committed,
                     include_uncommitted,
                 )
                 .await
@@ -209,6 +211,7 @@ pub(super) async fn handle_app_files_review_command(
             let path = payload_string(&request.payload, "path")?;
             let old_path = payload_optional_string(&request.payload, "oldPath")?;
             let status = payload_string(&request.payload, "status")?;
+            let include_committed = payload_bool(&request.payload, "includeCommitted")?;
             let include_uncommitted = payload_bool(&request.payload, "includeUncommitted")?;
             let worktree_path = app_task_workspace_path(state, &task_id)?;
             json_value(
@@ -217,6 +220,7 @@ pub(super) async fn handle_app_files_review_command(
                     &path,
                     old_path.as_deref(),
                     &status,
+                    include_committed,
                     include_uncommitted,
                 )
                 .await
@@ -229,12 +233,14 @@ pub(super) async fn handle_app_files_review_command(
                 &request.payload,
                 "files",
             )?;
+            let include_committed = payload_bool(&request.payload, "includeCommitted")?;
             let include_uncommitted = payload_bool(&request.payload, "includeUncommitted")?;
             let worktree_path = app_task_workspace_path(state, &task_id)?;
             json_value(
                 crate::self_review_runtime::get_task_batch_file_contents_for_workspace(
                     &worktree_path,
                     &files,
+                    include_committed,
                     include_uncommitted,
                 )
                 .await

@@ -19,7 +19,11 @@ vi.mock("./stores", () => ({
 vi.mock("./ipc", () => ({
 	getTaskDiff:
 		vi.fn<
-			(taskId: string, includeUncommitted: boolean) => Promise<PrFileDiff[]>
+			(
+				taskId: string,
+				includeCommitted: boolean,
+				includeUncommitted: boolean,
+			) => Promise<PrFileDiff[]>
 		>(),
 	getTaskCommits: vi.fn<(taskId: string) => Promise<CommitInfo[]>>(),
 	getCommitDiff:
@@ -235,18 +239,46 @@ describe("createDiffLoader", () => {
 		});
 	});
 
-	it("loadDiff calls IPC with correct taskId and includeUncommitted", async () => {
+	it("loadDiff calls IPC with correct taskId and scope flags", async () => {
 		mockGetTaskDiff.mockResolvedValue([]);
 
 		const loader = createDiffLoader({
 			getTaskId: () => "task-42",
+			getIncludeCommitted: () => true,
 			getIncludeUncommitted: () => true,
 		});
 
 		await loader.loadDiff();
 
-		expect(mockGetTaskDiff).toHaveBeenCalledWith("task-42", true);
+		expect(mockGetTaskDiff).toHaveBeenCalledWith("task-42", true, true);
 		expect(mockGetActiveSelfReviewComments).toHaveBeenCalledWith("task-42");
+	});
+
+	it("loadDiff forwards getIncludeCommitted=false for uncommitted-only review", async () => {
+		mockGetTaskDiff.mockResolvedValue([]);
+
+		const loader = createDiffLoader({
+			getTaskId: () => "task-7",
+			getIncludeCommitted: () => false,
+			getIncludeUncommitted: () => true,
+		});
+
+		await loader.loadDiff();
+
+		expect(mockGetTaskDiff).toHaveBeenCalledWith("task-7", false, true);
+	});
+
+	it("defaults includeCommitted to true when no getter is provided", async () => {
+		mockGetTaskDiff.mockResolvedValue([]);
+
+		const loader = createDiffLoader({
+			getTaskId: () => "task-9",
+			getIncludeUncommitted: () => false,
+		});
+
+		await loader.loadDiff();
+
+		expect(mockGetTaskDiff).toHaveBeenCalledWith("task-9", true, false);
 	});
 
 	it("refresh reloads diff data", async () => {
@@ -259,7 +291,7 @@ describe("createDiffLoader", () => {
 
 		await loader.refresh();
 
-		expect(mockGetTaskDiff).toHaveBeenCalledWith("task-1", false);
+		expect(mockGetTaskDiff).toHaveBeenCalledWith("task-1", true, false);
 		expect(getSelfReviewDiffFiles("task-1")).toEqual([baseDiff]);
 	});
 
@@ -384,7 +416,7 @@ describe("createDiffLoader", () => {
 
 		await loader.loadDiff();
 
-		expect(mockGetTaskDiff).toHaveBeenCalledWith("task-1", false);
+		expect(mockGetTaskDiff).toHaveBeenCalledWith("task-1", true, false);
 		expect(mockGetCommitDiff).not.toHaveBeenCalled();
 		expect(getSelfReviewDiffFiles("task-1")).toEqual([baseDiff]);
 	});

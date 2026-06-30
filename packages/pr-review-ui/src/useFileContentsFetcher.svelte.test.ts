@@ -368,6 +368,38 @@ describe('createFileContentsFetcher', () => {
     cleanup()
   })
 
+  it('resets fetch state when includeCommitted changes', async () => {
+    let includeCommitted = $state(true)
+
+    const batchFn = vi.fn<(files: PrFileDiff[]) => Promise<Map<string, FileContents>>>()
+      .mockResolvedValue(new Map([
+        ['src/test.ts', { oldContent: '', newContent: 'content' }],
+      ]))
+
+    const cleanup = $effect.root(() => {
+      createFileContentsFetcher({
+        getFiles: () => [fileWithPatch],
+        getIncludeCommitted: () => includeCommitted,
+        getIncludeUncommitted: () => true,
+        getFetchFileContents: () => undefined,
+        getBatchFetchFileContents: () => batchFn,
+      })
+    })
+
+    // Wait for initial fetch
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(batchFn).toHaveBeenCalledTimes(1)
+
+    // Toggling committed off (uncommitted-only) changes the diff base, so cached
+    // contents must be discarded and re-fetched.
+    includeCommitted = false
+    flushSync()
+
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(batchFn).toHaveBeenCalledTimes(2)
+    cleanup()
+  })
+
   it('discards in-flight contents when the same filename changes comparison context before results arrive', async () => {
     const comparisonFile: PrFileDiff = {
       ...fileWithPatch,

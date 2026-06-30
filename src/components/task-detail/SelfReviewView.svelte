@@ -40,8 +40,15 @@
 
   let diffViewer = $state<DiffViewer>()
   let fileTreeVisible = $state(true)
+  let includeCommitted = $state(true)
   let includeUncommitted = $state(false)
   let showAddressed = $state(false)
+
+  // At least one scope must always stay selected. Whichever checkbox is the only
+  // one currently on is locked so it can't be unchecked, leaving nothing to show.
+  let committedLocked = $derived(includeCommitted && !includeUncommitted)
+  let uncommittedLocked = $derived(includeUncommitted && !includeCommitted)
+  const lockedScopeTooltip = 'At least one must stay selected — enable the other option to turn this off.'
 
   let sidebarVisible = $state(false)
   let sidebarTab = $state<'pr' | 'notes'>('pr')
@@ -58,6 +65,7 @@
 
   const diffLoader = createDiffLoader({
     getTaskId: () => task.id,
+    getIncludeCommitted: () => includeCommitted,
     getIncludeUncommitted: () => includeUncommitted,
     initialSelectedCommitSha: getInitialSelectedCommitSha(),
     onSelectedCommitShaChange: (sha) => {
@@ -132,6 +140,7 @@
       file.filename,
       file.previous_filename,
       file.status,
+      includeCommitted,
       includeUncommitted,
     )
     return { oldContent, newContent }
@@ -143,7 +152,7 @@
 
     const results = sha !== null
       ? await getCommitBatchFileContents(task.id, sha, requests)
-      : await getTaskBatchFileContents(task.id, requests, includeUncommitted)
+      : await getTaskBatchFileContents(task.id, requests, includeCommitted, includeUncommitted)
 
     const map = new Map<string, FileContents>()
     files.forEach((file, i) => {
@@ -316,20 +325,44 @@
               <div class="px-2 py-1.5 text-[0.65rem] uppercase tracking-wider font-semibold text-base-content/50 border-b border-base-300 bg-base-200">Commit history</div>
               <div class="px-2 py-1.5 border-b border-base-300 bg-base-100/50">
                 {#if diffLoader.selectedCommitSha === null}
-                  <label class="flex items-center gap-1.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      class="checkbox checkbox-xs"
-                      checked={includeUncommitted}
-                      onchange={(e: Event) => {
-                        if (!(e.currentTarget instanceof HTMLInputElement)) return
-                        includeUncommitted = e.currentTarget.checked
-                        restoreAllChangesView()
-                        diffLoader.refresh()
-                      }}
-                    />
-                    <span class="text-base-content/70 text-[0.65rem]">Include uncommitted changes</span>
-                  </label>
+                  <div class="flex flex-col gap-1">
+                    <label
+                      class="flex items-center gap-1.5 {committedLocked ? 'cursor-not-allowed tooltip tooltip-right' : 'cursor-pointer'}"
+                      data-tip={committedLocked ? lockedScopeTooltip : null}
+                    >
+                      <input
+                        type="checkbox"
+                        class="checkbox checkbox-xs"
+                        checked={includeCommitted}
+                        disabled={committedLocked}
+                        onchange={(e: Event) => {
+                          if (!(e.currentTarget instanceof HTMLInputElement)) return
+                          includeCommitted = e.currentTarget.checked
+                          restoreAllChangesView()
+                          diffLoader.refresh()
+                        }}
+                      />
+                      <span class="text-base-content/70 text-[0.65rem]">Include committed changes</span>
+                    </label>
+                    <label
+                      class="flex items-center gap-1.5 {uncommittedLocked ? 'cursor-not-allowed tooltip tooltip-right' : 'cursor-pointer'}"
+                      data-tip={uncommittedLocked ? lockedScopeTooltip : null}
+                    >
+                      <input
+                        type="checkbox"
+                        class="checkbox checkbox-xs"
+                        checked={includeUncommitted}
+                        disabled={uncommittedLocked}
+                        onchange={(e: Event) => {
+                          if (!(e.currentTarget instanceof HTMLInputElement)) return
+                          includeUncommitted = e.currentTarget.checked
+                          restoreAllChangesView()
+                          diffLoader.refresh()
+                        }}
+                      />
+                      <span class="text-base-content/70 text-[0.65rem]">Include uncommitted changes</span>
+                    </label>
+                  </div>
                 {:else}
                   <button
                     class="btn btn-ghost btn-xs h-6 min-h-0 px-2 text-[0.65rem] justify-start"
@@ -407,6 +440,7 @@
               onToggleFileTree={() => { fileTreeVisible = !fileTreeVisible }}
               fetchFileContents={fetchTaskFileContents}
               batchFetchFileContents={batchFetchTaskFileContents}
+              {includeCommitted}
               {includeUncommitted}
               initialScrollTop={getTaskReviewPaneState(task.id).diffScrollTop}
               onScrollTopChange={(diffScrollTop) => updateTaskReviewPaneState(task.id, { diffScrollTop })}
