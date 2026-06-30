@@ -63,6 +63,21 @@ describe('deriveTaskAttention', () => {
     expect(deriveTaskAttention([pr], 0)).toEqual({ message: 'Ready to merge', tone: 'success' })
   })
 
+  it('uses shared merge affordance readiness before changes requested', () => {
+    const pr = makePr({ mergeable_state: 'clean', ci_status: 'success', review_status: 'changes_requested' })
+    expect(deriveTaskAttention([pr], 0)).toEqual({ message: 'Ready to merge', tone: 'success' })
+  })
+
+  it('does not flag ready to merge while CI is pending even when GitHub mergeability is clean', () => {
+    const pr = makePr({ mergeable_state: 'clean', ci_status: 'pending', review_status: 'approved' })
+    expect(deriveTaskAttention([pr], 0)).toEqual({ message: 'Waiting for CI', tone: 'info' })
+  })
+
+  it('does not flag draft PRs as ready to merge', () => {
+    const pr = makePr({ mergeable_state: 'clean', ci_status: 'success', draft: true, review_status: 'approved' })
+    expect(deriveTaskAttention([pr], 0)).toBeNull()
+  })
+
   it('shows waiting-for-CI as low-priority info', () => {
     const pr = makePr({ ci_status: 'pending', review_status: 'pending', mergeable_state: 'unknown' })
     expect(deriveTaskAttention([pr], 0)).toEqual({ message: 'Waiting for CI', tone: 'info' })

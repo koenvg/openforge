@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type PullRequestInfo, type CheckRunInfo, hasMergeConflicts, isReadyToMerge, isQueuedForMerge, splitCheckRuns, preservePullRequestState, isClosedOrMergedPullRequest } from './types'
+import { type PullRequestInfo, type CheckRunInfo, hasMergeConflicts, isReadyToMerge, canMergePullRequest, isQueuedForMerge, splitCheckRuns, preservePullRequestState, isClosedOrMergedPullRequest } from './types'
 
 function createPullRequest(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
   return {
@@ -105,6 +105,28 @@ describe('pull request merge conflict helpers', () => {
 
   it('does not consider a closed PR ready to merge even if mergeable_state is clean', () => {
     expect(isReadyToMerge(createPullRequest({ state: 'closed', mergeable_state: 'clean' }))).toBe(false)
+  })
+})
+
+describe('canMergePullRequest', () => {
+  it('allows user-initiated merge for an open clean PR with passing CI', () => {
+    expect(canMergePullRequest(createPullRequest({ mergeable_state: 'clean', ci_status: 'success' }))).toBe(true)
+  })
+
+  it('allows user-initiated merge for an open behind PR with passing CI', () => {
+    expect(canMergePullRequest(createPullRequest({ mergeable_state: 'behind', ci_status: 'success' }))).toBe(true)
+  })
+
+  it.each([
+    ['pending CI', { ci_status: 'pending', mergeable_state: 'clean' }],
+    ['failing CI', { ci_status: 'failure', mergeable_state: 'clean' }],
+    ['draft PR', { draft: true, mergeable_state: 'clean', ci_status: 'success' }],
+    ['queued PR', { is_queued: true, mergeable_state: 'clean', ci_status: 'success' }],
+    ['unknown mergeability', { mergeable_state: 'unknown', ci_status: 'success' }],
+    ['null mergeability', { mergeable_state: null, ci_status: 'success' }],
+    ['closed PR', { state: 'closed', mergeable_state: 'clean', ci_status: 'success' }],
+  ] satisfies Array<[string, Partial<PullRequestInfo>]>)('blocks user-initiated merge for %s', (_label, overrides) => {
+    expect(canMergePullRequest(createPullRequest(overrides))).toBe(false)
   })
 })
 

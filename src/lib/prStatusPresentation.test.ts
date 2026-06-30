@@ -54,6 +54,27 @@ describe('getPrStatusChips', () => {
       .toContainEqual(expect.objectContaining({ type: 'draft', label: 'Draft', variant: 'muted' }));
   });
 
+  it('only shows Ready to Merge when user-initiated merge is allowed', () => {
+    expect(getPrStatusChips({ ...basePr, ci_status: 'success', mergeable: true, mergeable_state: 'clean' }, 'detail'))
+      .toContainEqual(expect.objectContaining({ type: 'merge', label: 'Ready to Merge', variant: 'done' }));
+
+    for (const pr of [
+      { ...basePr, ci_status: 'pending', mergeable: true, mergeable_state: 'clean' },
+      { ...basePr, draft: true, ci_status: 'success', mergeable: true, mergeable_state: 'clean' },
+      { ...basePr, ci_status: 'success', mergeable: null, mergeable_state: 'unknown' },
+      { ...basePr, ci_status: 'success', mergeable: null, mergeable_state: null },
+    ]) {
+      expect(getPrStatusChips(pr, 'detail').some((chip) => chip.type === 'merge' && chip.label === 'Ready to Merge')).toBe(false);
+    }
+  });
+
+  it('shows queued status instead of Ready to Merge for queued pull requests', () => {
+    const chips = getPrStatusChips({ ...basePr, is_queued: true, ci_status: 'success', mergeable: true, mergeable_state: 'clean' }, 'detail');
+
+    expect(chips).toContainEqual(expect.objectContaining({ type: 'merge', label: 'In Merge Queue', variant: 'done' }));
+    expect(chips.some((chip) => chip.type === 'merge' && chip.label === 'Ready to Merge')).toBe(false);
+  });
+
   it('presents closed pull requests as merged/done status', () => {
     expect(getPrStatusChips({ ...basePr, state: 'closed' }, 'detail'))
       .toContainEqual(expect.objectContaining({ type: 'merge', label: 'Merged', variant: 'merged', icon: 'check' }));

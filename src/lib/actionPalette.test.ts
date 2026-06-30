@@ -115,6 +115,19 @@ describe('getTaskActions', () => {
     expect(ids).not.toContain('merge-pr')
   })
 
+  it.each([
+    ['pending CI', { ci_status: 'pending', mergeable_state: 'clean' }],
+    ['draft PR', { draft: true, mergeable_state: 'clean', ci_status: 'success' }],
+    ['unknown mergeability', { mergeable: null, mergeable_state: 'unknown', ci_status: 'success' }],
+    ['null mergeability', { mergeable: null, mergeable_state: null, ci_status: 'success' }],
+  ] satisfies Array<[string, Partial<PullRequestInfo>]>)('does not return Merge Pull Request action for %s', (_label, overrides) => {
+    const task = makeTask({ status: 'doing' })
+    const pr = makePR(overrides)
+    const actions = getTaskActions(task, [], [pr])
+    const ids = actions.map(a => a.id)
+    expect(ids).not.toContain('merge-pr')
+  })
+
   it('does not return Merge Pull Request action when multiple PRs are ready to merge', () => {
     const task = makeTask({ status: 'doing' })
     const firstPr = makePR({ id: 1, title: 'First ready PR' })

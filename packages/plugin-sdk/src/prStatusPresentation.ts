@@ -1,4 +1,4 @@
-import { hasMergeConflicts, isClosedOrMergedPullRequest, isReadyToMerge, type MergeStatusInfo } from './domain'
+import { canMergePullRequest, hasMergeConflicts, isClosedOrMergedPullRequest, type MergeStatusInfo } from './domain'
 
 export type PrChipSurface = 'compact' | 'detail'
 
@@ -130,7 +130,7 @@ export function getPrStatusChips(pr: PrInput, surface: PrChipSurface): PrStatusC
       icon: surface === 'detail' ? 'check' : undefined,
       surface,
     })
-  } else if (pr.is_queued === false && pr.state === 'open' && isReadyToMerge(pr)) {
+  } else if (canMergePullRequest(pr)) {
     chips.push({
       type: 'merge',
       label: 'Ready to Merge',

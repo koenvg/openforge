@@ -117,6 +117,12 @@ export interface MergeStatusInfo {
   mergeable_state: string | null;
 }
 
+export interface MergeReadinessInfo extends MergeStatusInfo {
+  ci_status?: string | null;
+  draft?: boolean;
+  is_queued?: boolean;
+}
+
 export function isClosedOrMergedPullRequest(state: string): boolean {
   return state === 'closed' || state === 'merged'
 }
@@ -128,11 +134,20 @@ export function hasMergeConflicts(pr: MergeStatusInfo): boolean {
   return mergeableState === 'dirty' || mergeableState === 'conflicting'
 }
 
-/** Check if a PR is ready to merge based on GitHub's mergeable_state field */
+/** Check if GitHub reports a PR as mergeable based on its mergeable_state field */
 export function isReadyToMerge(pr: MergeStatusInfo): boolean {
   if (pr.state !== 'open') return false
   const mergeableState = pr.mergeable_state?.toLowerCase() ?? null
   return mergeableState === 'clean' || mergeableState === 'behind'
+}
+
+/** Check if a user-initiated merge affordance may be shown/executed now. */
+export function canMergePullRequest(pr: MergeReadinessInfo): boolean {
+  if (!isReadyToMerge(pr)) return false
+  if (pr.ci_status === 'pending' || pr.ci_status === 'failure') return false
+  if (pr.draft === true) return false
+  if (pr.is_queued === true) return false
+  return true
 }
 
 export interface QueuedStatusInfo {

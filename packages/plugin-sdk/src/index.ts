@@ -119,6 +119,7 @@ export type {
   ProjectFileTreeNode,
 } from './projectFileTree'
 export {
+  canMergePullRequest,
   hasMergeConflicts,
   isQueuedForMerge,
   isReadyToMerge,

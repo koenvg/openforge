@@ -169,4 +169,27 @@ describe('createTaskActionRunner', () => {
     expect(get(ticketPrs).get(task.id)?.[0].merged_at).not.toBeNull()
     expect(triggerGithubSync).toHaveBeenCalledOnce()
   })
+
+  it.each([
+    ['pending CI', { ci_status: 'pending', mergeable_state: 'clean' }],
+    ['draft PR', { draft: true, mergeable_state: 'clean', ci_status: 'success' }],
+    ['queued PR', { is_queued: true, mergeable_state: 'clean', ci_status: 'success' }],
+    ['unknown mergeability', { mergeable: null, mergeable_state: 'unknown', ci_status: 'success' }],
+    ['null mergeability', { mergeable: null, mergeable_state: null, ci_status: 'success' }],
+  ] satisfies Array<[string, Partial<PullRequestInfo>]>)('does not merge a PR with %s', async (_label, overrides) => {
+    const triggerGithubSync = vi.fn(async () => undefined)
+    const runner = createTaskActionRunner({
+      getActiveProject: () => activeProject,
+      loadTasks: vi.fn(async () => undefined),
+      triggerGithubSync,
+    })
+    const blockedPr = createPullRequest(overrides)
+    ticketPrs.set(new Map([[task.id, [blockedPr]]]))
+
+    await runner.mergeReadyPullRequest(task)
+
+    expect(mergePullRequest).not.toHaveBeenCalled()
+    expect(triggerGithubSync).not.toHaveBeenCalled()
+    expect(get(ticketPrs).get(task.id)).toEqual([blockedPr])
+  })
 })

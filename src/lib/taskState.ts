@@ -1,5 +1,5 @@
 import type { Task, AgentSession, PullRequestInfo } from './types'
-import { isReadyToMerge, hasMergeConflicts, isClosedOrMergedPullRequest } from './types'
+import { canMergePullRequest, hasMergeConflicts, isClosedOrMergedPullRequest, isQueuedForMerge } from './types'
 
 export type TaskState =
   | 'egg' | 'idle' | 'active' | 'needs-input' | 'paused' | 'agent-done' | 'failed' | 'interrupted' | 'done'
@@ -43,13 +43,15 @@ function getPrState(prs: PullRequestInfo[]): TaskState | null {
   // CI failures always take priority over merge readiness
   if (pr.ci_status === 'failure') return 'ci-failed'
 
-  // GitHub's source of truth: mergeable_state tells us if all requirements are met
-  // But only when CI is not pending — pending CI means the result isn't final yet
-  if (isReadyToMerge(pr) && pr.ci_status !== 'pending')
-    return pr.is_queued ? 'pr-queued' : 'ready-to-merge'
-
   // Open PR checks in priority order (when not merge-ready)
   if (pr.review_status === 'changes_requested') return 'changes-requested'
+
+  // Queued PRs are not merge affordances, but they have their own task state.
+  if (isQueuedForMerge(pr)) return 'pr-queued'
+
+  // Shared user-initiated merge readiness keeps task state and merge affordances aligned.
+  if (canMergePullRequest(pr)) return 'ready-to-merge'
+
   if (hasMergeConflicts(pr)) return 'merge-conflict'
   if ((pr.unaddressed_comment_count ?? 0) > 0) return 'unaddressed-comments'
   if (pr.draft) return 'pr-draft'

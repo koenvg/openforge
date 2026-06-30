@@ -284,4 +284,46 @@ describe('TaskPullRequestStatus', () => {
     expect(screen.getByText('Fresh feedback')).toBeTruthy()
     expect(screen.queryByText('Stale feedback')).toBeNull()
   })
+
+  it('shows merge controls for one PR that is ready for user-initiated merge', () => {
+    render(TaskPullRequestStatus, {
+      props: {
+        taskId: 'T-42',
+        taskPrs: [createPullRequest({ ci_status: 'success', mergeable: true, mergeable_state: 'clean' })],
+      },
+    })
+
+    expect(screen.getByRole('button', { name: 'Merge' })).toBeTruthy()
+    expect(screen.getByText('Ready to Merge')).toBeTruthy()
+  })
+
+  it.each([
+    ['pending CI', { ci_status: 'pending', mergeable: true, mergeable_state: 'clean' }],
+    ['draft PR', { draft: true, ci_status: 'success', mergeable: true, mergeable_state: 'clean' }],
+    ['unknown mergeability', { ci_status: 'success', mergeable: null, mergeable_state: 'unknown' }],
+    ['null mergeability', { ci_status: 'success', mergeable: null, mergeable_state: null }],
+  ] satisfies Array<[string, Partial<PullRequestInfo>]>)('does not show merge controls for %s', (_label, overrides) => {
+    render(TaskPullRequestStatus, {
+      props: {
+        taskId: 'T-42',
+        taskPrs: [createPullRequest(overrides)],
+      },
+    })
+
+    expect(screen.queryByRole('button', { name: 'Merge' })).toBeNull()
+    expect(screen.queryByText('Ready to Merge')).toBeNull()
+  })
+
+  it('shows a queued badge without merge controls for queued PRs', () => {
+    render(TaskPullRequestStatus, {
+      props: {
+        taskId: 'T-42',
+        taskPrs: [createPullRequest({ is_queued: true, ci_status: 'success', mergeable: true, mergeable_state: 'clean' })],
+      },
+    })
+
+    expect(screen.getByText('In Merge Queue')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Merge' })).toBeNull()
+    expect(screen.queryByText('Ready to Merge')).toBeNull()
+  })
 })

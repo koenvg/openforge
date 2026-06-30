@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { PullRequestInfo } from '../../lib/types'
-  import { hasMergeConflicts, isClosedOrMergedPullRequest, isReadyToMerge, isQueuedForMerge } from '../../lib/types'
+  import { canMergePullRequest, hasMergeConflicts, isClosedOrMergedPullRequest, isQueuedForMerge } from '../../lib/types'
   import { linkPullRequest, openUrl } from '../../lib/ipc'
   import { getPrStatusChips } from '@openforge/plugin-sdk/prStatusPresentation'
   import { getGitHubMarkdownImageBaseUrl } from '../../lib/githubMarkdown'
@@ -87,7 +87,7 @@
 
   function shouldShowMergeDetails(pr: PullRequestInfo): boolean {
     return (isClosedOrMergedPullRequest(pr.state) && pr.merged_at !== null)
-      || (!isQueuedForMerge(pr) && isReadyToMerge(pr))
+      || canMergePullRequest(pr)
       || orchestration.mergeFeedbackByPr.has(pr.id)
   }
 </script>
@@ -167,7 +167,7 @@
                 <div class="text-[0.7rem] text-base-content/60">Merged on {formatDate(pr.merged_at)}</div>
               {/if}
 
-              {#if !isQueuedForMerge(pr) && isReadyToMerge(pr)}
+              {#if canMergePullRequest(pr)}
                 <div class="flex items-center gap-2">
                   <button
                     class="btn btn-success btn-xs"
