@@ -87,6 +87,17 @@ CREATE TABLE IF NOT EXISTS pull_requests (
     mergeable INTEGER,
     mergeable_state TEXT,
     merged_at INTEGER,
+    merge_readiness_status TEXT,
+    merge_readiness_action TEXT,
+    merge_readiness_blockers TEXT,
+    merge_readiness_warnings TEXT,
+    readiness_source_head_sha TEXT,
+    merge_group_sha TEXT,
+    required_checks_policy_known INTEGER,
+    required_reviews_policy_known INTEGER,
+    merge_queue_required INTEGER,
+    merge_queue_state TEXT,
+    readiness_updated_at INTEGER,
     FOREIGN KEY (ticket_id) REFERENCES tasks(id)
 );
 
@@ -1143,6 +1154,38 @@ CREATE TABLE IF NOT EXISTS roadmap_repo_config (
         }
         Ok(())
     }),
+    // Persist PR merge readiness decisions and the raw GitHub facts that produced
+    // them. Guarded so pre-existing or manually healed databases keep their rows.
+    M::up_with_hook("", |tx| {
+        let table_exists: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='pull_requests'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if !table_exists {
+            return Ok(());
+        }
+
+        for (column, sql) in pull_request_readiness_columns() {
+            let exists: bool = tx
+                .query_row(
+                    &format!(
+                        "SELECT COUNT(*) > 0 FROM pragma_table_info('pull_requests') WHERE name = '{}'",
+                        column
+                    ),
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap_or(false);
+            if !exists {
+                tx.execute(sql, [])
+                    .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            }
+        }
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -1293,11 +1336,56 @@ pub(super) fn ensure_mergeability_columns(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// Backfills the `is_queued` column on the PR tables for databases that were
-/// already migrated past the (mid-list) column-adding migration, which
-/// `rusqlite_migration` skips once `user_version` is beyond it. Idempotent and
-/// version-independent, so it heals existing databases on startup. Mirrors
-/// [`ensure_mergeability_columns`].
+/// Column definitions for persisted PR merge readiness and raw GitHub readiness facts.
+fn pull_request_readiness_columns() -> [(&'static str, &'static str); 11] {
+    [
+        (
+            "merge_readiness_status",
+            "ALTER TABLE pull_requests ADD COLUMN merge_readiness_status TEXT",
+        ),
+        (
+            "merge_readiness_action",
+            "ALTER TABLE pull_requests ADD COLUMN merge_readiness_action TEXT",
+        ),
+        (
+            "merge_readiness_blockers",
+            "ALTER TABLE pull_requests ADD COLUMN merge_readiness_blockers TEXT",
+        ),
+        (
+            "merge_readiness_warnings",
+            "ALTER TABLE pull_requests ADD COLUMN merge_readiness_warnings TEXT",
+        ),
+        (
+            "readiness_source_head_sha",
+            "ALTER TABLE pull_requests ADD COLUMN readiness_source_head_sha TEXT",
+        ),
+        (
+            "merge_group_sha",
+            "ALTER TABLE pull_requests ADD COLUMN merge_group_sha TEXT",
+        ),
+        (
+            "required_checks_policy_known",
+            "ALTER TABLE pull_requests ADD COLUMN required_checks_policy_known INTEGER",
+        ),
+        (
+            "required_reviews_policy_known",
+            "ALTER TABLE pull_requests ADD COLUMN required_reviews_policy_known INTEGER",
+        ),
+        (
+            "merge_queue_required",
+            "ALTER TABLE pull_requests ADD COLUMN merge_queue_required INTEGER",
+        ),
+        (
+            "merge_queue_state",
+            "ALTER TABLE pull_requests ADD COLUMN merge_queue_state TEXT",
+        ),
+        (
+            "readiness_updated_at",
+            "ALTER TABLE pull_requests ADD COLUMN readiness_updated_at INTEGER",
+        ),
+    ]
+}
+
 pub(super) fn ensure_is_queued_columns(conn: &Connection) -> Result<()> {
     for table in ["pull_requests", "authored_prs"] {
         let has_table: bool = conn.query_row(
@@ -1367,6 +1455,35 @@ pub(super) fn ensure_labels_columns(conn: &Connection) -> Result<()> {
 
         if !exists {
             conn.execute(&format!("ALTER TABLE {} ADD COLUMN labels TEXT", table), [])?;
+        }
+    }
+
+    Ok(())
+}
+
+pub(super) fn ensure_pull_request_readiness_columns(conn: &Connection) -> Result<()> {
+    let has_table: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='pull_requests'",
+        [],
+        |r| r.get(0),
+    )?;
+
+    if !has_table {
+        return Ok(());
+    }
+
+    for (column, sql) in pull_request_readiness_columns() {
+        let exists: bool = conn.query_row(
+            &format!(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('pull_requests') WHERE name = '{}'",
+                column
+            ),
+            [],
+            |r| r.get(0),
+        )?;
+
+        if !exists {
+            conn.execute(sql, [])?;
         }
     }
 
@@ -1518,7 +1635,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = LATEST_USER_VERSION - 6;
+            let previous_version = LATEST_USER_VERSION - 7;
             conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
                 .expect("set user_version");
             conn.execute(
@@ -1582,7 +1699,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = LATEST_USER_VERSION - 7;
+            let previous_version = LATEST_USER_VERSION - 8;
             conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
                 .expect("set user_version");
             conn.execute("CREATE TABLE plugins (id TEXT PRIMARY KEY)", [])
@@ -1761,7 +1878,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = LATEST_USER_VERSION - 8;
+            let previous_version = LATEST_USER_VERSION - 9;
             conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
                 .expect("set user_version");
             conn.execute_batch(
@@ -2060,6 +2177,88 @@ mod tests {
             "Fresh DB should have user_version={} after migrations, got {}",
             LATEST_USER_VERSION, uv
         );
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_pull_request_readiness_columns_backfilled_for_upgraded_db() {
+        let path = std::env::temp_dir().join(format!(
+            "test_pr_readiness_backfill_{}.db",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+
+        {
+            let conn = rusqlite::Connection::open(&path).expect("open legacy db");
+            conn.execute_batch(
+                r#"
+                CREATE TABLE tasks (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    initial_prompt TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );
+                CREATE TABLE pull_requests (
+                    id INTEGER PRIMARY KEY,
+                    pr_number INTEGER NOT NULL DEFAULT 0,
+                    ticket_id TEXT NOT NULL,
+                    repo_owner TEXT NOT NULL,
+                    repo_name TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    url TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    head_sha TEXT NOT NULL DEFAULT '',
+                    ci_status TEXT,
+                    ci_check_runs TEXT,
+                    last_polled_at INTEGER DEFAULT 0,
+                    review_status TEXT,
+                    mergeable INTEGER,
+                    mergeable_state TEXT,
+                    merged_at INTEGER,
+                    draft INTEGER NOT NULL DEFAULT 0,
+                    is_queued INTEGER NOT NULL DEFAULT 0
+                );
+                INSERT INTO tasks (id, title, status, created_at, updated_at)
+                VALUES ('T-100', 'Legacy task', 'doing', 1, 1);
+                INSERT INTO pull_requests (id, pr_number, ticket_id, repo_owner, repo_name, title, url, state, created_at, updated_at)
+                VALUES (42, 42, 'T-100', 'acme', 'repo', 'Legacy PR', 'https://github.com/acme/repo/pull/42', 'open', 1, 1);
+                "#,
+            )
+            .expect("create legacy schema");
+            conn.execute(&format!("PRAGMA user_version = {LATEST_USER_VERSION}"), [])
+                .expect("pin user_version past migration");
+        }
+
+        let db = Database::new(path.clone()).expect("reopen upgraded DB");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        for (column, _) in pull_request_readiness_columns() {
+            let exists: bool = conn
+                .query_row(
+                    &format!(
+                        "SELECT COUNT(*) > 0 FROM pragma_table_info('pull_requests') WHERE name = '{column}'"
+                    ),
+                    [],
+                    |row| row.get(0),
+                )
+                .expect("query readiness column");
+            assert!(exists, "{column} should be backfilled");
+        }
+
+        let preserved_title: String = conn
+            .query_row("SELECT title FROM pull_requests WHERE id = 42", [], |row| {
+                row.get(0)
+            })
+            .expect("legacy PR row should remain");
+        assert_eq!(preserved_title, "Legacy PR");
 
         drop(conn);
         drop(db);
@@ -2659,7 +2858,7 @@ mod tests {
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
             conn.execute(
-                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 11),
+                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 12),
                 [],
             )
             .expect("set pre-upgrade user_version");
@@ -2705,7 +2904,7 @@ mod tests {
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
             conn.execute(
-                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 11),
+                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 12),
                 [],
             )
             .expect("set pre-upgrade user_version");

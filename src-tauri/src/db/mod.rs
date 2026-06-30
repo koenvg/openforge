@@ -24,7 +24,7 @@ pub use authored_prs::AuthoredPrRow;
 pub use board_status::BoardStatus;
 pub use plugins::PluginRow;
 pub use projects::{ProjectAttentionRow, ProjectRow};
-pub use pull_requests::{PrCommentRow, PrRow};
+pub use pull_requests::{PrCommentRow, PrMergeReadinessFacts, PrRow};
 pub use review::ReviewPrRow;
 pub use task_workspaces::TaskWorkspaceRow;
 pub use tasks::{NewTaskOptions, TaskLabelRow, TaskRow};
@@ -81,6 +81,7 @@ impl Database {
         migrations::ensure_mergeability_columns(&conn)?;
         migrations::ensure_is_queued_columns(&conn)?;
         migrations::ensure_labels_columns(&conn)?;
+        migrations::ensure_pull_request_readiness_columns(&conn)?;
         migrations::ensure_task_dependency_table(&conn)?;
         migrations::ensure_task_label_tables(&conn)?;
         migrations::ensure_plugin_tables(&conn)?;

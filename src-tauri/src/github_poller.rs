@@ -29,7 +29,7 @@
 //! - Skips GitHub syncing when no token is configured
 
 use crate::app_events::{publish_app_event, AppEventSender};
-use crate::db::{Database, PrRow, ProjectRow};
+use crate::db::{Database, PrMergeReadinessFacts, PrRow, ProjectRow};
 use crate::github_client::{
     aggregate_ci_status, aggregate_review_status, deduplicate_check_runs, filter_to_required,
     CheckRunsResponse, CombinedStatusResponse, GitHubClient, PrComment, PrReview,
@@ -851,6 +851,7 @@ struct PollSinglePrResult {
     is_queued: bool,
     required_check_names: Vec<String>,
     required_approving_count: Option<usize>,
+    readiness_facts: PrMergeReadinessFacts,
     error: Option<String>,
 }
 
@@ -945,7 +946,7 @@ async fn poll_single_pr(
                     pr_id: pr.id,
                     ticket_id: pr.ticket_id,
                     pr_title: pr.title,
-                    head_sha: pr.head_sha,
+                    head_sha: pr.head_sha.clone(),
                     old_ci_status,
                     old_review_status,
                     comments: vec![],
@@ -958,6 +959,19 @@ async fn poll_single_pr(
                     is_queued: false,
                     required_check_names: vec![],
                     required_approving_count: None,
+                    readiness_facts: PrMergeReadinessFacts {
+                        status: None,
+                        action: None,
+                        blockers_json: None,
+                        warnings_json: None,
+                        source_head_sha: Some(pr.head_sha),
+                        merge_group_sha: None,
+                        required_checks_policy_known: None,
+                        required_reviews_policy_known: None,
+                        merge_queue_required: None,
+                        merge_queue_state: None,
+                        updated_at: 0,
+                    },
                     error: Some(format!("Failed to fetch comments: {}", e)),
                 };
             }
@@ -1094,6 +1108,42 @@ async fn poll_single_pr(
         Err(_) => (vec![], None),
     };
 
+    let readiness_ci_status = match (&check_runs, &combined_status) {
+        (Some(check_runs), Some(combined_status)) => {
+            let check_runs = deduplicate_check_runs(check_runs);
+            if required_check_names.is_empty() {
+                Some(aggregate_ci_status(&check_runs, combined_status))
+            } else {
+                let (filtered_runs, filtered_combined) =
+                    filter_to_required(&check_runs, combined_status, &required_check_names);
+                if filtered_runs.check_runs.is_empty() && filtered_combined.statuses.is_empty() {
+                    Some("pending".to_string())
+                } else {
+                    Some(aggregate_ci_status(&filtered_runs, &filtered_combined))
+                }
+            }
+        }
+        _ => old_ci_status.clone(),
+    };
+    let readiness_review_status = reviews
+        .as_ref()
+        .map(|reviews| {
+            aggregate_review_status(reviews, has_requested_reviewers, required_approving_count)
+        })
+        .or_else(|| old_review_status.clone());
+    let readiness_facts = build_merge_readiness_facts(
+        &pr,
+        pr_details_result.as_ref().ok(),
+        mergeable,
+        mergeable_state.as_deref(),
+        readiness_ci_status.as_deref(),
+        readiness_review_status.as_deref(),
+        is_queued,
+        !required_check_names.is_empty(),
+        required_approving_count.is_some(),
+        None,
+    );
+
     PollSinglePrResult {
         pr_id: pr.id,
         ticket_id: pr.ticket_id,
@@ -1111,6 +1161,7 @@ async fn poll_single_pr(
         is_queued,
         required_check_names,
         required_approving_count,
+        readiness_facts,
         error: None,
     }
 }
@@ -1355,6 +1406,24 @@ async fn poll_prs_for_project(
         ) {
             error!(
                 "[GitHub Poller] Failed to update mergeability for PR #{}: {}",
+                result.pr_id, e
+            );
+        }
+
+        let mut readiness_facts = result.readiness_facts;
+        if persist_result.new_comment_count > 0 {
+            readiness_facts.warnings_json = add_readiness_warning(
+                readiness_facts.warnings_json,
+                MergeReadinessReason {
+                    code: "unresolved_conversations",
+                    message: "Pull request has unresolved conversations.",
+                },
+            );
+        }
+        readiness_facts.updated_at = now;
+        if let Err(e) = db_lock.update_pr_merge_readiness(result.pr_id, &readiness_facts) {
+            error!(
+                "[GitHub Poller] Failed to update merge readiness for PR #{}: {}",
                 result.pr_id, e
             );
         }
@@ -1641,6 +1710,216 @@ fn mergeability_after_pr_details(
     }
 }
 
+#[derive(Serialize)]
+struct MergeReadinessReason {
+    code: &'static str,
+    message: &'static str,
+}
+
+fn readiness_reason_json(reasons: &[MergeReadinessReason]) -> Option<String> {
+    serde_json::to_string(reasons).ok()
+}
+
+fn add_readiness_warning(
+    warnings_json: Option<String>,
+    reason: MergeReadinessReason,
+) -> Option<String> {
+    let mut warnings = warnings_json
+        .as_deref()
+        .and_then(|raw| serde_json::from_str::<Vec<serde_json::Value>>(raw).ok())
+        .unwrap_or_default();
+
+    let already_present = warnings
+        .iter()
+        .any(|warning| warning.get("code").and_then(|code| code.as_str()) == Some(reason.code));
+
+    if !already_present {
+        warnings.push(serde_json::json!({
+            "code": reason.code,
+            "message": reason.message,
+        }));
+    }
+
+    serde_json::to_string(&warnings).ok()
+}
+
+fn extra_string_at_path(extra: &serde_json::Value, path: &[&str]) -> Option<String> {
+    let mut current = extra;
+    for segment in path {
+        current = current.get(*segment)?;
+    }
+    current.as_str().map(ToOwned::to_owned)
+}
+
+fn merge_group_sha_from_details(details: &crate::github_client::PullRequest) -> Option<String> {
+    [
+        ["merge_group_sha"].as_slice(),
+        ["merge_group", "head_sha"].as_slice(),
+        ["merge_queue_entry", "head_sha"].as_slice(),
+        ["merge_queue_entry", "merge_group", "head_sha"].as_slice(),
+    ]
+    .into_iter()
+    .find_map(|path| extra_string_at_path(&details.extra, path))
+}
+
+fn merge_queue_state_from_details(
+    details: Option<&crate::github_client::PullRequest>,
+    is_queued: bool,
+    merge_queue_required: Option<bool>,
+) -> Option<String> {
+    let detail_state = details.and_then(|details| {
+        extra_string_at_path(&details.extra, &["merge_queue_entry", "state"])
+            .or_else(|| extra_string_at_path(&details.extra, &["merge_queue_entry", "status"]))
+    });
+
+    match (detail_state, is_queued, merge_queue_required) {
+        (Some(state), _, _) => Some(state),
+        (None, true, _) => Some("queued".to_string()),
+        (None, false, Some(true)) => Some("not_queued".to_string()),
+        _ => None,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_merge_readiness_facts(
+    pr: &PrRow,
+    details: Option<&crate::github_client::PullRequest>,
+    mergeable: Option<bool>,
+    mergeable_state: Option<&str>,
+    ci_status: Option<&str>,
+    review_status: Option<&str>,
+    is_queued: bool,
+    required_checks_policy_known: bool,
+    required_reviews_policy_known: bool,
+    updated_at: Option<i64>,
+) -> PrMergeReadinessFacts {
+    let mut blockers = Vec::new();
+    let mut warnings = Vec::new();
+    let mergeable_state_lower = mergeable_state.map(str::to_ascii_lowercase);
+    let ci_status = ci_status.map(str::to_ascii_lowercase);
+    let review_status = review_status.map(str::to_ascii_lowercase);
+
+    if pr.state != "open" {
+        blockers.push(if pr.state == "merged" {
+            MergeReadinessReason {
+                code: "already_merged",
+                message: "Pull request is already merged.",
+            }
+        } else {
+            MergeReadinessReason {
+                code: "pull_request_closed",
+                message: "Pull request is closed.",
+            }
+        });
+    }
+
+    if pr.draft {
+        blockers.push(MergeReadinessReason {
+            code: "draft",
+            message: "Pull request is still marked as draft.",
+        });
+    }
+
+    if review_status.as_deref() == Some("changes_requested") {
+        blockers.push(MergeReadinessReason {
+            code: "changes_requested",
+            message: "Review changes have been requested.",
+        });
+    }
+
+    match ci_status.as_deref() {
+        Some("pending" | "queued" | "in_progress") => blockers.push(MergeReadinessReason {
+            code: "checks_pending",
+            message: "Required checks are still running.",
+        }),
+        Some("failure" | "error" | "cancelled" | "timed_out" | "action_required") => {
+            blockers.push(MergeReadinessReason {
+                code: "checks_failed",
+                message: "Required checks are failing.",
+            });
+        }
+        _ => {}
+    }
+
+    match mergeable_state_lower.as_deref() {
+        Some("unstable") => blockers.push(MergeReadinessReason {
+            code: "checks_failed",
+            message: "GitHub reports failing or unstable required checks.",
+        }),
+        Some("dirty" | "conflicting") => blockers.push(MergeReadinessReason {
+            code: "merge_conflict",
+            message: "Pull request has merge conflicts.",
+        }),
+        Some("blocked") => blockers.push(MergeReadinessReason {
+            code: "mergeability_blocked",
+            message: "GitHub reports that mergeability is blocked.",
+        }),
+        Some("behind") => warnings.push(MergeReadinessReason {
+            code: "branch_behind",
+            message: "Branch is behind the base branch.",
+        }),
+        _ => {}
+    }
+
+    if pr.unaddressed_comment_count > 0 {
+        warnings.push(MergeReadinessReason {
+            code: "unresolved_conversations",
+            message: "Pull request has unresolved conversations.",
+        });
+    }
+
+    let merge_queue_required = if is_queued || mergeable_state_lower.as_deref() == Some("queued") {
+        Some(true)
+    } else {
+        None
+    };
+    let merge_queue_state =
+        merge_queue_state_from_details(details, is_queued, merge_queue_required);
+
+    let (status, action) = if !blockers.is_empty() {
+        (Some("blocked"), Some("resolve_blockers"))
+    } else if is_queued {
+        (Some("queued_pull_request"), Some("wait_for_queue"))
+    } else if merge_queue_required == Some(true) {
+        (Some("ready_to_enqueue"), Some("enqueue"))
+    } else if matches!(mergeable_state_lower.as_deref(), Some("clean" | "behind"))
+        || (mergeable == Some(true)
+            && mergeable_state_lower.is_none()
+            && matches!(ci_status.as_deref(), None | Some("none"))
+            && matches!(review_status.as_deref(), None | Some("none")))
+    {
+        (Some("ready_to_merge"), Some("merge"))
+    } else if mergeable_state_lower.as_deref() == Some("unknown") || mergeable.is_none() {
+        warnings.push(MergeReadinessReason {
+            code: "mergeability_unknown",
+            message: "GitHub has not reported definitive mergeability yet.",
+        });
+        (Some("readiness_unknown"), Some("wait_for_github"))
+    } else {
+        blockers.push(MergeReadinessReason {
+            code: "mergeability_blocked",
+            message: "Pull request is not mergeable.",
+        });
+        (Some("blocked"), Some("resolve_blockers"))
+    };
+
+    PrMergeReadinessFacts {
+        status: status.map(ToOwned::to_owned),
+        action: action.map(ToOwned::to_owned),
+        blockers_json: readiness_reason_json(&blockers),
+        warnings_json: readiness_reason_json(&warnings),
+        source_head_sha: details
+            .map(|details| details.head.sha.clone())
+            .or_else(|| Some(pr.head_sha.clone())),
+        merge_group_sha: details.and_then(merge_group_sha_from_details),
+        required_checks_policy_known: Some(required_checks_policy_known),
+        required_reviews_policy_known: Some(required_reviews_policy_known),
+        merge_queue_required,
+        merge_queue_state,
+        updated_at: updated_at.unwrap_or(0),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1830,6 +2109,17 @@ mod tests {
                 updated_at: 2,
                 draft: false,
                 is_queued: false,
+                merge_readiness_status: None,
+                merge_readiness_action: None,
+                merge_readiness_blockers: None,
+                merge_readiness_warnings: None,
+                readiness_source_head_sha: None,
+                merge_group_sha: None,
+                required_checks_policy_known: None,
+                required_reviews_policy_known: None,
+                merge_queue_required: None,
+                merge_queue_state: None,
+                readiness_updated_at: None,
                 unaddressed_comment_count: 0,
             },
             PrRow {
@@ -1852,6 +2142,17 @@ mod tests {
                 updated_at: 2,
                 draft: false,
                 is_queued: false,
+                merge_readiness_status: None,
+                merge_readiness_action: None,
+                merge_readiness_blockers: None,
+                merge_readiness_warnings: None,
+                readiness_source_head_sha: None,
+                merge_group_sha: None,
+                required_checks_policy_known: None,
+                required_reviews_policy_known: None,
+                merge_queue_required: None,
+                merge_queue_state: None,
+                readiness_updated_at: None,
                 unaddressed_comment_count: 0,
             },
         ];
@@ -1951,6 +2252,30 @@ mod tests {
         let timestamp = "invalid";
         let result = parse_github_timestamp(timestamp);
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_add_readiness_warning_deduplicates_unresolved_conversations() {
+        let warnings = add_readiness_warning(
+            Some(r#"[{"code":"branch_behind","message":"Branch is behind."}]"#.to_string()),
+            MergeReadinessReason {
+                code: "unresolved_conversations",
+                message: "Pull request has unresolved conversations.",
+            },
+        )
+        .expect("warnings should serialize");
+
+        let warnings = add_readiness_warning(
+            Some(warnings),
+            MergeReadinessReason {
+                code: "unresolved_conversations",
+                message: "Pull request has unresolved conversations.",
+            },
+        )
+        .expect("warnings should serialize");
+
+        assert_eq!(warnings.matches("unresolved_conversations").count(), 1);
+        assert!(warnings.contains("branch_behind"));
     }
 
     #[test]
@@ -2243,6 +2568,19 @@ mod tests {
             is_queued: false,
             required_check_names: vec![],
             required_approving_count: None,
+            readiness_facts: PrMergeReadinessFacts {
+                status: None,
+                action: None,
+                blockers_json: None,
+                warnings_json: None,
+                source_head_sha: Some("abc123".to_string()),
+                merge_group_sha: None,
+                required_checks_policy_known: None,
+                required_reviews_policy_known: None,
+                merge_queue_required: None,
+                merge_queue_state: None,
+                updated_at: 0,
+            },
             error: None,
         }
     }

@@ -24,7 +24,44 @@ pub struct PrRow {
     pub updated_at: i64,
     pub draft: bool,
     pub is_queued: bool,
+    pub merge_readiness_status: Option<String>,
+    pub merge_readiness_action: Option<String>,
+    pub merge_readiness_blockers: Option<String>,
+    pub merge_readiness_warnings: Option<String>,
+    pub readiness_source_head_sha: Option<String>,
+    pub merge_group_sha: Option<String>,
+    pub required_checks_policy_known: Option<bool>,
+    pub required_reviews_policy_known: Option<bool>,
+    pub merge_queue_required: Option<bool>,
+    pub merge_queue_state: Option<String>,
+    pub readiness_updated_at: Option<i64>,
     pub unaddressed_comment_count: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PrMergeReadinessFacts {
+    pub status: Option<String>,
+    pub action: Option<String>,
+    pub blockers_json: Option<String>,
+    pub warnings_json: Option<String>,
+    pub source_head_sha: Option<String>,
+    pub merge_group_sha: Option<String>,
+    pub required_checks_policy_known: Option<bool>,
+    pub required_reviews_policy_known: Option<bool>,
+    pub merge_queue_required: Option<bool>,
+    pub merge_queue_state: Option<String>,
+    pub updated_at: i64,
+}
+
+fn current_unix_timestamp() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+fn terminal_readiness_blockers_json(code: &str, message: &str) -> String {
+    serde_json::json!([{ "code": code, "message": message }]).to_string()
 }
 
 fn read_pr_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrRow> {
@@ -48,7 +85,18 @@ fn read_pr_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrRow> {
         updated_at: row.get(16)?,
         draft: row.get(17)?,
         is_queued: row.get(18)?,
-        unaddressed_comment_count: row.get(19)?,
+        merge_readiness_status: row.get(19)?,
+        merge_readiness_action: row.get(20)?,
+        merge_readiness_blockers: row.get(21)?,
+        merge_readiness_warnings: row.get(22)?,
+        readiness_source_head_sha: row.get(23)?,
+        merge_group_sha: row.get(24)?,
+        required_checks_policy_known: row.get(25)?,
+        required_reviews_policy_known: row.get(26)?,
+        merge_queue_required: row.get(27)?,
+        merge_queue_state: row.get(28)?,
+        readiness_updated_at: row.get(29)?,
+        unaddressed_comment_count: row.get(30)?,
     })
 }
 
@@ -72,6 +120,7 @@ impl super::Database {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT id, pr_number, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, mergeable, mergeable_state, merged_at, created_at, updated_at, draft, is_queued,
+                    merge_readiness_status, merge_readiness_action, merge_readiness_blockers, merge_readiness_warnings, readiness_source_head_sha, merge_group_sha, required_checks_policy_known, required_reviews_policy_known, merge_queue_required, merge_queue_state, readiness_updated_at,
                     (SELECT COUNT(*) FROM pr_comments WHERE pr_id = pull_requests.id AND addressed = 0) as unaddressed_comment_count
              FROM pull_requests
              WHERE state = 'open'
@@ -91,6 +140,7 @@ impl super::Database {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT id, pr_number, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, mergeable, mergeable_state, merged_at, created_at, updated_at, draft, is_queued,
+                    merge_readiness_status, merge_readiness_action, merge_readiness_blockers, merge_readiness_warnings, readiness_source_head_sha, merge_group_sha, required_checks_policy_known, required_reviews_policy_known, merge_queue_required, merge_queue_state, readiness_updated_at,
                     (SELECT COUNT(*) FROM pr_comments WHERE pr_id = pull_requests.id AND addressed = 0) as unaddressed_comment_count
              FROM pull_requests
              ORDER BY updated_at DESC",
@@ -189,7 +239,16 @@ impl super::Database {
                repo_name=excluded.repo_name,
                title=excluded.title,
                url=excluded.url,
-               state=excluded.state,
+               state=CASE
+                 WHEN pull_requests.state = 'merged' AND excluded.state IN ('open', 'closed') THEN pull_requests.state
+                 WHEN pull_requests.state = 'closed' AND excluded.state = 'open' THEN pull_requests.state
+                 ELSE excluded.state
+               END,
+               merged_at=CASE
+                 WHEN pull_requests.state = 'merged' AND excluded.state IN ('open', 'closed') THEN pull_requests.merged_at
+                 WHEN pull_requests.state = 'closed' AND excluded.state = 'open' THEN pull_requests.merged_at
+                 ELSE pull_requests.merged_at
+               END,
                updated_at=excluded.updated_at,
                draft=excluded.draft",
             rusqlite::params![
@@ -315,8 +374,25 @@ impl super::Database {
     pub fn update_pr_merged_state(&self, id: i64, merged_at: Option<i64>) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "UPDATE pull_requests SET state = 'merged', merged_at = ?1 WHERE id = ?2",
-            rusqlite::params![merged_at, id],
+            "UPDATE pull_requests SET
+                state = 'merged',
+                merged_at = ?1,
+                merge_readiness_status = 'blocked',
+                merge_readiness_action = 'resolve_blockers',
+                merge_readiness_blockers = ?2,
+                merge_readiness_warnings = '[]',
+                readiness_source_head_sha = COALESCE(readiness_source_head_sha, head_sha),
+                readiness_updated_at = ?3
+             WHERE id = ?4",
+            rusqlite::params![
+                merged_at,
+                terminal_readiness_blockers_json(
+                    "already_merged",
+                    "Pull request is already merged."
+                ),
+                current_unix_timestamp(),
+                id
+            ],
         )?;
         Ok(())
     }
@@ -324,8 +400,21 @@ impl super::Database {
     pub fn update_pr_closed(&self, id: i64) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "UPDATE pull_requests SET state = 'closed', merged_at = NULL WHERE id = ?1",
-            rusqlite::params![id],
+            "UPDATE pull_requests SET
+                state = 'closed',
+                merged_at = NULL,
+                merge_readiness_status = 'blocked',
+                merge_readiness_action = 'resolve_blockers',
+                merge_readiness_blockers = ?1,
+                merge_readiness_warnings = '[]',
+                readiness_source_head_sha = COALESCE(readiness_source_head_sha, head_sha),
+                readiness_updated_at = ?2
+             WHERE id = ?3",
+            rusqlite::params![
+                terminal_readiness_blockers_json("pull_request_closed", "Pull request is closed."),
+                current_unix_timestamp(),
+                id
+            ],
         )?;
         Ok(())
     }
@@ -335,6 +424,44 @@ impl super::Database {
         conn.execute(
             "UPDATE pull_requests SET is_queued = ?1 WHERE id = ?2",
             rusqlite::params![is_queued as i32, pr_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_pr_merge_readiness(
+        &self,
+        pr_id: i64,
+        facts: &PrMergeReadinessFacts,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE pull_requests SET
+                merge_readiness_status = ?1,
+                merge_readiness_action = ?2,
+                merge_readiness_blockers = ?3,
+                merge_readiness_warnings = ?4,
+                readiness_source_head_sha = ?5,
+                merge_group_sha = ?6,
+                required_checks_policy_known = ?7,
+                required_reviews_policy_known = ?8,
+                merge_queue_required = ?9,
+                merge_queue_state = ?10,
+                readiness_updated_at = ?11
+             WHERE id = ?12",
+            rusqlite::params![
+                facts.status,
+                facts.action,
+                facts.blockers_json,
+                facts.warnings_json,
+                facts.source_head_sha,
+                facts.merge_group_sha,
+                facts.required_checks_policy_known,
+                facts.required_reviews_policy_known,
+                facts.merge_queue_required,
+                facts.merge_queue_state,
+                facts.updated_at,
+                pr_id,
+            ],
         )?;
         Ok(())
     }
@@ -479,6 +606,7 @@ impl super::Database {
 
 #[cfg(test)]
 mod tests {
+    use super::PrMergeReadinessFacts;
     use crate::db::test_helpers::*;
     use std::fs;
 
@@ -1003,6 +1131,195 @@ mod tests {
         assert_eq!(prs[0].mergeable_state.as_deref(), Some("dirty"));
 
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_pr_merge_readiness_round_trip() {
+        let (db, path) = make_test_db("pr_merge_readiness_round_trip");
+        insert_test_task(&db);
+
+        db.insert_pull_request(
+            42,
+            "T-100",
+            "owner",
+            "repo",
+            "Test PR",
+            "https://github.com/pr/42",
+            "open",
+            1000,
+            1000,
+            false,
+        )
+        .unwrap();
+
+        let facts = PrMergeReadinessFacts {
+            status: Some("ready_to_enqueue".to_string()),
+            action: Some("enqueue".to_string()),
+            blockers_json: Some("[]".to_string()),
+            warnings_json: Some(r#"[{"code":"branch_behind"}]"#.to_string()),
+            source_head_sha: Some("head-sha".to_string()),
+            merge_group_sha: Some("merge-group-sha".to_string()),
+            required_checks_policy_known: Some(true),
+            required_reviews_policy_known: Some(false),
+            merge_queue_required: Some(true),
+            merge_queue_state: Some("not_queued".to_string()),
+            updated_at: 1704067200,
+        };
+
+        db.update_pr_merge_readiness(42, &facts).unwrap();
+
+        let prs = db.get_open_prs().unwrap();
+        let pr = prs.iter().find(|p| p.id == 42).expect("PR not found");
+        assert_eq!(
+            pr.merge_readiness_status.as_deref(),
+            Some("ready_to_enqueue")
+        );
+        assert_eq!(pr.merge_readiness_action.as_deref(), Some("enqueue"));
+        assert_eq!(pr.merge_readiness_blockers.as_deref(), Some("[]"));
+        assert_eq!(
+            pr.merge_readiness_warnings.as_deref(),
+            Some(r#"[{"code":"branch_behind"}]"#)
+        );
+        assert_eq!(pr.readiness_source_head_sha.as_deref(), Some("head-sha"));
+        assert_eq!(pr.merge_group_sha.as_deref(), Some("merge-group-sha"));
+        assert_eq!(pr.required_checks_policy_known, Some(true));
+        assert_eq!(pr.required_reviews_policy_known, Some(false));
+        assert_eq!(pr.merge_queue_required, Some(true));
+        assert_eq!(pr.merge_queue_state.as_deref(), Some("not_queued"));
+        assert_eq!(pr.readiness_updated_at, Some(1704067200));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_pr_upsert_preserves_terminal_state_against_stale_open_data() {
+        let (db, path) = make_test_db("pr_upsert_preserve_terminal_state");
+        insert_test_task(&db);
+
+        db.insert_pull_request(
+            42,
+            "T-100",
+            "owner",
+            "repo",
+            "Merged PR",
+            "https://github.com/pr/42",
+            "open",
+            1000,
+            1000,
+            false,
+        )
+        .unwrap();
+        db.update_pr_merge_readiness(
+            42,
+            &PrMergeReadinessFacts {
+                status: Some("ready_to_merge".to_string()),
+                action: Some("merge".to_string()),
+                blockers_json: Some("[]".to_string()),
+                warnings_json: Some("[]".to_string()),
+                source_head_sha: Some("sha-before-merge".to_string()),
+                merge_group_sha: None,
+                required_checks_policy_known: Some(true),
+                required_reviews_policy_known: Some(true),
+                merge_queue_required: None,
+                merge_queue_state: None,
+                updated_at: 1001,
+            },
+        )
+        .unwrap();
+        db.update_pr_merged_state(42, Some(1704067200)).unwrap();
+
+        db.insert_pull_request(
+            42,
+            "T-100",
+            "owner",
+            "repo",
+            "Stale open poll",
+            "https://github.com/pr/42",
+            "open",
+            1000,
+            2000,
+            false,
+        )
+        .unwrap();
+
+        let prs = db.get_all_pull_requests().unwrap();
+        let pr = prs.iter().find(|p| p.id == 42).expect("PR not found");
+        assert_eq!(pr.state, "merged");
+        assert_eq!(pr.merged_at, Some(1704067200));
+        assert_eq!(pr.title, "Stale open poll");
+        assert_eq!(pr.merge_readiness_status.as_deref(), Some("blocked"));
+        assert_eq!(
+            pr.merge_readiness_action.as_deref(),
+            Some("resolve_blockers")
+        );
+        assert!(pr
+            .merge_readiness_blockers
+            .as_deref()
+            .unwrap_or_default()
+            .contains("already_merged"));
+
+        db.insert_pull_request(
+            43,
+            "T-100",
+            "owner",
+            "repo",
+            "Closed PR",
+            "https://github.com/pr/43",
+            "open",
+            1000,
+            1000,
+            false,
+        )
+        .unwrap();
+        db.update_pr_merge_readiness(
+            43,
+            &PrMergeReadinessFacts {
+                status: Some("ready_to_merge".to_string()),
+                action: Some("merge".to_string()),
+                blockers_json: Some("[]".to_string()),
+                warnings_json: Some("[]".to_string()),
+                source_head_sha: Some("sha-before-close".to_string()),
+                merge_group_sha: None,
+                required_checks_policy_known: Some(true),
+                required_reviews_policy_known: Some(true),
+                merge_queue_required: None,
+                merge_queue_state: None,
+                updated_at: 1001,
+            },
+        )
+        .unwrap();
+        db.update_pr_closed(43).unwrap();
+        db.insert_pull_request(
+            43,
+            "T-100",
+            "owner",
+            "repo",
+            "Stale reopened poll",
+            "https://github.com/pr/43",
+            "open",
+            1000,
+            2000,
+            false,
+        )
+        .unwrap();
+
+        let prs = db.get_all_pull_requests().unwrap();
+        let closed = prs
+            .iter()
+            .find(|p| p.id == 43)
+            .expect("closed PR not found");
+        assert_eq!(closed.state, "closed");
+        assert_eq!(closed.merged_at, None);
+        assert_eq!(closed.merge_readiness_status.as_deref(), Some("blocked"));
+        assert!(closed
+            .merge_readiness_blockers
+            .as_deref()
+            .unwrap_or_default()
+            .contains("pull_request_closed"));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
     }
 
     #[test]
