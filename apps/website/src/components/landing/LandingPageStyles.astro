@@ -45,6 +45,9 @@
   .wordmark {
     position: relative;
     z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
     color: var(--hero-paper);
     font-family: var(--font-mono);
     font-size: clamp(1.35rem, 1.8vw, 1.85rem);
@@ -52,6 +55,14 @@
     letter-spacing: -0.04em;
     text-decoration: none;
     text-shadow: var(--shadow-hero-text);
+  }
+
+  .wordmark-logo {
+    width: clamp(2.15rem, 3vw, 2.8rem);
+    height: clamp(2.15rem, 3vw, 2.8rem);
+    display: block;
+    border-radius: 0.7rem;
+    box-shadow: var(--shadow-hero-text);
   }
 
   .hero {

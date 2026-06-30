@@ -12,6 +12,9 @@ interface Props {
 
 const { title, description, canonical, siteName = 'OpenForge' } = Astro.props;
 const canonicalUrl = resolveMetadataUrl(canonical, Astro.site);
+const appIconPath = '/app-icon.svg';
+const touchIconPath = '/apple-touch-icon.png';
+const socialImageUrl = resolveMetadataUrl(touchIconPath, Astro.site);
 
 function resolveMetadataUrl(value: MetadataUrl, site: URL | undefined): string | undefined {
   if (value instanceof URL) {
@@ -46,8 +49,12 @@ function resolveMetadataUrl(value: MetadataUrl, site: URL | undefined): string |
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
+    <link rel="icon" type="image/svg+xml" href={appIconPath} />
+    <link rel="apple-touch-icon" href={touchIconPath} />
     {canonicalUrl ? <link rel="canonical" href={canonicalUrl} /> : null}
     {canonicalUrl ? <meta property="og:url" content={canonicalUrl} /> : null}
+    {socialImageUrl ? <meta property="og:image" content={socialImageUrl} /> : null}
+    {socialImageUrl ? <meta name="twitter:image" content={socialImageUrl} /> : null}
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
