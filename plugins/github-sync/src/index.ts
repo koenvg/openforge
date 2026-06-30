@@ -19,11 +19,14 @@ export default defineFrontendPlugin({
     // A second, all-repos view rendered by the same component (it derives its
     // scope from the active view). Placed in the left projects sidebar rather
     // than the icon rail; the host surfaces it there with the PR count badges.
+    // Cmd+Shift+G is the logical sibling of the project view's Cmd+G, with Shift
+    // signalling the broader "all repos" scope.
     context.subscriptions.add(openforge.views.register({
       id: 'pr_review_global',
       title: 'All Pull Requests',
       icon: 'boxes',
       placement: 'sidebar',
+      shortcut: 'Cmd+Shift+G',
       component: PrReviewView,
     }))
 
