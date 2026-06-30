@@ -1,5 +1,5 @@
 import { getAppShortcutHelpLabel, getPrimaryAppShortcutKey } from './appShortcutDefinitions'
-import { isQueuedForMerge, isReadyToMerge } from './types'
+import { canMergePullRequest } from './types'
 import type { Action, PullRequestInfo, Task } from './types'
 
 export interface PaletteAction {
@@ -33,7 +33,7 @@ export function getTaskActions(task: Task, customActions: Action[], taskPrs: Pul
     })
   }
 
-  const readyToMergePrs = taskPrs.filter(pr => isReadyToMerge(pr) && !isQueuedForMerge(pr))
+  const readyToMergePrs = taskPrs.filter(canMergePullRequest)
   if (readyToMergePrs.length === 1) {
     actions.push({
       id: 'merge-pr',

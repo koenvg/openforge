@@ -1,5 +1,5 @@
 import type { PullRequestInfo } from './types'
-import { hasMergeConflicts, isReadyToMerge } from './types'
+import { canMergePullRequest, hasMergeConflicts } from './types'
 
 export type AttentionTone = 'error' | 'warning' | 'success' | 'info'
 
@@ -29,15 +29,15 @@ export function deriveTaskAttention(
   if (prs.some((pr) => pr.ci_status === 'failure')) {
     return { message: 'Fix failing CI checks', tone: 'error' }
   }
-  if (prs.some((pr) => pr.review_status === 'changes_requested')) {
-    return { message: 'Address requested changes', tone: 'warning' }
-  }
   if (waitingDependencyCount > 0) {
     const noun = waitingDependencyCount === 1 ? 'dependency' : 'dependencies'
     return { message: `Blocked by ${waitingDependencyCount} ${noun}`, tone: 'warning' }
   }
-  if (prs.some((pr) => isReadyToMerge(pr))) {
+  if (prs.some((pr) => canMergePullRequest(pr))) {
     return { message: 'Ready to merge', tone: 'success' }
+  }
+  if (prs.some((pr) => pr.review_status === 'changes_requested')) {
+    return { message: 'Address requested changes', tone: 'warning' }
   }
   if (prs.some((pr) => pr.ci_status === 'pending')) {
     return { message: 'Waiting for CI', tone: 'info' }

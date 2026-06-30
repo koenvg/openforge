@@ -318,7 +318,7 @@ describe('computeTaskState - pr-queued (PART 3)', () => {
     expect(state).toBe('ci-failed')
   })
 
-  it('test 4: changes_requested takes priority over is_queued → changes-requested', () => {
+  it('test 4: is_queued takes priority over changes_requested to match the queued PR badge', () => {
     const task = createTask({ status: 'doing' })
     const session = createSession({ status: 'completed' })
     const prs = [
@@ -331,7 +331,7 @@ describe('computeTaskState - pr-queued (PART 3)', () => {
     ]
 
     const state = computeTaskState(task, session, prs)
-    expect(state).toBe('changes-requested')
+    expect(state).toBe('pr-queued')
   })
 
   it('test 5: is_queued with no session → pr-queued', () => {
@@ -549,11 +549,25 @@ describe('computeTaskState - mergeable_state based ready-to-merge (PART 5)', () 
     expect(computeTaskState(task, session, prs)).toBe('ci-running')
   })
 
+  it('test 16: mergeable_state clean with draft true → pr-draft (draft blocks merge readiness)', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', mergeable_state: 'clean', ci_status: 'success', draft: true })]
+    expect(computeTaskState(task, session, prs)).toBe('pr-draft')
+  })
+
   it('test 6: ISOLATION — mergeable_state clean with review_status review_required → ready-to-merge (trusts GitHub)', () => {
     // review_required with mergeable_state clean = review not needed per branch protection
     const task = createTask({ status: 'doing' })
     const session = createSession({ status: 'completed' })
     const prs = [createPr({ state: 'open', mergeable_state: 'clean', review_status: 'review_required' })]
+    expect(computeTaskState(task, session, prs)).toBe('ready-to-merge')
+  })
+
+  it('test 17: mergeable_state clean with changes_requested still follows shared merge affordance readiness', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', mergeable_state: 'clean', ci_status: 'success', review_status: 'changes_requested' })]
     expect(computeTaskState(task, session, prs)).toBe('ready-to-merge')
   })
 
@@ -682,16 +696,20 @@ describe('computeTaskState - transient null mergeability (PART 5b)', () => {
     expect(computeTaskState(task, session, prs)).toBe('changes-requested')
   })
 
-  it('test 8: mergeable_state null + is_queued — queued badge still shown', () => {
+  it('test 8: mergeable_state null + is_queued — queued state still shown without merge affordance readiness', () => {
     // A PR can be in merge queue even while GitHub recomputes mergeability.
-    // is_queued takes effect via isQueuedForMerge which is independent of mergeable_state.
-    // But pr-queued path requires isReadyToMerge — so it falls through to pr-open, not pr-queued.
+    // is_queued is independent of mergeable_state and should keep task state aligned with the queued PR badge.
     const task = createTask({ status: 'doing' })
     const session = createSession({ status: 'completed' })
     const prs = [createPr({ state: 'open', mergeable_state: null, is_queued: true })]
-    // With null mergeability, isReadyToMerge returns false, so pr-queued won't fire.
-    // The PR stays as pr-open (most accurate conservative state).
-    expect(computeTaskState(task, session, prs)).toBe('pr-open')
+    expect(computeTaskState(task, session, prs)).toBe('pr-queued')
+  })
+
+  it('test 9: pending CI + is_queued — queued state does not become ci-running or ready-to-merge', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', mergeable_state: 'clean', ci_status: 'pending', is_queued: true })]
+    expect(computeTaskState(task, session, prs)).toBe('pr-queued')
   })
 })
 

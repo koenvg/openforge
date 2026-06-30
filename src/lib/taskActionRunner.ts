@@ -16,7 +16,7 @@ import {
 import { writePtyWithSubmit } from './ptySubmit'
 import { focusTerminal, isPtyActive } from './terminalPool'
 import { moveTaskToComplete } from './moveToComplete'
-import { isQueuedForMerge, isReadyToMerge } from './types'
+import { canMergePullRequest } from './types'
 import type { Project, Task } from './types'
 
 export interface RunActionData {
@@ -108,7 +108,7 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
 
   async function mergeReadyPullRequest(task: Task): Promise<void> {
     const prs = get(ticketPrs).get(task.id) || []
-    const readyPrs = prs.filter(candidate => isReadyToMerge(candidate) && !isQueuedForMerge(candidate))
+    const readyPrs = prs.filter(canMergePullRequest)
 
     if (readyPrs.length === 1) {
       const pr = readyPrs[0]

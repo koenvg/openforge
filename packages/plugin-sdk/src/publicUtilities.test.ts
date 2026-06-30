@@ -6,6 +6,7 @@ import { parseStrictFiniteNumber } from '@openforge/plugin-sdk/numberParsing'
 import { sanitizeHtml } from '@openforge/plugin-sdk/sanitize'
 import {
   hasMergeConflicts,
+  canMergePullRequest,
   isQueuedForMerge,
   isReadyToMerge,
   parseCheckRuns,
@@ -45,6 +46,10 @@ describe('public plugin utilities', () => {
   it('exposes PR domain helpers for GitHub plugins', () => {
     expect(hasMergeConflicts({ state: 'open', mergeable: false, mergeable_state: 'dirty' })).toBe(true)
     expect(isReadyToMerge({ state: 'open', mergeable: true, mergeable_state: 'clean' })).toBe(true)
+    expect(canMergePullRequest(makePullRequest({ mergeable: true, mergeable_state: 'clean', ci_status: 'success' }))).toBe(true)
+    expect(canMergePullRequest(makePullRequest({ mergeable: true, mergeable_state: 'clean', ci_status: 'pending' }))).toBe(false)
+    expect(canMergePullRequest(makePullRequest({ mergeable: true, mergeable_state: 'clean', draft: true, ci_status: 'success' }))).toBe(false)
+    expect(canMergePullRequest(makePullRequest({ mergeable: true, mergeable_state: 'clean', is_queued: true, ci_status: 'success' }))).toBe(false)
     expect(isQueuedForMerge({ state: 'open', is_queued: true })).toBe(true)
   })
 
