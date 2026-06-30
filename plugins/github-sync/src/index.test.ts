@@ -107,11 +107,13 @@ describe('github-sync plugin', () => {
       component: PrReviewViewComponent,
     }))
     // The all-repos view lives in the left projects sidebar, not the icon rail.
+    // It carries Cmd+Shift+G, the logical sibling of the project view's Cmd+G.
     expect(api.views.register).toHaveBeenCalledWith(expect.objectContaining({
       id: 'pr_review_global',
       title: 'All Pull Requests',
       icon: 'boxes',
       placement: 'sidebar',
+      shortcut: 'Cmd+Shift+G',
       component: PrReviewViewComponent,
     }))
     expect(api.commands.register).toHaveBeenCalledWith(expect.objectContaining({
