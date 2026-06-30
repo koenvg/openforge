@@ -39,15 +39,24 @@ pub fn parse_git_log_output(output: &str) -> Vec<CommitInfo> {
 
 pub async fn get_task_diff_for_workspace(
     worktree_path: &str,
+    include_committed: bool,
     include_uncommitted: bool,
 ) -> Result<Vec<diff_parser::TaskFileDiff>, String> {
-    let merge_base = resolve_self_review_base(worktree_path).await?;
+    // The diff base is the merge-base when committed changes are included, and
+    // HEAD when they are not (so the diff shows only work-tree changes). Skipping
+    // merge-base resolution in the latter case also lets uncommitted-only review
+    // work in repos without a usable base candidate.
+    let base_ref = if include_committed {
+        resolve_self_review_base(worktree_path).await?
+    } else {
+        "HEAD".to_string()
+    };
 
     let mut cmd = tokio::process::Command::new("git");
     cmd.arg("-C")
         .arg(&worktree_path)
         .arg("diff")
-        .arg(&merge_base);
+        .arg(&base_ref);
     if !include_uncommitted {
         cmd.arg("HEAD");
     }
@@ -172,6 +181,21 @@ async fn resolve_self_review_base(worktree_path: &str) -> Result<String, String>
     ))
 }
 
+/// The git ref a file's "old" side is diffed against. When committed changes are
+/// included the base is the merge-base (showing the full task diff); when only
+/// uncommitted changes are wanted the base is HEAD, so work-tree edits stand
+/// alone and no merge-base candidate is required.
+async fn resolve_content_base_ref(
+    worktree_path: &str,
+    include_committed: bool,
+) -> Result<String, String> {
+    if include_committed {
+        resolve_self_review_base(worktree_path).await
+    } else {
+        Ok("HEAD".to_string())
+    }
+}
+
 // ============================================================================
 // File content helpers
 // ============================================================================
@@ -202,7 +226,7 @@ fn bytes_to_frontend_content(path: &str, bytes: &[u8]) -> String {
 
 async fn fetch_file_contents(
     worktree_path: &str,
-    merge_base: &str,
+    base_ref: &str,
     path: &str,
     old_path: Option<&str>,
     status: &str,
@@ -215,7 +239,7 @@ async fn fetch_file_contents(
         let old_output = tokio::process::Command::new("git")
             .arg("-C")
             .arg(worktree_path)
-            .args(["show", &format!("{}:{}", merge_base, old_file_path)])
+            .args(["show", &format!("{}:{}", base_ref, old_file_path)])
             .output()
             .await
             .map_err(|e| format!("Failed to run git show: {}", e))?;
@@ -262,13 +286,14 @@ pub async fn get_task_file_contents_for_workspace(
     path: &str,
     old_path: Option<&str>,
     status: &str,
+    include_committed: bool,
     include_uncommitted: bool,
 ) -> Result<(String, String), String> {
-    let merge_base = resolve_self_review_base(worktree_path).await?;
+    let base_ref = resolve_content_base_ref(worktree_path, include_committed).await?;
 
     fetch_file_contents(
         worktree_path,
-        &merge_base,
+        &base_ref,
         path,
         old_path,
         status,
@@ -291,16 +316,17 @@ pub struct FileContentRequest {
 pub async fn get_task_batch_file_contents_for_workspace(
     worktree_path: &str,
     files: &[FileContentRequest],
+    include_committed: bool,
     include_uncommitted: bool,
 ) -> Result<Vec<(String, String)>, String> {
-    let merge_base = resolve_self_review_base(worktree_path).await?;
+    let base_ref = resolve_content_base_ref(worktree_path, include_committed).await?;
 
-    // Fetch each file using the single pre-computed merge-base.
+    // Fetch each file using the single pre-computed base ref.
     let mut results = Vec::with_capacity(files.len());
     for file in files {
         let contents = fetch_file_contents(
             &worktree_path,
-            &merge_base,
+            &base_ref,
             &file.path,
             file.old_path.as_deref(),
             &file.status,
@@ -805,7 +831,7 @@ mod tests {
         write_repo_file(repo.path(), "tracked.txt", "base\nfeature\n");
         commit_all(repo.path(), "feature commit");
 
-        let result = get_task_diff_for_workspace(repo.path().to_str().unwrap(), false).await;
+        let result = get_task_diff_for_workspace(repo.path().to_str().unwrap(), true, false).await;
 
         assert!(
             result.is_ok(),
@@ -820,6 +846,166 @@ mod tests {
             }),
             "expected diff for feature commit, got {:?}",
             diffs
+        );
+    }
+
+    /// Repo with one committed change to `tracked.txt`, then an uncommitted
+    /// modification to it, plus a brand-new untracked file. Used to assert the
+    /// committed/uncommitted scope flags select the right slice of changes.
+    fn setup_committed_and_uncommitted_repo() -> tempfile::TempDir {
+        let repo = init_git_repo();
+        write_repo_file(repo.path(), "tracked.txt", "base\n");
+        commit_all(repo.path(), "base commit");
+        run_git(repo.path(), &["checkout", "-b", "feature"]);
+        write_repo_file(repo.path(), "tracked.txt", "base\ncommitted\n");
+        commit_all(repo.path(), "committed change");
+        // Uncommitted (unstaged) modification on top of the committed change.
+        write_repo_file(repo.path(), "tracked.txt", "base\ncommitted\nuncommitted\n");
+        // Untracked file — uncommitted, never added.
+        write_repo_file(repo.path(), "untracked.txt", "new file\n");
+        repo
+    }
+
+    #[tokio::test]
+    async fn test_task_diff_committed_only_excludes_uncommitted_and_untracked() {
+        let repo = setup_committed_and_uncommitted_repo();
+
+        let diffs = get_task_diff_for_workspace(repo.path().to_str().unwrap(), true, false)
+            .await
+            .expect("committed-only diff");
+
+        let tracked = diffs
+            .iter()
+            .find(|d| d.filename == "tracked.txt")
+            .expect("tracked.txt in diff");
+        let patch = tracked.patch.as_deref().unwrap_or("");
+        assert!(patch.contains("+committed"), "committed change should show: {patch}");
+        assert!(
+            !patch.contains("+uncommitted"),
+            "uncommitted change must be hidden in committed-only mode: {patch}"
+        );
+        assert!(
+            !diffs.iter().any(|d| d.filename == "untracked.txt"),
+            "untracked file must be hidden in committed-only mode"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_task_diff_both_includes_committed_and_uncommitted() {
+        let repo = setup_committed_and_uncommitted_repo();
+
+        let diffs = get_task_diff_for_workspace(repo.path().to_str().unwrap(), true, true)
+            .await
+            .expect("both-scopes diff");
+
+        let tracked = diffs
+            .iter()
+            .find(|d| d.filename == "tracked.txt")
+            .expect("tracked.txt in diff");
+        let patch = tracked.patch.as_deref().unwrap_or("");
+        assert!(patch.contains("+committed"), "committed change should show: {patch}");
+        assert!(patch.contains("+uncommitted"), "uncommitted change should show: {patch}");
+        assert!(
+            diffs.iter().any(|d| d.filename == "untracked.txt"),
+            "untracked file should show when uncommitted is included"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_task_diff_uncommitted_only_excludes_committed() {
+        let repo = setup_committed_and_uncommitted_repo();
+
+        let diffs = get_task_diff_for_workspace(repo.path().to_str().unwrap(), false, true)
+            .await
+            .expect("uncommitted-only diff");
+
+        let tracked = diffs
+            .iter()
+            .find(|d| d.filename == "tracked.txt")
+            .expect("tracked.txt in diff");
+        let patch = tracked.patch.as_deref().unwrap_or("");
+        assert!(patch.contains("+uncommitted"), "uncommitted change should show: {patch}");
+        assert!(
+            !patch.contains("+committed"),
+            "committed change is already in HEAD and must NOT re-appear in uncommitted-only mode: {patch}"
+        );
+        assert!(
+            diffs.iter().any(|d| d.filename == "untracked.txt"),
+            "untracked file should show in uncommitted-only mode"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_task_diff_neither_scope_is_empty() {
+        let repo = setup_committed_and_uncommitted_repo();
+
+        let diffs = get_task_diff_for_workspace(repo.path().to_str().unwrap(), false, false)
+            .await
+            .expect("empty-scope diff");
+
+        assert!(diffs.is_empty(), "no scope selected yields no diff, got {diffs:?}");
+    }
+
+    #[tokio::test]
+    async fn test_task_diff_uncommitted_only_works_without_base_candidate() {
+        // No origin/main, main, or master shares history with HEAD — committed mode
+        // would error, but uncommitted-only compares against HEAD and must still work.
+        let repo = init_git_repo();
+        run_git(repo.path(), &["checkout", "-B", "trunk"]);
+        write_repo_file(repo.path(), "tracked.txt", "base\n");
+        commit_all(repo.path(), "trunk base commit");
+        run_git(repo.path(), &["checkout", "-b", "feature"]);
+        write_repo_file(repo.path(), "tracked.txt", "base\nuncommitted\n");
+
+        let diffs = get_task_diff_for_workspace(repo.path().to_str().unwrap(), false, true)
+            .await
+            .expect("uncommitted-only diff should not require a base candidate");
+
+        let tracked = diffs
+            .iter()
+            .find(|d| d.filename == "tracked.txt")
+            .expect("tracked.txt in diff");
+        assert!(tracked.patch.as_deref().unwrap_or("").contains("+uncommitted"));
+    }
+
+    #[tokio::test]
+    async fn test_task_file_contents_committed_only_uses_merge_base_and_head() {
+        let repo = setup_committed_and_uncommitted_repo();
+
+        let (old_content, new_content) = get_task_file_contents_for_workspace(
+            repo.path().to_str().unwrap(),
+            "tracked.txt",
+            None,
+            "modified",
+            true,
+            false,
+        )
+        .await
+        .expect("committed-only file contents");
+
+        assert_eq!(old_content, "base\n", "old = merge-base version");
+        assert_eq!(new_content, "base\ncommitted\n", "new = HEAD version");
+    }
+
+    #[tokio::test]
+    async fn test_task_file_contents_uncommitted_only_uses_head_and_worktree() {
+        let repo = setup_committed_and_uncommitted_repo();
+
+        let (old_content, new_content) = get_task_file_contents_for_workspace(
+            repo.path().to_str().unwrap(),
+            "tracked.txt",
+            None,
+            "modified",
+            false,
+            true,
+        )
+        .await
+        .expect("uncommitted-only file contents");
+
+        assert_eq!(old_content, "base\ncommitted\n", "old = HEAD version");
+        assert_eq!(
+            new_content, "base\ncommitted\nuncommitted\n",
+            "new = working-tree version"
         );
     }
 
@@ -879,7 +1065,7 @@ mod tests {
         write_repo_file(repo.path(), "tracked.txt", "base\nfeature\n");
         commit_all(repo.path(), "feature commit");
 
-        let err = get_task_diff_for_workspace(repo.path().to_str().unwrap(), false)
+        let err = get_task_diff_for_workspace(repo.path().to_str().unwrap(), true, false)
             .await
             .expect_err("missing base candidates should not fall back to HEAD and hide diffs");
 

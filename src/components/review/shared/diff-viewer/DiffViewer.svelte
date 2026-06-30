@@ -19,6 +19,7 @@
     batchFetchFileContents?: (files: PrFileDiff[]) => Promise<Map<string, FileContents>>
     toolbarExtra?: Snippet
     fileHeaderExtra?: Snippet<[PrFileDiff]>
+    includeCommitted?: boolean
     includeUncommitted?: boolean
     agentComments?: AgentReviewComment[]
     onScrollTopChange?: (scrollTop: number) => void
@@ -46,6 +47,7 @@
     batchFetchFileContents,
     toolbarExtra,
     fileHeaderExtra,
+    includeCommitted = true,
     includeUncommitted = false,
     agentComments = [],
     pendingComments,
@@ -105,6 +107,7 @@
   {batchFetchFileContents}
   {toolbarExtra}
   {fileHeaderExtra}
+  {includeCommitted}
   {includeUncommitted}
   {agentComments}
   pendingComments={visiblePendingComments}

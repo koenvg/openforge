@@ -27,6 +27,7 @@
     batchFetchFileContents?: (files: PrFileDiff[]) => Promise<Map<string, FileContents>>
     toolbarExtra?: Snippet
     fileHeaderExtra?: Snippet<[PrFileDiff]>
+    includeCommitted?: boolean
     includeUncommitted?: boolean
     agentComments?: AgentReviewComment[]
     pendingComments?: ReviewSubmissionComment[]
@@ -46,7 +47,7 @@
     getFileReviewIdentity?: (file: PrFileDiff) => string | null
   }
   type Props = BaseProps
-  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, fileHeaderExtra, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onAgentCommentsChange, onUpdateAgentCommentStatus, onOpenUrl, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, diffTheme, reviewedFileShas = new Map(), onToggleFileReviewed, getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null }: Props = $props()
+  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, fileHeaderExtra, includeCommitted = true, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onAgentCommentsChange, onUpdateAgentCommentStatus, onOpenUrl, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, diffTheme, reviewedFileShas = new Map(), onToggleFileReviewed, getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null }: Props = $props()
   let internalPendingComments = $state<ReviewSubmissionComment[]>([])
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
   let diffViewWrap = $state(false)
@@ -70,6 +71,7 @@
   let previousReviewedFileIdentities = new Map<string, string>()
   const fileContentsFetcher = createFileContentsFetcher({
     getFiles: () => files,
+    getIncludeCommitted: () => includeCommitted,
     getIncludeUncommitted: () => includeUncommitted,
     getFetchFileContents: () => fetchFileContents,
     getBatchFetchFileContents: () => batchFetchFileContents,

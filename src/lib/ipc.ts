@@ -329,16 +329,16 @@ export async function getPtyBuffer(taskId: string): Promise<string | null> {
   return invoke<string | null>("get_pty_buffer", { taskId });
 }
 
-export async function getTaskDiff(taskId: string, includeUncommitted: boolean): Promise<PrFileDiff[]> {
-  return invoke<PrFileDiff[]>("get_task_diff", { taskId, includeUncommitted });
+export async function getTaskDiff(taskId: string, includeCommitted: boolean, includeUncommitted: boolean): Promise<PrFileDiff[]> {
+  return invoke<PrFileDiff[]>("get_task_diff", { taskId, includeCommitted, includeUncommitted });
 }
 
 export async function getTaskGitStatus(taskId: string): Promise<GitStatusSummary> {
   return invoke<GitStatusSummary>("get_task_git_status", { taskId });
 }
 
-export async function getTaskFileContents(taskId: string, path: string, oldPath: string | null, status: string, includeUncommitted: boolean): Promise<[string, string]> {
-  return invoke<[string, string]>("get_task_file_contents", { taskId, path, oldPath, status, includeUncommitted });
+export async function getTaskFileContents(taskId: string, path: string, oldPath: string | null, status: string, includeCommitted: boolean, includeUncommitted: boolean): Promise<[string, string]> {
+  return invoke<[string, string]>("get_task_file_contents", { taskId, path, oldPath, status, includeCommitted, includeUncommitted });
 }
 
 export interface FileContentRequest {
@@ -347,8 +347,8 @@ export interface FileContentRequest {
   status: string;
 }
 
-export async function getTaskBatchFileContents(taskId: string, files: FileContentRequest[], includeUncommitted: boolean): Promise<[string, string][]> {
-  return invoke<[string, string][]>("get_task_batch_file_contents", { taskId, files: files.map(f => ({ path: f.path, old_path: f.oldPath, status: f.status })), includeUncommitted });
+export async function getTaskBatchFileContents(taskId: string, files: FileContentRequest[], includeCommitted: boolean, includeUncommitted: boolean): Promise<[string, string][]> {
+  return invoke<[string, string][]>("get_task_batch_file_contents", { taskId, files: files.map(f => ({ path: f.path, old_path: f.oldPath, status: f.status })), includeCommitted, includeUncommitted });
 }
 
 export async function addSelfReviewComment(taskId: string, commentType: string, filePath: string | null, lineNumber: number | null, body: string): Promise<number> {

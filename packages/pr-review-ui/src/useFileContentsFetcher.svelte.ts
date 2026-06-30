@@ -8,10 +8,12 @@ export interface FileContentsFetcherState {
 
 /**
  * Manages batch and per-file content fetching with generation tracking to
- * discard stale results. Resets fetch state when includeUncommitted changes.
+ * discard stale results. Resets fetch state when the diff basis (committed
+ * and/or uncommitted scope) changes.
  */
 export function createFileContentsFetcher(deps: {
   getFiles: () => PrFileDiff[]
+  getIncludeCommitted?: () => boolean
   getIncludeUncommitted: () => boolean
   getFetchFileContents: () => ((file: PrFileDiff) => Promise<FileContents>) | undefined
   getBatchFetchFileContents: () => ((files: PrFileDiff[]) => Promise<Map<string, FileContents>>) | undefined
@@ -20,21 +22,24 @@ export function createFileContentsFetcher(deps: {
   let fetchedKeys = new Map<string, string>()
   let activeFileKeys = new Map<string, string>()
   let fetchGeneration = 0
-  let prevIncludeUncommitted: boolean | undefined = undefined
+  let prevBasis: string | undefined = undefined
   // Incremented on reset to force the fetch effect to re-run
 
   let resetSignal = $state(0)
-  // Reset file contents when includeUncommitted changes (non-destructive: preserves collapsedFiles/scroll)
+  // Reset file contents when the diff basis changes (non-destructive: preserves
+  // collapsedFiles/scroll). Both the committed and uncommitted scope flags move
+  // the diff's old/new sides, so a change in either must invalidate the cache.
   $effect(() => {
-    const current = deps.getIncludeUncommitted()
-    if (prevIncludeUncommitted !== undefined && prevIncludeUncommitted !== current) {
-      // Clear fetch state to trigger re-fetch with new includeUncommitted value
+    const includeCommitted = deps.getIncludeCommitted?.() ?? true
+    const current = `${includeCommitted}|${deps.getIncludeUncommitted()}`
+    if (prevBasis !== undefined && prevBasis !== current) {
+      // Clear fetch state to trigger re-fetch with the new diff basis
       fetchedKeys = new Map()
       fileContentsMap = new Map()
       fetchGeneration++ // invalidate any in-flight fetches
       resetSignal++ // signal fetch effect to re-run
     }
-    prevIncludeUncommitted = current
+    prevBasis = current
   })
 
   $effect(() => {

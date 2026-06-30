@@ -263,7 +263,7 @@ async fn handles_git_workspace_extraction_commands() {
     let diff_value = invoke_ok(
         &state,
         "get_task_diff",
-        json!({ "taskId": task_id, "includeUncommitted": true }),
+        json!({ "taskId": task_id, "includeCommitted": true, "includeUncommitted": true }),
     )
     .await;
     assert!(diff_value
@@ -295,7 +295,7 @@ async fn handles_git_workspace_extraction_commands() {
     let task_contents = invoke_ok(
             &state,
             "get_task_file_contents",
-            json!({ "taskId": task_id, "path": "tracked.txt", "oldPath": null, "status": "modified", "includeUncommitted": true }),
+            json!({ "taskId": task_id, "path": "tracked.txt", "oldPath": null, "status": "modified", "includeCommitted": true, "includeUncommitted": true }),
         )
         .await;
     assert_eq!(task_contents[0], "base\n");
@@ -304,7 +304,7 @@ async fn handles_git_workspace_extraction_commands() {
     let batch = invoke_ok(
             &state,
             "get_task_batch_file_contents",
-            json!({ "taskId": task_id, "files": [{ "path": "tracked.txt", "old_path": null, "status": "modified" }], "includeUncommitted": true }),
+            json!({ "taskId": task_id, "files": [{ "path": "tracked.txt", "old_path": null, "status": "modified" }], "includeCommitted": true, "includeUncommitted": true }),
         )
         .await;
     assert_eq!(batch[0][1], "base\nfeature\n");

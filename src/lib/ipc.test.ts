@@ -292,11 +292,12 @@ describe("ipc spawnShellPty", () => {
 	});
 
 	it("preserves snake_case nested file payload keys for task batch contents", async () => {
-		await getTaskBatchFileContents("T-42", [{ path: "src/App.svelte", oldPath: "src/Old.svelte", status: "renamed" }], true);
+		await getTaskBatchFileContents("T-42", [{ path: "src/App.svelte", oldPath: "src/Old.svelte", status: "renamed" }], false, true);
 
 		expect(invokeMock).toHaveBeenCalledWith("get_task_batch_file_contents", {
 			taskId: "T-42",
 			files: [{ path: "src/App.svelte", old_path: "src/Old.svelte", status: "renamed" }],
+			includeCommitted: false,
 			includeUncommitted: true,
 		});
 	});
