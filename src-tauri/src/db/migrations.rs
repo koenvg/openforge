@@ -1518,7 +1518,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = LATEST_USER_VERSION - 5;
+            let previous_version = LATEST_USER_VERSION - 6;
             conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
                 .expect("set user_version");
             conn.execute(
@@ -1582,7 +1582,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = LATEST_USER_VERSION - 6;
+            let previous_version = LATEST_USER_VERSION - 7;
             conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
                 .expect("set user_version");
             conn.execute("CREATE TABLE plugins (id TEXT PRIMARY KEY)", [])
@@ -1761,7 +1761,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = LATEST_USER_VERSION - 7;
+            let previous_version = LATEST_USER_VERSION - 8;
             conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
                 .expect("set user_version");
             conn.execute_batch(
@@ -2659,7 +2659,7 @@ mod tests {
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
             conn.execute(
-                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 10),
+                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 11),
                 [],
             )
             .expect("set pre-upgrade user_version");
@@ -2705,7 +2705,7 @@ mod tests {
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
             conn.execute(
-                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 10),
+                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 11),
                 [],
             )
             .expect("set pre-upgrade user_version");
