@@ -856,6 +856,38 @@ struct PollSinglePrResult {
     error: Option<String>,
 }
 
+struct RestReadinessSources {
+    rest_ci_sha: String,
+    check_runs: Option<CheckRunsResponse>,
+    combined_status: Option<CombinedStatusResponse>,
+    reviews: Option<Vec<PrReview>>,
+    pr_details_result: Result<crate::github_client::PullRequest, crate::github_client::GitHubError>,
+    has_requested_reviewers: bool,
+    mergeable: Option<bool>,
+    mergeable_state: Option<String>,
+    is_queued: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BranchPolicyInputs {
+    required_check_names: Vec<String>,
+    required_approving_count: Option<usize>,
+    required_checks_policy_known: bool,
+    required_reviews_policy_known: bool,
+    requires_up_to_date_branch: bool,
+    conversations_blocking: bool,
+    merge_queue_required_by_policy: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CiPersistencePayload {
+    pr_id: i64,
+    head_sha: String,
+    status: String,
+    check_runs_json: String,
+    status_changed: bool,
+}
+
 #[derive(Debug, Default)]
 struct PersistCommentsResult {
     new_comment_count: usize,
@@ -915,74 +947,78 @@ fn persist_polled_comments(
     persist_result
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn poll_single_pr(
-    github_client: GitHubClient,
-    github_token: String,
+fn comment_fetch_error_result(
     pr: PrRow,
-    since: Option<String>,
     old_ci_status: Option<String>,
     old_review_status: Option<String>,
     old_mergeable: Option<bool>,
     old_mergeable_state: Option<String>,
-    fetch_comments: bool,
+    error: String,
 ) -> PollSinglePrResult {
-    let since_ref = since.as_deref();
+    PollSinglePrResult {
+        pr_id: pr.id,
+        ticket_id: pr.ticket_id,
+        pr_title: pr.title,
+        head_sha: pr.head_sha.clone(),
+        old_ci_status,
+        old_review_status,
+        comments: vec![],
+        check_runs: None,
+        combined_status: None,
+        reviews: None,
+        has_requested_reviewers: false,
+        mergeable: old_mergeable,
+        mergeable_state: old_mergeable_state,
+        is_queued: false,
+        required_check_names: vec![],
+        required_approving_count: None,
+        readiness_facts: PrMergeReadinessFacts {
+            status: None,
+            action: None,
+            blockers_json: None,
+            warnings_json: None,
+            source_head_sha: Some(pr.head_sha),
+            merge_group_sha: None,
+            required_checks_policy_known: None,
+            required_reviews_policy_known: None,
+            merge_queue_required: None,
+            merge_queue_state: None,
+            updated_at: 0,
+        },
+        error: Some(error),
+    }
+}
 
-    let comments = if fetch_comments {
-        let comments_result = github_client
-            .get_pr_comments(
-                &pr.repo_owner,
-                &pr.repo_name,
-                pr.pr_number,
-                &github_token,
-                since_ref,
-            )
-            .await;
+async fn fetch_pr_comments_for_poll(
+    github_client: &GitHubClient,
+    github_token: &str,
+    pr: &PrRow,
+    since: Option<&str>,
+    fetch_comments: bool,
+) -> Result<Vec<PrComment>, String> {
+    if !fetch_comments {
+        return Ok(Vec::new());
+    }
 
-        match comments_result {
-            Ok(c) => c,
-            Err(e) => {
-                return PollSinglePrResult {
-                    pr_id: pr.id,
-                    ticket_id: pr.ticket_id,
-                    pr_title: pr.title,
-                    head_sha: pr.head_sha.clone(),
-                    old_ci_status,
-                    old_review_status,
-                    comments: vec![],
-                    check_runs: None,
-                    combined_status: None,
-                    reviews: None,
-                    has_requested_reviewers: false,
-                    mergeable: old_mergeable,
-                    mergeable_state: old_mergeable_state,
-                    is_queued: false,
-                    required_check_names: vec![],
-                    required_approving_count: None,
-                    readiness_facts: PrMergeReadinessFacts {
-                        status: None,
-                        action: None,
-                        blockers_json: None,
-                        warnings_json: None,
-                        source_head_sha: Some(pr.head_sha),
-                        merge_group_sha: None,
-                        required_checks_policy_known: None,
-                        required_reviews_policy_known: None,
-                        merge_queue_required: None,
-                        merge_queue_state: None,
-                        updated_at: 0,
-                    },
-                    error: Some(format!("Failed to fetch comments: {}", e)),
-                };
-            }
-        }
-    } else {
-        Vec::new()
-    };
+    github_client
+        .get_pr_comments(
+            &pr.repo_owner,
+            &pr.repo_name,
+            pr.pr_number,
+            github_token,
+            since,
+        )
+        .await
+        .map_err(|e| format!("Failed to fetch comments: {e}"))
+}
 
-    let graphql_snapshot = match github_client
-        .get_pr_readiness_snapshot(&pr.repo_owner, &pr.repo_name, pr.pr_number, &github_token)
+async fn fetch_graphql_readiness_snapshot(
+    github_client: &GitHubClient,
+    pr: &PrRow,
+    github_token: &str,
+) -> Option<GitHubReadinessSnapshot> {
+    match github_client
+        .get_pr_readiness_snapshot(&pr.repo_owner, &pr.repo_name, pr.pr_number, github_token)
         .await
     {
         Ok(snapshot) if snapshot.source_head_sha.is_none() => {
@@ -1007,48 +1043,56 @@ async fn poll_single_pr(
             );
             None
         }
-    };
+    }
+}
 
-    // Fetch CI status, reviews, and PR details in parallel. These REST calls are
-    // the fallback source when GraphQL coverage is unavailable or SHA-stale.
-    let needs_rest_ci = needs_rest_ci_for_snapshot(graphql_snapshot.as_ref());
+async fn collect_rest_readiness_sources(
+    github_client: &GitHubClient,
+    github_token: &str,
+    pr: &PrRow,
+    graphql_snapshot: Option<&GitHubReadinessSnapshot>,
+    old_mergeable: Option<bool>,
+    old_mergeable_state: Option<String>,
+) -> RestReadinessSources {
+    let needs_rest_ci = needs_rest_ci_for_snapshot(graphql_snapshot);
     let mut rest_ci_sha = graphql_snapshot
-        .as_ref()
         .and_then(|snapshot| snapshot.source_head_sha.clone())
         .filter(|sha| !sha.is_empty())
         .unwrap_or_else(|| pr.head_sha.clone());
+    let ci_sha_for_request = rest_ci_sha.clone();
+
     let ci_future = async {
-        if !needs_rest_ci || rest_ci_sha.is_empty() {
+        if !needs_rest_ci || ci_sha_for_request.is_empty() {
             (None, None)
         } else {
-            let (cr, cs) = tokio::join!(
+            let (check_runs, combined_status) = tokio::join!(
                 github_client.get_check_runs(
                     &pr.repo_owner,
                     &pr.repo_name,
-                    &rest_ci_sha,
-                    &github_token
+                    &ci_sha_for_request,
+                    github_token
                 ),
                 github_client.get_combined_status(
                     &pr.repo_owner,
                     &pr.repo_name,
-                    &rest_ci_sha,
-                    &github_token
+                    &ci_sha_for_request,
+                    github_token
                 )
             );
-            (Some(cr), Some(cs))
+            (Some(check_runs), Some(combined_status))
         }
     };
 
     let reviews_future =
-        github_client.get_pr_reviews(&pr.repo_owner, &pr.repo_name, pr.pr_number, &github_token);
+        github_client.get_pr_reviews(&pr.repo_owner, &pr.repo_name, pr.pr_number, github_token);
     let pr_details_future =
-        github_client.get_pr_details(&pr.repo_owner, &pr.repo_name, pr.pr_number, &github_token);
+        github_client.get_pr_details(&pr.repo_owner, &pr.repo_name, pr.pr_number, github_token);
 
     let ((check_runs_result, combined_status_result), reviews_result, pr_details_result) =
         tokio::join!(ci_future, reviews_future, pr_details_future);
 
-    let mut check_runs = check_runs_result.and_then(|r| match r {
-        Ok(cr) => Some(cr),
+    let mut check_runs = check_runs_result.and_then(|result| match result {
+        Ok(check_runs) => Some(check_runs),
         Err(e) => {
             warn!(
                 "[GitHub Poller] Failed to fetch check runs for PR #{}: {}",
@@ -1058,8 +1102,8 @@ async fn poll_single_pr(
         }
     });
 
-    let mut combined_status = combined_status_result.and_then(|r| match r {
-        Ok(cs) => Some(cs),
+    let mut combined_status = combined_status_result.and_then(|result| match result {
+        Ok(combined_status) => Some(combined_status),
         Err(e) => {
             warn!(
                 "[GitHub Poller] Failed to fetch combined status for PR #{}: {}",
@@ -1077,13 +1121,13 @@ async fn poll_single_pr(
                         &pr.repo_owner,
                         &pr.repo_name,
                         &details.head.sha,
-                        &github_token
+                        github_token
                     ),
                     github_client.get_combined_status(
                         &pr.repo_owner,
                         &pr.repo_name,
                         &details.head.sha,
-                        &github_token
+                        github_token
                     )
                 );
                 if let Ok(fresh_check_runs) = fresh_check_runs {
@@ -1097,29 +1141,8 @@ async fn poll_single_pr(
         }
     }
 
-    let graphql_inputs = graphql_snapshot
-        .as_ref()
-        .and_then(|snapshot| merge_readiness_inputs_from_snapshot(&pr, snapshot));
-
-    let check_runs = graphql_inputs
-        .as_ref()
-        .and_then(|_| {
-            graphql_snapshot
-                .as_ref()
-                .map(|snapshot| snapshot.check_runs.clone())
-        })
-        .or(check_runs);
-    let combined_status = graphql_inputs
-        .as_ref()
-        .and_then(|_| {
-            graphql_snapshot
-                .as_ref()
-                .map(|snapshot| snapshot.combined_status.clone())
-        })
-        .or(combined_status);
-
     let reviews = match reviews_result {
-        Ok(r) => Some(r),
+        Ok(reviews) => Some(reviews),
         Err(e) => {
             warn!(
                 "[GitHub Poller] Failed to fetch reviews for PR #{}: {}",
@@ -1130,20 +1153,7 @@ async fn poll_single_pr(
     };
 
     let has_requested_reviewers = match &pr_details_result {
-        Ok(details) => {
-            details
-                .extra
-                .get("requested_reviewers")
-                .and_then(|r| r.as_array())
-                .map(|a| !a.is_empty())
-                .unwrap_or(false)
-                || details
-                    .extra
-                    .get("requested_teams")
-                    .and_then(|r| r.as_array())
-                    .map(|a| !a.is_empty())
-                    .unwrap_or(false)
-        }
+        Ok(details) => has_requested_reviewers_from_details(details),
         Err(e) => {
             warn!(
                 "[GitHub Poller] Failed to fetch PR details for PR #{}: {}",
@@ -1152,41 +1162,82 @@ async fn poll_single_pr(
             false
         }
     };
-
-    let is_queued = match &pr_details_result {
-        Ok(details) => details
-            .extra
-            .get("merge_queue_entry")
-            .map(|v| !v.is_null())
-            .unwrap_or(false),
-        Err(_) => false,
-    };
-
+    let is_queued = pr_details_result
+        .as_ref()
+        .ok()
+        .map(pr_is_queued_from_details)
+        .unwrap_or(false);
     let (mergeable, mergeable_state) =
         mergeability_after_pr_details(&pr_details_result, old_mergeable, old_mergeable_state);
 
-    // Fetch required status check names and required review count from branch protection.
-    // GraphQL policy facts win when known; REST keeps coverage explicit when GraphQL is unavailable.
-    let (rest_required_checks_policy, rest_required_reviews_policy) = match &pr_details_result {
+    RestReadinessSources {
+        rest_ci_sha,
+        check_runs,
+        combined_status,
+        reviews,
+        pr_details_result,
+        has_requested_reviewers,
+        mergeable,
+        mergeable_state,
+        is_queued,
+    }
+}
+
+fn has_requested_reviewers_from_details(details: &crate::github_client::PullRequest) -> bool {
+    details
+        .extra
+        .get("requested_reviewers")
+        .and_then(|reviewers| reviewers.as_array())
+        .map(|reviewers| !reviewers.is_empty())
+        .unwrap_or(false)
+        || details
+            .extra
+            .get("requested_teams")
+            .and_then(|teams| teams.as_array())
+            .map(|teams| !teams.is_empty())
+            .unwrap_or(false)
+}
+
+fn pr_is_queued_from_details(details: &crate::github_client::PullRequest) -> bool {
+    details
+        .extra
+        .get("merge_queue_entry")
+        .map(|value| !value.is_null())
+        .unwrap_or(false)
+}
+
+async fn collect_branch_policy_sources(
+    github_client: &GitHubClient,
+    github_token: &str,
+    pr: &PrRow,
+    pr_details_result: &Result<
+        crate::github_client::PullRequest,
+        crate::github_client::GitHubError,
+    >,
+) -> (
+    crate::github_client::RequiredChecksPolicy,
+    crate::github_client::RequiredReviewsPolicy,
+) {
+    match pr_details_result {
         Ok(details) => {
             let base_ref = details
                 .extra
                 .get("base")
-                .and_then(|b| b.get("ref"))
-                .and_then(|r| r.as_str())
+                .and_then(|base| base.get("ref"))
+                .and_then(|reference| reference.as_str())
                 .unwrap_or("main");
             tokio::join!(
                 github_client.get_required_status_checks_policy(
                     &pr.repo_owner,
                     &pr.repo_name,
                     base_ref,
-                    &github_token
+                    github_token
                 ),
                 github_client.get_required_approving_review_policy(
                     &pr.repo_owner,
                     &pr.repo_name,
                     base_ref,
-                    &github_token
+                    github_token
                 )
             )
         }
@@ -1198,159 +1249,187 @@ async fn poll_single_pr(
                 "PR details unavailable for branch protection lookup",
             ),
         ),
-    };
+    }
+}
 
+fn select_branch_policy_inputs(
+    graphql_snapshot: Option<&GitHubReadinessSnapshot>,
+    rest_required_checks_policy: &crate::github_client::RequiredChecksPolicy,
+    rest_required_reviews_policy: &crate::github_client::RequiredReviewsPolicy,
+) -> BranchPolicyInputs {
     let required_check_names = graphql_snapshot
-        .as_ref()
         .filter(|snapshot| snapshot.policy.required_checks.known)
         .map(|snapshot| snapshot.policy.required_checks.value.clone())
         .unwrap_or_else(|| rest_required_checks_policy.required_check_names.clone());
     let required_approving_count = graphql_snapshot
-        .as_ref()
         .filter(|snapshot| snapshot.policy.required_reviews.known)
         .and_then(|snapshot| snapshot.policy.required_reviews.value)
         .or(rest_required_reviews_policy.required_approving_review_count);
     let required_checks_policy_known = graphql_snapshot
-        .as_ref()
         .map(|snapshot| snapshot.policy.required_checks.known)
         .unwrap_or(false)
         || rest_required_checks_policy.known;
     let required_reviews_policy_known = graphql_snapshot
-        .as_ref()
         .map(|snapshot| snapshot.policy.required_reviews.known)
         .unwrap_or(false)
         || rest_required_reviews_policy.known;
-
-    let readiness_ci_status = match (&check_runs, &combined_status) {
-        (Some(check_runs), Some(combined_status)) => {
-            let check_runs = deduplicate_check_runs(check_runs);
-            if required_check_names.is_empty() {
-                Some(aggregate_ci_status(&check_runs, combined_status))
-            } else {
-                let (filtered_runs, filtered_combined) =
-                    filter_to_required(&check_runs, combined_status, &required_check_names);
-                if filtered_runs.check_runs.is_empty() && filtered_combined.statuses.is_empty() {
-                    Some("pending".to_string())
-                } else {
-                    Some(aggregate_ci_status(&filtered_runs, &filtered_combined))
-                }
-            }
-        }
-        _ => old_ci_status.clone(),
-    };
-    let readiness_review_status = graphql_inputs
-        .as_ref()
-        .and_then(|inputs| inputs.review_status.clone())
-        .or_else(|| {
-            reviews.as_ref().map(|reviews| {
-                aggregate_review_status(reviews, has_requested_reviewers, required_approving_count)
-            })
-        })
-        .or_else(|| old_review_status.clone());
-    let readiness_mergeable_state = graphql_inputs
-        .as_ref()
-        .and_then(|inputs| inputs.mergeable_state.as_deref())
-        .or(mergeable_state.as_deref());
-    let readiness_is_queued = graphql_snapshot
-        .as_ref()
-        .and_then(|snapshot| snapshot.merge_queue_state.as_ref())
-        .map(|_| true)
-        .unwrap_or(is_queued);
     let requires_up_to_date_branch = graphql_snapshot
-        .as_ref()
         .filter(|snapshot| snapshot.policy.requires_up_to_date_branch.known)
         .and_then(|snapshot| snapshot.policy.requires_up_to_date_branch.value)
         .or(rest_required_checks_policy.requires_up_to_date_branch)
         .unwrap_or(false);
     let conversations_blocking = graphql_snapshot
-        .as_ref()
         .filter(|snapshot| snapshot.policy.requires_conversation_resolution.known)
         .and_then(|snapshot| snapshot.policy.requires_conversation_resolution.value)
         .unwrap_or(false)
         && graphql_snapshot
-            .as_ref()
             .and_then(|snapshot| snapshot.unresolved_conversations)
             .unwrap_or(false);
     let merge_queue_required_by_policy = graphql_snapshot
-        .as_ref()
         .filter(|snapshot| snapshot.policy.merge_queue_required.known)
         .and_then(|snapshot| snapshot.policy.merge_queue_required.value)
         .unwrap_or(false);
-    let mut readiness_facts = build_merge_readiness_facts(
-        &pr,
-        pr_details_result.as_ref().ok(),
-        mergeable,
-        readiness_mergeable_state,
-        readiness_ci_status.as_deref(),
-        readiness_review_status.as_deref(),
-        readiness_is_queued,
+
+    BranchPolicyInputs {
+        required_check_names,
+        required_approving_count,
         required_checks_policy_known,
         required_reviews_policy_known,
         requires_up_to_date_branch,
         conversations_blocking,
+        merge_queue_required_by_policy,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn poll_single_pr(
+    github_client: GitHubClient,
+    github_token: String,
+    pr: PrRow,
+    since: Option<String>,
+    old_ci_status: Option<String>,
+    old_review_status: Option<String>,
+    old_mergeable: Option<bool>,
+    old_mergeable_state: Option<String>,
+    fetch_comments: bool,
+) -> PollSinglePrResult {
+    let comments = match fetch_pr_comments_for_poll(
+        &github_client,
+        &github_token,
+        &pr,
+        since.as_deref(),
+        fetch_comments,
+    )
+    .await
+    {
+        Ok(comments) => comments,
+        Err(error) => {
+            return comment_fetch_error_result(
+                pr,
+                old_ci_status,
+                old_review_status,
+                old_mergeable,
+                old_mergeable_state,
+                error,
+            );
+        }
+    };
+
+    let graphql_snapshot =
+        fetch_graphql_readiness_snapshot(&github_client, &pr, &github_token).await;
+    let rest_sources = collect_rest_readiness_sources(
+        &github_client,
+        &github_token,
+        &pr,
+        graphql_snapshot.as_ref(),
+        old_mergeable,
+        old_mergeable_state,
+    )
+    .await;
+    let graphql_inputs = select_snapshot_readiness_inputs(&pr, graphql_snapshot.as_ref());
+
+    let check_runs = graphql_inputs
+        .as_ref()
+        .map(|inputs| inputs.check_runs.clone())
+        .or(rest_sources.check_runs);
+    let combined_status = graphql_inputs
+        .as_ref()
+        .map(|inputs| inputs.combined_status.clone())
+        .or(rest_sources.combined_status);
+
+    let (rest_required_checks_policy, rest_required_reviews_policy) =
+        collect_branch_policy_sources(
+            &github_client,
+            &github_token,
+            &pr,
+            &rest_sources.pr_details_result,
+        )
+        .await;
+    let branch_policy_inputs = select_branch_policy_inputs(
+        graphql_snapshot.as_ref(),
+        &rest_required_checks_policy,
+        &rest_required_reviews_policy,
+    );
+
+    let readiness_ci_status = ci_status_for_readiness(
+        check_runs.as_ref(),
+        combined_status.as_ref(),
+        &branch_policy_inputs.required_check_names,
+        old_ci_status.as_ref(),
+    );
+    let readiness_review_status = review_status_for_readiness(
+        graphql_inputs.as_ref(),
+        rest_sources.reviews.as_ref(),
+        rest_sources.has_requested_reviewers,
+        branch_policy_inputs.required_approving_count,
+        old_review_status.as_ref(),
+    );
+    let readiness_mergeable_state = graphql_inputs
+        .as_ref()
+        .and_then(|inputs| inputs.mergeable_state.as_deref())
+        .or(rest_sources.mergeable_state.as_deref());
+    let readiness_is_queued = graphql_snapshot
+        .as_ref()
+        .and_then(|snapshot| snapshot.merge_queue_state.as_ref())
+        .map(|_| true)
+        .unwrap_or(rest_sources.is_queued);
+
+    let mut readiness_facts = build_merge_readiness_facts(
+        &pr,
+        rest_sources.pr_details_result.as_ref().ok(),
+        rest_sources.mergeable,
+        readiness_mergeable_state,
+        readiness_ci_status.as_deref(),
+        readiness_review_status.as_deref(),
+        readiness_is_queued,
+        branch_policy_inputs.required_checks_policy_known,
+        branch_policy_inputs.required_reviews_policy_known,
+        branch_policy_inputs.requires_up_to_date_branch,
+        branch_policy_inputs.conversations_blocking,
         None,
     );
-    if !rest_ci_sha.is_empty() {
-        readiness_facts.source_head_sha = Some(rest_ci_sha.clone());
-    }
-    if let Some(snapshot) = &graphql_snapshot {
-        if readiness_facts.merge_group_sha.is_none() {
-            readiness_facts.merge_group_sha = snapshot.merge_group_sha.clone();
-        }
-        if readiness_facts.merge_queue_state.is_none() {
-            readiness_facts.merge_queue_state = snapshot.merge_queue_state.clone();
-        }
-        if readiness_facts.merge_queue_required.is_none() {
-            readiness_facts.merge_queue_required = snapshot
-                .merge_queue_required
-                .or(snapshot.policy.merge_queue_required.value);
-        }
-        if !snapshot.policy.unknown_reasons.is_empty() {
-            readiness_facts.warnings_json = add_readiness_warning(
-                readiness_facts.warnings_json,
-                MergeReadinessReason {
-                    code: "policy_coverage_unknown",
-                    message: "Some repository policy facts could not be verified from GitHub.",
-                },
-            );
-        }
-        if snapshot.unresolved_conversations == Some(true) {
-            readiness_facts.warnings_json = add_readiness_warning(
-                readiness_facts.warnings_json,
-                MergeReadinessReason {
-                    code: "unresolved_conversations",
-                    message: "Pull request has unresolved conversations.",
-                },
-            );
-        }
-        if merge_queue_required_by_policy
-            && !readiness_is_queued
-            && readiness_facts.status.as_deref() == Some("ready_to_merge")
-        {
-            readiness_facts.status = Some("ready_to_enqueue".to_string());
-            readiness_facts.action = Some("enqueue".to_string());
-            readiness_facts.merge_queue_required = Some(true);
-            readiness_facts.merge_queue_state = Some("not_queued".to_string());
-        }
-        if !snapshot.policy.unknown_reasons.is_empty()
-            && readiness_facts.status.as_deref() == Some("ready_to_merge")
-        {
-            readiness_facts.status = Some("readiness_unknown".to_string());
-            readiness_facts.action = Some("wait_for_github".to_string());
-        }
-    }
 
     let result_head_sha = graphql_inputs
         .as_ref()
         .and_then(|inputs| inputs.source_head_sha.clone())
         .or_else(|| {
-            if rest_ci_sha.is_empty() {
+            if rest_sources.rest_ci_sha.is_empty() {
                 None
             } else {
-                Some(rest_ci_sha)
+                Some(rest_sources.rest_ci_sha.clone())
             }
         })
         .unwrap_or_else(|| pr.head_sha.clone());
+
+    readiness_facts = finalize_readiness_facts_for_poll(
+        readiness_facts,
+        graphql_snapshot.as_ref(),
+        &result_head_sha,
+        readiness_is_queued,
+        branch_policy_inputs.merge_queue_required_by_policy,
+        0,
+        0,
+    );
 
     PollSinglePrResult {
         pr_id: pr.id,
@@ -1362,13 +1441,13 @@ async fn poll_single_pr(
         comments,
         check_runs,
         combined_status,
-        reviews,
-        has_requested_reviewers,
-        mergeable,
-        mergeable_state,
-        is_queued,
-        required_check_names,
-        required_approving_count,
+        reviews: rest_sources.reviews,
+        has_requested_reviewers: rest_sources.has_requested_reviewers,
+        mergeable: rest_sources.mergeable,
+        mergeable_state: rest_sources.mergeable_state,
+        is_queued: rest_sources.is_queued,
+        required_check_names: branch_policy_inputs.required_check_names,
+        required_approving_count: branch_policy_inputs.required_approving_count,
         readiness_facts,
         error: None,
     }
@@ -1511,52 +1590,25 @@ async fn poll_prs_for_project(
         let persist_result = persist_polled_comments(events, &db_lock, &result, &existing_ids, now);
         new_comment_count += persist_result.new_comment_count;
 
-        if let (Some(check_runs), Some(combined_status)) =
-            (&result.check_runs, &result.combined_status)
-        {
-            // Deduplicate check runs: GitHub keeps old runs from reruns,
-            // so the same check name can appear multiple times. Keep only the latest.
-            let check_runs = &deduplicate_check_runs(check_runs);
-            // Filter to required checks only when branch protection is configured
-            let (display_runs, new_status) = if !result.required_check_names.is_empty() {
-                let (filtered_runs, filtered_combined) =
-                    filter_to_required(check_runs, combined_status, &result.required_check_names);
-                let status = if filtered_runs.check_runs.is_empty()
-                    && filtered_combined.statuses.is_empty()
-                {
-                    // Required checks haven't run yet
-                    "pending".to_string()
-                } else {
-                    aggregate_ci_status(&filtered_runs, &filtered_combined)
-                };
-                (filtered_runs.check_runs, status)
-            } else {
-                (
-                    check_runs.check_runs.clone(),
-                    aggregate_ci_status(check_runs, combined_status),
-                )
-            };
-            let check_runs_json =
-                serde_json::to_string(&display_runs).unwrap_or_else(|_| "[]".to_string());
-
+        if let Some(ci_payload) = ci_persistence_payload(&result) {
             if let Err(e) = db_lock.update_pr_ci_status(
-                result.pr_id,
-                &result.head_sha,
-                &new_status,
-                &check_runs_json,
+                ci_payload.pr_id,
+                &ci_payload.head_sha,
+                &ci_payload.status,
+                &ci_payload.check_runs_json,
             ) {
                 error!(
                     "[GitHub Poller] Failed to update CI status for PR #{}: {}",
                     result.pr_id, e
                 );
-            } else if result.old_ci_status.as_deref() != Some(new_status.as_str()) {
+            } else if ci_payload.status_changed {
                 if let Err(e) = events.emit(
                     "ci-status-changed",
                     serde_json::json!({
                         "task_id": result.ticket_id,
                         "pr_id": result.pr_id,
                         "pr_title": result.pr_title,
-                        "ci_status": new_status,
+                        "ci_status": ci_payload.status,
                         "timestamp": now
                     }),
                 ) {
@@ -1618,17 +1670,15 @@ async fn poll_prs_for_project(
             );
         }
 
-        let mut readiness_facts = result.readiness_facts;
-        if persist_result.new_comment_count > 0 {
-            readiness_facts.warnings_json = add_readiness_warning(
-                readiness_facts.warnings_json,
-                MergeReadinessReason {
-                    code: "unresolved_conversations",
-                    message: "Pull request has unresolved conversations.",
-                },
-            );
-        }
-        readiness_facts.updated_at = now;
+        let readiness_facts = finalize_readiness_facts_for_poll(
+            result.readiness_facts,
+            None,
+            &result.head_sha,
+            result.is_queued,
+            false,
+            persist_result.new_comment_count,
+            now,
+        );
         if let Err(e) = db_lock.update_pr_merge_readiness(result.pr_id, &readiness_facts) {
             error!(
                 "[GitHub Poller] Failed to update merge readiness for PR #{}: {}",
@@ -1999,13 +2049,16 @@ struct MergeReadinessInputs {
     source_head_sha: Option<String>,
     review_status: Option<String>,
     mergeable_state: Option<String>,
+    check_runs: CheckRunsResponse,
+    combined_status: CombinedStatusResponse,
 }
 
-fn merge_readiness_inputs_from_snapshot(
+fn select_snapshot_readiness_inputs(
     _pr: &PrRow,
-    snapshot: &GitHubReadinessSnapshot,
+    snapshot: Option<&GitHubReadinessSnapshot>,
 ) -> Option<MergeReadinessInputs> {
-    if snapshot.requires_rest_check_fallback() {
+    let snapshot = snapshot?;
+    if snapshot.source_head_sha.is_none() || snapshot.requires_rest_check_fallback() {
         return None;
     }
 
@@ -2013,7 +2066,159 @@ fn merge_readiness_inputs_from_snapshot(
         source_head_sha: snapshot.source_head_sha.clone(),
         review_status: snapshot.review_status.clone(),
         mergeable_state: snapshot.mergeable_state.clone(),
+        check_runs: snapshot.check_runs.clone(),
+        combined_status: snapshot.combined_status.clone(),
     })
+}
+
+fn ci_status_for_readiness(
+    check_runs: Option<&CheckRunsResponse>,
+    combined_status: Option<&CombinedStatusResponse>,
+    required_check_names: &[String],
+    old_ci_status: Option<&String>,
+) -> Option<String> {
+    match (check_runs, combined_status) {
+        (Some(check_runs), Some(combined_status)) => {
+            let check_runs = deduplicate_check_runs(check_runs);
+            if required_check_names.is_empty() {
+                Some(aggregate_ci_status(&check_runs, combined_status))
+            } else {
+                let (filtered_runs, filtered_combined) =
+                    filter_to_required(&check_runs, combined_status, required_check_names);
+                if filtered_runs.check_runs.is_empty() && filtered_combined.statuses.is_empty() {
+                    Some("pending".to_string())
+                } else {
+                    Some(aggregate_ci_status(&filtered_runs, &filtered_combined))
+                }
+            }
+        }
+        _ => old_ci_status.cloned(),
+    }
+}
+
+fn review_status_for_readiness(
+    graphql_inputs: Option<&MergeReadinessInputs>,
+    reviews: Option<&Vec<PrReview>>,
+    has_requested_reviewers: bool,
+    required_approving_count: Option<usize>,
+    old_review_status: Option<&String>,
+) -> Option<String> {
+    graphql_inputs
+        .and_then(|inputs| inputs.review_status.clone())
+        .or_else(|| {
+            reviews.map(|reviews| {
+                aggregate_review_status(reviews, has_requested_reviewers, required_approving_count)
+            })
+        })
+        .or_else(|| old_review_status.cloned())
+}
+
+fn ci_persistence_payload(result: &PollSinglePrResult) -> Option<CiPersistencePayload> {
+    let (Some(check_runs), Some(combined_status)) = (&result.check_runs, &result.combined_status)
+    else {
+        return None;
+    };
+
+    let check_runs = deduplicate_check_runs(check_runs);
+    let (display_runs, status) = if result.required_check_names.is_empty() {
+        (
+            check_runs.check_runs.clone(),
+            aggregate_ci_status(&check_runs, combined_status),
+        )
+    } else {
+        let (filtered_runs, filtered_combined) =
+            filter_to_required(&check_runs, combined_status, &result.required_check_names);
+        let status = if filtered_runs.check_runs.is_empty() && filtered_combined.statuses.is_empty()
+        {
+            "pending".to_string()
+        } else {
+            aggregate_ci_status(&filtered_runs, &filtered_combined)
+        };
+        (filtered_runs.check_runs, status)
+    };
+    let check_runs_json = serde_json::to_string(&display_runs).unwrap_or_else(|_| "[]".to_string());
+    let status_changed = result.old_ci_status.as_deref() != Some(status.as_str());
+
+    Some(CiPersistencePayload {
+        pr_id: result.pr_id,
+        head_sha: result.head_sha.clone(),
+        status,
+        check_runs_json,
+        status_changed,
+    })
+}
+
+fn finalize_readiness_facts_for_poll(
+    mut readiness_facts: PrMergeReadinessFacts,
+    graphql_snapshot: Option<&GitHubReadinessSnapshot>,
+    source_head_sha: &str,
+    readiness_is_queued: bool,
+    merge_queue_required_by_policy: bool,
+    new_comment_count: usize,
+    updated_at: i64,
+) -> PrMergeReadinessFacts {
+    if !source_head_sha.is_empty() {
+        readiness_facts.source_head_sha = Some(source_head_sha.to_string());
+    }
+
+    if let Some(snapshot) = graphql_snapshot {
+        if readiness_facts.merge_group_sha.is_none() {
+            readiness_facts.merge_group_sha = snapshot.merge_group_sha.clone();
+        }
+        if readiness_facts.merge_queue_state.is_none() {
+            readiness_facts.merge_queue_state = snapshot.merge_queue_state.clone();
+        }
+        if readiness_facts.merge_queue_required.is_none() {
+            readiness_facts.merge_queue_required = snapshot
+                .merge_queue_required
+                .or(snapshot.policy.merge_queue_required.value);
+        }
+        if !snapshot.policy.unknown_reasons.is_empty() {
+            readiness_facts.warnings_json = add_readiness_warning(
+                readiness_facts.warnings_json,
+                MergeReadinessReason {
+                    code: "policy_coverage_unknown",
+                    message: "Some repository policy facts could not be verified from GitHub.",
+                },
+            );
+        }
+        if snapshot.unresolved_conversations == Some(true) {
+            readiness_facts.warnings_json = add_readiness_warning(
+                readiness_facts.warnings_json,
+                MergeReadinessReason {
+                    code: "unresolved_conversations",
+                    message: "Pull request has unresolved conversations.",
+                },
+            );
+        }
+        if merge_queue_required_by_policy
+            && !readiness_is_queued
+            && readiness_facts.status.as_deref() == Some("ready_to_merge")
+        {
+            readiness_facts.status = Some("ready_to_enqueue".to_string());
+            readiness_facts.action = Some("enqueue".to_string());
+            readiness_facts.merge_queue_required = Some(true);
+            readiness_facts.merge_queue_state = Some("not_queued".to_string());
+        }
+        if !snapshot.policy.unknown_reasons.is_empty()
+            && readiness_facts.status.as_deref() == Some("ready_to_merge")
+        {
+            readiness_facts.status = Some("readiness_unknown".to_string());
+            readiness_facts.action = Some("wait_for_github".to_string());
+        }
+    }
+
+    if new_comment_count > 0 {
+        readiness_facts.warnings_json = add_readiness_warning(
+            readiness_facts.warnings_json,
+            MergeReadinessReason {
+                code: "unresolved_conversations",
+                message: "Pull request has unresolved conversations.",
+            },
+        );
+    }
+    readiness_facts.updated_at = updated_at;
+    readiness_facts
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3145,7 +3350,7 @@ mod tests {
         };
 
         assert!(!needs_rest_ci_for_snapshot(Some(&snapshot)));
-        let inputs = merge_readiness_inputs_from_snapshot(&pr, &snapshot).unwrap();
+        let inputs = select_snapshot_readiness_inputs(&pr, Some(&snapshot)).unwrap();
         assert_eq!(inputs.source_head_sha.as_deref(), Some("new-head-sha"));
         assert_eq!(inputs.review_status.as_deref(), Some("approved"));
         assert_eq!(inputs.mergeable_state.as_deref(), Some("clean"));
@@ -3184,7 +3389,7 @@ mod tests {
         };
 
         assert!(needs_rest_ci_for_snapshot(Some(&snapshot)));
-        assert!(merge_readiness_inputs_from_snapshot(&pr, &snapshot).is_none());
+        assert!(select_snapshot_readiness_inputs(&pr, Some(&snapshot)).is_none());
     }
 
     #[test]
@@ -3262,5 +3467,280 @@ mod tests {
             .as_deref()
             .unwrap_or_default()
             .contains("unresolved_conversations"));
+    }
+
+    fn known_readiness_policy(
+        required_checks: Vec<&str>,
+        required_reviews: Option<usize>,
+        requires_up_to_date_branch: Option<bool>,
+        requires_conversation_resolution: Option<bool>,
+        merge_queue_required: Option<bool>,
+    ) -> crate::github_client::RepositoryPolicyFacts {
+        crate::github_client::RepositoryPolicyFacts {
+            required_checks: crate::github_client::PolicyValue::known(
+                required_checks.into_iter().map(str::to_string).collect(),
+            ),
+            required_reviews: crate::github_client::PolicyValue::known(required_reviews),
+            requires_up_to_date_branch: crate::github_client::PolicyValue::known(
+                requires_up_to_date_branch,
+            ),
+            requires_conversation_resolution: crate::github_client::PolicyValue::known(
+                requires_conversation_resolution,
+            ),
+            merge_queue_required: crate::github_client::PolicyValue::known(merge_queue_required),
+            required_deployments: crate::github_client::PolicyValue::known(Vec::new()),
+            unknown_reasons: Vec::new(),
+        }
+    }
+
+    fn readiness_snapshot_with_policy(
+        source_head_sha: Option<&str>,
+        status_check_rollup_sha: Option<&str>,
+        policy: crate::github_client::RepositoryPolicyFacts,
+    ) -> GitHubReadinessSnapshot {
+        GitHubReadinessSnapshot {
+            source_head_sha: source_head_sha.map(str::to_string),
+            status_check_rollup_sha: status_check_rollup_sha.map(str::to_string),
+            check_runs: CheckRunsResponse {
+                total_count: 1,
+                check_runs: vec![CheckRun {
+                    id: 10,
+                    name: "graphql-ci".to_string(),
+                    status: "completed".to_string(),
+                    conclusion: Some("success".to_string()),
+                    html_url: "https://example.com/graphql-ci".to_string(),
+                }],
+            },
+            combined_status: CombinedStatusResponse {
+                state: "success".to_string(),
+                statuses: vec![],
+                sha: source_head_sha.unwrap_or_default().to_string(),
+                total_count: 0,
+                extra: serde_json::json!({}),
+            },
+            merge_state_status: Some("CLEAN".to_string()),
+            mergeable_state: Some("clean".to_string()),
+            review_decision: Some("APPROVED".to_string()),
+            review_status: Some("approved".to_string()),
+            auto_merge_requested: false,
+            merge_queue_required: None,
+            merge_queue_state: None,
+            merge_group_sha: Some("merge-group-sha".to_string()),
+            unresolved_conversations: Some(true),
+            policy,
+            warnings: Vec::new(),
+        }
+    }
+
+    fn ready_to_merge_facts() -> PrMergeReadinessFacts {
+        PrMergeReadinessFacts {
+            status: Some("ready_to_merge".to_string()),
+            action: Some("merge".to_string()),
+            blockers_json: None,
+            warnings_json: None,
+            source_head_sha: Some("old-head-sha".to_string()),
+            merge_group_sha: None,
+            required_checks_policy_known: Some(true),
+            required_reviews_policy_known: Some(true),
+            merge_queue_required: None,
+            merge_queue_state: None,
+            updated_at: 0,
+        }
+    }
+
+    #[test]
+    fn select_snapshot_readiness_inputs_accepts_fresh_graphql_head_data() {
+        let pr = make_github_readiness_pr();
+        let snapshot = readiness_snapshot_with_policy(
+            Some("graphql-head-sha"),
+            Some("graphql-head-sha"),
+            crate::github_client::RepositoryPolicyFacts::known_empty(),
+        );
+
+        let inputs = select_snapshot_readiness_inputs(&pr, Some(&snapshot))
+            .expect("fresh GraphQL readiness should be usable");
+
+        assert_eq!(inputs.source_head_sha.as_deref(), Some("graphql-head-sha"));
+        assert_eq!(inputs.review_status.as_deref(), Some("approved"));
+        assert_eq!(inputs.mergeable_state.as_deref(), Some("clean"));
+        assert_eq!(inputs.check_runs.check_runs[0].name, "graphql-ci");
+        assert_eq!(inputs.combined_status.sha, "graphql-head-sha");
+    }
+
+    #[test]
+    fn select_snapshot_readiness_inputs_rejects_missing_or_stale_head_data() {
+        let pr = make_github_readiness_pr();
+        let missing_head = readiness_snapshot_with_policy(
+            None,
+            Some("graphql-head-sha"),
+            crate::github_client::RepositoryPolicyFacts::known_empty(),
+        );
+        let stale_rollup = readiness_snapshot_with_policy(
+            Some("graphql-head-sha"),
+            Some("old-head-sha"),
+            crate::github_client::RepositoryPolicyFacts::known_empty(),
+        );
+
+        assert!(select_snapshot_readiness_inputs(&pr, Some(&missing_head)).is_none());
+        assert!(select_snapshot_readiness_inputs(&pr, Some(&stale_rollup)).is_none());
+        assert!(select_snapshot_readiness_inputs(&pr, None).is_none());
+    }
+
+    #[test]
+    fn select_branch_policy_inputs_prefers_known_graphql_policy_over_rest_fallbacks() {
+        let mut snapshot = readiness_snapshot_with_policy(
+            Some("graphql-head-sha"),
+            Some("graphql-head-sha"),
+            known_readiness_policy(
+                vec!["graphql-ci"],
+                Some(2),
+                Some(true),
+                Some(true),
+                Some(true),
+            ),
+        );
+        snapshot.unresolved_conversations = Some(true);
+        let rest_checks = crate::github_client::RequiredChecksPolicy::known(
+            vec!["rest-ci".to_string()],
+            Some(false),
+        );
+        let rest_reviews = crate::github_client::RequiredReviewsPolicy::known(1);
+
+        let inputs = select_branch_policy_inputs(Some(&snapshot), &rest_checks, &rest_reviews);
+
+        assert_eq!(inputs.required_check_names, vec!["graphql-ci".to_string()]);
+        assert_eq!(inputs.required_approving_count, Some(2));
+        assert!(inputs.required_checks_policy_known);
+        assert!(inputs.required_reviews_policy_known);
+        assert!(inputs.requires_up_to_date_branch);
+        assert!(inputs.conversations_blocking);
+        assert!(inputs.merge_queue_required_by_policy);
+    }
+
+    #[test]
+    fn select_branch_policy_inputs_uses_rest_when_graphql_policy_is_unknown() {
+        let snapshot = readiness_snapshot_with_policy(
+            Some("graphql-head-sha"),
+            Some("graphql-head-sha"),
+            crate::github_client::RepositoryPolicyFacts::unknown("GraphQL policy unavailable"),
+        );
+        let rest_checks = crate::github_client::RequiredChecksPolicy::known(
+            vec!["rest-ci".to_string()],
+            Some(true),
+        );
+        let rest_reviews = crate::github_client::RequiredReviewsPolicy::known(1);
+
+        let inputs = select_branch_policy_inputs(Some(&snapshot), &rest_checks, &rest_reviews);
+
+        assert_eq!(inputs.required_check_names, vec!["rest-ci".to_string()]);
+        assert_eq!(inputs.required_approving_count, Some(1));
+        assert!(inputs.required_checks_policy_known);
+        assert!(inputs.required_reviews_policy_known);
+        assert!(inputs.requires_up_to_date_branch);
+        assert!(!inputs.conversations_blocking);
+        assert!(!inputs.merge_queue_required_by_policy);
+    }
+
+    #[test]
+    fn finalize_readiness_facts_for_poll_preserves_snapshot_queue_facts() {
+        let mut snapshot = readiness_snapshot_with_policy(
+            Some("graphql-head-sha"),
+            Some("graphql-head-sha"),
+            known_readiness_policy(vec![], Some(0), Some(false), Some(false), Some(true)),
+        );
+        snapshot.merge_queue_required = Some(true);
+        snapshot.merge_queue_state = None;
+        snapshot.merge_group_sha = Some("merge-group-sha".to_string());
+
+        let facts = finalize_readiness_facts_for_poll(
+            ready_to_merge_facts(),
+            Some(&snapshot),
+            "graphql-head-sha",
+            false,
+            true,
+            0,
+            1234,
+        );
+
+        assert_eq!(facts.status.as_deref(), Some("ready_to_enqueue"));
+        assert_eq!(facts.action.as_deref(), Some("enqueue"));
+        assert_eq!(facts.source_head_sha.as_deref(), Some("graphql-head-sha"));
+        assert_eq!(facts.merge_group_sha.as_deref(), Some("merge-group-sha"));
+        assert_eq!(facts.merge_queue_required, Some(true));
+        assert_eq!(facts.merge_queue_state.as_deref(), Some("not_queued"));
+        assert_eq!(facts.updated_at, 1234);
+    }
+
+    #[test]
+    fn finalize_readiness_facts_for_poll_adds_warnings_for_unknown_policy_and_new_comments() {
+        let mut snapshot = readiness_snapshot_with_policy(
+            Some("graphql-head-sha"),
+            Some("graphql-head-sha"),
+            crate::github_client::RepositoryPolicyFacts::unknown("GraphQL policy unavailable"),
+        );
+        snapshot.unresolved_conversations = Some(false);
+
+        let facts = finalize_readiness_facts_for_poll(
+            ready_to_merge_facts(),
+            Some(&snapshot),
+            "graphql-head-sha",
+            false,
+            false,
+            1,
+            5678,
+        );
+        let warnings = facts.merge_readiness_warnings_or_default();
+
+        assert_eq!(facts.status.as_deref(), Some("readiness_unknown"));
+        assert_eq!(facts.action.as_deref(), Some("wait_for_github"));
+        assert!(warnings.contains("policy_coverage_unknown"));
+        assert!(warnings.contains("unresolved_conversations"));
+        assert_eq!(warnings.matches("unresolved_conversations").count(), 1);
+        assert_eq!(facts.updated_at, 5678);
+    }
+
+    #[test]
+    fn ci_persistence_payload_filters_to_required_checks_and_reports_status_change() {
+        let mut result = make_review_body_poll_result(42);
+        result.head_sha = "head-sha".to_string();
+        result.old_ci_status = Some("pending".to_string());
+        result.required_check_names = vec!["ci".to_string()];
+        result.check_runs = Some(CheckRunsResponse {
+            total_count: 2,
+            check_runs: vec![
+                CheckRun {
+                    id: 1,
+                    name: "ci".to_string(),
+                    status: "completed".to_string(),
+                    conclusion: Some("success".to_string()),
+                    html_url: "https://example.com/ci".to_string(),
+                },
+                CheckRun {
+                    id: 2,
+                    name: "optional-lint".to_string(),
+                    status: "completed".to_string(),
+                    conclusion: Some("failure".to_string()),
+                    html_url: "https://example.com/lint".to_string(),
+                },
+            ],
+        });
+        result.combined_status = Some(CombinedStatusResponse {
+            state: "success".to_string(),
+            statuses: vec![],
+            sha: "head-sha".to_string(),
+            total_count: 0,
+            extra: serde_json::json!({}),
+        });
+
+        let payload = ci_persistence_payload(&result).expect("CI inputs should produce a payload");
+        let persisted_runs: Vec<CheckRun> = serde_json::from_str(&payload.check_runs_json)
+            .expect("payload should serialize display check runs");
+
+        assert_eq!(payload.pr_id, 42);
+        assert_eq!(payload.head_sha, "head-sha");
+        assert_eq!(payload.status, "success");
+        assert!(payload.status_changed);
+        assert_eq!(persisted_runs.len(), 1);
+        assert_eq!(persisted_runs[0].name, "ci");
     }
 }
