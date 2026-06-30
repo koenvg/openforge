@@ -3,8 +3,8 @@ import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { writable } from 'svelte/store'
 import { requireElement } from '../../test-utils/dom'
 import TaskInfoPanel from './TaskInfoPanel.svelte'
-import type { Task, PullRequestInfo, PrComment, TaskLabel } from '../../lib/types'
-import { mergingTaskIds, tasks, ticketPrs } from '../../lib/stores'
+import type { Task, PullRequestInfo, PrComment, TaskLabel, AgentSession } from '../../lib/types'
+import { activeSessions, mergingTaskIds, tasks, ticketPrs } from '../../lib/stores'
 import { addTaskLabel, forceGithubSync, getPrComments, getPullRequests, linkPullRequest, mergePullRequest, removeTaskLabel } from '../../lib/ipc'
 
 vi.mock('../../lib/stores', () => ({
@@ -64,6 +64,7 @@ const baseTask: Task = {
 describe('TaskInfoPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    activeSessions.set(new Map())
     mergingTaskIds.set(new Set())
     ticketPrs.set(new Map())
     tasks.set([])
@@ -113,6 +114,25 @@ describe('TaskInfoPanel', () => {
     }
   }
 
+  function createAgentSession(overrides: Partial<AgentSession> = {}): AgentSession {
+    return {
+      id: 'session-1',
+      ticket_id: 'T-42',
+      opencode_session_id: null,
+      stage: 'implement',
+      status: 'running',
+      checkpoint_data: null,
+      pty_instance_id: null,
+      error_message: null,
+      created_at: 1000,
+      updated_at: 2000,
+      provider: 'pi',
+      claude_session_id: null,
+      pi_session_id: 'pi-sess-abc123',
+      ...overrides,
+    }
+  }
+
   async function findPullRequestCard(prNumber: number): Promise<HTMLElement> {
     const prNumberElement = await screen.findByText(`#${prNumber}`)
     return requireElement(prNumberElement.closest('article'), HTMLElement)
@@ -154,6 +174,25 @@ describe('TaskInfoPanel', () => {
       const element = document.querySelector(`[data-task-info-card="${card}"]`)
       expect(element?.getAttribute('data-card-sizing')).toBe('natural')
     }
+  })
+
+  it('shows a copyable resume command in details when the active session can be resumed', () => {
+    activeSessions.set(new Map([['T-42', createAgentSession({ provider: 'pi', pi_session_id: 'pi-sess-abc123' })]]))
+
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: '/repo/T-42' } })
+
+    expect(screen.getByText('Resume command')).toBeTruthy()
+    expect(screen.getByText('pi --session pi-sess-abc123')).toBeTruthy()
+    expect(screen.getByTitle('Copy resume command')).toBeTruthy()
+  })
+
+  it('hides the resume command row when no active session command is available', () => {
+    activeSessions.set(new Map([['T-42', createAgentSession({ provider: 'codex', pi_session_id: null })]]))
+
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: '/repo/T-42' } })
+
+    expect(screen.queryByText('Resume command')).toBeNull()
+    expect(screen.queryByText(/--session|--resume|codex resume/)).toBeNull()
   })
 
   it('refreshes task pull requests after linking a PR from the empty state', async () => {

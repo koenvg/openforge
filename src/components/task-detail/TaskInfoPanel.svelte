@@ -1,8 +1,9 @@
 <script lang="ts">
   import type { Task, TaskLabel, PullRequestInfo } from '../../lib/types'
   import { deriveTaskAttention } from '../../lib/taskAttention'
-  import { tasks as allTasks, ticketPrs } from '../../lib/stores'
+  import { activeSessions, tasks as allTasks, ticketPrs } from '../../lib/stores'
   import { addTaskLabel, getPullRequests, removeTaskLabel } from '../../lib/ipc'
+  import { getAgentSessionResumeCommand } from '../../lib/agentResumeCommand'
   import { buildTicketPullRequestMap } from '../../lib/pullRequestStore'
   import { getTaskLabels, hasLabelNamed } from '../../lib/taskLabels'
   import { getTaskDependentSummaries, getTaskDependencySummaries, getWaitingDependencyCount } from '../../lib/taskDependencies'
@@ -36,6 +37,7 @@
   let dependents = $derived(getTaskDependentSummaries(task, taskList))
   let surfaceClass = $derived(surface === 'transparent' ? 'bg-transparent' : 'bg-base-200')
   let attention = $derived(deriveTaskAttention(taskPrs, waitingDependencyCount))
+  let resumeCommand = $derived(getAgentSessionResumeCommand($activeSessions.get(task.id) || null))
 
   function labelSignature(nextLabels: TaskLabel[]): string {
     return JSON.stringify(nextLabels.map((label) => [label.id, label.name, label.color]))
@@ -120,6 +122,14 @@
         <div class="text-xs text-base-content/55">Workspace</div>
         <span class="text-xs font-mono text-base-content/70 truncate" title={workspacePath}>{workspacePath}</span>
         <CopyButton text={workspacePath} label="Copy workspace path" />
+      </div>
+    {/if}
+
+    {#if resumeCommand}
+      <div class="grid grid-cols-[6.25rem_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 border-b border-base-300/70" aria-label="Resume command">
+        <div class="text-xs text-base-content/55">Resume command</div>
+        <code class="text-xs font-mono text-base-content/70 truncate" title={resumeCommand}>{resumeCommand}</code>
+        <CopyButton text={resumeCommand} label="Copy resume command" />
       </div>
     {/if}
   </section>
