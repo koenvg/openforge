@@ -232,10 +232,6 @@ export function getMergeReadiness(pr: MergeReadinessInfo, options: MergeReadines
     return mergeReadinessResult(pr, 'blocked', 'resolve_blockers', blockers, warnings);
   }
 
-  if (pr.is_queued === true) {
-    return mergeReadinessResult(pr, 'queued_pull_request', 'wait_for_queue', blockers, warnings);
-  }
-
   if (pr.draft === true) {
     blockers.push(mergeReadinessDetail('draft', 'Pull request is still marked as draft.'));
   }
@@ -279,8 +275,14 @@ export function getMergeReadiness(pr: MergeReadinessInfo, options: MergeReadines
     return mergeReadinessResult(pr, 'blocked', 'resolve_blockers', blockers, warnings);
   }
 
+  if (pr.is_queued === true) {
+    return mergeReadinessResult(pr, 'queued_pull_request', 'wait_for_queue', blockers, warnings);
+  }
+
   const hasDirectMergeability = mergeableState === 'clean' || mergeableState === 'behind';
-  const isUnprotectedFallback = mergeableState === null && pr.mergeable === true && ciStatus === null && reviewStatus === null;
+  const hasNoCiStatus = ciStatus === null || ciStatus === 'none';
+  const hasNoReviewStatus = reviewStatus === null || reviewStatus === 'none';
+  const isUnprotectedFallback = mergeableState === null && pr.mergeable === true && hasNoCiStatus && hasNoReviewStatus;
 
   if (isUnprotectedFallback) {
     warnings.push(mergeReadinessDetail('unprotected_fallback', 'Using simple mergeability because no protected-branch checks or review state are available.'));

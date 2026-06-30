@@ -1018,7 +1018,6 @@ function getMergeReadiness(pr, options = {}) {
 		blockers.push(mergeReadinessDetail(pr.state === "merged" ? "already_merged" : "pull_request_closed", pr.state === "merged" ? "Pull request is already merged." : "Pull request is closed."));
 		return mergeReadinessResult(pr, "blocked", "resolve_blockers", blockers, warnings);
 	}
-	if (pr.is_queued === true) return mergeReadinessResult(pr, "queued_pull_request", "wait_for_queue", blockers, warnings);
 	if (pr.draft === true) blockers.push(mergeReadinessDetail("draft", "Pull request is still marked as draft."));
 	if (reviewStatus === "changes_requested") blockers.push(mergeReadinessDetail("changes_requested", "Review changes have been requested."));
 	if (ciStatus === "pending" || ciStatus === "queued" || ciStatus === "in_progress") blockers.push(mergeReadinessDetail("checks_pending", "Required checks are still running."));
@@ -1034,8 +1033,11 @@ function getMergeReadiness(pr, options = {}) {
 		else warnings.push(detail);
 	}
 	if (blockers.length > 0) return mergeReadinessResult(pr, "blocked", "resolve_blockers", blockers, warnings);
+	if (pr.is_queued === true) return mergeReadinessResult(pr, "queued_pull_request", "wait_for_queue", blockers, warnings);
 	const hasDirectMergeability = mergeableState === "clean" || mergeableState === "behind";
-	const isUnprotectedFallback = mergeableState === null && pr.mergeable === true && ciStatus === null && reviewStatus === null;
+	const hasNoCiStatus = ciStatus === null || ciStatus === "none";
+	const hasNoReviewStatus = reviewStatus === null || reviewStatus === "none";
+	const isUnprotectedFallback = mergeableState === null && pr.mergeable === true && hasNoCiStatus && hasNoReviewStatus;
 	if (isUnprotectedFallback) warnings.push(mergeReadinessDetail("unprotected_fallback", "Using simple mergeability because no protected-branch checks or review state are available."));
 	if (hasDirectMergeability || isUnprotectedFallback) return mergeReadinessResult(pr, options.requireMergeQueue === true ? "ready_to_enqueue" : "ready_to_merge", options.requireMergeQueue === true ? "enqueue" : "merge", blockers, warnings);
 	if (mergeableState === "unknown" || pr.mergeable === null || mergeableState === null && pr.mergeable !== false) {

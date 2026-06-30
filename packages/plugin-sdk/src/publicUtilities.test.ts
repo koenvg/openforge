@@ -76,6 +76,23 @@ describe('public plugin utilities', () => {
       action: 'wait_for_queue',
     })
 
+    expect(getMergeReadiness(makePullRequest({ is_queued: true, ci_status: 'failure' }))).toMatchObject({
+      status: 'blocked',
+      action: 'resolve_blockers',
+      blockers: [expect.objectContaining({ code: 'checks_failed' })],
+    })
+
+    expect(getMergeReadiness(makePullRequest({
+      mergeable: true,
+      mergeable_state: null,
+      ci_status: 'none',
+      review_status: 'none',
+    }))).toMatchObject({
+      status: 'ready_to_merge',
+      action: 'merge',
+      warnings: [expect.objectContaining({ code: 'unprotected_fallback' })],
+    })
+
     expect(getMergeReadiness(makePullRequest({ mergeable: true, mergeable_state: 'clean', ci_status: 'success' }), { requireMergeQueue: true })).toMatchObject({
       status: 'ready_to_enqueue',
       action: 'enqueue',

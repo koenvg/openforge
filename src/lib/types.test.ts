@@ -137,6 +137,23 @@ describe('getMergeReadiness', () => {
     expect(isReadyToMerge(createPullRequest({ is_queued: true }))).toBe(false)
   })
 
+  it('reports hard blockers before queued status when a queued pull request becomes blocked', () => {
+    const result = getMergeReadiness(createPullRequest({
+      is_queued: true,
+      ci_status: 'failure',
+      review_status: 'changes_requested',
+    }))
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      action: 'resolve_blockers',
+      blockers: [
+        expect.objectContaining({ code: 'changes_requested' }),
+        expect.objectContaining({ code: 'checks_failed' }),
+      ],
+    })
+  })
+
   it('returns readiness-unknown with source SHA when GitHub mergeability is transient or unknown', () => {
     const result = getMergeReadiness(createPullRequest({ mergeable: null, mergeable_state: 'unknown', head_sha: 'sha-unknown' }))
 
@@ -156,6 +173,22 @@ describe('getMergeReadiness', () => {
       mergeable_state: null,
       ci_status: null,
       review_status: null,
+    }))
+
+    expect(result).toMatchObject({
+      status: 'ready_to_merge',
+      action: 'merge',
+      blockers: [],
+      warnings: [expect.objectContaining({ code: 'unprotected_fallback' })],
+    })
+  })
+
+  it('treats backend none statuses as absent state for the simple unprotected fallback', () => {
+    const result = getMergeReadiness(createPullRequest({
+      mergeable: true,
+      mergeable_state: null,
+      ci_status: 'none',
+      review_status: 'none',
     }))
 
     expect(result).toMatchObject({
