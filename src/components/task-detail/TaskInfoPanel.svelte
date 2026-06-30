@@ -41,11 +41,11 @@
     return JSON.stringify(nextLabels.map((label) => [label.id, label.name, label.color]))
   }
 
-  function alertClass(tone: 'error' | 'warning' | 'success' | 'info'): string {
-    if (tone === 'error') return 'alert-error'
-    if (tone === 'warning') return 'alert-warning'
-    if (tone === 'success') return 'alert-success'
-    return 'alert-info'
+  function chipClass(tone: 'error' | 'warning' | 'success' | 'info'): string {
+    if (tone === 'error') return 'badge-error badge-outline'
+    if (tone === 'warning') return 'badge-warning badge-outline'
+    if (tone === 'success') return 'badge-success badge-outline'
+    return 'badge-info badge-outline'
   }
 
   $effect(() => {
@@ -89,15 +89,14 @@
 
 <div data-testid="task-info-panel" data-scroll-owner="false" class="flex flex-col gap-3 p-3 {surfaceClass} min-h-max">
   {#if attention}
-    <div
-      role="alert"
+    <section
       data-task-info-card="attention"
       data-card-sizing="natural"
-      class="alert {alertClass(attention.tone)} py-2 px-3 text-sm shrink-0"
+      class="flex flex-wrap items-center gap-1.5 shrink-0"
       aria-label="Attention"
     >
-      <span>{attention.message}</span>
-    </div>
+      <span class="badge badge-sm rounded-md {chipClass(attention.tone)}">{attention.message}</span>
+    </section>
   {/if}
 
   <TaskPullRequestStatus taskId={task.id} {taskPrs} onPullRequestLinked={refreshLinkedPullRequests} {allowCommentAddressing} />
