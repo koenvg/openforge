@@ -75,11 +75,19 @@ describe('getPrStatusChips', () => {
     expect(chips.some((chip) => chip.type === 'merge' && chip.label === 'Ready to Merge')).toBe(false);
   });
 
-  it('presents closed pull requests as merged/done status', () => {
-    expect(getPrStatusChips({ ...basePr, state: 'closed' }, 'detail'))
+  it('presents closed pull requests separately from merged/done status', () => {
+    expect(getPrStatusChips({ ...basePr, state: 'closed', merged_at: null }, 'detail'))
+      .toContainEqual(expect.objectContaining({ type: 'merge', label: 'Closed', variant: 'closed', icon: 'cross' }));
+
+    expect(getPrStatusChips({ ...basePr, state: 'closed', merged_at: null }, 'compact'))
+      .toContainEqual(expect.objectContaining({ type: 'merge', label: 'closed', variant: 'closed' }));
+  });
+
+  it('keeps merged pull request presentation as merged/done status', () => {
+    expect(getPrStatusChips({ ...basePr, state: 'merged', merged_at: 3000 }, 'detail'))
       .toContainEqual(expect.objectContaining({ type: 'merge', label: 'Merged', variant: 'merged', icon: 'check' }));
 
-    expect(getPrStatusChips({ ...basePr, state: 'closed' }, 'compact'))
+    expect(getPrStatusChips({ ...basePr, state: 'merged', merged_at: 3000 }, 'compact'))
       .toContainEqual(expect.objectContaining({ type: 'merge', label: 'merged', variant: 'merged' }));
   });
 

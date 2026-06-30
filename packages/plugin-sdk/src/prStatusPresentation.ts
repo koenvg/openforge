@@ -1,8 +1,8 @@
-import { canMergePullRequest, hasMergeConflicts, isClosedOrMergedPullRequest, type MergeStatusInfo } from './domain'
+import { canMergePullRequest, hasMergeConflicts, isClosedUnmergedPullRequest, isMergedPullRequest, type MergeStatusInfo } from './domain'
 
 export type PrChipSurface = 'compact' | 'detail'
 
-export type PrChipVariant = 'success' | 'error' | 'pending' | 'muted' | 'neutral' | 'done' | 'merged'
+export type PrChipVariant = 'success' | 'error' | 'pending' | 'muted' | 'neutral' | 'done' | 'merged' | 'closed'
 export type PrChipType = 'draft' | 'ci' | 'review' | 'merge'
 export type PrChipIcon = 'check' | 'cross' | 'clock' | null
 
@@ -20,6 +20,7 @@ export interface PrInput extends MergeStatusInfo {
   is_queued?: boolean
   ci_status?: string | null
   review_status?: string | null
+  merged_at?: number | null
 }
 
 export function getPrStatusChips(pr: PrInput, surface: PrChipSurface): PrStatusChipSpec[] {
@@ -106,12 +107,20 @@ export function getPrStatusChips(pr: PrInput, surface: PrChipSurface): PrStatusC
     }
   }
 
-  if (isClosedOrMergedPullRequest(pr.state)) {
+  if (isMergedPullRequest(pr)) {
     chips.push({
       type: 'merge',
       label: surface === 'compact' ? 'merged' : 'Merged',
       variant: 'merged',
       icon: surface === 'detail' ? 'check' : undefined,
+      surface,
+    })
+  } else if (isClosedUnmergedPullRequest(pr)) {
+    chips.push({
+      type: 'merge',
+      label: surface === 'compact' ? 'closed' : 'Closed',
+      variant: 'closed',
+      icon: surface === 'detail' ? 'cross' : undefined,
       surface,
     })
   } else if (hasMergeConflicts(pr)) {

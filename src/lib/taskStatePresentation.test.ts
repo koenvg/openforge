@@ -142,10 +142,21 @@ describe('getTaskReasonText', () => {
       expect(reason).toBe('Pull request is queued for merge.')
     })
 
+    it('keeps merged and closed PR task labels distinct', () => {
+      expect(TASK_STATE_LABELS['pr-merged']).toBe('PR Merged')
+      expect((TASK_STATE_LABELS as Record<string, string>)['pr-closed']).toBe('PR Closed')
+    })
+
     it('returns "Pull request merged." for pr-merged state', () => {
       const pr = makePr({ id: 1, state: 'merged' })
       const reason = getTaskReasonText('pr-merged', [pr])
       expect(reason).toBe('Pull request merged.')
+    })
+
+    it('returns "Pull request closed without merge." for pr-closed state', () => {
+      const pr = makePr({ id: 1, state: 'closed', merged_at: null })
+      const reason = getTaskReasonText('pr-closed' as never, [pr])
+      expect(reason).toBe('Pull request closed without merge.')
     })
 
     it('returns "Pull request has merge conflicts that must be resolved." for merge-conflict state', () => {

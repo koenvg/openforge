@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type PullRequestInfo, type CheckRunInfo, hasMergeConflicts, isReadyToMerge, canMergePullRequest, isQueuedForMerge, splitCheckRuns, preservePullRequestState, isClosedOrMergedPullRequest } from './types'
+import { type PullRequestInfo, type CheckRunInfo, hasMergeConflicts, isReadyToMerge, canMergePullRequest, isQueuedForMerge, splitCheckRuns, preservePullRequestState, isClosedOrMergedPullRequest, isClosedUnmergedPullRequest, isMergedPullRequest } from './types'
 
 function createPullRequest(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
   return {
@@ -130,14 +130,21 @@ describe('canMergePullRequest', () => {
   })
 })
 
-describe('isClosedOrMergedPullRequest', () => {
-  it('treats closed and merged pull requests as user-facing done states', () => {
+describe('pull request terminal state helpers', () => {
+  it('treats closed and merged pull requests as terminal states', () => {
     expect(isClosedOrMergedPullRequest('closed')).toBe(true)
     expect(isClosedOrMergedPullRequest('merged')).toBe(true)
   })
 
-  it('does not treat open pull requests as user-facing done states', () => {
+  it('does not treat open pull requests as a terminal state', () => {
     expect(isClosedOrMergedPullRequest('open')).toBe(false)
+  })
+
+  it('distinguishes merged pull requests from closed-unmerged pull requests', () => {
+    expect(isMergedPullRequest(createPullRequest({ state: 'merged', merged_at: 123 }))).toBe(true)
+    expect(isMergedPullRequest(createPullRequest({ state: 'closed', merged_at: null }))).toBe(false)
+    expect(isClosedUnmergedPullRequest(createPullRequest({ state: 'closed', merged_at: null }))).toBe(true)
+    expect(isClosedUnmergedPullRequest(createPullRequest({ state: 'merged', merged_at: 123 }))).toBe(false)
   })
 })
 

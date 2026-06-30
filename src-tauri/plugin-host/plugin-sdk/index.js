@@ -974,6 +974,12 @@ function getArrowLeftAction(node, expandedDirs, visiblePaths) {
 }
 //#endregion
 //#region packages/plugin-sdk/src/domain.ts
+function isMergedPullRequest(pr) {
+	return pr.state === "merged" || pr.merged_at != null;
+}
+function isClosedUnmergedPullRequest(pr) {
+	return pr.state === "closed" && pr.merged_at == null;
+}
 function hasMergeConflicts(pr) {
 	if (pr.state !== "open") return false;
 	const mergeableState = pr.mergeable_state?.toLowerCase() ?? null;
@@ -1033,4 +1039,4 @@ function splitCheckRuns(checks) {
 	};
 }
 //#endregion
-export { MAX_SUPPORTED_API_VERSION, MIN_SUPPORTED_API_VERSION, OPENFORGE_PACKAGE_METADATA_SCHEMA, OPENFORGE_PLUGIN_API_VERSION, OPENFORGE_PLUGIN_CAPABILITIES, SUPPORTED_OPENFORGE_API_VERSIONS, TestingOpenForgeRegistryFake, TestingSubscriptionSink, buildProjectFileTree, canMergePullRequest, createMemoryPluginStorage, createMockBackendOpenForgeApi, createMockFrontendOpenForgeApi, createMockOpenForgeApi, createMockPluginContext, createOpenForgeRegistryFake, createTestingCalls, flattenVisibleProjectFileTree, formatProjectFileTreeSize, getProjectFileTreeDepth, getProjectFileTreeItemAccessibility, getProjectFileTreeKeyboardAction, getProjectFileTreeParentPath, hasMergeConflicts, hasProjectFileTreeShortcutModifier, isOpenForgePackageMetadata, isPluginPackageMetadata, isPluginViewKey, isQueuedForMerge, isReadyToMerge, isSupportedOpenForgeApiVersion, makePluginViewKey, parseCheckRuns, parsePluginViewKey, parseStrictFiniteNumber, preservePullRequestState, projectFileTreePathToId, splitCheckRuns, validateOpenForgePackageMetadata, validatePluginPackageMetadata };
+export { MAX_SUPPORTED_API_VERSION, MIN_SUPPORTED_API_VERSION, OPENFORGE_PACKAGE_METADATA_SCHEMA, OPENFORGE_PLUGIN_API_VERSION, OPENFORGE_PLUGIN_CAPABILITIES, SUPPORTED_OPENFORGE_API_VERSIONS, TestingOpenForgeRegistryFake, TestingSubscriptionSink, buildProjectFileTree, canMergePullRequest, createMemoryPluginStorage, createMockBackendOpenForgeApi, createMockFrontendOpenForgeApi, createMockOpenForgeApi, createMockPluginContext, createOpenForgeRegistryFake, createTestingCalls, flattenVisibleProjectFileTree, formatProjectFileTreeSize, getProjectFileTreeDepth, getProjectFileTreeItemAccessibility, getProjectFileTreeKeyboardAction, getProjectFileTreeParentPath, hasMergeConflicts, hasProjectFileTreeShortcutModifier, isClosedUnmergedPullRequest, isMergedPullRequest, isOpenForgePackageMetadata, isPluginPackageMetadata, isPluginViewKey, isQueuedForMerge, isReadyToMerge, isSupportedOpenForgeApiVersion, makePluginViewKey, parseCheckRuns, parsePluginViewKey, parseStrictFiniteNumber, preservePullRequestState, projectFileTreePathToId, splitCheckRuns, validateOpenForgePackageMetadata, validatePluginPackageMetadata };

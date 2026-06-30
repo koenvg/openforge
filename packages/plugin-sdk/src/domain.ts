@@ -117,6 +117,11 @@ export interface MergeStatusInfo {
   mergeable_state: string | null;
 }
 
+export interface PullRequestTerminalStateInfo {
+  state: string;
+  merged_at?: number | null;
+}
+
 export interface MergeReadinessInfo extends MergeStatusInfo {
   ci_status?: string | null;
   draft?: boolean;
@@ -125,6 +130,14 @@ export interface MergeReadinessInfo extends MergeStatusInfo {
 
 export function isClosedOrMergedPullRequest(state: string): boolean {
   return state === 'closed' || state === 'merged'
+}
+
+export function isMergedPullRequest(pr: PullRequestTerminalStateInfo): boolean {
+  return pr.state === 'merged' || pr.merged_at != null
+}
+
+export function isClosedUnmergedPullRequest(pr: PullRequestTerminalStateInfo): boolean {
+  return pr.state === 'closed' && pr.merged_at == null
 }
 
 export function hasMergeConflicts(pr: MergeStatusInfo): boolean {

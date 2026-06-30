@@ -384,6 +384,10 @@ describe('getFilterCounts', () => {
   it('includes merge-conflict', () => {
     expect(DEFAULT_FOCUS_STATES).toContain('merge-conflict')
   })
+
+  it('includes pr-closed for closed-but-unmerged pull requests needing attention', () => {
+    expect(DEFAULT_FOCUS_STATES).toContain('pr-closed')
+  })
 })
 
 describe('loadFocusFilterStates', () => {
@@ -405,7 +409,7 @@ describe('loadFocusFilterStates', () => {
     expect(result).toEqual(['idle', 'needs-input'])
   })
 
-  it('migrates legacy default stored states to include merge-conflict', async () => {
+  it('migrates legacy default stored states to include merge-conflict and pr-closed', async () => {
     vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify([
       'idle',
       'needs-input',
@@ -425,6 +429,14 @@ describe('loadFocusFilterStates', () => {
     const result = await loadFocusFilterStates('proj-1')
 
     expect(result).toEqual(DEFAULT_FOCUS_STATES)
+    expect(result).toContain('merge-conflict')
+    expect(result).toContain('pr-closed')
+  })
+
+  it('loads pr-closed as a valid custom focus filter state', async () => {
+    vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify(['pr-closed']))
+    const result = await loadFocusFilterStates('proj-1')
+    expect(result).toEqual(['pr-closed'])
   })
 
   it('returns defaults when invalid JSON stored', async () => {

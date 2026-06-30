@@ -1,9 +1,9 @@
 import type { Task, AgentSession, PullRequestInfo } from './types'
-import { canMergePullRequest, hasMergeConflicts, isClosedOrMergedPullRequest, isQueuedForMerge } from './types'
+import { canMergePullRequest, hasMergeConflicts, isClosedOrMergedPullRequest, isClosedUnmergedPullRequest, isMergedPullRequest, isQueuedForMerge } from './types'
 
 export type TaskState =
   | 'egg' | 'idle' | 'active' | 'needs-input' | 'paused' | 'agent-done' | 'failed' | 'interrupted' | 'done'
-  | 'pr-draft' | 'pr-open' | 'ci-failed' | 'changes-requested' | 'ready-to-merge' | 'pr-queued' | 'pr-merged' | 'ci-running' | 'review-pending' | 'unaddressed-comments' | 'merge-conflict'
+  | 'pr-draft' | 'pr-open' | 'ci-failed' | 'changes-requested' | 'ready-to-merge' | 'pr-queued' | 'pr-merged' | 'pr-closed' | 'ci-running' | 'review-pending' | 'unaddressed-comments' | 'merge-conflict'
 
 export const ALL_TASK_STATES: TaskState[] = [
   'idle',
@@ -23,6 +23,7 @@ export const ALL_TASK_STATES: TaskState[] = [
   'ready-to-merge',
   'pr-queued',
   'pr-merged',
+  'pr-closed',
   'merge-conflict',
 ]
 
@@ -38,7 +39,8 @@ function getPrState(prs: PullRequestInfo[]): TaskState | null {
 
   if (!pr) return null
 
-  if (isClosedOrMergedPullRequest(pr.state)) return 'pr-merged'
+  if (isMergedPullRequest(pr)) return 'pr-merged'
+  if (isClosedUnmergedPullRequest(pr)) return 'pr-closed'
 
   // CI failures always take priority over merge readiness
   if (pr.ci_status === 'failure') return 'ci-failed'
