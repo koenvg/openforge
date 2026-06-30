@@ -275,6 +275,7 @@ impl GitHubClient {
                         mergeable_state: pr_details.mergeable_state,
                         created_at: item.created_at,
                         updated_at: item.updated_at,
+                        labels: item.labels,
                     });
                 }
                 Err(e) => {
@@ -379,6 +380,7 @@ impl GitHubClient {
                         mergeable_state: pr_details.mergeable_state,
                         created_at: item.created_at,
                         updated_at: item.updated_at,
+                        labels: item.labels,
                     });
                 }
                 Err(e) => {

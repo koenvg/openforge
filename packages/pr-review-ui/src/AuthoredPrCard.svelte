@@ -4,6 +4,7 @@
   import { timeAgoFromSeconds } from './timeAgo'
   import { getPrStatusChips } from '@openforge/plugin-sdk/prStatusPresentation'
   import PrStatusChip from './ui/PrStatusChip.svelte'
+  import { labelChipStyle } from './labelColors'
 
   interface Props {
     pr: AuthoredPullRequest
@@ -12,6 +13,10 @@
   }
 
   let { pr, selected = false, onClick }: Props = $props()
+
+  const MAX_VISIBLE_LABELS = 4
+  let visibleLabels = $derived((pr.labels ?? []).slice(0, MAX_VISIBLE_LABELS))
+  let overflowCount = $derived(Math.max(0, (pr.labels ?? []).length - MAX_VISIBLE_LABELS))
 </script>
 
 <Card
@@ -54,4 +59,20 @@
     <span class="font-medium text-success">+{pr.additions}</span>
     <span class="font-medium text-error">−{pr.deletions}</span>
   </div>
+
+  {#if visibleLabels.length > 0}
+    <div class="flex flex-wrap items-center gap-1">
+      {#each visibleLabels as label}
+        {@const style = labelChipStyle(label.color)}
+        <span
+          class="badge badge-sm {style ? '' : 'badge-outline'}"
+          style={style}
+          title={label.name}
+        >{label.name}</span>
+      {/each}
+      {#if overflowCount > 0}
+        <span class="badge badge-sm badge-ghost">+{overflowCount}</span>
+      {/if}
+    </div>
+  {/if}
 </Card>

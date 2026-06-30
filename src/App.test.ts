@@ -152,6 +152,7 @@ describe('App startup data loading', () => {
       task_id: null,
       created_at: 1000,
       updated_at: 1000,
+      labels: [],
     }
 
     vi.mocked(getAuthoredPrs).mockResolvedValue([conflictedPr])
@@ -197,6 +198,7 @@ describe('App startup data loading', () => {
       task_id: null,
       created_at: 1000,
       updated_at: 1000,
+      labels: [],
     }
 
     vi.mocked(getAuthoredPrs)

@@ -47,6 +47,17 @@ pub struct PullRequest {
     pub extra: serde_json::Value,
 }
 
+/// A GitHub label attached to a pull request.
+///
+/// `color` is a 6-digit hex string without a leading '#' (e.g. "b60205"),
+/// exactly as GitHub returns it.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub struct PrLabel {
+    pub name: String,
+    #[serde(default)]
+    pub color: String,
+}
+
 /// Search PR result with full details
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SearchPrResult {
@@ -71,6 +82,8 @@ pub struct SearchPrResult {
     pub mergeable_state: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    #[serde(default)]
+    pub labels: Vec<PrLabel>,
 }
 
 /// PR file diff
@@ -215,6 +228,8 @@ pub(crate) struct SearchItem {
     pub repository_url: String,
     pub created_at: String,
     pub updated_at: String,
+    #[serde(default)]
+    pub labels: Vec<PrLabel>,
 }
 
 #[derive(Debug, Deserialize)]

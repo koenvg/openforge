@@ -1,3 +1,4 @@
+use crate::github_client::PrLabel;
 use rusqlite::Result;
 use serde::Serialize;
 
@@ -27,6 +28,9 @@ pub struct ReviewPrRow {
     pub updated_at: i64,
     pub viewed_at: Option<i64>,
     pub viewed_head_sha: Option<String>,
+    /// GitHub labels on the PR. Serialized to the frontend as an array; empty
+    /// when the PR has no labels. Persisted as a nullable JSON-TEXT column.
+    pub labels: Vec<PrLabel>,
 }
 
 impl super::Database {
@@ -50,13 +54,15 @@ impl super::Database {
         additions: i64,
         deletions: i64,
         changed_files: i64,
+        labels: &[PrLabel],
         created_at: i64,
         updated_at: i64,
     ) -> Result<()> {
+        let labels_json = super::serialize_labels_column(labels);
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO review_prs (id, number, title, body, state, draft, html_url, user_login, user_avatar_url, repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions, changed_files, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
+            "INSERT INTO review_prs (id, number, title, body, state, draft, html_url, user_login, user_avatar_url, repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions, changed_files, labels, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
              ON CONFLICT(id) DO UPDATE SET
                  number = excluded.number,
                  title = excluded.title,
@@ -74,6 +80,7 @@ impl super::Database {
                   additions = excluded.additions,
                   deletions = excluded.deletions,
                   changed_files = excluded.changed_files,
+                  labels = excluded.labels,
                   created_at = excluded.created_at,
                   updated_at = excluded.updated_at,
                   viewed_at = CASE WHEN review_prs.viewed_head_sha IS NOT NULL AND review_prs.viewed_head_sha != excluded.head_sha THEN NULL ELSE review_prs.viewed_at END,
@@ -81,7 +88,7 @@ impl super::Database {
             rusqlite::params![
                 id, number, title, body, state, draft as i32, html_url, user_login, user_avatar_url,
                 repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions, changed_files,
-                created_at, updated_at
+                labels_json, created_at, updated_at
             ],
         )?;
         Ok(())
@@ -106,7 +113,7 @@ impl super::Database {
         let mut stmt = conn.prepare(
             "SELECT id, number, title, body, state, draft, html_url, user_login, user_avatar_url,
                     repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions,
-                    changed_files, mergeable, mergeable_state, created_at, updated_at, viewed_at, viewed_head_sha
+                    changed_files, mergeable, mergeable_state, created_at, updated_at, viewed_at, viewed_head_sha, labels
              FROM review_prs
              ORDER BY CASE WHEN viewed_at IS NULL THEN 0 ELSE 1 END, updated_at DESC",
         )?;
@@ -135,6 +142,7 @@ impl super::Database {
                 updated_at: row.get(20)?,
                 viewed_at: row.get(21)?,
                 viewed_head_sha: row.get(22)?,
+                labels: super::parse_labels_column(row.get(23)?),
             })
         })?;
         let mut result = Vec::new();
@@ -213,8 +221,9 @@ mod tests {
             100,
             50,
             10,
+            &[],
             1000,
-            2000,
+            2000
         )
         .expect("upsert failed");
 
@@ -261,8 +270,9 @@ mod tests {
             100,
             50,
             10,
+            &[],
             1000,
-            3000,
+            3000
         )
         .expect("upsert update failed");
 
@@ -270,6 +280,65 @@ mod tests {
         assert_eq!(prs.len(), 1);
         assert_eq!(prs[0].title, "Add new feature - updated");
         assert_eq!(prs[0].updated_at, 3000);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_review_pr_labels_round_trip_and_clear() {
+        use crate::github_client::PrLabel;
+
+        let (db, path) = make_test_db("review_pr_labels");
+
+        let labels = vec![
+            PrLabel {
+                name: "DO NOT REVIEW".to_string(),
+                color: "b60205".to_string(),
+            },
+            PrLabel {
+                name: "bug".to_string(),
+                color: "d73a4a".to_string(),
+            },
+        ];
+
+        let upsert = |labels: &[PrLabel], updated_at: i64| {
+            db.upsert_review_pr(
+                123,
+                456,
+                "Labeled PR",
+                None,
+                "open",
+                false,
+                "https://github.com/owner/repo/pull/456",
+                "octocat",
+                None,
+                "owner",
+                "repo",
+                "feature-branch",
+                "main",
+                "abc123def",
+                100,
+                50,
+                10,
+                labels,
+                1000,
+                updated_at,
+            )
+            .expect("upsert failed");
+        };
+
+        // Non-empty labels persist and round-trip with name + color preserved.
+        upsert(&labels, 2000);
+        let prs = db.get_all_review_prs().expect("get_all failed");
+        assert_eq!(prs.len(), 1);
+        assert_eq!(prs[0].labels, labels);
+
+        // Re-upserting with no labels clears them (column stored as NULL).
+        upsert(&[], 3000);
+        let prs = db.get_all_review_prs().expect("get_all failed");
+        assert_eq!(prs.len(), 1);
+        assert!(prs[0].labels.is_empty());
 
         drop(db);
         let _ = fs::remove_file(&path);
@@ -297,8 +366,9 @@ mod tests {
             10,
             5,
             2,
+            &[],
             1000,
-            1000,
+            1000
         )
         .expect("insert 1 failed");
         db.upsert_review_pr(
@@ -319,8 +389,9 @@ mod tests {
             20,
             10,
             3,
+            &[],
             2000,
-            2000,
+            2000
         )
         .expect("insert 2 failed");
         db.upsert_review_pr(
@@ -341,8 +412,9 @@ mod tests {
             30,
             15,
             4,
+            &[],
             3000,
-            3000,
+            3000
         )
         .expect("insert 3 failed");
 
@@ -386,8 +458,9 @@ mod tests {
             10,
             5,
             2,
+            &[],
             1000,
-            1000,
+            1000
         )
         .expect("insert older failed");
         db.upsert_review_pr(
@@ -408,8 +481,9 @@ mod tests {
             20,
             10,
             3,
+            &[],
             2000,
-            5000,
+            5000
         )
         .expect("insert newer failed");
 
@@ -444,8 +518,9 @@ mod tests {
             10,
             5,
             2,
+            &[],
             1000,
-            2000,
+            2000
         )
         .expect("upsert failed");
 
@@ -480,8 +555,9 @@ mod tests {
             10,
             5,
             2,
+            &[],
             1000,
-            2000,
+            2000
         )
         .expect("upsert failed");
 
@@ -519,8 +595,9 @@ mod tests {
             10,
             5,
             2,
+            &[],
             1000,
-            2000,
+            2000
         )
         .expect("upsert failed");
 
@@ -549,8 +626,9 @@ mod tests {
             10,
             5,
             2,
+            &[],
             1000,
-            3000,
+            3000
         )
         .expect("re-upsert failed");
 
@@ -585,8 +663,9 @@ mod tests {
             10,
             5,
             2,
+            &[],
             1000,
-            2000,
+            2000
         )
         .expect("upsert failed");
 
@@ -612,8 +691,9 @@ mod tests {
             10,
             5,
             2,
+            &[],
             1000,
-            3000,
+            3000
         )
         .expect("re-upsert failed");
 
@@ -648,8 +728,9 @@ mod tests {
             10,
             5,
             2,
+            &[],
             1000,
-            2000,
+            2000
         )
         .expect("upsert failed");
 
@@ -672,8 +753,9 @@ mod tests {
             10,
             5,
             2,
+            &[],
             1000,
-            3000,
+            3000
         )
         .expect("re-upsert failed");
 
@@ -710,8 +792,9 @@ mod tests {
                 10,
                 5,
                 2,
+                &[],
                 i * 1000,
-                i * 1000,
+                i * 1000
             )
             .expect("upsert failed");
         }

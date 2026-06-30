@@ -27,6 +27,7 @@ const basePr: ReviewPullRequest = {
   updated_at: 1_700_000_000,
   viewed_at: null,
   viewed_head_sha: null,
+  labels: [],
 }
 
 describe('shared PrOverviewTab in github-sync', () => {

@@ -31,6 +31,7 @@ const basePr: AuthoredPullRequest = {
   task_id: null,
   created_at: Math.floor(Date.now() / 1000) - 3600,
   updated_at: Math.floor(Date.now() / 1000),
+  labels: [],
 }
 
 describe('AuthoredPrCard', () => {
@@ -136,5 +137,40 @@ describe('AuthoredPrCard', () => {
     const card = screen.getByRole('button')
     await fireEvent.click(card)
     expect(clicked).toBe(true)
+  })
+
+  it('renders each label name when the PR has labels', () => {
+    const labeledPr = {
+      ...basePr,
+      labels: [
+        { name: 'DO NOT REVIEW', color: 'b60205' },
+        { name: 'enhancement', color: 'a2eeef' },
+      ],
+    }
+    render(AuthoredPrCard, { props: { pr: labeledPr, selected: false, onClick: () => {} } })
+    expect(screen.getByText('DO NOT REVIEW')).toBeTruthy()
+    expect(screen.getByText('enhancement')).toBeTruthy()
+  })
+
+  it('renders no label badges when the PR has no labels', () => {
+    render(AuthoredPrCard, { props: { pr: basePr, selected: false, onClick: () => {} } })
+    expect(screen.queryByText('DO NOT REVIEW')).toBeNull()
+  })
+
+  it('caps visible labels at 4 and shows a +k overflow indicator', () => {
+    const manyLabels = [
+      { name: 'one', color: '000000' },
+      { name: 'two', color: '000000' },
+      { name: 'three', color: '000000' },
+      { name: 'four', color: '000000' },
+      { name: 'five', color: '000000' },
+    ]
+    const labeledPr = { ...basePr, labels: manyLabels }
+    render(AuthoredPrCard, { props: { pr: labeledPr, selected: false, onClick: () => {} } })
+    expect(screen.getByText('one')).toBeTruthy()
+    expect(screen.getByText('four')).toBeTruthy()
+    expect(screen.queryByText('five')).toBeNull()
+    // 5 labels, 4 shown -> 1 hidden
+    expect(screen.getByText('+1')).toBeTruthy()
   })
 })

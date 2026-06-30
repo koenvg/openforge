@@ -164,6 +164,7 @@ async fn handles_db_backed_commands_and_events() {
             10,
             2,
             3,
+            &[],
             1000,
             2000,
         )
@@ -192,6 +193,7 @@ async fn handles_db_backed_commands_and_events() {
             None,
             false,
             Some(&task.id),
+            &[],
             1000,
             2000,
         )

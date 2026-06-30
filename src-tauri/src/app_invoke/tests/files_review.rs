@@ -42,6 +42,7 @@ async fn handles_fs_self_review_and_agent_review_db_commands() {
             0,
             0,
             0,
+            &[],
             1000,
             2000,
         )
