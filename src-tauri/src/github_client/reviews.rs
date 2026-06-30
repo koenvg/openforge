@@ -92,16 +92,14 @@ impl GitHubClient {
         self.get_with_etag::<Vec<PrReview>>(&url, token).await
     }
 
-    /// Get required pull request reviews config from branch protection rules
-    ///
-    /// Returns the required approving review count, or `None` if not configured.
-    pub async fn get_required_approving_review_count(
+    /// Get required pull request reviews policy from branch protection rules.
+    pub async fn get_required_approving_review_policy(
         &self,
         owner: &str,
         repo: &str,
         branch: &str,
         token: &str,
-    ) -> Option<usize> {
+    ) -> RequiredReviewsPolicy {
         let url = format!(
             "https://api.github.com/repos/{}/{}/branches/{}/protection/required_pull_request_reviews",
             owner, repo, branch
@@ -117,38 +115,32 @@ impl GitHubClient {
                     "[GitHub] Failed to fetch required reviews for {}/{} branch {}: {}",
                     owner, repo, branch, e
                 );
-                return None;
+                return RequiredReviewsPolicy::unknown(e.to_string());
             }
         };
 
-        // 404 = no branch protection or no required reviews configured
-        // 403 = insufficient permissions
-        if response.status() == reqwest::StatusCode::NOT_FOUND
-            || response.status() == reqwest::StatusCode::FORBIDDEN
-        {
-            return None;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return RequiredReviewsPolicy::from_rest_error(404, "not found");
+        }
+        if response.status() == reqwest::StatusCode::FORBIDDEN {
+            return RequiredReviewsPolicy::from_rest_error(403, "forbidden");
         }
 
         if response.status() == reqwest::StatusCode::NOT_MODIFIED {
             if let Some(cached_body) = self.cached_body_for_url(&url) {
-                if let Ok(result) =
-                    serde_json::from_str::<RequiredPullRequestReviewsResponse>(&cached_body)
-                {
-                    return Some(result.required_approving_review_count);
-                }
+                return RequiredReviewsPolicy::from_rest_json(&cached_body)
+                    .unwrap_or_else(|e| RequiredReviewsPolicy::unknown(e.to_string()));
             }
-            return None;
+            return RequiredReviewsPolicy::unknown("304 without cached required reviews response");
         }
 
         if !response.status().is_success() {
+            let status = response.status();
             warn!(
                 "[GitHub] Unexpected status {} fetching required reviews for {}/{} branch {}",
-                response.status(),
-                owner,
-                repo,
-                branch
+                status, owner, repo, branch
             );
-            return None;
+            return RequiredReviewsPolicy::from_rest_error(status.as_u16(), "unexpected status");
         }
 
         let etag = response
@@ -159,22 +151,51 @@ impl GitHubClient {
 
         let body = match response.text().await {
             Ok(b) => b,
-            Err(_) => return None,
+            Err(e) => return RequiredReviewsPolicy::unknown(e.to_string()),
         };
 
         self.cache_response_body(&url, etag, &body);
 
-        match serde_json::from_str::<RequiredPullRequestReviewsResponse>(&body) {
-            Ok(result) => Some(result.required_approving_review_count),
-            Err(e) => {
-                warn!(
-                    "[GitHub] Failed to parse required reviews for {}/{} branch {}: {}",
-                    owner, repo, branch, e
-                );
-                None
-            }
-        }
+        RequiredReviewsPolicy::from_rest_json(&body).unwrap_or_else(|e| {
+            warn!(
+                "[GitHub] Failed to parse required reviews for {}/{} branch {}: {}",
+                owner, repo, branch, e
+            );
+            RequiredReviewsPolicy::unknown(e.to_string())
+        })
     }
+
+    /// Get required approving review count from branch protection rules.
+    ///
+    /// Compatibility wrapper for callers that only need the count. Prefer
+    /// `get_required_approving_review_policy` when policy coverage matters.
+    #[allow(dead_code)]
+    pub async fn get_required_approving_review_count(
+        &self,
+        owner: &str,
+        repo: &str,
+        branch: &str,
+        token: &str,
+    ) -> Option<usize> {
+        self.get_required_approving_review_policy(owner, repo, branch, token)
+            .await
+            .required_approving_review_count
+    }
+}
+
+pub(crate) fn normalize_review_decision(decision: Option<&str>) -> Option<String> {
+    decision.map(|decision| match decision {
+        "APPROVED" => "approved".to_string(),
+        "CHANGES_REQUESTED" => "changes_requested".to_string(),
+        "REVIEW_REQUIRED" => "review_required".to_string(),
+        other => {
+            warn!(
+                "[GitHub] Unknown reviewDecision value from GraphQL: {}",
+                other
+            );
+            "review_unknown".to_string()
+        }
+    })
 }
 
 /// Aggregate review status from PR reviews and requested reviewers
@@ -379,5 +400,59 @@ mod tests {
             aggregate_review_status(&reviews, false, None),
             "review_required"
         );
+    }
+
+    #[test]
+    fn github_readiness_review_decision_normalizes_known_and_unknown_values() {
+        assert_eq!(
+            normalize_review_decision(Some("APPROVED")),
+            Some("approved".to_string())
+        );
+        assert_eq!(
+            normalize_review_decision(Some("CHANGES_REQUESTED")),
+            Some("changes_requested".to_string())
+        );
+        assert_eq!(
+            normalize_review_decision(Some("REVIEW_REQUIRED")),
+            Some("review_required".to_string())
+        );
+        assert_eq!(
+            normalize_review_decision(Some("AI_REVIEW_PENDING")),
+            Some("review_unknown".to_string())
+        );
+        assert_eq!(normalize_review_decision(None), None);
+    }
+
+    #[test]
+    fn github_readiness_required_reviews_policy_parses_count() {
+        let json = r#"{
+            "required_approving_review_count": 2,
+            "dismiss_stale_reviews": true,
+            "require_code_owner_reviews": true
+        }"#;
+
+        let policy = RequiredReviewsPolicy::from_rest_json(json).unwrap();
+        assert!(policy.known);
+        assert_eq!(policy.required_approving_review_count, Some(2));
+    }
+
+    #[test]
+    fn github_readiness_required_reviews_forbidden_is_unknown_not_no_policy() {
+        let policy = RequiredReviewsPolicy::from_rest_error(403, "Forbidden");
+        assert!(!policy.known);
+        assert_eq!(policy.required_approving_review_count, None);
+        assert!(policy
+            .unknown_reason
+            .as_deref()
+            .unwrap_or_default()
+            .contains("403"));
+    }
+
+    #[test]
+    fn github_readiness_required_reviews_not_found_is_known_no_policy() {
+        let policy = RequiredReviewsPolicy::from_rest_error(404, "Not Found");
+        assert!(policy.known);
+        assert_eq!(policy.required_approving_review_count, Some(0));
+        assert!(policy.unknown_reason.is_none());
     }
 }

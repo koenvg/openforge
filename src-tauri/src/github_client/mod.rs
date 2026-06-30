@@ -18,6 +18,7 @@
 mod checks;
 pub mod error;
 mod events;
+mod graphql;
 mod issues;
 mod labels;
 mod pulls;

@@ -53,6 +53,12 @@ pub struct PrMergeReadinessFacts {
     pub updated_at: i64,
 }
 
+impl PrMergeReadinessFacts {
+    pub fn merge_readiness_warnings_or_default(&self) -> String {
+        self.warnings_json.clone().unwrap_or_default()
+    }
+}
+
 fn current_unix_timestamp() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
