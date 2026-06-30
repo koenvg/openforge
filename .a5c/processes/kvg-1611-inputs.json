@@ -1,4 +1,0 @@
-{
-  "taskId": "KVG-1611",
-  "verification": ["pnpm i", "pnpm install --frozen-lockfile", "git diff --check"]
-}

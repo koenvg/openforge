@@ -24,3 +24,10 @@ __pycache__/
 
 # Local screenshot scratch output (scripts/capture-screenshots.mjs)
 /screenshots/
+
+# Local Babysitter one-off process drafts
+# Existing tracked reusable processes remain tracked; use `git add -f` for intentional new root-level processes.
+.a5c/processes/*.js
+.a5c/processes/*.mjs
+.a5c/processes/*.json
+.a5c/processes/*.md
