@@ -1011,13 +1011,14 @@ async fn poll_single_pr(
 
     // Fetch CI status, reviews, and PR details in parallel. These REST calls are
     // the fallback source when GraphQL coverage is unavailable or SHA-stale.
+    let needs_rest_ci = needs_rest_ci_for_snapshot(graphql_snapshot.as_ref());
     let mut rest_ci_sha = graphql_snapshot
         .as_ref()
         .and_then(|snapshot| snapshot.source_head_sha.clone())
         .filter(|sha| !sha.is_empty())
         .unwrap_or_else(|| pr.head_sha.clone());
     let ci_future = async {
-        if rest_ci_sha.is_empty() {
+        if !needs_rest_ci || rest_ci_sha.is_empty() {
             (None, None)
         } else {
             let (cr, cs) = tokio::join!(
@@ -1985,6 +1986,12 @@ fn merge_queue_state_from_details(
         (None, false, Some(true)) => Some("not_queued".to_string()),
         _ => None,
     }
+}
+
+fn needs_rest_ci_for_snapshot(snapshot: Option<&GitHubReadinessSnapshot>) -> bool {
+    snapshot
+        .map(GitHubReadinessSnapshot::requires_rest_check_fallback)
+        .unwrap_or(true)
 }
 
 #[derive(Debug, Clone)]
@@ -3137,6 +3144,7 @@ mod tests {
             warnings: vec![],
         };
 
+        assert!(!needs_rest_ci_for_snapshot(Some(&snapshot)));
         let inputs = merge_readiness_inputs_from_snapshot(&pr, &snapshot).unwrap();
         assert_eq!(inputs.source_head_sha.as_deref(), Some("new-head-sha"));
         assert_eq!(inputs.review_status.as_deref(), Some("approved"));
@@ -3175,6 +3183,7 @@ mod tests {
             warnings: vec![],
         };
 
+        assert!(needs_rest_ci_for_snapshot(Some(&snapshot)));
         assert!(merge_readiness_inputs_from_snapshot(&pr, &snapshot).is_none());
     }
 

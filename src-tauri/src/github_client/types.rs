@@ -747,7 +747,9 @@ impl GitHubReadinessSnapshot {
                     .to_string(),
             );
         }
-        if review_threads_truncated {
+        if review_threads_truncated
+            && (policy.requires_conversation_resolution.value != Some(false))
+        {
             let reason = "reviewThreads are paginated; conversation resolution coverage is unknown"
                 .to_string();
             policy.requires_conversation_resolution = PolicyValue::unknown(reason.clone());
@@ -851,6 +853,19 @@ fn parse_repository_policy(rule: Option<&serde_json::Value>) -> RepositoryPolicy
     }
 }
 
+fn combined_status_state_from_status_contexts(statuses: &[CommitStatusEntry]) -> String {
+    if statuses
+        .iter()
+        .any(|status| matches!(status.state.as_str(), "failure" | "error"))
+    {
+        "failure".to_string()
+    } else if statuses.iter().any(|status| status.state == "pending") {
+        "pending".to_string()
+    } else {
+        "success".to_string()
+    }
+}
+
 fn parse_status_check_rollup(
     commit: &serde_json::Value,
     sha: &Option<String>,
@@ -890,11 +905,7 @@ fn parse_status_check_rollup(
         }
     }
 
-    let state = rollup
-        .get("state")
-        .and_then(|value| value.as_str())
-        .map(|value| value.to_ascii_lowercase())
-        .unwrap_or_else(|| "pending".to_string());
+    let state = combined_status_state_from_status_contexts(&statuses);
 
     let truncated = rollup
         .pointer("/contexts/pageInfo/hasNextPage")
@@ -1641,6 +1652,91 @@ mod tests {
             Some("AWAITING_CHECKS")
         );
         assert_eq!(snapshot.merge_group_sha.as_deref(), Some("merge-group-sha"));
+    }
+
+    #[test]
+    fn github_readiness_graphql_rollup_state_does_not_poison_required_check_status() {
+        let payload = serde_json::json!({
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "headRefOid": "head-sha-1",
+                        "commits": {
+                            "nodes": [{
+                                "commit": {
+                                    "oid": "head-sha-1",
+                                    "statusCheckRollup": {
+                                        "state": "FAILURE",
+                                        "contexts": {
+                                            "nodes": [
+                                                { "__typename": "CheckRun", "name": "required", "status": "COMPLETED", "conclusion": "SUCCESS", "detailsUrl": "https://example.com/required" },
+                                                { "__typename": "CheckRun", "name": "optional", "status": "COMPLETED", "conclusion": "FAILURE", "detailsUrl": "https://example.com/optional" }
+                                            ]
+                                        }
+                                    }
+                                }
+                            }]
+                        },
+                        "reviewThreads": { "nodes": [] },
+                        "baseRef": {
+                            "branchProtectionRule": {
+                                "requiredStatusCheckContexts": ["required"],
+                                "requiresConversationResolution": false
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        let snapshot = GitHubReadinessSnapshot::from_graphql_response(&payload).unwrap();
+        assert!(snapshot.combined_status.statuses.is_empty());
+        assert_eq!(snapshot.combined_status.state, "success");
+    }
+
+    #[test]
+    fn github_readiness_review_thread_pagination_keeps_disabled_conversation_policy_known() {
+        let payload = serde_json::json!({
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "headRefOid": "head-sha-1",
+                        "commits": {
+                            "nodes": [{
+                                "commit": {
+                                    "oid": "head-sha-1",
+                                    "statusCheckRollup": {
+                                        "state": "SUCCESS",
+                                        "contexts": { "nodes": [] }
+                                    }
+                                }
+                            }]
+                        },
+                        "reviewThreads": {
+                            "pageInfo": { "hasNextPage": true },
+                            "nodes": [{ "isResolved": false }]
+                        },
+                        "baseRef": {
+                            "branchProtectionRule": {
+                                "requiresConversationResolution": false
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        let snapshot = GitHubReadinessSnapshot::from_graphql_response(&payload).unwrap();
+        assert!(snapshot.policy.requires_conversation_resolution.known);
+        assert_eq!(
+            snapshot.policy.requires_conversation_resolution.value,
+            Some(false)
+        );
+        assert!(snapshot
+            .policy
+            .unknown_reasons
+            .iter()
+            .all(|reason| !reason.contains("reviewThreads")));
     }
 
     #[test]
