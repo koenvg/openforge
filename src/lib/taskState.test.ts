@@ -318,7 +318,7 @@ describe('computeTaskState - pr-queued (PART 3)', () => {
     expect(state).toBe('ci-failed')
   })
 
-  it('test 4: changes_requested takes priority over is_queued → changes-requested', () => {
+  it('test 4: is_queued takes priority over changes_requested to match the queued PR badge', () => {
     const task = createTask({ status: 'doing' })
     const session = createSession({ status: 'completed' })
     const prs = [
@@ -331,7 +331,7 @@ describe('computeTaskState - pr-queued (PART 3)', () => {
     ]
 
     const state = computeTaskState(task, session, prs)
-    expect(state).toBe('changes-requested')
+    expect(state).toBe('pr-queued')
   })
 
   it('test 5: is_queued with no session → pr-queued', () => {
@@ -561,6 +561,13 @@ describe('computeTaskState - mergeable_state based ready-to-merge (PART 5)', () 
     const task = createTask({ status: 'doing' })
     const session = createSession({ status: 'completed' })
     const prs = [createPr({ state: 'open', mergeable_state: 'clean', review_status: 'review_required' })]
+    expect(computeTaskState(task, session, prs)).toBe('ready-to-merge')
+  })
+
+  it('test 17: mergeable_state clean with changes_requested still follows shared merge affordance readiness', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', mergeable_state: 'clean', ci_status: 'success', review_status: 'changes_requested' })]
     expect(computeTaskState(task, session, prs)).toBe('ready-to-merge')
   })
 

@@ -43,15 +43,14 @@ function getPrState(prs: PullRequestInfo[]): TaskState | null {
   // CI failures always take priority over merge readiness
   if (pr.ci_status === 'failure') return 'ci-failed'
 
-  // Open PR checks in priority order (when not merge-ready)
-  if (pr.review_status === 'changes_requested') return 'changes-requested'
-
   // Queued PRs are not merge affordances, but they have their own task state.
   if (isQueuedForMerge(pr)) return 'pr-queued'
 
   // Shared user-initiated merge readiness keeps task state and merge affordances aligned.
   if (canMergePullRequest(pr)) return 'ready-to-merge'
 
+  // Open PR checks in priority order (when not merge-ready)
+  if (pr.review_status === 'changes_requested') return 'changes-requested'
   if (hasMergeConflicts(pr)) return 'merge-conflict'
   if ((pr.unaddressed_comment_count ?? 0) > 0) return 'unaddressed-comments'
   if (pr.draft) return 'pr-draft'
