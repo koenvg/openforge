@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { PullRequestInfo } from '../../lib/types'
-  import { canMergePullRequest, hasMergeConflicts, isClosedOrMergedPullRequest, isQueuedForMerge } from '../../lib/types'
+  import { canMergePullRequest, hasMergeConflicts, isClosedOrMergedPullRequest } from '../../lib/types'
   import { linkPullRequest, openUrl } from '../../lib/ipc'
   import { getPrStatusChips } from '@openforge/plugin-sdk/prStatusPresentation'
   import { getGitHubMarkdownImageBaseUrl } from '../../lib/githubMarkdown'
