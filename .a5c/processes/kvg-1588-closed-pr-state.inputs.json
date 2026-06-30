@@ -1,4 +1,0 @@
-{
-  "taskId": "KVG-1588",
-  "request": "Review how OpenForge represents closed-but-unmerged pull requests. Current task state collapses closed PRs into pr-merged/done, which can hide abandoned or superseded PRs. Decide whether to add a distinct closed-unmerged/pr-closed state and update taskState, presentation, and tests accordingly."
-}

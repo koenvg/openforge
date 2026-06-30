@@ -1,4 +1,0 @@
-{
-  "taskId": "KVG-1608",
-  "request": "Remove the bright \"Fix failing CI checks\" banner because it is too bright and restore the previous small chips with muted colours for a calmer environment."
-}
