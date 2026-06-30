@@ -993,7 +993,7 @@ function canMergePullRequest(pr) {
 	if (pr.is_queued === true) return false;
 	return true;
 }
-/** Check if a PR is queued in a merge queue (ready to merge + is_queued) */
+/** Check if GitHub reports a PR as queued in a merge queue. */
 function isQueuedForMerge(pr) {
 	return pr.state === "open" && pr.is_queued;
 }

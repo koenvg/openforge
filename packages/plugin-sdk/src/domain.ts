@@ -155,7 +155,7 @@ export interface QueuedStatusInfo {
   is_queued: boolean;
 }
 
-/** Check if a PR is queued in a merge queue (ready to merge + is_queued) */
+/** Check if GitHub reports a PR as queued in a merge queue. */
 export function isQueuedForMerge(pr: QueuedStatusInfo): boolean {
   return pr.state === 'open' && pr.is_queued;
 }
