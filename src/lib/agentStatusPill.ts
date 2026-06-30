@@ -46,11 +46,11 @@ const OPENCODE_STAGE_LABELS: AgentStageLabels = {
 export function getAgentProviderConfig(provider: string | null): AgentProviderConfig {
   switch (provider) {
     case 'claude-code':
-      return { runningText: 'Claude agent running...', sessionIdKey: 'claude_session_id', stageLabels: SHARED_STAGE_LABELS, stageLabelPrefix: '// ', uppercaseSessionStatus: true, resumeCommandProvider: 'claude-code' }
+      return { runningText: 'Claude agent running...', sessionIdKey: 'claude_session_id', stageLabels: SHARED_STAGE_LABELS, stageLabelPrefix: '', uppercaseSessionStatus: true, resumeCommandProvider: 'claude-code' }
     case 'pi':
-      return { runningText: 'Pi agent running...', sessionIdKey: 'pi_session_id', stageLabels: SHARED_STAGE_LABELS, stageLabelPrefix: '// ', uppercaseSessionStatus: true, resumeCommandProvider: 'pi' }
+      return { runningText: 'Pi agent running...', sessionIdKey: 'pi_session_id', stageLabels: SHARED_STAGE_LABELS, stageLabelPrefix: '', uppercaseSessionStatus: true, resumeCommandProvider: 'pi' }
     case 'codex':
-      return { runningText: 'Codex agent running...', sessionIdKey: null, stageLabels: SHARED_STAGE_LABELS, stageLabelPrefix: '// ', uppercaseSessionStatus: true, resumeCommandProvider: 'codex' }
+      return { runningText: 'Codex agent running...', sessionIdKey: null, stageLabels: SHARED_STAGE_LABELS, stageLabelPrefix: '', uppercaseSessionStatus: true, resumeCommandProvider: 'codex' }
     default:
       return { runningText: 'Agent running...', sessionIdKey: 'opencode_session_id', stageLabels: OPENCODE_STAGE_LABELS, stageLabelPrefix: '', uppercaseSessionStatus: false, resumeCommandProvider: 'opencode' }
   }

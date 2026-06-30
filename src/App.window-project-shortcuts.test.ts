@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Project } from './lib/types'
+import type { Project, Task } from './lib/types'
 import {
   closeRequestedHandler,
   installedPluginRows,
@@ -68,8 +68,47 @@ describe('App window and project shortcuts', () => {
 
       await fireEvent.keyDown(window, { key: '?', shiftKey: true, bubbles: true })
 
-      expect(screen.getByRole('dialog')).toBeTruthy()
+      const dialog = screen.getByRole('dialog')
+      expect(dialog).toBeTruthy()
       expect(screen.getByText('Keyboard Shortcuts')).toBeTruthy()
+      expect(screen.getByText('Global')).toBeTruthy()
+      expect(screen.getByText('Vim navigation')).toBeTruthy()
+      expect(screen.getByText('Board')).toBeTruthy()
+      expect(dialog.textContent).not.toContain('// global')
+      expect(dialog.textContent).not.toContain('// vim navigation')
+      expect(dialog.textContent).not.toContain('// board')
+    })
+
+    it('shows task view shortcut section without a // prefix when a task is selected', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const selectedTask: Task = {
+        id: 'task-123',
+        initial_prompt: 'Selected task',
+        prompt: null,
+        title: null,
+        summary: null,
+        status: 'doing',
+        agent: null,
+        permission_mode: null,
+        worktree_source: null,
+        worktree_branch: null,
+        handoff_notes_enabled: true,
+        depends_on: [],
+        project_id: 'proj-1',
+        created_at: 1000,
+        updated_at: 1000,
+      }
+      stores.tasks.set([selectedTask])
+      stores.selectedTaskId.set(selectedTask.id)
+
+      render(App)
+
+      await fireEvent.keyDown(window, { key: '?', shiftKey: true, bubbles: true })
+
+      const dialog = screen.getByRole('dialog')
+      expect(screen.getByText('Task view')).toBeTruthy()
+      expect(dialog.textContent).not.toContain('// task view')
     })
 
     it('shows the registered file quick-open shortcut in keyboard shortcuts help', async () => {
