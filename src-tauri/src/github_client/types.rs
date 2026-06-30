@@ -462,6 +462,461 @@ pub(crate) struct RequiredPullRequestReviewsResponse {
     pub required_approving_review_count: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RequiredChecksPolicy {
+    pub known: bool,
+    pub required_check_names: Vec<String>,
+    pub requires_up_to_date_branch: Option<bool>,
+    pub unknown_reason: Option<String>,
+}
+
+impl RequiredChecksPolicy {
+    pub fn known(
+        required_check_names: Vec<String>,
+        requires_up_to_date_branch: Option<bool>,
+    ) -> Self {
+        Self {
+            known: true,
+            required_check_names,
+            requires_up_to_date_branch,
+            unknown_reason: None,
+        }
+    }
+
+    pub fn unknown(reason: impl Into<String>) -> Self {
+        Self {
+            known: false,
+            required_check_names: Vec::new(),
+            requires_up_to_date_branch: None,
+            unknown_reason: Some(reason.into()),
+        }
+    }
+
+    pub fn from_rest_json(json: &str) -> Result<Self, serde_json::Error> {
+        let value: serde_json::Value = serde_json::from_str(json)?;
+        let response: RequiredStatusChecksResponse = serde_json::from_value(value.clone())?;
+        let requires_up_to_date_branch = value.get("strict").and_then(|v| v.as_bool());
+        Ok(Self::known(
+            response.into_context_names(),
+            requires_up_to_date_branch,
+        ))
+    }
+
+    pub fn from_rest_error(status: u16, message: &str) -> Self {
+        if status == 404 {
+            Self::known(Vec::new(), Some(false))
+        } else {
+            Self::unknown(format!(
+                "REST required checks unavailable ({status}): {message}"
+            ))
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RequiredReviewsPolicy {
+    pub known: bool,
+    pub required_approving_review_count: Option<usize>,
+    pub unknown_reason: Option<String>,
+}
+
+impl RequiredReviewsPolicy {
+    pub fn known(required_approving_review_count: usize) -> Self {
+        Self {
+            known: true,
+            required_approving_review_count: Some(required_approving_review_count),
+            unknown_reason: None,
+        }
+    }
+
+    pub fn unknown(reason: impl Into<String>) -> Self {
+        Self {
+            known: false,
+            required_approving_review_count: None,
+            unknown_reason: Some(reason.into()),
+        }
+    }
+
+    pub fn from_rest_json(json: &str) -> Result<Self, serde_json::Error> {
+        let response: RequiredPullRequestReviewsResponse = serde_json::from_str(json)?;
+        Ok(Self::known(response.required_approving_review_count))
+    }
+
+    pub fn from_rest_error(status: u16, message: &str) -> Self {
+        if status == 404 {
+            Self::known(0)
+        } else {
+            Self::unknown(format!(
+                "REST required reviews unavailable ({status}): {message}"
+            ))
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PolicyValue<T> {
+    pub known: bool,
+    pub value: T,
+    pub unknown_reason: Option<String>,
+}
+
+impl<T: Default> PolicyValue<T> {
+    pub fn unknown(reason: impl Into<String>) -> Self {
+        Self {
+            known: false,
+            value: T::default(),
+            unknown_reason: Some(reason.into()),
+        }
+    }
+}
+
+impl<T> PolicyValue<T> {
+    pub fn known(value: T) -> Self {
+        Self {
+            known: true,
+            value,
+            unknown_reason: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepositoryPolicyFacts {
+    pub required_checks: PolicyValue<Vec<String>>,
+    pub required_reviews: PolicyValue<Option<usize>>,
+    pub requires_up_to_date_branch: PolicyValue<Option<bool>>,
+    pub requires_conversation_resolution: PolicyValue<Option<bool>>,
+    pub merge_queue_required: PolicyValue<Option<bool>>,
+    pub required_deployments: PolicyValue<Vec<String>>,
+    pub unknown_reasons: Vec<String>,
+}
+
+impl RepositoryPolicyFacts {
+    pub fn known_empty() -> Self {
+        Self {
+            required_checks: PolicyValue::known(Vec::new()),
+            required_reviews: PolicyValue::known(Some(0)),
+            requires_up_to_date_branch: PolicyValue::known(Some(false)),
+            requires_conversation_resolution: PolicyValue::known(Some(false)),
+            merge_queue_required: PolicyValue::known(Some(false)),
+            required_deployments: PolicyValue::known(Vec::new()),
+            unknown_reasons: Vec::new(),
+        }
+    }
+
+    pub fn unknown(reason: impl Into<String>) -> Self {
+        let reason = reason.into();
+        Self {
+            required_checks: PolicyValue::unknown(reason.clone()),
+            required_reviews: PolicyValue::unknown(reason.clone()),
+            requires_up_to_date_branch: PolicyValue::unknown(reason.clone()),
+            requires_conversation_resolution: PolicyValue::unknown(reason.clone()),
+            merge_queue_required: PolicyValue::unknown(reason.clone()),
+            required_deployments: PolicyValue::unknown(reason.clone()),
+            unknown_reasons: vec![reason],
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct GitHubReadinessSnapshot {
+    pub source_head_sha: Option<String>,
+    pub status_check_rollup_sha: Option<String>,
+    pub check_runs: CheckRunsResponse,
+    pub combined_status: CombinedStatusResponse,
+    pub merge_state_status: Option<String>,
+    pub mergeable_state: Option<String>,
+    pub review_decision: Option<String>,
+    pub review_status: Option<String>,
+    pub auto_merge_requested: bool,
+    pub merge_queue_required: Option<bool>,
+    pub merge_queue_state: Option<String>,
+    pub merge_group_sha: Option<String>,
+    pub unresolved_conversations: Option<bool>,
+    pub policy: RepositoryPolicyFacts,
+    pub warnings: Vec<String>,
+}
+
+impl GitHubReadinessSnapshot {
+    pub fn unknown(reason: impl Into<String>) -> Self {
+        let reason = reason.into();
+        Self {
+            source_head_sha: None,
+            status_check_rollup_sha: None,
+            check_runs: CheckRunsResponse {
+                total_count: 0,
+                check_runs: vec![],
+            },
+            combined_status: CombinedStatusResponse {
+                state: "pending".to_string(),
+                statuses: vec![],
+                sha: String::new(),
+                total_count: 0,
+                extra: serde_json::json!({}),
+            },
+            merge_state_status: None,
+            mergeable_state: None,
+            review_decision: None,
+            review_status: None,
+            auto_merge_requested: false,
+            merge_queue_required: None,
+            merge_queue_state: None,
+            merge_group_sha: None,
+            unresolved_conversations: None,
+            policy: RepositoryPolicyFacts::unknown(reason.clone()),
+            warnings: vec![reason],
+        }
+    }
+
+    pub fn from_graphql_response(payload: &serde_json::Value) -> Result<Self, String> {
+        if let Some(errors) = payload.get("errors").and_then(|v| v.as_array()) {
+            if !errors.is_empty() {
+                let reason = errors
+                    .iter()
+                    .filter_map(|error| error.get("message").and_then(|message| message.as_str()))
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                return Ok(Self::unknown(if reason.is_empty() {
+                    "GraphQL readiness unavailable"
+                } else {
+                    &reason
+                }));
+            }
+        }
+
+        let pr = payload
+            .pointer("/data/repository/pullRequest")
+            .ok_or_else(|| "GraphQL response missing pullRequest".to_string())?;
+        let source_head_sha = string_field(pr, "headRefOid");
+        let merge_state_status = string_field(pr, "mergeStateStatus");
+        let review_decision = string_field(pr, "reviewDecision");
+        let mut warnings = Vec::new();
+        let mergeable_state = merge_state_status.as_deref().map(|status| {
+            if is_known_merge_state_status(status) {
+                normalize_merge_state_status(status)
+            } else {
+                warnings.push(format!(
+                    "Unknown mergeStateStatus value from GraphQL: {status}"
+                ));
+                "unknown".to_string()
+            }
+        });
+        let review_status =
+            crate::github_client::reviews::normalize_review_decision(review_decision.as_deref());
+        let auto_merge_requested = pr
+            .get("autoMergeRequest")
+            .map(|value| !value.is_null())
+            .unwrap_or(false);
+        let merge_queue = pr.get("mergeQueueEntry");
+        let merge_queue_state = merge_queue.and_then(|entry| string_field(entry, "state"));
+        let merge_group_sha = merge_queue
+            .and_then(|entry| entry.pointer("/mergeGroup/headSha"))
+            .and_then(|value| value.as_str())
+            .map(ToOwned::to_owned);
+
+        let commit = pr
+            .pointer("/commits/nodes/0/commit")
+            .unwrap_or(&serde_json::Value::Null);
+        let status_check_rollup_sha = string_field(commit, "oid");
+        let (check_runs, combined_status, check_rollup_truncated) =
+            parse_status_check_rollup(commit, &status_check_rollup_sha);
+        let status_check_rollup_sha = if check_rollup_truncated {
+            None
+        } else {
+            status_check_rollup_sha
+        };
+
+        let review_threads_truncated = pr
+            .pointer("/reviewThreads/pageInfo/hasNextPage")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false);
+        let unresolved_conversations = pr
+            .pointer("/reviewThreads/nodes")
+            .and_then(|nodes| nodes.as_array())
+            .map(|nodes| {
+                nodes
+                    .iter()
+                    .any(|node| node.get("isResolved").and_then(|v| v.as_bool()) == Some(false))
+            });
+
+        let mut policy = parse_repository_policy(pr.pointer("/baseRef/branchProtectionRule"));
+        if check_rollup_truncated {
+            warnings.push(
+                "statusCheckRollup contexts are paginated; REST check fallback required"
+                    .to_string(),
+            );
+        }
+        if review_threads_truncated {
+            let reason = "reviewThreads are paginated; conversation resolution coverage is unknown"
+                .to_string();
+            policy.requires_conversation_resolution = PolicyValue::unknown(reason.clone());
+            policy.unknown_reasons.push(reason.clone());
+            warnings.push(reason);
+        }
+
+        Ok(Self {
+            source_head_sha,
+            status_check_rollup_sha,
+            check_runs,
+            combined_status,
+            merge_state_status,
+            mergeable_state,
+            review_decision,
+            review_status,
+            auto_merge_requested,
+            merge_queue_required: policy.merge_queue_required.value,
+            merge_queue_state,
+            merge_group_sha,
+            unresolved_conversations,
+            policy,
+            warnings,
+        })
+    }
+
+    pub fn requires_rest_check_fallback(&self) -> bool {
+        match (&self.source_head_sha, &self.status_check_rollup_sha) {
+            (Some(source), Some(rollup)) => source != rollup,
+            _ => true,
+        }
+    }
+}
+
+fn string_field(value: &serde_json::Value, field: &str) -> Option<String> {
+    value
+        .get(field)
+        .and_then(|value| value.as_str())
+        .map(ToOwned::to_owned)
+}
+
+pub(crate) fn normalize_merge_state_status(status: &str) -> String {
+    status.to_ascii_lowercase()
+}
+
+fn is_known_merge_state_status(status: &str) -> bool {
+    matches!(
+        status,
+        "BEHIND" | "BLOCKED" | "CLEAN" | "DIRTY" | "DRAFT" | "HAS_HOOKS" | "UNKNOWN" | "UNSTABLE"
+    )
+}
+
+fn parse_repository_policy(rule: Option<&serde_json::Value>) -> RepositoryPolicyFacts {
+    let Some(rule) = rule else {
+        return RepositoryPolicyFacts::known_empty();
+    };
+
+    let required_checks = rule
+        .get("requiredStatusCheckContexts")
+        .and_then(|value| value.as_array())
+        .map(|contexts| {
+            contexts
+                .iter()
+                .filter_map(|value| value.as_str().map(ToOwned::to_owned))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let required_reviews = rule
+        .get("requiredApprovingReviewCount")
+        .and_then(|value| value.as_u64())
+        .and_then(|value| usize::try_from(value).ok());
+    let requires_up_to_date_branch = rule
+        .get("requiresStrictStatusChecks")
+        .and_then(|value| value.as_bool());
+    let requires_conversation_resolution = rule
+        .get("requiresConversationResolution")
+        .and_then(|value| value.as_bool());
+    let requires_deployments = rule
+        .get("requiresDeployments")
+        .and_then(|value| value.as_bool());
+    let requires_merge_queue = rule
+        .get("requiresMergeQueue")
+        .and_then(|value| value.as_bool());
+
+    RepositoryPolicyFacts {
+        required_checks: PolicyValue::known(required_checks),
+        required_reviews: PolicyValue::known(required_reviews),
+        requires_up_to_date_branch: PolicyValue::known(requires_up_to_date_branch),
+        requires_conversation_resolution: PolicyValue::known(requires_conversation_resolution),
+        merge_queue_required: PolicyValue::known(requires_merge_queue),
+        required_deployments: if requires_deployments == Some(true) {
+            PolicyValue::unknown("required deployments are configured but deployment environments were not available from GraphQL")
+        } else {
+            PolicyValue::known(Vec::new())
+        },
+        unknown_reasons: if requires_deployments == Some(true) {
+            vec!["required deployments are configured but deployment environments were not available from GraphQL".to_string()]
+        } else {
+            Vec::new()
+        },
+    }
+}
+
+fn parse_status_check_rollup(
+    commit: &serde_json::Value,
+    sha: &Option<String>,
+) -> (CheckRunsResponse, CombinedStatusResponse, bool) {
+    let rollup = commit
+        .get("statusCheckRollup")
+        .unwrap_or(&serde_json::Value::Null);
+    let nodes = rollup
+        .pointer("/contexts/nodes")
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let mut check_runs = Vec::new();
+    let mut statuses = Vec::new();
+    for (index, node) in nodes.iter().enumerate() {
+        match node.get("__typename").and_then(|value| value.as_str()) {
+            Some("CheckRun") => check_runs.push(CheckRun {
+                id: i64::try_from(index + 1).unwrap_or(1),
+                name: string_field(node, "name").unwrap_or_else(|| "check".to_string()),
+                status: string_field(node, "status")
+                    .map(|status| status.to_ascii_lowercase())
+                    .unwrap_or_default(),
+                conclusion: string_field(node, "conclusion")
+                    .map(|conclusion| conclusion.to_ascii_lowercase()),
+                html_url: string_field(node, "detailsUrl").unwrap_or_default(),
+            }),
+            Some("StatusContext") => statuses.push(CommitStatusEntry {
+                state: string_field(node, "state")
+                    .map(|state| state.to_ascii_lowercase())
+                    .unwrap_or_default(),
+                context: string_field(node, "context").unwrap_or_else(|| "status".to_string()),
+                description: string_field(node, "description"),
+                target_url: string_field(node, "targetUrl"),
+            }),
+            _ => {}
+        }
+    }
+
+    let state = rollup
+        .get("state")
+        .and_then(|value| value.as_str())
+        .map(|value| value.to_ascii_lowercase())
+        .unwrap_or_else(|| "pending".to_string());
+
+    let truncated = rollup
+        .pointer("/contexts/pageInfo/hasNextPage")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+
+    (
+        CheckRunsResponse {
+            total_count: check_runs.len(),
+            check_runs,
+        },
+        CombinedStatusResponse {
+            state,
+            statuses,
+            sha: sha.clone().unwrap_or_default(),
+            total_count: 0,
+            extra: serde_json::json!({}),
+        },
+        truncated,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1111,5 +1566,119 @@ mod tests {
             comment.extra.get("start_line").and_then(|v| v.as_i64()),
             Some(15)
         );
+    }
+
+    #[test]
+    fn github_readiness_graphql_payload_preserves_unknown_strings_and_sha_scope() {
+        let payload = serde_json::json!({
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "headRefOid": "head-sha-1",
+                        "mergeStateStatus": "FUTURE_STATE",
+                        "reviewDecision": "AI_REVIEW_PENDING",
+                        "autoMergeRequest": { "enabledAt": "2026-01-01T00:00:00Z" },
+                        "mergeQueueEntry": { "state": "AWAITING_CHECKS", "mergeGroup": { "headSha": "merge-group-sha" } },
+                        "commits": {
+                            "nodes": [{
+                                "commit": {
+                                    "oid": "head-sha-1",
+                                    "statusCheckRollup": {
+                                        "state": "SUCCESS",
+                                        "contexts": { "nodes": [{ "__typename": "CheckRun", "name": "ci", "status": "COMPLETED", "conclusion": "SUCCESS", "detailsUrl": "https://example.com/ci" }] }
+                                    }
+                                }
+                            }]
+                        },
+                        "reviewThreads": { "nodes": [{ "isResolved": true }] },
+                        "baseRef": {
+                            "name": "main",
+                            "branchProtectionRule": {
+                                "requiredStatusCheckContexts": ["ci"],
+                                "requiredApprovingReviewCount": 2,
+                                "requiresStrictStatusChecks": true,
+                                "requiresConversationResolution": true,
+                                "requiresDeployments": false,
+                                "requiresMergeQueue": true
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        let snapshot = GitHubReadinessSnapshot::from_graphql_response(&payload).unwrap();
+        assert_eq!(snapshot.source_head_sha, Some("head-sha-1".to_string()));
+        assert_eq!(snapshot.merge_state_status.as_deref(), Some("FUTURE_STATE"));
+        assert_eq!(
+            snapshot.review_decision.as_deref(),
+            Some("AI_REVIEW_PENDING")
+        );
+        assert_eq!(snapshot.mergeable_state.as_deref(), Some("unknown"));
+        assert_eq!(snapshot.review_status.as_deref(), Some("review_unknown"));
+        assert!(snapshot
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("FUTURE_STATE")));
+        assert_eq!(
+            snapshot.policy.required_checks.value,
+            vec!["ci".to_string()]
+        );
+        assert_eq!(snapshot.policy.requires_up_to_date_branch.value, Some(true));
+        assert_eq!(
+            snapshot.policy.requires_conversation_resolution.value,
+            Some(true)
+        );
+        assert_eq!(snapshot.policy.merge_queue_required.value, Some(true));
+        assert_eq!(
+            snapshot.status_check_rollup_sha.as_deref(),
+            Some("head-sha-1")
+        );
+        assert_eq!(snapshot.check_runs.check_runs[0].name, "ci");
+        assert!(snapshot.auto_merge_requested);
+        assert_eq!(
+            snapshot.merge_queue_state.as_deref(),
+            Some("AWAITING_CHECKS")
+        );
+        assert_eq!(snapshot.merge_group_sha.as_deref(), Some("merge-group-sha"));
+    }
+
+    #[test]
+    fn github_readiness_graphql_errors_mark_policy_coverage_unknown() {
+        let payload = serde_json::json!({
+            "errors": [{ "message": "Field 'mergeQueueEntry' doesn't exist on type 'PullRequest'" }],
+            "data": { "repository": null }
+        });
+
+        let snapshot = GitHubReadinessSnapshot::from_graphql_response(&payload).unwrap();
+        assert!(!snapshot.policy.required_checks.known);
+        assert!(!snapshot.policy.required_reviews.known);
+        assert!(!snapshot.policy.merge_queue_required.known);
+        assert!(snapshot
+            .policy
+            .unknown_reasons
+            .iter()
+            .any(|reason| reason.contains("mergeQueueEntry")));
+        assert!(snapshot.requires_rest_check_fallback());
+    }
+
+    #[test]
+    fn github_readiness_status_rollup_sha_mismatch_requires_fallback() {
+        let payload = serde_json::json!({
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "headRefOid": "head-sha-2",
+                        "commits": { "nodes": [{ "commit": { "oid": "old-sha", "statusCheckRollup": { "state": "SUCCESS", "contexts": { "nodes": [] } } } }] },
+                        "baseRef": { "name": "main", "branchProtectionRule": null }
+                    }
+                }
+            }
+        });
+
+        let snapshot = GitHubReadinessSnapshot::from_graphql_response(&payload).unwrap();
+        assert_eq!(snapshot.source_head_sha.as_deref(), Some("head-sha-2"));
+        assert_eq!(snapshot.status_check_rollup_sha.as_deref(), Some("old-sha"));
+        assert!(snapshot.requires_rest_check_fallback());
     }
 }

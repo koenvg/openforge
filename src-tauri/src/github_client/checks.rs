@@ -208,17 +208,14 @@ impl GitHubClient {
         Ok(result)
     }
 
-    /// Get required status checks for a branch from branch protection rules
-    ///
-    /// Returns an empty list if no branch protection is configured or if the
-    /// API call fails (graceful degradation).
-    pub async fn get_required_status_checks(
+    /// Get required status checks policy for a branch from branch protection rules.
+    pub async fn get_required_status_checks_policy(
         &self,
         owner: &str,
         repo: &str,
         branch: &str,
         token: &str,
-    ) -> Vec<String> {
+    ) -> RequiredChecksPolicy {
         let url = format!(
             "https://api.github.com/repos/{}/{}/branches/{}/protection/required_status_checks",
             owner, repo, branch
@@ -234,38 +231,32 @@ impl GitHubClient {
                     "[GitHub] Failed to fetch required status checks for {}/{} branch {}: {}",
                     owner, repo, branch, e
                 );
-                return vec![];
+                return RequiredChecksPolicy::unknown(e.to_string());
             }
         };
 
-        // 404 = no branch protection or no required checks configured
-        // 403 = insufficient permissions
-        if response.status() == reqwest::StatusCode::NOT_FOUND
-            || response.status() == reqwest::StatusCode::FORBIDDEN
-        {
-            return vec![];
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return RequiredChecksPolicy::from_rest_error(404, "not found");
+        }
+        if response.status() == reqwest::StatusCode::FORBIDDEN {
+            return RequiredChecksPolicy::from_rest_error(403, "forbidden");
         }
 
         if response.status() == reqwest::StatusCode::NOT_MODIFIED {
             if let Some(cached_body) = self.cached_body_for_url(&url) {
-                if let Ok(result) =
-                    serde_json::from_str::<RequiredStatusChecksResponse>(&cached_body)
-                {
-                    return result.into_context_names();
-                }
+                return RequiredChecksPolicy::from_rest_json(&cached_body)
+                    .unwrap_or_else(|e| RequiredChecksPolicy::unknown(e.to_string()));
             }
-            return vec![];
+            return RequiredChecksPolicy::unknown("304 without cached required checks response");
         }
 
         if !response.status().is_success() {
+            let status = response.status();
             warn!(
                 "[GitHub] Unexpected status {} fetching required checks for {}/{} branch {}",
-                response.status(),
-                owner,
-                repo,
-                branch
+                status, owner, repo, branch
             );
-            return vec![];
+            return RequiredChecksPolicy::from_rest_error(status.as_u16(), "unexpected status");
         }
 
         let etag = response
@@ -276,21 +267,35 @@ impl GitHubClient {
 
         let body = match response.text().await {
             Ok(b) => b,
-            Err(_) => return vec![],
+            Err(e) => return RequiredChecksPolicy::unknown(e.to_string()),
         };
 
         self.cache_response_body(&url, etag, &body);
 
-        match serde_json::from_str::<RequiredStatusChecksResponse>(&body) {
-            Ok(result) => result.into_context_names(),
-            Err(e) => {
-                warn!(
-                    "[GitHub] Failed to parse required status checks for {}/{} branch {}: {}",
-                    owner, repo, branch, e
-                );
-                vec![]
-            }
-        }
+        RequiredChecksPolicy::from_rest_json(&body).unwrap_or_else(|e| {
+            warn!(
+                "[GitHub] Failed to parse required status checks for {}/{} branch {}: {}",
+                owner, repo, branch, e
+            );
+            RequiredChecksPolicy::unknown(e.to_string())
+        })
+    }
+
+    /// Get required status check names for a branch from branch protection rules.
+    ///
+    /// Compatibility wrapper for callers that only need names. Prefer
+    /// `get_required_status_checks_policy` when policy coverage matters.
+    #[allow(dead_code)]
+    pub async fn get_required_status_checks(
+        &self,
+        owner: &str,
+        repo: &str,
+        branch: &str,
+        token: &str,
+    ) -> Vec<String> {
+        self.get_required_status_checks_policy(owner, repo, branch, token)
+            .await
+            .required_check_names
     }
 }
 
@@ -759,5 +764,47 @@ mod tests {
             ci.conclusion, None,
             "in-progress run should have no conclusion"
         );
+    }
+
+    #[test]
+    fn github_readiness_required_checks_policy_parses_strict_and_names() {
+        let json = r#"{
+            "strict": true,
+            "contexts": ["ci/build", "ci/test"],
+            "checks": [
+                {"context": "ci/build", "app_id": 1},
+                {"context": "lint", "app_id": null}
+            ]
+        }"#;
+
+        let policy = RequiredChecksPolicy::from_rest_json(json).unwrap();
+        assert!(policy.known);
+        assert_eq!(
+            policy.required_check_names,
+            vec!["ci/build", "lint", "ci/test"]
+        );
+        assert_eq!(policy.requires_up_to_date_branch, Some(true));
+    }
+
+    #[test]
+    fn github_readiness_required_checks_policy_marks_forbidden_as_unknown_not_empty() {
+        let policy =
+            RequiredChecksPolicy::from_rest_error(403, "Resource not accessible by integration");
+        assert!(!policy.known);
+        assert!(policy.required_check_names.is_empty());
+        assert!(policy
+            .unknown_reason
+            .as_deref()
+            .unwrap_or_default()
+            .contains("403"));
+    }
+
+    #[test]
+    fn github_readiness_required_checks_policy_marks_not_found_as_known_no_policy() {
+        let policy = RequiredChecksPolicy::from_rest_error(404, "Not Found");
+        assert!(policy.known);
+        assert!(policy.required_check_names.is_empty());
+        assert_eq!(policy.requires_up_to_date_branch, Some(false));
+        assert!(policy.unknown_reason.is_none());
     }
 }
