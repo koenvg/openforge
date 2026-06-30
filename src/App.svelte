@@ -574,7 +574,7 @@
     <div class="p-5 flex flex-col gap-4">
       <!-- Global shortcuts -->
       <div>
-        <div class="font-mono text-xs text-secondary mb-3">// global</div>
+        <div class="font-mono text-xs text-secondary mb-3">Global</div>
         <div class="flex flex-col gap-2">
           {#each globalShortcutHelpEntries as shortcut}
             <div class="flex items-center justify-between">
@@ -593,7 +593,7 @@
 
       <!-- Vim navigation -->
       <div>
-        <div class="font-mono text-xs text-secondary mb-3">// vim navigation</div>
+        <div class="font-mono text-xs text-secondary mb-3">Vim navigation</div>
         <div class="flex flex-col gap-2">
           <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">Move down / up</span>
@@ -625,7 +625,7 @@
       <!-- Task view shortcuts -->
       {#if selectedTask}
         <div>
-          <div class="font-mono text-xs text-secondary mb-3">// task view</div>
+          <div class="font-mono text-xs text-secondary mb-3">Task view</div>
           <div class="flex flex-col gap-2">
             <div class="flex items-center justify-between">
               <span class="text-sm text-base-content">Info panel</span>
@@ -650,7 +650,7 @@
       <!-- Board-specific shortcuts -->
       {#if $currentView === 'board' && !selectedTask}
         <div>
-          <div class="font-mono text-xs text-secondary mb-3">// board</div>
+          <div class="font-mono text-xs text-secondary mb-3">Board</div>
           <div class="flex flex-col gap-2">
             <div class="flex items-center justify-between">
               <span class="text-sm text-base-content">Toggle backlog</span>

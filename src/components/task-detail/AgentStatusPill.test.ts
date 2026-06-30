@@ -18,7 +18,8 @@ describe('AgentStatusPill', () => {
     render(AgentStatusPill, { props: { taskId: 'T-1' } })
 
     expect(await screen.findByText('Pi agent running...')).toBeTruthy()
-    expect(screen.getByText('// implementing')).toBeTruthy()
+    expect(screen.getByText('implementing')).toBeTruthy()
+    expect(screen.queryByText('// implementing')).toBeNull()
     expect(screen.getByText('RUNNING')).toBeTruthy()
     expect(screen.getByText('pi --session pi-sess-abc123')).toBeTruthy()
   })

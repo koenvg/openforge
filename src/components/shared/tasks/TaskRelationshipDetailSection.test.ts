@@ -32,6 +32,8 @@ describe('TaskRelationshipDetailSection', () => {
     })
 
     const section = screen.getByLabelText('Dependencies')
+    expect(section.textContent).toContain('Dependencies')
+    expect(section.textContent).not.toContain('// DEPENDS_ON')
     expect(section.textContent).toContain('T-1')
     expect(section.textContent).toContain('done')
     expect(section.textContent).toContain('Finish schema changes')
@@ -70,6 +72,8 @@ describe('TaskRelationshipDetailSection', () => {
     })
 
     const section = screen.getByLabelText('Dependent tasks')
+    expect(section.textContent).toContain('Dependent tasks')
+    expect(section.textContent).not.toContain('// DEPENDENTS')
     expect(section.textContent).toContain('T-2')
     expect(section.textContent).toContain('ready after this')
     expect(section.textContent).toContain('T-3')
