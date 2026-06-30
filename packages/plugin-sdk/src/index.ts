@@ -121,6 +121,8 @@ export type {
 export {
   canMergePullRequest,
   hasMergeConflicts,
+  isClosedUnmergedPullRequest,
+  isMergedPullRequest,
   isQueuedForMerge,
   isReadyToMerge,
   parseCheckRuns,

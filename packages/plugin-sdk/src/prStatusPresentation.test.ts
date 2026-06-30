@@ -33,4 +33,15 @@ describe('getPrStatusChips shared package API', () => {
     expect(getPrStatusChips({ ...basePr, mergeable_state: 'dirty' }, 'detail'))
       .toContainEqual(expect.objectContaining({ type: 'merge', label: 'Merge Conflict', variant: 'error', icon: 'cross' }))
   })
+
+  it('presents closed pull requests distinctly from merged pull requests', () => {
+    expect(getPrStatusChips({ ...basePr, state: 'closed' }, 'detail'))
+      .toContainEqual(expect.objectContaining({ type: 'merge', label: 'Closed', variant: 'closed', icon: 'cross' }))
+
+    expect(getPrStatusChips({ ...basePr, state: 'closed' }, 'compact'))
+      .toContainEqual(expect.objectContaining({ type: 'merge', label: 'closed', variant: 'closed' }))
+
+    expect(getPrStatusChips({ ...basePr, state: 'merged' }, 'detail'))
+      .toContainEqual(expect.objectContaining({ type: 'merge', label: 'Merged', variant: 'merged', icon: 'check' }))
+  })
 })

@@ -22,6 +22,7 @@ export const TASK_STATE_LABELS: Record<TaskState, string> = {
   'ready-to-merge': 'Ready to Merge',
   'pr-queued': 'In Merge Queue',
   'pr-merged': 'PR Merged',
+  'pr-closed': 'PR Closed',
   'merge-conflict': 'Merge Conflict',
 }
 
@@ -45,6 +46,7 @@ export const TASK_STATE_COMPACT_LABELS: Record<TaskState, string> = {
   'ready-to-merge': 'Ready to Merge',
   'pr-queued': 'Queued',
   'pr-merged': 'Merged',
+  'pr-closed': 'Closed',
   'merge-conflict': 'Merge Conflict',
 }
 
@@ -108,6 +110,7 @@ const STATE_REASONS: Record<TaskState, string> = {
   'ready-to-merge': 'Ready to merge — all checks passed.',
   'pr-queued': 'Pull request is queued for merge.',
   'pr-merged': 'Pull request merged.',
+  'pr-closed': 'Pull request closed without merge.',
   'merge-conflict': 'Pull request has merge conflicts that must be resolved.',
 }
 

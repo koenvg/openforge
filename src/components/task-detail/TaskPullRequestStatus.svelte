@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { PullRequestInfo } from '../../lib/types'
-  import { canMergePullRequest, hasMergeConflicts, isClosedOrMergedPullRequest } from '../../lib/types'
+  import { canMergePullRequest, hasMergeConflicts, isClosedOrMergedPullRequest, isClosedUnmergedPullRequest, isMergedPullRequest } from '../../lib/types'
   import { linkPullRequest, openUrl } from '../../lib/ipc'
   import { getPrStatusChips } from '@openforge/plugin-sdk/prStatusPresentation'
   import { getGitHubMarkdownImageBaseUrl } from '../../lib/githubMarkdown'
@@ -34,7 +34,9 @@
   }
 
   function displayStateLabel(pr: PullRequestInfo): string {
-    return isClosedOrMergedPullRequest(pr.state) ? 'merged' : pr.state
+    if (isMergedPullRequest(pr)) return 'merged'
+    if (isClosedUnmergedPullRequest(pr)) return 'closed'
+    return pr.state
   }
 
   function stateClass(pr: PullRequestInfo): string {
@@ -45,7 +47,9 @@
 
   function prCardAriaLabel(pr: PullRequestInfo): string {
     const label = prNumberLabel(pr)
-    return isClosedOrMergedPullRequest(pr.state) ? `Merged pull request ${label} (done)` : `Pull request ${label}`
+    if (isMergedPullRequest(pr)) return `Merged pull request ${label} (done)`
+    if (isClosedUnmergedPullRequest(pr)) return `Closed pull request ${label} (not merged)`
+    return `Pull request ${label}`
   }
 
   function cardSurfaceClass(pr: PullRequestInfo): string {
@@ -86,7 +90,7 @@
   }
 
   function shouldShowMergeDetails(pr: PullRequestInfo): boolean {
-    return (isClosedOrMergedPullRequest(pr.state) && pr.merged_at !== null)
+    return isMergedPullRequest(pr)
       || canMergePullRequest(pr)
       || orchestration.mergeFeedbackByPr.has(pr.id)
   }
@@ -163,7 +167,7 @@
           {#if shouldShowMergeDetails(pr)}
             {@const feedback = orchestration.mergeFeedbackByPr.get(pr.id)}
             <div class="border-t border-base-300/70 bg-base-200/35 p-2.5 flex flex-col gap-2" aria-label="Pull request merge status">
-              {#if isClosedOrMergedPullRequest(pr.state) && pr.merged_at}
+              {#if isMergedPullRequest(pr) && pr.merged_at}
                 <div class="text-[0.7rem] text-base-content/60">Merged on {formatDate(pr.merged_at)}</div>
               {/if}
 

@@ -169,13 +169,13 @@ describe('computeTaskState - getPrState behavior (PART 1)', () => {
       expect(state).toBe('ci-failed')
     })
 
-    it('test 9: closed PR → pr-merged for user-facing state', () => {
+    it('test 9: closed PR → pr-closed for user-facing state', () => {
       const task = createTask({ status: 'doing' })
       const session = createSession({ status: 'completed' })
-      const prs = [createPr({ state: 'closed' })]
+      const prs = [createPr({ state: 'closed', merged_at: null })]
 
       const state = computeTaskState(task, session, prs)
-      expect(state).toBe('pr-merged')
+      expect(state).toBe('pr-closed')
     })
 
     it('test 10: prefers open PR over merged PR when both exist', () => {
@@ -753,11 +753,11 @@ describe('computeTaskState - merge-conflict (PART 6)', () => {
     expect(computeTaskState(task, session, prs)).toBe('merge-conflict')
   })
 
-  it('test 6: closed PR with dirty state is still user-facing merged, not merge-conflict', () => {
+  it('test 6: closed PR with dirty state is still user-facing closed, not merge-conflict', () => {
     const task = createTask({ status: 'doing' })
     const session = createSession({ status: 'completed' })
-    const prs = [createPr({ state: 'closed', mergeable_state: 'dirty' })]
-    expect(computeTaskState(task, session, prs)).toBe('pr-merged')
+    const prs = [createPr({ state: 'closed', merged_at: null, mergeable_state: 'dirty' })]
+    expect(computeTaskState(task, session, prs)).toBe('pr-closed')
   })
 })
 

@@ -8,13 +8,20 @@ export type BoardFilter = 'focus' | 'low-fire' | 'backlog' | 'done'
 export const DEFAULT_FOCUS_STATES: TaskState[] = [
   'idle', 'needs-input', 'paused', 'agent-done', 'failed', 'interrupted',
   'pr-draft', 'pr-open', 'ci-failed', 'changes-requested', 'unaddressed-comments',
-  'ready-to-merge', 'pr-merged', 'merge-conflict',
+  'ready-to-merge', 'pr-merged', 'pr-closed', 'merge-conflict',
 ]
 
-const LEGACY_DEFAULT_FOCUS_STATES: TaskState[] = [
-  'idle', 'needs-input', 'paused', 'agent-done', 'failed', 'interrupted',
-  'pr-draft', 'pr-open', 'ci-failed', 'changes-requested', 'unaddressed-comments',
-  'ready-to-merge', 'pr-merged',
+const LEGACY_DEFAULT_FOCUS_STATE_SETS: TaskState[][] = [
+  [
+    'idle', 'needs-input', 'paused', 'agent-done', 'failed', 'interrupted',
+    'pr-draft', 'pr-open', 'ci-failed', 'changes-requested', 'unaddressed-comments',
+    'ready-to-merge', 'pr-merged',
+  ],
+  [
+    'idle', 'needs-input', 'paused', 'agent-done', 'failed', 'interrupted',
+    'pr-draft', 'pr-open', 'ci-failed', 'changes-requested', 'unaddressed-comments',
+    'ready-to-merge', 'pr-merged', 'merge-conflict',
+  ],
 ]
 
 const FOCUS_FILTER_CONFIG_KEY = 'focus_filter_states'
@@ -27,8 +34,10 @@ function removeNonFocusableStates(states: TaskState[]): TaskState[] {
 }
 
 function isLegacyDefaultFocusStateSet(states: TaskState[]): boolean {
-  return states.length === LEGACY_DEFAULT_FOCUS_STATES.length
-    && LEGACY_DEFAULT_FOCUS_STATES.every((state, index) => states[index] === state)
+  return LEGACY_DEFAULT_FOCUS_STATE_SETS.some((legacyStates) =>
+    states.length === legacyStates.length
+      && legacyStates.every((state, index) => states[index] === state)
+  )
 }
 
 export function isFocusTask(_task: Task, state: TaskState, prs: PullRequestInfo[], focusStates: TaskState[] = DEFAULT_FOCUS_STATES): boolean {
