@@ -564,11 +564,11 @@ describe('computeTaskState - mergeable_state based ready-to-merge (PART 5)', () 
     expect(computeTaskState(task, session, prs)).toBe('ready-to-merge')
   })
 
-  it('test 17: mergeable_state clean with changes_requested still follows shared merge affordance readiness', () => {
+  it('test 17: mergeable_state clean with changes_requested remains blocked by requested changes', () => {
     const task = createTask({ status: 'doing' })
     const session = createSession({ status: 'completed' })
     const prs = [createPr({ state: 'open', mergeable_state: 'clean', ci_status: 'success', review_status: 'changes_requested' })]
-    expect(computeTaskState(task, session, prs)).toBe('ready-to-merge')
+    expect(computeTaskState(task, session, prs)).toBe('changes-requested')
   })
 
   it('test 7: mergeable_state null — old ci+review conditions NO LONGER trigger ready-to-merge', () => {

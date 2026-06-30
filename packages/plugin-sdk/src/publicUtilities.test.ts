@@ -9,6 +9,7 @@ import {
   canMergePullRequest,
   isQueuedForMerge,
   isReadyToMerge,
+  getMergeReadiness,
   parseCheckRuns,
   preservePullRequestState,
   splitCheckRuns,
@@ -51,6 +52,41 @@ describe('public plugin utilities', () => {
     expect(canMergePullRequest(makePullRequest({ mergeable: true, mergeable_state: 'clean', draft: true, ci_status: 'success' }))).toBe(false)
     expect(canMergePullRequest(makePullRequest({ mergeable: true, mergeable_state: 'clean', is_queued: true, ci_status: 'success' }))).toBe(false)
     expect(isQueuedForMerge({ state: 'open', is_queued: true })).toBe(true)
+  })
+
+  it('exposes the strict merge readiness domain model for GitHub plugins', () => {
+    const ready = getMergeReadiness(makePullRequest({
+      mergeable: true,
+      mergeable_state: 'clean',
+      ci_status: 'success',
+      review_status: 'approved',
+      head_sha: 'sha-ready',
+      updated_at: 42,
+    }))
+    expect(ready).toMatchObject({
+      status: 'ready_to_merge',
+      action: 'merge',
+      blockers: [],
+      warnings: [],
+      freshness: { sourceSha: 'sha-ready', checkedAt: 42 },
+    })
+
+    expect(getMergeReadiness(makePullRequest({ is_queued: true }))).toMatchObject({
+      status: 'queued_pull_request',
+      action: 'wait_for_queue',
+    })
+
+    expect(getMergeReadiness(makePullRequest({ mergeable: true, mergeable_state: 'clean', ci_status: 'success' }), { requireMergeQueue: true })).toMatchObject({
+      status: 'ready_to_enqueue',
+      action: 'enqueue',
+      blockers: [],
+    })
+
+    expect(getMergeReadiness(makePullRequest({ mergeable: null, mergeable_state: 'unknown', head_sha: 'sha-unknown' }))).toMatchObject({
+      status: 'readiness_unknown',
+      action: 'wait_for_github',
+      freshness: { sourceSha: 'sha-unknown' },
+    })
   })
 
   it('preserves optimistic and definitive pull request state across transient syncs', () => {

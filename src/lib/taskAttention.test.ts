@@ -63,9 +63,9 @@ describe('deriveTaskAttention', () => {
     expect(deriveTaskAttention([pr], 0)).toEqual({ message: 'Ready to merge', tone: 'success' })
   })
 
-  it('uses shared merge affordance readiness before changes requested', () => {
+  it('uses strict merge readiness so requested changes block merge attention', () => {
     const pr = makePr({ mergeable_state: 'clean', ci_status: 'success', review_status: 'changes_requested' })
-    expect(deriveTaskAttention([pr], 0)).toEqual({ message: 'Ready to merge', tone: 'success' })
+    expect(deriveTaskAttention([pr], 0)).toEqual({ message: 'Address requested changes', tone: 'warning' })
   })
 
   it('does not flag ready to merge while CI is pending even when GitHub mergeability is clean', () => {
