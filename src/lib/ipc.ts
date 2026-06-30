@@ -49,10 +49,6 @@ export async function deleteTask(id: string): Promise<void> {
   return invoke("delete_task", { id });
 }
 
-export async function clearDoneTasks(projectId: string): Promise<number> {
-  return invoke<number>("clear_done_tasks", { projectId });
-}
-
 export async function getAppMode(): Promise<string> {
   return invoke<string>("get_app_mode");
 }

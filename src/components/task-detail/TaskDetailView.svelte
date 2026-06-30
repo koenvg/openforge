@@ -3,11 +3,11 @@
   import { get } from 'svelte/store'
   import { createTaskTerminalPaneLifecycle } from '@openforge/terminal-runtime'
   import { activeProjectId, activeSessions, commandHeld, error, startingTasks, taskActiveView, taskRuntimeInfo } from '../../lib/stores'
-  import { getTaskWorkspace, openInEditor, updateTaskStatus } from '../../lib/ipc'
+  import { deleteTask, getTaskWorkspace, openInEditor, updateTaskStatus } from '../../lib/ipc'
+  import { confirmCompleteTask } from '../../lib/completeTask'
   import { getTaskTitle } from '../../lib/taskTitle'
   import { createTaskTitleRename } from '../../lib/useTaskTitleRename.svelte'
   import { useAppRouter } from '../../lib/router.svelte'
-  import { moveTaskToComplete } from '../../lib/moveToComplete'
   import { isInputFocused } from '../../lib/domUtils'
   import { loadActions, getEnabledActions } from '../../lib/actions'
   import PluginSlot from '../plugin/PluginSlot.svelte'
@@ -213,15 +213,24 @@
 
   async function handleStatusChange(newStatus: BoardStatus) {
     if (newStatus === task.status) return
-    if (newStatus === 'done') {
-      await moveTaskToComplete(task.id)
-      return
-    }
 
     try {
       await updateTaskStatus(task.id, newStatus)
     } catch (e) {
       console.error('Failed to update status:', e)
+      $error = String(e)
+    }
+  }
+
+  async function handleComplete() {
+    if (!confirmCompleteTask()) {
+      return
+    }
+    try {
+      await deleteTask(task.id)
+      router.resetToBoard()
+    } catch (e) {
+      console.error('Failed to complete task:', e)
       $error = String(e)
     }
   }
@@ -317,9 +326,9 @@
         {:else if task.status === 'doing'}
           <button
             class="btn btn-success btn-sm shrink-0 shadow-sm hover:shadow-md transition-shadow"
-            onclick={() => handleStatusChange('done')}
+            onclick={handleComplete}
           >
-            Move to Done
+            Complete 🏁
           </button>
           {#if actions.length > 0}
             <ActionDropdown {actions} disabled={isStarting} onAction={handleActionClick} />

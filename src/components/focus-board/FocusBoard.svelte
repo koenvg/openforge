@@ -3,7 +3,6 @@
   import { backlogLabelFilters, commandHeld, focusBoardFilters, lowFireTaskIdsByProject, mergingTaskIds } from '../../lib/stores'
   import { filterTasks, getFilterCounts, DEFAULT_FOCUS_STATES, loadFocusFilterStates, loadLowFireTaskIds, saveLowFireTaskIds, isFocusTask } from '../../lib/boardFilters'
   import type { BoardFilter } from '../../lib/boardFilters'
-  import { reopenTask } from '../../lib/reopenTask'
   import { getDependencyWaitLabel } from '../../lib/taskDependencies'
   import { getTaskReasonText } from '../../lib/taskStatePresentation'
   import { computeTaskState } from '../../lib/taskState'
@@ -46,7 +45,6 @@
     { value: 'focus' as BoardFilter, label: 'Focus', shortcut: '⌘1' },
     { value: 'low-fire' as BoardFilter, label: 'Low-Fire', shortcut: '⌘2' },
     { value: 'backlog' as BoardFilter, label: 'Backlog', shortcut: '⌘3' },
-    { value: 'done' as BoardFilter, label: 'Done', shortcut: '⌘4' },
   ] as const
 
   let { projectId, projectName, tasks, activeSessions, ticketPrs, onOpenTask, onEditTask, onTaskUpdated, onRunAction }: Props = $props()
@@ -90,13 +88,6 @@
       }
     }
 
-    if (activeFilter === 'done') {
-      return {
-        attention: [...labelFiltered].sort((a, b) => b.updated_at - a.updated_at),
-        inFlight: [],
-      }
-    }
-
     const attention: Task[] = []
     const inFlight: Task[] = []
     for (const task of labelFiltered) {
@@ -119,7 +110,7 @@
   let filteredTasks = $derived.by(() => [...groupedTasks.attention, ...groupedTasks.inFlight])
 
   let visibleRows = $derived.by<TaskRow[]>(() => {
-    if (activeFilter === 'backlog' || activeFilter === 'done') {
+    if (activeFilter === 'backlog') {
       return groupedTasks.attention.map((task, taskIndex) => ({ type: 'task', task, taskIndex, isInFlight: false }))
     }
 
@@ -304,7 +295,7 @@
 
     // CMD+1/2/3 filter chip shortcuts (works even when pane has focus)
     if (e.metaKey && !e.shiftKey && !e.altKey) {
-      const filterMap: Record<string, BoardFilter> = { '1': 'focus', '2': 'low-fire', '3': 'backlog', '4': 'done' }
+      const filterMap: Record<string, BoardFilter> = { '1': 'focus', '2': 'low-fire', '3': 'backlog' }
       const filter = filterMap[e.key]
       if (filter) {
         e.preventDefault()
@@ -369,13 +360,6 @@
     })
   }
 
-  function handleReopen(taskId: string) {
-    // Reopening returns a finished task to active work. Clear any stale
-    // Low-Fire membership so it surfaces in Focus rather than silently
-    // landing back in the Low-Fire lane.
-    setTaskLowFire(taskId, false)
-    void reopenTask(taskId)
-  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -512,7 +496,6 @@
     {lowFireTaskIds}
     onMoveToLowFire={(taskId) => setTaskLowFire(taskId, true)}
     onMoveToFocus={(taskId) => setTaskLowFire(taskId, false)}
-    onReopen={handleReopen}
     {onRunAction}
   />
 </div>

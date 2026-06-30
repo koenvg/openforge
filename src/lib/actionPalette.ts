@@ -23,16 +23,6 @@ export function getTaskActions(task: Task, customActions: Action[], taskPrs: Pul
     })
   }
 
-  if (task.status === 'doing') {
-    actions.push({
-      id: 'move-to-done',
-      label: 'Move to Done',
-      shortcut: null,
-      category: 'task',
-      keywords: ['complete', 'finish', 'close', 'done'],
-    })
-  }
-
   const readyToMergePrs = taskPrs.filter(canMergePullRequest)
   if (readyToMergePrs.length === 1) {
     actions.push({
@@ -46,10 +36,10 @@ export function getTaskActions(task: Task, customActions: Action[], taskPrs: Pul
 
   actions.push({
     id: 'delete-task',
-    label: 'Delete Task',
+    label: 'Complete',
     shortcut: null,
     category: 'task',
-    keywords: ['remove', 'trash'],
+    keywords: ['remove', 'trash', 'complete', 'finish', 'close', 'done'],
   })
 
   for (const action of customActions) {

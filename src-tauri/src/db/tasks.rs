@@ -934,23 +934,6 @@ impl super::Database {
         }
     }
 
-    /// Get all task IDs with the given status for a specific project.
-    ///
-    /// # Arguments
-    /// * `project_id` - Project to scope the query to
-    /// * `status` - Task status to filter by (e.g. "done")
-    pub fn get_task_ids_by_status(&self, project_id: &str, status: &str) -> Result<Vec<String>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt =
-            conn.prepare("SELECT id FROM tasks WHERE project_id = ?1 AND status = ?2")?;
-        let ids = stmt.query_map(rusqlite::params![project_id, status], |row| row.get(0))?;
-        let mut result = Vec::new();
-        for id in ids {
-            result.push(id?);
-        }
-        Ok(result)
-    }
-
     pub fn get_all_task_ids(&self) -> Result<Vec<String>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare("SELECT id FROM tasks")?;

@@ -239,7 +239,6 @@ vi.mock('./lib/ipc', () => ({
   updateTask: vi.fn(),
   updateTaskStatus: vi.fn(async () => undefined),
   deleteTask: vi.fn(),
-  clearDoneTasks: vi.fn(),
   listOpenCodeAgents: vi.fn().mockResolvedValue([]),
   createProject: vi.fn(),
   updateProject: vi.fn(),
@@ -307,10 +306,6 @@ vi.mock('./components/shell/FileQuickOpen.svelte', () => ({ default: vi.fn() }))
 
 vi.mock('./lib/doingStatus', () => ({
   computeDoingStatus: vi.fn(() => 'idle'),
-}))
-
-vi.mock('./lib/moveToComplete', () => ({
-  moveTaskToComplete: vi.fn(async () => undefined),
 }))
 
 export const mockRouterPushNavState = vi.fn()

@@ -18,18 +18,8 @@ pub(super) async fn handle_app_core_task_project_command(
                         format!("Failed to update task status: {e}"),
                     )
                 })?;
-                if status == db::BoardStatus::Done {
-                    let _ = db.update_task_workspace_status(&id, "completed");
-                }
             }
             publish_task_changed(state, &id);
-            if status == db::BoardStatus::Done {
-                // Clean up the worktree AND its OpenForge-created branch on
-                // move-to-Done, matching the delete path. Branch deletion is
-                // still gated by safety checks in git_worktree, so adopted or
-                // in-progress branches are never destroyed.
-                cleanup_task_runtime_for_app(state, &id, true).await?;
-            }
             serde_json::Value::Null
         }
         "delete_task" => {
@@ -49,38 +39,6 @@ pub(super) async fn handle_app_core_task_project_command(
                 serde_json::json!({ "action": "deleted", "task_id": id }),
             );
             serde_json::Value::Null
-        }
-        "clear_done_tasks" => {
-            let project_id = payload_string(&request.payload, "projectId")?;
-            let task_ids = {
-                let db = crate::db::acquire_db(&state.db);
-                db.get_task_ids_by_status(&project_id, db::BoardStatus::Done.as_str())
-                    .map_err(|e| {
-                        (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            format!("Failed to get done tasks: {e}"),
-                        )
-                    })?
-            };
-            let mut deleted = 0u32;
-            for id in &task_ids {
-                cleanup_task_runtime_for_app(state, id, true).await?;
-                let db = crate::db::acquire_db(&state.db);
-                db.delete_task(id).map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to delete task {id}: {e}"),
-                    )
-                })?;
-                deleted += 1;
-            }
-            if deleted > 0 {
-                publish_task_changed_payload(
-                    state,
-                    serde_json::json!({ "action": "cleared_done", "count": deleted }),
-                );
-            }
-            json_value(deleted)?
         }
         "list_git_branches" => {
             let repo_path = payload_string(&request.payload, "repoPath")?;

@@ -203,19 +203,19 @@ describe('filterTasks', () => {
     expect(filtered.map((t: Task) => t.id)).toEqual(['T-2', 'T-3'])
   })
 
-  it('filters done tasks (status === done) regardless of low-fire membership', () => {
+  it('excludes legacy done tasks from focus and low-fire lanes', () => {
     const sessions = new Map<string, AgentSession>()
     const prs = new Map<string, PullRequestInfo[]>()
 
     const tasks = [
       makeTask({ id: 'T-1', status: 'doing' }),
       makeTask({ id: 'T-2', status: 'done' }),
-      makeTask({ id: 'T-3', status: 'backlog' }),
-      makeTask({ id: 'T-4', status: 'done' }),
     ]
 
-    const filtered = filterTasks(tasks, 'done', sessions, prs, DEFAULT_FOCUS_STATES, new Set(['T-2']))
-    expect(filtered.map((t: Task) => t.id)).toEqual(['T-2', 'T-4'])
+    expect(filterTasks(tasks, 'focus', sessions, prs).map((t: Task) => t.id)).toEqual(['T-1'])
+    expect(
+      filterTasks(tasks, 'low-fire', sessions, prs, DEFAULT_FOCUS_STATES, new Set(['T-1', 'T-2'])).map((t: Task) => t.id),
+    ).toEqual(['T-1'])
   })
 
   it('returns empty array for empty task list', () => {
@@ -280,7 +280,6 @@ describe('getFilterCounts', () => {
       focus: 1,
       'low-fire': 0,
       backlog: 1,
-      done: 0,
     })
   })
 
@@ -293,7 +292,6 @@ describe('getFilterCounts', () => {
       focus: 0,
       'low-fire': 0,
       backlog: 0,
-      done: 0,
     })
   })
 
@@ -311,7 +309,6 @@ describe('getFilterCounts', () => {
       focus: 0,
       'low-fire': 0,
       backlog: 2,
-      done: 0,
     })
   })
 
@@ -339,7 +336,6 @@ describe('getFilterCounts', () => {
       focus: 1,
       'low-fire': 1,
       backlog: 1,
-      done: 0,
     })
   })
 
@@ -357,11 +353,10 @@ describe('getFilterCounts', () => {
       focus: 1,
       'low-fire': 0,
       backlog: 1,
-      done: 0,
     })
   })
 
-  it('counts done tasks in the done chip without affecting other lanes', () => {
+  it('does not count legacy done tasks in any lane chip', () => {
     const sessions = new Map<string, AgentSession>()
     const prs = new Map<string, PullRequestInfo[]>()
 
@@ -377,7 +372,6 @@ describe('getFilterCounts', () => {
       focus: 1,
       'low-fire': 0,
       backlog: 1,
-      done: 2,
     })
   })
 
