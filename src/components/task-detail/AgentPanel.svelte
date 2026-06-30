@@ -11,20 +11,6 @@
 
   let { taskId, isStarting = false }: Props = $props()
 
-  const sharedStageLabels: Record<string, string> = {
-    'read_ticket': 'reading ticket',
-    'implement': 'implementing',
-    'create_pr': 'creating PR',
-    'address_comments': 'addressing comments',
-  }
-
-  const openCodeStageLabels: Record<string, string> = {
-    'read_ticket': 'Reading Ticket',
-    'implement': 'Implementing',
-    'create_pr': 'Creating PR',
-    'address_comments': 'Addressing Comments',
-  }
-
   // Check the store first; if absent, try loading from DB once on mount.
   let session = $derived($activeSessions.get(taskId) || null)
   let provider = $derived(session?.provider ?? null)
@@ -51,43 +37,27 @@
   <AgentTerminalShell
     {taskId}
     {isStarting}
-    runningText="Claude agent running..."
-    logPrefix="AgentPanel:Claude"
     sessionIdKey="claude_session_id"
-    stageLabels={sharedStageLabels}
   />
 {:else if provider === 'pi'}
   <AgentTerminalShell
     {taskId}
     {isStarting}
-    runningText="Pi agent running..."
-    logPrefix="AgentPanel:Pi"
     sessionIdKey="pi_session_id"
-    stageLabels={sharedStageLabels}
     rootTestId="pi-agent-panel"
   />
 {:else if provider === 'codex'}
   <AgentTerminalShell
     {taskId}
     {isStarting}
-    runningText="Codex agent running..."
-    logPrefix="AgentPanel:Codex"
     sessionIdKey={null}
-    stageLabels={sharedStageLabels}
     rootTestId="codex-agent-panel"
-    resumeCommandProvider="codex"
   />
 {:else if provider || checkedDb}
   <AgentTerminalShell
     {taskId}
     {isStarting}
-    runningText="Agent running..."
-    logPrefix="AgentPanel:OpenCode"
     sessionIdKey="opencode_session_id"
-    stageLabels={openCodeStageLabels}
     rootTestId="opencode-agent-panel"
-    stageLabelPrefix=""
-    uppercaseSessionStatus={false}
-    sessionStatusBadgeVariant="badge"
   />
 {/if}

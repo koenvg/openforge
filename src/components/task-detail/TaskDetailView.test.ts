@@ -94,6 +94,7 @@ vi.mock('../../lib/ipc', () => ({
   getPrComments: vi.fn().mockResolvedValue([]),
   markCommentAddressed: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn().mockResolvedValue(undefined),
+  openInEditor: vi.fn().mockResolvedValue(undefined),
   getTaskWorkspace: vi.fn().mockResolvedValue(null),
   getConfig: vi.fn().mockResolvedValue(''),
   getProjectConfig: vi.fn().mockResolvedValue(null),
@@ -306,6 +307,7 @@ describe('createTaskWorkspaceInfo', () => {
 
 describe('TaskDetailView', () => {
   beforeEach(() => {
+    localStorage.clear()
     taskActiveView.set(new Map())
     taskRuntimeInfo.set(new Map())
     commandHeld.set(false)
@@ -665,33 +667,14 @@ describe('TaskDetailView', () => {
     expect(button?.disabled).toBe(false)
   })
 
-  it('renders breadcrumb with board path segment', () => {
+  it('no longer renders the terminal-style breadcrumb row', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
-    expect(screen.getByText('$ cd board')).toBeTruthy()
+    expect(screen.queryByText('$ cd board')).toBeNull()
   })
 
-  it('renders breadcrumb with task status segment', () => {
+  it('shows the task status badge in the header', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
-    const breadcrumbRoot = screen.getByText('$ cd board').closest('div')
-    expect(breadcrumbRoot?.textContent).toContain('backlog')
-  })
-
-  it('renders breadcrumb with task identifier', () => {
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
-    const breadcrumbRoot = screen.getByText('$ cd board').closest('div')
-    expect(breadcrumbRoot?.textContent).toContain('T-42')
-  })
-
-  it('renders breadcrumb with agent segment by default', () => {
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
-    const breadcrumbRoot = screen.getByText('$ cd board').closest('div')
-    expect(breadcrumbRoot?.textContent).toContain('agent')
-  })
-
-  it('renders breadcrumb with task id', () => {
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
-    const breadcrumbRoot = screen.getByText('$ cd board').closest('div')
-    expect(breadcrumbRoot?.textContent).toContain('T-42')
+    expect(screen.getByLabelText('Task status').textContent).toContain('backlog')
   })
 
   it('shows TaskInfoPanel by default', async () => {
@@ -774,9 +757,8 @@ describe('TaskDetailView', () => {
     await waitFor(() => expect(vi.mocked(getTaskWorkspace)).toHaveBeenCalledWith('T-42'))
     await new Promise(resolve => setTimeout(resolve, 0))
     await waitFor(() => {
-      const breadcrumb = screen.getByText('$ cd board').closest('div')
-      expect(breadcrumb?.textContent).toContain('terminal')
-      expect(screen.getByRole('button', { name: /^terminal\b/i })).toBeTruthy()
+      expect(screen.getByRole('button', { name: /^terminal\b/i }).getAttribute('aria-pressed')).toBe('true')
+      expect(screen.getByRole('button', { name: /^agent\b/i }).getAttribute('aria-pressed')).toBe('false')
     })
 
     vi.mocked(getTaskWorkspace).mockResolvedValue(null)
@@ -833,8 +815,7 @@ describe('TaskDetailView', () => {
     await fireEvent.keyDown(window, { key: '3', code: 'Digit3', metaKey: true })
 
     await waitFor(() => {
-      const breadcrumb = screen.getByText('$ cd board').closest('div')
-      expect(breadcrumb?.textContent).toContain('terminal')
+      expect(screen.getByRole('button', { name: /^terminal\b/i }).getAttribute('aria-pressed')).toBe('true')
     })
     vi.mocked(getTaskWorkspace).mockResolvedValue(null)
   })
@@ -848,14 +829,13 @@ describe('TaskDetailView', () => {
 
     // Switch to review first
     await fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true, shiftKey: false })
-    const breadcrumb = screen.getByText('$ cd board').closest('div')
-    await waitFor(() => expect(breadcrumb?.textContent).toContain('review'))
+    await waitFor(() => expect(screen.getByRole('button', { name: /^review\b/i }).getAttribute('aria-pressed')).toBe('true'))
 
     // Now switch back to agent with CMD+1
     await fireEvent.keyDown(window, { key: '1', code: 'Digit1', metaKey: true, shiftKey: false })
     await waitFor(() => {
-      expect(breadcrumb?.textContent).toContain('agent')
-      expect(breadcrumb?.textContent).not.toContain('review')
+      expect(screen.getByRole('button', { name: /^agent\b/i }).getAttribute('aria-pressed')).toBe('true')
+      expect(screen.getByRole('button', { name: /^review\b/i }).getAttribute('aria-pressed')).toBe('false')
     })
     vi.mocked(getTaskWorkspace).mockResolvedValue(null)
   })
@@ -868,13 +848,12 @@ describe('TaskDetailView', () => {
     await waitFor(() => expect(screen.getByText('review')).toBeTruthy())
 
     await fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true, shiftKey: false })
-    const breadcrumb = screen.getByText('$ cd board').closest('div')
-    await waitFor(() => expect(breadcrumb?.textContent).toContain('review'))
+    await waitFor(() => expect(screen.getByRole('button', { name: /^review\b/i }).getAttribute('aria-pressed')).toBe('true'))
 
     await fireEvent.keyDown(window, { key: '1', code: 'Digit1', metaKey: true, shiftKey: false })
     await waitFor(() => {
-      expect(breadcrumb?.textContent).toContain('agent')
-      expect(breadcrumb?.textContent).not.toContain('review')
+      expect(screen.getByRole('button', { name: /^agent\b/i }).getAttribute('aria-pressed')).toBe('true')
+      expect(screen.getByRole('button', { name: /^review\b/i }).getAttribute('aria-pressed')).toBe('false')
     })
     vi.mocked(getTaskWorkspace).mockResolvedValue(null)
   })
@@ -886,11 +865,10 @@ describe('TaskDetailView', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     await waitFor(() => expect(screen.getByText('review')).toBeTruthy())
 
-    const breadcrumb = screen.getByText('$ cd board').closest('div')
-    expect(breadcrumb?.textContent).toContain('agent')
+    expect(screen.getByRole('button', { name: /^agent\b/i }).getAttribute('aria-pressed')).toBe('true')
 
     await fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true, shiftKey: false })
-    await waitFor(() => expect(breadcrumb?.textContent).toContain('review'))
+    await waitFor(() => expect(screen.getByRole('button', { name: /^review\b/i }).getAttribute('aria-pressed')).toBe('true'))
     vi.mocked(getTaskWorkspace).mockResolvedValue(null)
   })
 
@@ -961,8 +939,7 @@ describe('TaskDetailView', () => {
       await fireEvent.keyDown(window, { key: '1', code: 'Digit1', metaKey: true, shiftKey: false })
 
       await waitFor(() => {
-        const breadcrumb = screen.getByText('$ cd board').closest('div')
-        expect(breadcrumb?.textContent).toContain('agent')
+        expect(screen.getByRole('button', { name: /^agent\b/i }).getAttribute('aria-pressed')).toBe('true')
         expect(get(taskActiveView).get(baseTask.id)).toBe('agent')
       })
       expect(switchToTab).not.toHaveBeenCalled()
@@ -973,7 +950,7 @@ describe('TaskDetailView', () => {
     }
   })
 
-  it('breadcrumb shows terminal when terminal tab active', async () => {
+  it('terminal tab becomes active (aria-pressed) when terminal tab clicked', async () => {
     const { getTaskWorkspace } = await import('../../lib/ipc')
     vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
 
@@ -983,8 +960,7 @@ describe('TaskDetailView', () => {
     await fireEvent.click(screen.getByRole('button', { name: /^terminal\b/i }))
 
     await waitFor(() => {
-      const breadcrumb = screen.getByText('$ cd board').closest('div')
-      expect(breadcrumb?.textContent).toContain('terminal')
+      expect(screen.getByRole('button', { name: /^terminal\b/i }).getAttribute('aria-pressed')).toBe('true')
     })
 
     vi.mocked(getTaskWorkspace).mockResolvedValue(null)
@@ -1088,13 +1064,12 @@ describe('TaskDetailView', () => {
         expect(screen.getByText('review')).toBeTruthy()
       })
 
-      const breadcrumb = screen.getByText('$ cd board').closest('div')
-      expect(breadcrumb?.textContent).toContain('agent')
+      expect(screen.getByRole('button', { name: /^agent\b/i }).getAttribute('aria-pressed')).toBe('true')
 
       await fireEvent.keyDown(window, { key: 'l' })
 
       await waitFor(() => {
-        expect(breadcrumb?.textContent).toContain('review')
+        expect(screen.getByRole('button', { name: /^review\b/i }).getAttribute('aria-pressed')).toBe('true')
       })
 
       vi.mocked(getTaskWorkspace).mockResolvedValue(null)
@@ -1110,15 +1085,14 @@ describe('TaskDetailView', () => {
       })
 
       await fireEvent.keyDown(window, { key: 'l' })
-      const breadcrumb = screen.getByText('$ cd board').closest('div')
       await waitFor(() => {
-        expect(breadcrumb?.textContent).toContain('review')
+        expect(screen.getByRole('button', { name: /^review\b/i }).getAttribute('aria-pressed')).toBe('true')
       })
 
       await fireEvent.keyDown(window, { key: 'h' })
       await waitFor(() => {
-        expect(breadcrumb?.textContent).toContain('agent')
-        expect(breadcrumb?.textContent).not.toContain('review')
+        expect(screen.getByRole('button', { name: /^agent\b/i }).getAttribute('aria-pressed')).toBe('true')
+        expect(screen.getByRole('button', { name: /^review\b/i }).getAttribute('aria-pressed')).toBe('false')
       })
 
       vi.mocked(getTaskWorkspace).mockResolvedValue(null)
@@ -1127,12 +1101,11 @@ describe('TaskDetailView', () => {
     it('h and l keys are ignored when no worktree exists', async () => {
       render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
 
-      const breadcrumb = screen.getByText('$ cd board').closest('div')
-      expect(breadcrumb?.textContent).toContain('agent')
+      // With no worktree the view tabs do not render; the view stays on agent
+      expect(screen.queryByRole('button', { name: /^review\b/i })).toBeNull()
 
       await fireEvent.keyDown(window, { key: 'l' })
-      expect(breadcrumb?.textContent).toContain('agent')
-      expect(breadcrumb?.textContent).not.toContain('review')
+      expect(screen.queryByRole('button', { name: /^review\b/i })).toBeNull()
     })
 
     it('h and l keys are ignored when modifier keys are held', async () => {
@@ -1144,16 +1117,16 @@ describe('TaskDetailView', () => {
         expect(screen.getByText('review')).toBeTruthy()
       })
 
-      const breadcrumb = screen.getByText('$ cd board').closest('div')
+      const agentBtn = screen.getByRole('button', { name: /^agent\b/i })
 
       await fireEvent.keyDown(window, { key: 'l', ctrlKey: true })
-      expect(breadcrumb?.textContent).toContain('agent')
+      expect(agentBtn.getAttribute('aria-pressed')).toBe('true')
 
       await fireEvent.keyDown(window, { key: 'l', metaKey: true })
-      expect(breadcrumb?.textContent).toContain('agent')
+      expect(agentBtn.getAttribute('aria-pressed')).toBe('true')
 
       await fireEvent.keyDown(window, { key: 'l', altKey: true })
-      expect(breadcrumb?.textContent).toContain('agent')
+      expect(agentBtn.getAttribute('aria-pressed')).toBe('true')
 
       vi.mocked(getTaskWorkspace).mockResolvedValue(null)
     })
@@ -1167,13 +1140,12 @@ describe('TaskDetailView', () => {
         expect(screen.getByText('review')).toBeTruthy()
       })
 
-      const breadcrumb = screen.getByText('$ cd board').closest('div')
-      expect(breadcrumb?.textContent).toContain('agent')
+      expect(screen.getByRole('button', { name: /^agent\b/i }).getAttribute('aria-pressed')).toBe('true')
 
       await fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true, shiftKey: false })
 
       await waitFor(() => {
-        expect(breadcrumb?.textContent).toContain('review')
+        expect(screen.getByRole('button', { name: /^review\b/i }).getAttribute('aria-pressed')).toBe('true')
       })
 
       vi.mocked(getTaskWorkspace).mockResolvedValue(null)
@@ -1189,15 +1161,14 @@ describe('TaskDetailView', () => {
       })
 
       await fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true, shiftKey: false })
-      const breadcrumb = screen.getByText('$ cd board').closest('div')
       await waitFor(() => {
-        expect(breadcrumb?.textContent).toContain('review')
+        expect(screen.getByRole('button', { name: /^review\b/i }).getAttribute('aria-pressed')).toBe('true')
       })
 
       await fireEvent.keyDown(window, { key: '1', code: 'Digit1', metaKey: true, shiftKey: false })
       await waitFor(() => {
-        expect(breadcrumb?.textContent).toContain('agent')
-        expect(breadcrumb?.textContent).not.toContain('review')
+        expect(screen.getByRole('button', { name: /^agent\b/i }).getAttribute('aria-pressed')).toBe('true')
+        expect(screen.getByRole('button', { name: /^review\b/i }).getAttribute('aria-pressed')).toBe('false')
       })
 
       vi.mocked(getTaskWorkspace).mockResolvedValue(null)
@@ -1218,16 +1189,14 @@ describe('TaskDetailView', () => {
       try {
         input.focus()
 
-        const breadcrumb = screen.getByText('$ cd board').closest('div')
-
         await fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true, shiftKey: false })
         await waitFor(() => {
-          expect(breadcrumb?.textContent).toContain('review')
+          expect(screen.getByRole('button', { name: /^review\b/i }).getAttribute('aria-pressed')).toBe('true')
         })
 
         await fireEvent.keyDown(window, { key: '1', code: 'Digit1', metaKey: true, shiftKey: false })
         await waitFor(() => {
-          expect(breadcrumb?.textContent).toContain('agent')
+          expect(screen.getByRole('button', { name: /^agent\b/i }).getAttribute('aria-pressed')).toBe('true')
         })
       } finally {
         document.body.removeChild(input)
@@ -1238,24 +1207,22 @@ describe('TaskDetailView', () => {
     it('Cmd+1/2 are ignored when no worktree exists', async () => {
       render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
 
-      const breadcrumb = screen.getByText('$ cd board').closest('div')
-      expect(breadcrumb?.textContent).toContain('agent')
+      // No worktree means no view tabs are rendered
+      expect(screen.queryByRole('button', { name: /^review\b/i })).toBeNull()
 
       await fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true, shiftKey: false })
-      expect(breadcrumb?.textContent).toContain('agent')
-      expect(breadcrumb?.textContent).not.toContain('review')
+      expect(screen.queryByRole('button', { name: /^review\b/i })).toBeNull()
     })
 
     it('⌘3 ignored when no worktree', async () => {
       render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
 
-      const breadcrumb = screen.getByText('$ cd board').closest('div')
-      expect(breadcrumb?.textContent).toContain('agent')
+      // No worktree means no view tabs are rendered
+      expect(screen.queryByRole('button', { name: /^terminal\b/i })).toBeNull()
 
       await fireEvent.keyDown(window, { key: '3', code: 'Digit3', metaKey: true, shiftKey: false })
 
-      expect(breadcrumb?.textContent).toContain('agent')
-      expect(breadcrumb?.textContent).not.toContain('terminal')
+      expect(screen.queryByRole('button', { name: /^terminal\b/i })).toBeNull()
     })
 
     it('shows shortcut hints on view toggle buttons when CMD is held', async () => {
@@ -1394,8 +1361,6 @@ describe('TaskDetailView', () => {
        render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
 
        await waitFor(() => {
-         const breadcrumb = screen.getByText('$ cd board').closest('div')
-         expect(breadcrumb?.textContent).toContain('agent')
          expect(screen.getByRole('button', { name: /^agent\b/i }).getAttribute('aria-pressed')).toBe('true')
        })
 
@@ -1410,8 +1375,7 @@ describe('TaskDetailView', () => {
        render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
 
        await waitFor(() => {
-         const breadcrumb = screen.getByText('$ cd board').closest('div')
-         expect(breadcrumb?.textContent).toContain('terminal')
+         expect(screen.getByRole('button', { name: /^terminal\b/i }).getAttribute('aria-pressed')).toBe('true')
        })
 
        vi.mocked(getTaskWorkspace).mockResolvedValue(null)
@@ -1460,9 +1424,8 @@ describe('TaskDetailView', () => {
        render(TaskDetailView, { props: { task: secondaryTask, onRunAction: mockOnRunAction } })
 
        await waitFor(() => {
-         const breadcrumb = screen.getByText('$ cd board').closest('div')
-         expect(breadcrumb?.textContent).toContain('agent')
-         expect(breadcrumb?.textContent).not.toContain('review')
+         expect(screen.getByRole('button', { name: /^agent\b/i }).getAttribute('aria-pressed')).toBe('true')
+         expect(screen.getByRole('button', { name: /^review\b/i }).getAttribute('aria-pressed')).toBe('false')
        })
 
         vi.mocked(getTaskWorkspace).mockResolvedValue(null)
@@ -1474,11 +1437,164 @@ describe('TaskDetailView', () => {
     taskActiveView.set(new Map([['T-42', TERMINAL_VIEW_ID]]))
         render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
 
+        // No worktree means no view tabs render; the active view falls back to agent
         await waitFor(() => {
-          const breadcrumb = screen.getByText('$ cd board').closest('div')
-          expect(breadcrumb?.textContent).toContain('agent')
-          expect(breadcrumb?.textContent).not.toContain('terminal')
+          expect(screen.getByText('Initial Prompt')).toBeTruthy()
         })
+        expect(screen.queryByRole('button', { name: /^terminal\b/i })).toBeNull()
+      })
+    })
+
+    describe('info panel hide/show toggle', () => {
+      it('renders the info panel by default in agent view with a workspace', async () => {
+        const { getTaskWorkspace } = await import('../../lib/ipc')
+        vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+
+        render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+
+        await waitFor(() => {
+          expect(screen.getByRole('button', { name: 'Hide task info panel' })).toBeTruthy()
+        })
+        expect(screen.queryByTestId('task-info-panel')).toBeTruthy()
+
+        vi.mocked(getTaskWorkspace).mockResolvedValue(null)
+      })
+
+      it('clicking Hide removes the panel and clicking Show restores it', async () => {
+        const { getTaskWorkspace } = await import('../../lib/ipc')
+        vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+
+        render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+
+        await waitFor(() => {
+          expect(screen.getByRole('button', { name: 'Hide task info panel' })).toBeTruthy()
+        })
+        expect(screen.queryByTestId('task-info-panel')).toBeTruthy()
+
+        await fireEvent.click(screen.getByRole('button', { name: 'Hide task info panel' }))
+
+        await waitFor(() => {
+          expect(screen.queryByTestId('task-info-panel')).toBeNull()
+          expect(screen.getByRole('button', { name: 'Show task info panel' })).toBeTruthy()
+        })
+
+        await fireEvent.click(screen.getByRole('button', { name: 'Show task info panel' }))
+
+        await waitFor(() => {
+          expect(screen.queryByTestId('task-info-panel')).toBeTruthy()
+          expect(screen.getByRole('button', { name: 'Hide task info panel' })).toBeTruthy()
+        })
+
+        vi.mocked(getTaskWorkspace).mockResolvedValue(null)
+      })
+
+      it('the toggle button reflects panel visibility via aria-pressed', async () => {
+        const { getTaskWorkspace } = await import('../../lib/ipc')
+        vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+
+        render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+
+        await waitFor(() => {
+          expect(screen.getByRole('button', { name: 'Hide task info panel' }).getAttribute('aria-pressed')).toBe('true')
+        })
+
+        await fireEvent.click(screen.getByRole('button', { name: 'Hide task info panel' }))
+
+        await waitFor(() => {
+          expect(screen.getByRole('button', { name: 'Show task info panel' }).getAttribute('aria-pressed')).toBe('false')
+        })
+
+        vi.mocked(getTaskWorkspace).mockResolvedValue(null)
+      })
+
+      it('persists the hidden state to localStorage keyed by task id', async () => {
+        const { getTaskWorkspace } = await import('../../lib/ipc')
+        vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+
+        render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+
+        await waitFor(() => {
+          expect(screen.getByRole('button', { name: 'Hide task info panel' })).toBeTruthy()
+        })
+
+        await fireEvent.click(screen.getByRole('button', { name: 'Hide task info panel' }))
+
+        await waitFor(() => {
+          expect(localStorage.getItem('task-info-panel-hidden:T-42')).toBe('1')
+        })
+
+        vi.mocked(getTaskWorkspace).mockResolvedValue(null)
+      })
+
+      it('starts hidden for a task whose stored state is hidden', async () => {
+        const { getTaskWorkspace } = await import('../../lib/ipc')
+        vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+
+        localStorage.setItem('task-info-panel-hidden:T-42', '1')
+
+        render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+
+        await waitFor(() => {
+          expect(screen.getByRole('button', { name: 'Show task info panel' })).toBeTruthy()
+        })
+        expect(screen.queryByTestId('task-info-panel')).toBeNull()
+
+        vi.mocked(getTaskWorkspace).mockResolvedValue(null)
+      })
+
+      it('starts visible for a different task with no stored state', async () => {
+        const { getTaskWorkspace } = await import('../../lib/ipc')
+        vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+
+        // Only T-42 is marked hidden; T-99 has no stored state
+        localStorage.setItem('task-info-panel-hidden:T-42', '1')
+
+        render(TaskDetailView, { props: { task: secondaryTask, onRunAction: mockOnRunAction } })
+
+        await waitFor(() => {
+          expect(screen.getByRole('button', { name: 'Hide task info panel' })).toBeTruthy()
+        })
+        expect(screen.queryByTestId('task-info-panel')).toBeTruthy()
+
+        vi.mocked(getTaskWorkspace).mockResolvedValue(null)
+      })
+
+      it('opens the workspace in VS Code when the VS Code button is clicked', async () => {
+        const { getTaskWorkspace, openInEditor } = await import('../../lib/ipc')
+        vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+
+        render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+
+        const button = await screen.findByRole('button', { name: /open in vs code/i })
+        await fireEvent.click(button)
+
+        expect(openInEditor).toHaveBeenCalledWith('/tmp/wt')
+        vi.mocked(getTaskWorkspace).mockResolvedValue(null)
+      })
+
+      it('⌘/ toggles the info panel visibility', async () => {
+        const { getTaskWorkspace } = await import('../../lib/ipc')
+        vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+
+        render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+
+        await waitFor(() => {
+          expect(screen.queryByTestId('task-info-panel')).toBeTruthy()
+        })
+
+        await fireEvent.keyDown(window, { key: '/', metaKey: true })
+
+        await waitFor(() => {
+          expect(screen.queryByTestId('task-info-panel')).toBeNull()
+        })
+
+        await fireEvent.keyDown(window, { key: '/', metaKey: true })
+
+        await waitFor(() => {
+          expect(screen.queryByTestId('task-info-panel')).toBeTruthy()
+        })
+
+        vi.mocked(getTaskWorkspace).mockResolvedValue(null)
       })
     })
 

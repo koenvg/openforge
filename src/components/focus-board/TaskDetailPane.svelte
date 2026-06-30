@@ -19,11 +19,15 @@
   </div>
 {:else}
   <div class="rounded-[20px] bg-base-100 border border-base-300/60 shadow-sm overflow-y-auto h-full flex flex-col">
-    {#if onOpenFullView}
-      <div class="flex justify-end p-3 pb-0 shrink-0">
-        <button class="btn btn-ghost btn-xs" type="button" onclick={onOpenFullView}>Open full view</button>
+    <div class="flex items-center justify-between gap-2 p-3 pb-0 shrink-0">
+      <div class="flex items-center gap-2 min-w-0">
+        <span class="font-mono text-sm font-bold text-base-content shrink-0">{task.id}</span>
+        <span class="badge badge-sm badge-outline capitalize shrink-0" aria-label="Task status">{task.status}</span>
       </div>
-    {/if}
+      {#if onOpenFullView}
+        <button class="btn btn-ghost btn-xs" type="button" onclick={onOpenFullView}>Open full view</button>
+      {/if}
+    </div>
 
 
     <TaskInfoPanel

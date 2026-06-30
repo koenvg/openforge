@@ -99,6 +99,36 @@ describe('TaskPullRequestStatus', () => {
     expect(screen.getByText('https://github.com/owner/repo/pull/42')).toBeTruthy()
   })
 
+  it('omits the comment chip when there are no unaddressed comments', () => {
+    render(TaskPullRequestStatus, { props: { taskId: 'T-42', taskPrs: [createPullRequest({ unaddressed_comment_count: 0 })] } })
+
+    expect(screen.queryByText('0 comments')).toBeNull()
+    expect(screen.queryByText(/\bcomments?\b/)).toBeNull()
+  })
+
+  it('renders a comment chip with the unaddressed comment count when greater than zero', () => {
+    render(TaskPullRequestStatus, { props: { taskId: 'T-42', taskPrs: [createPullRequest({ unaddressed_comment_count: 2 })] } })
+
+    expect(screen.getByText('2 comments')).toBeTruthy()
+  })
+
+  it('renders a singular comment chip for a single unaddressed comment', () => {
+    render(TaskPullRequestStatus, { props: { taskId: 'T-42', taskPrs: [createPullRequest({ unaddressed_comment_count: 1 })] } })
+
+    expect(screen.getByText('1 comment')).toBeTruthy()
+  })
+
+  it('does not render a placeholder when a PR has no CI/review signals and no comments', () => {
+    render(TaskPullRequestStatus, {
+      props: {
+        taskId: 'T-42',
+        taskPrs: [createPullRequest({ ci_status: null, review_status: null, unaddressed_comment_count: 0 })],
+      },
+    })
+
+    expect(screen.queryByText('No CI or review signals')).toBeNull()
+  })
+
   it('labels merged PR cards as done instead of active pull requests', () => {
     render(TaskPullRequestStatus, { props: { taskId: 'T-42', taskPrs: [createPullRequest({ state: 'merged', merged_at: 3000 })] } })
 

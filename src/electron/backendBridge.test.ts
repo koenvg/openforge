@@ -32,6 +32,19 @@ describe('Electron backend bridge command forwarding', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it('keeps open_in_editor shell-owned and opens VS Code at the path', async () => {
+    const fetch = vi.fn()
+    const openExternal = vi.fn(async () => undefined)
+
+    await expect(handleElectronInvoke(
+      { command: 'open_in_editor', payload: { path: '/Users/me/proj' } },
+      { sidecarConfig: sidecarConfig(), fetch, openExternal },
+    )).resolves.toBeNull()
+
+    expect(openExternal).toHaveBeenCalledWith('vscode://file/Users/me/proj')
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it('keeps quit_app shell-owned so Electron before-quit shutdown cleanup runs', async () => {
     const fetch = vi.fn()
     const openExternal = vi.fn(async () => undefined)

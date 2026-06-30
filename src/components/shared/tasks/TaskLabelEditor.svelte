@@ -15,6 +15,7 @@
   let availableLabels = $state<TaskLabel[]>([])
   let labelInput = $state('')
   let error = $state<string | null>(null)
+  let isAdding = $state(false)
   let labelLoadRequest = 0
 
   let unselectedLabels = $derived(
@@ -38,6 +39,11 @@
       })
   })
 
+  function openAdd() {
+    isAdding = true
+    error = null
+  }
+
   async function submitLabel() {
     if (!projectId) return
     const name = normalizeTaskLabelNameInput(labelInput)
@@ -58,6 +64,10 @@
     error = null
   }
 
+  async function addSuggestion(label: TaskLabel) {
+    await onAdd(label)
+  }
+
   async function handleRemove(label: TaskLabel) {
     await onRemove(label)
   }
@@ -66,7 +76,7 @@
 <section class="flex flex-col gap-2" aria-label="Labels">
   <h3 class="text-xs font-semibold text-base-content/60 m-0">Labels</h3>
 
-  <div class="flex flex-wrap gap-1.5">
+  <div class="flex flex-wrap items-center gap-1.5">
     {#each selectedLabels as label (label.id)}
       <button
         type="button"
@@ -76,37 +86,61 @@
       >
         {label.name}<span aria-hidden="true">×</span>
       </button>
-    {:else}
-      <span class="text-xs text-base-content/50">No labels</span>
     {/each}
+
+    {#if !isAdding}
+      <button
+        type="button"
+        class="badge badge-sm badge-ghost gap-1"
+        aria-label="Add label"
+        disabled={!projectId}
+        onclick={openAdd}
+      >
+        <span aria-hidden="true">+</span> Add label
+      </button>
+    {/if}
   </div>
 
-  <div class="flex items-center gap-1.5">
-    <input
-      class="input input-bordered input-xs flex-1"
-      aria-label="Add label"
-      placeholder="Add label"
-      bind:value={labelInput}
-      disabled={!projectId}
-      onkeydown={(event: KeyboardEvent) => {
-        if (event.key === 'Enter') {
-          event.preventDefault()
-          void submitLabel()
-        }
-      }}
-    />
-    <button type="button" class="btn btn-xs" disabled={!projectId || !labelInput.trim()} onclick={() => submitLabel()}>Add</button>
-  </div>
+  {#if isAdding}
+    <div class="flex flex-col gap-2">
+      <div class="flex items-center gap-1.5">
+        <input
+          class="input input-bordered input-xs flex-1"
+          aria-label="Add label"
+          placeholder="Type to add or create a label"
+          bind:value={labelInput}
+          disabled={!projectId}
+          onkeydown={(event: KeyboardEvent) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              void submitLabel()
+            }
+          }}
+        />
+        <button type="button" class="btn btn-xs" disabled={!projectId || !labelInput.trim()} onclick={() => submitLabel()}>Add</button>
+      </div>
 
-  {#if error}
-    <div class="text-xs text-error">{error}</div>
-  {/if}
+      {#if error}
+        <div class="text-xs text-error">{error}</div>
+      {/if}
 
-  {#if unselectedLabels.length > 0}
-    <div class="flex flex-wrap gap-1.5" aria-label="Available labels">
-      {#each unselectedLabels as label (label.id)}
-        <button type="button" class="badge badge-sm badge-ghost" aria-label="Add label {label.name}" onclick={() => onAdd(label)}>{label.name}</button>
-      {/each}
+      {#if unselectedLabels.length > 0}
+        <div class="flex flex-col gap-1" aria-label="Suggestions">
+          <span class="text-xs font-semibold text-base-content/60">Suggestions</span>
+          <div class="flex flex-wrap gap-1.5">
+            {#each unselectedLabels as label (label.id)}
+              <button
+                type="button"
+                class="badge badge-sm badge-ghost gap-1"
+                aria-label="Add label {label.name}"
+                onclick={() => addSuggestion(label)}
+              >
+                <span aria-hidden="true">+</span> {label.name}
+              </button>
+            {/each}
+          </div>
+        </div>
+      {/if}
     </div>
   {/if}
 </section>

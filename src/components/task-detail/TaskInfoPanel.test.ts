@@ -11,6 +11,7 @@ vi.mock('../../lib/stores', () => ({
   ticketPrs: writable(new Map()),
   mergingTaskIds: writable(new Set()),
   tasks: writable([]),
+  activeSessions: writable(new Map()),
   setTaskMerging: vi.fn(),
 }))
 
@@ -32,6 +33,7 @@ vi.mock('../../lib/ipc', () => ({
   getProjectTaskLabels: vi.fn().mockResolvedValue([]),
   addTaskLabel: vi.fn().mockResolvedValue({ id: 1, project_id: 'proj-1', name: 'bug', color: 'error' }),
   removeTaskLabel: vi.fn().mockResolvedValue(undefined),
+  getTaskGitStatus: vi.fn().mockResolvedValue({ has_remote: false, remote_ahead: 0, remote_behind: 0, local_commits: 0, uncommitted_files: 0, insertions: 0, deletions: 0 }),
 }))
 
 vi.mock('../../lib/desktopIpc', () => ({
@@ -116,7 +118,7 @@ describe('TaskInfoPanel', () => {
     return requireElement(prNumberElement.closest('article'), HTMLElement)
   }
 
-  it('renders Docket List attention and PR signals before handoff notes and initial prompt', async () => {
+  it('shows a single actionable attention banner before PRs, then documents', async () => {
     ticketPrs.set(new Map([['T-42', [createPullRequest({
       ci_status: 'failure',
       review_status: 'changes_requested',
@@ -127,17 +129,28 @@ describe('TaskInfoPanel', () => {
 
     await screen.findByText('Pull Requests')
     const content = document.body.textContent ?? ''
-    expect(content.indexOf('T-42')).toBeLessThan(content.indexOf('Attention'))
-    expect(content.indexOf('Attention')).toBeLessThan(content.indexOf('Pull Requests'))
+    const attentionMessage = 'Review PR comments before merge'
+    expect(screen.getByText(attentionMessage)).toBeTruthy()
+    expect(content.indexOf(attentionMessage)).toBeLessThan(content.indexOf('Pull Requests'))
     expect(content.indexOf('Pull Requests')).toBeLessThan(content.indexOf('Handoff Notes'))
     expect(content.indexOf('Handoff Notes')).toBeLessThan(content.indexOf('Initial Prompt'))
-    expect(screen.getByText('Review PR comments before merge')).toBeTruthy()
+  })
+
+  it('stays calm: no attention banner or ghost chips when there are no PRs and nothing is blocked', () => {
+    ticketPrs.set(new Map())
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
+
+    expect(screen.queryByLabelText('Attention')).toBeNull()
+    expect(screen.queryByText('No PR')).toBeNull()
+    expect(screen.queryByText('No CI')).toBeNull()
+    expect(screen.queryByText('No review')).toBeNull()
+    expect(screen.queryByText('No pull requests linked')).toBeNull()
   })
 
   it('marks right-pane information cards as natural-size flow items', () => {
     render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
 
-    for (const card of ['summary', 'attention', 'pull-requests', 'documents', 'details']) {
+    for (const card of ['pull-requests', 'handoff-notes', 'initial-prompt', 'details']) {
       const element = document.querySelector(`[data-task-info-card="${card}"]`)
       expect(element?.getAttribute('data-card-sizing')).toBe('natural')
     }
@@ -304,28 +317,26 @@ describe('TaskInfoPanel', () => {
     expect(screen.getByRole('button', { name: 'Show less Handoff Notes' }).getAttribute('aria-expanded')).toBe('true')
   })
 
-  it('previews the initial prompt by default and expands it on request', async () => {
-    const longPromptTask = {
+  it('collapses the initial prompt by default and reveals it on request', async () => {
+    const promptTask = {
       ...baseTask,
-      initial_prompt: 'Build a calm task attention pane that starts with an attention summary, then pull request status cards, then handoff notes, then the original initial prompt so reviewers see the active signals before long-form task documents.',
+      initial_prompt: 'Build a calm task attention pane so reviewers see active signals before long-form task documents.',
     }
 
-    render(TaskInfoPanel, { props: { task: longPromptTask, workspacePath: null } })
+    render(TaskInfoPanel, { props: { task: promptTask, workspacePath: null } })
 
-    const promptSection = screen.getByLabelText('Initial Prompt').closest('section')
-    expect(promptSection?.textContent).toContain('Build a calm task attention pane')
-    expect(promptSection?.textContent).not.toContain('before long-form task documents')
+    expect(screen.getByText('Initial Prompt')).toBeTruthy()
+    expect(screen.queryByText(/Build a calm task attention pane/)).toBeNull()
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Show full Initial Prompt' }))
+    await fireEvent.click(screen.getByRole('button', { name: /show initial prompt/i }))
 
-    expect(screen.getByText(/before long-form task documents/)).toBeTruthy()
+    expect(screen.getByText(/Build a calm task attention pane/)).toBeTruthy()
   })
 
-  it('keeps document content in a separate full-width region before expand controls', () => {
+  it('keeps handoff notes content in a separate full-width region before expand controls', () => {
     const longDocumentTask = {
       ...baseTask,
       summary: 'Current summary: implementation started. Review focus: ordering and comments. Risks: lifecycle fetching. Open questions: none. Follow-up tasks: none.',
-      initial_prompt: 'Build a calm task attention pane that starts with an attention summary, then pull request status cards, then handoff notes, then the original initial prompt so reviewers see the active signals before long-form task documents.',
     }
 
     render(TaskInfoPanel, { props: { task: longDocumentTask, workspacePath: null } })
@@ -338,22 +349,15 @@ describe('TaskInfoPanel', () => {
     expect(handoffContent.contains(handoffButton)).toBe(false)
     expect(handoffContent.parentElement).toBe(handoffControls.parentElement)
     expect(Boolean(handoffContent.compareDocumentPosition(handoffControls) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
-
-    const promptSection = requireElement(screen.getByLabelText('Initial Prompt').closest('section'), HTMLElement, 'Expected Initial Prompt section')
-    const promptContent = within(promptSection).getByRole('region', { name: 'Initial Prompt content' })
-    const promptControls = within(promptSection).getByRole('group', { name: 'Initial Prompt actions' })
-    const promptButton = within(promptControls).getByRole('button', { name: 'Show full Initial Prompt' })
-
-    expect(promptContent.contains(promptButton)).toBe(false)
-    expect(promptContent.parentElement).toBe(promptControls.parentElement)
-    expect(Boolean(promptContent.compareDocumentPosition(promptControls) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
   })
 
-  it('renders Initial Prompt section with task initial_prompt', () => {
+  it('renders the Initial Prompt section collapsed by default and reveals the prompt on request', async () => {
     render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
     expect(screen.getByText('Initial Prompt')).toBeTruthy()
+    expect(screen.queryByText('Implement auth middleware')).toBeNull()
+
+    await fireEvent.click(screen.getByRole('button', { name: /show initial prompt/i }))
     expect(screen.getByText('Implement auth middleware')).toBeTruthy()
-    expect(screen.queryByText('Build the auth middleware implementation with JWT support')).toBeNull()
   })
 
   it('renders existing labels and adds/removes labels through IPC', async () => {
@@ -370,12 +374,13 @@ describe('TaskInfoPanel', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Remove label bug' }))
     expect(removeTaskLabel).toHaveBeenCalledWith('T-42', bugLabel.id)
 
+    await fireEvent.click(screen.getByRole('button', { name: 'Add label' }))
     const input = screen.getByRole('textbox', { name: 'Add label' })
-    await fireEvent.input(input, { target: { value: 'bug' } })
+    await fireEvent.input(input, { target: { value: 'feature' } })
     await fireEvent.keyDown(input, { key: 'Enter' })
 
     await waitFor(() => {
-      expect(addTaskLabel).toHaveBeenCalledWith('T-42', 'bug')
+      expect(addTaskLabel).toHaveBeenCalledWith('T-42', 'feature')
     })
   })
 

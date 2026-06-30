@@ -22,14 +22,29 @@ const baseTask: Task = {
 }
 
 describe('TaskPromptSummary', () => {
-  it('renders initial prompt and handoff notes', () => {
+  it('collapses the initial prompt by default while still rendering handoff notes', () => {
     render(TaskPromptSummary, { props: { task: baseTask } })
-    expect(screen.getByText('Implement auth middleware')).toBeTruthy()
+    // Initial Prompt header and reveal control are present, but the text is not.
+    expect(screen.getByText('Initial Prompt')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /show initial prompt/i })).toBeTruthy()
+    expect(screen.queryByText('Implement auth middleware')).toBeNull()
+    // Handoff Notes behavior is unchanged.
     expect(screen.getByText('Handoff Notes')).toBeTruthy()
     expect(screen.getByText('Implemented JWT auth')).toBeTruthy()
   })
 
-  it('hides persisted image reference definitions from the initial prompt preview', () => {
+  it('reveals and hides the initial prompt text when the toggle is clicked', async () => {
+    render(TaskPromptSummary, { props: { task: baseTask } })
+    expect(screen.queryByText('Implement auth middleware')).toBeNull()
+
+    await fireEvent.click(screen.getByRole('button', { name: /show initial prompt/i }))
+    expect(screen.getByText('Implement auth middleware')).toBeTruthy()
+
+    await fireEvent.click(screen.getByRole('button', { name: /hide initial prompt/i }))
+    expect(screen.queryByText('Implement auth middleware')).toBeNull()
+  })
+
+  it('hides persisted image reference definitions from the initial prompt once revealed', async () => {
     render(TaskPromptSummary, {
       props: {
         task: {
@@ -39,6 +54,7 @@ describe('TaskPromptSummary', () => {
       },
     })
 
+    await fireEvent.click(screen.getByRole('button', { name: /show initial prompt/i }))
     const promptContent = screen.getByRole('region', { name: 'Initial Prompt content' })
     expect(promptContent.textContent).toBe('Inspect [image#1] carefully')
     expect(promptContent.textContent).not.toContain('data:image/png;base64')

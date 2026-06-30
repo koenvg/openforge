@@ -195,6 +195,15 @@ pub(super) async fn handle_app_files_review_command(
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?,
             )?
         }
+        "get_task_git_status" => {
+            let task_id = payload_string(&request.payload, "taskId")?;
+            let worktree_path = app_task_workspace_path(state, &task_id)?;
+            json_value(
+                crate::self_review_runtime::get_task_git_status_for_workspace(&worktree_path)
+                    .await
+                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?,
+            )?
+        }
         "get_task_file_contents" => {
             let task_id = payload_string(&request.payload, "taskId")?;
             let path = payload_string(&request.payload, "path")?;
