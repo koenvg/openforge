@@ -13,15 +13,14 @@ describe('AgentStatusPill', () => {
     expect(screen.queryByTestId('agent-status-pill')).toBeNull()
   })
 
-  it('shows provider-specific running status, stage, badge, and resume command', async () => {
+  it('shows a single provider-specific running status without duplicate stage, badge, or resume command', async () => {
     setActiveSession(createAgentSession({ provider: 'pi', pi_session_id: 'pi-sess-abc123', status: 'running', stage: 'implement' }))
     render(AgentStatusPill, { props: { taskId: 'T-1' } })
 
     expect(await screen.findByText('Pi agent running...')).toBeTruthy()
-    expect(screen.getByText('implementing')).toBeTruthy()
-    expect(screen.queryByText('// implementing')).toBeNull()
-    expect(screen.getByText('RUNNING')).toBeTruthy()
-    expect(screen.getByText('pi --session pi-sess-abc123')).toBeTruthy()
+    expect(screen.queryByText('implementing')).toBeNull()
+    expect(screen.queryByText('RUNNING')).toBeNull()
+    expect(screen.queryByText('pi --session pi-sess-abc123')).toBeNull()
   })
 
   it('shows Claude permission pauses as paused rather than still running', async () => {
@@ -29,7 +28,7 @@ describe('AgentStatusPill', () => {
     render(AgentStatusPill, { props: { taskId: 'T-1' } })
 
     expect(await screen.findByText('Agent paused')).toBeTruthy()
-    expect(screen.getByText('PAUSED')).toBeTruthy()
+    expect(screen.queryByText('PAUSED')).toBeNull()
     expect(screen.queryByText('Claude agent running...')).toBeNull()
   })
 

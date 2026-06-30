@@ -25,33 +25,25 @@ describe('getAgentProviderConfig', () => {
   it('maps claude-code', () => {
     const c = getAgentProviderConfig('claude-code')
     expect(c.runningText).toBe('Claude agent running...')
-    expect(c.sessionIdKey).toBe('claude_session_id')
-    expect(c.stageLabelPrefix).toBe('')
-    expect(c.uppercaseSessionStatus).toBe(true)
-    expect(c.resumeCommandProvider).toBe('claude-code')
+    expect(c.supportsCheckpointQuestion).toBe(false)
   })
 
   it('maps pi', () => {
     const c = getAgentProviderConfig('pi')
     expect(c.runningText).toBe('Pi agent running...')
-    expect(c.sessionIdKey).toBe('pi_session_id')
-    expect(c.resumeCommandProvider).toBe('pi')
+    expect(c.supportsCheckpointQuestion).toBe(false)
   })
 
-  it('maps codex with no session id key', () => {
+  it('maps codex', () => {
     const c = getAgentProviderConfig('codex')
     expect(c.runningText).toBe('Codex agent running...')
-    expect(c.sessionIdKey).toBeNull()
-    expect(c.resumeCommandProvider).toBe('codex')
+    expect(c.supportsCheckpointQuestion).toBe(false)
   })
 
   it('falls back to opencode chrome for unknown/opencode providers', () => {
     const c = getAgentProviderConfig('opencode')
     expect(c.runningText).toBe('Agent running...')
-    expect(c.sessionIdKey).toBe('opencode_session_id')
-    expect(c.stageLabelPrefix).toBe('')
-    expect(c.uppercaseSessionStatus).toBe(false)
-    expect(c.resumeCommandProvider).toBe('opencode')
+    expect(c.supportsCheckpointQuestion).toBe(true)
   })
 })
 
@@ -60,21 +52,16 @@ describe('deriveAgentStatusPillView', () => {
     expect(deriveAgentStatusPillView(null, 'idle')).toBeNull()
   })
 
-  it('describes a running claude session', () => {
+  it('describes a running claude session with a single canonical status', () => {
     const view = deriveAgentStatusPillView(makeSession(), 'running')
     expect(view).not.toBeNull()
     expect(view!.statusText).toBe('Claude agent running...')
-    expect(view!.stageLabel).toBe('implementing')
-    expect(view!.stageLabel).not.toMatch(/^\/\//)
-    expect(view!.sessionStatusLabel).toBe('RUNNING')
-    expect(view!.resumeCommand).toBe('claude --resume claude-sess-abc')
     expect(view!.checkpointActive).toBe(false)
   })
 
-  it('uses lowercase status and no resume command for codex (no session id key)', () => {
+  it('uses the codex running status text', () => {
     const view = deriveAgentStatusPillView(makeSession({ provider: 'codex', status: 'running', claude_session_id: null }), 'running')
     expect(view!.statusText).toBe('Codex agent running...')
-    expect(view!.resumeCommand).toBeNull()
   })
 
   it('flags an opencode checkpoint question when paused', () => {
@@ -86,7 +73,6 @@ describe('deriveAgentStatusPillView', () => {
       checkpoint_data: '{"properties":{"description":"Which branch should I use?"}}',
     }), 'paused')
     expect(view!.statusText).toBe('Agent paused')
-    expect(view!.sessionStatusLabel).toBe('paused')
     expect(view!.checkpointActive).toBe(true)
   })
 

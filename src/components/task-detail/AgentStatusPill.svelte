@@ -3,8 +3,8 @@
   import type { DesktopUnlistenFn } from '../../lib/desktopIpc'
   import { activeSessions } from '../../lib/stores'
   import { listenToAgentStatusChanged, getAgentPanelStatusFromSessionStatus, type AgentPanelStatus } from '../../lib/agentPanelSessionSync'
-  import { getAgentSessionStatusBadgeClass, writeAgentTerminalTranscription } from '../../lib/agentTerminalPanel'
-  import { deriveAgentStatusPillView, getAgentProviderConfig } from '../../lib/agentStatusPill'
+  import { writeAgentTerminalTranscription } from '../../lib/agentTerminalPanel'
+  import { deriveAgentStatusPillView } from '../../lib/agentStatusPill'
   import VoiceInput from '../shared/input/VoiceInput.svelte'
 
   interface Props {
@@ -35,7 +35,6 @@
   })
 
   let view = $derived(deriveAgentStatusPillView(session, status))
-  let badgeVariant = $derived(getAgentProviderConfig(session?.provider ?? null).uppercaseSessionStatus ? 'soft' : 'badge')
 
   function dotClass(current: AgentPanelStatus): string {
     if (current === 'running') return 'status status-success'
@@ -54,13 +53,8 @@
   <div class="flex items-center gap-2 min-w-0" data-testid="agent-status-pill" aria-label="Agent status">
     <span class="shrink-0 {dotClass(status)}"></span>
     <span class="text-xs font-semibold text-base-content truncate">{view.statusText}</span>
-    <span class="text-[0.7rem] font-mono text-secondary shrink-0">{view.stageLabel}</span>
-    <span class="badge badge-sm font-bold shrink-0 {getAgentSessionStatusBadgeClass(view.sessionStatus, badgeVariant)}">{view.sessionStatusLabel}</span>
     {#if view.checkpointActive}
       <span class="badge badge-sm badge-warning shrink-0" aria-label="Checkpoint question pending">! checkpoint</span>
-    {/if}
-    {#if view.resumeCommand}
-      <code class="text-[0.65rem] font-mono text-secondary whitespace-nowrap select-all truncate max-w-[12rem]" title={view.resumeCommand}>{view.resumeCommand}</code>
     {/if}
     <VoiceInput onTranscription={handleTranscription} listenToHotkey />
   </div>

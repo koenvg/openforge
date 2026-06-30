@@ -9,6 +9,7 @@ vi.mock('../../lib/stores', () => ({
   ticketPrs: writable(new Map()),
   mergingTaskIds: writable(new Set()),
   tasks: writable([]),
+  activeSessions: writable(new Map()),
   setTaskMerging: vi.fn(),
 }))
 
@@ -104,6 +105,7 @@ describe('TaskDetailPane', () => {
     stores.ticketPrs.set(new Map())
     stores.mergingTaskIds.set(new Set())
     stores.tasks.set([])
+    stores.activeSessions.set(new Map())
   })
 
   it('renders a calm empty state when no task is selected', () => {
