@@ -124,8 +124,50 @@ export interface PullRequestTerminalStateInfo {
 
 export interface MergeReadinessInfo extends MergeStatusInfo {
   ci_status?: string | null;
+  review_status?: string | null;
   draft?: boolean;
   is_queued?: boolean;
+  unaddressed_comment_count?: number;
+  head_sha?: string | null;
+  updated_at?: number | null;
+}
+
+export interface MergeReadinessOptions {
+  requireBranchUpToDate?: boolean;
+  requireConversationResolution?: boolean;
+  requireMergeQueue?: boolean;
+}
+
+export type MergeReadinessStatus =
+  | 'ready_to_merge'
+  | 'ready_to_enqueue'
+  | 'queued_pull_request'
+  | 'readiness_unknown'
+  | 'blocked';
+
+export type MergeReadinessAction =
+  | 'merge'
+  | 'enqueue'
+  | 'wait_for_queue'
+  | 'wait_for_github'
+  | 'resolve_blockers';
+
+export interface MergeReadinessDetail {
+  code: string;
+  message: string;
+}
+
+export interface MergeReadinessFreshness {
+  sourceSha: string | null;
+  checkedAt: number | null;
+}
+
+export interface MergeReadinessResult {
+  status: MergeReadinessStatus;
+  action: MergeReadinessAction;
+  blockers: MergeReadinessDetail[];
+  warnings: MergeReadinessDetail[];
+  freshness: MergeReadinessFreshness;
 }
 
 export function isClosedOrMergedPullRequest(state: string): boolean {
@@ -147,20 +189,133 @@ export function hasMergeConflicts(pr: MergeStatusInfo): boolean {
   return mergeableState === 'dirty' || mergeableState === 'conflicting'
 }
 
-/** Check if GitHub reports a PR as mergeable based on its mergeable_state field */
-export function isReadyToMerge(pr: MergeStatusInfo): boolean {
-  if (pr.state !== 'open') return false
-  const mergeableState = pr.mergeable_state?.toLowerCase() ?? null
-  return mergeableState === 'clean' || mergeableState === 'behind'
+function mergeReadinessDetail(code: string, message: string): MergeReadinessDetail {
+  return { code, message };
+}
+
+function mergeReadinessResult(
+  pr: MergeReadinessInfo,
+  status: MergeReadinessStatus,
+  action: MergeReadinessAction,
+  blockers: MergeReadinessDetail[],
+  warnings: MergeReadinessDetail[],
+): MergeReadinessResult {
+  return {
+    status,
+    action,
+    blockers,
+    warnings,
+    freshness: {
+      sourceSha: pr.head_sha ?? null,
+      checkedAt: pr.updated_at ?? null,
+    },
+  };
+}
+
+/**
+ * Explains whether a pull request is ready for a direct merge, queue enqueueing,
+ * waiting on GitHub/merge queue, or blocked by hard requirements.
+ */
+export function getMergeReadiness(pr: MergeReadinessInfo, options: MergeReadinessOptions = {}): MergeReadinessResult {
+  const warnings: MergeReadinessDetail[] = [];
+  const blockers: MergeReadinessDetail[] = [];
+  const mergeableState = pr.mergeable_state?.toLowerCase() ?? null;
+  const ciStatus = pr.ci_status?.toLowerCase() ?? null;
+  const reviewStatus = pr.review_status?.toLowerCase() ?? null;
+  const unaddressedCommentCount = pr.unaddressed_comment_count ?? 0;
+
+  if (pr.state !== 'open') {
+    blockers.push(mergeReadinessDetail(
+      pr.state === 'merged' ? 'already_merged' : 'pull_request_closed',
+      pr.state === 'merged' ? 'Pull request is already merged.' : 'Pull request is closed.',
+    ));
+    return mergeReadinessResult(pr, 'blocked', 'resolve_blockers', blockers, warnings);
+  }
+
+  if (pr.draft === true) {
+    blockers.push(mergeReadinessDetail('draft', 'Pull request is still marked as draft.'));
+  }
+
+  if (reviewStatus === 'changes_requested') {
+    blockers.push(mergeReadinessDetail('changes_requested', 'Review changes have been requested.'));
+  }
+
+  if (ciStatus === 'pending' || ciStatus === 'queued' || ciStatus === 'in_progress') {
+    blockers.push(mergeReadinessDetail('checks_pending', 'Required checks are still running.'));
+  } else if (ciStatus === 'failure' || ciStatus === 'error' || ciStatus === 'cancelled' || ciStatus === 'timed_out' || ciStatus === 'action_required') {
+    blockers.push(mergeReadinessDetail('checks_failed', 'Required checks are failing.'));
+  }
+
+  if (mergeableState === 'unstable' && !blockers.some((blocker) => blocker.code === 'checks_failed')) {
+    blockers.push(mergeReadinessDetail('checks_failed', 'GitHub reports failing or unstable required checks.'));
+  }
+
+  if (mergeableState === 'dirty' || mergeableState === 'conflicting') {
+    blockers.push(mergeReadinessDetail('merge_conflict', 'Pull request has merge conflicts.'));
+  } else if (mergeableState === 'blocked') {
+    blockers.push(mergeReadinessDetail('mergeability_blocked', 'GitHub reports that mergeability is blocked.'));
+  } else if (mergeableState === 'behind') {
+    if (options.requireBranchUpToDate === true) {
+      blockers.push(mergeReadinessDetail('branch_out_of_date', 'Branch must be updated before merging.'));
+    } else {
+      warnings.push(mergeReadinessDetail('branch_behind', 'Branch is behind the base branch.'));
+    }
+  }
+
+  if (unaddressedCommentCount > 0) {
+    const detail = mergeReadinessDetail('unresolved_conversations', 'Pull request has unresolved conversations.');
+    if (options.requireConversationResolution === true) {
+      blockers.push(detail);
+    } else {
+      warnings.push(detail);
+    }
+  }
+
+  if (blockers.length > 0) {
+    return mergeReadinessResult(pr, 'blocked', 'resolve_blockers', blockers, warnings);
+  }
+
+  if (pr.is_queued === true) {
+    return mergeReadinessResult(pr, 'queued_pull_request', 'wait_for_queue', blockers, warnings);
+  }
+
+  const hasDirectMergeability = mergeableState === 'clean' || mergeableState === 'behind';
+  const hasNoCiStatus = ciStatus === null || ciStatus === 'none';
+  const hasNoReviewStatus = reviewStatus === null || reviewStatus === 'none';
+  const isUnprotectedFallback = mergeableState === null && pr.mergeable === true && hasNoCiStatus && hasNoReviewStatus;
+
+  if (isUnprotectedFallback) {
+    warnings.push(mergeReadinessDetail('unprotected_fallback', 'Using simple mergeability because no protected-branch checks or review state are available.'));
+  }
+
+  if (hasDirectMergeability || isUnprotectedFallback) {
+    return mergeReadinessResult(
+      pr,
+      options.requireMergeQueue === true ? 'ready_to_enqueue' : 'ready_to_merge',
+      options.requireMergeQueue === true ? 'enqueue' : 'merge',
+      blockers,
+      warnings,
+    );
+  }
+
+  if (mergeableState === 'unknown' || pr.mergeable === null || (mergeableState === null && pr.mergeable !== false)) {
+    warnings.push(mergeReadinessDetail('mergeability_unknown', 'GitHub has not reported definitive mergeability yet.'));
+    return mergeReadinessResult(pr, 'readiness_unknown', 'wait_for_github', blockers, warnings);
+  }
+
+  blockers.push(mergeReadinessDetail('mergeability_blocked', 'Pull request is not mergeable.'));
+  return mergeReadinessResult(pr, 'blocked', 'resolve_blockers', blockers, warnings);
+}
+
+/** Check if a PR is ready for a direct merge action. */
+export function isReadyToMerge(pr: MergeReadinessInfo, options?: MergeReadinessOptions): boolean {
+  const readiness = getMergeReadiness(pr, options);
+  return readiness.status === 'ready_to_merge' && readiness.action === 'merge';
 }
 
 /** Check if a user-initiated merge affordance may be shown/executed now. */
 export function canMergePullRequest(pr: MergeReadinessInfo): boolean {
-  if (!isReadyToMerge(pr)) return false
-  if (pr.ci_status === 'pending' || pr.ci_status === 'failure') return false
-  if (pr.draft === true) return false
-  if (pr.is_queued === true) return false
-  return true
+  return isReadyToMerge(pr);
 }
 
 export interface QueuedStatusInfo {

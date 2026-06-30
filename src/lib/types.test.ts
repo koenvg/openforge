@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type PullRequestInfo, type CheckRunInfo, hasMergeConflicts, isReadyToMerge, canMergePullRequest, isQueuedForMerge, splitCheckRuns, preservePullRequestState, isClosedOrMergedPullRequest, isClosedUnmergedPullRequest, isMergedPullRequest } from './types'
+import { type PullRequestInfo, type CheckRunInfo, hasMergeConflicts, isReadyToMerge, canMergePullRequest, isQueuedForMerge, splitCheckRuns, preservePullRequestState, isClosedOrMergedPullRequest, isClosedUnmergedPullRequest, isMergedPullRequest, getMergeReadiness } from './types'
 
 function createPullRequest(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
   return {
@@ -26,6 +26,179 @@ function createPullRequest(overrides: Partial<PullRequestInfo> = {}): PullReques
     ...overrides,
   }
 }
+
+describe('getMergeReadiness', () => {
+  it('returns direct merge readiness with an action and freshness metadata when checks pass', () => {
+    const pr = createPullRequest({ head_sha: 'sha-ready', updated_at: 4444 })
+
+    expect(getMergeReadiness(pr)).toMatchObject({
+      status: 'ready_to_merge',
+      action: 'merge',
+      blockers: [],
+      warnings: [],
+      freshness: {
+        sourceSha: 'sha-ready',
+        checkedAt: 4444,
+      },
+    })
+    expect(isReadyToMerge(pr)).toBe(true)
+  })
+
+  it('reports draft pull requests as hard blocked even when GitHub mergeability is clean', () => {
+    const result = getMergeReadiness(createPullRequest({ draft: true }))
+
+    expect(result.status).toBe('blocked')
+    expect(result.action).toBe('resolve_blockers')
+    expect(result.blockers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'draft' }),
+    ]))
+  })
+
+  it('reports changes requested as a hard blocker even when checks and mergeability are otherwise ready', () => {
+    const result = getMergeReadiness(createPullRequest({ review_status: 'changes_requested' }))
+
+    expect(result.status).toBe('blocked')
+    expect(result.blockers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'changes_requested' }),
+    ]))
+  })
+
+  it('distinguishes pending, failing, and successful checks', () => {
+    expect(getMergeReadiness(createPullRequest({ ci_status: 'pending' }))).toMatchObject({
+      status: 'blocked',
+      action: 'resolve_blockers',
+      blockers: [expect.objectContaining({ code: 'checks_pending' })],
+    })
+    expect(getMergeReadiness(createPullRequest({ ci_status: 'failure' }))).toMatchObject({
+      status: 'blocked',
+      action: 'resolve_blockers',
+      blockers: [expect.objectContaining({ code: 'checks_failed' })],
+    })
+    expect(getMergeReadiness(createPullRequest({ ci_status: 'success' }))).toMatchObject({
+      status: 'ready_to_merge',
+      action: 'merge',
+      blockers: [],
+    })
+  })
+
+  it('treats a behind branch as mergeable advisory detail unless up-to-date branches are required', () => {
+    const behindPr = createPullRequest({ mergeable_state: 'behind' })
+
+    expect(getMergeReadiness(behindPr)).toMatchObject({
+      status: 'ready_to_merge',
+      action: 'merge',
+      blockers: [],
+      warnings: [expect.objectContaining({ code: 'branch_behind' })],
+    })
+
+    expect(getMergeReadiness(behindPr, { requireBranchUpToDate: true })).toMatchObject({
+      status: 'blocked',
+      action: 'resolve_blockers',
+      blockers: [expect.objectContaining({ code: 'branch_out_of_date' })],
+    })
+  })
+
+  it('uses the conversation-resolution policy to decide whether unresolved conversations block readiness', () => {
+    const pr = createPullRequest({ unaddressed_comment_count: 2 })
+
+    expect(getMergeReadiness(pr)).toMatchObject({
+      status: 'ready_to_merge',
+      action: 'merge',
+      warnings: [expect.objectContaining({ code: 'unresolved_conversations' })],
+    })
+
+    expect(getMergeReadiness(pr, { requireConversationResolution: true })).toMatchObject({
+      status: 'blocked',
+      action: 'resolve_blockers',
+      blockers: [expect.objectContaining({ code: 'unresolved_conversations' })],
+    })
+  })
+
+  it('returns ready-to-enqueue instead of direct merge readiness when merge queue is required', () => {
+    const pr = createPullRequest()
+    const result = getMergeReadiness(pr, { requireMergeQueue: true })
+
+    expect(result).toMatchObject({
+      status: 'ready_to_enqueue',
+      action: 'enqueue',
+      blockers: [],
+    })
+    expect(isReadyToMerge(pr, { requireMergeQueue: true })).toBe(false)
+  })
+
+  it('returns queued-pull-request status for pull requests already in the merge queue', () => {
+    const result = getMergeReadiness(createPullRequest({ is_queued: true, mergeable: null, mergeable_state: null }))
+
+    expect(result).toMatchObject({
+      status: 'queued_pull_request',
+      action: 'wait_for_queue',
+      blockers: [],
+    })
+    expect(isReadyToMerge(createPullRequest({ is_queued: true }))).toBe(false)
+  })
+
+  it('reports hard blockers before queued status when a queued pull request becomes blocked', () => {
+    const result = getMergeReadiness(createPullRequest({
+      is_queued: true,
+      ci_status: 'failure',
+      review_status: 'changes_requested',
+    }))
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      action: 'resolve_blockers',
+      blockers: [
+        expect.objectContaining({ code: 'changes_requested' }),
+        expect.objectContaining({ code: 'checks_failed' }),
+      ],
+    })
+  })
+
+  it('returns readiness-unknown with source SHA when GitHub mergeability is transient or unknown', () => {
+    const result = getMergeReadiness(createPullRequest({ mergeable: null, mergeable_state: 'unknown', head_sha: 'sha-unknown' }))
+
+    expect(result).toMatchObject({
+      status: 'readiness_unknown',
+      action: 'wait_for_github',
+      freshness: {
+        sourceSha: 'sha-unknown',
+      },
+      warnings: [expect.objectContaining({ code: 'mergeability_unknown' })],
+    })
+  })
+
+  it('falls back to a simple unprotected-branch readiness decision when only mergeable=true is available', () => {
+    const result = getMergeReadiness(createPullRequest({
+      mergeable: true,
+      mergeable_state: null,
+      ci_status: null,
+      review_status: null,
+    }))
+
+    expect(result).toMatchObject({
+      status: 'ready_to_merge',
+      action: 'merge',
+      blockers: [],
+      warnings: [expect.objectContaining({ code: 'unprotected_fallback' })],
+    })
+  })
+
+  it('treats backend none statuses as absent state for the simple unprotected fallback', () => {
+    const result = getMergeReadiness(createPullRequest({
+      mergeable: true,
+      mergeable_state: null,
+      ci_status: 'none',
+      review_status: 'none',
+    }))
+
+    expect(result).toMatchObject({
+      status: 'ready_to_merge',
+      action: 'merge',
+      blockers: [],
+      warnings: [expect.objectContaining({ code: 'unprotected_fallback' })],
+    })
+  })
+})
 
 describe('pull request merge conflict helpers', () => {
   it('detects conflicts from a dirty mergeable_state', () => {
@@ -66,9 +239,8 @@ describe('pull request merge conflict helpers', () => {
     expect(isReadyToMerge(createPullRequest({ mergeable: null, mergeable_state: 'unknown' }))).toBe(false)
   })
 
-  // ISOLATION: mergeable_state: 'clean' WITHOUT ci_status: 'success' — currently FAILS
-  it('considers a PR ready to merge based on clean mergeable_state regardless of ci_status', () => {
-    expect(isReadyToMerge(createPullRequest({ ci_status: 'failure', mergeable_state: 'clean' }))).toBe(true)
+  it('does not consider a PR ready to merge when checks fail even if mergeable_state is clean', () => {
+    expect(isReadyToMerge(createPullRequest({ ci_status: 'failure', mergeable_state: 'clean' }))).toBe(false)
   })
 
   // ISOLATION: mergeable_state: 'unstable' — CI is failing

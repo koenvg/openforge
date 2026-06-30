@@ -120,6 +120,7 @@ export type {
 } from './projectFileTree'
 export {
   canMergePullRequest,
+  getMergeReadiness,
   hasMergeConflicts,
   isClosedUnmergedPullRequest,
   isMergedPullRequest,
