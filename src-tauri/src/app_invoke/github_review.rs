@@ -29,6 +29,21 @@ fn publish_comment_addressed(state: &AppState) {
     );
 }
 
+/// Notify the renderer that the unopened review-request count may have changed so the
+/// sidebar/rail badges refresh promptly. Payload mirrors the poller's event (the current
+/// all-repos unopened count); the renderer recomputes badges from its stores on receipt.
+fn publish_review_pr_count_changed(state: &AppState) {
+    let count = crate::github_runtime::get_review_prs(&state.db)
+        .map(|prs| prs.iter().filter(|pr| pr.viewed_at.is_none()).count())
+        .unwrap_or(0);
+    publish_app_event_to_runtime(
+        state.app.as_ref(),
+        &state.app_event_tx,
+        "review-pr-count-changed",
+        &serde_json::json!(count),
+    );
+}
+
 fn to_app_value<T: Serialize>(value: T) -> AppResult<serde_json::Value> {
     json_value(value)
 }
@@ -70,6 +85,7 @@ pub(super) async fn handle_app_github_review_command(
             let head_sha = payload_string(&request.payload, "headSha")?;
             crate::github_runtime::mark_review_pr_viewed(&state.db, pr_id, &head_sha)
                 .map_err(runtime_error)?;
+            publish_review_pr_count_changed(state);
             serde_json::Value::Null
         }
         "get_authored_prs" => to_app_value(

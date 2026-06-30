@@ -49,8 +49,6 @@ vi.mock('../../lib/stores', () => ({
   authoredPrs: writable([]),
   selectedReviewPr: writable(null),
   prFileDiffs: writable([]),
-  reviewRequestCount: writable(0),
-  authoredPrCount: writable(0),
   reviewComments: writable([]),
   pendingManualComments: writable([]),
   prOverviewComments: writable([]),
@@ -61,14 +59,12 @@ import PrReviewView from './PrReviewView.svelte'
 import {
   activeProjectId,
   agentReviewComments,
-  authoredPrCount,
   authoredPrs,
   pendingManualComments,
   prFileDiffs,
   prOverviewComments,
   reviewComments,
   reviewPrs,
-  reviewRequestCount,
   selectedReviewPr,
 } from '../../lib/stores'
 
@@ -140,8 +136,6 @@ function resetStores() {
   authoredPrs.set([])
   selectedReviewPr.set(null)
   prFileDiffs.set([])
-  reviewRequestCount.set(0)
-  authoredPrCount.set(0)
   reviewComments.set([])
   pendingManualComments.set([])
   prOverviewComments.set([])
@@ -155,6 +149,9 @@ function registerPrReviewBackends(
   reviewCommentResults: ReviewComment[] | (() => ReviewComment[] | Promise<ReviewComment[]>) = [],
   submitReview: () => Promise<void> = async () => undefined,
 ) {
+  // Per-repo scope now shows only the project's resolved repo (never all repos), so
+  // tests that exercise the repo-scoped view must resolve to the fixtures' repo.
+  void registry.frontendApi.projectConfig.set('resolved_repo', `${basePr.repo_owner}/${basePr.repo_name}`, 'project-1')
   const backend = registry.backendApi.backend
   backend.registerMethod('getReviewPrs', { handler: async () => prs })
   backend.registerMethod('fetchReviewPrs', { handler: async () => prs })
@@ -190,6 +187,35 @@ async function openFilesTab(registry: TestingOpenForgeRegistryFake) {
   await fireEvent.click(await screen.findByRole('tab', { name: /Files changed/i }))
   return requireElement(await screen.findByLabelText('Mark src/main.rs reviewed'), HTMLInputElement)
 }
+
+describe('PrReviewView repo scoping', () => {
+  beforeEach(() => {
+    resetStores()
+    vi.clearAllMocks()
+  })
+
+  it('shows a not-linked message (and no other repos PRs) when the project has no resolved GitHub repo', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    registerPrReviewBackends(registry, () => [baseDiff], [basePr])
+    await registry.frontendApi.config.set('github_token', 'ghp_test')
+    // A project with no GitHub remote resolves to no repo — the per-repo view must show
+    // the not-linked message, never other repos' PRs.
+    await registry.frontendApi.projectConfig.set('resolved_repo', '', 'project-1')
+
+    render(PrReviewView, {
+      props: {
+        api: registry.frontendApi,
+        context: registry.frontendApi.context.getSnapshot(),
+        projectName: 'Personal',
+        projectId: 'project-1',
+      },
+    })
+
+    await screen.findByText("This project isn't linked to a GitHub repository")
+    expect(screen.queryByText('Fix authentication middleware')).toBeNull()
+    expect(screen.queryByText('Review Requests')).toBeNull()
+  })
+})
 
 describe('PrReviewView reviewed files', () => {
   beforeEach(() => {
@@ -428,7 +454,7 @@ describe('PrReviewView empty and recovery states', () => {
   it('explains when repository filters hide every review request', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1', viewId: GLOBAL_VIEW_ID })
     await registry.frontendApi.config.set('github_token', 'ghp_test')
-    await registry.frontendApi.projectConfig.set('pr_excluded_repos', JSON.stringify(['acme/repo']), 'project-1')
+    await registry.frontendApi.config.set('pr_excluded_repos', JSON.stringify(['acme/repo']))
     registerPrReviewBackends(registry, () => [baseDiff], [basePr])
 
     render(PrReviewView, {
@@ -451,6 +477,7 @@ describe('PrReviewView empty and recovery states', () => {
   it('shows a sync recovery path when review requests cannot be loaded', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
     await registry.frontendApi.config.set('github_token', 'ghp_test')
+    await registry.frontendApi.projectConfig.set('resolved_repo', `${basePr.repo_owner}/${basePr.repo_name}`, 'project-1')
     const backend = registry.backendApi.backend
     backend.registerMethod('getReviewPrs', { handler: async () => { throw new Error('GitHub API unavailable') } })
     backend.registerMethod('fetchReviewPrs', { handler: async () => [] })
@@ -609,7 +636,7 @@ describe('PrReviewView repository filter scope', () => {
 
   it('ignores excluded-repo filters in the repo-scoped view', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
-    await registry.frontendApi.projectConfig.set('pr_excluded_repos', JSON.stringify([`${basePr.repo_owner}/${basePr.repo_name}`]), 'project-1')
+    await registry.frontendApi.config.set('pr_excluded_repos', JSON.stringify([`${basePr.repo_owner}/${basePr.repo_name}`]))
     registerPrReviewBackends(registry, () => [baseDiff])
 
     renderPrReviewView(registry)
@@ -621,7 +648,7 @@ describe('PrReviewView repository filter scope', () => {
 
   it('applies excluded-repo filters in the all-repos view', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1', viewId: GLOBAL_VIEW_ID })
-    await registry.frontendApi.projectConfig.set('pr_excluded_repos', JSON.stringify([`${basePr.repo_owner}/${basePr.repo_name}`]), 'project-1')
+    await registry.frontendApi.config.set('pr_excluded_repos', JSON.stringify([`${basePr.repo_owner}/${basePr.repo_name}`]))
     registerPrReviewBackends(registry, () => [baseDiff])
 
     renderPrReviewView(registry)

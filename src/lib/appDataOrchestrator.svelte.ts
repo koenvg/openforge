@@ -1,19 +1,19 @@
 import { get } from 'svelte/store'
 import {
   activeProjectId,
+  activeResolvedRepo,
   activeSessions,
-  authoredPrCount,
   error,
+  globalExcludedPrRepos,
   isLoading,
   projectAttention,
   projects,
-  reviewRequestCount,
+  reviewPrs,
   tasks,
   ticketPrs,
 } from './stores'
 import {
   forceGithubSync,
-  getAuthoredPrs,
   getConfig,
   getLatestSessions,
   getProjectAttention,
@@ -25,7 +25,6 @@ import {
 } from './ipc'
 import { applyProjectOrder } from './projectOrder'
 import { buildTicketPullRequestMap } from './pullRequestStore'
-import { hasMergeConflicts } from './types'
 import type { ProjectAttention } from './types'
 
 type LogError = (message: string, error: unknown) => void
@@ -39,9 +38,11 @@ function defaultLogError(message: string, errorValue: unknown): void {
   console.error(message, errorValue)
 }
 
-async function loadExcludedRepos(projectId: string): Promise<Set<string>> {
+async function loadGlobalExcludedRepos(): Promise<Set<string>> {
   try {
-    const val = await getProjectConfig(projectId, 'pr_excluded_repos')
+    // The "All Pull Requests" repo filter is a single global list — not per-project —
+    // so the sidebar badge is constant regardless of which project is active.
+    const val = await getConfig('pr_excluded_repos')
     if (!val) return new Set()
 
     const parsed = JSON.parse(val)
@@ -128,22 +129,27 @@ export function useAppDataOrchestrator(options: AppDataOrchestratorOptions) {
   }
 
   async function refreshPrCounts(): Promise<void> {
-    const projectId = get(activeProjectId)
-    if (!projectId) return
-
     try {
-      const excludedRepos = await loadExcludedRepos(projectId)
-      const isExcluded = (owner: string, name: string) => excludedRepos.has(`${owner}/${name}`)
+      // Global filter for the all-repos "All Pull Requests" badge — independent of the
+      // active project, so the sidebar count stays constant across project switches.
+      globalExcludedPrRepos.set(await loadGlobalExcludedRepos())
 
-      const reviewPrList = await getReviewPrs()
-      const filtered = reviewPrList.filter(p => !isExcluded(p.repo_owner, p.repo_name))
-      reviewRequestCount.set(filtered.filter(p => p.viewed_at === null).length)
+      // The all-repos review list backs both derived badges: the sidebar (all repos, minus
+      // the global filter) and the rail (scoped to the active repo). Both are unopened-only
+      // and skip "DO NOT REVIEW" PRs; see stores.ts / prReviewBadgeCounts.ts.
+      reviewPrs.set(await getReviewPrs())
 
-      const authoredPrList = await getAuthoredPrs()
-      const filteredAuthored = authoredPrList.filter(p => !isExcluded(p.repo_owner, p.repo_name))
-      authoredPrCount.set(filteredAuthored.filter(
-        (p) => p.ci_status === 'failure' || p.review_status === 'changes_requested' || hasMergeConflicts(p),
-      ).length)
+      // Resolve the active project's repo so the rail badge can scope to it. The sidecar
+      // writes the project's git origin into the 'resolved_repo' project config.
+      const projectId = get(activeProjectId)
+      if (projectId) {
+        const resolvedRepoRaw = await getProjectConfig(projectId, 'resolved_repo')
+        activeResolvedRepo.set(
+          typeof resolvedRepoRaw === 'string' && resolvedRepoRaw.includes('/') ? resolvedRepoRaw : null,
+        )
+      } else {
+        activeResolvedRepo.set(null)
+      }
     } catch (e) {
       logError('Failed to refresh PR counts:', e)
     }

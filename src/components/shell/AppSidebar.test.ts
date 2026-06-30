@@ -64,7 +64,7 @@ const sampleProjects: Project[] = [
   { id: 'proj-3', name: 'Gamma Project', path: '/users/charlie/gamma', created_at: 0, updated_at: 0 },
 ]
 
-function renderSidebar(props?: Partial<{ collapsed: boolean; currentView: AppView; onToggleCollapse: () => void; onNewProject?: () => void; onNavigate: (view: AppView) => void; pluginNavItems: typeof globalPrNavItem[]; reviewRequestCount: number; authoredPrCount: number }>) {
+function renderSidebar(props?: Partial<{ collapsed: boolean; currentView: AppView; onToggleCollapse: () => void; onNewProject?: () => void; onNavigate: (view: AppView) => void; pluginNavItems: typeof globalPrNavItem[]; reviewRequestCount: number }>) {
   const defaultProps = {
     collapsed: false,
     currentView: 'board' as AppView,
@@ -245,13 +245,8 @@ describe('AppSidebar', () => {
       expect(screen.getByText('3')).toBeTruthy()
     })
 
-    it('shows the authored PR count badge on the all-repos item', () => {
-      renderSidebar({ pluginNavItems: [globalPrNavItem], authoredPrCount: 5 })
-      expect(screen.getByText('5')).toBeTruthy()
-    })
-
-    it('does not show count badges when counts are zero', () => {
-      renderSidebar({ pluginNavItems: [globalPrNavItem], reviewRequestCount: 0, authoredPrCount: 0 })
+    it('does not show the review count badge when the count is zero', () => {
+      renderSidebar({ pluginNavItems: [globalPrNavItem], reviewRequestCount: 0 })
       expect(screen.queryByText('0')).toBeNull()
     })
 

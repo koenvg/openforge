@@ -1,9 +1,10 @@
 import { cleanup } from '@testing-library/svelte'
 import { vi, beforeEach, afterEach } from 'vitest'
-import { get, writable } from 'svelte/store'
+import { get, writable, derived } from 'svelte/store'
 import type { RuntimeContributionSource } from './lib/plugin/contributionResolver'
 import type { Task, AgentSession, Project, ProjectAttention, PullRequestInfo, CheckpointNotification, CiFailureNotification, RateLimitNotification } from './lib/types'
 import { forceGithubSync, registerBuiltinPlugin } from './lib/ipc'
+import { countAllReposUnopenedReviews, countRepoUnopenedReviews } from './lib/prReviewBadgeCounts'
 
 export const callOrder: string[] = []
 export const installedPluginRows: Array<{
@@ -137,7 +138,11 @@ vi.mock('./lib/plugin/pluginRegistry', async () => {
   }
 })
 
-vi.mock('./lib/stores', () => ({
+vi.mock('./lib/stores', () => {
+  const reviewPrs = writable<any[]>([])
+  const activeResolvedRepo = writable<string | null>(null)
+  const globalExcludedPrRepos = writable<ReadonlySet<string>>(new Set())
+  return {
   tasks: writable<Task[]>([]),
   pendingTask: writable<Task | null>(null),
   selectedTaskId: mockSelectedTaskIdStore,
@@ -168,20 +173,23 @@ vi.mock('./lib/stores', () => ({
   agentEvents: writable<Map<string, any>>(new Map()),
   taskRuntimeInfo: writable(new Map()),
   currentView: mockCurrentViewStore,
-  reviewPrs: writable([]),
+  reviewPrs,
+  activeResolvedRepo,
+  globalExcludedPrRepos,
   selectedReviewPr: mockSelectedReviewPrStore,
   prFileDiffs: writable([]),
-  reviewRequestCount: writable(0),
+  reviewRequestCount: derived([reviewPrs, globalExcludedPrRepos], ([$prs, $excluded]) => countAllReposUnopenedReviews($prs, $excluded)),
+  activeRepoReviewRequestCount: derived([reviewPrs, activeResolvedRepo], ([$prs, $repo]) => countRepoUnopenedReviews($prs, $repo)),
   reviewComments: writable([]),
   pendingManualComments: writable([]),
   selectedReviewPrDetails: writable(null),
   reviewPullRequestDiff: writable(null),
-  authoredPrCount: writable(0),
   commandHeld: writable(false),
   focusBoardFilters: writable(new Map()),
   startingTasks: writable<Set<string>>(new Set()),
     codeCleanupTasksEnabled: writable(false),
-}))
+  }
+})
 
 vi.mock('./lib/ipc', () => ({
   registerBuiltinPlugin: vi.fn(async (plugin) => {

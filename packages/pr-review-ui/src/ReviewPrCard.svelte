@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ReviewPullRequest } from '@openforge/plugin-sdk/domain'
+  import { hasDoNotReviewLabel } from '@openforge/plugin-sdk/domain'
   import Card from './ui/Card.svelte'
   import { timeAgoFromSeconds } from './timeAgo'
   import { getPrStatusChips } from '@openforge/plugin-sdk/prStatusPresentation'
@@ -17,10 +18,12 @@
   const MAX_VISIBLE_LABELS = 4
   let visibleLabels = $derived((pr.labels ?? []).slice(0, MAX_VISIBLE_LABELS))
   let overflowCount = $derived(Math.max(0, (pr.labels ?? []).length - MAX_VISIBLE_LABELS))
+  // Gray out PRs marked "DO NOT REVIEW"; the label itself is shown in the label row below.
+  let doNotReview = $derived(hasDoNotReviewLabel(pr))
 </script>
 
 <Card
-  class="flex flex-col gap-2.5 p-4 duration-150 {!selected ? 'hover:-translate-y-px' : ''} {pr.viewed_at ? 'opacity-50' : ''}"
+  class="flex flex-col gap-2.5 p-4 duration-150 {!selected ? 'hover:-translate-y-px' : ''} {pr.viewed_at || doNotReview ? 'opacity-50' : ''}"
   {selected}
   onclick={onClick}
 >

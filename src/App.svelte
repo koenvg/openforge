@@ -4,7 +4,7 @@
   import type { DesktopUnlistenFn } from './lib/desktopIpc'
   import { createDesktopWindow } from './lib/desktopWindow'
   import type { DesktopWindowTarget } from './lib/desktopWindow'
-  import { tasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, isLoading, projects, activeProjectId, activeProjectColorId, currentView, reviewRequestCount, authoredPrCount, codeCleanupTasksEnabled, focusBoardFilters } from './lib/stores'
+  import { tasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, isLoading, projects, activeProjectId, activeProjectColorId, currentView, reviewRequestCount, activeRepoReviewRequestCount, codeCleanupTasksEnabled, focusBoardFilters } from './lib/stores'
   import { getAppMode, getConfig, getProjectConfig, resumeStartupSessions, setPollContext, getProjectRepo } from './lib/ipc'
   import { computePollContext, pollContextEquals, type PollContextPayload } from './lib/pollContext'
   import { GITHUB_SYNC_GLOBAL_VIEW_KEY } from './lib/githubSyncPlugin'
@@ -447,10 +447,9 @@
     onNavigate={handleNavigate}
     pluginNavItems={sidebarPluginNavItems}
     reviewRequestCount={$reviewRequestCount}
-    authoredPrCount={$authoredPrCount}
   />
   {#if !ICON_RAIL_HIDDEN_VIEWS.has($currentView)}
-    <IconRail currentView={$currentView} onNavigate={handleNavigate} pluginNavItems={pluginNavItems} modalsOpen={showCommandPalette || showProjectSwitcher || actionPalette.showActionPalette || showAddDialog || showFileQuickOpen} railBg={iconRailBg} />
+    <IconRail currentView={$currentView} onNavigate={handleNavigate} pluginNavItems={pluginNavItems} modalsOpen={showCommandPalette || showProjectSwitcher || actionPalette.showActionPalette || showAddDialog || showFileQuickOpen} railBg={iconRailBg} activeRepoReviewRequestCount={$activeRepoReviewRequestCount} />
   {/if}
 
   <div class="flex flex-col flex-1 min-w-0 relative" style="background: linear-gradient(180deg, var(--project-bg-alt) 0%, var(--project-bg) 100%)">

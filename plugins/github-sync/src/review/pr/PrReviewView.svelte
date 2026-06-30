@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte'
   import type { Disposable, FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
   type UnlistenFn = Disposable
-  import { reviewPrs, selectedReviewPr, prFileDiffs, reviewRequestCount, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, authoredPrs, authoredPrCount, activeProjectId } from '../../lib/stores'
+  import { reviewPrs, selectedReviewPr, prFileDiffs, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, authoredPrs, activeProjectId } from '../../lib/stores'
   import { getHTMLElementAt, isInputFocused } from '../../lib/domUtils'
   import { useVimNavigation } from '../../lib/useVimNavigation.svelte'
   import { timeAgoFromSeconds } from '../../lib/timeAgo'
@@ -16,7 +16,6 @@
   import ProjectPageHeader from '../../project/ProjectPageHeader.svelte'
   import ReviewSubmitPanel from '@openforge/pr-review-ui/ReviewSubmitPanel.svelte'
   import PrOverviewTab from '@openforge/pr-review-ui/PrOverviewTab.svelte'
-  import { hasMergeConflicts } from '@openforge/plugin-sdk/domain'
   import type { ReviewPullRequest, AuthoredPullRequest, PrFileDiff, PrOverviewComment, ReviewComment, ReviewSubmissionComment } from '@openforge/plugin-sdk/domain'
   import { createGithubSyncPrReviewClient } from './githubSyncClient'
   import {
@@ -86,27 +85,23 @@
   let excludedRepos = $state<Set<string>>(new Set())
   let showFilterDropdown = $state(false)
 
-  // Load excluded repos when project changes
-  $effect(() => {
-    const pid = $activeProjectId
-    if (pid) {
-      api.projectConfig.get<string>('pr_excluded_repos', pid).then((val) => {
-        if (val) {
-          try {
-            const parsed = JSON.parse(val)
-            excludedRepos = new Set(Array.isArray(parsed) ? parsed : [])
-          } catch {
-            excludedRepos = new Set()
-          }
-        } else {
-          excludedRepos = new Set()
-        }
-      }).catch(() => {
+  // The repo-exclusion filter is a single GLOBAL list (not per-project), so the "All
+  // Pull Requests" view and its sidebar badge are independent of the active project.
+  async function loadExcludedRepos() {
+    try {
+      const val = await api.config.get<string>('pr_excluded_repos')
+      if (!val) {
         excludedRepos = new Set()
-      })
-    } else {
+        return
+      }
+      const parsed = JSON.parse(val)
+      excludedRepos = new Set(Array.isArray(parsed) ? parsed : [])
+    } catch {
       excludedRepos = new Set()
     }
+  }
+  $effect(() => {
+    void loadExcludedRepos()
   })
 
   function isRepoExcluded(repoOwner: string, repoName: string): boolean {
@@ -115,23 +110,38 @@
 
   // When scope === 'repo', restrict the lists to the active project's repo. The
   // sidecar resolves it from the project's git origin into the 'resolved_repo'
-  // project config. Until it's known, fall back to showing all (graceful).
+  // project config.
   let scopedRepo = $state<string | null>(null)
+  // Whether the repo-scope resolution has finished, so we can distinguish "still
+  // resolving" from "resolved to no repo" and avoid flashing the not-linked message.
+  let repoResolutionLoaded = $state(false)
   $effect(() => {
     const pid = $activeProjectId
     if (scope === 'repo' && pid) {
+      repoResolutionLoaded = false
       api.projectConfig.get<string>('resolved_repo', pid).then((val) => {
         scopedRepo = typeof val === 'string' && val.includes('/') ? val : null
+        repoResolutionLoaded = true
       }).catch(() => {
         scopedRepo = null
+        repoResolutionLoaded = true
       })
     } else {
       scopedRepo = null
+      repoResolutionLoaded = true
     }
   })
 
+  // A per-repo view whose project has no resolved GitHub repo (e.g. a project with no
+  // remote): render an explanatory message instead of PR columns.
+  let projectHasNoRepo = $derived(scope === 'repo' && repoResolutionLoaded && !scopedRepo)
+
   function matchesScope(repoOwner: string, repoName: string): boolean {
-    if (scope !== 'repo' || !scopedRepo) return true
+    // The all-repos view spans every repository.
+    if (scope !== 'repo') return true
+    // A per-repo view whose project has no resolved GitHub repo (e.g. a project with
+    // no remote) shows nothing — never other repos' PRs.
+    if (!scopedRepo) return false
     return `${repoOwner}/${repoName}` === scopedRepo
   }
 
@@ -155,10 +165,8 @@
 
   async function persistExcludedRepos(newExcluded: Set<string>) {
     excludedRepos = newExcluded
-    if ($activeProjectId) {
-      const arr = [...newExcluded].sort()
-      await api.projectConfig.set('pr_excluded_repos', JSON.stringify(arr), $activeProjectId)
-    }
+    const arr = [...newExcluded].sort()
+    await api.config.set('pr_excluded_repos', JSON.stringify(arr))
   }
 
   async function addExcludedRepo(repo: string) {
@@ -302,22 +310,6 @@
     }
     return grouped
   }
-
-  function updateAuthoredCount() {
-    $authoredPrCount = filteredAuthoredPrs.filter(
-      (p) => p.ci_status === 'failure' || p.review_status === 'changes_requested' || hasMergeConflicts(p),
-    ).length
-  }
-
-  // Update authored PR count whenever filtered authored PRs change
-  $effect(() => {
-    updateAuthoredCount()
-  })
-
-  // Update review request count whenever filtered PRs change
-  $effect(() => {
-    $reviewRequestCount = filteredReviewPrs.filter(p => p.viewed_at === null).length
-  })
 
   function getReviewedFilesStorageScope() {
     return projectId ? api.storage.project(projectId) : api.storage.global
@@ -906,6 +898,13 @@
         {/snippet}
       </ProjectPageHeader>
 
+      {#if projectHasNoRepo}
+        <div class="flex flex-col items-center justify-center flex-1 gap-3 text-base-content/70 text-center p-8">
+          <div class="badge badge-ghost badge-lg">Not linked</div>
+          <h3 class="text-xl font-semibold text-base-content m-0">This project isn't linked to a GitHub repository</h3>
+          <p class="text-sm m-0 max-w-md">{projectName} has no GitHub remote, so there are no pull requests to show here. Open <span class="font-medium">All Pull Requests</span> to review pull requests across all your repositories.</p>
+        </div>
+      {:else}
       <div class="flex flex-1 overflow-hidden">
         <!-- Left column: Review Requests -->
         <div class="flex-1 flex flex-col overflow-hidden border-r border-base-300">
@@ -1056,6 +1055,7 @@
           </div>
         </div>
       </div>
+      {/if}
     </div>
   {/if}
 </div>

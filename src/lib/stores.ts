@@ -1,6 +1,7 @@
-import { writable } from "svelte/store";
+import { writable, derived } from "svelte/store";
 import type { Task, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, CiFailureNotification, RateLimitNotification, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrOverviewComment, ProjectAttention } from "./types";
 import type { BoardFilter } from './boardFilters'
+import { countAllReposUnopenedReviews, countRepoUnopenedReviews } from './prReviewBadgeCounts'
 
 export interface TaskRuntimeInfo {
   workspacePath: string;
@@ -43,7 +44,27 @@ export const currentView = writable<AppView>("board");
 export const reviewPrs = writable<ReviewPullRequest[]>([]);
 export const selectedReviewPr = writable<ReviewPullRequest | null>(null);
 export const prFileDiffs = writable<PrFileDiff[]>([]);
-export const reviewRequestCount = writable<number>(0);
+
+// The active project's resolved GitHub repo ("owner/name"), or null when unresolved.
+// Backs the per-repo rail badge scope; distinct from the all-repos sidebar badge.
+export const activeResolvedRepo = writable<string | null>(null);
+// Global repo-exclusion filter for the "All Pull Requests" view. Stored in global
+// config (not per-project), so the sidebar badge is constant across project switches.
+export const globalExcludedPrRepos = writable<ReadonlySet<string>>(new Set());
+
+// "All Pull Requests" sidebar badge: unopened review requests across ALL repos, minus
+// globally-excluded repos and "DO NOT REVIEW" PRs. Derived from reviewPrs so opening a
+// PR (which mutates reviewPrs) drops the count immediately; independent of active project.
+export const reviewRequestCount = derived(
+  [reviewPrs, globalExcludedPrRepos],
+  ([$reviewPrs, $excluded]) => countAllReposUnopenedReviews($reviewPrs, $excluded),
+);
+// Rail "Pull Requests" icon badge: same logic scoped to the active project's resolved
+// repo. Zero when the repo is unresolved, so the rail never shows an all-repos number.
+export const activeRepoReviewRequestCount = derived(
+  [reviewPrs, activeResolvedRepo],
+  ([$reviewPrs, $repo]) => countRepoUnopenedReviews($reviewPrs, $repo),
+);
 export const reviewComments = writable<ReviewComment[]>([]);
 export const pendingManualComments = writable<ReviewSubmissionComment[]>([]);
 export const prOverviewComments = writable<PrOverviewComment[]>([]);
@@ -88,5 +109,4 @@ function createBacklogLabelFilters() {
 export const backlogLabelFilters = createBacklogLabelFilters()
 
 export const authoredPrs = writable<AuthoredPullRequest[]>([]);
-export const authoredPrCount = writable<number>(0);
 export const commandHeld = writable<boolean>(false);
