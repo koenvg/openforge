@@ -23,6 +23,7 @@
     "./useVirtualizer.svelte": "./src/useVirtualizer.svelte.ts",
     "./fileStatus": "./src/fileStatus.ts",
     "./githubMarkdown": "./src/githubMarkdown.ts",
+    "./prSort": "./src/prSort.ts",
     "./prStatusPresentation": "./src/prStatusPresentation.ts",
     "./reviewFileIdentity": "./src/reviewFileIdentity.ts",
     "./timeAgo": "./src/timeAgo.ts"

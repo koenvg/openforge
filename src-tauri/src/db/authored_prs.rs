@@ -1,3 +1,4 @@
+use crate::github_client::PrLabel;
 use rusqlite::Result;
 use serde::Serialize;
 
@@ -30,6 +31,9 @@ pub struct AuthoredPrRow {
     pub task_id: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
+    /// GitHub labels on the PR. Serialized to the frontend as an array; empty
+    /// when the PR has no labels. Persisted as a nullable JSON-TEXT column.
+    pub labels: Vec<PrLabel>,
 }
 
 impl super::Database {
@@ -59,13 +63,15 @@ impl super::Database {
         merged_at: Option<i64>,
         is_queued: bool,
         task_id: Option<&str>,
+        labels: &[PrLabel],
         created_at: i64,
         updated_at: i64,
     ) -> Result<()> {
+        let labels_json = super::serialize_labels_column(labels);
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO authored_prs (id, number, title, body, state, draft, html_url, user_login, user_avatar_url, repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions, changed_files, ci_status, ci_check_runs, review_status, merged_at, is_queued, task_id, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)
+            "INSERT INTO authored_prs (id, number, title, body, state, draft, html_url, user_login, user_avatar_url, repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions, changed_files, ci_status, ci_check_runs, review_status, merged_at, is_queued, task_id, labels, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)
              ON CONFLICT(id) DO UPDATE SET
                  number = excluded.number,
                  title = excluded.title,
@@ -89,6 +95,7 @@ impl super::Database {
                    merged_at = excluded.merged_at,
                    is_queued = excluded.is_queued,
                    task_id = excluded.task_id,
+                   labels = excluded.labels,
                   created_at = excluded.created_at,
                   updated_at = excluded.updated_at",
             rusqlite::params![
@@ -115,6 +122,7 @@ impl super::Database {
                 merged_at,
                 is_queued as i32,
                 task_id,
+                labels_json,
                 created_at,
                 updated_at
             ],
@@ -142,7 +150,7 @@ impl super::Database {
             "SELECT id, number, title, body, state, draft, html_url, user_login, user_avatar_url,
                     repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions,
                     changed_files, ci_status, ci_check_runs, review_status, mergeable, mergeable_state, merged_at, is_queued,
-                    task_id, created_at, updated_at
+                    task_id, created_at, updated_at, labels
              FROM authored_prs
              ORDER BY updated_at DESC",
         )?;
@@ -175,6 +183,7 @@ impl super::Database {
                 task_id: row.get(24)?,
                 created_at: row.get(25)?,
                 updated_at: row.get(26)?,
+                labels: super::parse_labels_column(row.get(27)?),
             })
         })?;
         let mut result = Vec::new();
@@ -253,8 +262,9 @@ mod tests {
             None,
             false,
             None,
+            &[],
             1000,
-            2000,
+            2000
         )
         .expect("upsert failed");
 
@@ -269,6 +279,71 @@ mod tests {
         assert_eq!(prs[0].repo_owner, "owner");
         assert_eq!(prs[0].repo_name, "repo");
         assert_eq!(prs[0].head_sha, "abc123");
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_authored_pr_labels_round_trip_and_clear() {
+        use crate::github_client::PrLabel;
+
+        let (db, path) = make_test_db("authored_pr_labels");
+
+        let labels = vec![
+            PrLabel {
+                name: "DO NOT REVIEW".to_string(),
+                color: "b60205".to_string(),
+            },
+            PrLabel {
+                name: "enhancement".to_string(),
+                color: "a2eeef".to_string(),
+            },
+        ];
+
+        let upsert = |labels: &[PrLabel], updated_at: i64| {
+            db.upsert_authored_pr(
+                123,
+                456,
+                "Labeled authored PR",
+                None,
+                "open",
+                false,
+                "https://github.com/owner/repo/pull/456",
+                "octocat",
+                None,
+                "owner",
+                "repo",
+                "feature-branch",
+                "main",
+                "abc123",
+                100,
+                50,
+                10,
+                None,
+                None,
+                None,
+                None,
+                false,
+                None,
+                labels,
+                1000,
+                updated_at,
+            )
+            .expect("upsert failed");
+        };
+
+        // Non-empty labels persist and round-trip with name + color preserved.
+        upsert(&labels, 2000);
+        let prs = db.get_all_authored_prs().expect("get_all failed");
+        assert_eq!(prs.len(), 1);
+        assert_eq!(prs[0].labels, labels);
+
+        // Re-upserting with no labels clears them (column stored as NULL).
+        upsert(&[], 3000);
+        let prs = db.get_all_authored_prs().expect("get_all failed");
+        assert_eq!(prs.len(), 1);
+        assert!(prs[0].labels.is_empty());
 
         drop(db);
         let _ = fs::remove_file(&path);
@@ -302,8 +377,9 @@ mod tests {
             None,
             false,
             None,
+            &[],
             1000,
-            2000,
+            2000
         )
         .expect("insert failed");
 
@@ -331,8 +407,9 @@ mod tests {
             None,
             false,
             None,
+            &[],
             1000,
-            3000,
+            3000
         )
         .expect("update failed");
 
@@ -377,8 +454,9 @@ mod tests {
                 None,
                 false,
                 None,
+                &[],
                 i * 1000,
-                i * 1000,
+                i * 1000
             )
             .expect("insert failed");
         }
@@ -429,8 +507,9 @@ mod tests {
             None,
             false,
             None,
+            &[],
             1000,
-            1000,
+            1000
         )
         .expect("insert older failed");
 
@@ -458,8 +537,9 @@ mod tests {
             None,
             false,
             None,
+            &[],
             2000,
-            5000,
+            5000
         )
         .expect("insert newer failed");
 
@@ -500,8 +580,9 @@ mod tests {
             None,
             false,
             Some("T-100"),
+            &[],
             1000,
-            1000,
+            1000
         )
         .expect("insert failed");
 
@@ -540,8 +621,9 @@ mod tests {
             None,
             false,
             None,
+            &[],
             1000,
-            1000,
+            1000
         )
         .expect("insert failed");
 

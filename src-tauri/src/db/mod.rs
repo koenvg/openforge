@@ -33,6 +33,29 @@ pub use worktrees::WorktreeRow;
 pub(crate) const STARTUP_RESUMABLE_AGENT_SESSION_STATUSES: [&str; 4] =
     ["running", "paused", "interrupted", "completed"];
 
+use crate::github_client::PrLabel;
+
+/// Parse the nullable JSON-TEXT `labels` column into a vector of [`PrLabel`].
+///
+/// Mirrors the `ci_check_runs` nullable-JSON-TEXT storage pattern: the column
+/// holds a serialized JSON array (or NULL). Invalid/NULL values decode to an
+/// empty vector so the frontend always receives an array it can map over.
+pub(crate) fn parse_labels_column(raw: Option<String>) -> Vec<PrLabel> {
+    raw.and_then(|json| serde_json::from_str::<Vec<PrLabel>>(&json).ok())
+        .unwrap_or_default()
+}
+
+/// Serialize labels for the nullable JSON-TEXT `labels` column. Returns `None`
+/// for an empty label set so the column stays NULL, matching the
+/// `ci_check_runs` pattern.
+pub(crate) fn serialize_labels_column(labels: &[PrLabel]) -> Option<String> {
+    if labels.is_empty() {
+        None
+    } else {
+        serde_json::to_string(labels).ok()
+    }
+}
+
 /// Database connection wrapper for thread-safe access
 pub struct Database {
     pub(crate) conn: Arc<Mutex<Connection>>,
@@ -57,6 +80,7 @@ impl Database {
         migrations::ensure_pr_number_column(&conn)?;
         migrations::ensure_mergeability_columns(&conn)?;
         migrations::ensure_is_queued_columns(&conn)?;
+        migrations::ensure_labels_columns(&conn)?;
         migrations::ensure_task_dependency_table(&conn)?;
         migrations::ensure_task_label_tables(&conn)?;
         migrations::ensure_plugin_tables(&conn)?;

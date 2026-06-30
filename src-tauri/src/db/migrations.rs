@@ -1106,6 +1106,43 @@ CREATE TABLE IF NOT EXISTS roadmap_repo_config (
         }
         Ok(())
     }),
+    // Add a nullable `labels` JSON-TEXT column to the PR tables so each cached
+    // PR can carry its GitHub labels (serialized array of {name, color}).
+    // Mirrors the existing nullable-JSON-TEXT `ci_check_runs` pattern. Additive
+    // and idempotent so it heals databases regardless of prior state.
+    M::up_with_hook("", |tx| {
+        for table in ["pull_requests", "review_prs", "authored_prs"] {
+            let has_table: bool = tx
+                .query_row(
+                    &format!(
+                        "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='{}'",
+                        table
+                    ),
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap_or(false);
+            if !has_table {
+                continue;
+            }
+
+            let has_labels: bool = tx
+                .query_row(
+                    &format!(
+                        "SELECT COUNT(*) > 0 FROM pragma_table_info('{}') WHERE name = 'labels'",
+                        table
+                    ),
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap_or(false);
+            if !has_labels {
+                tx.execute(&format!("ALTER TABLE {} ADD COLUMN labels TEXT", table), [])
+                    .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            }
+        }
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -1299,6 +1336,43 @@ pub(super) fn ensure_is_queued_columns(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// Backfills the nullable `labels` JSON-TEXT column on the PR tables for
+/// databases that were already migrated past the (mid-list) column-adding
+/// migration, which `rusqlite_migration` skips once `user_version` is beyond
+/// it. Idempotent and version-independent, so it heals existing databases on
+/// startup. Mirrors [`ensure_is_queued_columns`].
+pub(super) fn ensure_labels_columns(conn: &Connection) -> Result<()> {
+    for table in ["pull_requests", "review_prs", "authored_prs"] {
+        let has_table: bool = conn.query_row(
+            &format!(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='{}'",
+                table
+            ),
+            [],
+            |r| r.get(0),
+        )?;
+
+        if !has_table {
+            continue;
+        }
+
+        let exists: bool = conn.query_row(
+            &format!(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('{}') WHERE name = 'labels'",
+                table
+            ),
+            [],
+            |r| r.get(0),
+        )?;
+
+        if !exists {
+            conn.execute(&format!("ALTER TABLE {} ADD COLUMN labels TEXT", table), [])?;
+        }
+    }
+
+    Ok(())
+}
+
 pub(super) fn ensure_task_dependency_table(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"
@@ -1444,7 +1518,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = LATEST_USER_VERSION - 5;
+            let previous_version = LATEST_USER_VERSION - 6;
             conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
                 .expect("set user_version");
             conn.execute(
@@ -1508,7 +1582,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = LATEST_USER_VERSION - 6;
+            let previous_version = LATEST_USER_VERSION - 7;
             conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
                 .expect("set user_version");
             conn.execute("CREATE TABLE plugins (id TEXT PRIMARY KEY)", [])
@@ -1687,7 +1761,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = LATEST_USER_VERSION - 7;
+            let previous_version = LATEST_USER_VERSION - 8;
             conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
                 .expect("set user_version");
             conn.execute_batch(
@@ -2585,7 +2659,7 @@ mod tests {
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
             conn.execute(
-                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 10),
+                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 11),
                 [],
             )
             .expect("set pre-upgrade user_version");
@@ -2631,7 +2705,7 @@ mod tests {
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
             conn.execute(
-                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 10),
+                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 11),
                 [],
             )
             .expect("set pre-upgrade user_version");

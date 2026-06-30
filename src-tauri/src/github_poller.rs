@@ -1442,6 +1442,7 @@ async fn poll_review_prs(
                 pr.additions,
                 pr.deletions,
                 pr.changed_files,
+                &pr.labels,
                 created_at,
                 updated_at,
             );
@@ -1598,6 +1599,7 @@ async fn poll_authored_prs(
                 None,
                 *is_queued,
                 task_id.as_deref(),
+                &pr.labels,
                 *created_at,
                 updated_at,
             );

@@ -409,6 +409,7 @@ pub async fn fetch_review_prs(
                     pr.additions,
                     pr.deletions,
                     pr.changed_files,
+                    &pr.labels,
                     created_at,
                     updated_at,
                 )
@@ -718,6 +719,16 @@ async fn fetch_event_signal_prs(
                         .and_then(|value| value.as_str())
                         .unwrap_or_default()
                         .to_string(),
+                    labels: pr_details
+                        .extra
+                        .get("labels")
+                        .and_then(|value| {
+                            serde_json::from_value::<Vec<crate::github_client::PrLabel>>(
+                                value.clone(),
+                            )
+                            .ok()
+                        })
+                        .unwrap_or_default(),
                 });
             }
             Err(e) => {
@@ -897,6 +908,7 @@ pub async fn fetch_authored_prs(
                     None,
                     *is_queued,
                     task_id.as_deref(),
+                    &pr.labels,
                     *created_at,
                     updated_at,
                 )

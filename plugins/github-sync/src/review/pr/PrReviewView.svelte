@@ -8,6 +8,7 @@
   import { timeAgoFromSeconds } from '../../lib/timeAgo'
   import ReviewPrCard from '@openforge/pr-review-ui/ReviewPrCard.svelte'
   import AuthoredPrCard from '@openforge/pr-review-ui/AuthoredPrCard.svelte'
+  import { sortDoNotReviewLast } from '@openforge/pr-review-ui/prSort'
   import FileTree from '@openforge/pr-review-ui/FileTree.svelte'
   import ResizablePanel from '@openforge/plugin-sdk/ui/ResizablePanel.svelte'
   import DiffViewer from '@openforge/pr-review-ui/DiffViewer.svelte'
@@ -137,6 +138,10 @@
   let filteredReviewPrs = $derived($reviewPrs.filter(pr => matchesScope(pr.repo_owner, pr.repo_name) && (!showFilters || !isRepoExcluded(pr.repo_owner, pr.repo_name))))
   let filteredAuthoredPrs = $derived($authoredPrs.filter(pr => matchesScope(pr.repo_owner, pr.repo_name) && (!showFilters || !isRepoExcluded(pr.repo_owner, pr.repo_name))))
 
+  // PRs labeled "DO NOT REVIEW" always sort to the bottom of their list (reviewed & authored).
+  let sortedReviewPrs = $derived(sortDoNotReviewLast(filteredReviewPrs))
+  let sortedAuthoredPrs = $derived(sortDoNotReviewLast(filteredAuthoredPrs))
+
   // Text input for manually adding repos
   let newRepoInput = $state('')
 
@@ -172,7 +177,7 @@
   }
 
   // Flat PR list for vim navigation
-  let flatPrList = $derived(filteredReviewPrs)
+  let flatPrList = $derived(sortedReviewPrs)
 
   const vimList = useVimNavigation({
     getItemCount: () => $selectedReviewPr ? 0 : flatPrList.length,
@@ -227,8 +232,8 @@
     el?.scrollIntoView?.({ block: 'nearest' })
   })
 
-  let groupedPrs = $derived(groupByRepo(filteredReviewPrs))
-  let groupedAuthoredPrs = $derived(groupAuthoredByRepo(filteredAuthoredPrs))
+  let groupedPrs = $derived(groupByRepo(sortedReviewPrs))
+  let groupedAuthoredPrs = $derived(groupAuthoredByRepo(sortedAuthoredPrs))
   let hiddenReviewRepos = $derived(showFilters ? getHiddenRepos($reviewPrs) : [])
   let hiddenAuthoredRepos = $derived(showFilters ? getHiddenRepos($authoredPrs) : [])
 

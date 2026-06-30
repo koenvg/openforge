@@ -480,6 +480,15 @@ export interface ImplementationStatus {
 // PR Review Types (cross-repo, not task-linked)
 // ============================================================================
 
+/**
+ * A GitHub label attached to a pull request. `color` is a 6-digit hex string
+ * without a leading '#', exactly as GitHub returns it (e.g. "b60205").
+ */
+export interface PrLabel {
+  name: string;
+  color: string;
+}
+
 /** PR authored by the authenticated user — cached from GitHub Search API */
 export interface AuthoredPullRequest {
   id: number;
@@ -509,6 +518,8 @@ export interface AuthoredPullRequest {
   task_id: string | null;
   created_at: number;
   updated_at: number;
+  /** GitHub labels on the PR. Empty when the PR has no labels. */
+  labels: PrLabel[];
 }
 
 /** PR from GitHub Search API — review requested for the authenticated user */
@@ -536,6 +547,8 @@ export interface ReviewPullRequest {
   updated_at: number;
   viewed_at: number | null;
   viewed_head_sha: string | null;
+  /** GitHub labels on the PR. Empty when the PR has no labels. */
+  labels: PrLabel[];
 }
 
 /** File diff from PR files endpoint */
