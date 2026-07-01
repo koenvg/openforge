@@ -52,6 +52,7 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'get_task_workspace',
   'get_worktree_for_task',
   'list_git_branches',
+  'inspect_existing_branch',
   'create_project',
   'get_projects',
   'get_project_attention',

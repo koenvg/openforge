@@ -105,6 +105,12 @@ async function startTaskImplementationFromPluginRequest(request: StartTaskImplem
     throw new Error(`Cannot start task ${request.taskId}: project ${task.project_id} not found`)
   }
 
+  // Plugin-initiated starts intentionally omit a divergenceResolution, so the
+  // backend defaults to `Auto`. This is a headless call with no UI to surface
+  // the divergence modal, so for a diverged existing-branch task the backend's
+  // Auto path fails safe with a structured error rather than silently mutating
+  // the branch. Interactive starts route through resolveBranchStart (branchStart.ts)
+  // to prompt the user instead.
   return normalizeImplementationRun(await startImplementation(request.taskId, project.path))
 }
 

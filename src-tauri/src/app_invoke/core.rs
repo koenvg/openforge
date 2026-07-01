@@ -48,6 +48,18 @@ pub(super) async fn handle_app_core_task_project_command(
                     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?,
             )?
         }
+        "inspect_existing_branch" => {
+            let repo_path = payload_string(&request.payload, "repoPath")?;
+            let branch = payload_string(&request.payload, "branch")?;
+            json_value(
+                crate::git_worktree::inspect_existing_branch(
+                    std::path::Path::new(&repo_path),
+                    &branch,
+                )
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?,
+            )?
+        }
         "delete_project" => {
             let id = payload_string(&request.payload, "id")?;
             let db = crate::db::acquire_db(&state.db);

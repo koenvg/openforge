@@ -34,6 +34,46 @@ export interface GitBranchInfo {
   is_remote: boolean;
 }
 
+/**
+ * How an existing branch relates to its `origin/<branch>` remote-tracking ref,
+ * as reported by the read-only `inspectExistingBranch` pre-flight. Drives whether
+ * a task can start silently or must prompt the user to resolve divergence.
+ */
+export type ExistingBranchRelation =
+  | 'localOnly'
+  | 'remoteOnly'
+  | 'autoFastForward'
+  | 'diverged';
+
+/** How to resolve a diverged existing branch when creating its worktree. */
+export type DivergenceResolution = 'auto' | 'keepLocal' | 'resetToRemote';
+
+/** A compact, display-oriented description of a single commit. */
+export interface CommitSummary {
+  shortSha: string;
+  subject: string;
+  author: string;
+  relativeDate: string;
+}
+
+/**
+ * Read-only plan describing how an existing branch relates to its origin remote
+ * at Start time. Produced without creating a worktree or mutating any branch.
+ */
+export interface ExistingBranchPlan {
+  relation: ExistingBranchRelation;
+  /** Local-only commits (`origin/foo..foo`), capped; lost by a reset-to-remote. */
+  ahead: CommitSummary[];
+  /** Remote-only commits (`foo..origin/foo`), capped; on the remote but not local. */
+  behind: CommitSummary[];
+  /** True when the ahead list was truncated to the cap (more commits exist). */
+  aheadTruncated: boolean;
+  /** True when the behind list was truncated to the cap (more commits exist). */
+  behindTruncated: boolean;
+  /** False when the origin fetch failed, so the comparison may be stale. */
+  remoteReachable: boolean;
+}
+
 export interface AgentSession {
   id: string;
   ticket_id: string;

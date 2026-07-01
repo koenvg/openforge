@@ -4,6 +4,7 @@ import {
   error,
   startingTasks,
   taskRuntimeInfo,
+  tasks,
   ticketPrs,
   setTaskMerging,
 } from './stores'
@@ -15,8 +16,9 @@ import {
 } from './ipc'
 import { writePtyWithSubmit } from './ptySubmit'
 import { focusTerminal, isPtyActive } from './terminalPool'
+import { resolveBranchStart } from './branchStart'
 import { canMergePullRequest } from './types'
-import type { Project, Task } from './types'
+import type { DivergenceResolution, Project, Task } from './types'
 
 export interface RunActionData {
   taskId: string
@@ -62,12 +64,31 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
       return
     }
 
+    // Start gate: for existing-branch tasks, pre-flight the branch and — when it
+    // has diverged — prompt the user before creating the worktree. Runs before
+    // the starting spinner so an awaiting modal does not leave a stuck spinner.
+    let resolution: DivergenceResolution | undefined
+    try {
+      const task = get(tasks).find((candidate) => candidate.id === taskId)
+      if (task) {
+        const outcome = await resolveBranchStart(task, activeProject.path)
+        if (!outcome.start) {
+          return
+        }
+        resolution = outcome.resolution
+      }
+    } catch (e) {
+      logError('[session] Failed to inspect existing branch before start:', e)
+      setError(e)
+      return
+    }
+
     const starting = new Set(get(startingTasks))
     starting.add(taskId)
     startingTasks.set(starting)
 
     try {
-      const result = await startImplementation(taskId, activeProject.path)
+      const result = await startImplementation(taskId, activeProject.path, resolution ?? null)
 
       const updatedRuntimeInfo = new Map(get(taskRuntimeInfo))
       updatedRuntimeInfo.set(taskId, {
