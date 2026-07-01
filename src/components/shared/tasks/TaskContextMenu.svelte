@@ -2,7 +2,7 @@
   import type { BoardStatus, Action } from '../../../lib/types'
   import { tasks, error } from '../../../lib/stores'
   import { deleteTask } from '../../../lib/ipc'
-  import { moveTaskToComplete } from '../../../lib/moveToComplete'
+  import { confirmCompleteTask } from '../../../lib/completeTask'
   import ContextMenu from '../ui/ContextMenu.svelte'
   import ContextMenuItem from '../ui/ContextMenuItem.svelte'
 
@@ -20,10 +20,9 @@
     lowFireTaskIds?: Set<string>
     onMoveToLowFire?: (taskId: string) => void
     onMoveToFocus?: (taskId: string) => void
-    onReopen?: (taskId: string) => void
   }
 
-  let { visible, x, y, taskId, onClose, onStart, onEdit, onDelete, actions = [], onRunAction, lowFireTaskIds = new Set(), onMoveToLowFire, onMoveToFocus, onReopen }: Props = $props()
+  let { visible, x, y, taskId, onClose, onStart, onEdit, onDelete, actions = [], onRunAction, lowFireTaskIds = new Set(), onMoveToLowFire, onMoveToFocus }: Props = $props()
 
   let taskStatus = $derived<BoardStatus | ''>($tasks.find(t => t.id === taskId)?.status ?? '')
   let isLowFireTask = $derived(lowFireTaskIds.has(taskId))
@@ -45,12 +44,6 @@
     onRunAction?.({ taskId: id, actionPrompt: action.prompt, agent: null })
   }
 
-  async function handleMoveToDone() {
-    const id = taskId
-    onClose()
-    await moveTaskToComplete(id, { resetToBoard: false })
-  }
-
   function handleMoveToLowFire() {
     const id = taskId
     onClose()
@@ -63,20 +56,17 @@
     onMoveToFocus?.(id)
   }
 
-  function handleReopen() {
+  async function handleComplete() {
     const id = taskId
-    onClose()
-    onReopen?.(id)
-  }
-
-  async function handleDelete() {
-    const id = taskId
+    if (!confirmCompleteTask()) {
+      return
+    }
     onClose()
     try {
       await deleteTask(id)
       onDelete?.(id)
     } catch (err: unknown) {
-      console.error('Failed to delete task:', err)
+      console.error('Failed to complete task:', err)
       $error = String(err)
     }
   }
@@ -101,11 +91,7 @@
     {:else if !isLowFireTask && onMoveToLowFire}
       <ContextMenuItem label="Move to Low-Fire" onclick={handleMoveToLowFire} />
     {/if}
-    <ContextMenuItem label="Move to Done" onclick={handleMoveToDone} />
-  {/if}
-  {#if taskStatus === 'done' && onReopen}
-    <ContextMenuItem label="Reopen" onclick={handleReopen} />
   {/if}
   <div class="border-t border-base-content/10 my-1"></div>
-  <ContextMenuItem label="Delete" variant="danger" onclick={handleDelete} />
+  <ContextMenuItem label="Complete 🏁" onclick={handleComplete} />
 </ContextMenu>
