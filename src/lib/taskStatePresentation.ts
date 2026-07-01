@@ -20,6 +20,7 @@ export const TASK_STATE_LABELS: Record<TaskState, string> = {
   'changes-requested': 'Changes Requested',
   'unaddressed-comments': 'Unaddressed Comments',
   'ready-to-merge': 'Ready to Merge',
+  'ready-to-enqueue': 'Ready to Enqueue',
   'pr-queued': 'In Merge Queue',
   'pr-merged': 'PR Merged',
   'pr-closed': 'PR Closed',
@@ -44,6 +45,7 @@ export const TASK_STATE_COMPACT_LABELS: Record<TaskState, string> = {
   'changes-requested': 'Changes Req.',
   'unaddressed-comments': 'Unaddressed Comments',
   'ready-to-merge': 'Ready to Merge',
+  'ready-to-enqueue': 'Ready to Enqueue',
   'pr-queued': 'Queued',
   'pr-merged': 'Merged',
   'pr-closed': 'Closed',
@@ -84,6 +86,7 @@ export function getTaskStateBadgeClass(state: TaskState): string {
     case 'merge-conflict': return 'badge-error'
     case 'agent-done': return 'badge-success'
     case 'ready-to-merge': return 'badge-info'
+    case 'ready-to-enqueue': return 'badge-info'
     case 'pr-queued': return 'badge-info'
     case 'egg': return 'badge-ghost'
     default: return ''
@@ -108,6 +111,7 @@ const STATE_REASONS: Record<TaskState, string> = {
   'changes-requested': 'Changes requested on the pull request.',
   'unaddressed-comments': 'Unaddressed comments on the pull request.',
   'ready-to-merge': 'Ready to merge — all checks passed.',
+  'ready-to-enqueue': 'Ready to enqueue — all requirements passed.',
   'pr-queued': 'Pull request is queued for merge.',
   'pr-merged': 'Pull request merged.',
   'pr-closed': 'Pull request closed without merge.',

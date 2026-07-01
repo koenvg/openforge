@@ -1,9 +1,9 @@
 import type { Task, AgentSession, PullRequestInfo } from './types'
-import { canMergePullRequest, hasMergeConflicts, isClosedOrMergedPullRequest, isClosedUnmergedPullRequest, isMergedPullRequest, isQueuedForMerge } from './types'
+import { getMergeReadiness, getMostAttentionWorthyPullRequest, isClosedOrMergedPullRequest, isClosedUnmergedPullRequest, isMergedPullRequest } from './types'
 
 export type TaskState =
   | 'egg' | 'idle' | 'active' | 'needs-input' | 'paused' | 'agent-done' | 'failed' | 'interrupted' | 'done'
-  | 'pr-draft' | 'pr-open' | 'ci-failed' | 'changes-requested' | 'ready-to-merge' | 'pr-queued' | 'pr-merged' | 'pr-closed' | 'ci-running' | 'review-pending' | 'unaddressed-comments' | 'merge-conflict'
+  | 'pr-draft' | 'pr-open' | 'ci-failed' | 'changes-requested' | 'ready-to-merge' | 'ready-to-enqueue' | 'pr-queued' | 'pr-merged' | 'pr-closed' | 'ci-running' | 'review-pending' | 'unaddressed-comments' | 'merge-conflict'
 
 export const ALL_TASK_STATES: TaskState[] = [
   'idle',
@@ -21,6 +21,7 @@ export const ALL_TASK_STATES: TaskState[] = [
   'changes-requested',
   'unaddressed-comments',
   'ready-to-merge',
+  'ready-to-enqueue',
   'pr-queued',
   'pr-merged',
   'pr-closed',
@@ -29,7 +30,7 @@ export const ALL_TASK_STATES: TaskState[] = [
 
 
 export function getStateDrivingPr(prs: PullRequestInfo[]): PullRequestInfo | null {
-  const openPr = prs.find(pr => pr.state === 'open')
+  const openPr = getMostAttentionWorthyPullRequest(prs.filter(pr => pr.state === 'open'))
   const donePr = prs.find(pr => isClosedOrMergedPullRequest(pr.state))
   return openPr ?? donePr ?? null
 }
@@ -42,22 +43,25 @@ function getPrState(prs: PullRequestInfo[]): TaskState | null {
   if (isMergedPullRequest(pr)) return 'pr-merged'
   if (isClosedUnmergedPullRequest(pr)) return 'pr-closed'
 
-  // CI failures always take priority over merge readiness
-  if (pr.ci_status === 'failure') return 'ci-failed'
+  const readiness = getMergeReadiness(pr)
 
-  // Queued PRs are not merge affordances, but they have their own task state.
-  if (isQueuedForMerge(pr)) return 'pr-queued'
+  if (readiness.status === 'ready_to_merge') return 'ready-to-merge'
+  if (readiness.status === 'ready_to_enqueue') return 'ready-to-enqueue'
+  if (readiness.status === 'queued_pull_request') return 'pr-queued'
 
-  // Shared user-initiated merge readiness keeps task state and merge affordances aligned.
-  if (canMergePullRequest(pr)) return 'ready-to-merge'
+  if (readiness.status === 'blocked') {
+    const blockerCodes = new Set(readiness.blockers.map((blocker) => blocker.code))
+    const warningCodes = new Set(readiness.warnings.map((warning) => warning.code))
+    if (blockerCodes.has('checks_failed')) return 'ci-failed'
+    if (blockerCodes.has('changes_requested')) return 'changes-requested'
+    if (blockerCodes.has('merge_conflict')) return 'merge-conflict'
+    if (blockerCodes.has('unresolved_conversations') || warningCodes.has('unresolved_conversations')) return 'unaddressed-comments'
+    if (blockerCodes.has('draft')) return 'pr-draft'
+    if (blockerCodes.has('checks_pending')) return 'ci-running'
+  }
 
-  // Open PR checks in priority order (when not merge-ready)
-  if (pr.review_status === 'changes_requested') return 'changes-requested'
-  if (hasMergeConflicts(pr)) return 'merge-conflict'
-  if ((pr.unaddressed_comment_count ?? 0) > 0) return 'unaddressed-comments'
-  if (pr.draft) return 'pr-draft'
-  if (pr.ci_status === 'pending') return 'ci-running'
-  if (pr.ci_status === 'success' && pr.review_status === 'review_required') return 'review-pending'
+  if (readiness.warnings.some((warning) => warning.code === 'unresolved_conversations')) return 'unaddressed-comments'
+  if (pr.review_status === 'review_required') return 'review-pending'
   return 'pr-open'
 }
 
@@ -73,6 +77,7 @@ const BORDER_CLASS: Record<string, string> = {
   'review-pending': 'review-pending',
   'unaddressed-comments': 'unaddressed-comments',
   'ready-to-merge': 'ready-to-merge',
+  'ready-to-enqueue': 'ready-to-merge',
   'pr-queued': 'ready-to-merge',
   'merge-conflict': 'ci-failed',
 }

@@ -324,8 +324,27 @@ describe('TaskPullRequestStatus', () => {
       },
     })
 
-    expect(screen.getByText('In Merge Queue')).toBeTruthy()
+    expect(screen.getByText('Queued Pull Request')).toBeTruthy()
+    expect(screen.getByText('Queued pull request — waiting for merge queue validation.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Merge' })).toBeNull()
     expect(screen.queryByText('Ready to Merge')).toBeNull()
+  })
+
+  it('shows persisted ready-to-enqueue and readiness-unknown details without direct merge controls', () => {
+    render(TaskPullRequestStatus, {
+      props: {
+        taskId: 'T-42',
+        taskPrs: [
+          createPullRequest({ id: 1, merge_readiness_status: 'ready_to_enqueue', merge_readiness_action: 'enqueue' }),
+          createPullRequest({ id: 2, merge_readiness_status: 'readiness_unknown', merge_readiness_action: 'wait_for_github' }),
+        ],
+      },
+    })
+
+    expect(screen.getByText('Ready to Enqueue')).toBeTruthy()
+    expect(screen.getByText('Ready to enqueue in the merge queue.')).toBeTruthy()
+    expect(screen.getByText('Readiness Unknown')).toBeTruthy()
+    expect(screen.getByText('Readiness unknown — waiting for GitHub to report definitive mergeability.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Merge' })).toBeNull()
   })
 })

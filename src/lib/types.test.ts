@@ -44,6 +44,40 @@ describe('getMergeReadiness', () => {
     expect(isReadyToMerge(pr)).toBe(true)
   })
 
+  it('prefers persisted merge readiness when present', () => {
+    const result = getMergeReadiness(createPullRequest({
+      mergeable: null,
+      mergeable_state: null,
+      merge_readiness_status: 'ready_to_enqueue',
+      merge_readiness_action: 'enqueue',
+      merge_readiness_blockers: '[]',
+      merge_readiness_warnings: '[{"code":"branch_behind","message":"Branch is behind."}]',
+      readiness_source_head_sha: 'persisted-sha',
+      readiness_updated_at: 5555,
+    }))
+
+    expect(result).toMatchObject({
+      status: 'ready_to_enqueue',
+      action: 'enqueue',
+      blockers: [],
+      warnings: [expect.objectContaining({ code: 'branch_behind' })],
+      freshness: { sourceSha: 'persisted-sha', checkedAt: 5555 },
+    })
+  })
+
+  it('does not let stale persisted readiness override terminal closed state', () => {
+    expect(getMergeReadiness(createPullRequest({
+      state: 'closed',
+      merged_at: null,
+      merge_readiness_status: 'ready_to_merge',
+      merge_readiness_action: 'merge',
+    }))).toMatchObject({
+      status: 'blocked',
+      action: 'resolve_blockers',
+      blockers: [expect.objectContaining({ code: 'pull_request_closed' })],
+    })
+  })
+
   it('reports draft pull requests as hard blocked even when GitHub mergeability is clean', () => {
     const result = getMergeReadiness(createPullRequest({ draft: true }))
 
@@ -394,6 +428,30 @@ describe('preservePullRequestState', () => {
     const result = preservePullRequestState(oldPr, newPr)
     expect(result.mergeable).toBe(false)
     expect(result.mergeable_state).toBe('dirty')
+  })
+
+  it('preserves definitive persisted readiness across transient unknown updates for the same source SHA', () => {
+    const oldPr = createPullRequest({
+      head_sha: 'same-sha',
+      merge_readiness_status: 'ready_to_merge',
+      merge_readiness_action: 'merge',
+      readiness_source_head_sha: 'same-sha',
+      readiness_updated_at: 3000,
+    })
+    const newPr = createPullRequest({
+      head_sha: 'same-sha',
+      mergeable: null,
+      mergeable_state: 'unknown',
+      merge_readiness_status: 'readiness_unknown',
+      merge_readiness_action: 'wait_for_github',
+      readiness_source_head_sha: 'same-sha',
+      readiness_updated_at: 4000,
+    })
+
+    const result = preservePullRequestState(oldPr, newPr)
+    expect(result.merge_readiness_status).toBe('ready_to_merge')
+    expect(result.merge_readiness_action).toBe('merge')
+    expect(result.readiness_updated_at).toBe(3000)
   })
 })
 

@@ -43,9 +43,9 @@ describe('deriveTaskAttention', () => {
     expect(deriveTaskAttention([pr], 0)).toEqual({ message: 'Resolve merge conflicts', tone: 'error' })
   })
 
-  it('flags unaddressed comments above CI failures', () => {
+  it('flags failing CI above unaddressed comments when readiness reports a hard blocker', () => {
     const pr = makePr({ unaddressed_comment_count: 2, ci_status: 'failure', mergeable_state: 'blocked' })
-    expect(deriveTaskAttention([pr], 0)).toEqual({ message: 'Review PR comments before merge', tone: 'warning' })
+    expect(deriveTaskAttention([pr], 0)).toEqual({ message: 'Fix failing CI checks', tone: 'error' })
   })
 
   it('flags failing CI', () => {
@@ -61,6 +61,12 @@ describe('deriveTaskAttention', () => {
   it('flags ready to merge', () => {
     const pr = makePr({ mergeable_state: 'clean', ci_status: 'success', review_status: 'approved' })
     expect(deriveTaskAttention([pr], 0)).toEqual({ message: 'Ready to merge', tone: 'success' })
+  })
+
+  it('uses persisted ready-to-enqueue attention and lets actionable readiness outrank another blocked PR', () => {
+    const blocked = makePr({ id: 1, merge_readiness_status: 'blocked', merge_readiness_action: 'resolve_blockers', merge_readiness_blockers: [{ code: 'checks_failed', message: 'Required checks are failing.' }] })
+    const enqueue = makePr({ id: 2, merge_readiness_status: 'ready_to_enqueue', merge_readiness_action: 'enqueue' })
+    expect(deriveTaskAttention([blocked, enqueue], 0)).toEqual({ message: 'Ready to enqueue', tone: 'success' })
   })
 
   it('uses strict merge readiness so requested changes block merge attention', () => {
@@ -81,6 +87,21 @@ describe('deriveTaskAttention', () => {
   it('shows waiting-for-CI as low-priority info', () => {
     const pr = makePr({ ci_status: 'pending', review_status: 'pending', mergeable_state: 'unknown' })
     expect(deriveTaskAttention([pr], 0)).toEqual({ message: 'Waiting for CI', tone: 'info' })
+  })
+
+  it('surfaces dependency blockers before passive PR waiting states', () => {
+    const unknownPr = makePr({ mergeable: null, mergeable_state: 'unknown', ci_status: 'success' })
+    const pendingPr = makePr({ ci_status: 'pending', review_status: 'approved', mergeable_state: 'clean' })
+
+    expect(deriveTaskAttention([unknownPr], 1)).toEqual({ message: 'Blocked by 1 dependency', tone: 'warning' })
+    expect(deriveTaskAttention([pendingPr], 2)).toEqual({ message: 'Blocked by 2 dependencies', tone: 'warning' })
+  })
+
+  it('surfaces later hard PR blockers before earlier passive waiting PRs', () => {
+    const pendingPr = makePr({ id: 1, merge_readiness_status: 'blocked', merge_readiness_action: 'resolve_blockers', merge_readiness_blockers: [{ code: 'checks_pending', message: 'Required checks are still running.' }] })
+    const conflictedPr = makePr({ id: 2, merge_readiness_status: 'blocked', merge_readiness_action: 'resolve_blockers', merge_readiness_blockers: [{ code: 'merge_conflict', message: 'Pull request has merge conflicts.' }] })
+
+    expect(deriveTaskAttention([pendingPr, conflictedPr], 0)).toEqual({ message: 'Resolve merge conflicts', tone: 'error' })
   })
 
   it('shows waiting-for-review when CI is done but review still pending', () => {

@@ -139,6 +139,17 @@ export interface PullRequestInfo {
   draft: boolean;
   is_queued: boolean;
   unaddressed_comment_count: number;
+  merge_readiness_status?: MergeReadinessStatus | null;
+  merge_readiness_action?: MergeReadinessAction | null;
+  merge_readiness_blockers?: string | MergeReadinessDetail[] | null;
+  merge_readiness_warnings?: string | MergeReadinessDetail[] | null;
+  readiness_source_head_sha?: string | null;
+  merge_group_sha?: string | null;
+  required_checks_policy_known?: boolean | null;
+  required_reviews_policy_known?: boolean | null;
+  merge_queue_required?: boolean | null;
+  merge_queue_state?: string | null;
+  readiness_updated_at?: number | null;
 }
 
 export interface PollResult {
@@ -170,6 +181,12 @@ export interface MergeReadinessInfo extends MergeStatusInfo {
   unaddressed_comment_count?: number;
   head_sha?: string | null;
   updated_at?: number | null;
+  merge_readiness_status?: MergeReadinessStatus | null;
+  merge_readiness_action?: MergeReadinessAction | null;
+  merge_readiness_blockers?: string | MergeReadinessDetail[] | null;
+  merge_readiness_warnings?: string | MergeReadinessDetail[] | null;
+  readiness_source_head_sha?: string | null;
+  readiness_updated_at?: number | null;
 }
 
 export interface MergeReadinessOptions {
@@ -252,6 +269,69 @@ function mergeReadinessResult(
   };
 }
 
+const MERGE_READINESS_STATUSES: readonly MergeReadinessStatus[] = [
+  'ready_to_merge',
+  'ready_to_enqueue',
+  'queued_pull_request',
+  'readiness_unknown',
+  'blocked',
+];
+
+const MERGE_READINESS_ACTIONS: readonly MergeReadinessAction[] = [
+  'merge',
+  'enqueue',
+  'wait_for_queue',
+  'wait_for_github',
+  'resolve_blockers',
+];
+
+function isMergeReadinessStatus(value: string | null | undefined): value is MergeReadinessStatus {
+  return MERGE_READINESS_STATUSES.includes(value as MergeReadinessStatus);
+}
+
+function isMergeReadinessAction(value: string | null | undefined): value is MergeReadinessAction {
+  return MERGE_READINESS_ACTIONS.includes(value as MergeReadinessAction);
+}
+
+function parseMergeReadinessDetails(value: string | MergeReadinessDetail[] | null | undefined): MergeReadinessDetail[] {
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed)
+      ? parsed.filter((detail): detail is MergeReadinessDetail =>
+          typeof detail?.code === 'string' && typeof detail?.message === 'string',
+        )
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export function getPersistedMergeReadiness(pr: MergeReadinessInfo): MergeReadinessResult | null {
+  const status = pr.merge_readiness_status ?? null;
+  const action = pr.merge_readiness_action ?? null;
+  if (!isMergeReadinessStatus(status) || !isMergeReadinessAction(action)) return null;
+
+  return {
+    status,
+    action,
+    blockers: parseMergeReadinessDetails(pr.merge_readiness_blockers),
+    warnings: parseMergeReadinessDetails(pr.merge_readiness_warnings),
+    freshness: {
+      sourceSha: pr.readiness_source_head_sha ?? pr.head_sha ?? null,
+      checkedAt: pr.readiness_updated_at ?? pr.updated_at ?? null,
+    },
+  };
+}
+
+function hasMergeReadinessOptions(options: MergeReadinessOptions): boolean {
+  return options.requireBranchUpToDate === true
+    || options.requireConversationResolution === true
+    || options.requireMergeQueue === true;
+}
+
 /**
  * Explains whether a pull request is ready for a direct merge, queue enqueueing,
  * waiting on GitHub/merge queue, or blocked by hard requirements.
@@ -259,10 +339,6 @@ function mergeReadinessResult(
 export function getMergeReadiness(pr: MergeReadinessInfo, options: MergeReadinessOptions = {}): MergeReadinessResult {
   const warnings: MergeReadinessDetail[] = [];
   const blockers: MergeReadinessDetail[] = [];
-  const mergeableState = pr.mergeable_state?.toLowerCase() ?? null;
-  const ciStatus = pr.ci_status?.toLowerCase() ?? null;
-  const reviewStatus = pr.review_status?.toLowerCase() ?? null;
-  const unaddressedCommentCount = pr.unaddressed_comment_count ?? 0;
 
   if (pr.state !== 'open') {
     blockers.push(mergeReadinessDetail(
@@ -271,6 +347,14 @@ export function getMergeReadiness(pr: MergeReadinessInfo, options: MergeReadines
     ));
     return mergeReadinessResult(pr, 'blocked', 'resolve_blockers', blockers, warnings);
   }
+
+  const persisted = hasMergeReadinessOptions(options) ? null : getPersistedMergeReadiness(pr);
+  if (persisted) return persisted;
+
+  const mergeableState = pr.mergeable_state?.toLowerCase() ?? null;
+  const ciStatus = pr.ci_status?.toLowerCase() ?? null;
+  const reviewStatus = pr.review_status?.toLowerCase() ?? null;
+  const unaddressedCommentCount = pr.unaddressed_comment_count ?? 0;
 
   if (pr.draft === true) {
     blockers.push(mergeReadinessDetail('draft', 'Pull request is still marked as draft.'));
@@ -355,7 +439,39 @@ export function isReadyToMerge(pr: MergeReadinessInfo, options?: MergeReadinessO
 
 /** Check if a user-initiated merge affordance may be shown/executed now. */
 export function canMergePullRequest(pr: MergeReadinessInfo): boolean {
-  return isReadyToMerge(pr);
+  const readiness = getMergeReadiness(pr);
+  return readiness.status === 'ready_to_merge' && readiness.action === 'merge';
+}
+
+function mergeReadinessPriority(pr: MergeReadinessInfo): number {
+  if (pr.state !== 'open') return pr.state === 'merged' ? 100 : 90;
+
+  const readiness = getMergeReadiness(pr);
+  switch (readiness.status) {
+    case 'ready_to_merge': return 600;
+    case 'ready_to_enqueue': return 590;
+    case 'blocked': {
+      const blockerCodes = new Set(readiness.blockers.map((blocker) => blocker.code));
+      return blockerCodes.size === 1 && blockerCodes.has('checks_pending') ? 350 : 500;
+    }
+    case 'readiness_unknown': return 300;
+    case 'queued_pull_request': return 250;
+  }
+}
+
+export function getMostAttentionWorthyPullRequest<T extends MergeReadinessInfo>(prs: T[]): T | null {
+  let best: T | null = null;
+  let bestPriority = Number.NEGATIVE_INFINITY;
+
+  for (const pr of prs) {
+    const priority = mergeReadinessPriority(pr);
+    if (priority > bestPriority) {
+      best = pr;
+      bestPriority = priority;
+    }
+  }
+
+  return best;
 }
 
 export interface QueuedStatusInfo {
@@ -388,6 +504,24 @@ export function preservePullRequestState(oldPr: PullRequestInfo | undefined, new
   if (isTransient && oldIsDefinitive) {
     result.mergeable = oldPr.mergeable;
     result.mergeable_state = oldPr.mergeable_state;
+  }
+
+  const oldReadiness = getPersistedMergeReadiness(oldPr);
+  const newReadiness = getPersistedMergeReadiness(result);
+  const sameReadinessSource = (oldPr.readiness_source_head_sha ?? oldPr.head_sha ?? null) === (result.readiness_source_head_sha ?? result.head_sha ?? null);
+  const newReadinessIsTransient = newReadiness === null || newReadiness.status === 'readiness_unknown';
+  if (sameReadinessSource && oldReadiness && oldReadiness.status !== 'readiness_unknown' && newReadinessIsTransient) {
+    result.merge_readiness_status = oldPr.merge_readiness_status;
+    result.merge_readiness_action = oldPr.merge_readiness_action;
+    result.merge_readiness_blockers = oldPr.merge_readiness_blockers;
+    result.merge_readiness_warnings = oldPr.merge_readiness_warnings;
+    result.readiness_source_head_sha = oldPr.readiness_source_head_sha;
+    result.readiness_updated_at = oldPr.readiness_updated_at;
+    result.merge_group_sha = oldPr.merge_group_sha;
+    result.required_checks_policy_known = oldPr.required_checks_policy_known;
+    result.required_reviews_policy_known = oldPr.required_reviews_policy_known;
+    result.merge_queue_required = oldPr.merge_queue_required;
+    result.merge_queue_state = oldPr.merge_queue_state;
   }
 
   return result;

@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { PullRequestInfo } from '../../lib/types'
-  import { canMergePullRequest, hasMergeConflicts, isClosedOrMergedPullRequest, isClosedUnmergedPullRequest, isMergedPullRequest } from '../../lib/types'
+  import { canMergePullRequest, getMergeReadiness, isClosedOrMergedPullRequest, isClosedUnmergedPullRequest, isMergedPullRequest } from '../../lib/types'
   import { linkPullRequest, openUrl } from '../../lib/ipc'
   import { getPrStatusChips } from '@openforge/plugin-sdk/prStatusPresentation'
   import { getGitHubMarkdownImageBaseUrl } from '../../lib/githubMarkdown'
@@ -58,9 +58,15 @@
 
   function cardAccentClass(pr: PullRequestInfo): string {
     if (isClosedOrMergedPullRequest(pr.state)) return 'border-l-base-300'
-    if (pr.ci_status === 'failure' || hasMergeConflicts(pr)) return 'border-l-error'
-    if ((pr.unaddressed_comment_count ?? 0) > 0 || pr.review_status === 'changes_requested') return 'border-l-warning'
-    if (pr.ci_status === 'success') return 'border-l-success'
+
+    const readiness = getMergeReadiness(pr)
+    if (readiness.status === 'ready_to_merge' || readiness.status === 'ready_to_enqueue') return 'border-l-success'
+    if (readiness.status === 'blocked') {
+      const blockerCodes = new Set(readiness.blockers.map((blocker) => blocker.code))
+      if (blockerCodes.has('checks_failed') || blockerCodes.has('merge_conflict')) return 'border-l-error'
+      return 'border-l-warning'
+    }
+    if (readiness.status === 'readiness_unknown') return 'border-l-warning'
     return 'border-l-base-300'
   }
 
@@ -89,9 +95,24 @@
     return new Date(timestamp * 1000).toLocaleDateString()
   }
 
+  function readinessDetailText(pr: PullRequestInfo): string | null {
+    const readiness = getMergeReadiness(pr)
+    if (readiness.status === 'ready_to_enqueue') return 'Ready to enqueue in the merge queue.'
+    if (readiness.status === 'queued_pull_request') return 'Queued pull request — waiting for merge queue validation.'
+    if (readiness.status === 'readiness_unknown') {
+      return readiness.warnings[0]?.message ?? 'Readiness unknown — waiting for GitHub to report definitive mergeability.'
+    }
+    if (readiness.status === 'blocked') return readiness.blockers[0]?.message ?? 'Pull request has readiness blockers.'
+    return null
+  }
+
   function shouldShowMergeDetails(pr: PullRequestInfo): boolean {
+    const readiness = getMergeReadiness(pr)
     return isMergedPullRequest(pr)
-      || canMergePullRequest(pr)
+      || readiness.status === 'ready_to_merge'
+      || readiness.status === 'ready_to_enqueue'
+      || readiness.status === 'queued_pull_request'
+      || readiness.status === 'readiness_unknown'
       || orchestration.mergeFeedbackByPr.has(pr.id)
   }
 </script>
@@ -166,9 +187,14 @@
 
           {#if shouldShowMergeDetails(pr)}
             {@const feedback = orchestration.mergeFeedbackByPr.get(pr.id)}
+            {@const readinessText = readinessDetailText(pr)}
             <div class="border-t border-base-300/70 bg-base-200/35 p-2.5 flex flex-col gap-2" aria-label="Pull request merge status">
               {#if isMergedPullRequest(pr) && pr.merged_at}
                 <div class="text-[0.7rem] text-base-content/60">Merged on {formatDate(pr.merged_at)}</div>
+              {/if}
+
+              {#if readinessText}
+                <div class="text-[0.7rem] text-base-content/60">{readinessText}</div>
               {/if}
 
               {#if canMergePullRequest(pr)}

@@ -379,8 +379,23 @@ describe('getFilterCounts', () => {
     expect(DEFAULT_FOCUS_STATES).toContain('merge-conflict')
   })
 
+  it('includes ready-to-enqueue for actionable merge queue readiness', () => {
+    expect(DEFAULT_FOCUS_STATES).toContain('ready-to-enqueue')
+    const task = makeTask({ id: 'T-queue' })
+    expect(isFocusTask(task, 'ready-to-enqueue', [])).toBe(true)
+  })
+
   it('includes pr-closed for closed-but-unmerged pull requests needing attention', () => {
     expect(DEFAULT_FOCUS_STATES).toContain('pr-closed')
+  })
+
+  it('counts ready-to-enqueue pull requests as default focus attention', () => {
+    const task = makeTask({ id: 'T-enqueue' })
+    const prs = new Map<string, PullRequestInfo[]>([
+      ['T-enqueue', [makePr({ id: 1, ticket_id: 'T-enqueue', merge_readiness_status: 'ready_to_enqueue', merge_readiness_action: 'enqueue' })]],
+    ])
+
+    expect(getFilterCounts([task], new Map(), prs)).toMatchObject({ focus: 1 })
   })
 })
 
@@ -403,7 +418,7 @@ describe('loadFocusFilterStates', () => {
     expect(result).toEqual(['idle', 'needs-input'])
   })
 
-  it('migrates legacy default stored states to include merge-conflict and pr-closed', async () => {
+  it('migrates legacy default stored states to include merge-conflict, pr-closed, and ready-to-enqueue', async () => {
     vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify([
       'idle',
       'needs-input',
@@ -425,6 +440,7 @@ describe('loadFocusFilterStates', () => {
     expect(result).toEqual(DEFAULT_FOCUS_STATES)
     expect(result).toContain('merge-conflict')
     expect(result).toContain('pr-closed')
+    expect(result).toContain('ready-to-enqueue')
   })
 
   it('loads pr-closed as a valid custom focus filter state', async () => {

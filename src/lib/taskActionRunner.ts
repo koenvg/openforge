@@ -17,7 +17,7 @@ import {
 import { writePtyWithSubmit } from './ptySubmit'
 import { focusTerminal, isPtyActive } from './terminalPool'
 import { resolveBranchStart } from './branchStart'
-import { canMergePullRequest } from './types'
+import { getMergeReadiness } from './types'
 import type { DivergenceResolution, Project, Task } from './types'
 
 export interface RunActionData {
@@ -124,7 +124,10 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
 
   async function mergeReadyPullRequest(task: Task): Promise<void> {
     const prs = get(ticketPrs).get(task.id) || []
-    const readyPrs = prs.filter(canMergePullRequest)
+    const readyPrs = prs.filter((pr) => {
+      const readiness = getMergeReadiness(pr)
+      return readiness.status === 'ready_to_merge' && readiness.action === 'merge'
+    })
 
     if (readyPrs.length === 1) {
       const pr = readyPrs[0]

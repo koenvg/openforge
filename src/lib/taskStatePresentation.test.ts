@@ -136,6 +136,12 @@ describe('getTaskReasonText', () => {
       expect(reason).toBe('Ready to merge — all checks passed.')
     })
 
+    it('returns "Ready to enqueue — all requirements passed." for ready-to-enqueue state', () => {
+      const pr = makePr({ id: 1, merge_readiness_status: 'ready_to_enqueue', merge_readiness_action: 'enqueue' })
+      const reason = getTaskReasonText('ready-to-enqueue', [pr])
+      expect(reason).toBe('Ready to enqueue — all requirements passed.')
+    })
+
     it('returns "Pull request is queued for merge." for pr-queued state', () => {
       const pr = makePr({ id: 1, is_queued: true })
       const reason = getTaskReasonText('pr-queued', [pr])

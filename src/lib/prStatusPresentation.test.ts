@@ -71,8 +71,16 @@ describe('getPrStatusChips', () => {
   it('shows queued status instead of Ready to Merge for queued pull requests', () => {
     const chips = getPrStatusChips({ ...basePr, is_queued: true, ci_status: 'success', mergeable: true, mergeable_state: 'clean' }, 'detail');
 
-    expect(chips).toContainEqual(expect.objectContaining({ type: 'merge', label: 'In Merge Queue', variant: 'done' }));
+    expect(chips).toContainEqual(expect.objectContaining({ type: 'merge', label: 'Queued Pull Request', variant: 'done' }));
     expect(chips.some((chip) => chip.type === 'merge' && chip.label === 'Ready to Merge')).toBe(false);
+  });
+
+  it('shows persisted Ready to Enqueue and Readiness Unknown details', () => {
+    expect(getPrStatusChips({ ...basePr, merge_readiness_status: 'ready_to_enqueue', merge_readiness_action: 'enqueue' }, 'detail'))
+      .toContainEqual(expect.objectContaining({ type: 'merge', label: 'Ready to Enqueue', variant: 'done' }));
+
+    expect(getPrStatusChips({ ...basePr, merge_readiness_status: 'readiness_unknown', merge_readiness_action: 'wait_for_github' }, 'detail'))
+      .toContainEqual(expect.objectContaining({ type: 'merge', label: 'Readiness Unknown', variant: 'neutral', icon: 'clock' }));
   });
 
   it('presents closed pull requests separately from merged/done status', () => {
