@@ -195,6 +195,7 @@ async fn prepare_start_workspace(
     repo_path: &str,
     worktree_source: Option<&str>,
     worktree_branch: Option<&str>,
+    divergence_resolution: crate::git_worktree::DivergenceResolution,
 ) -> AppResult<PreparedWorkspace> {
     if worktree_source == Some("disabled") {
         return Ok(PreparedWorkspace {
@@ -234,6 +235,7 @@ async fn prepare_start_workspace(
             Path::new(repo_path),
             &working_dir,
             branch,
+            divergence_resolution,
         )
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
@@ -364,6 +366,11 @@ pub(super) async fn handle_app_start_implementation_command(
 
     let task_id = payload_string(&request.payload, "taskId")?;
     let repo_path = payload_string(&request.payload, "repoPath")?;
+    // Optional: the frontend divergence gate supplies how to resolve a diverged
+    // existing branch. Absent (or null) means the defensive `Auto` behavior.
+    let divergence_resolution: crate::git_worktree::DivergenceResolution =
+        payload_field(&request.payload, "divergenceResolution")
+            .unwrap_or(crate::git_worktree::DivergenceResolution::Auto);
     let pty_manager = state.pty_manager.as_ref().ok_or_else(|| {
         (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -388,6 +395,7 @@ pub(super) async fn handle_app_start_implementation_command(
         &repo_path,
         start_context.task.worktree_source.as_deref(),
         start_context.task.worktree_branch.as_deref(),
+        divergence_resolution,
     )
     .await?;
 

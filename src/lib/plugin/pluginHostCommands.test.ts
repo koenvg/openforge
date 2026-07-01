@@ -72,6 +72,7 @@ describe('plugin host commands', () => {
     expect(invoke).toHaveBeenNthCalledWith(4, 'start_implementation', {
       taskId: 'T-2',
       repoPath: '/repo',
+      divergenceResolution: null,
     })
   })
 

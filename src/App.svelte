@@ -12,6 +12,7 @@
   import FocusBoard from './components/focus-board/FocusBoard.svelte'
   import TaskDetailView from './components/task-detail/TaskDetailView.svelte'
   import AddTaskDialog from './components/AddTaskDialog.svelte'
+  import BranchDivergenceModal from './components/BranchDivergenceModal.svelte'
   import Modal from './components/shared/ui/Modal.svelte'
   import Toast from './components/feedback/toasts/Toast.svelte'
   import CheckpointToast from './components/feedback/toasts/CheckpointToast.svelte'
@@ -549,6 +550,9 @@
 {#if showFileQuickOpen}
   <FileQuickOpen onClose={() => { showFileQuickOpen = false }} />
 {/if}
+
+<!-- Branch divergence prompt (global, store-driven, awaited as a Promise) -->
+<BranchDivergenceModal />
 
 {#if showCloseConfirm}
   <Modal onClose={handleCloseCancel} maxWidth="360px" initialFocus="[data-close-confirm-action='quit']">

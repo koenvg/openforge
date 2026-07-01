@@ -6,6 +6,10 @@
   interface Option {
     value: string
     label: string
+    /** Optional short tag rendered as a daisyUI badge after the label. */
+    badge?: string
+    /** daisyUI badge modifier class (e.g. 'badge-info'); no hardcoded colors. */
+    badgeClass?: string
   }
 
   interface Props {
@@ -26,7 +30,8 @@
   let listEl = $state<HTMLUListElement | null>(null)
   const listboxId = `searchable-select-listbox-${Math.random().toString(36).slice(2)}`
 
-  let selectedLabel = $derived(options.find(o => o.value === value)?.label ?? '')
+  let selectedOption = $derived(options.find(o => o.value === value) ?? null)
+  let selectedLabel = $derived(selectedOption?.label ?? '')
 
   let filtered = $derived.by(() => {
     const q = query.toLowerCase().trim()
@@ -95,7 +100,12 @@
     aria-expanded={open}
     tabindex="0"
   >
-    {selectedLabel || placeholder}
+    <span class="flex min-w-0 items-center gap-2">
+      <span class="truncate">{selectedLabel || placeholder}</span>
+      {#if selectedOption?.badge}
+        <span class="badge badge-xs shrink-0 {selectedOption.badgeClass ?? ''}">{selectedOption.badge}</span>
+      {/if}
+    </span>
   </div>
 
   <!-- Dropdown -->
@@ -131,7 +141,12 @@
             onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectOption(opt) } }}
             onmouseenter={() => { highlightedIndex = i }}
           >
-            {opt.label}
+            <span class="flex min-w-0 items-center justify-between gap-2">
+              <span class="truncate">{opt.label}</span>
+              {#if opt.badge}
+                <span class="badge badge-xs shrink-0 {opt.badgeClass ?? ''}">{opt.badge}</span>
+              {/if}
+            </span>
           </li>
         {:else}
           <li class="px-3 py-2 text-xs text-base-content/40">No matches</li>

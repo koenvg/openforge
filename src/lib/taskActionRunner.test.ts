@@ -7,6 +7,7 @@ vi.mock('./ipc', () => ({
   getSessionStatus: vi.fn(),
   mergePullRequest: vi.fn(),
   startImplementation: vi.fn(),
+  inspectExistingBranch: vi.fn(),
 }))
 
 vi.mock('./ptySubmit', () => ({
@@ -28,11 +29,14 @@ import {
   error,
   startingTasks,
   taskRuntimeInfo,
+  tasks,
   ticketPrs,
 } from './stores'
-import { getSessionStatus, mergePullRequest, startImplementation } from './ipc'
+import { getSessionStatus, inspectExistingBranch, mergePullRequest, startImplementation } from './ipc'
+import { branchDivergenceRequest } from './branchDivergenceModalStore'
 import { focusTerminal, isPtyActive } from './terminalPool'
 import { writePtyWithSubmit } from './ptySubmit'
+import type { ExistingBranchPlan } from './types'
 
 const activeProject: Project = {
   id: 'proj-1',
@@ -94,6 +98,8 @@ describe('createTaskActionRunner', () => {
     startingTasks.set(new Set())
     taskRuntimeInfo.set(new Map())
     ticketPrs.set(new Map())
+    tasks.set([])
+    branchDivergenceRequest.set(null)
     vi.mocked(isPtyActive).mockReturnValue(false)
   })
 
@@ -109,14 +115,99 @@ describe('createTaskActionRunner', () => {
       triggerGithubSync,
     })
 
+    tasks.set([task])
     await runner.handleRunAction({ taskId: task.id, actionPrompt: '', agent: null })
 
-    expect(startImplementation).toHaveBeenCalledWith(task.id, activeProject.path)
+    // Non-existing-branch task: the gate never touches the remote and starts
+    // immediately with the defensive `auto` resolution.
+    expect(inspectExistingBranch).not.toHaveBeenCalled()
+    expect(startImplementation).toHaveBeenCalledWith(task.id, activeProject.path, 'auto')
     expect(get(taskRuntimeInfo).get(task.id)).toEqual({ workspacePath: '/workspace/T-42' })
     expect(get(activeSessions).get(task.id)).toEqual({ ticket_id: task.id, status: 'running' })
     expect(loadTasks).toHaveBeenCalledOnce()
     expect(focusTerminal).toHaveBeenCalledWith(task.id)
     expect(get(startingTasks).has(task.id)).toBe(false)
+  })
+
+  function existingBranchTask(): Task {
+    return { ...task, worktree_source: 'existingBranch', worktree_branch: 'origin/foo' }
+  }
+
+  function plan(relation: ExistingBranchPlan['relation'], overrides: Partial<ExistingBranchPlan> = {}): ExistingBranchPlan {
+    return {
+      relation,
+      ahead: [],
+      behind: [],
+      aheadTruncated: false,
+      behindTruncated: false,
+      remoteReachable: true,
+      ...overrides,
+    }
+  }
+
+  it('auto-starts an existing-branch task that fast-forwards without opening the modal', async () => {
+    const branchTask = existingBranchTask()
+    tasks.set([branchTask])
+    vi.mocked(inspectExistingBranch).mockResolvedValue(plan('autoFastForward'))
+    vi.mocked(startImplementation).mockResolvedValue({ session_id: 's', workspace_path: '/w', task_id: branchTask.id, port: 0 } as any)
+    vi.mocked(getSessionStatus).mockResolvedValue({ ticket_id: branchTask.id, status: 'running' } as any)
+
+    const runner = createTaskActionRunner({
+      getActiveProject: () => activeProject,
+      loadTasks: vi.fn(async () => undefined),
+      triggerGithubSync: vi.fn(async () => undefined),
+    })
+
+    await runner.handleRunAction({ taskId: branchTask.id, actionPrompt: '', agent: null })
+
+    expect(inspectExistingBranch).toHaveBeenCalledWith(activeProject.path, 'origin/foo')
+    expect(get(branchDivergenceRequest)).toBeNull()
+    expect(startImplementation).toHaveBeenCalledWith(branchTask.id, activeProject.path, 'auto')
+  })
+
+  it('opens the divergence modal for a diverged branch and threads the chosen resolution', async () => {
+    const branchTask = existingBranchTask()
+    tasks.set([branchTask])
+    vi.mocked(inspectExistingBranch).mockResolvedValue(
+      plan('diverged', { ahead: [{ shortSha: 'a1b2c3d', subject: 'WIP', author: 'me', relativeDate: '1h ago' }] }),
+    )
+    vi.mocked(startImplementation).mockResolvedValue({ session_id: 's', workspace_path: '/w', task_id: branchTask.id, port: 0 } as any)
+    vi.mocked(getSessionStatus).mockResolvedValue({ ticket_id: branchTask.id, status: 'running' } as any)
+
+    const runner = createTaskActionRunner({
+      getActiveProject: () => activeProject,
+      loadTasks: vi.fn(async () => undefined),
+      triggerGithubSync: vi.fn(async () => undefined),
+    })
+
+    const started = runner.handleRunAction({ taskId: branchTask.id, actionPrompt: '', agent: null })
+    // The modal request is now pending; resolve it with the user's choice.
+    await vi.waitFor(() => expect(get(branchDivergenceRequest)).not.toBeNull())
+    get(branchDivergenceRequest)!.resolve('keepLocal')
+    branchDivergenceRequest.set(null)
+    await started
+
+    expect(startImplementation).toHaveBeenCalledWith(branchTask.id, activeProject.path, 'keepLocal')
+  })
+
+  it('aborts the start when the divergence modal is cancelled', async () => {
+    const branchTask = existingBranchTask()
+    tasks.set([branchTask])
+    vi.mocked(inspectExistingBranch).mockResolvedValue(plan('diverged'))
+
+    const runner = createTaskActionRunner({
+      getActiveProject: () => activeProject,
+      loadTasks: vi.fn(async () => undefined),
+      triggerGithubSync: vi.fn(async () => undefined),
+    })
+
+    const started = runner.handleRunAction({ taskId: branchTask.id, actionPrompt: '', agent: null })
+    await vi.waitFor(() => expect(get(branchDivergenceRequest)).not.toBeNull())
+    get(branchDivergenceRequest)!.resolve('cancel')
+    branchDivergenceRequest.set(null)
+    await started
+
+    expect(startImplementation).not.toHaveBeenCalled()
   })
 
   it('writes to an active PTY instead of starting a new implementation', async () => {

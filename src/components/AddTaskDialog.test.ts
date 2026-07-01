@@ -295,7 +295,7 @@ describe('AddTaskDialog', () => {
     await expandEnvironment()
     await fireEvent.click(screen.getByLabelText('Existing branch'))
     await fireEvent.click(screen.getByRole('combobox', { name: 'Branch' }))
-    await fireEvent.click(await screen.findByRole('option', { name: 'feature/open-pr' }))
+    await fireEvent.click(await screen.findByRole('option', { name: /^feature\/open-pr/ }))
     expect(screen.getByRole('button', { name: /Environment: Worktree · feature\/open-pr · default permissions/ })).toBeTruthy()
 
     const textbox = await findPromptTextbox()
@@ -540,15 +540,15 @@ describe('AddTaskDialog', () => {
     await fireEvent.click(screen.getByLabelText('Existing branch'))
     await fireEvent.click(screen.getByRole('combobox', { name: 'Branch' }))
 
-    expect(await screen.findByRole('option', { name: 'feature/open-pr' })).toBeTruthy()
-    expect(screen.getByRole('option', { name: 'main' })).toBeTruthy()
+    expect(await screen.findByRole('option', { name: /^feature\/open-pr/ })).toBeTruthy()
+    expect(screen.getByRole('option', { name: /^main/ })).toBeTruthy()
 
     const search = screen.getByPlaceholderText('Search...')
     await fireEvent.input(search, { target: { value: 'feature' } })
 
     await waitFor(() => {
-      expect(screen.queryByRole('option', { name: 'main' })).toBeNull()
-      expect(screen.getByRole('option', { name: 'feature/open-pr' })).toBeTruthy()
+      expect(screen.queryByRole('option', { name: /^main/ })).toBeNull()
+      expect(screen.getByRole('option', { name: /^feature\/open-pr/ })).toBeTruthy()
     })
   })
 

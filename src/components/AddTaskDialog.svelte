@@ -3,6 +3,7 @@
   import { ImagePlus } from '@lucide/svelte'
   import type { Task, PermissionMode, Action, GitBranchInfo, WorktreeSource } from '../lib/types'
   import { createTask, updateTask, getProjectConfig, getResolvedAiProvider, listGitBranches } from '../lib/ipc'
+  import { dedupeBranchesForSelector, type BranchLocation } from '../lib/branchSelector'
   import {
     formatTaskPromptWithImageReferences,
     getTaskPromptImageReferences,
@@ -37,6 +38,13 @@
   let selectedExistingBranch = $state('')
   let useWorktree = $state(true)
   let gitBranches = $state<GitBranchInfo[]>([])
+  const branchSelectorOptions = $derived(dedupeBranchesForSelector(gitBranches))
+  // Badge shown per branch so the three states are unambiguous in the selector.
+  const branchLocationBadge: Record<BranchLocation, { text: string; class: string }> = {
+    local: { text: 'local', class: 'badge-ghost' },
+    remote: { text: 'remote', class: 'badge-info' },
+    both: { text: 'local+remote', class: 'badge-success' },
+  }
   let branchLoadError = $state<string | null>(null)
   let aiProvider = $state<string | null>(null)
   let availableActions = $state<Action[]>([])
@@ -137,7 +145,14 @@
         if (projectPath) {
           try {
             gitBranches = await listGitBranches(projectPath)
-            selectedExistingBranch = gitBranches.find((branch) => !branch.is_current)?.name ?? gitBranches[0]?.name ?? ''
+            const options = dedupeBranchesForSelector(gitBranches)
+            const currentNames = new Set(
+              gitBranches.filter((branch) => branch.is_current).map((branch) => branch.name),
+            )
+            // Prefer the first branch that is not the currently checked-out one so
+            // the default is a sensible "other" branch, falling back to the first.
+            const preferred = options.find((option) => !currentNames.has(option.value)) ?? options[0]
+            selectedExistingBranch = preferred?.value ?? ''
           } catch (e) {
             console.error('Failed to list git branches:', e)
             branchLoadError = String(e)
@@ -627,7 +642,7 @@
                         {#if selectedWorktreeSource === 'existingBranch'}
                           <div class="grid grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-2">
                             <span class="text-xs font-medium text-base-content/50">Branch</span>
-                            {#if gitBranches.length === 0}
+                            {#if branchSelectorOptions.length === 0}
                               <div
                                 class="select select-bordered select-xs flex min-w-0 flex-1 items-center text-base-content/40"
                                 aria-label="Branch"
@@ -640,9 +655,11 @@
                                   ariaLabel="Branch"
                                   size="xs"
                                   placeholder="Search branches…"
-                                  options={gitBranches.map((branch) => ({
-                                    value: branch.name,
-                                    label: `${branch.name}${branch.is_remote ? ' (remote)' : ''}`,
+                                  options={branchSelectorOptions.map((option) => ({
+                                    value: option.value,
+                                    label: option.label,
+                                    badge: branchLocationBadge[option.location].text,
+                                    badgeClass: branchLocationBadge[option.location].class,
                                   }))}
                                   value={selectedExistingBranch}
                                   onSelect={(value) => { selectedExistingBranch = value }}

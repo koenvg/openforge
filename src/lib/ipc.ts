@@ -1,7 +1,7 @@
 import { invokeDesktopCommand as invoke, isElectronDesktopBridgeAvailable } from "./desktopIpc";
 import { normalizeTask } from "./boardStatus"
 import type { JsonValue } from '@openforge/plugin-sdk'
-import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource } from "./types";
+import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, DivergenceResolution, ExistingBranchPlan, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource } from "./types";
 
 type RawTask = Omit<Task, 'status'> & { status: string }
 
@@ -120,8 +120,8 @@ export async function removeTaskLabel(taskId: string, labelId: number): Promise<
   return invoke("remove_task_label", { taskId, labelId })
 }
 
-export async function startImplementation(taskId: string, repoPath: string): Promise<ImplementationStatus> {
-  return invoke<ImplementationStatus>("start_implementation", { taskId, repoPath });
+export async function startImplementation(taskId: string, repoPath: string, divergenceResolution: DivergenceResolution | null = null): Promise<ImplementationStatus> {
+  return invoke<ImplementationStatus>("start_implementation", { taskId, repoPath, divergenceResolution });
 }
 
 export async function resumeStartupSessions(): Promise<void> {
@@ -135,6 +135,10 @@ export async function getWorktreeForTask(taskId: string): Promise<WorktreeInfo |
 
 export async function listGitBranches(repoPath: string): Promise<GitBranchInfo[]> {
   return invoke<GitBranchInfo[]>("list_git_branches", { repoPath });
+}
+
+export async function inspectExistingBranch(repoPath: string, branch: string): Promise<ExistingBranchPlan> {
+  return invoke<ExistingBranchPlan>("inspect_existing_branch", { repoPath, branch });
 }
 
 export async function getTaskWorkspace(taskId: string): Promise<TaskWorkspaceInfo | null> {

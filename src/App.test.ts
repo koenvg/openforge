@@ -340,7 +340,7 @@ describe('App startup data loading', () => {
       await vi.waitFor(() => {
         expect(mockRouterNavigateToTask).toHaveBeenCalledWith(createdTask.id)
       })
-      expect(ipc.startImplementation).toHaveBeenCalledWith(createdTask.id, '/test')
+      expect(ipc.startImplementation).toHaveBeenCalledWith(createdTask.id, '/test', 'auto')
       expect(get(stores.selectedTaskId)).toBe(createdTask.id)
 
       resolveStart({ session_id: 'session-new', workspace_path: '/workspace/T-new', task_id: createdTask.id, port: 0 })
