@@ -64,6 +64,13 @@ export const taskDraftNotes = writable<Map<string, string>>(new Map());
 export const focusBoardFilters = writable<Map<string, BoardFilter>>(new Map())
 export const lowFireTaskIdsByProject = writable<Map<string, Set<string>>>(new Map())
 
+/**
+ * Whether the In-flight section is collapsed, keyed per repo + view
+ * (`${projectId}:${filter}`). In-memory only — resets on restart, matching
+ * how focusBoardFilters preserves the active filter for the session.
+ */
+export const inFlightCollapsedByView = writable<Map<string, boolean>>(new Map())
+
 function createBacklogLabelFilters() {
   const store = writable<Map<string, Set<number>>>(new Map())
   let previousProjectId: string | null | undefined = undefined
