@@ -852,7 +852,10 @@ struct PollSinglePrResult {
     pr_id: i64,
     ticket_id: String,
     pr_title: String,
+    /// PR source head SHA persisted on the pull_requests row.
     head_sha: String,
+    /// SHA whose CI signals were evaluated; can be a merge-group SHA.
+    ci_validation_sha: String,
     old_ci_status: Option<String>,
     old_review_status: Option<String>,
     comments: Vec<PrComment>,
@@ -895,7 +898,10 @@ struct BranchPolicyInputs {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CiPersistencePayload {
     pr_id: i64,
+    /// PR source head SHA persisted on the pull_requests row.
     head_sha: String,
+    /// SHA whose CI signals were evaluated; kept separate from the persisted PR head SHA.
+    ci_validation_sha: String,
     status: String,
     check_runs_json: String,
     status_changed: bool,
@@ -973,6 +979,7 @@ fn comment_fetch_error_result(
         ticket_id: pr.ticket_id,
         pr_title: pr.title,
         head_sha: pr.head_sha.clone(),
+        ci_validation_sha: pr.head_sha.clone(),
         old_ci_status,
         old_review_status,
         comments: vec![],
@@ -1198,6 +1205,38 @@ async fn collect_rest_readiness_sources(
     }
 }
 
+fn non_empty_sha(value: Option<String>) -> Option<String> {
+    value.filter(|sha| !sha.is_empty())
+}
+
+fn poll_result_pr_head_sha(
+    pr: &PrRow,
+    graphql_snapshot: Option<&GitHubReadinessSnapshot>,
+    rest_sources: &RestReadinessSources,
+) -> String {
+    graphql_snapshot
+        .and_then(|snapshot| non_empty_sha(snapshot.source_head_sha.clone()))
+        .or_else(|| {
+            rest_sources
+                .pr_details_result
+                .as_ref()
+                .ok()
+                .and_then(|details| non_empty_sha(Some(details.head.sha.clone())))
+        })
+        .unwrap_or_else(|| pr.head_sha.clone())
+}
+
+fn poll_result_ci_validation_sha(
+    graphql_inputs: Option<&MergeReadinessInputs>,
+    rest_sources: &RestReadinessSources,
+    fallback_pr_head_sha: &str,
+) -> String {
+    graphql_inputs
+        .and_then(|inputs| non_empty_sha(inputs.source_head_sha.clone()))
+        .or_else(|| non_empty_sha(Some(rest_sources.rest_ci_sha.clone())))
+        .unwrap_or_else(|| fallback_pr_head_sha.to_string())
+}
+
 fn has_requested_reviewers_from_details(details: &crate::github_client::PullRequest) -> bool {
     details
         .extra
@@ -1363,6 +1402,9 @@ async fn poll_single_pr(
     )
     .await;
     let graphql_inputs = select_snapshot_readiness_inputs(&pr, graphql_snapshot.as_ref());
+    let result_head_sha = poll_result_pr_head_sha(&pr, graphql_snapshot.as_ref(), &rest_sources);
+    let ci_validation_sha =
+        poll_result_ci_validation_sha(graphql_inputs.as_ref(), &rest_sources, &result_head_sha);
 
     let check_runs = graphql_inputs
         .as_ref()
@@ -1425,18 +1467,6 @@ async fn poll_single_pr(
         None,
     );
 
-    let result_head_sha = graphql_inputs
-        .as_ref()
-        .and_then(|inputs| inputs.source_head_sha.clone())
-        .or_else(|| {
-            if rest_sources.rest_ci_sha.is_empty() {
-                None
-            } else {
-                Some(rest_sources.rest_ci_sha.clone())
-            }
-        })
-        .unwrap_or_else(|| pr.head_sha.clone());
-
     readiness_facts = finalize_readiness_facts_for_poll(
         readiness_facts,
         graphql_snapshot.as_ref(),
@@ -1457,6 +1487,7 @@ async fn poll_single_pr(
         ticket_id: pr.ticket_id,
         pr_title: pr.title,
         head_sha: result_head_sha,
+        ci_validation_sha,
         old_ci_status,
         old_review_status,
         comments,
@@ -2179,6 +2210,7 @@ fn ci_persistence_payload(result: &PollSinglePrResult) -> Option<CiPersistencePa
     Some(CiPersistencePayload {
         pr_id: result.pr_id,
         head_sha: result.head_sha.clone(),
+        ci_validation_sha: result.ci_validation_sha.clone(),
         status,
         check_runs_json,
         status_changed,
@@ -3136,6 +3168,7 @@ mod tests {
             ticket_id: "T-100".to_string(),
             pr_title: "Review body test".to_string(),
             head_sha: "abc123".to_string(),
+            ci_validation_sha: "abc123".to_string(),
             old_ci_status: None,
             old_review_status: None,
             comments: vec![PrComment {
@@ -3952,6 +3985,37 @@ mod tests {
     }
 
     #[test]
+    fn github_readiness_keeps_merge_group_validation_sha_out_of_pr_head() {
+        let pr = make_github_readiness_pr();
+        let mut snapshot = readiness_snapshot_with_policy(
+            Some("pr-head-sha"),
+            Some("pr-head-sha"),
+            known_readiness_policy(vec![], Some(0), Some(false), Some(false), Some(true)),
+        );
+        snapshot.merge_queue_state = Some("QUEUED".to_string());
+        snapshot.merge_group_sha = Some("merge-group-sha".to_string());
+        let rest_sources = RestReadinessSources {
+            rest_ci_sha: "merge-group-sha".to_string(),
+            check_runs: None,
+            combined_status: None,
+            reviews: None,
+            pr_details_result: Err(crate::github_client::GitHubError::NetworkError(
+                "unused".to_string(),
+            )),
+            has_requested_reviewers: false,
+            mergeable: None,
+            mergeable_state: None,
+            is_queued: true,
+        };
+
+        let pr_head_sha = poll_result_pr_head_sha(&pr, Some(&snapshot), &rest_sources);
+        let ci_validation_sha = poll_result_ci_validation_sha(None, &rest_sources, &pr_head_sha);
+
+        assert_eq!(pr_head_sha, "pr-head-sha");
+        assert_eq!(ci_validation_sha, "merge-group-sha");
+    }
+
+    #[test]
     fn finalize_readiness_facts_for_poll_adds_warnings_for_unknown_policy_and_new_comments() {
         let mut snapshot = readiness_snapshot_with_policy(
             Some("graphql-head-sha"),
@@ -3983,6 +4047,7 @@ mod tests {
     fn ci_persistence_payload_filters_to_required_checks_and_reports_status_change() {
         let mut result = make_review_body_poll_result(42);
         result.head_sha = "head-sha".to_string();
+        result.ci_validation_sha = "merge-group-sha".to_string();
         result.old_ci_status = Some("pending".to_string());
         result.required_check_names = vec!["ci".to_string()];
         result.check_runs = Some(CheckRunsResponse {
@@ -4007,7 +4072,7 @@ mod tests {
         result.combined_status = Some(CombinedStatusResponse {
             state: "success".to_string(),
             statuses: vec![],
-            sha: "head-sha".to_string(),
+            sha: "merge-group-sha".to_string(),
             total_count: 0,
             extra: serde_json::json!({}),
         });
@@ -4018,6 +4083,7 @@ mod tests {
 
         assert_eq!(payload.pr_id, 42);
         assert_eq!(payload.head_sha, "head-sha");
+        assert_eq!(payload.ci_validation_sha, "merge-group-sha");
         assert_eq!(payload.status, "success");
         assert!(payload.status_changed);
         assert_eq!(persisted_runs.len(), 1);
