@@ -212,10 +212,6 @@ vi.mock('../../lib/router.svelte', () => ({
   }),
 }))
 
-vi.mock('../../lib/moveToComplete', () => ({
-  moveTaskToComplete: vi.fn(async () => undefined),
-}))
-
 vi.mock('../../lib/actions', () => ({
   loadActions: vi.fn(() => Promise.resolve([
     { id: 'builtin-go', name: 'Go', prompt: '', builtin: true, enabled: true },
@@ -382,7 +378,7 @@ describe('TaskDetailView', () => {
   it('shows Start Task button for backlog tasks', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     expect(screen.getByText('Start Task')).toBeTruthy()
-    expect(screen.queryByText('Move to Done')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Complete/ })).toBeNull()
   })
 
   it('does not render a header Edit button (prompt editing lives in the info panel)', () => {
@@ -410,7 +406,7 @@ describe('TaskDetailView', () => {
   it('hides all action buttons for done tasks', () => {
     const doneTask = { ...baseTask, status: 'done' }
     render(TaskDetailView, { props: { task: doneTask, onRunAction: mockOnRunAction } })
-    expect(screen.queryByText('Move to Done')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Complete/ })).toBeNull()
     expect(screen.queryByText('Start Task')).toBeNull()
     expect(screen.queryByText('Go')).toBeNull()
   })
@@ -468,10 +464,11 @@ describe('TaskDetailView', () => {
     expect(mockOnRunAction).toHaveBeenCalledWith({ taskId: 'T-42', actionPrompt: '', agent: null })
   })
 
-  it('shows Move to Done and action buttons for doing tasks', async () => {
+  it('shows Complete and action buttons for doing tasks', async () => {
     const doingTask = { ...baseTask, status: 'doing' }
     render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
-    expect(screen.getByText('Move to Done')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Complete/ })).toBeTruthy()
+    expect(screen.queryByText('Move to Done')).toBeNull()
     await waitFor(() => {
       expect(screen.getByText('Go')).toBeTruthy()
     })
@@ -672,9 +669,9 @@ describe('TaskDetailView', () => {
     expect(screen.queryByText('$ cd board')).toBeNull()
   })
 
-  it('shows the task status badge in the header', () => {
+  it('does not render the task status badge in the header', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
-    expect(screen.getByLabelText('Task status').textContent).toContain('backlog')
+    expect(screen.queryByLabelText('Task status')).toBeNull()
   })
 
   it('shows TaskInfoPanel by default', async () => {
@@ -968,59 +965,32 @@ describe('TaskDetailView', () => {
 
 
 
-  it('navigates to board when task is moved to done', async () => {
+  it('completes a doing task by confirming, deleting it, and navigating to the board', async () => {
+    const { deleteTask } = await import('../../lib/ipc')
+    vi.mocked(deleteTask).mockClear()
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    mockResetToBoard.mockClear()
     const doingTask: Task = { ...baseTask, status: 'doing' }
     render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
-    await fireEvent.click(screen.getByText('Move to Done'))
-    const { moveTaskToComplete } = await import('../../lib/moveToComplete')
-    const { resetToBoard } = await import('../../lib/router.svelte')
-    expect(moveTaskToComplete).toHaveBeenCalledWith('T-42')
-    expect(resetToBoard).not.toHaveBeenCalled()
-  })
-
-  it('delegates task completion to moveTaskToComplete when moved to done', async () => {
-    const { moveTaskToComplete } = await import('../../lib/moveToComplete')
-    const { resetToBoard } = await import('../../lib/router.svelte')
-
-    const callOrder: string[] = []
-    vi.mocked(resetToBoard).mockImplementation(() => { callOrder.push('resetToBoard') })
-    vi.mocked(moveTaskToComplete).mockImplementation(async () => { callOrder.push('moveTaskToComplete') })
-
-    const doingTask: Task = { ...baseTask, status: 'doing' }
-    render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
-    await fireEvent.click(screen.getByText('Move to Done'))
-
+    await fireEvent.click(screen.getByRole('button', { name: /Complete/ }))
     await vi.waitFor(() => {
-      expect(callOrder).toEqual(['moveTaskToComplete'])
+      expect(deleteTask).toHaveBeenCalledWith('T-42')
     })
-
-    vi.mocked(resetToBoard).mockReset()
-    vi.mocked(moveTaskToComplete).mockReset()
-    vi.mocked(moveTaskToComplete).mockResolvedValue(undefined)
+    expect(mockResetToBoard).toHaveBeenCalled()
+    confirmSpy.mockRestore()
   })
 
-  it('awaits moveTaskToComplete when moving task to done', async () => {
+  it('does not complete the task when the confirmation is cancelled', async () => {
+    const { deleteTask } = await import('../../lib/ipc')
+    vi.mocked(deleteTask).mockClear()
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    mockResetToBoard.mockClear()
     const doingTask: Task = { ...baseTask, status: 'doing' }
-    const { moveTaskToComplete } = await import('../../lib/moveToComplete')
-    const { resetToBoard } = await import('../../lib/router.svelte')
-
-    let resolveMove: (() => void) | undefined
-    vi.mocked(moveTaskToComplete).mockImplementationOnce(
-      () => new Promise<void>((resolve) => {
-        resolveMove = resolve
-      }),
-    )
-
     render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
-
-    vi.mocked(resetToBoard).mockClear()
-
-    await fireEvent.click(screen.getByText('Move to Done'))
-
-    expect(moveTaskToComplete).toHaveBeenCalledWith('T-42')
-    expect(resetToBoard).not.toHaveBeenCalled()
-
-    resolveMove?.()
+    await fireEvent.click(screen.getByRole('button', { name: /Complete/ }))
+    expect(deleteTask).not.toHaveBeenCalled()
+    expect(mockResetToBoard).not.toHaveBeenCalled()
+    confirmSpy.mockRestore()
   })
 
   it('shows action buttons in dropdown when actions exist', async () => {

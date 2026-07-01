@@ -71,13 +71,13 @@ describe('getTaskActions', () => {
     expect(ids).toContain('delete-task')
   })
 
-  it('returns Move to Done, Delete + custom actions for doing task', () => {
+  it('returns Complete (delete) + custom actions for doing task, never Move to Done', () => {
     const task = makeTask({ status: 'doing' })
     const custom = makeAction({ id: 'custom-1', name: 'Deploy' })
     const actions = getTaskActions(task, [custom], [])
     const ids = actions.map(a => a.id)
     expect(ids).not.toContain('start-task')
-    expect(ids).toContain('move-to-done')
+    expect(ids).not.toContain('move-to-done')
     expect(ids).toContain('delete-task')
     expect(ids).toContain('custom-action-custom-1')
   })
@@ -173,7 +173,7 @@ describe('getAvailableActions', () => {
     const task = makeTask({ status: 'doing' })
     const actions = getAvailableActions(task, [], [])
     const ids = actions.map(a => a.id)
-    expect(ids).toContain('move-to-done')
+    expect(ids).not.toContain('move-to-done')
     expect(ids).toContain('delete-task')
     expect(ids).toContain('go-back')
     expect(ids).toContain('search-tasks')

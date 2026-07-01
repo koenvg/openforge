@@ -106,25 +106,6 @@ async fn handles_config_projects_tasks_and_unmatched_commands() {
         .expect("get deleted task")
         .is_none());
 
-    let done_task = {
-        let db = crate::db::acquire_db(&state.db);
-        db.create_task("Done task", "done", Some(project_id), None, None)
-            .expect("create done task")
-    };
-    assert_eq!(
-        invoke_ok(
-            &state,
-            "clear_done_tasks",
-            json!({ "projectId": project_id })
-        )
-        .await,
-        1
-    );
-    assert!(crate::db::acquire_db(&state.db)
-        .get_task(&done_task.id)
-        .expect("get cleared task")
-        .is_none());
-
     invoke_ok(&state, "delete_project", json!({ "id": project_id })).await;
 
     let unsupported = invoke(

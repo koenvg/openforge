@@ -42,7 +42,6 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'update_task_summary',
   'update_task_status',
   'delete_task',
-  'clear_done_tasks',
   'get_tasks',
   'get_task_detail',
   'get_tasks_for_project',

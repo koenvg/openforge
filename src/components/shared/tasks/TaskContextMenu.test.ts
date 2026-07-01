@@ -9,10 +9,6 @@ vi.mock('../../../lib/ipc', () => ({
   deleteTask: vi.fn(),
 }))
 
-vi.mock('../../../lib/moveToComplete', () => ({
-  moveTaskToComplete: vi.fn().mockResolvedValue(undefined),
-}))
-
 const makeTask = (id: string, status: BoardStatus): Task => ({
   id,
   initial_prompt: 'Test task',
@@ -42,7 +38,7 @@ describe('TaskContextMenu', () => {
     tasks.set([makeTask('T-1', 'backlog')])
     render(TaskContextMenu, { props: { visible: false, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
     expect(screen.queryByText('Start Task')).toBeNull()
-    expect(screen.queryByText('Delete')).toBeNull()
+    expect(screen.queryByText(/Complete/)).toBeNull()
   })
 
   it('shows Start Task for backlog tasks when onStart is provided', () => {
@@ -107,30 +103,13 @@ describe('TaskContextMenu', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
-  it('shows Move to Done for doing tasks', () => {
-    tasks.set([makeTask('T-1', 'doing')])
-    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
-    expect(screen.getByText('Move to Done')).toBeTruthy()
-  })
-
-  it('does not show Move to Done for backlog tasks', () => {
-    tasks.set([makeTask('T-1', 'backlog')])
-    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
-    expect(screen.queryByText('Move to Done')).toBeNull()
-  })
-
-  it('does not show Move to Done for done tasks', () => {
-    tasks.set([makeTask('T-1', 'done')])
-    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
-    expect(screen.queryByText('Move to Done')).toBeNull()
-  })
-
-  it('calls shared moveTaskToComplete without resetting to board when Move to Done is clicked', async () => {
-    const { moveTaskToComplete } = await import('../../../lib/moveToComplete')
-    tasks.set([makeTask('T-1', 'doing')])
-    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
-    await fireEvent.click(screen.getByText('Move to Done'))
-    expect(moveTaskToComplete).toHaveBeenCalledWith('T-1', { resetToBoard: false })
+  it('never shows Move to Done (the Done story is removed)', () => {
+    for (const status of ['backlog', 'doing', 'done'] as BoardStatus[]) {
+      tasks.set([makeTask('T-1', status)])
+      const { unmount } = render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
+      expect(screen.queryByText('Move to Done')).toBeNull()
+      unmount()
+    }
   })
 
   it('shows Move to Low-Fire for doing tasks outside low-fire', () => {
@@ -186,87 +165,46 @@ describe('TaskContextMenu', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
-  it('shows Reopen for done tasks when onReopen is provided', () => {
-    tasks.set([makeTask('T-1', 'done')])
-    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn(), onReopen: vi.fn() } })
-    expect(screen.getByText('Reopen')).toBeTruthy()
+  it('never shows Reopen (the Done story is removed)', () => {
+    for (const status of ['backlog', 'doing', 'done'] as BoardStatus[]) {
+      tasks.set([makeTask('T-1', status)])
+      const { unmount } = render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn(), onReopen: vi.fn() } })
+      expect(screen.queryByText('Reopen')).toBeNull()
+      unmount()
+    }
   })
 
-  it('does not show Reopen for doing tasks', () => {
-    tasks.set([makeTask('T-1', 'doing')])
-    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn(), onReopen: vi.fn() } })
-    expect(screen.queryByText('Reopen')).toBeNull()
-  })
-
-  it('does not show Reopen for backlog tasks', () => {
-    tasks.set([makeTask('T-1', 'backlog')])
-    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn(), onReopen: vi.fn() } })
-    expect(screen.queryByText('Reopen')).toBeNull()
-  })
-
-  it('does not show Reopen when onReopen is not provided', () => {
-    tasks.set([makeTask('T-1', 'done')])
-    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
-    expect(screen.queryByText('Reopen')).toBeNull()
-  })
-
-  it('calls onReopen with taskId and closes when Reopen is clicked', async () => {
-    const onReopen = vi.fn()
-    const onClose = vi.fn()
-    tasks.set([makeTask('T-1', 'done')])
-    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose, onReopen } })
-    await fireEvent.click(screen.getByText('Reopen'))
-    expect(onReopen).toHaveBeenCalledWith('T-1')
-    expect(onClose).toHaveBeenCalled()
-  })
-
-  it('offers no path back to backlog for done tasks (only Reopen and Delete)', () => {
-    tasks.set([makeTask('T-1', 'done')])
-    render(TaskContextMenu, {
-      props: {
-        visible: true,
-        x: 0,
-        y: 0,
-        taskId: 'T-1',
-        onClose: vi.fn(),
-        onStart: vi.fn(),
-        onEdit: vi.fn(),
-        onReopen: vi.fn(),
-        onMoveToLowFire: vi.fn(),
-        onMoveToFocus: vi.fn(),
-      },
-    })
-    expect(screen.queryByText('Start Task')).toBeNull()
-    expect(screen.queryByText('Edit Task')).toBeNull()
-    expect(screen.queryByText('Move to Done')).toBeNull()
-    expect(screen.queryByText('Move to Low-Fire')).toBeNull()
-    expect(screen.queryByText('Backlog')).toBeNull()
-    expect(screen.getByText('Reopen')).toBeTruthy()
-    expect(screen.getByText('Delete')).toBeTruthy()
-  })
-
-  it('always shows Delete option', () => {
+  it('always shows the Complete option instead of Delete', () => {
     tasks.set([makeTask('T-1', 'doing')])
     render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
-    expect(screen.getByText('Delete')).toBeTruthy()
+    expect(screen.getByText(/Complete/)).toBeTruthy()
+    expect(screen.queryByText('Delete')).toBeNull()
   })
 
-  it('calls deleteTask and onDelete when Delete is clicked', async () => {
+  it('confirms, then calls deleteTask and onDelete when Complete is confirmed', async () => {
     const { deleteTask } = await import('../../../lib/ipc')
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
     const onDelete = vi.fn()
+    const onClose = vi.fn()
     tasks.set([makeTask('T-1', 'doing')])
-    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn(), onDelete } })
-    await fireEvent.click(screen.getByText('Delete'))
+    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose, onDelete } })
+    await fireEvent.click(screen.getByText(/Complete/))
+    expect(confirmSpy).toHaveBeenCalled()
     expect(deleteTask).toHaveBeenCalledWith('T-1')
     expect(onDelete).toHaveBeenCalledWith('T-1')
+    expect(onClose).toHaveBeenCalled()
+    confirmSpy.mockRestore()
   })
 
-  it('calls deleteTask without onDelete when not provided', async () => {
+  it('does not delete when Complete confirmation is cancelled', async () => {
     const { deleteTask } = await import('../../../lib/ipc')
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
     tasks.set([makeTask('T-1', 'doing')])
     render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
-    await fireEvent.click(screen.getByText('Delete'))
-    expect(deleteTask).toHaveBeenCalledWith('T-1')
+    await fireEvent.click(screen.getByText(/Complete/))
+    expect(confirmSpy).toHaveBeenCalled()
+    expect(deleteTask).not.toHaveBeenCalled()
+    confirmSpy.mockRestore()
   })
 
   it('closes menu on outside click', async () => {

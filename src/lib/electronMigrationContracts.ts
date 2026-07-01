@@ -48,7 +48,6 @@ export const ipcCommandContracts = [
   { functionName: 'updateTaskSummary', ipcCommand: 'update_task_summary', payloadKeys: ['id', 'summary'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'updateTaskStatus', ipcCommand: 'update_task_status', payloadKeys: ['id', 'status'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'deleteTask', ipcCommand: 'delete_task', payloadKeys: ['id'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
-  { functionName: 'clearDoneTasks', ipcCommand: 'clear_done_tasks', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'getAppMode', ipcCommand: 'get_app_mode', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'getGitBranch', ipcCommand: 'get_git_branch', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'createProject', ipcCommand: 'create_project', payloadKeys: ['name', 'path'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
@@ -178,7 +177,7 @@ export const appShellEventContracts = [
   { eventName: 'review-pr-count-changed', payload: 'number', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'github-review' },
   { eventName: 'authored-prs-updated', payload: 'void', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'github-review' },
   { eventName: 'github-rate-limited', payload: 'GitHub rate limit payload', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'github-review' },
-  { eventName: 'task-changed', payload: '{ action: "created" | "updated" | "deleted"; task_id: string } | { action: "cleared_done"; count: number }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'tasks-projects' },
+  { eventName: 'task-changed', payload: '{ action: "created" | "updated" | "deleted"; task_id: string }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'tasks-projects' },
 ] as const satisfies readonly AppShellEventContract[]
 
 export const dynamicShellEventContracts = [

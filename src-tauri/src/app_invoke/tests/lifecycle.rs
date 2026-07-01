@@ -1318,11 +1318,11 @@ async fn setup_owned_worktree_task(
 }
 
 #[tokio::test]
-async fn move_to_done_deletes_owned_branch_when_safe() {
+async fn update_task_status_to_done_does_not_clean_up_worktree() {
     let temp = tempfile::tempdir().expect("tempdir should be created");
     let repo_dir = temp.path().join("repo");
     let worktree_dir = temp.path().join("wt");
-    let (state, db_path) = test_state("app_invoke_done_deletes_owned_branch");
+    let (state, db_path) = test_state("app_invoke_done_keeps_worktree");
     let (task_id, branch) = setup_owned_worktree_task(&state, &repo_dir, &worktree_dir, true).await;
 
     invoke_ok(
@@ -1333,19 +1333,19 @@ async fn move_to_done_deletes_owned_branch_when_safe() {
     .await;
 
     assert!(
-        !branch_exists_lifecycle(&repo_dir, &branch),
-        "moving an OpenForge task to Done must clean up its safe owned branch"
+        branch_exists_lifecycle(&repo_dir, &branch),
+        "moving a task to Done must no longer delete its branch"
     );
     assert!(
-        !worktree_dir.exists(),
-        "the worktree directory should be removed when moving to Done"
+        worktree_dir.exists(),
+        "moving a task to Done must no longer remove its worktree directory"
     );
     let db = crate::db::acquire_db(&state.db);
     assert!(
         db.get_worktree_for_task(&task_id)
             .expect("get worktree")
-            .is_none(),
-        "the stale worktree record must be removed after moving to Done"
+            .is_some(),
+        "the worktree record must survive a move to Done"
     );
     drop(db);
 
@@ -1365,97 +1365,6 @@ async fn delete_task_deletes_owned_branch_when_safe() {
     assert!(
         !branch_exists_lifecycle(&repo_dir, &branch),
         "deleting an OpenForge task must clean up its safe owned branch"
-    );
-
-    let _ = std::fs::remove_file(db_path);
-}
-
-#[tokio::test]
-async fn move_to_done_preserves_owned_branch_with_unpushed_work() {
-    let temp = tempfile::tempdir().expect("tempdir should be created");
-    let repo_dir = temp.path().join("repo");
-    let worktree_dir = temp.path().join("wt");
-    let (state, db_path) = test_state("app_invoke_done_preserves_unpushed_branch");
-    // Not marked pushed: the branch carries local-only commits.
-    let (task_id, branch) =
-        setup_owned_worktree_task(&state, &repo_dir, &worktree_dir, false).await;
-    std::fs::write(worktree_dir.join("README.md"), "local-only work\n")
-        .expect("fixture file should write");
-    assert_git_success(&worktree_dir, &["commit", "-am", "local-only commit"]);
-
-    invoke_ok(
-        &state,
-        "update_task_status",
-        json!({ "id": task_id, "status": "done" }),
-    )
-    .await;
-
-    assert!(
-        branch_exists_lifecycle(&repo_dir, &branch),
-        "moving to Done must never delete a branch with unpushed local work"
-    );
-
-    let _ = std::fs::remove_file(db_path);
-}
-
-#[tokio::test]
-async fn move_to_done_preserves_existing_branch_source_branch() {
-    let temp = tempfile::tempdir().expect("tempdir should be created");
-    let repo_dir = temp.path().join("repo");
-    let worktree_dir = temp.path().join("wt");
-    init_committed_repo(&repo_dir);
-    // A pre-existing branch the task was started FROM.
-    assert_git_success(&repo_dir, &["branch", "feature/keep"]);
-    assert_git_success(
-        &repo_dir,
-        &[
-            "worktree",
-            "add",
-            worktree_dir.to_str().expect("utf8 worktree path"),
-            "feature/keep",
-        ],
-    );
-    let (state, db_path) = test_state("app_invoke_done_preserves_existing_branch");
-    let task_id = {
-        let db = crate::db::acquire_db(&state.db);
-        let project = db
-            .create_project(
-                "Existing Branch Project",
-                repo_dir.to_str().expect("utf8 repo path"),
-            )
-            .expect("create project");
-        let task = db
-            .create_task_with_worktree_source(
-                "continue existing branch",
-                "doing",
-                Some(&project.id),
-                None,
-                None,
-                Some("existingBranch"),
-                Some("feature/keep"),
-            )
-            .expect("create task");
-        db.create_worktree_record(
-            &task.id,
-            &project.id,
-            repo_dir.to_str().expect("utf8 repo path"),
-            worktree_dir.to_str().expect("utf8 worktree path"),
-            "feature/keep",
-        )
-        .expect("create worktree record");
-        task.id
-    };
-
-    invoke_ok(
-        &state,
-        "update_task_status",
-        json!({ "id": task_id, "status": "done" }),
-    )
-    .await;
-
-    assert!(
-        branch_exists_lifecycle(&repo_dir, "feature/keep"),
-        "moving an existingBranch-sourced task to Done must never delete that branch"
     );
 
     let _ = std::fs::remove_file(db_path);

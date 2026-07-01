@@ -11,7 +11,6 @@
     'focus': { title: 'All clear', subtitle: 'Nothing needs your attention right now' },
     'low-fire': { title: 'Low-Fire is clear', subtitle: 'No set-aside tasks in this lane' },
     'backlog': { title: 'Backlog is empty', subtitle: 'Create a task with \u2318T to get started' },
-    'done': { title: 'No completed tasks yet', subtitle: 'Finished tasks collect here \u2014 reopen one to pick it back up' },
   }
 
   let message = $derived(messages[filter])

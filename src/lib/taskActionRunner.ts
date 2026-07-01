@@ -16,7 +16,6 @@ import {
 } from './ipc'
 import { writePtyWithSubmit } from './ptySubmit'
 import { focusTerminal, isPtyActive } from './terminalPool'
-import { moveTaskToComplete } from './moveToComplete'
 import { resolveBranchStart } from './branchStart'
 import { canMergePullRequest } from './types'
 import type { DivergenceResolution, Project, Task } from './types'
@@ -118,10 +117,6 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
     }
   }
 
-  async function moveTaskToDone(taskId: string): Promise<void> {
-    await moveTaskToComplete(taskId)
-  }
-
   async function deleteTaskAndReload(taskId: string): Promise<void> {
     await deleteTask(taskId)
     await options.loadTasks()
@@ -156,7 +151,6 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
 
   return {
     handleRunAction,
-    moveTaskToDone,
     deleteTaskAndReload,
     mergeReadyPullRequest,
   }

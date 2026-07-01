@@ -1,6 +1,7 @@
 import { get } from 'svelte/store'
 import { activeProjectId } from './stores'
 import { getEnabledActions, loadActions } from './actions'
+import { confirmCompleteTask } from './completeTask'
 import type { Action, Task } from './types'
 import type { RunActionData, TaskActionRunner } from './taskActionRunner'
 
@@ -55,13 +56,8 @@ export function useActionPaletteController(options: ActionPaletteControllerOptio
       case 'start-task':
         if (task) await options.taskActions.handleRunAction({ taskId: task.id, actionPrompt: '', agent: null })
         break
-      case 'move-to-done':
-        if (task) {
-          await options.taskActions.moveTaskToDone(task.id)
-        }
-        break
       case 'delete-task':
-        if (task) {
+        if (task && confirmCompleteTask()) {
           await options.taskActions.deleteTaskAndReload(task.id)
         }
         break

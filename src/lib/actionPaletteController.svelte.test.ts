@@ -44,7 +44,6 @@ describe('useActionPaletteController', () => {
     let currentSelectedTask: Task | null = selectedTask
     const taskActions = {
       handleRunAction: vi.fn(async () => undefined),
-      moveTaskToDone: vi.fn(async () => undefined),
       deleteTaskAndReload: vi.fn(async () => undefined),
       mergeReadyPullRequest: vi.fn(async () => undefined),
     }
@@ -78,7 +77,6 @@ describe('useActionPaletteController', () => {
   it('delegates built-in palette actions to UI callbacks and task actions', async () => {
     const taskActions = {
       handleRunAction: vi.fn(async () => undefined),
-      moveTaskToDone: vi.fn(async () => undefined),
       deleteTaskAndReload: vi.fn(async () => undefined),
       mergeReadyPullRequest: vi.fn(async () => undefined),
     }
@@ -95,14 +93,61 @@ describe('useActionPaletteController', () => {
     })
 
     await controller.openActionPalette()
-    await controller.executeAction('move-to-done')
-    await controller.openActionPalette()
     await controller.executeAction('new-task')
     await controller.openActionPalette()
     await controller.executeAction('refresh-github')
 
-    expect(taskActions.moveTaskToDone).toHaveBeenCalledWith(selectedTask.id)
     expect(showNewTask).toHaveBeenCalledOnce()
     expect(triggerGithubSync).toHaveBeenCalledOnce()
+  })
+
+  it('confirms before completing (deleting) a task from the palette', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const taskActions = {
+      handleRunAction: vi.fn(async () => undefined),
+      deleteTaskAndReload: vi.fn(async () => undefined),
+      mergeReadyPullRequest: vi.fn(async () => undefined),
+    }
+    const controller = useActionPaletteController({
+      getSelectedTask: () => selectedTask,
+      taskActions,
+      goBack: vi.fn(),
+      showSearchTasks: vi.fn(),
+      showNewTask: vi.fn(),
+      showProjectSwitcher: vi.fn(),
+      triggerGithubSync: vi.fn(async () => undefined),
+    })
+
+    await controller.openActionPalette()
+    await controller.executeAction('delete-task')
+
+    expect(confirmSpy).toHaveBeenCalled()
+    expect(taskActions.deleteTaskAndReload).toHaveBeenCalledWith(selectedTask.id)
+    confirmSpy.mockRestore()
+  })
+
+  it('does not complete the task when the confirmation is cancelled', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const taskActions = {
+      handleRunAction: vi.fn(async () => undefined),
+      deleteTaskAndReload: vi.fn(async () => undefined),
+      mergeReadyPullRequest: vi.fn(async () => undefined),
+    }
+    const controller = useActionPaletteController({
+      getSelectedTask: () => selectedTask,
+      taskActions,
+      goBack: vi.fn(),
+      showSearchTasks: vi.fn(),
+      showNewTask: vi.fn(),
+      showProjectSwitcher: vi.fn(),
+      triggerGithubSync: vi.fn(async () => undefined),
+    })
+
+    await controller.openActionPalette()
+    await controller.executeAction('delete-task')
+
+    expect(confirmSpy).toHaveBeenCalled()
+    expect(taskActions.deleteTaskAndReload).not.toHaveBeenCalled()
+    confirmSpy.mockRestore()
   })
 })

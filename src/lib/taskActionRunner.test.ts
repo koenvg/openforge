@@ -19,10 +19,6 @@ vi.mock('./terminalPool', () => ({
   isPtyActive: vi.fn(() => false),
 }))
 
-vi.mock('./moveToComplete', () => ({
-  moveTaskToComplete: vi.fn(),
-}))
-
 import { createTaskActionRunner } from './taskActionRunner'
 import {
   activeSessions,
