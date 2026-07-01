@@ -74,6 +74,17 @@ function createPr(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
     draft: false,
     is_queued: false,
     unaddressed_comment_count: 0,
+    merge_readiness_status: null,
+    merge_readiness_action: null,
+    merge_readiness_blockers: null,
+    merge_readiness_warnings: null,
+    readiness_source_head_sha: null,
+    merge_group_sha: null,
+    required_checks_policy_known: null,
+    required_reviews_policy_known: null,
+    merge_queue_required: null,
+    merge_queue_state: null,
+    readiness_updated_at: null,
     ...restOverrides,
   }
 }
@@ -318,7 +329,7 @@ describe('computeTaskState - pr-queued (PART 3)', () => {
     expect(state).toBe('ci-failed')
   })
 
-  it('test 4: is_queued takes priority over changes_requested to match the queued PR badge', () => {
+  it('test 4: changes_requested readiness blocker takes priority over queued state', () => {
     const task = createTask({ status: 'doing' })
     const session = createSession({ status: 'completed' })
     const prs = [
@@ -331,7 +342,7 @@ describe('computeTaskState - pr-queued (PART 3)', () => {
     ]
 
     const state = computeTaskState(task, session, prs)
-    expect(state).toBe('pr-queued')
+    expect(state).toBe('changes-requested')
   })
 
   it('test 5: is_queued with no session → pr-queued', () => {
@@ -705,11 +716,36 @@ describe('computeTaskState - transient null mergeability (PART 5b)', () => {
     expect(computeTaskState(task, session, prs)).toBe('pr-queued')
   })
 
-  it('test 9: pending CI + is_queued — queued state does not become ci-running or ready-to-merge', () => {
+  it('test 9: pending CI + is_queued — persisted readiness blockers outrank queued state', () => {
     const task = createTask({ status: 'doing' })
     const session = createSession({ status: 'completed' })
     const prs = [createPr({ state: 'open', mergeable_state: 'clean', ci_status: 'pending', is_queued: true })]
-    expect(computeTaskState(task, session, prs)).toBe('pr-queued')
+    expect(computeTaskState(task, session, prs)).toBe('ci-running')
+  })
+
+  it('test 10: persisted ready_to_enqueue surfaces ready-to-enqueue task state', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', merge_readiness_status: 'ready_to_enqueue', merge_readiness_action: 'enqueue', readiness_source_head_sha: 'abc123', readiness_updated_at: 2000 })]
+    expect(computeTaskState(task, session, prs)).toBe('ready-to-enqueue')
+  })
+
+  it('test 11: actionable readiness outranks another PR with blockers', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const blocked = createPr({ id: 1, state: 'open', merge_readiness_status: 'blocked', merge_readiness_action: 'resolve_blockers', merge_readiness_blockers: [{ code: 'checks_failed', message: 'Required checks are failing.' }], readiness_source_head_sha: 'abc123', readiness_updated_at: 2000 })
+    const ready = createPr({ id: 2, state: 'open', merge_readiness_status: 'ready_to_merge', merge_readiness_action: 'merge', readiness_source_head_sha: 'abc123', readiness_updated_at: 2000 })
+    expect(computeTaskState(task, session, [blocked, ready])).toBe('ready-to-merge')
+    expect(getStateDrivingPr([blocked, ready])).toBe(ready)
+  })
+
+  it('test 12: hard blockers outrank earlier passive waiting PRs', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const passive = createPr({ id: 1, state: 'open', merge_readiness_status: 'blocked', merge_readiness_action: 'resolve_blockers', merge_readiness_blockers: [{ code: 'checks_pending', message: 'Required checks are still running.' }], readiness_source_head_sha: 'abc123', readiness_updated_at: 2000 })
+    const blocked = createPr({ id: 2, state: 'open', merge_readiness_status: 'blocked', merge_readiness_action: 'resolve_blockers', merge_readiness_blockers: [{ code: 'merge_conflict', message: 'Pull request has merge conflicts.' }], readiness_source_head_sha: 'abc123', readiness_updated_at: 2000 })
+    expect(computeTaskState(task, session, [passive, blocked])).toBe('merge-conflict')
+    expect(getStateDrivingPr([passive, blocked])).toBe(blocked)
   })
 })
 
@@ -791,10 +827,10 @@ describe('getStateDrivingPr', () => {
     expect(getStateDrivingPr([merged, open])).toBe(open)
   })
 
-  it('with multiple open PRs returns the first open PR (array order)', () => {
-    const first = createPr({ state: 'open', id: 10 })
-    const second = createPr({ state: 'open', id: 20 })
-    expect(getStateDrivingPr([first, second])).toBe(first)
+  it('with multiple open PRs returns the most attention-worthy PR', () => {
+    const blocked = createPr({ state: 'open', id: 10, mergeable_state: 'dirty' })
+    const ready = createPr({ state: 'open', id: 20, merge_readiness_status: 'ready_to_enqueue', merge_readiness_action: 'enqueue', readiness_source_head_sha: 'abc123', readiness_updated_at: 2000 })
+    expect(getStateDrivingPr([blocked, ready])).toBe(ready)
   })
 
   it('prefers an open PR over a closed PR later in array', () => {

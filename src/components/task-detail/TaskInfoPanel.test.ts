@@ -95,6 +95,17 @@ describe('TaskInfoPanel', () => {
       draft: false,
       is_queued: false,
       unaddressed_comment_count: 0,
+    merge_readiness_status: null,
+    merge_readiness_action: null,
+    merge_readiness_blockers: null,
+    merge_readiness_warnings: null,
+    readiness_source_head_sha: null,
+    merge_group_sha: null,
+    required_checks_policy_known: null,
+    required_reviews_policy_known: null,
+    merge_queue_required: null,
+    merge_queue_state: null,
+    readiness_updated_at: null,
       ...overrides,
     }
   }
@@ -143,13 +154,24 @@ describe('TaskInfoPanel', () => {
       ci_status: 'failure',
       review_status: 'changes_requested',
       unaddressed_comment_count: 1,
+    merge_readiness_status: null,
+    merge_readiness_action: null,
+    merge_readiness_blockers: null,
+    merge_readiness_warnings: null,
+    readiness_source_head_sha: null,
+    merge_group_sha: null,
+    required_checks_policy_known: null,
+    required_reviews_policy_known: null,
+    merge_queue_required: null,
+    merge_queue_state: null,
+    readiness_updated_at: null,
     })]]]))
 
     render(TaskInfoPanel, { props: { task: { ...baseTask, summary: 'Reviewer handoff notes' }, workspacePath: null } })
 
     await screen.findByText('Pull Requests')
     const content = document.body.textContent ?? ''
-    const attentionMessage = 'Review PR comments before merge'
+    const attentionMessage = 'Fix failing CI checks'
     expect(screen.getByText(attentionMessage)).toBeTruthy()
     expect(content.indexOf(attentionMessage)).toBeLessThan(content.indexOf('Pull Requests'))
     expect(content.indexOf('Pull Requests')).toBeLessThan(content.indexOf('Handoff Notes'))
@@ -286,10 +308,10 @@ describe('TaskInfoPanel', () => {
     const mergedCard = await findPullRequestCard(123)
 
     expect(within(conflictedCard).getByText('Merge Conflict')).toBeTruthy()
-    expect(within(conflictedCard).queryByText('In Merge Queue')).toBeNull()
+    expect(within(conflictedCard).queryByText('Queued Pull Request')).toBeNull()
     expect(within(conflictedCard).queryByText(/Merged on/)).toBeNull()
 
-    expect(within(queuedCard).getByText('In Merge Queue')).toBeTruthy()
+    expect(within(queuedCard).getByText('Queued Pull Request')).toBeTruthy()
     expect(within(queuedCard).queryByRole('button', { name: 'Merge' })).toBeNull()
     expect(within(queuedCard).queryByText('Merge Conflict')).toBeNull()
 
@@ -618,6 +640,17 @@ describe('TaskInfoPanel', () => {
        draft: false,
        is_queued: false,
        unaddressed_comment_count: 0,
+    merge_readiness_status: null,
+    merge_readiness_action: null,
+    merge_readiness_blockers: null,
+    merge_readiness_warnings: null,
+    readiness_source_head_sha: null,
+    merge_group_sha: null,
+    required_checks_policy_known: null,
+    required_reviews_policy_known: null,
+    merge_queue_required: null,
+    merge_queue_state: null,
+    readiness_updated_at: null,
      }
 
     ticketPrs.set(new Map([['T-42', [prWithCi]]]))
@@ -651,6 +684,17 @@ describe('TaskInfoPanel', () => {
        draft: true,
        is_queued: false,
        unaddressed_comment_count: 0,
+    merge_readiness_status: null,
+    merge_readiness_action: null,
+    merge_readiness_blockers: null,
+    merge_readiness_warnings: null,
+    readiness_source_head_sha: null,
+    merge_group_sha: null,
+    required_checks_policy_known: null,
+    required_reviews_policy_known: null,
+    merge_queue_required: null,
+    merge_queue_state: null,
+    readiness_updated_at: null,
      }
 
     ticketPrs.set(new Map([['T-42', [draftPr]]]))
@@ -683,6 +727,17 @@ describe('TaskInfoPanel', () => {
        draft: false,
        is_queued: false,
        unaddressed_comment_count: 0,
+    merge_readiness_status: null,
+    merge_readiness_action: null,
+    merge_readiness_blockers: null,
+    merge_readiness_warnings: null,
+    readiness_source_head_sha: null,
+    merge_group_sha: null,
+    required_checks_policy_known: null,
+    required_reviews_policy_known: null,
+    merge_queue_required: null,
+    merge_queue_state: null,
+    readiness_updated_at: null,
      }
 
     ticketPrs.set(new Map([['T-42', [openPr]]]))
@@ -778,10 +833,10 @@ describe('TaskInfoPanel', () => {
 
     await new Promise((r) => setTimeout(r, 10))
     expect(screen.queryByRole('button', { name: 'Merge' })).toBeNull()
-    expect(screen.getByText(/In Merge Queue/)).toBeTruthy()
+    expect(screen.getByText(/Queued Pull Request/)).toBeTruthy()
   })
 
-  it('shows "In Merge Queue" badge when PR is queued with mergeable null (not hidden)', async () => {
+  it('shows "Queued Pull Request" badge when PR is queued with mergeable null (not hidden)', async () => {
     const queuedPr = createPullRequest({
       ci_status: 'success',
       review_status: 'approved',
@@ -795,7 +850,7 @@ describe('TaskInfoPanel', () => {
     render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
 
     await new Promise((r) => setTimeout(r, 10))
-    expect(screen.getByText(/In Merge Queue/)).toBeTruthy()
+    expect(screen.getByText(/Queued Pull Request/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Merge' })).toBeNull()
   })
 

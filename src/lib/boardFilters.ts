@@ -8,7 +8,7 @@ export type BoardFilter = 'focus' | 'low-fire' | 'backlog'
 export const DEFAULT_FOCUS_STATES: TaskState[] = [
   'idle', 'needs-input', 'paused', 'agent-done', 'failed', 'interrupted',
   'pr-draft', 'pr-open', 'ci-failed', 'changes-requested', 'unaddressed-comments',
-  'ready-to-merge', 'pr-merged', 'pr-closed', 'merge-conflict',
+  'ready-to-merge', 'ready-to-enqueue', 'pr-merged', 'pr-closed', 'merge-conflict',
 ]
 
 const LEGACY_DEFAULT_FOCUS_STATE_SETS: TaskState[][] = [
@@ -21,6 +21,11 @@ const LEGACY_DEFAULT_FOCUS_STATE_SETS: TaskState[][] = [
     'idle', 'needs-input', 'paused', 'agent-done', 'failed', 'interrupted',
     'pr-draft', 'pr-open', 'ci-failed', 'changes-requested', 'unaddressed-comments',
     'ready-to-merge', 'pr-merged', 'merge-conflict',
+  ],
+  [
+    'idle', 'needs-input', 'paused', 'agent-done', 'failed', 'interrupted',
+    'pr-draft', 'pr-open', 'ci-failed', 'changes-requested', 'unaddressed-comments',
+    'ready-to-merge', 'pr-merged', 'pr-closed', 'merge-conflict',
   ],
 ]
 

@@ -57,6 +57,17 @@ function makePR(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
     draft: false,
     is_queued: false,
     unaddressed_comment_count: 0,
+    merge_readiness_status: null,
+    merge_readiness_action: null,
+    merge_readiness_blockers: null,
+    merge_readiness_warnings: null,
+    readiness_source_head_sha: null,
+    merge_group_sha: null,
+    required_checks_policy_known: null,
+    required_reviews_policy_known: null,
+    merge_queue_required: null,
+    merge_queue_state: null,
+    readiness_updated_at: null,
     ...overrides,
   }
 }
@@ -107,9 +118,33 @@ describe('getTaskActions', () => {
     expect(ids).not.toContain('merge-pr')
   })
 
+  it('returns Merge Pull Request action from current persisted ready_to_merge readiness', () => {
+    const task = makeTask({ status: 'doing' })
+    const pr = makePR({ mergeable: null, mergeable_state: null, merge_readiness_status: 'ready_to_merge', merge_readiness_action: 'merge', readiness_source_head_sha: 'abc', readiness_updated_at: 0 })
+    const actions = getTaskActions(task, [], [pr])
+    const ids = actions.map(a => a.id)
+    expect(ids).toContain('merge-pr')
+  })
+
+  it('does not return Merge Pull Request action from stale persisted ready_to_merge readiness', () => {
+    const task = makeTask({ status: 'doing' })
+    const pr = makePR({ head_sha: 'new-head', mergeable: null, mergeable_state: 'unknown', merge_readiness_status: 'ready_to_merge', merge_readiness_action: 'merge', readiness_source_head_sha: 'old-head', readiness_updated_at: 1 })
+    const actions = getTaskActions(task, [], [pr])
+    const ids = actions.map(a => a.id)
+    expect(ids).not.toContain('merge-pr')
+  })
+
   it('does not return Merge Pull Request action when PR is already queued', () => {
     const task = makeTask({ status: 'doing' })
     const pr = makePR({ is_queued: true })
+    const actions = getTaskActions(task, [], [pr])
+    const ids = actions.map(a => a.id)
+    expect(ids).not.toContain('merge-pr')
+  })
+
+  it('does not return direct Merge Pull Request action for persisted ready_to_enqueue readiness', () => {
+    const task = makeTask({ status: 'doing' })
+    const pr = makePR({ merge_readiness_status: 'ready_to_enqueue', merge_readiness_action: 'enqueue', readiness_source_head_sha: 'abc', readiness_updated_at: 0 })
     const actions = getTaskActions(task, [], [pr])
     const ids = actions.map(a => a.id)
     expect(ids).not.toContain('merge-pr')

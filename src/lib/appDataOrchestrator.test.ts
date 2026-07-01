@@ -63,6 +63,17 @@ function createPullRequest(overrides: Partial<PullRequestInfo> = {}): PullReques
     draft: false,
     is_queued: false,
     unaddressed_comment_count: 0,
+    merge_readiness_status: null,
+    merge_readiness_action: null,
+    merge_readiness_blockers: null,
+    merge_readiness_warnings: null,
+    readiness_source_head_sha: null,
+    merge_group_sha: null,
+    required_checks_policy_known: null,
+    required_reviews_policy_known: null,
+    merge_queue_required: null,
+    merge_queue_state: null,
+    readiness_updated_at: null,
     ...overrides,
   }
 }
@@ -97,14 +108,32 @@ describe('useAppDataOrchestrator', () => {
     const orchestrator = useAppDataOrchestrator({ setShowProjectSetup: vi.fn() })
     const locallyMerged = createPullRequest({ state: 'merged', merged_at: 1000 })
     const locallyDirty = createPullRequest({ id: 99, ticket_id: 'T-99', mergeable: false, mergeable_state: 'dirty' })
+    const locallyReady = createPullRequest({
+      id: 100,
+      ticket_id: 'T-100',
+      head_sha: 'ready-sha',
+      merge_readiness_status: 'ready_to_merge',
+      merge_readiness_action: 'merge',
+      readiness_source_head_sha: 'ready-sha',
+      readiness_updated_at: 3000,
+    })
     ticketPrs.set(new Map([
       ['T-42', [locallyMerged]],
       ['T-99', [locallyDirty]],
+      ['T-100', [locallyReady]],
     ]))
 
     vi.mocked(getPullRequests).mockResolvedValue([
       { ...locallyMerged, state: 'open', merged_at: null },
       { ...locallyDirty, mergeable: null, mergeable_state: 'unknown' },
+      {
+        ...locallyReady,
+        mergeable: null,
+        mergeable_state: 'unknown',
+        merge_readiness_status: 'readiness_unknown',
+        merge_readiness_action: 'wait_for_github',
+        readiness_updated_at: 4000,
+      },
     ])
 
     await orchestrator.loadPullRequests()
@@ -114,6 +143,9 @@ describe('useAppDataOrchestrator', () => {
     expect(loadedPrs.get('T-42')?.[0].merged_at).toBe(1000)
     expect(loadedPrs.get('T-99')?.[0].mergeable).toBe(false)
     expect(loadedPrs.get('T-99')?.[0].mergeable_state).toBe('dirty')
+    expect(loadedPrs.get('T-100')?.[0].merge_readiness_status).toBe('ready_to_merge')
+    expect(loadedPrs.get('T-100')?.[0].merge_readiness_action).toBe('merge')
+    expect(loadedPrs.get('T-100')?.[0].readiness_updated_at).toBe(3000)
   })
 
   it('refreshes PR counts after applying project repo exclusions', async () => {

@@ -1,4 +1,4 @@
-import { canMergePullRequest, hasMergeConflicts, isClosedUnmergedPullRequest, isMergedPullRequest, type MergeStatusInfo } from './domain'
+import { getMergeReadiness, isClosedUnmergedPullRequest, isMergedPullRequest, type MergeReadinessAction, type MergeReadinessDetail, type MergeReadinessStatus, type MergeStatusInfo } from './domain'
 
 export type PrChipSurface = 'compact' | 'detail'
 
@@ -21,6 +21,15 @@ export interface PrInput extends MergeStatusInfo {
   ci_status?: string | null
   review_status?: string | null
   merged_at?: number | null
+  head_sha?: string | null
+  updated_at?: number | null
+  unaddressed_comment_count?: number
+  merge_readiness_status?: MergeReadinessStatus | null
+  merge_readiness_action?: MergeReadinessAction | null
+  merge_readiness_blockers?: string | MergeReadinessDetail[] | null
+  merge_readiness_warnings?: string | MergeReadinessDetail[] | null
+  readiness_source_head_sha?: string | null
+  readiness_updated_at?: number | null
 }
 
 export function getPrStatusChips(pr: PrInput, surface: PrChipSurface): PrStatusChipSpec[] {
@@ -123,30 +132,51 @@ export function getPrStatusChips(pr: PrInput, surface: PrChipSurface): PrStatusC
       icon: surface === 'detail' ? 'cross' : undefined,
       surface,
     })
-  } else if (hasMergeConflicts(pr)) {
-    chips.push({
-      type: 'merge',
-      label: 'Merge Conflict',
-      variant: 'error',
-      icon: surface === 'detail' ? 'cross' : undefined,
-      surface,
-    })
-  } else if (pr.is_queued && pr.state === 'open') {
-    chips.push({
-      type: 'merge',
-      label: surface === 'compact' ? 'Queued' : 'In Merge Queue',
-      variant: 'done',
-      icon: surface === 'detail' ? 'check' : undefined,
-      surface,
-    })
-  } else if (canMergePullRequest(pr)) {
-    chips.push({
-      type: 'merge',
-      label: 'Ready to Merge',
-      variant: 'done',
-      icon: surface === 'detail' ? 'check' : undefined,
-      surface,
-    })
+  } else if (pr.state === 'open') {
+    const readiness = getMergeReadiness(pr)
+    const hasMergeConflict = readiness.blockers.some((blocker) => blocker.code === 'merge_conflict')
+
+    if (hasMergeConflict) {
+      chips.push({
+        type: 'merge',
+        label: 'Merge Conflict',
+        variant: 'error',
+        icon: surface === 'detail' ? 'cross' : undefined,
+        surface,
+      })
+    } else if (readiness.status === 'queued_pull_request') {
+      chips.push({
+        type: 'merge',
+        label: surface === 'compact' ? 'Queued' : 'Queued Pull Request',
+        variant: 'done',
+        icon: surface === 'detail' ? 'check' : undefined,
+        surface,
+      })
+    } else if (readiness.status === 'ready_to_enqueue') {
+      chips.push({
+        type: 'merge',
+        label: 'Ready to Enqueue',
+        variant: 'done',
+        icon: surface === 'detail' ? 'check' : undefined,
+        surface,
+      })
+    } else if (readiness.status === 'ready_to_merge') {
+      chips.push({
+        type: 'merge',
+        label: 'Ready to Merge',
+        variant: 'done',
+        icon: surface === 'detail' ? 'check' : undefined,
+        surface,
+      })
+    } else if (readiness.status === 'readiness_unknown') {
+      chips.push({
+        type: 'merge',
+        label: 'Readiness Unknown',
+        variant: 'neutral',
+        icon: surface === 'detail' ? 'clock' : undefined,
+        surface,
+      })
+    }
   }
 
   return chips

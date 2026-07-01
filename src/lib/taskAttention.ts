@@ -1,5 +1,5 @@
 import type { PullRequestInfo } from './types'
-import { canMergePullRequest, hasMergeConflicts } from './types'
+import { getMergeReadiness, getMostAttentionWorthyPullRequest } from './types'
 
 export type AttentionTone = 'error' | 'warning' | 'success' | 'info'
 
@@ -20,30 +20,46 @@ export function deriveTaskAttention(
   prs: PullRequestInfo[],
   waitingDependencyCount: number,
 ): TaskAttention | null {
-  if (prs.some((pr) => hasMergeConflicts(pr))) {
-    return { message: 'Resolve merge conflicts', tone: 'error' }
+  const drivingPr = getMostAttentionWorthyPullRequest(prs.filter((pr) => pr.state === 'open'))
+  if (drivingPr) {
+    const readiness = getMergeReadiness(drivingPr)
+
+    if (readiness.status === 'ready_to_merge') {
+      return { message: 'Ready to merge', tone: 'success' }
+    }
+    if (readiness.status === 'ready_to_enqueue') {
+      return { message: 'Ready to enqueue', tone: 'success' }
+    }
+    if (readiness.status === 'blocked') {
+      const blockerCodes = new Set(readiness.blockers.map((blocker) => blocker.code))
+      if (blockerCodes.has('merge_conflict')) return { message: 'Resolve merge conflicts', tone: 'error' }
+      if (blockerCodes.has('checks_failed')) return { message: 'Fix failing CI checks', tone: 'error' }
+      if (blockerCodes.has('changes_requested')) return { message: 'Address requested changes', tone: 'warning' }
+      if (blockerCodes.has('unresolved_conversations')) return { message: 'Review PR comments before merge', tone: 'warning' }
+      if (readiness.warnings.some((warning) => warning.code === 'unresolved_conversations')) {
+        return { message: 'Review PR comments before merge', tone: 'warning' }
+      }
+    }
   }
-  if (prs.some((pr) => (pr.unaddressed_comment_count ?? 0) > 0)) {
-    return { message: 'Review PR comments before merge', tone: 'warning' }
-  }
-  if (prs.some((pr) => pr.ci_status === 'failure')) {
-    return { message: 'Fix failing CI checks', tone: 'error' }
-  }
+
   if (waitingDependencyCount > 0) {
     const noun = waitingDependencyCount === 1 ? 'dependency' : 'dependencies'
     return { message: `Blocked by ${waitingDependencyCount} ${noun}`, tone: 'warning' }
   }
-  if (prs.some((pr) => canMergePullRequest(pr))) {
-    return { message: 'Ready to merge', tone: 'success' }
+
+  if (drivingPr) {
+    const readiness = getMergeReadiness(drivingPr)
+    const blockerCodes = new Set(readiness.blockers.map((blocker) => blocker.code))
+    if (readiness.status === 'blocked' && blockerCodes.has('checks_pending')) {
+      return { message: 'Waiting for CI', tone: 'info' }
+    }
+    if (readiness.status === 'readiness_unknown') {
+      return { message: 'Waiting for merge readiness', tone: 'info' }
+    }
+    if (readiness.status === 'blocked' && (drivingPr.review_status === 'pending' || drivingPr.review_status === 'review_required')) {
+      return { message: 'Waiting for review', tone: 'info' }
+    }
   }
-  if (prs.some((pr) => pr.review_status === 'changes_requested')) {
-    return { message: 'Address requested changes', tone: 'warning' }
-  }
-  if (prs.some((pr) => pr.ci_status === 'pending')) {
-    return { message: 'Waiting for CI', tone: 'info' }
-  }
-  if (prs.some((pr) => pr.review_status === 'pending' || pr.review_status === 'review_required')) {
-    return { message: 'Waiting for review', tone: 'info' }
-  }
+
   return null
 }

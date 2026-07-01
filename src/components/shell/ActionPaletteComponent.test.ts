@@ -47,6 +47,17 @@ function makePullRequest(overrides: Partial<PullRequestInfo> = {}): PullRequestI
     draft: false,
     is_queued: false,
     unaddressed_comment_count: 0,
+    merge_readiness_status: null,
+    merge_readiness_action: null,
+    merge_readiness_blockers: null,
+    merge_readiness_warnings: null,
+    readiness_source_head_sha: null,
+    merge_group_sha: null,
+    required_checks_policy_known: null,
+    required_reviews_policy_known: null,
+    merge_queue_required: null,
+    merge_queue_state: null,
+    readiness_updated_at: null,
     ...overrides,
   }
 }

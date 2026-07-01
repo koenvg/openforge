@@ -1003,6 +1003,63 @@ function mergeReadinessResult(pr, status, action, blockers, warnings) {
 		}
 	};
 }
+var MERGE_READINESS_STATUSES = [
+	"ready_to_merge",
+	"ready_to_enqueue",
+	"queued_pull_request",
+	"readiness_unknown",
+	"blocked"
+];
+var MERGE_READINESS_ACTIONS = [
+	"merge",
+	"enqueue",
+	"wait_for_queue",
+	"wait_for_github",
+	"resolve_blockers"
+];
+function isMergeReadinessStatus(value) {
+	return MERGE_READINESS_STATUSES.includes(value);
+}
+function isMergeReadinessAction(value) {
+	return MERGE_READINESS_ACTIONS.includes(value);
+}
+function parseMergeReadinessDetails(value) {
+	if (Array.isArray(value)) return value;
+	if (!value) return [];
+	try {
+		const parsed = JSON.parse(value);
+		return Array.isArray(parsed) ? parsed.filter((detail) => typeof detail?.code === "string" && typeof detail?.message === "string") : [];
+	} catch {
+		return [];
+	}
+}
+function isPersistedMergeReadinessCurrent(pr) {
+	const sourceSha = pr.readiness_source_head_sha ?? null;
+	const headSha = pr.head_sha ?? null;
+	if (!sourceSha || !headSha || sourceSha !== headSha) return false;
+	const checkedAt = pr.readiness_updated_at ?? null;
+	const updatedAt = pr.updated_at ?? null;
+	return checkedAt !== null && (updatedAt === null || checkedAt >= updatedAt);
+}
+function getPersistedMergeReadiness(pr) {
+	const status = pr.merge_readiness_status ?? null;
+	const action = pr.merge_readiness_action ?? null;
+	if (!isMergeReadinessStatus(status) || !isMergeReadinessAction(action)) return null;
+	if (!isPersistedMergeReadinessCurrent(pr)) return null;
+	return {
+		status,
+		action,
+		blockers: parseMergeReadinessDetails(pr.merge_readiness_blockers),
+		warnings: parseMergeReadinessDetails(pr.merge_readiness_warnings),
+		freshness: {
+			sourceSha: pr.readiness_source_head_sha ?? null,
+			checkedAt: pr.readiness_updated_at ?? null
+		}
+	};
+}
+function hasMergeReadinessOptions(options) {
+	return options.requireBranchUpToDate === true || options.requireConversationResolution === true || options.requireMergeQueue === true;
+}
 /**
 * Explains whether a pull request is ready for a direct merge, queue enqueueing,
 * waiting on GitHub/merge queue, or blocked by hard requirements.
@@ -1010,14 +1067,16 @@ function mergeReadinessResult(pr, status, action, blockers, warnings) {
 function getMergeReadiness(pr, options = {}) {
 	const warnings = [];
 	const blockers = [];
-	const mergeableState = pr.mergeable_state?.toLowerCase() ?? null;
-	const ciStatus = pr.ci_status?.toLowerCase() ?? null;
-	const reviewStatus = pr.review_status?.toLowerCase() ?? null;
-	const unaddressedCommentCount = pr.unaddressed_comment_count ?? 0;
 	if (pr.state !== "open") {
 		blockers.push(mergeReadinessDetail(pr.state === "merged" ? "already_merged" : "pull_request_closed", pr.state === "merged" ? "Pull request is already merged." : "Pull request is closed."));
 		return mergeReadinessResult(pr, "blocked", "resolve_blockers", blockers, warnings);
 	}
+	const persisted = hasMergeReadinessOptions(options) ? null : getPersistedMergeReadiness(pr);
+	if (persisted) return persisted;
+	const mergeableState = pr.mergeable_state?.toLowerCase() ?? null;
+	const ciStatus = pr.ci_status?.toLowerCase() ?? null;
+	const reviewStatus = pr.review_status?.toLowerCase() ?? null;
+	const unaddressedCommentCount = pr.unaddressed_comment_count ?? 0;
 	if (pr.draft === true) blockers.push(mergeReadinessDetail("draft", "Pull request is still marked as draft."));
 	if (reviewStatus === "changes_requested") blockers.push(mergeReadinessDetail("changes_requested", "Review changes have been requested."));
 	if (ciStatus === "pending" || ciStatus === "queued" || ciStatus === "in_progress") blockers.push(mergeReadinessDetail("checks_pending", "Required checks are still running."));
@@ -1054,7 +1113,8 @@ function isReadyToMerge(pr, options) {
 }
 /** Check if a user-initiated merge affordance may be shown/executed now. */
 function canMergePullRequest(pr) {
-	return isReadyToMerge(pr);
+	const readiness = getMergeReadiness(pr);
+	return readiness.status === "ready_to_merge" && readiness.action === "merge";
 }
 /** Check if GitHub reports a PR as queued in a merge queue. */
 function isQueuedForMerge(pr) {
@@ -1073,6 +1133,23 @@ function preservePullRequestState(oldPr, newPr) {
 	if (isTransient && oldIsDefinitive) {
 		result.mergeable = oldPr.mergeable;
 		result.mergeable_state = oldPr.mergeable_state;
+	}
+	const oldReadiness = getPersistedMergeReadiness(oldPr);
+	const newReadiness = getPersistedMergeReadiness(result);
+	const sameReadinessSource = (oldPr.readiness_source_head_sha ?? oldPr.head_sha ?? null) === (result.readiness_source_head_sha ?? result.head_sha ?? null);
+	const newReadinessIsTransient = newReadiness === null || newReadiness.status === "readiness_unknown";
+	if (sameReadinessSource && oldReadiness && oldReadiness.status !== "readiness_unknown" && newReadinessIsTransient) {
+		result.merge_readiness_status = oldPr.merge_readiness_status;
+		result.merge_readiness_action = oldPr.merge_readiness_action;
+		result.merge_readiness_blockers = oldPr.merge_readiness_blockers;
+		result.merge_readiness_warnings = oldPr.merge_readiness_warnings;
+		result.readiness_source_head_sha = oldPr.readiness_source_head_sha;
+		result.readiness_updated_at = oldPr.readiness_updated_at;
+		result.merge_group_sha = oldPr.merge_group_sha;
+		result.required_checks_policy_known = oldPr.required_checks_policy_known;
+		result.required_reviews_policy_known = oldPr.required_reviews_policy_known;
+		result.merge_queue_required = oldPr.merge_queue_required;
+		result.merge_queue_state = oldPr.merge_queue_state;
 	}
 	return result;
 }

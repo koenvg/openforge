@@ -142,6 +142,7 @@ describe('public plugin utilities', () => {
 function makePullRequest(overrides: Partial<PullRequestInfo>): PullRequestInfo {
   return {
     id: 1,
+    pr_number: 1,
     ticket_id: 'T-1',
     repo_owner: 'openforge',
     repo_name: 'app',
@@ -160,6 +161,17 @@ function makePullRequest(overrides: Partial<PullRequestInfo>): PullRequestInfo {
     draft: false,
     is_queued: false,
     unaddressed_comment_count: 0,
+    merge_readiness_status: null,
+    merge_readiness_action: null,
+    merge_readiness_blockers: null,
+    merge_readiness_warnings: null,
+    readiness_source_head_sha: null,
+    merge_group_sha: null,
+    required_checks_policy_known: null,
+    required_reviews_policy_known: null,
+    merge_queue_required: null,
+    merge_queue_state: null,
+    readiness_updated_at: null,
     ...overrides,
   }
 }

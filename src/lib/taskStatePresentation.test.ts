@@ -22,6 +22,17 @@ function makePr(overrides: Partial<PullRequestInfo> & { id: number }): PullReque
     draft: false,
     is_queued: false,
     unaddressed_comment_count: 0,
+    merge_readiness_status: null,
+    merge_readiness_action: null,
+    merge_readiness_blockers: null,
+    merge_readiness_warnings: null,
+    readiness_source_head_sha: null,
+    merge_group_sha: null,
+    required_checks_policy_known: null,
+    required_reviews_policy_known: null,
+    merge_queue_required: null,
+    merge_queue_state: null,
+    readiness_updated_at: null,
     pr_number: overrides.id,
     ...overrides,
   }
@@ -134,6 +145,12 @@ describe('getTaskReasonText', () => {
       const pr = makePr({ id: 1, ci_status: 'success', review_status: 'approved' })
       const reason = getTaskReasonText('ready-to-merge', [pr])
       expect(reason).toBe('Ready to merge — all checks passed.')
+    })
+
+    it('returns "Ready to enqueue — all requirements passed." for ready-to-enqueue state', () => {
+      const pr = makePr({ id: 1, merge_readiness_status: 'ready_to_enqueue', merge_readiness_action: 'enqueue' })
+      const reason = getTaskReasonText('ready-to-enqueue', [pr])
+      expect(reason).toBe('Ready to enqueue — all requirements passed.')
     })
 
     it('returns "Pull request is queued for merge." for pr-queued state', () => {
