@@ -139,17 +139,17 @@ export interface PullRequestInfo {
   draft: boolean;
   is_queued: boolean;
   unaddressed_comment_count: number;
-  merge_readiness_status?: MergeReadinessStatus | null;
-  merge_readiness_action?: MergeReadinessAction | null;
-  merge_readiness_blockers?: string | MergeReadinessDetail[] | null;
-  merge_readiness_warnings?: string | MergeReadinessDetail[] | null;
-  readiness_source_head_sha?: string | null;
-  merge_group_sha?: string | null;
-  required_checks_policy_known?: boolean | null;
-  required_reviews_policy_known?: boolean | null;
-  merge_queue_required?: boolean | null;
-  merge_queue_state?: string | null;
-  readiness_updated_at?: number | null;
+  merge_readiness_status: MergeReadinessStatus | null;
+  merge_readiness_action: MergeReadinessAction | null;
+  merge_readiness_blockers: string | MergeReadinessDetail[] | null;
+  merge_readiness_warnings: string | MergeReadinessDetail[] | null;
+  readiness_source_head_sha: string | null;
+  merge_group_sha: string | null;
+  required_checks_policy_known: boolean | null;
+  required_reviews_policy_known: boolean | null;
+  merge_queue_required: boolean | null;
+  merge_queue_state: string | null;
+  readiness_updated_at: number | null;
 }
 
 export interface PollResult {
@@ -309,10 +309,21 @@ function parseMergeReadinessDetails(value: string | MergeReadinessDetail[] | nul
   }
 }
 
+function isPersistedMergeReadinessCurrent(pr: MergeReadinessInfo): boolean {
+  const sourceSha = pr.readiness_source_head_sha ?? null;
+  const headSha = pr.head_sha ?? null;
+  if (!sourceSha || !headSha || sourceSha !== headSha) return false;
+
+  const checkedAt = pr.readiness_updated_at ?? null;
+  const updatedAt = pr.updated_at ?? null;
+  return checkedAt !== null && (updatedAt === null || checkedAt >= updatedAt);
+}
+
 export function getPersistedMergeReadiness(pr: MergeReadinessInfo): MergeReadinessResult | null {
   const status = pr.merge_readiness_status ?? null;
   const action = pr.merge_readiness_action ?? null;
   if (!isMergeReadinessStatus(status) || !isMergeReadinessAction(action)) return null;
+  if (!isPersistedMergeReadinessCurrent(pr)) return null;
 
   return {
     status,
@@ -320,8 +331,8 @@ export function getPersistedMergeReadiness(pr: MergeReadinessInfo): MergeReadine
     blockers: parseMergeReadinessDetails(pr.merge_readiness_blockers),
     warnings: parseMergeReadinessDetails(pr.merge_readiness_warnings),
     freshness: {
-      sourceSha: pr.readiness_source_head_sha ?? pr.head_sha ?? null,
-      checkedAt: pr.readiness_updated_at ?? pr.updated_at ?? null,
+      sourceSha: pr.readiness_source_head_sha ?? null,
+      checkedAt: pr.readiness_updated_at ?? null,
     },
   };
 }

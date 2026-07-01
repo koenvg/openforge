@@ -22,7 +22,18 @@ describe('getPrStatusChips', () => {
     updated_at: 0,
     draft: false,
     is_queued: false,
-    unaddressed_comment_count: 0
+    unaddressed_comment_count: 0,
+    merge_readiness_status: null,
+    merge_readiness_action: null,
+    merge_readiness_blockers: null,
+    merge_readiness_warnings: null,
+    readiness_source_head_sha: null,
+    merge_group_sha: null,
+    required_checks_policy_known: null,
+    required_reviews_policy_known: null,
+    merge_queue_required: null,
+    merge_queue_state: null,
+    readiness_updated_at: null,
   } as PullRequestInfo;
 
   it('handles ci_status in compact surface', () => {
@@ -76,10 +87,10 @@ describe('getPrStatusChips', () => {
   });
 
   it('shows persisted Ready to Enqueue and Readiness Unknown details', () => {
-    expect(getPrStatusChips({ ...basePr, merge_readiness_status: 'ready_to_enqueue', merge_readiness_action: 'enqueue' }, 'detail'))
+    expect(getPrStatusChips({ ...basePr, merge_readiness_status: 'ready_to_enqueue', merge_readiness_action: 'enqueue', readiness_source_head_sha: 'sha', readiness_updated_at: 0 }, 'detail'))
       .toContainEqual(expect.objectContaining({ type: 'merge', label: 'Ready to Enqueue', variant: 'done' }));
 
-    expect(getPrStatusChips({ ...basePr, merge_readiness_status: 'readiness_unknown', merge_readiness_action: 'wait_for_github' }, 'detail'))
+    expect(getPrStatusChips({ ...basePr, merge_readiness_status: 'readiness_unknown', merge_readiness_action: 'wait_for_github', readiness_source_head_sha: 'sha', readiness_updated_at: 0 }, 'detail'))
       .toContainEqual(expect.objectContaining({ type: 'merge', label: 'Readiness Unknown', variant: 'neutral', icon: 'clock' }));
   });
 

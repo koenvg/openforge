@@ -24,6 +24,17 @@ function makePr(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
     draft: false,
     is_queued: false,
     unaddressed_comment_count: 0,
+    merge_readiness_status: null,
+    merge_readiness_action: null,
+    merge_readiness_blockers: null,
+    merge_readiness_warnings: null,
+    readiness_source_head_sha: null,
+    merge_group_sha: null,
+    required_checks_policy_known: null,
+    required_reviews_policy_known: null,
+    merge_queue_required: null,
+    merge_queue_state: null,
+    readiness_updated_at: null,
     ...overrides,
   }
 }
@@ -64,8 +75,8 @@ describe('deriveTaskAttention', () => {
   })
 
   it('uses persisted ready-to-enqueue attention and lets actionable readiness outrank another blocked PR', () => {
-    const blocked = makePr({ id: 1, merge_readiness_status: 'blocked', merge_readiness_action: 'resolve_blockers', merge_readiness_blockers: [{ code: 'checks_failed', message: 'Required checks are failing.' }] })
-    const enqueue = makePr({ id: 2, merge_readiness_status: 'ready_to_enqueue', merge_readiness_action: 'enqueue' })
+    const blocked = makePr({ id: 1, merge_readiness_status: 'blocked', merge_readiness_action: 'resolve_blockers', merge_readiness_blockers: [{ code: 'checks_failed', message: 'Required checks are failing.' }], readiness_source_head_sha: 'abc', readiness_updated_at: 0 })
+    const enqueue = makePr({ id: 2, merge_readiness_status: 'ready_to_enqueue', merge_readiness_action: 'enqueue', readiness_source_head_sha: 'abc', readiness_updated_at: 0 })
     expect(deriveTaskAttention([blocked, enqueue], 0)).toEqual({ message: 'Ready to enqueue', tone: 'success' })
   })
 
@@ -98,8 +109,8 @@ describe('deriveTaskAttention', () => {
   })
 
   it('surfaces later hard PR blockers before earlier passive waiting PRs', () => {
-    const pendingPr = makePr({ id: 1, merge_readiness_status: 'blocked', merge_readiness_action: 'resolve_blockers', merge_readiness_blockers: [{ code: 'checks_pending', message: 'Required checks are still running.' }] })
-    const conflictedPr = makePr({ id: 2, merge_readiness_status: 'blocked', merge_readiness_action: 'resolve_blockers', merge_readiness_blockers: [{ code: 'merge_conflict', message: 'Pull request has merge conflicts.' }] })
+    const pendingPr = makePr({ id: 1, merge_readiness_status: 'blocked', merge_readiness_action: 'resolve_blockers', merge_readiness_blockers: [{ code: 'checks_pending', message: 'Required checks are still running.' }], readiness_source_head_sha: 'abc', readiness_updated_at: 0 })
+    const conflictedPr = makePr({ id: 2, merge_readiness_status: 'blocked', merge_readiness_action: 'resolve_blockers', merge_readiness_blockers: [{ code: 'merge_conflict', message: 'Pull request has merge conflicts.' }], readiness_source_head_sha: 'abc', readiness_updated_at: 0 })
 
     expect(deriveTaskAttention([pendingPr, conflictedPr], 0)).toEqual({ message: 'Resolve merge conflicts', tone: 'error' })
   })

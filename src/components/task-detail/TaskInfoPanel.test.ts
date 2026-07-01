@@ -95,6 +95,17 @@ describe('TaskInfoPanel', () => {
       draft: false,
       is_queued: false,
       unaddressed_comment_count: 0,
+    merge_readiness_status: null,
+    merge_readiness_action: null,
+    merge_readiness_blockers: null,
+    merge_readiness_warnings: null,
+    readiness_source_head_sha: null,
+    merge_group_sha: null,
+    required_checks_policy_known: null,
+    required_reviews_policy_known: null,
+    merge_queue_required: null,
+    merge_queue_state: null,
+    readiness_updated_at: null,
       ...overrides,
     }
   }
@@ -143,6 +154,17 @@ describe('TaskInfoPanel', () => {
       ci_status: 'failure',
       review_status: 'changes_requested',
       unaddressed_comment_count: 1,
+    merge_readiness_status: null,
+    merge_readiness_action: null,
+    merge_readiness_blockers: null,
+    merge_readiness_warnings: null,
+    readiness_source_head_sha: null,
+    merge_group_sha: null,
+    required_checks_policy_known: null,
+    required_reviews_policy_known: null,
+    merge_queue_required: null,
+    merge_queue_state: null,
+    readiness_updated_at: null,
     })]]]))
 
     render(TaskInfoPanel, { props: { task: { ...baseTask, summary: 'Reviewer handoff notes' }, workspacePath: null } })
@@ -618,6 +640,17 @@ describe('TaskInfoPanel', () => {
        draft: false,
        is_queued: false,
        unaddressed_comment_count: 0,
+    merge_readiness_status: null,
+    merge_readiness_action: null,
+    merge_readiness_blockers: null,
+    merge_readiness_warnings: null,
+    readiness_source_head_sha: null,
+    merge_group_sha: null,
+    required_checks_policy_known: null,
+    required_reviews_policy_known: null,
+    merge_queue_required: null,
+    merge_queue_state: null,
+    readiness_updated_at: null,
      }
 
     ticketPrs.set(new Map([['T-42', [prWithCi]]]))
@@ -651,6 +684,17 @@ describe('TaskInfoPanel', () => {
        draft: true,
        is_queued: false,
        unaddressed_comment_count: 0,
+    merge_readiness_status: null,
+    merge_readiness_action: null,
+    merge_readiness_blockers: null,
+    merge_readiness_warnings: null,
+    readiness_source_head_sha: null,
+    merge_group_sha: null,
+    required_checks_policy_known: null,
+    required_reviews_policy_known: null,
+    merge_queue_required: null,
+    merge_queue_state: null,
+    readiness_updated_at: null,
      }
 
     ticketPrs.set(new Map([['T-42', [draftPr]]]))
@@ -683,6 +727,17 @@ describe('TaskInfoPanel', () => {
        draft: false,
        is_queued: false,
        unaddressed_comment_count: 0,
+    merge_readiness_status: null,
+    merge_readiness_action: null,
+    merge_readiness_blockers: null,
+    merge_readiness_warnings: null,
+    readiness_source_head_sha: null,
+    merge_group_sha: null,
+    required_checks_policy_known: null,
+    required_reviews_policy_known: null,
+    merge_queue_required: null,
+    merge_queue_state: null,
+    readiness_updated_at: null,
      }
 
     ticketPrs.set(new Map([['T-42', [openPr]]]))

@@ -1033,18 +1033,27 @@ function parseMergeReadinessDetails(value) {
 		return [];
 	}
 }
+function isPersistedMergeReadinessCurrent(pr) {
+	const sourceSha = pr.readiness_source_head_sha ?? null;
+	const headSha = pr.head_sha ?? null;
+	if (!sourceSha || !headSha || sourceSha !== headSha) return false;
+	const checkedAt = pr.readiness_updated_at ?? null;
+	const updatedAt = pr.updated_at ?? null;
+	return checkedAt !== null && (updatedAt === null || checkedAt >= updatedAt);
+}
 function getPersistedMergeReadiness(pr) {
 	const status = pr.merge_readiness_status ?? null;
 	const action = pr.merge_readiness_action ?? null;
 	if (!isMergeReadinessStatus(status) || !isMergeReadinessAction(action)) return null;
+	if (!isPersistedMergeReadinessCurrent(pr)) return null;
 	return {
 		status,
 		action,
 		blockers: parseMergeReadinessDetails(pr.merge_readiness_blockers),
 		warnings: parseMergeReadinessDetails(pr.merge_readiness_warnings),
 		freshness: {
-			sourceSha: pr.readiness_source_head_sha ?? pr.head_sha ?? null,
-			checkedAt: pr.readiness_updated_at ?? pr.updated_at ?? null
+			sourceSha: pr.readiness_source_head_sha ?? null,
+			checkedAt: pr.readiness_updated_at ?? null
 		}
 	};
 }

@@ -33,10 +33,10 @@ describe('getPrStatusChips shared package API', () => {
     expect(getPrStatusChips({ ...basePr, mergeable_state: 'dirty' }, 'detail'))
       .toContainEqual(expect.objectContaining({ type: 'merge', label: 'Merge Conflict', variant: 'error', icon: 'cross' }))
 
-    expect(getPrStatusChips({ ...basePr, merge_readiness_status: 'ready_to_enqueue', merge_readiness_action: 'enqueue' }, 'detail'))
+    expect(getPrStatusChips({ ...basePr, head_sha: 'sha', updated_at: 10, merge_readiness_status: 'ready_to_enqueue', merge_readiness_action: 'enqueue', readiness_source_head_sha: 'sha', readiness_updated_at: 10 }, 'detail'))
       .toContainEqual(expect.objectContaining({ type: 'merge', label: 'Ready to Enqueue', variant: 'done', icon: 'check' }))
 
-    expect(getPrStatusChips({ ...basePr, merge_readiness_status: 'readiness_unknown', merge_readiness_action: 'wait_for_github' }, 'detail'))
+    expect(getPrStatusChips({ ...basePr, head_sha: 'sha', updated_at: 10, merge_readiness_status: 'readiness_unknown', merge_readiness_action: 'wait_for_github', readiness_source_head_sha: 'sha', readiness_updated_at: 10 }, 'detail'))
       .toContainEqual(expect.objectContaining({ type: 'merge', label: 'Readiness Unknown', variant: 'neutral', icon: 'clock' }))
   })
 
