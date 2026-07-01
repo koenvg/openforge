@@ -133,6 +133,7 @@ describe('TaskDetailPane', () => {
     expect(screen.getByTestId('task-info-panel')).toBeTruthy()
     expect(screen.getByText('T-748')).toBeTruthy()
     expect((await screen.findAllByText('Fix dashboard reactivity')).length).toBeGreaterThan(0)
+    expect(screen.queryByLabelText('Task status')).toBeNull()
     expect(screen.getByText('Labels')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Remove label bug' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Merge' })).toBeTruthy()

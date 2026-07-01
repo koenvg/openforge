@@ -672,9 +672,9 @@ describe('TaskDetailView', () => {
     expect(screen.queryByText('$ cd board')).toBeNull()
   })
 
-  it('shows the task status badge in the header', () => {
+  it('does not render the task status badge in the header', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
-    expect(screen.getByLabelText('Task status').textContent).toContain('backlog')
+    expect(screen.queryByLabelText('Task status')).toBeNull()
   })
 
   it('shows TaskInfoPanel by default', async () => {

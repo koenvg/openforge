@@ -297,7 +297,6 @@
             >✎</button>
           </div>
         {/if}
-        <span class="badge badge-sm badge-outline capitalize shrink-0" aria-label="Task status">{task.status}</span>
         {#if task.status === 'backlog'}
           <button
             class="btn btn-primary btn-sm shrink-0 shadow-sm hover:shadow-md transition-shadow"
