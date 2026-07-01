@@ -323,6 +323,11 @@ async fn poll_github_once_with_state(
         sync_start.elapsed().as_secs_f64()
     );
 
+    let configured_github_username = {
+        let db_lock = db.lock().unwrap();
+        db_lock.get_config("github_username").ok().flatten()
+    };
+
     for project in projects {
         let open_prs = match get_open_prs_for_project(&db, &project.id) {
             Ok(prs) => prs,
@@ -337,8 +342,16 @@ async fn poll_github_once_with_state(
         };
 
         let poll_start = Instant::now();
-        let (new_comments, ci_changes, review_changes, errors) =
-            poll_prs_for_project(github_client, &db, events, &github_token, open_prs, &[]).await;
+        let (new_comments, ci_changes, review_changes, errors) = poll_prs_for_project(
+            github_client,
+            &db,
+            events,
+            &github_token,
+            configured_github_username.as_deref(),
+            open_prs,
+            &[],
+        )
+        .await;
         debug!(
             "[GitHub Poller] PR polling for project {} took {:.1}s",
             project.id,
@@ -1056,7 +1069,9 @@ async fn collect_rest_readiness_sources(
 ) -> RestReadinessSources {
     let needs_rest_ci = needs_rest_ci_for_snapshot(graphql_snapshot);
     let mut rest_ci_sha = graphql_snapshot
-        .and_then(|snapshot| snapshot.source_head_sha.clone())
+        .and_then(queued_validation_sha)
+        .map(ToOwned::to_owned)
+        .or_else(|| graphql_snapshot.and_then(|snapshot| snapshot.source_head_sha.clone()))
         .filter(|sha| !sha.is_empty())
         .unwrap_or_else(|| pr.head_sha.clone());
     let ci_sha_for_request = rest_ci_sha.clone();
@@ -1305,6 +1320,7 @@ fn select_branch_policy_inputs(
 async fn poll_single_pr(
     github_client: GitHubClient,
     github_token: String,
+    configured_github_username: Option<String>,
     pr: PrRow,
     since: Option<String>,
     old_ci_status: Option<String>,
@@ -1430,6 +1446,11 @@ async fn poll_single_pr(
         0,
         0,
     );
+    readiness_facts = enforce_actor_scoped_readiness(
+        readiness_facts,
+        rest_sources.pr_details_result.as_ref().ok(),
+        configured_github_username.as_deref(),
+    );
 
     PollSinglePrResult {
         pr_id: pr.id,
@@ -1445,7 +1466,7 @@ async fn poll_single_pr(
         has_requested_reviewers: rest_sources.has_requested_reviewers,
         mergeable: rest_sources.mergeable,
         mergeable_state: rest_sources.mergeable_state,
-        is_queued: rest_sources.is_queued,
+        is_queued: readiness_is_queued,
         required_check_names: branch_policy_inputs.required_check_names,
         required_approving_count: branch_policy_inputs.required_approving_count,
         readiness_facts,
@@ -1458,6 +1479,7 @@ async fn poll_prs_for_project(
     db: &Mutex<Database>,
     events: &GitHubEventTarget,
     github_token: &str,
+    configured_github_username: Option<&str>,
     open_prs: Vec<PrRow>,
     changed_pr_numbers: &[i64],
 ) -> (usize, usize, usize, usize) {
@@ -1537,9 +1559,11 @@ async fn poll_prs_for_project(
                 .cloned()
                 .unwrap_or((None, None));
             let fetch_comments = should_fetch_comments_for_pr(pr.pr_number, &changed_pr_numbers);
+            let configured_github_username = configured_github_username.map(ToOwned::to_owned);
             poll_single_pr(
                 client,
                 token,
+                configured_github_username,
                 pr,
                 since,
                 old_ci,
@@ -2038,9 +2062,19 @@ fn merge_queue_state_from_details(
     }
 }
 
+fn queued_validation_sha(snapshot: &GitHubReadinessSnapshot) -> Option<&str> {
+    snapshot
+        .merge_group_sha
+        .as_deref()
+        .filter(|sha| !sha.is_empty())
+        .filter(|_| snapshot.merge_queue_state.is_some())
+}
+
 fn needs_rest_ci_for_snapshot(snapshot: Option<&GitHubReadinessSnapshot>) -> bool {
     snapshot
-        .map(GitHubReadinessSnapshot::requires_rest_check_fallback)
+        .map(|snapshot| {
+            queued_validation_sha(snapshot).is_some() || snapshot.requires_rest_check_fallback()
+        })
         .unwrap_or(true)
 }
 
@@ -2058,7 +2092,10 @@ fn select_snapshot_readiness_inputs(
     snapshot: Option<&GitHubReadinessSnapshot>,
 ) -> Option<MergeReadinessInputs> {
     let snapshot = snapshot?;
-    if snapshot.source_head_sha.is_none() || snapshot.requires_rest_check_fallback() {
+    if snapshot.source_head_sha.is_none()
+        || snapshot.requires_rest_check_fallback()
+        || queued_validation_sha(snapshot).is_some()
+    {
         return None;
     }
 
@@ -2157,10 +2194,6 @@ fn finalize_readiness_facts_for_poll(
     new_comment_count: usize,
     updated_at: i64,
 ) -> PrMergeReadinessFacts {
-    if !source_head_sha.is_empty() {
-        readiness_facts.source_head_sha = Some(source_head_sha.to_string());
-    }
-
     if let Some(snapshot) = graphql_snapshot {
         if readiness_facts.merge_group_sha.is_none() {
             readiness_facts.merge_group_sha = snapshot.merge_group_sha.clone();
@@ -2201,11 +2234,24 @@ fn finalize_readiness_facts_for_poll(
             readiness_facts.merge_queue_state = Some("not_queued".to_string());
         }
         if !snapshot.policy.unknown_reasons.is_empty()
-            && readiness_facts.status.as_deref() == Some("ready_to_merge")
+            && first_class_readiness_status(readiness_facts.status.as_deref())
         {
             readiness_facts.status = Some("readiness_unknown".to_string());
             readiness_facts.action = Some("wait_for_github".to_string());
         }
+    }
+
+    let effective_source_sha = if readiness_is_queued {
+        readiness_facts
+            .merge_group_sha
+            .as_deref()
+            .filter(|sha| !sha.is_empty())
+            .unwrap_or(source_head_sha)
+    } else {
+        source_head_sha
+    };
+    if !effective_source_sha.is_empty() {
+        readiness_facts.source_head_sha = Some(effective_source_sha.to_string());
     }
 
     if new_comment_count > 0 {
@@ -2219,6 +2265,72 @@ fn finalize_readiness_facts_for_poll(
     }
     readiness_facts.updated_at = updated_at;
     readiness_facts
+}
+
+fn first_class_readiness_status(status: Option<&str>) -> bool {
+    matches!(
+        status,
+        Some("ready_to_merge" | "ready_to_enqueue" | "queued_pull_request")
+    )
+}
+
+fn downgrade_ready_handoff_to_unknown(
+    mut readiness_facts: PrMergeReadinessFacts,
+    reason: MergeReadinessReason,
+) -> PrMergeReadinessFacts {
+    if first_class_readiness_status(readiness_facts.status.as_deref()) {
+        readiness_facts.status = Some("readiness_unknown".to_string());
+        readiness_facts.action = Some("wait_for_github".to_string());
+        readiness_facts.warnings_json =
+            add_readiness_warning(readiness_facts.warnings_json, reason);
+    }
+    readiness_facts
+}
+
+fn enforce_actor_scoped_readiness(
+    readiness_facts: PrMergeReadinessFacts,
+    details: Option<&crate::github_client::PullRequest>,
+    configured_github_username: Option<&str>,
+) -> PrMergeReadinessFacts {
+    let Some(configured_github_username) = configured_github_username
+        .map(str::trim)
+        .filter(|username| !username.is_empty())
+    else {
+        return downgrade_ready_handoff_to_unknown(
+            readiness_facts,
+            MergeReadinessReason {
+                code: "actor_scope_unknown",
+                message: "OpenForge GitHub identity was unavailable for readiness scoping.",
+            },
+        );
+    };
+
+    let Some(details) = details else {
+        return downgrade_ready_handoff_to_unknown(
+            readiness_facts,
+            MergeReadinessReason {
+                code: "actor_scope_unknown",
+                message: "Pull request author was unavailable for readiness scoping.",
+            },
+        );
+    };
+
+    if details
+        .user
+        .login
+        .eq_ignore_ascii_case(configured_github_username)
+    {
+        readiness_facts
+    } else {
+        downgrade_ready_handoff_to_unknown(
+            readiness_facts,
+            MergeReadinessReason {
+                code: "actor_scope_mismatch",
+                message:
+                    "Pull request is not authored by the configured OpenForge GitHub identity.",
+            },
+        )
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2241,9 +2353,15 @@ fn build_merge_readiness_facts(
     let mergeable_state_lower = mergeable_state.map(str::to_ascii_lowercase);
     let ci_status = ci_status.map(str::to_ascii_lowercase);
     let review_status = review_status.map(str::to_ascii_lowercase);
+    let current_state = details
+        .map(|details| details.state.as_str())
+        .unwrap_or(pr.state.as_str());
+    let current_draft = details
+        .and_then(|details| details.draft)
+        .unwrap_or(pr.draft);
 
-    if pr.state != "open" {
-        blockers.push(if pr.state == "merged" {
+    if current_state != "open" {
+        blockers.push(if current_state == "merged" {
             MergeReadinessReason {
                 code: "already_merged",
                 message: "Pull request is already merged.",
@@ -2256,7 +2374,7 @@ fn build_merge_readiness_facts(
         });
     }
 
-    if pr.draft {
+    if current_draft {
         blockers.push(MergeReadinessReason {
             code: "draft",
             message: "Pull request is still marked as draft.",
@@ -2345,13 +2463,15 @@ fn build_merge_readiness_facts(
     let merge_queue_state =
         merge_queue_state_from_details(details, is_queued, merge_queue_required);
 
+    let has_unknown_policy = !required_checks_policy_known || !required_reviews_policy_known;
+
     let (status, action) = if !blockers.is_empty() {
         (Some("blocked"), Some("resolve_blockers"))
     } else if is_queued {
         (Some("queued_pull_request"), Some("wait_for_queue"))
     } else if merge_queue_required == Some(true) {
         (Some("ready_to_enqueue"), Some("enqueue"))
-    } else if review_status.as_deref() == Some("review_unknown") {
+    } else if review_status.as_deref() == Some("review_unknown") || has_unknown_policy {
         (Some("readiness_unknown"), Some("wait_for_github"))
     } else if matches!(mergeable_state_lower.as_deref(), Some("clean" | "behind"))
         || (mergeable == Some(true)
@@ -3469,6 +3589,135 @@ mod tests {
             .contains("unresolved_conversations"));
     }
 
+    fn actor_scoped_pr_details(author: &str) -> PullRequest {
+        PullRequest {
+            number: 7,
+            title: "Readiness".to_string(),
+            state: "open".to_string(),
+            html_url: "https://github.com/acme/repo/pull/7".to_string(),
+            user: GitHubUser {
+                login: author.to_string(),
+                extra: serde_json::json!({}),
+            },
+            head: GitHubHead {
+                ref_name: "feature/T-42".to_string(),
+                sha: "head-sha".to_string(),
+                extra: serde_json::json!({}),
+            },
+            draft: Some(false),
+            mergeable: Some(true),
+            mergeable_state: Some("clean".to_string()),
+            extra: serde_json::json!({}),
+        }
+    }
+
+    #[test]
+    fn github_readiness_actor_scope_prevents_non_actor_ready_handoff() {
+        let pr = make_github_readiness_pr();
+        let details = actor_scoped_pr_details("other-user");
+        let facts = build_merge_readiness_facts(
+            &pr,
+            Some(&details),
+            Some(true),
+            Some("clean"),
+            Some("success"),
+            Some("approved"),
+            false,
+            true,
+            true,
+            false,
+            false,
+            None,
+        );
+
+        let facts = enforce_actor_scoped_readiness(facts, Some(&details), Some("octocat"));
+
+        assert_eq!(facts.status.as_deref(), Some("readiness_unknown"));
+        assert_eq!(facts.action.as_deref(), Some("wait_for_github"));
+        assert!(facts
+            .merge_readiness_warnings_or_default()
+            .contains("actor_scope_mismatch"));
+    }
+
+    #[test]
+    fn github_readiness_actor_scope_allows_configured_actor_ready_handoff() {
+        let pr = make_github_readiness_pr();
+        let details = actor_scoped_pr_details("octocat");
+        let facts = build_merge_readiness_facts(
+            &pr,
+            Some(&details),
+            Some(true),
+            Some("clean"),
+            Some("success"),
+            Some("approved"),
+            false,
+            true,
+            true,
+            false,
+            false,
+            None,
+        );
+
+        let facts = enforce_actor_scoped_readiness(facts, Some(&details), Some("octocat"));
+
+        assert_eq!(facts.status.as_deref(), Some("ready_to_merge"));
+        assert_eq!(facts.action.as_deref(), Some("merge"));
+    }
+
+    #[test]
+    fn github_readiness_uses_current_polled_draft_state_as_blocker() {
+        let pr = make_github_readiness_pr();
+        let mut details = actor_scoped_pr_details("octocat");
+        details.draft = Some(true);
+        let facts = build_merge_readiness_facts(
+            &pr,
+            Some(&details),
+            Some(true),
+            Some("clean"),
+            Some("success"),
+            Some("approved"),
+            false,
+            true,
+            true,
+            false,
+            false,
+            None,
+        );
+
+        assert_eq!(facts.status.as_deref(), Some("blocked"));
+        assert_eq!(facts.action.as_deref(), Some("resolve_blockers"));
+        assert!(facts
+            .blockers_json
+            .as_deref()
+            .unwrap_or_default()
+            .contains("draft"));
+    }
+
+    #[test]
+    fn github_readiness_unknown_policy_does_not_produce_ready_handoff() {
+        let pr = make_github_readiness_pr();
+        let facts = build_merge_readiness_facts(
+            &pr,
+            None,
+            Some(true),
+            Some("clean"),
+            Some("success"),
+            Some("approved"),
+            false,
+            false,
+            false,
+            false,
+            false,
+            None,
+        );
+
+        assert_eq!(facts.status.as_deref(), Some("readiness_unknown"));
+        assert_eq!(facts.action.as_deref(), Some("wait_for_github"));
+        assert!(facts
+            .merge_readiness_warnings_or_default()
+            .contains("policy_coverage_unknown"));
+    }
+
     fn known_readiness_policy(
         required_checks: Vec<&str>,
         required_reviews: Option<usize>,
@@ -3669,6 +3918,37 @@ mod tests {
         assert_eq!(facts.merge_queue_required, Some(true));
         assert_eq!(facts.merge_queue_state.as_deref(), Some("not_queued"));
         assert_eq!(facts.updated_at, 1234);
+    }
+
+    #[test]
+    fn github_readiness_finalize_uses_merge_group_sha_for_queued_validation() {
+        let mut snapshot = readiness_snapshot_with_policy(
+            Some("pr-head-sha"),
+            Some("pr-head-sha"),
+            known_readiness_policy(vec![], Some(0), Some(false), Some(false), Some(true)),
+        );
+        snapshot.merge_queue_state = Some("QUEUED".to_string());
+        snapshot.merge_group_sha = Some("merge-group-sha".to_string());
+
+        let mut queued_facts = ready_to_merge_facts();
+        queued_facts.status = Some("queued_pull_request".to_string());
+        queued_facts.action = Some("wait_for_queue".to_string());
+
+        let facts = finalize_readiness_facts_for_poll(
+            queued_facts,
+            Some(&snapshot),
+            "pr-head-sha",
+            true,
+            true,
+            0,
+            1234,
+        );
+
+        assert_eq!(facts.status.as_deref(), Some("queued_pull_request"));
+        assert_eq!(facts.action.as_deref(), Some("wait_for_queue"));
+        assert_eq!(facts.source_head_sha.as_deref(), Some("merge-group-sha"));
+        assert_eq!(facts.merge_group_sha.as_deref(), Some("merge-group-sha"));
+        assert_eq!(facts.merge_queue_state.as_deref(), Some("QUEUED"));
     }
 
     #[test]
