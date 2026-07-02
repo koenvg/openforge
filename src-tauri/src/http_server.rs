@@ -371,6 +371,8 @@ pub struct AgentLifecycleNotificationPayload {
     pub notification: crate::agent_lifecycle::AgentLifecycleNotification,
     #[serde(default)]
     pub transcript_path: Option<String>,
+    #[serde(default)]
+    pub activity_snapshot: Option<String>,
 }
 
 fn emit_task_changed(state: &AppState, action: &str, task_id: &str, project_id: Option<&str>) {
@@ -454,6 +456,7 @@ async fn handle_agent_lifecycle_notification(
     state: AppState,
     notification: crate::agent_lifecycle::AgentLifecycleNotification,
     transcript_path: Option<String>,
+    activity_snapshot: Option<String>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let status_change = record_agent_lifecycle_notification(&state, &notification);
 
@@ -465,12 +468,14 @@ async fn handle_agent_lifecycle_notification(
             let task_id = notification.task_id.clone();
             let provider = notification.provider.clone();
             let transcript_path = transcript_path.map(PathBuf::from);
+            let activity_snapshot = activity_snapshot.clone();
             tokio::spawn(async move {
                 match crate::task_metadata_refresh::refresh_task_display_title_with_ai_once(
                     db,
                     task_id.clone(),
                     provider,
                     transcript_path,
+                    activity_snapshot,
                 )
                 .await
                 {
@@ -503,9 +508,22 @@ async fn handle_agent_lifecycle_notification(
 fn should_start_task_display_title_refresh(
     notification: &crate::agent_lifecycle::AgentLifecycleNotification,
 ) -> bool {
-    notification.provider == "codex"
-        && notification.kind == crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy
-        && notification.raw_event_type.as_deref() == Some("UserPromptSubmit")
+    if notification.kind != crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy {
+        return false;
+    }
+
+    match notification.provider.as_str() {
+        "codex" => notification.raw_event_type.as_deref() == Some("UserPromptSubmit"),
+        "claude-code" => matches!(
+            notification.raw_event_type.as_deref(),
+            Some("pre-tool-use" | "post-tool-use")
+        ),
+        "opencode" => matches!(
+            notification.raw_event_type.as_deref(),
+            Some("session.status" | "session.updated" | "message.updated")
+        ),
+        _ => false,
+    }
 }
 
 /// Resolve project_id from request parameters, failing if no project can be determined.
@@ -1038,6 +1056,7 @@ pub async fn pi_agent_start_handler(
             raw_status_type: None,
         },
         None,
+        None,
     )
     .await
 }
@@ -1057,6 +1076,7 @@ pub async fn pi_agent_end_handler(
             raw_event_type: Some("agent.end".to_string()),
             raw_status_type: None,
         },
+        None,
         None,
     )
     .await
@@ -1114,14 +1134,20 @@ pub async fn opencode_event_handler(
         raw_status_type: payload.status_type,
     };
 
-    handle_agent_lifecycle_notification(state, notification, None).await
+    handle_agent_lifecycle_notification(state, notification, None, None).await
 }
 
 pub async fn agent_lifecycle_handler(
     State(state): State<AppState>,
     Json(payload): Json<AgentLifecycleNotificationPayload>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    handle_agent_lifecycle_notification(state, payload.notification, payload.transcript_path).await
+    handle_agent_lifecycle_notification(
+        state,
+        payload.notification,
+        payload.transcript_path,
+        payload.activity_snapshot,
+    )
+    .await
 }
 
 pub async fn hook_stop_handler(

@@ -8,6 +8,18 @@ const SUPPORTED_OPENFORGE_LIFECYCLE_KINDS = new Set([
 const TURN_MONITOR_ARG = "--monitor-turn";
 const TURN_MONITOR_TIMEOUT_MS = 12 * 60 * 60 * 1000;
 const TURN_MONITOR_POLL_INTERVAL_MS = 500;
+const MAX_ACTIVITY_SNAPSHOT_CHARS = 8000;
+
+function boundedJsonSnapshot(value) {
+  if (!value || typeof value !== "object") return null;
+  const snapshot = { ...value };
+  delete snapshot.transcript_path;
+  const json = JSON.stringify(snapshot);
+  if (!json || json === "{}") return null;
+  return json.length > MAX_ACTIVITY_SNAPSHOT_CHARS
+    ? json.slice(json.length - MAX_ACTIVITY_SNAPSHOT_CHARS)
+    : json;
+}
 
 async function postLifecycleEvent(kind, rawEventType, rawStatusType = null, hookInput = null) {
   const taskId = process.env.OPENFORGE_TASK_ID;
@@ -38,6 +50,11 @@ async function postLifecycleEvent(kind, rawEventType, rawStatusType = null, hook
 
   if (hookInput && typeof hookInput.transcript_path === "string" && hookInput.transcript_path) {
     payload.transcript_path = hookInput.transcript_path;
+  }
+
+  const activitySnapshot = boundedJsonSnapshot(hookInput);
+  if (activitySnapshot) {
+    payload.activity_snapshot = activitySnapshot;
   }
 
   await postJson(`http://127.0.0.1:${port}/hooks/agent-lifecycle`, payload);
