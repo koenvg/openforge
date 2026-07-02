@@ -41,7 +41,7 @@
   let diffViewer = $state<DiffViewer>()
   let fileTreeVisible = $state(true)
   let includeCommitted = $state(true)
-  let includeUncommitted = $state(false)
+  let includeUncommitted = $state(true)
   let showAddressed = $state(false)
 
   // At least one scope must always stay selected. Whichever checkbox is the only
@@ -279,10 +279,6 @@
 
   onMount(async () => {
     await diffLoader.loadDiff()
-    if (selfReviewDiffFiles.length === 0 && !includeUncommitted) {
-      includeUncommitted = true
-      await diffLoader.refresh()
-    }
     await diffLoader.loadCommits()
     await restoreDiffScroll()
   })
