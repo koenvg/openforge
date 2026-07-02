@@ -172,7 +172,7 @@ describe("SelfReviewView uncommitted toggle", () => {
 		vi.clearAllMocks();
 	});
 
-	it("defaults to committed checked and uncommitted unchecked", async () => {
+	it("defaults to both committed and uncommitted checked", async () => {
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
 
 		render(SelfReviewView, {
@@ -187,11 +187,11 @@ describe("SelfReviewView uncommitted toggle", () => {
 			const committed = requireElement(screen.getByLabelText("Include committed changes"), HTMLInputElement);
 			const uncommitted = requireElement(screen.getByLabelText("Include uncommitted changes"), HTMLInputElement);
 			expect(committed.checked).toBe(true);
-			expect(uncommitted.checked).toBe(false);
+			expect(uncommitted.checked).toBe(true);
 		});
 	});
 
-	it("locks the committed checkbox while it is the only selected scope", async () => {
+	it("leaves both checkboxes unlocked when both scopes are selected by default", async () => {
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
 
 		render(SelfReviewView, {
@@ -205,13 +205,13 @@ describe("SelfReviewView uncommitted toggle", () => {
 		await waitFor(() => {
 			const committed = requireElement(screen.getByLabelText("Include committed changes"), HTMLInputElement);
 			const uncommitted = requireElement(screen.getByLabelText("Include uncommitted changes"), HTMLInputElement);
-			// Committed is the only scope on by default, so it cannot be unchecked.
-			expect(committed.disabled).toBe(true);
+			// Both scopes are on by default, so neither checkbox is locked.
+			expect(committed.disabled).toBe(false);
 			expect(uncommitted.disabled).toBe(false);
 		});
 	});
 
-	it("initial load calls getTaskDiff with committed-only scope", async () => {
+	it("initial load calls getTaskDiff with both committed and uncommitted scope", async () => {
 		const mockGetTaskDiff = vi
 			.mocked(getTaskDiff)
 			.mockResolvedValue([baseDiff]);
@@ -225,7 +225,7 @@ describe("SelfReviewView uncommitted toggle", () => {
 		});
 
 		await waitFor(() => {
-			expect(mockGetTaskDiff).toHaveBeenCalledWith("task-1", true, false);
+			expect(mockGetTaskDiff).toHaveBeenCalledWith("task-1", true, true);
 		});
 	});
 
@@ -247,49 +247,7 @@ describe("SelfReviewView uncommitted toggle", () => {
 		});
 	});
 
-	it("auto-enables uncommitted when initial committed diff is empty", async () => {
-		const mockGetTaskDiff = vi.mocked(getTaskDiff);
-		mockGetTaskDiff.mockResolvedValueOnce([]).mockResolvedValueOnce([baseDiff]);
-
-		render(SelfReviewView, {
-			props: {
-				task: baseTask,
-				agentStatus: null,
-				onSendToAgent: vi.fn(),
-			},
-		});
-
-		await waitFor(() => {
-			const checkbox = requireElement(screen.getByLabelText("Include uncommitted changes"), HTMLInputElement);
-			expect(checkbox.checked).toBe(true);
-			expect(mockGetTaskDiff).toHaveBeenCalledTimes(2);
-			expect(mockGetTaskDiff).toHaveBeenNthCalledWith(1, "task-1", true, false);
-			expect(mockGetTaskDiff).toHaveBeenNthCalledWith(2, "task-1", true, true);
-		});
-	});
-
-	it("does not auto-enable uncommitted when committed changes exist", async () => {
-		const mockGetTaskDiff = vi
-			.mocked(getTaskDiff)
-			.mockResolvedValue([baseDiff]);
-
-		render(SelfReviewView, {
-			props: {
-				task: baseTask,
-				agentStatus: null,
-				onSendToAgent: vi.fn(),
-			},
-		});
-
-		await waitFor(() => {
-			const checkbox = requireElement(screen.getByLabelText("Include uncommitted changes"), HTMLInputElement);
-			expect(checkbox.checked).toBe(false);
-			expect(mockGetTaskDiff).toHaveBeenCalledTimes(1);
-			expect(mockGetTaskDiff).toHaveBeenCalledWith("task-1", true, false);
-		});
-	});
-
-	it("checking uncommitted requests both committed and uncommitted changes", async () => {
+	it("unchecking uncommitted requests committed-only changes", async () => {
 		const mockGetTaskDiff = vi
 			.mocked(getTaskDiff)
 			.mockResolvedValue([baseDiff]);
@@ -309,16 +267,17 @@ describe("SelfReviewView uncommitted toggle", () => {
 			expect(screen.getByLabelText("Include uncommitted changes").isConnected).toBe(true);
 		});
 
+		// Uncommitted is on by default; unchecking it leaves committed-only.
 		const cb = requireElement(screen.getByLabelText("Include uncommitted changes"), HTMLInputElement);
 		cb.click();
 		cb.dispatchEvent(new Event("change", { bubbles: true }));
 
 		await waitFor(() => {
-			expect(mockGetTaskDiff).toHaveBeenCalledWith("task-1", true, true);
+			expect(mockGetTaskDiff).toHaveBeenCalledWith("task-1", true, false);
 		});
 	});
 
-	it("unchecking committed after enabling uncommitted requests uncommitted-only diff", async () => {
+	it("unchecking committed requests uncommitted-only diff and locks the uncommitted checkbox", async () => {
 		const mockGetTaskDiff = vi
 			.mocked(getTaskDiff)
 			.mockResolvedValue([baseDiff]);
@@ -331,23 +290,18 @@ describe("SelfReviewView uncommitted toggle", () => {
 			},
 		});
 
-		// Enable uncommitted → both scopes on, which unlocks the committed checkbox.
-		const uncommitted = requireElement(
-			await screen.findByLabelText("Include uncommitted changes"),
+		// Both scopes are on by default, so the committed checkbox is unlocked.
+		const committed = requireElement(
+			await screen.findByLabelText("Include committed changes"),
 			HTMLInputElement,
 		);
-		uncommitted.click();
-		uncommitted.dispatchEvent(new Event("change", { bubbles: true }));
-
 		await waitFor(() => {
-			const committed = requireElement(screen.getByLabelText("Include committed changes"), HTMLInputElement);
 			expect(committed.disabled).toBe(false);
 		});
 
 		mockGetTaskDiff.mockClear();
 
 		// Uncheck committed → only uncommitted remains selected.
-		const committed = requireElement(screen.getByLabelText("Include committed changes"), HTMLInputElement);
 		committed.click();
 		committed.dispatchEvent(new Event("change", { bubbles: true }));
 
@@ -433,7 +387,7 @@ describe("SelfReviewView integration — performance fixes", () => {
 
 		await waitFor(() => {
 			expect(mockGetTaskDiff).toHaveBeenCalledTimes(1);
-			expect(mockGetTaskDiff).toHaveBeenCalledWith("task-1", true, false);
+			expect(mockGetTaskDiff).toHaveBeenCalledWith("task-1", true, true);
 		});
 	});
 
@@ -696,7 +650,7 @@ describe("SelfReviewView pane restoration", () => {
 				originalDiff.previous_filename,
 				originalDiff.status,
 				true,
-				false,
+				true,
 			);
 		});
 
@@ -727,7 +681,7 @@ describe("SelfReviewView pane restoration", () => {
 				baseTask.id,
 				[{ path: changedDiff.filename, oldPath: changedDiff.previous_filename, status: changedDiff.status }],
 				true,
-				false,
+				true,
 			);
 			expect(currentRender.container.textContent).toContain("reviewed content");
 			expect(currentRender.container.textContent).toContain("changed content");
