@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { requireElement } from '../../test-utils/dom'
 import FocusBoard from './FocusBoard.svelte'
 import type { Task, AgentSession, PullRequestInfo, BoardStatus, TaskLabel } from '../../lib/types'
-import { backlogLabelFilters, commandHeld, focusBoardFilters, lowFireTaskIdsByProject, tasks as taskStore } from '../../lib/stores'
+import { backlogLabelFilters, commandHeld, focusBoardFilters, lastViewedTaskId, lowFireTaskIdsByProject, tasks as taskStore } from '../../lib/stores'
 
 vi.mock('../../lib/ipc', () => ({
   getPrComments: vi.fn().mockResolvedValue([]),
@@ -150,6 +150,7 @@ describe('FocusBoard', () => {
     focusBoardFilters.set(new Map())
     lowFireTaskIdsByProject.set(new Map())
     backlogLabelFilters.set(new Map())
+    lastViewedTaskId.set(null)
     taskStore.set([])
   })
 
@@ -701,5 +702,85 @@ describe('FocusBoard', () => {
 
     await fireEvent.click(items[1])
     expect(onOpenTask).toHaveBeenCalledWith(taskDoing.id)
+  })
+
+  it('marks only the just-viewed task card with data-just-viewed', async () => {
+    lastViewedTaskId.set(taskFocus.id)
+
+    renderBoard({
+      tasks: [taskFocus, taskDoing],
+      sessions: new Map([
+        [taskFocus.id, makeSession(taskFocus.id, 'paused', 'needs-review')],
+        [taskDoing.id, makeSession(taskDoing.id, 'failed', null)],
+      ]),
+    })
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('[data-vim-item]').length).toBe(2)
+    })
+
+    const items = Array.from(document.querySelectorAll('[data-vim-item]')) as HTMLElement[]
+    const focusCard = items.find((item) => within(item).queryByText('Focus task'))
+    const doingCard = items.find((item) => within(item).queryByText('Doing task'))
+
+    expect(focusCard).toBeTruthy()
+    expect(doingCard).toBeTruthy()
+    expect(focusCard!.getAttribute('data-just-viewed')).toBe('true')
+    expect(doingCard!.getAttribute('data-just-viewed')).toBeNull()
+  })
+
+  it('selects the just-viewed task on return to the board', async () => {
+    lastViewedTaskId.set(taskDoing.id)
+
+    renderBoard({
+      tasks: [taskFocus, taskDoing],
+      sessions: new Map([
+        [taskFocus.id, makeSession(taskFocus.id, 'paused', 'needs-review')],
+        [taskDoing.id, makeSession(taskDoing.id, 'failed', null)],
+      ]),
+    })
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('[data-vim-item]').length).toBe(2)
+    })
+
+    const current = getCurrentVimItem()
+    expect(within(current).queryByText('Doing task')).toBeTruthy()
+    expect(within(current).queryByText('Focus task')).toBeNull()
+  })
+
+  it('keeps the first card selected when there is no just-viewed task', async () => {
+    renderBoard({
+      tasks: [taskFocus, taskDoing],
+      sessions: new Map([
+        [taskFocus.id, makeSession(taskFocus.id, 'paused', 'needs-review')],
+        [taskDoing.id, makeSession(taskDoing.id, 'failed', null)],
+      ]),
+    })
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('[data-vim-item]').length).toBe(2)
+    })
+
+    const current = getCurrentVimItem()
+    expect(within(current).queryByText('Focus task')).toBeTruthy()
+  })
+
+  it('clears lastViewedTaskId after the board mounts so the pop does not replay', async () => {
+    lastViewedTaskId.set(taskFocus.id)
+
+    renderBoard({
+      tasks: [taskFocus, taskDoing],
+      sessions: new Map([
+        [taskFocus.id, makeSession(taskFocus.id, 'paused', 'needs-review')],
+        [taskDoing.id, makeSession(taskDoing.id, 'failed', null)],
+      ]),
+    })
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('[data-vim-item]').length).toBe(2)
+    })
+
+    expect(get(lastViewedTaskId)).toBeNull()
   })
 })

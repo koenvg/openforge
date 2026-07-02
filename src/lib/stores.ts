@@ -12,6 +12,9 @@ export const pendingTask = writable<Task | null>(null);
 // - null = show Flow board
 // - non-null = show full-page detail view for that task
 export const selectedTaskId = writable<string | null>(null);
+// The task to briefly highlight (a one-shot "pop") when the user returns to the
+// board from its detail view. null = nothing to highlight.
+export const lastViewedTaskId = writable<string | null>(null);
 export const activeSessions = writable<Map<string, AgentSession>>(new Map());
 export const checkpointNotification = writable<CheckpointNotification | null>(null);
 export const ciFailureNotification = writable<CiFailureNotification | null>(null);

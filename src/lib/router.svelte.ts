@@ -3,6 +3,7 @@ import { get } from 'svelte/store'
 import {
   activeProjectId,
   currentView,
+  lastViewedTaskId,
   pendingManualComments,
   prFileDiffs,
   prOverviewComments,
@@ -40,10 +41,14 @@ export function pushNavState(): void {
 }
 
 export function resetToBoard(): void {
+  const previousTaskId = get(selectedTaskId)
   history.length = 0
   currentView.set('board')
   selectedTaskId.set(null)
   selectedReviewPr.set(null)
+  if (previousTaskId) {
+    lastViewedTaskId.set(previousTaskId)
+  }
 }
 
 function navigateBack(): boolean {
@@ -53,6 +58,7 @@ function navigateBack(): boolean {
   }
 
   const hadReviewPr = get(selectedReviewPr)
+  const previousTaskId = get(selectedTaskId)
 
   currentView.set(prev.currentView)
   selectedTaskId.set(prev.selectedTaskId)
@@ -64,6 +70,11 @@ function navigateBack(): boolean {
     reviewComments.set([])
     pendingManualComments.set([])
     prOverviewComments.set([])
+  }
+
+  // Returning to the board from a task detail view — flag that task for a one-shot pop.
+  if (previousTaskId && prev.selectedTaskId === null) {
+    lastViewedTaskId.set(previousTaskId)
   }
 
   return true

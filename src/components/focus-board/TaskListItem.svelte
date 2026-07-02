@@ -19,13 +19,14 @@
     showLabels?: boolean
     isSelected: boolean
     isFocused: boolean
+    justViewed?: boolean
     isMerging: boolean
     onSelect: () => void
     onContextMenu: (e: MouseEvent) => void
     onTaskUpdated?: () => void | Promise<void>
   }
 
-  let { task, state, session, pullRequests, reasonText, dependencyHint = null, showLabels = false, isSelected, isFocused, isMerging, onSelect, onContextMenu, onTaskUpdated }: Props = $props()
+  let { task, state, session, pullRequests, reasonText, dependencyHint = null, showLabels = false, isSelected, isFocused, justViewed = false, isMerging, onSelect, onContextMenu, onTaskUpdated }: Props = $props()
 
   const titleRename = createTaskTitleRename(() => task, () => onTaskUpdated?.())
 
@@ -50,8 +51,10 @@
   data-vim-item
   data-selected={isSelected ? 'true' : undefined}
   data-focused={isFocused ? 'true' : undefined}
+  data-just-viewed={justViewed ? 'true' : undefined}
   aria-current={isFocused ? 'true' : undefined}
   class:vim-focus={isFocused}
+  class:just-viewed-pop={justViewed}
   class="{isSelected
     ? 'rounded-2xl bg-base-100 border border-base-300/70 shadow-sm p-4 gap-2.5'
     : 'rounded-2xl bg-base-100 border border-base-200 p-4 gap-2'} flex flex-col cursor-pointer w-full text-left"
@@ -120,3 +123,27 @@
     </div>
   {/if}
 </div>
+
+<style>
+  /* One-shot "pop" on the card the user just returned from, so it's easy to spot. */
+  @keyframes just-viewed-pop {
+    from {
+      transform: scale(1.06);
+    }
+    to {
+      transform: scale(1);
+    }
+  }
+
+  .just-viewed-pop {
+    animation: just-viewed-pop 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    transform-origin: center;
+    will-change: transform;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .just-viewed-pop {
+      animation: none;
+    }
+  }
+</style>

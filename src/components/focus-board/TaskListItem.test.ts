@@ -213,6 +213,17 @@ describe('TaskListItem', () => {
     expect(item.getAttribute('data-focused')).toBeNull()
   })
 
+  it('sets data-just-viewed to "true" when justViewed is true', () => {
+    const { container } = render(TaskListItem, { props: { ...baseProps, justViewed: true } })
+    const item = container.querySelector('[data-just-viewed="true"]')
+    expect(item).not.toBeNull()
+  })
+
+  it('does not set data-just-viewed when justViewed is omitted', () => {
+    const { container } = render(TaskListItem, { props: baseProps })
+    expect(container.querySelector('[data-just-viewed]')).toBeNull()
+  })
+
   it('renders PR chip showing PR number when pullRequests are given', () => {
     render(TaskListItem, { props: { ...baseProps, pullRequests: [basePr] } })
     expect(screen.getByText(/PR #99/)).toBeTruthy()

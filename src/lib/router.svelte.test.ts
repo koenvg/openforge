@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { get } from 'svelte/store'
-import { activeProjectId, currentView, selectedReviewPr, selectedTaskId } from './stores'
+import { activeProjectId, currentView, lastViewedTaskId, selectedReviewPr, selectedTaskId } from './stores'
 import { pushNavState, resetToBoard, useAppRouter } from './router.svelte'
 
 describe('useAppRouter', () => {
@@ -182,5 +182,66 @@ describe('useAppRouter', () => {
 
     expect(get(activeProjectId)).toBe('proj-1')
     expect(get(currentView)).toBe('board')
+  })
+})
+
+describe('useAppRouter lastViewedTaskId', () => {
+  beforeEach(() => {
+    const router = useAppRouter()
+    currentView.set('board')
+    selectedTaskId.set(null)
+    selectedReviewPr.set(null)
+    activeProjectId.set(null)
+    lastViewedTaskId.set(null)
+
+    while (router.back()) {
+    }
+
+    currentView.set('board')
+    selectedTaskId.set(null)
+    selectedReviewPr.set(null)
+    activeProjectId.set(null)
+    lastViewedTaskId.set(null)
+  })
+
+  it('resetToBoard records the currently selected task in lastViewedTaskId', () => {
+    selectedTaskId.set('task-1')
+
+    resetToBoard()
+
+    expect(get(lastViewedTaskId)).toBe('task-1')
+  })
+
+  it('resetToBoard with no selected task does not set lastViewedTaskId', () => {
+    selectedTaskId.set(null)
+
+    resetToBoard()
+
+    expect(get(lastViewedTaskId)).toBeNull()
+  })
+
+  it('going back to the board from a task records that task in lastViewedTaskId', () => {
+    const router = useAppRouter()
+
+    router.navigateToTask('task-1')
+    expect(get(selectedTaskId)).toBe('task-1')
+
+    router.back()
+
+    expect(get(selectedTaskId)).toBeNull()
+    expect(get(lastViewedTaskId)).toBe('task-1')
+  })
+
+  it('going back from task B to task A does not record task B in lastViewedTaskId', () => {
+    const router = useAppRouter()
+
+    router.navigateToTask('task-A')
+    router.navigateToTask('task-B')
+
+    router.back()
+
+    expect(get(selectedTaskId)).toBe('task-A')
+    expect(get(lastViewedTaskId)).not.toBe('task-B')
+    expect(get(lastViewedTaskId)).toBeNull()
   })
 })
