@@ -164,7 +164,7 @@ describe('FileTree', () => {
     expect(selectedFilename).toBe('test.ts')
   })
 
-  it('shows directory nodes for nested paths', () => {
+  it('compacts single-child directory chains into one node', () => {
     const onSelectFile = () => {}
     const nestedFiles: PrFileDiff[] = [
       {
@@ -181,9 +181,11 @@ describe('FileTree', () => {
       },
     ]
     render(FileTree, { props: { files: nestedFiles, onSelectFile } })
-    expect(screen.getByText('src/')).toBeTruthy()
-    expect(screen.getByText('components/')).toBeTruthy()
+    // src/ and components/ each have a single child, so they collapse into one node.
+    expect(screen.getByText('src/components/')).toBeTruthy()
     expect(screen.getByText('Button.svelte')).toBeTruthy()
+    expect(screen.queryByText('src/')).toBeNull()
+    expect(screen.queryByText('components/')).toBeNull()
   })
 
   it('directories are collapsed when clicked', async () => {
@@ -203,10 +205,11 @@ describe('FileTree', () => {
       },
     ]
     render(FileTree, { props: { files: nestedFiles, onSelectFile } })
-    const srcDir = screen.getByText('src/')
-    expect(screen.getByText('lib/')).toBeTruthy()
-    await fireEvent.click(srcDir)
-    expect(screen.queryByText('lib/')).toBeNull()
+    // src/lib/ is a compacted single-child chain; collapsing it hides its file leaf.
+    const dir = screen.getByText('src/lib/')
+    expect(screen.getByText('test.ts')).toBeTruthy()
+    await fireEvent.click(dir)
+    expect(screen.queryByText('test.ts')).toBeNull()
   })
 
   it('directories are expanded when clicked again', async () => {
@@ -226,11 +229,11 @@ describe('FileTree', () => {
       },
     ]
     render(FileTree, { props: { files: nestedFiles, onSelectFile } })
-    const srcDir = screen.getByText('src/')
-    await fireEvent.click(srcDir)
-    expect(screen.queryByText('lib/')).toBeNull()
-    await fireEvent.click(srcDir)
-    expect(screen.getByText('lib/')).toBeTruthy()
+    const dir = screen.getByText('src/lib/')
+    await fireEvent.click(dir)
+    expect(screen.queryByText('test.ts')).toBeNull()
+    await fireEvent.click(dir)
+    expect(screen.getByText('test.ts')).toBeTruthy()
   })
 
   it('shows file stats for each file', () => {

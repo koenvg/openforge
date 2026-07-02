@@ -23,11 +23,13 @@ describe('FileTree accessibility', () => {
     const onSelectFile = vi.fn()
     render(FileTree, { props: { files, onSelectFile } })
 
-    const srcDir = screen.getByRole('treeitem', { name: 'Collapse src' })
+    // src/ contains only components/, which contains only the file, so the single-child
+    // directory chain is compacted into one "src/components" node (VSCode-style).
+    const srcDir = screen.getByRole('treeitem', { name: 'Collapse src/components' })
     expect(srcDir.getAttribute('aria-expanded')).toBe('true')
 
     await fireEvent.click(srcDir)
-    const collapsedSrcDir = screen.getByRole('treeitem', { name: 'Expand src' })
+    const collapsedSrcDir = screen.getByRole('treeitem', { name: 'Expand src/components' })
     expect(collapsedSrcDir.getAttribute('aria-expanded')).toBe('false')
 
     await fireEvent.click(collapsedSrcDir)
