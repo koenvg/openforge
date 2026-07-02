@@ -1656,13 +1656,34 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
-    // Named migration boundaries intentionally use the fixed user_version immediately
-    // before the target migration. Do not derive these from LATEST_USER_VERSION:
-    // appending a migration must not shift the starting point for these upgrade tests.
-    const USER_VERSION_BEFORE_GITHUB_POLL_INTERVAL_DEFAULT_UPDATE: i32 = 21;
-    const USER_VERSION_BEFORE_LEGACY_OPENCODE_SERVER_COLUMN_REMOVAL: i32 = 24;
-    const USER_VERSION_BEFORE_PLUGIN_STORAGE_SCOPED_KEY_MIGRATION: i32 = 25;
-    const USER_VERSION_BEFORE_AGENT_SESSION_PTY_INSTANCE_BACKFILL: i32 = 26;
+    #[derive(Clone, Copy)]
+    enum MigrationBoundary {
+        GithubPollIntervalDefaultUpdate,
+        LegacyOpencodeServerColumnRemoval,
+        PluginStorageScopedKeyMigration,
+        AgentSessionPtyInstanceBackfill,
+    }
+
+    impl MigrationBoundary {
+        fn user_version_before(self) -> i32 {
+            // Fixed user_version values immediately before each target migration.
+            // Keep these pinned to the migration boundary being exercised; do not
+            // derive them from LATEST_USER_VERSION, or appending a migration could
+            // silently move legacy-upgrade fixtures into the wrong migration window.
+            match self {
+                Self::GithubPollIntervalDefaultUpdate => 21,
+                Self::LegacyOpencodeServerColumnRemoval => 24,
+                Self::PluginStorageScopedKeyMigration => 25,
+                Self::AgentSessionPtyInstanceBackfill => 26,
+            }
+        }
+    }
+
+    fn set_user_version_before(conn: &Connection, boundary: MigrationBoundary) {
+        let user_version = boundary.user_version_before();
+        conn.execute(&format!("PRAGMA user_version = {user_version}"), [])
+            .expect("set pre-migration user_version");
+    }
 
     #[test]
     fn test_migrations_validate() {
@@ -1689,9 +1710,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = USER_VERSION_BEFORE_AGENT_SESSION_PTY_INSTANCE_BACKFILL;
-            conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
-                .expect("set user_version");
+            set_user_version_before(&conn, MigrationBoundary::AgentSessionPtyInstanceBackfill);
             conn.execute(
                 "CREATE TABLE agent_sessions (
                     id TEXT PRIMARY KEY,
@@ -1753,9 +1772,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = USER_VERSION_BEFORE_PLUGIN_STORAGE_SCOPED_KEY_MIGRATION;
-            conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
-                .expect("set user_version");
+            set_user_version_before(&conn, MigrationBoundary::PluginStorageScopedKeyMigration);
             conn.execute("CREATE TABLE plugins (id TEXT PRIMARY KEY)", [])
                 .expect("create legacy plugins table");
             conn.execute("INSERT INTO plugins (id) VALUES ('legacy-plugin')", [])
@@ -1932,9 +1949,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = USER_VERSION_BEFORE_LEGACY_OPENCODE_SERVER_COLUMN_REMOVAL;
-            conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
-                .expect("set user_version");
+            set_user_version_before(&conn, MigrationBoundary::LegacyOpencodeServerColumnRemoval);
             conn.execute_batch(
                 "CREATE TABLE worktrees (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2911,14 +2926,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            conn.execute(
-                &format!(
-                    "PRAGMA user_version = {}",
-                    USER_VERSION_BEFORE_GITHUB_POLL_INTERVAL_DEFAULT_UPDATE
-                ),
-                [],
-            )
-            .expect("set pre-upgrade user_version");
+            set_user_version_before(&conn, MigrationBoundary::GithubPollIntervalDefaultUpdate);
             conn.execute(
                 "CREATE TABLE config (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
                 [],
@@ -2960,14 +2968,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            conn.execute(
-                &format!(
-                    "PRAGMA user_version = {}",
-                    USER_VERSION_BEFORE_GITHUB_POLL_INTERVAL_DEFAULT_UPDATE
-                ),
-                [],
-            )
-            .expect("set pre-upgrade user_version");
+            set_user_version_before(&conn, MigrationBoundary::GithubPollIntervalDefaultUpdate);
             conn.execute(
                 "CREATE TABLE config (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
                 [],
