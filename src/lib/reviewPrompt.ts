@@ -58,7 +58,6 @@ export function compileReviewPrompt(
   sections.push("For valid code comments, fix the issue at the referenced location.");
   sections.push("For valid general feedback, investigate and fix the described behavior.");
   sections.push("If a comment is invalid, stale, already addressed, or not applicable, do not make a change for it; explain why in your response.");
-  sections.push("After making all valid fixes, commit the changes and push to the branch.");
 
   return sections.join("\n");
 }
