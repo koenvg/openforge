@@ -65,42 +65,53 @@ pub struct AppState {
     pub app_event_bus: Option<AppEventBus>,
     pub whisper: Option<std::sync::Arc<WhisperManager>>,
     pub sidecar_readiness: SidecarReadinessState,
-    pub start_implementation_claims: StartImplementationClaims,
+    pub task_claims: TaskClaims,
     pub poll_context: crate::github_poller::PollContext,
 }
 
+/// Exclusive per-task operations guarded by [`TaskClaims`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TaskOperation {
+    StartImplementation,
+    DeleteTask,
+}
+
+/// Registry of in-flight exclusive per-task operations. Claiming a
+/// (task, operation) pair fails while a previous claim for the same pair is
+/// alive, so duplicate concurrent starts or deletes cannot run.
 #[derive(Debug, Clone, Default)]
-pub struct StartImplementationClaims {
-    active_task_ids: Arc<Mutex<HashSet<String>>>,
+pub struct TaskClaims {
+    active: Arc<Mutex<HashSet<(String, TaskOperation)>>>,
 }
 
-pub struct StartImplementationClaim {
-    task_id: String,
-    active_task_ids: Arc<Mutex<HashSet<String>>>,
+pub struct TaskClaim {
+    key: (String, TaskOperation),
+    active: Arc<Mutex<HashSet<(String, TaskOperation)>>>,
 }
 
-impl StartImplementationClaims {
+impl TaskClaims {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub(crate) fn try_claim(&self, task_id: &str) -> Option<StartImplementationClaim> {
-        let mut active_task_ids = self.active_task_ids.lock().ok()?;
-        if !active_task_ids.insert(task_id.to_string()) {
+    pub(crate) fn try_claim(&self, task_id: &str, operation: TaskOperation) -> Option<TaskClaim> {
+        let mut active = self.active.lock().ok()?;
+        let key = (task_id.to_string(), operation);
+        if !active.insert(key.clone()) {
             return None;
         }
 
-        Some(StartImplementationClaim {
-            task_id: task_id.to_string(),
-            active_task_ids: Arc::clone(&self.active_task_ids),
+        Some(TaskClaim {
+            key,
+            active: Arc::clone(&self.active),
         })
     }
 }
 
-impl Drop for StartImplementationClaim {
+impl Drop for TaskClaim {
     fn drop(&mut self) {
-        if let Ok(mut active_task_ids) = self.active_task_ids.lock() {
-            active_task_ids.remove(&self.task_id);
+        if let Ok(mut active) = self.active.lock() {
+            active.remove(&self.key);
         }
     }
 }
@@ -1496,13 +1507,13 @@ async fn start_http_server_with_app_state(
         .and_then(|app| app.try_state::<GitHubClient>())
         .map(|state| state.inner().clone())
         .unwrap_or_else(GitHubClient::new);
-    let start_implementation_claims = StartImplementationClaims::new();
+    let task_claims = TaskClaims::new();
     let poll_context = crate::github_poller::PollContext::new();
-    let plugin_host = Some(PluginHost::with_app_event_sender_and_start_claims(
+    let plugin_host = Some(PluginHost::with_app_event_sender_and_task_claims(
         app.clone()
             .unwrap_or_else(crate::backend_runtime::AppHandle::new),
         Some(app_event_tx.clone()),
-        start_implementation_claims.clone(),
+        task_claims.clone(),
     ));
     let state = AppState {
         app,
@@ -1515,7 +1526,7 @@ async fn start_http_server_with_app_state(
         app_event_bus: Some(app_event_bus),
         whisper,
         sidecar_readiness,
-        start_implementation_claims,
+        task_claims,
         poll_context: poll_context.clone(),
     };
 

@@ -23,13 +23,14 @@ vi.mock('./terminalPool', () => ({
 import { createTaskActionRunner } from './taskActionRunner'
 import {
   activeSessions,
+  completingTasks,
   error,
   startingTasks,
   taskRuntimeInfo,
   tasks,
   ticketPrs,
 } from './stores'
-import { enqueuePullRequest, getSessionStatus, inspectExistingBranch, mergePullRequest, startImplementation } from './ipc'
+import { deleteTask, enqueuePullRequest, getSessionStatus, inspectExistingBranch, mergePullRequest, startImplementation } from './ipc'
 import { branchDivergenceRequest } from './branchDivergenceModalStore'
 import { focusTerminal, isPtyActive } from './terminalPool'
 import { writePtyWithSubmit } from './ptySubmit'
@@ -104,6 +105,7 @@ describe('createTaskActionRunner', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     activeSessions.set(new Map())
+    completingTasks.set(new Set())
     error.set(null)
     startingTasks.set(new Set())
     taskRuntimeInfo.set(new Map())
@@ -324,6 +326,53 @@ describe('createTaskActionRunner', () => {
     expect(enqueuePullRequest).not.toHaveBeenCalled()
     expect(triggerGithubSync).not.toHaveBeenCalled()
     expect(get(ticketPrs).get(task.id)).toEqual([stalePr])
+  })
+
+  it('deleteTaskAndReload reloads tasks after a successful delete', async () => {
+    const loadTasks = vi.fn(async () => undefined)
+    vi.mocked(deleteTask).mockResolvedValue(undefined)
+    const runner = createTaskActionRunner({
+      getActiveProject: () => activeProject,
+      loadTasks,
+      triggerGithubSync: vi.fn(async () => undefined),
+    })
+
+    await runner.deleteTaskAndReload(task.id)
+
+    expect(deleteTask).toHaveBeenCalledWith(task.id)
+    expect(loadTasks).toHaveBeenCalledOnce()
+    expect(get(completingTasks).has(task.id)).toBe(false)
+  })
+
+  it('deleteTaskAndReload surfaces failures to the error store without reloading', async () => {
+    const loadTasks = vi.fn(async () => undefined)
+    vi.mocked(deleteTask).mockRejectedValue(new Error('delete blew up'))
+    const runner = createTaskActionRunner({
+      getActiveProject: () => activeProject,
+      loadTasks,
+      triggerGithubSync: vi.fn(async () => undefined),
+    })
+
+    await runner.deleteTaskAndReload(task.id)
+
+    expect(get(error)).toContain('delete blew up')
+    expect(loadTasks).not.toHaveBeenCalled()
+    expect(get(completingTasks).has(task.id)).toBe(false)
+  })
+
+  it('deleteTaskAndReload skips a task that is already completing', async () => {
+    const loadTasks = vi.fn(async () => undefined)
+    completingTasks.set(new Set([task.id]))
+    const runner = createTaskActionRunner({
+      getActiveProject: () => activeProject,
+      loadTasks,
+      triggerGithubSync: vi.fn(async () => undefined),
+    })
+
+    await runner.deleteTaskAndReload(task.id)
+
+    expect(deleteTask).not.toHaveBeenCalled()
+    expect(loadTasks).not.toHaveBeenCalled()
   })
 
   it.each([
