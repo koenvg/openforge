@@ -53,10 +53,7 @@ pub async fn get_task_diff_for_workspace(
     };
 
     let mut cmd = tokio::process::Command::new("git");
-    cmd.arg("-C")
-        .arg(&worktree_path)
-        .arg("diff")
-        .arg(&base_ref);
+    cmd.arg("-C").arg(&worktree_path).arg("diff").arg(&base_ref);
     if !include_uncommitted {
         cmd.arg("HEAD");
     }
@@ -888,7 +885,10 @@ mod tests {
             .find(|d| d.filename == "tracked.txt")
             .expect("tracked.txt in diff");
         let patch = tracked.patch.as_deref().unwrap_or("");
-        assert!(patch.contains("+committed"), "committed change should show: {patch}");
+        assert!(
+            patch.contains("+committed"),
+            "committed change should show: {patch}"
+        );
         assert!(
             !patch.contains("+uncommitted"),
             "uncommitted change must be hidden in committed-only mode: {patch}"
@@ -912,8 +912,14 @@ mod tests {
             .find(|d| d.filename == "tracked.txt")
             .expect("tracked.txt in diff");
         let patch = tracked.patch.as_deref().unwrap_or("");
-        assert!(patch.contains("+committed"), "committed change should show: {patch}");
-        assert!(patch.contains("+uncommitted"), "uncommitted change should show: {patch}");
+        assert!(
+            patch.contains("+committed"),
+            "committed change should show: {patch}"
+        );
+        assert!(
+            patch.contains("+uncommitted"),
+            "uncommitted change should show: {patch}"
+        );
         assert!(
             diffs.iter().any(|d| d.filename == "untracked.txt"),
             "untracked file should show when uncommitted is included"
@@ -933,7 +939,10 @@ mod tests {
             .find(|d| d.filename == "tracked.txt")
             .expect("tracked.txt in diff");
         let patch = tracked.patch.as_deref().unwrap_or("");
-        assert!(patch.contains("+uncommitted"), "uncommitted change should show: {patch}");
+        assert!(
+            patch.contains("+uncommitted"),
+            "uncommitted change should show: {patch}"
+        );
         assert!(
             !patch.contains("+committed"),
             "committed change is already in HEAD and must NOT re-appear in uncommitted-only mode: {patch}"
@@ -952,7 +961,10 @@ mod tests {
             .await
             .expect("empty-scope diff");
 
-        assert!(diffs.is_empty(), "no scope selected yields no diff, got {diffs:?}");
+        assert!(
+            diffs.is_empty(),
+            "no scope selected yields no diff, got {diffs:?}"
+        );
     }
 
     #[tokio::test]
@@ -974,7 +986,11 @@ mod tests {
             .iter()
             .find(|d| d.filename == "tracked.txt")
             .expect("tracked.txt in diff");
-        assert!(tracked.patch.as_deref().unwrap_or("").contains("+uncommitted"));
+        assert!(tracked
+            .patch
+            .as_deref()
+            .unwrap_or("")
+            .contains("+uncommitted"));
     }
 
     #[tokio::test]

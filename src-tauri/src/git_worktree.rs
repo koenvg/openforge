@@ -2440,7 +2440,10 @@ mod tests {
 
         // Local branch at base; remote one commit ahead.
         assert_git_success(&repo_path, &["branch", "feature/behind"]);
-        assert_git_success(&repo_path, &["checkout", "-b", "tmp-remote", "feature/behind"]);
+        assert_git_success(
+            &repo_path,
+            &["checkout", "-b", "tmp-remote", "feature/behind"],
+        );
         std::fs::write(repo_path.join("README.md"), "remote ahead\n")
             .expect("fixture file should be written");
         assert_git_success(&repo_path, &["commit", "-am", "remote advance"]);
@@ -2510,7 +2513,10 @@ mod tests {
             std::fs::write(repo_path.join("counter.txt"), format!("commit {index}\n"))
                 .expect("fixture file should be written");
             assert_git_success(&repo_path, &["add", "counter.txt"]);
-            assert_git_success(&repo_path, &["commit", "-m", &format!("ahead commit {index}")]);
+            assert_git_success(
+                &repo_path,
+                &["commit", "-m", &format!("ahead commit {index}")],
+            );
         }
         assert_git_success(&repo_path, &["checkout", "main"]);
 
@@ -2559,7 +2565,10 @@ mod tests {
 
         assert_eq!(branch_name, "feature/keep");
         // Worktree HEAD equals the local tip: ahead commits survived.
-        assert_eq!(git_stdout(&worktree_path, &["rev-parse", "HEAD"]), local_tip);
+        assert_eq!(
+            git_stdout(&worktree_path, &["rev-parse", "HEAD"]),
+            local_tip
+        );
         assert_eq!(
             git_stdout(&worktree_path, &["rev-parse", "--abbrev-ref", "HEAD"]),
             "feature/keep"
@@ -2605,7 +2614,10 @@ mod tests {
 
         assert_eq!(branch_name, "feature/reset");
         // Worktree HEAD equals the remote tip: local ahead commits were discarded.
-        assert_eq!(git_stdout(&worktree_path, &["rev-parse", "HEAD"]), remote_tip);
+        assert_eq!(
+            git_stdout(&worktree_path, &["rev-parse", "HEAD"]),
+            remote_tip
+        );
         // The local branch ref itself now points at the remote tip (reset moved it).
         assert_eq!(
             git_stdout(&repo_path, &["rev-parse", "refs/heads/feature/reset"]),

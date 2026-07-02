@@ -223,7 +223,7 @@ mod tests {
             10,
             &[],
             1000,
-            2000
+            2000,
         )
         .expect("upsert failed");
 
@@ -272,7 +272,7 @@ mod tests {
             10,
             &[],
             1000,
-            3000
+            3000,
         )
         .expect("upsert update failed");
 
@@ -368,7 +368,7 @@ mod tests {
             2,
             &[],
             1000,
-            1000
+            1000,
         )
         .expect("insert 1 failed");
         db.upsert_review_pr(
@@ -391,7 +391,7 @@ mod tests {
             3,
             &[],
             2000,
-            2000
+            2000,
         )
         .expect("insert 2 failed");
         db.upsert_review_pr(
@@ -414,7 +414,7 @@ mod tests {
             4,
             &[],
             3000,
-            3000
+            3000,
         )
         .expect("insert 3 failed");
 
@@ -460,7 +460,7 @@ mod tests {
             2,
             &[],
             1000,
-            1000
+            1000,
         )
         .expect("insert older failed");
         db.upsert_review_pr(
@@ -483,7 +483,7 @@ mod tests {
             3,
             &[],
             2000,
-            5000
+            5000,
         )
         .expect("insert newer failed");
 
@@ -520,7 +520,7 @@ mod tests {
             2,
             &[],
             1000,
-            2000
+            2000,
         )
         .expect("upsert failed");
 
@@ -557,7 +557,7 @@ mod tests {
             2,
             &[],
             1000,
-            2000
+            2000,
         )
         .expect("upsert failed");
 
@@ -597,7 +597,7 @@ mod tests {
             2,
             &[],
             1000,
-            2000
+            2000,
         )
         .expect("upsert failed");
 
@@ -628,7 +628,7 @@ mod tests {
             2,
             &[],
             1000,
-            3000
+            3000,
         )
         .expect("re-upsert failed");
 
@@ -665,7 +665,7 @@ mod tests {
             2,
             &[],
             1000,
-            2000
+            2000,
         )
         .expect("upsert failed");
 
@@ -693,7 +693,7 @@ mod tests {
             2,
             &[],
             1000,
-            3000
+            3000,
         )
         .expect("re-upsert failed");
 
@@ -730,7 +730,7 @@ mod tests {
             2,
             &[],
             1000,
-            2000
+            2000,
         )
         .expect("upsert failed");
 
@@ -755,7 +755,7 @@ mod tests {
             2,
             &[],
             1000,
-            3000
+            3000,
         )
         .expect("re-upsert failed");
 
@@ -794,7 +794,7 @@ mod tests {
                 2,
                 &[],
                 i * 1000,
-                i * 1000
+                i * 1000,
             )
             .expect("upsert failed");
         }
