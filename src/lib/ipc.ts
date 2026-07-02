@@ -1,7 +1,7 @@
 import { invokeDesktopCommand as invoke, isElectronDesktopBridgeAvailable } from "./desktopIpc";
 import { normalizeTask } from "./boardStatus"
 import type { JsonValue } from '@openforge/plugin-sdk'
-import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, DivergenceResolution, ExistingBranchPlan, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource } from "./types";
+import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, DivergenceResolution, ExistingBranchPlan, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, PrWalkthrough, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource } from "./types";
 
 type RawTask = Omit<Task, 'status'> & { status: string }
 
@@ -397,6 +397,22 @@ export async function getAgentReviewComments(reviewPrId: number): Promise<AgentR
 
 export async function updateAgentReviewCommentStatus(commentId: number, status: string): Promise<void> {
   return invoke<void>("update_agent_review_comment_status", { commentId, status });
+}
+
+export async function getPrWalkthrough(reviewPrId: number, headSha: string): Promise<PrWalkthrough | null> {
+  return invoke<PrWalkthrough | null>("get_pr_walkthrough", { reviewPrId, headSha });
+}
+
+export async function startAgentWalkthrough(repoOwner: string, repoName: string, prNumber: number, headRef: string, baseRef: string, prTitle: string, prBody: string | null, headSha: string, reviewPrId: number, prompt: string): Promise<{ walkthrough_session_key: string }> {
+  return invoke<{ walkthrough_session_key: string }>("start_agent_walkthrough", { repoOwner, repoName, prNumber, headRef, baseRef, prTitle, prBody, headSha, reviewPrId, prompt });
+}
+
+export async function abortAgentWalkthrough(walkthroughSessionKey: string): Promise<void> {
+  return invoke<void>("abort_agent_walkthrough", { walkthroughSessionKey });
+}
+
+export async function deletePrWalkthrough(reviewPrId: number, headSha: string): Promise<void> {
+  return invoke<void>("delete_pr_walkthrough", { reviewPrId, headSha });
 }
 
 export async function listOpenCodeCommands(projectId: string): Promise<CommandInfo[]> {

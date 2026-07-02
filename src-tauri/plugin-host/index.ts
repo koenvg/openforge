@@ -1005,7 +1005,10 @@ export async function handleRequest(request: JsonRpcRequest): Promise<void> {
     respond(response.id, { error: response.error })
     return
   }
-  respond(response.id, { result: response.result })
+  // A void/undefined handler result would be dropped by JSON.stringify, producing
+  // a response with no `result` field that the sidecar can't match to its pending
+  // request. Emit an explicit null so every success response carries a `result`.
+  respond(response.id, { result: response.result ?? null })
 }
 
 function startStdioServer(): void {
