@@ -210,6 +210,7 @@ mod tests {
         assert!(CODEX_HOOK_SOURCE.contains("raw_event_type"));
         assert!(CODEX_HOOK_SOURCE.contains("raw_status_type"));
         assert!(CODEX_HOOK_SOURCE.contains("transcript_path"));
+        assert!(CODEX_HOOK_SOURCE.contains("payload.transcript_path"));
         assert!(CODEX_HOOK_SOURCE.contains("openforge-codex-turn"));
         assert!(CODEX_HOOK_SOURCE.contains("turn_aborted"));
         assert!(CODEX_HOOK_SOURCE.contains("started"));

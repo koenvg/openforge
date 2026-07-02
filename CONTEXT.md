@@ -8,6 +8,10 @@ OpenForge is a desktop command center for coordinating task work and AI coding a
 A unit of work tracked by OpenForge for a project.
 _Avoid_: Ticket, issue, job
 
+**Task Display Title**:
+A short, memorable human label shown for a **Task**, stored separately from the Task's prompt text.
+_Avoid_: Prompt title, thread title, branch title
+
 **Implementation Run**:
 An agent-driven attempt to work on a **Task** in a task workspace, identified to plugins by task, session, and workspace.
 _Avoid_: Agent run when referring to the task-scoped OpenForge concept, provider port
@@ -171,6 +175,8 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 ## Relationships
 
 - **Task Creation** creates a project-owned backlog **Task**, not an **Implementation Run**.
+- A **Task Display Title** belongs to a **Task** and does not change its initial prompt, mutable prompt, or **Handoff Notes**.
+- Automatic **Task Display Title** generation happens at most once early in **Agent Session** activity and only when the user has not manually set a title.
 - **Project Task Creation Settings** provide defaults for **Task Creation** while still allowing a specific new **Task** to override them before it is saved.
 - A **Task Schedule** creates a new normal board **Task** for each **Scheduled Fire** rather than mutating or reusing an existing **Task**.
 - A **Task Schedule** belongs to the active project context where it is configured; it is not selected globally from inside the schedule composer.
@@ -258,6 +264,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - "Summary" and **Handoff Notes** overlapped — resolved: user-facing review language should say **Handoff Notes**, while existing unstructured summaries remain valid legacy content.
 - "Status cockpit" was used for the task detail sidebar redesign — resolved: use **Task Attention Pane** for the compact attention-first task detail area.
 - Worktree branch names were considered for prompt-derived descriptions — resolved: **Task Branches** should be stable task identifiers because they are visible as PR source branches.
+- "Codex thread title" was used for a short generated task label — resolved: use **Task Display Title** because the label belongs to the **Task** and may be generated from any provider's **Agent Session**.
 - "Skill" was considered as a core OpenForge platform concept because one built-in plugin manages skills — resolved: skill discovery and editing are a **Plugin-owned Domain** unless multiple plugins need a shared platform contract.
 - `src-tauri` was used to describe both a historical directory and the active Rust process — resolved: use **Rust Sidecar** for the supervised runtime process and **Backend Crate** for the Rust package that builds it.
 - "Terminal pooling" was used for plugin UI, shell process state, and reusable terminal lifecycle — resolved: **Terminal Surface** names the UI, while **Terminal Runtime** names the shared lifecycle owner.

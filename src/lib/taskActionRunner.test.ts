@@ -48,6 +48,8 @@ const task: Task = {
   initial_prompt: 'Prompt',
   prompt: null,
   title: null,
+  title_source: null,
+  title_generated_at: null,
   summary: null,
   status: 'doing',
   agent: null,

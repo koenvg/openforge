@@ -9,7 +9,7 @@ const TURN_MONITOR_ARG = "--monitor-turn";
 const TURN_MONITOR_TIMEOUT_MS = 12 * 60 * 60 * 1000;
 const TURN_MONITOR_POLL_INTERVAL_MS = 500;
 
-async function postLifecycleEvent(kind, rawEventType, rawStatusType = null) {
+async function postLifecycleEvent(kind, rawEventType, rawStatusType = null, hookInput = null) {
   const taskId = process.env.OPENFORGE_TASK_ID;
   const ptyInstanceId = Number(process.env.OPENFORGE_PTY_INSTANCE_ID);
   const port = process.env.OPENFORGE_HTTP_PORT;
@@ -34,6 +34,10 @@ async function postLifecycleEvent(kind, rawEventType, rawStatusType = null) {
 
   if (rawStatusType) {
     payload.raw_status_type = rawStatusType;
+  }
+
+  if (hookInput && typeof hookInput.transcript_path === "string" && hookInput.transcript_path) {
+    payload.transcript_path = hookInput.transcript_path;
   }
 
   await postJson(`http://127.0.0.1:${port}/hooks/agent-lifecycle`, payload);
@@ -242,7 +246,7 @@ async function main() {
     const kind = firstArg;
     const rawEventType = secondArg;
     const hookInput = await readStdinJson();
-    await postLifecycleEvent(kind, rawEventType);
+    await postLifecycleEvent(kind, rawEventType, null, hookInput);
     await maybeStartTurnCompletionMonitor(kind, rawEventType, hookInput);
   } catch (_error) {
     // Lifecycle reporting must never block the provider command.

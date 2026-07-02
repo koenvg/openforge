@@ -1031,6 +1031,38 @@ DROP TABLE plugin_storage_legacy;
             tx.execute("ALTER TABLE tasks ADD COLUMN title TEXT", [])
                 .map_err(rusqlite_migration::HookError::RusqliteError)?;
         }
+
+        for (column, sql) in [
+            (
+                "title_source",
+                "ALTER TABLE tasks ADD COLUMN title_source TEXT",
+            ),
+            (
+                "title_generated_at",
+                "ALTER TABLE tasks ADD COLUMN title_generated_at INTEGER",
+            ),
+        ] {
+            let exists: bool = tx
+                .query_row(
+                    &format!(
+                        "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = '{}'",
+                        column
+                    ),
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap_or(false);
+            if !exists {
+                tx.execute(sql, [])
+                    .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            }
+        }
+
+        tx.execute(
+            "UPDATE tasks SET title_source = 'manual' WHERE title IS NOT NULL AND TRIM(title) != '' AND title_source IS NULL",
+            [],
+        )
+        .map_err(rusqlite_migration::HookError::RusqliteError)?;
         Ok(())
     }),
     // Persist how a task's git worktree should be created. NULL preserves the
@@ -1223,6 +1255,8 @@ pub(super) fn ensure_tasks_columns(conn: &Connection) -> Result<()> {
         ("permission_mode", false),
         ("worktree_source", false),
         ("worktree_branch", false),
+        ("title", false),
+        ("title_source", false),
     ] {
         let exists: bool = conn.query_row(
             &format!(
@@ -1241,6 +1275,18 @@ pub(super) fn ensure_tasks_columns(conn: &Connection) -> Result<()> {
                 )?;
             }
         }
+    }
+
+    let title_generated_at_exists: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'title_generated_at'",
+        [],
+        |r| r.get(0),
+    )?;
+    if !title_generated_at_exists {
+        conn.execute(
+            "ALTER TABLE tasks ADD COLUMN title_generated_at INTEGER",
+            [],
+        )?;
     }
     Ok(())
 }

@@ -596,8 +596,14 @@ pub fn parse_diff_shortstat(shortstat: &str) -> (i32, i32, i32) {
 /// ("<ahead>\t<behind>") into (ahead, behind). Malformed/empty input yields (0, 0).
 pub fn parse_ahead_behind(rev_list: &str) -> (i32, i32) {
     let mut counts = rev_list.split_whitespace();
-    let ahead = counts.next().and_then(|v| v.parse::<i32>().ok()).unwrap_or(0);
-    let behind = counts.next().and_then(|v| v.parse::<i32>().ok()).unwrap_or(0);
+    let ahead = counts
+        .next()
+        .and_then(|v| v.parse::<i32>().ok())
+        .unwrap_or(0);
+    let behind = counts
+        .next()
+        .and_then(|v| v.parse::<i32>().ok())
+        .unwrap_or(0);
     (ahead, behind)
 }
 
@@ -796,7 +802,10 @@ mod tests {
         fs::write(repo.path().join("a.txt"), "1\n").expect("write a.txt");
         run_git(repo.path(), &["add", "."]);
         run_git(repo.path(), &["commit", "-m", "base"]);
-        run_git(repo.path(), &["remote", "add", "origin", remote.path().to_str().unwrap()]);
+        run_git(
+            repo.path(),
+            &["remote", "add", "origin", remote.path().to_str().unwrap()],
+        );
         // Push sets up the upstream tracking branch (origin/main); branch is in sync.
         run_git(repo.path(), &["push", "-u", "origin", "main"]);
         // One local commit that has not been pushed.

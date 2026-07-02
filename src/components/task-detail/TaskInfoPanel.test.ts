@@ -49,6 +49,8 @@ const baseTask: Task = {
   status: 'backlog',
   prompt: 'Build the auth middleware implementation with JWT support',
   title: null,
+  title_source: null,
+  title_generated_at: null,
   summary: null,
   agent: null,
   permission_mode: null,

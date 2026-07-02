@@ -87,6 +87,8 @@ describe('App window and project shortcuts', () => {
         initial_prompt: 'Selected task',
         prompt: null,
         title: null,
+        title_source: null,
+        title_generated_at: null,
         summary: null,
         status: 'doing',
         agent: null,

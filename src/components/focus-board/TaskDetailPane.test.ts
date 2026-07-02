@@ -46,6 +46,8 @@ const baseTask: Task = {
   status: 'doing',
   prompt: null,
   title: null,
+  title_source: null,
+  title_generated_at: null,
   agent: null,
   permission_mode: null,
   worktree_source: null,

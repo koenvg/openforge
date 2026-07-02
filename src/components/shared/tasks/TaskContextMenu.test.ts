@@ -18,6 +18,8 @@ const makeTask = (id: string, status: BoardStatus): Task => ({
   updated_at: 2000,
   prompt: '',
   title: null,
+  title_source: null,
+  title_generated_at: null,
   summary: null,
   agent: null,
   permission_mode: 'default',
