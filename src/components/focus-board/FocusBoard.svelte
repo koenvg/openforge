@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { untrack } from 'svelte'
-  import { backlogLabelFilters, commandHeld, focusBoardFilters, inFlightCollapsedByView, lowFireTaskIdsByProject, mergingTaskIds } from '../../lib/stores'
+  import { onMount, untrack } from 'svelte'
+  import { get } from 'svelte/store'
+  import { backlogLabelFilters, commandHeld, focusBoardFilters, inFlightCollapsedByView, lastViewedTaskId, lowFireTaskIdsByProject, mergingTaskIds } from '../../lib/stores'
   import { filterTasks, getFilterCounts, DEFAULT_FOCUS_STATES, loadFocusFilterStates, loadLowFireTaskIds, saveLowFireTaskIds, isFocusTask } from '../../lib/boardFilters'
   import type { BoardFilter } from '../../lib/boardFilters'
   import { getDependencyWaitLabel } from '../../lib/taskDependencies'
@@ -50,6 +51,11 @@
   let { projectId, projectName, tasks, activeSessions, ticketPrs, onOpenTask, onEditTask, onTaskUpdated, onRunAction }: Props = $props()
 
   let selectedTaskIdLocal: string | null = $state(null)
+  // Which card the user just returned from — snapshot once at init (before it's
+  // cleared), used both to seed selection/focus on mount and to play the one-shot pop.
+  // The {#each} is keyed by task.id, so existing cards aren't remounted on data
+  // refresh and the pop won't replay.
+  let recentlyViewedTaskId = $state<string | null>(get(lastViewedTaskId))
   let paneHasFocus = $state(false)
   let contextMenu = $state({ visible: false, x: 0, y: 0, taskId: '' })
   let projectActions = $state<Action[]>([])
@@ -232,6 +238,21 @@
       const task = filteredTasks[index]
       if (task) onRunAction({ taskId: task.id, actionPrompt: '', agent: null })
     },
+  })
+
+  onMount(() => {
+    // Returning from a task detail view: focus that task so it becomes the selected
+    // card. The focusedIndex effects below sync selectedTaskIdLocal and scroll it into
+    // view. Falls back to the default first-card focus when it isn't currently visible.
+    if (recentlyViewedTaskId) {
+      const idx = filteredTasks.findIndex((t) => t.id === recentlyViewedTaskId)
+      if (idx >= 0) {
+        vim.setFocusedIndex(idx)
+      }
+    }
+    if (get(lastViewedTaskId) !== null) {
+      lastViewedTaskId.set(null)
+    }
   })
 
   $effect(() => {
@@ -480,6 +501,7 @@
                 showLabels={activeFilter === 'backlog'}
                 isSelected={selectedTaskIdLocal === task.id}
                 isFocused={vim.focusedIndex === row.taskIndex}
+                justViewed={recentlyViewedTaskId === task.id}
                 isMerging={$mergingTaskIds.has(task.id)}
                 onSelect={() => {
                   if (selectedTaskIdLocal === task.id) {
