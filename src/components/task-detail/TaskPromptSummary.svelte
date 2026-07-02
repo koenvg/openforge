@@ -14,9 +14,10 @@
   let canEditPrompt = $derived(task.status === 'backlog' && !!onEditPrompt)
 
   const HANDOFF_PREVIEW_LENGTH = 112
+  const INITIAL_PROMPT_PREVIEW_LINES = 3
 
   let handoffExpanded = $state(false)
-  // The initial prompt is collapsed by default; its text is revealed on demand.
+  // The initial prompt shows a short preview by default; full text is revealed on demand.
   let promptExpanded = $state(false)
   let previousTaskId: string | null = null
 
@@ -27,6 +28,9 @@
     : `${handoffNotes.slice(0, HANDOFF_PREVIEW_LENGTH).trimEnd()}…`)
 
   let initialPromptText = $derived(parseTaskPrompt(task.initial_prompt).text)
+  let initialPromptPreview = $derived(initialPromptText.split('\n').slice(0, INITIAL_PROMPT_PREVIEW_LINES).join('\n'))
+  let initialPromptHasOverflow = $derived(initialPromptText.split('\n').length > INITIAL_PROMPT_PREVIEW_LINES)
+  let visibleInitialPrompt = $derived(promptExpanded || !initialPromptHasOverflow ? initialPromptText : initialPromptPreview)
 
   let handoffContentId = $derived(`handoff-notes-${task.id}`)
   let promptContentId = $derived(`initial-prompt-${task.id}`)
@@ -84,19 +88,19 @@
     {/if}
   </div>
   <div class="px-3 py-2 flex flex-col gap-2">
-    {#if promptExpanded}
-      <div id={promptContentId} role="region" aria-label="Initial Prompt content" class="text-xs text-base-content/65 leading-relaxed whitespace-pre-wrap break-words">{initialPromptText}</div>
+    <div id={promptContentId} role="region" aria-label="Initial Prompt content" class="text-xs text-base-content/65 leading-relaxed whitespace-pre-wrap break-words">{visibleInitialPrompt}</div>
+    {#if initialPromptHasOverflow}
+      <div role="group" aria-label="Initial Prompt actions" class="flex justify-start">
+        <button
+          type="button"
+          class="btn btn-outline btn-xs focus-visible:ring-2 focus-visible:ring-primary rounded"
+          aria-expanded={promptExpanded}
+          aria-controls={promptContentId}
+          onclick={() => { promptExpanded = !promptExpanded }}
+        >
+          {promptExpanded ? 'Show less Initial Prompt' : 'Show full Initial Prompt'}
+        </button>
+      </div>
     {/if}
-    <div role="group" aria-label="Initial Prompt actions" class="flex justify-start">
-      <button
-        type="button"
-        class="btn btn-outline btn-xs focus-visible:ring-2 focus-visible:ring-primary rounded"
-        aria-expanded={promptExpanded}
-        aria-controls={promptContentId}
-        onclick={() => { promptExpanded = !promptExpanded }}
-      >
-        {promptExpanded ? 'Hide Initial Prompt' : 'Show Initial Prompt'}
-      </button>
-    </div>
   </div>
 </section>
