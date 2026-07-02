@@ -31,7 +31,7 @@ describe('compileReviewPrompt', () => {
     expect(result).toContain('Please evaluate each review comment for validity and applicability before changing code.')
     expect(result).toContain('Only apply fixes for comments that are valid for the current code and task context.')
     expect(result).toContain('If a comment is invalid, stale, already addressed, or not applicable, do not make a change for it; explain why in your response.')
-    expect(result).toContain('After making all valid fixes, commit the changes and push to the branch.')
+    expect(result).not.toMatch(/\bcommit\b|\bpush\b/i)
   })
 
   it('handles inline-only — omits General Feedback section', () => {
@@ -44,7 +44,7 @@ describe('compileReviewPrompt', () => {
     expect(result).toContain('`src/foo.ts:5`')
     expect(result).toContain('Fix this')
     expect(result).toContain('Please evaluate each review comment for validity and applicability before changing code.')
-    expect(result).toContain('After making all valid fixes, commit the changes and push to the branch.')
+    expect(result).not.toMatch(/\bcommit\b|\bpush\b/i)
   })
 
   it('handles general-only — omits Code Comments section', () => {
@@ -56,7 +56,7 @@ describe('compileReviewPrompt', () => {
     expect(result).toContain('## General Feedback')
     expect(result).toContain('Improve test coverage')
     expect(result).toContain('Please evaluate each review comment for validity and applicability before changing code.')
-    expect(result).toContain('After making all valid fixes, commit the changes and push to the branch.')
+    expect(result).not.toMatch(/\bcommit\b|\bpush\b/i)
   })
 
   it('handles special characters in comment body — backticks, quotes, newlines preserved', () => {
@@ -108,6 +108,18 @@ describe('compileReviewPrompt', () => {
     const result = compileReviewPrompt('Invalid Feedback', [], [{ body: 'Use a helper that no longer exists' }])
 
     expect(result).toContain('If a comment is invalid, stale, already addressed, or not applicable, do not make a change for it; explain why in your response.')
+  })
+
+  it('does not instruct the agent to perform git actions after fixes', () => {
+    const result = compileReviewPrompt(
+      'Git Free',
+      [{ path: 'x.ts', line: 1, body: 'Fix this' }],
+      [{ body: 'General note' }],
+      [{ body: 'PR note', author: 'reviewer', file_path: 'y.ts', line_number: 2 }]
+    )
+
+    expect(result).not.toContain('After making all valid fixes, commit the changes and push to the branch.')
+    expect(result).not.toMatch(/\bcommit\b|\bpush\b|\bbranch\b/i)
   })
 
   it('includes PR review comments section when prReviewComments provided', () => {
