@@ -480,6 +480,8 @@ mod tests {
             worktree_source: None,
             worktree_branch: None,
             title: None,
+            title_source: None,
+            title_generated_at: None,
             handoff_notes_enabled: true,
             depends_on: Vec::new(),
             labels: Vec::new(),
@@ -582,6 +584,17 @@ mod tests {
         assert!(!prompt.contains("openforge_update_task"));
         assert!(!prompt.contains("<initial_prompt_update"));
         assert!(!prompt.contains("initial_prompt=\"...\""));
+    }
+
+    #[test]
+    fn test_build_task_prompt_never_requests_task_display_title_generation() {
+        let task = sample_task("T-300", "Prompt that needs a better title", None);
+
+        let prompt = build_task_prompt(&task, None, false, None);
+
+        assert!(!prompt.contains("Task Display Title"));
+        assert!(!prompt.contains("update_task_title"));
+        assert!(!prompt.contains("title generation"));
     }
 
     #[test]

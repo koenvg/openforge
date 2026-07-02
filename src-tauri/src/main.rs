@@ -37,6 +37,7 @@ mod runtime_checks;
 mod secure_store;
 mod self_review_runtime;
 mod startup_resume;
+mod task_metadata_refresh;
 mod user_environment;
 mod whisper_manager;
 use log::{info, warn};

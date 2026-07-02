@@ -36,6 +36,12 @@ pub struct TaskRow {
     pub worktree_branch: Option<String>,
     /// Explicit display title; `None` means fall back to the prompt-derived title.
     pub title: Option<String>,
+    /// Origin of the explicit display title. `manual` means user-provided and must
+    /// not be overwritten by automatic generation; `generated` means OpenForge set it.
+    pub title_source: Option<String>,
+    /// Timestamp of the first automatic title generation attempt that wrote a title.
+    /// Once set, generation will not run again for this task.
+    pub title_generated_at: Option<i64>,
     /// Whether the task's start prompt includes the OpenForge handoff-notes
     /// (task management) block. Defaults to `true`; `false` opts the task out.
     pub handoff_notes_enabled: bool,
@@ -283,7 +289,7 @@ impl super::Database {
     pub fn get_tasks_for_project(&self, project_id: &str) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, worktree_source, worktree_branch, handoff_notes_enabled
+            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, title_source, title_generated_at, worktree_source, worktree_branch, handoff_notes_enabled
              FROM tasks WHERE project_id = ?1 ORDER BY updated_at DESC",
         )?;
 
@@ -300,9 +306,11 @@ impl super::Database {
                 agent: row.get(8)?,
                 permission_mode: row.get(9)?,
                 title: row.get(10)?,
-                worktree_source: row.get(11)?,
-                worktree_branch: row.get(12)?,
-                handoff_notes_enabled: row.get(13)?,
+                title_source: row.get(11)?,
+                title_generated_at: row.get(12)?,
+                worktree_source: row.get(13)?,
+                worktree_branch: row.get(14)?,
+                handoff_notes_enabled: row.get(15)?,
                 depends_on: Vec::new(),
                 labels: Vec::new(),
             })
@@ -325,7 +333,7 @@ impl super::Database {
     ) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, worktree_source, worktree_branch, handoff_notes_enabled
+            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, title_source, title_generated_at, worktree_source, worktree_branch, handoff_notes_enabled
              FROM tasks WHERE project_id = ?1 AND status = ?2 ORDER BY updated_at DESC",
         )?;
         let tasks = stmt.query_map([project_id, state], |row| {
@@ -341,9 +349,11 @@ impl super::Database {
                 agent: row.get(8)?,
                 permission_mode: row.get(9)?,
                 title: row.get(10)?,
-                worktree_source: row.get(11)?,
-                worktree_branch: row.get(12)?,
-                handoff_notes_enabled: row.get(13)?,
+                title_source: row.get(11)?,
+                title_generated_at: row.get(12)?,
+                worktree_source: row.get(13)?,
+                worktree_branch: row.get(14)?,
+                handoff_notes_enabled: row.get(15)?,
                 depends_on: Vec::new(),
                 labels: Vec::new(),
             })
@@ -423,6 +433,7 @@ impl super::Database {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(str::to_string);
+        let title_source = title.as_ref().map(|_| "manual".to_string());
 
         let next_id: i64 = conn.query_row(
             "SELECT value FROM config WHERE key = 'next_task_id'",
@@ -461,8 +472,8 @@ impl super::Database {
         let final_prompt = prompt.unwrap_or(initial_prompt);
 
         conn.execute(
-            "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, worktree_source, worktree_branch, title, handoff_notes_enabled)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+            "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, worktree_source, worktree_branch, title, title_source, title_generated_at, handoff_notes_enabled)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             rusqlite::params![
                 &task_id,
                 initial_prompt,
@@ -477,6 +488,8 @@ impl super::Database {
                 worktree_source.as_deref(),
                 worktree_branch.as_deref(),
                 title.as_deref(),
+                title_source.as_deref(),
+                None::<i64>,
                 handoff_notes_enabled,
             ],
         )?;
@@ -495,6 +508,8 @@ impl super::Database {
             worktree_source,
             worktree_branch,
             title,
+            title_source,
+            title_generated_at: None,
             handoff_notes_enabled,
             depends_on: Vec::new(),
             labels: Vec::new(),
@@ -504,7 +519,7 @@ impl super::Database {
     pub fn get_all_tasks(&self) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, worktree_source, worktree_branch, handoff_notes_enabled
+            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, title_source, title_generated_at, worktree_source, worktree_branch, handoff_notes_enabled
              FROM tasks ORDER BY updated_at DESC"
         )?;
 
@@ -521,9 +536,11 @@ impl super::Database {
                 agent: row.get(8)?,
                 permission_mode: row.get(9)?,
                 title: row.get(10)?,
-                worktree_source: row.get(11)?,
-                worktree_branch: row.get(12)?,
-                handoff_notes_enabled: row.get(13)?,
+                title_source: row.get(11)?,
+                title_generated_at: row.get(12)?,
+                worktree_source: row.get(13)?,
+                worktree_branch: row.get(14)?,
+                handoff_notes_enabled: row.get(15)?,
                 depends_on: Vec::new(),
                 labels: Vec::new(),
             })
@@ -542,7 +559,7 @@ impl super::Database {
     pub fn get_task(&self, id: &str) -> Result<Option<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, worktree_source, worktree_branch, handoff_notes_enabled
+            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, title_source, title_generated_at, worktree_source, worktree_branch, handoff_notes_enabled
              FROM tasks WHERE id = ?1"
         )?;
         let mut rows = stmt.query([id])?;
@@ -559,9 +576,11 @@ impl super::Database {
                 agent: row.get(8)?,
                 permission_mode: row.get(9)?,
                 title: row.get(10)?,
-                worktree_source: row.get(11)?,
-                worktree_branch: row.get(12)?,
-                handoff_notes_enabled: row.get(13)?,
+                title_source: row.get(11)?,
+                title_generated_at: row.get(12)?,
+                worktree_source: row.get(13)?,
+                worktree_branch: row.get(14)?,
+                handoff_notes_enabled: row.get(15)?,
                 depends_on: load_task_dependency_ids(&conn, id)?,
                 labels: load_task_labels(&conn, id)?,
             }))
@@ -764,16 +783,42 @@ impl super::Database {
             .expect("time went backwards")
             .as_secs() as i64;
         let trimmed = title.trim();
-        let stored_title: Option<&str> = if trimmed.is_empty() {
-            None
+        let (stored_title, title_source): (Option<&str>, Option<&str>) = if trimmed.is_empty() {
+            (None, None)
         } else {
-            Some(trimmed)
+            (Some(trimmed), Some("manual"))
         };
         conn.execute(
-            "UPDATE tasks SET title = ?1, updated_at = ?2 WHERE id = ?3",
-            rusqlite::params![stored_title, now, id],
+            "UPDATE tasks SET title = ?1, title_source = ?2, updated_at = ?3 WHERE id = ?4",
+            rusqlite::params![stored_title, title_source, now, id],
         )?;
         Ok(())
+    }
+
+    /// Set an automatically generated task display title exactly once. Generated
+    /// titles never overwrite a manual title and a task with a prior generation
+    /// timestamp is skipped even if the title was later cleared.
+    pub fn update_generated_task_title_once(&self, id: &str, title: &str) -> Result<bool> {
+        let trimmed = title.trim();
+        if trimmed.is_empty() {
+            return Ok(false);
+        }
+
+        let conn = self.conn.lock().unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs() as i64;
+        let changed = conn.execute(
+            "UPDATE tasks
+             SET title = ?1, title_source = 'generated', title_generated_at = ?2, updated_at = ?2
+             WHERE id = ?3
+               AND title_generated_at IS NULL
+               AND (title_source IS NULL OR title_source != 'manual')
+               AND (title IS NULL OR TRIM(title) = '')",
+            rusqlite::params![trimmed, now, id],
+        )?;
+        Ok(changed > 0)
     }
 
     pub fn update_task_status(&self, id: &str, status: &str) -> Result<()> {
@@ -1129,12 +1174,16 @@ mod tests {
             })
             .expect("create failed");
 
-        // Title is trimmed; the handoff opt-out is persisted.
+        // Title is trimmed, treated as manual user input, and the handoff opt-out is persisted.
         assert_eq!(task.title.as_deref(), Some("Custom title"));
+        assert_eq!(task.title_source.as_deref(), Some("manual"));
+        assert_eq!(task.title_generated_at, None);
         assert!(!task.handoff_notes_enabled);
 
         let retrieved = db.get_task(&task.id).expect("get failed").unwrap();
         assert_eq!(retrieved.title.as_deref(), Some("Custom title"));
+        assert_eq!(retrieved.title_source.as_deref(), Some("manual"));
+        assert_eq!(retrieved.title_generated_at, None);
         assert!(!retrieved.handoff_notes_enabled);
 
         drop(db);
@@ -1199,18 +1248,73 @@ mod tests {
             .expect("create failed");
         db.update_task_title(&task.id, "Has title")
             .expect("set title failed");
-        assert_eq!(
-            db.get_task(&task.id).expect("get failed").unwrap().title,
-            Some("Has title".to_string())
-        );
+        let titled = db.get_task(&task.id).expect("get failed").unwrap();
+        assert_eq!(titled.title, Some("Has title".to_string()));
+        assert_eq!(titled.title_source.as_deref(), Some("manual"));
 
-        // Clearing the title (blank input) reverts to the derived title.
+        // Clearing the title (blank input) reverts to the derived title and clears manual provenance.
         db.update_task_title(&task.id, "   ")
             .expect("clear title failed");
-        assert_eq!(
-            db.get_task(&task.id).expect("get failed").unwrap().title,
-            None
-        );
+        let cleared = db.get_task(&task.id).expect("get failed").unwrap();
+        assert_eq!(cleared.title, None);
+        assert_eq!(cleared.title_source, None);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_update_generated_task_title_sets_title_once_for_unset_task() {
+        let (db, path) = make_test_db("generated_task_title_once");
+
+        let task = db
+            .create_task("Original prompt", "doing", None, None, None)
+            .expect("create failed");
+
+        assert!(db
+            .update_generated_task_title_once(&task.id, "Actual migration race")
+            .expect("generated title failed"));
+        let generated = db.get_task(&task.id).expect("get failed").unwrap();
+        assert_eq!(generated.title.as_deref(), Some("Actual migration race"));
+        assert_eq!(generated.title_source.as_deref(), Some("generated"));
+        assert!(generated.title_generated_at.is_some());
+
+        assert!(!db
+            .update_generated_task_title_once(&task.id, "Different title")
+            .expect("second generated title failed"));
+        let unchanged = db.get_task(&task.id).expect("get failed").unwrap();
+        assert_eq!(unchanged.title.as_deref(), Some("Actual migration race"));
+        assert_eq!(unchanged.title_source.as_deref(), Some("generated"));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_generated_task_title_never_overwrites_manual_title() {
+        let (db, path) = make_test_db("generated_task_title_manual_guard");
+
+        let task = db
+            .create_task_with_options(super::NewTaskOptions {
+                initial_prompt: "Original prompt",
+                status: "doing",
+                project_id: None,
+                prompt: None,
+                permission_mode: None,
+                worktree_source: None,
+                worktree_branch: None,
+                title: Some("Manual title"),
+                handoff_notes_enabled: true,
+            })
+            .expect("create failed");
+
+        assert!(!db
+            .update_generated_task_title_once(&task.id, "Generated title")
+            .expect("generated title failed"));
+        let unchanged = db.get_task(&task.id).expect("get failed").unwrap();
+        assert_eq!(unchanged.title.as_deref(), Some("Manual title"));
+        assert_eq!(unchanged.title_source.as_deref(), Some("manual"));
+        assert_eq!(unchanged.title_generated_at, None);
 
         drop(db);
         let _ = fs::remove_file(&path);

@@ -11,6 +11,10 @@ export interface Task {
   prompt: string | null;
   /** Explicit display title; null means fall back to the prompt-derived title. */
   title: string | null;
+  /** Origin of the explicit display title; manual titles are never overwritten by automation. */
+  title_source: 'manual' | 'generated' | null;
+  /** Unix timestamp for the first generated title write; null means generation has not written yet. */
+  title_generated_at: number | null;
   summary: string | null;
   agent: string | null;
   permission_mode: string | null;
