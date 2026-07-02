@@ -2,6 +2,8 @@ use rusqlite::Result;
 use serde::Serialize;
 use std::collections::HashSet;
 
+use super::pull_request_readiness::terminal_readiness_blockers_json;
+
 /// Pull request row from database
 #[derive(Debug, Clone, Serialize)]
 pub struct PrRow {
@@ -38,36 +40,11 @@ pub struct PrRow {
     pub unaddressed_comment_count: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PrMergeReadinessFacts {
-    pub status: Option<String>,
-    pub action: Option<String>,
-    pub blockers_json: Option<String>,
-    pub warnings_json: Option<String>,
-    pub source_head_sha: Option<String>,
-    pub merge_group_sha: Option<String>,
-    pub required_checks_policy_known: Option<bool>,
-    pub required_reviews_policy_known: Option<bool>,
-    pub merge_queue_required: Option<bool>,
-    pub merge_queue_state: Option<String>,
-    pub updated_at: i64,
-}
-
-impl PrMergeReadinessFacts {
-    pub fn merge_readiness_warnings_or_default(&self) -> String {
-        self.warnings_json.clone().unwrap_or_default()
-    }
-}
-
 fn current_unix_timestamp() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_secs() as i64)
         .unwrap_or(0)
-}
-
-fn terminal_readiness_blockers_json(code: &str, message: &str) -> String {
-    serde_json::json!([{ "code": code, "message": message }]).to_string()
 }
 
 fn read_pr_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrRow> {
@@ -434,44 +411,6 @@ impl super::Database {
         Ok(())
     }
 
-    pub fn update_pr_merge_readiness(
-        &self,
-        pr_id: i64,
-        facts: &PrMergeReadinessFacts,
-    ) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "UPDATE pull_requests SET
-                merge_readiness_status = ?1,
-                merge_readiness_action = ?2,
-                merge_readiness_blockers = ?3,
-                merge_readiness_warnings = ?4,
-                readiness_source_head_sha = ?5,
-                merge_group_sha = ?6,
-                required_checks_policy_known = ?7,
-                required_reviews_policy_known = ?8,
-                merge_queue_required = ?9,
-                merge_queue_state = ?10,
-                readiness_updated_at = ?11
-             WHERE id = ?12",
-            rusqlite::params![
-                facts.status,
-                facts.action,
-                facts.blockers_json,
-                facts.warnings_json,
-                facts.source_head_sha,
-                facts.merge_group_sha,
-                facts.required_checks_policy_known,
-                facts.required_reviews_policy_known,
-                facts.merge_queue_required,
-                facts.merge_queue_state,
-                facts.updated_at,
-                pr_id,
-            ],
-        )?;
-        Ok(())
-    }
-
     /// Get existing comment IDs for a PR as a HashSet for efficient batch lookups
     pub fn get_existing_comment_ids(&self, pr_id: i64) -> Result<HashSet<i64>> {
         let conn = self.conn.lock().unwrap();
@@ -612,8 +551,8 @@ impl super::Database {
 
 #[cfg(test)]
 mod tests {
-    use super::PrMergeReadinessFacts;
     use crate::db::test_helpers::*;
+    use crate::db::PrMergeReadinessFacts;
     use std::fs;
 
     #[test]
