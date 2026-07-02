@@ -264,7 +264,7 @@ mod tests {
             None,
             &[],
             1000,
-            2000
+            2000,
         )
         .expect("upsert failed");
 
@@ -379,7 +379,7 @@ mod tests {
             None,
             &[],
             1000,
-            2000
+            2000,
         )
         .expect("insert failed");
 
@@ -409,7 +409,7 @@ mod tests {
             None,
             &[],
             1000,
-            3000
+            3000,
         )
         .expect("update failed");
 
@@ -456,7 +456,7 @@ mod tests {
                 None,
                 &[],
                 i * 1000,
-                i * 1000
+                i * 1000,
             )
             .expect("insert failed");
         }
@@ -509,7 +509,7 @@ mod tests {
             None,
             &[],
             1000,
-            1000
+            1000,
         )
         .expect("insert older failed");
 
@@ -539,7 +539,7 @@ mod tests {
             None,
             &[],
             2000,
-            5000
+            5000,
         )
         .expect("insert newer failed");
 
@@ -582,7 +582,7 @@ mod tests {
             Some("T-100"),
             &[],
             1000,
-            1000
+            1000,
         )
         .expect("insert failed");
 
@@ -623,7 +623,7 @@ mod tests {
             None,
             &[],
             1000,
-            1000
+            1000,
         )
         .expect("insert failed");
 
