@@ -357,7 +357,6 @@ describe('FocusBoard', () => {
     })
     const detailPane = screen.getByTestId('task-info-panel')
     expect(within(detailPane).getByText('Initial Prompt')).toBeTruthy()
-    await fireEvent.click(within(detailPane).getByRole('button', { name: /show initial prompt/i }))
     expect(within(detailPane).getByRole('region', { name: 'Initial Prompt content' }).textContent).toContain('Focus task')
   })
 

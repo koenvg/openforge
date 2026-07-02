@@ -378,20 +378,22 @@ describe('TaskInfoPanel', () => {
     expect(screen.getByRole('button', { name: 'Show less Handoff Notes' }).getAttribute('aria-expanded')).toBe('true')
   })
 
-  it('collapses the initial prompt by default and reveals it on request', async () => {
+  it('previews the initial prompt by default and expands it on request', async () => {
     const promptTask = {
       ...baseTask,
-      initial_prompt: 'Build a calm task attention pane so reviewers see active signals before long-form task documents.',
+      initial_prompt: 'Build a calm task attention pane\nShow active signals\nKeep long documents below\nReserve full text for expansion',
     }
 
     render(TaskInfoPanel, { props: { task: promptTask, workspacePath: null } })
 
-    expect(screen.getByText('Initial Prompt')).toBeTruthy()
-    expect(screen.queryByText(/Build a calm task attention pane/)).toBeNull()
+    const promptSection = screen.getByLabelText('Initial Prompt').closest('section')
+    expect(promptSection?.textContent).toContain('Build a calm task attention pane')
+    expect(promptSection?.textContent).toContain('Keep long documents below')
+    expect(promptSection?.textContent).not.toContain('Reserve full text for expansion')
 
-    await fireEvent.click(screen.getByRole('button', { name: /show initial prompt/i }))
+    await fireEvent.click(screen.getByRole('button', { name: /show full initial prompt/i }))
 
-    expect(screen.getByText(/Build a calm task attention pane/)).toBeTruthy()
+    expect(promptSection?.textContent).toContain('Reserve full text for expansion')
   })
 
   it('keeps handoff notes content in a separate full-width region before expand controls', () => {
@@ -412,13 +414,23 @@ describe('TaskInfoPanel', () => {
     expect(Boolean(handoffContent.compareDocumentPosition(handoffControls) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
   })
 
-  it('renders the Initial Prompt section collapsed by default and reveals the prompt on request', async () => {
-    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
+  it('renders the Initial Prompt section as a preview by default and reveals the full prompt on request', async () => {
+    render(TaskInfoPanel, {
+      props: {
+        task: {
+          ...baseTask,
+          initial_prompt: 'Line one\nLine two\nLine three\nLine four',
+        },
+        workspacePath: null,
+      },
+    })
     expect(screen.getByText('Initial Prompt')).toBeTruthy()
-    expect(screen.queryByText('Implement auth middleware')).toBeNull()
+    const promptContent = screen.getByRole('region', { name: 'Initial Prompt content' })
+    expect(promptContent.textContent).toContain('Line three')
+    expect(promptContent.textContent).not.toContain('Line four')
 
-    await fireEvent.click(screen.getByRole('button', { name: /show initial prompt/i }))
-    expect(screen.getByText('Implement auth middleware')).toBeTruthy()
+    await fireEvent.click(screen.getByRole('button', { name: /show full initial prompt/i }))
+    expect(promptContent.textContent).toContain('Line four')
   })
 
   it('renders existing labels and adds/removes labels through IPC', async () => {

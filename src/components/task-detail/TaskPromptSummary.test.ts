@@ -22,41 +22,66 @@ const baseTask: Task = {
 }
 
 describe('TaskPromptSummary', () => {
-  it('collapses the initial prompt by default while still rendering handoff notes', () => {
-    render(TaskPromptSummary, { props: { task: baseTask } })
-    // Initial Prompt header and reveal control are present, but the text is not.
-    expect(screen.getByText('Initial Prompt')).toBeTruthy()
-    expect(screen.getByRole('button', { name: /show initial prompt/i })).toBeTruthy()
-    expect(screen.queryByText('Implement auth middleware')).toBeNull()
+  it('previews the first three initial prompt lines by default while still rendering handoff notes', () => {
+    render(TaskPromptSummary, {
+      props: {
+        task: {
+          ...baseTask,
+          initial_prompt: 'Line one\nLine two\nLine three\nLine four',
+        },
+      },
+    })
+
+    const promptContent = screen.getByRole('region', { name: 'Initial Prompt content' })
+    expect(promptContent.textContent).toContain('Line one')
+    expect(promptContent.textContent).toContain('Line two')
+    expect(promptContent.textContent).toContain('Line three')
+    expect(promptContent.textContent).not.toContain('Line four')
+    expect(screen.getByRole('button', { name: /show full initial prompt/i })).toBeTruthy()
+
     // Handoff Notes behavior is unchanged.
     expect(screen.getByText('Handoff Notes')).toBeTruthy()
     expect(screen.getByText('Implemented JWT auth')).toBeTruthy()
   })
 
-  it('reveals and hides the initial prompt text when the toggle is clicked', async () => {
-    render(TaskPromptSummary, { props: { task: baseTask } })
-    expect(screen.queryByText('Implement auth middleware')).toBeNull()
-
-    await fireEvent.click(screen.getByRole('button', { name: /show initial prompt/i }))
-    expect(screen.getByText('Implement auth middleware')).toBeTruthy()
-
-    await fireEvent.click(screen.getByRole('button', { name: /hide initial prompt/i }))
-    expect(screen.queryByText('Implement auth middleware')).toBeNull()
-  })
-
-  it('hides persisted image reference definitions from the initial prompt once revealed', async () => {
+  it('expands and collapses the initial prompt text when the toggle is clicked', async () => {
     render(TaskPromptSummary, {
       props: {
         task: {
           ...baseTask,
-          initial_prompt: 'Inspect [image#1] carefully\n\n[image#1]: data:image/png;base64,aW1hZ2UtYnl0ZXM=',
+          initial_prompt: 'Line one\nLine two\nLine three\nLine four',
+        },
+      },
+    })
+    const promptContent = screen.getByRole('region', { name: 'Initial Prompt content' })
+    expect(promptContent.textContent).not.toContain('Line four')
+
+    await fireEvent.click(screen.getByRole('button', { name: /show full initial prompt/i }))
+    expect(promptContent.textContent).toContain('Line four')
+
+    await fireEvent.click(screen.getByRole('button', { name: /show less initial prompt/i }))
+    expect(promptContent.textContent).toContain('Line three')
+    expect(promptContent.textContent).not.toContain('Line four')
+  })
+
+  it('hides persisted image reference definitions from the initial prompt preview and full text', async () => {
+    render(TaskPromptSummary, {
+      props: {
+        task: {
+          ...baseTask,
+          initial_prompt: 'Inspect [image#1] carefully\nSecond line\nThird line\nFourth line\n\n[image#1]: data:image/png;base64,aW1hZ2UtYnl0ZXM=',
         },
       },
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: /show initial prompt/i }))
     const promptContent = screen.getByRole('region', { name: 'Initial Prompt content' })
-    expect(promptContent.textContent).toBe('Inspect [image#1] carefully')
+    expect(promptContent.textContent).toContain('Inspect [image#1] carefully')
+    expect(promptContent.textContent).toContain('Third line')
+    expect(promptContent.textContent).not.toContain('Fourth line')
+    expect(promptContent.textContent).not.toContain('data:image/png;base64')
+
+    await fireEvent.click(screen.getByRole('button', { name: /show full initial prompt/i }))
+    expect(promptContent.textContent).toContain('Fourth line')
     expect(promptContent.textContent).not.toContain('data:image/png;base64')
   })
 
