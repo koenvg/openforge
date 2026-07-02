@@ -12,17 +12,9 @@ flowchart TD
     G --> I[Run improve-codebase-architecture skill]
     H --> I
     I --> J{Architecture approved and score >= target?}
-    J -- No --> L{Iterations remaining?}
-    L -- Yes --> M[Fix architecture gate blockers]
-    M --> D
-    L -- No --> N[Manual breakpoint with architecture feedback]
+    J -- No --> N[Complete unsuccessfully with architecture feedback]
     J -- Yes --> P[Project-local review skill: thermo-nuclear code quality review]
     P --> Q{Oracle approved, no required fixes, and score >= target?}
     Q -- Yes --> K[Complete successfully]
-    Q -- No --> R{Iterations remaining?}
-    R -- Yes --> S[Fix oracle blockers and required feedback]
-    S --> D
-    R -- No --> T[Manual breakpoint with oracle feedback]
-    T --> O[Complete as not approved unless user takes over]
-    N --> O
+    Q -- No --> T[Complete unsuccessfully with oracle feedback]
 ```

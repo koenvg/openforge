@@ -8,7 +8,6 @@ import {
   buildOracleReviewPrompt,
   changeInventoryTask,
   angryOracleReviewTask,
-  architectureFixTask,
   architectureReviewTask,
   hasBlockingArchitectureFindings,
   hasBlockingOracleFindings,
@@ -16,7 +15,6 @@ import {
   isFiniteNumericReviewScore,
   manualAppVerificationTask,
   mergeChangedFiles,
-  oracleFixTask,
   process as runProcess,
   projectContextTask,
   runVerificationCommandTask,
@@ -58,7 +56,7 @@ describe('angry oracle code-change process', () => {
     assert.equal(isFiniteNumericReviewScore(Infinity), false);
   });
 
-  it('deduplicates changed files from implementation and fixer outputs while preserving order', () => {
+  it('deduplicates changed files from implementation outputs while preserving order', () => {
     assert.deepEqual(
       mergeChangedFiles(['src/a.ts', 'src/b.ts'], {
         filesCreated: ['src/c.ts'],
@@ -76,19 +74,8 @@ describe('angry oracle code-change process', () => {
     assert.match(task.shell.command, /git ls-files --others --exclude-standard/);
   });
 
-  it('directs fixes to address every reviewer-required change before re-review', async () => {
-    const oracleTask = await oracleFixTask.build({ iteration: 1 }, { effectId: 'effect-1' });
-    const architectureTask = await architectureFixTask.build({ iteration: 1 }, { effectId: 'effect-2' });
-
-    assert.ok(oracleTask.agent.prompt.instructions.some((instruction) => /required fixes/i.test(instruction)));
-    assert.ok(oracleTask.agent.prompt.instructions.some((instruction) => /blocking review/i.test(instruction)));
-    assert.ok(architectureTask.agent.prompt.instructions.some((instruction) => /architecture review/i.test(instruction)));
-    assert.ok(architectureTask.agent.prompt.instructions.some((instruction) => /module boundaries/i.test(instruction)));
-  });
-
   it('applies TDD conditionally instead of mandating failing tests for every workflow change', async () => {
     const implementation = await implementationTask.build({}, { effectId: 'effect-1' });
-    const fix = await oracleFixTask.build({ iteration: 1 }, { effectId: 'effect-2' });
 
     assert.match(implementation.title, /appropriate verification/i);
     assert.ok(
@@ -99,11 +86,6 @@ describe('angry oracle code-change process', () => {
     assert.ok(
       implementation.agent.prompt.instructions.some((instruction) =>
         /documentation-only.*configuration-only.*process-only/i.test(instruction)
-      )
-    );
-    assert.ok(
-      fix.agent.prompt.instructions.some((instruction) =>
-        /Do not invent failing product tests/i.test(instruction)
       )
     );
   });
@@ -250,8 +232,7 @@ describe('angry oracle code-change process', () => {
       {
         request: 'Fix task detail rendering',
         verificationCommands: ['pnpm test src/components/TaskDetails.test.ts'],
-        targetOracleScore: 90,
-        maxOracleIterations: 1
+        targetOracleScore: 90
       },
       {
         runId: 'run-1',
@@ -315,7 +296,7 @@ describe('angry oracle code-change process', () => {
     assert.deepEqual(result.finalArchitectureReview, architectureReview);
   });
 
-  it('blocks high-scoring oracle reviews with missing or invalid verdicts before approval', async () => {
+  it('runs one oracle review and records a failed result without fix loops or breakpoints', async () => {
     for (const oracleReview of [
       { score: 99, summary: 'High-scoring oracle forgot to emit an approve verdict', findings: [] },
       { verdict: 'needs_work', score: 99, summary: 'Oracle emitted an invalid verdict', findings: [] }
@@ -328,8 +309,7 @@ describe('angry oracle code-change process', () => {
         {
           request: 'Tighten oracle gate verdict handling',
           verificationCommands: ['node --test .a5c/processes/angry-oracle-code-change.test.mjs'],
-          targetOracleScore: 90,
-          maxOracleIterations: 1
+          targetOracleScore: 90
         },
         {
           runId: `run-oracle-${oracleReview.verdict || 'missing'}`,
@@ -377,9 +357,11 @@ describe('angry oracle code-change process', () => {
       ]);
       assert.equal(result.architectureApproved, true);
       assert.equal(result.oracleApproved, false);
+      assert.equal(result.success, false);
       assert.deepEqual(result.finalOracleReview, oracleReview);
+      assert.equal(result.oracleAttempts.length, 1);
       assert.equal(result.oracleAttempts[0].blocking, true);
-      assert.equal(breakpoints.length, 1);
+      assert.equal(breakpoints.length, 0);
     }
   });
 
@@ -396,8 +378,7 @@ describe('angry oracle code-change process', () => {
       {
         request: 'Tighten architecture gate verdict handling',
         verificationCommands: ['node --test .a5c/processes/angry-oracle-code-change.test.mjs'],
-        targetOracleScore: 90,
-        maxOracleIterations: 1
+        targetOracleScore: 90
       },
       {
         runId: 'run-1',
@@ -445,8 +426,9 @@ describe('angry oracle code-change process', () => {
     assert.equal(result.oracleApproved, false);
     assert.equal(result.finalOracleReview, null);
     assert.deepEqual(result.finalArchitectureReview, architectureReview);
+    assert.equal(result.architectureAttempts.length, 1);
     assert.equal(result.architectureAttempts[0].blocking, true);
-    assert.equal(breakpoints.length, 1);
+    assert.equal(breakpoints.length, 0);
   });
 
   it('blocks an approving architecture review with a non-numeric score before oracle review', async () => {
@@ -463,8 +445,7 @@ describe('angry oracle code-change process', () => {
       {
         request: 'Tighten architecture gate score handling',
         verificationCommands: ['node --test .a5c/processes/angry-oracle-code-change.test.mjs'],
-        targetOracleScore: 90,
-        maxOracleIterations: 1
+        targetOracleScore: 90
       },
       {
         runId: 'run-1',
@@ -512,8 +493,9 @@ describe('angry oracle code-change process', () => {
     assert.equal(result.oracleApproved, false);
     assert.equal(result.finalOracleReview, null);
     assert.deepEqual(result.finalArchitectureReview, architectureReview);
+    assert.equal(result.architectureAttempts.length, 1);
     assert.equal(result.architectureAttempts[0].blocking, true);
-    assert.equal(breakpoints.length, 1);
+    assert.equal(breakpoints.length, 0);
   });
 
   it('blocks approving architecture reviews with out-of-range scores before oracle review', async () => {
@@ -531,8 +513,7 @@ describe('angry oracle code-change process', () => {
         {
           request: 'Tighten architecture gate score range handling',
           verificationCommands: ['node --test .a5c/processes/angry-oracle-code-change.test.mjs'],
-          targetOracleScore: 90,
-          maxOracleIterations: 1
+          targetOracleScore: 90
         },
         {
           runId: `run-score-${score}`,
@@ -580,20 +561,27 @@ describe('angry oracle code-change process', () => {
       assert.equal(result.oracleApproved, false);
       assert.equal(result.finalOracleReview, null);
       assert.deepEqual(result.finalArchitectureReview, architectureReview);
+      assert.equal(result.architectureAttempts.length, 1);
       assert.equal(result.architectureAttempts[0].blocking, true);
-      assert.equal(breakpoints.length, 1);
+      assert.equal(breakpoints.length, 0);
     }
   });
 
-  it('fixes blocking architecture gate feedback before running the angry oracle review', async () => {
+  it('runs one architecture review and records a failed result without fixes, oracle review, or breakpoints', async () => {
     const taskOrder = [];
+    const breakpoints = [];
+    const architectureReview = {
+      verdict: 'changes_requested',
+      score: 70,
+      summary: 'Ownership is misplaced',
+      findings: [{ severity: 'high', message: 'Wrong layer', actionableFix: 'Move process orchestration back into process task' }]
+    };
 
     const result = await runProcess(
       {
         request: 'Move task orchestration into the right layer',
         verificationCommands: ['node --test .a5c/processes/angry-oracle-code-change.test.mjs'],
-        targetOracleScore: 90,
-        maxOracleIterations: 2
+        targetOracleScore: 90
       },
       {
         runId: 'run-1',
@@ -617,29 +605,15 @@ describe('angry oracle code-change process', () => {
           }
           if (task === architectureReviewTask) {
             taskOrder.push(`architecture-review-${args.iteration}`);
-            return args.iteration === 1
-              ? {
-                  verdict: 'changes_requested',
-                  score: 70,
-                  summary: 'Ownership is misplaced',
-                  findings: [{ severity: 'high', message: 'Wrong layer', actionableFix: 'Move process orchestration back into process task' }]
-                }
-              : { verdict: 'approve', score: 94, summary: 'Architecture now fits', findings: [] };
-          }
-          if (task === architectureFixTask) {
-            taskOrder.push(`architecture-fix-${args.iteration}`);
-            assert.match(args.architectureReview.summary, /Ownership/);
-            return { summary: 'fixed architecture', changedFiles: ['.a5c/processes/angry-oracle-code-change.js'] };
+            return architectureReview;
           }
           if (task === angryOracleReviewTask) {
-            taskOrder.push(`oracle-review-${args.iteration}`);
-            assert.equal(args.iteration, 2);
-            return { verdict: 'approve', score: 95, summary: 'ready', findings: [] };
+            throw new Error('Angry oracle review must not run when architecture review blocks');
           }
           throw new Error(`Unexpected task: ${task?.id || task?.title || 'unknown'}`);
         },
-        breakpoint: async () => {
-          throw new Error('No breakpoint expected');
+        breakpoint: async (details) => {
+          breakpoints.push(details);
         }
       }
     );
@@ -649,14 +623,15 @@ describe('angry oracle code-change process', () => {
       'implementation',
       'change-inventory-1',
       'automated-verification-1',
-      'architecture-review-1',
-      'architecture-fix-1',
-      'change-inventory-2',
-      'automated-verification-2',
-      'architecture-review-2',
-      'oracle-review-2'
+      'architecture-review-1'
     ]);
-    assert.equal(result.architectureApproved, true);
-    assert.equal(result.oracleApproved, true);
+    assert.equal(result.architectureApproved, false);
+    assert.equal(result.oracleApproved, false);
+    assert.equal(result.success, false);
+    assert.deepEqual(result.finalArchitectureReview, architectureReview);
+    assert.equal(result.finalOracleReview, null);
+    assert.equal(result.architectureAttempts.length, 1);
+    assert.equal(result.oracleAttempts.length, 0);
+    assert.equal(breakpoints.length, 0);
   });
 });

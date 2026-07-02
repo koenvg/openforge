@@ -1,13 +1,13 @@
 /**
  * @process openforge/angry-oracle-code-change
- * @description Code-change workflow with context-appropriate verification, an explicit architecture review gate, and a thermo-nuclear post-change review/fix loop
+ * @description Code-change workflow with context-appropriate verification, one explicit architecture review gate, and one thermo-nuclear post-change review
  * @skill rust .agents/skills/rust/SKILL.md
  * @skill ui-ux-pro-max .agents/skills/ui-ux-pro-max/SKILL.md
  * @skill improve-codebase-architecture /Users/koen/.agents/skills/improve-codebase-architecture/SKILL.md
  * @skill openforge /Users/koen/.pi/agent/skills/openforge/SKILL.md
  * @skill openforge-app-operator .agents/skills/openforge-app-operator/SKILL.md
  * @skill review .agents/skills/review/SKILL.md
- * @inputs { request: string, maxOracleIterations: number, targetOracleScore: number, verificationCommands: string[] }
+ * @inputs { request: string, targetOracleScore: number, verificationCommands: string[] }
  * @outputs { success: boolean, architectureApproved: boolean, oracleApproved: boolean, iterations: number, changedFiles: string[], finalArchitectureReview: object, finalOracleReview: object, manualVerification: object }
  */
 
@@ -178,15 +178,15 @@ export function buildOracleReviewPrompt({ request, changedFiles = [], verificati
 
 export async function process(inputs, ctx) {
   const request = inputs.request || inputs.prompt || 'Implement the requested code change';
-  const maxOracleIterations = Number(inputs.maxOracleIterations ?? 3);
   const targetOracleScore = Number(inputs.targetOracleScore ?? 90);
   const verificationCommands = Array.isArray(inputs.verificationCommands) && inputs.verificationCommands.length > 0
     ? inputs.verificationCommands
     : DEFAULT_VERIFICATION_COMMANDS;
+  const iteration = 1;
 
   const projectContext = await ctx.task(projectContextTask, { request });
 
-  let implementation = await ctx.task(implementationTask, {
+  const implementation = await ctx.task(implementationTask, {
     request,
     projectContext,
     previousOracleReview: null
@@ -202,72 +202,40 @@ export async function process(inputs, ctx) {
   let oracleApproved = false;
   let architectureApproved = false;
 
-  for (let iteration = 1; iteration <= maxOracleIterations; iteration++) {
-    const inventory = await ctx.task(changeInventoryTask, { request, changedFiles, iteration });
-    changedFiles = mergeChangedFiles(changedFiles, inventory);
+  const inventory = await ctx.task(changeInventoryTask, { request, changedFiles, iteration });
+  changedFiles = mergeChangedFiles(changedFiles, inventory);
 
-    verificationResults = [];
-    for (const command of verificationCommands) {
-      const result = await ctx.task(runVerificationCommandTask, { command, iteration });
-      verificationResults.push({ command, ...result });
-    }
+  verificationResults = [];
+  for (const command of verificationCommands) {
+    const result = await ctx.task(runVerificationCommandTask, { command, iteration });
+    verificationResults.push({ command, ...result });
+  }
 
-    manualVerification = shouldRequestManualAppVerification(changedFiles)
-      ? await ctx.task(manualAppVerificationTask, { request, changedFiles, verificationResults, iteration })
-      : buildManualVerificationSkip(changedFiles, iteration);
+  manualVerification = shouldRequestManualAppVerification(changedFiles)
+    ? await ctx.task(manualAppVerificationTask, { request, changedFiles, verificationResults, iteration })
+    : buildManualVerificationSkip(changedFiles, iteration);
 
-    finalArchitectureReview = await ctx.task(architectureReviewTask, {
-      request,
-      changedFiles,
-      implementation,
-      verificationResults,
-      manualVerification,
-      iteration,
-      targetOracleScore
-    });
+  finalArchitectureReview = await ctx.task(architectureReviewTask, {
+    request,
+    changedFiles,
+    implementation,
+    verificationResults,
+    manualVerification,
+    iteration,
+    targetOracleScore
+  });
 
-    const architectureBlocking = hasBlockingArchitectureFindings(finalArchitectureReview);
-    const architectureScore = normalizeFiniteReviewScore(finalArchitectureReview?.score);
-    architectureAttempts.push({
-      iteration,
-      review: finalArchitectureReview,
-      blocking: architectureBlocking,
-      score: architectureScore,
-      manualVerification
-    });
+  const architectureBlocking = hasBlockingArchitectureFindings(finalArchitectureReview);
+  const architectureScore = normalizeFiniteReviewScore(finalArchitectureReview?.score);
+  architectureAttempts.push({
+    iteration,
+    review: finalArchitectureReview,
+    blocking: architectureBlocking,
+    score: architectureScore,
+    manualVerification
+  });
 
-    if (architectureBlocking || architectureScore < targetOracleScore) {
-      architectureApproved = false;
-
-      if (iteration === maxOracleIterations) {
-        await ctx.breakpoint({
-          title: 'Architecture review still has blocking feedback',
-          question: `The architecture review gate still requests changes after ${iteration} iteration(s). Stop here or manually approve continuing despite the feedback?`,
-          context: {
-            runId: ctx.runId,
-            architectureReview: finalArchitectureReview,
-            changedFiles,
-            verificationResults,
-            manualVerification
-          },
-          tags: ['architecture', 'quality-gate', 'manual-decision']
-        });
-        break;
-      }
-
-      const fixResult = await ctx.task(architectureFixTask, {
-        request,
-        changedFiles,
-        verificationResults,
-        manualVerification,
-        architectureReview: finalArchitectureReview,
-        iteration
-      });
-      implementation = { ...implementation, ...fixResult };
-      changedFiles = mergeChangedFiles(changedFiles, fixResult);
-      continue;
-    }
-
+  if (!architectureBlocking && architectureScore !== null && architectureScore >= targetOracleScore) {
     architectureApproved = true;
 
     finalOracleReview = await ctx.task(angryOracleReviewTask, {
@@ -282,42 +250,12 @@ export async function process(inputs, ctx) {
     });
 
     const blocking = hasBlockingOracleFindings(finalOracleReview);
-    const score = Number(finalOracleReview?.score ?? 0);
+    const score = normalizeFiniteReviewScore(finalOracleReview?.score);
     oracleAttempts.push({ iteration, review: finalOracleReview, blocking, score, manualVerification, architectureReview: finalArchitectureReview });
 
-    if (!blocking && score >= targetOracleScore) {
+    if (!blocking && score !== null && score >= targetOracleScore) {
       oracleApproved = true;
-      break;
     }
-
-    if (iteration === maxOracleIterations) {
-      await ctx.breakpoint({
-        title: 'Angry oracle still has blocking feedback',
-        question: `The angry oracle still requests changes after ${iteration} iteration(s). Stop here or manually approve continuing despite the feedback?`,
-        context: {
-          runId: ctx.runId,
-          oracleReview: finalOracleReview,
-          architectureReview: finalArchitectureReview,
-          changedFiles,
-          verificationResults,
-          manualVerification
-        },
-        tags: ['oracle', 'quality-gate', 'manual-decision']
-      });
-      break;
-    }
-
-    const fixResult = await ctx.task(oracleFixTask, {
-      request,
-      changedFiles,
-      verificationResults,
-      manualVerification,
-      architectureReview: finalArchitectureReview,
-      oracleReview: finalOracleReview,
-      iteration
-    });
-    implementation = { ...implementation, ...fixResult };
-    changedFiles = mergeChangedFiles(changedFiles, fixResult);
   }
 
   return {
@@ -498,48 +436,6 @@ export const architectureReviewTask = defineTask('architecture-review', (args, t
   labels: ['skill', 'architecture', 'architecture-review', 'improve-codebase-architecture', `iteration-${args.iteration}`]
 }));
 
-export const architectureFixTask = defineTask('architecture-fix', (args, taskCtx) => ({
-  kind: 'agent',
-  title: `Fix architecture review feedback (iteration ${args.iteration})`,
-  description: 'Apply required fixes from the explicit architecture review gate',
-  agent: {
-    name: 'general-purpose',
-    prompt: {
-      role: 'senior engineer fixing architecture review blockers',
-      task: 'Apply the architecture review feedback and remove all required fixes plus critical/high blockers before the angry oracle review runs',
-      context: args,
-      instructions: [
-        'Fix every architecture review required fixes item, every requiredFixes entry, and every blocking architecture finding unless it is demonstrably false; explain any false positive with evidence.',
-        'Fix every critical and high severity architecture finding unless it is demonstrably false; explain any false positive with evidence.',
-        'Preserve module boundaries, layer ownership, separation of concerns, cohesion, coupling, and appropriate scope for the original request.',
-        'Add or update focused business-logic tests only when the architecture fix changes feature, bugfix, business-logic, or product behavior.',
-        'Do not invent failing product tests for documentation-only, configuration-only, planning, metadata, process-only, or similarly low-risk fixes; use targeted verification that fits the changed artifact.',
-        'Keep the scope tight to the architecture review feedback and original request.',
-        'Return exactly what changed and which architecture findings were addressed.'
-      ],
-      outputFormat: 'JSON with summary, filesCreated, filesModified, changedFiles, addressedFindings, testsAddedOrUpdated, remainingConcerns'
-    },
-    outputSchema: {
-      type: 'object',
-      required: ['summary', 'changedFiles'],
-      properties: {
-        summary: { type: 'string' },
-        filesCreated: { type: 'array', items: { type: 'string' } },
-        filesModified: { type: 'array', items: { type: 'string' } },
-        changedFiles: { type: 'array', items: { type: 'string' } },
-        addressedFindings: { type: 'array', items: { type: 'string' } },
-        testsAddedOrUpdated: { type: 'array', items: { type: 'string' } },
-        remainingConcerns: { type: 'array', items: { type: 'string' } }
-      }
-    }
-  },
-  io: {
-    inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
-    outputJsonPath: `tasks/${taskCtx.effectId}/output.json`
-  },
-  labels: ['agent', 'fix', 'architecture-review', `iteration-${args.iteration}`]
-}));
-
 export const angryOracleReviewTask = defineTask('angry-oracle-review', (args, taskCtx) => {
   const prompt = buildOracleReviewPrompt(args);
 
@@ -562,44 +458,3 @@ export const angryOracleReviewTask = defineTask('angry-oracle-review', (args, ta
   };
 });
 
-export const oracleFixTask = defineTask('oracle-fix', (args, taskCtx) => ({
-  kind: 'agent',
-  title: `Fix angry oracle feedback (iteration ${args.iteration})`,
-  description: 'Apply required fixes from the adversarial oracle review',
-  agent: {
-    name: 'general-purpose',
-    prompt: {
-      role: 'senior engineer fixing code review blockers',
-      task: 'Apply the angry oracle feedback and remove all required fixes plus critical/high blockers',
-      context: args,
-      instructions: [
-        'Fix every required fixes item, every requiredFixes entry, and every blocking review finding unless it is demonstrably false; explain any false positive with evidence.',
-        'Fix every critical and high severity finding unless it is demonstrably false; explain any false positive with evidence.',
-        'Address architectural fit feedback by preserving module boundaries, ownership, cohesion, and appropriate scope.',
-        'Add or update focused business-logic tests for fixed feature, bugfix, business-logic, or product-behavior changes.',
-        'Do not invent failing product tests for documentation-only, configuration-only, planning, metadata, process-only, or similarly low-risk fixes; use targeted verification that fits the changed artifact.',
-        'Keep the scope tight to the oracle feedback and original request.',
-        'Return exactly what changed and which findings were addressed.'
-      ],
-      outputFormat: 'JSON with summary, filesCreated, filesModified, changedFiles, addressedFindings, testsAddedOrUpdated, remainingConcerns'
-    },
-    outputSchema: {
-      type: 'object',
-      required: ['summary', 'changedFiles'],
-      properties: {
-        summary: { type: 'string' },
-        filesCreated: { type: 'array', items: { type: 'string' } },
-        filesModified: { type: 'array', items: { type: 'string' } },
-        changedFiles: { type: 'array', items: { type: 'string' } },
-        addressedFindings: { type: 'array', items: { type: 'string' } },
-        testsAddedOrUpdated: { type: 'array', items: { type: 'string' } },
-        remainingConcerns: { type: 'array', items: { type: 'string' } }
-      }
-    }
-  },
-  io: {
-    inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
-    outputJsonPath: `tasks/${taskCtx.effectId}/output.json`
-  },
-  labels: ['agent', 'fix', 'oracle-feedback', `iteration-${args.iteration}`]
-}));
