@@ -18,7 +18,6 @@
     onNavigate: (view: AppView) => void
     pluginNavItems?: IconRailPluginNavItem[]
     reviewRequestCount?: number
-    authoredPrCount?: number
   }
 
   let {
@@ -30,7 +29,6 @@
     onNavigate,
     pluginNavItems = [],
     reviewRequestCount = 0,
-    authoredPrCount = 0,
   }: Props = $props()
   const router = useAppRouter()
 
@@ -245,20 +243,12 @@
           {#if collapsed && viewKey === GITHUB_SYNC_GLOBAL_VIEW_KEY && reviewRequestCount > 0}
             <span class="badge badge-error badge-xs absolute -top-2 -right-2 text-[0.6rem] font-bold min-w-4 h-4">{reviewRequestCount}</span>
           {/if}
-          {#if collapsed && viewKey === GITHUB_SYNC_GLOBAL_VIEW_KEY && authoredPrCount > 0}
-            <span class="badge badge-warning badge-xs absolute -bottom-2 -right-2 text-[0.6rem] font-bold min-w-4 h-4">{authoredPrCount}</span>
-          {/if}
         </span>
         {#if !collapsed}
           <span class="text-xs font-medium">{title}</span>
-          {#if viewKey === GITHUB_SYNC_GLOBAL_VIEW_KEY && (reviewRequestCount > 0 || authoredPrCount > 0)}
+          {#if viewKey === GITHUB_SYNC_GLOBAL_VIEW_KEY && reviewRequestCount > 0}
             <span class="ml-auto flex items-center gap-1 shrink-0">
-              {#if reviewRequestCount > 0}
-                <span class="badge badge-error badge-xs text-[0.6rem] font-bold min-w-4 h-4">{reviewRequestCount}</span>
-              {/if}
-              {#if authoredPrCount > 0}
-                <span class="badge badge-warning badge-xs text-[0.6rem] font-bold min-w-4 h-4">{authoredPrCount}</span>
-              {/if}
+              <span class="badge badge-error badge-xs text-[0.6rem] font-bold min-w-4 h-4">{reviewRequestCount}</span>
             </span>
           {/if}
         {/if}

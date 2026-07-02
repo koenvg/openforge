@@ -4,6 +4,7 @@
   import { getIconRailNavItems } from '../../lib/iconRailNav'
   import type { IconRailPluginNavItem } from '../../lib/iconRailNav'
   import { resolveIconRailIcon } from '../../lib/iconRailIcons'
+  import { GITHUB_SYNC_VIEW_KEY } from '../../lib/githubSyncPlugin'
 
   interface Props {
     currentView: AppView
@@ -11,9 +12,17 @@
     pluginNavItems?: IconRailPluginNavItem[]
     modalsOpen?: boolean
     railBg?: string
+    activeRepoReviewRequestCount?: number
   }
 
-  let { currentView, onNavigate, pluginNavItems = [], modalsOpen = false, railBg = 'oklch(var(--b2))' }: Props = $props()
+  let {
+    currentView,
+    onNavigate,
+    pluginNavItems = [],
+    modalsOpen = false,
+    railBg = 'oklch(var(--b2))',
+    activeRepoReviewRequestCount = 0,
+  }: Props = $props()
 
   let navItems = $derived(
     getIconRailNavItems(pluginNavItems).map((item) => ({
@@ -34,6 +43,11 @@
       onclick={() => onNavigate(view)}
     >
       <Icon size={24} />
+      <!-- Per-repo unopened review requests for the active project's repo. Uses the
+           same error/red as the "All Pull Requests" sidebar badge for consistency. -->
+      {#if view === GITHUB_SYNC_VIEW_KEY && activeRepoReviewRequestCount > 0}
+        <span class="badge badge-error badge-xs absolute -top-2 -right-3 text-[0.6rem] font-bold min-w-4 h-4">{activeRepoReviewRequestCount}</span>
+      {/if}
       {#if shortcut && $commandHeld && !modalsOpen}
         <kbd class="kbd kbd-xs absolute -bottom-2 -left-3 bg-base-content/10 text-base-content/40 border-base-content/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none">{shortcut}</kbd>
       {/if}

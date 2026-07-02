@@ -746,6 +746,14 @@ export interface ReviewPullRequest {
   labels: PrLabel[];
 }
 
+/** GitHub label that suppresses a PR from review counting and grays out its card. */
+export const DO_NOT_REVIEW_LABEL = 'DO NOT REVIEW';
+
+/** True when the PR carries the "DO NOT REVIEW" label (case-insensitive, trimmed). */
+export function hasDoNotReviewLabel(pr: { labels: PrLabel[] }): boolean {
+  return (pr.labels ?? []).some((label) => label.name.trim().toUpperCase() === DO_NOT_REVIEW_LABEL);
+}
+
 /** File diff from PR files endpoint */
 export interface PrFileDiff {
   sha: string;

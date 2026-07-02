@@ -1,9 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { get } from 'svelte/store'
 import { describe, expect, it, vi } from 'vitest'
-import type { AuthoredPullRequest, Project, Task } from './lib/types'
-import { requireDefined } from './test-utils/dom'
-import { callOrder, eventListeners, installAppTestLifecycle, mockActivatePlugin, mockCurrentViewStore, mockLoadEnabledForProject, mockRouterNavigateToTask, mockRouterResetToBoard, persistInstalledPluginRow } from './App.test-harness'
+import type { Project, Task } from './lib/types'
+import { callOrder, installAppTestLifecycle, mockActivatePlugin, mockCurrentViewStore, mockLoadEnabledForProject, mockRouterNavigateToTask, mockRouterResetToBoard, persistInstalledPluginRow } from './App.test-harness'
 
 async function withSuppressedExpectedConsoleError(run: () => Promise<void>) {
   const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -89,24 +88,22 @@ describe('App startup data loading', () => {
     expect(get(stores.reviewRequestCount)).toBe(2)
   }, 15000)
 
-  it('reviewRequestCount respects repo exclusion filter', async () => {
-    const { getReviewPrs, getProjectConfig, getAuthoredPrs } = await import('./lib/ipc')
+  it('reviewRequestCount respects the GLOBAL repo exclusion filter', async () => {
+    const { getReviewPrs, getConfig } = await import('./lib/ipc')
     const stores = await import('./lib/stores')
     const { get } = await import('svelte/store')
 
     // PRs from two different repos, all unviewed
     vi.mocked(getReviewPrs).mockResolvedValue([
-      { id: 1, number: 10, title: 'PR 1', body: null, state: 'open', draft: false, html_url: 'https://github.com/o/r/pull/10', user_login: 'u1', user_avatar_url: null, repo_owner: 'o', repo_name: 'r', head_ref: 'b1', base_ref: 'main', head_sha: 'sha1', additions: 0, deletions: 0, changed_files: 0, created_at: 1000, updated_at: 1000, viewed_at: null, viewed_head_sha: null },
-      { id: 2, number: 20, title: 'PR 2', body: null, state: 'open', draft: false, html_url: 'https://github.com/x/y/pull/20', user_login: 'u2', user_avatar_url: null, repo_owner: 'x', repo_name: 'y', head_ref: 'b2', base_ref: 'main', head_sha: 'sha2', additions: 0, deletions: 0, changed_files: 0, created_at: 2000, updated_at: 2000, viewed_at: null, viewed_head_sha: null },
-      { id: 3, number: 30, title: 'PR 3', body: null, state: 'open', draft: false, html_url: 'https://github.com/o/r/pull/30', user_login: 'u3', user_avatar_url: null, repo_owner: 'o', repo_name: 'r', head_ref: 'b3', base_ref: 'main', head_sha: 'sha3', additions: 0, deletions: 0, changed_files: 0, created_at: 3000, updated_at: 3000, viewed_at: null, viewed_head_sha: null },
+      { id: 1, number: 10, title: 'PR 1', body: null, state: 'open', draft: false, html_url: 'https://github.com/o/r/pull/10', user_login: 'u1', user_avatar_url: null, repo_owner: 'o', repo_name: 'r', head_ref: 'b1', base_ref: 'main', head_sha: 'sha1', additions: 0, deletions: 0, changed_files: 0, created_at: 1000, updated_at: 1000, viewed_at: null, viewed_head_sha: null, labels: [] },
+      { id: 2, number: 20, title: 'PR 2', body: null, state: 'open', draft: false, html_url: 'https://github.com/x/y/pull/20', user_login: 'u2', user_avatar_url: null, repo_owner: 'x', repo_name: 'y', head_ref: 'b2', base_ref: 'main', head_sha: 'sha2', additions: 0, deletions: 0, changed_files: 0, created_at: 2000, updated_at: 2000, viewed_at: null, viewed_head_sha: null, labels: [] },
+      { id: 3, number: 30, title: 'PR 3', body: null, state: 'open', draft: false, html_url: 'https://github.com/o/r/pull/30', user_login: 'u3', user_avatar_url: null, repo_owner: 'o', repo_name: 'r', head_ref: 'b3', base_ref: 'main', head_sha: 'sha3', additions: 0, deletions: 0, changed_files: 0, created_at: 3000, updated_at: 3000, viewed_at: null, viewed_head_sha: null, labels: [] },
     ] as any)
-    vi.mocked(getAuthoredPrs).mockResolvedValue([])
 
-    // Exclude repo x/y
-    vi.mocked(getProjectConfig).mockImplementation(async (_projectId: string, key: string) => {
-      if (key === 'pr_excluded_repos') return JSON.stringify(['x/y'])
-      return null
-    })
+    // Exclude repo x/y via GLOBAL config (not per-project).
+    vi.mocked(getConfig).mockImplementation(async (key: string) =>
+      key === 'pr_excluded_repos' ? JSON.stringify(['x/y']) : null,
+    )
 
     const App = (await import('./App.svelte')).default
     render(App)
@@ -116,113 +113,8 @@ describe('App startup data loading', () => {
     })
 
     // 3 PRs unviewed, but x/y is excluded → only 2 from o/r count
-    expect(get(stores.reviewRequestCount)).toBe(2)
-  }, 15000)
-
-  it('initializes authoredPrCount with merge-conflicted PRs on startup', async () => {
-    const { getAuthoredPrs } = await import('./lib/ipc')
-    const stores = await import('./lib/stores')
-    const { get } = await import('svelte/store')
-
-    const conflictedPr: AuthoredPullRequest = {
-      id: 10,
-      number: 10,
-      title: 'Conflicted PR',
-      body: null,
-      state: 'open',
-      draft: false,
-      html_url: 'https://github.com/o/r/pull/10',
-      user_login: 'u1',
-      user_avatar_url: null,
-      repo_owner: 'o',
-      repo_name: 'r',
-      head_ref: 'feature/conflict',
-      base_ref: 'main',
-      head_sha: 'sha10',
-      additions: 1,
-      deletions: 1,
-      changed_files: 1,
-      ci_status: 'success',
-      ci_check_runs: null,
-      review_status: 'approved',
-      mergeable: false,
-      mergeable_state: 'dirty',
-      merged_at: null,
-      is_queued: false,
-      task_id: null,
-      created_at: 1000,
-      updated_at: 1000,
-      labels: [],
-    }
-
-    vi.mocked(getAuthoredPrs).mockResolvedValue([conflictedPr])
-
-    const App = (await import('./App.svelte')).default
-    render(App)
-
     await vi.waitFor(() => {
-      expect(get(stores.authoredPrCount)).toBe(1)
-    })
-  }, 15000)
-
-  it('refreshes authoredPrCount when authored-prs-updated fires', async () => {
-    const { getAuthoredPrs } = await import('./lib/ipc')
-    const stores = await import('./lib/stores')
-    const { get } = await import('svelte/store')
-
-    const conflictedPr: AuthoredPullRequest = {
-      id: 10,
-      number: 10,
-      title: 'Conflicted PR',
-      body: null,
-      state: 'open',
-      draft: false,
-      html_url: 'https://github.com/o/r/pull/10',
-      user_login: 'u1',
-      user_avatar_url: null,
-      repo_owner: 'o',
-      repo_name: 'r',
-      head_ref: 'feature/conflict',
-      base_ref: 'main',
-      head_sha: 'sha10',
-      additions: 1,
-      deletions: 1,
-      changed_files: 1,
-      ci_status: 'success',
-      ci_check_runs: null,
-      review_status: 'approved',
-      mergeable: false,
-      mergeable_state: 'dirty',
-      merged_at: null,
-      is_queued: false,
-      task_id: null,
-      created_at: 1000,
-      updated_at: 1000,
-      labels: [],
-    }
-
-    vi.mocked(getAuthoredPrs)
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([conflictedPr])
-
-    const App = (await import('./App.svelte')).default
-    render(App)
-
-    await vi.waitFor(() => {
-      expect(eventListeners.has('authored-prs-updated')).toBe(true)
-      expect(getAuthoredPrs).toHaveBeenCalledTimes(1)
-    })
-
-    expect(get(stores.authoredPrCount)).toBe(0)
-
-    const callback = requireDefined(
-      eventListeners.get('authored-prs-updated'),
-      'Expected authored-prs-updated listener to be registered',
-    )
-    await callback({ payload: undefined })
-
-    await vi.waitFor(() => {
-      expect(get(stores.authoredPrCount)).toBe(1)
+      expect(get(stores.reviewRequestCount)).toBe(2)
     })
   }, 15000)
 

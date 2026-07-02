@@ -70,24 +70,50 @@ describe('IconRail', () => {
     expect(onNavigate).toHaveBeenCalledWith('settings')
   })
 
-  it('does not render PR count badges on the rail (they live in the left sidebar now)', () => {
-    render(IconRail, {
-      props: {
-        currentView: 'board' as AppView,
-        onNavigate: vi.fn(),
-        pluginNavItems: [
-          {
-            viewKey: 'plugin:com.openforge.github-sync:pr_review',
-            icon: 'git-pull-request',
-            title: 'Pull Requests',
-            shortcut: '⌘G',
-          },
-        ],
-      },
+  describe('active-repo PR count badge', () => {
+    const prRailItem = {
+      viewKey: 'plugin:com.openforge.github-sync:pr_review' as AppView,
+      icon: 'git-pull-request',
+      title: 'Pull Requests',
+      shortcut: '⌘G',
+    }
+
+    it('renders the active-repo unopened review count on the per-repo PR rail item', () => {
+      render(IconRail, {
+        props: {
+          currentView: 'board' as AppView,
+          onNavigate: vi.fn(),
+          pluginNavItems: [prRailItem],
+          activeRepoReviewRequestCount: 3,
+        },
+      })
+      expect(screen.getByText('3')).toBeTruthy()
     })
-    // The repo-scoped rail item carries no review/authored count badges.
-    expect(screen.queryByText('3')).toBeNull()
-    expect(screen.queryByText('5')).toBeNull()
+
+    it('omits the review badge when the active-repo count is zero', () => {
+      render(IconRail, {
+        props: {
+          currentView: 'board' as AppView,
+          onNavigate: vi.fn(),
+          pluginNavItems: [prRailItem],
+          activeRepoReviewRequestCount: 0,
+        },
+      })
+      expect(screen.queryByText('0')).toBeNull()
+    })
+
+    it('does not place the PR count badge on the static (non-PR) rail items', () => {
+      render(IconRail, {
+        props: {
+          currentView: 'board' as AppView,
+          onNavigate: vi.fn(),
+          pluginNavItems: [],
+          activeRepoReviewRequestCount: 3,
+        },
+      })
+      // Only Board + Project Settings render; neither is the PR view, so no badge appears.
+      expect(screen.queryByText('3')).toBeNull()
+    })
   })
 
   describe('shortcut badges', () => {

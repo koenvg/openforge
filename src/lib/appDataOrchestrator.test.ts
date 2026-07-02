@@ -4,7 +4,6 @@ import type { PullRequestInfo } from './types'
 
 vi.mock('./ipc', () => ({
   forceGithubSync: vi.fn(),
-  getAuthoredPrs: vi.fn(),
   getConfig: vi.fn(),
   getLatestSessions: vi.fn(),
   getProjectAttention: vi.fn(),
@@ -18,19 +17,21 @@ vi.mock('./ipc', () => ({
 import { useAppDataOrchestrator } from './appDataOrchestrator.svelte'
 import {
   activeProjectId,
+  activeResolvedRepo,
   activeSessions,
-  authoredPrCount,
   error,
+  globalExcludedPrRepos,
   isLoading,
   projectAttention,
   projects,
+  reviewPrs,
   reviewRequestCount,
+  activeRepoReviewRequestCount,
   tasks,
   ticketPrs,
 } from './stores'
 import {
   forceGithubSync,
-  getAuthoredPrs,
   getConfig,
   getLatestSessions,
   getProjectAttention,
@@ -82,13 +83,14 @@ describe('useAppDataOrchestrator', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     activeProjectId.set(null)
+    activeResolvedRepo.set(null)
     activeSessions.set(new Map())
-    authoredPrCount.set(0)
     error.set(null)
+    globalExcludedPrRepos.set(new Set())
     isLoading.set(false)
     projectAttention.set(new Map())
     projects.set([])
-    reviewRequestCount.set(0)
+    reviewPrs.set([])
     tasks.set([])
     ticketPrs.set(new Map())
 
@@ -99,7 +101,6 @@ describe('useAppDataOrchestrator', () => {
     vi.mocked(getProjects).mockResolvedValue([])
     vi.mocked(getPullRequests).mockResolvedValue([])
     vi.mocked(getReviewPrs).mockResolvedValue([])
-    vi.mocked(getAuthoredPrs).mockResolvedValue([])
     vi.mocked(getTasksForProject).mockResolvedValue([])
     vi.mocked(forceGithubSync).mockResolvedValue({} as any)
   })
@@ -148,25 +149,89 @@ describe('useAppDataOrchestrator', () => {
     expect(loadedPrs.get('T-100')?.[0].readiness_updated_at).toBe(3000)
   })
 
-  it('refreshes PR counts after applying project repo exclusions', async () => {
+  it('populates the all-repos review list so the sidebar badge derives from it', async () => {
     const orchestrator = useAppDataOrchestrator({ setShowProjectSetup: vi.fn() })
     activeProjectId.set('proj-1')
-    vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify(['hidden/repo']))
     vi.mocked(getReviewPrs).mockResolvedValue([
-      { repo_owner: 'visible', repo_name: 'repo', viewed_at: null },
-      { repo_owner: 'hidden', repo_name: 'repo', viewed_at: null },
-      { repo_owner: 'visible', repo_name: 'seen', viewed_at: 123 },
+      { repo_owner: 'visible', repo_name: 'repo', viewed_at: null, labels: [] },
+      { repo_owner: 'other', repo_name: 'svc', viewed_at: null, labels: [] },
+      { repo_owner: 'visible', repo_name: 'seen', viewed_at: 123, labels: [] },
     ] as any)
-    vi.mocked(getAuthoredPrs).mockResolvedValue([
-      { repo_owner: 'visible', repo_name: 'repo', ci_status: 'failure', review_status: null, state: 'open', mergeable: true, mergeable_state: 'clean' },
-      { repo_owner: 'hidden', repo_name: 'repo', ci_status: 'failure', review_status: null, state: 'open', mergeable: true, mergeable_state: 'clean' },
-      { repo_owner: 'visible', repo_name: 'changes', ci_status: 'success', review_status: 'changes_requested', state: 'open', mergeable: true, mergeable_state: 'clean' },
+
+    await orchestrator.refreshPrCounts()
+
+    expect(get(reviewPrs)).toHaveLength(3)
+    // Two unopened across all repos; the viewed one does not count.
+    expect(get(reviewRequestCount)).toBe(2)
+  })
+
+  it('derives the sidebar count from a GLOBAL exclusion filter, not per-project config', async () => {
+    const orchestrator = useAppDataOrchestrator({ setShowProjectSetup: vi.fn() })
+    activeProjectId.set('proj-1')
+    // Global filter comes from global config, not getProjectConfig.
+    vi.mocked(getConfig).mockImplementation(async (key: string) =>
+      key === 'pr_excluded_repos' ? JSON.stringify(['hidden/repo']) : null,
+    )
+    vi.mocked(getReviewPrs).mockResolvedValue([
+      { repo_owner: 'visible', repo_name: 'repo', viewed_at: null, labels: [] },
+      { repo_owner: 'hidden', repo_name: 'repo', viewed_at: null, labels: [] },
+    ] as any)
+
+    await orchestrator.refreshPrCounts()
+
+    expect(get(globalExcludedPrRepos).has('hidden/repo')).toBe(true)
+    expect(get(reviewRequestCount)).toBe(1)
+  })
+
+  it('sidebar count stays constant when only the resolved repo changes', async () => {
+    const orchestrator = useAppDataOrchestrator({ setShowProjectSetup: vi.fn() })
+    activeProjectId.set('proj-1')
+    vi.mocked(getReviewPrs).mockResolvedValue([
+      { repo_owner: 'a', repo_name: 'x', viewed_at: null, labels: [] },
+      { repo_owner: 'b', repo_name: 'y', viewed_at: null, labels: [] },
+    ] as any)
+
+    await orchestrator.refreshPrCounts()
+    const before = get(reviewRequestCount)
+    activeResolvedRepo.set('a/x') // simulate switching to a specific repo
+    expect(get(reviewRequestCount)).toBe(before)
+    activeResolvedRepo.set('b/y')
+    expect(get(reviewRequestCount)).toBe(before)
+  })
+
+  it('derives the active-repo count as unopened reviews scoped to the resolved repo', async () => {
+    const orchestrator = useAppDataOrchestrator({ setShowProjectSetup: vi.fn() })
+    activeProjectId.set('proj-1')
+    vi.mocked(getProjectConfig).mockImplementation(async (_projectId: string, key: string) =>
+      key === 'resolved_repo' ? 'visible/repo' : null,
+    )
+    vi.mocked(getReviewPrs).mockResolvedValue([
+      { repo_owner: 'visible', repo_name: 'repo', viewed_at: null, labels: [] }, // counts
+      { repo_owner: 'visible', repo_name: 'repo', viewed_at: 5, labels: [] }, // opened — excluded
+      { repo_owner: 'other', repo_name: 'repo', viewed_at: null, labels: [] }, // different repo
+    ] as any)
+
+    await orchestrator.refreshPrCounts()
+
+    expect(get(activeResolvedRepo)).toBe('visible/repo')
+    expect(get(activeRepoReviewRequestCount)).toBe(1)
+  })
+
+  it('excludes DO NOT REVIEW labeled PRs from both counts', async () => {
+    const orchestrator = useAppDataOrchestrator({ setShowProjectSetup: vi.fn() })
+    activeProjectId.set('proj-1')
+    vi.mocked(getProjectConfig).mockImplementation(async (_projectId: string, key: string) =>
+      key === 'resolved_repo' ? 'visible/repo' : null,
+    )
+    vi.mocked(getReviewPrs).mockResolvedValue([
+      { repo_owner: 'visible', repo_name: 'repo', viewed_at: null, labels: [] },
+      { repo_owner: 'visible', repo_name: 'repo', viewed_at: null, labels: [{ name: 'DO NOT REVIEW', color: '' }] },
     ] as any)
 
     await orchestrator.refreshPrCounts()
 
     expect(get(reviewRequestCount)).toBe(1)
-    expect(get(authoredPrCount)).toBe(2)
+    expect(get(activeRepoReviewRequestCount)).toBe(1)
   })
 
   it('guards GitHub sync so concurrent calls do not duplicate IPC syncs', async () => {
