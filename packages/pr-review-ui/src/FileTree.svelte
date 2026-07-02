@@ -87,6 +87,36 @@
     return root
   }
 
+  // VSCode-style "compact folders": collapse a chain of single-child directories
+  // (e.g. libs/ > bound-shared/ > forge/) into a single node ("libs/bound-shared/forge").
+  // A directory is merged with its child only when it has exactly one child and that
+  // child is itself a directory. The merged node keeps the deepest fullPath so expand
+  // state (keyed by fullPath) stays unique and stable.
+  function compactTree(node: TreeNode, isRoot = false): TreeNode {
+    const compactedChildren = new Map<string, TreeNode>()
+    for (const [key, child] of node.children) {
+      compactedChildren.set(key, child.isDir ? compactTree(child) : child)
+    }
+
+    let result: TreeNode = { ...node, children: compactedChildren }
+
+    // The root is an invisible container, so never fold it into a top-level entry.
+    if (!isRoot) {
+      while (result.isDir && result.children.size === 1) {
+        const onlyChild = result.children.values().next().value as TreeNode
+        if (!onlyChild.isDir) break
+        result = {
+          name: `${result.name}/${onlyChild.name}`,
+          fullPath: onlyChild.fullPath,
+          isDir: true,
+          children: onlyChild.children,
+        }
+      }
+    }
+
+    return result
+  }
+
   function handleFileClick(file: PrFileDiff) {
     selectedFile = file.filename
     onSelectFile(file.filename)
@@ -118,7 +148,7 @@
     return result
   }
 
-  let flattenedNodes = $derived(flattenTree(buildTree(files), 0))
+  let flattenedNodes = $derived(flattenTree(compactTree(buildTree(files), true), 0))
 </script>
 
 <div class="flex flex-col h-full bg-base-200 border-r border-base-300">
