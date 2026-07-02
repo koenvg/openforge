@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte'
-  import { backlogLabelFilters, commandHeld, focusBoardFilters, lowFireTaskIdsByProject, mergingTaskIds } from '../../lib/stores'
+  import { backlogLabelFilters, commandHeld, focusBoardFilters, inFlightCollapsedByView, lowFireTaskIdsByProject, mergingTaskIds } from '../../lib/stores'
   import { filterTasks, getFilterCounts, DEFAULT_FOCUS_STATES, loadFocusFilterStates, loadLowFireTaskIds, saveLowFireTaskIds, isFocusTask } from '../../lib/boardFilters'
   import type { BoardFilter } from '../../lib/boardFilters'
   import { getDependencyWaitLabel } from '../../lib/taskDependencies'
@@ -65,6 +65,10 @@
     return $focusBoardFilters.get(projectId) ?? 'focus'
   })
 
+  // In-flight collapse state is remembered per repo + view for the session.
+  let inFlightCollapseKey = $derived(`${projectId ?? '__none__'}:${activeFilter}`)
+  let inFlightCollapsed = $derived($inFlightCollapsedByView.get(inFlightCollapseKey) ?? false)
+
   let selectedLabelIds = $derived.by(() => {
     if (!projectId) return new Set<number>()
     return $backlogLabelFilters.get(projectId) ?? new Set<number>()
@@ -117,14 +121,25 @@
     const rows: TaskRow[] = groupedTasks.attention.map((task, taskIndex) => ({ type: 'task', task, taskIndex, isInFlight: false }))
     if (groupedTasks.inFlight.length > 0) {
       rows.push({ type: 'divider', count: groupedTasks.inFlight.length })
-      rows.push(...groupedTasks.inFlight.map((task, index) => ({
-        type: 'task' as const,
-        task,
-        taskIndex: groupedTasks.attention.length + index,
-        isInFlight: true,
-      })))
+      if (!inFlightCollapsed) {
+        rows.push(...groupedTasks.inFlight.map((task, index) => ({
+          type: 'task' as const,
+          task,
+          taskIndex: groupedTasks.attention.length + index,
+          isInFlight: true,
+        })))
+      }
     }
     return rows
+  })
+
+  // When the in-flight section is collapsed, its tasks are hidden, so vim
+  // navigation should only range over the visible (attention) tasks.
+  let navigableCount = $derived.by(() => {
+    if (activeFilter !== 'backlog' && inFlightCollapsed) {
+      return groupedTasks.attention.length
+    }
+    return filteredTasks.length
   })
 
   let filterCounts = $derived.by(() => getFilterCounts(tasks, activeSessions, ticketPrs, focusStates, lowFireTaskIds))
@@ -153,6 +168,12 @@
     const nextFilters = new Map($focusBoardFilters)
     nextFilters.set(projectId, filter)
     focusBoardFilters.set(nextFilters)
+  }
+
+  function toggleInFlightCollapsed() {
+    const next = new Map($inFlightCollapsedByView)
+    next.set(inFlightCollapseKey, !inFlightCollapsed)
+    inFlightCollapsedByView.set(next)
   }
 
   $effect(() => {
@@ -199,7 +220,7 @@
   })
 
   const vim = useVimNavigation({
-    getItemCount: () => filteredTasks.length,
+    getItemCount: () => navigableCount,
     onSelect: (index) => {
       const task = filteredTasks[index]
       if (task) onOpenTask(task.id)
@@ -214,7 +235,7 @@
   })
 
   $effect(() => {
-    const count = filteredTasks.length
+    const count = navigableCount
     if (count === 0) return
     if (vim.focusedIndex >= count) {
       vim.setFocusedIndex(count - 1)
@@ -428,14 +449,21 @@
       {:else}
         {#each visibleRows as row (row.type === 'divider' ? 'in-flight-divider' : row.task.id)}
           {#if row.type === 'divider'}
-            <div class="flex items-center gap-3 py-1" role="separator" aria-label="In-flight tasks">
+            <button
+              type="button"
+              class="group flex w-full items-center gap-3 py-1"
+              aria-expanded={!inFlightCollapsed}
+              aria-label={inFlightCollapsed ? 'Show in-flight tasks' : 'Hide in-flight tasks'}
+              onclick={toggleInFlightCollapsed}
+            >
               <div class="h-px flex-1 bg-base-content/10"></div>
-              <div class="flex items-center gap-2 text-xs font-semibold text-base-content/45">
+              <div class="flex items-center gap-2 text-xs font-semibold text-base-content/45 transition-colors group-hover:text-base-content/70">
                 <span>In-flight</span>
                 <span class="badge badge-ghost badge-xs">{row.count}</span>
+                <span class="text-base-content/40">{inFlightCollapsed ? '⌄' : '⌃'}</span>
               </div>
               <div class="h-px flex-1 bg-base-content/10"></div>
-            </div>
+            </button>
           {:else}
             {@const task = row.task}
             {@const session = activeSessions.get(task.id) ?? null}
