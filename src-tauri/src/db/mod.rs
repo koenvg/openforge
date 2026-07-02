@@ -11,6 +11,7 @@ mod config;
 pub(crate) mod migrations;
 mod plugins;
 mod projects;
+mod pull_request_readiness;
 mod pull_requests;
 mod review;
 mod roadmap;
@@ -24,7 +25,13 @@ pub use authored_prs::AuthoredPrRow;
 pub use board_status::BoardStatus;
 pub use plugins::PluginRow;
 pub use projects::{ProjectAttentionRow, ProjectRow};
-pub use pull_requests::{PrCommentRow, PrMergeReadinessFacts, PrRow};
+pub use pull_request_readiness::PrMergeReadinessFacts;
+pub(crate) use pull_request_readiness::{
+    build_merge_readiness_facts, ci_status_for_readiness, enforce_actor_scoped_readiness,
+    finalize_readiness_facts_for_poll, needs_rest_ci_for_snapshot, queued_validation_sha,
+    review_status_for_readiness, select_snapshot_readiness_inputs, MergeReadinessInputs,
+};
+pub use pull_requests::{PrCommentRow, PrRow};
 pub use review::ReviewPrRow;
 pub use task_workspaces::TaskWorkspaceRow;
 pub use tasks::{NewTaskOptions, TaskLabelRow, TaskRow};
