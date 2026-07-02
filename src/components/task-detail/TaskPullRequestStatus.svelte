@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { PullRequestInfo } from '../../lib/types'
-  import { canMergePullRequest, getMergeReadiness, isClosedOrMergedPullRequest, isClosedUnmergedPullRequest, isMergedPullRequest } from '../../lib/types'
+  import { canEnqueuePullRequest, canMergePullRequest, getMergeReadiness, isClosedOrMergedPullRequest, isClosedUnmergedPullRequest, isMergedPullRequest } from '../../lib/types'
   import { linkPullRequest, openUrl } from '../../lib/ipc'
   import { getPrStatusChips } from '@openforge/plugin-sdk/prStatusPresentation'
   import { getGitHubMarkdownImageBaseUrl } from '../../lib/githubMarkdown'
@@ -197,7 +197,25 @@
                 <div class="text-[0.7rem] text-base-content/60">{readinessText}</div>
               {/if}
 
-              {#if canMergePullRequest(pr)}
+              {#if canEnqueuePullRequest(pr)}
+                <div class="flex items-center gap-2">
+                  <button
+                    class="btn btn-success btn-xs"
+                    disabled={orchestration.mergingPrId !== null || $mergingTaskIds.has(taskId)}
+                    onclick={() => orchestration.handleEnqueue(taskId, pr)}
+                  >
+                    {#if orchestration.mergingPrId === pr.id || $mergingTaskIds.has(taskId)}
+                      <span class="loading loading-spinner loading-xs"></span>
+                      Enqueueing...
+                    {:else}
+                      Enqueue
+                    {/if}
+                  </button>
+                  {#if feedback}
+                    <span class="text-[0.7rem] {feedback.kind === 'success' ? 'text-success' : feedback.kind === 'warning' ? 'text-warning' : 'text-error'}">{feedback.message}</span>
+                  {/if}
+                </div>
+              {:else if canMergePullRequest(pr)}
                 <div class="flex items-center gap-2">
                   <button
                     class="btn btn-success btn-xs"

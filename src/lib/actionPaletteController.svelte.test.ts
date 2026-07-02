@@ -46,6 +46,7 @@ describe('useActionPaletteController', () => {
       handleRunAction: vi.fn(async () => undefined),
       deleteTaskAndReload: vi.fn(async () => undefined),
       mergeReadyPullRequest: vi.fn(async () => undefined),
+      enqueueReadyPullRequest: vi.fn(async () => undefined),
     }
     vi.mocked(loadActions).mockResolvedValue([
       { id: 'custom-1', name: 'Custom', prompt: 'Do custom work', builtin: false, enabled: true },
@@ -79,6 +80,7 @@ describe('useActionPaletteController', () => {
       handleRunAction: vi.fn(async () => undefined),
       deleteTaskAndReload: vi.fn(async () => undefined),
       mergeReadyPullRequest: vi.fn(async () => undefined),
+      enqueueReadyPullRequest: vi.fn(async () => undefined),
     }
     const showNewTask = vi.fn()
     const triggerGithubSync = vi.fn(async () => undefined)
@@ -107,6 +109,7 @@ describe('useActionPaletteController', () => {
       handleRunAction: vi.fn(async () => undefined),
       deleteTaskAndReload: vi.fn(async () => undefined),
       mergeReadyPullRequest: vi.fn(async () => undefined),
+      enqueueReadyPullRequest: vi.fn(async () => undefined),
     }
     const controller = useActionPaletteController({
       getSelectedTask: () => selectedTask,
@@ -132,6 +135,7 @@ describe('useActionPaletteController', () => {
       handleRunAction: vi.fn(async () => undefined),
       deleteTaskAndReload: vi.fn(async () => undefined),
       mergeReadyPullRequest: vi.fn(async () => undefined),
+      enqueueReadyPullRequest: vi.fn(async () => undefined),
     }
     const controller = useActionPaletteController({
       getSelectedTask: () => selectedTask,
@@ -149,5 +153,28 @@ describe('useActionPaletteController', () => {
     expect(confirmSpy).toHaveBeenCalled()
     expect(taskActions.deleteTaskAndReload).not.toHaveBeenCalled()
     confirmSpy.mockRestore()
+  })
+
+  it('delegates enqueue-pr to the task action runner with the captured task', async () => {
+    const taskActions = {
+      handleRunAction: vi.fn(async () => undefined),
+      deleteTaskAndReload: vi.fn(async () => undefined),
+      mergeReadyPullRequest: vi.fn(async () => undefined),
+      enqueueReadyPullRequest: vi.fn(async () => undefined),
+    }
+    const controller = useActionPaletteController({
+      getSelectedTask: () => selectedTask,
+      taskActions,
+      goBack: vi.fn(),
+      showSearchTasks: vi.fn(),
+      showNewTask: vi.fn(),
+      showProjectSwitcher: vi.fn(),
+      triggerGithubSync: vi.fn(async () => undefined),
+    })
+
+    await controller.openActionPalette()
+    await controller.executeAction('enqueue-pr')
+
+    expect(taskActions.enqueueReadyPullRequest).toHaveBeenCalledWith(selectedTask)
   })
 })

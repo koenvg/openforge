@@ -37,6 +37,20 @@ export function getTaskActions(task: Task, customActions: Action[], taskPrs: Pul
     })
   }
 
+  const readyToEnqueuePrs = taskPrs.filter((pr) => {
+    const readiness = getMergeReadiness(pr)
+    return readiness.status === 'ready_to_enqueue' && readiness.action === 'enqueue'
+  })
+  if (readyToEnqueuePrs.length === 1) {
+    actions.push({
+      id: 'enqueue-pr',
+      label: 'Enqueue Pull Request',
+      shortcut: null,
+      category: 'task',
+      keywords: ['enqueue', 'merge queue', 'pull request', 'pr', 'github'],
+    })
+  }
+
   actions.push({
     id: 'delete-task',
     label: 'Complete',

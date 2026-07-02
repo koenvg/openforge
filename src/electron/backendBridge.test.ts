@@ -345,6 +345,7 @@ describe('Electron backend bridge command forwarding', () => {
     expect(isSidecarBackedCommand('get_pr_comments')).toBe(true)
     expect(isSidecarBackedCommand('mark_comment_addressed')).toBe(true)
     expect(isSidecarBackedCommand('merge_pull_request')).toBe(true)
+    expect(isSidecarBackedCommand('enqueue_pull_request')).toBe(true)
     expect(isSidecarBackedCommand('fetch_review_prs')).toBe(true)
     expect(isSidecarBackedCommand('get_review_prs')).toBe(true)
     expect(isSidecarBackedCommand('mark_review_pr_viewed')).toBe(true)

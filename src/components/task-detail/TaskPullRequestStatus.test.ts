@@ -17,6 +17,7 @@ vi.mock('../../lib/ipc', () => ({
   markCommentAddressed: vi.fn().mockResolvedValue(undefined),
   linkPullRequest: vi.fn().mockResolvedValue(undefined),
   mergePullRequest: vi.fn().mockResolvedValue(undefined),
+  enqueuePullRequest: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn().mockResolvedValue(undefined),
 }))
 
@@ -101,6 +102,7 @@ describe('TaskPullRequestStatus', () => {
     vi.mocked(ipc.getPrComments).mockResolvedValue([])
     vi.mocked(ipc.linkPullRequest).mockResolvedValue(createPullRequest())
     vi.mocked(ipc.mergePullRequest).mockResolvedValue(undefined)
+    vi.mocked(ipc.enqueuePullRequest).mockResolvedValue(undefined)
     vi.mocked(ipc.openUrl).mockResolvedValue(undefined)
   })
 
@@ -339,6 +341,35 @@ describe('TaskPullRequestStatus', () => {
     expect(screen.getByText('Queued pull request — waiting for merge queue validation.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Merge' })).toBeNull()
     expect(screen.queryByText('Ready to Merge')).toBeNull()
+  })
+
+  it('shows Enqueue controls for a PR that is ready for the merge queue', async () => {
+    render(TaskPullRequestStatus, {
+      props: {
+        taskId: 'T-42',
+        taskPrs: [createPullRequest({ merge_readiness_status: 'ready_to_enqueue', merge_readiness_action: 'enqueue', readiness_source_head_sha: 'abc123', readiness_updated_at: 2000 })],
+      },
+    })
+
+    expect(screen.getByText('Ready to Enqueue')).toBeTruthy()
+    expect(screen.getByText('Ready to enqueue in the merge queue.')).toBeTruthy()
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Enqueue' }))
+
+    expect(ipc.enqueuePullRequest).toHaveBeenCalledWith('owner', 'repo', 42)
+    expect(ipc.mergePullRequest).not.toHaveBeenCalled()
+  })
+
+  it('does not show Enqueue controls for stale ready-to-enqueue readiness', () => {
+    render(TaskPullRequestStatus, {
+      props: {
+        taskId: 'T-42',
+        taskPrs: [createPullRequest({ head_sha: 'new-head', mergeable: null, mergeable_state: 'unknown', merge_readiness_status: 'ready_to_enqueue', merge_readiness_action: 'enqueue', readiness_source_head_sha: 'old-head', readiness_updated_at: 2000 })],
+      },
+    })
+
+    expect(screen.queryByRole('button', { name: 'Enqueue' })).toBeNull()
+    expect(screen.queryByText('Ready to Enqueue')).toBeNull()
   })
 
   it('shows persisted ready-to-enqueue and readiness-unknown details without direct merge controls', () => {

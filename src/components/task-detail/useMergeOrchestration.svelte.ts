@@ -1,4 +1,4 @@
-import { getPullRequests, mergePullRequest, forceGithubSync } from '../../lib/ipc'
+import { enqueuePullRequest, getPullRequests, mergePullRequest, forceGithubSync } from '../../lib/ipc'
 import { updateTaskPullRequestsInMap } from '../../lib/pullRequestStore'
 import { setTaskMerging, ticketPrs } from '../../lib/stores'
 import type { PullRequestInfo } from '../../lib/types'
@@ -87,6 +87,58 @@ export function useMergeOrchestration() {
       setTaskMerging(taskId, false)
     }
   }
+  async function handleEnqueue(taskId: string, pr: PullRequestInfo) {
+    mergingPrId = pr.id
+    setTaskMerging(taskId, true)
+    setMergeFeedback(pr.id, null)
+
+    try {
+      await enqueuePullRequest(pr.repo_owner, pr.repo_name, pr.pr_number ?? pr.id)
+
+      updateTaskPullRequests(taskId, (currentTaskPrs) =>
+        currentTaskPrs.map((taskPr) =>
+          taskPr.id === pr.id
+            ? {
+                ...taskPr,
+                is_queued: true,
+                merge_readiness_status: 'queued_pull_request',
+                merge_readiness_action: 'wait_for_queue',
+                merge_queue_state: 'QUEUED',
+              }
+            : taskPr
+        )
+      )
+
+      try {
+        const result = await forceGithubSync()
+
+        if (result.errors > 0 || result.rate_limited) {
+          const reason = result.rate_limited
+            ? 'GitHub sync was rate limited after enqueue.'
+            : 'GitHub sync reported errors after enqueue.'
+          setMergeFeedback(pr.id, {
+            kind: 'warning',
+            message: `${reason} Pull request queue state may take a moment to fully refresh.`,
+          })
+        } else {
+          await refreshTaskPullRequests(taskId)
+        }
+      } catch (e) {
+        setMergeFeedback(pr.id, {
+          kind: 'warning',
+          message: `Pull request enqueued, but refresh failed: ${e instanceof Error ? e.message : String(e)}`,
+        })
+      }
+    } catch (e) {
+      setMergeFeedback(pr.id, {
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      })
+    } finally {
+      mergingPrId = null
+      setTaskMerging(taskId, false)
+    }
+  }
 
   function runMergeSmokeTest(taskId: string, pr: PullRequestInfo, outcome: MergeSmokeOutcome) {
     if (outcome === 'success') {
@@ -120,6 +172,7 @@ export function useMergeOrchestration() {
     get mergeFeedbackByPr() { return mergeFeedbackByPr },
     get mergingPrId() { return mergingPrId },
     handleMerge,
+    handleEnqueue,
     runMergeSmokeTest,
     setMergeFeedback
   }

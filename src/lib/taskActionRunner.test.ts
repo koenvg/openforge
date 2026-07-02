@@ -6,6 +6,7 @@ vi.mock('./ipc', () => ({
   deleteTask: vi.fn(),
   getSessionStatus: vi.fn(),
   mergePullRequest: vi.fn(),
+  enqueuePullRequest: vi.fn(),
   startImplementation: vi.fn(),
   inspectExistingBranch: vi.fn(),
 }))
@@ -28,7 +29,7 @@ import {
   tasks,
   ticketPrs,
 } from './stores'
-import { getSessionStatus, inspectExistingBranch, mergePullRequest, startImplementation } from './ipc'
+import { enqueuePullRequest, getSessionStatus, inspectExistingBranch, mergePullRequest, startImplementation } from './ipc'
 import { branchDivergenceRequest } from './branchDivergenceModalStore'
 import { focusTerminal, isPtyActive } from './terminalPool'
 import { writePtyWithSubmit } from './ptySubmit'
@@ -266,6 +267,61 @@ describe('createTaskActionRunner', () => {
     expect(get(ticketPrs).get(task.id)?.[0].state).toBe('merged')
     expect(get(ticketPrs).get(task.id)?.[0].merged_at).not.toBeNull()
     expect(triggerGithubSync).toHaveBeenCalledOnce()
+  })
+
+  it('marks a single ready-to-enqueue PR queued locally and then triggers GitHub sync', async () => {
+    const triggerGithubSync = vi.fn(async () => undefined)
+    const runner = createTaskActionRunner({
+      getActiveProject: () => activeProject,
+      loadTasks: vi.fn(async () => undefined),
+      triggerGithubSync,
+    })
+    const readyPr = createPullRequest({
+      id: 9002,
+      pr_number: 43,
+      merge_readiness_status: 'ready_to_enqueue',
+      merge_readiness_action: 'enqueue',
+      readiness_source_head_sha: 'abc',
+      readiness_updated_at: 0,
+      merge_queue_required: true,
+    })
+    ticketPrs.set(new Map([[task.id, [readyPr]]]))
+    vi.mocked(enqueuePullRequest).mockResolvedValue(undefined)
+
+    await runner.enqueueReadyPullRequest(task)
+
+    expect(enqueuePullRequest).toHaveBeenCalledWith('owner', 'repo', 43)
+    expect(get(ticketPrs).get(task.id)?.[0]).toEqual(expect.objectContaining({
+      is_queued: true,
+      merge_readiness_status: 'queued_pull_request',
+      merge_readiness_action: 'wait_for_queue',
+    }))
+    expect(triggerGithubSync).toHaveBeenCalledOnce()
+  })
+
+  it('does not enqueue a stale ready-to-enqueue PR', async () => {
+    const triggerGithubSync = vi.fn(async () => undefined)
+    const runner = createTaskActionRunner({
+      getActiveProject: () => activeProject,
+      loadTasks: vi.fn(async () => undefined),
+      triggerGithubSync,
+    })
+    const stalePr = createPullRequest({
+      head_sha: 'new-head',
+      mergeable: null,
+      mergeable_state: 'unknown',
+      merge_readiness_status: 'ready_to_enqueue',
+      merge_readiness_action: 'enqueue',
+      readiness_source_head_sha: 'old-head',
+      readiness_updated_at: 1,
+    })
+    ticketPrs.set(new Map([[task.id, [stalePr]]]))
+
+    await runner.enqueueReadyPullRequest(task)
+
+    expect(enqueuePullRequest).not.toHaveBeenCalled()
+    expect(triggerGithubSync).not.toHaveBeenCalled()
+    expect(get(ticketPrs).get(task.id)).toEqual([stalePr])
   })
 
   it.each([

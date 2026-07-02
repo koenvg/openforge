@@ -10,6 +10,7 @@ import {
 } from './stores'
 import {
   deleteTask,
+  enqueuePullRequest,
   getSessionStatus,
   mergePullRequest,
   startImplementation,
@@ -151,11 +152,49 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
       error.set('Multiple pull requests are ready to merge. Open the task details to choose the correct PR.')
     }
   }
+  async function enqueueReadyPullRequest(task: Task): Promise<void> {
+    const prs = get(ticketPrs).get(task.id) || []
+    const readyPrs = prs.filter((pr) => {
+      const readiness = getMergeReadiness(pr)
+      return readiness.status === 'ready_to_enqueue' && readiness.action === 'enqueue'
+    })
+
+    if (readyPrs.length === 1) {
+      const pr = readyPrs[0]
+      try {
+        setTaskMerging(task.id, true)
+        await enqueuePullRequest(pr.repo_owner, pr.repo_name, pr.pr_number ?? pr.id)
+        const nextMap = new Map(get(ticketPrs))
+        const taskPrs = nextMap.get(task.id) || []
+        nextMap.set(task.id, taskPrs.map(p =>
+          p.id === pr.id
+            ? {
+                ...p,
+                is_queued: true,
+                merge_readiness_status: 'queued_pull_request',
+                merge_readiness_action: 'wait_for_queue',
+                merge_queue_state: 'QUEUED',
+              }
+            : p,
+        ))
+        ticketPrs.set(nextMap)
+        await options.triggerGithubSync()
+      } catch (e) {
+        logError('Failed to enqueue PR:', e)
+        setError(e)
+      } finally {
+        setTaskMerging(task.id, false)
+      }
+    } else if (readyPrs.length > 1) {
+      error.set('Multiple pull requests are ready to enqueue. Open the task details to choose the correct PR.')
+    }
+  }
 
   return {
     handleRunAction,
     deleteTaskAndReload,
     mergeReadyPullRequest,
+    enqueueReadyPullRequest,
   }
 }
 
