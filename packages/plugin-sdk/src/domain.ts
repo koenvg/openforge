@@ -454,6 +454,12 @@ export function canMergePullRequest(pr: MergeReadinessInfo): boolean {
   return readiness.status === 'ready_to_merge' && readiness.action === 'merge';
 }
 
+/** Check if a user-initiated merge-queue enqueue affordance may be shown/executed now. */
+export function canEnqueuePullRequest(pr: MergeReadinessInfo): boolean {
+  const readiness = getMergeReadiness(pr);
+  return readiness.status === 'ready_to_enqueue' && readiness.action === 'enqueue';
+}
+
 function mergeReadinessPriority(pr: MergeReadinessInfo): number {
   if (pr.state !== 'open') return pr.state === 'merged' ? 100 : 90;
 

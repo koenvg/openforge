@@ -84,6 +84,7 @@ export const ipcCommandContracts = [
   { functionName: 'getPrComments', ipcCommand: 'get_pr_comments', payloadKeys: ['prId'], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'markCommentAddressed', ipcCommand: 'mark_comment_addressed', payloadKeys: ['commentId'], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'mergePullRequest', ipcCommand: 'merge_pull_request', payloadKeys: ['owner', 'repo', 'prNumber'], targetOwner: 'rust-sidecar', domain: 'github-review' },
+  { functionName: 'enqueuePullRequest', ipcCommand: 'enqueue_pull_request', payloadKeys: ['owner', 'repo', 'prNumber'], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'checkOpenCodeInstalled', ipcCommand: 'check_opencode_installed', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'checkPiInstalled', ipcCommand: 'check_pi_installed', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'checkCodexInstalled', ipcCommand: 'check_codex_installed', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },

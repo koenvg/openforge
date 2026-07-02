@@ -1,4 +1,4 @@
-use serde_json::json;
+use serde_json::{json, Value};
 
 use super::error::GitHubError;
 use super::types::GitHubReadinessSnapshot;
@@ -91,6 +91,25 @@ query OpenForgePullRequestReadinessCore($owner: String!, $repo: String!, $number
 }
 "#;
 
+const PR_NODE_ID_QUERY: &str = r#"
+query OpenForgePullRequestNodeId($owner: String!, $repo: String!, $number: Int!) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) { id }
+  }
+}
+"#;
+
+const ENQUEUE_PULL_REQUEST_MUTATION: &str = r#"
+mutation OpenForgeEnqueuePullRequest($pullRequestId: ID!) {
+  enqueuePullRequest(input: { pullRequestId: $pullRequestId }) {
+    pullRequest {
+      id
+      mergeQueueEntry { state }
+    }
+  }
+}
+"#;
+
 impl GitHubClient {
     pub async fn get_pr_readiness_snapshot(
         &self,
@@ -117,6 +136,101 @@ impl GitHubClient {
         }
 
         GitHubReadinessSnapshot::from_graphql_response(&body).map_err(GitHubError::ParseError)
+    }
+    pub async fn enqueue_pull_request(
+        &self,
+        owner: &str,
+        repo: &str,
+        pr_number: i64,
+        token: &str,
+        actor_login: &str,
+    ) -> Result<(), GitHubError> {
+        let pull_request_id = self
+            .get_pull_request_node_id(owner, repo, pr_number, token)
+            .await?;
+        let body = self
+            .send_enqueue_pull_request_mutation(&pull_request_id, token)
+            .await?;
+
+        classify_enqueue_graphql_errors(&body, actor_login, owner, repo, pr_number).map_err(
+            |message| GitHubError::ApiError {
+                status: 422,
+                message,
+            },
+        )?;
+        extract_enqueue_pull_request_result(&body).map_err(|message| GitHubError::ApiError {
+            status: 422,
+            message,
+        })
+    }
+
+    async fn get_pull_request_node_id(
+        &self,
+        owner: &str,
+        repo: &str,
+        pr_number: i64,
+        token: &str,
+    ) -> Result<String, GitHubError> {
+        let payload = json!({
+            "query": PR_NODE_ID_QUERY,
+            "variables": {
+                "owner": owner,
+                "repo": repo,
+                "number": pr_number,
+            },
+        });
+        let body = self.send_graphql_payload(payload, token).await?;
+        let id = body
+            .pointer("/data/repository/pullRequest/id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| GitHubError::ApiError {
+                status: 404,
+                message: format!(
+                    "Could not find pull request {owner}/{repo}#{pr_number} before enqueueing"
+                ),
+            })?;
+        Ok(id.to_string())
+    }
+
+    async fn send_enqueue_pull_request_mutation(
+        &self,
+        pull_request_id: &str,
+        token: &str,
+    ) -> Result<Value, GitHubError> {
+        let payload = json!({
+            "query": ENQUEUE_PULL_REQUEST_MUTATION,
+            "variables": {
+                "pullRequestId": pull_request_id,
+            },
+        });
+        self.send_graphql_payload(payload, token).await
+    }
+
+    async fn send_graphql_payload(
+        &self,
+        payload: Value,
+        token: &str,
+    ) -> Result<Value, GitHubError> {
+        let response = self
+            .send_github(
+                self.github_request(
+                    reqwest::Method::POST,
+                    "https://api.github.com/graphql",
+                    token,
+                )
+                .header("Accept", "application/vnd.github+json")
+                .json(&payload),
+            )
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(Self::api_error_from_response(response).await);
+        }
+
+        response
+            .json()
+            .await
+            .map_err(|e| GitHubError::ParseError(e.to_string()))
     }
 
     async fn send_pr_readiness_query(
@@ -156,5 +270,165 @@ impl GitHubClient {
             .json()
             .await
             .map_err(|e| GitHubError::ParseError(e.to_string()))
+    }
+}
+
+fn graphql_error_messages(body: &Value) -> Vec<String> {
+    body.get("errors")
+        .and_then(Value::as_array)
+        .map(|errors| {
+            errors
+                .iter()
+                .filter_map(|error| error.get("message").and_then(Value::as_str))
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn is_unsupported_enqueue_error(message: &str) -> bool {
+    let lower = message.to_lowercase();
+    lower.contains("enqueuepullrequest")
+        && (lower.contains("doesn't exist")
+            || lower.contains("does not exist")
+            || lower.contains("undefinedfield")
+            || lower.contains("unknown field"))
+}
+
+fn is_enqueue_permission_error(message: &str) -> bool {
+    let lower = message.to_lowercase();
+    lower.contains("resource not accessible")
+        || lower.contains("permission")
+        || lower.contains("not permitted")
+        || lower.contains("write access")
+        || lower.contains("forbidden")
+}
+
+fn unsupported_enqueue_message() -> String {
+    "GitHub merge queue enqueue is not supported by this GitHub API. If this is GitHub Enterprise, update GitHub Enterprise or enqueue the pull request in GitHub.".to_string()
+}
+
+fn enqueue_permission_message(
+    actor_login: &str,
+    owner: &str,
+    repo: &str,
+    pr_number: i64,
+    github_message: &str,
+) -> String {
+    format!(
+        "GitHub user {actor_login} does not have permission to enqueue {owner}/{repo}#{pr_number}. Use a token for an actor with write access and merge queue permissions. GitHub said: {github_message}"
+    )
+}
+
+fn classify_enqueue_graphql_errors(
+    body: &Value,
+    actor_login: &str,
+    owner: &str,
+    repo: &str,
+    pr_number: i64,
+) -> Result<(), String> {
+    let messages = graphql_error_messages(body);
+    if messages.is_empty() {
+        return Ok(());
+    }
+
+    let joined = messages.join("; ");
+    if messages
+        .iter()
+        .any(|message| is_unsupported_enqueue_error(message))
+    {
+        return Err(unsupported_enqueue_message());
+    }
+    if messages
+        .iter()
+        .any(|message| is_enqueue_permission_error(message))
+    {
+        return Err(enqueue_permission_message(
+            actor_login,
+            owner,
+            repo,
+            pr_number,
+            &joined,
+        ));
+    }
+
+    Err(format!(
+        "GitHub refused to enqueue pull request {owner}/{repo}#{pr_number}: {joined}"
+    ))
+}
+
+fn extract_enqueue_pull_request_result(body: &Value) -> Result<(), String> {
+    if let Err(message) =
+        classify_enqueue_graphql_errors(body, "the authenticated actor", "unknown", "unknown", 0)
+    {
+        return Err(message);
+    }
+
+    if body
+        .pointer("/data/enqueuePullRequest/pullRequest/id")
+        .and_then(Value::as_str)
+        .is_some()
+    {
+        Ok(())
+    } else {
+        Err("GitHub enqueue response did not include the pull request payload.".to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn enqueue_response_success_requires_pull_request_payload() {
+        let body = json!({
+            "data": {
+                "enqueuePullRequest": {
+                    "pullRequest": {
+                        "id": "PR_node",
+                        "mergeQueueEntry": { "state": "QUEUED" }
+                    }
+                }
+            }
+        });
+
+        extract_enqueue_pull_request_result(&body).expect("valid enqueue response");
+    }
+
+    #[test]
+    fn enqueue_response_reports_unsupported_merge_queue_api() {
+        let body = json!({
+            "errors": [{ "message": "Field 'enqueuePullRequest' doesn't exist on type 'Mutation'" }]
+        });
+
+        let err = extract_enqueue_pull_request_result(&body)
+            .expect_err("unsupported mutation should error");
+        assert!(err.contains("GitHub merge queue enqueue is not supported"));
+        assert!(err.contains("update GitHub Enterprise"));
+    }
+
+    #[test]
+    fn enqueue_response_reports_actor_scoped_permission_failure() {
+        let body = json!({
+            "errors": [{ "message": "Resource not accessible by personal access token" }]
+        });
+
+        let err = classify_enqueue_graphql_errors(&body, "octocat", "owner", "repo", 42)
+            .expect_err("permission failure should be classified");
+        assert!(err.contains("GitHub user octocat"));
+        assert!(err.contains("permission to enqueue owner/repo#42"));
+    }
+
+    #[test]
+    fn enqueue_response_preserves_github_error_context() {
+        let body = json!({
+            "errors": [{ "message": "Pull request cannot be enqueued while mergeability is UNKNOWN" }]
+        });
+
+        let err = classify_enqueue_graphql_errors(&body, "octocat", "owner", "repo", 42)
+            .expect_err("GitHub error should surface");
+        assert!(err.contains("GitHub refused to enqueue pull request owner/repo#42"));
+        assert!(err.contains("mergeability is UNKNOWN"));
     }
 }

@@ -13,29 +13,30 @@ vi.mock("./desktopIpc", () => ({
 
 import * as ipcModule from "./ipc";
 import {
-	checkCodexInstalled,
-	checkPiInstalled,
-	createTask,
-	fsSearchFiles,
-	getAllTasks,
-	getCommitBatchFileContents,
-	getTaskBatchFileContents,
-	getPtyBuffer,
-	getResolvedAiProvider,
-	listGitBranches,
-	registerBuiltinPlugin,
-	installPluginFromGit,
-	installPluginFromLocal,
-	installPluginFromNpm,
-	installPluginFromSource,
-	killPty,
-	killShellsForTask,
-	resizePty,
-	spawnShellPty,
-	transcribeAudio,
-	updateTask,
-	updateTaskSummary,
-	writePty,
+  checkCodexInstalled,
+  checkPiInstalled,
+  createTask,
+  enqueuePullRequest,
+  fsSearchFiles,
+  getAllTasks,
+  getCommitBatchFileContents,
+  getTaskBatchFileContents,
+  getPtyBuffer,
+  getResolvedAiProvider,
+  listGitBranches,
+  registerBuiltinPlugin,
+  installPluginFromGit,
+  installPluginFromLocal,
+  installPluginFromNpm,
+  installPluginFromSource,
+  killPty,
+  killShellsForTask,
+  resizePty,
+  spawnShellPty,
+  transcribeAudio,
+  updateTask,
+  updateTaskSummary,
+  writePty,
 } from "./ipc";
 
 type PtyPayloadFixture = {
@@ -54,17 +55,34 @@ function ptyFixture(command: string, name: string): PtyPayloadFixture {
 	return fixture;
 }
 
+describe("ipc GitHub pull request commands", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+    invokeMock.mockResolvedValue(undefined);
+  });
+
+  it("sends camelCase payload for enqueuePullRequest", async () => {
+    await enqueuePullRequest("owner", "repo", 42);
+
+    expect(invokeMock).toHaveBeenCalledWith("enqueue_pull_request", {
+      owner: "owner",
+      repo: "repo",
+      prNumber: 42,
+    });
+  });
+});
+
 describe("ipc resolved provider", () => {
-	beforeEach(() => {
-		invokeMock.mockReset();
-		invokeMock.mockResolvedValue("codex");
-	});
+  beforeEach(() => {
+    invokeMock.mockReset();
+    invokeMock.mockResolvedValue("codex");
+  });
 
-	it("requests the backend-resolved provider for a project", async () => {
-		await expect(getResolvedAiProvider("P-1")).resolves.toBe("codex");
+  it("requests the backend-resolved provider for a project", async () => {
+    await expect(getResolvedAiProvider("P-1")).resolves.toBe("codex");
 
-		expect(invokeMock).toHaveBeenCalledWith("resolve_ai_provider", { projectId: "P-1" });
-	});
+    expect(invokeMock).toHaveBeenCalledWith("resolve_ai_provider", { projectId: "P-1" });
+  });
 });
 
 describe("ipc spawnShellPty", () => {

@@ -220,6 +220,10 @@ export async function mergePullRequest(owner: string, repo: string, prNumber: nu
   return invoke<void>("merge_pull_request", { owner, repo, prNumber });
 }
 
+export async function enqueuePullRequest(owner: string, repo: string, prNumber: number): Promise<void> {
+  return invoke<void>("enqueue_pull_request", { owner, repo, prNumber });
+}
+
 export async function checkOpenCodeInstalled(): Promise<{ installed: boolean; path: string | null; version: string | null }> {
   return invoke("check_opencode_installed");
 }

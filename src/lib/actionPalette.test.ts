@@ -142,12 +142,30 @@ describe('getTaskActions', () => {
     expect(ids).not.toContain('merge-pr')
   })
 
-  it('does not return direct Merge Pull Request action for persisted ready_to_enqueue readiness', () => {
+  it('returns Enqueue Pull Request action from current persisted ready_to_enqueue readiness', () => {
     const task = makeTask({ status: 'doing' })
     const pr = makePR({ merge_readiness_status: 'ready_to_enqueue', merge_readiness_action: 'enqueue', readiness_source_head_sha: 'abc', readiness_updated_at: 0 })
     const actions = getTaskActions(task, [], [pr])
     const ids = actions.map(a => a.id)
+    expect(ids).toContain('enqueue-pr')
     expect(ids).not.toContain('merge-pr')
+  })
+
+  it('does not return Enqueue Pull Request action from stale persisted ready_to_enqueue readiness', () => {
+    const task = makeTask({ status: 'doing' })
+    const pr = makePR({ head_sha: 'new-head', mergeable: null, mergeable_state: 'unknown', merge_readiness_status: 'ready_to_enqueue', merge_readiness_action: 'enqueue', readiness_source_head_sha: 'old-head', readiness_updated_at: 1 })
+    const actions = getTaskActions(task, [], [pr])
+    const ids = actions.map(a => a.id)
+    expect(ids).not.toContain('enqueue-pr')
+    expect(ids).not.toContain('merge-pr')
+  })
+
+  it('does not return Enqueue Pull Request action when PR is already queued', () => {
+    const task = makeTask({ status: 'doing' })
+    const pr = makePR({ is_queued: true, merge_readiness_status: 'queued_pull_request', merge_readiness_action: 'wait_for_queue', readiness_source_head_sha: 'abc', readiness_updated_at: 0 })
+    const actions = getTaskActions(task, [], [pr])
+    const ids = actions.map(a => a.id)
+    expect(ids).not.toContain('enqueue-pr')
   })
 
   it.each([

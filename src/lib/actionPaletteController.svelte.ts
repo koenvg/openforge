@@ -66,6 +66,11 @@ export function useActionPaletteController(options: ActionPaletteControllerOptio
           await options.taskActions.mergeReadyPullRequest(task)
         }
         break
+      case 'enqueue-pr':
+        if (task) {
+          await options.taskActions.enqueueReadyPullRequest(task)
+        }
+        break
       case 'go-back':
         options.goBack()
         break
