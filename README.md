@@ -107,7 +107,7 @@ openforge update-task --task-id T-123 --summary "Done"
 openforge create-task --initial-prompt "Correct task prompt" --worktree "$PWD" --depends-on T-122 --label cleanup
 ```
 
-The CLI talks to the local Open Forge HTTP bridge and is used by the auto-installed provider skills.
+The CLI talks to the local Open Forge HTTP bridge and is used by the auto-installed provider skills. `openforge list-tasks` excludes done tasks by default; pass `--state done` only when completed tasks are explicitly needed.
 
 `openforge update-task` is summary-only: it updates the task `summary` field, which Open Forge uses for Handoff Notes. It does not change `initial_prompt` or `prompt`, and should not be documented or used as a way to correct task prompt text.
 
