@@ -101,6 +101,7 @@ describe('OpenForge CLI', () => {
     expect(stdout).toContain('Usage:\n  openforge create-task');
     expect(stdout).toContain('openforge delete-task --task-id <id>');
     expect(stdout).toContain('openforge list-projects');
+    expect(stdout).toContain('list-tasks excludes done tasks unless --state done is passed');
     expect(stdout).not.toContain('node cli.js');
     expect(stdout).not.toContain('openforge mcp');
   });
@@ -428,6 +429,89 @@ describe('OpenForge CLI', () => {
 
       expect(JSON.parse(stdout)).toEqual({ task_id: 'T-1', status: 'updated' });
       expect(seenBody).toEqual({ task_id: 'T-1', summary: 'Done' });
+    } finally {
+      await close(server);
+    }
+  });
+
+  it('excludes done tasks from list-tasks output by default', async () => {
+    const tasks = [
+      { id: 'T-1', project_id: 'P-1', status: 'backlog', initial_prompt: 'Open task' },
+      { id: 'T-2', project_id: 'P-1', status: 'doing', initial_prompt: 'Active task' },
+      { id: 'T-3', project_id: 'P-1', status: 'done', initial_prompt: 'Done task' },
+    ];
+    const server = createServer((req, res) => {
+      if (!req.url?.startsWith('/tasks?')) {
+        res.writeHead(404, { 'content-type': 'text/plain' });
+        res.end('not found');
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(tasks));
+    });
+    const port = await listen(server);
+
+    try {
+      const { stdout } = await runCli(['list-tasks', '--project-id', 'P-1'], { OPENFORGE_HTTP_PORT: String(port) });
+
+      expect(JSON.parse(stdout)).toEqual([
+        { id: 'T-1', project_id: 'P-1', status: 'backlog', initial_prompt: 'Open task' },
+        { id: 'T-2', project_id: 'P-1', status: 'doing', initial_prompt: 'Active task' },
+      ]);
+    } finally {
+      await close(server);
+    }
+  });
+
+  it('keeps explicit done-task access through list-tasks --state done', async () => {
+    const doneTasks = [
+      { id: 'T-3', project_id: 'P-1', status: 'done', initial_prompt: 'Done task' },
+    ];
+    let seenUrl = null;
+    const server = createServer((req, res) => {
+      seenUrl = req.url;
+      if (req.url !== '/tasks?project_id=P-1&state=done') {
+        res.writeHead(404, { 'content-type': 'text/plain' });
+        res.end('not found');
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(doneTasks));
+    });
+    const port = await listen(server);
+
+    try {
+      const { stdout } = await runCli(['list-tasks', '--project-id', 'P-1', '--state', 'done'], { OPENFORGE_HTTP_PORT: String(port) });
+
+      expect(seenUrl).toBe('/tasks?project_id=P-1&state=done');
+      expect(JSON.parse(stdout)).toEqual(doneTasks);
+    } finally {
+      await close(server);
+    }
+  });
+
+  it.each(['backlog', 'doing'])('keeps explicit %s list-tasks filtering unchanged', async (state) => {
+    const tasks = [
+      { id: `T-${state}`, project_id: 'P-1', status: state, initial_prompt: `${state} task` },
+    ];
+    let seenUrl = null;
+    const server = createServer((req, res) => {
+      seenUrl = req.url;
+      if (req.url !== `/tasks?project_id=P-1&state=${state}`) {
+        res.writeHead(404, { 'content-type': 'text/plain' });
+        res.end('not found');
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(tasks));
+    });
+    const port = await listen(server);
+
+    try {
+      const { stdout } = await runCli(['list-tasks', '--project-id', 'P-1', '--state', state], { OPENFORGE_HTTP_PORT: String(port) });
+
+      expect(seenUrl).toBe(`/tasks?project_id=P-1&state=${state}`);
+      expect(JSON.parse(stdout)).toEqual(tasks);
     } finally {
       await close(server);
     }

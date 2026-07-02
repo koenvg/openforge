@@ -39,6 +39,8 @@ openforge list-tasks --project-id P-1 --state doing
 openforge list-projects
 ```
 
+`list-tasks` excludes done tasks by default to keep agent context focused. Pass `--state done` only when you explicitly need completed tasks.
+
 Use `--worktree "$PWD"` with `create-task` when the project can be inferred from the current worktree and no project id is known.
 
 If a task was created with the wrong initial prompt, do not try to repair it with `update-task`. Before deleting it, record the old task's labels, its own `depends_on` list, and any dependent tasks whose `depends_on` entries include the old task id. Then delete the incorrect task, create a replacement with the desired `--initial-prompt`, and repoint each dependent task to the replacement:

@@ -44,6 +44,9 @@ Task prompt semantics:
   update-task does not change initial_prompt or prompt; do not use it to fix a bad task prompt.
   If a task was created with the wrong initial prompt, first record its labels, own depends_on list, and reverse dependents by listing project tasks and finding depends_on entries containing the old id. Delete the incorrect task, create a replacement with the desired --initial-prompt, then repoint each dependent with set-task-dependencies.
 
+Task listing:
+  list-tasks excludes done tasks unless --state done is passed.
+
 Examples:
   openforge list-tasks --project-id P-1
   openforge delete-task --task-id T-123
@@ -178,6 +181,10 @@ function printJson(value) {
   console.log(JSON.stringify(value, null, 2));
 }
 
+function excludeDoneTasks(tasks) {
+  return Array.isArray(tasks) ? tasks.filter((task) => task?.status !== 'done') : tasks;
+}
+
 async function main(argv) {
   const { command, flags } = parseArgs(argv);
 
@@ -302,7 +309,8 @@ async function main(argv) {
     case 'list-tasks': {
       const params = new URLSearchParams({ project_id: requireFlag(flags, 'projectId') });
       if (typeof flags.state === 'string') params.set('state', flags.state);
-      printJson(await requestJson(`/tasks?${params.toString()}`));
+      const tasks = await requestJson(`/tasks?${params.toString()}`);
+      printJson(typeof flags.state === 'string' ? tasks : excludeDoneTasks(tasks));
       return;
     }
     case 'list-projects': {
