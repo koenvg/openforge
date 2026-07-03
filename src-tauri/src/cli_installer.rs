@@ -397,7 +397,10 @@ mod tests {
         assert!(skill_content.contains("openforge create-task --help"));
         assert!(skill_content.contains("openforge update-task --help"));
         assert_eq!(skill_content.matches("openforge get-task").count(), 1);
-        assert_eq!(skill_content.matches("openforge list-task-labels").count(), 1);
+        assert_eq!(
+            skill_content.matches("openforge list-task-labels").count(),
+            1
+        );
         assert!(!skill_content.contains("reverse dependents"));
         assert!(!skill_content.contains("repoint each dependent"));
         assert!(!skill_content.contains("Correct task prompt"));
