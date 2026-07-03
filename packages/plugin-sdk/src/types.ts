@@ -3,13 +3,13 @@ import packageMetadataSchemaData from './openforgePackageMetadataSchema.json'
 import type { Component } from 'svelte'
 import type {
   AgentSession,
-  BoardStatus,
   FileContent,
   FileEntry,
   Project,
   ProjectAttention,
   Task,
   TaskWorkspaceInfo,
+  WritableBoardStatus,
 } from './domain'
 
 export type SupportedOpenForgeApiVersion = 1
@@ -347,7 +347,7 @@ export interface TasksAPI {
   get(taskId: string): Promise<Task>
   create(request: CreateTaskRequest): Promise<Task>
   updateSummary(taskId: string, summary: string): Promise<void>
-  updateStatus(taskId: string, status: BoardStatus): Promise<void>
+  updateStatus(taskId: string, status: WritableBoardStatus): Promise<void>
   startImplementation(request: StartTaskImplementationRequest): Promise<ImplementationRun>
   getWorkspace(taskId: string): Promise<TaskWorkspaceInfo | null>
   getLatestSession(taskId: string): Promise<AgentSession | null>

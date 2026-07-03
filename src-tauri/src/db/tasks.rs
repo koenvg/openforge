@@ -1959,6 +1959,17 @@ mod tests {
     }
 
     #[test]
+    fn test_board_status_done_is_not_writable() {
+        use crate::db::BoardStatus;
+
+        // 'done' still parses so legacy rows remain readable...
+        assert!(BoardStatus::Backlog.is_writable());
+        assert!(BoardStatus::Doing.is_writable());
+        // ...but it can never be assigned as a new status (AVIV-118 black hole).
+        assert!(!BoardStatus::Done.is_writable());
+    }
+
+    #[test]
     fn test_board_status_serializes_to_canonical_lowercase_strings() {
         use crate::db::BoardStatus;
 

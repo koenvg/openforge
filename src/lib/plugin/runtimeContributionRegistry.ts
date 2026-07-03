@@ -18,7 +18,6 @@ import type {
 import type {
   AgentSession,
   BackendReadyState,
-  BoardStatus,
   CommandDescriptor,
   CommandShortcutMetadata,
   CreateTaskRequest,
@@ -37,6 +36,7 @@ import type {
   SubscriptionSink,
   Task,
   TaskWorkspaceInfo,
+  WritableBoardStatus,
 } from '@openforge/plugin-sdk'
 
 type MaybePromise<T> = T | Promise<T>
@@ -52,7 +52,7 @@ export type RuntimeHostBridge = {
   getTask?(taskId: string): Promise<Task>
   createTask?(request: CreateTaskRequest): Promise<Task>
   updateTaskSummary?(taskId: string, summary: string): Promise<void>
-  updateTaskStatus?(taskId: string, status: BoardStatus): Promise<void>
+  updateTaskStatus?(taskId: string, status: WritableBoardStatus): Promise<void>
   startTaskImplementation?(request: StartTaskImplementationRequest): Promise<ImplementationRun>
   getTaskWorkspace?(taskId: string): Promise<TaskWorkspaceInfo | null>
   getLatestSession?(taskId: string): Promise<AgentSession | null>
