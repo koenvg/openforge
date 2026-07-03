@@ -333,6 +333,16 @@ pub struct AppReadinessResponse {
 pub struct TasksQuery {
     pub project_id: String,
     pub state: Option<String>,
+    pub include_done: Option<bool>,
+    pub exclude_done: Option<bool>,
+    pub compact: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(untagged)]
+pub enum TaskListRow {
+    Full(db::TaskRow),
+    Compact(db::CompactTaskRow),
 }
 
 /// Payload from Claude Code hooks
@@ -894,7 +904,7 @@ pub async fn get_projects_handler(
 pub async fn get_tasks_handler(
     State(state): State<AppState>,
     Query(query): Query<TasksQuery>,
-) -> Result<Json<Vec<db::TaskRow>>, (StatusCode, String)> {
+) -> Result<Json<Vec<TaskListRow>>, (StatusCode, String)> {
     if let Some(task_state) = query.state.as_deref() {
         if !matches!(task_state, "backlog" | "doing" | "done") {
             return Err((
@@ -904,7 +914,40 @@ pub async fn get_tasks_handler(
         }
     }
 
+    let compact = query.compact.unwrap_or(false);
+    let exclude_done = query.exclude_done.unwrap_or(false) || !query.include_done.unwrap_or(true);
     let db = state.db.lock().unwrap();
+
+    if compact {
+        let tasks = match query.state.as_deref() {
+            Some(task_state) => db
+                .get_compact_tasks_for_project_by_state(&query.project_id, task_state)
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to get compact tasks by state: {e}"),
+                    )
+                })?,
+            None if exclude_done => db
+                .get_compact_tasks_for_project_excluding_state(&query.project_id, "done")
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to get compact tasks excluding done: {e}"),
+                    )
+                })?,
+            None => db
+                .get_compact_tasks_for_project(&query.project_id)
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to get compact tasks: {e}"),
+                    )
+                })?,
+        };
+        return Ok(Json(tasks.into_iter().map(TaskListRow::Compact).collect()));
+    }
+
     let tasks = match query.state.as_deref() {
         Some(task_state) => db
             .get_tasks_for_project_by_state(&query.project_id, task_state)
@@ -912,6 +955,14 @@ pub async fn get_tasks_handler(
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     format!("Failed to get tasks by state: {e}"),
+                )
+            })?,
+        None if exclude_done => db
+            .get_tasks_for_project_excluding_state(&query.project_id, "done")
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to get tasks excluding done: {e}"),
                 )
             })?,
         None => db.get_tasks_for_project(&query.project_id).map_err(|e| {
@@ -922,7 +973,7 @@ pub async fn get_tasks_handler(
         })?,
     };
 
-    Ok(Json(tasks))
+    Ok(Json(tasks.into_iter().map(TaskListRow::Full).collect()))
 }
 
 pub async fn get_project_attention_handler(

@@ -101,7 +101,7 @@ describe('OpenForge CLI', () => {
     expect(stdout).toContain('Usage:\n  openforge create-task');
     expect(stdout).toContain('openforge delete-task --task-id <id>');
     expect(stdout).toContain('openforge list-projects');
-    expect(stdout).toContain('list-tasks excludes done tasks unless --state done is passed');
+    expect(stdout).toContain('list-tasks requests compact non-done task rows unless --state done is passed');
     expect(stdout).not.toContain('node cli.js');
     expect(stdout).not.toContain('openforge mcp');
   });
@@ -434,14 +434,15 @@ describe('OpenForge CLI', () => {
     }
   });
 
-  it('excludes done tasks from list-tasks output by default', async () => {
+  it('requests non-done compact task rows from list-tasks by default', async () => {
     const tasks = [
-      { id: 'T-1', project_id: 'P-1', status: 'backlog', initial_prompt: 'Open task' },
-      { id: 'T-2', project_id: 'P-1', status: 'doing', initial_prompt: 'Active task' },
-      { id: 'T-3', project_id: 'P-1', status: 'done', initial_prompt: 'Done task' },
+      { id: 'T-1', project_id: 'P-1', status: 'backlog' },
+      { id: 'T-2', project_id: 'P-1', status: 'doing' },
     ];
+    let seenUrl = null;
     const server = createServer((req, res) => {
-      if (!req.url?.startsWith('/tasks?')) {
+      seenUrl = req.url;
+      if (req.url !== '/tasks?project_id=P-1&exclude_done=true&compact=true') {
         res.writeHead(404, { 'content-type': 'text/plain' });
         res.end('not found');
         return;
@@ -454,10 +455,8 @@ describe('OpenForge CLI', () => {
     try {
       const { stdout } = await runCli(['list-tasks', '--project-id', 'P-1'], { OPENFORGE_HTTP_PORT: String(port) });
 
-      expect(JSON.parse(stdout)).toEqual([
-        { id: 'T-1', project_id: 'P-1', status: 'backlog', initial_prompt: 'Open task' },
-        { id: 'T-2', project_id: 'P-1', status: 'doing', initial_prompt: 'Active task' },
-      ]);
+      expect(seenUrl).toBe('/tasks?project_id=P-1&exclude_done=true&compact=true');
+      expect(JSON.parse(stdout)).toEqual(tasks);
     } finally {
       await close(server);
     }

@@ -49,6 +49,25 @@ pub struct TaskRow {
     pub labels: Vec<TaskLabelRow>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct CompactTaskRow {
+    pub id: String,
+    pub status: String,
+    pub project_id: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub agent: Option<String>,
+    pub permission_mode: Option<String>,
+    pub worktree_source: Option<String>,
+    pub worktree_branch: Option<String>,
+    pub title: String,
+    pub title_source: Option<String>,
+    pub title_generated_at: Option<i64>,
+    pub handoff_notes_enabled: bool,
+    pub depends_on: Vec<String>,
+    pub labels: Vec<TaskLabelRow>,
+}
+
 /// Full option set for creating a task. Existing `create_task` /
 /// `create_task_with_worktree_source` helpers delegate here with defaults so
 /// their call sites stay stable while new optional fields (display title,
@@ -284,44 +303,144 @@ fn normalize_worktree_source(
     }
 }
 
+const TASK_ROW_COLUMNS: &str = "id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, title_source, title_generated_at, worktree_source, worktree_branch, handoff_notes_enabled";
+const COMPACT_TASK_ROW_COLUMNS: &str = "id, status, project_id, created_at, updated_at, agent, permission_mode, worktree_source, worktree_branch, COALESCE(NULLIF(title, ''), substr(initial_prompt, 1, 120)) AS title, title_source, title_generated_at, handoff_notes_enabled";
+
+fn task_from_row(row: &rusqlite::Row<'_>) -> Result<TaskRow> {
+    Ok(TaskRow {
+        id: row.get(0)?,
+        initial_prompt: row.get(1)?,
+        status: row.get(2)?,
+        project_id: row.get(3)?,
+        created_at: row.get(4)?,
+        updated_at: row.get(5)?,
+        prompt: row.get(6)?,
+        summary: row.get(7)?,
+        agent: row.get(8)?,
+        permission_mode: row.get(9)?,
+        title: row.get(10)?,
+        title_source: row.get(11)?,
+        title_generated_at: row.get(12)?,
+        worktree_source: row.get(13)?,
+        worktree_branch: row.get(14)?,
+        handoff_notes_enabled: row.get(15)?,
+        depends_on: Vec::new(),
+        labels: Vec::new(),
+    })
+}
+
+fn compact_task_from_row(row: &rusqlite::Row<'_>) -> Result<CompactTaskRow> {
+    Ok(CompactTaskRow {
+        id: row.get(0)?,
+        status: row.get(1)?,
+        project_id: row.get(2)?,
+        created_at: row.get(3)?,
+        updated_at: row.get(4)?,
+        agent: row.get(5)?,
+        permission_mode: row.get(6)?,
+        worktree_source: row.get(7)?,
+        worktree_branch: row.get(8)?,
+        title: row.get(9)?,
+        title_source: row.get(10)?,
+        title_generated_at: row.get(11)?,
+        handoff_notes_enabled: row.get(12)?,
+        depends_on: Vec::new(),
+        labels: Vec::new(),
+    })
+}
+
+fn hydrate_task_row(conn: &rusqlite::Connection, mut task: TaskRow) -> Result<TaskRow> {
+    task.depends_on = load_task_dependency_ids(conn, &task.id)?;
+    task.labels = load_task_labels(conn, &task.id)?;
+    Ok(task)
+}
+
+fn hydrate_compact_task_row(
+    conn: &rusqlite::Connection,
+    mut task: CompactTaskRow,
+) -> Result<CompactTaskRow> {
+    task.depends_on = load_task_dependency_ids(conn, &task.id)?;
+    task.labels = load_task_labels(conn, &task.id)?;
+    Ok(task)
+}
+
 impl super::Database {
     /// Get all tasks for a project
     pub fn get_tasks_for_project(&self, project_id: &str) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, title_source, title_generated_at, worktree_source, worktree_branch, handoff_notes_enabled
-             FROM tasks WHERE project_id = ?1 ORDER BY updated_at DESC",
-        )?;
-
-        let tasks = stmt.query_map([project_id], |row| {
-            Ok(TaskRow {
-                id: row.get(0)?,
-                initial_prompt: row.get(1)?,
-                status: row.get(2)?,
-                project_id: row.get(3)?,
-                created_at: row.get(4)?,
-                updated_at: row.get(5)?,
-                prompt: row.get(6)?,
-                summary: row.get(7)?,
-                agent: row.get(8)?,
-                permission_mode: row.get(9)?,
-                title: row.get(10)?,
-                title_source: row.get(11)?,
-                title_generated_at: row.get(12)?,
-                worktree_source: row.get(13)?,
-                worktree_branch: row.get(14)?,
-                handoff_notes_enabled: row.get(15)?,
-                depends_on: Vec::new(),
-                labels: Vec::new(),
-            })
-        })?;
+        let query = format!(
+            "SELECT {TASK_ROW_COLUMNS} FROM tasks WHERE project_id = ?1 ORDER BY updated_at DESC"
+        );
+        let mut stmt = conn.prepare(&query)?;
+        let tasks = stmt.query_map([project_id], task_from_row)?;
 
         let mut result = Vec::new();
         for task in tasks {
-            let mut task = task?;
-            task.depends_on = load_task_dependency_ids(&conn, &task.id)?;
-            task.labels = load_task_labels(&conn, &task.id)?;
-            result.push(task);
+            result.push(hydrate_task_row(&conn, task?)?);
+        }
+        Ok(result)
+    }
+
+    pub fn get_tasks_for_project_excluding_state(
+        &self,
+        project_id: &str,
+        state: &str,
+    ) -> Result<Vec<TaskRow>> {
+        let conn = self.conn.lock().unwrap();
+        let query = format!("SELECT {TASK_ROW_COLUMNS} FROM tasks WHERE project_id = ?1 AND status != ?2 ORDER BY updated_at DESC");
+        let mut stmt = conn.prepare(&query)?;
+        let tasks = stmt.query_map([project_id, state], task_from_row)?;
+
+        let mut result = Vec::new();
+        for task in tasks {
+            result.push(hydrate_task_row(&conn, task?)?);
+        }
+        Ok(result)
+    }
+
+    pub fn get_compact_tasks_for_project(&self, project_id: &str) -> Result<Vec<CompactTaskRow>> {
+        let conn = self.conn.lock().unwrap();
+        let query = format!("SELECT {COMPACT_TASK_ROW_COLUMNS} FROM tasks WHERE project_id = ?1 ORDER BY updated_at DESC");
+        let mut stmt = conn.prepare(&query)?;
+        let tasks = stmt.query_map([project_id], compact_task_from_row)?;
+
+        let mut result = Vec::new();
+        for task in tasks {
+            result.push(hydrate_compact_task_row(&conn, task?)?);
+        }
+        Ok(result)
+    }
+
+    pub fn get_compact_tasks_for_project_excluding_state(
+        &self,
+        project_id: &str,
+        state: &str,
+    ) -> Result<Vec<CompactTaskRow>> {
+        let conn = self.conn.lock().unwrap();
+        let query = format!("SELECT {COMPACT_TASK_ROW_COLUMNS} FROM tasks WHERE project_id = ?1 AND status != ?2 ORDER BY updated_at DESC");
+        let mut stmt = conn.prepare(&query)?;
+        let tasks = stmt.query_map([project_id, state], compact_task_from_row)?;
+
+        let mut result = Vec::new();
+        for task in tasks {
+            result.push(hydrate_compact_task_row(&conn, task?)?);
+        }
+        Ok(result)
+    }
+
+    pub fn get_compact_tasks_for_project_by_state(
+        &self,
+        project_id: &str,
+        state: &str,
+    ) -> Result<Vec<CompactTaskRow>> {
+        let conn = self.conn.lock().unwrap();
+        let query = format!("SELECT {COMPACT_TASK_ROW_COLUMNS} FROM tasks WHERE project_id = ?1 AND status = ?2 ORDER BY updated_at DESC");
+        let mut stmt = conn.prepare(&query)?;
+        let tasks = stmt.query_map([project_id, state], compact_task_from_row)?;
+
+        let mut result = Vec::new();
+        for task in tasks {
+            result.push(hydrate_compact_task_row(&conn, task?)?);
         }
         Ok(result)
     }
@@ -332,39 +451,13 @@ impl super::Database {
         state: &str,
     ) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, title_source, title_generated_at, worktree_source, worktree_branch, handoff_notes_enabled
-             FROM tasks WHERE project_id = ?1 AND status = ?2 ORDER BY updated_at DESC",
-        )?;
-        let tasks = stmt.query_map([project_id, state], |row| {
-            Ok(TaskRow {
-                id: row.get(0)?,
-                initial_prompt: row.get(1)?,
-                status: row.get(2)?,
-                project_id: row.get(3)?,
-                created_at: row.get(4)?,
-                updated_at: row.get(5)?,
-                prompt: row.get(6)?,
-                summary: row.get(7)?,
-                agent: row.get(8)?,
-                permission_mode: row.get(9)?,
-                title: row.get(10)?,
-                title_source: row.get(11)?,
-                title_generated_at: row.get(12)?,
-                worktree_source: row.get(13)?,
-                worktree_branch: row.get(14)?,
-                handoff_notes_enabled: row.get(15)?,
-                depends_on: Vec::new(),
-                labels: Vec::new(),
-            })
-        })?;
+        let query = format!("SELECT {TASK_ROW_COLUMNS} FROM tasks WHERE project_id = ?1 AND status = ?2 ORDER BY updated_at DESC");
+        let mut stmt = conn.prepare(&query)?;
+        let tasks = stmt.query_map([project_id, state], task_from_row)?;
 
         let mut result = Vec::new();
         for task in tasks {
-            let mut task = task?;
-            task.depends_on = load_task_dependency_ids(&conn, &task.id)?;
-            task.labels = load_task_labels(&conn, &task.id)?;
-            result.push(task);
+            result.push(hydrate_task_row(&conn, task?)?);
         }
         Ok(result)
     }
