@@ -725,14 +725,23 @@ describe('computeTaskState - transient null mergeability (PART 5b)', () => {
     expect(computeTaskState(task, session, prs)).toBe('ci-running')
   })
 
-  it('test 10: persisted ready_to_enqueue surfaces ready-to-enqueue task state', () => {
+  it('test 10: running CI + unstable mergeability remains ci-running, not ci-failed', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    for (const ci_status of ['pending', 'queued', 'in_progress']) {
+      const prs = [createPr({ state: 'open', mergeable_state: 'unstable', ci_status })]
+      expect(computeTaskState(task, session, prs)).toBe('ci-running')
+    }
+  })
+
+  it('test 11: persisted ready_to_enqueue surfaces ready-to-enqueue task state', () => {
     const task = createTask({ status: 'doing' })
     const session = createSession({ status: 'completed' })
     const prs = [createPr({ state: 'open', merge_readiness_status: 'ready_to_enqueue', merge_readiness_action: 'enqueue', readiness_source_head_sha: 'abc123', readiness_updated_at: 2000 })]
     expect(computeTaskState(task, session, prs)).toBe('ready-to-enqueue')
   })
 
-  it('test 11: actionable readiness outranks another PR with blockers', () => {
+  it('test 12: actionable readiness outranks another PR with blockers', () => {
     const task = createTask({ status: 'doing' })
     const session = createSession({ status: 'completed' })
     const blocked = createPr({ id: 1, state: 'open', merge_readiness_status: 'blocked', merge_readiness_action: 'resolve_blockers', merge_readiness_blockers: [{ code: 'checks_failed', message: 'Required checks are failing.' }], readiness_source_head_sha: 'abc123', readiness_updated_at: 2000 })
@@ -741,7 +750,7 @@ describe('computeTaskState - transient null mergeability (PART 5b)', () => {
     expect(getStateDrivingPr([blocked, ready])).toBe(ready)
   })
 
-  it('test 12: hard blockers outrank earlier passive waiting PRs', () => {
+  it('test 13: hard blockers outrank earlier passive waiting PRs', () => {
     const task = createTask({ status: 'doing' })
     const session = createSession({ status: 'completed' })
     const passive = createPr({ id: 1, state: 'open', merge_readiness_status: 'blocked', merge_readiness_action: 'resolve_blockers', merge_readiness_blockers: [{ code: 'checks_pending', message: 'Required checks are still running.' }], readiness_source_head_sha: 'abc123', readiness_updated_at: 2000 })

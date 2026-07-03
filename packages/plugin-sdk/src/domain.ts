@@ -395,9 +395,10 @@ export function getMergeReadiness(pr: MergeReadinessInfo, options: MergeReadines
   } else if (ciStatus === 'failure' || ciStatus === 'error' || ciStatus === 'cancelled' || ciStatus === 'timed_out' || ciStatus === 'action_required') {
     blockers.push(mergeReadinessDetail('checks_failed', 'Required checks are failing.'));
   }
-
-  if (mergeableState === 'unstable' && !blockers.some((blocker) => blocker.code === 'checks_failed')) {
-    blockers.push(mergeReadinessDetail('checks_failed', 'GitHub reports failing or unstable required checks.'));
+  const hasFailedChecks = blockers.some((blocker) => blocker.code === 'checks_failed')
+  const hasPendingChecks = blockers.some((blocker) => blocker.code === 'checks_pending')
+  if (mergeableState === 'unstable' && !hasFailedChecks && !hasPendingChecks) {
+    blockers.push(mergeReadinessDetail('checks_failed', 'GitHub reports failing or unstable required checks.'))
   }
 
   if (mergeableState === 'dirty' || mergeableState === 'conflicting') {

@@ -82,6 +82,16 @@ describe('public plugin utilities', () => {
       blockers: [expect.objectContaining({ code: 'checks_failed' })],
     })
 
+    for (const ci_status of ['pending', 'queued', 'in_progress']) {
+      const readiness = getMergeReadiness(makePullRequest({ mergeable: true, mergeable_state: 'unstable', ci_status }))
+      expect(readiness).toMatchObject({
+        status: 'blocked',
+        action: 'resolve_blockers',
+        blockers: [expect.objectContaining({ code: 'checks_pending' })],
+      })
+      expect(readiness.blockers).not.toContainEqual(expect.objectContaining({ code: 'checks_failed' }))
+    }
+
     expect(getMergeReadiness(makePullRequest({
       mergeable: true,
       mergeable_state: null,
