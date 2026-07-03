@@ -103,6 +103,26 @@ fn parse_poll_interval_seconds(raw: Option<String>) -> u64 {
         .unwrap_or(DEFAULT_GITHUB_POLL_INTERVAL_SECS)
 }
 
+fn current_unix_timestamp() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
+}
+
+fn rate_limit_sleep_duration_secs(poll_interval: u64, reset_at: Option<i64>, now: i64) -> u64 {
+    let Some(reset_at) = reset_at else {
+        return poll_interval;
+    };
+
+    let seconds_until_reset = reset_at.saturating_sub(now);
+    if seconds_until_reset <= 0 {
+        poll_interval
+    } else {
+        poll_interval.max(seconds_until_reset as u64 + 1)
+    }
+}
+
 // ============================================================================
 // Poll context & scope
 // ============================================================================
@@ -515,7 +535,16 @@ async fn start_github_poller_with_state(
             }
         }
 
-        sleep(Duration::from_secs(poll_interval)).await;
+        let sleep_secs = if result.rate_limited {
+            rate_limit_sleep_duration_secs(
+                poll_interval,
+                result.rate_limit_reset_at,
+                current_unix_timestamp(),
+            )
+        } else {
+            poll_interval
+        };
+        sleep(Duration::from_secs(sleep_secs)).await;
     }
 }
 
@@ -575,7 +604,10 @@ enum SyncOpenPrsError {
 
 impl SyncOpenPrsError {
     fn should_increment_rate_limit_count(&self) -> bool {
-        matches!(self, Self::GitHub(error) if error.is_rate_limited())
+        matches!(
+            self,
+            Self::GitHub(crate::github_client::GitHubError::ApiError { status: 429, .. })
+        )
     }
 }
 
@@ -769,7 +801,6 @@ async fn read_or_fetch_github_username(
         .get_authenticated_user(github_token)
         .await
         .map_err(SyncOpenPrsError::GitHub)?;
-
     {
         let db_lock = db.lock().unwrap();
         db_lock
@@ -2492,7 +2523,7 @@ mod tests {
             status: 403,
             message: "Forbidden".to_string(),
         });
-        assert!(forbidden.should_increment_rate_limit_count());
+        assert!(!forbidden.should_increment_rate_limit_count());
 
         let non_rate_limited = SyncOpenPrsError::Db("boom".to_string());
         assert!(!non_rate_limited.should_increment_rate_limit_count());
@@ -2966,6 +2997,30 @@ mod tests {
     #[test]
     fn test_parse_poll_interval_seconds_clamps_above_maximum_supported_value() {
         assert_eq!(parse_poll_interval_seconds(Some("301".to_string())), 300);
+    }
+
+    #[test]
+    fn test_rate_limit_sleep_duration_waits_until_future_reset() {
+        assert_eq!(
+            rate_limit_sleep_duration_secs(60, Some(1_700_000_300), 1_700_000_000),
+            301
+        );
+    }
+
+    #[test]
+    fn test_rate_limit_sleep_duration_uses_poll_interval_after_past_reset() {
+        assert_eq!(
+            rate_limit_sleep_duration_secs(60, Some(1_699_999_999), 1_700_000_000),
+            60
+        );
+    }
+
+    #[test]
+    fn test_rate_limit_sleep_duration_keeps_longer_poll_interval() {
+        assert_eq!(
+            rate_limit_sleep_duration_secs(120, Some(1_700_000_030), 1_700_000_000),
+            120
+        );
     }
 
     fn make_github_readiness_pr() -> PrRow {

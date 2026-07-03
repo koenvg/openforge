@@ -21,18 +21,8 @@ impl GitHubClient {
             owner, repo, pr_number
         );
 
-        let response = self.send_github(self.github_get(&url, token)).await?;
-
-        if !response.status().is_success() {
-            return Err(Self::api_error_from_response(response).await);
-        }
-
-        let comments: Vec<PrReviewComment> = response
-            .json()
+        self.get_with_etag::<Vec<PrReviewComment>>(&url, token)
             .await
-            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
-
-        Ok(comments)
     }
 
     /// Submit a PR review with inline comments
