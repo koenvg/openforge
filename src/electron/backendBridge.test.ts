@@ -60,6 +60,52 @@ describe('Electron backend bridge command forwarding', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it('keeps developer log snapshots shell-owned and returns the file-backed tail', async () => {
+    const fetch = vi.fn()
+    const getDeveloperLogSnapshot = vi.fn(() => ({
+      entries: [{
+        id: 1,
+        timestamp: '2026-07-03T12:00:00.000Z',
+        level: 'info' as const,
+        message: '[electron] ready',
+      }],
+      logFilePath: '/tmp/openforge.log',
+      totalEntries: 1,
+    }))
+
+    await expect(handleElectronInvoke(
+      { command: 'get_developer_log_snapshot', payload: { limit: 1000 } },
+      { sidecarConfig: sidecarConfig(), fetch, openExternal: vi.fn(), getDeveloperLogSnapshot },
+    )).resolves.toEqual({
+      entries: [expect.objectContaining({ message: '[electron] ready' })],
+      logFilePath: '/tmp/openforge.log',
+      totalEntries: 1,
+    })
+
+    expect(getDeveloperLogSnapshot).toHaveBeenCalledWith(1000)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('keeps developer logs shell-owned and passes through an explicit log limit', async () => {
+    const fetch = vi.fn()
+    const getDeveloperLogs = vi.fn(() => [{
+      id: 1,
+      timestamp: '2026-07-03T12:00:00.000Z',
+      level: 'info' as const,
+      message: '[electron] ready',
+    }])
+
+    await expect(handleElectronInvoke(
+      { command: 'get_developer_logs', payload: { limit: 1 } },
+      { sidecarConfig: sidecarConfig(), fetch, openExternal: vi.fn(), getDeveloperLogs },
+    )).resolves.toEqual([
+      expect.objectContaining({ message: '[electron] ready' }),
+    ])
+
+    expect(getDeveloperLogs).toHaveBeenCalledWith(1)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it('keeps select_directory shell-owned so macOS folder access is granted through Electron', async () => {
     const fetch = vi.fn()
     const openExternal = vi.fn(async () => undefined)

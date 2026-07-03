@@ -17,6 +17,9 @@ vi.mock('../../lib/ipc', () => ({
   checkPiInstalled: vi.fn(() => Promise.resolve({ installed: false, path: null, version: null })),
   checkCodexInstalled: vi.fn(() => Promise.resolve({ installed: false, path: null, version: null })),
   getAllWhisperModelStatuses: vi.fn(() => Promise.resolve([])),
+  getDeveloperLogSnapshot: vi.fn(() => Promise.resolve({ entries: [], logFilePath: '/tmp/openforge.log', totalEntries: 0 })),
+  getDeveloperLogs: vi.fn(() => Promise.resolve([])),
+  openInEditor: vi.fn(() => Promise.resolve(undefined)),
   setWhisperModel: vi.fn(),
 }))
 
@@ -59,6 +62,7 @@ import {
   checkClaudeInstalled,
   checkPiInstalled,
   getConfig,
+  getDeveloperLogSnapshot,
   getProjectConfig,
   setConfig,
   setProjectConfig,
@@ -88,6 +92,7 @@ describe('SettingsView', () => {
     vi.mocked(checkClaudeInstalled).mockResolvedValue({ installed: false, path: null, version: null, authenticated: false })
     vi.mocked(checkPiInstalled).mockResolvedValue({ installed: false, path: null, version: null })
     vi.mocked(getAllWhisperModelStatuses).mockResolvedValue([])
+    vi.mocked(getDeveloperLogSnapshot).mockResolvedValue({ entries: [], logFilePath: '/tmp/openforge.log', totalEntries: 0 })
     vi.mocked(loadActions).mockResolvedValue([])
 
     activeProjectId.set('test-project-id')
@@ -132,6 +137,63 @@ describe('SettingsView', () => {
     projects.set([])
     render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
     expect(screen.queryAllByText(/credentials/i).length).toBeGreaterThan(0)
+  })
+
+  it('live-refreshes the full OpenForge log trace in the global Developer section', async () => {
+    vi.useFakeTimers()
+    activeProjectId.set(null)
+    projects.set([])
+    vi.mocked(getDeveloperLogSnapshot)
+      .mockResolvedValueOnce({
+        entries: [
+          {
+            id: 1,
+            timestamp: '2026-07-03T12:00:00.000Z',
+            level: 'info',
+            message: '[electron] app ready',
+          },
+        ],
+        logFilePath: '/tmp/openforge.log',
+        totalEntries: 1,
+      })
+      .mockResolvedValueOnce({
+        entries: [
+          {
+            id: 1,
+            timestamp: '2026-07-03T12:00:00.000Z',
+            level: 'info',
+            message: '[electron] app ready',
+          },
+          {
+            id: 2,
+            timestamp: '2026-07-03T12:00:01.000Z',
+            level: 'info',
+            message: '[sidecar] booted',
+          },
+        ],
+        logFilePath: '/tmp/openforge.log',
+        totalEntries: 2,
+      })
+
+    const { unmount } = render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
+
+    try {
+      await vi.waitFor(() => {
+        expect(screen.getByText('Developer')).toBeTruthy()
+        expect(screen.getByText(/\[electron\] app ready/)).toBeTruthy()
+      })
+      expect(getDeveloperLogSnapshot).toHaveBeenCalledWith(1000)
+
+      await vi.advanceTimersByTimeAsync(1000)
+
+      await vi.waitFor(() => {
+        expect(screen.getByText(/\[sidecar\] booted/)).toBeTruthy()
+      })
+      expect(getDeveloperLogSnapshot).toHaveBeenCalledTimes(2)
+    } finally {
+      unmount()
+      vi.useRealTimers()
+    }
   })
 
   it('renders Actions section', () => {

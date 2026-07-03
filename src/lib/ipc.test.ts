@@ -20,6 +20,8 @@ import {
   fsSearchFiles,
   getAllTasks,
   getCommitBatchFileContents,
+  getDeveloperLogSnapshot,
+  getDeveloperLogs,
   getTaskBatchFileContents,
   getPtyBuffer,
   getResolvedAiProvider,
@@ -82,6 +84,25 @@ describe("ipc resolved provider", () => {
     await expect(getResolvedAiProvider("P-1")).resolves.toBe("codex");
 
     expect(invokeMock).toHaveBeenCalledWith("resolve_ai_provider", { projectId: "P-1" });
+  });
+});
+
+describe("ipc developer logs", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+    invokeMock.mockResolvedValue([]);
+  });
+
+  it("requests a file-backed log snapshot through the typed wrapper", async () => {
+    await getDeveloperLogSnapshot(1000);
+
+    expect(invokeMock).toHaveBeenCalledWith("get_developer_log_snapshot", { limit: 1000 });
+  });
+
+  it("can request a bounded main-process log snapshot when a limit is provided", async () => {
+    await getDeveloperLogs(150);
+
+    expect(invokeMock).toHaveBeenCalledWith("get_developer_logs", { limit: 150 });
   });
 });
 
