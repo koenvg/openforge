@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { execFile } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -7,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 
 const execFileAsync = promisify(execFile);
 const CLI_PATH = resolve(process.cwd(), 'src-tauri/src/openforge-cli/cli.js');
+const SKILL_PATH = resolve(process.cwd(), 'src-tauri/src/openforge-cli/openforge-skill.md');
 const CLI_TEST_LOCAL_STORAGE_FILE = join(tmpdir(), `openforge-cli-vitest-${process.pid}.localstorage`);
 
 function normalizeNodeOptionsForCliBridgeTests(nodeOptions) {
@@ -95,6 +97,30 @@ function close(server) {
 }
 
 describe('OpenForge CLI', () => {
+  it('keeps the auto-installed task-management skill concise while covering safe commands', async () => {
+    const skill = await readFile(SKILL_PATH, 'utf8');
+
+    for (const command of [
+      'openforge create-task',
+      'openforge update-task',
+      'openforge delete-task',
+      'openforge get-task',
+      'openforge list-tasks',
+      'openforge list-task-labels',
+      'openforge add-task-label',
+      'openforge remove-task-label',
+    ]) {
+      expect(skill).toContain(command);
+    }
+    expect(skill).toContain('openforge create-task --help');
+    expect(skill).toContain('openforge update-task --help');
+    expect(skill.match(/openforge get-task/g)).toHaveLength(1);
+    expect(skill.match(/openforge list-task-labels/g)).toHaveLength(1);
+    expect(skill).not.toContain('reverse dependents');
+    expect(skill).not.toContain('repoint each dependent');
+    expect(skill).not.toContain('Correct task prompt');
+  });
+
   it('prints launcher-based help without the MCP command', async () => {
     const { stdout } = await runCli(['--help']);
 
