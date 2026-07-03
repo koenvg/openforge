@@ -522,6 +522,7 @@ fn should_start_task_display_title_refresh(
             notification.raw_event_type.as_deref(),
             Some("session.status" | "session.updated" | "message.updated")
         ),
+        "pi" => notification.raw_event_type.as_deref() == Some("user_prompt"),
         _ => false,
     }
 }

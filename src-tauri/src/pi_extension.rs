@@ -33,6 +33,15 @@ mod tests {
         assert!(PI_EXTENSION_SOURCE.contains("raw_event_type"));
         assert!(PI_EXTENSION_SOURCE.contains("agent.start"));
         assert!(PI_EXTENSION_SOURCE.contains("agent.end"));
+        assert!(PI_EXTENSION_SOURCE.contains("pi.on(\"input\""));
+        assert!(PI_EXTENSION_SOURCE.contains("user_prompt"));
+        assert!(PI_EXTENSION_SOURCE.contains("transcript_path"));
+        assert!(PI_EXTENSION_SOURCE.contains("activity_snapshot"));
+        assert!(PI_EXTENSION_SOURCE.contains("getSessionFile"));
+        assert!(PI_EXTENSION_SOURCE.contains("MAX_ACTIVITY_SNAPSHOT_CHARS"));
+        assert!(!PI_EXTENSION_SOURCE.contains("sendMessage("));
+        assert!(!PI_EXTENSION_SOURCE.contains("sendUserMessage("));
+        assert!(!PI_EXTENSION_SOURCE.contains("appendEntry("));
     }
 
     #[test]
