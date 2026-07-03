@@ -53,6 +53,8 @@ mod tests {
         assert!(OPENCODE_PLUGIN_SOURCE.contains("ended"));
         assert!(OPENCODE_PLUGIN_SOURCE.contains("raw_event_type"));
         assert!(OPENCODE_PLUGIN_SOURCE.contains("raw_status_type"));
+        assert!(OPENCODE_PLUGIN_SOURCE.contains("activity_snapshot"));
+        assert!(OPENCODE_PLUGIN_SOURCE.contains("boundedActivitySnapshot"));
     }
 
     #[test]
@@ -131,7 +133,15 @@ mod tests {
         );
         assert_eq!(payloads[1]["raw_event_type"], "session.status");
         assert_eq!(payloads[1]["raw_status_type"], "busy");
+        assert!(payloads[1]["activity_snapshot"]
+            .as_str()
+            .expect("activity snapshot should be string")
+            .contains("session.status"));
         assert_eq!(payloads[6]["provider_session_id"], "ses_rich123");
+        assert!(payloads[6]["activity_snapshot"]
+            .as_str()
+            .expect("activity snapshot should be string")
+            .contains("ses_rich123"));
     }
 
     #[test]

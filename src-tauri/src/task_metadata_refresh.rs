@@ -6,17 +6,39 @@ use std::time::Duration;
 
 const MAX_TASK_DISPLAY_TITLE_CHARS: usize = 60;
 const MAX_TRANSCRIPT_SNAPSHOT_BYTES: u64 = 16 * 1024;
+const MAX_ACTIVITY_SNAPSHOT_BYTES: usize = 8 * 1024;
 const TITLE_REFRESH_DELAY_SECONDS: u64 = 8;
 const TITLE_PROVIDER_TIMEOUT_SECONDS: u64 = 60;
 const TASK_DISPLAY_TITLE_JSON_SCHEMA: &str = r#"{"type":"object","additionalProperties":false,"properties":{"title":{"type":"string","minLength":1,"maxLength":60}},"required":["title"]}"#;
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct TaskDisplayTitleSnapshot {
+    pub(crate) transcript_excerpt: Option<String>,
+    pub(crate) activity_excerpt: Option<String>,
+}
+
+impl TaskDisplayTitleSnapshot {
+    fn is_empty(&self) -> bool {
+        self.transcript_excerpt
+            .as_deref()
+            .unwrap_or("")
+            .trim()
+            .is_empty()
+            && self
+                .activity_excerpt
+                .as_deref()
+                .unwrap_or("")
+                .trim()
+                .is_empty()
+    }
+}
+
 /// Build a short Task Display Title candidate from bounded out-of-band metadata.
 ///
 /// This is intentionally separate from the provider prompt so metadata refreshes do
-/// not pollute the main Agent Session context. The current implementation uses the
-/// task's existing prompt text as the stable early-activity seed; future provider
-/// adapters can pass richer transcript/activity snapshots through this module
-/// without changing the write-safety rules.
+/// not pollute the main Agent Session context. Provider adapters can pass bounded
+/// transcript/activity snapshots through this module without changing the
+/// write-safety rules.
 pub(crate) fn task_display_title_candidate(task: &db::TaskRow) -> Option<String> {
     [task.prompt.as_deref(), Some(task.initial_prompt.as_str())]
         .into_iter()
@@ -87,26 +109,63 @@ fn sanitize_metadata_text(text: &str) -> String {
         .to_string()
 }
 
+fn tail_bounded_lossy(text: &str, max_bytes: usize) -> String {
+    if text.len() <= max_bytes {
+        return text.to_string();
+    }
+
+    String::from_utf8_lossy(&text.as_bytes()[text.len() - max_bytes..]).to_string()
+}
+
+pub(crate) fn task_display_title_snapshot(
+    transcript_path: Option<&Path>,
+    activity_snapshot: Option<&str>,
+) -> Option<TaskDisplayTitleSnapshot> {
+    let snapshot = TaskDisplayTitleSnapshot {
+        transcript_excerpt: transcript_path.and_then(read_transcript_excerpt),
+        activity_excerpt: activity_snapshot.and_then(|activity| {
+            let trimmed = activity.trim();
+            (!trimmed.is_empty()).then(|| tail_bounded_lossy(trimmed, MAX_ACTIVITY_SNAPSHOT_BYTES))
+        }),
+    };
+
+    (!snapshot.is_empty()).then_some(snapshot)
+}
+
 pub(crate) fn build_task_display_title_prompt(
     task: &db::TaskRow,
-    transcript_excerpt: Option<&str>,
+    snapshot: Option<&TaskDisplayTitleSnapshot>,
 ) -> String {
     let task_prompt =
         sanitize_metadata_text(task.prompt.as_deref().unwrap_or(&task.initial_prompt));
-    let transcript = transcript_excerpt
+    let transcript = snapshot
+        .and_then(|snapshot| snapshot.transcript_excerpt.as_deref())
+        .map(sanitize_metadata_text)
+        .unwrap_or_default();
+    let activity = snapshot
+        .and_then(|snapshot| snapshot.activity_excerpt.as_deref())
         .map(sanitize_metadata_text)
         .unwrap_or_default();
     format!(
-        "You are naming an OpenForge Task from a bounded Agent Session metadata snapshot.\n\
+        "You are naming an OpenForge Task from bounded provider metadata snapshots.\n\
 Return only JSON with exactly one string field: title.\n\
 The title must be 3-7 words, short, memorable, specific, and at most {MAX_TASK_DISPLAY_TITLE_CHARS} characters.\n\
 Do not mention OpenForge task management, handoff notes, branches, or generic words like task/thread/session.\n\n\
 Task prompt:\n{task_prompt}\n\n\
-Agent Session snapshot:\n{transcript}\n"
+Provider transcript snapshot:\n{transcript}\n\n\
+Provider activity snapshot:\n{activity}\n"
     )
 }
 
 pub(crate) fn parse_task_display_title_output(raw: &str) -> Result<Option<String>, String> {
+    parse_task_display_title_output_inner(raw, 0)
+}
+
+fn parse_task_display_title_output_inner(raw: &str, depth: u8) -> Result<Option<String>, String> {
+    if depth > 3 {
+        return Err("task display title response was nested too deeply".to_string());
+    }
+
     let cleaned = raw
         .trim()
         .trim_start_matches("```json")
@@ -116,12 +175,112 @@ pub(crate) fn parse_task_display_title_output(raw: &str) -> Result<Option<String
     let value = serde_json::from_str::<Value>(cleaned)
         .or_else(|_| extract_json_object(cleaned).and_then(|json| serde_json::from_str(json)))
         .map_err(|error| format!("failed to parse task display title JSON: {error}"))?;
-    Ok(value
-        .get("title")
-        .and_then(Value::as_str)
-        .and_then(normalize_task_display_title))
+
+    if let Some(title) = title_from_value(&value) {
+        return Ok(Some(title));
+    }
+
+    if value.get("is_error").and_then(Value::as_bool) == Some(true) {
+        let detail = provider_error_detail(&value);
+        return Err(format!(
+            "task display title generation failed{}",
+            detail
+                .as_deref()
+                .map(|message| format!(": {message}"))
+                .unwrap_or_default()
+        ));
+    }
+
+    for key in [
+        "structured_output",
+        "result",
+        "output",
+        "message",
+        "content",
+        "text",
+        "response",
+    ] {
+        if let Some(next) = value.get(key) {
+            if let Some(text) = next.as_str() {
+                if let Some(title) = parse_task_display_title_output_inner(text, depth + 1)? {
+                    return Ok(Some(title));
+                }
+            } else if next.is_object() {
+                if let Some(title) = title_from_value(next) {
+                    return Ok(Some(title));
+                }
+            } else if let Some(items) = next.as_array() {
+                for item in items {
+                    if let Some(text) = item.as_str() {
+                        if let Some(title) = parse_task_display_title_output_inner(text, depth + 1)?
+                        {
+                            return Ok(Some(title));
+                        }
+                    } else if let Some(text) = item.get("text").and_then(Value::as_str) {
+                        if let Some(title) = parse_task_display_title_output_inner(text, depth + 1)?
+                        {
+                            return Ok(Some(title));
+                        }
+                    } else if let Some(title) = title_from_value(item) {
+                        return Ok(Some(title));
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(None)
 }
 
+fn title_from_value(value: &Value) -> Option<String> {
+    value
+        .get("title")
+        .and_then(Value::as_str)
+        .and_then(normalize_task_display_title)
+}
+
+fn provider_error_detail(value: &Value) -> Option<String> {
+    let mut parts = Vec::new();
+    for key in ["subtype", "error", "message", "result"] {
+        if let Some(message) = value.get(key).and_then(Value::as_str) {
+            let message = message.trim();
+            if !message.is_empty() {
+                parts.push(message.to_string());
+            }
+        }
+    }
+
+    if let Some(errors) = value.get("errors").and_then(Value::as_array) {
+        for error in errors {
+            if let Some(message) = error.as_str() {
+                let message = message.trim();
+                if !message.is_empty() {
+                    parts.push(message.to_string());
+                }
+            }
+        }
+    }
+
+    (!parts.is_empty()).then(|| parts.join(": "))
+}
+
+fn build_claude_title_headless_args(prompt: &str) -> Vec<String> {
+    vec![
+        "--print".to_string(),
+        "--output-format".to_string(),
+        "json".to_string(),
+        "--json-schema".to_string(),
+        TASK_DISPLAY_TITLE_JSON_SCHEMA.to_string(),
+        "--no-session-persistence".to_string(),
+        "--permission-mode".to_string(),
+        "dontAsk".to_string(),
+        prompt.to_string(),
+    ]
+}
+
+fn build_opencode_title_headless_args(prompt: &str) -> Vec<String> {
+    vec!["run".to_string(), prompt.to_string()]
+}
 fn extract_json_object(raw: &str) -> Result<&str, serde_json::Error> {
     let Some(start) = raw.find('{') else {
         return serde_json::from_str::<Value>(raw).map(|_| raw);
@@ -186,6 +345,20 @@ async fn run_codex_title_headless(prompt: &str) -> Result<Option<String>, String
     result.and_then(|raw| parse_task_display_title_output(&raw))
 }
 
+async fn run_claude_title_headless(prompt: &str) -> Result<Option<String>, String> {
+    let args = build_claude_title_headless_args(prompt);
+    run_headless_title_command("claude", &args, None)
+        .await
+        .and_then(|raw| parse_task_display_title_output(&raw))
+}
+
+async fn run_opencode_title_headless(prompt: &str) -> Result<Option<String>, String> {
+    let args = build_opencode_title_headless_args(prompt);
+    run_headless_title_command("opencode", &args, None)
+        .await
+        .and_then(|raw| parse_task_display_title_output(&raw))
+}
+
 async fn run_headless_title_command(
     program: &str,
     args: &[String],
@@ -230,6 +403,12 @@ async fn run_headless_title_command(
 async fn run_title_provider(provider: &str, prompt: &str) -> Result<Option<String>, String> {
     match provider {
         "codex" => run_codex_title_headless(prompt).await,
+        "claude-code" => run_claude_title_headless(prompt).await,
+        "opencode" => run_opencode_title_headless(prompt).await,
+        "pi" => Err(
+            "Pi headless task title generation is not supported yet; falling back to metadata"
+                .to_string(),
+        ),
         other => Err(format!(
             "task title AI generation is not supported for provider '{other}'"
         )),
@@ -252,7 +431,7 @@ pub(crate) fn refresh_task_display_title_once(
 pub(crate) fn refresh_task_display_title_once_with_provider<F>(
     db: &db::Database,
     task_id: &str,
-    transcript_excerpt: Option<&str>,
+    snapshot: Option<&TaskDisplayTitleSnapshot>,
     title_provider: F,
 ) -> Result<bool, String>
 where
@@ -269,7 +448,7 @@ where
         return Ok(false);
     }
 
-    let prompt = build_task_display_title_prompt(&task, transcript_excerpt);
+    let prompt = build_task_display_title_prompt(&task, snapshot);
     let candidate = title_provider(&prompt)
         .ok()
         .flatten()
@@ -287,6 +466,7 @@ pub(crate) async fn refresh_task_display_title_with_ai_once(
     task_id: String,
     provider: String,
     transcript_path: Option<PathBuf>,
+    activity_snapshot: Option<String>,
 ) -> Result<bool, String> {
     tokio::time::sleep(Duration::from_secs(TITLE_REFRESH_DELAY_SECONDS)).await;
 
@@ -296,7 +476,8 @@ pub(crate) async fn refresh_task_display_title_with_ai_once(
             .get_task(&task_id)
             .map_err(|error| format!("failed to load task for AI title refresh: {error}"))?
     };
-    let transcript_excerpt = transcript_path.as_deref().and_then(read_transcript_excerpt);
+    let snapshot =
+        task_display_title_snapshot(transcript_path.as_deref(), activity_snapshot.as_deref());
     let Some(task) = task else {
         return Ok(false);
     };
@@ -304,7 +485,7 @@ pub(crate) async fn refresh_task_display_title_with_ai_once(
         return Ok(false);
     }
 
-    let prompt = build_task_display_title_prompt(&task, transcript_excerpt.as_deref());
+    let prompt = build_task_display_title_prompt(&task, snapshot.as_ref());
     let provider_title = run_title_provider(&provider, &prompt).await.ok().flatten();
     let candidate = provider_title.or_else(|| task_display_title_candidate(&task));
     let Some(candidate) = candidate else {
@@ -376,12 +557,17 @@ mod tests {
         let task = db
             .create_task("Initial vague request", "doing", None, None, None)
             .expect("create task");
-        let transcript = "<openforge_task_management>openforge update-task --task-id T-1 --summary ...</openforge_task_management>\nActual topic: repair OAuth token refresh race";
+        let snapshot = TaskDisplayTitleSnapshot {
+            transcript_excerpt: Some("<openforge_task_management>openforge update-task --task-id T-1 --summary ...</openforge_task_management>\nActual topic: repair OAuth token refresh race".to_string()),
+            activity_excerpt: Some("<openforge_code_cleanup>noise</openforge_code_cleanup>\nTool activity: edited auth middleware".to_string()),
+        };
 
-        let prompt = build_task_display_title_prompt(&task, Some(transcript));
+        let prompt = build_task_display_title_prompt(&task, Some(&snapshot));
 
         assert!(prompt.contains("repair OAuth token refresh race"));
+        assert!(prompt.contains("edited auth middleware"));
         assert!(!prompt.contains("openforge_task_management"));
+        assert!(!prompt.contains("openforge_code_cleanup"));
         assert!(!prompt.contains("openforge update-task"));
         assert!(prompt.contains("Return only JSON"));
 
@@ -399,16 +585,54 @@ mod tests {
     }
 
     #[test]
+    fn parse_task_display_title_output_reads_nested_provider_json() {
+        assert_eq!(
+            parse_task_display_title_output(
+                r#"{"result":"{\"title\":\"Provider Snapshot Title\"}"}"#
+            )
+            .expect("parse nested title")
+            .as_deref(),
+            Some("Provider Snapshot Title")
+        );
+    }
+
+    #[test]
+    fn provider_title_headless_args_are_session_isolated() {
+        let claude_args = build_claude_title_headless_args("Name this work");
+        assert!(claude_args.contains(&"--no-session-persistence".to_string()));
+        assert!(claude_args.contains(&"--permission-mode".to_string()));
+        assert!(claude_args.contains(&"dontAsk".to_string()));
+
+        let schema_path = Path::new("/tmp/title.schema.json");
+        let output_path = Path::new("/tmp/title.output.json");
+        let codex_args =
+            build_codex_title_headless_args(schema_path, output_path, "Name this work");
+        assert!(codex_args.contains(&"--ephemeral".to_string()));
+        assert!(codex_args.contains(&"--ignore-rules".to_string()));
+
+        let opencode_args = build_opencode_title_headless_args("Name this work");
+        assert_eq!(
+            opencode_args,
+            vec!["run".to_string(), "Name this work".to_string()]
+        );
+    }
+
+    #[test]
     fn refresh_task_display_title_once_uses_ai_title_when_provider_succeeds() {
         let (db, path) = make_test_db("metadata_refresh_ai_title");
         let task = db
             .create_task("Vague initial prompt", "doing", None, None, None)
             .expect("create task");
 
+        let snapshot = TaskDisplayTitleSnapshot {
+            transcript_excerpt: Some("Actual topic: repair SQLite lock contention".to_string()),
+            activity_excerpt: Some("Edited database retry code after failing test".to_string()),
+        };
+
         assert!(refresh_task_display_title_once_with_provider(
             &db,
             &task.id,
-            Some("Actual topic: repair SQLite lock contention"),
+            Some(&snapshot),
             |_| Ok(Some("SQLite Lock Fix".to_string())),
         )
         .expect("refresh title"));
