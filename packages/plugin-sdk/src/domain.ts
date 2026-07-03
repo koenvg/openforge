@@ -323,6 +323,22 @@ function parseMergeReadinessDetails(value: string | MergeReadinessDetail[] | nul
     return [];
   }
 }
+function isUnresolvedConversationDetail(detail: MergeReadinessDetail): boolean {
+  return detail.code === 'unresolved_conversations';
+}
+
+function removeUnresolvedConversationDetails(details: MergeReadinessDetail[]): MergeReadinessDetail[] {
+  return details.filter((detail) => !isUnresolvedConversationDetail(detail));
+}
+
+function shouldIgnorePersistedUnresolvedConversationDetails(
+  pr: MergeReadinessInfo,
+  blockers: MergeReadinessDetail[],
+  warnings: MergeReadinessDetail[],
+): boolean {
+  return pr.unaddressed_comment_count === 0
+    && (blockers.some(isUnresolvedConversationDetail) || warnings.some(isUnresolvedConversationDetail));
+}
 
 function isPersistedMergeReadinessCurrent(pr: MergeReadinessInfo): boolean {
   const sourceSha = pr.readiness_source_head_sha ?? null;
@@ -340,11 +356,19 @@ export function getPersistedMergeReadiness(pr: MergeReadinessInfo): MergeReadine
   if (!isMergeReadinessStatus(status) || !isMergeReadinessAction(action)) return null;
   if (!isPersistedMergeReadinessCurrent(pr)) return null;
 
+  let blockers = parseMergeReadinessDetails(pr.merge_readiness_blockers);
+  let warnings = parseMergeReadinessDetails(pr.merge_readiness_warnings);
+  if (shouldIgnorePersistedUnresolvedConversationDetails(pr, blockers, warnings)) {
+    blockers = removeUnresolvedConversationDetails(blockers);
+    warnings = removeUnresolvedConversationDetails(warnings);
+    if (status === 'blocked' && blockers.length === 0) return null;
+  }
+
   return {
     status,
     action,
-    blockers: parseMergeReadinessDetails(pr.merge_readiness_blockers),
-    warnings: parseMergeReadinessDetails(pr.merge_readiness_warnings),
+    blockers,
+    warnings,
     freshness: {
       sourceSha: pr.readiness_source_head_sha ?? null,
       checkedAt: pr.readiness_updated_at ?? null,
