@@ -16,20 +16,18 @@ function propertyName(name: ts.PropertyName, sourceFile: ts.SourceFile): string 
   return name.getText(sourceFile)
 }
 
-function findFirstInvoke(node: ts.Node): ts.CallExpression | null {
-  let found: ts.CallExpression | null = null
+function findInvokeCalls(node: ts.Node): ts.CallExpression[] {
+  const calls: ts.CallExpression[] = []
 
   function visit(child: ts.Node): void {
-    if (found) return
     if (ts.isCallExpression(child) && ts.isIdentifier(child.expression) && child.expression.text === 'invoke') {
-      found = child
-      return
+      calls.push(child)
     }
     ts.forEachChild(child, visit)
   }
 
   ts.forEachChild(node, visit)
-  return found
+  return calls
 }
 
 function collectSourceFiles(directory: string): string[] {
@@ -71,20 +69,22 @@ function parseIpcInvokeContracts(): ParsedInvokeContract[] {
     const isExported = statement.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword) ?? false
     if (!isExported) continue
 
-    const invokeCall = findFirstInvoke(statement)
-    if (!invokeCall) continue
+    const invokeCalls = findInvokeCalls(statement)
+    if (invokeCalls.length === 0) continue
 
-    const commandArgument = invokeCall.arguments[0]
+    const commandArgument = invokeCalls[0].arguments[0]
     if (!commandArgument || !ts.isStringLiteral(commandArgument)) continue
 
-    const payloadArgument = invokeCall.arguments[1]
-    const payloadKeys = payloadArgument && ts.isObjectLiteralExpression(payloadArgument)
-      ? payloadArgument.properties.map((property) => {
-        if (ts.isShorthandPropertyAssignment(property)) return property.name.text
-        if (ts.isPropertyAssignment(property)) return propertyName(property.name, sourceFile)
-        return property.getText(sourceFile)
-      })
-      : []
+    const payloadKeys = invokeCalls.flatMap((invokeCall) => {
+      const payloadArgument = invokeCall.arguments[1]
+      return payloadArgument && ts.isObjectLiteralExpression(payloadArgument)
+        ? payloadArgument.properties.map((property) => {
+          if (ts.isShorthandPropertyAssignment(property)) return property.name.text
+          if (ts.isPropertyAssignment(property)) return propertyName(property.name, sourceFile)
+          return property.getText(sourceFile)
+        })
+        : []
+    }).filter((key, index, keys) => keys.indexOf(key) === index)
 
     contracts.push({
       functionName: statement.name.text,
