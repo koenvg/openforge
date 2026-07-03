@@ -67,6 +67,7 @@ export interface GithubSyncPrReviewClient {
     headSha: string
     reviewPrId: number
     prompt: string
+    projectId: string | null
   }): Promise<{ walkthrough_session_key: string }>
   abortAgentWalkthrough(request: { walkthroughSessionKey: string }): Promise<void>
   onAuthoredPullRequestsUpdated(handler: () => void): Disposable

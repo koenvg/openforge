@@ -123,6 +123,7 @@ export default defineBackendPlugin({
       headSha: string
       reviewPrId: number
       prompt: string
+      projectId: string | null
     }, { walkthrough_session_key: string }>('startAgentWalkthrough', {
       handler: async (request) => {
         const sessionKey = randomUUID()
@@ -130,11 +131,14 @@ export default defineBackendPlugin({
         await beginWalkthroughGeneration(openforge, params)
         // Kick off generation in the background so the UI gets its session key
         // immediately and can render the optimistic "generating" state.
+        // Forward the active project id so the sidecar resolves this project's
+        // AI provider (not the global fallback) for the headless generation.
         void runWalkthroughGeneration(openforge, params, (key, prompt) =>
           invokeHostCommand<{ text: string }>(openforge, 'agentGenerate', {
             sessionKey: key,
             prompt,
             model: WALKTHROUGH_MODEL,
+            projectId: request.projectId,
           }).then((result) => result?.text ?? ''),
         )
         return { walkthrough_session_key: sessionKey }

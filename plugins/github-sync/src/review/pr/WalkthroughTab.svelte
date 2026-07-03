@@ -25,9 +25,10 @@
     pr: ReviewPullRequest
     files: PrFileDiff[]
     fetchFileContents: (file: PrFileDiff) => Promise<FileContents>
+    projectId: string | null
   }
 
-  let { api: _api, githubSync, pr, files, fetchFileContents }: Props = $props()
+  let { api: _api, githubSync, pr, files, fetchFileContents, projectId }: Props = $props()
 
   let walkthrough = $state<PrWalkthrough | null>(null)
   let isLoading = $state(false)
@@ -135,6 +136,7 @@
         headSha: pr.head_sha,
         reviewPrId: pr.id,
         prompt,
+        projectId,
       })
       walkthrough = {
         pr_id: pr.id,
