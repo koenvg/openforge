@@ -2,8 +2,7 @@ use crate::{
     backend_runtime::AppHandle,
     github_client::GitHubClient,
     http_server::{
-        electron_sidecar_app_handle, AppInvokeRequest, AppState, SidecarReadinessState,
-        TaskClaims,
+        electron_sidecar_app_handle, AppInvokeRequest, AppState, SidecarReadinessState, TaskClaims,
     },
     plugin_host::PluginHost,
     pty_manager::PtyManager,
