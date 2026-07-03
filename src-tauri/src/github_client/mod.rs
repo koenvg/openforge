@@ -49,6 +49,13 @@ enum ConditionalResponse {
     Fresh(Response),
 }
 
+fn current_unix_timestamp() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
+}
+
 /// GitHub API client
 #[derive(Clone)]
 pub struct GitHubClient {
@@ -133,16 +140,40 @@ impl GitHubClient {
         }
     }
 
-    fn capture_rate_limit_reset_from_headers(&self, status: StatusCode, headers: &HeaderMap) {
-        if status != StatusCode::FORBIDDEN && status != StatusCode::TOO_MANY_REQUESTS {
-            return;
-        }
-
-        if let Some(reset_val) = headers
-            .get("x-ratelimit-reset")
+    fn rate_limit_reset_from_headers(status: StatusCode, headers: &HeaderMap) -> Option<i64> {
+        let retry_after = headers
+            .get("retry-after")
             .and_then(|value| value.to_str().ok())
             .and_then(|value| value.parse::<i64>().ok())
-        {
+            .filter(|value| *value >= 0);
+
+        if let Some(retry_after_secs) = retry_after {
+            if status == StatusCode::FORBIDDEN || status == StatusCode::TOO_MANY_REQUESTS {
+                return Some(current_unix_timestamp().saturating_add(retry_after_secs));
+            }
+        }
+
+        let reset = headers
+            .get("x-ratelimit-reset")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse::<i64>().ok());
+
+        match status {
+            StatusCode::TOO_MANY_REQUESTS => reset,
+            StatusCode::FORBIDDEN => {
+                let remaining_is_zero = headers
+                    .get("x-ratelimit-remaining")
+                    .and_then(|value| value.to_str().ok())
+                    .map(|value| value == "0")
+                    .unwrap_or(false);
+                remaining_is_zero.then_some(reset).flatten()
+            }
+            _ => None,
+        }
+    }
+
+    fn capture_rate_limit_reset_from_headers(&self, status: StatusCode, headers: &HeaderMap) {
+        if let Some(reset_val) = Self::rate_limit_reset_from_headers(status, headers) {
             *self.last_rate_limit_reset.lock().unwrap() = Some(reset_val);
         }
     }
@@ -154,10 +185,7 @@ impl GitHubClient {
         headers: &HeaderMap,
         reset_at: i64,
     ) -> String {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+        let now = current_unix_timestamp();
         let seconds_until_reset = (reset_at - now).max(0);
 
         let mut details = vec![format!("status {}", status.as_u16())];
@@ -199,15 +227,8 @@ impl GitHubClient {
             .await
             .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
 
-        if let Some(reset_at) = response
-            .headers()
-            .get("x-ratelimit-reset")
-            .and_then(|value| value.to_str().ok())
-            .and_then(|value| value.parse::<i64>().ok())
-            .filter(|_| {
-                response.status() == StatusCode::FORBIDDEN
-                    || response.status() == StatusCode::TOO_MANY_REQUESTS
-            })
+        if let Some(reset_at) =
+            Self::rate_limit_reset_from_headers(response.status(), response.headers())
         {
             self.capture_rate_limit_reset_from_headers(response.status(), response.headers());
             warn!(
@@ -304,16 +325,7 @@ impl GitHubClient {
     pub async fn get_authenticated_user(&self, token: &str) -> Result<String, GitHubError> {
         let url = "https://api.github.com/user";
 
-        let response = self.send_github(self.github_get(url, token)).await?;
-
-        if !response.status().is_success() {
-            return Err(Self::api_error_from_response(response).await);
-        }
-
-        let user: AuthenticatedUser = response
-            .json()
-            .await
-            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+        let user: AuthenticatedUser = self.get_with_etag(url, token).await?;
 
         Ok(user.login)
     }
@@ -520,6 +532,7 @@ mod tests {
     fn test_capture_rate_limit_reset_stores_value_for_rate_limit_status() {
         let client = GitHubClient::new();
         let mut headers = HeaderMap::new();
+        headers.insert("x-ratelimit-remaining", HeaderValue::from_static("0"));
         headers.insert("x-ratelimit-reset", HeaderValue::from_static("12345"));
 
         client.capture_rate_limit_reset_from_headers(reqwest::StatusCode::FORBIDDEN, &headers);
@@ -559,11 +572,43 @@ mod tests {
     fn test_capture_rate_limit_reset_forbidden_with_valid_reset() {
         let client = GitHubClient::new();
         let mut headers = HeaderMap::new();
+        headers.insert("x-ratelimit-remaining", HeaderValue::from_static("0"));
         headers.insert("x-ratelimit-reset", HeaderValue::from_static("1704067200"));
 
         client.capture_rate_limit_reset_from_headers(StatusCode::FORBIDDEN, &headers);
 
         assert_eq!(client.get_last_rate_limit_reset(), Some(1704067200));
+    }
+
+    #[test]
+    fn test_capture_rate_limit_reset_ignores_forbidden_without_rate_limit_signal() {
+        let client = GitHubClient::new();
+        let mut headers = HeaderMap::new();
+        headers.insert("x-ratelimit-remaining", HeaderValue::from_static("42"));
+        headers.insert("x-ratelimit-reset", HeaderValue::from_static("1704067200"));
+
+        client.capture_rate_limit_reset_from_headers(StatusCode::FORBIDDEN, &headers);
+
+        assert_eq!(client.get_last_rate_limit_reset(), None);
+    }
+
+    #[test]
+    fn test_capture_rate_limit_reset_prefers_retry_after_over_reset_header() {
+        let client = GitHubClient::new();
+        let mut headers = HeaderMap::new();
+        headers.insert("retry-after", HeaderValue::from_static("30"));
+        headers.insert("x-ratelimit-reset", HeaderValue::from_static("999"));
+
+        let before = current_unix_timestamp();
+        client.capture_rate_limit_reset_from_headers(StatusCode::TOO_MANY_REQUESTS, &headers);
+        let after = current_unix_timestamp();
+
+        let reset = client
+            .get_last_rate_limit_reset()
+            .expect("retry-after should be converted into a reset timestamp");
+        assert_ne!(reset, 999);
+        assert!(reset >= before + 30);
+        assert!(reset <= after + 30);
     }
 
     #[test]
@@ -581,6 +626,7 @@ mod tests {
     fn test_capture_rate_limit_reset_stores_multiple_sequential_resets() {
         let client = GitHubClient::new();
         let mut headers1 = HeaderMap::new();
+        headers1.insert("x-ratelimit-remaining", HeaderValue::from_static("0"));
         headers1.insert("x-ratelimit-reset", HeaderValue::from_static("1704067200"));
 
         client.capture_rate_limit_reset_from_headers(StatusCode::FORBIDDEN, &headers1);
