@@ -72,6 +72,10 @@ _Avoid_: Agent run settings, global task defaults, plugin task policy
 An installed OpenForge extension that may act across tasks when using explicit host capabilities.
 _Avoid_: Sandboxed widget, project-only script
 
+**GitHub Sync**:
+OpenForge's local-first process for refreshing GitHub pull request, comment, CI, review, and merge-readiness signals into the desktop app.
+_Avoid_: Webhook service, hosted sync, GitHub polling when referring to the product capability
+
 **Plugin-owned Domain**:
 A product area whose language, contracts, and workflows belong to a **Trusted Plugin** rather than OpenForge core.
 _Avoid_: Core capability, host feature
@@ -233,6 +237,11 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - Draft pull requests block **Merge Readiness** even when checks pass or reviews are approved.
 - A **Closed Pull Request** is distinct from a merged pull request and does not make a **Task** done unless another completion signal exists.
 - The **Rust Sidecar** owns persisted **Merge Readiness** so board state, actions, plugins, and future CLI surfaces share one source of truth.
+- **GitHub Sync** is local-first by default and may use polling, conditional requests, caches, and backoff without requiring a hosted webhook receiver.
+- **GitHub Sync** may refresh active attention surfaces faster than inactive project or global pull request data, while manual refresh remains available for explicit full freshness.
+- **GitHub Sync** prioritizes **Task**-linked **Merge Readiness** freshness over lower-attention pull request review list freshness when rate-limit budget is constrained.
+- **GitHub Sync** spends its fastest refresh budget on Focus-column **Tasks** in the active project, then other active-project task-linked pull requests, then inactive projects, then global review-list data.
+- **GitHub Sync** may temporarily increase refresh frequency for Focus-column **Tasks** whose task-linked pull request has pending CI, then slow down after CI settles or GitHub reports a definitive readiness outcome.
 - **Merge Readiness** is scoped to the GitHub identity OpenForge will use for merge or enqueue actions, not to an arbitrary administrator.
 - When multiple pull requests belong to one **Task**, OpenForge should evaluate each pull request independently and surface the most attention-worthy pull request rather than the first open pull request.
 - An immediately actionable **Merge Readiness** outcome is more attention-worthy than a blocked pull request; definitive blockers are more attention-worthy than passive waiting or queued states.
@@ -280,4 +289,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - "Agent controls OpenForge through the CLI" could imply unrestricted app automation — resolved: the **Marketing Site Top Reasons** should say agents manage OpenForge **Tasks** through the CLI.
 - The **Marketing Site Promise** could be inflated into agent autonomy claims — resolved: avoid promises of autonomous engineering teams, code-review replacement, one-click shipping, hosted control planes, universal provider support, or enterprise collaboration suites.
 - "Ready" for pull requests could mean ready for human review, direct merge, or merge queue entry — resolved: use **Merge Readiness** only for strict GitHub-actionable merge or enqueue handoffs.
+- "GitHub syncing" could mean local polling or an external webhook receiver — resolved: **GitHub Sync** stays local-first by default; webhook receivers are optional future integrations, not the core desktop path.
+- "Fresh GitHub data" could mean every repository is equally current or only the active attention surface is current — resolved: **GitHub Sync** can be attention-scoped, with manual refresh for explicit freshness.
+- "Refresh Pull Requests" sounded like review-list refresh only — resolved: user-facing manual refresh should say GitHub status when it refreshes **Task** pipeline and **Merge Readiness** signals.
 - Closed pull requests were treated like merged pull requests — resolved: a **Closed Pull Request** is closed without merge and is not a completion signal by itself.
