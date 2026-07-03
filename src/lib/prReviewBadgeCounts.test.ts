@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  buildReviewRequestCountByProject,
   countAllReposUnopenedReviews,
   countRepoUnopenedReviews,
   DO_NOT_REVIEW_LABEL,
@@ -87,6 +88,58 @@ describe('countRepoUnopenedReviews', () => {
       'me/app',
     )
     expect(count).toBe(1)
+  })
+})
+
+describe('buildReviewRequestCountByProject', () => {
+  it('counts unopened reviews per project scoped to its resolved repo', () => {
+    const prs = [
+      review({ repo_owner: 'acme', repo_name: 'web', viewed_at: null }), // web counts
+      review({ repo_owner: 'acme', repo_name: 'web', viewed_at: null }), // web counts
+      review({ repo_owner: 'acme', repo_name: 'web', viewed_at: 9 }), // web opened — excluded
+      review({ repo_owner: 'acme', repo_name: 'api', viewed_at: null }), // api counts
+    ]
+    const counts = buildReviewRequestCountByProject(
+      prs,
+      new Map<string, string | null>([
+        ['proj-web', 'acme/web'],
+        ['proj-api', 'acme/api'],
+      ]),
+    )
+    expect(counts.get('proj-web')).toBe(2)
+    expect(counts.get('proj-api')).toBe(1)
+  })
+
+  it('reports zero for a project whose repo is unresolved', () => {
+    const counts = buildReviewRequestCountByProject(
+      [review({ viewed_at: null })],
+      new Map<string, string | null>([['proj-x', null]]),
+    )
+    expect(counts.get('proj-x')).toBe(0)
+  })
+
+  it('excludes opened and DO NOT REVIEW PRs, matching the other badges', () => {
+    const counts = buildReviewRequestCountByProject(
+      [
+        review({ repo_owner: 'me', repo_name: 'app', viewed_at: null, labels: [label(DO_NOT_REVIEW_LABEL)] }),
+        review({ repo_owner: 'me', repo_name: 'app', viewed_at: 3 }),
+        review({ repo_owner: 'me', repo_name: 'app', viewed_at: null }), // the only one that counts
+      ],
+      new Map<string, string | null>([['p', 'me/app']]),
+    )
+    expect(counts.get('p')).toBe(1)
+  })
+
+  it('gives every project sharing a repo the same count', () => {
+    const counts = buildReviewRequestCountByProject(
+      [review({ repo_owner: 'me', repo_name: 'shared', viewed_at: null })],
+      new Map<string, string | null>([
+        ['p1', 'me/shared'],
+        ['p2', 'me/shared'],
+      ]),
+    )
+    expect(counts.get('p1')).toBe(1)
+    expect(counts.get('p2')).toBe(1)
   })
 })
 

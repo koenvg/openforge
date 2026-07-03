@@ -1,11 +1,16 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { get } from 'svelte/store'
+import type { Writable } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { getProjectAttention, setConfig } from '../../lib/ipc'
-import { activeProjectId, projectAttention, projects } from '../../lib/stores'
+import { activeProjectId, projectAttention, projects, reviewRequestCountByProject } from '../../lib/stores'
 import type { AppView, Project, ProjectAttention } from '../../lib/types'
 import AppSidebar from './AppSidebar.svelte'
+
+// In production reviewRequestCountByProject is a `derived` (Readable) store, but this suite
+// mocks '../../lib/stores' with a writable so tests can drive per-project counts directly.
+const reviewCountByProject = reviewRequestCountByProject as unknown as Writable<Map<string, number>>
 
 vi.mock('../../lib/stores', async () => {
   const { writable } = await import('svelte/store')
@@ -13,6 +18,7 @@ vi.mock('../../lib/stores', async () => {
     projects: writable<Project[]>([]),
     activeProjectId: writable<string | null>(null),
     projectAttention: writable<Map<string, ProjectAttention>>(new Map()),
+    reviewRequestCountByProject: writable<Map<string, number>>(new Map()),
   }
 })
 
@@ -82,6 +88,7 @@ describe('AppSidebar', () => {
     projects.set(sampleProjects)
     activeProjectId.set('proj-1')
     projectAttention.set(new Map())
+    reviewCountByProject.set(new Map())
     vi.mocked(getProjectAttention).mockResolvedValue([])
   })
 
@@ -180,16 +187,29 @@ describe('AppSidebar', () => {
     expect(onNewProject).toHaveBeenCalledOnce()
   })
 
-  it('shows attention status from store data', () => {
+  it('shows the number of items needing attention, excluding running agents', () => {
     projectAttention.set(new Map([
+      // Only running agents — running is in-flight, not "needs attention" — so no indicator.
       ['proj-1', { project_id: 'proj-1', needs_input: 0, running_agents: 2, ci_failures: 0, unaddressed_comments: 0, completed_agents: 0 }],
-      ['proj-2', { project_id: 'proj-2', needs_input: 1, running_agents: 0, ci_failures: 0, unaddressed_comments: 0, completed_agents: 0 }],
+      // 1 needs_input + 2 completed + 0 + 0 = 3 items needing attention.
+      ['proj-2', { project_id: 'proj-2', needs_input: 1, running_agents: 0, ci_failures: 0, unaddressed_comments: 0, completed_agents: 2 }],
     ]))
 
     renderSidebar({ collapsed: false })
 
-    expect(screen.getByText('2 running')).toBeTruthy()
-    expect(screen.getByText('1 needs input')).toBeTruthy()
+    expect(screen.getByTitle(/3 items needing attention/i).textContent).toContain('3')
+    // The running-only project contributes no attention indicator.
+    expect(screen.getAllByTitle(/item.* needing attention/i)).toHaveLength(1)
+    // The old status labels are gone entirely.
+    expect(screen.queryByText('2 running')).toBeNull()
+    expect(screen.queryByText('idle')).toBeNull()
+  })
+
+  it('does not render an attention indicator when nothing needs attention', () => {
+    projectAttention.set(new Map())
+    renderSidebar({ collapsed: false })
+
+    expect(screen.queryByTitle(/needing attention/i)).toBeNull()
   })
 
   it('calls getProjectAttention on mount', async () => {
@@ -253,6 +273,32 @@ describe('AppSidebar', () => {
     it('renders no extra nav buttons when there are no sidebar plugin items', () => {
       renderSidebar({ pluginNavItems: [] })
       expect(screen.queryByRole('button', { name: /all pull requests/i })).toBeNull()
+    })
+  })
+
+  describe('per-project review count badge', () => {
+    it('shows a project\'s pending review count when expanded', () => {
+      reviewCountByProject.set(new Map([['proj-1', 2]]))
+      renderSidebar({ collapsed: false })
+
+      expect(screen.getByTitle(/2 PRs awaiting your review/i).textContent).toContain('2')
+    })
+
+    it('shows a red review dot without the number on the collapsed avatar', () => {
+      reviewCountByProject.set(new Map([['proj-2', 1]]))
+      renderSidebar({ collapsed: true })
+
+      const dot = screen.getByTitle(/1 PR awaiting your review/i)
+      expect(dot).toBeTruthy()
+      // Collapsed shows only a dot — the count number itself is not rendered.
+      expect(dot.textContent).toBe('')
+    })
+
+    it('renders no review badge for a project with zero pending reviews', () => {
+      reviewCountByProject.set(new Map([['proj-1', 0]]))
+      renderSidebar({ collapsed: false })
+
+      expect(screen.queryByTitle(/awaiting your review/i)).toBeNull()
     })
   })
 

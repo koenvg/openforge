@@ -36,3 +36,20 @@ export function countRepoUnopenedReviews(
     (pr) => isUnopened(pr) && `${pr.repo_owner}/${pr.repo_name}` === resolvedRepo,
   ).length
 }
+
+/**
+ * Per-project unopened review counts, keyed by project id. Each project is scored against
+ * its own resolved repo with the same unopened / not-"do not review" rule as the rail badge,
+ * so a project with an unresolved repo (null) reports zero. Backs the sidebar's per-project
+ * review-request badge.
+ */
+export function buildReviewRequestCountByProject(
+  reviewPrs: ReviewPullRequest[],
+  projectRepos: ReadonlyMap<string, string | null>,
+): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const [projectId, repo] of projectRepos) {
+    counts.set(projectId, countRepoUnopenedReviews(reviewPrs, repo))
+  }
+  return counts
+}

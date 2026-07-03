@@ -1,7 +1,7 @@
 import { writable, derived } from "svelte/store";
 import type { Task, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, CiFailureNotification, RateLimitNotification, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrOverviewComment, ProjectAttention } from "./types";
 import type { BoardFilter } from './boardFilters'
-import { countAllReposUnopenedReviews, countRepoUnopenedReviews } from './prReviewBadgeCounts'
+import { buildReviewRequestCountByProject, countAllReposUnopenedReviews, countRepoUnopenedReviews } from './prReviewBadgeCounts'
 
 export interface TaskRuntimeInfo {
   workspacePath: string;
@@ -67,6 +67,17 @@ export const reviewRequestCount = derived(
 export const activeRepoReviewRequestCount = derived(
   [reviewPrs, activeResolvedRepo],
   ([$reviewPrs, $repo]) => countRepoUnopenedReviews($reviewPrs, $repo),
+);
+// Each project's resolved GitHub repo ("owner/name" or null), keyed by project id. Populated
+// by the data orchestrator; backs the sidebar's per-project review-request badge so a project
+// can show its own count without being the active one.
+export const projectResolvedRepos = writable<Map<string, string | null>>(new Map());
+// Sidebar per-project review badge: unopened review requests scoped to each project's resolved
+// repo. Same unopened / "do not review" rule as the rail badge, so opening a PR drops the owning
+// project's count immediately. Keyed by project id; missing/unresolved projects report zero.
+export const reviewRequestCountByProject = derived(
+  [reviewPrs, projectResolvedRepos],
+  ([$reviewPrs, $repos]) => buildReviewRequestCountByProject($reviewPrs, $repos),
 );
 export const reviewComments = writable<ReviewComment[]>([]);
 export const pendingManualComments = writable<ReviewSubmissionComment[]>([]);
