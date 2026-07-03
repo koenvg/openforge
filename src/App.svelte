@@ -4,11 +4,11 @@
   import type { DesktopUnlistenFn } from './lib/desktopIpc'
   import { createDesktopWindow } from './lib/desktopWindow'
   import type { DesktopWindowTarget } from './lib/desktopWindow'
-  import { tasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, isLoading, projects, activeProjectId, activeProjectColorId, currentView, reviewRequestCount, activeRepoReviewRequestCount, codeCleanupTasksEnabled, focusBoardFilters } from './lib/stores'
-  import { getAppMode, getConfig, getProjectConfig, resumeStartupSessions, setPollContext, getProjectRepo } from './lib/ipc'
+  import { tasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, isLoading, projects, activeProjectId, activeProjectColorId, currentView, reviewRequestCount, activeRepoReviewRequestCount, reviewPrs, codeCleanupTasksEnabled, focusBoardFilters } from './lib/stores'
+  import { getAppMode, getConfig, getProjectConfig, resumeStartupSessions, setPollContext, getProjectRepo, openUrl, markReviewPrViewed } from './lib/ipc'
   import { computePollContext, pollContextEquals, type PollContextPayload } from './lib/pollContext'
   import { GITHUB_SYNC_GLOBAL_VIEW_KEY } from './lib/githubSyncPlugin'
-  import type { Task, AppView, Project } from './lib/types'
+  import type { Task, AppView, Project, ReviewPullRequest } from './lib/types'
   import FocusBoard from './components/focus-board/FocusBoard.svelte'
   import TaskDetailView from './components/task-detail/TaskDetailView.svelte'
   import AddTaskDialog from './components/AddTaskDialog.svelte'
@@ -21,6 +21,7 @@
   import RateLimitToast from './components/feedback/toasts/RateLimitToast.svelte'
   import AppSidebar from './components/shell/AppSidebar.svelte'
   import ProjectSwitcherModal from './components/project/ProjectSwitcherModal.svelte'
+  import AttentionOverviewDialog from './components/shared/AttentionOverviewDialog.svelte'
   import ProjectSetupDialog from './components/project/ProjectSetupDialog.svelte'
   import IconRail from './components/shell/IconRail.svelte'
   import CommandPalette from './components/shell/CommandPalette.svelte'
@@ -56,6 +57,7 @@
   let showShortcutsDialog = $state(false)
   let showCloseConfirm = $state(false)
   let showProjectSwitcher = $state(false)
+  let showAttentionOverview = $state(false)
   let appSidebarCollapsed = $state(localStorage.getItem('appSidebarCollapsed') === 'true')
   let showCommandPalette = $state(false)
   let showFileQuickOpen = $state(false)
@@ -301,6 +303,35 @@
     router.navigateToTask(taskId)
   }
 
+  // Open a task from the cross-project attention overview: switch to its project
+  // and wait for that project's tasks to load before selecting it, so the
+  // "clear unknown selected task" effect doesn't drop it mid-switch.
+  async function handleOpenTaskFromOverview(task: Task) {
+    showAttentionOverview = false
+    if (task.project_id && task.project_id !== $activeProjectId) {
+      $activeProjectId = task.project_id
+      await appData.loadTasks()
+    }
+    router.navigateToTask(task.id)
+  }
+
+  // Open a review PR from the overview in the browser and mark it viewed, so it
+  // drops off the overview and the review badge (matches the existing
+  // "opening a review = viewed" semantics; the backend re-surfaces it on new commits).
+  async function handleOpenPrFromOverview(pr: ReviewPullRequest) {
+    showAttentionOverview = false
+    const viewedAt = Math.floor(Date.now() / 1000)
+    reviewPrs.update((list) =>
+      list.map((p) => (p.id === pr.id ? { ...p, viewed_at: viewedAt, viewed_head_sha: pr.head_sha } : p)),
+    )
+    markReviewPrViewed(pr.id, pr.head_sha).catch((e) => console.error('[App] Failed to mark review PR viewed:', e))
+    try {
+      await openUrl(pr.html_url)
+    } catch (e) {
+      console.error('[App] Failed to open PR URL:', e)
+    }
+  }
+
   function openEditTask(taskId: string) {
     const task = $tasks.find((t) => t.id === taskId)
     // Only never-started (backlog) tasks may have their prompt edited.
@@ -375,6 +406,7 @@
     registerAppShortcuts(shortcuts, {
       showShortcuts: () => { showShortcutsDialog = true },
       openActionPalette: actionPalette.openActionPalette,
+      toggleAttentionOverview: () => { showAttentionOverview = !showAttentionOverview },
       toggleProjectSwitcher: () => { showProjectSwitcher = !showProjectSwitcher },
       toggleSidebar: () => {
         appSidebarCollapsed = !appSidebarCollapsed
@@ -390,7 +422,7 @@
       toggleVoiceRecording: () => { window.dispatchEvent(new CustomEvent('toggle-voice-recording')) },
       toggleCommandPalette: () => { showCommandPalette = !showCommandPalette },
       toggleFileQuickOpen: () => { showFileQuickOpen = !showFileQuickOpen },
-      canToggleFileQuickOpen: () => selectedTask === null && !showCommandPalette && !showProjectSwitcher && !actionPalette.showActionPalette && !showShortcutsDialog,
+      canToggleFileQuickOpen: () => selectedTask === null && !showCommandPalette && !showProjectSwitcher && !showAttentionOverview && !actionPalette.showActionPalette && !showShortcutsDialog,
       resetToBoard: () => { router.resetToBoard() },
       navigateToGlobalSettings: () => { handleNavigate('global_settings') },
       cycleActiveProject,
@@ -449,7 +481,7 @@
     reviewRequestCount={$reviewRequestCount}
   />
   {#if !ICON_RAIL_HIDDEN_VIEWS.has($currentView)}
-    <IconRail currentView={$currentView} onNavigate={handleNavigate} pluginNavItems={pluginNavItems} modalsOpen={showCommandPalette || showProjectSwitcher || actionPalette.showActionPalette || showAddDialog || showFileQuickOpen} railBg={iconRailBg} activeRepoReviewRequestCount={$activeRepoReviewRequestCount} />
+    <IconRail currentView={$currentView} onNavigate={handleNavigate} pluginNavItems={pluginNavItems} modalsOpen={showCommandPalette || showProjectSwitcher || showAttentionOverview || actionPalette.showActionPalette || showAddDialog || showFileQuickOpen} railBg={iconRailBg} activeRepoReviewRequestCount={$activeRepoReviewRequestCount} />
   {/if}
 
   <div class="flex flex-col flex-1 min-w-0 relative" style="background: linear-gradient(180deg, var(--project-bg-alt) 0%, var(--project-bg) 100%)">
@@ -530,6 +562,14 @@
 
 {#if showProjectSwitcher}
   <ProjectSwitcherModal onClose={() => showProjectSwitcher = false} />
+{/if}
+
+{#if showAttentionOverview}
+  <AttentionOverviewDialog
+    onClose={() => showAttentionOverview = false}
+    onOpenTask={handleOpenTaskFromOverview}
+    onOpenPr={handleOpenPrFromOverview}
+  />
 {/if}
 
 {#if showCommandPalette}

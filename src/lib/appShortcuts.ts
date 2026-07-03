@@ -5,6 +5,7 @@ import type { ShortcutRegistry } from './shortcuts.svelte'
 export interface AppShortcutHandlers {
   showShortcuts(): void
   openActionPalette(): void | Promise<void>
+  toggleAttentionOverview(): void
   toggleProjectSwitcher(): void
   toggleSidebar(): void
   openNewTaskDialog(): void
@@ -25,6 +26,9 @@ function runAppShortcutAction(action: AppShortcutAction, handlers: AppShortcutHa
       break
     case 'openActionPalette':
       void handlers.openActionPalette()
+      break
+    case 'toggleAttentionOverview':
+      handlers.toggleAttentionOverview()
       break
     case 'toggleProjectSwitcher':
       handlers.toggleProjectSwitcher()

@@ -22,6 +22,7 @@ describe('registerAppShortcuts', () => {
     registerAppShortcuts(registry, {
       showShortcuts: vi.fn(),
       openActionPalette: vi.fn(),
+      toggleAttentionOverview: vi.fn(),
       toggleProjectSwitcher: vi.fn(),
       toggleSidebar: vi.fn(),
       openNewTaskDialog: vi.fn(),
@@ -44,6 +45,7 @@ describe('registerAppShortcuts', () => {
 
   it('exposes help entries from the same shared definitions used for registration', () => {
     expect(getGlobalShortcutHelpEntries()).toEqual([
+      { id: 'attention-overview', label: 'Attention overview', keys: [['⌘', '⇧', 'A']] },
       { id: 'switch-project', label: 'Switch Project', keys: [['⌘', '⇧', 'P']] },
       { id: 'new-task', label: 'New Task', keys: [['⌘N']] },
       { id: 'go-back', label: 'Go Back', keys: [['⌘[']] },
@@ -75,6 +77,7 @@ describe('registerAppShortcuts', () => {
     registerAppShortcuts(registry, {
       showShortcuts,
       openActionPalette,
+      toggleAttentionOverview: vi.fn(),
       toggleProjectSwitcher,
       toggleSidebar,
       openNewTaskDialog,
@@ -128,6 +131,7 @@ describe('registerAppShortcuts', () => {
     registerAppShortcuts(registry, {
       showShortcuts: vi.fn(),
       openActionPalette: vi.fn(),
+      toggleAttentionOverview: vi.fn(),
       toggleProjectSwitcher: vi.fn(),
       toggleSidebar: vi.fn(),
       openNewTaskDialog: vi.fn(),

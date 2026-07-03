@@ -1,6 +1,7 @@
 export type AppShortcutAction =
   | 'showShortcuts'
   | 'openActionPalette'
+  | 'toggleAttentionOverview'
   | 'toggleProjectSwitcher'
   | 'toggleSidebar'
   | 'openNewTaskDialog'
@@ -33,6 +34,11 @@ export interface AppShortcutDefinition {
 }
 
 export const APP_SHORTCUT_DEFINITIONS: readonly AppShortcutDefinition[] = [
+  {
+    id: 'attention-overview',
+    registrations: [{ key: '⌘⇧A', action: 'toggleAttentionOverview' }],
+    help: { id: 'attention-overview', label: 'Attention overview', keys: [['⌘', '⇧', 'A']] },
+  },
   {
     id: 'switch-project',
     registrations: [{ key: '⌘⇧P', action: 'toggleProjectSwitcher' }],
