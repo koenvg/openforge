@@ -33,10 +33,11 @@ openforge remove-task-label --task-id T-123 --label-id 42
 openforge set-task-dependencies --task-id T-123 --depends-on T-121,T-122
 openforge add-task-dependency --task-id T-123 --depends-on T-122
 openforge link-tasks --chain "T-121 -> T-122 -> T-123"
+openforge list-tasks --project-id P-1 --full
 openforge delete-task --task-id T-123
 ```
 
-`list-tasks` excludes done tasks by default to keep agent context focused. Pass `--state done` only when you explicitly need completed tasks. Use `--worktree "$PWD"` with `create-task` when the project can be inferred from the current worktree and no project id is known.
+`list-tasks` prints compact rows by default (`id`, `prompt_preview`, `status`, `labels`, `depends_on`, `updated_at`) for broad scans and excludes done tasks by default. Pass `--full` when you need complete TaskRow objects. Pass `--state done` only when you explicitly need completed tasks. Use `--worktree "$PWD"` with `create-task` when the project can be inferred from the current worktree and no project id is known.
 
 Labels are project-scoped. Use `--label` on `create-task` for AI-created follow-up work that already has an obvious category. `--label` can be repeated or comma-separated, e.g. `--label bug --label "needs review"` or `--label bug,cleanup`. Use `add-task-label`, `remove-task-label`, and `list-task-labels` to manage labels on existing tasks.
 

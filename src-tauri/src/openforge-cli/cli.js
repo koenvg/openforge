@@ -15,7 +15,7 @@ const COMMAND_FLAGS = {
   'list-task-labels': new Set(['taskId']),
   'add-task-label': new Set(['taskId', 'label']),
   'remove-task-label': new Set(['taskId', 'labelId']),
-  'list-tasks': new Set(['projectId', 'state']),
+  'list-tasks': new Set(['projectId', 'state', 'full']),
   'list-projects': new Set(),
 };
 
@@ -35,7 +35,7 @@ Usage:
   openforge list-task-labels --task-id <id>
   openforge add-task-label --task-id <id> --label <name>
   openforge remove-task-label --task-id <id> --label-id <id>
-  openforge list-tasks --project-id <id> [--state backlog|doing|done]
+  openforge list-tasks --project-id <id> [--state backlog|doing|done] [--full]
   openforge list-projects
 
 Task prompt semantics:
@@ -45,7 +45,9 @@ Task prompt semantics:
   If a task was created with the wrong initial prompt, first record its labels, own depends_on list, and reverse dependents by listing project tasks and finding depends_on entries containing the old id. Delete the incorrect task, create a replacement with the desired --initial-prompt, then repoint each dependent with set-task-dependencies.
 
 Task listing:
-  list-tasks requests compact non-done task rows unless --state done is passed.
+  list-tasks prints compact rows by default for broad scans: id, prompt_preview, status, labels, depends_on, updated_at.
+  Pass --full to print complete TaskRow objects.
+  list-tasks excludes done tasks unless --state done is passed.
 
 Examples:
   openforge list-tasks --project-id P-1
@@ -308,8 +310,8 @@ async function main(argv) {
         params.set('state', flags.state);
       } else {
         params.set('exclude_done', 'true');
-        params.set('compact', 'true');
       }
+      if (flags.full !== true) params.set('compact', 'true');
       printJson(await requestJson(`/tasks?${params.toString()}`));
       return;
     }
