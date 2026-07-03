@@ -7,6 +7,7 @@ import {
   globalExcludedPrRepos,
   isLoading,
   projectAttention,
+  projectResolvedRepos,
   projects,
   reviewPrs,
   tasks,
@@ -142,14 +143,27 @@ export function useAppDataOrchestrator(options: AppDataOrchestratorOptions) {
       // Resolve the active project's repo so the rail badge can scope to it. The sidecar
       // writes the project's git origin into the 'resolved_repo' project config.
       const projectId = get(activeProjectId)
+      let activeRepo: string | null = null
       if (projectId) {
         const resolvedRepoRaw = await getProjectConfig(projectId, 'resolved_repo')
-        activeResolvedRepo.set(
-          typeof resolvedRepoRaw === 'string' && resolvedRepoRaw.includes('/') ? resolvedRepoRaw : null,
-        )
-      } else {
-        activeResolvedRepo.set(null)
+        activeRepo = typeof resolvedRepoRaw === 'string' && resolvedRepoRaw.includes('/') ? resolvedRepoRaw : null
       }
+      activeResolvedRepo.set(activeRepo)
+
+      // Resolve every project's repo so the sidebar can show a per-project review count, not
+      // just the active project's. Reuse the value already fetched for the active project.
+      const repoEntries = await Promise.all(
+        get(projects).map(async (project): Promise<[string, string | null]> => {
+          if (project.id === projectId) return [project.id, activeRepo]
+          try {
+            const raw = await getProjectConfig(project.id, 'resolved_repo')
+            return [project.id, typeof raw === 'string' && raw.includes('/') ? raw : null]
+          } catch {
+            return [project.id, null]
+          }
+        }),
+      )
+      projectResolvedRepos.set(new Map(repoEntries))
     } catch (e) {
       logError('Failed to refresh PR counts:', e)
     }

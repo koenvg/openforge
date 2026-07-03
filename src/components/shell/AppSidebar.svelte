@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { projects, activeProjectId, projectAttention } from '../../lib/stores'
+  import { projects, activeProjectId, projectAttention, reviewRequestCountByProject } from '../../lib/stores'
   import { getProjectAttention, getGitBranch, setConfig } from '../../lib/ipc'
   import { useAppRouter } from '../../lib/router.svelte'
   import { ChevronLeft, ChevronRight, Settings, Plus, ArrowUp, ArrowDown } from '@lucide/svelte'
@@ -68,24 +68,17 @@
     router.resetToBoard()
   }
 
-  function getAttentionStatus(projectId: string): { dot: string; text: string; color: string } {
+  // Count of focus-bar items awaiting the user: everything except running agents, which are
+  // in-flight rather than needing attention (mirrors DEFAULT_FOCUS_STATES excluding 'active').
+  function getAttentionCount(projectId: string): number {
     const attention = $projectAttention.get(projectId)
-    if (!attention) {
-      return { dot: 'bg-base-content/30', text: 'idle', color: 'text-base-content/50' }
-    }
-    if (attention.needs_input > 0) {
-      return { dot: 'bg-warning', text: `${attention.needs_input} needs input`, color: 'text-warning' }
-    }
-    if (attention.running_agents > 0) {
-      return { dot: 'bg-success animate-pulse', text: `${attention.running_agents} running`, color: 'text-success' }
-    }
-    if (attention.completed_agents > 0) {
-      return { dot: 'bg-info', text: `${attention.completed_agents} completed`, color: 'text-info' }
-    }
-    if (attention.ci_failures > 0) {
-      return { dot: 'bg-error', text: `${attention.ci_failures} CI failures`, color: 'text-error' }
-    }
-    return { dot: 'bg-base-content/30', text: 'idle', color: 'text-base-content/50' }
+    if (!attention) return 0
+    return (
+      attention.needs_input +
+      attention.completed_agents +
+      attention.ci_failures +
+      attention.unaddressed_comments
+    )
   }
 
   
@@ -165,8 +158,9 @@
 
   <div class="flex-1 overflow-y-auto">
     {#each $projects as project, index (project.id)}
-      {@const status = getAttentionStatus(project.id)}
+      {@const attentionCount = getAttentionCount(project.id)}
       {@const isActive = project.id === $activeProjectId && currentView === 'board'}
+      {@const reviewCount = $reviewRequestCountByProject.get(project.id) ?? 0}
 
       {#if collapsed}
         <button
@@ -180,7 +174,18 @@
             <div class="w-8 h-8 rounded-full {isActive ? 'bg-primary text-primary-content' : 'bg-base-content/10 text-base-content'} flex items-center justify-center text-xs font-bold uppercase">
                {project.name.charAt(0)}
              </div>
-            <span class="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full {status.dot} ring-2 ring-base-300"></span>
+            {#if attentionCount > 0}
+              <span
+                class="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-success/70 ring-2 ring-base-300"
+                title="{attentionCount} item{attentionCount === 1 ? '' : 's'} needing attention"
+              ></span>
+            {/if}
+            {#if reviewCount > 0}
+              <span
+                class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-error/70 ring-2 ring-base-300"
+                title="{reviewCount} PR{reviewCount === 1 ? '' : 's'} awaiting your review"
+              ></span>
+            {/if}
           </div>
         </button>
       {:else}
@@ -192,10 +197,22 @@
             onclick={() => selectProject(project.id)}
           >
              <div class="text-xs {isActive ? 'font-bold text-base-content' : 'font-medium text-base-content'}">{project.name}</div>
-             <div class="mt-1 flex items-center gap-1.5" aria-hidden="true">
-               <span class="w-1.5 h-1.5 rounded-full {status.dot}"></span>
-               <span class="text-[10px] {status.color}">{status.text}</span>
-             </div>
+             {#if reviewCount > 0 || attentionCount > 0}
+               <div class="mt-1 flex items-center gap-2">
+                 {#if reviewCount > 0}
+                   <span class="flex items-center gap-1" title="{reviewCount} PR{reviewCount === 1 ? '' : 's'} awaiting your review">
+                     <span class="w-1.5 h-1.5 rounded-full bg-error/70"></span>
+                     <span class="text-[10px] text-base-content/60">{reviewCount}</span>
+                   </span>
+                 {/if}
+                 {#if attentionCount > 0}
+                   <span class="flex items-center gap-1" title="{attentionCount} item{attentionCount === 1 ? '' : 's'} needing attention">
+                     <span class="w-1.5 h-1.5 rounded-full bg-success/70"></span>
+                     <span class="text-[10px] text-base-content/60">{attentionCount}</span>
+                   </span>
+                 {/if}
+               </div>
+             {/if}
           </button>
           <div class="absolute right-1 top-1/2 flex -translate-y-1/2 flex-col gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
             {#if index > 0}

@@ -24,8 +24,10 @@ import {
   isLoading,
   projectAttention,
   projects,
+  projectResolvedRepos,
   reviewPrs,
   reviewRequestCount,
+  reviewRequestCountByProject,
   activeRepoReviewRequestCount,
   tasks,
   ticketPrs,
@@ -89,6 +91,7 @@ describe('useAppDataOrchestrator', () => {
     globalExcludedPrRepos.set(new Set())
     isLoading.set(false)
     projectAttention.set(new Map())
+    projectResolvedRepos.set(new Map())
     projects.set([])
     reviewPrs.set([])
     tasks.set([])
@@ -232,6 +235,34 @@ describe('useAppDataOrchestrator', () => {
 
     expect(get(reviewRequestCount)).toBe(1)
     expect(get(activeRepoReviewRequestCount)).toBe(1)
+  })
+
+  it("resolves every project's repo so the sidebar shows a per-project review count", async () => {
+    const orchestrator = useAppDataOrchestrator({ setShowProjectSetup: vi.fn() })
+    activeProjectId.set('proj-web')
+    projects.set([
+      { id: 'proj-web', name: 'Web', path: '/web', created_at: 0, updated_at: 0 },
+      { id: 'proj-api', name: 'API', path: '/api', created_at: 0, updated_at: 0 },
+    ])
+    vi.mocked(getProjectConfig).mockImplementation(async (projectId: string, key: string) => {
+      if (key !== 'resolved_repo') return null
+      if (projectId === 'proj-web') return 'acme/web'
+      if (projectId === 'proj-api') return 'acme/api'
+      return null
+    })
+    vi.mocked(getReviewPrs).mockResolvedValue([
+      { repo_owner: 'acme', repo_name: 'web', viewed_at: null, labels: [] },
+      { repo_owner: 'acme', repo_name: 'web', viewed_at: null, labels: [] },
+      { repo_owner: 'acme', repo_name: 'api', viewed_at: null, labels: [] },
+    ] as any)
+
+    await orchestrator.refreshPrCounts()
+
+    expect(get(projectResolvedRepos).get('proj-web')).toBe('acme/web')
+    expect(get(projectResolvedRepos).get('proj-api')).toBe('acme/api')
+    const counts = get(reviewRequestCountByProject)
+    expect(counts.get('proj-web')).toBe(2)
+    expect(counts.get('proj-api')).toBe(1)
   })
 
   it('guards GitHub sync so concurrent calls do not duplicate IPC syncs', async () => {
