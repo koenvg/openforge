@@ -1,7 +1,7 @@
 import { invokeDesktopCommand as invoke, isElectronDesktopBridgeAvailable } from "./desktopIpc";
 import { normalizeTask } from "./boardStatus"
 import type { JsonValue } from '@openforge/plugin-sdk'
-import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, DivergenceResolution, ExistingBranchPlan, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, PrWalkthrough, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource, WritableBoardStatus } from "./types";
+import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, DeveloperLogEntry, DeveloperLogSnapshot, DivergenceResolution, ExistingBranchPlan, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, PrWalkthrough, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource, WritableBoardStatus } from "./types";
 
 type RawTask = Omit<Task, 'status'> & { status: string }
 
@@ -197,6 +197,18 @@ export async function openUrl(url: string): Promise<void> {
 
 export async function quitApp(): Promise<void> {
   return invoke("quit_app");
+}
+
+export async function getDeveloperLogs(limit?: number): Promise<DeveloperLogEntry[]> {
+  return limit === undefined
+    ? invoke<DeveloperLogEntry[]>("get_developer_logs")
+    : invoke<DeveloperLogEntry[]>("get_developer_logs", { limit });
+}
+
+export async function getDeveloperLogSnapshot(limit?: number): Promise<DeveloperLogSnapshot> {
+  return limit === undefined
+    ? invoke<DeveloperLogSnapshot>("get_developer_log_snapshot")
+    : invoke<DeveloperLogSnapshot>("get_developer_log_snapshot", { limit });
 }
 
 export async function selectDirectory(options: {

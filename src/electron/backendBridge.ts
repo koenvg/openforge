@@ -1,4 +1,6 @@
+import { developerLogStore } from './developerLogs.js'
 import { openExternalUrl, openPathInEditor } from './shellCommands.js'
+import type { DeveloperLogEntry, DeveloperLogSnapshot } from './developerLogs.js'
 import type { SidecarLaunchConfig } from './sidecar.js'
 
 export interface ElectronInvokeRequest {
@@ -26,6 +28,8 @@ export type SelectDirectory = (options: {
   buttonLabel?: string
   message?: string
 }) => Promise<string | null>
+export type GetDeveloperLogs = (limit?: number) => DeveloperLogEntry[]
+export type GetDeveloperLogSnapshot = (limit?: number) => DeveloperLogSnapshot
 
 export interface ElectronInvokeDeps {
   sidecarConfig: SidecarLaunchConfig | null
@@ -33,6 +37,8 @@ export interface ElectronInvokeDeps {
   openExternal: OpenExternal
   quitApp?: QuitApp
   selectDirectory?: SelectDirectory
+  getDeveloperLogs?: GetDeveloperLogs
+  getDeveloperLogSnapshot?: GetDeveloperLogSnapshot
 }
 
 const SIDECAR_BACKED_COMMANDS = new Set([
@@ -200,6 +206,12 @@ function payloadString(payload: unknown, key: string): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value : null
 }
 
+function payloadNumber(payload: unknown, key: string): number | undefined {
+  if (typeof payload !== 'object' || payload === null) return undefined
+  const value = (payload as Record<string, unknown>)[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
 function isRepositoryAccessFailure(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error)
   return message.includes('Cannot access repository path')
@@ -273,6 +285,16 @@ export async function handleElectronInvoke(request: ElectronInvokeRequest, deps:
       buttonLabel: payloadString(payload, 'buttonLabel') ?? undefined,
       message: payloadString(payload, 'message') ?? undefined,
     })
+  }
+
+  if (command === 'get_developer_log_snapshot') {
+    const getDeveloperLogSnapshot = deps.getDeveloperLogSnapshot ?? ((limit?: number) => developerLogStore.getSnapshot(limit))
+    return getDeveloperLogSnapshot(payloadNumber(payload, 'limit'))
+  }
+
+  if (command === 'get_developer_logs') {
+    const getDeveloperLogs = deps.getDeveloperLogs ?? ((limit?: number) => developerLogStore.getRecentLogs(limit))
+    return getDeveloperLogs(payloadNumber(payload, 'limit'))
   }
 
   if (isSidecarBackedCommand(command)) {

@@ -6,6 +6,7 @@ import { createMainWindowOptions } from './windowConfig.js'
 import { createPreloadPath } from './preloadPath.js'
 import { loadAndRevealMainWindow } from './windowStartup.js'
 import { ElectronRendererTrustAdapter } from './rendererTrustPolicy.js'
+import { developerLogSink, developerLogStore } from './developerLogs.js'
 import { createAppEventForwarder } from './eventForwarder.js'
 import { resolveElectronSidecarPath } from './sidecarPath.js'
 import { configureElectronUserDataPath } from './runtimePaths.js'
@@ -48,7 +49,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
       }))
     })
 
-    console.log(`[electron] Loading renderer from ${rendererUrl ?? 'packaged dist/index.html'}`)
+    developerLogSink.info(`[electron] Loading renderer from ${rendererUrl ?? 'packaged dist/index.html'}`)
     await loadAndRevealMainWindow(window, rendererUrl
       ? { rendererUrl }
       : { filePath: join(options.currentDir, '..', 'dist', 'index.html') }, {
@@ -83,6 +84,8 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
               : await dialog.showOpenDialog(options)
             return result.canceled ? null : result.filePaths[0] ?? null
           },
+          getDeveloperLogs: (limit) => developerLogStore.getRecentLogs(limit),
+          getDeveloperLogSnapshot: (limit) => developerLogStore.getSnapshot(limit),
         },
       ))
     },
@@ -120,7 +123,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     },
 
     async startSidecar(config: SidecarLaunchConfig): Promise<SidecarReadinessHandle> {
-      console.log(`[electron] Starting Rust sidecar: ${config.command} --host ${config.host} --port ${config.port}`)
+      developerLogSink.info(`[electron] Starting Rust sidecar: ${config.command} --host ${config.host} --port ${config.port}`)
       const sidecar = await startSidecarReadiness(config, {
         spawn: (command, args, spawnOptions) => asChildProcessLike(spawn(command, [...args], spawnOptions)),
         fetch: (url, init) => fetch(url, init),
@@ -129,6 +132,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
           sidecarLaunchProcess = child
         },
         logSidecarOutput: true,
+        logger: developerLogSink,
         failureReporter: options.failureReporter,
         createEventStream: sidecarConfig => {
           let eventListener: ((envelope: SidecarEventEnvelopeLike) => void) | null = null
@@ -148,7 +152,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
         },
       })
       const readiness = await sidecar.ready()
-      console.log(`[electron] Rust sidecar is ready at ${readiness.identity.readinessUrl}`)
+      developerLogSink.info(`[electron] Rust sidecar is ready at ${readiness.identity.readinessUrl}`)
       sidecarLaunchProcess = sidecar.process
       return sidecar
     },

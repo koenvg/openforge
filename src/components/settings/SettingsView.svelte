@@ -32,6 +32,7 @@
   import SettingsCredentialsCard from './SettingsCredentialsCard.svelte'
   import SettingsActionsCard from './SettingsActionsCard.svelte'
   import SettingsExperimentalCard from './SettingsExperimentalCard.svelte'
+  import SettingsDeveloperLogsCard from './SettingsDeveloperLogsCard.svelte'
   import ProjectPageHeader from '../project/ProjectPageHeader.svelte'
   import PluginSlot from '../plugin/PluginSlot.svelte'
   import PluginSettingsPanel from '../plugin/PluginSettingsPanel.svelte'
@@ -134,7 +135,7 @@
   let scrollContainer = $state<HTMLDivElement | null>(null)
   let isNavigating = false
   const projectSections = ['general', 'instructions', 'plugins', 'actions']
-  const globalSections = ['preferences', 'ai', 'credentials', 'experimental']
+  const globalSections = ['preferences', 'ai', 'credentials', 'experimental', 'developer']
 
   function getErrorMessage(e: unknown): string {
     return e instanceof Error ? e.message : String(e)
@@ -660,6 +661,8 @@
           onCodeCleanupTasksToggle={() => { handleCodeCleanupTasksToggle(); scheduleSave() }}
           disabled={!globalSettingsLoaded}
         />
+
+        <SettingsDeveloperLogsCard />
       {/if}
     </div>
   </div>

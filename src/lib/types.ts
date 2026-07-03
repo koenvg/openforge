@@ -1,5 +1,20 @@
 export * from '@openforge/plugin-sdk/domain'
 
+export type DeveloperLogLevel = 'info' | 'warn' | 'error'
+
+export interface DeveloperLogEntry {
+  id: number
+  timestamp: string
+  level: DeveloperLogLevel
+  message: string
+}
+
+export interface DeveloperLogSnapshot {
+  entries: DeveloperLogEntry[]
+  logFilePath: string
+  totalEntries: number
+}
+
 export interface TaskLabel {
   id: number
   project_id: string

@@ -81,6 +81,8 @@ export const ipcCommandContracts = [
   { functionName: 'openInEditor', ipcCommand: 'open_in_editor', payloadKeys: ['path'], targetOwner: 'electron-main', domain: 'misc' },
   { functionName: 'quitApp', ipcCommand: 'quit_app', payloadKeys: [], targetOwner: 'electron-main', domain: 'app-shell' },
   { functionName: 'selectDirectory', ipcCommand: 'select_directory', payloadKeys: ['defaultPath', 'buttonLabel', 'message'], targetOwner: 'electron-main', domain: 'app-shell' },
+  { functionName: 'getDeveloperLogs', ipcCommand: 'get_developer_logs', payloadKeys: ['limit'], targetOwner: 'electron-main', domain: 'app-shell' },
+  { functionName: 'getDeveloperLogSnapshot', ipcCommand: 'get_developer_log_snapshot', payloadKeys: ['limit'], targetOwner: 'electron-main', domain: 'app-shell' },
   { functionName: 'getPrComments', ipcCommand: 'get_pr_comments', payloadKeys: ['prId'], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'markCommentAddressed', ipcCommand: 'mark_comment_addressed', payloadKeys: ['commentId'], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'mergePullRequest', ipcCommand: 'merge_pull_request', payloadKeys: ['owner', 'repo', 'prNumber'], targetOwner: 'rust-sidecar', domain: 'github-review' },
