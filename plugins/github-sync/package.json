@@ -37,6 +37,7 @@
       "backend",
       "commands",
       "events",
+      "storage",
       "system.openUrl",
       "projectConfig",
       "context"

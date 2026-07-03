@@ -529,6 +529,7 @@
       <div style="height: {virtualizer.totalSize}px; width: 100%; position: relative;">
         {#each virtualizer.virtualItems as row (row.key)}
           {@const file = sortedFiles[row.index]}
+          {#if file}
           {@const truncated = isTruncated(file)}
           {@const truncStats = getTruncationStats(file)}
           <div
@@ -770,6 +771,7 @@
               {/if}
             </div>
           </div>
+          {/if}
         {/each}
       </div>
     {/if}

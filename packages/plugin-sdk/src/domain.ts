@@ -832,6 +832,34 @@ export interface SelfReviewComment {
   archived_at: number | null;
 }
 
+/** One file referenced by a walkthrough step. `hunk_indexes === null` means the entire file's diff belongs to the step. */
+export interface PrWalkthroughStepFile {
+  filename: string;
+  hunk_indexes: number[] | null;
+}
+
+/** One concept-sized step in a PR walkthrough — as if the author had landed a small commit. */
+export interface PrWalkthroughStep {
+  id: string;
+  title: string;
+  summary: string;
+  files: PrWalkthroughStepFile[];
+}
+
+/** A cached AI-generated walkthrough of a PR, keyed by (pr_id, head_sha).
+ * `steps_json` is the agent's raw structured response. Parse + validate it
+ * against the live PR diffs before rendering (see walkthroughParse). */
+export interface PrWalkthrough {
+  pr_id: number;
+  head_sha: string;
+  walkthrough_session_key: string | null;
+  status: 'generating' | 'ready' | 'error';
+  steps_json: string | null;
+  error_message: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
 /** Agent review comment for AI-powered PR review */
 export interface AgentReviewComment {
   id: number;

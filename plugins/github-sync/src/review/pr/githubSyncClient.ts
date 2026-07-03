@@ -5,6 +5,7 @@ import type {
   PollResult,
   PrFileDiff,
   PrOverviewComment,
+  PrWalkthrough,
   ReviewComment,
   ReviewPullRequest,
   ReviewSubmissionComment,
@@ -53,6 +54,21 @@ export interface GithubSyncPrReviewClient {
   submitPullRequestReview(request: SubmitPullRequestReviewRequest): Promise<void>
   listAgentReviewComments(request: { reviewPrId: number }): Promise<AgentReviewComment[]>
   updateAgentReviewCommentStatus(request: { commentId: number; status: string }): Promise<void>
+  getPrWalkthrough(request: { reviewPrId: number; headSha: string }): Promise<PrWalkthrough | null>
+  deletePrWalkthrough(request: { reviewPrId: number; headSha: string }): Promise<void>
+  startAgentWalkthrough(request: {
+    repoOwner: string
+    repoName: string
+    prNumber: number
+    headRef: string
+    baseRef: string
+    prTitle: string
+    prBody: string | null
+    headSha: string
+    reviewPrId: number
+    prompt: string
+  }): Promise<{ walkthrough_session_key: string }>
+  abortAgentWalkthrough(request: { walkthroughSessionKey: string }): Promise<void>
   onAuthoredPullRequestsUpdated(handler: () => void): Disposable
   onReviewPullRequestCountChanged(handler: () => void): Disposable
 }
@@ -94,6 +110,10 @@ export function createGithubSyncPrReviewClient(api: Pick<FrontendOpenForgeAPI, '
     }),
     listAgentReviewComments: ({ reviewPrId }) => invokeBackend<AgentReviewComment[]>(api, 'getAgentReviewComments', { reviewPrId }),
     updateAgentReviewCommentStatus: ({ commentId, status }) => invokeBackend<void>(api, 'updateAgentReviewCommentStatus', { commentId, status }),
+    getPrWalkthrough: ({ reviewPrId, headSha }) => invokeBackend<PrWalkthrough | null>(api, 'getPrWalkthrough', { reviewPrId, headSha }),
+    deletePrWalkthrough: ({ reviewPrId, headSha }) => invokeBackend<void>(api, 'deletePrWalkthrough', { reviewPrId, headSha }),
+    startAgentWalkthrough: (request) => invokeBackend<{ walkthrough_session_key: string }>(api, 'startAgentWalkthrough', request),
+    abortAgentWalkthrough: ({ walkthroughSessionKey }) => invokeBackend<void>(api, 'abortAgentWalkthrough', { walkthroughSessionKey }),
     onAuthoredPullRequestsUpdated: (handler) => api.events.onGlobal(hostEventId('authored-prs-updated'), handler),
     onReviewPullRequestCountChanged: (handler) => api.events.onGlobal(hostEventId('review-pr-count-changed'), handler),
   }
