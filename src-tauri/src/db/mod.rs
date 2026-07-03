@@ -34,7 +34,7 @@ pub(crate) use pull_request_readiness::{
 pub use pull_requests::{PrCommentRow, PrRow};
 pub use review::ReviewPrRow;
 pub use task_workspaces::TaskWorkspaceRow;
-pub use tasks::{NewTaskOptions, TaskLabelRow, TaskRow};
+pub use tasks::{CompactTaskRow, NewTaskOptions, TaskLabelRow, TaskRow};
 pub use worktrees::WorktreeRow;
 
 pub(crate) const STARTUP_RESUMABLE_AGENT_SESSION_STATUSES: [&str; 4] =

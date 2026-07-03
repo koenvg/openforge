@@ -53,6 +53,8 @@ async fn test_get_tasks_handler_returns_tasks_for_project() {
             .expect("create task a");
         db.create_task("Task B", "doing", Some(&project.id), None, None)
             .expect("create task b");
+        db.create_task("Task C", "done", Some(&project.id), None, None)
+            .expect("create task c");
     }
 
     let router = create_router(state);
@@ -70,7 +72,104 @@ async fn test_get_tasks_handler_returns_tasks_for_project() {
     assert_eq!(response.status(), StatusCode::OK);
     let json = response_body_json(response).await;
     let tasks = json.as_array().expect("array response");
-    assert_eq!(tasks.len(), 2);
+    assert_eq!(tasks.len(), 3);
+    assert!(tasks.iter().any(|task| task["status"] == "done"));
+    assert!(tasks[0].get("initial_prompt").is_some());
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn test_get_tasks_handler_excludes_done_and_compacts_when_requested() {
+    let (state, path) = test_state("http_get_tasks_handler_excludes_done_compact");
+    let open_task_id = {
+        let db = state.db.lock().expect("lock db");
+        let project = db
+            .create_project("Project", "/tmp/project")
+            .expect("create project");
+        let open_task = db
+            .create_task(
+                "Open task full prompt",
+                "backlog",
+                Some(&project.id),
+                Some("Open task runtime prompt"),
+                None,
+            )
+            .expect("create open task");
+        db.update_task_summary(&open_task.id, "Open task handoff notes")
+            .expect("seed open summary");
+        let done_task = db
+            .create_task(
+                "Done task full prompt",
+                "done",
+                Some(&project.id),
+                Some("Done task runtime prompt"),
+                None,
+            )
+            .expect("create done task");
+        db.update_task_summary(&done_task.id, "Done task handoff notes")
+            .expect("seed done summary");
+        open_task.id
+    };
+
+    let router = create_router(state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/tasks?project_id=P-1&exclude_done=true&compact=true")
+                .method("GET")
+                .body(Body::empty())
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = response_body_json(response).await;
+    let tasks = json.as_array().expect("array response");
+    assert_eq!(tasks.len(), 1);
+    assert_eq!(tasks[0]["id"], open_task_id);
+    assert_eq!(tasks[0]["status"], "backlog");
+    assert_eq!(tasks[0]["title"], "Open task full prompt");
+    assert!(tasks[0].get("initial_prompt").is_none());
+    assert!(tasks[0].get("prompt").is_none());
+    assert!(tasks[0].get("summary").is_none());
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn test_get_tasks_handler_excludes_done_when_include_done_is_false() {
+    let (state, path) = test_state("http_get_tasks_handler_include_done_false");
+    {
+        let db = state.db.lock().expect("lock db");
+        let project = db
+            .create_project("Project", "/tmp/project")
+            .expect("create project");
+        db.create_task("Task A", "backlog", Some(&project.id), None, None)
+            .expect("create task a");
+        db.create_task("Task B", "done", Some(&project.id), None, None)
+            .expect("create task b");
+    }
+
+    let router = create_router(state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/tasks?project_id=P-1&include_done=false")
+                .method("GET")
+                .body(Body::empty())
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = response_body_json(response).await;
+    let tasks = json.as_array().expect("array response");
+    assert_eq!(tasks.len(), 1);
+    assert_eq!(tasks[0]["status"], "backlog");
+    assert!(tasks[0].get("initial_prompt").is_some());
 
     let _ = std::fs::remove_file(path);
 }
