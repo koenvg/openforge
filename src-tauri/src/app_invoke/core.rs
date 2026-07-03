@@ -10,6 +10,18 @@ pub(super) async fn handle_app_core_task_project_command(
             let status_text = payload_string(&request.payload, "status")?;
             let status = db::BoardStatus::from_str(&status_text)
                 .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+            if !status.is_writable() {
+                // 'done' is recognized for reading legacy rows but is not an
+                // assignable status: writing it would hide the task from every
+                // board surface with no reopen path or runtime cleanup.
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "Cannot assign non-writable board status: {}",
+                        status.as_str()
+                    ),
+                ));
+            }
             {
                 let db = crate::db::acquire_db(&state.db);
                 db.update_task_status(&id, status.as_str()).map_err(|e| {

@@ -212,6 +212,55 @@ async fn task_label_commands_round_trip_labels_on_tasks() {
     let _ = std::fs::remove_file(path);
 }
 
+#[tokio::test]
+async fn update_task_status_rejects_done_and_leaves_status_unchanged() {
+    let (state, path) = test_state("app_invoke_reject_done_status");
+    let project = invoke_ok(
+        &state,
+        "create_project",
+        json!({ "name": "Open Forge", "path": "/tmp/openforge-reject-done" }),
+    )
+    .await;
+    let project_id = project["id"].as_str().expect("project id");
+
+    let task = invoke_ok(
+        &state,
+        "create_task",
+        json!({
+            "initialPrompt": "Guard done",
+            "status": "doing",
+            "projectId": project_id,
+            "permissionMode": null,
+        }),
+    )
+    .await;
+    let task_id = task["id"].as_str().expect("task id");
+
+    // 'done' is a legacy, recognized-but-unreachable status (AVIV-118). Assigning
+    // it would hide the task from every board surface with no reopen path or
+    // runtime cleanup, so the write boundary must reject it.
+    let rejected = invoke(
+        &state,
+        "update_task_status",
+        json!({ "id": task_id, "status": "done" }),
+    )
+    .await
+    .expect_err("update to 'done' should be rejected");
+    assert_eq!(rejected.0, StatusCode::BAD_REQUEST);
+
+    // The task must remain in its prior, board-visible status.
+    assert_eq!(
+        crate::db::acquire_db(&state.db)
+            .get_task(task_id)
+            .expect("get task")
+            .expect("task exists")
+            .status,
+        "doing"
+    );
+
+    let _ = std::fs::remove_file(path);
+}
+
 async fn task_workspace_value(
     task_id: &str,
     state: &crate::http_server::AppState,

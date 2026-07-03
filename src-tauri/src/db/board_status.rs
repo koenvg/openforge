@@ -19,6 +19,18 @@ impl BoardStatus {
         }
     }
 
+    /// Whether a client may assign this status to a task.
+    ///
+    /// `Done` is a legacy, recognized-but-unreachable status (AVIV-118 removed
+    /// the Done lane and its reopen path). Assigning it hides the task from every
+    /// board filter, count, and search with no runtime cleanup, leaking the
+    /// worktree and any running agent while the task is invisible. It stays
+    /// parseable so existing `done` rows remain readable, but every write
+    /// boundary must reject it.
+    pub fn is_writable(self) -> bool {
+        !matches!(self, Self::Done)
+    }
+
     fn normalize(value: &str) -> Option<Self> {
         match value.trim().to_lowercase().as_str() {
             "backlog" | "todo" => Some(Self::Backlog),

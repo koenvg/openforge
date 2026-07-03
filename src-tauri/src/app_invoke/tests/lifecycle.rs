@@ -1329,34 +1329,52 @@ async fn setup_owned_worktree_task(
 }
 
 #[tokio::test]
-async fn update_task_status_to_done_does_not_clean_up_worktree() {
+async fn update_task_status_to_done_is_rejected_and_preserves_worktree() {
     let temp = tempfile::tempdir().expect("tempdir should be created");
     let repo_dir = temp.path().join("repo");
     let worktree_dir = temp.path().join("wt");
-    let (state, db_path) = test_state("app_invoke_done_keeps_worktree");
+    let (state, db_path) = test_state("app_invoke_done_rejected_keeps_worktree");
     let (task_id, branch) = setup_owned_worktree_task(&state, &repo_dir, &worktree_dir, true).await;
 
-    invoke_ok(
+    // 'done' is a legacy, recognized-but-unreachable status (AVIV-118): assigning
+    // it hides the task from every board surface with no reopen path. The write
+    // boundary rejects it, so the status update never runs.
+    let rejected = invoke(
         &state,
         "update_task_status",
         json!({ "id": task_id, "status": "done" }),
     )
-    .await;
+    .await
+    .expect_err("move to Done should be rejected");
+    assert_eq!(rejected.0, StatusCode::BAD_REQUEST);
 
+    // The task keeps its board-visible status...
+    {
+        let db = crate::db::acquire_db(&state.db);
+        assert_eq!(
+            db.get_task(&task_id)
+                .expect("get task")
+                .expect("task exists")
+                .status,
+            "doing"
+        );
+    }
+    // ...and, because nothing was written, the worktree and branch survive
+    // untouched (no accidental cleanup on the rejected path).
     assert!(
         branch_exists_lifecycle(&repo_dir, &branch),
-        "moving a task to Done must no longer delete its branch"
+        "rejecting a move to Done must not delete the branch"
     );
     assert!(
         worktree_dir.exists(),
-        "moving a task to Done must no longer remove its worktree directory"
+        "rejecting a move to Done must not remove the worktree directory"
     );
     let db = crate::db::acquire_db(&state.db);
     assert!(
         db.get_worktree_for_task(&task_id)
             .expect("get worktree")
             .is_some(),
-        "the worktree record must survive a move to Done"
+        "the worktree record must survive a rejected move to Done"
     );
     drop(db);
 

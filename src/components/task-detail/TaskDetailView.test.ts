@@ -90,7 +90,6 @@ vi.mock('../../lib/stores', () => ({
 
 vi.mock('../../lib/ipc', () => ({
   updateTaskFields: vi.fn().mockResolvedValue(undefined),
-  updateTaskStatus: vi.fn().mockResolvedValue(undefined),
   updateTaskTitle: vi.fn().mockResolvedValue(undefined),
   deleteTask: vi.fn().mockResolvedValue(undefined),
   getPrComments: vi.fn().mockResolvedValue([]),

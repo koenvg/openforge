@@ -2,6 +2,17 @@ import type { PluginViewKey } from './types'
 export type { PluginViewKey } from './types'
 
 export type BoardStatus = 'backlog' | 'doing' | 'done'
+
+/**
+ * The subset of {@link BoardStatus} a client may assign to a task.
+ *
+ * `'done'` is a legacy, recognized-but-unreachable status (AVIV-118 removed the
+ * Done lane and its reopen path). Assigning it hides the task from every board
+ * surface with no runtime cleanup, so it stays readable on existing rows but is
+ * never a valid write target. The backend rejects it regardless; this type gives
+ * plugin and renderer callers a compile-time signal.
+ */
+export type WritableBoardStatus = Exclude<BoardStatus, 'done'>
 export type WorktreeSource = 'newBranchFromMain' | 'existingBranch' | 'disabled'
 
 export interface Task {
