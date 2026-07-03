@@ -5,7 +5,7 @@ import { DO_NOT_REVIEW_LABEL, hasDoNotReviewLabel } from './types'
 export { DO_NOT_REVIEW_LABEL, hasDoNotReviewLabel }
 
 /** A review request still owed: not yet opened in-app and not marked "do not review". */
-function isUnopened(pr: ReviewPullRequest): boolean {
+export function isUnopened(pr: ReviewPullRequest): boolean {
   return pr.viewed_at === null && !hasDoNotReviewLabel(pr)
 }
 
