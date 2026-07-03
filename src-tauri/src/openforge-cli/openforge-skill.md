@@ -20,43 +20,33 @@ Do not bypass the launcher with the underlying script path.
 
 If OpenForge is listening on a non-default HTTP bridge port, set `OPENFORGE_HTTP_PORT` before running the command. The default is `17422`.
 
-## Commands
+## Common commands
 
 ```bash
-openforge create-task --initial-prompt "Describe the follow-up work" --project-id P-1 --depends-on T-122 --label cleanup
+openforge create-task --initial-prompt "Describe the follow-up work" --worktree "$PWD" --depends-on T-122 --label cleanup
 openforge update-task --task-id T-123 --summary "What changed and what needs attention"
-openforge delete-task --task-id T-123
 openforge get-task --task-id T-123
-openforge list-task-labels --task-id T-123
-openforge set-task-dependencies --task-id T-123 --depends-on T-121,T-122
-openforge add-task-dependency --task-id T-123 --depends-on T-122
-openforge link-tasks --chain "T-121 -> T-122 -> T-123"
-openforge get-task --task-id T-123
+openforge list-tasks --project-id P-1 --state doing
 openforge list-task-labels --task-id T-123
 openforge add-task-label --task-id T-123 --label bug
 openforge remove-task-label --task-id T-123 --label-id 42
-openforge list-tasks --project-id P-1 --state doing
-openforge list-projects
-```
-
-`list-tasks` excludes done tasks by default to keep agent context focused. Pass `--state done` only when you explicitly need completed tasks.
-
-Use `--worktree "$PWD"` with `create-task` when the project can be inferred from the current worktree and no project id is known.
-
-If a task was created with the wrong initial prompt, do not try to repair it with `update-task`. Before deleting it, record the old task's labels, its own `depends_on` list, and any dependent tasks whose `depends_on` entries include the old task id. Then delete the incorrect task, create a replacement with the desired `--initial-prompt`, and repoint each dependent task to the replacement:
-
-```bash
-openforge get-task --task-id T-123
-openforge list-task-labels --task-id T-123
-openforge list-tasks --project-id P-1 # record tasks whose depends_on includes T-123
+openforge set-task-dependencies --task-id T-123 --depends-on T-121,T-122
+openforge add-task-dependency --task-id T-123 --depends-on T-122
+openforge link-tasks --chain "T-121 -> T-122 -> T-123"
+openforge list-tasks --project-id P-1 --full
 openforge delete-task --task-id T-123
-openforge create-task --initial-prompt "Correct task prompt" --project-id P-1 --depends-on T-122 --label cleanup
-openforge set-task-dependencies --task-id T-999 --depends-on T-456,T-122 # replace T-123 with new task T-456
 ```
 
-When repointing dependents, pass each dependent task's full desired dependency list to `set-task-dependencies`, replacing only the old task id with the new one.
+`list-tasks` prints compact rows by default (`id`, `prompt_preview`, `status`, `labels`, `depends_on`, `updated_at`) for broad scans and excludes done tasks by default. Pass `--full` when you need complete TaskRow objects. Pass `--state done` only when you explicitly need completed tasks. Use `--worktree "$PWD"` with `create-task` when the project can be inferred from the current worktree and no project id is known.
 
 Labels are project-scoped. Use `--label` on `create-task` for AI-created follow-up work that already has an obvious category. `--label` can be repeated or comma-separated, e.g. `--label bug --label "needs review"` or `--label bug,cleanup`. Use `add-task-label`, `remove-task-label`, and `list-task-labels` to manage labels on existing tasks.
+
+Rare prompt-repair workflow: if a task was created with the wrong initial prompt, do not try to repair it with `update-task`. Use the CLI help for the full safe replacement workflow:
+
+```bash
+openforge create-task --help
+openforge update-task --help
+```
 
 ## Guidance
 

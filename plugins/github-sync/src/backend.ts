@@ -6,12 +6,24 @@ import type {
   PollResult,
   PrFileDiff,
   PrOverviewComment,
+  PrWalkthrough,
   ReviewComment,
   ReviewPullRequest,
 } from '@openforge/plugin-sdk/domain'
 import type { FileAtRefRequest, FileContentRequest, PullRequestRepositoryRequest, SubmitPullRequestReviewRequest } from './review/pr/githubSyncClient'
+import { randomUUID } from 'node:crypto'
+import {
+  beginWalkthroughGeneration,
+  readWalkthrough,
+  removeWalkthrough,
+  runWalkthroughGeneration,
+} from './lib/walkthroughStore'
 
 const HOST_COMMAND_NAMESPACE = ['open', 'forge'].join('')
+
+// Model used for headless walkthrough generation (passed to `claude --model`).
+// Sonnet balances quality and speed for the "split this PR into steps" task.
+const WALKTHROUGH_MODEL = 'sonnet'
 
 type HostCommandPayload = Record<string, unknown> | null
 
@@ -87,6 +99,56 @@ export default defineBackendPlugin({
 
     context.subscriptions.add(openforge.backend.registerMethod<{ commentId: number; status: string }, void>('updateAgentReviewCommentStatus', {
       handler: (request) => invokeHostCommand<void>(openforge, 'updateAgentReviewCommentStatus', request),
+    }))
+
+    // The walkthrough feature is owned entirely by this plugin: the cache lives
+    // in plugin storage and generation runs via the generic core `agentGenerate`
+    // primitive. No walkthrough-specific code exists in the core sidecar.
+    context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string }, PrWalkthrough | null>('getPrWalkthrough', {
+      handler: (request) => readWalkthrough(openforge, request.reviewPrId, request.headSha),
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string }, void>('deletePrWalkthrough', {
+      handler: (request) => removeWalkthrough(openforge, request.reviewPrId, request.headSha),
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<{
+      repoOwner: string
+      repoName: string
+      prNumber: number
+      headRef: string
+      baseRef: string
+      prTitle: string
+      prBody: string | null
+      headSha: string
+      reviewPrId: number
+      prompt: string
+    }, { walkthrough_session_key: string }>('startAgentWalkthrough', {
+      handler: async (request) => {
+        const sessionKey = randomUUID()
+        const params = { prId: request.reviewPrId, headSha: request.headSha, sessionKey, prompt: request.prompt }
+        await beginWalkthroughGeneration(openforge, params)
+        // Kick off generation in the background so the UI gets its session key
+        // immediately and can render the optimistic "generating" state.
+        void runWalkthroughGeneration(openforge, params, (key, prompt) =>
+          invokeHostCommand<{ text: string }>(openforge, 'agentGenerate', {
+            sessionKey: key,
+            prompt,
+            model: WALKTHROUGH_MODEL,
+          }).then((result) => result?.text ?? ''),
+        )
+        return { walkthrough_session_key: sessionKey }
+      },
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<{ walkthroughSessionKey: string }, void>('abortAgentWalkthrough', {
+      handler: async (request) => {
+        // Cancel the in-flight generation; the awaiting runWalkthroughGeneration
+        // call then rejects and marks the cached row as errored/aborted.
+        await invokeHostCommand<{ aborted: boolean }>(openforge, 'abortAgentGenerate', {
+          sessionKey: request.walkthroughSessionKey,
+        }).catch(() => undefined)
+      },
     }))
   },
 })

@@ -2,9 +2,9 @@
   import { onDestroy } from 'svelte'
   import { get } from 'svelte/store'
   import { createTaskTerminalPaneLifecycle } from '@openforge/terminal-runtime'
-  import { activeProjectId, activeSessions, commandHeld, error, startingTasks, taskActiveView, taskRuntimeInfo } from '../../lib/stores'
-  import { deleteTask, getTaskWorkspace, openInEditor, updateTaskStatus } from '../../lib/ipc'
-  import { confirmCompleteTask } from '../../lib/completeTask'
+  import { activeProjectId, activeSessions, commandHeld, completingTasks, startingTasks, taskActiveView, taskRuntimeInfo } from '../../lib/stores'
+  import { getTaskWorkspace, openInEditor } from '../../lib/ipc'
+  import { confirmCompleteTask, runCompleteTask } from '../../lib/completeTask'
   import { getTaskTitle } from '../../lib/taskTitle'
   import { createTaskTitleRename } from '../../lib/useTaskTitleRename.svelte'
   import { useAppRouter } from '../../lib/router.svelte'
@@ -17,7 +17,7 @@
   import { TERMINAL_PLUGIN_ID } from '../../lib/terminalPlugin'
   import { useShortcutRegistry } from '../../lib/shortcuts.svelte'
   import { releaseAllForTask } from '../../lib/terminalPool'
-  import type { Action, BoardStatus, Task } from '../../lib/types'
+  import type { Action, Task } from '../../lib/types'
   import AgentPanel from './AgentPanel.svelte'
   import AgentStatusPill from './AgentStatusPill.svelte'
   import TaskInfoPanel from './TaskInfoPanel.svelte'
@@ -117,6 +117,7 @@
   let currentSession = $derived($activeSessions.get(task.id))
   let agentStatus = $derived(currentSession?.status ?? null)
   let isStarting = $derived($startingTasks.has(task.id))
+  let isCompleting = $derived($completingTasks.has(task.id))
 
   const taskTerminalLifecycle = createTaskTerminalPaneLifecycle<string>({
     getInitialWorkspacePath: (taskId) => get(taskRuntimeInfo).get(taskId)?.workspacePath ?? null,
@@ -211,27 +212,12 @@
     void openInEditor(workspacePath)
   }
 
-  async function handleStatusChange(newStatus: BoardStatus) {
-    if (newStatus === task.status) return
-
-    try {
-      await updateTaskStatus(task.id, newStatus)
-    } catch (e) {
-      console.error('Failed to update status:', e)
-      $error = String(e)
-    }
-  }
-
   async function handleComplete() {
-    if (!confirmCompleteTask()) {
+    if (isCompleting || !confirmCompleteTask()) {
       return
     }
-    try {
-      await deleteTask(task.id)
+    if (await runCompleteTask(task.id)) {
       router.resetToBoard()
-    } catch (e) {
-      console.error('Failed to complete task:', e)
-      $error = String(e)
     }
   }
 
@@ -325,9 +311,15 @@
         {:else if task.status === 'doing'}
           <button
             class="btn btn-success btn-sm shrink-0 shadow-sm hover:shadow-md transition-shadow"
+            disabled={isCompleting}
             onclick={handleComplete}
           >
-            Complete 🏁
+            {#if isCompleting}
+              <span class="loading loading-spinner loading-xs"></span>
+              Completing…
+            {:else}
+              Complete 🏁
+            {/if}
           </button>
           {#if actions.length > 0}
             <ActionDropdown {actions} disabled={isStarting} onAction={handleActionClick} />

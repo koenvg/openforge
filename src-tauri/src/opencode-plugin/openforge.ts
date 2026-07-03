@@ -9,7 +9,24 @@ const interestingEvents = new Set([
   "tool.execute.after",
 ])
 
+const MAX_ACTIVITY_SNAPSHOT_CHARS = 8000
+
 const endedSessionIds = new Set()
+
+function boundedActivitySnapshot(event) {
+  if (!event || typeof event !== "object") return null
+  const snapshot = {
+    type: event.type,
+    status: statusTypeFromEvent(event),
+    sessionId: sessionIdFromEvent(event),
+    properties: event.properties,
+  }
+  const json = JSON.stringify(snapshot)
+  if (!json || json === "{}") return null
+  return json.length > MAX_ACTIVITY_SNAPSHOT_CHARS
+    ? json.slice(json.length - MAX_ACTIVITY_SNAPSHOT_CHARS)
+    : json
+}
 
 function isOpenCodeSessionId(value) {
   return typeof value === "string" && value.startsWith("ses")
@@ -87,6 +104,7 @@ async function postOpenForgeEvent(event) {
         kind,
         raw_event_type: event.type,
         raw_status_type: statusTypeFromEvent(event),
+        activity_snapshot: boundedActivitySnapshot(event),
       }),
     })
   } catch {

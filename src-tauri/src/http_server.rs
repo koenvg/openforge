@@ -65,42 +65,53 @@ pub struct AppState {
     pub app_event_bus: Option<AppEventBus>,
     pub whisper: Option<std::sync::Arc<WhisperManager>>,
     pub sidecar_readiness: SidecarReadinessState,
-    pub start_implementation_claims: StartImplementationClaims,
+    pub task_claims: TaskClaims,
     pub poll_context: crate::github_poller::PollContext,
 }
 
+/// Exclusive per-task operations guarded by [`TaskClaims`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TaskOperation {
+    StartImplementation,
+    DeleteTask,
+}
+
+/// Registry of in-flight exclusive per-task operations. Claiming a
+/// (task, operation) pair fails while a previous claim for the same pair is
+/// alive, so duplicate concurrent starts or deletes cannot run.
 #[derive(Debug, Clone, Default)]
-pub struct StartImplementationClaims {
-    active_task_ids: Arc<Mutex<HashSet<String>>>,
+pub struct TaskClaims {
+    active: Arc<Mutex<HashSet<(String, TaskOperation)>>>,
 }
 
-pub struct StartImplementationClaim {
-    task_id: String,
-    active_task_ids: Arc<Mutex<HashSet<String>>>,
+pub struct TaskClaim {
+    key: (String, TaskOperation),
+    active: Arc<Mutex<HashSet<(String, TaskOperation)>>>,
 }
 
-impl StartImplementationClaims {
+impl TaskClaims {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub(crate) fn try_claim(&self, task_id: &str) -> Option<StartImplementationClaim> {
-        let mut active_task_ids = self.active_task_ids.lock().ok()?;
-        if !active_task_ids.insert(task_id.to_string()) {
+    pub(crate) fn try_claim(&self, task_id: &str, operation: TaskOperation) -> Option<TaskClaim> {
+        let mut active = self.active.lock().ok()?;
+        let key = (task_id.to_string(), operation);
+        if !active.insert(key.clone()) {
             return None;
         }
 
-        Some(StartImplementationClaim {
-            task_id: task_id.to_string(),
-            active_task_ids: Arc::clone(&self.active_task_ids),
+        Some(TaskClaim {
+            key,
+            active: Arc::clone(&self.active),
         })
     }
 }
 
-impl Drop for StartImplementationClaim {
+impl Drop for TaskClaim {
     fn drop(&mut self) {
-        if let Ok(mut active_task_ids) = self.active_task_ids.lock() {
-            active_task_ids.remove(&self.task_id);
+        if let Ok(mut active) = self.active.lock() {
+            active.remove(&self.key);
         }
     }
 }
@@ -333,6 +344,16 @@ pub struct AppReadinessResponse {
 pub struct TasksQuery {
     pub project_id: String,
     pub state: Option<String>,
+    pub include_done: Option<bool>,
+    pub exclude_done: Option<bool>,
+    pub compact: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(untagged)]
+pub enum TaskListRow {
+    Full(db::TaskRow),
+    Compact(db::CompactTaskRow),
 }
 
 /// Payload from Claude Code hooks
@@ -371,6 +392,8 @@ pub struct AgentLifecycleNotificationPayload {
     pub notification: crate::agent_lifecycle::AgentLifecycleNotification,
     #[serde(default)]
     pub transcript_path: Option<String>,
+    #[serde(default)]
+    pub activity_snapshot: Option<String>,
 }
 
 fn emit_task_changed(state: &AppState, action: &str, task_id: &str, project_id: Option<&str>) {
@@ -454,6 +477,7 @@ async fn handle_agent_lifecycle_notification(
     state: AppState,
     notification: crate::agent_lifecycle::AgentLifecycleNotification,
     transcript_path: Option<String>,
+    activity_snapshot: Option<String>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let status_change = record_agent_lifecycle_notification(&state, &notification);
 
@@ -465,12 +489,14 @@ async fn handle_agent_lifecycle_notification(
             let task_id = notification.task_id.clone();
             let provider = notification.provider.clone();
             let transcript_path = transcript_path.map(PathBuf::from);
+            let activity_snapshot = activity_snapshot.clone();
             tokio::spawn(async move {
                 match crate::task_metadata_refresh::refresh_task_display_title_with_ai_once(
                     db,
                     task_id.clone(),
                     provider,
                     transcript_path,
+                    activity_snapshot,
                 )
                 .await
                 {
@@ -503,9 +529,23 @@ async fn handle_agent_lifecycle_notification(
 fn should_start_task_display_title_refresh(
     notification: &crate::agent_lifecycle::AgentLifecycleNotification,
 ) -> bool {
-    notification.provider == "codex"
-        && notification.kind == crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy
-        && notification.raw_event_type.as_deref() == Some("UserPromptSubmit")
+    if notification.kind != crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy {
+        return false;
+    }
+
+    match notification.provider.as_str() {
+        "codex" => notification.raw_event_type.as_deref() == Some("UserPromptSubmit"),
+        "claude-code" => matches!(
+            notification.raw_event_type.as_deref(),
+            Some("pre-tool-use" | "post-tool-use")
+        ),
+        "opencode" => matches!(
+            notification.raw_event_type.as_deref(),
+            Some("session.status" | "session.updated" | "message.updated")
+        ),
+        "pi" => notification.raw_event_type.as_deref() == Some("user_prompt"),
+        _ => false,
+    }
 }
 
 /// Resolve project_id from request parameters, failing if no project can be determined.
@@ -876,7 +916,7 @@ pub async fn get_projects_handler(
 pub async fn get_tasks_handler(
     State(state): State<AppState>,
     Query(query): Query<TasksQuery>,
-) -> Result<Json<Vec<db::TaskRow>>, (StatusCode, String)> {
+) -> Result<Json<Vec<TaskListRow>>, (StatusCode, String)> {
     if let Some(task_state) = query.state.as_deref() {
         if !matches!(task_state, "backlog" | "doing" | "done") {
             return Err((
@@ -886,7 +926,40 @@ pub async fn get_tasks_handler(
         }
     }
 
+    let compact = query.compact.unwrap_or(false);
+    let exclude_done = query.exclude_done.unwrap_or(false) || !query.include_done.unwrap_or(true);
     let db = state.db.lock().unwrap();
+
+    if compact {
+        let tasks = match query.state.as_deref() {
+            Some(task_state) => db
+                .get_compact_tasks_for_project_by_state(&query.project_id, task_state)
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to get compact tasks by state: {e}"),
+                    )
+                })?,
+            None if exclude_done => db
+                .get_compact_tasks_for_project_excluding_state(&query.project_id, "done")
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to get compact tasks excluding done: {e}"),
+                    )
+                })?,
+            None => db
+                .get_compact_tasks_for_project(&query.project_id)
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to get compact tasks: {e}"),
+                    )
+                })?,
+        };
+        return Ok(Json(tasks.into_iter().map(TaskListRow::Compact).collect()));
+    }
+
     let tasks = match query.state.as_deref() {
         Some(task_state) => db
             .get_tasks_for_project_by_state(&query.project_id, task_state)
@@ -894,6 +967,14 @@ pub async fn get_tasks_handler(
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     format!("Failed to get tasks by state: {e}"),
+                )
+            })?,
+        None if exclude_done => db
+            .get_tasks_for_project_excluding_state(&query.project_id, "done")
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to get tasks excluding done: {e}"),
                 )
             })?,
         None => db.get_tasks_for_project(&query.project_id).map_err(|e| {
@@ -904,7 +985,7 @@ pub async fn get_tasks_handler(
         })?,
     };
 
-    Ok(Json(tasks))
+    Ok(Json(tasks.into_iter().map(TaskListRow::Full).collect()))
 }
 
 pub async fn get_project_attention_handler(
@@ -1038,6 +1119,7 @@ pub async fn pi_agent_start_handler(
             raw_status_type: None,
         },
         None,
+        None,
     )
     .await
 }
@@ -1057,6 +1139,7 @@ pub async fn pi_agent_end_handler(
             raw_event_type: Some("agent.end".to_string()),
             raw_status_type: None,
         },
+        None,
         None,
     )
     .await
@@ -1114,14 +1197,20 @@ pub async fn opencode_event_handler(
         raw_status_type: payload.status_type,
     };
 
-    handle_agent_lifecycle_notification(state, notification, None).await
+    handle_agent_lifecycle_notification(state, notification, None, None).await
 }
 
 pub async fn agent_lifecycle_handler(
     State(state): State<AppState>,
     Json(payload): Json<AgentLifecycleNotificationPayload>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    handle_agent_lifecycle_notification(state, payload.notification, payload.transcript_path).await
+    handle_agent_lifecycle_notification(
+        state,
+        payload.notification,
+        payload.transcript_path,
+        payload.activity_snapshot,
+    )
+    .await
 }
 
 pub async fn hook_stop_handler(
@@ -1496,13 +1585,13 @@ async fn start_http_server_with_app_state(
         .and_then(|app| app.try_state::<GitHubClient>())
         .map(|state| state.inner().clone())
         .unwrap_or_else(GitHubClient::new);
-    let start_implementation_claims = StartImplementationClaims::new();
+    let task_claims = TaskClaims::new();
     let poll_context = crate::github_poller::PollContext::new();
-    let plugin_host = Some(PluginHost::with_app_event_sender_and_start_claims(
+    let plugin_host = Some(PluginHost::with_app_event_sender_and_task_claims(
         app.clone()
             .unwrap_or_else(crate::backend_runtime::AppHandle::new),
         Some(app_event_tx.clone()),
-        start_implementation_claims.clone(),
+        task_claims.clone(),
     ));
     let state = AppState {
         app,
@@ -1515,7 +1604,7 @@ async fn start_http_server_with_app_state(
         app_event_bus: Some(app_event_bus),
         whisper,
         sidecar_readiness,
-        start_implementation_claims,
+        task_claims,
         poll_context: poll_context.clone(),
     };
 

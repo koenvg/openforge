@@ -1041,3 +1041,76 @@ async fn opencode_hook_ignores_error_status_events() {
 
     let _ = std::fs::remove_file(path);
 }
+
+#[test]
+fn task_display_title_refresh_starts_for_supported_provider_activity() {
+    let cases = [
+        ("codex", "UserPromptSubmit"),
+        ("claude-code", "pre-tool-use"),
+        ("claude-code", "post-tool-use"),
+        ("opencode", "session.status"),
+        ("opencode", "session.updated"),
+        ("opencode", "message.updated"),
+        ("pi", "user_prompt"),
+    ];
+
+    for (provider, raw_event_type) in cases {
+        let notification = crate::agent_lifecycle::AgentLifecycleNotification {
+            provider: provider.to_string(),
+            task_id: "task-title-refresh".to_string(),
+            pty_instance_id: Some(1),
+            provider_session_id: None,
+            kind: crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy,
+            raw_event_type: Some(raw_event_type.to_string()),
+            raw_status_type: None,
+        };
+
+        assert!(
+            should_start_task_display_title_refresh(&notification),
+            "{provider} {raw_event_type} should start title refresh"
+        );
+    }
+}
+
+#[test]
+fn task_display_title_refresh_ignores_unsupported_provider_activity() {
+    let cases = [
+        (
+            "codex",
+            "TaskComplete",
+            crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy,
+        ),
+        (
+            "opencode",
+            "tool.execute.before",
+            crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy,
+        ),
+        (
+            "pi",
+            "agent.start",
+            crate::agent_lifecycle::AgentLifecycleEventKind::Started,
+        ),
+        (
+            "claude-code",
+            "stop",
+            crate::agent_lifecycle::AgentLifecycleEventKind::Ended,
+        ),
+    ];
+
+    for (provider, raw_event_type, kind) in cases {
+        let notification = crate::agent_lifecycle::AgentLifecycleNotification {
+            provider: provider.to_string(),
+            task_id: "task-title-refresh".to_string(),
+            pty_instance_id: Some(1),
+            provider_session_id: None,
+            kind,
+            raw_event_type: Some(raw_event_type.to_string()),
+            raw_status_type: None,
+        };
+
+        assert!(
+            !should_start_task_display_title_refresh(&notification),
+            "{provider} {raw_event_type} should not start title refresh"
+        );
+    }
+}

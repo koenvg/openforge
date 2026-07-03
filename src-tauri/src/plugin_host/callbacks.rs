@@ -36,6 +36,8 @@ fn openforge_global_command_to_app_invoke(qualified_id: &str) -> Result<&'static
         "roadmapEditIssue" => Ok("roadmap_edit_issue"),
         "roadmapUpdateLabelColor" => Ok("roadmap_update_label_color"),
         "roadmapRefineTicket" => Ok("roadmap_refine_ticket"),
+        "agentGenerate" => Ok("agent_generate"),
+        "abortAgentGenerate" => Ok("abort_agent_generate"),
         _ => Err(format!(
             "unsupported plugin host global command id: {qualified_id}"
         )),
@@ -47,6 +49,10 @@ fn is_files_review_app_command(command: &str) -> bool {
         command,
         "get_agent_review_comments" | "update_agent_review_comment_status"
     )
+}
+
+fn is_agent_generate_app_command(command: &str) -> bool {
+    matches!(command, "agent_generate" | "abort_agent_generate")
 }
 
 fn is_roadmap_app_command(command: &str) -> bool {
@@ -134,6 +140,8 @@ impl PluginHost {
         let state = self.app_state_for_host_callback()?;
         let result = if is_roadmap_app_command(command) {
             crate::app_invoke::handle_roadmap_command(&state, &request).await
+        } else if is_agent_generate_app_command(command) {
+            crate::app_invoke::handle_agent_generate_command(&state, &request).await
         } else if is_files_review_app_command(command) {
             crate::app_invoke::handle_files_review_command(&state, &request).await
         } else {

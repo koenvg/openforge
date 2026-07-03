@@ -1,8 +1,7 @@
 <script lang="ts">
   import type { BoardStatus, Action } from '../../../lib/types'
-  import { tasks, error } from '../../../lib/stores'
-  import { deleteTask } from '../../../lib/ipc'
-  import { confirmCompleteTask } from '../../../lib/completeTask'
+  import { completingTasks, tasks } from '../../../lib/stores'
+  import { confirmCompleteTask, runCompleteTask } from '../../../lib/completeTask'
   import ContextMenu from '../ui/ContextMenu.svelte'
   import ContextMenuItem from '../ui/ContextMenuItem.svelte'
 
@@ -26,6 +25,7 @@
 
   let taskStatus = $derived<BoardStatus | ''>($tasks.find(t => t.id === taskId)?.status ?? '')
   let isLowFireTask = $derived(lowFireTaskIds.has(taskId))
+  let isCompleting = $derived($completingTasks.has(taskId))
 
   function handleStart() {
     onClose()
@@ -58,16 +58,12 @@
 
   async function handleComplete() {
     const id = taskId
-    if (!confirmCompleteTask()) {
+    if (isCompleting || !confirmCompleteTask()) {
       return
     }
     onClose()
-    try {
-      await deleteTask(id)
+    if (await runCompleteTask(id)) {
       onDelete?.(id)
-    } catch (err: unknown) {
-      console.error('Failed to complete task:', err)
-      $error = String(err)
     }
   }
 </script>
@@ -93,5 +89,5 @@
     {/if}
   {/if}
   <div class="border-t border-base-content/10 my-1"></div>
-  <ContextMenuItem label="Complete 🏁" onclick={handleComplete} />
+  <ContextMenuItem label={isCompleting ? 'Completing…' : 'Complete 🏁'} disabled={isCompleting} onclick={handleComplete} />
 </ContextMenu>

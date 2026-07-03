@@ -9,12 +9,12 @@ import {
   setTaskMerging,
 } from './stores'
 import {
-  deleteTask,
   enqueuePullRequest,
   getSessionStatus,
   mergePullRequest,
   startImplementation,
 } from './ipc'
+import { runCompleteTask } from './completeTask'
 import { writePtyWithSubmit } from './ptySubmit'
 import { focusTerminal, isPtyActive } from './terminalPool'
 import { resolveBranchStart } from './branchStart'
@@ -119,8 +119,9 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
   }
 
   async function deleteTaskAndReload(taskId: string): Promise<void> {
-    await deleteTask(taskId)
-    await options.loadTasks()
+    if (await runCompleteTask(taskId)) {
+      await options.loadTasks()
+    }
   }
 
   async function mergeReadyPullRequest(task: Task): Promise<void> {

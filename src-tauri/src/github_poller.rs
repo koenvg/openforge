@@ -141,7 +141,7 @@ impl Default for PollContextSnapshot {
 ///
 /// The frontend updates it via the `set_poll_context` command; the poller loop
 /// reads a snapshot each cycle. Follows the same shared-handle pattern as
-/// `StartImplementationClaims`.
+/// `TaskClaims`.
 #[derive(Clone, Default)]
 pub struct PollContext {
     inner: Arc<Mutex<PollContextSnapshot>>,

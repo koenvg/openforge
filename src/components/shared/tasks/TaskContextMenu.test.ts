@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import TaskContextMenu from './TaskContextMenu.svelte'
 import type { Task, BoardStatus } from '../../../lib/types'
-import { tasks, error } from '../../../lib/stores'
+import { completingTasks, tasks, error } from '../../../lib/stores'
 
 vi.mock('../../../lib/ipc', () => ({
   updateTaskStatus: vi.fn().mockResolvedValue(undefined),
@@ -32,6 +32,7 @@ const makeTask = (id: string, status: BoardStatus): Task => ({
 beforeEach(() => {
   vi.clearAllMocks()
   tasks.set([])
+  completingTasks.set(new Set())
   error.set(null)
 })
 
@@ -206,6 +207,43 @@ describe('TaskContextMenu', () => {
     await fireEvent.click(screen.getByText(/Complete/))
     expect(confirmSpy).toHaveBeenCalled()
     expect(deleteTask).not.toHaveBeenCalled()
+    confirmSpy.mockRestore()
+  })
+
+  it('shows a disabled Completing state while the task is being completed', async () => {
+    const { deleteTask } = await import('../../../lib/ipc')
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    tasks.set([makeTask('T-1', 'doing')])
+    completingTasks.set(new Set(['T-1']))
+    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
+
+    const item = screen.getByText(/Completing/).closest('button') as HTMLButtonElement
+    expect(item.disabled).toBe(true)
+
+    await fireEvent.click(item)
+    expect(confirmSpy).not.toHaveBeenCalled()
+    expect(deleteTask).not.toHaveBeenCalled()
+    confirmSpy.mockRestore()
+  })
+
+  it('does not start a second delete while the first is still pending', async () => {
+    const { deleteTask } = await import('../../../lib/ipc')
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    let resolveDelete!: () => void
+    vi.mocked(deleteTask).mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveDelete = resolve
+      })
+    )
+    tasks.set([makeTask('T-1', 'doing')])
+    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
+
+    await fireEvent.click(screen.getByRole('menuitem', { name: /Complet/ }))
+    await fireEvent.click(screen.getByRole('menuitem', { name: /Complet/ }))
+
+    expect(deleteTask).toHaveBeenCalledTimes(1)
+    expect(confirmSpy).toHaveBeenCalledTimes(1)
+    resolveDelete()
     confirmSpy.mockRestore()
   })
 

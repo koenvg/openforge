@@ -198,8 +198,18 @@ impl PluginHost {
                     }
                 }
                 Ok(crate::plugin_rpc::ParsedMessage::Request(request)) => {
-                    self.handle_sidecar_host_callback(request, session_id, process_token)
-                        .await;
+                    // Service host callbacks concurrently. If we awaited each one
+                    // inline, a slow callback (a GitHub diff fetch, or a long
+                    // agent generation) would head-of-line block this single
+                    // reader loop and starve every other in-flight plugin RPC —
+                    // including method responses — until they hit the 30s timeout.
+                    // Each callback is an independent JSON-RPC request matched by
+                    // id, so out-of-order completion is safe.
+                    let host = self.clone();
+                    tokio::spawn(async move {
+                        host.handle_sidecar_host_callback(request, session_id, process_token)
+                            .await;
+                    });
                 }
                 Err(error) => {
                     warn!("[plugin_host] failed to parse sidecar message: {}", error.0);

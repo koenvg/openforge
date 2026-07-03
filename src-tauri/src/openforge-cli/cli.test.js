@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { execFile } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -7,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 
 const execFileAsync = promisify(execFile);
 const CLI_PATH = resolve(process.cwd(), 'src-tauri/src/openforge-cli/cli.js');
+const SKILL_PATH = resolve(process.cwd(), 'src-tauri/src/openforge-cli/openforge-skill.md');
 const CLI_TEST_LOCAL_STORAGE_FILE = join(tmpdir(), `openforge-cli-vitest-${process.pid}.localstorage`);
 
 function normalizeNodeOptionsForCliBridgeTests(nodeOptions) {
@@ -94,13 +96,59 @@ function close(server) {
   });
 }
 
+const COMPACT_TASK_KEYS = ['depends_on', 'id', 'labels', 'prompt_preview', 'status', 'updated_at'];
+const VERBOSE_TASK_KEYS = [
+  'initial_prompt',
+  'prompt',
+  'summary',
+  'worktree',
+  'branch',
+  'project_id',
+  'created_at',
+];
+
+function expectCompactTaskRow(row, expected) {
+  expect(Object.keys(row).sort()).toEqual([...COMPACT_TASK_KEYS].sort());
+  expect(row).toMatchObject(expected);
+  expect(row.prompt_preview.length).toBeLessThanOrEqual(120);
+  for (const key of VERBOSE_TASK_KEYS) {
+    expect(row).not.toHaveProperty(key);
+  }
+}
+
 describe('OpenForge CLI', () => {
+  it('keeps the auto-installed task-management skill concise while covering safe commands', async () => {
+    const skill = await readFile(SKILL_PATH, 'utf8');
+
+    for (const command of [
+      'openforge create-task',
+      'openforge update-task',
+      'openforge delete-task',
+      'openforge get-task',
+      'openforge list-tasks',
+      'openforge list-task-labels',
+      'openforge add-task-label',
+      'openforge remove-task-label',
+    ]) {
+      expect(skill).toContain(command);
+    }
+    expect(skill).toContain('openforge create-task --help');
+    expect(skill).toContain('openforge update-task --help');
+    expect(skill.match(/openforge get-task/g)).toHaveLength(1);
+    expect(skill.match(/openforge list-task-labels/g)).toHaveLength(1);
+    expect(skill).not.toContain('reverse dependents');
+    expect(skill).not.toContain('repoint each dependent');
+    expect(skill).not.toContain('Correct task prompt');
+  });
+
   it('prints launcher-based help without the MCP command', async () => {
     const { stdout } = await runCli(['--help']);
 
     expect(stdout).toContain('Usage:\n  openforge create-task');
     expect(stdout).toContain('openforge delete-task --task-id <id>');
     expect(stdout).toContain('openforge list-projects');
+    expect(stdout).toContain('list-tasks prints compact rows by default');
+    expect(stdout).toContain('Pass --full to print complete TaskRow objects');
     expect(stdout).toContain('list-tasks excludes done tasks unless --state done is passed');
     expect(stdout).not.toContain('node cli.js');
     expect(stdout).not.toContain('openforge mcp');
@@ -434,14 +482,29 @@ describe('OpenForge CLI', () => {
     }
   });
 
-  it('excludes done tasks from list-tasks output by default', async () => {
+  it('requests compact non-done task rows from list-tasks by default', async () => {
     const tasks = [
-      { id: 'T-1', project_id: 'P-1', status: 'backlog', initial_prompt: 'Open task' },
-      { id: 'T-2', project_id: 'P-1', status: 'doing', initial_prompt: 'Active task' },
-      { id: 'T-3', project_id: 'P-1', status: 'done', initial_prompt: 'Done task' },
+      {
+        id: 'T-1',
+        prompt_preview: 'Open task',
+        status: 'backlog',
+        labels: [{ id: 1, name: 'cleanup' }],
+        depends_on: ['T-0'],
+        updated_at: 200,
+      },
+      {
+        id: 'T-2',
+        prompt_preview: 'Active task',
+        status: 'doing',
+        labels: [],
+        depends_on: [],
+        updated_at: 201,
+      },
     ];
+    let seenUrl = null;
     const server = createServer((req, res) => {
-      if (!req.url?.startsWith('/tasks?')) {
+      seenUrl = req.url;
+      if (req.url !== '/tasks?project_id=P-1&exclude_done=true&compact=true') {
         res.writeHead(404, { 'content-type': 'text/plain' });
         res.end('not found');
         return;
@@ -453,19 +516,108 @@ describe('OpenForge CLI', () => {
 
     try {
       const { stdout } = await runCli(['list-tasks', '--project-id', 'P-1'], { OPENFORGE_HTTP_PORT: String(port) });
+      const listedTasks = JSON.parse(stdout);
 
-      expect(JSON.parse(stdout)).toEqual([
-        { id: 'T-1', project_id: 'P-1', status: 'backlog', initial_prompt: 'Open task' },
-        { id: 'T-2', project_id: 'P-1', status: 'doing', initial_prompt: 'Active task' },
-      ]);
+      expect(seenUrl).toBe('/tasks?project_id=P-1&exclude_done=true&compact=true');
+      expect(listedTasks).toEqual(tasks);
+      for (const task of listedTasks) expectCompactTaskRow(task, task);
     } finally {
       await close(server);
     }
   });
 
-  it('keeps explicit done-task access through list-tasks --state done', async () => {
+  it('keeps full TaskRow access behind list-tasks --full while still excluding done tasks by default', async () => {
+    const tasks = [
+      {
+        id: 'T-1',
+        project_id: 'P-1',
+        status: 'backlog',
+        initial_prompt: 'Open task',
+        prompt: 'Open task\nwith details',
+        summary: '## Current summary\nDetailed handoff notes',
+        worktree: '/tmp/openforge/T-1',
+        branch: 'task/T-1',
+        labels: [{ id: 1, name: 'cleanup' }],
+        depends_on: ['T-0'],
+        updated_at: 200,
+      },
+    ];
+    let seenUrl = null;
+    const server = createServer((req, res) => {
+      seenUrl = req.url;
+      if (req.url !== '/tasks?project_id=P-1&exclude_done=true') {
+        res.writeHead(404, { 'content-type': 'text/plain' });
+        res.end('not found');
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(tasks));
+    });
+    const port = await listen(server);
+
+    try {
+      const { stdout } = await runCli(['list-tasks', '--project-id', 'P-1', '--full'], {
+        OPENFORGE_HTTP_PORT: String(port),
+      });
+
+      expect(seenUrl).toBe('/tasks?project_id=P-1&exclude_done=true');
+      expect(JSON.parse(stdout)).toEqual(tasks);
+    } finally {
+      await close(server);
+    }
+  });
+
+  it('keeps explicit done-task access through compact list-tasks --state done', async () => {
     const doneTasks = [
-      { id: 'T-3', project_id: 'P-1', status: 'done', initial_prompt: 'Done task' },
+      {
+        id: 'T-3',
+        prompt_preview: 'Done task',
+        status: 'done',
+        labels: [{ id: 3, name: 'done-label' }],
+        depends_on: ['T-1'],
+        updated_at: 203,
+      },
+    ];
+    let seenUrl = null;
+    const server = createServer((req, res) => {
+      seenUrl = req.url;
+      if (req.url !== '/tasks?project_id=P-1&state=done&compact=true') {
+        res.writeHead(404, { 'content-type': 'text/plain' });
+        res.end('not found');
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(doneTasks));
+    });
+    const port = await listen(server);
+
+    try {
+      const { stdout } = await runCli(['list-tasks', '--project-id', 'P-1', '--state', 'done'], { OPENFORGE_HTTP_PORT: String(port) });
+      const listedTasks = JSON.parse(stdout);
+
+      expect(seenUrl).toBe('/tasks?project_id=P-1&state=done&compact=true');
+      expect(listedTasks).toHaveLength(1);
+      expectCompactTaskRow(listedTasks[0], doneTasks[0]);
+    } finally {
+      await close(server);
+    }
+  });
+
+  it('keeps explicit done-task full-row access through list-tasks --state done --full', async () => {
+    const doneTasks = [
+      {
+        id: 'T-3',
+        project_id: 'P-1',
+        status: 'done',
+        initial_prompt: 'Done task',
+        prompt: 'Done task full prompt',
+        summary: 'Done handoff notes',
+        worktree: '/tmp/openforge/T-3',
+        branch: 'task/T-3',
+        labels: [{ id: 3, name: 'done-label' }],
+        depends_on: ['T-1'],
+        updated_at: 203,
+      },
     ];
     let seenUrl = null;
     const server = createServer((req, res) => {
@@ -481,7 +633,9 @@ describe('OpenForge CLI', () => {
     const port = await listen(server);
 
     try {
-      const { stdout } = await runCli(['list-tasks', '--project-id', 'P-1', '--state', 'done'], { OPENFORGE_HTTP_PORT: String(port) });
+      const { stdout } = await runCli(['list-tasks', '--project-id', 'P-1', '--state', 'done', '--full'], {
+        OPENFORGE_HTTP_PORT: String(port),
+      });
 
       expect(seenUrl).toBe('/tasks?project_id=P-1&state=done');
       expect(JSON.parse(stdout)).toEqual(doneTasks);
@@ -490,14 +644,21 @@ describe('OpenForge CLI', () => {
     }
   });
 
-  it.each(['backlog', 'doing'])('keeps explicit %s list-tasks filtering unchanged', async (state) => {
+  it.each(['backlog', 'doing'])('keeps explicit %s list-tasks filtering compact and unchanged', async (state) => {
     const tasks = [
-      { id: `T-${state}`, project_id: 'P-1', status: state, initial_prompt: `${state} task` },
+      {
+        id: `T-${state}`,
+        prompt_preview: `${state} task`,
+        status: state,
+        labels: [{ id: 1, name: state }],
+        depends_on: ['T-parent'],
+        updated_at: 300,
+      },
     ];
     let seenUrl = null;
     const server = createServer((req, res) => {
       seenUrl = req.url;
-      if (req.url !== `/tasks?project_id=P-1&state=${state}`) {
+      if (req.url !== `/tasks?project_id=P-1&state=${state}&compact=true`) {
         res.writeHead(404, { 'content-type': 'text/plain' });
         res.end('not found');
         return;
@@ -509,9 +670,11 @@ describe('OpenForge CLI', () => {
 
     try {
       const { stdout } = await runCli(['list-tasks', '--project-id', 'P-1', '--state', state], { OPENFORGE_HTTP_PORT: String(port) });
+      const listedTasks = JSON.parse(stdout);
 
-      expect(seenUrl).toBe(`/tasks?project_id=P-1&state=${state}`);
-      expect(JSON.parse(stdout)).toEqual(tasks);
+      expect(seenUrl).toBe(`/tasks?project_id=P-1&state=${state}&compact=true`);
+      expect(listedTasks).toHaveLength(1);
+      expectCompactTaskRow(listedTasks[0], tasks[0]);
     } finally {
       await close(server);
     }

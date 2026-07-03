@@ -24,7 +24,18 @@ pub(super) async fn handle_app_core_task_project_command(
         }
         "delete_task" => {
             let id = payload_string(&request.payload, "id")?;
-            cleanup_task_runtime_for_app(state, &id, true).await?;
+            // Held until the background cleanup finishes so a second Complete
+            // cannot start a duplicate delete while cleanup is in flight.
+            let delete_claim = state
+                .task_claims
+                .try_claim(&id, TaskOperation::DeleteTask)
+                .ok_or_else(|| {
+                    (
+                        StatusCode::CONFLICT,
+                        "Task already has a delete in progress".to_string(),
+                    )
+                })?;
+            let cleanup = prepare_task_runtime_cleanup(state, &id, true).await?;
             {
                 let db = crate::db::acquire_db(&state.db);
                 db.delete_task(&id).map_err(|e| {
@@ -38,6 +49,14 @@ pub(super) async fn handle_app_core_task_project_command(
                 state,
                 serde_json::json!({ "action": "deleted", "task_id": id }),
             );
+            // The board is already updated; the slow worktree/branch cleanup
+            // (repo lock, git subprocesses, rm -rf) must not delay the response.
+            if let Some(cleanup) = cleanup {
+                tokio::spawn(async move {
+                    let _delete_claim = delete_claim;
+                    run_task_runtime_cleanup(&id, cleanup).await;
+                });
+            }
             serde_json::Value::Null
         }
         "list_git_branches" => {

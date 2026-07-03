@@ -16,6 +16,8 @@
   import ProjectPageHeader from '../../project/ProjectPageHeader.svelte'
   import ReviewSubmitPanel from '@openforge/pr-review-ui/ReviewSubmitPanel.svelte'
   import PrOverviewTab from '@openforge/pr-review-ui/PrOverviewTab.svelte'
+  import WalkthroughTab from './WalkthroughTab.svelte'
+  import { isPrLargeEnoughForWalkthroughHint } from '../../lib/walkthroughViewState'
   import type { ReviewPullRequest, AuthoredPullRequest, PrFileDiff, PrOverviewComment, ReviewComment, ReviewSubmissionComment } from '@openforge/plugin-sdk/domain'
   import { createGithubSyncPrReviewClient } from './githubSyncClient'
   import {
@@ -28,7 +30,7 @@
   } from './reviewedFilesState'
   import { isImageFileDiff, type FileContents } from '@openforge/pr-review-ui/diffAdapter'
 
-  type PrDetailTab = 'overview' | 'files'
+  type PrDetailTab = 'overview' | 'files' | 'walkthrough'
 
   interface Props {
     api: FrontendOpenForgeAPI
@@ -222,6 +224,11 @@
       if (e.key === '2') {
         e.preventDefault()
         activeTab = 'files'
+        return
+      }
+      if (e.key === '3') {
+        e.preventDefault()
+        activeTab = 'walkthrough'
         return
       }
       return
@@ -748,6 +755,16 @@
               class="btn btn-ghost btn-xs {activeTab === 'files' ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
               onclick={() => { activeTab = 'files' }}
             >Files changed <span class="badge badge-xs ml-1">{$prFileDiffs.length}</span></button>
+            <button
+              class="btn btn-ghost btn-xs {activeTab === 'walkthrough' ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
+              onclick={() => { activeTab = 'walkthrough' }}
+              title={isPrLargeEnoughForWalkthroughHint($selectedReviewPr, $prFileDiffs) ? 'This PR is large — a walkthrough may help.' : 'AI walkthrough'}
+            >
+              Walkthrough
+              {#if isPrLargeEnoughForWalkthroughHint($selectedReviewPr, $prFileDiffs)}
+                <span class="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-warning"></span>
+              {/if}
+            </button>
           </div>
         </div>
       </div>
@@ -759,6 +776,14 @@
           onCommentsChange={(comments) => { $prOverviewComments = comments }}
           loadComments={loadOverviewComments}
           onOpenUrl={(url) => api.system.openUrl(url)}
+        />
+      {:else if activeTab === 'walkthrough'}
+        <WalkthroughTab
+          {api}
+          {githubSync}
+          pr={$selectedReviewPr}
+          files={$prFileDiffs}
+          fetchFileContents={fetchPrFileContents}
         />
       {:else}
         <div class="flex flex-1 min-h-0 overflow-hidden">

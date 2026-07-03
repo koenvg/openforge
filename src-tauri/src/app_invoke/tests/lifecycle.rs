@@ -685,6 +685,11 @@ async fn start_implementation_uses_persisted_existing_worktree_branch() {
     drop(db);
 
     invoke_ok(&state, "delete_task", json!({ "id": task_id })).await;
+    let workspace_dir = std::path::PathBuf::from(workspace_path);
+    wait_for_background_cleanup("existing-branch worktree must be removed", || {
+        !workspace_dir.exists()
+    })
+    .await;
     assert!(
         git(
             &repo_dir,
@@ -824,13 +829,19 @@ async fn start_implementation_blocks_in_progress_start_claim() {
             .id
     };
     let _claim = state
-        .start_implementation_claims
-        .try_claim(&task_id)
+        .task_claims
+        .try_claim(
+            &task_id,
+            crate::http_server::TaskOperation::StartImplementation,
+        )
         .expect("first start claim should be acquired");
     let cloned_state = state.clone();
     assert!(cloned_state
-        .start_implementation_claims
-        .try_claim(&task_id)
+        .task_claims
+        .try_claim(
+            &task_id,
+            crate::http_server::TaskOperation::StartImplementation,
+        )
         .is_none());
 
     let err = invoke(
@@ -1352,6 +1363,19 @@ async fn update_task_status_to_done_does_not_clean_up_worktree() {
     let _ = std::fs::remove_file(db_path);
 }
 
+/// Polls until `condition` holds, panicking after a generous deadline. Used to
+/// observe the background worktree cleanup that delete_task no longer awaits.
+async fn wait_for_background_cleanup(description: &str, mut condition: impl FnMut() -> bool) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    while !condition() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "timed out waiting for background cleanup: {description}"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+}
+
 #[tokio::test]
 async fn delete_task_deletes_owned_branch_when_safe() {
     let temp = tempfile::tempdir().expect("tempdir should be created");
@@ -1362,10 +1386,100 @@ async fn delete_task_deletes_owned_branch_when_safe() {
 
     invoke_ok(&state, "delete_task", json!({ "id": task_id })).await;
 
+    wait_for_background_cleanup(
+        "safe owned branch must be deleted after a task is completed",
+        || !branch_exists_lifecycle(&repo_dir, &branch),
+    )
+    .await;
+
+    let _ = std::fs::remove_file(db_path);
+}
+
+#[tokio::test]
+async fn delete_task_publishes_deleted_event_before_worktree_cleanup_finishes() {
+    let temp = tempfile::tempdir().expect("tempdir should be created");
+    let repo_dir = temp.path().join("repo");
+    let worktree_dir = temp.path().join("wt");
+    let (state, db_path) = test_state("app_invoke_delete_event_before_cleanup");
+    let (task_id, branch) = setup_owned_worktree_task(&state, &repo_dir, &worktree_dir, true).await;
+    let mut events = state
+        .app_event_tx
+        .as_ref()
+        .expect("app event sender")
+        .subscribe();
+
+    // Hold the per-repo worktree lock so the worktree/branch cleanup cannot run
+    // yet. delete_task must still return, delete the row, and publish the
+    // deleted event: cleanup is background work.
+    let repo_lock = crate::git_worktree::acquire_lock(&repo_dir);
+    let cleanup_gate = repo_lock.lock().await;
+
+    tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        invoke_ok(&state, "delete_task", json!({ "id": task_id })),
+    )
+    .await
+    .expect("delete_task must return while worktree cleanup is still pending");
+
     assert!(
-        !branch_exists_lifecycle(&repo_dir, &branch),
-        "deleting an OpenForge task must clean up its safe owned branch"
+        crate::db::acquire_db(&state.db)
+            .get_task(&task_id)
+            .expect("get task")
+            .is_none(),
+        "the task row must be deleted before worktree cleanup runs"
     );
+    let envelope = events
+        .try_recv()
+        .expect("task-changed{deleted} must be published before cleanup finishes");
+    assert_eq!(envelope.event_name, "task-changed");
+    assert_eq!(envelope.payload["action"], "deleted");
+    assert_eq!(envelope.payload["task_id"], task_id.as_str());
+    assert!(
+        worktree_dir.exists(),
+        "worktree removal must happen in the background, after the deleted event"
+    );
+    assert!(
+        branch_exists_lifecycle(&repo_dir, &branch),
+        "branch cleanup must happen in the background, after the deleted event"
+    );
+
+    drop(cleanup_gate);
+    wait_for_background_cleanup("worktree directory and branch must be removed", || {
+        !worktree_dir.exists() && !branch_exists_lifecycle(&repo_dir, &branch)
+    })
+    .await;
+
+    let _ = std::fs::remove_file(db_path);
+}
+
+#[tokio::test]
+async fn delete_task_rejects_duplicate_delete_while_cleanup_in_flight() {
+    let temp = tempfile::tempdir().expect("tempdir should be created");
+    let repo_dir = temp.path().join("repo");
+    let worktree_dir = temp.path().join("wt");
+    let (state, db_path) = test_state("app_invoke_delete_duplicate_guard");
+    let (task_id, branch) = setup_owned_worktree_task(&state, &repo_dir, &worktree_dir, true).await;
+
+    let repo_lock = crate::git_worktree::acquire_lock(&repo_dir);
+    let cleanup_gate = repo_lock.lock().await;
+
+    tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        invoke_ok(&state, "delete_task", json!({ "id": task_id })),
+    )
+    .await
+    .expect("delete_task must return while worktree cleanup is still pending");
+
+    let err = invoke(&state, "delete_task", json!({ "id": task_id }))
+        .await
+        .expect_err("a second Complete while cleanup is in flight must be rejected");
+    assert_eq!(err.0, StatusCode::CONFLICT);
+
+    drop(cleanup_gate);
+    wait_for_background_cleanup("cleanup must finish after the gate is released", || {
+        !worktree_dir.exists() && !branch_exists_lifecycle(&repo_dir, &branch)
+    })
+    .await;
 
     let _ = std::fs::remove_file(db_path);
 }

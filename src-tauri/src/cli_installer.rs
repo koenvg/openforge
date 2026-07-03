@@ -385,10 +385,25 @@ mod tests {
         assert!(!cli_content.contains("'mcp'"));
 
         let skill_content = std::fs::read_to_string(&skill_md).unwrap();
+        assert!(skill_content.contains("openforge create-task"));
         assert!(skill_content.contains("openforge update-task"));
+        assert!(skill_content.contains("openforge get-task"));
+        assert!(skill_content.contains("openforge list-tasks"));
         assert!(skill_content.contains("openforge add-task-label"));
+        assert!(skill_content.contains("openforge remove-task-label"));
+        assert!(skill_content.contains("openforge delete-task"));
         assert!(skill_content.contains("Task summaries are Markdown-formatted"));
         assert!(skill_content.contains("$HOME/.openforge/bin/openforge"));
+        assert!(skill_content.contains("openforge create-task --help"));
+        assert!(skill_content.contains("openforge update-task --help"));
+        assert_eq!(skill_content.matches("openforge get-task").count(), 1);
+        assert_eq!(
+            skill_content.matches("openforge list-task-labels").count(),
+            1
+        );
+        assert!(!skill_content.contains("reverse dependents"));
+        assert!(!skill_content.contains("repoint each dependent"));
+        assert!(!skill_content.contains("Correct task prompt"));
         assert!(!skill_content.contains("cli.js"));
         assert!(!skill_content.contains("exec node"));
         let obsolete_segment = ["mcp", "server"].join("-");
@@ -471,11 +486,23 @@ mod tests {
             let content = std::fs::read_to_string(&expected_path).unwrap();
             assert!(content.contains("name: openforge"));
             assert!(content.contains("OPENFORGE_HTTP_PORT"));
+            assert!(content.contains("openforge create-task"));
+            assert!(content.contains("openforge update-task"));
+            assert!(content.contains("openforge delete-task"));
             assert!(content.contains("openforge get-task"));
+            assert!(content.contains("openforge list-tasks"));
             assert!(content.contains("openforge list-task-labels"));
+            assert!(content.contains("openforge add-task-label"));
+            assert!(content.contains("openforge remove-task-label"));
             assert!(content.contains("Use labels to record task categories"));
             assert!(content.contains("Task summaries are Markdown-formatted"));
             assert!(content.contains("$HOME/.openforge/bin/openforge"));
+            assert!(content.contains("openforge create-task --help"));
+            assert!(content.contains("openforge update-task --help"));
+            assert_eq!(content.matches("openforge get-task").count(), 1);
+            assert_eq!(content.matches("openforge list-task-labels").count(), 1);
+            assert!(!content.contains("reverse dependents"));
+            assert!(!content.contains("repoint each dependent"));
             assert!(!content.contains("openforge/cli/cli.js"));
             assert!(!content.contains("node \""));
             let obsolete_segment = ["mcp", "server"].join("-");

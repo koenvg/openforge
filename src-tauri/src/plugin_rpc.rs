@@ -123,9 +123,15 @@ pub fn parse_message(raw: &str) -> Result<ParsedMessage, RpcError> {
         }));
     }
 
-    Err(RpcError(format!(
-        "invalid JSON-RPC message {message_id}: missing method, result, or error"
-    )))
+    // A message with an id but no method, result, or error is a successful
+    // response whose `result` was `null`/`undefined`. JSON.stringify on the Node
+    // side drops an `undefined` result entirely (e.g. a void backend method), so
+    // treat the missing field as a null result rather than a malformed message —
+    // otherwise the caller would wait out the full timeout.
+    Ok(ParsedMessage::Response(ParsedResponse {
+        id: message_id,
+        result: RpcResult::Success(Value::Null),
+    }))
 }
 
 #[cfg(test)]

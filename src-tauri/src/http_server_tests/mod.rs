@@ -29,7 +29,7 @@ fn test_state(name: &str) -> (AppState, std::path::PathBuf) {
                 WhisperModelSize::Small,
             ))),
             sidecar_readiness: SidecarReadinessState::new(),
-            start_implementation_claims: StartImplementationClaims::new(),
+            task_claims: TaskClaims::new(),
             poll_context: crate::github_poller::PollContext::new(),
         },
         path,
