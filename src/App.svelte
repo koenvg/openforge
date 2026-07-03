@@ -289,8 +289,9 @@
   async function handleProjectCreated(project: Project) {
     showProjectSetup = false
     $activeProjectId = project.id
-    router.resetToBoard()
     await appData.loadProjects()
+    // Land the user on the new project's settings page to finish configuring it.
+    router.navigate('settings')
   }
 
   function handleNavigate(view: AppView) {
