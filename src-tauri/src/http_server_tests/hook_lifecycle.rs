@@ -1051,6 +1051,7 @@ fn task_display_title_refresh_starts_for_supported_provider_activity() {
         ("opencode", "session.status"),
         ("opencode", "session.updated"),
         ("opencode", "message.updated"),
+        ("pi", "user_prompt"),
     ];
 
     for (provider, raw_event_type) in cases {
