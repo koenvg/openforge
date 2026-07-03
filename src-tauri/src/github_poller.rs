@@ -1242,6 +1242,38 @@ fn poll_result_ci_validation_sha(
         .unwrap_or_else(|| fallback_pr_head_sha.to_string())
 }
 
+fn current_graphql_readiness_snapshot<'a>(
+    graphql_snapshot: Option<&'a GitHubReadinessSnapshot>,
+    result_head_sha: &str,
+) -> Option<&'a GitHubReadinessSnapshot> {
+    graphql_snapshot.filter(|snapshot| {
+        snapshot
+            .source_head_sha
+            .as_deref()
+            .is_some_and(|source| source == result_head_sha)
+    })
+}
+
+fn current_graphql_review_status(
+    graphql_snapshot: Option<&GitHubReadinessSnapshot>,
+    result_head_sha: &str,
+    graphql_inputs: Option<&MergeReadinessInputs>,
+) -> Option<String> {
+    current_graphql_readiness_snapshot(graphql_snapshot, result_head_sha)
+        .and_then(|snapshot| snapshot.review_status.clone())
+        .or_else(|| graphql_inputs.and_then(|inputs| inputs.review_status.clone()))
+}
+
+fn current_graphql_mergeable_state<'a>(
+    graphql_snapshot: Option<&'a GitHubReadinessSnapshot>,
+    result_head_sha: &str,
+    graphql_inputs: Option<&'a MergeReadinessInputs>,
+) -> Option<&'a str> {
+    current_graphql_readiness_snapshot(graphql_snapshot, result_head_sha)
+        .and_then(|snapshot| snapshot.mergeable_state.as_deref())
+        .or_else(|| graphql_inputs.and_then(|inputs| inputs.mergeable_state.as_deref()))
+}
+
 fn has_requested_reviewers_from_details(details: &crate::github_client::PullRequest) -> bool {
     details
         .extra
@@ -1440,17 +1472,26 @@ async fn poll_single_pr(
         &branch_policy_inputs.required_check_names,
         old_ci_status.as_ref(),
     );
-    let readiness_review_status = review_status_for_readiness(
+    let readiness_review_status = current_graphql_review_status(
+        graphql_snapshot.as_ref(),
+        &result_head_sha,
         graphql_inputs.as_ref(),
-        rest_sources.reviews.as_ref(),
-        rest_sources.has_requested_reviewers,
-        branch_policy_inputs.required_approving_count,
-        old_review_status.as_ref(),
-    );
-    let readiness_mergeable_state = graphql_inputs
-        .as_ref()
-        .and_then(|inputs| inputs.mergeable_state.as_deref())
-        .or(rest_sources.mergeable_state.as_deref());
+    )
+    .or_else(|| {
+        review_status_for_readiness(
+            None,
+            rest_sources.reviews.as_ref(),
+            rest_sources.has_requested_reviewers,
+            branch_policy_inputs.required_approving_count,
+            old_review_status.as_ref(),
+        )
+    });
+    let readiness_mergeable_state = current_graphql_mergeable_state(
+        graphql_snapshot.as_ref(),
+        &result_head_sha,
+        graphql_inputs.as_ref(),
+    )
+    .or(rest_sources.mergeable_state.as_deref());
     let readiness_is_queued = graphql_snapshot
         .as_ref()
         .and_then(|snapshot| snapshot.merge_queue_state.as_ref())
@@ -3057,6 +3098,53 @@ mod tests {
         assert!(inputs.merge_queue_required_by_policy);
     }
 
+    #[test]
+    fn current_graphql_readiness_keeps_mergeability_when_check_rollup_needs_rest_fallback() {
+        let pr = make_github_readiness_pr();
+        let mut snapshot = readiness_snapshot_with_policy(
+            Some("pr-head-sha"),
+            Some("stale-rollup-sha"),
+            known_readiness_policy(vec![], Some(0), Some(false), Some(false), Some(false)),
+        );
+        snapshot.mergeable_state = Some("clean".to_string());
+        snapshot.review_status = Some("approved".to_string());
+        let rest_sources = RestReadinessSources {
+            rest_ci_sha: "pr-head-sha".to_string(),
+            check_runs: None,
+            combined_status: None,
+            reviews: None,
+            pr_details_result: Err(crate::github_client::GitHubError::NetworkError(
+                "unused".to_string(),
+            )),
+            has_requested_reviewers: false,
+            mergeable: None,
+            mergeable_state: Some("unknown".to_string()),
+            is_queued: false,
+        };
+
+        let graphql_inputs = select_snapshot_readiness_inputs(&pr, Some(&snapshot));
+        let result_head_sha = poll_result_pr_head_sha(&pr, Some(&snapshot), &rest_sources);
+
+        assert!(graphql_inputs.is_none());
+        assert_eq!(result_head_sha, "pr-head-sha");
+        assert_eq!(
+            current_graphql_mergeable_state(
+                Some(&snapshot),
+                &result_head_sha,
+                graphql_inputs.as_ref()
+            ),
+            Some("clean")
+        );
+        assert_eq!(
+            current_graphql_review_status(
+                Some(&snapshot),
+                &result_head_sha,
+                graphql_inputs.as_ref()
+            )
+            .as_deref(),
+            Some("approved")
+        );
+    }
     #[test]
     fn select_branch_policy_inputs_uses_rest_when_graphql_policy_is_unknown() {
         let snapshot = readiness_snapshot_with_policy(
