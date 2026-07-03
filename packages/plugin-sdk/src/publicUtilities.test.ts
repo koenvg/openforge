@@ -106,6 +106,53 @@ describe('public plugin utilities', () => {
     })
   })
 
+  it('ignores persisted unresolved-conversations readiness after local comments are addressed', () => {
+    const result = getMergeReadiness(makePullRequest({
+      head_sha: 'abc123',
+      updated_at: 1,
+      mergeable_state: 'clean',
+      unaddressed_comment_count: 0,
+      merge_readiness_status: 'blocked',
+      merge_readiness_action: 'resolve_blockers',
+      merge_readiness_blockers: '[{"code":"unresolved_conversations","message":"Pull request has unresolved conversations."}]',
+      merge_readiness_warnings: '[]',
+      readiness_source_head_sha: 'abc123',
+      readiness_updated_at: 2,
+    }))
+
+    expect(result).toMatchObject({
+      status: 'ready_to_merge',
+      action: 'merge',
+      blockers: [],
+      warnings: [],
+    })
+  })
+
+  it('preserves other persisted blockers when locally addressed comments clear stale conversation blockers', () => {
+    const result = getMergeReadiness(makePullRequest({
+      head_sha: 'abc123',
+      updated_at: 1,
+      mergeable_state: 'clean',
+      unaddressed_comment_count: 0,
+      merge_readiness_status: 'blocked',
+      merge_readiness_action: 'resolve_blockers',
+      merge_readiness_blockers: '[{"code":"unresolved_conversations","message":"Pull request has unresolved conversations."},{"code":"checks_failed","message":"Required checks are failing."}]',
+      merge_readiness_warnings: '[]',
+      readiness_source_head_sha: 'abc123',
+      readiness_updated_at: 2,
+    }))
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      action: 'resolve_blockers',
+      blockers: [expect.objectContaining({ code: 'checks_failed' })],
+      warnings: [],
+    })
+    expect(result.blockers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'unresolved_conversations' }),
+    ]))
+  })
+
   it('preserves optimistic and definitive pull request state across transient syncs', () => {
     const oldPr = makePullRequest({ state: 'merged', mergeable: true, mergeable_state: 'clean', merged_at: 123 })
     const nextPr = makePullRequest({ state: 'open', mergeable: null, mergeable_state: 'unknown', merged_at: null })

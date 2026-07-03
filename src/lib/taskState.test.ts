@@ -513,6 +513,27 @@ describe('computeTaskState - unaddressed-comments (PART 5)', () => {
     const state = computeTaskState(task, session, prs)
     expect(state).toBe('pr-open')
   })
+
+  it('test 8: resolved local comments clear stale persisted unresolved-conversations readiness', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({
+      state: 'open',
+      head_sha: 'abc123',
+      updated_at: 2000,
+      unaddressed_comment_count: 0,
+      mergeable_state: 'clean',
+      merge_readiness_status: 'blocked',
+      merge_readiness_action: 'resolve_blockers',
+      merge_readiness_blockers: '[{"code":"unresolved_conversations","message":"Pull request has unresolved conversations."}]',
+      merge_readiness_warnings: '[]',
+      readiness_source_head_sha: 'abc123',
+      readiness_updated_at: 3000,
+    })]
+
+    const state = computeTaskState(task, session, prs)
+    expect(state).toBe('ready-to-merge')
+  })
 })
 
 // ============================================================================
