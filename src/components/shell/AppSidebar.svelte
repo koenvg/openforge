@@ -1,13 +1,12 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
-  import { projects, activeProjectId, projectAttention, reviewRequestCountByProject } from '../../lib/stores'
-  import { getProjectAttention, getGitBranch, setConfig } from '../../lib/ipc'
+  import { projects, activeProjectId, attentionCountByProject, reviewRequestCountByProject } from '../../lib/stores'
+  import { getGitBranch, setConfig } from '../../lib/ipc'
   import { useAppRouter } from '../../lib/router.svelte'
   import { ChevronLeft, ChevronRight, Settings, Plus, ArrowUp, ArrowDown } from '@lucide/svelte'
   import { resolveIconRailIcon } from '../../lib/iconRailIcons'
   import { GITHUB_SYNC_GLOBAL_VIEW_KEY } from '../../lib/githubSyncPlugin'
   import type { IconRailPluginNavItem } from '../../lib/iconRailNav'
-  import type { ProjectAttention, AppView } from '../../lib/types'
+  import type { AppView } from '../../lib/types'
 
   interface Props {
     collapsed: boolean
@@ -42,19 +41,6 @@
   let branchName = $state<string | null>(null)
   let isSavingProjectOrder = $state(false)
 
-  onMount(async () => {
-    try {
-      const summaries = await getProjectAttention()
-      const map = new Map<string, ProjectAttention>()
-      for (const summary of summaries) {
-        map.set(summary.project_id, summary)
-      }
-      $projectAttention = map
-    } catch (e) {
-      console.error('Failed to load project attention:', e)
-    }
-  })
-
   $effect(() => {
     if (appMode === 'dev' && !branchName) {
       getGitBranch()
@@ -68,17 +54,11 @@
     router.resetToBoard()
   }
 
-  // Count of focus-bar items awaiting the user: everything except running agents, which are
-  // in-flight rather than needing attention (mirrors DEFAULT_FOCUS_STATES excluding 'active').
+  // The green dot: distinct Focus-tab tasks needing attention, excluding in-flight (running)
+  // agents and low-fire tasks. Computed by the data orchestrator with the board's own
+  // getFilterCounts, so this matches the board's Focus count exactly. See attentionCounts.ts.
   function getAttentionCount(projectId: string): number {
-    const attention = $projectAttention.get(projectId)
-    if (!attention) return 0
-    return (
-      attention.needs_input +
-      attention.completed_agents +
-      attention.ci_failures +
-      attention.unaddressed_comments
-    )
+    return $attentionCountByProject.get(projectId) ?? 0
   }
 
   

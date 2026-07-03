@@ -3,9 +3,9 @@ import { get } from 'svelte/store'
 import type { Writable } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { getProjectAttention, setConfig } from '../../lib/ipc'
-import { activeProjectId, projectAttention, projects, reviewRequestCountByProject } from '../../lib/stores'
-import type { AppView, Project, ProjectAttention } from '../../lib/types'
+import { setConfig } from '../../lib/ipc'
+import { activeProjectId, attentionCountByProject, projects, reviewRequestCountByProject } from '../../lib/stores'
+import type { AppView, Project } from '../../lib/types'
 import AppSidebar from './AppSidebar.svelte'
 
 // In production reviewRequestCountByProject is a `derived` (Readable) store, but this suite
@@ -17,13 +17,12 @@ vi.mock('../../lib/stores', async () => {
   return {
     projects: writable<Project[]>([]),
     activeProjectId: writable<string | null>(null),
-    projectAttention: writable<Map<string, ProjectAttention>>(new Map()),
+    attentionCountByProject: writable<Map<string, number>>(new Map()),
     reviewRequestCountByProject: writable<Map<string, number>>(new Map()),
   }
 })
 
 vi.mock('../../lib/ipc', () => ({
-  getProjectAttention: vi.fn(async () => []),
   setConfig: vi.fn(async () => {}),
   getGitBranch: vi.fn(async () => 'main'),
 }))
@@ -87,9 +86,8 @@ describe('AppSidebar', () => {
     vi.clearAllMocks()
     projects.set(sampleProjects)
     activeProjectId.set('proj-1')
-    projectAttention.set(new Map())
+    attentionCountByProject.set(new Map())
     reviewCountByProject.set(new Map())
-    vi.mocked(getProjectAttention).mockResolvedValue([])
   })
 
   it('renders the >_ logo', () => {
@@ -187,18 +185,18 @@ describe('AppSidebar', () => {
     expect(onNewProject).toHaveBeenCalledOnce()
   })
 
-  it('shows the number of items needing attention, excluding running agents', () => {
-    projectAttention.set(new Map([
-      // Only running agents — running is in-flight, not "needs attention" — so no indicator.
-      ['proj-1', { project_id: 'proj-1', needs_input: 0, running_agents: 2, ci_failures: 0, unaddressed_comments: 0, completed_agents: 0 }],
-      // 1 needs_input + 2 completed + 0 + 0 = 3 items needing attention.
-      ['proj-2', { project_id: 'proj-2', needs_input: 1, running_agents: 0, ci_failures: 0, unaddressed_comments: 0, completed_agents: 2 }],
+  it('shows each project\'s attention count from the store and hides it at zero', () => {
+    attentionCountByProject.set(new Map([
+      // A project whose only tasks are in-flight resolves to 0 — no indicator. The
+      // exclusion of running agents / low-fire lives in the count itself (attentionCounts.ts).
+      ['proj-1', 0],
+      ['proj-2', 3],
     ]))
 
     renderSidebar({ collapsed: false })
 
     expect(screen.getByTitle(/3 items needing attention/i).textContent).toContain('3')
-    // The running-only project contributes no attention indicator.
+    // The zero-count project contributes no attention indicator.
     expect(screen.getAllByTitle(/item.* needing attention/i)).toHaveLength(1)
     // The old status labels are gone entirely.
     expect(screen.queryByText('2 running')).toBeNull()
@@ -206,18 +204,10 @@ describe('AppSidebar', () => {
   })
 
   it('does not render an attention indicator when nothing needs attention', () => {
-    projectAttention.set(new Map())
+    attentionCountByProject.set(new Map())
     renderSidebar({ collapsed: false })
 
     expect(screen.queryByTitle(/needing attention/i)).toBeNull()
-  })
-
-  it('calls getProjectAttention on mount', async () => {
-    renderSidebar()
-
-    await vi.waitFor(() => {
-      expect(getProjectAttention).toHaveBeenCalledOnce()
-    })
   })
 
   it('project is NOT visually active (aria-current) when on global_settings view', () => {
