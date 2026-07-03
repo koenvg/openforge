@@ -7,9 +7,7 @@ mod task_callbacks;
 #[cfg(test)]
 mod tests;
 
-use crate::{
-    app_events::AppEventSender, backend_runtime::AppHandle, http_server::TaskClaims,
-};
+use crate::{app_events::AppEventSender, backend_runtime::AppHandle, http_server::TaskClaims};
 use std::sync::{Arc, Mutex};
 use tokio::sync::Notify;
 
@@ -57,11 +55,7 @@ impl PluginHost {
         app_handle: AppHandle,
         app_event_tx: Option<AppEventSender>,
     ) -> Self {
-        Self::with_app_event_sender_and_task_claims(
-            app_handle,
-            app_event_tx,
-            TaskClaims::new(),
-        )
+        Self::with_app_event_sender_and_task_claims(app_handle, app_event_tx, TaskClaims::new())
     }
 
     pub fn with_app_event_sender_and_task_claims(
