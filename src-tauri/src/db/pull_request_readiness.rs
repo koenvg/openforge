@@ -451,12 +451,20 @@ pub(crate) fn build_merge_readiness_facts(
         }
         _ => {}
     }
+    let has_failed_checks = blockers
+        .iter()
+        .any(|blocker| blocker.code == "checks_failed");
+    let has_pending_checks = blockers
+        .iter()
+        .any(|blocker| blocker.code == "checks_pending");
 
     match mergeable_state_lower.as_deref() {
-        Some("unstable") => blockers.push(MergeReadinessReason {
-            code: "checks_failed",
-            message: "GitHub reports failing or unstable required checks.",
-        }),
+        Some("unstable") if !has_failed_checks && !has_pending_checks => {
+            blockers.push(MergeReadinessReason {
+                code: "checks_failed",
+                message: "GitHub reports failing or unstable required checks.",
+            });
+        }
         Some("dirty" | "conflicting") => blockers.push(MergeReadinessReason {
             code: "merge_conflict",
             message: "Pull request has merge conflicts.",
@@ -722,6 +730,31 @@ mod tests {
         assert_eq!(facts.required_reviews_policy_known, Some(false));
         let warnings = facts.merge_readiness_warnings_or_default();
         assert!(warnings.contains("policy_coverage_unknown"));
+    }
+
+    #[test]
+    fn github_readiness_unstable_mergeability_does_not_fail_while_checks_pending() {
+        let pr = make_github_readiness_pr();
+        for ci_status in ["pending", "queued", "in_progress"] {
+            let facts = build_merge_readiness_facts(
+                &pr,
+                None,
+                Some(true),
+                Some("unstable"),
+                Some(ci_status),
+                Some("approved"),
+                false,
+                true,
+                true,
+                false,
+                false,
+                None,
+            );
+
+            let blockers = facts.blockers_json.as_deref().unwrap_or_default();
+            assert!(blockers.contains("checks_pending"));
+            assert!(!blockers.contains("checks_failed"));
+        }
     }
 
     #[test]
