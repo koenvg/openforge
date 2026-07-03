@@ -2,8 +2,8 @@
   import { onDestroy } from 'svelte'
   import { get } from 'svelte/store'
   import { createTaskTerminalPaneLifecycle } from '@openforge/terminal-runtime'
-  import { activeProjectId, activeSessions, commandHeld, completingTasks, error, startingTasks, taskActiveView, taskRuntimeInfo } from '../../lib/stores'
-  import { getTaskWorkspace, openInEditor, updateTaskStatus } from '../../lib/ipc'
+  import { activeProjectId, activeSessions, commandHeld, completingTasks, startingTasks, taskActiveView, taskRuntimeInfo } from '../../lib/stores'
+  import { getTaskWorkspace, openInEditor } from '../../lib/ipc'
   import { confirmCompleteTask, runCompleteTask } from '../../lib/completeTask'
   import { getTaskTitle } from '../../lib/taskTitle'
   import { createTaskTitleRename } from '../../lib/useTaskTitleRename.svelte'
@@ -17,7 +17,7 @@
   import { TERMINAL_PLUGIN_ID } from '../../lib/terminalPlugin'
   import { useShortcutRegistry } from '../../lib/shortcuts.svelte'
   import { releaseAllForTask } from '../../lib/terminalPool'
-  import type { Action, BoardStatus, Task } from '../../lib/types'
+  import type { Action, Task } from '../../lib/types'
   import AgentPanel from './AgentPanel.svelte'
   import AgentStatusPill from './AgentStatusPill.svelte'
   import TaskInfoPanel from './TaskInfoPanel.svelte'
@@ -210,17 +210,6 @@
   function openInVsCode() {
     if (workspacePath === null) return
     void openInEditor(workspacePath)
-  }
-
-  async function handleStatusChange(newStatus: BoardStatus) {
-    if (newStatus === task.status) return
-
-    try {
-      await updateTaskStatus(task.id, newStatus)
-    } catch (e) {
-      console.error('Failed to update status:', e)
-      $error = String(e)
-    }
   }
 
   async function handleComplete() {
