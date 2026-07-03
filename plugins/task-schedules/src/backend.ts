@@ -177,19 +177,10 @@ async function getOpenPreviousTask(openforge: BackendOpenForgeAPI, schedule: Tas
     const task = await openforge.tasks.get(schedule.lastTaskId)
     return task.status === 'done' ? null : task
   } catch {
-    return {
-      id: schedule.lastTaskId,
-      status: 'doing',
-      initial_prompt: '',
-      prompt: null,
-      summary: null,
-      agent: null,
-      permission_mode: null,
-      depends_on: [],
-      project_id: null,
-      created_at: 0,
-      updated_at: 0,
-    }
+    // Since AVIV-118, completing a Task deletes it: openforge.tasks.get then
+    // rejects with 'task not found'. Treat a missing last Task as closed so the
+    // schedule keeps firing instead of skipping forever.
+    return null
   }
 }
 
