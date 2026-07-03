@@ -19,11 +19,11 @@ mod tests;
 use crate::{
     app_events::publish_app_event_to_runtime,
     db,
-    http_server::{AppInvokeRequest, AppState},
+    http_server::{AppInvokeRequest, AppState, TaskOperation},
     whisper_manager::WhisperModelSize,
 };
 use axum::http::StatusCode;
-use lifecycle::cleanup_task_runtime_for_app;
+use lifecycle::{prepare_task_runtime_cleanup, run_task_runtime_cleanup};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 

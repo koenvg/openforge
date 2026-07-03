@@ -138,8 +138,9 @@ pub enum DivergenceResolution {
 
 static WORKTREE_LOCKS: Lazy<DashMap<String, Arc<Mutex<()>>>> = Lazy::new(DashMap::new);
 
-/// Acquires a lock for the given repository path to prevent concurrent worktree operations
-fn acquire_lock(repo_path: &Path) -> Arc<Mutex<()>> {
+/// Acquires a lock for the given repository path to prevent concurrent worktree operations.
+/// `pub(crate)` so tests can hold the lock to observe in-flight cleanup deterministically.
+pub(crate) fn acquire_lock(repo_path: &Path) -> Arc<Mutex<()>> {
     let path_key = repo_path.to_string_lossy().to_string();
     WORKTREE_LOCKS
         .entry(path_key)

@@ -2,72 +2,73 @@ use super::*;
 use log::error;
 use std::path::{Path, PathBuf};
 
-pub(super) async fn cleanup_task_runtime_for_app(
+/// The worktree/branch cleanup work captured for a task before its DB rows are
+/// deleted. Running it needs no DB access: `delete_task` drops the worktree
+/// record in the same transaction as the task row.
+pub(super) struct TaskRuntimeCleanup {
+    repo_path: PathBuf,
+    worktree_path: PathBuf,
+    branch_to_delete: Option<String>,
+}
+
+/// Kills the task's PTYs and captures its worktree cleanup while the task and
+/// worktree rows still exist. The returned cleanup (if any) is safe to run
+/// after the rows are deleted, so `delete_task` can publish the deleted event
+/// immediately and finish the slow git/filesystem work in the background.
+pub(super) async fn prepare_task_runtime_cleanup(
     state: &AppState,
     task_id: &str,
     remove_branch: bool,
-) -> Result<(), (StatusCode, String)> {
+) -> Result<Option<TaskRuntimeCleanup>, (StatusCode, String)> {
     if let Some(pty_manager) = state.pty_manager.as_ref() {
         let _ = pty_manager.kill_pty(task_id).await;
         pty_manager.kill_shells_for_task(task_id).await;
     }
-    let (worktree, delete_worktree_branch) = {
-        let db = crate::db::acquire_db(&state.db);
-        let worktree = db.get_worktree_for_task(task_id).map_err(|e| {
+    let db = crate::db::acquire_db(&state.db);
+    let worktree = db.get_worktree_for_task(task_id).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to get worktree: {e}"),
+        )
+    })?;
+    let task_uses_existing_branch = db
+        .get_task(task_id)
+        .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get worktree: {e}"),
+                format!("Failed to get task: {e}"),
             )
-        })?;
-        let task_uses_existing_branch = db
-            .get_task(task_id)
-            .map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get task: {e}"),
-                )
-            })?
-            .and_then(|task| task.worktree_source)
-            .as_deref()
-            == Some("existingBranch");
-        (worktree, remove_branch && !task_uses_existing_branch)
-    };
+        })?
+        .and_then(|task| task.worktree_source)
+        .as_deref()
+        == Some("existingBranch");
+    let delete_worktree_branch = remove_branch && !task_uses_existing_branch;
 
-    if let Some(worktree) = worktree {
-        let repo_path = std::path::Path::new(&worktree.repo_path);
-        let worktree_path = std::path::Path::new(&worktree.worktree_path);
-        let remove_result = if delete_worktree_branch {
-            crate::git_worktree::remove_worktree_with_branch(
-                repo_path,
-                worktree_path,
-                Some(&worktree.branch_name),
-            )
-            .await
-        } else {
-            crate::git_worktree::remove_worktree(repo_path, worktree_path).await
-        };
-        if let Err(e) = remove_result {
-            error!(
-                "[app_invoke] Failed to remove worktree at {}: {}",
-                worktree_path.display(),
-                e
-            );
-        }
+    Ok(worktree.map(|worktree| TaskRuntimeCleanup {
+        repo_path: PathBuf::from(worktree.repo_path),
+        worktree_path: PathBuf::from(worktree.worktree_path),
+        branch_to_delete: delete_worktree_branch.then_some(worktree.branch_name),
+    }))
+}
 
-        // The worktree directory is gone, so its DB record is now stale and must
-        // be dropped regardless of whether the branch was deleted or preserved.
-        // On the delete-task path `delete_task` deletes it again inside its own
-        // transaction, which is a harmless no-op.
-        let db = crate::db::acquire_db(&state.db);
-        if let Err(e) = db.delete_worktree_record(task_id) {
-            error!(
-                "[app_invoke] Failed to delete worktree record for {}: {}",
-                task_id, e
-            );
-        }
+/// Runs a captured worktree/branch cleanup. Failures are logged rather than
+/// surfaced: by the time this runs the task row is gone and the deleted event
+/// has been published, so there is no caller left to report to.
+pub(super) async fn run_task_runtime_cleanup(task_id: &str, cleanup: TaskRuntimeCleanup) {
+    let remove_result = crate::git_worktree::remove_worktree_with_branch(
+        &cleanup.repo_path,
+        &cleanup.worktree_path,
+        cleanup.branch_to_delete.as_deref(),
+    )
+    .await;
+    if let Err(e) = remove_result {
+        error!(
+            "[app_invoke] Failed to remove worktree at {} for deleted task {}: {}",
+            cleanup.worktree_path.display(),
+            task_id,
+            e
+        );
     }
-
-    Ok(())
 }
 
 pub(super) async fn handle_app_resume_startup_sessions_command(
@@ -378,8 +379,8 @@ pub(super) async fn handle_app_start_implementation_command(
         )
     })?;
     let _start_claim = state
-        .start_implementation_claims
-        .try_claim(&task_id)
+        .task_claims
+        .try_claim(&task_id, TaskOperation::StartImplementation)
         .ok_or_else(|| {
             (
                 StatusCode::CONFLICT,

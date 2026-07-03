@@ -79,6 +79,8 @@ vi.mock('../../lib/stores', () => ({
   tasks: writable([]),
   activeProjectId: writable('project-1'),
   startingTasks: writable(new Set()),
+  completingTasks: writable(new Set()),
+  error: writable(null),
   taskRuntimeInfo: writable(new Map()),
   pendingManualComments: writable([]),
   taskActiveView: writable(new Map()),
@@ -219,7 +221,7 @@ vi.mock('../../lib/actions', () => ({
   getEnabledActions: vi.fn((actions: { enabled: boolean }[]) => actions.filter(a => a.enabled)),
 }))
 
-import { activeSessions, taskActiveView, commandHeld, taskRuntimeInfo } from '../../lib/stores'
+import { activeSessions, completingTasks, taskActiveView, commandHeld, taskRuntimeInfo } from '../../lib/stores'
 import type { Task, AgentSession, TaskWorkspaceInfo } from '../../lib/types'
 import PluginSlotTestView from '../plugin/PluginSlotTestView.svelte'
 import TerminalTaskPane from './TerminalTaskPane.svelte'
@@ -308,6 +310,7 @@ describe('TaskDetailView', () => {
     localStorage.clear()
     taskActiveView.set(new Map())
     taskRuntimeInfo.set(new Map())
+    completingTasks.set(new Set())
     commandHeld.set(false)
     taskTabSessions.clear()
     clearTerminalTaskPaneControllers()
@@ -979,6 +982,50 @@ describe('TaskDetailView', () => {
       expect(deleteTask).toHaveBeenCalledWith('T-42')
     })
     expect(mockResetToBoard).toHaveBeenCalled()
+    confirmSpy.mockRestore()
+  })
+
+  it('disables the Complete button and shows pending feedback while the task is completing', async () => {
+    const { deleteTask } = await import('../../lib/ipc')
+    vi.mocked(deleteTask).mockClear()
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    completingTasks.set(new Set(['T-42']))
+    const doingTask: Task = { ...baseTask, status: 'doing' }
+    render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
+
+    const button = screen.getByRole('button', { name: /Completing/ }) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+
+    await fireEvent.click(button)
+    expect(confirmSpy).not.toHaveBeenCalled()
+    expect(deleteTask).not.toHaveBeenCalled()
+    confirmSpy.mockRestore()
+  })
+
+  it('does not start a second delete while the first is still pending', async () => {
+    const { deleteTask } = await import('../../lib/ipc')
+    vi.mocked(deleteTask).mockClear()
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    let resolveDelete!: () => void
+    vi.mocked(deleteTask).mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveDelete = resolve
+      })
+    )
+    mockResetToBoard.mockClear()
+    const doingTask: Task = { ...baseTask, status: 'doing' }
+    render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
+
+    await fireEvent.click(screen.getByRole('button', { name: /Complet/ }))
+    await fireEvent.click(screen.getByRole('button', { name: /Complet/ }))
+
+    expect(deleteTask).toHaveBeenCalledTimes(1)
+    expect(confirmSpy).toHaveBeenCalledTimes(1)
+    resolveDelete()
+    await vi.waitFor(() => {
+      expect(mockResetToBoard).toHaveBeenCalled()
+    })
+    vi.mocked(deleteTask).mockResolvedValue(undefined)
     confirmSpy.mockRestore()
   })
 
