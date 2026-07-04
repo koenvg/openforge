@@ -143,6 +143,75 @@ impl PluginHost {
         .await
     }
 
+    pub(super) fn get_handoff_notes_workflow_for_host(
+        &self,
+        params: &Value,
+    ) -> Result<Value, String> {
+        let project_id = required_param_string(params, "projectId")?;
+        let db_state = self.database_state_for_host()?;
+        let db = crate::db::acquire_db(db_state.as_ref());
+        let enabled = db
+            .get_project_config(
+                &project_id,
+                crate::agent_lifecycle::HANDOFF_NOTES_WORKFLOW_ENABLED_CONFIG_KEY,
+            )
+            .map_err(|error| format!("failed to get handoff notes workflow setting: {error}"))?
+            .map(|value| value == "true")
+            .unwrap_or(false);
+        let template = db
+            .get_project_config(
+                &project_id,
+                crate::agent_lifecycle::HANDOFF_NOTES_TEMPLATE_CONFIG_KEY,
+            )
+            .map_err(|error| format!("failed to get handoff notes template: {error}"))?
+            .filter(|value| !value.is_empty());
+        Ok(json!({
+            "projectId": project_id,
+            "enabled": enabled,
+            "template": template,
+        }))
+    }
+
+    pub(super) fn configure_handoff_notes_workflow_for_host(
+        &self,
+        params: &Value,
+    ) -> Result<Value, String> {
+        let project_id = required_param_string(params, "projectId")?;
+        let enabled = params
+            .get("enabled")
+            .and_then(Value::as_bool)
+            .ok_or_else(|| "plugin host callback missing boolean param: enabled".to_string())?;
+        let template = match params.get("template") {
+            None => None,
+            Some(Value::Null) => Some(String::new()),
+            Some(Value::String(value)) => Some(value.trim().to_string()),
+            Some(_) => {
+                return Err(
+                    "plugin host callback param must be a string or null: template".to_string(),
+                )
+            }
+        };
+        {
+            let db_state = self.database_state_for_host()?;
+            let db = crate::db::acquire_db(db_state.as_ref());
+            db.set_project_config(
+                &project_id,
+                crate::agent_lifecycle::HANDOFF_NOTES_WORKFLOW_ENABLED_CONFIG_KEY,
+                if enabled { "true" } else { "false" },
+            )
+            .map_err(|error| format!("failed to set handoff notes workflow setting: {error}"))?;
+            if let Some(template) = template {
+                db.set_project_config(
+                    &project_id,
+                    crate::agent_lifecycle::HANDOFF_NOTES_TEMPLATE_CONFIG_KEY,
+                    &template,
+                )
+                .map_err(|error| format!("failed to set handoff notes template: {error}"))?;
+            }
+        }
+        self.get_handoff_notes_workflow_for_host(params)
+    }
+
     pub(super) async fn start_task_implementation_for_host(
         &self,
         params: &Value,

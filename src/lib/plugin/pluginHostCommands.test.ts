@@ -76,6 +76,57 @@ describe('plugin host commands', () => {
     })
   })
 
+  it('routes plugin handoff notes workflow configuration through project config only', async () => {
+    const { invoke } = installDesktopBridge(null)
+    invoke.mockResolvedValueOnce(null)
+    invoke.mockResolvedValueOnce('## Existing Template')
+
+    await expect(invokePluginHostCommand('getHandoffNotesWorkflow', {
+      projectId: 'P-1',
+    })).resolves.toEqual({
+      projectId: 'P-1',
+      enabled: false,
+      template: '## Existing Template',
+    })
+    expect(invoke).toHaveBeenNthCalledWith(1, 'get_project_config', {
+      projectId: 'P-1',
+      key: 'handoff_notes_workflow_enabled',
+    })
+    expect(invoke).toHaveBeenNthCalledWith(2, 'get_project_config', {
+      projectId: 'P-1',
+      key: 'handoff_notes_template',
+    })
+
+    invoke.mockResolvedValueOnce(undefined)
+    invoke.mockResolvedValueOnce(undefined)
+    invoke.mockResolvedValueOnce('true')
+    invoke.mockResolvedValueOnce('## Plugin Template')
+
+    await expect(invokePluginHostCommand('configureHandoffNotesWorkflow', {
+      projectId: 'P-1',
+      enabled: true,
+      template: '## Plugin Template',
+      provider: 'codex',
+      agent: 'ignored',
+      permissionMode: 'trusted',
+    })).resolves.toEqual({
+      projectId: 'P-1',
+      enabled: true,
+      template: '## Plugin Template',
+    })
+    expect(invoke).toHaveBeenNthCalledWith(3, 'set_project_config', {
+      projectId: 'P-1',
+      key: 'handoff_notes_workflow_enabled',
+      value: 'true',
+    })
+    expect(invoke).toHaveBeenNthCalledWith(4, 'set_project_config', {
+      projectId: 'P-1',
+      key: 'handoff_notes_template',
+      value: '## Plugin Template',
+    })
+    expect(invoke).not.toHaveBeenCalledWith('start_implementation', expect.anything())
+  })
+
   it('routes runtime host shell callbacks through concrete PTY session keys', async () => {
     const { invoke } = installDesktopBridge('buffered')
     const host = createPluginRuntimeHost('test-plugin')

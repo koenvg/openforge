@@ -144,6 +144,12 @@ const task = await openforge.tasks.create({
 const run = await openforge.tasks.startImplementation({
   taskId: task.id
 })
+
+await openforge.tasks.configureHandoffNotesWorkflow({
+  projectId,
+  enabled: true,
+  template: '## Current summary\nWhat changed and whether the task is ready for review.\n\n## Follow-up tasks\nRecommended next work.'
+})
 ```
 
 Behavior and limits:
@@ -151,7 +157,9 @@ Behavior and limits:
 - `projectId` is required for plugin-created tasks.
 - `tasks.create` creates backlog tasks. Plugins may attach dependency task IDs and label names; missing labels are created by the host.
 - `tasks.startImplementation` starts OpenForge's native implementation flow and returns `{ taskId, sessionId, workspacePath }` once launch is accepted.
-- The host resolves provider, agent, permission mode, model, branch/worktree strategy, and project checkout from OpenForge state. Plugins cannot override those execution settings in the API call.
+- `tasks.configureHandoffNotesWorkflow({ projectId, enabled, template })` is the narrow plugin-owned switch for Handoff Notes Workflow prompt injection. It stores only project workflow preferences and optional template text; `Task.summary` remains the canonical shared Handoff Notes field.
+- Projects that never enable the workflow do not receive the opinionated Handoff Notes instructions in new implementation prompts. Existing tasks that already had `handoff_notes_enabled` are migrated to keep their prior behavior at the project level.
+- The host resolves provider, agent, permission mode, model, branch/worktree strategy, and project checkout from OpenForge state. Plugins cannot override those execution settings in the API call or through Handoff Notes workflow configuration.
 - Starting an implementation can fail when dependencies are unmet, an active agent session already exists, the task/project cannot be resolved, the checkout/workspace cannot be prepared, or the configured provider/PTY runtime is unavailable.
 - `tasks.getWorkspace(taskId)` and `tasks.getLatestSession(taskId)` return `null` until OpenForge has recorded that state.
 

@@ -5,6 +5,9 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+pub const HANDOFF_NOTES_WORKFLOW_ENABLED_CONFIG_KEY: &str = "handoff_notes_workflow_enabled";
+pub const HANDOFF_NOTES_TEMPLATE_CONFIG_KEY: &str = "handoff_notes_template";
+
 pub const DEFAULT_HANDOFF_NOTES_TEMPLATE: &str =
     include_str!("../../shared/defaultHandoffNotesTemplate.md");
 
@@ -339,14 +342,16 @@ pub fn build_task_prompt(
     task: &db::TaskRow,
     additional_instructions: Option<&str>,
     code_cleanup_enabled: bool,
+    handoff_notes_workflow_enabled: bool,
     handoff_notes_template: Option<&str>,
 ) -> String {
     let mut prompt = String::new();
 
-    // The handoff-notes (task management) block can be opted out per task. When
-    // disabled, the start prompt omits the block entirely so the agent is not
-    // instructed to maintain Handoff Notes.
-    if task.handoff_notes_enabled {
+    // The handoff-notes (task management) block is injected only when the
+    // project-level workflow is enabled and the task has not opted out. This
+    // keeps Task.summary as the shared storage field while making the opinionated
+    // workflow opt-in at the project/plugin boundary.
+    if handoff_notes_workflow_enabled && task.handoff_notes_enabled {
         let handoff_notes_template = effective_handoff_notes_template(handoff_notes_template);
 
         prompt.push_str(&format!(r###"<openforge_task_management>
@@ -506,7 +511,7 @@ mod tests {
     fn test_build_task_prompt_contains_management_and_prompt() {
         let task = sample_task("T-123", "Test Task", None);
 
-        let prompt = build_task_prompt(&task, None, false, None);
+        let prompt = build_task_prompt(&task, None, false, true, None);
 
         assert!(prompt.contains("Test Task"));
         assert!(prompt.contains("<openforge_task_management>"));
@@ -537,7 +542,7 @@ mod tests {
         let mut task = sample_task("T-200", "Opted out of handoff notes", None);
         task.handoff_notes_enabled = false;
 
-        let prompt = build_task_prompt(&task, None, false, None);
+        let prompt = build_task_prompt(&task, None, false, true, None);
 
         // The task body is still present, but the entire handoff-notes block is gone.
         assert!(prompt.contains("Opted out of handoff notes"));
@@ -549,11 +554,24 @@ mod tests {
     }
 
     #[test]
+    fn test_build_task_prompt_omits_management_block_when_project_workflow_disabled() {
+        let task = sample_task("T-203", "Project has not enabled workflow", None);
+        assert!(task.handoff_notes_enabled);
+
+        let prompt = build_task_prompt(&task, None, false, false, None);
+
+        assert!(prompt.contains("Project has not enabled workflow"));
+        assert!(!prompt.contains("<openforge_task_management>"));
+        assert!(!prompt.contains("<handoff_notes_template>"));
+        assert!(!prompt.contains("openforge update-task"));
+    }
+
+    #[test]
     fn test_build_task_prompt_includes_management_block_when_handoff_enabled() {
         let task = sample_task("T-201", "Keeps handoff notes", None);
         assert!(task.handoff_notes_enabled);
 
-        let prompt = build_task_prompt(&task, None, false, None);
+        let prompt = build_task_prompt(&task, None, false, true, None);
 
         assert!(prompt.contains("<openforge_task_management>"));
         assert!(prompt.contains("openforge update-task --task-id \"T-201\" --summary \"...\""));
@@ -564,7 +582,7 @@ mod tests {
         let mut task = sample_task("T-202", "No handoff, yes cleanup", None);
         task.handoff_notes_enabled = false;
 
-        let prompt = build_task_prompt(&task, None, true, None);
+        let prompt = build_task_prompt(&task, None, true, true, None);
 
         assert!(!prompt.contains("<openforge_task_management>"));
         assert!(prompt.contains("<openforge_code_cleanup>"));
@@ -574,7 +592,7 @@ mod tests {
     fn test_build_task_prompt_never_requests_initial_prompt_update() {
         let task = sample_task("T-124", "Immutable prompt", None);
 
-        let prompt = build_task_prompt(&task, None, false, None);
+        let prompt = build_task_prompt(&task, None, false, true, None);
 
         assert!(prompt.contains("<analysis_update trigger=\"after_initial_analysis\">"));
         assert!(prompt.contains("Write concise initial Handoff Notes"));
@@ -590,7 +608,7 @@ mod tests {
     fn test_build_task_prompt_never_requests_task_display_title_generation() {
         let task = sample_task("T-300", "Prompt that needs a better title", None);
 
-        let prompt = build_task_prompt(&task, None, false, None);
+        let prompt = build_task_prompt(&task, None, false, true, None);
 
         assert!(!prompt.contains("Task Display Title"));
         assert!(!prompt.contains("update_task_title"));
@@ -605,6 +623,7 @@ mod tests {
             &task,
             None,
             false,
+            true,
             Some("## Custom review brief\n- Inspect project-specific risk"),
         );
 
@@ -617,7 +636,7 @@ mod tests {
     fn test_build_task_prompt_uses_default_handoff_notes_template_when_project_template_blank() {
         let task = sample_task("T-126", "Blank handoff", None);
 
-        let prompt = build_task_prompt(&task, None, false, Some("   "));
+        let prompt = build_task_prompt(&task, None, false, true, Some("   "));
 
         assert!(prompt.contains("## Current summary"));
         assert!(prompt.contains("## Follow-up tasks"));
@@ -631,7 +650,7 @@ mod tests {
             Some("Specific implementation prompt"),
         );
 
-        let prompt = build_task_prompt(&task, None, false, None);
+        let prompt = build_task_prompt(&task, None, false, true, None);
 
         assert!(prompt.contains("Specific implementation prompt"));
         assert!(!prompt.contains("\nInitial title\n"));
@@ -641,7 +660,7 @@ mod tests {
     fn test_build_task_prompt_with_additional_instructions_ordering() {
         let task = sample_task("T-789", "Task Body", Some("Do the work"));
 
-        let prompt = build_task_prompt(&task, Some("Project rules here"), false, None);
+        let prompt = build_task_prompt(&task, Some("Project rules here"), false, true, None);
 
         let mgmt_pos = prompt.find("<openforge_task_management>").unwrap();
         let instructions_pos = prompt.find("Project rules here").unwrap();
@@ -1171,7 +1190,7 @@ mod tests {
     fn test_build_task_prompt_without_code_cleanup() {
         let task = sample_task("T-800", "No cleanup", None);
 
-        let prompt = build_task_prompt(&task, None, false, None);
+        let prompt = build_task_prompt(&task, None, false, true, None);
 
         assert!(!prompt.contains("<openforge_code_cleanup>"));
         assert!(!prompt.contains("openforge_create_task"));
@@ -1183,7 +1202,7 @@ mod tests {
     fn test_build_task_prompt_with_code_cleanup_enabled() {
         let task = sample_task("T-801", "With cleanup", None);
 
-        let prompt = build_task_prompt(&task, None, true, None);
+        let prompt = build_task_prompt(&task, None, true, true, None);
 
         assert!(prompt.contains("<openforge_code_cleanup>"));
         assert!(prompt.contains("</openforge_code_cleanup>"));
@@ -1199,7 +1218,7 @@ mod tests {
     fn test_build_task_prompt_code_cleanup_ordering() {
         let task = sample_task("T-802", "Cleanup ordering", None);
 
-        let prompt = build_task_prompt(&task, None, true, None);
+        let prompt = build_task_prompt(&task, None, true, true, None);
 
         let mgmt_pos = prompt.find("<openforge_task_management>").unwrap();
         let cleanup_pos = prompt.find("<openforge_code_cleanup>").unwrap();

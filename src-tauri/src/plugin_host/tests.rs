@@ -564,6 +564,30 @@ async fn plugin_host_task_callbacks_create_start_and_read_state() {
         .expect("task status callback"),
         Value::Null
     );
+    let workflow = host
+        .handle_host_callback(
+            "openforge.tasks.configureHandoffNotesWorkflow",
+            &json!({
+                "projectId": project.id,
+                "enabled": true,
+                "template": "## Plugin Brief\n- backend owned"
+            }),
+        )
+        .await
+        .expect("configure handoff workflow callback");
+    assert_eq!(workflow["projectId"], project.id);
+    assert_eq!(workflow["enabled"], true);
+    assert_eq!(workflow["template"], "## Plugin Brief\n- backend owned");
+
+    let workflow = host
+        .handle_host_callback(
+            "openforge.tasks.getHandoffNotesWorkflow",
+            &json!({ "projectId": project.id }),
+        )
+        .await
+        .expect("get handoff workflow callback");
+    assert_eq!(workflow["enabled"], true);
+    assert_eq!(workflow["template"], "## Plugin Brief\n- backend owned");
 
     {
         let db_state = app

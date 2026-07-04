@@ -1,5 +1,5 @@
 import { get } from 'svelte/store'
-import type { BackendReadyState, CreateTaskRequest, ImplementationRun, StartTaskImplementationRequest } from '@openforge/plugin-sdk'
+import type { BackendReadyState, ConfigureHandoffNotesWorkflowRequest, HandoffNotesWorkflowConfig, CreateTaskRequest, ImplementationRun, StartTaskImplementationRequest } from '@openforge/plugin-sdk'
 import {
   createTask,
   fsReadDir,
@@ -42,6 +42,8 @@ import {
 
 const STATIC_APP_VIEWS = new Set<AppView>(['board', 'settings', 'global_settings', 'files'])
 const pluginBackendReadyStates = new Map<string, BackendReadyState>()
+const HANDOFF_NOTES_WORKFLOW_ENABLED_KEY = 'handoff_notes_workflow_enabled'
+const HANDOFF_NOTES_TEMPLATE_KEY = 'handoff_notes_template'
 
 function isAppView(value: unknown): value is AppView {
   return typeof value === 'string' && (STATIC_APP_VIEWS.has(value as AppView) || isPluginViewKey(value))
@@ -94,6 +96,37 @@ function normalizeImplementationRun(status: Awaited<ReturnType<typeof startImple
   }
 }
 
+async function getHandoffNotesWorkflowForProject(projectId: string): Promise<HandoffNotesWorkflowConfig> {
+  if (!projectId) {
+    throw new Error('handoff notes workflow config requires projectId')
+  }
+
+  const [enabled, template] = await Promise.all([
+    getProjectConfig(projectId, HANDOFF_NOTES_WORKFLOW_ENABLED_KEY),
+    getProjectConfig(projectId, HANDOFF_NOTES_TEMPLATE_KEY),
+  ])
+
+  return {
+    projectId,
+    enabled: enabled === 'true',
+    template: typeof template === 'string' && template.length > 0 ? template : null,
+  }
+}
+
+async function configureHandoffNotesWorkflowForProject(request: ConfigureHandoffNotesWorkflowRequest): Promise<HandoffNotesWorkflowConfig> {
+  const projectId = request.projectId
+  if (!projectId) {
+    throw new Error('handoff notes workflow config requires projectId')
+  }
+
+  await setProjectConfig(projectId, HANDOFF_NOTES_WORKFLOW_ENABLED_KEY, request.enabled ? 'true' : 'false')
+  if (request.template !== undefined) {
+    await setProjectConfig(projectId, HANDOFF_NOTES_TEMPLATE_KEY, request.template?.trim() ? request.template : '')
+  }
+
+  return getHandoffNotesWorkflowForProject(projectId)
+}
+
 async function startTaskImplementationFromPluginRequest(request: StartTaskImplementationRequest): Promise<ImplementationRun> {
   const task = await getTaskDetail(request.taskId)
   if (!task.project_id) {
@@ -134,6 +167,8 @@ export function createPluginRuntimeHost(pluginId: string) {
     createTask: (request: CreateTaskRequest) => createTaskFromPluginRequest(request),
     updateTaskSummary: (taskId: string, summary: string) => updateTaskSummary(taskId, summary),
     updateTaskStatus: (taskId: string, status: Parameters<typeof updateTaskStatus>[1]) => updateTaskStatus(taskId, status),
+    getHandoffNotesWorkflow: (projectId: string) => getHandoffNotesWorkflowForProject(projectId),
+    configureHandoffNotesWorkflow: (request: ConfigureHandoffNotesWorkflowRequest) => configureHandoffNotesWorkflowForProject(request),
     startTaskImplementation: (request: StartTaskImplementationRequest) => startTaskImplementationFromPluginRequest(request),
     getTaskWorkspace: (taskId: string) => getTaskWorkspace(taskId),
     getLatestSession: (taskId: string) => getLatestSession(taskId),
@@ -280,6 +315,14 @@ export async function invokePluginHostCommand(command: string, payload: unknown)
         },
       )
     }
+    case 'getHandoffNotesWorkflow':
+      return getHandoffNotesWorkflowForProject(String(commandPayload?.projectId ?? ''))
+    case 'configureHandoffNotesWorkflow':
+      return configureHandoffNotesWorkflowForProject({
+        projectId: String(commandPayload?.projectId ?? ''),
+        enabled: commandPayload?.enabled === true,
+        template: typeof commandPayload?.template === 'string' || commandPayload?.template === null ? commandPayload.template : undefined,
+      })
     case 'startImplementation':
       return startTaskImplementationFromPluginRequest({ taskId: String(commandPayload?.taskId ?? '') })
     case 'navigate': {

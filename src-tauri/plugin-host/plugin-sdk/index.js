@@ -330,6 +330,15 @@ var TestingOpenForgeRegistryFake = class {
 			subscriptions
 		};
 	}
+	handoffNotesWorkflowConfig(projectId) {
+		const enabled = this.config.get(`project:${projectId}:handoff_notes_workflow_enabled`);
+		const template = this.config.get(`project:${projectId}:handoff_notes_template`);
+		return {
+			projectId,
+			enabled: enabled === true || enabled === "true",
+			template: typeof template === "string" && template.length > 0 ? template : null
+		};
+	}
 	createCommonApi() {
 		return {
 			commands: {
@@ -384,6 +393,13 @@ var TestingOpenForgeRegistryFake = class {
 						taskId,
 						status
 					});
+				},
+				getHandoffNotesWorkflow: async (projectId) => this.handoffNotesWorkflowConfig(projectId),
+				configureHandoffNotesWorkflow: async (request) => {
+					this.calls.handoffNotesWorkflowConfigurations.push(request);
+					this.config.set(`project:${request.projectId}:handoff_notes_workflow_enabled`, request.enabled);
+					if (request.template !== void 0) this.config.set(`project:${request.projectId}:handoff_notes_template`, request.template ?? "");
+					return this.handoffNotesWorkflowConfig(request.projectId);
 				},
 				startImplementation: async (request) => {
 					this.calls.taskImplementationStarts.push(request);
@@ -751,6 +767,7 @@ function createTestingCalls() {
 		navigationRequests: [],
 		notify: [],
 		taskCreations: [],
+		handoffNotesWorkflowConfigurations: [],
 		taskImplementationStarts: [],
 		taskSummaryUpdates: [],
 		taskStatusUpdates: [],

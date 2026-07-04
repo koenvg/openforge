@@ -332,6 +332,19 @@ export interface CreateTaskRequest {
   labelNames?: string[]
 }
 
+export interface HandoffNotesWorkflowConfig {
+  projectId: string
+  enabled: boolean
+  template: string | null
+}
+
+export interface ConfigureHandoffNotesWorkflowRequest {
+  projectId: string
+  enabled: boolean
+  /** Template markdown injected into the Handoff Notes Workflow prompt when enabled. Null or blank falls back to OpenForge's default template. */
+  template?: string | null
+}
+
 export interface StartTaskImplementationRequest {
   taskId: string
 }
@@ -348,6 +361,8 @@ export interface TasksAPI {
   create(request: CreateTaskRequest): Promise<Task>
   updateSummary(taskId: string, summary: string): Promise<void>
   updateStatus(taskId: string, status: WritableBoardStatus): Promise<void>
+  getHandoffNotesWorkflow(projectId: string): Promise<HandoffNotesWorkflowConfig>
+  configureHandoffNotesWorkflow(request: ConfigureHandoffNotesWorkflowRequest): Promise<HandoffNotesWorkflowConfig>
   startImplementation(request: StartTaskImplementationRequest): Promise<ImplementationRun>
   getWorkspace(taskId: string): Promise<TaskWorkspaceInfo | null>
   getLatestSession(taskId: string): Promise<AgentSession | null>

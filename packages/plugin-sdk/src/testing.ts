@@ -7,12 +7,14 @@ import type {
   CommandDescriptor,
   CommandRegistration,
   CommandShortcutMetadata,
+  ConfigureHandoffNotesWorkflowRequest,
   CreateTaskRequest,
   Disposable,
   FrontendOpenForgeAPI,
   FrontendPlugin,
   FrontendPluginContext,
   JsonValue,
+  HandoffNotesWorkflowConfig,
   NotificationRequest,
   OpenForgeContextSnapshot,
   OpenForgeNavigationRequest,
@@ -54,6 +56,7 @@ export interface TestingOpenForgeApiCalls {
   navigationRequests: OpenForgeNavigationRequest[]
   notify: NotificationRequest[]
   taskCreations: CreateTaskRequest[]
+  handoffNotesWorkflowConfigurations: ConfigureHandoffNotesWorkflowRequest[]
   taskImplementationStarts: StartTaskImplementationRequest[]
   taskSummaryUpdates: Array<{ taskId: string; summary: string }>
   taskStatusUpdates: Array<{ taskId: string; status: string }>
@@ -299,6 +302,15 @@ export class TestingOpenForgeRegistryFake {
       subscriptions,
     }
   }
+  private handoffNotesWorkflowConfig(projectId: string): HandoffNotesWorkflowConfig {
+    const enabled = this.config.get(`project:${projectId}:handoff_notes_workflow_enabled`)
+    const template = this.config.get(`project:${projectId}:handoff_notes_template`)
+    return {
+      projectId,
+      enabled: enabled === true || enabled === 'true',
+      template: typeof template === 'string' && template.length > 0 ? template : null,
+    }
+  }
 
   private createCommonApi(): Omit<FrontendOpenForgeAPI, 'views' | 'taskPane' | 'settings' | 'backend'> {
     return {
@@ -348,6 +360,15 @@ export class TestingOpenForgeRegistryFake {
         },
         updateStatus: async (taskId, status) => {
           this.calls.taskStatusUpdates.push({ taskId, status })
+        },
+        getHandoffNotesWorkflow: async (projectId) => this.handoffNotesWorkflowConfig(projectId),
+        configureHandoffNotesWorkflow: async (request) => {
+          this.calls.handoffNotesWorkflowConfigurations.push(request)
+          this.config.set(`project:${request.projectId}:handoff_notes_workflow_enabled`, request.enabled)
+          if (request.template !== undefined) {
+            this.config.set(`project:${request.projectId}:handoff_notes_template`, request.template ?? '')
+          }
+          return this.handoffNotesWorkflowConfig(request.projectId)
         },
         startImplementation: async (request) => {
           this.calls.taskImplementationStarts.push(request)
@@ -736,6 +757,7 @@ export function createTestingCalls(): TestingOpenForgeApiCalls {
     navigationRequests: [],
     notify: [],
     taskCreations: [],
+    handoffNotesWorkflowConfigurations: [],
     taskImplementationStarts: [],
     taskSummaryUpdates: [],
     taskStatusUpdates: [],

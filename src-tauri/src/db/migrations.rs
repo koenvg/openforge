@@ -1149,6 +1149,48 @@ CREATE TABLE IF NOT EXISTS roadmap_repo_config (
         }
         Ok(())
     }),
+    // Backward compatibility for databases that already had per-task
+    // `handoff_notes_enabled`: keep those existing enabled tasks receiving the
+    // workflow prompt by enabling the new project-level gate for their projects.
+    // New projects remain opt-in until a trusted plugin configures the workflow.
+    M::up_with_hook("", |tx| {
+        let tasks_table_exists: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='tasks'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        let project_config_table_exists: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='project_config'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if !tasks_table_exists || !project_config_table_exists {
+            return Ok(());
+        }
+
+        let has_column: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'handoff_notes_enabled'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+        if has_column {
+            tx.execute(
+                "INSERT OR IGNORE INTO project_config (project_id, key, value)
+                 SELECT DISTINCT project_id, 'handoff_notes_workflow_enabled', 'true'
+                 FROM tasks
+                 WHERE handoff_notes_enabled = 1 AND project_id IS NOT NULL AND project_id != ''",
+                [],
+            )
+            .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
+        Ok(())
+    }),
     // Add a nullable `labels` JSON-TEXT column to the PR tables so each cached
     // PR can carry its GitHub labels (serialized array of {name, color}).
     // Mirrors the existing nullable-JSON-TEXT `ci_check_runs` pattern. Additive
@@ -1503,6 +1545,59 @@ pub(super) fn ensure_labels_columns(conn: &Connection) -> Result<()> {
             conn.execute(&format!("ALTER TABLE {} ADD COLUMN labels TEXT", table), [])?;
         }
     }
+
+    Ok(())
+}
+pub(super) fn ensure_handoff_notes_workflow_backfill(conn: &Connection) -> Result<()> {
+    let tasks_table_exists: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='tasks'",
+        [],
+        |row| row.get(0),
+    )?;
+    let project_config_table_exists: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='project_config'",
+        [],
+        |row| row.get(0),
+    )?;
+    let config_table_exists: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='config'",
+        [],
+        |row| row.get(0),
+    )?;
+    if !tasks_table_exists || !project_config_table_exists || !config_table_exists {
+        return Ok(());
+    }
+
+    let already_applied = conn
+        .query_row(
+            "SELECT value FROM config WHERE key = 'handoff_notes_workflow_backfill_applied'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .map(|value| value == "true")
+        .unwrap_or(false);
+    if already_applied {
+        return Ok(());
+    }
+
+    let has_column: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'handoff_notes_enabled'",
+        [],
+        |row| row.get(0),
+    )?;
+    if has_column {
+        conn.execute(
+            "INSERT OR IGNORE INTO project_config (project_id, key, value)
+             SELECT DISTINCT project_id, 'handoff_notes_workflow_enabled', 'true'
+             FROM tasks
+             WHERE handoff_notes_enabled = 1 AND project_id IS NOT NULL AND project_id != ''",
+            [],
+        )?;
+    }
+    conn.execute(
+        "INSERT OR REPLACE INTO config (key, value) VALUES ('handoff_notes_workflow_backfill_applied', 'true')",
+        [],
+    )?;
 
     Ok(())
 }
@@ -2373,6 +2468,72 @@ mod tests {
                 "{table} should have an is_queued column after upgrading an existing DB"
             );
         }
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_handoff_notes_workflow_backfill_is_one_time_for_legacy_tasks() {
+        let path = std::env::temp_dir().join(format!(
+            "test_handoff_notes_workflow_backfill_{}.db",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+
+        {
+            let conn = rusqlite::Connection::open(&path).expect("open raw db");
+            conn.execute(&format!("PRAGMA user_version = {LATEST_USER_VERSION}"), [])
+                .expect("set user_version");
+            conn.execute(
+                "CREATE TABLE config (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+                [],
+            )
+            .expect("create config table");
+            conn.execute(
+                "CREATE TABLE project_config (project_id TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, UNIQUE(project_id, key))",
+                [],
+            )
+            .expect("create project_config table");
+            conn.execute(
+                "CREATE TABLE tasks (id TEXT PRIMARY KEY, initial_prompt TEXT NOT NULL, project_id TEXT, handoff_notes_enabled INTEGER NOT NULL DEFAULT 1)",
+                [],
+            )
+            .expect("create tasks table");
+            conn.execute(
+                "INSERT INTO tasks (id, initial_prompt, project_id, handoff_notes_enabled) VALUES ('T-legacy', 'Legacy task', 'P-legacy', 1)",
+                [],
+            )
+            .expect("insert legacy task");
+        }
+
+        let db = Database::new(path.clone()).expect("Database::new");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+        let legacy_enabled: String = conn
+            .query_row(
+                "SELECT value FROM project_config WHERE project_id = 'P-legacy' AND key = 'handoff_notes_workflow_enabled'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("legacy project should be backfilled");
+        assert_eq!(legacy_enabled, "true");
+
+        conn.execute(
+            "INSERT INTO tasks (id, initial_prompt, project_id, handoff_notes_enabled) VALUES ('T-new', 'New task', 'P-new', 1)",
+            [],
+        )
+        .expect("insert post-backfill task");
+        ensure_handoff_notes_workflow_backfill(&conn).expect("rerun backfill");
+        let new_project_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM project_config WHERE project_id = 'P-new' AND key = 'handoff_notes_workflow_enabled'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query new project config");
+        assert_eq!(new_project_count, 0, "backfill should only run once");
 
         drop(conn);
         drop(db);
