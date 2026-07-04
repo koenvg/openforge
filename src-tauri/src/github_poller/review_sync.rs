@@ -100,7 +100,7 @@ pub(super) fn stale_authored_task_pr_candidates(
         .collect()
 }
 
-pub(super) fn terminal_state_for_stale_authored_pr(
+pub(super) fn terminal_state_for_pr_details(
     details: &crate::github_client::PullRequest,
 ) -> Option<StaleAuthoredPrTerminalState> {
     let state = details.state.to_ascii_lowercase();
@@ -149,7 +149,7 @@ pub(super) async fn reconcile_stale_authored_task_prs(
             .await
         {
             Ok(details) => {
-                if let Some(terminal_state) = terminal_state_for_stale_authored_pr(&details) {
+                if let Some(terminal_state) = terminal_state_for_pr_details(&details) {
                     terminal_states.push((pr.id, terminal_state));
                 }
             }

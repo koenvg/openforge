@@ -33,7 +33,7 @@ fn test_stale_authored_pr_terminal_state_marks_merged_from_merged_at() {
     );
 
     assert_eq!(
-        terminal_state_for_stale_authored_pr(&details),
+        terminal_state_for_pr_details(&details),
         Some(StaleAuthoredPrTerminalState::Merged(Some(1704067200)))
     );
 }
@@ -49,7 +49,7 @@ fn test_stale_authored_pr_terminal_state_marks_closed_without_merged_evidence() 
     );
 
     assert_eq!(
-        terminal_state_for_stale_authored_pr(&details),
+        terminal_state_for_pr_details(&details),
         Some(StaleAuthoredPrTerminalState::Closed)
     );
 }
@@ -58,7 +58,7 @@ fn test_stale_authored_pr_terminal_state_marks_closed_without_merged_evidence() 
 fn test_stale_authored_pr_terminal_state_leaves_open_pr_open() {
     let details = make_stale_detail("open", serde_json::json!({ "merged": false }));
 
-    assert_eq!(terminal_state_for_stale_authored_pr(&details), None);
+    assert_eq!(terminal_state_for_pr_details(&details), None);
 }
 
 #[test]

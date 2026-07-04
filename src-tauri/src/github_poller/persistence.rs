@@ -1,5 +1,6 @@
 use super::common::{parse_github_timestamp, GitHubEventTarget};
 use super::pr_execution::{poll_single_pr, should_fetch_comments_for_pr, PollSinglePrResult};
+use super::review_sync::StaleAuthoredPrTerminalState;
 use crate::db::{finalize_readiness_facts_for_poll, Database, PrRow};
 use crate::github_client::{
     aggregate_ci_status, aggregate_review_status, deduplicate_check_runs, filter_to_required,
@@ -101,6 +102,23 @@ pub(super) fn persist_polled_comments(
     persist_result
 }
 
+pub(super) fn apply_terminal_pr_state(
+    db: &Database,
+    result: &PollSinglePrResult,
+) -> rusqlite::Result<bool> {
+    match &result.terminal_state {
+        Some(StaleAuthoredPrTerminalState::Closed) => {
+            db.update_pr_closed(result.pr_id)?;
+            Ok(true)
+        }
+        Some(StaleAuthoredPrTerminalState::Merged(merged_at)) => {
+            db.update_pr_merged_state(result.pr_id, *merged_at)?;
+            Ok(true)
+        }
+        None => Ok(false),
+    }
+}
+
 pub(super) async fn poll_prs_for_project(
     github_client: &GitHubClient,
     db: &Mutex<Database>,
@@ -109,9 +127,9 @@ pub(super) async fn poll_prs_for_project(
     configured_github_username: Option<&str>,
     open_prs: Vec<PrRow>,
     changed_pr_numbers: &[i64],
-) -> (usize, usize, usize, usize) {
+) -> (usize, usize, usize, usize, usize) {
     if open_prs.is_empty() {
-        return (0, 0, 0, 0);
+        return (0, 0, 0, 0, 0);
     }
 
     type PrMetadata = (
@@ -212,6 +230,7 @@ pub(super) async fn poll_prs_for_project(
     let mut new_comment_count = 0;
     let mut ci_change_count = 0;
     let mut review_change_count = 0;
+    let mut pr_change_count = 0;
     let mut error_count = 0;
 
     let db_lock = db.lock().unwrap();
@@ -322,7 +341,7 @@ pub(super) async fn poll_prs_for_project(
         }
 
         let readiness_facts = finalize_readiness_facts_for_poll(
-            result.readiness_facts,
+            result.readiness_facts.clone(),
             None,
             &result.head_sha,
             result.is_queued,
@@ -337,6 +356,17 @@ pub(super) async fn poll_prs_for_project(
             );
         }
 
+        match apply_terminal_pr_state(&db_lock, &result) {
+            Ok(true) => pr_change_count += 1,
+            Ok(false) => {}
+            Err(e) => {
+                error!(
+                    "[GitHub Poller] Failed to update terminal state for PR #{}: {}",
+                    result.pr_id, e
+                );
+                error_count += 1;
+            }
+        }
         if let Err(e) = db_lock.set_pr_last_polled(result.pr_id, now) {
             error!(
                 "[GitHub Poller] Failed to set last_polled_at for PR #{}: {}",
@@ -351,6 +381,7 @@ pub(super) async fn poll_prs_for_project(
         new_comment_count,
         ci_change_count,
         review_change_count,
+        pr_change_count,
         error_count,
     )
 }

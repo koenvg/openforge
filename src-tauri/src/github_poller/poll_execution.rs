@@ -161,7 +161,7 @@ pub async fn refresh_task_github_status_for_sidecar(
         db_lock.get_config("github_username").ok().flatten()
     };
 
-    let (new_comments, ci_changes, review_changes, errors) = poll_prs_for_project(
+    let (new_comments, ci_changes, review_changes, pr_changes, errors) = poll_prs_for_project(
         github_client,
         &db,
         &events,
@@ -177,7 +177,7 @@ pub async fn refresh_task_github_status_for_sidecar(
         new_comments,
         ci_changes,
         review_changes,
-        pr_changes: 0,
+        pr_changes,
         errors,
         rate_limited: rate_limit_reset.is_some(),
         rate_limit_reset_at: rate_limit_reset,
@@ -246,6 +246,7 @@ pub(super) async fn poll_github_once_with_state(
     let mut total_new_comments = 0;
     let mut total_ci_changes = 0;
     let mut total_review_changes = 0;
+    let mut total_pr_changes = 0;
     let mut total_errors = 0;
     let mut rate_limit_count = 0;
 
@@ -334,19 +335,20 @@ pub(super) async fn poll_github_once_with_state(
                 open_pr_count
             );
             let poll_start = Instant::now();
-            let (new_comments, ci_changes, review_changes, errors) = poll_prs_for_project(
-                github_client,
-                &db,
-                events,
-                &github_token,
-                configured_github_username.as_deref(),
-                open_prs,
-                &[],
-            )
-            .await;
+            let (new_comments, ci_changes, review_changes, pr_changes, errors) =
+                poll_prs_for_project(
+                    github_client,
+                    &db,
+                    events,
+                    &github_token,
+                    configured_github_username.as_deref(),
+                    open_prs,
+                    &[],
+                )
+                .await;
             let detail = format!(
-                "{} PRs, {} new comments, {} CI changes, {} review changes, {} errors",
-                open_pr_count, new_comments, ci_changes, review_changes, errors
+                "{} PRs, {} new comments, {} CI changes, {} review changes, {} PR changes, {} errors",
+                open_pr_count, new_comments, ci_changes, review_changes, pr_changes, errors
             );
             debug!(
                 "{}",
@@ -359,6 +361,7 @@ pub(super) async fn poll_github_once_with_state(
             total_new_comments += new_comments;
             total_ci_changes += ci_changes;
             total_review_changes += review_changes;
+            total_pr_changes += pr_changes;
             total_errors += errors;
         }
     }
@@ -426,8 +429,10 @@ pub(super) async fn poll_github_once_with_state(
     );
 
     if rate_limited {
-        let has_changes =
-            total_new_comments > 0 || total_ci_changes > 0 || total_review_changes > 0;
+        let has_changes = total_new_comments > 0
+            || total_ci_changes > 0
+            || total_review_changes > 0
+            || total_pr_changes > 0;
 
         if has_changes {
             warn!(
@@ -453,7 +458,7 @@ pub(super) async fn poll_github_once_with_state(
         new_comments: total_new_comments,
         ci_changes: total_ci_changes,
         review_changes: total_review_changes,
-        pr_changes: 0,
+        pr_changes: total_pr_changes,
         errors: total_errors,
         rate_limited,
         rate_limit_reset_at: rate_limit_reset,

@@ -55,6 +55,7 @@ fn make_review_body_poll_result(pr_id: i64) -> PollSinglePrResult {
             merge_queue_state: None,
             updated_at: 0,
         },
+        terminal_state: None,
         error: None,
     }
 }
@@ -229,4 +230,42 @@ fn ci_persistence_payload_filters_to_required_checks_and_reports_status_change()
     assert!(payload.status_changed);
     assert_eq!(persisted_runs.len(), 1);
     assert_eq!(persisted_runs[0].name, "ci");
+}
+
+#[test]
+fn refresh_task_github_status_reconciles_terminal_pr_state() {
+    let (db, path) = make_test_db("refresh_task_github_status_terminal_state");
+    insert_test_task(&db);
+    db.insert_pull_request(
+        142,
+        "T-100",
+        "acme",
+        "repo",
+        "Merged from manual refresh",
+        "https://example.com/pr/142",
+        "open",
+        1000,
+        1000,
+        false,
+    )
+    .expect("insert pr failed");
+
+    let mut result = make_review_body_poll_result(142);
+    result.terminal_state = Some(StaleAuthoredPrTerminalState::Merged(Some(1704067200)));
+
+    let changed = apply_terminal_pr_state(&db, &result).expect("terminal state should persist");
+    let pr = db
+        .get_all_pull_requests()
+        .expect("get pull requests failed")
+        .into_iter()
+        .find(|pr| pr.id == 142)
+        .expect("pull request should remain queryable");
+
+    assert!(changed);
+    assert_eq!(pr.state, "merged");
+    assert_eq!(pr.merged_at, Some(1704067200));
+    assert_eq!(pr.merge_readiness_status.as_deref(), Some("blocked"));
+
+    drop(db);
+    let _ = std::fs::remove_file(&path);
 }
