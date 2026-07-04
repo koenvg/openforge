@@ -52,6 +52,10 @@ _Avoid_: Resume, restart
 A living reviewer-facing brief on a **Task** that summarizes what needs inspection after agent work.
 _Avoid_: Completion log, run history, random comments
 
+**Handoff Notes Workflow**:
+An optional, project-enabled workflow that prompts agents to maintain **Handoff Notes** and gives users supporting template or review surfaces.
+_Avoid_: Core task summary, mandatory agent ritual, plugin-private notes
+
 **Task Attention Pane**:
 A compact task detail area that prioritizes current signals requiring user attention before long-form task documents.
 _Avoid_: Status cockpit, right sidebar, document reader
@@ -244,6 +248,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - **Session Reattachment** preserves the existing **Agent Session** identity.
 - **Implementation Input** targets an existing **Agent Session** and does not choose a new provider or agent.
 - **Handoff Notes** belong to a **Task** and are updated to reflect the current review state rather than appended per **Implementation Run**.
+- A **Handoff Notes Workflow** may be supplied by a **Trusted Plugin**, but the shared **Handoff Notes** brief remains Task-owned when present.
 - A **Task Attention Pane** surfaces the most time-sensitive Task signals before lower-priority long-form context such as **Handoff Notes** or the initial prompt.
 - A **Reviewed File** can belong to self-review or pull request review; it remains reviewed only while its content identity is unchanged.
 - A **Reviewed File Snapshot** records the accepted file version for a **Reviewed File**, not the latest commit on the branch.
@@ -308,6 +313,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - "Handoff" could mean a per-run completion record or the current reviewer brief — resolved: **Handoff Notes** are the current Task-level review brief, not append-only run history.
 - The handoff format could be hidden inside broad project instructions — resolved: use a dedicated **Project Handoff Notes Template** so the review contract is explicit.
 - "Summary" and **Handoff Notes** overlapped — resolved: user-facing review language should say **Handoff Notes**, while existing unstructured summaries remain valid legacy content.
+- "Handoff Notes" could mean the shared reviewer brief or the optional workflow that asks agents to maintain it — resolved: **Handoff Notes** are the Task-owned brief, while a **Handoff Notes Workflow** can be plugin-owned and project-enabled.
 - "Status cockpit" was used for the task detail sidebar redesign — resolved: use **Task Attention Pane** for the compact attention-first task detail area.
 - Worktree branch names were considered for prompt-derived descriptions — resolved: **Task Branches** should be stable task identifiers because they are visible as PR source branches.
 - "Codex thread title" was used for a short generated task label — resolved: use **Task Display Title** because the label belongs to the **Task** and may be generated from any provider's **Agent Session**.
