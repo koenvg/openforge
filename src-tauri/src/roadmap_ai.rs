@@ -1,6 +1,7 @@
+use crate::user_environment::{find_tool_on_path, user_environment, user_tool_path};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 const TICKET_DRAFT_JSON_SCHEMA: &str = r#"{"type":"object","additionalProperties":false,"properties":{"title":{"type":"string","minLength":1},"body":{"type":"string"}},"required":["title","body"]}"#;
@@ -189,14 +190,32 @@ async fn run_opencode_headless(
     parse_ticket_draft_output(&stdout)
 }
 
+/// Resolve a headless AI CLI to an absolute path using the user's effective
+/// tool PATH.
+///
+/// GUI-launched processes inherit macOS's minimal PATH (e.g.
+/// `/usr/bin:/bin:...`), which omits the user tool directories where these CLIs
+/// live (`~/.local/bin`, node-manager bins, Homebrew, etc.). A bare-name spawn
+/// therefore fails with ENOENT even when the CLI works from a terminal, so we
+/// resolve to an absolute path here and spawn with the augmented environment.
+fn resolve_headless_program(program: &str, path: &str) -> Result<PathBuf, String> {
+    find_tool_on_path(program, path)
+        .ok_or_else(|| format!("{program} executable was not found on PATH"))
+}
+
 async fn run_headless_command(
     program: &str,
     args: &[String],
     current_dir: Option<&Path>,
     output_file: Option<&Path>,
 ) -> Result<String, String> {
-    let mut command = tokio::process::Command::new(program);
+    let env = user_environment();
+    let path = env.get("PATH").cloned().unwrap_or_else(user_tool_path);
+    let binary = resolve_headless_program(program, &path)?;
+
+    let mut command = tokio::process::Command::new(&binary);
     command.args(args);
+    command.envs(&env);
     command.env("NO_COLOR", "1");
     if let Some(path) = current_dir {
         command.current_dir(path);
@@ -491,5 +510,36 @@ mod tests {
         assert!(prompt.contains("Draft v1"));
         assert!(prompt.contains("make it tighter"));
         assert!(prompt.contains("bug"));
+    }
+
+    #[test]
+    fn roadmap_ai_resolves_headless_program_from_effective_path() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let executable = temp_dir.path().join("claude");
+        std::fs::write(&executable, "#!/bin/sh\n").expect("write executable");
+        let mut permissions = std::fs::metadata(&executable)
+            .expect("metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&executable, permissions).expect("chmod executable");
+
+        // A minimal, GUI-style PATH that does not contain the CLI, plus the real dir.
+        let path = format!("/usr/bin:/bin:{}", temp_dir.path().display());
+
+        assert_eq!(
+            resolve_headless_program("claude", &path).expect("claude should resolve"),
+            executable
+        );
+    }
+
+    #[test]
+    fn roadmap_ai_reports_missing_headless_program_clearly() {
+        let err = resolve_headless_program("definitely-missing-cli", "/usr/bin:/bin")
+            .expect_err("missing program should error");
+
+        assert!(err.contains("definitely-missing-cli"));
+        assert!(err.contains("not found on PATH"));
     }
 }
