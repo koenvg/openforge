@@ -154,6 +154,7 @@ describe('useAppDataOrchestrator', () => {
     vi.mocked(forceGithubSync).mockResolvedValue({} as any)
   })
 
+
   it('loads pull requests while preserving locally definitive PR state', async () => {
     const orchestrator = useAppDataOrchestrator({ setShowProjectSetup: vi.fn() })
     const locallyMerged = createPullRequest({ state: 'merged', merged_at: 1000 })
@@ -314,24 +315,24 @@ describe('useAppDataOrchestrator', () => {
   it('computes the per-project green-dot count with the board\'s focus semantics', async () => {
     const orchestrator = useAppDataOrchestrator({ setShowProjectSetup: vi.fn() })
     projects.set([{ id: 'P-1', name: 'Frontend', path: '/fe', created_at: 0, updated_at: 0 }])
-    // Three doing tasks: one running (in-flight), one low-fire, one plain agent-done.
+    // Three doing tasks: one running (in-flight), one Out of Focus, one plain agent-done.
     vi.mocked(getAllTasks).mockResolvedValue([
       makeTask('T-run', 'P-1'),
-      makeTask('T-lf', 'P-1'),
+      makeTask('T-out', 'P-1'),
       makeTask('T-focus', 'P-1'),
     ])
     vi.mocked(getLatestSessions).mockResolvedValue([
       makeSession('T-run', 'running'),
-      makeSession('T-lf', 'completed'),
+      makeSession('T-out', 'completed'),
       makeSession('T-focus', 'completed'),
     ])
     vi.mocked(getProjectConfig).mockImplementation(async (_projectId: string, key: string) =>
-      key === 'low_fire_task_ids' ? JSON.stringify(['T-lf']) : null,
+      key === 'low_fire_task_ids' ? JSON.stringify(['T-out']) : null,
     )
 
     await orchestrator.refreshAttentionCounts()
 
-    // In-flight (T-run) and low-fire (T-lf) are excluded — only T-focus needs attention.
+    // In-flight (T-run) and Out of Focus (T-out) are excluded — only T-focus needs attention.
     expect(get(attentionCountByProject).get('P-1')).toBe(1)
   })
 

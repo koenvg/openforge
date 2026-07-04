@@ -29,6 +29,7 @@
     onOpenTask: (taskId: string) => void
     onEditTask?: (taskId: string) => void
     onTaskUpdated?: () => void | Promise<void>
+    onProjectAttentionChanged?: () => void | Promise<void>
     onRunAction: (data: { taskId: string; actionPrompt: string; agent: string | null }) => void
   }
 
@@ -44,7 +45,7 @@
     { value: 'backlog' as BoardFilter, label: 'Backlog', shortcut: '⌘4' },
   ] as const
 
-  let { projectId, projectName, tasks, activeSessions, ticketPrs, onOpenTask, onEditTask, onTaskUpdated, onRunAction }: Props = $props()
+  let { projectId, projectName, tasks, activeSessions, ticketPrs, onOpenTask, onEditTask, onTaskUpdated, onProjectAttentionChanged, onRunAction }: Props = $props()
 
   let selectedTaskIdLocal: string | null = $state(null)
   // Which card the user just returned from — snapshot once at init (before it's
@@ -335,9 +336,11 @@
       return next
     })
 
-    saveOutOfFocusTaskIds(currentProjectId, nextTaskIds).catch((err: unknown) => {
-      console.error('Failed to save Out of Focus tasks:', err)
-    })
+    saveOutOfFocusTaskIds(currentProjectId, nextTaskIds)
+      .then(() => onProjectAttentionChanged?.())
+      .catch((err: unknown) => {
+        console.error('Failed to save Out of Focus tasks:', err)
+      })
   }
 
 </script>

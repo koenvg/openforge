@@ -116,6 +116,7 @@ function renderBoard(overrides?: {
   tasks?: Task[]
   sessions?: Map<string, AgentSession>
   prs?: Map<string, PullRequestInfo[]>
+  onProjectAttentionChanged?: () => void | Promise<void>
 }) {
   const projectId = overrides?.projectId ?? 'proj-1'
   const tasks = overrides?.tasks ?? [taskFocus, taskDoing, taskDone, taskBacklog]
@@ -135,6 +136,7 @@ function renderBoard(overrides?: {
       ticketPrs: prs,
       onOpenTask,
       onRunAction,
+      onProjectAttentionChanged: overrides?.onProjectAttentionChanged,
     },
   })
 }
@@ -202,7 +204,8 @@ describe('FocusBoard', () => {
 
   it('sets aside tasks into Out of Focus and Return to board restores normal placement', async () => {
     const ipc = await import('../../lib/ipc')
-    renderBoard()
+    const onProjectAttentionChanged = vi.fn(async () => undefined)
+    renderBoard({ onProjectAttentionChanged })
 
     await fireEvent.click(await screen.findByRole('button', { name: /In Flight 1/i }))
     await fireEvent.contextMenu((await screen.findAllByText('Doing task'))[0])
@@ -212,6 +215,9 @@ describe('FocusBoard', () => {
       expect(get(outOfFocusTaskIdsByProject).get('proj-1')).toEqual(new Set(['T-2']))
     })
     expect(ipc.setProjectConfig).toHaveBeenCalledWith('proj-1', 'low_fire_task_ids', JSON.stringify(['T-2']))
+    await waitFor(() => {
+      expect(onProjectAttentionChanged).toHaveBeenCalledOnce()
+    })
 
     await fireEvent.click(screen.getByRole('button', { name: /Out of Focus 1/i }))
     expect(screen.getAllByText('Doing task').length).toBeGreaterThan(0)
@@ -222,6 +228,9 @@ describe('FocusBoard', () => {
 
     await waitFor(() => {
       expect(get(outOfFocusTaskIdsByProject).get('proj-1')).toBeUndefined()
+    })
+    await waitFor(() => {
+      expect(onProjectAttentionChanged).toHaveBeenCalledTimes(2)
     })
 
     await fireEvent.click(screen.getByRole('button', { name: /In Flight 1/i }))

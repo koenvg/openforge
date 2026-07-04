@@ -381,11 +381,13 @@ describe('createTaskActionRunner', () => {
     expect(loadTasks).not.toHaveBeenCalled()
   })
 
-  it('sets a task aside by persisting it in the Out of Focus backing set', async () => {
+  it('sets a task aside by persisting it in the Out of Focus backing set and refreshing project attention', async () => {
+    const loadProjectAttention = vi.fn(async () => undefined)
     vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify(['T-existing']))
     const runner = createTaskActionRunner({
       getActiveProject: () => activeProject,
       loadTasks: vi.fn(async () => undefined),
+      loadProjectAttention,
       triggerGithubSync: vi.fn(async () => undefined),
     })
 
@@ -393,14 +395,17 @@ describe('createTaskActionRunner', () => {
 
     expect(get(outOfFocusTaskIdsByProject).get(activeProject.id)).toEqual(new Set(['T-existing', task.id]))
     expect(setProjectConfig).toHaveBeenCalledWith(activeProject.id, 'low_fire_task_ids', JSON.stringify(['T-existing', task.id]))
+    expect(loadProjectAttention).toHaveBeenCalledOnce()
   })
 
-  it('returns a task to the board by removing it from the Out of Focus backing set', async () => {
+  it('returns a task to the board by removing it from the Out of Focus backing set and refreshing project attention', async () => {
+    const loadProjectAttention = vi.fn(async () => undefined)
     outOfFocusTaskIdsByProject.set(new Map([[activeProject.id, new Set(['T-existing', task.id])]]))
     vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify(['T-existing', task.id]))
     const runner = createTaskActionRunner({
       getActiveProject: () => activeProject,
       loadTasks: vi.fn(async () => undefined),
+      loadProjectAttention,
       triggerGithubSync: vi.fn(async () => undefined),
     })
 
@@ -408,6 +413,7 @@ describe('createTaskActionRunner', () => {
 
     expect(get(outOfFocusTaskIdsByProject).get(activeProject.id)).toEqual(new Set(['T-existing']))
     expect(setProjectConfig).toHaveBeenCalledWith(activeProject.id, 'low_fire_task_ids', JSON.stringify(['T-existing']))
+    expect(loadProjectAttention).toHaveBeenCalledOnce()
   })
 
   it.each([

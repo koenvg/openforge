@@ -121,6 +121,7 @@ export async function registerAppDesktopEventListeners(deps: AppDesktopEventDeps
     await listen('github-sync-complete', () => {
       void deps.loadPullRequests()
       void deps.loadProjectAttention()
+      void deps.refreshPrCounts()
     }),
   )
 
@@ -385,6 +386,7 @@ export async function registerAppDesktopEventListeners(deps: AppDesktopEventDeps
         }
       }
       await deps.loadTasks()
+      await deps.loadProjectAttention()
     }),
   )
 

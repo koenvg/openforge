@@ -32,6 +32,7 @@ export interface RunActionData {
 interface TaskActionRunnerOptions {
   getActiveProject(): Project | null
   loadTasks(): Promise<void>
+  loadProjectAttention?: () => Promise<void>
   triggerGithubSync(): Promise<void>
   logError?: (message: string, error: unknown) => void
 }
@@ -153,6 +154,7 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
       outOfFocusTaskIdsByProject.set(nextByProject)
 
       await saveOutOfFocusTaskIds(activeProject.id, nextTaskIds)
+      await options.loadProjectAttention?.()
     } catch (e) {
       logError('Failed to update Out of Focus tasks:', e)
       setError(e)

@@ -26,7 +26,7 @@ import {
   getReviewPrs,
   getTasksForProject,
 } from './ipc'
-import { DEFAULT_FOCUS_STATES, loadFocusFilterStates, loadLowFireTaskIds } from './boardFilters'
+import { DEFAULT_FOCUS_STATES, loadFocusFilterStates, loadOutOfFocusTaskIds } from './boardFilters'
 import { buildAttentionCountByProject } from './attentionCounts'
 import { applyProjectOrder } from './projectOrder'
 import { buildTicketPullRequestMap } from './pullRequestStore'
@@ -66,6 +66,7 @@ async function loadGlobalExcludedRepos(): Promise<Set<string>> {
     return new Set()
   }
 }
+
 
 export function useAppDataOrchestrator(options: AppDataOrchestratorOptions) {
   const logError = options.logError ?? defaultLogError
@@ -200,8 +201,8 @@ export function useAppDataOrchestrator(options: AppDataOrchestratorOptions) {
 
   // Sidebar green dot: the count of Focus-tab tasks needing attention per project. Computed on
   // the frontend with the board's own getFilterCounts so the dot equals the board's Focus count
-  // exactly (distinct tasks, excluding in-flight agents and low-fire), rather than the backend's
-  // summed signals which over-counted PR comments and double-counted tasks.
+  // exactly (distinct tasks, excluding in-flight agents and Out of Focus tasks), rather than
+  // the backend's summed signals which over-counted PR comments and double-counted tasks.
   async function refreshAttentionCounts(): Promise<void> {
     try {
       const projectList = get(projects)
@@ -211,20 +212,20 @@ export function useAppDataOrchestrator(options: AppDataOrchestratorOptions) {
       const sessions = new Map(sessionList.map((session) => [session.ticket_id, session]))
 
       const focusStatesByProject = new Map<string, TaskState[]>()
-      const lowFireByProject = new Map<string, Set<string>>()
+      const outOfFocusByProject = new Map<string, Set<string>>()
       await Promise.all(
         projectList.map(async (project) => {
-          const [focusStates, lowFire] = await Promise.all([
+          const [focusStates, outOfFocusTaskIds] = await Promise.all([
             loadFocusFilterStates(project.id).catch(() => DEFAULT_FOCUS_STATES),
-            loadLowFireTaskIds(project.id).catch(() => new Set<string>()),
+            loadOutOfFocusTaskIds(project.id).catch(() => new Set<string>()),
           ])
           focusStatesByProject.set(project.id, focusStates)
-          if (lowFire.size > 0) lowFireByProject.set(project.id, lowFire)
+          if (outOfFocusTaskIds.size > 0) outOfFocusByProject.set(project.id, outOfFocusTaskIds)
         }),
       )
 
       attentionCountByProject.set(
-        buildAttentionCountByProject(allTasks, sessions, get(ticketPrs), focusStatesByProject, lowFireByProject),
+        buildAttentionCountByProject(allTasks, sessions, get(ticketPrs), focusStatesByProject, outOfFocusByProject),
       )
     } catch (e) {
       logError('Failed to refresh attention counts:', e)
@@ -233,7 +234,7 @@ export function useAppDataOrchestrator(options: AppDataOrchestratorOptions) {
 
   // Trailing throttle: if a refresh is already pending, leave its deadline alone so a steady
   // stream of triggers can't push it out forever. Called both from loadProjectAttention and
-  // when board-only state (low-fire) changes without emitting a desktop event.
+  // when board-only state (Out of Focus) changes without emitting a desktop event.
   function scheduleAttentionCountRefresh(): void {
     if (attentionCountRefreshTimer !== null) return
     attentionCountRefreshTimer = setTimeout(() => {

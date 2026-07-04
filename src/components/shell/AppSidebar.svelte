@@ -55,7 +55,7 @@
   }
 
   // The green dot: distinct Focus-tab tasks needing attention, excluding in-flight (running)
-  // agents and low-fire tasks. Computed by the data orchestrator with the board's own
+  // agents and Out of Focus tasks. Computed by the data orchestrator with the board's own
   // getFilterCounts, so this matches the board's Focus count exactly. See attentionCounts.ts.
   function getAttentionCount(projectId: string): number {
     return $attentionCountByProject.get(projectId) ?? 0

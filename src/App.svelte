@@ -86,6 +86,7 @@
   const taskActions = createTaskActionRunner({
     getActiveProject: () => activeProject,
     loadTasks: appData.loadTasks,
+    loadProjectAttention: appData.loadProjectAttention,
     triggerGithubSync: appData.triggerGithubSync,
   })
   const actionPalette = useActionPaletteController({
@@ -520,6 +521,7 @@
                 onOpenTask={handleOpenTask}
                 onEditTask={openEditTask}
                 onTaskUpdated={async () => { await appData.loadTasks() }}
+                onProjectAttentionChanged={appData.loadProjectAttention}
                 onRunAction={handleRunAction}
               />
             {/if}

@@ -188,7 +188,7 @@ describe('AppSidebar', () => {
   it('shows each project\'s attention count from the store and hides it at zero', () => {
     attentionCountByProject.set(new Map([
       // A project whose only tasks are in-flight resolves to 0 — no indicator. The
-      // exclusion of running agents / low-fire lives in the count itself (attentionCounts.ts).
+      // exclusion of running agents / Out of Focus tasks lives in the count itself (attentionCounts.ts).
       ['proj-1', 0],
       ['proj-2', 3],
     ]))
@@ -203,13 +203,13 @@ describe('AppSidebar', () => {
     expect(screen.queryByText('idle')).toBeNull()
   })
 
+
   it('does not render an attention indicator when nothing needs attention', () => {
     attentionCountByProject.set(new Map())
     renderSidebar({ collapsed: false })
 
     expect(screen.queryByTitle(/needing attention/i)).toBeNull()
   })
-
   it('project is NOT visually active (aria-current) when on global_settings view', () => {
     renderSidebar({ currentView: 'global_settings' })
 
