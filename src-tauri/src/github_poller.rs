@@ -267,6 +267,71 @@ impl PollScope {
     }
 }
 
+fn poll_scope_log_name(scope: &PollScope) -> &'static str {
+    match scope {
+        PollScope::Global => "global",
+        PollScope::ActiveRepo(_) => "active-repo",
+        PollScope::ActiveFocusTaskPrs(_) => "active-focus-task-prs",
+        PollScope::ActiveTaskPrs(_) => "active-task-prs",
+        PollScope::InactiveTaskPrs(_) => "inactive-task-prs",
+        PollScope::GlobalReviewLists => "global-review-lists",
+    }
+}
+
+fn poll_scope_active_project_id(scope: &PollScope) -> Option<&str> {
+    match scope {
+        PollScope::ActiveRepo(active_project_id)
+        | PollScope::ActiveFocusTaskPrs(active_project_id)
+        | PollScope::ActiveTaskPrs(active_project_id)
+        | PollScope::InactiveTaskPrs(active_project_id) => active_project_id.as_deref(),
+        PollScope::Global | PollScope::GlobalReviewLists => None,
+    }
+}
+
+fn format_sync_scope_log(scope: &PollScope, project_count: usize, pr_count: usize) -> String {
+    let mut parts = vec![format!("scope={}", poll_scope_log_name(scope))];
+    if let Some(active_project_id) = poll_scope_active_project_id(scope) {
+        parts.push(format!("active_project={active_project_id}"));
+    }
+    parts.push(format!("projects={project_count}"));
+    parts.push(format!("prs={pr_count}"));
+
+    format!(
+        "[GitHub Poller] Starting GitHub sync ({})",
+        parts.join(", ")
+    )
+}
+
+fn format_sync_phase_log(phase: &str, elapsed_secs: f64, detail: Option<&str>) -> String {
+    match detail.filter(|value| !value.is_empty()) {
+        Some(detail) => {
+            format!("[GitHub Poller] Finished {phase} in {elapsed_secs:.1}s ({detail})")
+        }
+        None => format!("[GitHub Poller] Finished {phase} in {elapsed_secs:.1}s"),
+    }
+}
+
+fn format_rate_limit_pause_log(
+    reset_at: Option<i64>,
+    now: i64,
+    scope: &PollScope,
+    sleep_secs: u64,
+) -> String {
+    let reset_detail = reset_at
+        .map(|reset_at| {
+            let seconds_until_reset = reset_at.saturating_sub(now);
+            format!("reset_at={reset_at} (in {seconds_until_reset}s)")
+        })
+        .unwrap_or_else(|| "reset_at=unknown".to_string());
+
+    format!(
+        "[GitHub Poller] Rate limit paused GitHub sync after scope={}; {}, sleeping {}s",
+        poll_scope_log_name(scope),
+        reset_detail,
+        sleep_secs
+    )
+}
+
 fn is_focus_task_status(status: &str) -> bool {
     !matches!(status, "backlog" | "done")
 }
@@ -548,12 +613,6 @@ async fn poll_github_once_with_state(
 
     let projects = select_projects(projects, scope);
 
-    debug!(
-        "[GitHub Poller] Polling {} projects for PR updates (scope={:?})...",
-        projects.len(),
-        scope
-    );
-
     let project_count = projects.len();
     let mut total_new_comments = 0;
     let mut total_ci_changes = 0;
@@ -563,17 +622,30 @@ async fn poll_github_once_with_state(
 
     if scope.refreshes_task_links() {
         let sync_start = Instant::now();
-        if let Err(e) = sync_authored_task_prs(github_client, &db, &github_token).await {
-            error!("[GitHub Poller] Failed to sync authored task PRs: {}", e);
-            total_errors += 1;
-            if e.should_increment_rate_limit_count() {
-                rate_limit_count += 1;
+        info!(
+            "[GitHub Poller] Starting authored task PR link sync (scope={})",
+            poll_scope_log_name(scope)
+        );
+        match sync_authored_task_prs(github_client, &db, &github_token).await {
+            Ok(synced) => {
+                let detail = format!("synced {synced} task-linked PRs");
+                debug!(
+                    "{}",
+                    format_sync_phase_log(
+                        "authored task PR link sync",
+                        sync_start.elapsed().as_secs_f64(),
+                        Some(&detail),
+                    )
+                );
+            }
+            Err(e) => {
+                error!("[GitHub Poller] Failed to sync authored task PRs: {}", e);
+                total_errors += 1;
+                if e.should_increment_rate_limit_count() {
+                    rate_limit_count += 1;
+                }
             }
         }
-        debug!(
-            "[GitHub Poller] Sync authored task PRs took {:.1}s",
-            sync_start.elapsed().as_secs_f64()
-        );
     }
 
     let configured_github_username = {
@@ -581,6 +653,7 @@ async fn poll_github_once_with_state(
         db_lock.get_config("github_username").ok().flatten()
     };
 
+    let mut project_pr_batches = Vec::new();
     if scope.polls_task_prs() {
         for project in projects {
             let open_prs = match get_scheduled_prs_for_project(&db, &project.id) {
@@ -588,17 +661,46 @@ async fn poll_github_once_with_state(
                     .into_iter()
                     .filter(|pr| scheduled_pr_in_scope(pr, scope))
                     .map(|pr| pr.pr)
-                    .collect(),
+                    .collect::<Vec<_>>(),
                 Err(e) => {
                     error!(
-                        "[GitHub Poller] Failed to get PRs for project {}: {}",
-                        project.id, e
+                        "[GitHub Poller] Failed to get PRs for project {} while preparing scope={}: {}",
+                        project.id,
+                        poll_scope_log_name(scope),
+                        e
                     );
                     total_errors += 1;
                     continue;
                 }
             };
+            debug!(
+                "[GitHub Poller] Prepared project {} for scope={} (prs={})",
+                project.id,
+                poll_scope_log_name(scope),
+                open_prs.len()
+            );
+            project_pr_batches.push((project, open_prs));
+        }
+    }
 
+    let planned_pr_count = project_pr_batches
+        .iter()
+        .map(|(_, prs)| prs.len())
+        .sum::<usize>();
+    info!(
+        "{}",
+        format_sync_scope_log(scope, project_count, planned_pr_count)
+    );
+
+    if scope.polls_task_prs() {
+        for (project, open_prs) in project_pr_batches {
+            let open_pr_count = open_prs.len();
+            debug!(
+                "[GitHub Poller] Polling project {} GitHub PRs (scope={}, prs={})",
+                project.id,
+                poll_scope_log_name(scope),
+                open_pr_count
+            );
             let poll_start = Instant::now();
             let (new_comments, ci_changes, review_changes, errors) = poll_prs_for_project(
                 github_client,
@@ -610,10 +712,17 @@ async fn poll_github_once_with_state(
                 &[],
             )
             .await;
+            let detail = format!(
+                "{} PRs, {} new comments, {} CI changes, {} review changes, {} errors",
+                open_pr_count, new_comments, ci_changes, review_changes, errors
+            );
             debug!(
-                "[GitHub Poller] PR polling for project {} took {:.1}s",
-                project.id,
-                poll_start.elapsed().as_secs_f64()
+                "{}",
+                format_sync_phase_log(
+                    &format!("task PR polling for project {}", project.id),
+                    poll_start.elapsed().as_secs_f64(),
+                    Some(&detail),
+                )
             );
             total_new_comments += new_comments;
             total_ci_changes += ci_changes;
@@ -631,6 +740,7 @@ async fn poll_github_once_with_state(
 
     if scope.polls_global_lists() {
         let review_start = Instant::now();
+        info!("[GitHub Poller] Starting global review PR list sync");
         count_poll_phase_error(
             "review PRs",
             poll_review_prs(github_client, &db, events, &github_token).await,
@@ -638,11 +748,16 @@ async fn poll_github_once_with_state(
             &mut rate_limit_count,
         );
         debug!(
-            "[GitHub Poller] Review PR polling took {:.1}s",
-            review_start.elapsed().as_secs_f64()
+            "{}",
+            format_sync_phase_log(
+                "global review PR list",
+                review_start.elapsed().as_secs_f64(),
+                None,
+            )
         );
 
         let authored_start = Instant::now();
+        info!("[GitHub Poller] Starting authored PR list sync");
         count_poll_phase_error(
             "authored PRs",
             poll_authored_prs(github_client, &db, events, &github_token).await,
@@ -650,18 +765,24 @@ async fn poll_github_once_with_state(
             &mut rate_limit_count,
         );
         debug!(
-            "[GitHub Poller] Authored PR polling took {:.1}s",
-            authored_start.elapsed().as_secs_f64()
+            "{}",
+            format_sync_phase_log(
+                "authored PR list",
+                authored_start.elapsed().as_secs_f64(),
+                None,
+            )
         );
     }
 
     let rate_limit_reset = github_client.get_last_rate_limit_reset();
     let rate_limited = rate_limit_reset.is_some() || rate_limit_count > 0;
 
-    debug!(
-        "[GitHub Poller] Cycle completed in {:.1}s ({} projects, {} new comments, {} CI changes, {} review changes, {} errors, rate_limited={}, reset_at={})",
+    info!(
+        "[GitHub Poller] Completed GitHub sync scope={} in {:.1}s (projects={}, prs={}, new_comments={}, ci_changes={}, review_changes={}, errors={}, rate_limited={}, reset_at={})",
+        poll_scope_log_name(scope),
         cycle_start.elapsed().as_secs_f64(),
         project_count,
+        planned_pr_count,
         total_new_comments,
         total_ci_changes,
         total_review_changes,
@@ -758,14 +879,31 @@ async fn start_github_poller_with_state(
             continue;
         }
 
+        let planned_scope_names = plan
+            .scopes
+            .iter()
+            .map(poll_scope_log_name)
+            .collect::<Vec<_>>()
+            .join(", ");
+        info!(
+            "[GitHub Poller] Starting GitHub sync plan (scopes=[{}], followup_sleep={}s)",
+            planned_scope_names, plan.sleep_secs
+        );
+
         let ran_global_review = plan.scopes.iter().any(PollScope::polls_global_lists);
         let mut result = PollResult::empty();
+        let mut last_scope = None;
         for scope in plan.scopes {
+            last_scope = Some(scope.clone());
             let scope_result =
                 poll_github_once_with_state(db.clone(), &github_client, &events, &scope).await;
             let stop_for_rate_limit = scope_result.rate_limited;
             result.absorb(scope_result);
             if stop_for_rate_limit {
+                warn!(
+                    "[GitHub Poller] Stopping remaining GitHub sync scopes after rate limit in scope={}",
+                    poll_scope_log_name(&scope)
+                );
                 break;
             }
         }
@@ -797,11 +935,16 @@ async fn start_github_poller_with_state(
         }
 
         let sleep_secs = if result.rate_limited {
-            rate_limit_sleep_duration_secs(
-                poll_interval,
-                result.rate_limit_reset_at,
-                current_unix_timestamp(),
-            )
+            let now = current_unix_timestamp();
+            let sleep_secs =
+                rate_limit_sleep_duration_secs(poll_interval, result.rate_limit_reset_at, now);
+            if let Some(scope) = &last_scope {
+                warn!(
+                    "{}",
+                    format_rate_limit_pause_log(result.rate_limit_reset_at, now, scope, sleep_secs)
+                );
+            }
+            sleep_secs
         } else {
             plan.sleep_secs
         };
@@ -2550,6 +2693,38 @@ mod tests {
             task_status: task_status.to_string(),
             low_fire: false,
         }
+    }
+
+    #[test]
+    fn test_format_sync_scope_log_includes_scope_and_fanout() {
+        let message =
+            format_sync_scope_log(&PollScope::ActiveTaskPrs(Some("active".to_string())), 3, 7);
+
+        assert!(message.contains("scope=active-task-prs"));
+        assert!(message.contains("active_project=active"));
+        assert!(message.contains("projects=3"));
+        assert!(message.contains("prs=7"));
+    }
+
+    #[test]
+    fn test_format_sync_phase_log_includes_phase_duration_and_counts() {
+        let message = format_sync_phase_log("global review PR list", 1.25, Some("fetched 4 PRs"));
+
+        assert_eq!(
+            message,
+            "[GitHub Poller] Finished global review PR list in 1.2s (fetched 4 PRs)"
+        );
+    }
+
+    #[test]
+    fn test_format_rate_limit_pause_log_includes_reset_delay_and_scope() {
+        let message =
+            format_rate_limit_pause_log(Some(1_120), 1_000, &PollScope::GlobalReviewLists, 121);
+
+        assert_eq!(
+            message,
+            "[GitHub Poller] Rate limit paused GitHub sync after scope=global-review-lists; reset_at=1120 (in 120s), sleeping 121s"
+        );
     }
 
     #[test]
