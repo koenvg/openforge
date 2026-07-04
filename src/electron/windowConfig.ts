@@ -1,6 +1,13 @@
 import type { BrowserWindowConstructorOptions } from 'electron'
 
-export function createMainWindowOptions(preloadPath: string): BrowserWindowConstructorOptions {
+export interface MainWindowOptionsConfig {
+  sandbox?: boolean
+}
+
+export function createMainWindowOptions(
+  preloadPath: string,
+  config: MainWindowOptionsConfig = {},
+): BrowserWindowConstructorOptions {
   return {
     title: 'Open Forge',
     width: 1200,
@@ -9,7 +16,7 @@ export function createMainWindowOptions(preloadPath: string): BrowserWindowConst
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
-      sandbox: true,
+      sandbox: config.sandbox ?? true,
       nodeIntegration: false,
     },
   }

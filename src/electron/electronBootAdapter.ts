@@ -34,7 +34,9 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
 
   async function createMainWindow(): Promise<BrowserWindow> {
     const preloadPath = createPreloadPath(options.currentDir)
-    const window = new BrowserWindow(createMainWindowOptions(preloadPath))
+    const window = new BrowserWindow(createMainWindowOptions(preloadPath, {
+      sandbox: options.env.OPENFORGE_ELECTRON_SMOKE_TEST !== '1',
+    }))
 
     const rendererUrl = rendererTrustAdapter.trustedRendererUrlFromEnv(options.env)
     const trustedOrigins = rendererTrustAdapter.trustedRendererOrigins(rendererUrl)

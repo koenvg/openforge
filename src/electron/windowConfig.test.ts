@@ -12,4 +12,15 @@ describe('Electron main window security contract', () => {
       nodeIntegration: false,
     })
   })
+
+  it('allows smoke tests to disable renderer sandbox without changing the default contract', () => {
+    const options = createMainWindowOptions('/tmp/openforge-preload.js', { sandbox: false })
+
+    expect(options.webPreferences).toMatchObject({
+      preload: '/tmp/openforge-preload.js',
+      contextIsolation: true,
+      sandbox: false,
+      nodeIntegration: false,
+    })
+  })
 })
