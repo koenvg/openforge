@@ -26,7 +26,7 @@ import {
   getReviewPrs,
   getTasksForProject,
 } from './ipc'
-import { DEFAULT_FOCUS_STATES, loadFocusFilterStates, loadLowFireTaskIds } from './boardFilters'
+import { DEFAULT_FOCUS_STATES, loadFocusFilterStates, loadOutOfFocusTaskIds } from './boardFilters'
 import { buildAttentionCountByProject } from './attentionCounts'
 import { applyProjectOrder } from './projectOrder'
 import { buildTicketPullRequestMap } from './pullRequestStore'
@@ -211,20 +211,20 @@ export function useAppDataOrchestrator(options: AppDataOrchestratorOptions) {
       const sessions = new Map(sessionList.map((session) => [session.ticket_id, session]))
 
       const focusStatesByProject = new Map<string, TaskState[]>()
-      const lowFireByProject = new Map<string, Set<string>>()
+      const outOfFocusByProject = new Map<string, Set<string>>()
       await Promise.all(
         projectList.map(async (project) => {
-          const [focusStates, lowFire] = await Promise.all([
+          const [focusStates, outOfFocus] = await Promise.all([
             loadFocusFilterStates(project.id).catch(() => DEFAULT_FOCUS_STATES),
-            loadLowFireTaskIds(project.id).catch(() => new Set<string>()),
+            loadOutOfFocusTaskIds(project.id).catch(() => new Set<string>()),
           ])
           focusStatesByProject.set(project.id, focusStates)
-          if (lowFire.size > 0) lowFireByProject.set(project.id, lowFire)
+          if (outOfFocus.size > 0) outOfFocusByProject.set(project.id, outOfFocus)
         }),
       )
 
       attentionCountByProject.set(
-        buildAttentionCountByProject(allTasks, sessions, get(ticketPrs), focusStatesByProject, lowFireByProject),
+        buildAttentionCountByProject(allTasks, sessions, get(ticketPrs), focusStatesByProject, outOfFocusByProject),
       )
     } catch (e) {
       logError('Failed to refresh attention counts:', e)

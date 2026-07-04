@@ -145,9 +145,9 @@ describe('buildAttentionCountByProject', () => {
     ])
 
     const focusStates = new Map<string, TaskState[]>([['P-1', DEFAULT_FOCUS_STATES]])
-    const lowFire = new Map<string, Set<string>>([['P-1', new Set(['LF-1', 'LF-2'])]])
+    const outOfFocus = new Map<string, Set<string>>([['P-1', new Set(['LF-1', 'LF-2'])]])
 
-    const counts = buildAttentionCountByProject(tasks, sessions, prs, focusStates, lowFire)
+    const counts = buildAttentionCountByProject(tasks, sessions, prs, focusStates, outOfFocus)
 
     expect(counts.get('P-1')).toBe(4)
   })

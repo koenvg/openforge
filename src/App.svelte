@@ -4,7 +4,7 @@
   import type { DesktopUnlistenFn } from './lib/desktopIpc'
   import { createDesktopWindow } from './lib/desktopWindow'
   import type { DesktopWindowTarget } from './lib/desktopWindow'
-  import { tasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, isLoading, projects, activeProjectId, activeProjectColorId, currentView, reviewRequestCount, activeRepoReviewRequestCount, reviewPrs, codeCleanupTasksEnabled, focusBoardFilters, lowFireTaskIdsByProject } from './lib/stores'
+  import { tasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, isLoading, projects, activeProjectId, activeProjectColorId, currentView, reviewRequestCount, activeRepoReviewRequestCount, reviewPrs, codeCleanupTasksEnabled, focusBoardFilters, outOfFocusTaskIdsByProject } from './lib/stores'
   import { getAppMode, getConfig, getProjectConfig, resumeStartupSessions, setPollContext, getProjectRepo, openUrl, markReviewPrViewed } from './lib/ipc'
   import { computePollContext, pollContextEquals, type PollContextPayload } from './lib/pollContext'
   import { GITHUB_SYNC_GLOBAL_VIEW_KEY } from './lib/githubSyncPlugin'
@@ -260,12 +260,12 @@
     }
   })
 
-  // Moving a task to/from Low-Fire only mutates lowFireTaskIdsByProject (+ its config) and
+  // Moving a task to/from out-of-focus only mutates outOfFocusTaskIdsByProject (+ its config) and
   // emits no desktop event, so the sidebar green dot would otherwise lag the board's Focus
   // count until an unrelated event fires. Recompute the per-project attention counts whenever
-  // low-fire membership changes; the throttle also lets the config write settle first.
+  // out-of-focus membership changes; the throttle also lets the config write settle first.
   $effect(() => {
-    void $lowFireTaskIdsByProject
+    void $outOfFocusTaskIdsByProject
     appData.scheduleAttentionCountRefresh()
   })
 
