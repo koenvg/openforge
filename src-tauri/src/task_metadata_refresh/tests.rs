@@ -15,6 +15,59 @@ use crate::db::test_helpers::*;
 use std::path::Path;
 
 #[test]
+fn task_metadata_refresh_diagnostic_formatter_keeps_safe_metadata_only_message() {
+    let generated_title = "Actual Generated Title";
+    let prompt = "Fix user-visible auth prompt";
+    let raw_provider_output = r#"{"title":"Actual Generated Title"}"#;
+    let stdout = "provider stdout with raw content";
+    let stderr = "provider stderr with raw content";
+
+    let line = super::format_task_metadata_refresh_diagnostic(format_args!(
+        "[task_metadata_refresh] metadata command completed task_id={} provider={} kind={} program={} status={} stdout_bytes={} stderr_bytes={}",
+        "T-123",
+        "codex",
+        "task_display_title",
+        "codex",
+        "exit status: 0",
+        stdout.len(),
+        stderr.len()
+    ));
+
+    assert!(line.contains("task_id=T-123"));
+    assert!(line.contains("provider=codex"));
+    assert!(line.contains("stdout_bytes="));
+    assert!(line.contains("stderr_bytes="));
+    assert!(!line.contains(generated_title));
+    assert!(!line.contains(prompt));
+    assert!(!line.contains(raw_provider_output));
+    assert!(!line.contains(stdout));
+    assert!(!line.contains(stderr));
+}
+
+#[test]
+fn task_metadata_refresh_debug_diagnostics_require_explicit_opt_in() {
+    assert!(!super::task_metadata_refresh_debug_enabled_from_env(None));
+    assert!(!super::task_metadata_refresh_debug_enabled_from_env(Some(
+        ""
+    )));
+    assert!(!super::task_metadata_refresh_debug_enabled_from_env(Some(
+        "info"
+    )));
+    assert!(super::task_metadata_refresh_debug_enabled_from_env(Some(
+        "1"
+    )));
+    assert!(super::task_metadata_refresh_debug_enabled_from_env(Some(
+        "true"
+    )));
+    assert!(super::task_metadata_refresh_debug_enabled_from_env(Some(
+        "debug"
+    )));
+    assert!(super::task_metadata_refresh_debug_enabled_from_env(Some(
+        "trace"
+    )));
+}
+
+#[test]
 fn task_display_title_candidate_uses_short_first_prompt_line() {
     let (db, path) = make_test_db("metadata_title_candidate");
     let task = db
