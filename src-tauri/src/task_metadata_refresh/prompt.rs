@@ -7,22 +7,15 @@ pub(super) const MAX_TRANSCRIPT_SNAPSHOT_BYTES: u64 = 16 * 1024;
 pub(super) const MAX_ACTIVITY_SNAPSHOT_BYTES: usize = 8 * 1024;
 pub(super) const TASK_DISPLAY_TITLE_JSON_SCHEMA: &str = r#"{"type":"object","additionalProperties":false,"properties":{"title":{"type":"string","minLength":1,"maxLength":60}},"required":["title"]}"#;
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum MetadataJobKind {
     TaskDisplayTitle,
-    Summary,
-    Labels,
-    HandoffStatus,
 }
 
 impl MetadataJobKind {
     pub(super) fn as_str(self) -> &'static str {
         match self {
             Self::TaskDisplayTitle => "task_display_title",
-            Self::Summary => "summary",
-            Self::Labels => "labels",
-            Self::HandoffStatus => "handoff_status",
         }
     }
 }
