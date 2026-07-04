@@ -85,7 +85,7 @@ describe('Electron smoke script contract', () => {
     expect(rendererDist).toBe('/tmp/Open Forge.app/Contents/Resources/app/dist')
     expect(rendererUrlForPort()).toBe('http://127.0.0.1:17653')
     expect(launchOptions).toMatchObject({
-      args: [appRoot],
+      args: ['--no-sandbox', '--disable-gpu', appRoot],
       cwd: '/repo',
       env: { PATH: '/usr/bin' },
       artifactsDir: '/artifacts',
@@ -93,6 +93,7 @@ describe('Electron smoke script contract', () => {
       tracesDir: '/artifacts/traces',
     })
     expect(launchOptions).not.toHaveProperty('executablePath')
+    expect(launchOptions.args.slice(0, -1)).toEqual(['--no-sandbox', '--disable-gpu'])
     expect(openForgeCliBridgePath(appPath)).toBe('/tmp/Open Forge.app/Contents/Resources/openforge-cli/cli.js')
   })
 

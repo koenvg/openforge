@@ -77,7 +77,7 @@ export function openForgeCliBridgePath(appPath = electronBundlePath()) {
 
 export function electronSmokeLaunchOptions({ appRoot, root, env, artifactsDir, videosDir, tracesDir } = {}) {
   return {
-    args: [appRoot],
+    args: ['--no-sandbox', '--disable-gpu', appRoot],
     cwd: root,
     env,
     timeout: DEFAULT_TIMEOUT_MS,
