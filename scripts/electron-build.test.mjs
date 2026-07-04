@@ -333,7 +333,7 @@ describe('Electron build host-runtime assets', () => {
     }
   })
 
-  it('copies the shared host-runtime contract next to compiled Electron main assets', async () => {
+  it('copies shared runtime assets next to compiled Electron main assets', async () => {
     const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
     const outDir = join(tmpdir(), `openforge-electron-main-runtime-${process.pid}-${Date.now()}`)
     await mkdir(outDir, { recursive: true })
@@ -343,6 +343,10 @@ describe('Electron build host-runtime assets', () => {
     const copiedContract = await readFile(join(outDir, 'svelteHostRuntimeContract.mjs'), 'utf8')
     expect(copiedContract).toContain('SVELTE_HOST_RUNTIME_MODULES')
     expect(copiedContract).not.toContain('packages/plugin-sdk')
+
+    const copiedPreloadBridge = await readFile(join(outDir, 'preloadBridge.cjs'), 'utf8')
+    expect(copiedPreloadBridge).toContain('createOpenForgePreloadApi')
+    expect(copiedPreloadBridge).toContain('openforge:event')
   })
 
   it('builds the backend plugin-host runtime from the configured Backend Crate root', async () => {
