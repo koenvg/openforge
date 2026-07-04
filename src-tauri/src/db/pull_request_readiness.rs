@@ -460,9 +460,17 @@ pub(crate) fn build_merge_readiness_facts(
 
     match mergeable_state_lower.as_deref() {
         Some("unstable") if !has_failed_checks && !has_pending_checks => {
-            blockers.push(MergeReadinessReason {
-                code: "checks_failed",
-                message: "GitHub reports failing or unstable required checks.",
+            let no_published_checks = matches!(ci_status.as_deref(), None | Some("none"));
+            blockers.push(if no_published_checks {
+                MergeReadinessReason {
+                    code: "checks_pending",
+                    message: "Required checks are still running.",
+                }
+            } else {
+                MergeReadinessReason {
+                    code: "checks_failed",
+                    message: "GitHub reports failing or unstable required checks.",
+                }
             });
         }
         Some("dirty" | "conflicting") => blockers.push(MergeReadinessReason {
@@ -755,6 +763,30 @@ mod tests {
             assert!(blockers.contains("checks_pending"));
             assert!(!blockers.contains("checks_failed"));
         }
+    }
+
+    #[test]
+    fn github_readiness_unstable_mergeability_waits_when_no_checks_have_published_yet() {
+        let pr = make_github_readiness_pr();
+        let facts = build_merge_readiness_facts(
+            &pr,
+            None,
+            Some(true),
+            Some("unstable"),
+            Some("none"),
+            Some("approved"),
+            false,
+            true,
+            true,
+            false,
+            false,
+            None,
+        );
+
+        assert_eq!(facts.status.as_deref(), Some("blocked"));
+        let blockers = facts.blockers_json.as_deref().unwrap_or_default();
+        assert!(blockers.contains("checks_pending"));
+        assert!(!blockers.contains("checks_failed"));
     }
 
     #[test]

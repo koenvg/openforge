@@ -91,6 +91,28 @@ describe('public plugin utilities', () => {
       })
       expect(readiness.blockers).not.toContainEqual(expect.objectContaining({ code: 'checks_failed' }))
     }
+    const noChecksYet = getMergeReadiness(makePullRequest({ mergeable: true, mergeable_state: 'unstable', ci_status: 'none', review_status: 'approved' }))
+    expect(noChecksYet).toMatchObject({
+      status: 'blocked',
+      action: 'resolve_blockers',
+      blockers: [expect.objectContaining({ code: 'checks_pending' })],
+    })
+    expect(noChecksYet.blockers).not.toContainEqual(expect.objectContaining({ code: 'checks_failed' }))
+
+    const stalePersistedNoChecksYet = getMergeReadiness(makePullRequest({
+      mergeable: true,
+      mergeable_state: 'unstable',
+      ci_status: 'none',
+      review_status: 'approved',
+      merge_readiness_status: 'blocked',
+      merge_readiness_action: 'resolve_blockers',
+      merge_readiness_blockers: [{ code: 'checks_failed', message: 'GitHub reports failing or unstable required checks.' }],
+      readiness_source_head_sha: 'abc123',
+      readiness_updated_at: 2,
+      updated_at: 1,
+    }))
+    expect(stalePersistedNoChecksYet.blockers).toContainEqual(expect.objectContaining({ code: 'checks_pending' }))
+    expect(stalePersistedNoChecksYet.blockers).not.toContainEqual(expect.objectContaining({ code: 'checks_failed' }))
 
     expect(getMergeReadiness(makePullRequest({
       mergeable: true,

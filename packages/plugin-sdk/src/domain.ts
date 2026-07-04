@@ -327,6 +327,23 @@ function isUnresolvedConversationDetail(detail: MergeReadinessDetail): boolean {
   return detail.code === 'unresolved_conversations';
 }
 
+function hasNoPublishedChecksForUnstableMergeability(pr: MergeReadinessInfo): boolean {
+  const mergeableState = pr.mergeable_state?.toLowerCase() ?? null;
+  const ciStatus = pr.ci_status?.toLowerCase() ?? null;
+  return mergeableState === 'unstable' && (ciStatus === null || ciStatus === 'none');
+}
+
+function downgradeNoCheckPersistedFailures(
+  pr: MergeReadinessInfo,
+  blockers: MergeReadinessDetail[],
+): MergeReadinessDetail[] {
+  if (!hasNoPublishedChecksForUnstableMergeability(pr)) return blockers;
+
+  return blockers.map((blocker) => blocker.code === 'checks_failed'
+    ? mergeReadinessDetail('checks_pending', 'Required checks are still running.')
+    : blocker);
+}
+
 function removeUnresolvedConversationDetails(details: MergeReadinessDetail[]): MergeReadinessDetail[] {
   return details.filter((detail) => !isUnresolvedConversationDetail(detail));
 }
@@ -356,7 +373,10 @@ export function getPersistedMergeReadiness(pr: MergeReadinessInfo): MergeReadine
   if (!isMergeReadinessStatus(status) || !isMergeReadinessAction(action)) return null;
   if (!isPersistedMergeReadinessCurrent(pr)) return null;
 
-  let blockers = parseMergeReadinessDetails(pr.merge_readiness_blockers);
+  let blockers = downgradeNoCheckPersistedFailures(
+    pr,
+    parseMergeReadinessDetails(pr.merge_readiness_blockers),
+  );
   let warnings = parseMergeReadinessDetails(pr.merge_readiness_warnings);
   if (shouldIgnorePersistedUnresolvedConversationDetails(pr, blockers, warnings)) {
     blockers = removeUnresolvedConversationDetails(blockers);
@@ -422,7 +442,9 @@ export function getMergeReadiness(pr: MergeReadinessInfo, options: MergeReadines
   const hasFailedChecks = blockers.some((blocker) => blocker.code === 'checks_failed')
   const hasPendingChecks = blockers.some((blocker) => blocker.code === 'checks_pending')
   if (mergeableState === 'unstable' && !hasFailedChecks && !hasPendingChecks) {
-    blockers.push(mergeReadinessDetail('checks_failed', 'GitHub reports failing or unstable required checks.'))
+    blockers.push(hasNoPublishedChecksForUnstableMergeability(pr)
+      ? mergeReadinessDetail('checks_pending', 'Required checks are still running.')
+      : mergeReadinessDetail('checks_failed', 'GitHub reports failing or unstable required checks.'))
   }
 
   if (mergeableState === 'dirty' || mergeableState === 'conflicting') {
