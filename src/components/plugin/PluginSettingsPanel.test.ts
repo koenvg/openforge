@@ -9,6 +9,7 @@ import {
   installFromLocal,
   installPluginFromGit,
   installPluginFromNpm,
+  reloadInstalledPluginMetadata,
   reloadPluginForProject,
   uninstallPlugin,
 } from '../../lib/plugin/pluginRegistry'
@@ -30,6 +31,7 @@ vi.mock('../../lib/plugin/pluginRegistry', () => ({
   installFromLocal: vi.fn(),
   installPluginFromGit: vi.fn(),
   installPluginFromNpm: vi.fn(),
+  reloadInstalledPluginMetadata: vi.fn(),
   reloadPluginForProject: vi.fn(),
   uninstallPlugin: vi.fn(),
 }))
@@ -285,6 +287,34 @@ describe('GlobalPluginSettingsPanel', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: 'Reload plugin: Test Plugin' }))
     expect(reloadPluginForProject).toHaveBeenCalledWith('proj-1', 'test-plugin')
+    expect(reloadInstalledPluginMetadata).not.toHaveBeenCalled()
+  })
+
+  it('refreshes only global install metadata when reloading without an active project', async () => {
+    vi.mocked(reloadInstalledPluginMetadata).mockResolvedValue(true)
+    installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
+
+    render(GlobalPluginSettingsPanel)
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Reload plugin: Test Plugin' }))
+    expect(reloadInstalledPluginMetadata).toHaveBeenCalledWith('test-plugin')
+    expect(reloadPluginForProject).not.toHaveBeenCalled()
+  })
+
+  it('clears stale action errors before a successful metadata reload', async () => {
+    vi.mocked(reloadInstalledPluginMetadata)
+      .mockRejectedValueOnce(new Error('reload failed'))
+      .mockResolvedValueOnce(true)
+    installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
+
+    render(GlobalPluginSettingsPanel)
+
+    const reloadButton = screen.getByRole('button', { name: 'Reload plugin: Test Plugin' })
+    await fireEvent.click(reloadButton)
+    expect(screen.getByText('reload failed')).toBeTruthy()
+
+    await fireEvent.click(reloadButton)
+    expect(screen.queryByText('reload failed')).toBeNull()
   })
 
   it('uninstalls custom plugins through the global inventory', async () => {

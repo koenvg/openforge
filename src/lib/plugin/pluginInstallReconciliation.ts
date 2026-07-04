@@ -41,9 +41,8 @@ export async function disablePluginForProject(projectId: string, pluginId: strin
   await deactivatePluginById(pluginId)
 }
 
-export async function reloadPluginForProject(projectId: string, pluginId: string): Promise<boolean> {
-  await deactivatePluginById(pluginId)
-
+async function refreshInstalledPluginMetadata(pluginId: string): Promise<boolean> {
+  const previousEntry = get(installedPlugins).get(pluginId)
   const refreshedPlugin = await getPluginIpc(pluginId)
   if (!refreshedPlugin) {
     installedPlugins.update(map => {
@@ -51,11 +50,38 @@ export async function reloadPluginForProject(projectId: string, pluginId: string
       next.delete(pluginId)
       return next
     })
-    await loadEnabledPluginIdsForProject(projectId)
     return false
   }
 
   upsertInstalledPlugin(refreshedPlugin)
+
+  if (previousEntry?.state === 'active') {
+    installedPlugins.update(map => {
+      const entry = map.get(pluginId)
+      if (!entry) return map
+
+      const next = new Map(map)
+      next.set(pluginId, { ...entry, state: 'active', error: null })
+      return next
+    })
+  }
+
+  return true
+}
+
+export async function reloadInstalledPluginMetadata(pluginId: string): Promise<boolean> {
+  return refreshInstalledPluginMetadata(pluginId)
+}
+
+export async function reloadPluginForProject(projectId: string, pluginId: string): Promise<boolean> {
+  await deactivatePluginById(pluginId)
+
+  const refreshed = await refreshInstalledPluginMetadata(pluginId)
+  if (!refreshed) {
+    await loadEnabledPluginIdsForProject(projectId)
+    return false
+  }
+
   await loadEnabledPluginIdsForProject(projectId)
 
   if (!get(enabledPluginIds).has(pluginId)) {

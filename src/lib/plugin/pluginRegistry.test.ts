@@ -140,6 +140,7 @@ import {
   getPluginRenderProps,
   enablePluginForProject,
   disablePluginForProject,
+  reloadInstalledPluginMetadata,
   reloadPluginForProject,
 } from './pluginRegistry'
 import { installedPlugins, enabledPluginIds, runtimeContributionSources } from './pluginStore'
@@ -903,6 +904,30 @@ describe('pluginRegistry', () => {
       state: 'installed',
     })
     expect(get(enabledPluginIds).has('local-plugin')).toBe(false)
+  })
+
+  it('reloadInstalledPluginMetadata refreshes global install state without project activation', async () => {
+    const manifest = makeManifest({ id: 'reload-plugin' })
+    enabledPluginIds.set(new Set(['reload-plugin']))
+    installedPlugins.set(new Map([['reload-plugin', { manifest, state: 'active', error: 'old error' }]]))
+    getPluginIpcMock.mockResolvedValue({
+      ...makeNormalized('reload-plugin'),
+      name: 'Reloaded Plugin',
+      sourceKind: 'local',
+      sourceSpec: '/plugins/reload-plugin',
+    })
+
+    await expect(reloadInstalledPluginMetadata('reload-plugin')).resolves.toBe(true)
+
+    expect(deactivatePluginLoaderMock).not.toHaveBeenCalled()
+    expect(getEnabledPluginsMock).not.toHaveBeenCalled()
+    expect(loadPluginFrontendMock).not.toHaveBeenCalled()
+    expect(get(installedPlugins).get('reload-plugin')).toMatchObject({
+      state: 'active',
+      sourceKind: 'local',
+      sourceSpec: '/plugins/reload-plugin',
+      error: null,
+    })
   })
 
   it('reloadPluginForProject re-imports changed local frontend bundles with a cache-busted URL', async () => {

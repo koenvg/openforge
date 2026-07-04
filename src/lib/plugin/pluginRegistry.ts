@@ -16,6 +16,7 @@ export {
   disablePluginForProject,
   enablePluginForProject,
   loadEnabledForProject,
+  reloadInstalledPluginMetadata,
   reloadPluginForProject,
   uninstallPlugin,
 } from './pluginInstallReconciliation'

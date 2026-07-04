@@ -10,6 +10,7 @@
     installFromLocal,
     installPluginFromGit,
     installPluginFromNpm,
+    reloadInstalledPluginMetadata,
     reloadPluginForProject,
     uninstallPlugin,
   } from '../../lib/plugin/pluginRegistry'
@@ -108,7 +109,11 @@
 
     actionError = null
     try {
-      await reloadPluginForProject(activeProjectId ?? '', pluginId)
+      if (activeProjectId) {
+        await reloadPluginForProject(activeProjectId, pluginId)
+      } else {
+        await reloadInstalledPluginMetadata(pluginId)
+      }
     } catch (error) {
       actionError = errorMessage(error)
     }
