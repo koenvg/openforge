@@ -63,6 +63,10 @@ export async function copyElectronMainRuntimeAssets(root = repoRoot(), electronD
     resolve(root, 'packages', 'plugin-sdk', 'src', 'svelteHostRuntimeContract.mjs'),
     resolve(electronDist, 'svelteHostRuntimeContract.mjs'),
   )
+  await copyFile(
+    resolve(root, 'src', 'electron', 'preloadBridge.cjs'),
+    resolve(electronDist, 'preloadBridge.cjs'),
+  )
 }
 
 export async function copyHostRuntimeAssets(root = repoRoot(), electronDist = resolve(root, 'dist-electron')) {
