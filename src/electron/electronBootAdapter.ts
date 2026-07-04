@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
-import { BrowserWindow, app, dialog, ipcMain, protocol, session, shell } from 'electron'
+import { BrowserWindow, app, clipboard, dialog, ipcMain, protocol, session, shell } from 'electron'
 import { handleElectronInvoke } from './backendBridge.js'
 import { createMainWindowOptions } from './windowConfig.js'
 import { createPreloadPath } from './preloadPath.js'
@@ -71,6 +71,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
           fetch: (url, init) => fetch(url, init),
           openExternal: (url) => shell.openExternal(url),
           quitApp: () => app.quit(),
+          writeClipboardText: (text) => clipboard.writeText(text),
           selectDirectory: async ({ defaultPath, buttonLabel, message }) => {
             const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null
             const options: OpenDialogOptions = {

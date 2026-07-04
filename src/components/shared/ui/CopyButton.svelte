@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { writeClipboardText } from '../../../lib/ipc'
+
   interface Props {
     text: string
     label?: string
@@ -13,7 +15,7 @@
   async function handleCopy() {
     if (copied) return
     try {
-      await navigator.clipboard.writeText(text)
+      await writeClipboardText(text)
       copied = true
       if (timer) clearTimeout(timer)
       timer = setTimeout(() => { copied = false }, timeout)

@@ -23,6 +23,7 @@ export type BridgeFetch = (url: string, init: {
 
 export type OpenExternal = (url: string) => Promise<void>
 export type QuitApp = () => void | Promise<void>
+export type WriteClipboardText = (text: string) => void | Promise<void>
 export type SelectDirectory = (options: {
   defaultPath?: string
   buttonLabel?: string
@@ -36,6 +37,7 @@ export interface ElectronInvokeDeps {
   fetch: BridgeFetch
   openExternal: OpenExternal
   quitApp?: QuitApp
+  writeClipboardText?: WriteClipboardText
   selectDirectory?: SelectDirectory
   getDeveloperLogs?: GetDeveloperLogs
   getDeveloperLogSnapshot?: GetDeveloperLogSnapshot
@@ -277,6 +279,14 @@ export async function handleElectronInvoke(request: ElectronInvokeRequest, deps:
   if (command === 'quit_app') {
     if (!deps.quitApp) throw new Error('quit_app is not available')
     await deps.quitApp()
+    return undefined
+  }
+
+  if (command === 'write_clipboard_text') {
+    if (!deps.writeClipboardText) throw new Error('write_clipboard_text is not available')
+    const text = payloadString(payload, 'text')
+    if (!text) throw new Error('write_clipboard_text requires a text payload')
+    await deps.writeClipboardText(text)
     return undefined
   }
 

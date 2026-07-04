@@ -5,7 +5,7 @@ import { requireElement } from '../../test-utils/dom'
 import TaskInfoPanel from './TaskInfoPanel.svelte'
 import type { Task, PullRequestInfo, PrComment, TaskLabel, AgentSession } from '../../lib/types'
 import { activeSessions, mergingTaskIds, tasks, ticketPrs } from '../../lib/stores'
-import { addTaskLabel, forceGithubSync, getPrComments, getProjectTaskLabels, getPullRequests, linkPullRequest, mergePullRequest, refreshTaskGithubStatus, removeTaskLabel } from '../../lib/ipc'
+import { addTaskLabel, forceGithubSync, getPrComments, getProjectTaskLabels, getPullRequests, linkPullRequest, mergePullRequest, refreshTaskGithubStatus, removeTaskLabel, writeClipboardText } from '../../lib/ipc'
 
 vi.mock('../../lib/stores', () => ({
   ticketPrs: writable(new Map()),
@@ -43,6 +43,7 @@ vi.mock('../../lib/ipc', () => ({
   addTaskLabel: vi.fn().mockResolvedValue({ id: 1, project_id: 'proj-1', name: 'bug', color: 'error' }),
   removeTaskLabel: vi.fn().mockResolvedValue(undefined),
   getTaskGitStatus: vi.fn().mockResolvedValue({ has_remote: false, remote_ahead: 0, remote_behind: 0, local_commits: 0, uncommitted_files: 0, insertions: 0, deletions: 0 }),
+  writeClipboardText: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('../../lib/desktopIpc', () => ({
@@ -226,6 +227,16 @@ describe('TaskInfoPanel', () => {
     expect(screen.getByText('Resume command')).toBeTruthy()
     expect(screen.getByText('pi --session pi-sess-abc123')).toBeTruthy()
     expect(screen.getByTitle('Copy resume command')).toBeTruthy()
+  })
+
+  it('copies the workspace path through the typed IPC clipboard wrapper', async () => {
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: '/repo/T-42' } })
+
+    await fireEvent.click(screen.getByTitle('Copy workspace path'))
+
+    await waitFor(() => {
+      expect(writeClipboardText).toHaveBeenCalledWith('/repo/T-42')
+    })
   })
 
   it('hides the resume command row when no active session command is available', () => {
