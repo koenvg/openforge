@@ -77,25 +77,20 @@
     return $lowFireTaskIdsByProject.get(projectId) ?? new Set<string>()
   })
 
-  let groupedTasks = $derived.by(() => {
+  let visibleTasks = $derived.by(() => {
     const filtered = filterTasks(tasks, activeFilter, activeSessions, ticketPrs, focusStates, lowFireTaskIds)
     const labelFiltered = activeFilter === 'backlog'
       ? filtered.filter((task) => taskMatchesAnySelectedLabel(task, selectedLabelIds))
       : filtered
 
-    return {
-      attention: sortBySessionActivity(labelFiltered, activeSessions),
-      inFlight: [],
-    }
+    return sortBySessionActivity(labelFiltered, activeSessions)
   })
 
-  let filteredTasks = $derived.by(() => [...groupedTasks.attention, ...groupedTasks.inFlight])
-
   let visibleRows = $derived.by<TaskRow[]>(() =>
-    filteredTasks.map((task, taskIndex) => ({ task, taskIndex }))
+    visibleTasks.map((task, taskIndex) => ({ task, taskIndex }))
   )
 
-  let navigableCount = $derived(filteredTasks.length)
+  let navigableCount = $derived(visibleTasks.length)
 
   let filterCounts = $derived.by(() => getFilterCounts(tasks, activeSessions, ticketPrs, focusStates, lowFireTaskIds))
   let displayProjectLabels = $derived.by(() => {
@@ -112,7 +107,7 @@
 
   let selectedTask = $derived.by(() => {
     if (!selectedTaskIdLocal) return null
-    return filteredTasks.find(t => t.id === selectedTaskIdLocal) ?? null
+    return visibleTasks.find(t => t.id === selectedTaskIdLocal) ?? null
   })
 
   function setActiveFilter(filter: BoardFilter) {
@@ -148,7 +143,7 @@
   })
 
   $effect(() => {
-    if (selectedTaskIdLocal && !filteredTasks.find(t => t.id === selectedTaskIdLocal)) {
+    if (selectedTaskIdLocal && !visibleTasks.find(t => t.id === selectedTaskIdLocal)) {
       selectedTaskIdLocal = null
     }
   })
@@ -171,14 +166,14 @@
   const vim = useVimNavigation({
     getItemCount: () => navigableCount,
     onSelect: (index) => {
-      const task = filteredTasks[index]
+      const task = visibleTasks[index]
       if (task) onOpenTask(task.id)
     },
     onBack: () => {
       selectedTaskIdLocal = null
     },
     onAction: (index) => {
-      const task = filteredTasks[index]
+      const task = visibleTasks[index]
       if (task) onRunAction({ taskId: task.id, actionPrompt: '', agent: null })
     },
   })
@@ -188,7 +183,7 @@
     // card. The focusedIndex effects below sync selectedTaskIdLocal and scroll it into
     // view. Falls back to the default first-card focus when it isn't currently visible.
     if (recentlyViewedTaskId) {
-      const idx = filteredTasks.findIndex((t) => t.id === recentlyViewedTaskId)
+      const idx = visibleTasks.findIndex((t) => t.id === recentlyViewedTaskId)
       if (idx >= 0) {
         vim.setFocusedIndex(idx)
       }
@@ -217,7 +212,7 @@
 
   $effect(() => {
     const idx = vim.focusedIndex
-    const task = filteredTasks[idx]
+    const task = visibleTasks[idx]
     if (task) {
       selectedTaskIdLocal = task.id
     }
@@ -408,7 +403,7 @@
         </div>
       {/if}
 
-      {#if filteredTasks.length === 0}
+      {#if visibleTasks.length === 0}
         <FocusEmptyState filter={activeFilter} />
       {:else}
         {#each visibleRows as row (row.task.id)}
