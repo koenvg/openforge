@@ -13,7 +13,7 @@ import { _resetPluginLoaderForTests, _setModuleLoader } from '../src/lib/plugin/
 import { installedPlugins, enabledPluginIds, runtimeContributionSources } from '../src/lib/plugin/pluginStore.ts'
 import { activeProjectId } from '../src/lib/stores.ts'
 import { rendererImportMapHtml, svelteHostRuntimeBuildEntries } from '../packages/plugin-sdk/src/svelteHostRuntimeContract.mjs'
-import { buildBackendPluginHostRuntime, buildSvelteHostRuntimeAssets, copyElectronMainRuntimeAssets, copyHostRuntimeAssets, svelteHostRuntimeImportMapEntries } from './electron-build.mjs'
+import { buildBackendPluginHostRuntime, buildPreloadBundle, buildSvelteHostRuntimeAssets, copyElectronMainRuntimeAssets, copyHostRuntimeAssets, svelteHostRuntimeImportMapEntries } from './electron-build.mjs'
 import { BACKEND_LAYOUT_CONFIG_FILE } from './rust-sidecar-layout.mjs'
 
 const sidecarConfig = {
@@ -347,6 +347,27 @@ describe('Electron build host-runtime assets', () => {
     const copiedPreloadBridge = await readFile(join(outDir, 'preloadBridge.cjs'), 'utf8')
     expect(copiedPreloadBridge).toContain('createOpenForgePreloadApi')
     expect(copiedPreloadBridge).toContain('openforge:event')
+  })
+
+  it('bundles the sandbox preload into a self-contained preload.cjs', async () => {
+    // Electron's sandboxed preload uses a restricted require that cannot resolve
+    // relative sibling modules, so the bridge must be inlined into preload.cjs
+    // rather than pulled in via `require('./preloadBridge.cjs')` at runtime.
+    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+    const outDir = join(tmpdir(), `openforge-preload-bundle-${process.pid}-${Date.now()}`)
+    await mkdir(outDir, { recursive: true })
+
+    try {
+      await buildPreloadBundle(repoRoot, outDir)
+
+      const preload = await readFile(join(outDir, 'preload.cjs'), 'utf8')
+      expect(preload).toContain('createOpenForgePreloadApi')
+      expect(preload).toContain('openforge:invoke')
+      expect(preload).toContain('exposeInMainWorld')
+      expect(preload).not.toMatch(/require\(\s*['"]\.\/preloadBridge\.cjs['"]\s*\)/)
+    } finally {
+      await rm(outDir, { recursive: true, force: true })
+    }
   })
 
   it('builds the backend plugin-host runtime from the configured Backend Crate root', async () => {
