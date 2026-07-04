@@ -278,12 +278,6 @@ pub(crate) fn finalize_readiness_facts_for_poll(
             readiness_facts.merge_queue_required = Some(true);
             readiness_facts.merge_queue_state = Some("not_queued".to_string());
         }
-        if !snapshot.policy.unknown_reasons.is_empty()
-            && first_class_readiness_status(readiness_facts.status.as_deref())
-        {
-            readiness_facts.status = Some("readiness_unknown".to_string());
-            readiness_facts.action = Some("wait_for_github".to_string());
-        }
     }
 
     let effective_source_sha = if readiness_is_queued {
@@ -524,15 +518,13 @@ pub(crate) fn build_merge_readiness_facts(
     let merge_queue_state =
         merge_queue_state_from_details(details, is_queued, merge_queue_required);
 
-    let has_unknown_policy = !required_checks_policy_known || !required_reviews_policy_known;
-
     let (status, action) = if !blockers.is_empty() {
         (Some("blocked"), Some("resolve_blockers"))
     } else if is_queued {
         (Some("queued_pull_request"), Some("wait_for_queue"))
     } else if merge_queue_required == Some(true) {
         (Some("ready_to_enqueue"), Some("enqueue"))
-    } else if review_status.as_deref() == Some("review_unknown") || has_unknown_policy {
+    } else if review_status.as_deref() == Some("review_unknown") {
         (Some("readiness_unknown"), Some("wait_for_github"))
     } else if matches!(mergeable_state_lower.as_deref(), Some("clean" | "behind"))
         || (mergeable == Some(true)
@@ -717,7 +709,7 @@ mod tests {
     }
 
     #[test]
-    fn github_readiness_unknown_policy_adds_warning_instead_of_known_false() {
+    fn github_readiness_unknown_policy_keeps_ready_handoff_with_warning() {
         let pr = make_github_readiness_pr();
         let facts = build_merge_readiness_facts(
             &pr,
@@ -734,6 +726,8 @@ mod tests {
             None,
         );
 
+        assert_eq!(facts.status.as_deref(), Some("ready_to_merge"));
+        assert_eq!(facts.action.as_deref(), Some("merge"));
         assert_eq!(facts.required_checks_policy_known, Some(false));
         assert_eq!(facts.required_reviews_policy_known, Some(false));
         let warnings = facts.merge_readiness_warnings_or_default();
@@ -947,7 +941,7 @@ mod tests {
     }
 
     #[test]
-    fn github_readiness_unknown_policy_does_not_produce_ready_handoff() {
+    fn github_readiness_unknown_policy_does_not_override_clean_mergeability() {
         let pr = make_github_readiness_pr();
         let facts = build_merge_readiness_facts(
             &pr,
@@ -955,7 +949,7 @@ mod tests {
             Some(true),
             Some("clean"),
             Some("success"),
-            Some("approved"),
+            Some("none"),
             false,
             false,
             false,
@@ -964,8 +958,8 @@ mod tests {
             None,
         );
 
-        assert_eq!(facts.status.as_deref(), Some("readiness_unknown"));
-        assert_eq!(facts.action.as_deref(), Some("wait_for_github"));
+        assert_eq!(facts.status.as_deref(), Some("ready_to_merge"));
+        assert_eq!(facts.action.as_deref(), Some("merge"));
         assert!(facts
             .merge_readiness_warnings_or_default()
             .contains("policy_coverage_unknown"));
@@ -1165,8 +1159,8 @@ mod tests {
         );
         let warnings = facts.merge_readiness_warnings_or_default();
 
-        assert_eq!(facts.status.as_deref(), Some("readiness_unknown"));
-        assert_eq!(facts.action.as_deref(), Some("wait_for_github"));
+        assert_eq!(facts.status.as_deref(), Some("ready_to_merge"));
+        assert_eq!(facts.action.as_deref(), Some("merge"));
         assert!(warnings.contains("policy_coverage_unknown"));
         assert!(warnings.contains("unresolved_conversations"));
         assert_eq!(warnings.matches("unresolved_conversations").count(), 1);
