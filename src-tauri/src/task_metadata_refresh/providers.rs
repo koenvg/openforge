@@ -1,7 +1,6 @@
 #[cfg(test)]
 use super::prompt::TASK_DISPLAY_TITLE_JSON_SCHEMA;
 use super::prompt::{parse_task_display_title_output, MetadataJob, MetadataJobKind};
-use log::{debug, info, warn};
 use std::path::Path;
 use std::time::Duration;
 

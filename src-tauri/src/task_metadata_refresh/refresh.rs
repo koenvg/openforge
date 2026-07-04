@@ -6,7 +6,6 @@ use super::prompt::{
 };
 use super::providers::run_task_display_title_metadata_job;
 use crate::db;
-use log::{debug, info, warn};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
