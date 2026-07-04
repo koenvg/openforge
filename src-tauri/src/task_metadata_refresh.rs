@@ -1,3 +1,6 @@
+use once_cell::sync::Lazy;
+use regex::Regex;
+
 macro_rules! info {
     ($($arg:tt)*) => {{
         $crate::task_metadata_refresh::emit_task_metadata_refresh_diagnostic_stdout(format_args!($($arg)*))
@@ -42,8 +45,39 @@ fn task_metadata_refresh_debug_enabled() -> bool {
     )
 }
 
+static SENSITIVE_KEY_VALUE_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+        r#"(?i)\b(prompt|transcript|stdout|stderr|body|title|generated_title|repo|repository|owner|path|url|token|authorization)=(("[^"]*")|('[^']*')|([^\s,;)]*))"#,
+    )
+    .expect("sensitive key-value regex should compile")
+});
+
+static ABSOLUTE_PATH_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"/(?:[A-Za-z0-9._ -]+/)+[A-Za-z0-9._ -]+"#)
+        .expect("absolute path regex should compile")
+});
+
+static GITHUB_API_URL_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"https://api\.github\.com/[^\s,;)'\"]+"#)
+        .expect("GitHub API URL regex should compile")
+});
+
+static TOKEN_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"(?i)\b(?:gh[opsur]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|bearer\s+[A-Za-z0-9._~+/=-]+|sk-[A-Za-z0-9_-]+)"#)
+        .expect("token regex should compile")
+});
+
+fn redact_task_metadata_refresh_diagnostic(message: &str) -> String {
+    let redacted = SENSITIVE_KEY_VALUE_RE.replace_all(message, "$1=<redacted>");
+    let redacted = GITHUB_API_URL_RE.replace_all(&redacted, "<redacted>");
+    let redacted = TOKEN_RE.replace_all(&redacted, "<redacted>");
+    ABSOLUTE_PATH_RE
+        .replace_all(&redacted, "<redacted>")
+        .to_string()
+}
+
 fn format_task_metadata_refresh_diagnostic(message: std::fmt::Arguments<'_>) -> String {
-    message.to_string()
+    redact_task_metadata_refresh_diagnostic(&message.to_string())
 }
 
 fn emit_task_metadata_refresh_diagnostic_stdout(message: std::fmt::Arguments<'_>) {

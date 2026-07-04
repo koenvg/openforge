@@ -62,13 +62,15 @@ mod tests {
     fn sanitized_log_message_preserves_status_without_sensitive_content() {
         let err = GitHubError::ApiError {
             status: 403,
-            message: "token ghp_secret body mentions https://api.github.com/repos/acme/private/pulls?user=alice".to_string(),
+            message: "token ghp_secret github_pat_secret Authorization: Bearer bearer-secret body mentions https://api.github.com/repos/acme/private/pulls?user=alice".to_string(),
         };
 
         let sanitized = err.sanitized_log_message();
 
         assert_eq!(sanitized, "GitHub API error (status 403)");
         assert!(!sanitized.contains("ghp_secret"));
+        assert!(!sanitized.contains("github_pat_secret"));
+        assert!(!sanitized.contains("Bearer bearer-secret"));
         assert!(!sanitized.contains("https://api.github.com"));
         assert!(!sanitized.contains("acme"));
         assert!(!sanitized.contains("private"));

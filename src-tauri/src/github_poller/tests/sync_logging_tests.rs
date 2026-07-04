@@ -2,11 +2,16 @@ use super::*;
 
 #[test]
 fn test_format_sync_scope_log_includes_scope_and_fanout() {
-    let message =
-        format_sync_scope_log(&PollScope::ActiveTaskPrs(Some("active".to_string())), 3, 7);
+    let repo_identifier = "acme/private";
+    let message = format_sync_scope_log(
+        &PollScope::ActiveTaskPrs(Some(repo_identifier.to_string())),
+        3,
+        7,
+    );
 
     assert!(message.contains("scope=active-task-prs"));
-    assert!(message.contains("active_project=active"));
+    assert!(message.contains("active_project=<redacted>"));
+    assert!(!message.contains(repo_identifier));
     assert!(message.contains("projects=3"));
     assert!(message.contains("prs=7"));
 }
