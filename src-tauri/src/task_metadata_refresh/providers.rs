@@ -1,8 +1,21 @@
 use super::prompt::{parse_task_display_title_output, MetadataJob, MetadataJobKind};
+use crate::user_environment::{find_tool_on_path, user_environment};
+use std::collections::HashMap;
 use std::path::Path;
 use std::time::Duration;
 
 const TITLE_PROVIDER_TIMEOUT_SECONDS: u64 = 60;
+
+pub(super) fn resolve_metadata_program(
+    program: &str,
+    environment: &HashMap<String, String>,
+) -> String {
+    environment
+        .get("PATH")
+        .and_then(|path| find_tool_on_path(program, path))
+        .map(|path| path.to_string_lossy().to_string())
+        .unwrap_or_else(|| program.to_string())
+}
 
 pub(super) fn build_claude_metadata_job_args(prompt: &str, output_schema: &str) -> Vec<String> {
     vec![
@@ -157,8 +170,11 @@ async fn run_headless_metadata_command(
         output_file.is_some(),
         TITLE_PROVIDER_TIMEOUT_SECONDS
     );
-    let mut command = tokio::process::Command::new(program);
+    let env = user_environment();
+    let program_path = resolve_metadata_program(program, &env);
+    let mut command = tokio::process::Command::new(&program_path);
     command.args(args);
+    command.envs(&env);
     command.env("NO_COLOR", "1");
     command.env("OPENFORGE_METADATA_JOB_KIND", job.kind.as_str());
     command.env("OPENFORGE_METADATA_PROVIDER", &job.provider);

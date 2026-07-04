@@ -6,12 +6,13 @@ use super::prompt::{
 };
 use super::providers::{
     build_claude_metadata_job_args, build_codex_title_headless_args,
-    build_opencode_title_headless_args, build_pi_metadata_job_args,
+    build_opencode_title_headless_args, build_pi_metadata_job_args, resolve_metadata_program,
 };
 use super::refresh::{
     refresh_task_display_title_once, refresh_task_display_title_once_with_provider,
 };
 use crate::db::test_helpers::*;
+use std::collections::HashMap;
 use std::path::Path;
 
 #[test]
@@ -192,6 +193,35 @@ fn provider_title_headless_args_are_session_isolated() {
             "-p".to_string(),
             "Name this work".to_string(),
         ]
+    );
+}
+
+#[test]
+fn pi_metadata_job_resolves_installed_pi_executable_for_sidecar_launch() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let pi_path = dir.path().join("pi");
+    std::fs::write(&pi_path, "#!/bin/sh\nexit 0\n").expect("write fake pi");
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = std::fs::metadata(&pi_path)
+            .expect("fake pi metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&pi_path, permissions).expect("make fake pi executable");
+    }
+
+    let mut env = HashMap::new();
+    env.insert("PATH".to_string(), dir.path().to_string_lossy().to_string());
+
+    assert_eq!(
+        resolve_metadata_program("pi", &env),
+        pi_path.to_string_lossy().to_string()
+    );
+    assert_eq!(
+        resolve_metadata_program("missing-openforge-tool", &env),
+        "missing-openforge-tool"
     );
 }
 
