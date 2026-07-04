@@ -186,18 +186,200 @@ impl PollContext {
     }
 }
 
-/// Which repositories a polling cycle should cover.
+/// Which repositories and PR lists a polling cycle should cover.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PollScope {
-    /// Poll every project + unscoped searches (used when the global PR view is open,
-    /// and for manual "sync now").
+    /// Poll every project + unscoped searches (used by manual "sync now" and
+    /// as the pre-context fallback).
     Global,
-    /// Poll only the active project's repo. `None` means no project is active, so no
-    /// project-specific (task-PR) polling happens this cycle.
+    /// Poll only the active project's repo. Preserved for existing poll-context
+    /// callers and tests; the background scheduler uses the finer-grained task
+    /// PR scopes below.
+    #[allow(dead_code)]
     ActiveRepo(Option<String>),
+    /// Poll Focus-column task-linked PRs in the active project.
+    ActiveFocusTaskPrs(Option<String>),
+    /// Poll non-Focus task-linked PRs in the active project.
+    ActiveTaskPrs(Option<String>),
+    /// Poll task-linked PRs outside the active project.
+    InactiveTaskPrs(Option<String>),
+    /// Poll global review/authored PR-list data without the per-task PR fan-out.
+    GlobalReviewLists,
+}
+
+#[derive(Debug, Clone)]
+pub struct ScheduledPr {
+    pr: PrRow,
+    project_id: String,
+    task_status: String,
+    low_fire: bool,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PollSchedulerSnapshot {
+    linked_prs: Vec<ScheduledPr>,
+    rate_limited: bool,
+    rate_limit_reset_at: Option<i64>,
+    global_review_due: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PollPlan {
+    scopes: Vec<PollScope>,
+    sleep_secs: u64,
+}
+
+impl PollResult {
+    fn empty() -> Self {
+        Self {
+            new_comments: 0,
+            ci_changes: 0,
+            review_changes: 0,
+            pr_changes: 0,
+            errors: 0,
+            rate_limited: false,
+            rate_limit_reset_at: None,
+        }
+    }
+
+    fn absorb(&mut self, other: PollResult) {
+        self.new_comments += other.new_comments;
+        self.ci_changes += other.ci_changes;
+        self.review_changes += other.review_changes;
+        self.pr_changes += other.pr_changes;
+        self.errors += other.errors;
+        self.rate_limited |= other.rate_limited;
+        self.rate_limit_reset_at = other.rate_limit_reset_at.or(self.rate_limit_reset_at);
+    }
+}
+
+impl PollScope {
+    fn polls_task_prs(&self) -> bool {
+        !matches!(self, Self::GlobalReviewLists)
+    }
+
+    fn polls_global_lists(&self) -> bool {
+        matches!(self, Self::Global | Self::GlobalReviewLists)
+    }
+
+    fn refreshes_task_links(&self) -> bool {
+        matches!(self, Self::Global | Self::GlobalReviewLists)
+    }
+}
+
+fn is_focus_task_status(status: &str) -> bool {
+    !matches!(status, "backlog" | "done")
+}
+
+fn is_pending_readiness(pr: &ScheduledPr) -> bool {
+    matches!(
+        pr.pr.ci_status.as_deref(),
+        Some("pending" | "queued" | "running" | "in_progress")
+    ) || matches!(
+        pr.pr.merge_readiness_status.as_deref(),
+        Some("pending" | "checking" | "unknown")
+    ) || pr.pr.is_queued
+}
+fn is_settled_readiness(pr: &ScheduledPr) -> bool {
+    matches!(
+        pr.pr.ci_status.as_deref(),
+        Some("success" | "failure" | "none")
+    ) && matches!(
+        pr.pr.merge_readiness_status.as_deref(),
+        Some("ready" | "mergeable")
+    )
+}
+
+fn scope_has_matches(scope: &PollScope, prs: &[ScheduledPr]) -> bool {
+    prs.iter().any(|pr| scheduled_pr_in_scope(pr, scope))
+}
+
+fn scheduled_pr_in_scope(pr: &ScheduledPr, scope: &PollScope) -> bool {
+    match scope {
+        PollScope::Global | PollScope::ActiveRepo(_) => true,
+        PollScope::GlobalReviewLists => false,
+        PollScope::ActiveFocusTaskPrs(Some(active_project_id)) => {
+            pr.project_id == *active_project_id
+                && is_focus_task_status(&pr.task_status)
+                && !pr.low_fire
+        }
+        PollScope::ActiveTaskPrs(Some(active_project_id)) => {
+            pr.project_id == *active_project_id
+                && (!is_focus_task_status(&pr.task_status) || pr.low_fire)
+        }
+        PollScope::InactiveTaskPrs(Some(active_project_id)) => pr.project_id != *active_project_id,
+        PollScope::ActiveFocusTaskPrs(None)
+        | PollScope::ActiveTaskPrs(None)
+        | PollScope::InactiveTaskPrs(None) => false,
+    }
+}
+
+fn build_poll_plan(
+    ctx: &PollContextSnapshot,
+    snapshot: PollSchedulerSnapshot,
+    poll_interval: u64,
+    now: i64,
+) -> PollPlan {
+    if snapshot.rate_limited {
+        return PollPlan {
+            scopes: Vec::new(),
+            sleep_secs: rate_limit_sleep_duration_secs(
+                poll_interval,
+                snapshot.rate_limit_reset_at,
+                now,
+            ),
+        };
+    }
+
+    if ctx.reported && !ctx.focused {
+        return PollPlan {
+            scopes: Vec::new(),
+            sleep_secs: MAX_GITHUB_POLL_INTERVAL_SECS,
+        };
+    }
+
+    if !ctx.reported {
+        return PollPlan {
+            scopes: vec![PollScope::Global],
+            sleep_secs: poll_interval,
+        };
+    }
+
+    let active_project_id = ctx.active_project_id.clone();
+    let candidate_scopes = vec![
+        PollScope::ActiveFocusTaskPrs(active_project_id.clone()),
+        PollScope::ActiveTaskPrs(active_project_id.clone()),
+        PollScope::InactiveTaskPrs(active_project_id),
+        PollScope::GlobalReviewLists,
+    ];
+
+    let mut scopes: Vec<PollScope> = candidate_scopes
+        .into_iter()
+        .filter(|scope| {
+            (matches!(scope, PollScope::GlobalReviewLists) && snapshot.global_review_due)
+                || scope_has_matches(scope, &snapshot.linked_prs)
+        })
+        .collect();
+
+    if scopes.is_empty() && ctx.global_view_open && snapshot.global_review_due {
+        scopes.push(PollScope::GlobalReviewLists);
+    }
+
+    let has_pending = snapshot.linked_prs.iter().any(is_pending_readiness);
+    let has_settled = snapshot.linked_prs.iter().any(is_settled_readiness);
+    let sleep_secs = if has_pending {
+        MIN_GITHUB_POLL_INTERVAL_SECS
+    } else if has_settled {
+        (poll_interval * 2).clamp(MIN_GITHUB_POLL_INTERVAL_SECS, MAX_GITHUB_POLL_INTERVAL_SECS)
+    } else {
+        poll_interval
+    };
+
+    PollPlan { scopes, sleep_secs }
 }
 
 /// What the loop should do for a given cycle, derived from the poll context.
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PollDecision {
     /// App is unfocused/hidden — skip the cycle entirely (no GitHub calls).
@@ -207,6 +389,7 @@ pub enum PollDecision {
 }
 
 /// Pure decision: given the current context, decide whether/how to poll.
+#[allow(dead_code)]
 pub fn decide_poll(ctx: &PollContextSnapshot) -> PollDecision {
     // Before the frontend reports, preserve the pre-feature behavior (poll all).
     if !ctx.reported {
@@ -226,8 +409,15 @@ pub fn decide_poll(ctx: &PollContextSnapshot) -> PollDecision {
 fn select_projects(all: Vec<ProjectRow>, scope: &PollScope) -> Vec<ProjectRow> {
     match scope {
         PollScope::Global => all,
-        PollScope::ActiveRepo(None) => Vec::new(),
-        PollScope::ActiveRepo(Some(id)) => all.into_iter().filter(|p| &p.id == id).collect(),
+        PollScope::GlobalReviewLists => Vec::new(),
+        PollScope::ActiveRepo(None)
+        | PollScope::ActiveFocusTaskPrs(None)
+        | PollScope::ActiveTaskPrs(None) => Vec::new(),
+        PollScope::ActiveRepo(Some(id))
+        | PollScope::ActiveFocusTaskPrs(Some(id))
+        | PollScope::ActiveTaskPrs(Some(id)) => all.into_iter().filter(|p| &p.id == id).collect(),
+        PollScope::InactiveTaskPrs(None) => all,
+        PollScope::InactiveTaskPrs(Some(id)) => all.into_iter().filter(|p| &p.id != id).collect(),
     }
 }
 
@@ -304,22 +494,10 @@ async fn poll_github_once_with_state(
         }
     };
 
-    if projects.is_empty() {
-        return PollResult {
-            new_comments: 0,
-            ci_changes: 0,
-            review_changes: 0,
-            pr_changes: 0,
-            errors: 0,
-            rate_limited: false,
-            rate_limit_reset_at: None,
-        };
+    if projects.is_empty() && scope.polls_task_prs() {
+        return PollResult::empty();
     }
 
-    // Scope the per-project (task-PR) polling to the active repo unless the global
-    // view is open. The review/authored searches below stay global (they are cheap
-    // single calls with no per-PR fan-out) so the global badge and the per-repo
-    // view's filtered list both stay fresh.
     let projects = select_projects(projects, scope);
 
     debug!(
@@ -335,57 +513,65 @@ async fn poll_github_once_with_state(
     let mut total_errors = 0;
     let mut rate_limit_count = 0;
 
-    let sync_start = Instant::now();
-    if let Err(e) = sync_authored_task_prs(github_client, &db, &github_token).await {
-        error!("[GitHub Poller] Failed to sync authored task PRs: {}", e);
-        total_errors += 1;
-        if e.should_increment_rate_limit_count() {
-            rate_limit_count += 1;
+    if scope.refreshes_task_links() {
+        let sync_start = Instant::now();
+        if let Err(e) = sync_authored_task_prs(github_client, &db, &github_token).await {
+            error!("[GitHub Poller] Failed to sync authored task PRs: {}", e);
+            total_errors += 1;
+            if e.should_increment_rate_limit_count() {
+                rate_limit_count += 1;
+            }
         }
+        debug!(
+            "[GitHub Poller] Sync authored task PRs took {:.1}s",
+            sync_start.elapsed().as_secs_f64()
+        );
     }
-    debug!(
-        "[GitHub Poller] Sync authored task PRs took {:.1}s",
-        sync_start.elapsed().as_secs_f64()
-    );
 
     let configured_github_username = {
         let db_lock = db.lock().unwrap();
         db_lock.get_config("github_username").ok().flatten()
     };
 
-    for project in projects {
-        let open_prs = match get_open_prs_for_project(&db, &project.id) {
-            Ok(prs) => prs,
-            Err(e) => {
-                error!(
-                    "[GitHub Poller] Failed to get PRs for project {}: {}",
-                    project.id, e
-                );
-                total_errors += 1;
-                continue;
-            }
-        };
+    if scope.polls_task_prs() {
+        for project in projects {
+            let open_prs = match get_scheduled_prs_for_project(&db, &project.id) {
+                Ok(prs) => prs
+                    .into_iter()
+                    .filter(|pr| scheduled_pr_in_scope(pr, scope))
+                    .map(|pr| pr.pr)
+                    .collect(),
+                Err(e) => {
+                    error!(
+                        "[GitHub Poller] Failed to get PRs for project {}: {}",
+                        project.id, e
+                    );
+                    total_errors += 1;
+                    continue;
+                }
+            };
 
-        let poll_start = Instant::now();
-        let (new_comments, ci_changes, review_changes, errors) = poll_prs_for_project(
-            github_client,
-            &db,
-            events,
-            &github_token,
-            configured_github_username.as_deref(),
-            open_prs,
-            &[],
-        )
-        .await;
-        debug!(
-            "[GitHub Poller] PR polling for project {} took {:.1}s",
-            project.id,
-            poll_start.elapsed().as_secs_f64()
-        );
-        total_new_comments += new_comments;
-        total_ci_changes += ci_changes;
-        total_review_changes += review_changes;
-        total_errors += errors;
+            let poll_start = Instant::now();
+            let (new_comments, ci_changes, review_changes, errors) = poll_prs_for_project(
+                github_client,
+                &db,
+                events,
+                &github_token,
+                configured_github_username.as_deref(),
+                open_prs,
+                &[],
+            )
+            .await;
+            debug!(
+                "[GitHub Poller] PR polling for project {} took {:.1}s",
+                project.id,
+                poll_start.elapsed().as_secs_f64()
+            );
+            total_new_comments += new_comments;
+            total_ci_changes += ci_changes;
+            total_review_changes += review_changes;
+            total_errors += errors;
+        }
     }
 
     if total_new_comments > 0 || total_errors > 0 {
@@ -395,29 +581,31 @@ async fn poll_github_once_with_state(
         );
     }
 
-    let review_start = Instant::now();
-    count_poll_phase_error(
-        "review PRs",
-        poll_review_prs(github_client, &db, events, &github_token).await,
-        &mut total_errors,
-        &mut rate_limit_count,
-    );
-    debug!(
-        "[GitHub Poller] Review PR polling took {:.1}s",
-        review_start.elapsed().as_secs_f64()
-    );
+    if scope.polls_global_lists() {
+        let review_start = Instant::now();
+        count_poll_phase_error(
+            "review PRs",
+            poll_review_prs(github_client, &db, events, &github_token).await,
+            &mut total_errors,
+            &mut rate_limit_count,
+        );
+        debug!(
+            "[GitHub Poller] Review PR polling took {:.1}s",
+            review_start.elapsed().as_secs_f64()
+        );
 
-    let authored_start = Instant::now();
-    count_poll_phase_error(
-        "authored PRs",
-        poll_authored_prs(github_client, &db, events, &github_token).await,
-        &mut total_errors,
-        &mut rate_limit_count,
-    );
-    debug!(
-        "[GitHub Poller] Authored PR polling took {:.1}s",
-        authored_start.elapsed().as_secs_f64()
-    );
+        let authored_start = Instant::now();
+        count_poll_phase_error(
+            "authored PRs",
+            poll_authored_prs(github_client, &db, events, &github_token).await,
+            &mut total_errors,
+            &mut rate_limit_count,
+        );
+        debug!(
+            "[GitHub Poller] Authored PR polling took {:.1}s",
+            authored_start.elapsed().as_secs_f64()
+        );
+    }
 
     let rate_limit_reset = github_client.get_last_rate_limit_reset();
     let rate_limited = rate_limit_reset.is_some() || rate_limit_count > 0;
@@ -494,24 +682,45 @@ async fn start_github_poller_with_state(
     events: GitHubEventTarget,
     poll_context: PollContext,
 ) {
+    let mut last_global_review_at = 0;
+
     loop {
         let poll_interval = {
             let db_lock = db.lock().unwrap();
             parse_poll_interval_seconds(db_lock.get_config("github_poll_interval").ok().flatten())
         };
 
-        // Focus-gating + view-scoping: skip the cycle entirely when the app is
-        // unfocused/hidden; otherwise poll the scope the active view needs.
-        let scope = match decide_poll(&poll_context.snapshot()) {
-            PollDecision::Skip => {
-                debug!("[GitHub Poller] App unfocused/hidden — skipping cycle");
-                sleep(Duration::from_secs(poll_interval)).await;
-                continue;
-            }
-            PollDecision::Poll(scope) => scope,
-        };
+        let now = current_unix_timestamp();
+        let global_review_interval = (poll_interval * 4) as i64;
+        let global_review_due = now.saturating_sub(last_global_review_at) >= global_review_interval;
+        let scheduler_snapshot = poll_scheduler_snapshot(&db, false, None, global_review_due);
+        let plan = build_poll_plan(
+            &poll_context.snapshot(),
+            scheduler_snapshot,
+            poll_interval,
+            now,
+        );
 
-        let result = poll_github_once_with_state(db.clone(), &github_client, &events, &scope).await;
+        if plan.scopes.is_empty() {
+            debug!(
+                "[GitHub Poller] No GitHub sync scopes due; sleeping {}s",
+                plan.sleep_secs
+            );
+            sleep(Duration::from_secs(plan.sleep_secs)).await;
+            continue;
+        }
+
+        let ran_global_review = plan.scopes.iter().any(PollScope::polls_global_lists);
+        let mut result = PollResult::empty();
+        for scope in plan.scopes {
+            let scope_result =
+                poll_github_once_with_state(db.clone(), &github_client, &events, &scope).await;
+            let stop_for_rate_limit = scope_result.rate_limited;
+            result.absorb(scope_result);
+            if stop_for_rate_limit {
+                break;
+            }
+        }
 
         let has_changes = result.new_comments > 0
             || result.ci_changes > 0
@@ -535,6 +744,10 @@ async fn start_github_poller_with_state(
             }
         }
 
+        if ran_global_review {
+            last_global_review_at = current_unix_timestamp();
+        }
+
         let sleep_secs = if result.rate_limited {
             rate_limit_sleep_duration_secs(
                 poll_interval,
@@ -542,7 +755,7 @@ async fn start_github_poller_with_state(
                 current_unix_timestamp(),
             )
         } else {
-            poll_interval
+            plan.sleep_secs
         };
         sleep(Duration::from_secs(sleep_secs)).await;
     }
@@ -552,7 +765,44 @@ fn json_value_for_event<T: Serialize>(value: &T) -> serde_json::Value {
     serde_json::to_value(value).unwrap_or(serde_json::Value::Null)
 }
 
-fn get_open_prs_for_project(db: &Mutex<Database>, project_id: &str) -> Result<Vec<PrRow>, String> {
+fn poll_scheduler_snapshot(
+    db: &Mutex<Database>,
+    rate_limited: bool,
+    rate_limit_reset_at: Option<i64>,
+    global_review_due: bool,
+) -> PollSchedulerSnapshot {
+    let projects = {
+        let db_lock = db.lock().unwrap();
+        db_lock.get_all_projects()
+    };
+
+    let linked_prs = match projects {
+        Ok(projects) => projects
+            .into_iter()
+            .filter_map(|project| get_scheduled_prs_for_project(db, &project.id).ok())
+            .flatten()
+            .collect(),
+        Err(e) => {
+            warn!(
+                "[GitHub Poller] Failed to build scheduler project snapshot: {}",
+                e
+            );
+            Vec::new()
+        }
+    };
+
+    PollSchedulerSnapshot {
+        linked_prs,
+        rate_limited,
+        rate_limit_reset_at,
+        global_review_due,
+    }
+}
+
+fn get_scheduled_prs_for_project(
+    db: &Mutex<Database>,
+    project_id: &str,
+) -> Result<Vec<ScheduledPr>, String> {
     let db_lock = db.lock().unwrap();
     let all_open_prs = db_lock.get_open_prs().map_err(|e| e.to_string())?;
 
@@ -560,11 +810,35 @@ fn get_open_prs_for_project(db: &Mutex<Database>, project_id: &str) -> Result<Ve
         .get_tasks_for_project(project_id)
         .map_err(|e| e.to_string())?;
 
-    let task_ids: HashSet<String> = tasks.into_iter().map(|t| t.id).collect();
+    let task_rows = tasks;
+    let low_fire_task_ids: HashSet<String> = db_lock
+        .get_project_config(project_id, "low_fire_task_ids")
+        .ok()
+        .flatten()
+        .and_then(|raw| serde_json::from_str::<Vec<String>>(&raw).ok())
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+    let task_statuses: HashMap<String, (String, bool)> = task_rows
+        .into_iter()
+        .map(|task| {
+            let low_fire = low_fire_task_ids.contains(&task.id);
+            (task.id, (task.status, low_fire))
+        })
+        .collect();
 
     Ok(all_open_prs
         .into_iter()
-        .filter(|pr| task_ids.contains(&pr.ticket_id))
+        .filter_map(|pr| {
+            task_statuses
+                .get(&pr.ticket_id)
+                .map(|(status, low_fire)| ScheduledPr {
+                    pr,
+                    project_id: project_id.to_string(),
+                    task_status: status.clone(),
+                    low_fire: *low_fire,
+                })
+        })
         .collect())
 }
 
@@ -2165,7 +2439,218 @@ mod tests {
             global_view_open,
         }
     }
+    fn make_pr(
+        id: i64,
+        ticket_id: &str,
+        project_id: &str,
+        task_status: &str,
+        ci_status: Option<&str>,
+        readiness_status: Option<&str>,
+    ) -> ScheduledPr {
+        ScheduledPr {
+            pr: PrRow {
+                id,
+                pr_number: id,
+                ticket_id: ticket_id.to_string(),
+                repo_owner: "acme".to_string(),
+                repo_name: project_id.to_string(),
+                title: format!("PR {id}"),
+                url: format!("https://github.com/acme/{project_id}/pull/{id}"),
+                state: "open".to_string(),
+                head_sha: format!("sha-{id}"),
+                ci_status: ci_status.map(str::to_string),
+                ci_check_runs: None,
+                review_status: None,
+                mergeable: None,
+                mergeable_state: None,
+                merged_at: None,
+                created_at: 0,
+                updated_at: 0,
+                draft: false,
+                is_queued: false,
+                merge_readiness_status: readiness_status.map(str::to_string),
+                merge_readiness_action: None,
+                merge_readiness_blockers: None,
+                merge_readiness_warnings: None,
+                readiness_source_head_sha: None,
+                merge_group_sha: None,
+                required_checks_policy_known: None,
+                required_reviews_policy_known: None,
+                merge_queue_required: None,
+                merge_queue_state: None,
+                readiness_updated_at: None,
+                unaddressed_comment_count: 0,
+            },
+            project_id: project_id.to_string(),
+            task_status: task_status.to_string(),
+            low_fire: false,
+        }
+    }
 
+    #[test]
+    fn test_scheduler_prioritizes_active_focus_task_prs_before_lower_budget_work() {
+        let plan = build_poll_plan(
+            &reported_ctx(true, Some("active"), false),
+            PollSchedulerSnapshot {
+                linked_prs: vec![
+                    make_pr(
+                        1,
+                        "T-focus",
+                        "active",
+                        "doing",
+                        Some("success"),
+                        Some("blocked"),
+                    ),
+                    make_pr(
+                        2,
+                        "T-other",
+                        "active",
+                        "backlog",
+                        Some("success"),
+                        Some("blocked"),
+                    ),
+                    make_pr(
+                        3,
+                        "T-inactive",
+                        "inactive",
+                        "doing",
+                        Some("success"),
+                        Some("blocked"),
+                    ),
+                ],
+                rate_limited: false,
+                rate_limit_reset_at: None,
+                global_review_due: true,
+            },
+            60,
+            1_000,
+        );
+
+        assert_eq!(
+            plan.scopes,
+            vec![
+                PollScope::ActiveFocusTaskPrs(Some("active".to_string())),
+                PollScope::ActiveTaskPrs(Some("active".to_string())),
+                PollScope::InactiveTaskPrs(Some("active".to_string())),
+                PollScope::GlobalReviewLists,
+            ]
+        );
+        assert_eq!(plan.sleep_secs, 60);
+    }
+    #[test]
+    fn test_scheduler_keeps_global_review_lists_due_gated_even_when_global_view_open() {
+        let plan = build_poll_plan(
+            &reported_ctx(true, Some("active"), true),
+            PollSchedulerSnapshot {
+                linked_prs: Vec::new(),
+                rate_limited: false,
+                rate_limit_reset_at: None,
+                global_review_due: false,
+            },
+            60,
+            1_000,
+        );
+
+        assert!(plan.scopes.is_empty());
+    }
+
+    #[test]
+    fn test_scheduler_uses_fast_cadence_while_active_focus_ci_is_pending() {
+        let plan = build_poll_plan(
+            &reported_ctx(true, Some("active"), false),
+            PollSchedulerSnapshot {
+                linked_prs: vec![make_pr(
+                    1,
+                    "T-focus",
+                    "active",
+                    "doing",
+                    Some("pending"),
+                    Some("pending"),
+                )],
+                rate_limited: false,
+                rate_limit_reset_at: None,
+                global_review_due: false,
+            },
+            60,
+            1_000,
+        );
+
+        assert_eq!(plan.sleep_secs, MIN_GITHUB_POLL_INTERVAL_SECS);
+    }
+
+    #[test]
+    fn test_scheduler_slows_down_after_readiness_settles() {
+        let plan = build_poll_plan(
+            &reported_ctx(true, Some("active"), false),
+            PollSchedulerSnapshot {
+                linked_prs: vec![make_pr(
+                    1,
+                    "T-focus",
+                    "active",
+                    "doing",
+                    Some("success"),
+                    Some("ready"),
+                )],
+                rate_limited: false,
+                rate_limit_reset_at: None,
+                global_review_due: false,
+            },
+            60,
+            1_000,
+        );
+
+        assert_eq!(plan.sleep_secs, 120);
+    }
+
+    #[test]
+    fn test_scheduler_slows_when_unfocused_without_github_calls() {
+        let plan = build_poll_plan(
+            &reported_ctx(false, Some("active"), false),
+            PollSchedulerSnapshot {
+                linked_prs: vec![make_pr(
+                    1,
+                    "T-focus",
+                    "active",
+                    "doing",
+                    Some("pending"),
+                    None,
+                )],
+                rate_limited: false,
+                rate_limit_reset_at: None,
+                global_review_due: false,
+            },
+            60,
+            1_000,
+        );
+
+        assert!(plan.scopes.is_empty());
+        assert_eq!(plan.sleep_secs, MAX_GITHUB_POLL_INTERVAL_SECS);
+    }
+
+    #[test]
+    fn test_scheduler_rate_limit_sleep_honors_reset_before_any_priority_work() {
+        let plan = build_poll_plan(
+            &reported_ctx(true, Some("active"), false),
+            PollSchedulerSnapshot {
+                linked_prs: vec![make_pr(
+                    1,
+                    "T-focus",
+                    "active",
+                    "doing",
+                    Some("pending"),
+                    None,
+                )],
+                rate_limited: true,
+                rate_limit_reset_at: Some(1_120),
+                global_review_due: false,
+            },
+            60,
+            1_000,
+        );
+
+        assert!(plan.scopes.is_empty());
+        assert_eq!(plan.sleep_secs, 121);
+    }
     #[test]
     fn test_decide_poll_unreported_falls_back_to_global() {
         // Before the frontend reports, behave like the pre-feature poller.
