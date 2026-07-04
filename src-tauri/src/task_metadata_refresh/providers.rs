@@ -241,24 +241,23 @@ async fn run_headless_metadata_command(
         match std::fs::read_to_string(path) {
             Ok(content) if !content.trim().is_empty() => {
                 debug!(
-                    "[task_metadata_refresh] using metadata output file task_id={} provider={} path={:?} bytes={}",
+                    "[task_metadata_refresh] using metadata output file task_id={} provider={} bytes={}",
                     job.task_id,
                     job.provider,
-                    path,
                     content.len()
                 );
                 return Ok(content);
             }
             Ok(_) => {
                 info!(
-                    "[task_metadata_refresh] metadata output file was empty task_id={} provider={} path={:?}; falling back to stdout",
-                    job.task_id, job.provider, path
+                    "[task_metadata_refresh] metadata output file was empty task_id={} provider={}; falling back to stdout",
+                    job.task_id, job.provider
                 );
             }
             Err(error) => {
                 info!(
-                    "[task_metadata_refresh] failed to read metadata output file task_id={} provider={} path={:?}: {error}; falling back to stdout",
-                    job.task_id, job.provider, path
+                    "[task_metadata_refresh] failed to read metadata output file task_id={} provider={}: {error}; falling back to stdout",
+                    job.task_id, job.provider
                 );
             }
         }

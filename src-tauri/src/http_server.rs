@@ -517,7 +517,10 @@ async fn handle_agent_lifecycle_notification(
                         );
                     }
                     Ok(false) => {}
-                    Err(error) => warn!("[http_server] task display title refresh failed: {error}"),
+                    Err(error) => warn!(
+                        "[http_server] task display title refresh failed error_bytes={}",
+                        error.len()
+                    ),
                 }
             });
         }

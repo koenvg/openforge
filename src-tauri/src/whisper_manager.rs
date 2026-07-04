@@ -425,7 +425,7 @@ impl WhisperManager {
         }
 
         let path_str = path.to_string_lossy().to_string();
-        info!("[whisper] Loading model: {} ({})", active, path_str);
+        info!("[whisper] Loading model: {} path_configured=true", active);
 
         let ctx = WhisperContext::new_with_params(&path_str, WhisperContextParameters::default())
             .map_err(|e| WhisperError::ContextLoadError(e.to_string()))?;
@@ -604,10 +604,7 @@ impl WhisperManager {
         })?;
 
         let path_str = dest_path.to_string_lossy().to_string();
-        info!(
-            "[whisper] Model downloaded and verified: {} ({})",
-            size, path_str
-        );
+        info!("[whisper] Model downloaded and verified: {}", size);
         Ok(path_str)
     }
 }

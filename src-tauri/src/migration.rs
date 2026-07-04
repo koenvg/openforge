@@ -40,17 +40,14 @@ fn rename_if_needed(old: &Path, new: &Path, label: &str) {
     }
     if new.exists() {
         warn!(
-            "[migration] Skipping {}: both old ({:?}) and new ({:?}) exist",
-            label, old, new
+            "[migration] Skipping {}: both old and new locations exist",
+            label
         );
         return;
     }
     match fs::rename(old, new) {
-        Ok(()) => info!("[migration] Migrated {}: {:?} → {:?}", label, old, new),
-        Err(e) => error!(
-            "[migration] Failed to migrate {}: {:?} → {:?}: {}",
-            label, old, new, e
-        ),
+        Ok(()) => info!("[migration] Migrated {}", label),
+        Err(e) => error!("[migration] Failed to migrate {}: {}", label, e),
     }
 }
 
@@ -116,8 +113,8 @@ fn rewrite_db_paths(app_data_dir: &Path, home_dir: Option<&Path>) {
             Ok(c) => c,
             Err(e) => {
                 error!(
-                    "[migration] Failed to open {:?} for path rewrite: {}",
-                    db_path, e
+                    "[migration] Failed to open database for path rewrite db_name={}: {}",
+                    db_name, e
                 );
                 continue;
             }
@@ -135,9 +132,9 @@ fn rewrite_db_paths(app_data_dir: &Path, home_dir: Option<&Path>) {
                 "UPDATE worktrees SET worktree_path = REPLACE(worktree_path, ?1, ?2) WHERE worktree_path LIKE ?3",
                 rusqlite::params![old_prefix, new_prefix, like_pattern],
             ) {
-                Ok(n) if n > 0 => info!("[migration] Rewrote {} worktree path(s) in {:?}", n, db_name),
+                Ok(n) if n > 0 => info!("[migration] Rewrote {} worktree path(s) in {}", n, db_name),
                 Ok(_) => {}
-                Err(e) => error!("[migration] Failed to rewrite worktree paths in {:?}: {}", db_name, e),
+                Err(e) => error!("[migration] Failed to rewrite worktree paths in {}: {}", db_name, e),
             }
         }
 
@@ -151,9 +148,9 @@ fn rewrite_db_paths(app_data_dir: &Path, home_dir: Option<&Path>) {
                 "UPDATE task_workspaces SET workspace_path = REPLACE(workspace_path, ?1, ?2) WHERE workspace_path LIKE ?3",
                 rusqlite::params![old_prefix, new_prefix, like_pattern],
             ) {
-                Ok(n) if n > 0 => info!("[migration] Rewrote {} task workspace path(s) in {:?}", n, db_name),
+                Ok(n) if n > 0 => info!("[migration] Rewrote {} task workspace path(s) in {}", n, db_name),
                 Ok(_) => {}
-                Err(e) => error!("[migration] Failed to rewrite task workspace paths in {:?}: {}", db_name, e),
+                Err(e) => error!("[migration] Failed to rewrite task workspace paths in {}: {}", db_name, e),
             }
         }
     }

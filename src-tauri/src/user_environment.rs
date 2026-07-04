@@ -124,24 +124,25 @@ fn read_login_shell_environment(shell: &str, timeout: Duration) -> Option<HashMa
     match run_login_shell_script_with_timeout(shell, "env", timeout) {
         Ok(Some(output)) if output.status.success() => Some(parse_environment(&output.stdout)),
         Ok(Some(output)) => {
-            let stderr = String::from_utf8_lossy(&output.stderr);
             warn!(
-                "Failed to get login shell environment from {}: {}",
-                shell, stderr
+                "Failed to get login shell environment status={} stdout_bytes={} stderr_bytes={}",
+                output.status,
+                output.stdout.len(),
+                output.stderr.len()
             );
             None
         }
         Ok(None) => {
             warn!(
-                "Timed out after {:?} while getting login shell environment from {}",
-                timeout, shell
+                "Timed out after {:?} while getting login shell environment",
+                timeout
             );
             None
         }
         Err(err) => {
             warn!(
-                "Failed to run login shell {} for environment: {}",
-                shell, err
+                "Failed to run login shell for environment: kind={:?}",
+                err.kind()
             );
             None
         }
