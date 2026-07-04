@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+
 const HOST_RUNTIME_SVELTE_BASE_URL = 'plugin://host-runtime/svelte/'
 
 export const SVELTE_HOST_RUNTIME_MODULES = Object.freeze([
@@ -62,6 +64,18 @@ export function rendererImportMapEntries() {
   }
 }
 
+export function rendererImportMapScriptBody() {
+  return `\n${JSON.stringify({ imports: rendererImportMapEntries() }, null, 2)}\n`
+}
+
+export function rendererImportMapScriptSha256() {
+  return `sha256-${createHash('sha256').update(rendererImportMapScriptBody(), 'utf8').digest('base64')}`
+}
+
+export function rendererImportMapScriptHashSource() {
+  return `'${rendererImportMapScriptSha256()}'`
+}
+
 export function rendererImportMapHtml() {
-  return `<script type="importmap">\n${JSON.stringify({ imports: rendererImportMapEntries() }, null, 2)}\n</script>`
+  return `<script type="importmap">${rendererImportMapScriptBody()}</script>`
 }

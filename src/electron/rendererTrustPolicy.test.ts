@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { mkdtemp } from 'node:fs/promises'
 import { describe, expect, it, vi } from 'vitest'
+import { rendererImportMapScriptHashSource } from './svelteHostRuntimeContract.mjs'
 import {
   ElectronRendererTrustAdapter,
   FilePluginAssetAdapter,
@@ -29,6 +30,10 @@ async function tempWorkspace(): Promise<string> {
   return mkdtemp(join(tmpdir(), 'openforge-renderer-trust-policy-'))
 }
 
+function cspDirective(csp: string, name: string): string {
+  return csp.split('; ').find(directive => directive.startsWith(`${name} `)) ?? ''
+}
+
 describe('Renderer Trust Policy Module', () => {
   it('exposes the complete renderer trust contract behind one deep Interface', () => {
     const policy = new RendererTrustPolicy()
@@ -42,8 +47,10 @@ describe('Renderer Trust Policy Module', () => {
         corsEnabled: true,
       },
     })
-    expect(policy.contentSecurityPolicy(sidecarConfig)).toBe("default-src 'self'; script-src 'self' plugin:; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src 'self' http://127.0.0.1:17642 https://api.github.com https://*.atlassian.net")
+    expect(policy.contentSecurityPolicy(sidecarConfig)).toBe(`default-src 'self'; script-src 'self' plugin: ${rendererImportMapScriptHashSource()}; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src 'self' http://127.0.0.1:17642 https://api.github.com https://*.atlassian.net`)
     expect(policy.contentSecurityPolicy(null)).toContain(`connect-src 'self' http://127.0.0.1:${DEFAULT_SIDECAR_PORT}`)
+    expect(cspDirective(policy.contentSecurityPolicy(sidecarConfig), 'script-src')).toContain(rendererImportMapScriptHashSource())
+    expect(cspDirective(policy.contentSecurityPolicy(sidecarConfig), 'script-src')).not.toContain("'unsafe-inline'")
     expect(policy.contentSecurityPolicy(sidecarConfig)).not.toContain('file:')
     expect(policy.trustedRendererUrlFromEnv({ ELECTRON_RENDERER_URL: 'http://localhost:1420/tasks' })).toBe('http://localhost:1420/tasks')
     expect(() => policy.trustedRendererUrlFromEnv({ ELECTRON_RENDERER_URL: 'https://evil.example' })).toThrow('trusted loopback Vite dev server')

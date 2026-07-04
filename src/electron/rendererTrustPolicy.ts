@@ -1,5 +1,6 @@
 import { readFile as nodeReadFile, realpath as nodeRealpath } from 'node:fs/promises'
 import { isAbsolute, join, relative, sep, win32 } from 'node:path'
+import { rendererImportMapScriptHashSource } from './svelteHostRuntimeContract.mjs'
 import { DEFAULT_SIDECAR_PORT, type SidecarLaunchConfig } from './sidecar.js'
 
 export const PLUGIN_PROTOCOL_SCHEME = 'plugin'
@@ -155,7 +156,7 @@ export class RendererTrustPolicy {
   contentSecurityPolicy(sidecarConfig: Pick<SidecarLaunchConfig, 'host' | 'port'> | null = null): string {
     return [
       "default-src 'self'",
-      "script-src 'self' plugin:",
+      `script-src 'self' plugin: ${rendererImportMapScriptHashSource()}`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' https: data:",
       "font-src 'self' data:",

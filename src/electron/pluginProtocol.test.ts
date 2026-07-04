@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it, vi } from 'vitest'
 import { OPENFORGE_HOST_SHARED_SVELTE_IMPORTS } from '../../packages/plugin-sdk/src/vite'
-import { rendererImportMapHtml, svelteHostRuntimeImportMapEntries } from '../../packages/plugin-sdk/src/svelteHostRuntimeContract.mjs'
+import { rendererImportMapHtml, rendererImportMapScriptHashSource, svelteHostRuntimeImportMapEntries } from '../../packages/plugin-sdk/src/svelteHostRuntimeContract.mjs'
 import {
   ELECTRON_RENDERER_CSP,
   applyElectronRendererCsp,
@@ -30,6 +30,10 @@ const sidecarConfig: SidecarLaunchConfig = {
 
 async function tempWorkspace(): Promise<string> {
   return mkdtemp(join(tmpdir(), 'openforge-electron-plugin-protocol-'))
+}
+
+function cspDirective(csp: string, name: string): string {
+  return csp.split('; ').find(directive => directive.startsWith(`${name} `)) ?? ''
 }
 
 describe('Electron plugin:// protocol security contract', () => {
@@ -389,7 +393,8 @@ describe('Electron plugin:// protocol security contract', () => {
 
   it('keeps renderer CSP compatible with plugin:// import maps and sidecar IPC without unsafe filesystem access', () => {
     expect(ELECTRON_RENDERER_CSP).toContain("default-src 'self'")
-    expect(ELECTRON_RENDERER_CSP).toContain("script-src 'self' plugin:")
+    expect(cspDirective(ELECTRON_RENDERER_CSP, 'script-src')).toBe(`script-src 'self' plugin: ${rendererImportMapScriptHashSource()}`)
+    expect(cspDirective(ELECTRON_RENDERER_CSP, 'script-src')).not.toContain("'unsafe-inline'")
     expect(ELECTRON_RENDERER_CSP).toContain(`connect-src 'self' http://127.0.0.1:${DEFAULT_SIDECAR_PORT} https://api.github.com https://*.atlassian.net`)
     expect(createElectronRendererCsp({ host: '127.0.0.1', port: 18000 })).toContain('http://127.0.0.1:18000')
     expect(ELECTRON_RENDERER_CSP).not.toContain('file:')

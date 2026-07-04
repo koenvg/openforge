@@ -12,4 +12,7 @@ export function svelteHostRuntimeBuildEntries(): Record<string, string>
 export function svelteHostRuntimeImportMapEntries(): Record<string, string>
 export function terminalRuntimeImportMapEntries(): Record<string, string>
 export function rendererImportMapEntries(): Record<string, string>
+export function rendererImportMapScriptBody(): string
+export function rendererImportMapScriptSha256(): string
+export function rendererImportMapScriptHashSource(): string
 export function rendererImportMapHtml(): string
