@@ -2,6 +2,7 @@ import { get } from 'svelte/store'
 import {
   activeSessions,
   error,
+  lowFireTaskIdsByProject,
   startingTasks,
   taskRuntimeInfo,
   tasks,
@@ -15,6 +16,7 @@ import {
   startImplementation,
 } from './ipc'
 import { runCompleteTask } from './completeTask'
+import { loadLowFireTaskIds, saveLowFireTaskIds } from './boardFilters'
 import { writePtyWithSubmit } from './ptySubmit'
 import { focusTerminal, isPtyActive } from './terminalPool'
 import { resolveBranchStart } from './branchStart'
@@ -124,6 +126,39 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
     }
   }
 
+  async function setTaskOutOfFocus(taskId: string, shouldBeOutOfFocus: boolean): Promise<void> {
+    const activeProject = options.getActiveProject()
+    if (!activeProject) {
+      error.set('No active project selected')
+      return
+    }
+
+    try {
+      const storedTaskIds = await loadLowFireTaskIds(activeProject.id)
+      const currentTaskIds = get(lowFireTaskIdsByProject).get(activeProject.id)
+      const nextTaskIds = new Set(currentTaskIds ?? storedTaskIds)
+
+      if (shouldBeOutOfFocus) {
+        nextTaskIds.add(taskId)
+      } else {
+        nextTaskIds.delete(taskId)
+      }
+
+      const nextByProject = new Map(get(lowFireTaskIdsByProject))
+      if (nextTaskIds.size > 0) {
+        nextByProject.set(activeProject.id, nextTaskIds)
+      } else {
+        nextByProject.delete(activeProject.id)
+      }
+      lowFireTaskIdsByProject.set(nextByProject)
+
+      await saveLowFireTaskIds(activeProject.id, nextTaskIds)
+    } catch (e) {
+      logError('Failed to update Out of Focus tasks:', e)
+      setError(e)
+    }
+  }
+
   async function mergeReadyPullRequest(task: Task): Promise<void> {
     const prs = get(ticketPrs).get(task.id) || []
     const readyPrs = prs.filter((pr) => {
@@ -194,6 +229,7 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
   return {
     handleRunAction,
     deleteTaskAndReload,
+    setTaskOutOfFocus,
     mergeReadyPullRequest,
     enqueueReadyPullRequest,
   }

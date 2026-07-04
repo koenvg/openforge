@@ -165,11 +165,11 @@ describe('isFocusTask', () => {
 })
 
 describe('filterTasks', () => {
-  it('filters focus lane tasks outside low-fire, including in-flight tasks', () => {
+  it('filters Focus to started/current attention tasks outside Out of Focus', () => {
     const sessions = new Map<string, AgentSession>([
-      ['T-1', makeSession({ id: 's-1', ticket_id: 'T-1', status: 'paused', checkpoint_data: '{}' })],
+      ['T-1', makeSession({ id: 's-1', ticket_id: 'T-1', status: 'paused', checkpoint_data: null })],
       ['T-2', makeSession({ id: 's-2', ticket_id: 'T-2', status: 'running' })],
-      ['T-3', makeSession({ id: 's-3', ticket_id: 'T-3', status: 'failed' })],
+      ['T-4', makeSession({ id: 's-4', ticket_id: 'T-4', status: 'failed' })],
     ])
     const prs = new Map<string, PullRequestInfo[]>()
 
@@ -177,13 +177,35 @@ describe('filterTasks', () => {
       makeTask({ id: 'T-1' }),
       makeTask({ id: 'T-2' }),
       makeTask({ id: 'T-3' }),
+      makeTask({ id: 'T-4' }),
+      makeTask({ id: 'T-5', status: 'backlog' }),
     ]
 
-    const filtered = filterTasks(tasks, 'focus', sessions, prs, DEFAULT_FOCUS_STATES, new Set(['T-3']))
-    expect(filtered.map((t: Task) => t.id)).toEqual(['T-1', 'T-2'])
+    const filtered = filterTasks(tasks, 'focus', sessions, prs, ['paused', 'failed'], new Set(['T-4']))
+    expect(filtered.map((t: Task) => t.id)).toEqual(['T-1'])
   })
 
-  it('filters low-fire lane tasks from the manual task set', () => {
+  it('filters In Flight to all started/current non-attention tasks after focus-state settings, not just active sessions', () => {
+    const sessions = new Map<string, AgentSession>([
+      ['T-1', makeSession({ id: 's-1', ticket_id: 'T-1', status: 'paused', checkpoint_data: null })],
+      ['T-2', makeSession({ id: 's-2', ticket_id: 'T-2', status: 'running' })],
+    ])
+    const prs = new Map<string, PullRequestInfo[]>()
+
+    const tasks = [
+      makeTask({ id: 'T-1' }),
+      makeTask({ id: 'T-2' }),
+      makeTask({ id: 'T-3' }),
+      makeTask({ id: 'T-4', status: 'backlog' }),
+      makeTask({ id: 'T-5', status: 'done' }),
+      makeTask({ id: 'T-6' }),
+    ]
+
+    const filtered = filterTasks(tasks, 'in-flight', sessions, prs, ['paused'], new Set(['T-6']))
+    expect(filtered.map((t: Task) => t.id)).toEqual(['T-2', 'T-3'])
+  })
+
+  it('filters Out of Focus to manually set-aside started/current tasks only', () => {
     const sessions = new Map<string, AgentSession>([
       ['T-1', makeSession({ id: 's-1', ticket_id: 'T-1', status: 'running' })],
       ['T-2', makeSession({ id: 's-2', ticket_id: 'T-2', status: 'paused', checkpoint_data: '{}' })],
@@ -198,7 +220,7 @@ describe('filterTasks', () => {
       makeTask({ id: 'T-4', status: 'backlog' }),
     ]
 
-    const filtered = filterTasks(tasks, 'low-fire', sessions, prs, DEFAULT_FOCUS_STATES, new Set(['T-1', 'T-2', 'T-3', 'T-4']))
+    const filtered = filterTasks(tasks, 'out-of-focus', sessions, prs, DEFAULT_FOCUS_STATES, new Set(['T-1', 'T-2', 'T-3', 'T-4']))
     expect(filtered.map((t: Task) => t.id)).toEqual(['T-1', 'T-2'])
   })
 
@@ -216,7 +238,7 @@ describe('filterTasks', () => {
     expect(filtered.map((t: Task) => t.id)).toEqual(['T-2', 'T-3'])
   })
 
-  it('excludes legacy done tasks from focus and low-fire lanes', () => {
+  it('excludes legacy done tasks from Focus, In Flight, and Out of Focus filters', () => {
     const sessions = new Map<string, AgentSession>()
     const prs = new Map<string, PullRequestInfo[]>()
 
@@ -226,9 +248,8 @@ describe('filterTasks', () => {
     ]
 
     expect(filterTasks(tasks, 'focus', sessions, prs).map((t: Task) => t.id)).toEqual(['T-1'])
-    expect(
-      filterTasks(tasks, 'low-fire', sessions, prs, DEFAULT_FOCUS_STATES, new Set(['T-1', 'T-2'])).map((t: Task) => t.id),
-    ).toEqual(['T-1'])
+    expect(filterTasks(tasks, 'in-flight', sessions, prs, [], new Set(['T-2'])).map((t: Task) => t.id)).toEqual(['T-1'])
+    expect(filterTasks(tasks, 'out-of-focus', sessions, prs, DEFAULT_FOCUS_STATES, new Set(['T-1', 'T-2'])).map((t: Task) => t.id)).toEqual(['T-1'])
   })
 
   it('returns empty array for empty task list', () => {
@@ -237,31 +258,6 @@ describe('filterTasks', () => {
 
     const filtered = filterTasks([], 'focus', sessions, prs)
     expect(filtered).toEqual([])
-  })
-
-  it('keeps running agents in the focus lane in-flight group even with unaddressed PR comments', () => {
-    const sessions = new Map<string, AgentSession>([
-      ['T-1', makeSession({ id: 's-1', ticket_id: 'T-1', status: 'running' })],
-    ])
-    const prs = new Map<string, PullRequestInfo[]>([
-      ['T-1', [makePr({ id: 1, ticket_id: 'T-1', unaddressed_comment_count: 1 })]],
-    ])
-
-    const tasks = [makeTask({ id: 'T-1' })]
-
-    const focusTasks = filterTasks(tasks, 'focus', sessions, prs)
-    expect(focusTasks.map((t: Task) => t.id)).toEqual(['T-1'])
-  })
-
-  it('keeps active agents in the focus lane even when active is a custom focus state', () => {
-    const sessions = new Map<string, AgentSession>([
-      ['T-1', makeSession({ id: 's-1', ticket_id: 'T-1', status: 'running' })],
-    ])
-    const prs = new Map<string, PullRequestInfo[]>()
-    const tasks = [makeTask({ id: 'T-1' })]
-
-    const focusTasks = filterTasks(tasks, 'focus', sessions, prs, ['active'])
-    expect(focusTasks.map((t: Task) => t.id)).toEqual(['T-1'])
   })
 
   it('does not mutate original array', () => {
@@ -291,7 +287,8 @@ describe('getFilterCounts', () => {
     const counts = getFilterCounts(tasks, sessions, prs)
     expect(counts).toEqual({
       focus: 1,
-      'low-fire': 0,
+      'in-flight': 1,
+      'out-of-focus': 0,
       backlog: 1,
     })
   })
@@ -303,7 +300,8 @@ describe('getFilterCounts', () => {
     const counts = getFilterCounts([], sessions, prs)
     expect(counts).toEqual({
       focus: 0,
-      'low-fire': 0,
+      'in-flight': 0,
+      'out-of-focus': 0,
       backlog: 0,
     })
   })
@@ -320,12 +318,13 @@ describe('getFilterCounts', () => {
     const counts = getFilterCounts(tasks, sessions, prs)
     expect(counts).toEqual({
       focus: 0,
-      'low-fire': 0,
+      'in-flight': 0,
+      'out-of-focus': 0,
       backlog: 2,
     })
   })
 
-  it('counts only attention items in focus and low-fire lane chips', () => {
+  it('counts all visible items for Focus, In Flight, and Out of Focus tab chips', () => {
     const sessions = new Map<string, AgentSession>([
       ['T-1', makeSession({ id: 's-1', ticket_id: 'T-1', status: 'running' })],
       ['T-2', makeSession({ id: 's-2', ticket_id: 'T-2', status: 'failed' })],
@@ -347,7 +346,8 @@ describe('getFilterCounts', () => {
     const counts = getFilterCounts(tasks, sessions, prs, DEFAULT_FOCUS_STATES, new Set(['T-3', 'T-4']))
     expect(counts).toEqual({
       focus: 1,
-      'low-fire': 1,
+      'in-flight': 1,
+      'out-of-focus': 2,
       backlog: 1,
     })
   })
@@ -361,10 +361,11 @@ describe('getFilterCounts', () => {
       makeTask({ id: 'T-2', status: 'backlog' }),
     ]
 
-    const counts = getFilterCounts(tasks, sessions, prs)
+    const counts = getFilterCounts(tasks, sessions, prs, [])
     expect(counts).toEqual({
-      focus: 1,
-      'low-fire': 0,
+      focus: 0,
+      'in-flight': 1,
+      'out-of-focus': 0,
       backlog: 1,
     })
   })
@@ -383,7 +384,8 @@ describe('getFilterCounts', () => {
     const counts = getFilterCounts(tasks, sessions, prs)
     expect(counts).toEqual({
       focus: 1,
-      'low-fire': 0,
+      'in-flight': 0,
+      'out-of-focus': 0,
       backlog: 1,
     })
   })

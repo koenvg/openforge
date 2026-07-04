@@ -44,13 +44,13 @@
     onRunAction?.({ taskId: id, actionPrompt: action.prompt, agent: null })
   }
 
-  function handleMoveToLowFire() {
+  function handleSetAside() {
     const id = taskId
     onClose()
     onMoveToLowFire?.(id)
   }
 
-  function handleMoveToFocus() {
+  function handleReturnToBoard() {
     const id = taskId
     onClose()
     onMoveToFocus?.(id)
@@ -83,9 +83,9 @@
   {/if}
   {#if taskStatus === 'doing'}
     {#if isLowFireTask && onMoveToFocus}
-      <ContextMenuItem label="Move to Focus" onclick={handleMoveToFocus} />
+      <ContextMenuItem label="Return to board" onclick={handleReturnToBoard} />
     {:else if !isLowFireTask && onMoveToLowFire}
-      <ContextMenuItem label="Move to Low-Fire" onclick={handleMoveToLowFire} />
+      <ContextMenuItem label="Set aside" onclick={handleSetAside} />
     {/if}
   {/if}
   <div class="border-t border-base-content/10 my-1"></div>

@@ -83,16 +83,16 @@ function baseInput(overrides: Partial<BuildAttentionOverviewInput> = {}): BuildA
 }
 
 describe('buildAttentionOverview — focus tasks', () => {
-  it('includes doing tasks, excludes backlog/done and low-fire tasks', () => {
+  it('includes doing tasks, excludes backlog/done and manually set-aside tasks', () => {
     const result = buildAttentionOverview(baseInput({
       projects: [project('p1')],
       allTasks: [
         task('t-doing', 'p1', { status: 'doing' }),
         task('t-backlog', 'p1', { status: 'backlog' }),
         task('t-done', 'p1', { status: 'done' }),
-        task('t-lowfire', 'p1', { status: 'doing' }),
+        task('t-set-aside', 'p1', { status: 'doing' }),
       ],
-      lowFireByProject: new Map([['p1', new Set(['t-lowfire'])]]),
+      lowFireByProject: new Map([['p1', new Set(['t-set-aside'])]]),
     }))
 
     const ids = result.groups[0].focusTasks.map((f) => f.task.id)

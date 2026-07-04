@@ -60,8 +60,8 @@ function activityTime(task: Task, session: AgentSession | null): number {
 }
 
 /**
- * Build the focus tasks for one project: its `doing`, non-low-fire tasks — the
- * Focus column as the board defines it — ordered needs-attention first, then by
+ * Build the focus tasks for one project: its `doing` tasks that are not manually
+ * set aside — ordered needs-attention first, then by
  * recent activity.
  */
 function buildFocusTasks(

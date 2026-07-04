@@ -4,11 +4,13 @@ import type { PullRequestInfo, Project, Task } from './types'
 
 vi.mock('./ipc', () => ({
   deleteTask: vi.fn(),
+  getProjectConfig: vi.fn(),
   getSessionStatus: vi.fn(),
   mergePullRequest: vi.fn(),
   enqueuePullRequest: vi.fn(),
   startImplementation: vi.fn(),
   inspectExistingBranch: vi.fn(),
+  setProjectConfig: vi.fn(),
 }))
 
 vi.mock('./ptySubmit', () => ({
@@ -25,12 +27,13 @@ import {
   activeSessions,
   completingTasks,
   error,
+  lowFireTaskIdsByProject,
   startingTasks,
   taskRuntimeInfo,
   tasks,
   ticketPrs,
 } from './stores'
-import { deleteTask, enqueuePullRequest, getSessionStatus, inspectExistingBranch, mergePullRequest, startImplementation } from './ipc'
+import { deleteTask, enqueuePullRequest, getProjectConfig, getSessionStatus, inspectExistingBranch, mergePullRequest, setProjectConfig, startImplementation } from './ipc'
 import { branchDivergenceRequest } from './branchDivergenceModalStore'
 import { focusTerminal, isPtyActive } from './terminalPool'
 import { writePtyWithSubmit } from './ptySubmit'
@@ -107,11 +110,14 @@ describe('createTaskActionRunner', () => {
     activeSessions.set(new Map())
     completingTasks.set(new Set())
     error.set(null)
+    lowFireTaskIdsByProject.set(new Map())
     startingTasks.set(new Set())
     taskRuntimeInfo.set(new Map())
     ticketPrs.set(new Map())
     tasks.set([])
     branchDivergenceRequest.set(null)
+    vi.mocked(getProjectConfig).mockResolvedValue(null)
+    vi.mocked(setProjectConfig).mockResolvedValue(undefined)
     vi.mocked(isPtyActive).mockReturnValue(false)
   })
 
@@ -373,6 +379,35 @@ describe('createTaskActionRunner', () => {
 
     expect(deleteTask).not.toHaveBeenCalled()
     expect(loadTasks).not.toHaveBeenCalled()
+  })
+
+  it('sets a task aside by persisting it in the Out of Focus backing set', async () => {
+    vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify(['T-existing']))
+    const runner = createTaskActionRunner({
+      getActiveProject: () => activeProject,
+      loadTasks: vi.fn(async () => undefined),
+      triggerGithubSync: vi.fn(async () => undefined),
+    })
+
+    await runner.setTaskOutOfFocus(task.id, true)
+
+    expect(get(lowFireTaskIdsByProject).get(activeProject.id)).toEqual(new Set(['T-existing', task.id]))
+    expect(setProjectConfig).toHaveBeenCalledWith(activeProject.id, 'low_fire_task_ids', JSON.stringify(['T-existing', task.id]))
+  })
+
+  it('returns a task to the board by removing it from the Out of Focus backing set', async () => {
+    lowFireTaskIdsByProject.set(new Map([[activeProject.id, new Set(['T-existing', task.id])]]))
+    vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify(['T-existing', task.id]))
+    const runner = createTaskActionRunner({
+      getActiveProject: () => activeProject,
+      loadTasks: vi.fn(async () => undefined),
+      triggerGithubSync: vi.fn(async () => undefined),
+    })
+
+    await runner.setTaskOutOfFocus(task.id, false)
+
+    expect(get(lowFireTaskIdsByProject).get(activeProject.id)).toEqual(new Set(['T-existing']))
+    expect(setProjectConfig).toHaveBeenCalledWith(activeProject.id, 'low_fire_task_ids', JSON.stringify(['T-existing']))
   })
 
   it.each([

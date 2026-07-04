@@ -84,15 +84,26 @@ describe('getTaskActions', () => {
     expect(ids).toContain('delete-task')
   })
 
-  it('returns Complete (delete) + custom actions for doing task, never Move to Done', () => {
+  it('returns Set aside + Complete (delete) + custom actions for doing task outside Out of Focus', () => {
     const task = makeTask({ status: 'doing' })
     const custom = makeAction({ id: 'custom-1', name: 'Deploy' })
     const actions = getTaskActions(task, [custom], [])
     const ids = actions.map(a => a.id)
     expect(ids).not.toContain('start-task')
     expect(ids).not.toContain('move-to-done')
+    expect(actions.find(a => a.id === 'set-aside-task')?.label).toBe('Set aside')
+    expect(ids).not.toContain('return-to-board')
     expect(ids).toContain('delete-task')
     expect(ids).toContain('custom-action-custom-1')
+  })
+
+  it('returns Return to board for doing task already Out of Focus', () => {
+    const task = makeTask({ status: 'doing' })
+    const actions = getTaskActions(task, [], [], new Set([task.id]))
+    const ids = actions.map(a => a.id)
+    expect(actions.find(a => a.id === 'return-to-board')?.label).toBe('Return to board')
+    expect(ids).not.toContain('set-aside-task')
+    expect(ids).toContain('delete-task')
   })
 
   it('returns Delete only for done task', () => {
@@ -229,6 +240,7 @@ describe('getAvailableActions', () => {
     const actions = getAvailableActions(task, [], [])
     const ids = actions.map(a => a.id)
     expect(ids).not.toContain('move-to-done')
+    expect(ids).toContain('set-aside-task')
     expect(ids).toContain('delete-task')
     expect(ids).toContain('go-back')
     expect(ids).toContain('search-tasks')

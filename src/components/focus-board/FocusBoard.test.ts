@@ -166,35 +166,66 @@ describe('FocusBoard', () => {
     expect(chip.getAttribute('aria-pressed')).toBe('true')
   })
 
-  it('shows focus tasks first and in-flight tasks below the divider', async () => {
+  it('renders board tabs ordered Focus, In Flight, Out of Focus, Backlog', async () => {
+    renderBoard()
+
+    const tabLabels = (await screen.findAllByRole('button'))
+      .map((button) => button.textContent?.replace(/\s+/g, ' ').trim() ?? '')
+      .filter((label) => /^(Focus|In Flight|Out of Focus|Backlog)\b/.test(label))
+
+    expect(tabLabels.slice(0, 4).map((label) => label.replace(/ \d+.*$/, ''))).toEqual([
+      'Focus',
+      'In Flight',
+      'Out of Focus',
+      'Backlog',
+    ])
+  })
+
+  it('shows only started/current attention tasks in Focus and non-attention tasks in In Flight', async () => {
     renderBoard()
 
     await waitFor(() => {
       expect(screen.getAllByText('Focus task').length).toBeGreaterThan(0)
     })
-    expect(screen.getByText('In-flight')).toBeTruthy()
+    expect(screen.queryByText('In-flight')).toBeNull()
+    expect(screen.queryByText('Doing task')).toBeNull()
+    expect(screen.queryByText('Backlog task')).toBeNull()
+    expect(screen.queryByText('Done task')).toBeNull()
+
+    await fireEvent.click(screen.getByRole('button', { name: /In Flight 1/i }))
+
     expect(screen.getAllByText('Doing task').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Focus task')).toBeNull()
     expect(screen.queryByText('Backlog task')).toBeNull()
     expect(screen.queryByText('Done task')).toBeNull()
   })
 
-  it('moves tasks to Low-Fire from the task context menu', async () => {
+  it('sets aside tasks into Out of Focus and Return to board restores normal placement', async () => {
     const ipc = await import('../../lib/ipc')
     renderBoard()
 
+    await fireEvent.click(await screen.findByRole('button', { name: /In Flight 1/i }))
     await fireEvent.contextMenu((await screen.findAllByText('Doing task'))[0])
-    await fireEvent.click(screen.getByText('Move to Low-Fire'))
+    await fireEvent.click(screen.getByText('Set aside'))
 
     await waitFor(() => {
       expect(get(lowFireTaskIdsByProject).get('proj-1')).toEqual(new Set(['T-2']))
     })
     expect(ipc.setProjectConfig).toHaveBeenCalledWith('proj-1', 'low_fire_task_ids', JSON.stringify(['T-2']))
 
-    await fireEvent.click(screen.getByRole('button', { name: /Low-Fire 0/i }))
-
-    expect(screen.getByText('In-flight')).toBeTruthy()
+    await fireEvent.click(screen.getByRole('button', { name: /Out of Focus 1/i }))
     expect(screen.getAllByText('Doing task').length).toBeGreaterThan(0)
     expect(screen.queryByText('Focus task')).toBeNull()
+
+    await fireEvent.contextMenu(screen.getAllByText('Doing task')[0])
+    await fireEvent.click(screen.getByText('Return to board'))
+
+    await waitFor(() => {
+      expect(get(lowFireTaskIdsByProject).get('proj-1')).toBeUndefined()
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: /In Flight 1/i }))
+    expect(screen.getAllByText('Doing task').length).toBeGreaterThan(0)
   })
 
   it('shows only backlog tasks when Backlog chip is clicked', async () => {
@@ -516,32 +547,33 @@ describe('FocusBoard', () => {
     expect(await screen.findByText('Needs attention')).toBeTruthy()
   })
 
-  it('shows empty state when no tasks match active filter', async () => {
-    focusBoardFilters.set(new Map([['proj-1', 'low-fire']]))
+  it('shows empty state when no tasks match the Out of Focus filter', async () => {
+    focusBoardFilters.set(new Map([['proj-1', 'out-of-focus']]))
     renderBoard({
       tasks: [taskDoing, taskDone],
       sessions: new Map([[taskDoing.id, makeSession(taskDoing.id, 'running', null)]]),
       prs: new Map(),
     })
 
-    expect(await screen.findByText('Low-Fire is clear')).toBeTruthy()
+    expect(await screen.findByText('Out of Focus is clear')).toBeTruthy()
   })
 
-  it('keeps running agents with unaddressed comments in the Focus in-flight section', async () => {
+  it('keeps running agents with unaddressed comments in the In Flight tab', async () => {
     renderBoard({
       tasks: [taskDoing],
       sessions: new Map([[taskDoing.id, makeSession(taskDoing.id, 'running', null)]]),
       prs: new Map([[taskDoing.id, [makePr(taskDoing.id, 2)]]]),
     })
 
-    expect(await screen.findByRole('button', { name: /Focus 0/i })).toBeTruthy()
-    expect(screen.getByText('In-flight')).toBeTruthy()
+    expect(await screen.findByRole('button', { name: /^Focus 0$/i })).toBeTruthy()
+    await fireEvent.click(screen.getByRole('button', { name: /In Flight 1/i }))
     expect(screen.getAllByText('Doing task').length).toBeGreaterThan(0)
   })
 
   it('opens task context menu on right click', async () => {
     renderBoard()
 
+    await fireEvent.click(await screen.findByRole('button', { name: /In Flight 1/i }))
     const doingTaskElements = screen.getAllByText('Doing task')
     await fireEvent.contextMenu(doingTaskElements[0])
 
@@ -597,23 +629,30 @@ describe('FocusBoard', () => {
   it('CMD+1 activates Focus filter', async () => {
     renderBoard()
     // First switch away from focus
-    await fireEvent.click(await screen.findByRole('button', { name: /Low-Fire/i }))
+    await fireEvent.click(await screen.findByRole('button', { name: /In Flight/i }))
     // Now CMD+1 should switch back
     await fireEvent.keyDown(window, { key: '1', metaKey: true })
     const focusChip = screen.getByRole('button', { name: /^Focus 1$/i })
     expect(focusChip.getAttribute('aria-pressed')).toBe('true')
   })
 
-  it('CMD+2 activates Low-Fire filter', async () => {
+  it('CMD+2 activates In Flight filter', async () => {
     renderBoard()
     await fireEvent.keyDown(window, { key: '2', metaKey: true })
-    const chip = screen.getByRole('button', { name: /Low-Fire/i })
+    const chip = screen.getByRole('button', { name: /In Flight 1/i })
     expect(chip.getAttribute('aria-pressed')).toBe('true')
   })
 
-  it('CMD+3 activates Backlog filter', async () => {
+  it('CMD+3 activates Out of Focus filter', async () => {
     renderBoard()
     await fireEvent.keyDown(window, { key: '3', metaKey: true })
+    const chip = screen.getByRole('button', { name: /Out of Focus 0/i })
+    expect(chip.getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('CMD+4 activates Backlog filter', async () => {
+    renderBoard()
+    await fireEvent.keyDown(window, { key: '4', metaKey: true })
     const chip = screen.getByRole('button', { name: /Backlog 1/i })
     expect(chip.getAttribute('aria-pressed')).toBe('true')
   })
@@ -624,12 +663,14 @@ describe('FocusBoard', () => {
     expect(screen.queryByText('⌘1')).toBeNull()
     expect(screen.queryByText('⌘2')).toBeNull()
     expect(screen.queryByText('⌘3')).toBeNull()
+    expect(screen.queryByText('⌘4')).toBeNull()
 
     commandHeld.set(true)
 
     expect(await screen.findByText('⌘1')).toBeTruthy()
     expect(screen.getByText('⌘2')).toBeTruthy()
     expect(screen.getByText('⌘3')).toBeTruthy()
+    expect(screen.getByText('⌘4')).toBeTruthy()
   })
 
   it('restores the previously selected filter when remounted for the same project', async () => {
@@ -648,8 +689,8 @@ describe('FocusBoard', () => {
   it('does not carry the selected filter over to a different project board', async () => {
     const firstRender = renderBoard({ projectId: 'proj-1' })
 
-    await fireEvent.click(await screen.findByRole('button', { name: /Low-Fire 0/i }))
-    expect(screen.getByRole('button', { name: /Low-Fire 0/i }).getAttribute('aria-pressed')).toBe('true')
+    await fireEvent.click(await screen.findByRole('button', { name: /Out of Focus 0/i }))
+    expect(screen.getByRole('button', { name: /Out of Focus 0/i }).getAttribute('aria-pressed')).toBe('true')
 
     firstRender.unmount()
 

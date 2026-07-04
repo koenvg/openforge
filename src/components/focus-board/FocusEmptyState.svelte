@@ -9,7 +9,8 @@
 
   const messages: Record<BoardFilter, { title: string; subtitle: string }> = {
     'focus': { title: 'All clear', subtitle: 'Nothing needs your attention right now' },
-    'low-fire': { title: 'Low-Fire is clear', subtitle: 'No set-aside tasks in this lane' },
+    'in-flight': { title: 'In Flight is clear', subtitle: 'No started tasks are moving without attention right now' },
+    'out-of-focus': { title: 'Out of Focus is clear', subtitle: 'No set-aside tasks in this tab' },
     'backlog': { title: 'Backlog is empty', subtitle: 'Create a task with \u2318T to get started' },
   }
 
