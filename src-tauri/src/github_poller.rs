@@ -29,8 +29,10 @@ mod common;
 mod persistence;
 mod poll_execution;
 mod pr_execution;
+mod pr_readiness;
 mod review_sync;
 mod scheduling;
+mod sync_logging;
 
 #[allow(unused_imports)]
 pub use common::{GitHubEventTarget, PollResult};
