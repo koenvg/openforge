@@ -478,6 +478,26 @@ describe('TaskInfoPanel', () => {
     })
   })
 
+  it('creates and assigns a new label through IPC from unmatched task detail input', async () => {
+    vi.mocked(getProjectTaskLabels).mockResolvedValue([bugLabel])
+    vi.mocked(addTaskLabel).mockResolvedValue({ id: 3, project_id: 'proj-1', name: 'feature', color: 'accent' })
+    render(TaskInfoPanel, {
+      props: {
+        task: { ...baseTask, labels: [] } as Task & { labels: TaskLabel[] },
+        workspacePath: null,
+      },
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Add label' }))
+    const input = screen.getByRole('textbox', { name: 'Search labels' })
+    await fireEvent.input(input, { target: { value: 'feature' } })
+    await fireEvent.keyDown(input, { key: 'Enter' })
+
+    await waitFor(() => {
+      expect(addTaskLabel).toHaveBeenCalledWith('T-42', 'feature')
+    })
+  })
+
   it('keeps project task label deletion controls out of task details', async () => {
     vi.mocked(getProjectTaskLabels).mockResolvedValue([bugLabel, uiLabel])
     render(TaskInfoPanel, {
