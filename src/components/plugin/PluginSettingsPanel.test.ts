@@ -11,6 +11,7 @@ import {
   reloadPluginForProject,
   uninstallPlugin,
 } from '../../lib/plugin/pluginRegistry'
+import { writeClipboardText } from '../../lib/ipc'
 import type { PluginEntry } from '../../lib/plugin/types'
 
 // Mock the dependencies
@@ -31,6 +32,10 @@ vi.mock('../../lib/plugin/pluginRegistry', () => ({
   installPluginFromNpm: vi.fn(),
   reloadPluginForProject: vi.fn(),
   uninstallPlugin: vi.fn(),
+}))
+
+vi.mock('../../lib/ipc', () => ({
+  writeClipboardText: vi.fn(),
 }))
 
 const mockPlugin: PluginEntry = {
@@ -154,11 +159,7 @@ describe('PluginSettingsPanel', () => {
     vi.mocked(installPluginFromNpm).mockRejectedValue(new Error('npm install failed'))
     pluginLoadError.set('Failed to list plugins')
     installedPlugins.set(new Map([['test-plugin', { ...mockPlugin, state: 'error', error: 'activation failed' }]]))
-    const writeText = vi.fn(async () => undefined)
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText },
-    })
+    vi.mocked(writeClipboardText).mockResolvedValue(undefined)
 
     render(PluginSettingsPanel, { projectId: 'proj-1' })
 
@@ -170,7 +171,7 @@ describe('PluginSettingsPanel', () => {
     expect(screen.getByText('npm install failed')).toBeTruthy()
 
     await fireEvent.click(screen.getByRole('button', { name: 'Copy diagnostics: Test Plugin' }))
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('activation failed'))
+    expect(writeClipboardText).toHaveBeenCalledWith(expect.stringContaining('activation failed'))
   })
 
   it('reloads a plugin for the current project', async () => {
