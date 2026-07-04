@@ -8,6 +8,18 @@ OpenForge is a desktop command center for coordinating task work and AI coding a
 A unit of work tracked by OpenForge for a project.
 _Avoid_: Ticket, issue, job
 
+**Focus**:
+The board view of **Tasks** that need user attention now.
+_Avoid_: All current work, in-flight queue
+
+**Set Aside**:
+A manual holding place for **Tasks** the user intentionally removes from **Focus** without changing their backlog or completion state.
+_Avoid_: Low-Fire, done, archive, low-priority status
+
+**Out of Focus**:
+The board tab for **Tasks** the user intentionally removed from the normal **Focus** and **In-Flight Task** flow.
+_Avoid_: Low-Fire, archive, backlog
+
 **Task Display Title**:
 A short, memorable human label shown for a **Task**, stored separately from the Task's prompt text.
 _Avoid_: Prompt title, thread title, branch title
@@ -19,6 +31,10 @@ _Avoid_: Agent run when referring to the task-scoped OpenForge concept, provider
 **Agent Session**:
 The provider-specific conversation or PTY process attached to an **Implementation Run**.
 _Avoid_: Run, task
+
+**In-Flight Task**:
+A **Task** with active agent work that does not currently need user attention.
+_Avoid_: In-flight session, running session
 
 **Session Reattachment**:
 Reconnecting OpenForge to an existing **Agent Session** without changing the provider, agent, or permission mode.
@@ -192,7 +208,18 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - A **Task Schedule** can be manually fired for testing, using the same behavior and overlap rules as a due **Scheduled Fire**.
 - A **Task Schedule** keeps a minimal history of its five most recent outcomes for diagnosis.
 - **Scheduled Fires** do not create a separate automation inbox, auto-archive workflow, or scheduler-specific notification flow; resulting **Tasks** follow the normal OpenForge board and review lifecycle.
-- A **Task** may have zero or more **Implementation Runs** over time.
+- The normal board tab order is **Focus**, **In-Flight Tasks**, **Out of Focus**, then backlog, keeping started/current work together before not-started work.
+- **Focus** contains **Tasks** needing user attention now unless they are **Out of Focus**.
+- **In-Flight Tasks** have their own board tab beside **Focus**, **Out of Focus**, and backlog.
+- User-configured focus settings decide which Task states count as needing attention; **In-Flight Tasks** are all non-attention current work left after applying those settings, not only Tasks with an active **Agent Session**.
+- Starting a backlog **Task** puts it into the normal board flow; a started/current **Task** may then be **Set Aside** when the user wants it moved **Out of Focus** until they explicitly bring it back.
+- **Set Aside** and **Return to Board** are the user-facing action labels; they do not need to repeat the **Out of Focus** tab name.
+- **Return to Board** moves an **Out of Focus** **Task** back into the normal board flow, where the user's focus settings decide whether it appears in **Focus** or with **In-Flight Tasks**.
+- **Out of Focus** can contain both attention-needing **Tasks** and **In-Flight Tasks**, grouped by their current state when shown.
+- An **Out of Focus** **In-Flight Task** stays **Out of Focus** when it later needs user attention; only the user can bring it back into **Focus**.
+- Board tab counts for **Focus**, **In-Flight Tasks**, and **Out of Focus** count **Tasks** that need user attention, not total visible Tasks.
+- **Out of Focus** uses the same board-tab styling as **Focus**, **In-Flight Tasks**, and backlog; its meaning comes from placement and action language, not special visual treatment.
+- **Out of Focus** is part of the core **Task** board because it protects the default attention-only **Focus** promise; custom board workflows may later belong to **Trusted Plugins** when OpenForge exposes explicit capabilities for them.
 - An **Implementation Run** uses exactly one **Agent Session** at a time.
 - A new **Implementation Run** uses the **Project Agent Settings** rather than plugin-supplied provider or agent overrides.
 - A **Trusted Plugin** may start an **Implementation Run** for any **Task** when using the host-provided task capability.
@@ -281,3 +308,18 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - The **Marketing Site Promise** could be inflated into agent autonomy claims — resolved: avoid promises of autonomous engineering teams, code-review replacement, one-click shipping, hosted control planes, universal provider support, or enterprise collaboration suites.
 - "Ready" for pull requests could mean ready for human review, direct merge, or merge queue entry — resolved: use **Merge Readiness** only for strict GitHub-actionable merge or enqueue handoffs.
 - Closed pull requests were treated like merged pull requests — resolved: a **Closed Pull Request** is closed without merge and is not a completion signal by itself.
+- "Focus" was used to mean both all in-progress work and work needing user attention — resolved: **Focus** means attention-needing **Tasks**, while in-flight work should stay quiet unless it needs attention.
+- "Low-Fire" implied priority or a special status — resolved: use **Set Aside** for the manual action and **Out of Focus** for the board tab that holds intentionally removed **Tasks**.
+- **Out of Focus** was considered as plugin-only customization — resolved: keep the attention-protection behavior in core, while leaving richer custom board workflows for future **Trusted Plugin** capabilities.
+- **Out of Focus** Tasks that later become urgent could have been auto-returned to **Focus** — resolved: manual removal is a promise, so they stay **Out of Focus** until the user brings them back, even when passive work turns into review or intervention work.
+- "In-flight session" was used for running work in board lists — resolved: use **In-Flight Task** because the board groups **Tasks**, not raw **Agent Sessions**.
+- **Set Aside** and **In-Flight Task** were conflated as competing board tabs — resolved: **Set Aside** is the action that moves a **Task** **Out of Focus**, while **In-Flight Tasks** also have their own normal board tab.
+- **Out of Focus** tab counts could have shown total parked work — resolved: counts stay consistent with the current board convention and show only **Tasks** needing attention.
+- In-flight placement could have ignored user focus settings — resolved: the boundary between **Focus** and **In-Flight Tasks** follows the user's configured attention states.
+- **In-Flight Task** could have meant only active agent/session work — resolved: it means any started current work that does not need user attention under the user's settings.
+- Returning an **Out of Focus** **Task** could have required separate "Return to Focus" and "Return to In Flight" actions — resolved: use **Return to Board** and let current state/settings determine placement.
+- Backlog **Tasks** could have been moved **Out of Focus** — resolved: keep backlog as the only place for not-started work, and reserve **Out of Focus** for started/current work the user intentionally hides from normal attention.
+- Starting a backlog **Task** directly **Out of Focus** was considered — resolved: starting work should enter the normal board flow first; **Set Aside** is a separate explicit user action afterward.
+- Board tab order could have placed backlog before **Out of Focus** — resolved: keep **Focus**, **In-Flight Tasks**, and **Out of Focus** adjacent because they are all started/current work, then put backlog last.
+- **Out of Focus** could have been visually quieter than other tabs — resolved: give it the same tab styling as the others so it remains trusted and easy to return to.
+- Out-of-focus actions could have repeated the tab name — resolved: use natural action labels, **Set Aside** and **Return to Board**, while the tab carries the **Out of Focus** name.
