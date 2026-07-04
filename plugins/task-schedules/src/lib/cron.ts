@@ -1,3 +1,4 @@
+import cronstrue from 'cronstrue'
 import type { SchedulePreset } from './types'
 
 const FIELD_LIMITS = [
@@ -67,18 +68,26 @@ export function validateFiveFieldCron(cron: string): { valid: boolean; error: st
 export function getNextScheduledFireAt(cron: string, afterMs: number): number {
   const parsed = parseCron(cron)
   const cursor = new Date(afterMs)
-  cursor.setUTCSeconds(0, 0)
-  cursor.setUTCMinutes(cursor.getUTCMinutes() + 1)
+  cursor.setSeconds(0, 0)
+  cursor.setMinutes(cursor.getMinutes() + 1)
 
   const maxIterations = 366 * 24 * 60 * 5
   for (let iteration = 0; iteration < maxIterations; iteration += 1) {
     if (matchesCron(parsed, cursor)) {
       return cursor.getTime()
     }
-    cursor.setUTCMinutes(cursor.getUTCMinutes() + 1)
+    cursor.setMinutes(cursor.getMinutes() + 1)
   }
 
   throw new Error('Unable to find next Scheduled Fire within five years')
+}
+
+export function describeCronExpression(cron: string): string {
+  try {
+    return cronstrue.toString(cron, { use24HourTimeFormat: true })
+  } catch {
+    return cron
+  }
 }
 
 function parseTimeOfDay(timeOfDay: string): { hour: number; minute: number } {
@@ -186,11 +195,11 @@ function normalizeCronValue(value: number, limit: typeof FIELD_LIMITS[number]): 
 
 function matchesCron(parsed: ParsedCron, date: Date): boolean {
   const checks = [
-    date.getUTCMinutes(),
-    date.getUTCHours(),
-    date.getUTCDate(),
-    date.getUTCMonth() + 1,
-    date.getUTCDay(),
+    date.getMinutes(),
+    date.getHours(),
+    date.getDate(),
+    date.getMonth() + 1,
+    date.getDay(),
   ]
 
   return parsed.every((field, index) => field.values.has(checks[index]))
