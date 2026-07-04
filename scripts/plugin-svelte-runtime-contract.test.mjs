@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readdir, readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -6,15 +7,21 @@ import { OPENFORGE_HOST_SHARED_SVELTE_IMPORTS, OPENFORGE_HOST_SHARED_TERMINAL_RU
 import {
   SVELTE_HOST_RUNTIME_MODULES,
   rendererImportMapHtml,
+  rendererImportMapScriptBody,
+  rendererImportMapScriptHashSource,
   svelteHostRuntimeBuildEntries,
   svelteHostRuntimeImportMapEntries,
   terminalRuntimeImportMapEntries,
 } from '../packages/plugin-sdk/src/svelteHostRuntimeContract.mjs'
 
+function readRendererImportMapScriptBody(indexHtml) {
+  const importMapBody = indexHtml.match(/<script type="importmap">([\s\S]*?)<\/script>/)?.[1]
+  expect(importMapBody).toBeTruthy()
+  return importMapBody
+}
+
 function readRendererImportMap(indexHtml) {
-  const importMapJson = indexHtml.match(/<script type="importmap">\s*([\s\S]*?)\s*<\/script>/)?.[1]
-  expect(importMapJson).toBeTruthy()
-  return JSON.parse(importMapJson).imports
+  return JSON.parse(readRendererImportMapScriptBody(indexHtml)).imports
 }
 
 function resolveAliasReplacement(alias, specifier) {
@@ -75,11 +82,20 @@ describe('OpenForge plugin Svelte runtime contract', () => {
     expect(plugin).toBeTruthy()
     const transformed = plugin.transformIndexHtml(await readFile(join(process.cwd(), 'index.html'), 'utf8'))
 
+    expect(readRendererImportMapScriptBody(transformed)).toBe(rendererImportMapScriptBody())
     expect(readRendererImportMap(transformed)).toEqual({
       ...svelteHostRuntimeImportMapEntries(),
       '@openforge/plugin-sdk': 'plugin://host-runtime/plugin-sdk/index.js',
       ...terminalRuntimeImportMapEntries(),
     })
+  })
+
+  it('derives the renderer import-map CSP hash from the exact injected script body', () => {
+    const body = readRendererImportMapScriptBody(rendererImportMapHtml())
+    const expectedHashSource = `'sha256-${createHash('sha256').update(body, 'utf8').digest('base64')}'`
+
+    expect(body).toBe(rendererImportMapScriptBody())
+    expect(rendererImportMapScriptHashSource()).toBe(expectedHashSource)
   })
 
   it('keeps built-in plugin packages on the SDK Vite host-shared Svelte template', async () => {
