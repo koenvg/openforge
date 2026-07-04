@@ -16,15 +16,15 @@
     onDelete?: (taskId: string) => void
     actions?: Action[]
     onRunAction?: (data: { taskId: string; actionPrompt: string; agent: string | null }) => void
-    lowFireTaskIds?: Set<string>
-    onMoveToLowFire?: (taskId: string) => void
-    onMoveToFocus?: (taskId: string) => void
+    outOfFocusTaskIds?: Set<string>
+    onMoveToOutOfFocus?: (taskId: string) => void
+    onReturnToBoard?: (taskId: string) => void
   }
 
-  let { visible, x, y, taskId, onClose, onStart, onEdit, onDelete, actions = [], onRunAction, lowFireTaskIds = new Set(), onMoveToLowFire, onMoveToFocus }: Props = $props()
+  let { visible, x, y, taskId, onClose, onStart, onEdit, onDelete, actions = [], onRunAction, outOfFocusTaskIds = new Set(), onMoveToOutOfFocus, onReturnToBoard }: Props = $props()
 
   let taskStatus = $derived<BoardStatus | ''>($tasks.find(t => t.id === taskId)?.status ?? '')
-  let isLowFireTask = $derived(lowFireTaskIds.has(taskId))
+  let isOutOfFocusTask = $derived(outOfFocusTaskIds.has(taskId))
   let isCompleting = $derived($completingTasks.has(taskId))
 
   function handleStart() {
@@ -47,13 +47,13 @@
   function handleSetAside() {
     const id = taskId
     onClose()
-    onMoveToLowFire?.(id)
+    onMoveToOutOfFocus?.(id)
   }
 
   function handleReturnToBoard() {
     const id = taskId
     onClose()
-    onMoveToFocus?.(id)
+    onReturnToBoard?.(id)
   }
 
   async function handleComplete() {
@@ -82,9 +82,9 @@
     <ContextMenuItem label="Edit Task" onclick={handleEdit} />
   {/if}
   {#if taskStatus === 'doing'}
-    {#if isLowFireTask && onMoveToFocus}
+    {#if isOutOfFocusTask && onReturnToBoard}
       <ContextMenuItem label="Return to board" onclick={handleReturnToBoard} />
-    {:else if !isLowFireTask && onMoveToLowFire}
+    {:else if !isOutOfFocusTask && onMoveToOutOfFocus}
       <ContextMenuItem label="Set aside" onclick={handleSetAside} />
     {/if}
   {/if}

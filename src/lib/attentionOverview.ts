@@ -39,8 +39,8 @@ export interface BuildAttentionOverviewInput {
   sessions: Map<string, AgentSession>
   /** Task-linked PRs per task id (drives task state). */
   ticketPrs: Map<string, PullRequestInfo[]>
-  /** Low-fire task ids per project id. */
-  lowFireByProject: Map<string, Set<string>>
+  /** Out-of-focus task ids per project id. */
+  outOfFocusByProject: Map<string, Set<string>>
   /** Configured focus states per project id; falls back to the defaults when absent. */
   focusStatesByProject: Map<string, TaskState[]>
   /** All review-requested PRs (cross-repo). */
@@ -68,11 +68,11 @@ function buildFocusTasks(
   project: Project,
   input: BuildAttentionOverviewInput,
 ): AttentionFocusTask[] {
-  const lowFire = input.lowFireByProject.get(project.id) ?? new Set<string>()
+  const outOfFocus = input.outOfFocusByProject.get(project.id) ?? new Set<string>()
   const focusStates = input.focusStatesByProject.get(project.id) ?? DEFAULT_FOCUS_STATES
 
   const items = input.allTasks
-    .filter((task) => task.project_id === project.id && task.status === 'doing' && !lowFire.has(task.id))
+    .filter((task) => task.project_id === project.id && task.status === 'doing' && !outOfFocus.has(task.id))
     .map((task) => {
       const session = input.sessions.get(task.id) ?? null
       const prs = input.ticketPrs.get(task.id) ?? []

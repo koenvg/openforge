@@ -124,12 +124,12 @@ describe('TaskContextMenu', () => {
         y: 0,
         taskId: 'T-1',
         onClose: vi.fn(),
-        lowFireTaskIds: new Set(),
-        onMoveToLowFire: vi.fn(),
+        outOfFocusTaskIds: new Set(),
+        onMoveToOutOfFocus: vi.fn(),
       },
     })
     expect(screen.getByText('Set aside')).toBeTruthy()
-    expect(screen.queryByText(`Move to ${'Low'}-${'Fire'}`)).toBeNull()
+    expect(screen.queryByText('Move to Out of Focus')).toBeNull()
   })
 
   it('shows Return to board for doing tasks already in Out of Focus', () => {
@@ -141,17 +141,17 @@ describe('TaskContextMenu', () => {
         y: 0,
         taskId: 'T-1',
         onClose: vi.fn(),
-        lowFireTaskIds: new Set(['T-1']),
-        onMoveToFocus: vi.fn(),
+        outOfFocusTaskIds: new Set(['T-1']),
+        onReturnToBoard: vi.fn(),
       },
     })
     expect(screen.getByText('Return to board')).toBeTruthy()
     expect(screen.queryByText('Move to Focus')).toBeNull()
-    expect(screen.queryByText(`Move to ${'Low'}-${'Fire'}`)).toBeNull()
+    expect(screen.queryByText('Move to Out of Focus')).toBeNull()
   })
 
   it('calls the set-aside handler and closes when Set aside is clicked', async () => {
-    const onMoveToLowFire = vi.fn()
+    const onMoveToOutOfFocus = vi.fn()
     const onClose = vi.fn()
     tasks.set([makeTask('T-1', 'doing')])
     render(TaskContextMenu, {
@@ -161,17 +161,17 @@ describe('TaskContextMenu', () => {
         y: 0,
         taskId: 'T-1',
         onClose,
-        lowFireTaskIds: new Set(),
-        onMoveToLowFire,
+        outOfFocusTaskIds: new Set(),
+        onMoveToOutOfFocus,
       },
     })
     await fireEvent.click(screen.getByText('Set aside'))
-    expect(onMoveToLowFire).toHaveBeenCalledWith('T-1')
+    expect(onMoveToOutOfFocus).toHaveBeenCalledWith('T-1')
     expect(onClose).toHaveBeenCalled()
   })
 
   it('calls the return handler and closes when Return to board is clicked', async () => {
-    const onMoveToFocus = vi.fn()
+    const onReturnToBoard = vi.fn()
     const onClose = vi.fn()
     tasks.set([makeTask('T-1', 'doing')])
     render(TaskContextMenu, {
@@ -181,12 +181,12 @@ describe('TaskContextMenu', () => {
         y: 0,
         taskId: 'T-1',
         onClose,
-        lowFireTaskIds: new Set(['T-1']),
-        onMoveToFocus,
+        outOfFocusTaskIds: new Set(['T-1']),
+        onReturnToBoard,
       },
     })
     await fireEvent.click(screen.getByText('Return to board'))
-    expect(onMoveToFocus).toHaveBeenCalledWith('T-1')
+    expect(onReturnToBoard).toHaveBeenCalledWith('T-1')
     expect(onClose).toHaveBeenCalled()
   })
 

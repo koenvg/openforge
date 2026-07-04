@@ -126,7 +126,7 @@ pub(super) struct ScheduledPr {
     pub(super) pr: PrRow,
     pub(super) project_id: String,
     pub(super) task_status: String,
-    pub(super) low_fire: bool,
+    pub(super) out_of_focus: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -191,11 +191,11 @@ pub(super) fn scheduled_pr_in_scope(pr: &ScheduledPr, scope: &PollScope) -> bool
         PollScope::ActiveFocusTaskPrs(Some(active_project_id)) => {
             pr.project_id == *active_project_id
                 && is_focus_task_status(&pr.task_status)
-                && !pr.low_fire
+                && !pr.out_of_focus
         }
         PollScope::ActiveTaskPrs(Some(active_project_id)) => {
             pr.project_id == *active_project_id
-                && (!is_focus_task_status(&pr.task_status) || pr.low_fire)
+                && (!is_focus_task_status(&pr.task_status) || pr.out_of_focus)
         }
         PollScope::InactiveTaskPrs(Some(active_project_id)) => pr.project_id != *active_project_id,
         PollScope::ActiveFocusTaskPrs(None)
@@ -369,7 +369,7 @@ pub(super) fn get_scheduled_prs_for_project(
         .map_err(|e| e.to_string())?;
 
     let task_rows = tasks;
-    let low_fire_task_ids: HashSet<String> = db_lock
+    let out_of_focus_task_ids: HashSet<String> = db_lock
         .get_project_config(project_id, "low_fire_task_ids")
         .ok()
         .flatten()
@@ -380,8 +380,8 @@ pub(super) fn get_scheduled_prs_for_project(
     let task_statuses: HashMap<String, (String, bool)> = task_rows
         .into_iter()
         .map(|task| {
-            let low_fire = low_fire_task_ids.contains(&task.id);
-            (task.id, (task.status, low_fire))
+            let out_of_focus = out_of_focus_task_ids.contains(&task.id);
+            (task.id, (task.status, out_of_focus))
         })
         .collect();
 
@@ -390,11 +390,11 @@ pub(super) fn get_scheduled_prs_for_project(
         .filter_map(|pr| {
             task_statuses
                 .get(&pr.ticket_id)
-                .map(|(status, low_fire)| ScheduledPr {
+                .map(|(status, out_of_focus)| ScheduledPr {
                     pr,
                     project_id: project_id.to_string(),
                     task_status: status.clone(),
-                    low_fire: *low_fire,
+                    out_of_focus: *out_of_focus,
                 })
         })
         .collect())

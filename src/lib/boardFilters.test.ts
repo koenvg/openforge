@@ -4,7 +4,7 @@ vi.mock('./ipc', () => ({ getProjectConfig: vi.fn(), setProjectConfig: vi.fn() }
 
 import { describe, it, expect } from 'vitest'
 import type { Task, AgentSession, PullRequestInfo } from './types'
-import { isFocusTask, filterTasks, getFilterCounts, DEFAULT_FOCUS_STATES, loadFocusFilterStates, saveFocusFilterStates, loadLowFireTaskIds, saveLowFireTaskIds } from './boardFilters'
+import { isFocusTask, filterTasks, getFilterCounts, DEFAULT_FOCUS_STATES, loadFocusFilterStates, saveFocusFilterStates, loadOutOfFocusTaskIds, saveOutOfFocusTaskIds } from './boardFilters'
 import { getProjectConfig, setProjectConfig } from './ipc'
 
 function makeTask(overrides: Partial<Task> & { id: string }): Task {
@@ -479,30 +479,30 @@ describe('saveFocusFilterStates', () => {
   })
 })
 
-describe('loadLowFireTaskIds', () => {
+describe('loadOutOfFocusTaskIds', () => {
   it('returns an empty set when no config stored', async () => {
     vi.mocked(getProjectConfig).mockResolvedValue(null)
-    const result = await loadLowFireTaskIds('proj-1')
+    const result = await loadOutOfFocusTaskIds('proj-1')
     expect(result).toEqual(new Set())
   })
 
   it('returns parsed task ids when valid config stored', async () => {
     vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify(['T-1', 'T-2']))
-    const result = await loadLowFireTaskIds('proj-1')
+    const result = await loadOutOfFocusTaskIds('proj-1')
     expect(result).toEqual(new Set(['T-1', 'T-2']))
   })
 
   it('returns an empty set when invalid JSON stored', async () => {
     vi.mocked(getProjectConfig).mockResolvedValue('not-json')
-    const result = await loadLowFireTaskIds('proj-1')
+    const result = await loadOutOfFocusTaskIds('proj-1')
     expect(result).toEqual(new Set())
   })
 })
 
-describe('saveLowFireTaskIds', () => {
+describe('saveOutOfFocusTaskIds', () => {
   it('saves task ids as a JSON array', async () => {
     vi.mocked(setProjectConfig).mockResolvedValue(undefined)
-    await saveLowFireTaskIds('proj-1', new Set(['T-2', 'T-1']))
+    await saveOutOfFocusTaskIds('proj-1', new Set(['T-2', 'T-1']))
     expect(setProjectConfig).toHaveBeenCalledWith('proj-1', 'low_fire_task_ids', JSON.stringify(['T-2', 'T-1']))
   })
 })

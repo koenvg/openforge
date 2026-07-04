@@ -100,7 +100,7 @@ export const taskActiveView = writable<Map<string, string>>(new Map());
 export const taskDraftNotes = writable<Map<string, string>>(new Map());
 
 export const focusBoardFilters = writable<Map<string, BoardFilter>>(new Map())
-export const lowFireTaskIdsByProject = writable<Map<string, Set<string>>>(new Map())
+export const outOfFocusTaskIdsByProject = writable<Map<string, Set<string>>>(new Map())
 
 function createBacklogLabelFilters() {
   const store = writable<Map<string, Set<number>>>(new Map())

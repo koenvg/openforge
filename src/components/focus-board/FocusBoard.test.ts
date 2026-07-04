@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { requireElement } from '../../test-utils/dom'
 import FocusBoard from './FocusBoard.svelte'
 import type { Task, AgentSession, PullRequestInfo, BoardStatus, TaskLabel } from '../../lib/types'
-import { backlogLabelFilters, commandHeld, focusBoardFilters, lastViewedTaskId, lowFireTaskIdsByProject, tasks as taskStore } from '../../lib/stores'
+import { backlogLabelFilters, commandHeld, focusBoardFilters, lastViewedTaskId, outOfFocusTaskIdsByProject, tasks as taskStore } from '../../lib/stores'
 
 vi.mock('../../lib/ipc', () => ({
   getPrComments: vi.fn().mockResolvedValue([]),
@@ -148,7 +148,7 @@ describe('FocusBoard', () => {
     vi.mocked(ipc.getProjectConfig).mockResolvedValue(null)
     commandHeld.set(false)
     focusBoardFilters.set(new Map())
-    lowFireTaskIdsByProject.set(new Map())
+    outOfFocusTaskIdsByProject.set(new Map())
     backlogLabelFilters.set(new Map())
     lastViewedTaskId.set(null)
     taskStore.set([])
@@ -209,7 +209,7 @@ describe('FocusBoard', () => {
     await fireEvent.click(screen.getByText('Set aside'))
 
     await waitFor(() => {
-      expect(get(lowFireTaskIdsByProject).get('proj-1')).toEqual(new Set(['T-2']))
+      expect(get(outOfFocusTaskIdsByProject).get('proj-1')).toEqual(new Set(['T-2']))
     })
     expect(ipc.setProjectConfig).toHaveBeenCalledWith('proj-1', 'low_fire_task_ids', JSON.stringify(['T-2']))
 
@@ -221,7 +221,7 @@ describe('FocusBoard', () => {
     await fireEvent.click(screen.getByText('Return to board'))
 
     await waitFor(() => {
-      expect(get(lowFireTaskIdsByProject).get('proj-1')).toBeUndefined()
+      expect(get(outOfFocusTaskIdsByProject).get('proj-1')).toBeUndefined()
     })
 
     await fireEvent.click(screen.getByRole('button', { name: /In Flight 1/i }))

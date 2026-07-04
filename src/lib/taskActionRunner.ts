@@ -2,7 +2,7 @@ import { get } from 'svelte/store'
 import {
   activeSessions,
   error,
-  lowFireTaskIdsByProject,
+  outOfFocusTaskIdsByProject,
   startingTasks,
   taskRuntimeInfo,
   tasks,
@@ -16,7 +16,7 @@ import {
   startImplementation,
 } from './ipc'
 import { runCompleteTask } from './completeTask'
-import { loadLowFireTaskIds, saveLowFireTaskIds } from './boardFilters'
+import { loadOutOfFocusTaskIds, saveOutOfFocusTaskIds } from './boardFilters'
 import { writePtyWithSubmit } from './ptySubmit'
 import { focusTerminal, isPtyActive } from './terminalPool'
 import { resolveBranchStart } from './branchStart'
@@ -134,8 +134,8 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
     }
 
     try {
-      const storedTaskIds = await loadLowFireTaskIds(activeProject.id)
-      const currentTaskIds = get(lowFireTaskIdsByProject).get(activeProject.id)
+      const storedTaskIds = await loadOutOfFocusTaskIds(activeProject.id)
+      const currentTaskIds = get(outOfFocusTaskIdsByProject).get(activeProject.id)
       const nextTaskIds = new Set(currentTaskIds ?? storedTaskIds)
 
       if (shouldBeOutOfFocus) {
@@ -144,15 +144,15 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
         nextTaskIds.delete(taskId)
       }
 
-      const nextByProject = new Map(get(lowFireTaskIdsByProject))
+      const nextByProject = new Map(get(outOfFocusTaskIdsByProject))
       if (nextTaskIds.size > 0) {
         nextByProject.set(activeProject.id, nextTaskIds)
       } else {
         nextByProject.delete(activeProject.id)
       }
-      lowFireTaskIdsByProject.set(nextByProject)
+      outOfFocusTaskIdsByProject.set(nextByProject)
 
-      await saveLowFireTaskIds(activeProject.id, nextTaskIds)
+      await saveOutOfFocusTaskIds(activeProject.id, nextTaskIds)
     } catch (e) {
       logError('Failed to update Out of Focus tasks:', e)
       setError(e)

@@ -27,7 +27,7 @@ import {
   activeSessions,
   completingTasks,
   error,
-  lowFireTaskIdsByProject,
+  outOfFocusTaskIdsByProject,
   startingTasks,
   taskRuntimeInfo,
   tasks,
@@ -110,7 +110,7 @@ describe('createTaskActionRunner', () => {
     activeSessions.set(new Map())
     completingTasks.set(new Set())
     error.set(null)
-    lowFireTaskIdsByProject.set(new Map())
+    outOfFocusTaskIdsByProject.set(new Map())
     startingTasks.set(new Set())
     taskRuntimeInfo.set(new Map())
     ticketPrs.set(new Map())
@@ -391,12 +391,12 @@ describe('createTaskActionRunner', () => {
 
     await runner.setTaskOutOfFocus(task.id, true)
 
-    expect(get(lowFireTaskIdsByProject).get(activeProject.id)).toEqual(new Set(['T-existing', task.id]))
+    expect(get(outOfFocusTaskIdsByProject).get(activeProject.id)).toEqual(new Set(['T-existing', task.id]))
     expect(setProjectConfig).toHaveBeenCalledWith(activeProject.id, 'low_fire_task_ids', JSON.stringify(['T-existing', task.id]))
   })
 
   it('returns a task to the board by removing it from the Out of Focus backing set', async () => {
-    lowFireTaskIdsByProject.set(new Map([[activeProject.id, new Set(['T-existing', task.id])]]))
+    outOfFocusTaskIdsByProject.set(new Map([[activeProject.id, new Set(['T-existing', task.id])]]))
     vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify(['T-existing', task.id]))
     const runner = createTaskActionRunner({
       getActiveProject: () => activeProject,
@@ -406,7 +406,7 @@ describe('createTaskActionRunner', () => {
 
     await runner.setTaskOutOfFocus(task.id, false)
 
-    expect(get(lowFireTaskIdsByProject).get(activeProject.id)).toEqual(new Set(['T-existing']))
+    expect(get(outOfFocusTaskIdsByProject).get(activeProject.id)).toEqual(new Set(['T-existing']))
     expect(setProjectConfig).toHaveBeenCalledWith(activeProject.id, 'low_fire_task_ids', JSON.stringify(['T-existing']))
   })
 
