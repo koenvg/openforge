@@ -644,10 +644,6 @@
             <div class="flex gap-0.5"><kbd class="kbd kbd-sm">j</kbd><kbd class="kbd kbd-sm">k</kbd><kbd class="kbd kbd-sm">↓</kbd><kbd class="kbd kbd-sm">↑</kbd></div>
           </div>
           <div class="flex items-center justify-between">
-            <span class="text-sm text-base-content">Left / right column</span>
-            <div class="flex gap-0.5"><kbd class="kbd kbd-sm">h</kbd><kbd class="kbd kbd-sm">l</kbd></div>
-          </div>
-          <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">Select / open</span>
             <kbd class="kbd kbd-sm">Enter</kbd>
           </div>
@@ -676,17 +672,9 @@
               <kbd class="kbd kbd-sm">⌘/</kbd>
             </div>
             <div class="flex items-center justify-between">
-              <span class="text-sm text-base-content">Focus agent</span>
-              <kbd class="kbd kbd-sm">⌘E</kbd>
-            </div>
-            <div class="flex items-center justify-between">
-              <span class="text-sm text-base-content">Code / Review / Terminal</span>
+              <span class="text-sm text-base-content">Agent / Review / Terminal (if available)</span>
               <div class="flex gap-0.5"><kbd class="kbd kbd-sm">⌘1</kbd><kbd class="kbd kbd-sm">⌘2</kbd><kbd class="kbd kbd-sm">⌘3</kbd></div>
             </div>
-             <div class="flex items-center justify-between">
-               <span class="text-sm text-base-content">New terminal tab</span>
-               <kbd class="kbd kbd-sm">⌘T</kbd>
-             </div>
             </div>
           </div>
        {/if}
@@ -697,12 +685,8 @@
           <div class="font-mono text-xs text-secondary mb-3">Board</div>
           <div class="flex flex-col gap-2">
             <div class="flex items-center justify-between">
-              <span class="text-sm text-base-content">Toggle backlog</span>
-              <kbd class="kbd kbd-sm">b</kbd>
-            </div>
-            <div class="flex items-center justify-between">
-              <span class="text-sm text-base-content">Toggle done drawer</span>
-              <kbd class="kbd kbd-sm">c</kbd>
+              <span class="text-sm text-base-content">Board filters</span>
+              <div class="flex gap-0.5"><kbd class="kbd kbd-sm">⌘1</kbd><kbd class="kbd kbd-sm">⌘2</kbd><kbd class="kbd kbd-sm">⌘3</kbd></div>
             </div>
           </div>
         </div>
