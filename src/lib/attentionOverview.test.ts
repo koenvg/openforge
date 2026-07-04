@@ -73,7 +73,7 @@ function baseInput(overrides: Partial<BuildAttentionOverviewInput> = {}): BuildA
     allTasks: [],
     sessions: new Map(),
     ticketPrs: new Map(),
-    lowFireByProject: new Map(),
+    outOfFocusByProject: new Map(),
     focusStatesByProject: new Map(),
     reviewPrs: [],
     excludedRepos: new Set(),
@@ -92,7 +92,7 @@ describe('buildAttentionOverview — focus tasks', () => {
         task('t-done', 'p1', { status: 'done' }),
         task('t-set-aside', 'p1', { status: 'doing' }),
       ],
-      lowFireByProject: new Map([['p1', new Set(['t-set-aside'])]]),
+      outOfFocusByProject: new Map([['p1', new Set(['t-set-aside'])]]),
     }))
 
     const ids = result.groups[0].focusTasks.map((f) => f.task.id)

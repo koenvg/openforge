@@ -30,7 +30,7 @@ const LEGACY_DEFAULT_FOCUS_STATE_SETS: TaskState[][] = [
 ]
 
 const FOCUS_FILTER_CONFIG_KEY = 'focus_filter_states'
-const LOW_FIRE_TASK_IDS_CONFIG_KEY = 'low_fire_task_ids'
+const OUT_OF_FOCUS_TASK_IDS_CONFIG_KEY = 'low_fire_task_ids'
 
 export const FOCUS_FILTER_STATES: TaskState[] = ALL_TASK_STATES.filter((state) => state !== 'active')
 
@@ -63,7 +63,7 @@ export function filterTasks(
   sessions: Map<string, AgentSession>,
   prs: Map<string, PullRequestInfo[]>,
   focusStates: TaskState[] = DEFAULT_FOCUS_STATES,
-  lowFireTaskIds: Set<string> = new Set()
+  outOfFocusTaskIds: Set<string> = new Set()
 ): Task[] {
   if (filter === 'backlog') {
     return tasks.filter(task => task.status === 'backlog')
@@ -72,7 +72,7 @@ export function filterTasks(
   return tasks.filter(task => {
     if (task.status === 'done' || task.status === 'backlog') return false
 
-    const isManuallyOutOfFocus = lowFireTaskIds.has(task.id)
+    const isManuallyOutOfFocus = outOfFocusTaskIds.has(task.id)
     if (filter === 'out-of-focus') return isManuallyOutOfFocus
     if (isManuallyOutOfFocus) return false
 
@@ -92,7 +92,7 @@ export function getFilterCounts(
   sessions: Map<string, AgentSession>,
   prs: Map<string, PullRequestInfo[]>,
   focusStates: TaskState[] = DEFAULT_FOCUS_STATES,
-  lowFireTaskIds: Set<string> = new Set()
+  outOfFocusTaskIds: Set<string> = new Set()
 ): Record<BoardFilter, number> {
   const counts: Record<BoardFilter, number> = {
     focus: 0,
@@ -115,7 +115,7 @@ export function getFilterCounts(
     const taskPrs = prs.get(task.id) ?? []
     const state = computeTaskState(task, session, taskPrs)
     const needsAttention = isFocusTask(task, state, taskPrs, focusStates)
-    if (lowFireTaskIds.has(task.id)) {
+    if (outOfFocusTaskIds.has(task.id)) {
       counts['out-of-focus']++
     } else if (needsAttention) {
       counts.focus++
@@ -147,8 +147,8 @@ export async function saveFocusFilterStates(projectId: string, states: TaskState
   await setProjectConfig(projectId, FOCUS_FILTER_CONFIG_KEY, JSON.stringify(removeNonFocusableStates(states)))
 }
 
-export async function loadLowFireTaskIds(projectId: string): Promise<Set<string>> {
-  const stored = await getProjectConfig(projectId, LOW_FIRE_TASK_IDS_CONFIG_KEY)
+export async function loadOutOfFocusTaskIds(projectId: string): Promise<Set<string>> {
+  const stored = await getProjectConfig(projectId, OUT_OF_FOCUS_TASK_IDS_CONFIG_KEY)
   if (!stored) return new Set()
   try {
     const parsed = JSON.parse(stored)
@@ -159,6 +159,6 @@ export async function loadLowFireTaskIds(projectId: string): Promise<Set<string>
   return new Set()
 }
 
-export async function saveLowFireTaskIds(projectId: string, taskIds: Set<string>): Promise<void> {
-  await setProjectConfig(projectId, LOW_FIRE_TASK_IDS_CONFIG_KEY, JSON.stringify(Array.from(taskIds)))
+export async function saveOutOfFocusTaskIds(projectId: string, taskIds: Set<string>): Promise<void> {
+  await setProjectConfig(projectId, OUT_OF_FOCUS_TASK_IDS_CONFIG_KEY, JSON.stringify(Array.from(taskIds)))
 }

@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte'
   import { get } from 'svelte/store'
-  import { backlogLabelFilters, commandHeld, focusBoardFilters, lastViewedTaskId, lowFireTaskIdsByProject, mergingTaskIds } from '../../lib/stores'
-  import { filterTasks, getFilterCounts, DEFAULT_FOCUS_STATES, loadFocusFilterStates, loadLowFireTaskIds, saveLowFireTaskIds } from '../../lib/boardFilters'
+  import { backlogLabelFilters, commandHeld, focusBoardFilters, lastViewedTaskId, outOfFocusTaskIdsByProject, mergingTaskIds } from '../../lib/stores'
+  import { filterTasks, getFilterCounts, DEFAULT_FOCUS_STATES, loadFocusFilterStates, loadOutOfFocusTaskIds, saveOutOfFocusTaskIds } from '../../lib/boardFilters'
   import type { BoardFilter } from '../../lib/boardFilters'
   import { getDependencyWaitLabel } from '../../lib/taskDependencies'
   import { getTaskReasonText } from '../../lib/taskStatePresentation'
@@ -60,7 +60,7 @@
   let fallbackFilter: BoardFilter = $state('focus')
   let previousProjectId: string | null | undefined = undefined
   let labelLoadRequest = 0
-  let lowFireLoadRequest = 0
+  let outOfFocusLoadRequest = 0
 
   let activeFilter = $derived.by(() => {
     if (!projectId) return fallbackFilter
@@ -72,13 +72,13 @@
     return $backlogLabelFilters.get(projectId) ?? new Set<number>()
   })
 
-  let lowFireTaskIds = $derived.by(() => {
+  let outOfFocusTaskIds = $derived.by(() => {
     if (!projectId) return new Set<string>()
-    return $lowFireTaskIdsByProject.get(projectId) ?? new Set<string>()
+    return $outOfFocusTaskIdsByProject.get(projectId) ?? new Set<string>()
   })
 
   let visibleTasks = $derived.by(() => {
-    const filtered = filterTasks(tasks, activeFilter, activeSessions, ticketPrs, focusStates, lowFireTaskIds)
+    const filtered = filterTasks(tasks, activeFilter, activeSessions, ticketPrs, focusStates, outOfFocusTaskIds)
     const labelFiltered = activeFilter === 'backlog'
       ? filtered.filter((task) => taskMatchesAnySelectedLabel(task, selectedLabelIds))
       : filtered
@@ -92,7 +92,7 @@
 
   let navigableCount = $derived(visibleTasks.length)
 
-  let filterCounts = $derived.by(() => getFilterCounts(tasks, activeSessions, ticketPrs, focusStates, lowFireTaskIds))
+  let filterCounts = $derived.by(() => getFilterCounts(tasks, activeSessions, ticketPrs, focusStates, outOfFocusTaskIds))
   let displayProjectLabels = $derived.by(() => {
     const labelsById = new Map(projectLabels.map((label) => [label.id, label]))
     for (const task of tasks) {
@@ -246,11 +246,11 @@
     const currentProjectId = projectId
     if (!currentProjectId) return
 
-    const requestId = ++lowFireLoadRequest
-    loadLowFireTaskIds(currentProjectId)
+    const requestId = ++outOfFocusLoadRequest
+    loadOutOfFocusTaskIds(currentProjectId)
       .then((taskIds) => {
-        if (requestId !== lowFireLoadRequest) return
-        lowFireTaskIdsByProject.update((current) => {
+        if (requestId !== outOfFocusLoadRequest) return
+        outOfFocusTaskIdsByProject.update((current) => {
           const next = new Map(current)
           if (taskIds.size > 0) {
             next.set(currentProjectId, taskIds)
@@ -261,8 +261,8 @@
         })
       })
       .catch(() => {
-        if (requestId !== lowFireLoadRequest) return
-        lowFireTaskIdsByProject.update((current) => {
+        if (requestId !== outOfFocusLoadRequest) return
+        outOfFocusTaskIdsByProject.update((current) => {
           const next = new Map(current)
           next.delete(currentProjectId)
           return next
@@ -314,15 +314,15 @@
     contextMenu = { visible: true, x: event.clientX, y: event.clientY, taskId }
   }
 
-  function setTaskLowFire(taskId: string, shouldBeLowFire: boolean) {
+  function setTaskOutOfFocus(taskId: string, shouldBeOutOfFocus: boolean) {
     if (!projectId) return
 
     const currentProjectId = projectId
     let nextTaskIds = new Set<string>()
-    lowFireTaskIdsByProject.update((current) => {
+    outOfFocusTaskIdsByProject.update((current) => {
       const next = new Map(current)
       nextTaskIds = new Set(next.get(currentProjectId) ?? new Set<string>())
-      if (shouldBeLowFire) {
+      if (shouldBeOutOfFocus) {
         nextTaskIds.add(taskId)
       } else {
         nextTaskIds.delete(taskId)
@@ -335,7 +335,7 @@
       return next
     })
 
-    saveLowFireTaskIds(currentProjectId, nextTaskIds).catch((err: unknown) => {
+    saveOutOfFocusTaskIds(currentProjectId, nextTaskIds).catch((err: unknown) => {
       console.error('Failed to save Out of Focus tasks:', err)
     })
   }
@@ -463,9 +463,9 @@
     onEdit={onEditTask}
     onDelete={() => contextMenu = { ...contextMenu, visible: false }}
     actions={projectActions}
-    {lowFireTaskIds}
-    onMoveToLowFire={(taskId) => setTaskLowFire(taskId, true)}
-    onMoveToFocus={(taskId) => setTaskLowFire(taskId, false)}
+    {outOfFocusTaskIds}
+    onMoveToOutOfFocus={(taskId) => setTaskOutOfFocus(taskId, true)}
+    onReturnToBoard={(taskId) => setTaskOutOfFocus(taskId, false)}
     {onRunAction}
   />
 </div>

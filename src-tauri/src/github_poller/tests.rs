@@ -81,7 +81,7 @@ fn make_pr(
         },
         project_id: project_id.to_string(),
         task_status: task_status.to_string(),
-        low_fire: false,
+        out_of_focus: false,
     }
 }
 

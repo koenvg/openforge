@@ -10,7 +10,7 @@ export interface PaletteAction {
   keywords: string[]
 }
 
-export function getTaskActions(task: Task, customActions: Action[], taskPrs: PullRequestInfo[] = [], lowFireTaskIds: Set<string> = new Set()): PaletteAction[] {
+export function getTaskActions(task: Task, customActions: Action[], taskPrs: PullRequestInfo[] = [], outOfFocusTaskIds: Set<string> = new Set()): PaletteAction[] {
   const actions: PaletteAction[] = []
 
   if (task.status === 'backlog') {
@@ -52,7 +52,7 @@ export function getTaskActions(task: Task, customActions: Action[], taskPrs: Pul
   }
 
   if (task.status === 'doing') {
-    if (lowFireTaskIds.has(task.id)) {
+    if (outOfFocusTaskIds.has(task.id)) {
       actions.push({
         id: 'return-to-board',
         label: 'Return to board',
@@ -125,8 +125,8 @@ export function getGlobalActions(): PaletteAction[] {
   return GLOBAL_ACTION_DEFINITIONS.map(getShortcutBackedGlobalAction)
 }
 
-export function getAvailableActions(task: Task | null, customActions: Action[], taskPrs: PullRequestInfo[] = [], lowFireTaskIds: Set<string> = new Set()): PaletteAction[] {
-  const taskActions = task ? getTaskActions(task, customActions, taskPrs, lowFireTaskIds) : []
+export function getAvailableActions(task: Task | null, customActions: Action[], taskPrs: PullRequestInfo[] = [], outOfFocusTaskIds: Set<string> = new Set()): PaletteAction[] {
+  const taskActions = task ? getTaskActions(task, customActions, taskPrs, outOfFocusTaskIds) : []
   return [...taskActions, ...getGlobalActions()]
 }
 

@@ -4,7 +4,7 @@
   import Modal from './ui/Modal.svelte'
   import { projects, activeProjectId, reviewPrs, globalExcludedPrRepos, ticketPrs } from '../../lib/stores'
   import { getAllTasks, getLatestSessions, getProjectConfig, getConfig, setConfig } from '../../lib/ipc'
-  import { loadLowFireTaskIds, loadFocusFilterStates, DEFAULT_FOCUS_STATES } from '../../lib/boardFilters'
+  import { loadOutOfFocusTaskIds, loadFocusFilterStates, DEFAULT_FOCUS_STATES } from '../../lib/boardFilters'
   import { buildAttentionOverview } from '../../lib/attentionOverview'
   import type { AttentionOverview, AttentionFocusTask } from '../../lib/attentionOverview'
   import type { ReviewPullRequest, Task } from '../../lib/types'
@@ -199,20 +199,20 @@
       const sessions = new Map(sessionList.map((session) => [session.ticket_id, session]))
 
       const resolvedRepoByProject = new Map<string, string | null>()
-      const lowFireByProject = new Map<string, Set<string>>()
+      const outOfFocusByProject = new Map<string, Set<string>>()
       const focusStatesByProject = new Map<string, TaskState[]>()
       await Promise.all(
         projectList.map(async (project) => {
-          const [repoRaw, lowFire, focusStates] = await Promise.all([
+          const [repoRaw, outOfFocus, focusStates] = await Promise.all([
             getProjectConfig(project.id, 'resolved_repo').catch(() => null),
-            loadLowFireTaskIds(project.id).catch(() => new Set<string>()),
+            loadOutOfFocusTaskIds(project.id).catch(() => new Set<string>()),
             loadFocusFilterStates(project.id).catch(() => DEFAULT_FOCUS_STATES),
           ])
           resolvedRepoByProject.set(
             project.id,
             typeof repoRaw === 'string' && repoRaw.includes('/') ? repoRaw : null,
           )
-          if (lowFire.size > 0) lowFireByProject.set(project.id, lowFire)
+          if (outOfFocus.size > 0) outOfFocusByProject.set(project.id, outOfFocus)
           focusStatesByProject.set(project.id, focusStates)
         }),
       )
@@ -222,7 +222,7 @@
         allTasks,
         sessions,
         ticketPrs: get(ticketPrs),
-        lowFireByProject,
+        outOfFocusByProject,
         focusStatesByProject,
         reviewPrs: get(reviewPrs),
         excludedRepos: get(globalExcludedPrRepos),
