@@ -1,4 +1,5 @@
 use crate::db;
+use log::{debug, info, warn};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -355,14 +356,50 @@ fn extract_json_object(raw: &str) -> Result<&str, serde_json::Error> {
 }
 
 fn read_transcript_excerpt(path: &Path) -> Option<String> {
-    let file = std::fs::File::open(path).ok()?;
-    let len = file.metadata().ok()?.len();
+    let file = match std::fs::File::open(path) {
+        Ok(file) => file,
+        Err(error) => {
+            warn!(
+                "[task_metadata_refresh] failed to open transcript snapshot {:?}: {error}",
+                path
+            );
+            return None;
+        }
+    };
+    let len = match file.metadata() {
+        Ok(metadata) => metadata.len(),
+        Err(error) => {
+            warn!(
+                "[task_metadata_refresh] failed to read transcript snapshot metadata {:?}: {error}",
+                path
+            );
+            return None;
+        }
+    };
     let start = len.saturating_sub(MAX_TRANSCRIPT_SNAPSHOT_BYTES);
     let mut reader = std::io::BufReader::new(file);
     use std::io::{Read, Seek};
-    reader.seek(std::io::SeekFrom::Start(start)).ok()?;
+    if let Err(error) = reader.seek(std::io::SeekFrom::Start(start)) {
+        warn!(
+            "[task_metadata_refresh] failed to seek transcript snapshot {:?}: {error}",
+            path
+        );
+        return None;
+    }
     let mut buf = Vec::new();
-    reader.read_to_end(&mut buf).ok()?;
+    if let Err(error) = reader.read_to_end(&mut buf) {
+        warn!(
+            "[task_metadata_refresh] failed to read transcript snapshot {:?}: {error}",
+            path
+        );
+        return None;
+    }
+    debug!(
+        "[task_metadata_refresh] loaded transcript snapshot {:?} len={} excerpt_bytes={}",
+        path,
+        len,
+        buf.len()
+    );
     Some(String::from_utf8_lossy(&buf).to_string())
 }
 
@@ -443,9 +480,34 @@ async fn run_task_display_title_metadata_job(
             job.kind.as_str()
         ));
     }
-    run_metadata_job(job, prompt)
-        .await
-        .and_then(|raw| parse_task_display_title_output(&raw))
+    let raw = run_metadata_job(job, prompt).await?;
+    let raw_bytes = raw.len();
+    match parse_task_display_title_output(&raw) {
+        Ok(Some(title)) => {
+            info!(
+                "[task_metadata_refresh] provider returned task display title task_id={} provider={} raw_bytes={} title_chars={}",
+                job.task_id,
+                job.provider,
+                raw_bytes,
+                title.chars().count()
+            );
+            Ok(Some(title))
+        }
+        Ok(None) => {
+            info!(
+                "[task_metadata_refresh] provider returned no task display title task_id={} provider={} raw_bytes={}",
+                job.task_id, job.provider, raw_bytes
+            );
+            Ok(None)
+        }
+        Err(error) => {
+            warn!(
+                "[task_metadata_refresh] failed to parse task display title metadata task_id={} provider={} raw_bytes={}; suppressing parser detail to avoid leaking provider content",
+                job.task_id, job.provider, raw_bytes
+            );
+            Err(error)
+        }
+    }
 }
 
 async fn run_headless_metadata_command(
@@ -454,6 +516,16 @@ async fn run_headless_metadata_command(
     args: &[String],
     output_file: Option<&Path>,
 ) -> Result<String, String> {
+    info!(
+        "[task_metadata_refresh] launching metadata command task_id={} provider={} kind={} program={} args_count={} has_output_file={} timeout_seconds={}",
+        job.task_id,
+        job.provider,
+        job.kind.as_str(),
+        program,
+        args.len(),
+        output_file.is_some(),
+        TITLE_PROVIDER_TIMEOUT_SECONDS
+    );
     let mut command = tokio::process::Command::new(program);
     command.args(args);
     command.env("NO_COLOR", "1");
@@ -474,32 +546,89 @@ async fn run_headless_metadata_command(
     )
     .await
     .map_err(|_| {
+        warn!(
+            "[task_metadata_refresh] metadata command timed out task_id={} provider={} kind={} program={} timeout_seconds={}",
+            job.task_id,
+            job.provider,
+            job.kind.as_str(),
+            program,
+            TITLE_PROVIDER_TIMEOUT_SECONDS
+        );
         format!(
             "{program} {} metadata generation timed out",
             job.kind.as_str()
         )
     })?
     .map_err(|error| {
+        warn!(
+            "[task_metadata_refresh] failed to launch metadata command task_id={} provider={} kind={} program={}: {error}",
+            job.task_id,
+            job.provider,
+            job.kind.as_str(),
+            program
+        );
         format!(
             "failed to launch {program} for {} metadata generation: {error}",
             job.kind.as_str()
         )
     })?;
 
+    let stderr_bytes = output.stderr.len();
+    let stdout_bytes = output.stdout.len();
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
         let detail = if stderr.is_empty() { stdout } else { stderr };
+        warn!(
+            "[task_metadata_refresh] metadata command failed task_id={} provider={} kind={} program={} status={} stdout_bytes={} stderr_bytes={}",
+            job.task_id,
+            job.provider,
+            job.kind.as_str(),
+            program,
+            output.status,
+            stdout_bytes,
+            stderr_bytes
+        );
         return Err(format!(
             "{program} {} metadata generation failed: {detail}",
             job.kind.as_str()
         ));
     }
 
+    info!(
+        "[task_metadata_refresh] metadata command completed task_id={} provider={} kind={} program={} status={} stdout_bytes={} stderr_bytes={}",
+        job.task_id,
+        job.provider,
+        job.kind.as_str(),
+        program,
+        output.status,
+        stdout_bytes,
+        stderr_bytes
+    );
+
     if let Some(path) = output_file {
-        if let Ok(content) = std::fs::read_to_string(path) {
-            if !content.trim().is_empty() {
+        match std::fs::read_to_string(path) {
+            Ok(content) if !content.trim().is_empty() => {
+                debug!(
+                    "[task_metadata_refresh] using metadata output file task_id={} provider={} path={:?} bytes={}",
+                    job.task_id,
+                    job.provider,
+                    path,
+                    content.len()
+                );
                 return Ok(content);
+            }
+            Ok(_) => {
+                info!(
+                    "[task_metadata_refresh] metadata output file was empty task_id={} provider={} path={:?}; falling back to stdout",
+                    job.task_id, job.provider, path
+                );
+            }
+            Err(error) => {
+                info!(
+                    "[task_metadata_refresh] failed to read metadata output file task_id={} provider={} path={:?}: {error}; falling back to stdout",
+                    job.task_id, job.provider, path
+                );
             }
         }
     }
@@ -559,6 +688,16 @@ pub(crate) async fn refresh_task_display_title_with_ai_once(
     transcript_path: Option<PathBuf>,
     activity_snapshot: Option<String>,
 ) -> Result<bool, String> {
+    let transcript_path_present = transcript_path.is_some();
+    let activity_snapshot_bytes = activity_snapshot.as_ref().map_or(0, String::len);
+    info!(
+        "[task_metadata_refresh] scheduling AI title refresh task_id={} provider={} delay_seconds={} has_transcript_path={} activity_snapshot_bytes={}",
+        task_id,
+        provider,
+        TITLE_REFRESH_DELAY_SECONDS,
+        transcript_path_present,
+        activity_snapshot_bytes
+    );
     tokio::time::sleep(Duration::from_secs(TITLE_REFRESH_DELAY_SECONDS)).await;
 
     let task = {
@@ -574,27 +713,90 @@ pub(crate) async fn refresh_task_display_title_with_ai_once(
         activity_snapshot,
     );
     let snapshot = job.snapshot.as_ref();
+    info!(
+        "[task_metadata_refresh] built AI title refresh snapshot task_id={} provider={} has_snapshot={} transcript_excerpt_bytes={} activity_excerpt_bytes={}",
+        task_id,
+        provider,
+        snapshot.is_some(),
+        snapshot
+            .and_then(|snapshot| snapshot.transcript_excerpt.as_ref())
+            .map_or(0, String::len),
+        snapshot
+            .and_then(|snapshot| snapshot.activity_excerpt.as_ref())
+            .map_or(0, String::len)
+    );
     let Some(task) = task else {
+        info!(
+            "[task_metadata_refresh] skipping AI title refresh because task no longer exists task_id={} provider={}",
+            task_id, provider
+        );
         return Ok(false);
     };
     if task.title_source.as_deref() == Some("manual") || task.title_generated_at.is_some() {
+        info!(
+            "[task_metadata_refresh] skipping AI title refresh because task is no longer eligible task_id={} provider={} title_source={:?} title_generated={}",
+            task_id,
+            provider,
+            task.title_source,
+            task.title_generated_at.is_some()
+        );
         return Ok(false);
     }
 
     let prompt = build_task_display_title_prompt(&task, snapshot);
-    let provider_title = run_task_display_title_metadata_job(&job, &prompt)
+    debug!(
+        "[task_metadata_refresh] built AI title prompt task_id={} provider={} prompt_bytes={}",
+        task_id,
+        provider,
+        prompt.len()
+    );
+    let (candidate, candidate_source) = match run_task_display_title_metadata_job(&job, &prompt)
         .await
-        .ok()
-        .flatten();
-    let candidate = provider_title.or_else(|| task_display_title_candidate(&task));
+    {
+        Ok(Some(title)) => (Some(title), "provider"),
+        Ok(None) => {
+            info!(
+                "[task_metadata_refresh] AI title provider returned no title; using prompt fallback if available task_id={} provider={}",
+                task_id, provider
+            );
+            (task_display_title_candidate(&task), "fallback")
+        }
+        Err(_) => {
+            warn!(
+                "[task_metadata_refresh] AI title provider failed; using prompt fallback if available task_id={} provider={}; suppressing provider error detail to avoid leaking provider content",
+                task_id, provider
+            );
+            (task_display_title_candidate(&task), "fallback")
+        }
+    };
     let Some(candidate) = candidate else {
+        info!(
+            "[task_metadata_refresh] no AI title candidate available task_id={} provider={}",
+            task_id, provider
+        );
         return Ok(false);
     };
+    info!(
+        "[task_metadata_refresh] selected AI title candidate task_id={} provider={} source={} title_chars={}",
+        task_id,
+        provider,
+        candidate_source,
+        candidate.chars().count()
+    );
 
     let guard = db.lock().unwrap();
-    guard
-        .update_generated_task_title_once(&task_id, &candidate)
-        .map_err(|error| format!("failed to write AI generated task display title: {error}"))
+    let result = guard.update_generated_task_title_once(&task_id, &candidate);
+    match &result {
+        Ok(updated) => info!(
+            "[task_metadata_refresh] AI title refresh write completed task_id={} provider={} source={} updated={}",
+            task_id, provider, candidate_source, updated
+        ),
+        Err(error) => warn!(
+            "[task_metadata_refresh] failed to write AI generated task display title task_id={} provider={} source={}: {error}",
+            task_id, provider, candidate_source
+        ),
+    }
+    result.map_err(|error| format!("failed to write AI generated task display title: {error}"))
 }
 
 #[cfg(test)]
