@@ -12,7 +12,7 @@
     neutral: { bg: 'bg-[var(--chip-stopped-bg)]', dot: 'bg-[var(--chip-stopped-dot)]', text: 'text-[var(--chip-stopped-text)]' },
     done: { bg: 'bg-[var(--chip-done-bg)]', dot: 'bg-[var(--chip-done-dot)]', text: 'text-[var(--chip-done-text)]' },
     merged: { bg: 'bg-[var(--chip-soft-bg)]', dot: '', text: 'text-secondary' },
-    closed: { bg: 'bg-[var(--chip-error-bg)]', dot: 'bg-[var(--chip-error-dot)]', text: 'text-[var(--chip-error-text)]' }
+    closed: { bg: 'bg-[var(--chip-soft-bg)]', dot: '', text: 'text-secondary' }
   };
 
   const detailClasses: Record<PrStatusChipSpec['variant'], string> = {
@@ -23,7 +23,7 @@
     neutral: 'bg-base-content/15 text-base-content/50',
     done: 'bg-primary/15 text-primary',
     merged: 'bg-secondary/15 text-secondary',
-    closed: 'bg-error/15 text-error'
+    closed: 'bg-secondary/15 text-secondary'
   };
 </script>
 
