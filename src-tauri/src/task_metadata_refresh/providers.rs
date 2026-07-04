@@ -1,5 +1,3 @@
-#[cfg(test)]
-use super::prompt::TASK_DISPLAY_TITLE_JSON_SCHEMA;
 use super::prompt::{parse_task_display_title_output, MetadataJob, MetadataJobKind};
 use std::path::Path;
 use std::time::Duration;
@@ -18,11 +16,6 @@ pub(super) fn build_claude_metadata_job_args(prompt: &str, output_schema: &str) 
         "dontAsk".to_string(),
         prompt.to_string(),
     ]
-}
-
-#[cfg(test)]
-pub(super) fn build_claude_title_headless_args(prompt: &str) -> Vec<String> {
-    build_claude_metadata_job_args(prompt, TASK_DISPLAY_TITLE_JSON_SCHEMA)
 }
 
 pub(super) fn build_opencode_title_headless_args(prompt: &str) -> Vec<String> {
