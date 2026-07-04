@@ -41,7 +41,7 @@ export const activeProjectId = writable<string | null>(null);
 export const activeProjectColorId = writable<string | null>(null);
 export const projectAttention = writable<Map<string, ProjectAttention>>(new Map());
 // Sidebar per-project attention count (the green dot): distinct Focus-tab tasks needing
-// attention, excluding in-flight (running) agents and low-fire tasks. Populated by the data
+// attention, excluding in-flight (running) agents and Out of Focus tasks. Populated by the data
 // orchestrator using the board's own getFilterCounts, so the dot matches the board's Focus
 // count exactly. Keyed by project id; missing projects report zero.
 export const attentionCountByProject = writable<Map<string, number>>(new Map());

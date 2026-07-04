@@ -186,7 +186,7 @@ vi.mock('./lib/stores', () => {
   reviewPullRequestDiff: writable(null),
   commandHeld: writable(false),
   focusBoardFilters: writable(new Map()),
-  lowFireTaskIdsByProject: writable(new Map()),
+  outOfFocusTaskIdsByProject: writable(new Map()),
   startingTasks: writable<Set<string>>(new Set()),
     codeCleanupTasksEnabled: writable(false),
   }
