@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cronForPreset, dayOfWeekFromCron, getNextScheduledFireAt, timeOfDayFromCron, validateFiveFieldCron } from './cron'
+import { cronForPreset, dayOfWeekFromCron, describeCronExpression, getNextScheduledFireAt, timeOfDayFromCron, validateFiveFieldCron } from './cron'
 
 describe('Task Schedule cron utilities', () => {
   it('compiles Schedule Presets with a selected time to private five-field cron expressions', () => {
@@ -38,7 +38,29 @@ describe('Task Schedule cron utilities', () => {
   })
 
   it('finds the next Scheduled Fire strictly after the provided time', () => {
-    const next = getNextScheduledFireAt('0 9 * * *', Date.UTC(2026, 0, 1, 9, 0, 0))
-    expect(next).toBe(Date.UTC(2026, 0, 2, 9, 0, 0))
+    const next = getNextScheduledFireAt('0 9 * * *', new Date(2026, 0, 1, 9, 0, 0).getTime())
+    expect(next).toBe(new Date(2026, 0, 2, 9, 0, 0).getTime())
+  })
+
+  it('interprets custom cron expressions in local time when finding the next Scheduled Fire', () => {
+    const previousTimeZone = process.env.TZ
+    process.env.TZ = 'Europe/Amsterdam'
+    try {
+      const after = new Date(2026, 6, 4, 10, 1, 0).getTime()
+      const next = getNextScheduledFireAt('*/30 9-16 * * *', after)
+
+      expect(next).toBe(new Date(2026, 6, 4, 10, 30, 0).getTime())
+    } finally {
+      if (previousTimeZone === undefined) {
+        delete process.env.TZ
+      } else {
+        process.env.TZ = previousTimeZone
+      }
+    }
+  })
+
+  it('describes cron expressions in human language', () => {
+    expect(describeCronExpression('*/30 9-16 * * *')).toMatch(/every 30 minutes/i)
+    expect(describeCronExpression('*/30 9-16 * * *')).toMatch(/09:00.*16:59|09:00.*04:59 PM/i)
   })
 })

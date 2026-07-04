@@ -363,6 +363,23 @@ describe('TaskSchedulesView UX feedback', () => {
     expect(screen.getByText('Creates a scheduled board Task immediately and starts implementation if no previous scheduled Task is still open.')).toBeTruthy()
   })
 
+  it('shows human-readable text for custom cron expressions', async () => {
+    mockScheduleBackend([
+      makeSchedule({
+        id: 'custom-business-hours',
+        title: 'Business hours sync',
+        preset: 'custom',
+        cron: '*/30 9-16 * * *',
+      }),
+    ])
+    renderTaskSchedulesView()
+
+    await screen.findByText('Business hours sync')
+    const card = getScheduleCard('Business hours sync')
+
+    expect(within(card).getByText(/every 30 minutes/i)).toBeTruthy()
+  })
+
   it('requires delete confirmation and does not offer undo after deletion', async () => {
     mockScheduleBackend([makeSchedule()])
     renderTaskSchedulesView()

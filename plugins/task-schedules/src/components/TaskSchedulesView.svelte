@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte'
   import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
-  import { dayOfWeekFromCron, timeOfDayFromCron, validateFiveFieldCron } from '../lib/cron'
+  import { dayOfWeekFromCron, describeCronExpression, timeOfDayFromCron, validateFiveFieldCron } from '../lib/cron'
   import type { ScheduledFireOutcome, SchedulePreset, TaskSchedule, TaskScheduleDraft, TaskScheduleMode } from '../lib/types'
 
   interface Props {
@@ -249,6 +249,14 @@
     return 'Creates a scheduled board Task immediately and starts implementation if no previous scheduled Task is still open.'
   }
 
+  function schedulePresetLabel(schedule: TaskSchedule): string {
+    return schedule.preset === 'custom' ? schedule.cron : schedule.preset
+  }
+
+  function scheduleHumanDescription(schedule: TaskSchedule): string | null {
+    return schedule.preset === 'custom' ? describeCronExpression(schedule.cron) : null
+  }
+
   function formatDate(value: number | null): string {
     if (value === null) return 'Never'
     return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
@@ -302,7 +310,10 @@
               <dl class="mt-4 grid gap-2 text-sm sm:grid-cols-2">
                 <div>
                   <dt class="text-base-content/60">Schedule Preset</dt>
-                  <dd class="font-medium">{schedule.preset === 'custom' ? schedule.cron : schedule.preset}</dd>
+                  <dd class="font-medium">{schedulePresetLabel(schedule)}</dd>
+                  {#if scheduleHumanDescription(schedule)}
+                    <dd class="text-xs text-base-content/60">{scheduleHumanDescription(schedule)}</dd>
+                  {/if}
                 </div>
                 <div>
                   <dt class="text-base-content/60">Mode</dt>
