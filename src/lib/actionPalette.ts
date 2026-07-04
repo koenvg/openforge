@@ -51,24 +51,14 @@ export function getTaskActions(task: Task, customActions: Action[], taskPrs: Pul
     })
   }
 
-  if (task.status === 'doing') {
-    if (outOfFocusTaskIds.has(task.id)) {
-      actions.push({
-        id: 'return-to-board',
-        label: 'Return to board',
-        shortcut: null,
-        category: 'task',
-        keywords: ['focus', 'board', 'return', 'out of focus'],
-      })
-    } else {
-      actions.push({
-        id: 'set-aside-task',
-        label: 'Set aside',
-        shortcut: null,
-        category: 'task',
-        keywords: ['set aside', 'out of focus', 'hide', 'defer'],
-      })
-    }
+  if (task.status === 'doing' && outOfFocusTaskIds.has(task.id)) {
+    actions.push({
+      id: 'return-to-board',
+      label: 'Return to board',
+      shortcut: null,
+      category: 'task',
+      keywords: ['focus', 'board', 'return', 'out of focus'],
+    })
   }
 
   actions.push({
@@ -86,6 +76,16 @@ export function getTaskActions(task: Task, customActions: Action[], taskPrs: Pul
       shortcut: null,
       category: 'task',
       keywords: ['custom', 'action'],
+    })
+  }
+
+  if (task.status === 'doing' && !outOfFocusTaskIds.has(task.id)) {
+    actions.push({
+      id: 'set-aside-task',
+      label: 'Set aside',
+      shortcut: null,
+      category: 'task',
+      keywords: ['set aside', 'out of focus', 'hide', 'defer'],
     })
   }
 

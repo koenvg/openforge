@@ -132,6 +132,28 @@ describe('TaskContextMenu', () => {
     expect(screen.queryByText('Move to Out of Focus')).toBeNull()
   })
 
+  it('orders Set aside behind Complete for doing tasks outside Out of Focus', () => {
+    tasks.set([makeTask('T-1', 'doing')])
+    render(TaskContextMenu, {
+      props: {
+        visible: true,
+        x: 0,
+        y: 0,
+        taskId: 'T-1',
+        onClose: vi.fn(),
+        outOfFocusTaskIds: new Set(),
+        onMoveToOutOfFocus: vi.fn(),
+      },
+    })
+
+    const labels = screen.getAllByRole('menuitem').map(item => item.textContent ?? '')
+    const completeIndex = labels.findIndex(label => label.includes('Complete'))
+    const setAsideIndex = labels.findIndex(label => label.includes('Set aside'))
+
+    expect(completeIndex).toBeGreaterThanOrEqual(0)
+    expect(setAsideIndex).toBeGreaterThan(completeIndex)
+  })
+
   it('shows Return to board for doing tasks already in Out of Focus', () => {
     tasks.set([makeTask('T-1', 'doing')])
     render(TaskContextMenu, {
