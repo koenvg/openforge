@@ -4,10 +4,12 @@ use super::review_sync::{
     count_poll_phase_error, poll_authored_prs, poll_review_prs, sync_authored_task_prs,
 };
 use super::scheduling::{
-    build_poll_plan, current_unix_timestamp, format_rate_limit_pause_log, format_sync_phase_log,
-    format_sync_scope_log, get_scheduled_prs_for_project, parse_poll_interval_seconds,
-    poll_scheduler_snapshot, poll_scope_log_name, rate_limit_sleep_duration_secs,
+    build_poll_plan, current_unix_timestamp, get_scheduled_prs_for_project,
+    parse_poll_interval_seconds, poll_scheduler_snapshot, rate_limit_sleep_duration_secs,
     scheduled_pr_in_scope, select_projects, PollContext, PollScope,
+};
+use super::sync_logging::{
+    format_rate_limit_pause_log, format_sync_phase_log, format_sync_scope_log, poll_scope_log_name,
 };
 use crate::app_events::AppEventSender;
 use crate::db::Database;
