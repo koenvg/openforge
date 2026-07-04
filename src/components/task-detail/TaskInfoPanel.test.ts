@@ -5,7 +5,7 @@ import { requireElement } from '../../test-utils/dom'
 import TaskInfoPanel from './TaskInfoPanel.svelte'
 import type { Task, PullRequestInfo, PrComment, TaskLabel, AgentSession } from '../../lib/types'
 import { activeSessions, mergingTaskIds, tasks, ticketPrs } from '../../lib/stores'
-import { addTaskLabel, forceGithubSync, getPrComments, getPullRequests, linkPullRequest, mergePullRequest, removeTaskLabel } from '../../lib/ipc'
+import { addTaskLabel, forceGithubSync, getPrComments, getPullRequests, linkPullRequest, mergePullRequest, refreshTaskGithubStatus, removeTaskLabel } from '../../lib/ipc'
 
 vi.mock('../../lib/stores', () => ({
   ticketPrs: writable(new Map()),
@@ -17,6 +17,15 @@ vi.mock('../../lib/stores', () => ({
 
 vi.mock('../../lib/ipc', () => ({
   forceGithubSync: vi.fn().mockResolvedValue({
+    new_comments: 0,
+    ci_changes: 0,
+    review_changes: 0,
+    pr_changes: 0,
+    errors: 0,
+    rate_limited: false,
+    rate_limit_reset_at: null,
+  }),
+  refreshTaskGithubStatus: vi.fn().mockResolvedValue({
     new_comments: 0,
     ci_changes: 0,
     review_changes: 0,
@@ -71,6 +80,15 @@ describe('TaskInfoPanel', () => {
     ticketPrs.set(new Map())
     tasks.set([])
     vi.mocked(getPullRequests).mockResolvedValue([])
+    vi.mocked(refreshTaskGithubStatus).mockResolvedValue({
+      new_comments: 0,
+      ci_changes: 0,
+      review_changes: 0,
+      pr_changes: 0,
+      errors: 0,
+      rate_limited: false,
+      rate_limit_reset_at: null,
+    })
     vi.mocked(getPrComments).mockResolvedValue([])
     vi.mocked(linkPullRequest).mockResolvedValue(createPullRequest())
   })
@@ -999,6 +1017,25 @@ describe('TaskInfoPanel', () => {
     await fireEvent.click(await screen.findByRole('button', { name: 'Merge' }))
 
     expect(await screen.findByText('merge blocked by branch protection')).toBeTruthy()
+  })
+
+  it('refreshes task pull requests after a task-scoped GitHub status refresh', async () => {
+    const stalePr = createPullRequest({ title: 'Stale PR', ci_status: 'pending' })
+    const freshPr = createPullRequest({ title: 'Fresh PR', ci_status: 'success' })
+
+    ticketPrs.set(new Map([['T-42', [stalePr]]]))
+    vi.mocked(getPullRequests).mockResolvedValue([freshPr])
+
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Refresh GitHub status' }))
+
+    await waitFor(() => {
+      expect(refreshTaskGithubStatus).toHaveBeenCalledWith('T-42')
+      expect(getPullRequests).toHaveBeenCalled()
+      expect(screen.getByText('Fresh PR')).toBeTruthy()
+    })
+    expect(screen.queryByText('Stale PR')).toBeNull()
   })
 
   it('refreshes task pull requests after a successful merge', async () => {

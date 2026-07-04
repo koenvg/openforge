@@ -60,6 +60,50 @@ async fn link_pull_request_persists_pr_for_task() {
 }
 
 #[tokio::test]
+async fn refresh_task_github_status_returns_empty_result_for_task_without_linked_prs() {
+    let (state, path) = test_state("app_invoke_refresh_task_github_status_empty");
+    let task_id = {
+        let db = state.db.lock().expect("db lock");
+        db.create_task("Refresh PR status", "doing", None, None, None)
+            .expect("create task")
+            .id
+    };
+
+    let value = invoke_ok(
+        &state,
+        "refresh_task_github_status",
+        json!({ "taskId": task_id }),
+    )
+    .await;
+
+    assert_eq!(value["new_comments"], 0);
+    assert_eq!(value["ci_changes"], 0);
+    assert_eq!(value["review_changes"], 0);
+    assert_eq!(value["pr_changes"], 0);
+    assert_eq!(value["errors"], 0);
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn refresh_task_github_status_rejects_missing_task() {
+    let (state, path) = test_state("app_invoke_refresh_task_github_status_missing_task");
+
+    let err = invoke(
+        &state,
+        "refresh_task_github_status",
+        json!({ "taskId": "T-missing" }),
+    )
+    .await
+    .expect_err("missing task should be rejected before GitHub calls");
+
+    assert_eq!(err.0, StatusCode::NOT_FOUND);
+    assert!(err.1.contains("Task not found"));
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn link_pull_request_rejects_invalid_url() {
     let (state, path) = test_state("app_invoke_link_pull_request_invalid_url");
     let task_id = {

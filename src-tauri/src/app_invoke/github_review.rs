@@ -19,6 +19,14 @@ fn link_pull_request_error(error: String) -> (StatusCode, String) {
     }
 }
 
+fn refresh_task_github_status_error(error: String) -> (StatusCode, String) {
+    if error.starts_with("Task not found") {
+        (StatusCode::NOT_FOUND, error)
+    } else {
+        runtime_error(error)
+    }
+}
+
 fn publish_comment_addressed(state: &AppState) {
     let payload = serde_json::Value::Null;
     publish_app_event_to_runtime(
@@ -108,6 +116,19 @@ pub(super) async fn handle_app_github_review_command(
             )
             .await,
         )?,
+        "refresh_task_github_status" => {
+            let task_id = payload_string(&request.payload, "taskId")?;
+            to_app_value(
+                crate::github_poller::refresh_task_github_status_for_sidecar(
+                    state.db.clone(),
+                    &state.github_client,
+                    state.app_event_tx.clone(),
+                    &task_id,
+                )
+                .await
+                .map_err(refresh_task_github_status_error)?,
+            )?
+        }
         "set_poll_context" => {
             let focused = request
                 .payload

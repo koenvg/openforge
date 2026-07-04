@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { PullRequestInfo } from '../../lib/types'
   import { canEnqueuePullRequest, canMergePullRequest, getMergeReadiness, isClosedOrMergedPullRequest, isClosedUnmergedPullRequest, isMergedPullRequest } from '../../lib/types'
-  import { linkPullRequest, openUrl } from '../../lib/ipc'
+  import { linkPullRequest, openUrl, refreshTaskGithubStatus } from '../../lib/ipc'
   import { getPrStatusChips } from '@openforge/plugin-sdk/prStatusPresentation'
   import { getGitHubMarkdownImageBaseUrl } from '../../lib/githubMarkdown'
   import { createPrCommentLoader } from '../../lib/prComments.svelte'
@@ -15,14 +15,17 @@
     taskId: string
     taskPrs: PullRequestInfo[]
     onPullRequestLinked?: () => Promise<void> | void
+    onGithubStatusRefreshed?: () => Promise<void> | void
     allowCommentAddressing?: boolean
   }
 
-  let { taskId, taskPrs, onPullRequestLinked, allowCommentAddressing = false }: Props = $props()
+  let { taskId, taskPrs, onPullRequestLinked, onGithubStatusRefreshed, allowCommentAddressing = false }: Props = $props()
   let isAddingPr = $state(false)
   let prUrl = $state('')
   let linkError = $state<string | null>(null)
   let isLinking = $state(false)
+  let isRefreshingGithubStatus = $state(false)
+  let githubStatusRefreshError = $state<string | null>(null)
 
   const commentLoader = createPrCommentLoader({ getPullRequests: () => taskPrs })
   const orchestration = useMergeOrchestration()
@@ -68,6 +71,19 @@
     }
     if (readiness.status === 'readiness_unknown') return 'border-l-warning'
     return 'border-l-base-300'
+  }
+
+  async function refreshGithubStatus() {
+    isRefreshingGithubStatus = true
+    githubStatusRefreshError = null
+    try {
+      await refreshTaskGithubStatus(taskId)
+      await onGithubStatusRefreshed?.()
+    } catch (error) {
+      githubStatusRefreshError = error instanceof Error ? error.message : String(error)
+    } finally {
+      isRefreshingGithubStatus = false
+    }
   }
 
   async function submitPullRequestLink() {
@@ -121,9 +137,18 @@
   <div class="flex items-center justify-between gap-2">
     <h3 class="m-0 text-sm font-semibold text-base-content">Pull Requests</h3>
     {#if taskPrs.length > 0}
-      <span class="badge badge-ghost badge-sm font-mono">{taskPrs.length} {taskPrs.length === 1 ? 'PR' : 'PRs'}</span>
+      <div class="flex items-center gap-2">
+        <button type="button" class="btn btn-ghost btn-xs" disabled={isRefreshingGithubStatus} onclick={() => void refreshGithubStatus()}>
+          {isRefreshingGithubStatus ? 'Refreshing…' : 'Refresh GitHub status'}
+        </button>
+        <span class="badge badge-ghost badge-sm font-mono">{taskPrs.length} {taskPrs.length === 1 ? 'PR' : 'PRs'}</span>
+      </div>
     {/if}
   </div>
+
+  {#if githubStatusRefreshError}
+    <p class="m-0 text-xs text-error" role="alert">Could not refresh GitHub status: {githubStatusRefreshError}</p>
+  {/if}
 
   {#if taskPrs.length === 0}
     <div class="flex flex-col gap-2 rounded-lg border border-dashed border-base-300 bg-base-100/60 px-3 py-2">

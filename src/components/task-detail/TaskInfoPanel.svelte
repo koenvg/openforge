@@ -101,7 +101,7 @@
     </section>
   {/if}
 
-  <TaskPullRequestStatus taskId={task.id} {taskPrs} onPullRequestLinked={refreshLinkedPullRequests} {allowCommentAddressing} />
+  <TaskPullRequestStatus taskId={task.id} {taskPrs} onPullRequestLinked={refreshLinkedPullRequests} onGithubStatusRefreshed={refreshLinkedPullRequests} {allowCommentAddressing} />
 
   <TaskPromptSummary {task} {onEditPrompt} />
 

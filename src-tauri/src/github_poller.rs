@@ -448,6 +448,54 @@ pub async fn poll_github_once_for_sidecar(
     poll_github_once_with_state(db, github_client, &events, &scope).await
 }
 
+pub async fn refresh_task_github_status_for_sidecar(
+    db: Arc<Mutex<Database>>,
+    github_client: &GitHubClient,
+    app_event_tx: Option<AppEventSender>,
+    task_id: &str,
+) -> Result<PollResult, String> {
+    let events = GitHubEventTarget::sidecar(app_event_tx);
+    let open_prs = get_open_prs_for_task(&db, task_id)?;
+    if open_prs.is_empty() {
+        return Ok(PollResult::empty());
+    }
+
+    github_client.clear_rate_limit_reset();
+    let github_token = crate::secure_store::get_secret("github_token")
+        .unwrap_or(None)
+        .unwrap_or_default();
+    if github_token.is_empty() {
+        return Ok(PollResult::empty());
+    }
+
+    let configured_github_username = {
+        let db_lock = db.lock().unwrap();
+        db_lock.get_config("github_username").ok().flatten()
+    };
+
+    let (new_comments, ci_changes, review_changes, errors) = poll_prs_for_project(
+        github_client,
+        &db,
+        &events,
+        &github_token,
+        configured_github_username.as_deref(),
+        open_prs,
+        &[],
+    )
+    .await;
+
+    let rate_limit_reset = github_client.get_last_rate_limit_reset();
+    Ok(PollResult {
+        new_comments,
+        ci_changes,
+        review_changes,
+        pr_changes: 0,
+        errors,
+        rate_limited: rate_limit_reset.is_some(),
+        rate_limit_reset_at: rate_limit_reset,
+    })
+}
+
 async fn poll_github_once_with_state(
     db: Arc<Mutex<Database>>,
     github_client: &GitHubClient,
@@ -839,6 +887,23 @@ fn get_scheduled_prs_for_project(
                     low_fire: *low_fire,
                 })
         })
+        .collect())
+}
+
+fn get_open_prs_for_task(db: &Mutex<Database>, task_id: &str) -> Result<Vec<PrRow>, String> {
+    let db_lock = db.lock().unwrap();
+    if db_lock
+        .get_task(task_id)
+        .map_err(|e| format!("Failed to find task: {e}"))?
+        .is_none()
+    {
+        return Err(format!("Task not found: {task_id}"));
+    }
+
+    let all_open_prs = db_lock.get_open_prs().map_err(|e| e.to_string())?;
+    Ok(all_open_prs
+        .into_iter()
+        .filter(|pr| pr.ticket_id == task_id)
         .collect())
 }
 
@@ -2708,6 +2773,80 @@ mod tests {
     fn test_select_projects_active_repo_none_returns_empty() {
         let all = vec![make_project("a"), make_project("b")];
         assert!(select_projects(all, &PollScope::ActiveRepo(None)).is_empty());
+    }
+
+    #[test]
+    fn refresh_task_github_status_selects_only_open_prs_for_requested_task() {
+        let (db, path) = make_test_db("refresh_task_github_status_selects_task_prs");
+        let task = db
+            .create_task("Selected task", "doing", None, None, None)
+            .expect("create selected task");
+        let other_task = db
+            .create_task("Other task", "doing", None, None, None)
+            .expect("create other task");
+        db.insert_pull_request_with_number(
+            101,
+            1,
+            &task.id,
+            "owner",
+            "repo",
+            "Selected open PR",
+            "https://github.com/owner/repo/pull/1",
+            "open",
+            1000,
+            3000,
+            false,
+        )
+        .expect("insert selected open PR");
+        db.insert_pull_request_with_number(
+            102,
+            2,
+            &task.id,
+            "owner",
+            "repo",
+            "Closed selected PR",
+            "https://github.com/owner/repo/pull/2",
+            "closed",
+            1000,
+            2000,
+            false,
+        )
+        .expect("insert selected closed PR");
+        db.insert_pull_request_with_number(
+            103,
+            3,
+            &other_task.id,
+            "owner",
+            "repo",
+            "Other task PR",
+            "https://github.com/owner/repo/pull/3",
+            "open",
+            1000,
+            4000,
+            false,
+        )
+        .expect("insert other task PR");
+        let db = Mutex::new(db);
+
+        let prs = get_open_prs_for_task(&db, &task.id).expect("select task prs");
+
+        assert_eq!(prs.len(), 1);
+        assert_eq!(prs[0].id, 101);
+        assert_eq!(prs[0].ticket_id, task.id);
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn refresh_task_github_status_rejects_unknown_task_before_polling() {
+        let (db, path) = make_test_db("refresh_task_github_status_unknown_task");
+        let db = Mutex::new(db);
+
+        let error = get_open_prs_for_task(&db, "T-missing").expect_err("missing task");
+
+        assert!(error.contains("Task not found: T-missing"));
+
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]
