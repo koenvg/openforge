@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte'
   import type { Disposable, FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
   type UnlistenFn = Disposable
-  import { reviewPrs, selectedReviewPr, prFileDiffs, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, authoredPrs, activeProjectId } from '../../lib/stores'
+  import { reviewPrs, selectedReviewPr, prFileDiffs, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, authoredPrs, activeProjectId, pendingReviewPrOpen } from '../../lib/stores'
   import { getHTMLElementAt, isInputFocused } from '../../lib/domUtils'
   import { useVimNavigation } from '../../lib/useVimNavigation.svelte'
   import { timeAgoFromSeconds } from '../../lib/timeAgo'
@@ -376,6 +376,15 @@
     void persistReviewedFiles(loadedReviewedFilesKey, prunedReviewedFileShas)
   })
 
+  // Consume a host request to open a specific PR (from the "Needs your attention"
+  // dialog). Clear the store before loading so this doesn't re-fire on its own writes.
+  $effect(() => {
+    const pr = $pendingReviewPrOpen
+    if (!pr) return
+    $pendingReviewPrOpen = null
+    void openPrDetail(pr)
+  })
+
   async function loadPrs() {
     isLoading = true
     error = null
@@ -460,6 +469,12 @@
 
   async function selectPr(pr: ReviewPullRequest) {
     void api.navigation.navigate({ viewId: 'plugin:com.openforge.github-sync:pr_review' })
+    await openPrDetail(pr)
+  }
+
+  // Load a PR into the detail view without navigating — the navigation has already
+  // happened (either via selectPr's list-click or the host's open_review_pr command).
+  async function openPrDetail(pr: ReviewPullRequest) {
     const loadSequence = ++prDetailsLoadSequence
     const now = Math.floor(Date.now() / 1000)
     const updatedPr = { ...pr, viewed_at: now, viewed_head_sha: pr.head_sha }

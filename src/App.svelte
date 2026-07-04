@@ -7,7 +7,7 @@
   import { tasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, isLoading, projects, activeProjectId, activeProjectColorId, currentView, reviewRequestCount, activeRepoReviewRequestCount, reviewPrs, codeCleanupTasksEnabled, focusBoardFilters, outOfFocusTaskIdsByProject } from './lib/stores'
   import { getAppMode, getConfig, getProjectConfig, resumeStartupSessions, setPollContext, getProjectRepo, openUrl, markReviewPrViewed } from './lib/ipc'
   import { computePollContext, pollContextEquals, type PollContextPayload } from './lib/pollContext'
-  import { GITHUB_SYNC_GLOBAL_VIEW_KEY } from './lib/githubSyncPlugin'
+  import { GITHUB_SYNC_GLOBAL_VIEW_KEY, GITHUB_SYNC_PLUGIN_ID } from './lib/githubSyncPlugin'
   import type { Task, AppView, Project, ReviewPullRequest } from './lib/types'
   import FocusBoard from './components/focus-board/FocusBoard.svelte'
   import TaskDetailView from './components/task-detail/TaskDetailView.svelte'
@@ -326,10 +326,14 @@
     router.navigateToTask(task.id)
   }
 
-  // Open a review PR from the overview in the browser and mark it viewed, so it
-  // drops off the overview and the review badge (matches the existing
-  // "opening a review = viewed" semantics; the backend re-surfaces it on new commits).
-  async function handleOpenPrFromOverview(pr: ReviewPullRequest) {
+  // Open a review PR from the overview inside Open Forge's PR review, as if opened
+  // from that project's Pull Requests. `projectId` is the dialog section the PR was
+  // nested under: a real project opens its per-repo view; null ("Other repositories")
+  // opens the all-repos view. The github-sync command navigates and loads the detail.
+  // Marking it viewed here drops it off the overview and the review badge (matches the
+  // existing "opening a review = viewed" semantics; the backend re-surfaces it on new
+  // commits). Falls back to the browser if the plugin can't handle it.
+  async function handleOpenPrFromOverview(pr: ReviewPullRequest, projectId: string | null) {
     showAttentionOverview = false
     const viewedAt = Math.floor(Date.now() / 1000)
     reviewPrs.update((list) =>
@@ -337,9 +341,13 @@
     )
     markReviewPrViewed(pr.id, pr.head_sha).catch((e) => console.error('[App] Failed to mark review PR viewed:', e))
     try {
-      await openUrl(pr.html_url)
+      const opened = await executePluginCommand(GITHUB_SYNC_PLUGIN_ID, 'open_review_pr', { pr, projectId })
+      if (!opened) {
+        await openUrl(pr.html_url)
+      }
     } catch (e) {
-      console.error('[App] Failed to open PR URL:', e)
+      console.error('[App] Failed to open PR in review view:', e)
+      await openUrl(pr.html_url)
     }
   }
 

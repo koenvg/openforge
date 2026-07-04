@@ -33,15 +33,24 @@ function makeRuntimeHarness() {
   const backendInvoke = vi.fn(async () => null)
   const backendWhenReady = vi.fn(async () => undefined)
   const onGlobal = vi.fn(() => ({ dispose: vi.fn() }))
+  const navigate = vi.fn(async () => ({ activeProjectId: 'project-1', currentView: 'board', selectedTaskId: null }))
   const api = {
     views: { register: vi.fn(() => ({ dispose: vi.fn() })) },
     commands: { register: vi.fn(() => ({ dispose: vi.fn() })), invokeGlobal },
     backend: { invoke: backendInvoke, whenReady: backendWhenReady },
     events: { onGlobal },
-    navigation: { get: vi.fn(() => ({ activeProjectId: 'project-1', currentView: 'board', selectedTaskId: null })) },
+    navigation: {
+      get: vi.fn(() => ({ activeProjectId: 'project-1', currentView: 'board', selectedTaskId: null })),
+      navigate,
+    },
   } as unknown as FrontendOpenForgeAPI
   const context = { pluginId: packageMetadata.id, apiVersion: packageMetadata.apiVersion, packageMetadata, subscriptions } as FrontendPluginContext
-  return { api, context, subscriptions, invokeGlobal, backendInvoke, backendWhenReady, onGlobal }
+  return { api, context, subscriptions, invokeGlobal, backendInvoke, backendWhenReady, onGlobal, navigate }
+}
+
+function findCommandHandler(api: FrontendOpenForgeAPI, id: string) {
+  const call = vi.mocked(api.commands.register).mock.calls.find((c) => (c[0] as { id: string }).id === id)
+  return (call?.[0] as { handler: (payload: unknown) => Promise<unknown> } | undefined)?.handler
 }
 
 describe('github-sync plugin', () => {
@@ -129,6 +138,55 @@ describe('github-sync plugin', () => {
     expect(backendWhenReady).toHaveBeenCalled()
     expect(backendInvoke).toHaveBeenCalledWith('forceGithubSync', undefined)
     expect(api.navigation.get).toHaveBeenCalled()
+  })
+
+  it('registers an open_review_pr command that opens a PR under its project view', async () => {
+    const { default: plugin } = await import('./index')
+    const { pendingReviewPrOpen } = await import('./lib/stores')
+    const { get } = await import('svelte/store')
+    const { api, context, navigate } = makeRuntimeHarness()
+
+    pendingReviewPrOpen.set(null)
+    await plugin.activate(api, context)
+
+    expect(api.commands.register).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'open_review_pr',
+      handler: expect.any(Function),
+    }))
+
+    const handler = findCommandHandler(api, 'open_review_pr')
+    expect(handler).toBeDefined()
+
+    const pr = { id: 42, number: 7, repo_owner: 'me', repo_name: 'app' } as unknown
+    await handler?.({ pr, projectId: 'project-9' })
+
+    // A PR nested under a project opens the per-project PR review view for that project.
+    expect(navigate).toHaveBeenCalledWith(expect.objectContaining({
+      viewId: `plugin:${context.pluginId}:pr_review`,
+      projectId: 'project-9',
+    }))
+    expect(get(pendingReviewPrOpen)).toBe(pr)
+  })
+
+  it('open_review_pr opens an "other repositories" PR in the global view without switching project', async () => {
+    const { default: plugin } = await import('./index')
+    const { pendingReviewPrOpen } = await import('./lib/stores')
+    const { get } = await import('svelte/store')
+    const { api, context, navigate } = makeRuntimeHarness()
+
+    pendingReviewPrOpen.set(null)
+    await plugin.activate(api, context)
+
+    const handler = findCommandHandler(api, 'open_review_pr')
+    const pr = { id: 99, number: 3, repo_owner: 'someone', repo_name: 'other' } as unknown
+    await handler?.({ pr, projectId: null })
+
+    expect(navigate).toHaveBeenCalledWith(expect.objectContaining({
+      viewId: `plugin:${context.pluginId}:pr_review_global`,
+    }))
+    // A null section must not clobber the active project (undefined = leave as-is).
+    expect(vi.mocked(navigate).mock.calls.at(-1)?.[0]).not.toHaveProperty('projectId', null)
+    expect(get(pendingReviewPrOpen)).toBe(pr)
   })
 
   it('registers GitHub Sync-owned backend methods for PR review operations', async () => {

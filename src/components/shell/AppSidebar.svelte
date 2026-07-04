@@ -5,6 +5,7 @@
   import { ChevronLeft, ChevronRight, Settings, Plus, ArrowUp, ArrowDown } from '@lucide/svelte'
   import { resolveIconRailIcon } from '../../lib/iconRailIcons'
   import { GITHUB_SYNC_GLOBAL_VIEW_KEY } from '../../lib/githubSyncPlugin'
+  import { isPluginViewKey } from '../../lib/plugin/types'
   import type { IconRailPluginNavItem } from '../../lib/iconRailNav'
   import type { AppView } from '../../lib/types'
 
@@ -36,6 +37,15 @@
       ...item,
       Icon: resolveIconRailIcon(item.icon),
     }))
+  )
+
+  // The active project stays highlighted while the current view belongs to that
+  // project's context: the board or a per-project (icon-rail) plugin view such as
+  // the per-repo PR review. Global views — global settings and sidebar-placed plugin
+  // views like "All Pull Requests" — are cross-project, so no project row highlights.
+  let sidebarPluginViewKeys = $derived(new Set(pluginNavItems.map((item) => item.viewKey)))
+  let isProjectContextView = $derived(
+    currentView === 'board' || (isPluginViewKey(currentView) && !sidebarPluginViewKeys.has(currentView))
   )
 
   let branchName = $state<string | null>(null)
@@ -139,7 +149,7 @@
   <div class="flex-1 overflow-y-auto">
     {#each $projects as project, index (project.id)}
       {@const attentionCount = getAttentionCount(project.id)}
-      {@const isActive = project.id === $activeProjectId && currentView === 'board'}
+      {@const isActive = project.id === $activeProjectId && isProjectContextView}
       {@const reviewCount = $reviewRequestCountByProject.get(project.id) ?? 0}
 
       {#if collapsed}

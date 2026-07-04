@@ -1,6 +1,8 @@
 import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
+import type { ReviewPullRequest } from '@openforge/plugin-sdk/domain'
 import PrReviewView from './review/pr/PrReviewView.svelte'
 import { createGithubSyncPrReviewClient } from './review/pr/githubSyncClient'
+import { pendingReviewPrOpen } from './lib/stores'
 
 export const PrReviewViewComponent = PrReviewView
 
@@ -38,6 +40,24 @@ export default defineFrontendPlugin({
       shortcut: 'Cmd+Shift+R',
       handler: async () => {
         await githubSync.syncPullRequests()
+      },
+    }))
+
+    // Host entry point for opening a specific review-requested PR straight in the
+    // detail view (used by the cross-project "Needs your attention" dialog). A PR
+    // nested under a project opens that project's per-repo view; one with no local
+    // project (`projectId` null) opens the all-repos view without switching project.
+    // The active PrReviewView consumes `pendingReviewPrOpen` and loads the detail.
+    context.subscriptions.add(openforge.commands.register({
+      id: 'open_review_pr',
+      title: 'Open Pull Request Review',
+      handler: async (payload: unknown) => {
+        const { pr, projectId } = payload as { pr: ReviewPullRequest; projectId: string | null }
+        const viewId = projectId
+          ? `plugin:${context.pluginId}:pr_review`
+          : `plugin:${context.pluginId}:pr_review_global`
+        await openforge.navigation.navigate({ viewId, projectId: projectId ?? undefined })
+        pendingReviewPrOpen.set(pr)
       },
     }))
 

@@ -108,18 +108,27 @@ describe('buildAttentionOverview — focus tasks', () => {
     expect(result.groups.find((g) => g.project.id === 'p2')?.focusTasks.map((f) => f.task.id).sort()).toEqual(['b', 'c'])
   })
 
-  it('orders needs-attention tasks before in-flight (running) tasks', () => {
-    // idle task (no session) => needs attention; running task => in-flight
+  it('excludes in-flight (running) tasks, keeping only those that need attention', () => {
+    // idle task (no session) => needs attention; running task => in-flight (active),
+    // which the "Needs your attention" overview must not surface.
     const result = buildAttentionOverview(baseInput({
       projects: [project('p1')],
       allTasks: [task('running', 'p1'), task('idle', 'p1')],
       sessions: new Map([['running', session('running', 'running')]]),
     }))
     const focus = result.groups[0].focusTasks
-    expect(focus.map((f) => f.task.id)).toEqual(['idle', 'running'])
+    expect(focus.map((f) => f.task.id)).toEqual(['idle'])
     expect(focus[0].needsAttention).toBe(true)
-    expect(focus[1].needsAttention).toBe(false)
-    expect(focus[1].state).toBe('active')
+  })
+
+  it('drops a project whose only doing task is in-flight and has no review PRs', () => {
+    const result = buildAttentionOverview(baseInput({
+      projects: [project('p1')],
+      allTasks: [task('running', 'p1')],
+      sessions: new Map([['running', session('running', 'running')]]),
+    }))
+    expect(result.groups).toHaveLength(0)
+    expect(result.totalFocusTasks).toBe(0)
   })
 
   it('computes task state from the session', () => {
@@ -131,17 +140,16 @@ describe('buildAttentionOverview — focus tasks', () => {
     expect(result.groups[0].focusTasks[0].state).toBe('failed')
   })
 
-  it("honors each project's configured focus states for needs-attention", () => {
-    // An empty focus-state set means an idle task no longer "needs attention"
-    // (it stays in the column, but is treated as in-flight for ordering/coloring).
+  it("honors each project's configured focus states, excluding tasks that no longer need attention", () => {
+    // An empty focus-state set means an idle task no longer "needs attention",
+    // so the overview drops it (and the now-empty project group).
     const result = buildAttentionOverview(baseInput({
       projects: [project('p1')],
       allTasks: [task('idle', 'p1')],
       focusStatesByProject: new Map([['p1', []]]),
     }))
-    const focus = result.groups[0].focusTasks
-    expect(focus.map((f) => f.task.id)).toEqual(['idle'])
-    expect(focus[0].needsAttention).toBe(false)
+    expect(result.groups).toHaveLength(0)
+    expect(result.totalFocusTasks).toBe(0)
   })
 })
 

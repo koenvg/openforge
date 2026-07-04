@@ -91,6 +91,38 @@ describe('useAppRouter', () => {
     expect(get(selectedTaskId)).toBe('task-42')
   })
 
+  it('navigateToTask returns to the board view so the task detail renders', () => {
+    const router = useAppRouter()
+    currentView.set('settings')
+
+    router.navigateToTask('task-42')
+
+    expect(get(currentView)).toBe('board')
+    expect(get(selectedTaskId)).toBe('task-42')
+  })
+
+  it('navigateToTask from a plugin view lands on the board', () => {
+    const router = useAppRouter()
+    currentView.set('plugin:com.openforge.github-sync:pr_review')
+
+    router.navigateToTask('task-7')
+
+    expect(get(currentView)).toBe('board')
+    expect(get(selectedTaskId)).toBe('task-7')
+  })
+
+  it('navigateToTask then back restores the originating non-board view', () => {
+    const router = useAppRouter()
+    currentView.set('settings')
+
+    router.navigateToTask('task-9')
+    expect(get(currentView)).toBe('board')
+
+    expect(router.back()).toBe(true)
+    expect(get(currentView)).toBe('settings')
+    expect(get(selectedTaskId)).toBeNull()
+  })
+
   it('pushNavState captures activeProjectId and back restores it', () => {
     const router = useAppRouter()
     activeProjectId.set('proj-1')

@@ -14,7 +14,7 @@
   interface Props {
     onClose: () => void
     onOpenTask: (task: Task) => void
-    onOpenPr: (pr: ReviewPullRequest) => void
+    onOpenPr: (pr: ReviewPullRequest, projectId: string | null) => void
   }
 
   let { onClose, onOpenTask, onOpenPr }: Props = $props()
@@ -403,14 +403,15 @@
                 {#each ng.items.filter((it) => it.row.kind === 'review') as it (it.row.kind === 'review' ? it.row.pr.id : it.index)}
                   {#if it.row.kind === 'review'}
                     {@const pr = it.row.pr}
+                    {@const prProjectId = ng.group.id === OTHER_ID ? null : ng.group.id}
                     <div
                       role="button"
                       tabindex="0"
                       data-attn-row={it.index}
                       class="flex items-center gap-3 px-2.5 py-2 rounded-lg cursor-pointer border border-transparent transition-colors
                         {focusedIndex === it.index ? 'bg-base-200 border-primary ring-1 ring-primary' : 'hover:bg-base-200/70'}"
-                      onclick={() => { focusRow(it.index); onOpenPr(pr) }}
-                      onkeydown={(e) => rowKeydown(e, () => onOpenPr(pr))}
+                      onclick={() => { focusRow(it.index); onOpenPr(pr, prProjectId) }}
+                      onkeydown={(e) => rowKeydown(e, () => onOpenPr(pr, prProjectId))}
                       onfocus={() => focusRow(it.index)}
                     >
                       <span class="w-4 grid place-items-center shrink-0 text-success">
