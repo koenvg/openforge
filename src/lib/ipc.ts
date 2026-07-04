@@ -116,6 +116,10 @@ export async function removeTaskLabel(taskId: string, labelId: number): Promise<
   return invoke("remove_task_label", { taskId, labelId })
 }
 
+export async function deleteTaskLabel(labelId: number): Promise<void> {
+  return invoke("delete_task_label", { labelId })
+}
+
 export async function startImplementation(taskId: string, repoPath: string, divergenceResolution: DivergenceResolution | null = null): Promise<ImplementationStatus> {
   return invoke<ImplementationStatus>("start_implementation", { taskId, repoPath, divergenceResolution });
 }

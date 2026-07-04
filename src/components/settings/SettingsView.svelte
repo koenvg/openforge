@@ -31,6 +31,7 @@
   import SettingsInstructionsCard from './SettingsInstructionsCard.svelte'
   import SettingsCredentialsCard from './SettingsCredentialsCard.svelte'
   import SettingsActionsCard from './SettingsActionsCard.svelte'
+  import SettingsTaskLabelsCard from './SettingsTaskLabelsCard.svelte'
   import SettingsExperimentalCard from './SettingsExperimentalCard.svelte'
   import SettingsDeveloperLogsCard from './SettingsDeveloperLogsCard.svelte'
   import ProjectPageHeader from '../project/ProjectPageHeader.svelte'
@@ -134,7 +135,7 @@
   // Scroll spy
   let scrollContainer = $state<HTMLDivElement | null>(null)
   let isNavigating = false
-  const projectSections = ['general', 'instructions', 'plugins', 'actions']
+  const projectSections = ['general', 'labels', 'instructions', 'plugins', 'actions']
   const globalSections = ['preferences', 'ai', 'credentials', 'experimental', 'developer']
 
   function getErrorMessage(e: unknown): string {
@@ -553,6 +554,10 @@
           onProjectColorChange={handleProjectColorChange}
           onUseWorktreesChange={(v) => { useWorktrees = v; scheduleSave() }}
           onRefreshInstallationStatus={refreshInstallationStatus}
+        />
+        <SettingsTaskLabelsCard
+          projectId={$activeProjectId}
+          disabled={!hasProject}
         />
 
         <SettingsFocusFilterCard

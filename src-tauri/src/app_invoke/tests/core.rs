@@ -209,6 +209,33 @@ async fn task_label_commands_round_trip_labels_on_tasks() {
         1
     );
 
+    invoke_ok(
+        &state,
+        "add_task_label",
+        json!({ "taskId": task_id, "name": "ui" }),
+    )
+    .await;
+    invoke_ok(
+        &state,
+        "delete_task_label",
+        json!({ "labelId": label["id"].as_i64().expect("label id") }),
+    )
+    .await;
+    let labels_after_delete = invoke_ok(
+        &state,
+        "get_project_task_labels",
+        json!({ "projectId": project_id }),
+    )
+    .await;
+    let labels_after_delete = labels_after_delete.as_array().expect("labels after delete");
+    assert_eq!(labels_after_delete.len(), 1);
+    assert_eq!(labels_after_delete[0]["name"], "Bug");
+    let updated = invoke_ok(&state, "get_task_detail", json!({ "taskId": task_id })).await;
+    assert_eq!(
+        updated["labels"].as_array().expect("updated labels").len(),
+        1
+    );
+
     let _ = std::fs::remove_file(path);
 }
 

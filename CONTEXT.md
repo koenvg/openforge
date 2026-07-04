@@ -12,6 +12,10 @@ _Avoid_: Ticket, issue, job
 A short, memorable human label shown for a **Task**, stored separately from the Task's prompt text.
 _Avoid_: Prompt title, thread title, branch title
 
+**Task Label**:
+A reusable colored marker that can be assigned to one or more **Tasks** within a project to categorize or filter work.
+_Avoid_: Tag when referring to the OpenForge task marker
+
 **Implementation Run**:
 An agent-driven attempt to work on a **Task** in a task workspace, identified to plugins by task, session, and workspace.
 _Avoid_: Agent run when referring to the task-scoped OpenForge concept, provider port

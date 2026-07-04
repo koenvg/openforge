@@ -64,6 +64,7 @@ export const ipcCommandContracts = [
   { functionName: 'createTaskLabel', ipcCommand: 'create_task_label', payloadKeys: ['projectId', 'name'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'addTaskLabel', ipcCommand: 'add_task_label', payloadKeys: ['taskId', 'name'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'removeTaskLabel', ipcCommand: 'remove_task_label', payloadKeys: ['taskId', 'labelId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
+  { functionName: 'deleteTaskLabel', ipcCommand: 'delete_task_label', payloadKeys: ['labelId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'startImplementation', ipcCommand: 'start_implementation', payloadKeys: ['taskId', 'repoPath', 'divergenceResolution'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'resumeStartupSessions', ipcCommand: 'resume_startup_sessions', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },
   { functionName: 'getWorktreeForTask', ipcCommand: 'get_worktree_for_task', payloadKeys: ['taskId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },

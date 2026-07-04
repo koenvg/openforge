@@ -21,6 +21,9 @@ vi.mock('../../lib/ipc', () => ({
   getDeveloperLogs: vi.fn(() => Promise.resolve([])),
   openInEditor: vi.fn(() => Promise.resolve(undefined)),
   setWhisperModel: vi.fn(),
+  getProjectTaskLabels: vi.fn(() => Promise.resolve([])),
+  createTaskLabel: vi.fn(() => Promise.resolve({ id: 1, project_id: 'test-project-id', name: 'bug', color: 'error' })),
+  deleteTaskLabel: vi.fn(() => Promise.resolve(undefined)),
 }))
 
 vi.mock('../../lib/actions', () => ({
@@ -64,6 +67,7 @@ import {
   getConfig,
   getDeveloperLogSnapshot,
   getProjectConfig,
+  getProjectTaskLabels,
   setConfig,
   setProjectConfig,
   updateProject,
@@ -94,6 +98,7 @@ describe('SettingsView', () => {
     vi.mocked(getAllWhisperModelStatuses).mockResolvedValue([])
     vi.mocked(getDeveloperLogSnapshot).mockResolvedValue({ entries: [], logFilePath: '/tmp/openforge.log', totalEntries: 0 })
     vi.mocked(loadActions).mockResolvedValue([])
+    vi.mocked(getProjectTaskLabels).mockResolvedValue([])
 
     activeProjectId.set('test-project-id')
     activeProjectColorId.set(null)
@@ -242,6 +247,15 @@ describe('SettingsView', () => {
   it('renders Actions section card', () => {
     render(SettingsView, { props: defaultProps })
     expect(screen.queryAllByText(/actions/i).length).toBeGreaterThan(0)
+  })
+
+  it('renders Task Labels management on the project settings page', async () => {
+    vi.mocked(getProjectTaskLabels).mockResolvedValue([{ id: 1, project_id: 'test-project-id', name: 'bug', color: 'error' }])
+    render(SettingsView, { props: defaultProps })
+
+    expect(await screen.findByText('Task Labels')).toBeTruthy()
+    expect(screen.getByText('bug')).toBeTruthy()
+    expect(getProjectTaskLabels).toHaveBeenCalledWith('test-project-id')
   })
 
   it('renders plugin settings sections on the project settings page', async () => {
