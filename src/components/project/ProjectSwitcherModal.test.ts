@@ -13,11 +13,6 @@ vi.mock('../../lib/stores', () => ({
   projectAttention: mockProjectAttention,
 }))
 
-const mockGetProjectAttention = vi.fn(async () => [])
-
-vi.mock('../../lib/ipc', () => ({
-  getProjectAttention: mockGetProjectAttention,
-}))
 
 const { mockResetToBoard } = vi.hoisted(() => ({
   mockResetToBoard: vi.fn(),
@@ -39,7 +34,6 @@ const sampleProjects: Project[] = [
 describe('ProjectSwitcherModal', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
-    mockGetProjectAttention.mockResolvedValue([])
     mockProjects.set(sampleProjects)
     mockActiveProjectId.set(null)
     mockProjectAttention.set(new Map())
@@ -336,14 +330,4 @@ describe('ProjectSwitcherModal', () => {
     })
   })
 
-  describe('IPC call on mount', () => {
-    it('calls getProjectAttention on mount', async () => {
-      const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
-      render(Modal, { props: { onClose: vi.fn() } })
-
-      await vi.waitFor(() => {
-        expect(mockGetProjectAttention).toHaveBeenCalledOnce()
-      })
-    })
-  })
 })

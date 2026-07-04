@@ -1,7 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
   import { projects, activeProjectId, projectAttention } from '../../lib/stores'
-  import { getProjectAttention } from '../../lib/ipc'
   import { useAppRouter } from '../../lib/router.svelte'
   import { useListNavigation } from '../../lib/useListNavigation.svelte'
   import Modal from '../shared/ui/Modal.svelte'
@@ -59,18 +57,6 @@
     return listNav.handleKeydown(e)
   }
 
-  onMount(async () => {
-    try {
-      const summaries = await getProjectAttention()
-      const map = new Map<string, ProjectAttention>()
-      for (const s of summaries) {
-        map.set(s.project_id, s)
-      }
-      $projectAttention = map
-    } catch (err) {
-      console.error('Failed to load project attention:', err)
-    }
-  })
 </script>
 
 <Modal onClose={onClose} maxWidth="480px" initialFocus="[data-project-switcher-search]" ariaLabel="Switch project" showHeader={false} onKeydown={handleKeyDown}>

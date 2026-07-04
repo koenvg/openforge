@@ -101,7 +101,7 @@ function prMap(prs: PullRequestInfo[]): Map<string, PullRequestInfo[]> {
 }
 
 const NO_FOCUS_STATES = new Map<string, TaskState[]>()
-const NO_LOW_FIRE = new Map<string, Set<string>>()
+const NO_OUT_OF_FOCUS = new Map<string, Set<string>>()
 
 describe('buildAttentionCountByProject', () => {
   it('counts a task once even with many signals (completed + failing CI + 4 comments = 1, not 6)', () => {
@@ -111,14 +111,14 @@ describe('buildAttentionCountByProject', () => {
     const sessions = sessionMap([makeSession({ id: 's-1', ticket_id: 'T-1', status: 'completed' })])
     const prs = prMap([makePr({ id: 1, ticket_id: 'T-1', ci_status: 'failure', unaddressed_comment_count: 4 })])
 
-    const counts = buildAttentionCountByProject(tasks, sessions, prs, NO_FOCUS_STATES, NO_LOW_FIRE)
+    const counts = buildAttentionCountByProject(tasks, sessions, prs, NO_FOCUS_STATES, NO_OUT_OF_FOCUS)
 
     expect(counts.get('P-1')).toBe(1)
   })
 
-  it('excludes in-flight (running) and low-fire tasks — mirrors the Frontend Focus=4 case', () => {
+  it('excludes in-flight (running) and Out of Focus tasks — mirrors the Frontend Focus=4 case', () => {
     const tasks = [
-      // 2 low-fire, completed, no PR -> agent-done but low-fire => excluded from focus
+      // 2 Out of Focus, completed, no PR -> agent-done but excluded from focus
       makeTask({ id: 'LF-1', project_id: 'P-1' }),
       makeTask({ id: 'LF-2', project_id: 'P-1' }),
       // 4 focus tasks
@@ -145,9 +145,9 @@ describe('buildAttentionCountByProject', () => {
     ])
 
     const focusStates = new Map<string, TaskState[]>([['P-1', DEFAULT_FOCUS_STATES]])
-    const lowFire = new Map<string, Set<string>>([['P-1', new Set(['LF-1', 'LF-2'])]])
+    const outOfFocus = new Map<string, Set<string>>([['P-1', new Set(['LF-1', 'LF-2'])]])
 
-    const counts = buildAttentionCountByProject(tasks, sessions, prs, focusStates, lowFire)
+    const counts = buildAttentionCountByProject(tasks, sessions, prs, focusStates, outOfFocus)
 
     expect(counts.get('P-1')).toBe(4)
   })
@@ -164,7 +164,7 @@ describe('buildAttentionCountByProject', () => {
       makeSession({ id: 's-b1', ticket_id: 'B-1', status: 'completed' }),
     ])
 
-    const counts = buildAttentionCountByProject(tasks, sessions, prMap([]), NO_FOCUS_STATES, NO_LOW_FIRE)
+    const counts = buildAttentionCountByProject(tasks, sessions, prMap([]), NO_FOCUS_STATES, NO_OUT_OF_FOCUS)
 
     expect(counts.get('P-1')).toBe(2)
     expect(counts.get('P-2')).toBe(1)
@@ -174,7 +174,7 @@ describe('buildAttentionCountByProject', () => {
     const tasks = [makeTask({ id: 'ORPHAN', project_id: null })]
     const sessions = sessionMap([makeSession({ id: 's-o', ticket_id: 'ORPHAN', status: 'completed' })])
 
-    const counts = buildAttentionCountByProject(tasks, sessions, prMap([]), NO_FOCUS_STATES, NO_LOW_FIRE)
+    const counts = buildAttentionCountByProject(tasks, sessions, prMap([]), NO_FOCUS_STATES, NO_OUT_OF_FOCUS)
 
     expect(counts.size).toBe(0)
   })
@@ -183,7 +183,7 @@ describe('buildAttentionCountByProject', () => {
     const tasks = [makeTask({ id: 'R-1', project_id: 'P-9' })]
     const sessions = sessionMap([makeSession({ id: 's-r1', ticket_id: 'R-1', status: 'running' })])
 
-    const counts = buildAttentionCountByProject(tasks, sessions, prMap([]), NO_FOCUS_STATES, NO_LOW_FIRE)
+    const counts = buildAttentionCountByProject(tasks, sessions, prMap([]), NO_FOCUS_STATES, NO_OUT_OF_FOCUS)
 
     expect(counts.get('P-9')).toBe(0)
   })

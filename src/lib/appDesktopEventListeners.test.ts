@@ -122,6 +122,17 @@ describe('registerAppDesktopEventListeners', () => {
     expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
   })
 
+  it('refreshes PR badge counts when GitHub sync completes', async () => {
+    const { deps, handlers } = createHarness()
+
+    await registerAppDesktopEventListeners(deps)
+    await handlers.get('github-sync-complete')?.({ payload: undefined })
+
+    expect(deps.loadPullRequests).toHaveBeenCalledOnce()
+    expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
+    expect(deps.refreshPrCounts).toHaveBeenCalledOnce()
+  })
+
   it('reloads authoritative state when the app event stream reports a delivery gap', async () => {
     const { deps, handlers } = createHarness()
 
@@ -315,5 +326,6 @@ describe('registerAppDesktopEventListeners', () => {
     expect(get(activeSessions).has('task-1')).toBe(false)
     expect(release).toHaveBeenCalledWith('task-1')
     expect(deps.loadTasks).toHaveBeenCalledOnce()
+    expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
   })
 })
