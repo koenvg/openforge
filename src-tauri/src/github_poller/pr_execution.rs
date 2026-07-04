@@ -3,6 +3,7 @@ use super::pr_readiness::{
     current_graphql_review_status, fetch_graphql_readiness_snapshot, poll_result_ci_validation_sha,
     poll_result_pr_head_sha, select_branch_policy_inputs,
 };
+use super::review_sync::{terminal_state_for_pr_details, StaleAuthoredPrTerminalState};
 use crate::db::{
     build_merge_readiness_facts, ci_status_for_readiness, enforce_actor_scoped_readiness,
     finalize_readiness_facts_for_poll, review_status_for_readiness,
@@ -45,6 +46,7 @@ pub(super) struct PollSinglePrResult {
     pub(super) required_check_names: Vec<String>,
     pub(super) required_approving_count: Option<usize>,
     pub(super) readiness_facts: PrMergeReadinessFacts,
+    pub(super) terminal_state: Option<StaleAuthoredPrTerminalState>,
     pub(super) error: Option<String>,
 }
 
@@ -87,6 +89,7 @@ pub(super) fn comment_fetch_error_result(
             merge_queue_state: None,
             updated_at: 0,
         },
+        terminal_state: None,
         error: Some(error),
     }
 }
@@ -249,6 +252,11 @@ pub(super) async fn poll_single_pr(
         rest_sources.pr_details_result.as_ref().ok(),
         configured_github_username.as_deref(),
     );
+    let terminal_state = rest_sources
+        .pr_details_result
+        .as_ref()
+        .ok()
+        .and_then(terminal_state_for_pr_details);
 
     PollSinglePrResult {
         pr_id: pr.id,
@@ -269,6 +277,7 @@ pub(super) async fn poll_single_pr(
         required_check_names: branch_policy_inputs.required_check_names,
         required_approving_count: branch_policy_inputs.required_approving_count,
         readiness_facts,
+        terminal_state,
         error: None,
     }
 }
