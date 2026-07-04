@@ -74,9 +74,7 @@
   let saving = $state(false)
   let deletingScheduleId = $state<string | null>(null)
   let runningScheduleId = $state<string | null>(null)
-  let undoingDelete = $state(false)
   let confirmingDeleteId = $state<string | null>(null)
-  let recentlyDeleted = $state<TaskSchedule | null>(null)
   let error = $state<string | null>(null)
   let previousProjectId: string | null = null
   let loadRequestId = 0
@@ -93,7 +91,6 @@
     loadRequestId += 1
     draft = emptyDraft()
     fieldErrors = emptyFieldErrors()
-    recentlyDeleted = null
     confirmingDeleteId = null
     schedules = []
     if (projectId) {
@@ -175,7 +172,6 @@
     try {
       await api.backend.invoke(DELETE_SCHEDULE_METHOD, { projectId, scheduleId: schedule.id })
       schedules = schedules.filter((candidate) => candidate.id !== schedule.id)
-      recentlyDeleted = schedule
       confirmingDeleteId = null
       if (draft.id === schedule.id) draft = emptyDraft()
     } catch (cause) {
@@ -185,26 +181,6 @@
     }
   }
 
-  async function undoDelete() {
-    if (!projectId || !recentlyDeleted) return
-    error = null
-    undoingDelete = true
-    const schedule = recentlyDeleted
-    try {
-      const saved = await api.backend.invoke<TaskSchedule>(SAVE_SCHEDULE_METHOD, {
-        projectId,
-        schedule: scheduleToDraftPayload(schedule),
-      })
-      schedules = schedules.some((candidate) => candidate.id === saved.id)
-        ? schedules.map((candidate) => candidate.id === saved.id ? saved : candidate)
-        : [...schedules, saved]
-      recentlyDeleted = null
-    } catch (cause) {
-      error = messageForAsyncError(cause)
-    } finally {
-      undoingDelete = false
-    }
-  }
 
   async function runNow(scheduleId: string) {
     if (!projectId) return
@@ -255,23 +231,6 @@
     }
   }
 
-  function scheduleToDraftPayload(schedule: TaskSchedule): TaskScheduleDraft {
-    return {
-      id: schedule.id,
-      title: schedule.title,
-      prompt: schedule.prompt,
-      preset: schedule.preset,
-      cron: schedule.preset === 'custom' ? schedule.cron : null,
-      timeOfDay: schedule.preset === 'custom' ? null : timeOfDayFromCron(schedule.cron),
-      dayOfWeek: schedule.preset === 'weekly' ? dayOfWeekFromCron(schedule.cron) : null,
-      mode: schedule.mode,
-      enabled: schedule.enabled,
-      createdAt: schedule.createdAt,
-      lastFireAt: schedule.lastFireAt,
-      lastTaskId: schedule.lastTaskId,
-      history: schedule.history,
-    }
-  }
 
   function messageForAsyncError(cause: unknown): string {
     return cause instanceof Error ? cause.message : String(cause)
@@ -317,12 +276,6 @@
       <div class="alert alert-error mb-4" role="alert" aria-live="assertive">{error}</div>
     {/if}
 
-    {#if recentlyDeleted}
-      <div class="alert alert-info mb-4" aria-live="polite">
-        <span>Deleted “{recentlyDeleted.title}”.</span>
-        <button class="btn btn-sm" type="button" disabled={undoingDelete} onclick={undoDelete}>{undoingDelete ? 'Restoring…' : 'Undo delete'}</button>
-      </div>
-    {/if}
 
     <div class="grid items-start gap-y-6 gap-x-4 md:grid-cols-[minmax(18rem,1fr)_minmax(22rem,28rem)]">
       <section class="min-w-0 space-y-3" aria-label="Task schedules list">
