@@ -6,7 +6,7 @@ import {
   registerBuiltinPlugin,
 } from '../ipc'
 import { BUILTIN_PLUGIN_MANIFESTS, BUILTIN_PLUGIN_PACKAGE_METADATA } from './builtinPlugins'
-import { installedPlugins, manifestFromPluginRow } from './pluginStore'
+import { installedPlugins, loadInstalledPlugins, manifestFromPluginRow } from './pluginStore'
 import type { PluginManifest } from './types'
 import type { OpenForgePackageMetadata } from '@openforge/plugin-sdk'
 
@@ -108,7 +108,6 @@ export async function installPluginFromManifest(_manifest: PluginManifest, _inst
 }
 
 export async function initializePluginRuntime(): Promise<void> {
-  const { loadInstalledPlugins } = await import('./pluginStore')
   await loadInstalledPlugins()
 
   for (const manifest of BUILTIN_PLUGIN_MANIFESTS) {
