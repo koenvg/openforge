@@ -186,6 +186,7 @@ vi.mock('./lib/stores', () => {
   reviewPullRequestDiff: writable(null),
   commandHeld: writable(false),
   focusBoardFilters: writable(new Map()),
+  lowFireTaskIdsByProject: writable(new Map()),
   startingTasks: writable<Set<string>>(new Set()),
     codeCleanupTasksEnabled: writable(false),
   }
@@ -204,6 +205,10 @@ vi.mock('./lib/ipc', () => ({
   }),
   getTasksForProject: vi.fn(async () => {
     callOrder.push('getTasksForProject')
+    return []
+  }),
+  getAllTasks: vi.fn(async () => {
+    callOrder.push('getAllTasks')
     return []
   }),
   getOpenCodeStatus: vi.fn(async () => {

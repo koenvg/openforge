@@ -3,6 +3,7 @@ import {
   activeProjectId,
   activeResolvedRepo,
   activeSessions,
+  attentionCountByProject,
   error,
   globalExcludedPrRepos,
   isLoading,
@@ -15,6 +16,7 @@ import {
 } from './stores'
 import {
   forceGithubSync,
+  getAllTasks,
   getConfig,
   getLatestSessions,
   getProjectAttention,
@@ -24,9 +26,20 @@ import {
   getReviewPrs,
   getTasksForProject,
 } from './ipc'
+import { DEFAULT_FOCUS_STATES, loadFocusFilterStates, loadLowFireTaskIds } from './boardFilters'
+import { buildAttentionCountByProject } from './attentionCounts'
 import { applyProjectOrder } from './projectOrder'
 import { buildTicketPullRequestMap } from './pullRequestStore'
 import type { ProjectAttention } from './types'
+import type { TaskState } from './taskState'
+
+// The green-dot refresh fans out across every project (all tasks + sessions + per-project
+// board config), so it is throttled rather than run inline: loadProjectAttention fires on
+// nearly every agent-event, most of which are streaming no-ops that cannot change any focus
+// count. A trailing throttle (a pending timer is never reset) coalesces bursts into one fetch
+// while still guaranteeing the count refreshes at least once per interval — a resetting
+// debounce would let a continuously-streaming agent starve the refresh for every project.
+const ATTENTION_COUNT_REFRESH_INTERVAL_MS = 500
 
 type LogError = (message: string, error: unknown) => void
 
@@ -57,6 +70,7 @@ async function loadGlobalExcludedRepos(): Promise<Set<string>> {
 export function useAppDataOrchestrator(options: AppDataOrchestratorOptions) {
   const logError = options.logError ?? defaultLogError
   let isSyncing = $state(false)
+  let attentionCountRefreshTimer: ReturnType<typeof setTimeout> | null = null
 
   async function loadProjects(): Promise<void> {
     try {
@@ -180,6 +194,52 @@ export function useAppDataOrchestrator(options: AppDataOrchestratorOptions) {
     } catch (e) {
       logError('Failed to load project attention:', e)
     }
+
+    scheduleAttentionCountRefresh()
+  }
+
+  // Sidebar green dot: the count of Focus-tab tasks needing attention per project. Computed on
+  // the frontend with the board's own getFilterCounts so the dot equals the board's Focus count
+  // exactly (distinct tasks, excluding in-flight agents and low-fire), rather than the backend's
+  // summed signals which over-counted PR comments and double-counted tasks.
+  async function refreshAttentionCounts(): Promise<void> {
+    try {
+      const projectList = get(projects)
+      const allTasks = await getAllTasks()
+      const doingIds = allTasks.filter((task) => task.status === 'doing').map((task) => task.id)
+      const sessionList = doingIds.length > 0 ? await getLatestSessions(doingIds) : []
+      const sessions = new Map(sessionList.map((session) => [session.ticket_id, session]))
+
+      const focusStatesByProject = new Map<string, TaskState[]>()
+      const lowFireByProject = new Map<string, Set<string>>()
+      await Promise.all(
+        projectList.map(async (project) => {
+          const [focusStates, lowFire] = await Promise.all([
+            loadFocusFilterStates(project.id).catch(() => DEFAULT_FOCUS_STATES),
+            loadLowFireTaskIds(project.id).catch(() => new Set<string>()),
+          ])
+          focusStatesByProject.set(project.id, focusStates)
+          if (lowFire.size > 0) lowFireByProject.set(project.id, lowFire)
+        }),
+      )
+
+      attentionCountByProject.set(
+        buildAttentionCountByProject(allTasks, sessions, get(ticketPrs), focusStatesByProject, lowFireByProject),
+      )
+    } catch (e) {
+      logError('Failed to refresh attention counts:', e)
+    }
+  }
+
+  // Trailing throttle: if a refresh is already pending, leave its deadline alone so a steady
+  // stream of triggers can't push it out forever. Called both from loadProjectAttention and
+  // when board-only state (low-fire) changes without emitting a desktop event.
+  function scheduleAttentionCountRefresh(): void {
+    if (attentionCountRefreshTimer !== null) return
+    attentionCountRefreshTimer = setTimeout(() => {
+      attentionCountRefreshTimer = null
+      void refreshAttentionCounts()
+    }, ATTENTION_COUNT_REFRESH_INTERVAL_MS)
   }
 
   async function triggerGithubSync(): Promise<void> {
@@ -208,6 +268,8 @@ export function useAppDataOrchestrator(options: AppDataOrchestratorOptions) {
     loadPullRequests,
     refreshPrCounts,
     loadProjectAttention,
+    refreshAttentionCounts,
+    scheduleAttentionCountRefresh,
     triggerGithubSync,
   }
 }

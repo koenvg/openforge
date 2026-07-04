@@ -4,6 +4,7 @@ import type { PullRequestInfo } from './types'
 
 vi.mock('./ipc', () => ({
   forceGithubSync: vi.fn(),
+  getAllTasks: vi.fn(),
   getConfig: vi.fn(),
   getLatestSessions: vi.fn(),
   getProjectAttention: vi.fn(),
@@ -15,10 +16,12 @@ vi.mock('./ipc', () => ({
 }))
 
 import { useAppDataOrchestrator } from './appDataOrchestrator.svelte'
+import type { AgentSession, Task } from './types'
 import {
   activeProjectId,
   activeResolvedRepo,
   activeSessions,
+  attentionCountByProject,
   error,
   globalExcludedPrRepos,
   isLoading,
@@ -34,6 +37,7 @@ import {
 } from './stores'
 import {
   forceGithubSync,
+  getAllTasks,
   getConfig,
   getLatestSessions,
   getProjectAttention,
@@ -43,6 +47,46 @@ import {
   getReviewPrs,
   getTasksForProject,
 } from './ipc'
+
+function makeTask(id: string, projectId: string): Task {
+  return {
+    id,
+    initial_prompt: id,
+    status: 'doing',
+    prompt: null,
+    title: null,
+    title_source: null,
+    title_generated_at: null,
+    summary: null,
+    agent: null,
+    permission_mode: null,
+    worktree_source: null,
+    worktree_branch: null,
+    handoff_notes_enabled: true,
+    depends_on: [],
+    project_id: projectId,
+    created_at: 1000,
+    updated_at: 1000,
+  }
+}
+
+function makeSession(ticketId: string, status: string): AgentSession {
+  return {
+    id: `s-${ticketId}`,
+    ticket_id: ticketId,
+    opencode_session_id: null,
+    stage: 'implement',
+    status,
+    checkpoint_data: null,
+    pty_instance_id: null,
+    error_message: null,
+    created_at: 1000,
+    updated_at: 1000,
+    provider: 'claude-code',
+    claude_session_id: null,
+    pi_session_id: null,
+  }
+}
 
 function createPullRequest(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
   return {
@@ -91,12 +135,14 @@ describe('useAppDataOrchestrator', () => {
     globalExcludedPrRepos.set(new Set())
     isLoading.set(false)
     projectAttention.set(new Map())
+    attentionCountByProject.set(new Map())
     projectResolvedRepos.set(new Map())
     projects.set([])
     reviewPrs.set([])
     tasks.set([])
     ticketPrs.set(new Map())
 
+    vi.mocked(getAllTasks).mockResolvedValue([])
     vi.mocked(getConfig).mockResolvedValue(null)
     vi.mocked(getLatestSessions).mockResolvedValue([])
     vi.mocked(getProjectAttention).mockResolvedValue([])
@@ -263,6 +309,47 @@ describe('useAppDataOrchestrator', () => {
     const counts = get(reviewRequestCountByProject)
     expect(counts.get('proj-web')).toBe(2)
     expect(counts.get('proj-api')).toBe(1)
+  })
+
+  it('computes the per-project green-dot count with the board\'s focus semantics', async () => {
+    const orchestrator = useAppDataOrchestrator({ setShowProjectSetup: vi.fn() })
+    projects.set([{ id: 'P-1', name: 'Frontend', path: '/fe', created_at: 0, updated_at: 0 }])
+    // Three doing tasks: one running (in-flight), one low-fire, one plain agent-done.
+    vi.mocked(getAllTasks).mockResolvedValue([
+      makeTask('T-run', 'P-1'),
+      makeTask('T-lf', 'P-1'),
+      makeTask('T-focus', 'P-1'),
+    ])
+    vi.mocked(getLatestSessions).mockResolvedValue([
+      makeSession('T-run', 'running'),
+      makeSession('T-lf', 'completed'),
+      makeSession('T-focus', 'completed'),
+    ])
+    vi.mocked(getProjectConfig).mockImplementation(async (_projectId: string, key: string) =>
+      key === 'low_fire_task_ids' ? JSON.stringify(['T-lf']) : null,
+    )
+
+    await orchestrator.refreshAttentionCounts()
+
+    // In-flight (T-run) and low-fire (T-lf) are excluded — only T-focus needs attention.
+    expect(get(attentionCountByProject).get('P-1')).toBe(1)
+  })
+
+  it('throttles attention refreshes so a steady stream of triggers cannot starve the update', async () => {
+    vi.useFakeTimers()
+    try {
+      const orchestrator = useAppDataOrchestrator({ setShowProjectSetup: vi.fn() })
+
+      await orchestrator.loadProjectAttention() // schedules the refresh ~500ms out
+      await vi.advanceTimersByTimeAsync(300)
+      await orchestrator.loadProjectAttention() // must NOT reset the pending deadline
+      await vi.advanceTimersByTimeAsync(200) // reaches the original ~500ms deadline
+
+      // A resetting debounce would have pushed the fetch out to ~800ms and fired zero times here.
+      expect(getAllTasks).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('guards GitHub sync so concurrent calls do not duplicate IPC syncs', async () => {
