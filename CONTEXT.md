@@ -96,6 +96,14 @@ _Avoid_: Agent run settings, global task defaults, plugin task policy
 An installed OpenForge extension that may act across tasks when using explicit host capabilities.
 _Avoid_: Sandboxed widget, project-only script
 
+**Plugin Installation**:
+Recording a **Trusted Plugin** as available app-wide in OpenForge, without making it active for any **Project**.
+_Avoid_: Project plugin install, global enablement
+
+**Project Plugin Enablement**:
+A project-owned choice that makes an installed **Trusted Plugin** active or inactive for one **Project**.
+_Avoid_: Plugin installation, global plugin toggle
+
 **GitHub Sync**:
 OpenForge's local-first process for refreshing GitHub pull request, comment, CI, review, and merge-readiness signals into the desktop app.
 _Avoid_: Webhook service, hosted sync, GitHub polling when referring to the product capability
@@ -237,6 +245,13 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - A new **Implementation Run** uses the **Project Agent Settings** rather than plugin-supplied provider or agent overrides.
 - A **Trusted Plugin** may start an **Implementation Run** for any **Task** when using the host-provided task capability.
 - A **Trusted Plugin** may own a **Plugin-owned Domain** when the concept is not shared across plugins or core workflows.
+- **Plugin Installation** makes a **Trusted Plugin** available app-wide; **Project Plugin Enablement** decides whether it contributes in a specific **Project**.
+- **Plugin Installation** does not automatically imply **Project Plugin Enablement**.
+- Newly installed non-built-in **Trusted Plugins** start disabled for every **Project** until explicitly enabled.
+- Built-in **Trusted Plugins** may be enabled by default for projects, while still allowing explicit **Project Plugin Enablement** disablement.
+- Global plugin settings manage the **Plugin Installation** inventory; project plugin settings manage **Project Plugin Enablement** for the active project.
+- A completed **Plugin Installation** may offer a convenience action to enable the plugin for the active project, but that action is still **Project Plugin Enablement** and must be explicit.
+- Moving plugin management UI between global and project settings does not require migrating existing **Plugin Installation** or **Project Plugin Enablement** data when the persisted model already separates them.
 - The **Backend Crate** builds the **Rust Sidecar**.
 - Electron main supervises the **Rust Sidecar** rather than embedding backend domain logic in the renderer or relying on a Tauri shell.
 - A **Terminal Surface** uses the **Terminal Runtime** and does not own shell process state.
@@ -318,6 +333,9 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - Worktree branch names were considered for prompt-derived descriptions — resolved: **Task Branches** should be stable task identifiers because they are visible as PR source branches.
 - "Codex thread title" was used for a short generated task label — resolved: use **Task Display Title** because the label belongs to the **Task** and may be generated from any provider's **Agent Session**.
 - "Skill" was considered as a core OpenForge platform concept because one built-in plugin manages skills — resolved: skill discovery and editing are a **Plugin-owned Domain** unless multiple plugins need a shared platform contract.
+- "Install plugin globally" could mean enabling a plugin everywhere — resolved: use **Plugin Installation** for app-wide availability and **Project Plugin Enablement** for per-project activation.
+- Plugin defaults could make newly installed plugins active everywhere — resolved: newly installed non-built-in **Trusted Plugins** start disabled for projects; built-ins may keep their default-enabled project behavior.
+- Plugin UI migration sounded like a data migration — resolved: the existing persisted model already separates app-wide **Plugin Installation** from **Project Plugin Enablement**, so the change is UI responsibility and wording.
 - `src-tauri` was used to describe both a historical directory and the active Rust process — resolved: use **Rust Sidecar** for the supervised runtime process and **Backend Crate** for the Rust package that builds it.
 - "Terminal pooling" was used for plugin UI, shell process state, and reusable terminal lifecycle — resolved: **Terminal Surface** names the UI, while **Terminal Runtime** names the shared lifecycle owner.
 - "Terminal API" could mean a host `openforge.terminal` capability, a normal package dependency, or the shared runtime — resolved: **Terminal Runtime** names the shared runtime; lower-level shell/event APIs remain capability primitives.

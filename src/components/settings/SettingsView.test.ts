@@ -24,6 +24,13 @@ vi.mock('../../lib/ipc', () => ({
   getProjectTaskLabels: vi.fn(() => Promise.resolve([])),
   createTaskLabel: vi.fn(() => Promise.resolve({ id: 1, project_id: 'test-project-id', name: 'bug', color: 'error' })),
   deleteTaskLabel: vi.fn(() => Promise.resolve(undefined)),
+  installPluginFromLocal: vi.fn(),
+  installPluginFromNpm: vi.fn(),
+  installPluginFromGit: vi.fn(),
+  uninstallPlugin: vi.fn(),
+  getPlugin: vi.fn(),
+  setPluginEnabled: vi.fn(),
+  getEnabledPlugins: vi.fn(() => Promise.resolve([])),
 }))
 
 vi.mock('../../lib/actions', () => ({
@@ -82,6 +89,27 @@ const defaultProps = {
   onClose: vi.fn(),
   onProjectDeleted: vi.fn(),
   mode: 'project' as const,
+}
+
+function installedPluginEntry(id: string, name: string) {
+  return {
+    manifest: {
+      id,
+      name,
+      version: '1.0.0',
+      apiVersion: 1,
+      description: `${name} description`,
+      permissions: [],
+      frontend: 'index.js',
+      backend: null,
+    },
+    state: 'installed' as const,
+    error: null,
+    installPath: `/plugins/${id}`,
+    isBuiltin: false,
+    sourceKind: 'local',
+    sourceSpec: `/plugins/${id}`,
+  }
 }
 
 describe('SettingsView', () => {
@@ -289,6 +317,42 @@ describe('SettingsView', () => {
       expect(screen.getByText('Advanced Plugin Settings')).toBeTruthy()
       expect(document.querySelector('[data-slot-type="settingsSections"][data-slot-id="plugin.settings:advanced"]')).toBeTruthy()
     })
+  })
+
+  it('renders plugin installation and inventory management on the global settings page', async () => {
+    installedPlugins.set(new Map([[
+      'plugin.global',
+      installedPluginEntry('plugin.global', 'Global Plugin'),
+    ]]))
+
+    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole('button', { name: /install package/i })).toBeTruthy()
+      expect(screen.getByText('Global Plugin')).toBeTruthy()
+    })
+    expect(screen.getByText('Install plugins app-wide. Projects enable installed plugins explicitly.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /reload plugin: global plugin/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /uninstall plugin: global plugin/i })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /enable for this project: global plugin/i })).toBeNull()
+  })
+
+  it('renders only project enablement controls for installed plugins on the project settings page', async () => {
+    installedPlugins.set(new Map([[
+      'plugin.project',
+      installedPluginEntry('plugin.project', 'Project Plugin'),
+    ]]))
+
+    render(SettingsView, { props: defaultProps })
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Project Plugin')).toBeTruthy()
+    })
+    expect(screen.queryByText('Install package')).toBeNull()
+    expect(screen.getByText('Enable installed plugins for this project.')).toBeTruthy()
+    expect(screen.getByRole('switch', { name: /enable for this project: project plugin/i })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /reload plugin: project plugin/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /uninstall plugin: project plugin/i })).toBeNull()
   })
 
   it('renders project name field', () => {
