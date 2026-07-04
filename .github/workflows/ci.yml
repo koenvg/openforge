@@ -37,6 +37,13 @@ jobs:
           pnpm build:plugins 2>&1 | tee /tmp/plugin-build.log
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
 
+      - name: Build root app
+        id: app_build
+        run: |
+          set +e -o pipefail
+          pnpm build 2>&1 | tee /tmp/app-build.log
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
       - name: Type check
         id: typecheck
         run: |
@@ -65,6 +72,7 @@ jobs:
           name: frontend-logs
           path: |
             /tmp/plugin-build.log
+            /tmp/app-build.log
             /tmp/typecheck.log
             /tmp/lint.log
             /tmp/tests.log
@@ -76,6 +84,7 @@ jobs:
         run: |
           mkdir -p /tmp/ci-results
           echo "${{ steps.plugin_build.outputs.exit_code }}" > /tmp/ci-results/plugin-build-exit-code
+          echo "${{ steps.app_build.outputs.exit_code }}" > /tmp/ci-results/app-build-exit-code
           echo "${{ steps.typecheck.outputs.exit_code }}" > /tmp/ci-results/typecheck-exit-code
           echo "${{ steps.lint.outputs.exit_code }}" > /tmp/ci-results/lint-exit-code
           echo "${{ steps.tests.outputs.exit_code }}" > /tmp/ci-results/tests-exit-code
@@ -89,7 +98,7 @@ jobs:
           retention-days: 1
 
       - name: Fail if checks failed
-        if: steps.plugin_build.outputs.exit_code != '0' || steps.typecheck.outputs.exit_code != '0' || steps.lint.outputs.exit_code != '0' || steps.tests.outputs.exit_code != '0'
+        if: steps.plugin_build.outputs.exit_code != '0' || steps.app_build.outputs.exit_code != '0' || steps.typecheck.outputs.exit_code != '0' || steps.lint.outputs.exit_code != '0' || steps.tests.outputs.exit_code != '0'
         run: exit 1
 
   rust:
