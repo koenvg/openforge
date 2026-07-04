@@ -564,6 +564,34 @@ async fn plugin_host_task_callbacks_create_start_and_read_state() {
         .expect("task status callback"),
         Value::Null
     );
+    let contributions = host
+        .handle_host_callback(
+            "openforge.tasks.configureStartPromptContribution",
+            &json!({
+                "projectId": project.id,
+                "id": "backend-owned",
+                "enabled": true,
+                "content": "## Plugin Brief\n- backend owned",
+                "order": 5
+            }),
+        )
+        .await
+        .expect("configure start prompt contribution callback");
+    assert_eq!(contributions[0]["id"], "backend-owned");
+    assert_eq!(contributions[0]["enabled"], true);
+    assert_eq!(
+        contributions[0]["content"],
+        "## Plugin Brief\n- backend owned"
+    );
+
+    let contributions = host
+        .handle_host_callback(
+            "openforge.tasks.listStartPromptContributions",
+            &json!({ "projectId": project.id }),
+        )
+        .await
+        .expect("list start prompt contributions callback");
+    assert_eq!(contributions[0]["id"], "backend-owned");
 
     {
         let db_state = app

@@ -240,6 +240,8 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
       create: unavailable('tasks.create'),
       updateSummary: unavailable('tasks.updateSummary'),
       updateStatus: unavailable('tasks.updateStatus'),
+      listStartPromptContributions: unavailable('tasks.listStartPromptContributions'),
+      configureStartPromptContribution: unavailable('tasks.configureStartPromptContribution'),
       startImplementation: unavailable('tasks.startImplementation'),
       getWorkspace: unavailable('tasks.getWorkspace'),
       getLatestSession: unavailable('tasks.getLatestSession'),

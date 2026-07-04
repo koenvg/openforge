@@ -330,6 +330,10 @@ var TestingOpenForgeRegistryFake = class {
 			subscriptions
 		};
 	}
+	startPromptContributions(projectId) {
+		const raw = this.config.get(`project:${projectId}:start_prompt_contributions`);
+		return Array.isArray(raw) ? raw.filter((entry) => Boolean(entry) && typeof entry === "object" && typeof entry.id === "string" && typeof entry.content === "string") : [];
+	}
 	createCommonApi() {
 		return {
 			commands: {
@@ -384,6 +388,13 @@ var TestingOpenForgeRegistryFake = class {
 						taskId,
 						status
 					});
+				},
+				listStartPromptContributions: async (projectId) => this.startPromptContributions(projectId),
+				configureStartPromptContribution: async (request) => {
+					this.calls.startPromptContributionConfigurations.push(request);
+					const next = [...this.startPromptContributions(request.projectId).filter((entry) => entry.id !== request.id), request].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.id.localeCompare(b.id));
+					this.config.set(`project:${request.projectId}:start_prompt_contributions`, next);
+					return next;
 				},
 				startImplementation: async (request) => {
 					this.calls.taskImplementationStarts.push(request);
@@ -751,6 +762,7 @@ function createTestingCalls() {
 		navigationRequests: [],
 		notify: [],
 		taskCreations: [],
+		startPromptContributionConfigurations: [],
 		taskImplementationStarts: [],
 		taskSummaryUpdates: [],
 		taskStatusUpdates: [],

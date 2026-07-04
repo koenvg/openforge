@@ -76,6 +76,53 @@ describe('plugin host commands', () => {
     })
   })
 
+  it('routes generic start prompt contribution configuration through project config only', async () => {
+    const { invoke } = installDesktopBridge(null)
+    invoke.mockResolvedValueOnce(JSON.stringify([{ id: 'existing', enabled: true, content: 'Existing', order: 0 }]))
+
+    await expect(invokePluginHostCommand('listStartPromptContributions', {
+      projectId: 'P-1',
+    })).resolves.toEqual([{ id: 'existing', enabled: true, content: 'Existing', order: 0 }])
+    expect(invoke).toHaveBeenNthCalledWith(1, 'get_project_config', {
+      projectId: 'P-1',
+      key: 'start_prompt_contributions',
+    })
+
+    invoke.mockResolvedValueOnce(null)
+    invoke.mockResolvedValueOnce(undefined)
+
+    await expect(invokePluginHostCommand('configureStartPromptContribution', {
+      projectId: 'P-1',
+      id: 'handoff-notes-workflow',
+      enabled: true,
+      content: '<openforge_task_management>Task {{taskId}}</openforge_task_management>',
+      order: 5,
+      provider: 'codex',
+      agent: 'ignored',
+      permissionMode: 'trusted',
+    })).resolves.toEqual([{
+      id: 'handoff-notes-workflow',
+      enabled: true,
+      content: '<openforge_task_management>Task {{taskId}}</openforge_task_management>',
+      order: 5,
+    }])
+    expect(invoke).toHaveBeenNthCalledWith(2, 'get_project_config', {
+      projectId: 'P-1',
+      key: 'start_prompt_contributions',
+    })
+    expect(invoke).toHaveBeenNthCalledWith(3, 'set_project_config', {
+      projectId: 'P-1',
+      key: 'start_prompt_contributions',
+      value: JSON.stringify([{
+        id: 'handoff-notes-workflow',
+        enabled: true,
+        content: '<openforge_task_management>Task {{taskId}}</openforge_task_management>',
+        order: 5,
+      }]),
+    })
+    expect(invoke).not.toHaveBeenCalledWith('start_implementation', expect.anything())
+  })
+
   it('routes runtime host shell callbacks through concrete PTY session keys', async () => {
     const { invoke } = installDesktopBridge('buffered')
     const host = createPluginRuntimeHost('test-plugin')

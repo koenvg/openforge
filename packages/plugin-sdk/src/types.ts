@@ -332,6 +332,19 @@ export interface CreateTaskRequest {
   labelNames?: string[]
 }
 
+export interface StartPromptContribution {
+  id: string
+  enabled: boolean
+  /** Prompt text injected before OpenForge's task prompt. The host substitutes {{taskId}} and {{task_id}}. */
+  content: string
+  /** Lower values are injected first. Defaults to 0. */
+  order?: number
+}
+
+export interface ConfigureStartPromptContributionRequest extends StartPromptContribution {
+  projectId: string
+}
+
 export interface StartTaskImplementationRequest {
   taskId: string
 }
@@ -348,6 +361,8 @@ export interface TasksAPI {
   create(request: CreateTaskRequest): Promise<Task>
   updateSummary(taskId: string, summary: string): Promise<void>
   updateStatus(taskId: string, status: WritableBoardStatus): Promise<void>
+  listStartPromptContributions(projectId: string): Promise<StartPromptContribution[]>
+  configureStartPromptContribution(request: ConfigureStartPromptContributionRequest): Promise<StartPromptContribution[]>
   startImplementation(request: StartTaskImplementationRequest): Promise<ImplementationRun>
   getWorkspace(taskId: string): Promise<TaskWorkspaceInfo | null>
   getLatestSession(taskId: string): Promise<AgentSession | null>

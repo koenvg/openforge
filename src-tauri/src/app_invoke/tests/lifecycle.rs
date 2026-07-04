@@ -358,6 +358,10 @@ async fn start_implementation_starts_configured_pi_provider_through_app_invoke_b
         log.contains("Start through Pi provider"),
         "prompt should cross the provider boundary, got provider log: {log}"
     );
+    assert!(
+        !log.contains("<openforge_task_management>"),
+        "handoff workflow should stay disabled until project config enables it, got provider log: {log}"
+    );
 
     let db = crate::db::acquire_db(&state.db);
     let task = db
@@ -380,6 +384,83 @@ async fn start_implementation_starts_configured_pi_provider_through_app_invoke_b
     assert_eq!(workspace.kind, "project_dir");
     assert_eq!(workspace.status, "active");
     drop(db);
+
+    if let Some(pty_manager) = state.pty_manager.as_ref() {
+        let _ = pty_manager.kill_pty(&task_id).await;
+    }
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn start_implementation_injects_plugin_configured_handoff_workflow() {
+    let _env_lock = PROVIDER_PATH_ENV_LOCK.lock().await;
+    let sandbox = &*PROVIDER_TEST_SANDBOX;
+    sandbox.clear_log();
+    let (_temp, repo_dir) = provider_repo_dir();
+    let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
+    let (state, path) = test_state("app_invoke_start_plugin_handoff_workflow");
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let project = db
+            .create_project(
+                "Plugin Handoff Project",
+                repo_dir.to_str().expect("utf8 repo path"),
+            )
+            .expect("create project");
+        db.set_project_config(&project.id, "ai_provider", "pi")
+            .expect("set provider");
+        let contribution = crate::agent_lifecycle::StartPromptContribution {
+            id: "plugin-handoff-workflow".to_string(),
+            enabled: true,
+            content: "<plugin_handoff>Task {{taskId}}\n## Plugin Template\n- Preserve plugin-owned reviewer brief</plugin_handoff>".to_string(),
+            order: 0,
+        };
+        db.set_project_config(
+            &project.id,
+            crate::agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY,
+            &serde_json::to_string(&vec![contribution]).expect("serialize contribution"),
+        )
+        .expect("set start prompt contribution");
+        db.create_task_with_worktree_source(
+            "Start with plugin prompt contribution",
+            "backlog",
+            Some(&project.id),
+            None,
+            None,
+            Some("disabled"),
+            None,
+        )
+        .expect("create task")
+        .id
+    };
+
+    let response = invoke_ok(
+        &state,
+        "start_implementation",
+        json!({ "taskId": task_id, "repoPath": repo_dir.to_string_lossy() }),
+    )
+    .await;
+
+    assert_eq!(response["task_id"], task_id);
+    let log = wait_for_provider_log_record(
+        &sandbox.log_path,
+        "pi",
+        "Start with plugin prompt contribution",
+    )
+    .await;
+    assert!(
+        log.contains("<openforge_start_prompt_contribution id=\"plugin-handoff-workflow\">")
+            && log.contains("Task "),
+        "plugin start prompt contribution should be injected, got provider log: {log}"
+    );
+    assert!(
+        log.contains("## Plugin Template"),
+        "got provider log: {log}"
+    );
+    assert!(
+        log.contains("Preserve plugin-owned reviewer brief"),
+        "got provider log: {log}"
+    );
 
     if let Some(pty_manager) = state.pty_manager.as_ref() {
         let _ = pty_manager.kill_pty(&task_id).await;
