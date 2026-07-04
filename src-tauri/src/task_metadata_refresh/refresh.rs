@@ -4,7 +4,9 @@ use super::prompt::{
     build_task_display_title_metadata_job, build_task_display_title_prompt,
     task_display_title_candidate,
 };
-use super::providers::run_task_display_title_metadata_job;
+use super::providers::{
+    run_task_display_title_metadata_job, task_display_title_metadata_error_kind,
+};
 use crate::db;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -117,29 +119,36 @@ pub(crate) async fn refresh_task_display_title_with_ai_once(
     }
 
     let prompt = build_task_display_title_prompt(&task, snapshot);
-    debug!(
+    info!(
         "[task_metadata_refresh] built AI title prompt task_id={} provider={} prompt_bytes={}",
         task_id,
         provider,
         prompt.len()
     );
-    let (candidate, candidate_source) = match run_task_display_title_metadata_job(&job, &prompt)
-        .await
+    let (candidate, candidate_source, fallback_reason) = match run_task_display_title_metadata_job(
+        &job, &prompt,
+    )
+    .await
     {
-        Ok(Some(title)) => (Some(title), "provider"),
+        Ok(Some(title)) => (Some(title), "provider", "provider_title"),
         Ok(None) => {
             info!(
-                "[task_metadata_refresh] AI title provider returned no title; using prompt fallback if available task_id={} provider={}",
+                "[task_metadata_refresh] AI title provider returned no title; using prompt fallback if available task_id={} provider={} fallback_reason=provider_no_title",
                 task_id, provider
             );
-            (task_display_title_candidate(&task), "fallback")
+            (
+                task_display_title_candidate(&task),
+                "fallback",
+                "provider_no_title",
+            )
         }
-        Err(_) => {
+        Err(error) => {
+            let error_kind = task_display_title_metadata_error_kind(&error);
             warn!(
-                "[task_metadata_refresh] AI title provider failed; using prompt fallback if available task_id={} provider={}; suppressing provider error detail to avoid leaking provider content",
-                task_id, provider
+                "[task_metadata_refresh] AI title provider failed; using prompt fallback if available task_id={} provider={} fallback_reason=provider_error error_kind={}; suppressing provider error detail to avoid leaking provider content",
+                task_id, provider, error_kind
             );
-            (task_display_title_candidate(&task), "fallback")
+            (task_display_title_candidate(&task), "fallback", error_kind)
         }
     };
     let Some(candidate) = candidate else {
@@ -150,23 +159,23 @@ pub(crate) async fn refresh_task_display_title_with_ai_once(
         return Ok(false);
     };
     info!(
-        "[task_metadata_refresh] selected AI title candidate task_id={} provider={} source={} title_chars={}",
+        "[task_metadata_refresh] selected AI title candidate task_id={} provider={} source={} fallback_reason={} title_chars={}",
         task_id,
         provider,
         candidate_source,
+        fallback_reason,
         candidate.chars().count()
     );
-
     let guard = db.lock().unwrap();
     let result = guard.update_generated_task_title_once(&task_id, &candidate);
     match &result {
         Ok(updated) => info!(
-            "[task_metadata_refresh] AI title refresh write completed task_id={} provider={} source={} updated={}",
-            task_id, provider, candidate_source, updated
+            "[task_metadata_refresh] AI title refresh write completed task_id={} provider={} source={} fallback_reason={} updated={}",
+            task_id, provider, candidate_source, fallback_reason, updated
         ),
         Err(error) => warn!(
-            "[task_metadata_refresh] failed to write AI generated task display title task_id={} provider={} source={}: {error}",
-            task_id, provider, candidate_source
+            "[task_metadata_refresh] failed to write AI generated task display title task_id={} provider={} source={} fallback_reason={}: {error}",
+            task_id, provider, candidate_source, fallback_reason
         ),
     }
     result.map_err(|error| format!("failed to write AI generated task display title: {error}"))

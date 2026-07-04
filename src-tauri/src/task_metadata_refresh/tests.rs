@@ -7,6 +7,7 @@ use super::prompt::{
 use super::providers::{
     build_claude_metadata_job_args, build_codex_title_headless_args,
     build_opencode_title_headless_args, build_pi_metadata_job_args,
+    task_display_title_metadata_error_kind,
 };
 use super::refresh::{
     refresh_task_display_title_once, refresh_task_display_title_once_with_provider,
@@ -42,6 +43,26 @@ fn task_metadata_refresh_diagnostic_formatter_keeps_safe_metadata_only_message()
     assert!(!line.contains(raw_provider_output));
     assert!(!line.contains(stdout));
     assert!(!line.contains(stderr));
+}
+
+#[test]
+fn task_metadata_refresh_fallback_diagnostic_includes_safe_reason_only() {
+    let raw_provider_error = "provider stderr with user prompt: fix secret token";
+    let line = super::format_task_metadata_refresh_diagnostic(format_args!(
+        "[task_metadata_refresh] selected AI title candidate task_id={} provider={} source={} fallback_reason={} title_chars={}",
+        "KVG-1740",
+        "pi",
+        "fallback",
+        task_display_title_metadata_error_kind(&format!(
+            "pi task_display_title metadata generation failed: {raw_provider_error}"
+        )),
+        60
+    ));
+
+    assert!(line.contains("source=fallback"));
+    assert!(line.contains("fallback_reason=exit_status"));
+    assert!(!line.contains(raw_provider_error));
+    assert!(!line.contains("secret token"));
 }
 
 #[test]

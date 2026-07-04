@@ -101,6 +101,26 @@ async fn run_metadata_job(job: &MetadataJob, prompt: &str) -> Result<String, Str
     }
 }
 
+pub(super) fn task_display_title_metadata_error_kind(error: &str) -> &'static str {
+    if error.contains("timed out") {
+        "timeout"
+    } else if error.contains("failed to launch") {
+        "launch"
+    } else if error.contains("metadata generation failed") {
+        "exit_status"
+    } else if error.contains("task display title generation failed") {
+        "provider_error"
+    } else if error.contains("failed to parse task display title JSON")
+        || error.contains("nested too deeply")
+    {
+        "parse"
+    } else if error.contains("not supported for provider") {
+        "unsupported_provider"
+    } else {
+        "unknown"
+    }
+}
+
 pub(super) async fn run_task_display_title_metadata_job(
     job: &MetadataJob,
     prompt: &str,
@@ -132,9 +152,10 @@ pub(super) async fn run_task_display_title_metadata_job(
             Ok(None)
         }
         Err(error) => {
+            let error_kind = task_display_title_metadata_error_kind(&error);
             warn!(
-                "[task_metadata_refresh] failed to parse task display title metadata task_id={} provider={} raw_bytes={}; suppressing parser detail to avoid leaking provider content",
-                job.task_id, job.provider, raw_bytes
+                "[task_metadata_refresh] failed to parse task display title metadata task_id={} provider={} raw_bytes={} error_kind={}; suppressing parser detail to avoid leaking provider content",
+                job.task_id, job.provider, raw_bytes, error_kind
             );
             Err(error)
         }
@@ -178,7 +199,7 @@ async fn run_headless_metadata_command(
     .await
     .map_err(|_| {
         warn!(
-            "[task_metadata_refresh] metadata command timed out task_id={} provider={} kind={} program={} timeout_seconds={}",
+            "[task_metadata_refresh] metadata command timed out task_id={} provider={} kind={} program={} failure_kind=timeout timeout_seconds={}",
             job.task_id,
             job.provider,
             job.kind.as_str(),
@@ -192,7 +213,7 @@ async fn run_headless_metadata_command(
     })?
     .map_err(|error| {
         warn!(
-            "[task_metadata_refresh] failed to launch metadata command task_id={} provider={} kind={} program={}: {error}",
+            "[task_metadata_refresh] failed to launch metadata command task_id={} provider={} kind={} program={} failure_kind=launch: {error}",
             job.task_id,
             job.provider,
             job.kind.as_str(),
@@ -211,7 +232,7 @@ async fn run_headless_metadata_command(
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
         let detail = if stderr.is_empty() { stdout } else { stderr };
         warn!(
-            "[task_metadata_refresh] metadata command failed task_id={} provider={} kind={} program={} status={} stdout_bytes={} stderr_bytes={}",
+            "[task_metadata_refresh] metadata command failed task_id={} provider={} kind={} program={} failure_kind=exit_status status={} stdout_bytes={} stderr_bytes={}",
             job.task_id,
             job.provider,
             job.kind.as_str(),
@@ -240,8 +261,8 @@ async fn run_headless_metadata_command(
     if let Some(path) = output_file {
         match std::fs::read_to_string(path) {
             Ok(content) if !content.trim().is_empty() => {
-                debug!(
-                    "[task_metadata_refresh] using metadata output file task_id={} provider={} bytes={}",
+                info!(
+                    "[task_metadata_refresh] metadata command output selected task_id={} provider={} source=output_file bytes={}",
                     job.task_id,
                     job.provider,
                     content.len()
@@ -262,5 +283,9 @@ async fn run_headless_metadata_command(
             }
         }
     }
+    info!(
+        "[task_metadata_refresh] metadata command output selected task_id={} provider={} source=stdout bytes={}",
+        job.task_id, job.provider, stdout_bytes
+    );
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
