@@ -14,6 +14,7 @@
     reloadPluginForProject,
     uninstallPlugin,
   } from '../../lib/plugin/pluginRegistry'
+  import { writeClipboardText } from '../../lib/ipc'
   import type { PluginEntry } from '../../lib/plugin/types'
 
   interface Props {
@@ -162,7 +163,7 @@
 
     actionError = null
     try {
-      await navigator.clipboard.writeText(diagnosticsFor(plugin, isEnabled))
+      await writeClipboardText(diagnosticsFor(plugin, isEnabled))
     } catch (error) {
       actionError = `Failed to copy diagnostics: ${errorMessage(error)}`
     }
