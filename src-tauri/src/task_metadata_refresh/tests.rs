@@ -46,6 +46,53 @@ fn task_metadata_refresh_diagnostic_formatter_keeps_safe_metadata_only_message()
 }
 
 #[test]
+fn task_metadata_refresh_diagnostic_formatter_redacts_sensitive_values() {
+    let path = "/Users/koen/private/openforge/transcripts/task-123.jsonl";
+    let prompt = "Rotate GitHub token ghp_promptsecret";
+    let transcript = "Transcript mentions /tmp/private/repo and github_pat_transcriptsecret";
+    let stdout = "provider stdout leaked title Actual Generated Title";
+    let stderr = "provider stderr leaked Authorization=Bearer stderr-secret";
+    let generated_title = "Actual Generated Title";
+    let repo = "acme/private";
+    let github_body = "body includes https://api.github.com/repos/acme/private/issues";
+
+    let line = super::format_task_metadata_refresh_diagnostic(format_args!(
+        "[task_metadata_refresh] unsafe diagnostic path={} prompt=\"{}\" transcript=\"{}\" stdout=\"{}\" stderr=\"{}\" generated_title=\"{}\" repo={} body=\"{}\" token=ghp_secretvalue",
+        path, prompt, transcript, stdout, stderr, generated_title, repo, github_body
+    ));
+
+    assert!(line.contains("[task_metadata_refresh] unsafe diagnostic"));
+    assert!(line.contains("path=<redacted>"));
+    assert!(line.contains("prompt=<redacted>"));
+    assert!(line.contains("transcript=<redacted>"));
+    assert!(line.contains("stdout=<redacted>"));
+    assert!(line.contains("stderr=<redacted>"));
+    assert!(line.contains("generated_title=<redacted>"));
+    assert!(line.contains("repo=<redacted>"));
+    assert!(line.contains("body=<redacted>"));
+    assert!(line.contains("token=<redacted>"));
+    for sensitive in [
+        path,
+        prompt,
+        transcript,
+        stdout,
+        stderr,
+        generated_title,
+        repo,
+        github_body,
+        "ghp_secretvalue",
+        "github_pat_transcriptsecret",
+        "Bearer stderr-secret",
+        "https://api.github.com",
+    ] {
+        assert!(
+            !line.contains(sensitive),
+            "diagnostic leaked {sensitive:?}: {line}"
+        );
+    }
+}
+
+#[test]
 fn task_metadata_refresh_debug_diagnostics_require_explicit_opt_in() {
     assert!(!super::task_metadata_refresh_debug_enabled_from_env(None));
     assert!(!super::task_metadata_refresh_debug_enabled_from_env(Some(

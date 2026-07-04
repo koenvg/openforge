@@ -11,24 +11,20 @@ pub(super) fn poll_scope_log_name(scope: &PollScope) -> &'static str {
     }
 }
 
-pub(super) fn poll_scope_active_project_id(scope: &PollScope) -> Option<&str> {
-    match scope {
-        PollScope::ActiveRepo(active_project_id)
-        | PollScope::ActiveFocusTaskPrs(active_project_id)
-        | PollScope::ActiveTaskPrs(active_project_id)
-        | PollScope::InactiveTaskPrs(active_project_id) => active_project_id.as_deref(),
-        PollScope::Global | PollScope::GlobalReviewLists => None,
-    }
-}
-
 pub(super) fn format_sync_scope_log(
     scope: &PollScope,
     project_count: usize,
     pr_count: usize,
 ) -> String {
     let mut parts = vec![format!("scope={}", poll_scope_log_name(scope))];
-    if let Some(active_project_id) = poll_scope_active_project_id(scope) {
-        parts.push(format!("active_project={active_project_id}"));
+    if matches!(
+        scope,
+        PollScope::ActiveRepo(Some(_))
+            | PollScope::ActiveFocusTaskPrs(Some(_))
+            | PollScope::ActiveTaskPrs(Some(_))
+            | PollScope::InactiveTaskPrs(Some(_))
+    ) {
+        parts.push("active_project=<redacted>".to_string());
     }
     parts.push(format!("projects={project_count}"));
     parts.push(format!("prs={pr_count}"));
