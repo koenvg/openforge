@@ -830,9 +830,30 @@ fn parse_repository_policy(rule: Option<&serde_json::Value>) -> RepositoryPolicy
     let requires_deployments = rule
         .get("requiresDeployments")
         .and_then(|value| value.as_bool());
+    let required_deployment_environments = rule
+        .get("requiredDeploymentEnvironments")
+        .and_then(|value| value.as_array())
+        .map(|environments| {
+            environments
+                .iter()
+                .filter_map(|value| value.as_str().map(ToOwned::to_owned))
+                .collect::<Vec<_>>()
+        });
     let requires_merge_queue = rule
         .get("requiresMergeQueue")
         .and_then(|value| value.as_bool());
+
+    let (required_deployments, unknown_reasons) = match (
+        requires_deployments,
+        required_deployment_environments,
+    ) {
+        (Some(true), Some(environments)) => (PolicyValue::known(environments), Vec::new()),
+        (Some(true), None) => {
+            let reason = "required deployments are configured but deployment environments were not available from GraphQL".to_string();
+            (PolicyValue::unknown(reason.clone()), vec![reason])
+        }
+        _ => (PolicyValue::known(Vec::new()), Vec::new()),
+    };
 
     RepositoryPolicyFacts {
         required_checks: PolicyValue::known(required_checks),
@@ -840,16 +861,8 @@ fn parse_repository_policy(rule: Option<&serde_json::Value>) -> RepositoryPolicy
         requires_up_to_date_branch: PolicyValue::known(requires_up_to_date_branch),
         requires_conversation_resolution: PolicyValue::known(requires_conversation_resolution),
         merge_queue_required: PolicyValue::known(requires_merge_queue),
-        required_deployments: if requires_deployments == Some(true) {
-            PolicyValue::unknown("required deployments are configured but deployment environments were not available from GraphQL")
-        } else {
-            PolicyValue::known(Vec::new())
-        },
-        unknown_reasons: if requires_deployments == Some(true) {
-            vec!["required deployments are configured but deployment environments were not available from GraphQL".to_string()]
-        } else {
-            Vec::new()
-        },
+        required_deployments,
+        unknown_reasons,
     }
 }
 
@@ -1652,6 +1665,46 @@ mod tests {
             Some("AWAITING_CHECKS")
         );
         assert_eq!(snapshot.merge_group_sha.as_deref(), Some("merge-group-sha"));
+    }
+
+    #[test]
+    fn github_readiness_graphql_payload_reads_required_deployment_environments() {
+        let payload = serde_json::json!({
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "headRefOid": "head-sha-1",
+                        "commits": {
+                            "nodes": [{
+                                "commit": {
+                                    "oid": "head-sha-1",
+                                    "statusCheckRollup": {
+                                        "state": "SUCCESS",
+                                        "contexts": { "nodes": [] }
+                                    }
+                                }
+                            }]
+                        },
+                        "reviewThreads": { "nodes": [] },
+                        "baseRef": {
+                            "branchProtectionRule": {
+                                "requiresDeployments": true,
+                                "requiredDeploymentEnvironments": ["production"]
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        let snapshot = GitHubReadinessSnapshot::from_graphql_response(&payload).unwrap();
+
+        assert_eq!(
+            snapshot.policy.required_deployments.value,
+            vec!["production".to_string()]
+        );
+        assert!(snapshot.policy.required_deployments.known);
+        assert!(snapshot.policy.unknown_reasons.is_empty());
     }
 
     #[test]
