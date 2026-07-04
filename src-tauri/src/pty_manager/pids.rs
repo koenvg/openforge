@@ -45,10 +45,7 @@ impl PtyManager {
             };
 
             if !is_running {
-                info!(
-                    "[cleanup] Removing stale PTY PID file (process dead): {:?}",
-                    path
-                );
+                info!("[cleanup] Removing stale PTY PID file (process dead)");
                 let _ = std::fs::remove_file(&path);
             } else {
                 // Process is alive — verify it's actually opencode before killing
@@ -80,7 +77,10 @@ impl PtyManager {
                         }
                     }
                 } else {
-                    info!("[cleanup] PID {} is not opencode (PID reuse), removing stale PTY file: {:?}", pid, path);
+                    info!(
+                        "[cleanup] PID {} is not opencode (PID reuse), removing stale PTY file",
+                        pid
+                    );
                 }
                 let _ = std::fs::remove_file(&path);
             }

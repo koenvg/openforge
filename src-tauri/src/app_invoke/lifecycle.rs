@@ -62,11 +62,11 @@ pub(super) async fn run_task_runtime_cleanup(task_id: &str, cleanup: TaskRuntime
     )
     .await;
     if let Err(e) = remove_result {
+        let error_message = e.to_string();
         error!(
-            "[app_invoke] Failed to remove worktree at {} for deleted task {}: {}",
-            cleanup.worktree_path.display(),
+            "[app_invoke] Failed to remove worktree for deleted task {} error_bytes={}",
             task_id,
-            e
+            error_message.len()
         );
     }
 }
@@ -310,9 +310,11 @@ pub(super) async fn rollback_failed_start_workspace(
         .await
     };
     if let Err(e) = remove_result {
+        let error_message = e.to_string();
         error!(
-            "[app_invoke] Failed to remove worktree during failed-start rollback for {}: {}",
-            task_id, e
+            "[app_invoke] Failed to remove worktree during failed-start rollback for {} error_bytes={}",
+            task_id,
+            error_message.len()
         );
     }
 

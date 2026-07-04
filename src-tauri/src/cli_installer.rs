@@ -30,10 +30,7 @@ fn write_cli_files(install_dir: &Path) -> Result<(), Box<dyn std::error::Error>>
         install_dir.join("openforge-plugin-dev-skill.md"),
         build_openforge_plugin_dev_skill(),
     )?;
-    info!(
-        "[cli_installer] OpenForge CLI files written to: {}",
-        install_dir.display()
-    );
+    info!("[cli_installer] OpenForge CLI files written");
     Ok(())
 }
 
@@ -69,8 +66,7 @@ fn remove_legacy_mcp_config_entry(config_path: &Path) -> Result<(), Box<dyn std:
         Ok(_) => return Ok(()),
         Err(e) => {
             warn!(
-                "[cli_installer] skipping legacy OpenForge MCP cleanup for invalid JSON in {}: {}",
-                config_path.display(),
+                "[cli_installer] skipping legacy OpenForge MCP cleanup for invalid JSON: {}",
                 e
             );
             return Ok(());
@@ -97,10 +93,7 @@ fn remove_legacy_mcp_config_entry(config_path: &Path) -> Result<(), Box<dyn std:
     }
 
     fs::write(config_path, serde_json::to_string_pretty(&config)?)?;
-    info!(
-        "[cli_installer] removed legacy OpenForge MCP config entry from {}",
-        config_path.display()
-    );
+    info!("[cli_installer] removed legacy OpenForge MCP config entry");
     Ok(())
 }
 
@@ -137,10 +130,7 @@ fn cleanup_legacy_mcp_install(config_dir: &Path) -> Result<(), Box<dyn std::erro
     let legacy_dir = legacy_mcp_install_dir(config_dir);
     if is_generated_legacy_mcp_install_dir(&legacy_dir) {
         fs::remove_dir_all(&legacy_dir)?;
-        info!(
-            "[cli_installer] removed legacy OpenForge MCP install directory at {}",
-            legacy_dir.display()
-        );
+        info!("[cli_installer] removed legacy OpenForge MCP install directory");
     }
     Ok(())
 }
@@ -185,10 +175,7 @@ pub fn install_cli_launcher(
         fs::set_permissions(&launcher, permissions)?;
     }
 
-    info!(
-        "[cli_installer] OpenForge CLI launcher installed at {}",
-        launcher.display()
-    );
+    info!("[cli_installer] OpenForge CLI launcher installed");
     Ok(launcher)
 }
 
@@ -212,10 +199,7 @@ pub fn ensure_zshrc_path(
         }
         updated.push_str("\n# OpenForge CLI\nexport PATH=\"$HOME/.openforge/bin:$PATH\"\n");
         fs::write(&zshrc, updated)?;
-        info!(
-            "[cli_installer] Added OpenForge CLI path to {}",
-            zshrc.display()
-        );
+        info!("[cli_installer] Added OpenForge CLI path to shell profile");
     }
 
     Ok(zshrc)
@@ -309,10 +293,8 @@ pub fn write_provider_skill_files(
         }
         fs::write(&target.path, skill_template_for_target(target))?;
         info!(
-            "[cli_installer] OpenForge {} skill installed for {} at {}",
-            target.skill_name,
-            target.provider,
-            target.path.display()
+            "[cli_installer] OpenForge {} skill installed for {}",
+            target.skill_name, target.provider
         );
     }
 

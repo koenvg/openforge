@@ -313,20 +313,14 @@ fn read_transcript_excerpt(path: &Path) -> Option<String> {
     let file = match std::fs::File::open(path) {
         Ok(file) => file,
         Err(error) => {
-            warn!(
-                "[task_metadata_refresh] failed to open transcript snapshot {:?}: {error}",
-                path
-            );
+            warn!("[task_metadata_refresh] failed to open transcript snapshot: {error}");
             return None;
         }
     };
     let len = match file.metadata() {
         Ok(metadata) => metadata.len(),
         Err(error) => {
-            warn!(
-                "[task_metadata_refresh] failed to read transcript snapshot metadata {:?}: {error}",
-                path
-            );
+            warn!("[task_metadata_refresh] failed to read transcript snapshot metadata: {error}");
             return None;
         }
     };
@@ -334,23 +328,16 @@ fn read_transcript_excerpt(path: &Path) -> Option<String> {
     let mut reader = std::io::BufReader::new(file);
     use std::io::{Read, Seek};
     if let Err(error) = reader.seek(std::io::SeekFrom::Start(start)) {
-        warn!(
-            "[task_metadata_refresh] failed to seek transcript snapshot {:?}: {error}",
-            path
-        );
+        warn!("[task_metadata_refresh] failed to seek transcript snapshot len={len}: {error}");
         return None;
     }
     let mut buf = Vec::new();
     if let Err(error) = reader.read_to_end(&mut buf) {
-        warn!(
-            "[task_metadata_refresh] failed to read transcript snapshot {:?}: {error}",
-            path
-        );
+        warn!("[task_metadata_refresh] failed to read transcript snapshot len={len}: {error}");
         return None;
     }
     debug!(
-        "[task_metadata_refresh] loaded transcript snapshot {:?} len={} excerpt_bytes={}",
-        path,
+        "[task_metadata_refresh] loaded transcript snapshot len={} excerpt_bytes={}",
         len,
         buf.len()
     );

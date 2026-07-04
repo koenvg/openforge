@@ -957,17 +957,11 @@ fn normalize_git_repo_url(repo: &str) -> String {
 }
 
 fn command_output_details(stdout: &[u8], stderr: &[u8]) -> String {
-    let stderr = String::from_utf8_lossy(stderr).trim().to_string();
-    if !stderr.is_empty() {
-        return stderr;
-    }
-
-    let stdout = String::from_utf8_lossy(stdout).trim().to_string();
-    if stdout.is_empty() {
-        "command exited without details".to_string()
-    } else {
-        stdout
-    }
+    format!(
+        "command exited with stdout_bytes={} stderr_bytes={}",
+        stdout.len(),
+        stderr.len()
+    )
 }
 
 #[allow(dead_code)]
@@ -1000,6 +994,20 @@ mod tests {
             permissions.set_mode(0o755);
             fs::set_permissions(path, permissions).expect("permissions should set");
         }
+    }
+    #[test]
+    fn command_output_details_reports_metadata_only() {
+        let details = command_output_details(
+            b"stdout with /Users/example/project",
+            b"stderr with secret plugin failure",
+        );
+
+        assert_eq!(
+            details,
+            "command exited with stdout_bytes=34 stderr_bytes=33"
+        );
+        assert!(!details.contains("/Users/example/project"));
+        assert!(!details.contains("secret plugin failure"));
     }
 
     #[test]

@@ -499,8 +499,11 @@ async fn fetch_origin_succeeded(repo_path: &Path) -> bool {
     };
 
     if !fetch_output.status.success() {
-        let stderr = String::from_utf8_lossy(&fetch_output.stderr);
-        warn!("Warning: git fetch origin failed: {}", stderr);
+        warn!(
+            "Warning: git fetch origin failed status={} stderr_bytes={}",
+            fetch_output.status,
+            fetch_output.stderr.len()
+        );
         return false;
     }
 
@@ -795,8 +798,11 @@ pub async fn create_worktree(
         .await?;
 
     if !prune_output.status.success() {
-        let stderr = String::from_utf8_lossy(&prune_output.stderr);
-        warn!("Warning: worktree prune failed: {}", stderr);
+        warn!(
+            "Warning: worktree prune failed status={} stderr_bytes={}",
+            prune_output.status,
+            prune_output.stderr.len()
+        );
     }
 
     // Fetch latest from origin so the base ref (e.g. origin/main) is up to date
@@ -864,8 +870,11 @@ pub async fn create_worktree_from_existing_branch(
         .await?;
 
     if !prune_output.status.success() {
-        let stderr = String::from_utf8_lossy(&prune_output.stderr);
-        warn!("Warning: worktree prune failed: {}", stderr);
+        warn!(
+            "Warning: worktree prune failed status={} stderr_bytes={}",
+            prune_output.status,
+            prune_output.stderr.len()
+        );
     }
 
     fetch_origin_best_effort(repo_path).await?;
@@ -1161,8 +1170,8 @@ enum BranchPreservedReason {
 impl fmt::Display for BranchPreservedReason {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            BranchPreservedReason::CheckedOutElsewhere(path) => {
-                write!(f, "it is checked out in another worktree ({path})")
+            BranchPreservedReason::CheckedOutElsewhere(_) => {
+                write!(f, "it is checked out in another worktree")
             }
             BranchPreservedReason::UncommittedChanges => {
                 write!(f, "its worktree has uncommitted changes")
@@ -1355,9 +1364,11 @@ pub async fn remove_worktree_with_branch(
             let plan = match evaluate_branch_deletion(repo_path, worktree_path, branch).await {
                 Ok(plan) => plan,
                 Err(e) => {
+                    let error_message = e.to_string();
                     warn!(
-                        "Could not evaluate deletion safety for branch '{}'; preserving it: {}",
-                        branch, e
+                        "Could not evaluate deletion safety for branch '{}'; preserving it error_bytes={}",
+                        branch,
+                        error_message.len()
                     );
                     BranchDeletionPlan::Preserve(BranchPreservedReason::SafetyCheckFailed)
                 }
@@ -1379,8 +1390,11 @@ pub async fn remove_worktree_with_branch(
         .await?;
 
     if !remove_output.status.success() {
-        let stderr = String::from_utf8_lossy(&remove_output.stderr);
-        warn!("Warning: git worktree remove failed: {}", stderr);
+        warn!(
+            "Warning: git worktree remove failed status={} stderr_bytes={}",
+            remove_output.status,
+            remove_output.stderr.len()
+        );
     }
 
     // Step 2: Remove .git/worktrees metadata
@@ -1392,7 +1406,10 @@ pub async fn remove_worktree_with_branch(
     let git_dir = repo_path.join(".git").join("worktrees").join(worktree_name);
     if git_dir.exists() {
         if let Err(e) = std::fs::remove_dir_all(&git_dir) {
-            warn!("Warning: failed to remove worktree metadata: {}", e);
+            warn!(
+                "Warning: failed to remove worktree metadata: kind={:?}",
+                e.kind()
+            );
         }
     }
 
@@ -1416,8 +1433,11 @@ pub async fn remove_worktree_with_branch(
         .await?;
 
     if !prune_output.status.success() {
-        let stderr = String::from_utf8_lossy(&prune_output.stderr);
-        warn!("Warning: worktree prune failed: {}", stderr);
+        warn!(
+            "Warning: worktree prune failed status={} stderr_bytes={}",
+            prune_output.status,
+            prune_output.stderr.len()
+        );
     }
 
     if let Some((branch, plan)) = branch_decision {
@@ -1438,11 +1458,11 @@ pub async fn remove_worktree_with_branch(
                 if branch_output.status.success() {
                     info!("Deleted OpenForge branch '{}' during teardown", branch);
                 } else {
-                    let stderr = String::from_utf8_lossy(&branch_output.stderr);
                     warn!(
-                        "Preserving branch '{}': safe delete was refused by git: {}",
+                        "Preserving branch '{}': safe delete was refused by git status={} stderr_bytes={}",
                         branch,
-                        stderr.trim()
+                        branch_output.status,
+                        branch_output.stderr.len()
                     );
                 }
             }

@@ -185,9 +185,12 @@ impl PluginHost {
         let runtime = resolve_sidecar_runtime(&entrypoint)?;
 
         info!(
-            "[plugin_host] starting plugin sidecar with runtime={} entrypoint={}",
-            runtime.command.display(),
-            entrypoint.display()
+            "[plugin_host] starting plugin sidecar runtime_kind={} entrypoint_extension={}",
+            runtime.kind(),
+            entrypoint
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .unwrap_or("none")
         );
 
         let mut command = Command::new(&runtime.command);
@@ -262,7 +265,10 @@ impl PluginHost {
         tokio::spawn(async move {
             let mut stderr_lines = BufReader::new(stderr).lines();
             while let Ok(Some(line)) = stderr_lines.next_line().await {
-                warn!("[plugin_host] sidecar stderr: {}", line);
+                warn!(
+                    "[plugin_host] sidecar stderr line received bytes={}",
+                    line.len()
+                );
             }
         });
 
@@ -562,6 +568,14 @@ impl SidecarRuntimeCommand {
             command,
             args: vec![entrypoint.as_os_str().to_os_string()],
             env: HashMap::from([(ELECTRON_RUN_AS_NODE_ENV, OsString::from("1"))]),
+        }
+    }
+
+    fn kind(&self) -> &'static str {
+        if self.env.contains_key(ELECTRON_RUN_AS_NODE_ENV) {
+            "electron-node"
+        } else {
+            "bun"
         }
     }
 }
