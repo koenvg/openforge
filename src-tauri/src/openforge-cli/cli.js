@@ -49,6 +49,11 @@ Task listing:
   Pass --full to print complete TaskRow objects.
   list-tasks excludes done tasks unless --state done is passed.
 
+Task creation hygiene:
+  When creating follow-up Tasks, include useful --label values when the category is obvious.
+  For multi-Task follow-up work, link prerequisites immediately with --depends-on or link-tasks.
+  If labels or dependency order are unclear, state that uncertainty instead of guessing.
+
 Examples:
   openforge list-tasks --project-id P-1
   openforge delete-task --task-id T-123

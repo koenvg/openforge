@@ -396,6 +396,8 @@ mod tests {
         assert!(skill_content.contains("$HOME/.openforge/bin/openforge"));
         assert!(skill_content.contains("openforge create-task --help"));
         assert!(skill_content.contains("openforge update-task --help"));
+        assert!(skill_content.contains("Before creating follow-up Tasks"));
+        assert!(skill_content.contains("When creating multiple related Tasks"));
         assert_eq!(skill_content.matches("openforge get-task").count(), 1);
         assert_eq!(
             skill_content.matches("openforge list-task-labels").count(),
@@ -495,6 +497,8 @@ mod tests {
             assert!(content.contains("openforge add-task-label"));
             assert!(content.contains("openforge remove-task-label"));
             assert!(content.contains("Use labels to record task categories"));
+            assert!(content.contains("Before creating follow-up Tasks"));
+            assert!(content.contains("When creating multiple related Tasks"));
             assert!(content.contains("Task summaries are Markdown-formatted"));
             assert!(content.contains("$HOME/.openforge/bin/openforge"));
             assert!(content.contains("openforge create-task --help"));

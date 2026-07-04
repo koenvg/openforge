@@ -20,6 +20,14 @@ Do not bypass the launcher with the underlying script path.
 
 If OpenForge is listening on a non-default HTTP bridge port, set `OPENFORGE_HTTP_PORT` before running the command. The default is `17422`.
 
+## Task Creation checklist
+
+Before creating follow-up Tasks, decide whether each one has obvious project-relevant Task Labels. Add them during Task Creation with `--label`; do not invent noisy labels just because labels exist.
+
+When creating multiple related Tasks, decide whether any Task must be done before another can start. Link prerequisites immediately with `--depends-on` during creation when the predecessor ID is known, or use `openforge link-tasks --chain "T-1 -> T-2 -> T-3"` after all Task IDs exist.
+
+If labels or dependency order are unclear, mention that uncertainty in Handoff Notes or open questions instead of guessing.
+
 ## Common commands
 
 ```bash
