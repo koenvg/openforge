@@ -81,13 +81,12 @@
   {#if taskStatus === 'backlog' && onEdit}
     <ContextMenuItem label="Edit Task" onclick={handleEdit} />
   {/if}
-  {#if taskStatus === 'doing'}
-    {#if isOutOfFocusTask && onReturnToBoard}
-      <ContextMenuItem label="Return to board" onclick={handleReturnToBoard} />
-    {:else if !isOutOfFocusTask && onMoveToOutOfFocus}
-      <ContextMenuItem label="Set aside" onclick={handleSetAside} />
-    {/if}
+  {#if taskStatus === 'doing' && isOutOfFocusTask && onReturnToBoard}
+    <ContextMenuItem label="Return to board" onclick={handleReturnToBoard} />
   {/if}
   <div class="border-t border-base-content/10 my-1"></div>
   <ContextMenuItem label={isCompleting ? 'Completing…' : 'Complete 🏁'} disabled={isCompleting} onclick={handleComplete} />
+  {#if taskStatus === 'doing' && !isOutOfFocusTask && onMoveToOutOfFocus}
+    <ContextMenuItem label="Set aside" onclick={handleSetAside} />
+  {/if}
 </ContextMenu>

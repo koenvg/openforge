@@ -95,6 +95,8 @@ describe('getTaskActions', () => {
     expect(ids).not.toContain('return-to-board')
     expect(ids).toContain('delete-task')
     expect(ids).toContain('custom-action-custom-1')
+    expect(ids.indexOf('set-aside-task')).toBeGreaterThan(ids.indexOf('delete-task'))
+    expect(ids.indexOf('set-aside-task')).toBeGreaterThan(ids.indexOf('custom-action-custom-1'))
   })
 
   it('returns Return to board for doing task already Out of Focus', () => {
