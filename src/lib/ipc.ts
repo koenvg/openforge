@@ -228,6 +228,10 @@ export async function selectDirectory(options: {
   return invoke<string | null>("select_directory", { defaultPath, buttonLabel, message });
 }
 
+export async function writeClipboardText(text: string): Promise<void> {
+  return invoke("write_clipboard_text", { text });
+}
+
 export async function getPrComments(prId: number): Promise<PrComment[]> {
   return invoke<PrComment[]>("get_pr_comments", { prId });
 }

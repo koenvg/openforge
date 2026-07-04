@@ -82,6 +82,7 @@ export const ipcCommandContracts = [
   { functionName: 'openUrl', ipcCommand: 'open_url', payloadKeys: ['url'], targetOwner: 'electron-main', domain: 'misc' },
   { functionName: 'openInEditor', ipcCommand: 'open_in_editor', payloadKeys: ['path'], targetOwner: 'electron-main', domain: 'misc' },
   { functionName: 'quitApp', ipcCommand: 'quit_app', payloadKeys: [], targetOwner: 'electron-main', domain: 'app-shell' },
+  { functionName: 'writeClipboardText', ipcCommand: 'write_clipboard_text', payloadKeys: ['text'], targetOwner: 'electron-main', domain: 'app-shell' },
   { functionName: 'selectDirectory', ipcCommand: 'select_directory', payloadKeys: ['defaultPath', 'buttonLabel', 'message'], targetOwner: 'electron-main', domain: 'app-shell' },
   { functionName: 'getDeveloperLogs', ipcCommand: 'get_developer_logs', payloadKeys: ['limit'], targetOwner: 'electron-main', domain: 'app-shell' },
   { functionName: 'getDeveloperLogSnapshot', ipcCommand: 'get_developer_log_snapshot', payloadKeys: ['limit'], targetOwner: 'electron-main', domain: 'app-shell' },

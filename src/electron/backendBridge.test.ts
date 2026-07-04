@@ -60,6 +60,20 @@ describe('Electron backend bridge command forwarding', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it('keeps clipboard writes shell-owned and does not forward them to the Rust sidecar', async () => {
+    const fetch = vi.fn()
+    const openExternal = vi.fn(async () => undefined)
+    const writeClipboardText = vi.fn(async () => undefined)
+
+    await expect(handleElectronInvoke(
+      { command: 'write_clipboard_text', payload: { text: '/repo/T-42' } },
+      { sidecarConfig: sidecarConfig(), fetch, openExternal, writeClipboardText },
+    )).resolves.toBeUndefined()
+
+    expect(writeClipboardText).toHaveBeenCalledWith('/repo/T-42')
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it('keeps developer log snapshots shell-owned and returns the file-backed tail', async () => {
     const fetch = vi.fn()
     const getDeveloperLogSnapshot = vi.fn(() => ({

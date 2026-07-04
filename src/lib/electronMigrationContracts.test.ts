@@ -238,6 +238,11 @@ describe('Electron migration Phase 0 contract inventory', () => {
       ipcCommand: 'quit_app',
       targetOwner: 'electron-main',
     })
+    expect(ipcCommandContracts.find(contract => contract.functionName === 'writeClipboardText')).toMatchObject({
+      ipcCommand: 'write_clipboard_text',
+      payloadKeys: ['text'],
+      targetOwner: 'electron-main',
+    })
     expect(ipcCommandContracts.find(contract => contract.functionName === 'createTask')).toMatchObject({
       ipcCommand: 'create_task',
       targetOwner: 'rust-sidecar',
