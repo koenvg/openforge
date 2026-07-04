@@ -54,4 +54,73 @@ describe('Electron preload API skeleton', () => {
     expect(handler).toHaveBeenCalledWith({ action: 'updated', task_id: 'T-1' })
     expect(ipc.off).toHaveBeenCalledWith('openforge:event', expect.any(Function))
   })
+
+  it('multiplexes logical app event subscriptions through one Electron listener', () => {
+    const listeners = new Map<string, (...args: unknown[]) => void>()
+    const ipc = {
+      invoke: vi.fn(),
+      on: vi.fn((channel: string, listener: (...args: unknown[]) => void) => {
+        listeners.set(channel, listener)
+      }),
+      off: vi.fn((channel: string) => {
+        listeners.delete(channel)
+      }),
+    }
+    const taskChangedHandler = vi.fn()
+    const ciStatusHandler = vi.fn()
+    const secondTaskChangedHandler = vi.fn()
+
+    const api = createOpenForgePreloadApi(ipc)
+    const unsubscribeTaskChanged = api.onEvent('task-changed', taskChangedHandler)
+    const unsubscribeCiStatus = api.onEvent('ci-status-changed', ciStatusHandler)
+    const unsubscribeSecondTaskChanged = api.onEvent('task-changed', secondTaskChangedHandler)
+
+    listeners.get('openforge:event')?.({}, { eventName: 'task-changed', payload: { task_id: 'T-1' } })
+    listeners.get('openforge:event')?.({}, { eventName: 'ci-status-changed', payload: { status: 'passed' } })
+
+    unsubscribeTaskChanged()
+    listeners.get('openforge:event')?.({}, { eventName: 'task-changed', payload: { task_id: 'T-2' } })
+
+    unsubscribeSecondTaskChanged()
+    listeners.get('openforge:event')?.({}, { eventName: 'task-changed', payload: { task_id: 'T-3' } })
+
+    unsubscribeCiStatus()
+
+    expect(ipc.on).toHaveBeenCalledTimes(1)
+    expect(ipc.on).toHaveBeenCalledWith('openforge:event', expect.any(Function))
+    expect(taskChangedHandler).toHaveBeenCalledTimes(1)
+    expect(secondTaskChangedHandler).toHaveBeenCalledTimes(2)
+    expect(ciStatusHandler).toHaveBeenCalledWith({ status: 'passed' })
+    expect(ipc.off).toHaveBeenCalledTimes(1)
+    expect(ipc.off).toHaveBeenCalledWith('openforge:event', expect.any(Function))
+  })
+
+  it('preserves duplicate handler registrations for the same event', () => {
+    const listeners = new Map<string, (...args: unknown[]) => void>()
+    const ipc = {
+      invoke: vi.fn(),
+      on: vi.fn((channel: string, listener: (...args: unknown[]) => void) => {
+        listeners.set(channel, listener)
+      }),
+      off: vi.fn(),
+    }
+    const handler = vi.fn()
+
+    const api = createOpenForgePreloadApi(ipc)
+    const unsubscribeFirst = api.onEvent('task-changed', handler)
+    const unsubscribeSecond = api.onEvent('task-changed', handler)
+
+    listeners.get('openforge:event')?.({}, { eventName: 'task-changed', payload: { task_id: 'T-1' } })
+    unsubscribeFirst()
+    listeners.get('openforge:event')?.({}, { eventName: 'task-changed', payload: { task_id: 'T-2' } })
+    unsubscribeSecond()
+
+    expect(ipc.on).toHaveBeenCalledTimes(1)
+    expect(handler).toHaveBeenCalledTimes(3)
+    expect(handler).toHaveBeenNthCalledWith(1, { task_id: 'T-1' })
+    expect(handler).toHaveBeenNthCalledWith(2, { task_id: 'T-1' })
+    expect(handler).toHaveBeenNthCalledWith(3, { task_id: 'T-2' })
+    expect(ipc.off).toHaveBeenCalledTimes(1)
+    expect(ipc.off).toHaveBeenCalledWith('openforge:event', expect.any(Function))
+  })
 })
