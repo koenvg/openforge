@@ -9,12 +9,19 @@ use crate::db::{
     select_snapshot_readiness_inputs, PrMergeReadinessFacts, PrRow,
 };
 use crate::github_client::{
-    CheckRunsResponse, CombinedStatusResponse, GitHubClient, PrComment, PrReview,
+    CheckRunsResponse, CombinedStatusResponse, GitHubClient, GitHubError, PrComment, PrReview,
 };
 use std::collections::HashSet;
 
 pub(super) fn should_fetch_comments_for_pr(pr_id: i64, changed_pr_numbers: &HashSet<i64>) -> bool {
     changed_pr_numbers.is_empty() || changed_pr_numbers.contains(&pr_id)
+}
+
+pub(super) fn sanitized_comment_fetch_error_message(error: &GitHubError) -> String {
+    format!(
+        "Failed to fetch comments: {}",
+        error.sanitized_log_message()
+    )
 }
 
 pub(super) struct PollSinglePrResult {
@@ -104,7 +111,7 @@ pub(super) async fn fetch_pr_comments_for_poll(
             since,
         )
         .await
-        .map_err(|e| format!("Failed to fetch comments: {e}"))
+        .map_err(|e| sanitized_comment_fetch_error_message(&e))
 }
 
 #[allow(clippy::too_many_arguments)]

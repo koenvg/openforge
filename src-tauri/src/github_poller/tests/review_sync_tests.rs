@@ -159,6 +159,27 @@ fn test_sync_open_prs_error_rate_limit_detection_uses_typed_github_error() {
 }
 
 #[test]
+fn test_sync_open_prs_error_sanitized_log_message_redacts_body_and_identity() {
+    let error = SyncOpenPrsError::GitHub(crate::github_client::GitHubError::ApiError {
+        status: 429,
+        message: "token ghp_secret body https://api.github.com/repos/acme/private/pulls?user=alice"
+            .to_string(),
+    });
+
+    let sanitized = error.sanitized_log_message("authored task PR link sync");
+
+    assert!(sanitized.contains("phase authored task PR link sync"));
+    assert!(sanitized.contains("status 429"));
+    assert!(sanitized.contains("rate_limited true"));
+    assert!(!sanitized.contains("ghp_secret"));
+    assert!(!sanitized.contains("https://api.github.com"));
+    assert!(!sanitized.contains("acme"));
+    assert!(!sanitized.contains("private"));
+    assert!(!sanitized.contains("alice"));
+    assert!(!sanitized.contains("body"));
+}
+
+#[test]
 fn test_contains_task_id_matches_boundaries() {
     assert!(contains_task_id("T-42 fix auth", "T-42"));
     assert!(contains_task_id("fix auth T-42", "T-42"));
@@ -278,6 +299,38 @@ fn test_poll_phase_error_rate_limit_detection_uses_typed_github_error() {
 
     let non_rate_limited = PollPhaseError::Db("boom".to_string());
     assert!(!non_rate_limited.should_increment_rate_limit_count());
+}
+
+#[test]
+fn test_poll_phase_error_sanitized_log_message_preserves_phase_and_status_only() {
+    let error = PollPhaseError::GitHub(crate::github_client::GitHubError::ApiError {
+        status: 429,
+        message: "token ghp_secret body https://api.github.com/repos/acme/private/pulls?user=alice"
+            .to_string(),
+    });
+
+    let sanitized = error.sanitized_log_message("review PRs");
+
+    assert!(sanitized.contains("phase review PRs"));
+    assert!(sanitized.contains("status 429"));
+    assert!(sanitized.contains("rate_limited true"));
+    assert!(!sanitized.contains("ghp_secret"));
+    assert!(!sanitized.contains("https://api.github.com"));
+    assert!(!sanitized.contains("acme"));
+    assert!(!sanitized.contains("private"));
+    assert!(!sanitized.contains("alice"));
+    assert!(!sanitized.contains("body"));
+}
+
+#[test]
+fn test_poll_phase_error_sanitized_log_message_redacts_db_message() {
+    let error = PollPhaseError::Db("database path mentions owner acme repo private".to_string());
+
+    let sanitized = error.sanitized_log_message("authored PRs");
+
+    assert_eq!(sanitized, "phase authored PRs: database error");
+    assert!(!sanitized.contains("acme"));
+    assert!(!sanitized.contains("private"));
 }
 
 #[test]

@@ -55,7 +55,8 @@ pub(super) async fn fetch_graphql_readiness_snapshot(
         Err(e) => {
             warn!(
                 "[GitHub Poller] Failed to fetch GraphQL readiness for PR #{}: {}",
-                pr.pr_number, e
+                pr.pr_number,
+                e.sanitized_log_message()
             );
             None
         }
@@ -114,7 +115,8 @@ pub(super) async fn collect_rest_readiness_sources(
         Err(e) => {
             warn!(
                 "[GitHub Poller] Failed to fetch check runs for PR #{}: {}",
-                pr.pr_number, e
+                pr.pr_number,
+                e.sanitized_log_message()
             );
             None
         }
@@ -125,7 +127,8 @@ pub(super) async fn collect_rest_readiness_sources(
         Err(e) => {
             warn!(
                 "[GitHub Poller] Failed to fetch combined status for PR #{}: {}",
-                pr.pr_number, e
+                pr.pr_number,
+                e.sanitized_log_message()
             );
             None
         }
@@ -164,7 +167,8 @@ pub(super) async fn collect_rest_readiness_sources(
         Err(e) => {
             warn!(
                 "[GitHub Poller] Failed to fetch reviews for PR #{}: {}",
-                pr.pr_number, e
+                pr.pr_number,
+                e.sanitized_log_message()
             );
             None
         }
@@ -175,7 +179,8 @@ pub(super) async fn collect_rest_readiness_sources(
         Err(e) => {
             warn!(
                 "[GitHub Poller] Failed to fetch PR details for PR #{}: {}",
-                pr.pr_number, e
+                pr.pr_number,
+                e.sanitized_log_message()
             );
             false
         }

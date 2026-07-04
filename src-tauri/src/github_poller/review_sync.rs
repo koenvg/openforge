@@ -18,6 +18,21 @@ impl PollPhaseError {
             Self::GitHub(crate::github_client::GitHubError::ApiError { status: 429, .. })
         )
     }
+
+    pub(super) fn sanitized_log_message(&self, phase: &str) -> String {
+        let summary = match self {
+            Self::GitHub(error) => {
+                let mut message = error.sanitized_log_message();
+                if self.should_increment_rate_limit_count() {
+                    message.push_str("; rate_limited true");
+                }
+                message
+            }
+            Self::Db(_) => "database error".to_string(),
+        };
+
+        format!("phase {phase}: {summary}")
+    }
 }
 
 impl fmt::Display for PollPhaseError {
@@ -41,6 +56,21 @@ impl SyncOpenPrsError {
             self,
             Self::GitHub(crate::github_client::GitHubError::ApiError { status: 429, .. })
         )
+    }
+
+    pub(super) fn sanitized_log_message(&self, phase: &str) -> String {
+        let summary = match self {
+            Self::GitHub(error) => {
+                let mut message = error.sanitized_log_message();
+                if self.should_increment_rate_limit_count() {
+                    message.push_str("; rate_limited true");
+                }
+                message
+            }
+            Self::Db(_) => "database error".to_string(),
+        };
+
+        format!("phase {phase}: {summary}")
     }
 }
 
@@ -124,8 +154,8 @@ pub(super) async fn reconcile_stale_authored_task_prs(
                 }
             }
             Err(error) => warn!(
-                "[GitHub Poller] Leaving stale authored PR {}/{} #{} open after failed detail fetch: {}",
-                pr.repo_owner, pr.repo_name, pr.pr_number, error
+                "[GitHub Poller] Leaving stale authored PR open after failed detail fetch: {}",
+                error.sanitized_log_message()
             ),
         }
     }
@@ -327,7 +357,10 @@ pub(super) fn count_poll_phase_error(
     rate_limit_count: &mut usize,
 ) {
     if let Err(e) = result {
-        error!("[GitHub Poller] Failed to poll {}: {}", phase, e);
+        error!(
+            "[GitHub Poller] Failed to poll: {}",
+            e.sanitized_log_message(phase)
+        );
         *total_errors += 1;
         if e.should_increment_rate_limit_count() {
             *rate_limit_count += 1;
