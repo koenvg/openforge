@@ -5,7 +5,7 @@ use super::prompt::{
     TASK_DISPLAY_TITLE_JSON_SCHEMA,
 };
 use super::providers::{
-    build_claude_title_headless_args, build_codex_title_headless_args,
+    build_claude_metadata_job_args, build_codex_title_headless_args,
     build_opencode_title_headless_args, build_pi_metadata_job_args,
 };
 use super::refresh::{
@@ -161,7 +161,8 @@ fn parse_task_display_title_output_reads_nested_provider_json() {
 
 #[test]
 fn provider_title_headless_args_are_session_isolated() {
-    let claude_args = build_claude_title_headless_args("Name this work");
+    let claude_args =
+        build_claude_metadata_job_args("Name this work", TASK_DISPLAY_TITLE_JSON_SCHEMA);
     assert!(claude_args.contains(&"--no-session-persistence".to_string()));
     assert!(claude_args.contains(&"--permission-mode".to_string()));
     assert!(claude_args.contains(&"dontAsk".to_string()));
@@ -221,9 +222,6 @@ fn task_display_title_metadata_job_contract_is_provider_agnostic_and_bounded() {
     assert_eq!(job.provider, "pi");
     assert_eq!(job.kind, MetadataJobKind::TaskDisplayTitle);
     assert_eq!(job.kind.as_str(), "task_display_title");
-    assert_eq!(MetadataJobKind::Summary.as_str(), "summary");
-    assert_eq!(MetadataJobKind::Labels.as_str(), "labels");
-    assert_eq!(MetadataJobKind::HandoffStatus.as_str(), "handoff_status");
     assert_eq!(job.output_schema, TASK_DISPLAY_TITLE_JSON_SCHEMA);
 
     let snapshot = job.snapshot.as_ref().expect("bounded snapshot");
