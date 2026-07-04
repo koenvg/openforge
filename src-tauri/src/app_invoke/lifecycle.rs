@@ -90,8 +90,7 @@ struct StartImplementationContext {
     task: crate::db::TaskRow,
     project_id: String,
     additional_instructions: Option<String>,
-    handoff_notes_workflow_enabled: bool,
-    handoff_notes_template: Option<String>,
+    start_prompt_contributions: Vec<crate::agent_lifecycle::StartPromptContribution>,
     code_cleanup_enabled: bool,
     provider_name: String,
 }
@@ -168,25 +167,15 @@ fn load_start_implementation_context(
         .get_project_config(&project_id, "additional_instructions")
         .ok()
         .flatten();
-    let handoff_notes_workflow_enabled = db
+    let start_prompt_contributions = db
         .get_project_config(
             &project_id,
-            crate::agent_lifecycle::HANDOFF_NOTES_WORKFLOW_ENABLED_CONFIG_KEY,
+            crate::agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY,
         )
         .ok()
         .flatten()
-        .map(|value| value == "true")
-        .unwrap_or(false);
-    let handoff_notes_template = if handoff_notes_workflow_enabled {
-        db.get_project_config(
-            &project_id,
-            crate::agent_lifecycle::HANDOFF_NOTES_TEMPLATE_CONFIG_KEY,
-        )
-        .ok()
-        .flatten()
-    } else {
-        None
-    };
+        .and_then(|value| serde_json::from_str(&value).ok())
+        .unwrap_or_default();
     let code_cleanup_enabled = db
         .get_config("code_cleanup_tasks_enabled")
         .ok()
@@ -199,8 +188,7 @@ fn load_start_implementation_context(
         task,
         project_id,
         additional_instructions,
-        handoff_notes_workflow_enabled,
-        handoff_notes_template,
+        start_prompt_contributions,
         code_cleanup_enabled,
         provider_name,
     })
@@ -423,8 +411,7 @@ pub(super) async fn handle_app_start_implementation_command(
         &start_context.task,
         start_context.additional_instructions.as_deref(),
         start_context.code_cleanup_enabled,
-        start_context.handoff_notes_workflow_enabled,
-        start_context.handoff_notes_template.as_deref(),
+        &start_context.start_prompt_contributions,
     );
     let image_attachment_root = state
         .app

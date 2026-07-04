@@ -7,14 +7,13 @@ import type {
   CommandDescriptor,
   CommandRegistration,
   CommandShortcutMetadata,
-  ConfigureHandoffNotesWorkflowRequest,
+  ConfigureStartPromptContributionRequest,
   CreateTaskRequest,
   Disposable,
   FrontendOpenForgeAPI,
   FrontendPlugin,
   FrontendPluginContext,
   JsonValue,
-  HandoffNotesWorkflowConfig,
   NotificationRequest,
   OpenForgeContextSnapshot,
   OpenForgeNavigationRequest,
@@ -24,6 +23,7 @@ import type {
   PluginStorage,
   PluginStorageScope,
   PluginTaskPaneTabRegistration,
+  StartPromptContribution,
   StartTaskImplementationRequest,
   PluginViewRegistration,
   SubscriptionSink,
@@ -56,7 +56,7 @@ export interface TestingOpenForgeApiCalls {
   navigationRequests: OpenForgeNavigationRequest[]
   notify: NotificationRequest[]
   taskCreations: CreateTaskRequest[]
-  handoffNotesWorkflowConfigurations: ConfigureHandoffNotesWorkflowRequest[]
+  startPromptContributionConfigurations: ConfigureStartPromptContributionRequest[]
   taskImplementationStarts: StartTaskImplementationRequest[]
   taskSummaryUpdates: Array<{ taskId: string; summary: string }>
   taskStatusUpdates: Array<{ taskId: string; status: string }>
@@ -302,14 +302,9 @@ export class TestingOpenForgeRegistryFake {
       subscriptions,
     }
   }
-  private handoffNotesWorkflowConfig(projectId: string): HandoffNotesWorkflowConfig {
-    const enabled = this.config.get(`project:${projectId}:handoff_notes_workflow_enabled`)
-    const template = this.config.get(`project:${projectId}:handoff_notes_template`)
-    return {
-      projectId,
-      enabled: enabled === true || enabled === 'true',
-      template: typeof template === 'string' && template.length > 0 ? template : null,
-    }
+  private startPromptContributions(projectId: string): StartPromptContribution[] {
+    const raw = this.config.get(`project:${projectId}:start_prompt_contributions`) as unknown
+    return Array.isArray(raw) ? raw.filter((entry): entry is StartPromptContribution => Boolean(entry) && typeof entry === 'object' && typeof (entry as { id?: unknown }).id === 'string' && typeof (entry as { content?: unknown }).content === 'string') : []
   }
 
   private createCommonApi(): Omit<FrontendOpenForgeAPI, 'views' | 'taskPane' | 'settings' | 'backend'> {
@@ -361,14 +356,13 @@ export class TestingOpenForgeRegistryFake {
         updateStatus: async (taskId, status) => {
           this.calls.taskStatusUpdates.push({ taskId, status })
         },
-        getHandoffNotesWorkflow: async (projectId) => this.handoffNotesWorkflowConfig(projectId),
-        configureHandoffNotesWorkflow: async (request) => {
-          this.calls.handoffNotesWorkflowConfigurations.push(request)
-          this.config.set(`project:${request.projectId}:handoff_notes_workflow_enabled`, request.enabled)
-          if (request.template !== undefined) {
-            this.config.set(`project:${request.projectId}:handoff_notes_template`, request.template ?? '')
-          }
-          return this.handoffNotesWorkflowConfig(request.projectId)
+        listStartPromptContributions: async (projectId) => this.startPromptContributions(projectId),
+        configureStartPromptContribution: async (request) => {
+          this.calls.startPromptContributionConfigurations.push(request)
+          const existing = this.startPromptContributions(request.projectId).filter((entry) => entry.id !== request.id)
+          const next = [...existing, request].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.id.localeCompare(b.id))
+          this.config.set(`project:${request.projectId}:start_prompt_contributions`, next as unknown as JsonValue)
+          return next
         },
         startImplementation: async (request) => {
           this.calls.taskImplementationStarts.push(request)
@@ -757,7 +751,7 @@ export function createTestingCalls(): TestingOpenForgeApiCalls {
     navigationRequests: [],
     notify: [],
     taskCreations: [],
-    handoffNotesWorkflowConfigurations: [],
+    startPromptContributionConfigurations: [],
     taskImplementationStarts: [],
     taskSummaryUpdates: [],
     taskStatusUpdates: [],

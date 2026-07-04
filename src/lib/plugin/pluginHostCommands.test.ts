@@ -76,53 +76,49 @@ describe('plugin host commands', () => {
     })
   })
 
-  it('routes plugin handoff notes workflow configuration through project config only', async () => {
+  it('routes generic start prompt contribution configuration through project config only', async () => {
     const { invoke } = installDesktopBridge(null)
-    invoke.mockResolvedValueOnce(null)
-    invoke.mockResolvedValueOnce('## Existing Template')
+    invoke.mockResolvedValueOnce(JSON.stringify([{ id: 'existing', enabled: true, content: 'Existing', order: 0 }]))
 
-    await expect(invokePluginHostCommand('getHandoffNotesWorkflow', {
+    await expect(invokePluginHostCommand('listStartPromptContributions', {
       projectId: 'P-1',
-    })).resolves.toEqual({
-      projectId: 'P-1',
-      enabled: false,
-      template: '## Existing Template',
-    })
+    })).resolves.toEqual([{ id: 'existing', enabled: true, content: 'Existing', order: 0 }])
     expect(invoke).toHaveBeenNthCalledWith(1, 'get_project_config', {
       projectId: 'P-1',
-      key: 'handoff_notes_workflow_enabled',
-    })
-    expect(invoke).toHaveBeenNthCalledWith(2, 'get_project_config', {
-      projectId: 'P-1',
-      key: 'handoff_notes_template',
+      key: 'start_prompt_contributions',
     })
 
+    invoke.mockResolvedValueOnce(null)
     invoke.mockResolvedValueOnce(undefined)
-    invoke.mockResolvedValueOnce(undefined)
-    invoke.mockResolvedValueOnce('true')
-    invoke.mockResolvedValueOnce('## Plugin Template')
 
-    await expect(invokePluginHostCommand('configureHandoffNotesWorkflow', {
+    await expect(invokePluginHostCommand('configureStartPromptContribution', {
       projectId: 'P-1',
+      id: 'handoff-notes-workflow',
       enabled: true,
-      template: '## Plugin Template',
+      content: '<openforge_task_management>Task {{taskId}}</openforge_task_management>',
+      order: 5,
       provider: 'codex',
       agent: 'ignored',
       permissionMode: 'trusted',
-    })).resolves.toEqual({
-      projectId: 'P-1',
+    })).resolves.toEqual([{
+      id: 'handoff-notes-workflow',
       enabled: true,
-      template: '## Plugin Template',
+      content: '<openforge_task_management>Task {{taskId}}</openforge_task_management>',
+      order: 5,
+    }])
+    expect(invoke).toHaveBeenNthCalledWith(2, 'get_project_config', {
+      projectId: 'P-1',
+      key: 'start_prompt_contributions',
     })
     expect(invoke).toHaveBeenNthCalledWith(3, 'set_project_config', {
       projectId: 'P-1',
-      key: 'handoff_notes_workflow_enabled',
-      value: 'true',
-    })
-    expect(invoke).toHaveBeenNthCalledWith(4, 'set_project_config', {
-      projectId: 'P-1',
-      key: 'handoff_notes_template',
-      value: '## Plugin Template',
+      key: 'start_prompt_contributions',
+      value: JSON.stringify([{
+        id: 'handoff-notes-workflow',
+        enabled: true,
+        content: '<openforge_task_management>Task {{taskId}}</openforge_task_management>',
+        order: 5,
+      }]),
     })
     expect(invoke).not.toHaveBeenCalledWith('start_implementation', expect.anything())
   })

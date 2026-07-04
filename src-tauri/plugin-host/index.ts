@@ -1,7 +1,7 @@
 import { createInterface } from 'node:readline'
 import { pathToFileURL } from 'node:url'
 import { validateSchemaValue } from '@openforge/plugin-runtime/commandValidation'
-import type { AgentSession, BoardStatus, CommandDescriptor, CommandRegistration, ConfigureHandoffNotesWorkflowRequest, CreateTaskRequest, FileContent, FileEntry, HandoffNotesWorkflowConfig, ImplementationRun, JsonValue, OpenForgePackageMetadata, PluginStorage, Project, ProjectAttention, StartTaskImplementationRequest, SubscriptionSink, Task, TaskWorkspaceInfo } from '@openforge/plugin-sdk'
+import type { AgentSession, BoardStatus, CommandDescriptor, CommandRegistration, ConfigureStartPromptContributionRequest, CreateTaskRequest, FileContent, FileEntry, ImplementationRun, JsonValue, OpenForgePackageMetadata, PluginStorage, Project, ProjectAttention, StartPromptContribution, StartTaskImplementationRequest, SubscriptionSink, Task, TaskWorkspaceInfo } from '@openforge/plugin-sdk'
 import type { BackendMethodRegistration, BackendOpenForgeAPI, BackendPlugin, BackendPluginContext, BackgroundServiceRegistration, Disposable, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/backend'
 
 type JsonRpcId = number | null | undefined
@@ -758,8 +758,8 @@ export class PluginHostRuntime {
         create: async (request: CreateTaskRequest) => await hostCallback<Task>('openforge.tasks.create', objectCallbackParams(request)),
         updateSummary: async (taskId: string, summary: string) => { await hostCallback<void>('openforge.tasks.updateSummary', { taskId, summary }) },
         updateStatus: async (taskId: string, status: BoardStatus) => { await hostCallback<void>('openforge.tasks.updateStatus', { taskId, status }) },
-        getHandoffNotesWorkflow: async (projectId: string) => await hostCallback<HandoffNotesWorkflowConfig>('openforge.tasks.getHandoffNotesWorkflow', { projectId }),
-        configureHandoffNotesWorkflow: async (request: ConfigureHandoffNotesWorkflowRequest) => await hostCallback<HandoffNotesWorkflowConfig>('openforge.tasks.configureHandoffNotesWorkflow', objectCallbackParams(request)),
+        listStartPromptContributions: async (projectId: string) => await hostCallback<StartPromptContribution[]>('openforge.tasks.listStartPromptContributions', { projectId }),
+        configureStartPromptContribution: async (request: ConfigureStartPromptContributionRequest) => await hostCallback<StartPromptContribution[]>('openforge.tasks.configureStartPromptContribution', objectCallbackParams(request)),
         startImplementation: async (request: StartTaskImplementationRequest) => normalizeImplementationRun(await hostCallback<unknown>('openforge.tasks.startImplementation', objectCallbackParams(request))),
         getWorkspace: async (taskId: string) => await hostCallback<TaskWorkspaceInfo | null>('openforge.tasks.getWorkspace', { taskId }),
         getLatestSession: async (taskId: string) => await hostCallback<AgentSession | null>('openforge.tasks.getLatestSession', { taskId }),

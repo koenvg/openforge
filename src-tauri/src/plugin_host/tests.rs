@@ -564,30 +564,34 @@ async fn plugin_host_task_callbacks_create_start_and_read_state() {
         .expect("task status callback"),
         Value::Null
     );
-    let workflow = host
+    let contributions = host
         .handle_host_callback(
-            "openforge.tasks.configureHandoffNotesWorkflow",
+            "openforge.tasks.configureStartPromptContribution",
             &json!({
                 "projectId": project.id,
+                "id": "backend-owned",
                 "enabled": true,
-                "template": "## Plugin Brief\n- backend owned"
+                "content": "## Plugin Brief\n- backend owned",
+                "order": 5
             }),
         )
         .await
-        .expect("configure handoff workflow callback");
-    assert_eq!(workflow["projectId"], project.id);
-    assert_eq!(workflow["enabled"], true);
-    assert_eq!(workflow["template"], "## Plugin Brief\n- backend owned");
+        .expect("configure start prompt contribution callback");
+    assert_eq!(contributions[0]["id"], "backend-owned");
+    assert_eq!(contributions[0]["enabled"], true);
+    assert_eq!(
+        contributions[0]["content"],
+        "## Plugin Brief\n- backend owned"
+    );
 
-    let workflow = host
+    let contributions = host
         .handle_host_callback(
-            "openforge.tasks.getHandoffNotesWorkflow",
+            "openforge.tasks.listStartPromptContributions",
             &json!({ "projectId": project.id }),
         )
         .await
-        .expect("get handoff workflow callback");
-    assert_eq!(workflow["enabled"], true);
-    assert_eq!(workflow["template"], "## Plugin Brief\n- backend owned");
+        .expect("list start prompt contributions callback");
+    assert_eq!(contributions[0]["id"], "backend-owned");
 
     {
         let db_state = app

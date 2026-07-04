@@ -94,11 +94,11 @@ impl PluginHost {
             "openforge.tasks.create" => self.create_task_for_host(params),
             "openforge.tasks.updateSummary" => self.update_task_summary_for_host(params),
             "openforge.tasks.updateStatus" => self.update_task_status_for_host(params).await,
-            "openforge.tasks.getHandoffNotesWorkflow" => {
-                self.get_handoff_notes_workflow_for_host(params)
+            "openforge.tasks.listStartPromptContributions" => {
+                self.list_start_prompt_contributions_for_host(params)
             }
-            "openforge.tasks.configureHandoffNotesWorkflow" => {
-                self.configure_handoff_notes_workflow_for_host(params)
+            "openforge.tasks.configureStartPromptContribution" => {
+                self.configure_start_prompt_contribution_for_host(params)
             }
             "openforge.tasks.startImplementation" => {
                 self.start_task_implementation_for_host(params).await

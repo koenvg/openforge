@@ -1,5 +1,5 @@
 import { get } from 'svelte/store'
-import type { BackendReadyState, ConfigureHandoffNotesWorkflowRequest, HandoffNotesWorkflowConfig, CreateTaskRequest, ImplementationRun, StartTaskImplementationRequest } from '@openforge/plugin-sdk'
+import type { BackendReadyState, ConfigureStartPromptContributionRequest, CreateTaskRequest, ImplementationRun, StartPromptContribution, StartTaskImplementationRequest } from '@openforge/plugin-sdk'
 import {
   createTask,
   fsReadDir,
@@ -42,8 +42,8 @@ import {
 
 const STATIC_APP_VIEWS = new Set<AppView>(['board', 'settings', 'global_settings', 'files'])
 const pluginBackendReadyStates = new Map<string, BackendReadyState>()
-const HANDOFF_NOTES_WORKFLOW_ENABLED_KEY = 'handoff_notes_workflow_enabled'
-const HANDOFF_NOTES_TEMPLATE_KEY = 'handoff_notes_template'
+const MAX_START_PROMPT_CONTRIBUTION_LENGTH = 16_000
+const START_PROMPT_CONTRIBUTIONS_KEY = 'start_prompt_contributions'
 
 function isAppView(value: unknown): value is AppView {
   return typeof value === 'string' && (STATIC_APP_VIEWS.has(value as AppView) || isPluginViewKey(value))
@@ -96,35 +96,61 @@ function normalizeImplementationRun(status: Awaited<ReturnType<typeof startImple
   }
 }
 
-async function getHandoffNotesWorkflowForProject(projectId: string): Promise<HandoffNotesWorkflowConfig> {
-  if (!projectId) {
-    throw new Error('handoff notes workflow config requires projectId')
-  }
-
-  const [enabled, template] = await Promise.all([
-    getProjectConfig(projectId, HANDOFF_NOTES_WORKFLOW_ENABLED_KEY),
-    getProjectConfig(projectId, HANDOFF_NOTES_TEMPLATE_KEY),
-  ])
-
-  return {
-    projectId,
-    enabled: enabled === 'true',
-    template: typeof template === 'string' && template.length > 0 ? template : null,
+function normalizeStartPromptContributions(value: string | null): StartPromptContribution[] {
+  if (!value) return []
+  try {
+    const parsed = JSON.parse(value)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter((entry): entry is StartPromptContribution => entry && typeof entry === 'object' && typeof entry.id === 'string' && typeof entry.content === 'string')
+      .map((entry) => ({
+        id: entry.id,
+        enabled: entry.enabled !== false,
+        content: entry.content,
+        order: typeof entry.order === 'number' && Number.isFinite(entry.order) ? entry.order : 0,
+      }))
+  } catch {
+    return []
   }
 }
 
-async function configureHandoffNotesWorkflowForProject(request: ConfigureHandoffNotesWorkflowRequest): Promise<HandoffNotesWorkflowConfig> {
+async function listStartPromptContributionsForProject(projectId: string): Promise<StartPromptContribution[]> {
+  if (!projectId) {
+    throw new Error('start prompt contributions require projectId')
+  }
+
+  return normalizeStartPromptContributions(await getProjectConfig(projectId, START_PROMPT_CONTRIBUTIONS_KEY))
+}
+
+async function configureStartPromptContributionForProject(request: ConfigureStartPromptContributionRequest): Promise<StartPromptContribution[]> {
   const projectId = request.projectId
   if (!projectId) {
-    throw new Error('handoff notes workflow config requires projectId')
+    throw new Error('start prompt contributions require projectId')
+  }
+  if (!request.id?.trim()) {
+    throw new Error('start prompt contribution requires id')
+  }
+  if (typeof request.content !== 'string') {
+    throw new Error('start prompt contribution requires string content')
+  }
+  if (request.content && request.content.length > MAX_START_PROMPT_CONTRIBUTION_LENGTH) {
+    throw new Error(`start prompt contribution content exceeds ${MAX_START_PROMPT_CONTRIBUTION_LENGTH} characters`)
   }
 
-  await setProjectConfig(projectId, HANDOFF_NOTES_WORKFLOW_ENABLED_KEY, request.enabled ? 'true' : 'false')
-  if (request.template !== undefined) {
-    await setProjectConfig(projectId, HANDOFF_NOTES_TEMPLATE_KEY, request.template?.trim() ? request.template : '')
+  const existing = await listStartPromptContributionsForProject(projectId)
+  const contribution: StartPromptContribution = {
+    id: request.id.trim(),
+    enabled: request.enabled !== false,
+    content: request.content,
+    order: typeof request.order === 'number' && Number.isFinite(request.order) ? request.order : 0,
   }
+  const next = [
+    ...existing.filter((entry) => entry.id !== contribution.id),
+    contribution,
+  ].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.id.localeCompare(b.id))
 
-  return getHandoffNotesWorkflowForProject(projectId)
+  await setProjectConfig(projectId, START_PROMPT_CONTRIBUTIONS_KEY, JSON.stringify(next))
+  return next
 }
 
 async function startTaskImplementationFromPluginRequest(request: StartTaskImplementationRequest): Promise<ImplementationRun> {
@@ -167,8 +193,8 @@ export function createPluginRuntimeHost(pluginId: string) {
     createTask: (request: CreateTaskRequest) => createTaskFromPluginRequest(request),
     updateTaskSummary: (taskId: string, summary: string) => updateTaskSummary(taskId, summary),
     updateTaskStatus: (taskId: string, status: Parameters<typeof updateTaskStatus>[1]) => updateTaskStatus(taskId, status),
-    getHandoffNotesWorkflow: (projectId: string) => getHandoffNotesWorkflowForProject(projectId),
-    configureHandoffNotesWorkflow: (request: ConfigureHandoffNotesWorkflowRequest) => configureHandoffNotesWorkflowForProject(request),
+    listStartPromptContributions: (projectId: string) => listStartPromptContributionsForProject(projectId),
+    configureStartPromptContribution: (request: ConfigureStartPromptContributionRequest) => configureStartPromptContributionForProject(request),
     startTaskImplementation: (request: StartTaskImplementationRequest) => startTaskImplementationFromPluginRequest(request),
     getTaskWorkspace: (taskId: string) => getTaskWorkspace(taskId),
     getLatestSession: (taskId: string) => getLatestSession(taskId),
@@ -315,14 +341,20 @@ export async function invokePluginHostCommand(command: string, payload: unknown)
         },
       )
     }
-    case 'getHandoffNotesWorkflow':
-      return getHandoffNotesWorkflowForProject(String(commandPayload?.projectId ?? ''))
-    case 'configureHandoffNotesWorkflow':
-      return configureHandoffNotesWorkflowForProject({
+    case 'listStartPromptContributions':
+      return listStartPromptContributionsForProject(String(commandPayload?.projectId ?? ''))
+    case 'configureStartPromptContribution': {
+      if (typeof commandPayload?.content !== 'string') {
+        throw new Error('start prompt contribution requires string content')
+      }
+      return configureStartPromptContributionForProject({
         projectId: String(commandPayload?.projectId ?? ''),
-        enabled: commandPayload?.enabled === true,
-        template: typeof commandPayload?.template === 'string' || commandPayload?.template === null ? commandPayload.template : undefined,
+        id: String(commandPayload?.id ?? ''),
+        enabled: commandPayload?.enabled !== false,
+        content: commandPayload.content,
+        order: typeof commandPayload?.order === 'number' ? commandPayload.order : undefined,
       })
+    }
     case 'startImplementation':
       return startTaskImplementationFromPluginRequest({ taskId: String(commandPayload?.taskId ?? '') })
     case 'navigate': {

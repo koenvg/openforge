@@ -409,20 +409,20 @@ async fn start_implementation_injects_plugin_configured_handoff_workflow() {
             .expect("create project");
         db.set_project_config(&project.id, "ai_provider", "pi")
             .expect("set provider");
+        let contribution = crate::agent_lifecycle::StartPromptContribution {
+            id: "plugin-handoff-workflow".to_string(),
+            enabled: true,
+            content: "<plugin_handoff>Task {{taskId}}\n## Plugin Template\n- Preserve plugin-owned reviewer brief</plugin_handoff>".to_string(),
+            order: 0,
+        };
         db.set_project_config(
             &project.id,
-            crate::agent_lifecycle::HANDOFF_NOTES_WORKFLOW_ENABLED_CONFIG_KEY,
-            "true",
+            crate::agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY,
+            &serde_json::to_string(&vec![contribution]).expect("serialize contribution"),
         )
-        .expect("enable handoff workflow");
-        db.set_project_config(
-            &project.id,
-            crate::agent_lifecycle::HANDOFF_NOTES_TEMPLATE_CONFIG_KEY,
-            "## Plugin Template\n- Preserve plugin-owned reviewer brief",
-        )
-        .expect("set handoff template");
+        .expect("set start prompt contribution");
         db.create_task_with_worktree_source(
-            "Start with plugin handoff workflow",
+            "Start with plugin prompt contribution",
             "backlog",
             Some(&project.id),
             None,
@@ -445,12 +445,13 @@ async fn start_implementation_injects_plugin_configured_handoff_workflow() {
     let log = wait_for_provider_log_record(
         &sandbox.log_path,
         "pi",
-        "Start with plugin handoff workflow",
+        "Start with plugin prompt contribution",
     )
     .await;
     assert!(
-        log.contains("<openforge_task_management>"),
-        "handoff workflow should be injected when project config enables it, got provider log: {log}"
+        log.contains("<openforge_start_prompt_contribution id=\"plugin-handoff-workflow\">")
+            && log.contains("Task "),
+        "plugin start prompt contribution should be injected, got provider log: {log}"
     );
     assert!(
         log.contains("## Plugin Template"),

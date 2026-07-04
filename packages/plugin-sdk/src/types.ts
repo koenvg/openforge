@@ -332,17 +332,17 @@ export interface CreateTaskRequest {
   labelNames?: string[]
 }
 
-export interface HandoffNotesWorkflowConfig {
-  projectId: string
+export interface StartPromptContribution {
+  id: string
   enabled: boolean
-  template: string | null
+  /** Prompt text injected before OpenForge's task prompt. The host substitutes {{taskId}} and {{task_id}}. */
+  content: string
+  /** Lower values are injected first. Defaults to 0. */
+  order?: number
 }
 
-export interface ConfigureHandoffNotesWorkflowRequest {
+export interface ConfigureStartPromptContributionRequest extends StartPromptContribution {
   projectId: string
-  enabled: boolean
-  /** Template markdown injected into the Handoff Notes Workflow prompt when enabled. Null or blank falls back to OpenForge's default template. */
-  template?: string | null
 }
 
 export interface StartTaskImplementationRequest {
@@ -361,8 +361,8 @@ export interface TasksAPI {
   create(request: CreateTaskRequest): Promise<Task>
   updateSummary(taskId: string, summary: string): Promise<void>
   updateStatus(taskId: string, status: WritableBoardStatus): Promise<void>
-  getHandoffNotesWorkflow(projectId: string): Promise<HandoffNotesWorkflowConfig>
-  configureHandoffNotesWorkflow(request: ConfigureHandoffNotesWorkflowRequest): Promise<HandoffNotesWorkflowConfig>
+  listStartPromptContributions(projectId: string): Promise<StartPromptContribution[]>
+  configureStartPromptContribution(request: ConfigureStartPromptContributionRequest): Promise<StartPromptContribution[]>
   startImplementation(request: StartTaskImplementationRequest): Promise<ImplementationRun>
   getWorkspace(taskId: string): Promise<TaskWorkspaceInfo | null>
   getLatestSession(taskId: string): Promise<AgentSession | null>

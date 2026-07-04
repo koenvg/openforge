@@ -20,20 +20,20 @@ import type {
   BackendReadyState,
   CommandDescriptor,
   CommandShortcutMetadata,
-  ConfigureHandoffNotesWorkflowRequest,
+  ConfigureStartPromptContributionRequest,
   CreateTaskRequest,
   FileContent,
   FileEntry,
   ImplementationRun,
   JsonSchema,
   OpenForgeContextSnapshot,
-  HandoffNotesWorkflowConfig,
   OpenForgeNavigationRequest,
   OpenForgeNavigationSnapshot,
   OpenForgePackageMetadata,
   PluginStorage,
   Project,
   ProjectAttention,
+  StartPromptContribution,
   StartTaskImplementationRequest,
   SubscriptionSink,
   Task,
@@ -55,8 +55,8 @@ export type RuntimeHostBridge = {
   createTask?(request: CreateTaskRequest): Promise<Task>
   updateTaskSummary?(taskId: string, summary: string): Promise<void>
   updateTaskStatus?(taskId: string, status: WritableBoardStatus): Promise<void>
-  getHandoffNotesWorkflow?(projectId: string): Promise<HandoffNotesWorkflowConfig>
-  configureHandoffNotesWorkflow?(request: ConfigureHandoffNotesWorkflowRequest): Promise<HandoffNotesWorkflowConfig>
+  listStartPromptContributions?(projectId: string): Promise<StartPromptContribution[]>
+  configureStartPromptContribution?(request: ConfigureStartPromptContributionRequest): Promise<StartPromptContribution[]>
   startTaskImplementation?(request: StartTaskImplementationRequest): Promise<ImplementationRun>
   getTaskWorkspace?(taskId: string): Promise<TaskWorkspaceInfo | null>
   getLatestSession?(taskId: string): Promise<AgentSession | null>
@@ -551,8 +551,8 @@ class RuntimeContributionRegistry {
         create: async (request) => this.host.createTask ? this.host.createTask(request) : unavailableCapability('tasks.create'),
         updateSummary: async (taskId, summary) => this.host.updateTaskSummary ? this.host.updateTaskSummary(taskId, summary) : unavailableCapability('tasks.updateSummary'),
         updateStatus: async (taskId, status) => this.host.updateTaskStatus ? this.host.updateTaskStatus(taskId, status) : unavailableCapability('tasks.updateStatus'),
-        getHandoffNotesWorkflow: async (projectId) => this.host.getHandoffNotesWorkflow ? this.host.getHandoffNotesWorkflow(projectId) : unavailableCapability('tasks.getHandoffNotesWorkflow'),
-        configureHandoffNotesWorkflow: async (request) => this.host.configureHandoffNotesWorkflow ? this.host.configureHandoffNotesWorkflow(request) : unavailableCapability('tasks.configureHandoffNotesWorkflow'),
+        listStartPromptContributions: async (projectId) => this.host.listStartPromptContributions ? this.host.listStartPromptContributions(projectId) : unavailableCapability('tasks.listStartPromptContributions'),
+        configureStartPromptContribution: async (request) => this.host.configureStartPromptContribution ? this.host.configureStartPromptContribution(request) : unavailableCapability('tasks.configureStartPromptContribution'),
         startImplementation: async (request) => this.host.startTaskImplementation ? this.host.startTaskImplementation(request) : unavailableCapability('tasks.startImplementation'),
         getWorkspace: async (taskId) => this.host.getTaskWorkspace ? this.host.getTaskWorkspace(taskId) : unavailableCapability('tasks.getWorkspace'),
         getLatestSession: async (taskId) => this.host.getLatestSession ? this.host.getLatestSession(taskId) : unavailableCapability('tasks.getLatestSession'),

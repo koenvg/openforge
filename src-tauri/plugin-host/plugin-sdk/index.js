@@ -330,14 +330,9 @@ var TestingOpenForgeRegistryFake = class {
 			subscriptions
 		};
 	}
-	handoffNotesWorkflowConfig(projectId) {
-		const enabled = this.config.get(`project:${projectId}:handoff_notes_workflow_enabled`);
-		const template = this.config.get(`project:${projectId}:handoff_notes_template`);
-		return {
-			projectId,
-			enabled: enabled === true || enabled === "true",
-			template: typeof template === "string" && template.length > 0 ? template : null
-		};
+	startPromptContributions(projectId) {
+		const raw = this.config.get(`project:${projectId}:start_prompt_contributions`);
+		return Array.isArray(raw) ? raw.filter((entry) => Boolean(entry) && typeof entry === "object" && typeof entry.id === "string" && typeof entry.content === "string") : [];
 	}
 	createCommonApi() {
 		return {
@@ -394,12 +389,12 @@ var TestingOpenForgeRegistryFake = class {
 						status
 					});
 				},
-				getHandoffNotesWorkflow: async (projectId) => this.handoffNotesWorkflowConfig(projectId),
-				configureHandoffNotesWorkflow: async (request) => {
-					this.calls.handoffNotesWorkflowConfigurations.push(request);
-					this.config.set(`project:${request.projectId}:handoff_notes_workflow_enabled`, request.enabled);
-					if (request.template !== void 0) this.config.set(`project:${request.projectId}:handoff_notes_template`, request.template ?? "");
-					return this.handoffNotesWorkflowConfig(request.projectId);
+				listStartPromptContributions: async (projectId) => this.startPromptContributions(projectId),
+				configureStartPromptContribution: async (request) => {
+					this.calls.startPromptContributionConfigurations.push(request);
+					const next = [...this.startPromptContributions(request.projectId).filter((entry) => entry.id !== request.id), request].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.id.localeCompare(b.id));
+					this.config.set(`project:${request.projectId}:start_prompt_contributions`, next);
+					return next;
 				},
 				startImplementation: async (request) => {
 					this.calls.taskImplementationStarts.push(request);
@@ -767,7 +762,7 @@ function createTestingCalls() {
 		navigationRequests: [],
 		notify: [],
 		taskCreations: [],
-		handoffNotesWorkflowConfigurations: [],
+		startPromptContributionConfigurations: [],
 		taskImplementationStarts: [],
 		taskSummaryUpdates: [],
 		taskStatusUpdates: [],

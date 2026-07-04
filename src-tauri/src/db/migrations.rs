@@ -1,4 +1,4 @@
-use rusqlite::{Connection, Result};
+use rusqlite::{Connection, OptionalExtension, Result};
 use rusqlite_migration::{Migrations, M};
 
 macro_rules! define_migrations {
@@ -1150,9 +1150,9 @@ CREATE TABLE IF NOT EXISTS roadmap_repo_config (
         Ok(())
     }),
     // Backward compatibility for databases that already had per-task
-    // `handoff_notes_enabled`: keep those existing enabled tasks receiving the
-    // workflow prompt by enabling the new project-level gate for their projects.
-    // New projects remain opt-in until a trusted plugin configures the workflow.
+    // `handoff_notes_enabled`: preserve their prompt behavior by migrating that
+    // opinionated workflow into the generic start-prompt contribution config.
+    // New projects remain opt-in until a trusted plugin configures a contribution.
     M::up_with_hook("", |tx| {
         let tasks_table_exists: bool = tx
             .query_row(
@@ -1180,14 +1180,8 @@ CREATE TABLE IF NOT EXISTS roadmap_repo_config (
             )
             .unwrap_or(false);
         if has_column {
-            tx.execute(
-                "INSERT OR IGNORE INTO project_config (project_id, key, value)
-                 SELECT DISTINCT project_id, 'handoff_notes_workflow_enabled', 'true'
-                 FROM tasks
-                 WHERE handoff_notes_enabled = 1 AND project_id IS NOT NULL AND project_id != ''",
-                [],
-            )
-            .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            backfill_handoff_notes_start_prompt_contributions(tx)
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
         }
         Ok(())
     }),
@@ -1548,6 +1542,51 @@ pub(super) fn ensure_labels_columns(conn: &Connection) -> Result<()> {
 
     Ok(())
 }
+fn legacy_handoff_notes_contribution_json(project_template: Option<&str>) -> Result<String> {
+    let contribution = crate::agent_lifecycle::StartPromptContribution {
+        id: crate::agent_lifecycle::HANDOFF_NOTES_WORKFLOW_CONTRIBUTION_ID.to_string(),
+        enabled: true,
+        content: crate::agent_lifecycle::legacy_handoff_notes_start_prompt_content(
+            project_template,
+        ),
+        order: 0,
+    };
+    serde_json::to_string(&vec![contribution])
+        .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
+}
+
+fn backfill_handoff_notes_start_prompt_contributions(conn: &Connection) -> Result<()> {
+    let mut statement = conn.prepare(
+        "SELECT DISTINCT project_id
+         FROM tasks
+         WHERE handoff_notes_enabled = 1 AND project_id IS NOT NULL AND project_id != ''",
+    )?;
+    let project_ids = statement
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<Result<Vec<_>>>()?;
+
+    for project_id in project_ids {
+        let template = conn
+            .query_row(
+                "SELECT value FROM project_config WHERE project_id = ?1 AND key = 'handoff_notes_template'",
+                [&project_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        let contribution_json = legacy_handoff_notes_contribution_json(template.as_deref())?;
+        conn.execute(
+            "INSERT OR IGNORE INTO project_config (project_id, key, value) VALUES (?1, ?2, ?3)",
+            rusqlite::params![
+                &project_id,
+                crate::agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY,
+                contribution_json
+            ],
+        )?;
+    }
+
+    Ok(())
+}
+
 pub(super) fn ensure_handoff_notes_workflow_backfill(conn: &Connection) -> Result<()> {
     let tasks_table_exists: bool = conn.query_row(
         "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='tasks'",
@@ -1570,7 +1609,7 @@ pub(super) fn ensure_handoff_notes_workflow_backfill(conn: &Connection) -> Resul
 
     let already_applied = conn
         .query_row(
-            "SELECT value FROM config WHERE key = 'handoff_notes_workflow_backfill_applied'",
+            "SELECT value FROM config WHERE key = 'start_prompt_contributions_backfill_applied'",
             [],
             |row| row.get::<_, String>(0),
         )
@@ -1586,16 +1625,10 @@ pub(super) fn ensure_handoff_notes_workflow_backfill(conn: &Connection) -> Resul
         |row| row.get(0),
     )?;
     if has_column {
-        conn.execute(
-            "INSERT OR IGNORE INTO project_config (project_id, key, value)
-             SELECT DISTINCT project_id, 'handoff_notes_workflow_enabled', 'true'
-             FROM tasks
-             WHERE handoff_notes_enabled = 1 AND project_id IS NOT NULL AND project_id != ''",
-            [],
-        )?;
+        backfill_handoff_notes_start_prompt_contributions(conn)?;
     }
     conn.execute(
-        "INSERT OR REPLACE INTO config (key, value) VALUES ('handoff_notes_workflow_backfill_applied', 'true')",
+        "INSERT OR REPLACE INTO config (key, value) VALUES ('start_prompt_contributions_backfill_applied', 'true')",
         [],
     )?;
 
@@ -1986,8 +2019,8 @@ mod tests {
             .expect("Failed to count config rows");
 
         assert_eq!(
-            config_count, 7,
-            "All 7 default config values should be inserted"
+            config_count, 8,
+            "Default config values and one-time migration markers should be inserted"
         );
 
         let jira_columns: i32 = conn
@@ -2506,6 +2539,11 @@ mod tests {
                 [],
             )
             .expect("insert legacy task");
+            conn.execute(
+                "INSERT INTO config (key, value) VALUES ('handoff_notes_workflow_backfill_applied', 'true')",
+                [],
+            )
+            .expect("insert legacy marker from old backfill");
         }
 
         let db = Database::new(path.clone()).expect("Database::new");
@@ -2513,12 +2551,12 @@ mod tests {
         let conn = conn.lock().unwrap();
         let legacy_enabled: String = conn
             .query_row(
-                "SELECT value FROM project_config WHERE project_id = 'P-legacy' AND key = 'handoff_notes_workflow_enabled'",
+                "SELECT value FROM project_config WHERE project_id = 'P-legacy' AND key = 'start_prompt_contributions'",
                 [],
                 |row| row.get(0),
             )
             .expect("legacy project should be backfilled");
-        assert_eq!(legacy_enabled, "true");
+        assert!(legacy_enabled.contains("handoff-notes-workflow"));
 
         conn.execute(
             "INSERT INTO tasks (id, initial_prompt, project_id, handoff_notes_enabled) VALUES ('T-new', 'New task', 'P-new', 1)",
@@ -2528,7 +2566,7 @@ mod tests {
         ensure_handoff_notes_workflow_backfill(&conn).expect("rerun backfill");
         let new_project_count: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM project_config WHERE project_id = 'P-new' AND key = 'handoff_notes_workflow_enabled'",
+                "SELECT COUNT(*) FROM project_config WHERE project_id = 'P-new' AND key = 'start_prompt_contributions'",
                 [],
                 |row| row.get(0),
             )
