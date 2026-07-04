@@ -48,11 +48,26 @@ describe('package build scripts', () => {
     }
   })
 
+  it('exposes the deterministic Electron smoke target from package scripts', async () => {
+    const packageJson = await readJson('package.json')
+
+    expect(packageJson.scripts['test:electron-smoke']).toBe('node scripts/electron-smoke-test.mjs')
+  })
+
   it('runs built-in plugin builds in CI so missing package exports fail the pipeline', async () => {
     const ciWorkflow = await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8')
 
     expect(ciWorkflow).toContain('id: plugin_build')
     expect(ciWorkflow).toContain('pnpm build:plugins 2>&1 | tee /tmp/plugin-build.log')
     expect(ciWorkflow).toContain("steps.plugin_build.outputs.exit_code != '0'")
+  })
+
+  it('runs the Electron smoke target on macos CI and uploads smoke failure artifacts', async () => {
+    const ciWorkflow = await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8')
+
+    expect(ciWorkflow).toContain('electron_smoke:')
+    expect(ciWorkflow).toContain('runs-on: macos-14')
+    expect(ciWorkflow).toContain('pnpm test:electron-smoke')
+    expect(ciWorkflow).toContain('path: test-results/electron-smoke')
   })
 })

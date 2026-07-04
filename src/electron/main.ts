@@ -14,8 +14,12 @@ function workspaceRoot(): string {
   return join(currentDir(), '..')
 }
 
+const suppressNativeDialogs = process.env.OPENFORGE_ELECTRON_SMOKE_TEST === '1'
+
 const failureReporter = new ElectronFailureReporterAdapter({
-  showErrorBox: (title, content) => dialog.showErrorBox(title, content),
+  showErrorBox: suppressNativeDialogs
+    ? (title, content) => console.error(`[electron:smoke] suppressed native dialog: ${title}\n${content}`)
+    : (title, content) => dialog.showErrorBox(title, content),
 })
 
 const adapter = createElectronBootAdapter({

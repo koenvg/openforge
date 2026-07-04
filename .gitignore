@@ -3,6 +3,7 @@ src-tauri/target/
 dist/
 dist-electron/
 node_modules/
+test-results/
 .astro/
 package-lock.json
 bun.lock

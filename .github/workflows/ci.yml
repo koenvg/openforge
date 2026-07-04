@@ -92,6 +92,50 @@ jobs:
         if: steps.plugin_build.outputs.exit_code != '0' || steps.typecheck.outputs.exit_code != '0' || steps.lint.outputs.exit_code != '0' || steps.tests.outputs.exit_code != '0'
         run: exit 1
 
+  electron_smoke:
+    name: Electron Smoke
+    timeout-minutes: 40
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Resolve backend layout
+        id: backend-layout
+        run: echo "backend-crate-root=$(node scripts/rust-sidecar-layout.mjs backend-crate-root)" >> "$GITHUB_OUTPUT"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ steps.backend-layout.outputs.backend-crate-root }} -> target
+          cache-bin: false
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Run Electron smoke
+        run: pnpm test:electron-smoke
+
+      - name: Upload Electron smoke failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-smoke-artifacts
+          path: test-results/electron-smoke
+          retention-days: 3
+          if-no-files-found: ignore
+
   rust:
     name: Rust Tests
     timeout-minutes: 10

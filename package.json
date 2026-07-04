@@ -18,6 +18,7 @@
     "electron:package": "node scripts/electron-package.mjs",
     "electron:install": "bash scripts/install-electron-mac.sh",
     "electron:dev": "node scripts/electron-dev.mjs",
+    "test:electron-smoke": "node scripts/electron-smoke-test.mjs",
     "build": "pnpm build:plugin-sdk-runtime && vite build",
     "lint": "node scripts/check-svelte-unused-imports.mjs",
     "preview": "vite preview",
