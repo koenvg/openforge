@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/svelte'
+import GlobalPluginSettingsPanel from './GlobalPluginSettingsPanel.svelte'
 import PluginSettingsPanel from './PluginSettingsPanel.svelte'
 import { installedPlugins, enabledPluginIds, error as pluginLoadError } from '../../lib/plugin/pluginStore'
 import {
@@ -14,7 +15,6 @@ import {
 import { writeClipboardText } from '../../lib/ipc'
 import type { PluginEntry } from '../../lib/plugin/types'
 
-// Mock the dependencies
 vi.mock('../../lib/plugin/pluginStore', () => {
   const { writable } = require('svelte/store')
   return {
@@ -61,41 +61,153 @@ describe('PluginSettingsPanel', () => {
   beforeEach(() => {
     cleanup()
     vi.clearAllMocks()
-    
-    // Reset stores
+
     installedPlugins.set(new Map())
     enabledPluginIds.set(new Set())
     pluginLoadError.set(null)
   })
 
-  it('renders empty state when no plugins installed', () => {
+  it('renders project empty state when no app-wide plugins are installed', () => {
     render(PluginSettingsPanel, { projectId: 'proj-1' })
+    expect(screen.getByText('Project plugins')).toBeTruthy()
+    expect(screen.getByText('Enable installed plugins for this project.')).toBeTruthy()
+    expect(screen.getByText('No plugins installed app-wide')).toBeTruthy()
+  })
+
+  it('renders only per-project enablement metadata for installed plugins', () => {
+    installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
+
+    render(PluginSettingsPanel, { projectId: 'proj-1' })
+
+    expect(screen.getByText('Test Plugin')).toBeTruthy()
+    expect(screen.getByText('A test plugin')).toBeTruthy()
+    expect(screen.getByText('v1.0.0')).toBeTruthy()
+    expect(screen.queryByText('Installed app-wide')).toBeNull()
+    expect(screen.getAllByText('Disabled').length).toBeGreaterThan(0)
+    expect(screen.queryByText('test-plugin')).toBeNull()
+    expect(screen.queryByText('npm:@acme/test-plugin@1.0.0')).toBeNull()
+    expect(screen.queryByText('read:files')).toBeNull()
+  })
+
+  it('uses native disabled semantics for project enablement switches when disabled', () => {
+    installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
+
+    render(PluginSettingsPanel, { projectId: 'proj-1', disabled: true })
+
+    expect((screen.getByPlaceholderText('Search plugins') as HTMLInputElement).disabled).toBe(true)
+    expect((screen.getByRole('switch', { name: 'Enable for this project: Test Plugin' }) as HTMLInputElement).disabled).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Install package' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Reload plugin: Test Plugin' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Uninstall plugin: Test Plugin' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Copy diagnostics: Test Plugin' })).toBeNull()
+  })
+
+  it('enables and disables plugins through explicit project controls', async () => {
+    installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
+
+    render(PluginSettingsPanel, { projectId: 'proj-1' })
+
+    await fireEvent.click(screen.getByRole('switch', { name: 'Enable for this project: Test Plugin' }))
+    expect(enablePluginForProject).toHaveBeenCalledWith('proj-1', 'test-plugin')
+    expect(installPluginFromNpm).not.toHaveBeenCalled()
+
+    enabledPluginIds.set(new Set(['test-plugin']))
+    await fireEvent.click(await screen.findByRole('switch', { name: 'Disable for this project: Test Plugin' }))
+    expect(disablePluginForProject).toHaveBeenCalledWith('proj-1', 'test-plugin')
+  })
+
+  it('shows load and project enablement errors', async () => {
+    vi.mocked(enablePluginForProject).mockRejectedValue(new Error('enable failed'))
+    pluginLoadError.set('Failed to list plugins')
+    installedPlugins.set(new Map([['test-plugin', { ...mockPlugin, state: 'error', error: 'activation failed' }]]))
+
+    render(PluginSettingsPanel, { projectId: 'proj-1' })
+
+    expect(screen.getByText('Failed to list plugins')).toBeTruthy()
+    expect(screen.getByText('activation failed')).toBeTruthy()
+
+    await fireEvent.click(screen.getByRole('switch', { name: 'Enable for this project: Test Plugin' }))
+    expect(screen.getByText('enable failed')).toBeTruthy()
+  })
+
+  it('filters project plugins by search text and status chips', async () => {
+    const disabledPlugin = { ...mockPlugin, manifest: { ...mockPlugin.manifest, id: 'terminal-plugin', name: 'Terminal', description: 'Integrated shell' } }
+    const attentionPlugin = { ...mockPlugin, manifest: { ...mockPlugin.manifest, id: 'browser-plugin', name: 'Browser', description: 'Web previews' }, state: 'error' as const, error: 'Built-in registration missing: com.openforge.browser' }
+    installedPlugins.set(new Map([
+      ['test-plugin', mockPlugin],
+      ['terminal-plugin', disabledPlugin],
+      ['browser-plugin', attentionPlugin],
+    ]))
+    enabledPluginIds.set(new Set(['test-plugin', 'browser-plugin']))
+
+    render(PluginSettingsPanel, { projectId: 'proj-1' })
+
+    await fireEvent.input(screen.getByPlaceholderText('Search plugins'), { target: { value: 'terminal' } })
+    expect(screen.getByText('Terminal')).toBeTruthy()
+    expect(screen.queryByText('Test Plugin')).toBeNull()
+
+    await fireEvent.input(screen.getByPlaceholderText('Search plugins'), { target: { value: '' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Needs attention' }))
+    expect(screen.getByText('Browser')).toBeTruthy()
+    expect(screen.getByText('Built-in registration missing: com.openforge.browser')).toBeTruthy()
+    expect(screen.queryByText('Terminal')).toBeNull()
+  })
+})
+
+describe('GlobalPluginSettingsPanel', () => {
+  beforeEach(() => {
+    cleanup()
+    vi.clearAllMocks()
+
+    installedPlugins.set(new Map())
+    enabledPluginIds.set(new Set())
+    pluginLoadError.set(null)
+  })
+
+  it('renders empty global installation inventory', () => {
+    render(GlobalPluginSettingsPanel)
     expect(screen.getByText('Plugins')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Install package' })).toBeTruthy()
     expect(screen.getByText('No plugins installed')).toBeTruthy()
   })
 
   it('renders app-wide install metadata for installed plugins', () => {
     installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
-    
-    render(PluginSettingsPanel, { projectId: 'proj-1' })
-    
+
+    render(GlobalPluginSettingsPanel)
+
     expect(screen.getByText('Test Plugin')).toBeTruthy()
     expect(screen.getByText('A test plugin')).toBeTruthy()
     expect(screen.getByText('v1.0.0')).toBeTruthy()
-    expect(screen.getByText('Installed app-wide')).toBeTruthy()
+    expect(screen.queryByText('Installed app-wide')).toBeNull()
     expect(screen.getByText('npm:@acme/test-plugin@1.0.0')).toBeTruthy()
+    expect(screen.queryByText('test-plugin')).toBeNull()
     expect(screen.getByText('read:files')).toBeTruthy()
   })
 
-  it('uses native disabled semantics for install and plugin action controls when disabled', () => {
+  it('does not render a separate raw plugin id when the source already identifies the package', () => {
+    installedPlugins.set(new Map([[
+      'com.openforge.github-sync',
+      {
+        ...mockPlugin,
+        manifest: { ...mockPlugin.manifest, id: 'com.openforge.github-sync', name: 'GitHub Sync' },
+        sourceSpec: 'com.openforge.github-sync',
+      },
+    ]]))
+
+    render(GlobalPluginSettingsPanel)
+
+    expect(screen.getAllByText('com.openforge.github-sync')).toHaveLength(1)
+  })
+
+  it('uses native disabled semantics for install and global plugin action controls when disabled', () => {
     installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
 
-    render(PluginSettingsPanel, { projectId: 'proj-1', disabled: true })
+    render(GlobalPluginSettingsPanel, { activeProjectId: 'proj-1', disabled: true })
 
     expect((screen.getByLabelText('Source type') as HTMLSelectElement).disabled).toBe(true)
     expect((screen.getByLabelText('Package source') as HTMLInputElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: 'Install package' }) as HTMLButtonElement).disabled).toBe(true)
-    expect((screen.getByRole('button', { name: 'Enable for this project: Test Plugin' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: 'Reload plugin: Test Plugin' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: 'Uninstall plugin: Test Plugin' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: 'Copy diagnostics: Test Plugin' }) as HTMLButtonElement).disabled).toBe(true)
@@ -103,7 +215,7 @@ describe('PluginSettingsPanel', () => {
 
   it('does not submit plugin installs while disabled', async () => {
     vi.mocked(installPluginFromNpm).mockResolvedValue(undefined)
-    render(PluginSettingsPanel, { projectId: 'proj-1', disabled: true })
+    render(GlobalPluginSettingsPanel, { disabled: true })
 
     const submitButton = screen.getByRole('button', { name: 'Install package' })
     const form = submitButton.closest('form')
@@ -114,35 +226,26 @@ describe('PluginSettingsPanel', () => {
     expect(installPluginFromNpm).not.toHaveBeenCalled()
   })
 
-  it('enables plugins through an explicit project CTA without using install as enablement', async () => {
-    installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
-    
-    render(PluginSettingsPanel, { projectId: 'proj-1' })
-    
-    await fireEvent.click(screen.getByRole('button', { name: 'Enable for this project: Test Plugin' }))
-    expect(enablePluginForProject).toHaveBeenCalledWith('proj-1', 'test-plugin')
-    expect(installPluginFromNpm).not.toHaveBeenCalled()
-    
-    enabledPluginIds.set(new Set(['test-plugin']))
-    await fireEvent.click(await screen.findByRole('button', { name: 'Disable for this project: Test Plugin' }))
-    expect(disablePluginForProject).toHaveBeenCalledWith('proj-1', 'test-plugin')
-  })
-
-  it('installs npm packages without silently enabling them', async () => {
-    vi.mocked(installPluginFromNpm).mockResolvedValue(undefined)
-    render(PluginSettingsPanel, { projectId: 'proj-1' })
+  it('installs npm packages globally without silently enabling them', async () => {
+    vi.mocked(installPluginFromNpm).mockImplementation(async () => {
+      installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
+    })
+    render(GlobalPluginSettingsPanel, { activeProjectId: 'proj-1' })
 
     await fireEvent.input(screen.getByLabelText('Package source'), { target: { value: '@acme/openforge-github@1.2.0' } })
     await fireEvent.click(screen.getByRole('button', { name: 'Install package' }))
 
     expect(installPluginFromNpm).toHaveBeenCalledWith('@acme/openforge-github@1.2.0')
     expect(enablePluginForProject).not.toHaveBeenCalled()
+    expect(screen.getByText('Installed app-wide. Enable it explicitly in each project when ready.')).toBeTruthy()
+    await fireEvent.click(screen.getByRole('button', { name: 'Enable for active project: Test Plugin' }))
+    expect(enablePluginForProject).toHaveBeenCalledWith('proj-1', 'test-plugin')
   })
 
   it('installs git and local package sources through the selected source flow', async () => {
     vi.mocked(installPluginFromGit).mockResolvedValue(undefined)
     vi.mocked(installFromLocal).mockResolvedValue(undefined)
-    render(PluginSettingsPanel, { projectId: 'proj-1' })
+    render(GlobalPluginSettingsPanel, { activeProjectId: 'proj-1' })
 
     await fireEvent.change(screen.getByLabelText('Source type'), { target: { value: 'git' } })
     await fireEvent.input(screen.getByLabelText('Package source'), { target: { value: 'github.com/acme/openforge-tools@main' } })
@@ -161,7 +264,7 @@ describe('PluginSettingsPanel', () => {
     installedPlugins.set(new Map([['test-plugin', { ...mockPlugin, state: 'error', error: 'activation failed' }]]))
     vi.mocked(writeClipboardText).mockResolvedValue(undefined)
 
-    render(PluginSettingsPanel, { projectId: 'proj-1' })
+    render(GlobalPluginSettingsPanel, { activeProjectId: 'proj-1' })
 
     expect(screen.getByText('Failed to list plugins')).toBeTruthy()
     expect(screen.getByText('activation failed')).toBeTruthy()
@@ -174,21 +277,21 @@ describe('PluginSettingsPanel', () => {
     expect(writeClipboardText).toHaveBeenCalledWith(expect.stringContaining('activation failed'))
   })
 
-  it('reloads a plugin for the current project', async () => {
+  it('reloads a plugin from global inventory using the active project context when present', async () => {
     vi.mocked(reloadPluginForProject).mockResolvedValue(true)
     installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
 
-    render(PluginSettingsPanel, { projectId: 'proj-1' })
+    render(GlobalPluginSettingsPanel, { activeProjectId: 'proj-1' })
 
     await fireEvent.click(screen.getByRole('button', { name: 'Reload plugin: Test Plugin' }))
     expect(reloadPluginForProject).toHaveBeenCalledWith('proj-1', 'test-plugin')
   })
 
-  it('uninstalls custom plugins through the plugin registry wrapper', async () => {
+  it('uninstalls custom plugins through the global inventory', async () => {
     vi.mocked(uninstallPlugin).mockResolvedValue(undefined)
     installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
 
-    render(PluginSettingsPanel, { projectId: 'proj-1' })
+    render(GlobalPluginSettingsPanel)
 
     await fireEvent.click(screen.getByRole('button', { name: 'Uninstall plugin: Test Plugin' }))
     expect(uninstallPlugin).toHaveBeenCalledWith('test-plugin')
@@ -198,7 +301,7 @@ describe('PluginSettingsPanel', () => {
     vi.mocked(uninstallPlugin).mockRejectedValue(new Error('uninstall failed'))
     installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
 
-    render(PluginSettingsPanel, { projectId: 'proj-1' })
+    render(GlobalPluginSettingsPanel)
 
     await fireEvent.click(screen.getByRole('button', { name: 'Uninstall plugin: Test Plugin' }))
     expect(screen.getByText('uninstall failed')).toBeTruthy()
@@ -210,7 +313,7 @@ describe('PluginSettingsPanel', () => {
       ['builtin-source', { ...mockPlugin, manifest: { ...mockPlugin.manifest, id: 'builtin-source' }, sourceKind: 'builtin' }],
     ]))
 
-    render(PluginSettingsPanel, { projectId: 'proj-1' })
+    render(GlobalPluginSettingsPanel)
 
     expect(screen.queryByRole('button', { name: /Uninstall plugin/i })).toBeNull()
   })

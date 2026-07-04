@@ -37,6 +37,7 @@
   import ProjectPageHeader from '../project/ProjectPageHeader.svelte'
   import PluginSlot from '../plugin/PluginSlot.svelte'
   import PluginSettingsPanel from '../plugin/PluginSettingsPanel.svelte'
+  import GlobalPluginSettingsPanel from '../plugin/GlobalPluginSettingsPanel.svelte'
 
   interface Props {
     onClose: () => void
@@ -136,7 +137,7 @@
   let scrollContainer = $state<HTMLDivElement | null>(null)
   let isNavigating = false
   const projectSections = ['general', 'labels', 'instructions', 'plugins', 'actions']
-  const globalSections = ['preferences', 'ai', 'credentials', 'experimental', 'developer']
+  const globalSections = ['preferences', 'ai', 'credentials', 'plugins', 'experimental', 'developer']
 
   function getErrorMessage(e: unknown): string {
     return e instanceof Error ? e.message : String(e)
@@ -658,6 +659,11 @@
         <SettingsCredentialsCard
           {githubToken}
           onGithubTokenChange={(v: string) => { githubToken = v; scheduleSave() }}
+          disabled={!globalSettingsLoaded}
+        />
+
+        <GlobalPluginSettingsPanel
+          activeProjectId={$activeProjectId}
           disabled={!globalSettingsLoaded}
         />
 
