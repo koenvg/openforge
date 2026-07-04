@@ -73,6 +73,7 @@ export const ipcCommandContracts = [
   { functionName: 'getSessionStatus', ipcCommand: 'get_session_status', payloadKeys: ['sessionId'], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },
   { functionName: 'abortSession', ipcCommand: 'abort_session', payloadKeys: ['sessionId'], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },
   { functionName: 'forceGithubSync', ipcCommand: 'force_github_sync', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'github-review' },
+  { functionName: 'refreshTaskGithubStatus', ipcCommand: 'refresh_task_github_status', payloadKeys: ['taskId'], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'setPollContext', ipcCommand: 'set_poll_context', payloadKeys: ['focused', 'activeProjectId', 'globalViewOpen'], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'getProjectRepo', ipcCommand: 'get_project_repo', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'getPullRequests', ipcCommand: 'get_pull_requests', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'github-review' },
