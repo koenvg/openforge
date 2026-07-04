@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte'
   import { get } from 'svelte/store'
-  import { backlogLabelFilters, commandHeld, focusBoardFilters, inFlightCollapsedByView, lastViewedTaskId, lowFireTaskIdsByProject, mergingTaskIds } from '../../lib/stores'
-  import { filterTasks, getFilterCounts, DEFAULT_FOCUS_STATES, loadFocusFilterStates, loadLowFireTaskIds, saveLowFireTaskIds, isFocusTask } from '../../lib/boardFilters'
+  import { backlogLabelFilters, commandHeld, focusBoardFilters, lastViewedTaskId, lowFireTaskIdsByProject, mergingTaskIds } from '../../lib/stores'
+  import { filterTasks, getFilterCounts, DEFAULT_FOCUS_STATES, loadFocusFilterStates, loadLowFireTaskIds, saveLowFireTaskIds } from '../../lib/boardFilters'
   import type { BoardFilter } from '../../lib/boardFilters'
   import { getDependencyWaitLabel } from '../../lib/taskDependencies'
   import { getTaskReasonText } from '../../lib/taskStatePresentation'
@@ -33,19 +33,15 @@
   }
 
   type TaskRow = {
-    type: 'task'
     task: Task
     taskIndex: number
-    isInFlight: boolean
-  } | {
-    type: 'divider'
-    count: number
   }
 
   const FILTER_OPTIONS = [
     { value: 'focus' as BoardFilter, label: 'Focus', shortcut: '⌘1' },
-    { value: 'low-fire' as BoardFilter, label: 'Low-Fire', shortcut: '⌘2' },
-    { value: 'backlog' as BoardFilter, label: 'Backlog', shortcut: '⌘3' },
+    { value: 'in-flight' as BoardFilter, label: 'In Flight', shortcut: '⌘2' },
+    { value: 'out-of-focus' as BoardFilter, label: 'Out of Focus', shortcut: '⌘3' },
+    { value: 'backlog' as BoardFilter, label: 'Backlog', shortcut: '⌘4' },
   ] as const
 
   let { projectId, projectName, tasks, activeSessions, ticketPrs, onOpenTask, onEditTask, onTaskUpdated, onRunAction }: Props = $props()
@@ -71,10 +67,6 @@
     return $focusBoardFilters.get(projectId) ?? 'focus'
   })
 
-  // In-flight collapse state is remembered per repo + view for the session.
-  let inFlightCollapseKey = $derived(`${projectId ?? '__none__'}:${activeFilter}`)
-  let inFlightCollapsed = $derived($inFlightCollapsedByView.get(inFlightCollapseKey) ?? false)
-
   let selectedLabelIds = $derived.by(() => {
     if (!projectId) return new Set<number>()
     return $backlogLabelFilters.get(projectId) ?? new Set<number>()
@@ -91,62 +83,19 @@
       ? filtered.filter((task) => taskMatchesAnySelectedLabel(task, selectedLabelIds))
       : filtered
 
-    if (activeFilter === 'backlog') {
-      return {
-        attention: sortBySessionActivity(labelFiltered, activeSessions),
-        inFlight: [],
-      }
-    }
-
-    const attention: Task[] = []
-    const inFlight: Task[] = []
-    for (const task of labelFiltered) {
-      const session = activeSessions.get(task.id) ?? null
-      const pullRequests = ticketPrs.get(task.id) ?? []
-      const state = computeTaskState(task, session, pullRequests)
-      if (isFocusTask(task, state, pullRequests, focusStates)) {
-        attention.push(task)
-      } else {
-        inFlight.push(task)
-      }
-    }
-
     return {
-      attention: sortBySessionActivity(attention, activeSessions),
-      inFlight: sortBySessionActivity(inFlight, activeSessions),
+      attention: sortBySessionActivity(labelFiltered, activeSessions),
+      inFlight: [],
     }
   })
 
   let filteredTasks = $derived.by(() => [...groupedTasks.attention, ...groupedTasks.inFlight])
 
-  let visibleRows = $derived.by<TaskRow[]>(() => {
-    if (activeFilter === 'backlog') {
-      return groupedTasks.attention.map((task, taskIndex) => ({ type: 'task', task, taskIndex, isInFlight: false }))
-    }
+  let visibleRows = $derived.by<TaskRow[]>(() =>
+    filteredTasks.map((task, taskIndex) => ({ task, taskIndex }))
+  )
 
-    const rows: TaskRow[] = groupedTasks.attention.map((task, taskIndex) => ({ type: 'task', task, taskIndex, isInFlight: false }))
-    if (groupedTasks.inFlight.length > 0) {
-      rows.push({ type: 'divider', count: groupedTasks.inFlight.length })
-      if (!inFlightCollapsed) {
-        rows.push(...groupedTasks.inFlight.map((task, index) => ({
-          type: 'task' as const,
-          task,
-          taskIndex: groupedTasks.attention.length + index,
-          isInFlight: true,
-        })))
-      }
-    }
-    return rows
-  })
-
-  // When the in-flight section is collapsed, its tasks are hidden, so vim
-  // navigation should only range over the visible (attention) tasks.
-  let navigableCount = $derived.by(() => {
-    if (activeFilter !== 'backlog' && inFlightCollapsed) {
-      return groupedTasks.attention.length
-    }
-    return filteredTasks.length
-  })
+  let navigableCount = $derived(filteredTasks.length)
 
   let filterCounts = $derived.by(() => getFilterCounts(tasks, activeSessions, ticketPrs, focusStates, lowFireTaskIds))
   let displayProjectLabels = $derived.by(() => {
@@ -174,12 +123,6 @@
     const nextFilters = new Map($focusBoardFilters)
     nextFilters.set(projectId, filter)
     focusBoardFilters.set(nextFilters)
-  }
-
-  function toggleInFlightCollapsed() {
-    const next = new Map($inFlightCollapsedByView)
-    next.set(inFlightCollapseKey, !inFlightCollapsed)
-    inFlightCollapsedByView.set(next)
   }
 
   $effect(() => {
@@ -335,9 +278,9 @@
   function handleKeydown(e: KeyboardEvent) {
     if (isInputFocused()) return
 
-    // CMD+1/2/3 filter chip shortcuts (works even when pane has focus)
+    // CMD+1/2/3/4 filter chip shortcuts (works even when pane has focus)
     if (e.metaKey && !e.shiftKey && !e.altKey) {
-      const filterMap: Record<string, BoardFilter> = { '1': 'focus', '2': 'low-fire', '3': 'backlog' }
+      const filterMap: Record<string, BoardFilter> = { '1': 'focus', '2': 'in-flight', '3': 'out-of-focus', '4': 'backlog' }
       const filter = filterMap[e.key]
       if (filter) {
         e.preventDefault()
@@ -398,7 +341,7 @@
     })
 
     saveLowFireTaskIds(currentProjectId, nextTaskIds).catch((err: unknown) => {
-      console.error('Failed to save Low-Fire tasks:', err)
+      console.error('Failed to save Out of Focus tasks:', err)
     })
   }
 
@@ -439,7 +382,7 @@
 
   <div class="flex gap-6 flex-1 min-h-0">
     <div class="flex flex-col gap-4 flex-1 min-w-0 overflow-y-auto">
-      {#if activeFilter === 'focus' || activeFilter === 'low-fire'}
+      {#if activeFilter === 'focus' || activeFilter === 'out-of-focus'}
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
             <span class="text-sm font-semibold text-base-content/70">Needs attention</span>
@@ -468,54 +411,36 @@
       {#if filteredTasks.length === 0}
         <FocusEmptyState filter={activeFilter} />
       {:else}
-        {#each visibleRows as row (row.type === 'divider' ? 'in-flight-divider' : row.task.id)}
-          {#if row.type === 'divider'}
-            <button
-              type="button"
-              class="group flex w-full items-center gap-3 py-1"
-              aria-expanded={!inFlightCollapsed}
-              aria-label={inFlightCollapsed ? 'Show in-flight tasks' : 'Hide in-flight tasks'}
-              onclick={toggleInFlightCollapsed}
-            >
-              <div class="h-px flex-1 bg-base-content/10"></div>
-              <div class="flex items-center gap-2 text-xs font-semibold text-base-content/45 transition-colors group-hover:text-base-content/70">
-                <span>In-flight</span>
-                <span class="badge badge-ghost badge-xs">{row.count}</span>
-                <span class="text-base-content/40">{inFlightCollapsed ? '⌄' : '⌃'}</span>
-              </div>
-              <div class="h-px flex-1 bg-base-content/10"></div>
-            </button>
-          {:else}
-            {@const task = row.task}
-            {@const session = activeSessions.get(task.id) ?? null}
-            {@const pullRequests = ticketPrs.get(task.id) ?? []}
-            {@const state = computeTaskState(task, session, pullRequests)}
-            <div class={row.isInFlight ? 'opacity-60 hover:opacity-100 transition-opacity' : ''}>
-              <TaskListItem
-                {task}
-                {state}
-                {session}
-                {pullRequests}
-                reasonText={getTaskReasonText(state, pullRequests)}
-                dependencyHint={activeFilter === 'backlog' ? getDependencyWaitLabel(task, tasks) : null}
-                showLabels={activeFilter === 'backlog'}
-                isSelected={selectedTaskIdLocal === task.id}
-                isFocused={vim.focusedIndex === row.taskIndex}
-                justViewed={recentlyViewedTaskId === task.id}
-                isMerging={$mergingTaskIds.has(task.id)}
-                onSelect={() => {
-                  if (selectedTaskIdLocal === task.id) {
-                    onOpenTask(task.id)
-                  } else {
-                    selectedTaskIdLocal = task.id
-                    vim.setFocusedIndex(row.taskIndex)
-                  }
-                }}
-                onContextMenu={(e) => handleContextMenu(e, task.id)}
-                {onTaskUpdated}
-              />
-            </div>
-          {/if}
+        {#each visibleRows as row (row.task.id)}
+          {@const task = row.task}
+          {@const session = activeSessions.get(task.id) ?? null}
+          {@const pullRequests = ticketPrs.get(task.id) ?? []}
+          {@const state = computeTaskState(task, session, pullRequests)}
+          <div>
+            <TaskListItem
+              {task}
+              {state}
+              {session}
+              {pullRequests}
+              reasonText={getTaskReasonText(state, pullRequests)}
+              dependencyHint={activeFilter === 'backlog' ? getDependencyWaitLabel(task, tasks) : null}
+              showLabels={activeFilter === 'backlog'}
+              isSelected={selectedTaskIdLocal === task.id}
+              isFocused={vim.focusedIndex === row.taskIndex}
+              justViewed={recentlyViewedTaskId === task.id}
+              isMerging={$mergingTaskIds.has(task.id)}
+              onSelect={() => {
+                if (selectedTaskIdLocal === task.id) {
+                  onOpenTask(task.id)
+                } else {
+                  selectedTaskIdLocal = task.id
+                  vim.setFocusedIndex(row.taskIndex)
+                }
+              }}
+              onContextMenu={(e) => handleContextMenu(e, task.id)}
+              {onTaskUpdated}
+            />
+          </div>
         {/each}
       {/if}
     </div>

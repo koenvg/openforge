@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Task, Action, PullRequestInfo } from '../../lib/types'
   import { getAvailableActions, filterActions, type PaletteAction } from '../../lib/actionPalette'
+  import { activeProjectId, lowFireTaskIdsByProject } from '../../lib/stores'
   import { useListNavigation } from '../../lib/useListNavigation.svelte'
   import HoverTooltip from '../shared/ui/HoverTooltip.svelte'
   import PaletteModal from './PaletteModal.svelte'
@@ -18,7 +19,11 @@
   let searchQuery = $state('')
   let selectedActionId = $state<string | null>(null)
 
-  let allActions = $derived(getAvailableActions(task, customActions, taskPrs))
+  let lowFireTaskIds = $derived.by(() => {
+    const taskProjectId = task?.project_id ?? $activeProjectId
+    return taskProjectId ? $lowFireTaskIdsByProject.get(taskProjectId) ?? new Set<string>() : new Set<string>()
+  })
+  let allActions = $derived(getAvailableActions(task, customActions, taskPrs, lowFireTaskIds))
   let filtered = $derived(filterActions(allActions, searchQuery))
 
   // Group by category

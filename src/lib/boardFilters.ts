@@ -3,7 +3,7 @@ import type { TaskState } from './taskState'
 import { computeTaskState, ALL_TASK_STATES } from './taskState'
 import { getProjectConfig, setProjectConfig } from './ipc'
 
-export type BoardFilter = 'focus' | 'low-fire' | 'backlog'
+export type BoardFilter = 'focus' | 'in-flight' | 'out-of-focus' | 'backlog'
 
 export const DEFAULT_FOCUS_STATES: TaskState[] = [
   'idle', 'needs-input', 'paused', 'agent-done', 'failed', 'interrupted',
@@ -60,30 +60,31 @@ export function isFocusTask(_task: Task, state: TaskState, prs: PullRequestInfo[
 export function filterTasks(
   tasks: Task[],
   filter: BoardFilter,
-  _sessions: Map<string, AgentSession>,
-  _prs: Map<string, PullRequestInfo[]>,
-  _focusStates: TaskState[] = DEFAULT_FOCUS_STATES,
+  sessions: Map<string, AgentSession>,
+  prs: Map<string, PullRequestInfo[]>,
+  focusStates: TaskState[] = DEFAULT_FOCUS_STATES,
   lowFireTaskIds: Set<string> = new Set()
 ): Task[] {
-  if (filter === 'focus') {
-    return tasks.filter(task => {
-      if (task.status === 'done' || task.status === 'backlog') return false
-      return !lowFireTaskIds.has(task.id)
-    })
-  }
-
-  if (filter === 'low-fire') {
-    return tasks.filter(task => {
-      if (task.status === 'done' || task.status === 'backlog') return false
-      return lowFireTaskIds.has(task.id)
-    })
-  }
-
   if (filter === 'backlog') {
     return tasks.filter(task => task.status === 'backlog')
   }
 
-  return []
+  return tasks.filter(task => {
+    if (task.status === 'done' || task.status === 'backlog') return false
+
+    const isManuallyOutOfFocus = lowFireTaskIds.has(task.id)
+    if (filter === 'out-of-focus') return isManuallyOutOfFocus
+    if (isManuallyOutOfFocus) return false
+
+    const session = sessions.get(task.id) ?? null
+    const taskPrs = prs.get(task.id) ?? []
+    const state = computeTaskState(task, session, taskPrs)
+    const needsAttention = isFocusTask(task, state, taskPrs, focusStates)
+
+    if (filter === 'focus') return needsAttention
+    if (filter === 'in-flight') return !needsAttention
+    return false
+  })
 }
 
 export function getFilterCounts(
@@ -95,7 +96,8 @@ export function getFilterCounts(
 ): Record<BoardFilter, number> {
   const counts: Record<BoardFilter, number> = {
     focus: 0,
-    'low-fire': 0,
+    'in-flight': 0,
+    'out-of-focus': 0,
     backlog: 0,
   }
 
@@ -112,13 +114,13 @@ export function getFilterCounts(
     const session = sessions.get(task.id) ?? null
     const taskPrs = prs.get(task.id) ?? []
     const state = computeTaskState(task, session, taskPrs)
-    if (!isFocusTask(task, state, taskPrs, focusStates)) {
-      continue
-    }
+    const needsAttention = isFocusTask(task, state, taskPrs, focusStates)
     if (lowFireTaskIds.has(task.id)) {
-      counts['low-fire']++
-    } else {
+      counts['out-of-focus']++
+    } else if (needsAttention) {
       counts.focus++
+    } else {
+      counts['in-flight']++
     }
   }
 

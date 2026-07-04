@@ -49,6 +49,7 @@ describe('useActionPaletteController', () => {
       deleteTaskAndReload: vi.fn(async () => undefined),
       mergeReadyPullRequest: vi.fn(async () => undefined),
       enqueueReadyPullRequest: vi.fn(async () => undefined),
+      setTaskOutOfFocus: vi.fn(async () => undefined),
     }
     vi.mocked(loadActions).mockResolvedValue([
       { id: 'custom-1', name: 'Custom', prompt: 'Do custom work', builtin: false, enabled: true },
@@ -83,6 +84,7 @@ describe('useActionPaletteController', () => {
       deleteTaskAndReload: vi.fn(async () => undefined),
       mergeReadyPullRequest: vi.fn(async () => undefined),
       enqueueReadyPullRequest: vi.fn(async () => undefined),
+      setTaskOutOfFocus: vi.fn(async () => undefined),
     }
     const showNewTask = vi.fn()
     const triggerGithubSync = vi.fn(async () => undefined)
@@ -112,6 +114,7 @@ describe('useActionPaletteController', () => {
       deleteTaskAndReload: vi.fn(async () => undefined),
       mergeReadyPullRequest: vi.fn(async () => undefined),
       enqueueReadyPullRequest: vi.fn(async () => undefined),
+      setTaskOutOfFocus: vi.fn(async () => undefined),
     }
     const controller = useActionPaletteController({
       getSelectedTask: () => selectedTask,
@@ -138,6 +141,7 @@ describe('useActionPaletteController', () => {
       deleteTaskAndReload: vi.fn(async () => undefined),
       mergeReadyPullRequest: vi.fn(async () => undefined),
       enqueueReadyPullRequest: vi.fn(async () => undefined),
+      setTaskOutOfFocus: vi.fn(async () => undefined),
     }
     const controller = useActionPaletteController({
       getSelectedTask: () => selectedTask,
@@ -163,6 +167,7 @@ describe('useActionPaletteController', () => {
       deleteTaskAndReload: vi.fn(async () => undefined),
       mergeReadyPullRequest: vi.fn(async () => undefined),
       enqueueReadyPullRequest: vi.fn(async () => undefined),
+      setTaskOutOfFocus: vi.fn(async () => undefined),
     }
     const controller = useActionPaletteController({
       getSelectedTask: () => selectedTask,
@@ -178,5 +183,32 @@ describe('useActionPaletteController', () => {
     await controller.executeAction('enqueue-pr')
 
     expect(taskActions.enqueueReadyPullRequest).toHaveBeenCalledWith(selectedTask)
+  })
+
+  it('delegates Set aside and Return to board to the task action runner with the captured task', async () => {
+    const taskActions = {
+      handleRunAction: vi.fn(async () => undefined),
+      deleteTaskAndReload: vi.fn(async () => undefined),
+      mergeReadyPullRequest: vi.fn(async () => undefined),
+      enqueueReadyPullRequest: vi.fn(async () => undefined),
+      setTaskOutOfFocus: vi.fn(async () => undefined),
+    }
+    const controller = useActionPaletteController({
+      getSelectedTask: () => selectedTask,
+      taskActions,
+      goBack: vi.fn(),
+      showSearchTasks: vi.fn(),
+      showNewTask: vi.fn(),
+      showProjectSwitcher: vi.fn(),
+      triggerGithubSync: vi.fn(async () => undefined),
+    })
+
+    await controller.openActionPalette()
+    await controller.executeAction('set-aside-task')
+    await controller.openActionPalette()
+    await controller.executeAction('return-to-board')
+
+    expect(taskActions.setTaskOutOfFocus).toHaveBeenNthCalledWith(1, selectedTask.id, true)
+    expect(taskActions.setTaskOutOfFocus).toHaveBeenNthCalledWith(2, selectedTask.id, false)
   })
 })

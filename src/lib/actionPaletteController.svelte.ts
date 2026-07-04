@@ -71,6 +71,16 @@ export function useActionPaletteController(options: ActionPaletteControllerOptio
           await options.taskActions.enqueueReadyPullRequest(task)
         }
         break
+      case 'set-aside-task':
+        if (task) {
+          await options.taskActions.setTaskOutOfFocus(task.id, true)
+        }
+        break
+      case 'return-to-board':
+        if (task) {
+          await options.taskActions.setTaskOutOfFocus(task.id, false)
+        }
+        break
       case 'go-back':
         options.goBack()
         break

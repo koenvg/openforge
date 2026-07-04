@@ -10,7 +10,7 @@ export interface PaletteAction {
   keywords: string[]
 }
 
-export function getTaskActions(task: Task, customActions: Action[], taskPrs: PullRequestInfo[] = []): PaletteAction[] {
+export function getTaskActions(task: Task, customActions: Action[], taskPrs: PullRequestInfo[] = [], lowFireTaskIds: Set<string> = new Set()): PaletteAction[] {
   const actions: PaletteAction[] = []
 
   if (task.status === 'backlog') {
@@ -49,6 +49,26 @@ export function getTaskActions(task: Task, customActions: Action[], taskPrs: Pul
       category: 'task',
       keywords: ['enqueue', 'merge queue', 'pull request', 'pr', 'github'],
     })
+  }
+
+  if (task.status === 'doing') {
+    if (lowFireTaskIds.has(task.id)) {
+      actions.push({
+        id: 'return-to-board',
+        label: 'Return to board',
+        shortcut: null,
+        category: 'task',
+        keywords: ['focus', 'board', 'return', 'out of focus'],
+      })
+    } else {
+      actions.push({
+        id: 'set-aside-task',
+        label: 'Set aside',
+        shortcut: null,
+        category: 'task',
+        keywords: ['set aside', 'out of focus', 'hide', 'defer'],
+      })
+    }
   }
 
   actions.push({
@@ -105,8 +125,8 @@ export function getGlobalActions(): PaletteAction[] {
   return GLOBAL_ACTION_DEFINITIONS.map(getShortcutBackedGlobalAction)
 }
 
-export function getAvailableActions(task: Task | null, customActions: Action[], taskPrs: PullRequestInfo[] = []): PaletteAction[] {
-  const taskActions = task ? getTaskActions(task, customActions, taskPrs) : []
+export function getAvailableActions(task: Task | null, customActions: Action[], taskPrs: PullRequestInfo[] = [], lowFireTaskIds: Set<string> = new Set()): PaletteAction[] {
+  const taskActions = task ? getTaskActions(task, customActions, taskPrs, lowFireTaskIds) : []
   return [...taskActions, ...getGlobalActions()]
 }
 
