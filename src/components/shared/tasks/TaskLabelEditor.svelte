@@ -17,12 +17,19 @@
   let isAdding = $state(false)
   let labelLoadRequest = 0
 
+  let trimmedLabelInput = $derived(labelInput.trim())
   let visibleAvailableLabels = $derived(
     availableLabels.filter((label) => {
       if (hasLabelNamed(selectedLabels, label.name)) return false
-      const query = labelInput.trim().toLocaleLowerCase()
+      const query = trimmedLabelInput.toLocaleLowerCase()
       return !query || label.name.toLocaleLowerCase().includes(query)
     })
+  )
+  let canCreateLabel = $derived(
+    projectId !== null &&
+    trimmedLabelInput !== '' &&
+    !hasLabelNamed(selectedLabels, trimmedLabelInput) &&
+    visibleAvailableLabels.length === 0
   )
 
   $effect(() => {
@@ -51,10 +58,16 @@
     await onAdd(label)
   }
 
-  async function addFirstVisibleLabel() {
+  async function addLabelFromInput() {
     const [firstLabel] = visibleAvailableLabels
-    if (!firstLabel) return
-    await addSuggestion(firstLabel)
+    if (firstLabel) {
+      await addSuggestion(firstLabel)
+      labelInput = ''
+      return
+    }
+
+    if (!canCreateLabel) return
+    await onAdd(trimmedLabelInput)
     labelInput = ''
   }
 
@@ -96,13 +109,13 @@
       <input
         class="input input-bordered input-xs"
         aria-label="Search labels"
-        placeholder="Search existing labels"
+        placeholder="Search or create labels"
         bind:value={labelInput}
         disabled={!projectId}
         onkeydown={(event: KeyboardEvent) => {
           if (event.key === 'Enter') {
             event.preventDefault()
-            void addFirstVisibleLabel()
+            void addLabelFromInput()
           }
         }}
       />
@@ -123,8 +136,19 @@
             {/each}
           </div>
         </div>
+      {:else if canCreateLabel}
+        <div class="flex flex-col gap-1" aria-label="Create label">
+          <button
+            type="button"
+            class="badge badge-sm badge-ghost gap-1 self-start"
+            aria-label="Create label {trimmedLabelInput}"
+            onclick={() => addLabelFromInput()}
+          >
+            <span aria-hidden="true">+</span> Create {trimmedLabelInput}
+          </button>
+        </div>
       {:else}
-        <p class="text-xs text-base-content/60 m-0">No matching project labels. Manage labels in Project Settings.</p>
+        <p class="text-xs text-base-content/60 m-0">No matching project labels.</p>
       {/if}
     </div>
   {/if}

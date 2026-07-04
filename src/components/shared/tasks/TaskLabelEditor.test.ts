@@ -120,7 +120,7 @@ describe('TaskLabelEditor', () => {
     expect(onAdd).toHaveBeenCalledWith(AVAILABLE_LABELS[2])
   })
 
-  it('points to Project Settings instead of creating a new label when no existing label matches', async () => {
+  it('creates and assigns a new project label from unmatched input on Enter', async () => {
     const onAdd = vi.fn()
     render(TaskLabelEditor, {
       props: {
@@ -135,11 +135,14 @@ describe('TaskLabelEditor', () => {
     await fireEvent.click(screen.getByRole('button', { name: /^add label$/i }))
 
     const input = screen.getByLabelText('Search labels')
-    await fireEvent.input(input, { target: { value: 'feature' } })
+    await fireEvent.input(input, { target: { value: ' feature ' } })
+
+    expect(screen.getByRole('button', { name: 'Create label feature' })).toBeTruthy()
+
     await fireEvent.keyDown(input, { key: 'Enter' })
 
-    expect(onAdd).not.toHaveBeenCalled()
-    expect(screen.getByText('No matching project labels. Manage labels in Project Settings.')).toBeTruthy()
+    expect(onAdd).toHaveBeenCalledTimes(1)
+    expect(onAdd).toHaveBeenCalledWith('feature')
   })
 
   it('renders applied labels and calls onRemove when a remove control is clicked', async () => {

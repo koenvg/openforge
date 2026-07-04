@@ -189,6 +189,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - **Task Creation** creates a project-owned backlog **Task**, not an **Implementation Run**.
 - A **Task Display Title** belongs to a **Task** and does not change its initial prompt, mutable prompt, or **Handoff Notes**.
 - Automatic **Task Display Title** generation happens at most once early in **Agent Session** activity and only when the user has not manually set a title.
+- A **Task Label** may be created while assigning labels to a **Task**; removing a label from one **Task** is separate from deleting the reusable **Task Label** from the project.
 - **Project Task Creation Settings** provide defaults for **Task Creation** while still allowing a specific new **Task** to override them before it is saved.
 - A **Task Schedule** creates a new normal board **Task** for each **Scheduled Fire** rather than mutating or reusing an existing **Task**.
 - A **Task Schedule** belongs to the active project context where it is configured; it is not selected globally from inside the schedule composer.
