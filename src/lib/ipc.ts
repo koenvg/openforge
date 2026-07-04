@@ -153,6 +153,10 @@ export async function forceGithubSync(): Promise<PollResult> {
   return invoke<PollResult>("force_github_sync");
 }
 
+export async function refreshTaskGithubStatus(taskId: string): Promise<PollResult> {
+  return invoke<PollResult>("refresh_task_github_status", { taskId });
+}
+
 /**
  * Report the renderer's poll context to the sidecar so the GitHub poller can
  * focus-gate and scope its calls: pause when the app is unfocused, poll only the

@@ -12,6 +12,15 @@ vi.mock('../../lib/ipc', () => ({
     rate_limited: false,
     rate_limit_reset_at: null,
   }),
+  refreshTaskGithubStatus: vi.fn().mockResolvedValue({
+    new_comments: 0,
+    ci_changes: 0,
+    review_changes: 0,
+    pr_changes: 0,
+    errors: 0,
+    rate_limited: false,
+    rate_limit_reset_at: null,
+  }),
   getPullRequests: vi.fn().mockResolvedValue([]),
   getPrComments: vi.fn().mockResolvedValue([]),
   markCommentAddressed: vi.fn().mockResolvedValue(undefined),
@@ -98,6 +107,15 @@ describe('TaskPullRequestStatus', () => {
       rate_limited: false,
       rate_limit_reset_at: null,
     })
+    vi.mocked(ipc.refreshTaskGithubStatus).mockResolvedValue({
+      new_comments: 0,
+      ci_changes: 0,
+      review_changes: 0,
+      pr_changes: 0,
+      errors: 0,
+      rate_limited: false,
+      rate_limit_reset_at: null,
+    })
     vi.mocked(ipc.getPullRequests).mockResolvedValue([])
     vi.mocked(ipc.getPrComments).mockResolvedValue([])
     vi.mocked(ipc.linkPullRequest).mockResolvedValue(createPullRequest())
@@ -163,6 +181,32 @@ describe('TaskPullRequestStatus', () => {
     await fireEvent.click(screen.getByText('https://github.com/owner/repo/pull/42'))
 
     expect(ipc.openUrl).toHaveBeenCalledWith('https://github.com/owner/repo/pull/42')
+  })
+
+  it('refreshes GitHub status for the current task and reloads linked pull requests', async () => {
+    const onGithubStatusRefreshed = vi.fn().mockResolvedValue(undefined)
+    render(TaskPullRequestStatus, {
+      props: { taskId: 'T-42', taskPrs: [createPullRequest()], onGithubStatusRefreshed },
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Refresh GitHub status' }))
+
+    await waitFor(() => {
+      expect(ipc.refreshTaskGithubStatus).toHaveBeenCalledWith('T-42')
+      expect(onGithubStatusRefreshed).toHaveBeenCalled()
+    })
+  })
+
+  it('keeps pull request cards visible and reports task-scoped refresh failures', async () => {
+    vi.mocked(ipc.refreshTaskGithubStatus).mockRejectedValueOnce(new Error('GitHub rate limit'))
+    render(TaskPullRequestStatus, { props: { taskId: 'T-42', taskPrs: [createPullRequest()] } })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Refresh GitHub status' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Test PR')).toBeTruthy()
+      expect(screen.getByText('Could not refresh GitHub status: GitHub rate limit')).toBeTruthy()
+    })
   })
 
   it('links a GitHub pull request URL for the current task from the empty state', async () => {

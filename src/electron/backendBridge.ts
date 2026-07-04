@@ -89,6 +89,7 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'pty_kill_shells_for_task',
   'get_pty_buffer',
   'force_github_sync',
+  'refresh_task_github_status',
   'set_poll_context',
   'get_project_repo',
   'get_pull_requests',

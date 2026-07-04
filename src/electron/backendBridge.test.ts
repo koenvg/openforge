@@ -387,6 +387,7 @@ describe('Electron backend bridge command forwarding', () => {
     expect(isSidecarBackedCommand('pty_kill_shells_for_task')).toBe(true)
     expect(isSidecarBackedCommand('get_pty_buffer')).toBe(true)
     expect(isSidecarBackedCommand('force_github_sync')).toBe(true)
+    expect(isSidecarBackedCommand('refresh_task_github_status')).toBe(true)
     expect(isSidecarBackedCommand('get_pull_requests')).toBe(true)
     expect(isSidecarBackedCommand('get_pr_comments')).toBe(true)
     expect(isSidecarBackedCommand('mark_comment_addressed')).toBe(true)
