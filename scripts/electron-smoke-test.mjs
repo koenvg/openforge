@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process'
+import { createServer } from 'node:http'
 import { constants } from 'node:fs'
-import { access, mkdir, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, extname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { _electron as electron } from 'playwright'
 import { APP_NAME, electronBundlePath } from './electron-package.mjs'
 
 export const DEFAULT_SMOKE_PORT = 17652
+export const DEFAULT_RENDERER_PORT = 17653
 export const DEFAULT_ARTIFACTS_DIR = 'test-results/electron-smoke'
 const DEFAULT_TIMEOUT_MS = 60_000
 const CLI_TIMEOUT_MS = 30_000
@@ -61,6 +63,14 @@ export function packagedElectronAppRootPath(appPath = electronBundlePath()) {
   return join(appPath, 'Contents', 'Resources', 'app')
 }
 
+export function packagedElectronRendererDistPath(appPath = electronBundlePath()) {
+  return join(packagedElectronAppRootPath(appPath), 'dist')
+}
+
+export function rendererUrlForPort(port = DEFAULT_RENDERER_PORT) {
+  return `http://127.0.0.1:${port}`
+}
+
 export function openForgeCliBridgePath(appPath = electronBundlePath()) {
   return join(appPath, 'Contents', 'Resources', 'openforge-cli', 'cli.js')
 }
@@ -77,9 +87,8 @@ export function electronSmokeLaunchOptions({ appRoot, root, env, artifactsDir, v
   }
 }
 
-export function smokeLaunchEnv({ env = process.env, port = DEFAULT_SMOKE_PORT, userDataDir, appDataDir } = {}) {
+export function smokeLaunchEnv({ env = process.env, port = DEFAULT_SMOKE_PORT, rendererUrl, userDataDir, appDataDir } = {}) {
   const {
-    ELECTRON_RENDERER_URL: _ignoredRendererUrl,
     OPENFORGE_ELECTRON_DEV_DISABLE_SIDECAR: _ignoredDisableSidecar,
     OPENFORGE_SIDECAR_PATH: _ignoredSidecarPath,
     ...baseEnv
@@ -91,6 +100,7 @@ export function smokeLaunchEnv({ env = process.env, port = DEFAULT_SMOKE_PORT, u
     OPENFORGE_BACKEND_PORT: String(port),
     OPENFORGE_HTTP_PORT: String(port),
     OPENFORGE_ELECTRON_SMOKE_TEST: '1',
+    ...(rendererUrl ? { ELECTRON_RENDERER_URL: rendererUrl } : {}),
     ...(userDataDir ? { OPENFORGE_ELECTRON_USER_DATA_DIR: userDataDir } : {}),
     ...(appDataDir ? { OPENFORGE_APP_DATA_DIR: appDataDir } : {}),
   }
@@ -230,6 +240,56 @@ async function prepareBuild({ skipBuild, root, log }) {
   }
 }
 
+function contentTypeForPath(path) {
+  switch (extname(path)) {
+    case '.html': return 'text/html; charset=utf-8'
+    case '.js': return 'text/javascript; charset=utf-8'
+    case '.css': return 'text/css; charset=utf-8'
+    case '.json': return 'application/json; charset=utf-8'
+    case '.svg': return 'image/svg+xml'
+    case '.woff2': return 'font/woff2'
+    default: return 'application/octet-stream'
+  }
+}
+
+export async function startStaticRendererServer({ rendererDistPath, port = DEFAULT_RENDERER_PORT, log = () => {} } = {}) {
+  const root = resolve(rendererDistPath)
+  const server = createServer(async (request, response) => {
+    try {
+      const url = new URL(request.url ?? '/', rendererUrlForPort(port))
+      const requestPath = decodeURIComponent(url.pathname)
+      const candidate = resolve(root, `.${requestPath}`)
+      const rel = relative(root, candidate)
+      if (rel.startsWith('..') || rel.includes(`..${sep}`) || resolve(candidate) !== root && rel === '') {
+        response.writeHead(403).end('Forbidden')
+        return
+      }
+
+      const info = await stat(candidate).catch(() => null)
+      const filePath = info?.isDirectory() ? join(candidate, 'index.html') : candidate
+      const content = await readFile(requestPath === '/' ? join(root, 'index.html') : filePath)
+      response.writeHead(200, { 'Content-Type': contentTypeForPath(filePath) })
+      response.end(content)
+    } catch {
+      response.writeHead(404).end('Not found')
+    }
+  })
+
+  await new Promise((resolveListen, reject) => {
+    server.once('error', reject)
+    server.listen(port, '127.0.0.1', () => {
+      server.off('error', reject)
+      log(`[renderer] serving packaged renderer at ${rendererUrlForPort(port)} from ${root}`)
+      resolveListen()
+    })
+  })
+
+  return {
+    url: rendererUrlForPort(port),
+    close: () => new Promise((resolveClose) => server.close(() => resolveClose())),
+  }
+}
+
 export async function runElectronSmokeTest({
   skipBuild = false,
   artifactsDir = DEFAULT_ARTIFACTS_DIR,
@@ -262,6 +322,7 @@ export async function runElectronSmokeTest({
   await mkdir(appDataDir, { recursive: true })
 
   let electronApp = null
+  let rendererServer = null
   let page = null
   let traceStarted = false
   let succeeded = false
@@ -271,11 +332,14 @@ export async function runElectronSmokeTest({
 
     const appPath = electronBundlePath(root)
     const appRoot = packagedElectronAppRootPath(appPath)
+    const rendererDistPath = packagedElectronRendererDistPath(appPath)
     const cliPath = openForgeCliBridgePath(appPath)
     await assertExists(appRoot, 'Packaged Electron app root')
+    await assertExists(rendererDistPath, 'Packaged Electron renderer dist')
     await assertExists(cliPath, 'Bundled OpenForge CLI bridge')
 
-    const env = smokeLaunchEnv({ env: process.env, port, userDataDir, appDataDir })
+    rendererServer = await startStaticRendererServer({ rendererDistPath, port: DEFAULT_RENDERER_PORT, log })
+    const env = smokeLaunchEnv({ env: process.env, port, rendererUrl: rendererServer.url, userDataDir, appDataDir })
     log(`[electron] launching packaged app root ${appRoot}`)
     electronApp = await launchElectron(electronSmokeLaunchOptions({
       appRoot,
@@ -341,6 +405,9 @@ export async function runElectronSmokeTest({
     if (!succeeded) {
       await mkdir(absoluteArtifactsDir, { recursive: true })
       await writeFile(join(absoluteArtifactsDir, 'electron.log'), `${logs.join('\n')}\n`)
+    }
+    if (rendererServer) {
+      await rendererServer.close().catch(error => log(`[renderer] static server close failed: ${error instanceof Error ? error.message : String(error)}`))
     }
     await rm(tempRoot, { recursive: true, force: true }).catch(() => undefined)
   }

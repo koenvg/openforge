@@ -3,10 +3,13 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_ARTIFACTS_DIR,
+  DEFAULT_RENDERER_PORT,
   DEFAULT_SMOKE_PORT,
   electronSmokeLaunchOptions,
   openForgeCliBridgePath,
   packagedElectronAppRootPath,
+  packagedElectronRendererDistPath,
+  rendererUrlForPort,
   parseSmokeArgs,
   smokeBuildSteps,
   smokeLaunchEnv,
@@ -35,6 +38,7 @@ describe('Electron smoke script contract', () => {
       artifactsDir: 'custom-artifacts',
     })
     expect(DEFAULT_SMOKE_PORT).toBe(17652)
+    expect(DEFAULT_RENDERER_PORT).toBe(17653)
   })
 
   it('launches with isolated data directories, smoke dialog suppression, and matching CLI/sidecar ports', () => {
@@ -46,6 +50,7 @@ describe('Electron smoke script contract', () => {
         OPENFORGE_SIDECAR_PATH: '/tmp/stale-sidecar',
       },
       port: 19999,
+      rendererUrl: 'http://127.0.0.1:18888/',
       userDataDir: '/tmp/openforge-electron-user',
       appDataDir: '/tmp/openforge-sidecar-data',
     })
@@ -55,10 +60,10 @@ describe('Electron smoke script contract', () => {
       OPENFORGE_BACKEND_PORT: '19999',
       OPENFORGE_HTTP_PORT: '19999',
       OPENFORGE_ELECTRON_SMOKE_TEST: '1',
+      ELECTRON_RENDERER_URL: 'http://127.0.0.1:18888/',
       OPENFORGE_ELECTRON_USER_DATA_DIR: '/tmp/openforge-electron-user',
       OPENFORGE_APP_DATA_DIR: '/tmp/openforge-sidecar-data',
     })
-    expect(env).not.toHaveProperty('ELECTRON_RENDERER_URL')
     expect(env).not.toHaveProperty('OPENFORGE_ELECTRON_DEV_DISABLE_SIDECAR')
     expect(env).not.toHaveProperty('OPENFORGE_SIDECAR_PATH')
   })
@@ -66,6 +71,7 @@ describe('Electron smoke script contract', () => {
   it('launches the packaged app root with Playwright args and verifies the bundled OpenForge CLI bridge', () => {
     const appPath = '/tmp/Open Forge.app'
     const appRoot = packagedElectronAppRootPath(appPath)
+    const rendererDist = packagedElectronRendererDistPath(appPath)
     const launchOptions = electronSmokeLaunchOptions({
       appRoot,
       root: '/repo',
@@ -76,6 +82,8 @@ describe('Electron smoke script contract', () => {
     })
 
     expect(appRoot).toBe('/tmp/Open Forge.app/Contents/Resources/app')
+    expect(rendererDist).toBe('/tmp/Open Forge.app/Contents/Resources/app/dist')
+    expect(rendererUrlForPort()).toBe('http://127.0.0.1:17653')
     expect(launchOptions).toMatchObject({
       args: [appRoot],
       cwd: '/repo',
