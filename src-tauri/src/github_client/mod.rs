@@ -180,7 +180,6 @@ impl GitHubClient {
 
     fn format_rate_limit_log_message(
         method: &Method,
-        url: &str,
         status: StatusCode,
         headers: &HeaderMap,
         reset_at: i64,
@@ -204,10 +203,19 @@ impl GitHubClient {
             details.push(format!("retry-after {}s", retry_after));
         }
 
+        for (header, label) in [
+            ("x-ratelimit-limit", "limit"),
+            ("x-ratelimit-remaining", "remaining"),
+            ("x-ratelimit-used", "used"),
+        ] {
+            if let Some(value) = headers.get(header).and_then(|value| value.to_str().ok()) {
+                details.push(format!("{} {}", label, value));
+            }
+        }
+
         format!(
-            "[GitHub Client] Rate limit detected for {} {} ({}): resets in {} seconds (at unix timestamp {})",
+            "[GitHub Client] Rate limit detected for {} ({}): resets in {} seconds (at unix timestamp {})",
             method,
-            url,
             details.join(", "),
             seconds_until_reset,
             reset_at
@@ -219,7 +227,6 @@ impl GitHubClient {
             .build()
             .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
         let method = request.method().clone();
-        let url = request.url().to_string();
 
         let response = self
             .client
@@ -235,7 +242,6 @@ impl GitHubClient {
                 "{}",
                 Self::format_rate_limit_log_message(
                     &method,
-                    &url,
                     response.status(),
                     response.headers(),
                     reset_at,
@@ -640,23 +646,33 @@ mod tests {
     }
 
     #[test]
-    fn test_format_rate_limit_log_message_includes_request_identity() {
+    fn test_format_rate_limit_log_message_redacts_request_identity() {
         let mut headers = HeaderMap::new();
         headers.insert("x-ratelimit-resource", HeaderValue::from_static("search"));
         headers.insert("retry-after", HeaderValue::from_static("60"));
+        headers.insert("x-ratelimit-limit", HeaderValue::from_static("30"));
+        headers.insert("x-ratelimit-remaining", HeaderValue::from_static("0"));
+        headers.insert("x-ratelimit-used", HeaderValue::from_static("30"));
 
         let message = GitHubClient::format_rate_limit_log_message(
             &Method::GET,
-            "https://api.github.com/search/issues?q=is:open",
             StatusCode::FORBIDDEN,
             &headers,
             1,
         );
 
-        assert!(message.contains("GET https://api.github.com/search/issues?q=is:open"));
+        assert!(message.contains("GET"));
         assert!(message.contains("status 403"));
         assert!(message.contains("resource search"));
         assert!(message.contains("retry-after 60s"));
+        assert!(message.contains("limit 30"));
+        assert!(message.contains("remaining 0"));
+        assert!(message.contains("used 30"));
+        assert!(!message.contains("https://api.github.com"));
+        assert!(!message.contains("repos"));
+        assert!(!message.contains("owner"));
+        assert!(!message.contains("repo"));
+        assert!(!message.contains("alice"));
     }
 
     #[test]
@@ -665,13 +681,12 @@ mod tests {
 
         let message = GitHubClient::format_rate_limit_log_message(
             &Method::POST,
-            "https://api.github.com/repos/owner/repo/pulls/1/reviews",
             StatusCode::TOO_MANY_REQUESTS,
             &headers,
             1,
         );
 
-        assert!(message.contains("POST https://api.github.com/repos/owner/repo/pulls/1/reviews"));
+        assert!(message.contains("POST"));
         assert!(message.contains("status 429"));
         assert!(!message.contains("resource "));
         assert!(!message.contains("retry-after "));

@@ -102,8 +102,8 @@ impl GitHubClient {
             Ok(response) => response,
             Err(e) => {
                 warn!(
-                    "[GitHub] Failed to fetch required reviews for {}/{} branch {}: {}",
-                    owner, repo, branch, e
+                    "[GitHub] Failed to fetch required reviews: {}",
+                    e.sanitized_log_message()
                 );
                 return RequiredReviewsPolicy::unknown(e.to_string());
             }
@@ -127,8 +127,8 @@ impl GitHubClient {
         if !response.status().is_success() {
             let status = response.status();
             warn!(
-                "[GitHub] Unexpected status {} fetching required reviews for {}/{} branch {}",
-                status, owner, repo, branch
+                "[GitHub] Unexpected status {} fetching required reviews",
+                status
             );
             return RequiredReviewsPolicy::from_rest_error(status.as_u16(), "unexpected status");
         }
@@ -147,10 +147,7 @@ impl GitHubClient {
         self.cache_response_body(&url, etag, &body);
 
         RequiredReviewsPolicy::from_rest_json(&body).unwrap_or_else(|e| {
-            warn!(
-                "[GitHub] Failed to parse required reviews for {}/{} branch {}: {}",
-                owner, repo, branch, e
-            );
+            warn!("[GitHub] Failed to parse required reviews");
             RequiredReviewsPolicy::unknown(e.to_string())
         })
     }

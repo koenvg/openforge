@@ -154,7 +154,8 @@ impl GitHubClient {
             .unwrap_or_else(|e| {
                 warn!(
                     "[GitHub] Failed to fetch reviews for PR #{}: {}",
-                    pr_number, e
+                    pr_number,
+                    e.sanitized_log_message()
                 );
                 vec![]
             });
@@ -293,8 +294,9 @@ impl GitHubClient {
                         Err(e) => {
                             detail_error_count += 1;
                             warn!(
-                                "[GitHub] Failed to fetch PR details for {}/{} #{}: {}",
-                                owner, repo, item.number, e
+                                "[GitHub] Failed to fetch PR details for PR #{}: {}",
+                                item.number,
+                                e.sanitized_log_message()
                             );
                         }
                     }

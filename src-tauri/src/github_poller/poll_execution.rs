@@ -268,7 +268,10 @@ pub(super) async fn poll_github_once_with_state(
                 );
             }
             Err(e) => {
-                error!("[GitHub Poller] Failed to sync authored task PRs: {}", e);
+                error!(
+                    "[GitHub Poller] Failed to sync authored task PRs: {}",
+                    e.sanitized_log_message("authored task PR link sync")
+                );
                 total_errors += 1;
                 if e.should_increment_rate_limit_count() {
                     rate_limit_count += 1;
