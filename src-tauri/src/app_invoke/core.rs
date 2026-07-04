@@ -503,6 +503,19 @@ pub(super) async fn handle_app_unmatched_command(
             })?;
             serde_json::Value::Null
         }
+        "delete_task_label" => {
+            let label_id = payload_i64(&request.payload, "labelId")?;
+            let affected_task_ids = db.delete_task_label(label_id).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    format!("Failed to delete task label: {e}"),
+                )
+            })?;
+            for task_id in affected_task_ids {
+                publish_task_changed(state, &task_id);
+            }
+            serde_json::Value::Null
+        }
         "get_task_detail" => {
             let task_id = payload_string(&request.payload, "taskId")?;
             let task = db

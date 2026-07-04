@@ -55,6 +55,7 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'create_task_label',
   'add_task_label',
   'remove_task_label',
+  'delete_task_label',
   'get_task_workspace',
   'get_worktree_for_task',
   'list_git_branches',

@@ -16,6 +16,7 @@ import {
   checkCodexInstalled,
   checkPiInstalled,
   createTask,
+  deleteTaskLabel,
   enqueuePullRequest,
   fsSearchFiles,
   getAllTasks,
@@ -84,6 +85,19 @@ describe("ipc resolved provider", () => {
     await expect(getResolvedAiProvider("P-1")).resolves.toBe("codex");
 
     expect(invokeMock).toHaveBeenCalledWith("resolve_ai_provider", { projectId: "P-1" });
+  });
+});
+
+describe("ipc task label commands", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+    invokeMock.mockResolvedValue(undefined);
+  });
+
+  it("sends camelCase payload for deleting a project task label", async () => {
+    await deleteTaskLabel(42);
+
+    expect(invokeMock).toHaveBeenCalledWith("delete_task_label", { labelId: 42 });
   });
 });
 

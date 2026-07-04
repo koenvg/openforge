@@ -1,7 +1,7 @@
 <script lang="ts">
   import { getProjectTaskLabels } from '../../../lib/ipc'
   import type { TaskLabel } from '../../../lib/types'
-  import { hasLabelNamed, makeTemporaryTaskLabel, normalizeTaskLabelNameInput, validateTaskLabelName } from '../../../lib/taskLabels'
+  import { hasLabelNamed } from '../../../lib/taskLabels'
 
   interface Props {
     projectId: string | null
@@ -14,12 +14,15 @@
 
   let availableLabels = $state<TaskLabel[]>([])
   let labelInput = $state('')
-  let error = $state<string | null>(null)
   let isAdding = $state(false)
   let labelLoadRequest = 0
 
-  let unselectedLabels = $derived(
-    availableLabels.filter((label) => !hasLabelNamed(selectedLabels, label.name))
+  let visibleAvailableLabels = $derived(
+    availableLabels.filter((label) => {
+      if (hasLabelNamed(selectedLabels, label.name)) return false
+      const query = labelInput.trim().toLocaleLowerCase()
+      return !query || label.name.toLocaleLowerCase().includes(query)
+    })
   )
 
   $effect(() => {
@@ -41,31 +44,18 @@
 
   function openAdd() {
     isAdding = true
-    error = null
-  }
-
-  async function submitLabel() {
-    if (!projectId) return
-    const name = normalizeTaskLabelNameInput(labelInput)
-    const validationError = validateTaskLabelName(name)
-    if (validationError) {
-      error = validationError
-      return
-    }
-    if (hasLabelNamed(selectedLabels, name)) {
-      labelInput = ''
-      error = null
-      return
-    }
-
-    const existing = availableLabels.find((label) => label.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase())
-    await onAdd(existing ?? makeTemporaryTaskLabel(name, projectId))
     labelInput = ''
-    error = null
   }
 
   async function addSuggestion(label: TaskLabel) {
     await onAdd(label)
+  }
+
+  async function addFirstVisibleLabel() {
+    const [firstLabel] = visibleAvailableLabels
+    if (!firstLabel) return
+    await addSuggestion(firstLabel)
+    labelInput = ''
   }
 
   async function handleRemove(label: TaskLabel) {
@@ -103,32 +93,25 @@
 
   {#if isAdding}
     <div class="flex flex-col gap-2">
-      <div class="flex items-center gap-1.5">
-        <input
-          class="input input-bordered input-xs flex-1"
-          aria-label="Add label"
-          placeholder="Type to add or create a label"
-          bind:value={labelInput}
-          disabled={!projectId}
-          onkeydown={(event: KeyboardEvent) => {
-            if (event.key === 'Enter') {
-              event.preventDefault()
-              void submitLabel()
-            }
-          }}
-        />
-        <button type="button" class="btn btn-xs" disabled={!projectId || !labelInput.trim()} onclick={() => submitLabel()}>Add</button>
-      </div>
+      <input
+        class="input input-bordered input-xs"
+        aria-label="Search labels"
+        placeholder="Search existing labels"
+        bind:value={labelInput}
+        disabled={!projectId}
+        onkeydown={(event: KeyboardEvent) => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            void addFirstVisibleLabel()
+          }
+        }}
+      />
 
-      {#if error}
-        <div class="text-xs text-error">{error}</div>
-      {/if}
-
-      {#if unselectedLabels.length > 0}
+      {#if visibleAvailableLabels.length > 0}
         <div class="flex flex-col gap-1" aria-label="Suggestions">
           <span class="text-xs font-semibold text-base-content/60">Suggestions</span>
           <div class="flex flex-wrap gap-1.5">
-            {#each unselectedLabels as label (label.id)}
+            {#each visibleAvailableLabels as label (label.id)}
               <button
                 type="button"
                 class="badge badge-sm badge-ghost gap-1"
@@ -140,6 +123,8 @@
             {/each}
           </div>
         </div>
+      {:else}
+        <p class="text-xs text-base-content/60 m-0">No matching project labels. Manage labels in Project Settings.</p>
       {/if}
     </div>
   {/if}

@@ -795,6 +795,38 @@ impl super::Database {
         Ok(())
     }
 
+    pub fn delete_task_label(&self, label_id: i64) -> Result<Vec<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT task_id FROM task_label_assignments WHERE label_id = ?1 ORDER BY task_id ASC",
+        )?;
+        let rows = stmt.query_map([label_id], |row| row.get(0))?;
+        let mut affected_task_ids = Vec::new();
+        for row in rows {
+            affected_task_ids.push(row?);
+        }
+        drop(stmt);
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs() as i64;
+        for task_id in &affected_task_ids {
+            conn.execute(
+                "UPDATE tasks SET updated_at = ?1 WHERE id = ?2",
+                rusqlite::params![now, task_id],
+            )?;
+        }
+
+        let deleted = conn.execute("DELETE FROM task_labels WHERE id = ?1", [label_id])?;
+        if deleted == 0 {
+            return Err(rusqlite::Error::InvalidParameterName(format!(
+                "label {label_id} does not exist"
+            )));
+        }
+        Ok(affected_task_ids)
+    }
+
     pub fn set_task_labels(
         &self,
         task_id: &str,
@@ -1493,6 +1525,50 @@ mod tests {
         assert_eq!(retrieved.labels, vec![bug]);
         let all_labels = db.get_project_task_labels(&project.id).expect("all labels");
         assert!(all_labels.iter().any(|label| label.id == ui.id));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_delete_task_label_removes_project_label_and_all_assignments() {
+        let (db, path) = make_test_db("task_labels_delete");
+        db.set_config("task_id_prefix", "T").unwrap();
+        let project = db
+            .create_project("A", "/tmp/labels-delete")
+            .expect("create project");
+        let first_task = db
+            .create_task("First", "backlog", Some(&project.id), None, None)
+            .expect("create first task");
+        let second_task = db
+            .create_task("Second", "backlog", Some(&project.id), None, None)
+            .expect("create second task");
+
+        let bug = db.add_task_label(&first_task.id, "bug").expect("add bug");
+        db.add_task_label(&second_task.id, "bug")
+            .expect("add bug to second task");
+        let ui = db.add_task_label(&second_task.id, "ui").expect("add ui");
+
+        db.delete_task_label(bug.id).expect("delete bug label");
+
+        let project_labels = db
+            .get_project_task_labels(&project.id)
+            .expect("project labels");
+        assert_eq!(project_labels, vec![ui.clone()]);
+        assert!(db
+            .get_task(&first_task.id)
+            .expect("get first task")
+            .unwrap()
+            .labels
+            .is_empty());
+        assert_eq!(
+            db.get_task(&second_task.id)
+                .expect("get second task")
+                .unwrap()
+                .labels,
+            vec![ui]
+        );
+        assert!(db.delete_task_label(bug.id).is_err());
 
         drop(db);
         let _ = fs::remove_file(&path);

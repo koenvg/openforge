@@ -5,7 +5,7 @@ import { requireElement } from '../../test-utils/dom'
 import TaskInfoPanel from './TaskInfoPanel.svelte'
 import type { Task, PullRequestInfo, PrComment, TaskLabel, AgentSession } from '../../lib/types'
 import { activeSessions, mergingTaskIds, tasks, ticketPrs } from '../../lib/stores'
-import { addTaskLabel, forceGithubSync, getPrComments, getPullRequests, linkPullRequest, mergePullRequest, refreshTaskGithubStatus, removeTaskLabel } from '../../lib/ipc'
+import { addTaskLabel, forceGithubSync, getPrComments, getProjectTaskLabels, getPullRequests, linkPullRequest, mergePullRequest, refreshTaskGithubStatus, removeTaskLabel } from '../../lib/ipc'
 
 vi.mock('../../lib/stores', () => ({
   ticketPrs: writable(new Map()),
@@ -453,7 +453,8 @@ describe('TaskInfoPanel', () => {
     expect(promptContent.textContent).toContain('Line four')
   })
 
-  it('renders existing labels and adds/removes labels through IPC', async () => {
+  it('renders existing labels and assigns/removes existing project labels through IPC', async () => {
+    vi.mocked(getProjectTaskLabels).mockResolvedValue([bugLabel, uiLabel])
     render(TaskInfoPanel, {
       props: {
         task: { ...baseTask, labels: [bugLabel] } as Task & { labels: TaskLabel[] },
@@ -468,13 +469,28 @@ describe('TaskInfoPanel', () => {
     expect(removeTaskLabel).toHaveBeenCalledWith('T-42', bugLabel.id)
 
     await fireEvent.click(screen.getByRole('button', { name: 'Add label' }))
-    const input = screen.getByRole('textbox', { name: 'Add label' })
-    await fireEvent.input(input, { target: { value: 'feature' } })
+    const input = screen.getByRole('textbox', { name: 'Search labels' })
+    await fireEvent.input(input, { target: { value: 'ui' } })
     await fireEvent.keyDown(input, { key: 'Enter' })
 
     await waitFor(() => {
-      expect(addTaskLabel).toHaveBeenCalledWith('T-42', 'feature')
+      expect(addTaskLabel).toHaveBeenCalledWith('T-42', 'ui')
     })
+  })
+
+  it('keeps project task label deletion controls out of task details', async () => {
+    vi.mocked(getProjectTaskLabels).mockResolvedValue([bugLabel, uiLabel])
+    render(TaskInfoPanel, {
+      props: {
+        task: { ...baseTask, labels: [bugLabel] } as Task & { labels: TaskLabel[] },
+        workspacePath: null,
+      },
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: /^add label$/i }))
+
+    expect(screen.queryByRole('button', { name: /delete project label/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /delete task label/i })).toBeNull()
   })
 
   it('resyncs rendered labels when the same task receives refreshed label data', async () => {

@@ -44,20 +44,15 @@ describe('TaskLabelEditor', () => {
 
     await flushAvailableLabels()
 
-    // The single add affordance is present.
     expect(screen.getByRole('button', { name: /add label/i })).toBeTruthy()
-
-    // No empty-state filler text.
     expect(screen.queryByText('No labels')).toBeNull()
-
-    // Suggestions (e.g. "cleanup") must not float in the collapsed state.
     expect(screen.queryByText('cleanup')).toBeNull()
     expect(screen.queryByText('bug')).toBeNull()
     expect(screen.queryByText('docs')).toBeNull()
     expect(screen.queryByText('Suggestions')).toBeNull()
   })
 
-  it('expands on "+ Add label": reveals input + a "Suggestions" group listing unselected available labels', async () => {
+  it('expands on "+ Add label": reveals search input + a "Suggestions" group listing unselected available labels', async () => {
     render(TaskLabelEditor, {
       props: {
         projectId: 'P-1',
@@ -71,17 +66,10 @@ describe('TaskLabelEditor', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: /add label/i }))
 
-    // Input becomes available.
-    expect(screen.getByLabelText('Add label')).toBeTruthy()
-
-    // Suggestions group heading present.
+    expect(screen.getByLabelText('Search labels')).toBeTruthy()
     expect(screen.getByText('Suggestions')).toBeTruthy()
-
-    // Unselected available labels appear as suggestions...
     expect(screen.getByRole('button', { name: 'Add label cleanup' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Add label docs' })).toBeTruthy()
-
-    // ...but already-selected ones are excluded from suggestions.
     expect(screen.queryByRole('button', { name: 'Add label bug' })).toBeNull()
   })
 
@@ -105,7 +93,7 @@ describe('TaskLabelEditor', () => {
     expect(onAdd).toHaveBeenCalledWith(AVAILABLE_LABELS[0])
   })
 
-  it('submitting a typed name calls onAdd', async () => {
+  it('filters existing project labels and adds the first match on Enter without creating labels', async () => {
     const onAdd = vi.fn()
     render(TaskLabelEditor, {
       props: {
@@ -120,12 +108,38 @@ describe('TaskLabelEditor', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: /^add label$/i }))
 
-    const input = screen.getByLabelText('Add label')
-    await fireEvent.input(input, { target: { value: 'newlabel' } })
+    const input = screen.getByLabelText('Search labels')
+    await fireEvent.input(input, { target: { value: 'doc' } })
+
+    expect(screen.getByRole('button', { name: 'Add label docs' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Add label cleanup' })).toBeNull()
+
     await fireEvent.keyDown(input, { key: 'Enter' })
 
     expect(onAdd).toHaveBeenCalledTimes(1)
-    expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ name: 'newlabel' }))
+    expect(onAdd).toHaveBeenCalledWith(AVAILABLE_LABELS[2])
+  })
+
+  it('points to Project Settings instead of creating a new label when no existing label matches', async () => {
+    const onAdd = vi.fn()
+    render(TaskLabelEditor, {
+      props: {
+        projectId: 'P-1',
+        selectedLabels: [],
+        onAdd,
+        onRemove: vi.fn(),
+      },
+    })
+
+    await flushAvailableLabels()
+    await fireEvent.click(screen.getByRole('button', { name: /^add label$/i }))
+
+    const input = screen.getByLabelText('Search labels')
+    await fireEvent.input(input, { target: { value: 'feature' } })
+    await fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(onAdd).not.toHaveBeenCalled()
+    expect(screen.getByText('No matching project labels. Manage labels in Project Settings.')).toBeTruthy()
   })
 
   it('renders applied labels and calls onRemove when a remove control is clicked', async () => {
@@ -149,5 +163,22 @@ describe('TaskLabelEditor', () => {
 
     expect(onRemove).toHaveBeenCalledTimes(1)
     expect(onRemove).toHaveBeenCalledWith(applied)
+  })
+
+  it('does not render project task label deletion controls in task detail label assignment', async () => {
+    render(TaskLabelEditor, {
+      props: {
+        projectId: 'P-1',
+        selectedLabels: [],
+        onAdd: vi.fn(),
+        onRemove: vi.fn(),
+      },
+    })
+
+    await flushAvailableLabels()
+    await fireEvent.click(screen.getByRole('button', { name: /^add label$/i }))
+
+    expect(screen.queryByRole('button', { name: /delete project label/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /delete task label/i })).toBeNull()
   })
 })
