@@ -7,9 +7,10 @@
     onSelectFile: (filename: string) => void
     reviewedFileShas?: Map<string, string>
     getFileReviewIdentity?: (file: PrFileDiff) => string | null
+    onToggleFileReviewed?: (file: PrFileDiff, reviewed: boolean) => void
   }
 
-  let { files = [], onSelectFile, reviewedFileShas = new Map(), getFileReviewIdentity }: Props = $props()
+  let { files = [], onSelectFile, reviewedFileShas = new Map(), getFileReviewIdentity, onToggleFileReviewed }: Props = $props()
 </script>
 
-<SharedFileTree {files} {onSelectFile} {reviewedFileShas} {getFileReviewIdentity} />
+<SharedFileTree {files} {onSelectFile} {reviewedFileShas} {getFileReviewIdentity} {onToggleFileReviewed} />

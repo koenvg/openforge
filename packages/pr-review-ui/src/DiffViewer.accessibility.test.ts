@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
 import DiffViewer from './DiffViewer.svelte'
 
@@ -43,6 +43,12 @@ const files: PrFileDiff[] = [
 ]
 
 describe('DiffViewer accessibility', () => {
+  beforeEach(() => {
+    // Line wrapping now defaults to on and persists to localStorage; clear it so the
+    // toolbar starts from the default in each test.
+    localStorage.clear()
+  })
+
   it('names toolbar icon controls and exposes pressed/expanded state', async () => {
     const onToggleFileTree = vi.fn()
     render(DiffViewer, { props: { files, fileTreeVisible: true, onToggleFileTree } })
@@ -59,10 +65,11 @@ describe('DiffViewer accessibility', () => {
     expect(screen.getByRole('button', { name: 'Split diff view' }).getAttribute('aria-pressed')).toBe('false')
     expect(screen.getByRole('button', { name: 'Unified diff view' }).getAttribute('aria-pressed')).toBe('true')
 
-    const wrapButton = screen.getByRole('button', { name: 'Enable line wrapping' })
-    expect(wrapButton.getAttribute('aria-pressed')).toBe('false')
+    // Line wrapping defaults to on, so the button starts in the "Disable" (pressed) state.
+    const wrapButton = screen.getByRole('button', { name: 'Disable line wrapping' })
+    expect(wrapButton.getAttribute('aria-pressed')).toBe('true')
     await fireEvent.click(wrapButton)
-    expect(screen.getByRole('button', { name: 'Disable line wrapping' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Enable line wrapping' }).getAttribute('aria-pressed')).toBe('false')
 
     await fireEvent.click(screen.getByRole('button', { name: 'Search diff' }))
     expect(screen.getByRole('textbox', { name: 'Search diff text' })).toBeTruthy()

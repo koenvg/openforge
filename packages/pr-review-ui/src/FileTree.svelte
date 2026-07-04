@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte'
   import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
   import { getFileStatusIcon, getFileStatusClass } from './fileStatus'
 
@@ -7,6 +8,7 @@
     onSelectFile: (filename: string) => void
     reviewedFileShas?: Map<string, string>
     getFileReviewIdentity?: (file: PrFileDiff) => string | null
+    onToggleFileReviewed?: (file: PrFileDiff, reviewed: boolean) => void
   }
 
   let {
@@ -14,10 +16,12 @@
     onSelectFile,
     reviewedFileShas = new Map(),
     getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null,
+    onToggleFileReviewed,
   }: Props = $props()
 
   let selectedFile = $state<string | null>(null)
   let expandedDirs = $state(new Set<string>())
+  let treeEl = $state<HTMLElement | null>(null)
 
   interface TreeNode {
     name: string
@@ -122,6 +126,11 @@
     onSelectFile(file.filename)
   }
 
+  function handleReviewedChange(file: PrFileDiff, event: Event) {
+    if (!(event.currentTarget instanceof HTMLInputElement)) return
+    onToggleFileReviewed?.(file, event.currentTarget.checked)
+  }
+
   function toggleDir(path: string) {
     const next = new Set(expandedDirs)
     if (next.has(path)) {
@@ -149,6 +158,82 @@
   }
 
   let flattenedNodes = $derived(flattenTree(compactTree(buildTree(files), true), 0))
+
+  // Files currently visible in the tree (excludes files under collapsed folders),
+  // in display order. Drives ArrowUp/ArrowDown navigation.
+  let visibleFiles = $derived(
+    flattenedNodes.map(({ node }) => node.file).filter((file): file is PrFileDiff => !!file),
+  )
+
+  function focusSelectedRow() {
+    if (!treeEl || !selectedFile) return
+    try {
+      const row = treeEl.querySelector(`[data-file="${CSS.escape(selectedFile)}"]`)
+      if (row instanceof HTMLElement) {
+        row.focus()
+        row.scrollIntoView({ block: 'nearest' })
+      }
+    } catch {
+      // Focus/scroll is a progressive enhancement; ignore lookup failures.
+    }
+  }
+
+  function selectByOffset(offset: number) {
+    if (visibleFiles.length === 0) return
+    const currentIndex = visibleFiles.findIndex((file) => file.filename === selectedFile)
+    const nextIndex = currentIndex === -1 ? (offset > 0 ? 0 : visibleFiles.length - 1) : currentIndex + offset
+    if (nextIndex < 0 || nextIndex >= visibleFiles.length) return
+    const next = visibleFiles[nextIndex]
+    if (next.filename === selectedFile) return
+    selectedFile = next.filename
+    onSelectFile(next.filename)
+    void tick().then(focusSelectedRow)
+  }
+
+  function setSelectedParentDirExpanded(expanded: boolean) {
+    if (!selectedFile) return
+    const parts = selectedFile.split('/')
+    if (parts.length < 2) return
+    const parentPath = parts.slice(0, -1).join('/')
+    const next = new Set(expandedDirs)
+    if (expanded) {
+      next.add(parentPath)
+    } else {
+      next.delete(parentPath)
+    }
+    expandedDirs = next
+    // Collapsing removes the focused file row from the DOM, which would drop focus to
+    // <body> and break further keyboard nav. Keep focus on the tree so arrows keep
+    // working; expanding re-reveals the row, so return focus to it.
+    void tick().then(() => {
+      if (expanded) {
+        focusSelectedRow()
+      } else {
+        treeEl?.focus()
+      }
+    })
+  }
+
+  function handleTreeKeydown(event: KeyboardEvent) {
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault()
+        selectByOffset(1)
+        break
+      case 'ArrowUp':
+        event.preventDefault()
+        selectByOffset(-1)
+        break
+      case 'ArrowRight':
+        event.preventDefault()
+        setSelectedParentDirExpanded(true)
+        break
+      case 'ArrowLeft':
+        event.preventDefault()
+        setSelectedParentDirExpanded(false)
+        break
+    }
+  }
 </script>
 
 <div class="flex flex-col h-full bg-base-200 border-r border-base-300">
@@ -160,7 +245,14 @@
     </div>
   </div>
 
-  <div class="flex-1 overflow-y-auto py-2" role="tree" aria-label="Changed files">
+  <div
+    class="flex-1 overflow-y-auto py-2 focus:outline-none"
+    role="tree"
+    aria-label="Changed files"
+    tabindex="0"
+    bind:this={treeEl}
+    onkeydown={handleTreeKeydown}
+  >
     {#each flattenedNodes as { node, depth }}
       {#if node.isDir}
         {@const expanded = expandedDirs.has(node.fullPath)}
@@ -179,23 +271,33 @@
       {:else if node.file}
         {@const reviewed = isFileReviewed(node.file)}
         {@const selected = selectedFile === node.file.filename}
-        <button
-          class="w-full flex items-center gap-2 text-xs transition-colors py-1.5 pr-3 text-base-content {selected ? 'bg-primary/10 border-l-2 border-l-primary' : 'hover:bg-primary/5'}"
+        <div
+          class="flex items-center w-full gap-1.5 pr-3 {selected ? 'bg-primary/10 border-l-2 border-l-primary' : 'hover:bg-primary/5'}"
           style="padding-left: {selected ? 10 + depth * 16 : 12 + depth * 16}px"
-          role="treeitem"
-          aria-label="{selected ? 'Selected' : 'Select'} file {node.file.filename}{reviewed ? ' (reviewed)' : ''}"
-          aria-selected={selected}
-          onclick={() => node.file && handleFileClick(node.file)}
         >
-          <span class="font-bold text-sm w-4 text-center shrink-0 {getFileStatusClass(node.file.status)}">
-            {getFileStatusIcon(node.file.status)}
-          </span>
-          <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left {reviewed ? 'line-through' : ''}" aria-label={reviewed ? `Reviewed file ${node.file.filename}` : undefined}>{node.name}</span>
-          <span class="flex gap-2 text-[0.7rem] ml-auto shrink-0">
-            <span class="text-success">+{node.file.additions}</span>
-            <span class="text-error">−{node.file.deletions}</span>
-          </span>
-        </button>
+          {#if onToggleFileReviewed}
+            <input
+              type="checkbox"
+              class="checkbox checkbox-xs shrink-0"
+              aria-label="Toggle reviewed for {node.file.filename}"
+              checked={reviewed}
+              onchange={(event) => node.file && handleReviewedChange(node.file, event)}
+            />
+          {/if}
+          <button
+            class="flex-1 min-w-0 flex items-center gap-2 text-xs transition-colors py-1.5 text-base-content text-left"
+            role="treeitem"
+            data-file={node.file.filename}
+            aria-label="{selected ? 'Selected' : 'Select'} file {node.file.filename}{reviewed ? ' (reviewed)' : ''}"
+            aria-selected={selected}
+            onclick={() => node.file && handleFileClick(node.file)}
+          >
+            <span class="font-bold text-sm w-4 text-center shrink-0 {getFileStatusClass(node.file.status)}">
+              {getFileStatusIcon(node.file.status)}
+            </span>
+            <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left {reviewed ? 'line-through' : ''}" aria-label={reviewed ? `Reviewed file ${node.file.filename}` : undefined}>{node.name}</span>
+          </button>
+        </div>
       {/if}
     {/each}
   </div>

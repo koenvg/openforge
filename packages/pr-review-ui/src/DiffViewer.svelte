@@ -15,6 +15,7 @@
   import { onDestroy, tick } from 'svelte'
   import { sortFilesAsTree } from './fileSort'
   import { getFileStatusIcon, getFileStatusColor, getFileStatusLabel } from './fileStatus'
+  import { loadDiffViewWrap, saveDiffViewWrap } from './diffViewPreferences'
   import type { Snippet } from 'svelte'
   interface BaseProps {
     files?: PrFileDiff[]
@@ -27,6 +28,7 @@
     batchFetchFileContents?: (files: PrFileDiff[]) => Promise<Map<string, FileContents>>
     toolbarExtra?: Snippet
     fileHeaderExtra?: Snippet<[PrFileDiff]>
+    footer?: Snippet
     includeCommitted?: boolean
     includeUncommitted?: boolean
     agentComments?: AgentReviewComment[]
@@ -47,10 +49,10 @@
     getFileReviewIdentity?: (file: PrFileDiff) => string | null
   }
   type Props = BaseProps
-  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, fileHeaderExtra, includeCommitted = true, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onAgentCommentsChange, onUpdateAgentCommentStatus, onOpenUrl, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, diffTheme, reviewedFileShas = new Map(), onToggleFileReviewed, getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null }: Props = $props()
+  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, fileHeaderExtra, footer, includeCommitted = true, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onAgentCommentsChange, onUpdateAgentCommentStatus, onOpenUrl, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, diffTheme, reviewedFileShas = new Map(), onToggleFileReviewed, getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null }: Props = $props()
   let internalPendingComments = $state<ReviewSubmissionComment[]>([])
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
-  let diffViewWrap = $state(false)
+  let diffViewWrap = $state(loadDiffViewWrap())
   let commentText = $state('')
   type InlineCommentDraftSide = ReviewSubmissionComment['side']
   type InlineCommentDraftKey = {
@@ -446,7 +448,7 @@
     <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
     <button
       class="btn btn-ghost btn-xs {diffViewWrap ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
-      onclick={() => (diffViewWrap = !diffViewWrap)}
+      onclick={() => { diffViewWrap = !diffViewWrap; saveDiffViewWrap(diffViewWrap) }}
       title={diffViewWrap ? 'Disable line wrapping' : 'Enable line wrapping'}
       aria-label={diffViewWrap ? 'Disable line wrapping' : 'Enable line wrapping'}
       aria-pressed={diffViewWrap}
@@ -512,7 +514,7 @@
   <div
     role="region"
     aria-label="Diff scroll area"
-    class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-base-100"
+    class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-base-100 pr-2"
     bind:this={scrollContainerEl}
     ondblclick={search.handleDoubleClick}
     onclick={search.handleContainerClick}
@@ -775,5 +777,6 @@
         {/each}
       </div>
     {/if}
+    {@render footer?.()}
   </div>
 </div>

@@ -749,14 +749,6 @@
           >GitHub ↗</span>
         </div>
         <div class="flex items-center">
-          <div class="flex items-center gap-2 text-xs text-base-content/50">
-            <span class="font-semibold text-base-content">#{$selectedReviewPr.number}</span>
-            <span class="text-base-300">•</span>
-            <span class="font-medium">{$selectedReviewPr.user_login}</span>
-            <span class="text-base-300">•</span>
-            <span>{timeAgoFromSeconds($selectedReviewPr.created_at)}</span>
-          </div>
-          <span class="flex-1"></span>
           <div class="flex gap-1" role="tablist" aria-label="Pull request detail sections">
             <button
               role="tab"
@@ -780,6 +772,14 @@
                 <span class="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-warning"></span>
               {/if}
             </button>
+          </div>
+          <span class="flex-1"></span>
+          <div class="flex items-center gap-2 text-xs text-base-content/50">
+            <span class="font-semibold text-base-content">#{$selectedReviewPr.number}</span>
+            <span class="text-base-300">•</span>
+            <span class="font-medium">{$selectedReviewPr.user_login}</span>
+            <span class="text-base-300">•</span>
+            <span>{timeAgoFromSeconds($selectedReviewPr.created_at)}</span>
           </div>
         </div>
       </div>
@@ -821,6 +821,7 @@
                   onSelectFile={handleFileSelect}
                   {reviewedFileShas}
                   getFileReviewIdentity={getReviewFileIdentity}
+                  onToggleFileReviewed={handleToggleFileReviewed}
                 />
               </ResizablePanel>
             {/if}
@@ -842,19 +843,21 @@
               {reviewedFileShas}
               onToggleFileReviewed={handleToggleFileReviewed}
               getFileReviewIdentity={getReviewFileIdentity}
-            />
+            >
+              {#snippet footer()}
+                <ReviewSubmitPanel
+                  repoOwner={$selectedReviewPr.repo_owner}
+                  repoName={$selectedReviewPr.repo_name}
+                  prNumber={$selectedReviewPr.number}
+                  commitId={$selectedReviewPr.head_sha}
+                  pendingComments={$pendingManualComments}
+                  onPendingCommentsChange={(comments) => { $pendingManualComments = comments }}
+                  onSubmitReview={submitReview}
+                />
+              {/snippet}
+            </DiffViewer>
           {/if}
         </div>
-
-        <ReviewSubmitPanel
-          repoOwner={$selectedReviewPr.repo_owner}
-          repoName={$selectedReviewPr.repo_name}
-          prNumber={$selectedReviewPr.number}
-          commitId={$selectedReviewPr.head_sha}
-          pendingComments={$pendingManualComments}
-          onPendingCommentsChange={(comments) => { $pendingManualComments = comments }}
-          onSubmitReview={submitReview}
-        />
       {/if}
     </div>
   {:else}
