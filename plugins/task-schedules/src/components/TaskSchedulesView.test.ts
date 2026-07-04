@@ -363,7 +363,7 @@ describe('TaskSchedulesView UX feedback', () => {
     expect(screen.getByText('Creates a scheduled board Task immediately and starts implementation if no previous scheduled Task is still open.')).toBeTruthy()
   })
 
-  it('requires delete confirmation and offers undo after deletion', async () => {
+  it('requires delete confirmation and does not offer undo after deletion', async () => {
     mockScheduleBackend([makeSchedule()])
     renderTaskSchedulesView()
     const card = (await screen.findByText('Daily dependency triage')).closest('article') as HTMLElement
@@ -377,20 +377,7 @@ describe('TaskSchedulesView UX feedback', () => {
     await waitFor(() => {
       expect(invoke).toHaveBeenCalledWith('deleteSchedule', { projectId: 'project-1', scheduleId: 'schedule-1' })
     })
-    expect(await screen.findByRole('button', { name: 'Undo delete' })).toBeTruthy()
-
-    await fireEvent.click(screen.getByRole('button', { name: 'Undo delete' }))
-    await waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith('saveSchedule', expect.objectContaining({
-        projectId: 'project-1',
-        schedule: expect.objectContaining({
-          id: 'schedule-1',
-          title: 'Daily dependency triage',
-          createdAt: Date.UTC(2026, 0, 1, 8),
-          history: [],
-        }),
-      }))
-    })
-    expect(await screen.findByText('Daily dependency triage')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Undo delete' })).toBeNull()
+    expect(screen.queryByText('Daily dependency triage')).toBeNull()
   })
 })
