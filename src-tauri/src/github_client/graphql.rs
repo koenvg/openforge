@@ -40,6 +40,7 @@ query OpenForgePullRequestReadiness($owner: String!, $repo: String!, $number: In
           requiresStrictStatusChecks
           requiresConversationResolution
           requiresDeployments
+          requiredDeploymentEnvironments
           requiresMergeQueue
         }
       }
@@ -83,6 +84,7 @@ query OpenForgePullRequestReadinessCore($owner: String!, $repo: String!, $number
           requiresStrictStatusChecks
           requiresConversationResolution
           requiresDeployments
+          requiredDeploymentEnvironments
           requiresMergeQueue
         }
       }
