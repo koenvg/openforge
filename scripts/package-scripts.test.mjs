@@ -66,7 +66,7 @@ describe('package build scripts', () => {
     const ciWorkflow = await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8')
 
     expect(ciWorkflow).toContain('electron_smoke:')
-    expect(ciWorkflow).toContain('runs-on: macos-14')
+    expect(ciWorkflow).toContain('runs-on: macos-13')
     expect(ciWorkflow).toContain('pnpm test:electron-smoke')
     expect(ciWorkflow).toContain('path: test-results/electron-smoke')
   })
