@@ -85,6 +85,26 @@ describe('deriveTaskAttention', () => {
     expect(deriveTaskAttention([pr], 0)).toEqual({ message: 'Address requested changes', tone: 'warning' })
   })
 
+  it('waits for CI instead of flagging failure before GitHub publishes any checks', () => {
+    const pr = makePr({ mergeable_state: 'unstable', ci_status: 'none', review_status: 'approved' })
+    expect(deriveTaskAttention([pr], 0)).toEqual({ message: 'Waiting for CI', tone: 'info' })
+  })
+
+  it('waits for CI when persisted readiness has stale no-check failure', () => {
+    const pr = makePr({
+      mergeable_state: 'unstable',
+      ci_status: 'none',
+      review_status: 'approved',
+      merge_readiness_status: 'blocked',
+      merge_readiness_action: 'resolve_blockers',
+      merge_readiness_blockers: [{ code: 'checks_failed', message: 'GitHub reports failing or unstable required checks.' }],
+      readiness_source_head_sha: 'abc',
+      readiness_updated_at: 2,
+      updated_at: 1,
+    })
+    expect(deriveTaskAttention([pr], 0)).toEqual({ message: 'Waiting for CI', tone: 'info' })
+  })
+
   it('does not flag ready to merge while CI is pending even when GitHub mergeability is clean', () => {
     const pr = makePr({ mergeable_state: 'clean', ci_status: 'pending', review_status: 'approved' })
     expect(deriveTaskAttention([pr], 0)).toEqual({ message: 'Waiting for CI', tone: 'info' })
