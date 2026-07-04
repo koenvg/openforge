@@ -57,8 +57,24 @@ export function electronAppExecutablePath(appPath = electronBundlePath(), appNam
   return join(appPath, 'Contents', 'MacOS', appName)
 }
 
+export function packagedElectronAppRootPath(appPath = electronBundlePath()) {
+  return join(appPath, 'Contents', 'Resources', 'app')
+}
+
 export function openForgeCliBridgePath(appPath = electronBundlePath()) {
   return join(appPath, 'Contents', 'Resources', 'openforge-cli', 'cli.js')
+}
+
+export function electronSmokeLaunchOptions({ appRoot, root, env, artifactsDir, videosDir, tracesDir } = {}) {
+  return {
+    args: [appRoot],
+    cwd: root,
+    env,
+    timeout: DEFAULT_TIMEOUT_MS,
+    artifactsDir,
+    recordVideo: { dir: videosDir },
+    tracesDir,
+  }
 }
 
 export function smokeLaunchEnv({ env = process.env, port = DEFAULT_SMOKE_PORT, userDataDir, appDataDir } = {}) {
@@ -254,22 +270,21 @@ export async function runElectronSmokeTest({
     await prepareBuild({ skipBuild, root, log })
 
     const appPath = electronBundlePath(root)
-    const executablePath = electronAppExecutablePath(appPath)
+    const appRoot = packagedElectronAppRootPath(appPath)
     const cliPath = openForgeCliBridgePath(appPath)
-    await assertExists(executablePath, 'Packaged Electron executable')
+    await assertExists(appRoot, 'Packaged Electron app root')
     await assertExists(cliPath, 'Bundled OpenForge CLI bridge')
 
     const env = smokeLaunchEnv({ env: process.env, port, userDataDir, appDataDir })
-    log(`[electron] launching ${executablePath}`)
-    electronApp = await launchElectron({
-      executablePath,
-      cwd: root,
+    log(`[electron] launching packaged app root ${appRoot}`)
+    electronApp = await launchElectron(electronSmokeLaunchOptions({
+      appRoot,
+      root,
       env,
-      timeout: DEFAULT_TIMEOUT_MS,
       artifactsDir: absoluteArtifactsDir,
-      recordVideo: { dir: videosDir },
+      videosDir,
       tracesDir,
-    })
+    }))
 
     electronApp.on('console', async message => {
       const values = []

@@ -4,8 +4,9 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_ARTIFACTS_DIR,
   DEFAULT_SMOKE_PORT,
-  electronAppExecutablePath,
+  electronSmokeLaunchOptions,
   openForgeCliBridgePath,
+  packagedElectronAppRootPath,
   parseSmokeArgs,
   smokeBuildSteps,
   smokeLaunchEnv,
@@ -62,10 +63,28 @@ describe('Electron smoke script contract', () => {
     expect(env).not.toHaveProperty('OPENFORGE_SIDECAR_PATH')
   })
 
-  it('targets the packaged app executable and bundled OpenForge CLI bridge', () => {
+  it('launches the packaged app root with Playwright args and verifies the bundled OpenForge CLI bridge', () => {
     const appPath = '/tmp/Open Forge.app'
+    const appRoot = packagedElectronAppRootPath(appPath)
+    const launchOptions = electronSmokeLaunchOptions({
+      appRoot,
+      root: '/repo',
+      env: { PATH: '/usr/bin' },
+      artifactsDir: '/artifacts',
+      videosDir: '/artifacts/videos',
+      tracesDir: '/artifacts/traces',
+    })
 
-    expect(electronAppExecutablePath(appPath)).toBe('/tmp/Open Forge.app/Contents/MacOS/Open Forge')
+    expect(appRoot).toBe('/tmp/Open Forge.app/Contents/Resources/app')
+    expect(launchOptions).toMatchObject({
+      args: [appRoot],
+      cwd: '/repo',
+      env: { PATH: '/usr/bin' },
+      artifactsDir: '/artifacts',
+      recordVideo: { dir: '/artifacts/videos' },
+      tracesDir: '/artifacts/traces',
+    })
+    expect(launchOptions).not.toHaveProperty('executablePath')
     expect(openForgeCliBridgePath(appPath)).toBe('/tmp/Open Forge.app/Contents/Resources/openforge-cli/cli.js')
   })
 
