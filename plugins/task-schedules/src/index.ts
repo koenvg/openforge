@@ -11,6 +11,7 @@ export default defineFrontendPlugin({
       icon: 'clock',
       placement: 'rail',
       order: 50,
+      shortcut: 'Cmd+S',
       component: TaskSchedulesView,
     }))
   },

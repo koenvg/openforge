@@ -17,14 +17,21 @@ describe('Task Schedules frontend plugin', () => {
     expect(packageJson.openforge.requires).toEqual(expect.arrayContaining(['views', 'backend', 'background', 'storage', 'tasks']))
   })
 
-  it('registers the Task Schedules rail view', async () => {
+  it('registers the Task Schedules rail view with shortcut metadata for host navigation', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.task-schedules', projectId: 'P-1' })
 
     await registry.activateFrontend(plugin)
 
     expect(plugin[OPENFORGE_FRONTEND_PLUGIN_MARKER]).toBe(true)
     expect(registry.snapshot.views).toMatchObject([
-      { id: 'schedules', qualifiedId: 'com.openforge.task-schedules.schedules', title: 'Task Schedules', pluginId: 'com.openforge.task-schedules' },
+      {
+        id: 'schedules',
+        qualifiedId: 'com.openforge.task-schedules.schedules',
+        title: 'Task Schedules',
+        pluginId: 'com.openforge.task-schedules',
+        placement: 'rail',
+        shortcut: 'Cmd+S',
+      },
     ])
   })
 })
