@@ -357,7 +357,7 @@ describe('FocusBoard', () => {
     })
   })
 
-  it('renders at most three labels on backlog cards with a hidden count', async () => {
+  it('summarizes labels on backlog cards while preserving accessible label names', async () => {
     const extraLabels: TaskLabel[] = [
       bugLabel,
       uiLabel,
@@ -368,12 +368,10 @@ describe('FocusBoard', () => {
 
     await fireEvent.click(await screen.findByRole('button', { name: /Backlog 1/i }))
 
-    const taskLabels = screen.getByLabelText('Task labels')
-    expect(within(taskLabels).getByText('bug')).toBeTruthy()
-    expect(within(taskLabels).getByText('ui')).toBeTruthy()
-    expect(within(taskLabels).getByText('backend')).toBeTruthy()
-    expect(within(taskLabels).getByText('+1')).toBeTruthy()
-    expect(within(taskLabels).queryByText('blocked')).toBeNull()
+    const backlogCard = requireElement(document.querySelector('[data-vim-item]'), HTMLElement)
+    expect(within(backlogCard).getByText('4 labels')).toBeTruthy()
+    expect(within(backlogCard).getByText(/bug \+3/)).toBeTruthy()
+    expect(within(backlogCard).getByLabelText('Labels: bug, ui, backend, blocked')).toBeTruthy()
   })
 
   it('shows dependency wait hint on backlog rows only in the Backlog filter', async () => {
