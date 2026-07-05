@@ -1,7 +1,10 @@
 {
   "name": "@openforge-app/terminal-runtime",
   "version": "0.1.0",
+  "license": "MIT",
   "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
     "./terminalRuntime": "./src/terminalRuntime.ts",
@@ -11,6 +14,14 @@
     "./shortcutController": "./src/terminalShortcutController.ts",
     "./TerminalTabsShell": "./src/TerminalTabsShell.svelte",
     "./xterm.css": "./src/xterm.css"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",

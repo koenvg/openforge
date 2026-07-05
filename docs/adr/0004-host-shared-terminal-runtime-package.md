@@ -15,8 +15,7 @@ ADR 0002 still sets the boundary: plugins must use public host capabilities and 
 ## Decision
 
 OpenForge should expose terminal pooling as a **host-shared public runtime package**, tentatively `@openforge-app/terminal-runtime`.
-
-This package is public author-facing API, but it is not an ordinary bundled plugin dependency. Plugins that render Terminal Surfaces should externalize it through the OpenForge host runtime/import-map contract, similar in spirit to host-shared Svelte. That gives all Terminal Surfaces one runtime/pool owner instead of one pool per plugin bundle.
+This package is public author-facing API and is MIT-licensed, but it is not an ordinary bundled plugin dependency. Plugins that render Terminal Surfaces should externalize it through the OpenForge host runtime/import-map contract, similar in spirit to host-shared Svelte. That gives all Terminal Surfaces one runtime/pool owner instead of one pool per plugin bundle.
 
 Do **not** add a broad host-provided `openforge.terminal` capability for v1. The host should continue to expose low-level public primitives (`shell`, `events`, `tasks`, `config`/`projectConfig`, `commands`, `system.openUrl`), while `@openforge-app/terminal-runtime` composes those primitives into safe terminal lifecycle behavior. A future `openforge.terminal` capability can be reconsidered only for state the host must authoritatively own and that cannot be expressed as a shared runtime library.
 

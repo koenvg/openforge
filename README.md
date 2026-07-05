@@ -206,9 +206,9 @@ pnpm electron:install
 
 ## License
 
-OpenForge is source-available/proprietary software. You may inspect, build, and modify the app for personal or internal use, but you may not commercially resell, redistribute, or offer the app as a competing hosted or packaged product without permission. See [`LICENSE`](LICENSE) for the app terms.
+OpenForge is source-available/proprietary software. You may inspect, build, and modify the app for personal or internal use, but you may not commercially resell, redistribute, or offer the app as a competing hosted or packaged product without permission. Internal workspace packages such as `@openforge-app/plugin-runtime` and `@openforge-app/pr-review-ui` are covered by these app terms. See [`LICENSE`](LICENSE) for the app terms.
 
-The `@openforge-app/plugin-sdk` package is licensed separately under MIT so third-party plugin authors can build, modify, redistribute, and sell plugins using the SDK. See [`packages/plugin-sdk/LICENSE`](packages/plugin-sdk/LICENSE).
+The `@openforge-app/plugin-sdk` and `@openforge-app/terminal-runtime` packages are licensed separately under MIT so third-party plugin authors can build, modify, redistribute, and sell plugins using the public SDK and terminal runtime contracts. See [`packages/plugin-sdk/LICENSE`](packages/plugin-sdk/LICENSE) and [`packages/terminal-runtime/LICENSE`](packages/terminal-runtime/LICENSE).
 
 ## First-run setup
 
