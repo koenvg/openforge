@@ -556,6 +556,19 @@ pub async fn list_git_branches(repo_path: &Path) -> Result<Vec<GitBranchInfo>, G
     Ok(branches)
 }
 
+/// Returns true if the repository has at least one commit reachable from HEAD.
+///
+/// A freshly `git init`ed repository has an "unborn" HEAD — the branch exists
+/// but points at no commit. Git worktrees cannot be created from such a repo
+/// because there is no base commit to branch from, so callers use this to steer
+/// the user toward a project-directory (no-worktree) start instead of failing
+/// later in `create_worktree` with "base ref '...' is unavailable and HEAD is
+/// not a valid commit".
+pub async fn repo_has_commits(repo_path: &Path) -> Result<bool, GitWorktreeError> {
+    validate_repository_path_access(repo_path)?;
+    git_ref_exists(repo_path, "HEAD").await
+}
+
 fn remote_name_from_ref(git_ref: &str) -> Option<&str> {
     let (remote_name, branch_name) = git_ref.split_once('/')?;
     if remote_name.is_empty() || branch_name.is_empty() {
@@ -1713,6 +1726,43 @@ mod tests {
         assert!(
             !branches.iter().any(|branch| branch.name == "origin/HEAD"),
             "remote HEAD aliases should not be shown as selectable branches"
+        );
+    }
+
+    fn init_uncommitted_repo(repo_path: &Path) {
+        std::fs::create_dir_all(repo_path).expect("repo directory should be created");
+        assert_git_success(repo_path, &["init", "-b", "main"]);
+    }
+
+    #[tokio::test]
+    async fn repo_has_commits_false_for_unborn_repo() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("empty repo");
+        init_uncommitted_repo(&repo_path);
+
+        let has_commits = repo_has_commits(&repo_path)
+            .await
+            .expect("repo_has_commits should succeed on an unborn repo");
+
+        assert!(
+            !has_commits,
+            "a freshly initialized repo with no commits (unborn HEAD) must report no commits"
+        );
+    }
+
+    #[tokio::test]
+    async fn repo_has_commits_true_after_first_commit() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("repo");
+        init_committed_repo(&repo_path);
+
+        let has_commits = repo_has_commits(&repo_path)
+            .await
+            .expect("repo_has_commits should succeed on a committed repo");
+
+        assert!(
+            has_commits,
+            "a repo with at least one commit must report having commits"
         );
     }
 

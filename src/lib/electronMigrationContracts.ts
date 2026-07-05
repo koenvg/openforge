@@ -69,6 +69,7 @@ export const ipcCommandContracts = [
   { functionName: 'resumeStartupSessions', ipcCommand: 'resume_startup_sessions', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },
   { functionName: 'getWorktreeForTask', ipcCommand: 'get_worktree_for_task', payloadKeys: ['taskId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'listGitBranches', ipcCommand: 'list_git_branches', payloadKeys: ['repoPath'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
+  { functionName: 'repoHasCommits', ipcCommand: 'repo_has_commits', payloadKeys: ['repoPath'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'inspectExistingBranch', ipcCommand: 'inspect_existing_branch', payloadKeys: ['repoPath', 'branch'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'getTaskWorkspace', ipcCommand: 'get_task_workspace', payloadKeys: ['taskId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'getSessionStatus', ipcCommand: 'get_session_status', payloadKeys: ['sessionId'], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },

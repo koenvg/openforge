@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import AddTaskDialog from './AddTaskDialog.svelte'
 import type { Action, Task } from '../lib/types'
-import { createTask, updateTask, getProjectConfig, getResolvedAiProvider, listGitBranches, listOpenCodeCommands } from '../lib/ipc'
+import { createTask, updateTask, getProjectConfig, getResolvedAiProvider, listGitBranches, repoHasCommits, listOpenCodeCommands } from '../lib/ipc'
 import { loadActions } from '../lib/actions'
 
 vi.mock('../lib/ipc', () => ({
@@ -28,6 +28,7 @@ vi.mock('../lib/ipc', () => ({
     { name: 'main', is_current: true, is_remote: false },
     { name: 'feature/open-pr', is_current: false, is_remote: false },
   ]),
+  repoHasCommits: vi.fn().mockResolvedValue(true),
   getProjectTaskLabels: vi.fn().mockResolvedValue([]),
   listOpenCodeCommands: vi.fn().mockResolvedValue([]),
   searchOpenCodeFiles: vi.fn().mockResolvedValue([]),
@@ -114,6 +115,7 @@ describe('AddTaskDialog', () => {
       { name: 'main', is_current: true, is_remote: false },
       { name: 'feature/open-pr', is_current: false, is_remote: false },
     ])
+    vi.mocked(repoHasCommits).mockResolvedValue(true)
     vi.mocked(listOpenCodeCommands).mockResolvedValue([])
     vi.mocked(loadActions).mockResolvedValue([
       { id: 'act-1', name: 'Test Action', prompt: 'Do test', builtin: false, enabled: true },
@@ -270,6 +272,37 @@ describe('AddTaskDialog', () => {
     await waitFor(() => {
       expect(createTask).toHaveBeenCalledWith(
         'Default project-directory task',
+        'backlog',
+        'test-project-id',
+        'default',
+        {
+          worktreeSource: 'disabled',
+          worktreeBranch: null,
+          title: null,
+          handoffNotesEnabled: true,
+        },
+      )
+      expect(onTaskSaved).toHaveBeenCalled()
+    })
+  })
+
+  it('disables the worktree toggle and runs in the project directory when the repo has no commits', async () => {
+    vi.mocked(repoHasCommits).mockResolvedValue(false)
+    const onTaskSaved = vi.fn()
+    render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo', onTaskSaved } })
+
+    await expandEnvironment()
+    const worktreeToggle = await screen.findByLabelText('Worktree') as HTMLInputElement
+    await waitFor(() => expect(worktreeToggle.disabled).toBe(true))
+    expect(worktreeToggle.checked).toBe(false)
+
+    const textbox = await findPromptTextbox()
+    await fireEvent.input(textbox, { target: { value: 'Bootstrap an app' } })
+    await clickAddToBacklogFromMore()
+
+    await waitFor(() => {
+      expect(createTask).toHaveBeenCalledWith(
+        'Bootstrap an app',
         'backlog',
         'test-project-id',
         'default',

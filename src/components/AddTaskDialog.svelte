@@ -2,8 +2,9 @@
   import { onMount } from 'svelte'
   import { ImagePlus } from '@lucide/svelte'
   import type { Task, PermissionMode, Action, GitBranchInfo, WorktreeSource } from '../lib/types'
-  import { createTask, updateTask, getProjectConfig, getResolvedAiProvider, listGitBranches } from '../lib/ipc'
+  import { createTask, updateTask, getProjectConfig, getResolvedAiProvider, listGitBranches, repoHasCommits } from '../lib/ipc'
   import { dedupeBranchesForSelector, type BranchLocation } from '../lib/branchSelector'
+  import { resolveWorktreeAvailability } from '../lib/worktreeAvailability'
   import {
     formatTaskPromptWithImageReferences,
     getTaskPromptImageReferences,
@@ -37,6 +38,10 @@
   let selectedWorktreeSource = $state<WorktreeSource>('newBranchFromMain')
   let selectedExistingBranch = $state('')
   let useWorktree = $state(true)
+  // False when the selected repo has no commits yet (unborn HEAD): a worktree
+  // cannot branch from a repo with no base commit, so the toggle is disabled and
+  // the task falls back to running in the project directory.
+  let worktreeAllowed = $state(true)
   let gitBranches = $state<GitBranchInfo[]>([])
   const branchSelectorOptions = $derived(dedupeBranchesForSelector(gitBranches))
   // Badge shown per branch so the three states are unambiguous in the selector.
@@ -133,16 +138,33 @@
     selectedPermissionMode = 'default'
     taskDefaultsLoading = mode === 'create'
     useWorktree = true
+    worktreeAllowed = true
     try {
       if ($activeProjectId) {
         const defaultUseWorktrees = await getProjectConfig($activeProjectId, 'use_worktrees')
-        useWorktree = defaultUseWorktrees == null ? true : defaultUseWorktrees === 'true'
+        const projectDefaultUseWorktree = defaultUseWorktrees == null ? true : defaultUseWorktrees === 'true'
+        useWorktree = projectDefaultUseWorktree
         aiProvider = await getResolvedAiProvider($activeProjectId)
 
         const allActions = await loadActions($activeProjectId)
         availableActions = getEnabledActions(allActions)
 
         if (projectPath) {
+          // A repo with no commits can't back a worktree; force the toggle off
+          // and disabled so the task runs in the project directory instead of
+          // failing later during worktree creation. Never block on a transient
+          // check failure — assume commits exist and let the backend guard.
+          let hasCommits = true
+          try {
+            hasCommits = await repoHasCommits(projectPath)
+          } catch (e) {
+            console.error('Failed to check whether repo has commits:', e)
+            hasCommits = true
+          }
+          const availability = resolveWorktreeAvailability(hasCommits, projectDefaultUseWorktree)
+          worktreeAllowed = availability.worktreeAllowed
+          useWorktree = availability.useWorktree
+
           try {
             gitBranches = await listGitBranches(projectPath)
             const options = dedupeBranchesForSelector(gitBranches)
@@ -174,6 +196,7 @@
       availableActions = []
       gitBranches = []
       selectedExistingBranch = ''
+      worktreeAllowed = true
     } finally {
       taskDefaultsLoading = false
     }
@@ -587,6 +610,7 @@
                             class="toggle toggle-primary toggle-xs"
                             aria-label="Worktree"
                             bind:checked={useWorktree}
+                            disabled={!worktreeAllowed}
                           />
                           <span>Worktree</span>
                         </label>
@@ -595,6 +619,12 @@
                           <span class="badge badge-ghost badge-xs shrink-0">Project directory</span>
                         {/if}
                       </div>
+
+                      {#if !worktreeAllowed}
+                        <p class="text-xs text-base-content/50">
+                          No commits yet — worktrees need an initial commit. This task will run in the project directory.
+                        </p>
+                      {/if}
 
                       {#if useWorktree}
                         <div class="grid grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-2">

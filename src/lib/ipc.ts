@@ -137,6 +137,10 @@ export async function listGitBranches(repoPath: string): Promise<GitBranchInfo[]
   return invoke<GitBranchInfo[]>("list_git_branches", { repoPath });
 }
 
+export async function repoHasCommits(repoPath: string): Promise<boolean> {
+  return invoke<boolean>("repo_has_commits", { repoPath });
+}
+
 export async function inspectExistingBranch(repoPath: string, branch: string): Promise<ExistingBranchPlan> {
   return invoke<ExistingBranchPlan>("inspect_existing_branch", { repoPath, branch });
 }
