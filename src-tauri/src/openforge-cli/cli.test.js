@@ -405,7 +405,7 @@ describe('OpenForge CLI', () => {
     }
   });
 
-  it('deletes tasks through the first-class HTTP bridge endpoint', async () => {
+  it('completes tasks through the first-class HTTP bridge endpoint', async () => {
     let seenBody = null;
     const server = createServer((req, res) => {
       if (req.url !== '/delete_task' || req.method !== 'POST') {
@@ -421,7 +421,7 @@ describe('OpenForge CLI', () => {
       req.on('end', () => {
         seenBody = JSON.parse(body);
         res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ task_id: 'T-1', status: 'deleted' }));
+        res.end(JSON.stringify({ task_id: 'T-1', status: 'completed' }));
       });
     });
     const port = await listen(server);
@@ -431,8 +431,98 @@ describe('OpenForge CLI', () => {
         OPENFORGE_HTTP_PORT: String(port),
       });
 
-      expect(JSON.parse(stdout)).toEqual({ task_id: 'T-1', status: 'deleted' });
+      expect(JSON.parse(stdout)).toEqual({ task_id: 'T-1', status: 'completed' });
       expect(seenBody).toEqual({ task_id: 'T-1' });
+    } finally {
+      await close(server);
+    }
+  });
+
+  it('keeps completed tasks reachable through get-task and explicit done lists', async () => {
+    let completed = false;
+    const completedTask = {
+      id: 'T-1',
+      initial_prompt: 'Completed prompt',
+      prompt: 'Full prompt kept for agents',
+      summary: '## Handoff Notes\nKeep this reference',
+      status: 'done',
+      depends_on: [],
+      labels: [],
+    };
+    const openTask = {
+      id: 'T-2',
+      prompt_preview: 'Open task',
+      status: 'backlog',
+      labels: [],
+      depends_on: [],
+      updated_at: 300,
+    };
+    const server = createServer((req, res) => {
+      if (req.url === '/delete_task' && req.method === 'POST') {
+        let body = '';
+        req.on('data', (chunk) => {
+          body += chunk;
+        });
+        req.on('end', () => {
+          expect(JSON.parse(body)).toEqual({ task_id: 'T-1' });
+          completed = true;
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ task_id: 'T-1', status: 'completed' }));
+        });
+        return;
+      }
+
+      if (req.url === '/task/T-1' && req.method === 'GET' && completed) {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(completedTask));
+        return;
+      }
+
+      if (req.url === '/tasks?project_id=P-1&exclude_done=true&compact=true' && req.method === 'GET') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify([openTask]));
+        return;
+      }
+
+      if (req.url === '/tasks?project_id=P-1&state=done&compact=true' && req.method === 'GET' && completed) {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify([
+          {
+            id: completedTask.id,
+            prompt_preview: completedTask.initial_prompt,
+            status: completedTask.status,
+            labels: completedTask.labels,
+            depends_on: completedTask.depends_on,
+            updated_at: 301,
+          },
+        ]));
+        return;
+      }
+
+      res.writeHead(404, { 'content-type': 'text/plain' });
+      res.end('not found');
+    });
+    const port = await listen(server);
+
+    try {
+      await runCli(['delete-task', '--task-id', 'T-1'], { OPENFORGE_HTTP_PORT: String(port) });
+
+      const { stdout: getTaskStdout } = await runCli(['get-task', '--task-id', 'T-1'], {
+        OPENFORGE_HTTP_PORT: String(port),
+      });
+      expect(JSON.parse(getTaskStdout)).toEqual(completedTask);
+
+      const { stdout: normalListStdout } = await runCli(['list-tasks', '--project-id', 'P-1'], {
+        OPENFORGE_HTTP_PORT: String(port),
+      });
+      expect(JSON.parse(normalListStdout)).toEqual([openTask]);
+
+      const { stdout: doneListStdout } = await runCli(['list-tasks', '--project-id', 'P-1', '--state', 'done'], {
+        OPENFORGE_HTTP_PORT: String(port),
+      });
+      const doneTasks = JSON.parse(doneListStdout);
+      expect(doneTasks).toHaveLength(1);
+      expect(doneTasks[0]).toMatchObject({ id: 'T-1', status: 'done' });
     } finally {
       await close(server);
     }

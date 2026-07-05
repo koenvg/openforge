@@ -304,8 +304,8 @@ async fn test_create_task_handler_persists_labels() {
 }
 
 #[tokio::test]
-async fn test_delete_task_handler_deletes_task() {
-    let (state, path) = test_state("http_delete_task_handler_deletes_task");
+async fn test_delete_task_handler_completes_task_and_keeps_cli_retrieval() {
+    let (state, path) = test_state("http_delete_task_handler_completes_task");
     {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -313,12 +313,23 @@ async fn test_delete_task_handler_deletes_task() {
             .expect("create project");
         db.set_config("task_id_prefix", "T")
             .expect("set task prefix");
-        db.create_task("Task", "backlog", Some(&project.id), None, None)
-            .expect("create task");
+        db.create_task(
+            "Completed prompt",
+            "backlog",
+            Some(&project.id),
+            Some("Full prompt kept for agents"),
+            None,
+        )
+        .expect("create completed task");
+        db.update_task_summary("T-1", "## Handoff Notes\nKeep this reference")
+            .expect("set handoff notes");
+        db.create_task("Open task", "backlog", Some(&project.id), None, None)
+            .expect("create open task");
     }
 
     let router = create_router(state.clone());
     let response = router
+        .clone()
         .oneshot(
             Request::builder()
                 .uri("/delete_task")
@@ -333,14 +344,67 @@ async fn test_delete_task_handler_deletes_task() {
     assert_eq!(response.status(), StatusCode::OK);
     let json = response_body_json(response).await;
     assert_eq!(json["task_id"], "T-1");
-    assert_eq!(json["status"], "deleted");
-    assert!(state
-        .db
-        .lock()
-        .expect("lock db")
-        .get_task("T-1")
-        .expect("get task")
-        .is_none());
+    assert_eq!(json["status"], "completed");
+
+    let completed_response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/task/T-1")
+                .method("GET")
+                .body(Body::empty())
+                .expect("build request"),
+        )
+        .await
+        .expect("get completed task should succeed");
+    assert_eq!(completed_response.status(), StatusCode::OK);
+    let completed_json = response_body_json(completed_response).await;
+    assert_eq!(completed_json["id"], "T-1");
+    assert_eq!(completed_json["status"], "done");
+    assert_eq!(completed_json["initial_prompt"], "Completed prompt");
+    assert_eq!(completed_json["prompt"], "Full prompt kept for agents");
+    assert_eq!(
+        completed_json["summary"],
+        "## Handoff Notes\nKeep this reference"
+    );
+
+    let normal_list_response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/tasks?project_id=P-1&exclude_done=true&compact=true")
+                .method("GET")
+                .body(Body::empty())
+                .expect("build request"),
+        )
+        .await
+        .expect("list visible tasks should succeed");
+    assert_eq!(normal_list_response.status(), StatusCode::OK);
+    let normal_list = response_body_json(normal_list_response).await;
+    let normal_ids: Vec<_> = normal_list
+        .as_array()
+        .expect("normal list array")
+        .iter()
+        .map(|row| row["id"].as_str().expect("task id"))
+        .collect();
+    assert_eq!(normal_ids, vec!["T-2"]);
+
+    let completed_list_response = router
+        .oneshot(
+            Request::builder()
+                .uri("/tasks?project_id=P-1&state=done&compact=true")
+                .method("GET")
+                .body(Body::empty())
+                .expect("build request"),
+        )
+        .await
+        .expect("list completed tasks should succeed");
+    assert_eq!(completed_list_response.status(), StatusCode::OK);
+    let completed_list = response_body_json(completed_list_response).await;
+    let completed_rows = completed_list.as_array().expect("completed list array");
+    assert_eq!(completed_rows.len(), 1);
+    assert_eq!(completed_rows[0]["id"], "T-1");
+    assert_eq!(completed_rows[0]["status"], "done");
 
     let _ = std::fs::remove_file(path);
 }

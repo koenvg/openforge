@@ -1508,7 +1508,7 @@ async fn delete_task_publishes_deleted_event_before_worktree_cleanup_finishes() 
         .subscribe();
 
     // Hold the per-repo worktree lock so the worktree/branch cleanup cannot run
-    // yet. delete_task must still return, delete the row, and publish the
+    // yet. delete_task must still return, complete the row, and publish the
     // deleted event: cleanup is background work.
     let repo_lock = crate::git_worktree::acquire_lock(&repo_dir);
     let cleanup_gate = repo_lock.lock().await;
@@ -1520,12 +1520,13 @@ async fn delete_task_publishes_deleted_event_before_worktree_cleanup_finishes() 
     .await
     .expect("delete_task must return while worktree cleanup is still pending");
 
-    assert!(
-        crate::db::acquire_db(&state.db)
-            .get_task(&task_id)
-            .expect("get task")
-            .is_none(),
-        "the task row must be deleted before worktree cleanup runs"
+    let completed = crate::db::acquire_db(&state.db)
+        .get_task(&task_id)
+        .expect("get task")
+        .expect("completed task record should remain before worktree cleanup runs");
+    assert_eq!(
+        completed.status, "done",
+        "the task row must be marked done before worktree cleanup runs"
     );
     let envelope = events
         .try_recv()

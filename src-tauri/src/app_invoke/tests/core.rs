@@ -101,10 +101,11 @@ async fn handles_config_projects_tasks_and_unmatched_commands() {
     );
 
     invoke_ok(&state, "delete_task", json!({ "id": task_id })).await;
-    assert!(crate::db::acquire_db(&state.db)
+    let completed = crate::db::acquire_db(&state.db)
         .get_task(task_id)
-        .expect("get deleted task")
-        .is_none());
+        .expect("get completed task")
+        .expect("completed task record should remain");
+    assert_eq!(completed.status, "done");
 
     invoke_ok(&state, "delete_project", json!({ "id": project_id })).await;
 
@@ -116,6 +117,84 @@ async fn handles_config_projects_tasks_and_unmatched_commands() {
     .await
     .expect_err("unsupported command should be rejected");
     assert_eq!(unsupported.0, StatusCode::NOT_IMPLEMENTED);
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn app_invoke_delete_task_completes_record_and_removes_worktree_metadata() {
+    let (state, path) = test_state("app_invoke_delete_task_completes_record");
+    let project = invoke_ok(
+        &state,
+        "create_project",
+        json!({ "name": "Open Forge", "path": "/tmp/openforge-complete" }),
+    )
+    .await;
+    let project_id = project["id"].as_str().expect("project id");
+    let task = invoke_ok(
+        &state,
+        "create_task",
+        json!({
+            "initialPrompt": "Preserve the handoff notes",
+            "status": "backlog",
+            "projectId": project_id,
+            "permissionMode": null,
+        }),
+    )
+    .await;
+    let task_id = task["id"].as_str().expect("task id").to_string();
+    {
+        let db = crate::db::acquire_db(&state.db);
+        db.update_task_summary(&task_id, "## Handoff Notes\nUseful reference")
+            .expect("set handoff notes");
+        db.create_worktree_record(
+            &task_id,
+            project_id,
+            "/tmp/openforge-complete",
+            "/tmp/openforge-complete/.worktrees/T-1",
+            "openforge/T-1",
+        )
+        .expect("create worktree metadata");
+        assert!(db
+            .get_worktree_for_task(&task_id)
+            .expect("get worktree")
+            .is_some());
+    }
+
+    invoke_ok(&state, "delete_task", json!({ "id": task_id })).await;
+
+    let db = crate::db::acquire_db(&state.db);
+    let completed = db
+        .get_task(&task_id)
+        .expect("get completed task")
+        .expect("completed task record should remain");
+    assert_eq!(completed.status, "done");
+    assert_eq!(completed.initial_prompt, "Preserve the handoff notes");
+    assert_eq!(
+        completed.summary.as_deref(),
+        Some("## Handoff Notes\nUseful reference")
+    );
+    assert!(db
+        .get_worktree_for_task(&task_id)
+        .expect("get worktree")
+        .is_none());
+    assert!(db
+        .get_tasks_for_project_excluding_state(project_id, "done")
+        .expect("get normal board tasks")
+        .is_empty());
+    let completed_tasks = db
+        .get_tasks_for_project_by_state(project_id, "done")
+        .expect("get completed tasks");
+    assert_eq!(completed_tasks.len(), 1);
+    assert_eq!(completed_tasks[0].id, task_id);
+    drop(db);
+    let visible_tasks = invoke_ok(
+        &state,
+        "get_tasks_for_project",
+        json!({ "projectId": project_id }),
+    )
+    .await;
+    assert_eq!(visible_tasks.as_array().expect("visible tasks").len(), 0);
 
     let _ = std::fs::remove_file(path);
 }

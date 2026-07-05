@@ -1054,13 +1054,11 @@ impl super::Database {
         Ok(links)
     }
 
-    /// Delete a task and all associated data (sessions, PRs, comments, worktrees, reviews).
+    /// Hard-delete a newly created task during rollback before it is user-visible.
     ///
-    /// Wrapped in a transaction so all-or-nothing: if any step fails the DB stays consistent.
-    ///
-    /// # Arguments
-    /// * `id` - Task ID to delete
-    pub fn delete_task(&self, id: &str) -> Result<()> {
+    /// This removes the task row and every associated row. Normal completion must use
+    /// `delete_task` so completed tasks stay available for reference.
+    pub fn hard_delete_task(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute_batch("BEGIN IMMEDIATE")?;
         let result = (|| -> Result<()> {
@@ -1090,6 +1088,53 @@ impl super::Database {
                 rusqlite::params![id],
             )?;
             conn.execute("DELETE FROM tasks WHERE id = ?1", rusqlite::params![id])?;
+            Ok(())
+        })();
+        match result {
+            Ok(()) => {
+                conn.execute_batch("COMMIT")?;
+                Ok(())
+            }
+            Err(e) => {
+                let _ = conn.execute_batch("ROLLBACK");
+                Err(e)
+            }
+        }
+    }
+
+    /// Complete a task by hiding it from active board flows while preserving its Task-owned reference data.
+    ///
+    /// Runtime data that depends on a live workspace is removed, but the task row, labels,
+    /// and dependency links remain available for CLI/agent lookup.
+    pub fn delete_task(&self, id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute_batch("BEGIN IMMEDIATE")?;
+        let result = (|| -> Result<()> {
+            conn.execute(
+                "DELETE FROM agent_sessions WHERE ticket_id = ?1",
+                rusqlite::params![id],
+            )?;
+            conn.execute("DELETE FROM pr_comments WHERE pr_id IN (SELECT id FROM pull_requests WHERE ticket_id = ?1)", rusqlite::params![id])?;
+            conn.execute(
+                "DELETE FROM pull_requests WHERE ticket_id = ?1",
+                rusqlite::params![id],
+            )?;
+            conn.execute(
+                "DELETE FROM self_review_comments WHERE task_id = ?1",
+                rusqlite::params![id],
+            )?;
+            conn.execute(
+                "DELETE FROM worktrees WHERE task_id = ?1",
+                rusqlite::params![id],
+            )?;
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time went backwards")
+                .as_secs() as i64;
+            conn.execute(
+                "UPDATE tasks SET status = 'done', updated_at = ?1 WHERE id = ?2",
+                rusqlite::params![now, id],
+            )?;
             Ok(())
         })();
         match result {
@@ -1759,7 +1804,7 @@ mod tests {
     }
 
     #[test]
-    fn test_delete_task_removes_dependency_edges() {
+    fn test_delete_task_preserves_dependency_edges_for_completed_references() {
         let (db, path) = make_test_db("delete_task_dependency_edges");
         db.set_config("task_id_prefix", "T").unwrap();
         let prerequisite = db
@@ -1775,26 +1820,57 @@ mod tests {
             .expect("delete prerequisite");
 
         let dependent = db.get_task(&dependent.id).expect("get dependent").unwrap();
-        assert!(dependent.depends_on.is_empty());
+        assert_eq!(dependent.depends_on, vec![prerequisite.id.clone()]);
 
         drop(db);
         let _ = fs::remove_file(&path);
     }
 
     #[test]
-    fn test_delete_task_basic() {
-        let (db, path) = make_test_db("delete_task_basic");
-
+    fn test_delete_task_completes_record_and_removes_worktree_metadata() {
+        let (db, path) = make_test_db("delete_task_completes_record");
+        let project = db
+            .create_project("Project", "/tmp/project")
+            .expect("create project");
         let task = db
-            .create_task("Deletable", "backlog", None, None, None)
+            .create_task("Complete me", "backlog", Some(&project.id), None, None)
             .expect("create failed");
-        let tasks = db.get_all_tasks().expect("get failed");
-        assert_eq!(tasks.len(), 1);
+        db.create_worktree_record(
+            &task.id,
+            &project.id,
+            "/tmp/project",
+            "/tmp/project/.worktrees/T-1",
+            "openforge/T-1",
+        )
+        .expect("create worktree metadata");
+        assert_eq!(db.get_all_tasks().expect("get failed").len(), 1);
+        assert!(db
+            .get_worktree_for_task(&task.id)
+            .expect("get worktree")
+            .is_some());
 
-        db.delete_task(&task.id).expect("delete failed");
+        db.delete_task(&task.id).expect("complete failed");
 
-        let tasks = db.get_all_tasks().expect("get failed");
-        assert_eq!(tasks.len(), 0);
+        let completed = db
+            .get_task(&task.id)
+            .expect("get completed task")
+            .expect("completed task record should remain");
+        assert_eq!(completed.status, "done");
+        assert_eq!(completed.initial_prompt, "Complete me");
+        assert_eq!(db.get_all_tasks().expect("get failed").len(), 1);
+        assert!(db
+            .get_worktree_for_task(&task.id)
+            .expect("get worktree")
+            .is_none());
+        assert!(db
+            .get_tasks_for_project_excluding_state(&project.id, "done")
+            .expect("get visible tasks")
+            .is_empty());
+        let done_tasks = db
+            .get_tasks_for_project_by_state(&project.id, "done")
+            .expect("get done tasks");
+        assert_eq!(done_tasks.len(), 1);
+        assert_eq!(done_tasks[0].id, task.id);
 
         drop(db);
         let _ = fs::remove_file(&path);
@@ -1837,10 +1913,13 @@ mod tests {
         db.insert_self_review_comment("T-100", "issue", Some("main.rs"), Some(5), "Looks wrong")
             .expect("insert self review failed");
 
-        db.delete_task("T-100").expect("delete failed");
+        db.delete_task("T-100").expect("complete failed");
 
-        let task = db.get_task("T-100").expect("get failed");
-        assert!(task.is_none());
+        let task = db
+            .get_task("T-100")
+            .expect("get failed")
+            .expect("completed task record should remain");
+        assert_eq!(task.status, "done");
 
         let sessions = db
             .get_latest_session_for_ticket("T-100")
