@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { get } from 'svelte/store'
-import type { PullRequestInfo } from './types'
+import type { ProjectAttention, PullRequestInfo } from './types'
 
 vi.mock('./ipc', () => ({
   forceGithubSync: vi.fn(),
@@ -334,6 +334,26 @@ describe('useAppDataOrchestrator', () => {
 
     // In-flight (T-run) and Out of Focus (T-out) are excluded — only T-focus needs attention.
     expect(get(attentionCountByProject).get('P-1')).toBe(1)
+  })
+
+  it('coalesces concurrent project attention loads through the orchestrator owner', async () => {
+    const orchestrator = useAppDataOrchestrator({ setShowProjectSetup: vi.fn() })
+    let resolveAttention: ((value: ProjectAttention[]) => void) | undefined
+    vi.mocked(getProjectAttention).mockImplementationOnce(() => new Promise((resolve) => {
+      resolveAttention = resolve
+    }))
+
+    const firstLoad = orchestrator.loadProjectAttention()
+    const secondLoad = orchestrator.loadProjectAttention()
+
+    expect(getProjectAttention).toHaveBeenCalledOnce()
+
+    resolveAttention?.([
+      { project_id: 'P-1', needs_input: 1, running_agents: 0, ci_failures: 0, unaddressed_comments: 0, completed_agents: 0 },
+    ])
+    await Promise.all([firstLoad, secondLoad])
+
+    expect(get(projectAttention).get('P-1')?.needs_input).toBe(1)
   })
 
   it('throttles attention refreshes so a steady stream of triggers cannot starve the update', async () => {

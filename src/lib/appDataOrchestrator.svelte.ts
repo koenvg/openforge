@@ -72,6 +72,7 @@ export function useAppDataOrchestrator(options: AppDataOrchestratorOptions) {
   const logError = options.logError ?? defaultLogError
   let isSyncing = $state(false)
   let attentionCountRefreshTimer: ReturnType<typeof setTimeout> | null = null
+  let projectAttentionLoadPromise: Promise<void> | null = null
 
   async function loadProjects(): Promise<void> {
     try {
@@ -184,19 +185,24 @@ export function useAppDataOrchestrator(options: AppDataOrchestratorOptions) {
     }
   }
 
-  async function loadProjectAttention(): Promise<void> {
-    try {
-      const summaries = await getProjectAttention()
-      const map = new Map<string, ProjectAttention>()
-      for (const summary of summaries) {
-        map.set(summary.project_id, summary)
+  function loadProjectAttention(): Promise<void> {
+    projectAttentionLoadPromise ??= (async () => {
+      try {
+        const summaries = await getProjectAttention()
+        const map = new Map<string, ProjectAttention>()
+        for (const summary of summaries) {
+          map.set(summary.project_id, summary)
+        }
+        projectAttention.set(map)
+      } catch (e) {
+        logError('Failed to load project attention:', e)
+      } finally {
+        projectAttentionLoadPromise = null
+        scheduleAttentionCountRefresh()
       }
-      projectAttention.set(map)
-    } catch (e) {
-      logError('Failed to load project attention:', e)
-    }
+    })()
 
-    scheduleAttentionCountRefresh()
+    return projectAttentionLoadPromise
   }
 
   // Sidebar green dot: the count of Focus-tab tasks needing attention per project. Computed on
