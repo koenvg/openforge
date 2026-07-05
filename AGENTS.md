@@ -21,9 +21,9 @@ Never use `$effect` return-cleanup to release resources keyed by a prop value. S
 
 ## Babysitter
 
-At the start of every task in this repository, load the Babysitter `call` skill and follow its instructions, including loading any skill it delegates to.
+At the start of every request in this repository, first classify whether the user is asking for development work. Development work means implementation, bug fixes, refactors, migrations, UI/API behavior changes, test writing, code verification, or an explicit Babysitter/process workflow request. For development work, load the Babysitter `call` skill and follow its instructions, including loading any skill it delegates to. Do not load Babysitter or create/drive a Babysitter CLI run for random questions, analysis-only requests, planning/research with no code or process artifact change, or other non-development work unless the user explicitly asks for Babysitter.
 
-For implementation tasks, loading the Babysitter skill is not enough. Before editing files, create and drive an actual Babysitter CLI run:
+Always create and drive a Babysitter CLI run for development work before editing files; loading the Babysitter skill is not enough. Before editing files:
 - Store run-specific process JS files under the current worktree's `.a5c/processes/`, not `/tmp` or another worktree.
 - Before `run:create`, verify the process file exists and `.a5c/node_modules/@a5c-ai/babysitter-sdk` exists; if the SDK is missing, install it from a subshell such as `(cd .a5c && npm i @a5c-ai/babysitter-sdk@<version>)` so the repository CWD does not change.
 - Run `babysitter run:create ... --harness pi` from the project root using an absolute `--entry` path to the current worktree process file.
@@ -36,7 +36,7 @@ Project profile: Open Forge is an Electron desktop command center with a Rust si
 
 Recommended local Babysitter usage:
 - Use `/babysitter:project-install` to refresh `.a5c/project-profile.json` and `.a5c/project-profile.md` after major architecture, workflow, or product-direction changes.
-- Use TDD-driven iterative convergence for feature, bugfix, business-logic, and product-behavior implementation work. For documentation-only, configuration-only, planning, metadata, process-only, or similarly low-risk changes, use a lighter verification-first workflow instead of inventing failing product tests.
+- Use TDD-driven iterative convergence for feature, bugfix, business-logic, and product-behavior implementation work. For documentation-only, configuration-only, planning, metadata, process-only, or similarly low-risk development changes, use a lighter verification-first workflow instead of inventing failing product tests. Do not create or drive a Babysitter CLI run for random questions, analysis-only requests, or planning/research that does not change code or process artifacts unless explicitly requested.
 - Use repo mapping before broad changes touching high-churn integration points such as `src/App.svelte`, `src/electron/main.ts`, `src-tauri/src/main.rs`, `src/lib/ipc.ts`, `src/lib/types.ts`, `src-tauri/src/github_poller.rs`, or `src/lib/terminalPool.ts`.
 
 Recommended verification gates:
