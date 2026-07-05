@@ -95,7 +95,7 @@ impl PluginHost {
             if let Some(depends_on) = depends_on {
                 if !depends_on.is_empty() {
                     if let Err(error) = db.set_task_dependencies(&created.id, &depends_on) {
-                        let _ = db.delete_task(&created.id);
+                        let _ = db.hard_delete_task(&created.id);
                         return Err(format!("failed to set task dependencies: {error}"));
                     }
                 }
@@ -104,7 +104,7 @@ impl PluginHost {
             if let Some(label_names) = label_names {
                 if !label_names.is_empty() {
                     if let Err(error) = db.set_task_labels(&created.id, &label_names) {
-                        let _ = db.delete_task(&created.id);
+                        let _ = db.hard_delete_task(&created.id);
                         return Err(format!("failed to set task labels: {error}"));
                     }
                 }

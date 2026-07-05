@@ -8,6 +8,10 @@ OpenForge is a desktop command center for coordinating task work and AI coding a
 A unit of work tracked by OpenForge for a project.
 _Avoid_: Ticket, issue, job
 
+**Completed Task**:
+A **Task** whose work is finished but remains available as reference for agents while staying out of normal active-task flows.
+_Avoid_: Deleted Task, old task, hidden task
+
 **Focus**:
 The board view of **Tasks** that need user attention now.
 _Avoid_: All current work, in-flight queue

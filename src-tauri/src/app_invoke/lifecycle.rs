@@ -2,9 +2,9 @@ use super::*;
 use log::error;
 use std::path::{Path, PathBuf};
 
-/// The worktree/branch cleanup work captured for a task before its DB rows are
-/// deleted. Running it needs no DB access: `delete_task` drops the worktree
-/// record in the same transaction as the task row.
+/// The worktree/branch cleanup work captured for a task before its workspace
+/// metadata is removed. Running it needs no DB access: `delete_task` drops the
+/// worktree record in the same transaction as completing the task.
 pub(super) struct TaskRuntimeCleanup {
     repo_path: PathBuf,
     worktree_path: PathBuf,
@@ -13,8 +13,7 @@ pub(super) struct TaskRuntimeCleanup {
 
 /// Kills the task's PTYs and captures its worktree cleanup while the task and
 /// worktree rows still exist. The returned cleanup (if any) is safe to run
-/// after the rows are deleted, so `delete_task` can publish the deleted event
-/// immediately and finish the slow git/filesystem work in the background.
+/// after the worktree row is removed, so `delete_task` can publish the deleted event
 pub(super) async fn prepare_task_runtime_cleanup(
     state: &AppState,
     task_id: &str,
@@ -52,7 +51,7 @@ pub(super) async fn prepare_task_runtime_cleanup(
 }
 
 /// Runs a captured worktree/branch cleanup. Failures are logged rather than
-/// surfaced: by the time this runs the task row is gone and the deleted event
+/// surfaced: by the time this runs the task is already completed and the deleted event
 /// has been published, so there is no caller left to report to.
 pub(super) async fn run_task_runtime_cleanup(task_id: &str, cleanup: TaskRuntimeCleanup) {
     let remove_result = crate::git_worktree::remove_worktree_with_branch(
@@ -64,7 +63,7 @@ pub(super) async fn run_task_runtime_cleanup(task_id: &str, cleanup: TaskRuntime
     if let Err(e) = remove_result {
         let error_message = e.to_string();
         error!(
-            "[app_invoke] Failed to remove worktree for deleted task {} error_bytes={}",
+            "[app_invoke] Failed to remove worktree for completed task {} error_bytes={}",
             task_id,
             error_message.len()
         );

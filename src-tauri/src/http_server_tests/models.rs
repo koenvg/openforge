@@ -197,18 +197,18 @@ fn test_task_label_request_models_serialize_expected_fields() {
 }
 
 #[test]
-fn test_delete_task_request_response_models_use_task_id_and_deleted_status() {
+fn test_delete_task_request_response_models_use_task_id_and_completed_status() {
     let request: DeleteTaskRequest =
         serde_json::from_str(r#"{"task_id":"T-1"}"#).expect("delete request");
     assert_eq!(request.task_id, "T-1");
 
     let response = DeleteTaskResponse {
         task_id: "T-1".to_string(),
-        status: "deleted".to_string(),
+        status: "completed".to_string(),
     };
     let json = serde_json::to_value(&response).expect("delete response");
     assert_eq!(json["task_id"], "T-1");
-    assert_eq!(json["status"], "deleted");
+    assert_eq!(json["status"], "completed");
 }
 
 #[test]

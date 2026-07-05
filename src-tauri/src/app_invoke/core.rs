@@ -257,7 +257,7 @@ pub(super) async fn handle_app_unmatched_command(
             if let Some(depends_on) = depends_on {
                 if !depends_on.is_empty() {
                     if let Err(e) = db.set_task_dependencies(&task.id, &depends_on) {
-                        let _ = db.delete_task(&task.id);
+                        let _ = db.hard_delete_task(&task.id);
                         return Err((
                             StatusCode::BAD_REQUEST,
                             format!("Failed to set task dependencies: {e}"),
@@ -268,7 +268,7 @@ pub(super) async fn handle_app_unmatched_command(
             if let Some(label_names) = label_names {
                 if !label_names.is_empty() {
                     if let Err(e) = db.set_task_labels(&task.id, &label_names) {
-                        let _ = db.delete_task(&task.id);
+                        let _ = db.hard_delete_task(&task.id);
                         return Err((
                             StatusCode::BAD_REQUEST,
                             format!("Failed to set task labels: {e}"),
@@ -531,12 +531,15 @@ pub(super) async fn handle_app_unmatched_command(
         }
         "get_tasks_for_project" => {
             let project_id = payload_string(&request.payload, "projectId")?;
-            json_value(db.get_tasks_for_project(&project_id).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get tasks for project: {e}"),
-                )
-            })?)?
+            json_value(
+                db.get_tasks_for_project_excluding_state(&project_id, "done")
+                    .map_err(|e| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("Failed to get tasks for project: {e}"),
+                        )
+                    })?,
+            )?
         }
         "get_task_workspace" => {
             let task_id = payload_string(&request.payload, "taskId")?;

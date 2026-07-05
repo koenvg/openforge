@@ -630,7 +630,7 @@ pub async fn create_task_handler(
 
     if !request.depends_on.is_empty() {
         if let Err(e) = db.set_task_dependencies(&task.id, &request.depends_on) {
-            let _ = db.delete_task(&task.id);
+            let _ = db.hard_delete_task(&task.id);
             return Err((
                 StatusCode::BAD_REQUEST,
                 format!("Failed to set task dependencies: {e}"),
@@ -640,7 +640,7 @@ pub async fn create_task_handler(
 
     if !request.labels.is_empty() {
         if let Err(e) = db.set_task_labels(&task.id, &request.labels) {
-            let _ = db.delete_task(&task.id);
+            let _ = db.hard_delete_task(&task.id);
             return Err((
                 StatusCode::BAD_REQUEST,
                 format!("Failed to set task labels: {e}"),
@@ -741,7 +741,7 @@ pub async fn delete_task_handler(
 
     Ok(Json(DeleteTaskResponse {
         task_id: request.task_id,
-        status: "deleted".to_string(),
+        status: "completed".to_string(),
     }))
 }
 
