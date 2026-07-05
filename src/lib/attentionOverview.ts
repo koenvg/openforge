@@ -60,9 +60,10 @@ function activityTime(task: Task, session: AgentSession | null): number {
 }
 
 /**
- * Build the focus tasks for one project: its `doing` tasks that are not manually
- * set aside — ordered needs-attention first, then by
- * recent activity.
+ * Build the needs-attention focus tasks for one project: its `doing` tasks that are
+ * not manually set aside and that actually need the user to act — the board's
+ * "Needs attention" section, excluding in-flight (actively running) tasks — ordered
+ * by recent activity.
  */
 function buildFocusTasks(
   project: Project,
@@ -85,11 +86,12 @@ function buildFocusTasks(
         needsAttention: isFocusTask(task, state, prs, focusStates),
       }
     })
+    // The overview surfaces only what the user must act on. Drop in-flight tasks
+    // (an agent is actively running, state 'active') and any whose state isn't a
+    // focus state, mirroring the board's "Needs attention" section exactly.
+    .filter((item) => item.needsAttention)
 
-  items.sort((a, b) => {
-    if (a.needsAttention !== b.needsAttention) return a.needsAttention ? -1 : 1
-    return activityTime(b.task, b.session) - activityTime(a.task, a.session)
-  })
+  items.sort((a, b) => activityTime(b.task, b.session) - activityTime(a.task, a.session))
 
   return items
 }

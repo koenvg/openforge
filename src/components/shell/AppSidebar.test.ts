@@ -231,6 +231,23 @@ describe('AppSidebar', () => {
     expect(activeProjectButton.getAttribute('aria-current')).toBe('true')
   })
 
+  it('project IS visually active on a per-project (rail) plugin view like PR review', () => {
+    // The per-project PR review view is scoped to the active project, so its project
+    // stays highlighted — e.g. after opening a review request from the attention dialog.
+    renderSidebar({ currentView: 'plugin:com.openforge.github-sync:pr_review' as AppView })
+
+    const activeProjectButton = screen.getByRole('button', { name: /^alpha project$/i })
+    expect(activeProjectButton.getAttribute('aria-current')).toBe('true')
+  })
+
+  it('project is NOT visually active on the global (sidebar) All Pull Requests view', () => {
+    // The all-repos view is cross-project, so no single project row should be highlighted.
+    renderSidebar({ pluginNavItems: [globalPrNavItem], currentView: GLOBAL_PR_VIEW_KEY as AppView })
+
+    const activeProjectButton = screen.getByRole('button', { name: /^alpha project$/i })
+    expect(activeProjectButton.getAttribute('aria-current')).toBeNull()
+  })
+
   describe('sidebar plugin nav items', () => {
     it('renders a sidebar plugin nav item with its title', () => {
       renderSidebar({ pluginNavItems: [globalPrNavItem] })

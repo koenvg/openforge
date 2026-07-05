@@ -101,6 +101,12 @@ export function useAppRouter() {
 
   function navigateToTask(taskId: string) {
     pushNavState()
+    // A task detail only renders on the board view, so navigating to a task from
+    // any other view (settings, a plugin view, PR review) must return to the board
+    // or the detail silently won't show. Push happens first so Back restores the
+    // originating view.
+    currentView.set('board')
+    currentViewState = 'board'
     selectedTaskId.set(taskId)
   }
 

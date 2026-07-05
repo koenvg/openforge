@@ -48,6 +48,7 @@ vi.mock('../../lib/stores', () => ({
   reviewPrs: writable([]),
   authoredPrs: writable([]),
   selectedReviewPr: writable(null),
+  pendingReviewPrOpen: writable(null),
   prFileDiffs: writable([]),
   reviewComments: writable([]),
   pendingManualComments: writable([]),
@@ -61,6 +62,7 @@ import {
   agentReviewComments,
   authoredPrs,
   pendingManualComments,
+  pendingReviewPrOpen,
   prFileDiffs,
   prOverviewComments,
   reviewComments,
@@ -135,6 +137,7 @@ function resetStores() {
   reviewPrs.set([])
   authoredPrs.set([])
   selectedReviewPr.set(null)
+  pendingReviewPrOpen.set(null)
   prFileDiffs.set([])
   reviewComments.set([])
   pendingManualComments.set([])
@@ -214,6 +217,41 @@ describe('PrReviewView repo scoping', () => {
     await screen.findByText("This project isn't linked to a GitHub repository")
     expect(screen.queryByText('Fix authentication middleware')).toBeNull()
     expect(screen.queryByText('Review Requests')).toBeNull()
+  })
+})
+
+describe('PrReviewView host-driven open', () => {
+  beforeEach(() => {
+    resetStores()
+    vi.clearAllMocks()
+  })
+
+  it('opens a PR straight into the detail view when the host sets pendingReviewPrOpen', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    registerPrReviewBackends(registry, () => [baseDiff])
+
+    render(PrReviewView, {
+      props: {
+        api: registry.frontendApi,
+        context: registry.frontendApi.context.getSnapshot(),
+        projectName: 'Demo Project',
+        projectId: 'project-1',
+      },
+    })
+
+    // List is up but no PR is selected yet.
+    await screen.findByText('Fix authentication middleware')
+    expect(get(selectedReviewPr)).toBeNull()
+
+    // The host (attention dialog) requests opening this specific PR.
+    pendingReviewPrOpen.set(basePr)
+
+    await waitFor(() => {
+      expect(get(selectedReviewPr)?.id).toBe(basePr.id)
+      expect(get(prFileDiffs).map((d) => d.filename)).toEqual(['src/main.rs'])
+    })
+    // The request is consumed so it does not re-fire on later store updates.
+    expect(get(pendingReviewPrOpen)).toBeNull()
   })
 })
 
