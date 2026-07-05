@@ -1021,11 +1021,92 @@ async fn opencode_hook_ignores_error_status_events() {
 }
 
 #[test]
+fn claude_activity_snapshot_is_bounded_and_excludes_transcript_path() {
+    let payload = ClaudeHookPayload {
+        session_id: Some("claude-session-from-payload".to_string()),
+        tool_name: Some("Bash".to_string()),
+        tool_input: Some(serde_json::json!({
+            "command": format!("{}tail command", "x".repeat(9 * 1024))
+        })),
+        transcript_path: Some("/private/transcript.jsonl".to_string()),
+        claude_task_id: Some("task-claude".to_string()),
+        pty_instance_id: Some(9),
+    };
+
+    let snapshot = bounded_claude_activity_snapshot(
+        "user-prompt-submit",
+        &payload,
+        Some("claude-session-from-query"),
+    )
+    .expect("activity snapshot");
+
+    assert!(snapshot.len() <= 8 * 1024);
+    assert!(snapshot.contains("tail command"));
+    assert!(snapshot.contains("user-prompt-submit"));
+    assert!(snapshot.contains("claude-session-from-query"));
+    assert!(!snapshot.contains("/private/transcript.jsonl"));
+}
+
+#[tokio::test]
+async fn claude_user_prompt_hook_uses_query_identity_and_payload_transcript_metadata() {
+    let (state, path) = test_state("claude_user_prompt_query_metadata");
+    let task_id = {
+        let db = state.db.lock().expect("lock db");
+        let task = db
+            .create_task("Claude metadata task", "doing", None, None, None)
+            .expect("create task");
+        db.create_agent_session(
+            "ses-claude-user-prompt",
+            &task.id,
+            None,
+            "implementing",
+            "completed",
+            "claude-code",
+        )
+        .expect("create claude session");
+        db.set_agent_session_pty_instance_id("ses-claude-user-prompt", 96)
+            .expect("store pty instance");
+        task.id
+    };
+
+    let router = create_router(state.clone());
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri(format!("/hooks/user-prompt-submit?task_id={task_id}&pty_instance_id=96&session_id=claude-query-96"))
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"session_id":"","transcript_path":"/tmp/claude-transcript.jsonl","tool_name":"UserPromptSubmit","tool_input":{"prompt":"implement metadata"}}"#,
+                ))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let session = state
+        .db
+        .lock()
+        .expect("lock db")
+        .get_agent_session("ses-claude-user-prompt")
+        .expect("get session")
+        .expect("session exists");
+    assert_eq!(session.status, "running");
+    assert_eq!(
+        session.claude_session_id.as_deref(),
+        Some("claude-query-96")
+    );
+    assert_eq!(session.pty_instance_id, Some(96));
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
 fn task_display_title_refresh_starts_for_supported_provider_activity() {
     let cases = [
         ("codex", "UserPromptSubmit"),
-        ("claude-code", "pre-tool-use"),
-        ("claude-code", "post-tool-use"),
+        ("claude-code", "user-prompt-submit"),
         ("opencode", "message.updated"),
         ("pi", "user_prompt"),
     ];
@@ -1075,6 +1156,16 @@ fn task_display_title_refresh_ignores_unsupported_provider_activity() {
             "pi",
             "agent.start",
             crate::agent_lifecycle::AgentLifecycleEventKind::Started,
+        ),
+        (
+            "claude-code",
+            "pre-tool-use",
+            crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy,
+        ),
+        (
+            "claude-code",
+            "post-tool-use",
+            crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy,
         ),
         (
             "claude-code",

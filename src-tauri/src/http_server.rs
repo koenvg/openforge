@@ -369,6 +369,13 @@ pub struct ClaudeHookPayload {
     pub pty_instance_id: Option<u64>,
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ClaudeHookQuery {
+    pub task_id: Option<String>,
+    pub pty_instance_id: Option<u64>,
+    pub session_id: Option<String>,
+}
+
 /// Payload from the OpenForge Pi extension when a PTY-backed Pi agent starts or finishes a run.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PiAgentLifecyclePayload {
@@ -545,10 +552,7 @@ fn should_start_task_display_title_refresh(
 
     match notification.provider.as_str() {
         "codex" => notification.raw_event_type.as_deref() == Some("UserPromptSubmit"),
-        "claude-code" => matches!(
-            notification.raw_event_type.as_deref(),
-            Some("pre-tool-use" | "post-tool-use")
-        ),
+        "claude-code" => notification.raw_event_type.as_deref() == Some("user-prompt-submit"),
         "opencode" => notification.raw_event_type.as_deref() == Some("message.updated"),
         "pi" => notification.raw_event_type.as_deref() == Some("user_prompt"),
         _ => false,
@@ -1040,7 +1044,7 @@ fn claude_event_kind_from_event(
     event_type: &str,
 ) -> Option<crate::agent_lifecycle::AgentLifecycleEventKind> {
     match event_type {
-        "pre-tool-use" | "post-tool-use" => {
+        "user-prompt-submit" | "pre-tool-use" | "post-tool-use" => {
             Some(crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy)
         }
         "stop" | "session-end" => Some(crate::agent_lifecycle::AgentLifecycleEventKind::Ended),
@@ -1068,12 +1072,81 @@ pub(crate) fn map_hook_to_status(event_type: &str, current_status: &str) -> Opti
     Some(target_status.to_string())
 }
 
+const CLAUDE_ACTIVITY_SNAPSHOT_BYTES: usize = 8 * 1024;
+
+fn non_empty_string(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        let trimmed = value.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_string())
+    })
+}
+
+fn tail_bounded_lossy_text(text: &str, max_bytes: usize) -> String {
+    if text.len() <= max_bytes {
+        return text.to_string();
+    }
+
+    String::from_utf8_lossy(&text.as_bytes()[text.len() - max_bytes..]).to_string()
+}
+
+fn bounded_claude_activity_snapshot(
+    event_type: &str,
+    payload: &ClaudeHookPayload,
+    provider_session_id: Option<&str>,
+) -> Option<String> {
+    let mut activity = serde_json::Map::new();
+    activity.insert(
+        "event_type".to_string(),
+        serde_json::Value::String(event_type.to_string()),
+    );
+    if let Some(session_id) = provider_session_id.filter(|session_id| !session_id.trim().is_empty())
+    {
+        activity.insert(
+            "session_id".to_string(),
+            serde_json::Value::String(session_id.to_string()),
+        );
+    }
+    if let Some(tool_name) = payload
+        .tool_name
+        .as_deref()
+        .filter(|tool_name| !tool_name.trim().is_empty())
+    {
+        activity.insert(
+            "tool_name".to_string(),
+            serde_json::Value::String(tool_name.to_string()),
+        );
+    }
+    if let Some(tool_input) = &payload.tool_input {
+        let tool_input = tool_input.to_string();
+        activity.insert(
+            "tool_input_tail".to_string(),
+            serde_json::Value::String(tail_bounded_lossy_text(
+                &tool_input,
+                CLAUDE_ACTIVITY_SNAPSHOT_BYTES / 2,
+            )),
+        );
+    }
+
+    let content = serde_json::Value::Object(activity).to_string();
+    Some(tail_bounded_lossy_text(
+        &content,
+        CLAUDE_ACTIVITY_SNAPSHOT_BYTES,
+    ))
+}
+
 async fn handle_hook(
     State(state): State<AppState>,
+    Query(query): Query<ClaudeHookQuery>,
     Json(payload): Json<ClaudeHookPayload>,
     event_type: &str,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    if let Some(task_id) = &payload.claude_task_id {
+    let task_id = non_empty_string(payload.claude_task_id.clone())
+        .or_else(|| non_empty_string(query.task_id.clone()));
+    let provider_session_id = non_empty_string(payload.session_id.clone())
+        .or_else(|| non_empty_string(query.session_id.clone()));
+    let pty_instance_id = payload.pty_instance_id.or(query.pty_instance_id);
+
+    if let Some(task_id) = task_id {
         let payload_value = serde_json::to_value(&payload).unwrap_or(serde_json::json!({}));
         publish_app_event_to_runtime(
             state.app.as_ref(),
@@ -1090,15 +1163,23 @@ async fn handle_hook(
             let notification = crate::agent_lifecycle::AgentLifecycleNotification {
                 provider: "claude-code".to_string(),
                 task_id: task_id.clone(),
-                pty_instance_id: payload.pty_instance_id,
-                provider_session_id: payload.session_id.clone(),
+                pty_instance_id,
+                provider_session_id: provider_session_id.clone(),
                 kind,
                 raw_event_type: Some(event_type.to_string()),
                 raw_status_type: None,
             };
-            if let Some(change) = record_agent_lifecycle_notification(&state, &notification) {
-                emit_agent_status_changed(&state, &change);
-            }
+            return handle_agent_lifecycle_notification(
+                state,
+                notification,
+                payload.transcript_path.clone(),
+                bounded_claude_activity_snapshot(
+                    event_type,
+                    &payload,
+                    provider_session_id.as_deref(),
+                ),
+            )
+            .await;
         }
     } else {
         warn!(
@@ -1234,44 +1315,70 @@ pub async fn agent_lifecycle_handler(
 
 pub async fn hook_stop_handler(
     State(state): State<AppState>,
+    Query(query): Query<ClaudeHookQuery>,
     Json(payload): Json<ClaudeHookPayload>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    handle_hook(State(state), Json(payload), "stop").await
+    handle_hook(State(state), Query(query), Json(payload), "stop").await
+}
+
+pub async fn hook_user_prompt_submit_handler(
+    State(state): State<AppState>,
+    Query(query): Query<ClaudeHookQuery>,
+    Json(payload): Json<ClaudeHookPayload>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    handle_hook(
+        State(state),
+        Query(query),
+        Json(payload),
+        "user-prompt-submit",
+    )
+    .await
 }
 
 pub async fn hook_pre_tool_use_handler(
     State(state): State<AppState>,
+    Query(query): Query<ClaudeHookQuery>,
     Json(payload): Json<ClaudeHookPayload>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    handle_hook(State(state), Json(payload), "pre-tool-use").await
+    handle_hook(State(state), Query(query), Json(payload), "pre-tool-use").await
 }
 
 pub async fn hook_post_tool_use_handler(
     State(state): State<AppState>,
+    Query(query): Query<ClaudeHookQuery>,
     Json(payload): Json<ClaudeHookPayload>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    handle_hook(State(state), Json(payload), "post-tool-use").await
+    handle_hook(State(state), Query(query), Json(payload), "post-tool-use").await
 }
 
 pub async fn hook_session_end_handler(
     State(state): State<AppState>,
+    Query(query): Query<ClaudeHookQuery>,
     Json(payload): Json<ClaudeHookPayload>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    handle_hook(State(state), Json(payload), "session-end").await
+    handle_hook(State(state), Query(query), Json(payload), "session-end").await
 }
 
 pub async fn hook_notification_handler(
     State(state): State<AppState>,
+    Query(query): Query<ClaudeHookQuery>,
     Json(payload): Json<ClaudeHookPayload>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    handle_hook(State(state), Json(payload), "notification").await
+    handle_hook(State(state), Query(query), Json(payload), "notification").await
 }
 
 pub async fn hook_notification_permission_handler(
     State(state): State<AppState>,
+    Query(query): Query<ClaudeHookQuery>,
     Json(payload): Json<ClaudeHookPayload>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    handle_hook(State(state), Json(payload), "notification-permission").await
+    handle_hook(
+        State(state),
+        Query(query),
+        Json(payload),
+        "notification-permission",
+    )
+    .await
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1469,6 +1576,10 @@ pub fn create_router(state: AppState) -> Router {
         .route("/hooks/pi-agent-end", post(pi_agent_end_handler))
         .route("/hooks/opencode-event", post(opencode_event_handler))
         .route("/hooks/stop", post(hook_stop_handler))
+        .route(
+            "/hooks/user-prompt-submit",
+            post(hook_user_prompt_submit_handler),
+        )
         .route("/hooks/pre-tool-use", post(hook_pre_tool_use_handler))
         .route("/hooks/post-tool-use", post(hook_post_tool_use_handler))
         .route("/hooks/session-end", post(hook_session_end_handler))
