@@ -501,8 +501,10 @@ describe('FocusBoard', () => {
   it('opens focused task on Enter', async () => {
     renderBoard()
 
+    await waitFor(() => {
+      expect(screen.getAllByText('Focus task').length).toBeGreaterThan(0)
+    })
     await fireEvent.keyDown(window, { key: 'Enter' })
-
     expect(onOpenTask).toHaveBeenCalledWith('T-1')
   })
 
@@ -704,6 +706,38 @@ describe('FocusBoard', () => {
     const secondRender = renderBoard({ projectId: 'proj-2' })
     expect((await screen.findByRole('button', { name: /Focus 1/i })).getAttribute('aria-pressed')).toBe('true')
     secondRender.unmount()
+  })
+
+  it('does not flash focus tasks before the new project Out of Focus ids load', async () => {
+    const ipc = await import('../../lib/ipc')
+    const projectTwoTask = { ...taskFocus, id: 'T-project-2', project_id: 'proj-2', initial_prompt: 'Project 2 task' }
+    let resolveProjectTwoOutOfFocus: ((value: string | null) => void) | undefined
+
+    vi.mocked(ipc.getProjectConfig).mockImplementation(async (projectId: string, key: string) => {
+      if (projectId === 'proj-2' && key === 'low_fire_task_ids') {
+        return new Promise((resolve) => {
+          resolveProjectTwoOutOfFocus = resolve
+        })
+      }
+      return null
+    })
+
+    const firstView = renderBoard({ projectId: 'proj-1', tasks: [], sessions: new Map() })
+    firstView.unmount()
+
+    renderBoard({
+      projectId: 'proj-2',
+      tasks: [projectTwoTask],
+      sessions: new Map([[projectTwoTask.id, makeSession(projectTwoTask.id, 'paused', 'needs-review')]]),
+    })
+
+    expect(screen.queryByText('Project 2 task')).toBeNull()
+
+    resolveProjectTwoOutOfFocus?.(JSON.stringify([projectTwoTask.id]))
+    await waitFor(() => {
+      expect(get(outOfFocusTaskIdsByProject).get('proj-2')).toEqual(new Set([projectTwoTask.id]))
+    })
+    expect(screen.queryByText('Project 2 task')).toBeNull()
   })
 
   it('clicking an unselected task selects it without navigating', async () => {

@@ -53,14 +53,18 @@
   // The {#each} is keyed by task.id, so existing cards aren't remounted on data
   // refresh and the pop won't replay.
   let recentlyViewedTaskId = $state<string | null>(get(lastViewedTaskId))
+  let restoredRecentlyViewedTask = $state(false)
   let paneHasFocus = $state(false)
   let contextMenu = $state({ visible: false, x: 0, y: 0, taskId: '' })
   let projectActions = $state<Action[]>([])
   let projectLabels = $state<TaskLabel[]>([])
   let focusStates = $state<TaskState[]>(DEFAULT_FOCUS_STATES)
+  let loadedFocusStatesProjectId: string | null = $state(null)
+  let loadedOutOfFocusProjectId: string | null = $state(null)
   let fallbackFilter: BoardFilter = $state('focus')
   let previousProjectId: string | null | undefined = undefined
   let labelLoadRequest = 0
+  let focusStateLoadRequest = 0
   let outOfFocusLoadRequest = 0
 
   let activeFilter = $derived.by(() => {
@@ -78,8 +82,15 @@
     return $outOfFocusTaskIdsByProject.get(projectId) ?? new Set<string>()
   })
 
+  let boardMetadataReady = $derived(!projectId || (loadedFocusStatesProjectId === projectId && loadedOutOfFocusProjectId === projectId))
+
+  let tasksWithReadyAttentionMetadata = $derived.by(() =>
+    boardMetadataReady ? tasks : tasks.filter((task) => task.status === 'backlog')
+  )
+
   let visibleTasks = $derived.by(() => {
-    const filtered = filterTasks(tasks, activeFilter, activeSessions, ticketPrs, focusStates, outOfFocusTaskIds)
+    const tasksToFilter = activeFilter === 'backlog' ? tasks : tasksWithReadyAttentionMetadata
+    const filtered = filterTasks(tasksToFilter, activeFilter, activeSessions, ticketPrs, focusStates, outOfFocusTaskIds)
     const labelFiltered = activeFilter === 'backlog'
       ? filtered.filter((task) => taskMatchesAnySelectedLabel(task, selectedLabelIds))
       : filtered
@@ -93,7 +104,7 @@
 
   let navigableCount = $derived(visibleTasks.length)
 
-  let filterCounts = $derived.by(() => getFilterCounts(tasks, activeSessions, ticketPrs, focusStates, outOfFocusTaskIds))
+  let filterCounts = $derived.by(() => getFilterCounts(tasksWithReadyAttentionMetadata, activeSessions, ticketPrs, focusStates, outOfFocusTaskIds))
   let displayProjectLabels = $derived.by(() => {
     const labelsById = new Map(projectLabels.map((label) => [label.id, label]))
     for (const task of tasks) {
@@ -187,10 +198,21 @@
       const idx = visibleTasks.findIndex((t) => t.id === recentlyViewedTaskId)
       if (idx >= 0) {
         vim.setFocusedIndex(idx)
+        restoredRecentlyViewedTask = true
       }
     }
     if (get(lastViewedTaskId) !== null) {
       lastViewedTaskId.set(null)
+    }
+  })
+
+  $effect(() => {
+    if (restoredRecentlyViewedTask || !recentlyViewedTaskId) return
+
+    const idx = visibleTasks.findIndex((t) => t.id === recentlyViewedTaskId)
+    if (idx >= 0) {
+      vim.setFocusedIndex(idx)
+      restoredRecentlyViewedTask = true
     }
   })
 
@@ -235,19 +257,40 @@
   })
 
   $effect(() => {
-    const projectId = tasks.find(t => t.project_id !== null)?.project_id
-    if (projectId) {
-      loadFocusFilterStates(projectId).then(states => {
-        focusStates = states
-      })
+    const currentProjectId = projectId
+    const requestId = ++focusStateLoadRequest
+
+    loadedFocusStatesProjectId = null
+    focusStates = []
+    if (!currentProjectId) {
+      focusStates = DEFAULT_FOCUS_STATES
+      loadedFocusStatesProjectId = null
+      return
     }
+
+    loadFocusFilterStates(currentProjectId)
+      .then(states => {
+        if (requestId !== focusStateLoadRequest) return
+        focusStates = states
+        loadedFocusStatesProjectId = currentProjectId
+      })
+      .catch(() => {
+        if (requestId !== focusStateLoadRequest) return
+        focusStates = DEFAULT_FOCUS_STATES
+        loadedFocusStatesProjectId = currentProjectId
+      })
   })
 
   $effect(() => {
     const currentProjectId = projectId
-    if (!currentProjectId) return
-
     const requestId = ++outOfFocusLoadRequest
+
+    loadedOutOfFocusProjectId = null
+    if (!currentProjectId) {
+      loadedOutOfFocusProjectId = null
+      return
+    }
+
     loadOutOfFocusTaskIds(currentProjectId)
       .then((taskIds) => {
         if (requestId !== outOfFocusLoadRequest) return
@@ -260,6 +303,7 @@
           }
           return next
         })
+        loadedOutOfFocusProjectId = currentProjectId
       })
       .catch(() => {
         if (requestId !== outOfFocusLoadRequest) return
@@ -268,6 +312,7 @@
           next.delete(currentProjectId)
           return next
         })
+        loadedOutOfFocusProjectId = currentProjectId
       })
   })
 
