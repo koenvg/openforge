@@ -10,4 +10,6 @@ fn format_task_metadata_refresh_diagnostic(message: std::fmt::Arguments<'_>) -> 
 #[cfg(test)]
 mod tests;
 
-pub(crate) use refresh::refresh_task_display_title_with_ai_once;
+pub(crate) use refresh::{
+    queue_task_display_title_refresh, refresh_queued_task_display_title_with_ai_once,
+};
