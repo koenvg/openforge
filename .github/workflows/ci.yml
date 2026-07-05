@@ -101,6 +101,78 @@ jobs:
         if: steps.plugin_build.outputs.exit_code != '0' || steps.app_build.outputs.exit_code != '0' || steps.typecheck.outputs.exit_code != '0' || steps.lint.outputs.exit_code != '0' || steps.tests.outputs.exit_code != '0'
         run: exit 1
 
+  npm-packages:
+    name: NPM Package Readiness
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build package workspaces
+        id: package_build
+        run: |
+          set +e -o pipefail
+          pnpm packages:build 2>&1 | tee /tmp/npm-package-build.log
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Test package workspaces
+        id: package_tests
+        run: |
+          set +e -o pipefail
+          pnpm packages:test 2>&1 | tee /tmp/npm-package-tests.log
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Pack publishable packages dry-run
+        id: package_pack
+        run: |
+          set +e -o pipefail
+          pnpm packages:pack:dry-run 2>&1 | tee /tmp/npm-package-pack.log
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Upload failure logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-package-logs
+          path: |
+            /tmp/npm-package-build.log
+            /tmp/npm-package-tests.log
+            /tmp/npm-package-pack.log
+          retention-days: 1
+          if-no-files-found: ignore
+
+      - name: Save results
+        if: always()
+        run: |
+          mkdir -p /tmp/ci-results
+          echo "${{ steps.package_build.outputs.exit_code }}" > /tmp/ci-results/package-build-exit-code
+          echo "${{ steps.package_tests.outputs.exit_code }}" > /tmp/ci-results/package-tests-exit-code
+          echo "${{ steps.package_pack.outputs.exit_code }}" > /tmp/ci-results/package-pack-exit-code
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-package-results
+          path: /tmp/ci-results/
+          retention-days: 1
+
+      - name: Fail if package checks failed
+        if: steps.package_build.outputs.exit_code != '0' || steps.package_tests.outputs.exit_code != '0' || steps.package_pack.outputs.exit_code != '0'
+        run: exit 1
+
   rust:
     name: Rust Tests
     timeout-minutes: 10
@@ -173,7 +245,7 @@ jobs:
     name: Packaged Electron Smoke
     timeout-minutes: 20
     runs-on: macos-14
-    needs: [frontend, rust]
+    needs: [frontend, npm-packages, rust]
     env:
       CARGO_BUILD_TARGET: aarch64-apple-darwin
       npm_config_arch: arm64

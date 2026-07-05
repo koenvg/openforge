@@ -21,6 +21,9 @@
     "electron:dev": "node scripts/electron-dev.mjs",
     "build": "pnpm build:plugin-sdk-runtime && vite build",
     "lint": "node scripts/check-svelte-unused-imports.mjs",
+    "packages:build": "pnpm --filter @openforge-app/plugin-sdk build",
+    "packages:test": "pnpm --filter @openforge-app/plugin-sdk test",
+    "packages:pack:dry-run": "node scripts/pack-npm-packages-dry-run.mjs",
     "preview": "vite preview",
     "test": "vitest run"
   },
