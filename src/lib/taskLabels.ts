@@ -2,8 +2,6 @@ import type { Task, TaskLabel } from './types'
 
 export const MAX_TASK_LABEL_NAME_LENGTH = 40
 
-const LABEL_COLORS = ['primary', 'secondary', 'accent', 'info', 'success', 'warning', 'error'] as const
-
 export function normalizeTaskLabelNameInput(name: string): string {
   return name.trim()
 }
@@ -21,22 +19,12 @@ export function normalizeTaskLabelKey(name: string): string {
   return normalizeTaskLabelNameInput(name).toLocaleLowerCase()
 }
 
-export function labelColorForName(name: string): TaskLabel['color'] {
-  const key = normalizeTaskLabelKey(name)
-  let hash = 0
-  for (let index = 0; index < key.length; index += 1) {
-    hash = (hash * 31 + key.charCodeAt(index)) >>> 0
-  }
-  return LABEL_COLORS[hash % LABEL_COLORS.length]
-}
-
 export function makeTemporaryTaskLabel(name: string, projectId: string): TaskLabel {
   const normalized = normalizeTaskLabelNameInput(name)
   return {
     id: -Math.max(1, Math.abs(hashLabelId(projectId, normalized))),
     project_id: projectId,
     name: normalized,
-    color: labelColorForName(normalized),
   }
 }
 

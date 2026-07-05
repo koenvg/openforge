@@ -19,7 +19,6 @@ export interface TaskLabel {
   id: number
   project_id: string
   name: string
-  color: 'primary' | 'secondary' | 'accent' | 'info' | 'success' | 'warning' | 'error'
 }
 
 export interface GitStatusSummary {

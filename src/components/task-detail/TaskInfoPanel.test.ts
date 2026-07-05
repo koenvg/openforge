@@ -40,7 +40,7 @@ vi.mock('../../lib/ipc', () => ({
   mergePullRequest: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn().mockResolvedValue(undefined),
   getProjectTaskLabels: vi.fn().mockResolvedValue([]),
-  addTaskLabel: vi.fn().mockResolvedValue({ id: 1, project_id: 'proj-1', name: 'bug', color: 'error' }),
+  addTaskLabel: vi.fn().mockResolvedValue({ id: 1, project_id: 'proj-1', name: 'bug' }),
   removeTaskLabel: vi.fn().mockResolvedValue(undefined),
   getTaskGitStatus: vi.fn().mockResolvedValue({ has_remote: false, remote_ahead: 0, remote_behind: 0, local_commits: 0, uncommitted_files: 0, insertions: 0, deletions: 0 }),
   writeClipboardText: vi.fn().mockResolvedValue(undefined),
@@ -50,8 +50,8 @@ vi.mock('../../lib/desktopIpc', () => ({
   listenDesktopEvent: vi.fn().mockResolvedValue(() => {}),
 }))
 
-const bugLabel: TaskLabel = { id: 1, project_id: 'proj-1', name: 'bug', color: 'error' }
-const uiLabel: TaskLabel = { id: 2, project_id: 'proj-1', name: 'ui', color: 'primary' }
+const bugLabel: TaskLabel = { id: 1, project_id: 'proj-1', name: 'bug' }
+const uiLabel: TaskLabel = { id: 2, project_id: 'proj-1', name: 'ui' }
 
 const baseTask: Task = {
   id: 'T-42',
@@ -491,7 +491,7 @@ describe('TaskInfoPanel', () => {
 
   it('creates and assigns a new label through IPC from unmatched task detail input', async () => {
     vi.mocked(getProjectTaskLabels).mockResolvedValue([bugLabel])
-    vi.mocked(addTaskLabel).mockResolvedValue({ id: 3, project_id: 'proj-1', name: 'feature', color: 'accent' })
+    vi.mocked(addTaskLabel).mockResolvedValue({ id: 3, project_id: 'proj-1', name: 'feature' })
     render(TaskInfoPanel, {
       props: {
         task: { ...baseTask, labels: [] } as Task & { labels: TaskLabel[] },

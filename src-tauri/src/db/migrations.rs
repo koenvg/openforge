@@ -1254,6 +1254,32 @@ CREATE TABLE IF NOT EXISTS roadmap_repo_config (
         }
         Ok(())
     }),
+    // Internal task labels no longer expose or store presentation colors.
+    M::up_with_hook("", |tx| {
+        let table_exists: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='task_labels'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if !table_exists {
+            return Ok(());
+        }
+
+        let has_color: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('task_labels') WHERE name = 'color'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if has_color {
+            tx.execute("ALTER TABLE task_labels DROP COLUMN color", [])
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -1763,7 +1789,6 @@ CREATE TABLE IF NOT EXISTS task_labels (
     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     name_normalized TEXT NOT NULL,
-    color TEXT NOT NULL,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     UNIQUE(project_id, name_normalized)

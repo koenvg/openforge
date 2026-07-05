@@ -178,7 +178,6 @@ fn test_task_label_request_models_serialize_expected_fields() {
         id: 42,
         project_id: "P-1".to_string(),
         name: "bug".to_string(),
-        color: "error".to_string(),
     };
     let list_response = TaskLabelsResponse {
         task_id: "T-1".to_string(),
@@ -186,6 +185,7 @@ fn test_task_label_request_models_serialize_expected_fields() {
     };
     let list_json = serde_json::to_value(&list_response).expect("list response");
     assert_eq!(list_json["labels"][0]["name"], "bug");
+    assert!(list_json["labels"][0].get("color").is_none());
 
     let add_response = AddTaskLabelResponse {
         task_id: "T-1".to_string(),
@@ -194,6 +194,7 @@ fn test_task_label_request_models_serialize_expected_fields() {
     };
     let add_json = serde_json::to_value(&add_response).expect("add response");
     assert_eq!(add_json["label"]["id"], 42);
+    assert!(add_json["label"].get("color").is_none());
 }
 
 #[test]

@@ -25,8 +25,8 @@ vi.mock('../../lib/boardFilters', async (importOriginal) => {
   }
 })
 
-const bugLabel: TaskLabel = { id: 1, project_id: 'proj-1', name: 'bug', color: 'error' }
-const uiLabel: TaskLabel = { id: 2, project_id: 'proj-1', name: 'ui', color: 'primary' }
+const bugLabel: TaskLabel = { id: 1, project_id: 'proj-1', name: 'bug' }
+const uiLabel: TaskLabel = { id: 2, project_id: 'proj-1', name: 'ui' }
 
 const makeTask = (id: string, status: BoardStatus, prompt: string, labels: TaskLabel[] = []): Task => ({
   id,
@@ -361,8 +361,8 @@ describe('FocusBoard', () => {
     const extraLabels: TaskLabel[] = [
       bugLabel,
       uiLabel,
-      { id: 3, project_id: 'proj-1', name: 'backend', color: 'secondary' },
-      { id: 4, project_id: 'proj-1', name: 'blocked', color: 'warning' },
+      { id: 3, project_id: 'proj-1', name: 'backend' },
+      { id: 4, project_id: 'proj-1', name: 'blocked' },
     ]
     renderBoard({ tasks: [makeTask('T-9', 'backlog', 'Many labels', extraLabels)], sessions: new Map() })
 
