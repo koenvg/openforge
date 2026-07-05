@@ -168,3 +168,86 @@ jobs:
       - name: Fail if checks failed
         if: steps.format.outputs.exit_code != '0' || steps.tests.outputs.exit_code != '0'
         run: exit 1
+
+  packaged-electron-smoke:
+    name: Packaged Electron Smoke
+    timeout-minutes: 20
+    runs-on: macos-14
+    needs: [frontend, rust]
+    env:
+      CARGO_BUILD_TARGET: aarch64-apple-darwin
+      npm_config_arch: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve backend layout
+        id: backend-layout
+        run: echo "backend-crate-root=$(node scripts/rust-sidecar-layout.mjs backend-crate-root)" >> "$GITHUB_OUTPUT"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ steps.backend-layout.outputs.backend-crate-root }} -> target
+          cache-bin: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Package Electron app
+        id: package_app
+        run: |
+          set +e -o pipefail
+          pnpm electron:package 2>&1 | tee /tmp/packaged-smoke-package.log
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke test packaged Electron app
+        id: smoke
+        if: steps.package_app.outputs.exit_code == '0'
+        run: |
+          set +e -o pipefail
+          pnpm electron:smoke:packaged --skip-package 2>&1 | tee /tmp/packaged-smoke.log
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Upload failure logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: packaged-electron-smoke-logs
+          path: |
+            /tmp/packaged-smoke-package.log
+            /tmp/packaged-smoke.log
+          retention-days: 1
+          if-no-files-found: ignore
+
+      - name: Save results
+        if: always()
+        run: |
+          mkdir -p /tmp/ci-results
+          echo "${{ steps.package_app.outputs.exit_code }}" > /tmp/ci-results/package-exit-code
+          echo "${{ steps.smoke.outputs.exit_code }}" > /tmp/ci-results/smoke-exit-code
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: packaged-electron-smoke-results
+          path: /tmp/ci-results/
+          retention-days: 1
+
+      - name: Fail if checks failed
+        if: steps.package_app.outputs.exit_code != '0' || steps.smoke.outputs.exit_code != '0'
+        run: exit 1
