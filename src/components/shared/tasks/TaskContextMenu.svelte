@@ -26,6 +26,11 @@
   let taskStatus = $derived<BoardStatus | ''>($tasks.find(t => t.id === taskId)?.status ?? '')
   let isOutOfFocusTask = $derived(outOfFocusTaskIds.has(taskId))
   let isCompleting = $derived($completingTasks.has(taskId))
+  let hasStartAction = $derived(taskStatus === 'backlog' && Boolean(onStart))
+  let hasCustomActions = $derived(taskStatus === 'backlog' && actions.length > 0 && Boolean(onRunAction))
+  let hasEditAction = $derived(taskStatus === 'backlog' && Boolean(onEdit))
+  let hasReturnToBoardAction = $derived(taskStatus === 'doing' && isOutOfFocusTask && Boolean(onReturnToBoard))
+  let hasActionsBeforeComplete = $derived(hasStartAction || hasCustomActions || hasEditAction || hasReturnToBoardAction)
 
   function handleStart() {
     onClose()
@@ -69,22 +74,26 @@
 </script>
 
 <ContextMenu {visible} {x} {y} {onClose}>
-  {#if taskStatus === 'backlog' && onStart}
+  {#if hasStartAction}
     <ContextMenuItem label="Start Task" variant="primary" onclick={handleStart} />
   {/if}
-  {#if taskStatus === 'backlog' && actions.length > 0 && onRunAction}
-    <div class="border-t border-base-content/10 my-1"></div>
+  {#if hasCustomActions}
+    {#if hasStartAction}
+      <div class="border-t border-base-content/10 my-1"></div>
+    {/if}
     {#each actions as action (action.id)}
       <ContextMenuItem label={action.name} description={action.prompt} onclick={() => handleRunAction(action)} />
     {/each}
   {/if}
-  {#if taskStatus === 'backlog' && onEdit}
+  {#if hasEditAction}
     <ContextMenuItem label="Edit Task" onclick={handleEdit} />
   {/if}
-  {#if taskStatus === 'doing' && isOutOfFocusTask && onReturnToBoard}
+  {#if hasReturnToBoardAction}
     <ContextMenuItem label="Return to board" onclick={handleReturnToBoard} />
   {/if}
-  <div class="border-t border-base-content/10 my-1"></div>
+  {#if hasActionsBeforeComplete}
+    <div class="border-t border-base-content/10 my-1"></div>
+  {/if}
   <ContextMenuItem label={isCompleting ? 'Completing…' : 'Complete 🏁'} disabled={isCompleting} onclick={handleComplete} />
   {#if taskStatus === 'doing' && !isOutOfFocusTask && onMoveToOutOfFocus}
     <ContextMenuItem label="Set aside" onclick={handleSetAside} />
