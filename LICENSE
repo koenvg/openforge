@@ -1,0 +1,16 @@
+OpenForge Source-Available License
+
+Copyright (c) 2026 Koen Van Geert
+
+This repository contains the OpenForge desktop application and related source code. Except for files, directories, or packages that include their own license terms, including `packages/plugin-sdk` which is licensed under the MIT License, all rights are reserved.
+
+You may view, clone, build, and modify the OpenForge application source code for personal evaluation, personal use, and internal use within your own organization.
+
+You may not, without prior written permission:
+
+- sell, rent, sublicense, or commercially redistribute the OpenForge application;
+- offer the OpenForge application, a modified version, or a substantially similar hosted or packaged product as a commercial service or product;
+- remove or obscure copyright, trademark, license, or attribution notices;
+- use the OpenForge name, logo, or branding to imply endorsement of a derivative work.
+
+This license is not an open source license as defined by the Open Source Initiative. For commercial licensing, redistribution, or other uses outside these terms, contact the copyright holder.

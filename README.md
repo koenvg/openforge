@@ -204,6 +204,12 @@ pnpm electron:install
 
 `pnpm electron:install` builds the Svelte renderer, Electron main/preload files, and the Rust sidecar, packages them into the Electron app path resolved from `openforge-backend-layout.json` (currently `src-tauri/target/release/bundle/electron/macos/Open Forge.app`), then copies the app to `/Applications`.
 
+## License
+
+OpenForge is source-available/proprietary software. You may inspect, build, and modify the app for personal or internal use, but you may not commercially resell, redistribute, or offer the app as a competing hosted or packaged product without permission. See [`LICENSE`](LICENSE) for the app terms.
+
+The `@openforge-app/plugin-sdk` package is licensed separately under MIT so third-party plugin authors can build, modify, redistribute, and sell plugins using the SDK. See [`packages/plugin-sdk/LICENSE`](packages/plugin-sdk/LICENSE).
+
 ## First-run setup
 
 1. Launch the app — the project setup dialog appears automatically

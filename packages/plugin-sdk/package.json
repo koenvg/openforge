@@ -1,6 +1,7 @@
 {
   "name": "@openforge-app/plugin-sdk",
   "version": "0.1.0",
+  "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -54,7 +55,9 @@
     "./ui/ResizablePanel.svelte": "./dist/ui/ResizablePanel.svelte"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "publishConfig": {
     "access": "public"
