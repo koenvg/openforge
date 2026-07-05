@@ -1,12 +1,12 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { get, writable } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PrFileDiff, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge/plugin-sdk/domain'
-import { createOpenForgeRegistryFake } from '@openforge/plugin-sdk/testing'
-import type { TestingOpenForgeRegistryFake } from '@openforge/plugin-sdk/testing'
+import type { PrFileDiff, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
+import type { TestingOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 import { requireElement } from '../../../../../src/test-utils/dom'
 
-vi.mock('@openforge/pr-review-ui/useVirtualizer.svelte', () => ({
+vi.mock('@openforge-app/pr-review-ui/useVirtualizer.svelte', () => ({
   createVirtualizer: vi.fn((opts: { getCount: () => number }) => ({
     get virtualItems() {
       const count = opts.getCount()
@@ -25,7 +25,7 @@ vi.mock('@openforge/pr-review-ui/useVirtualizer.svelte', () => ({
   })),
 }))
 
-vi.mock('@openforge/pr-review-ui/useDiffWorker.svelte', () => ({
+vi.mock('@openforge-app/pr-review-ui/useDiffWorker.svelte', () => ({
   createDiffWorker: vi.fn(() => ({
     getDiffFile: () => null,
   })),

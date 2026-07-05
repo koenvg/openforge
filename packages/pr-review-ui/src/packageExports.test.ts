@@ -1,24 +1,24 @@
 import { describe, expect, it } from 'vitest'
 
-import { toGitDiffViewData } from '@openforge/pr-review-ui/diffAdapter'
-import { prCommentsToReviewComments } from '@openforge/pr-review-ui/diffComments'
-import { configureDiffHighlighter } from '@openforge/pr-review-ui/diffHighlightConfig'
-import { diffHighlighter } from '@openforge/pr-review-ui/diffHighlighter'
-import { countMatchesInPatch } from '@openforge/pr-review-ui/diffSearch'
-import type { DiffWorkerRequest, DiffWorkerResponse } from '@openforge/pr-review-ui/diffWorker'
-import { sortFilesAsTree } from '@openforge/pr-review-ui/fileSort'
-import { getReviewFileIdentity } from '@openforge/pr-review-ui/reviewFileIdentity'
-import { createDiffSearch } from '@openforge/pr-review-ui/useDiffSearch.svelte'
-import { createDiffWorker } from '@openforge/pr-review-ui/useDiffWorker.svelte'
-import { createFileContentsFetcher } from '@openforge/pr-review-ui/useFileContentsFetcher.svelte'
-import { createVirtualizer } from '@openforge/pr-review-ui/useVirtualizer.svelte'
+import { toGitDiffViewData } from '@openforge-app/pr-review-ui/diffAdapter'
+import { prCommentsToReviewComments } from '@openforge-app/pr-review-ui/diffComments'
+import { configureDiffHighlighter } from '@openforge-app/pr-review-ui/diffHighlightConfig'
+import { diffHighlighter } from '@openforge-app/pr-review-ui/diffHighlighter'
+import { countMatchesInPatch } from '@openforge-app/pr-review-ui/diffSearch'
+import type { DiffWorkerRequest, DiffWorkerResponse } from '@openforge-app/pr-review-ui/diffWorker'
+import { sortFilesAsTree } from '@openforge-app/pr-review-ui/fileSort'
+import { getReviewFileIdentity } from '@openforge-app/pr-review-ui/reviewFileIdentity'
+import { createDiffSearch } from '@openforge-app/pr-review-ui/useDiffSearch.svelte'
+import { createDiffWorker } from '@openforge-app/pr-review-ui/useDiffWorker.svelte'
+import { createFileContentsFetcher } from '@openforge-app/pr-review-ui/useFileContentsFetcher.svelte'
+import { createVirtualizer } from '@openforge-app/pr-review-ui/useVirtualizer.svelte'
 
 /**
  * Keeps shared diff helper subpath exports intentional. The host app and bundled
- * plugins must import these helpers from @openforge/pr-review-ui instead of
+ * plugins must import these helpers from @openforge-app/pr-review-ui instead of
  * carrying duplicated src/lib copies.
  */
-describe('@openforge/pr-review-ui diff helper exports', () => {
+describe('@openforge-app/pr-review-ui diff helper exports', () => {
   it('exposes the shared diff utility entrypoints consumed by host and plugins', () => {
     expect(toGitDiffViewData).toBeTypeOf('function')
     expect(prCommentsToReviewComments).toBeTypeOf('function')

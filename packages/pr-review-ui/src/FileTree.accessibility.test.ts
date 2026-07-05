@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
-import type { PrFileDiff } from '@openforge/plugin-sdk/domain'
+import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
 import FileTree from './FileTree.svelte'
 
 const files: PrFileDiff[] = [

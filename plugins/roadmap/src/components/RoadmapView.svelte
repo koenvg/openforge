@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
   import { RefreshCw, Plus, Columns3 } from '@lucide/svelte'
-  import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
-  import type { Action } from '@openforge/plugin-sdk'
+  import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
+  import type { Action } from '@openforge-app/plugin-sdk'
   import {
     buildBoard,
     applyCreate,

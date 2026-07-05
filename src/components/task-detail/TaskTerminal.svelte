@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import { spawnShellPty, killPty } from '../../lib/ipc'
-  import '@openforge/terminal-runtime/xterm.css'
+  import '@openforge-app/terminal-runtime/xterm.css'
   import {
     TERMINAL_FOCUS_DESCRIPTION_TEXT,
     getRestartShellAriaLabel,
@@ -10,7 +10,7 @@
     getTerminalFocusDescriptionId,
     getTerminalRegionAriaLabel,
     getTerminalRegionTitle,
-  } from '@openforge/terminal-runtime'
+  } from '@openforge-app/terminal-runtime'
   import { acquire, attach, detach, recoverActiveTerminal, markPtySpawnPending, clearPtySpawnPending, shouldSpawnPty, markShellPtyStarted, getShellLifecycleState, subscribeShellLifecycle, type PoolEntry, type ShellLifecycleState } from '../../lib/terminalPool'
 
   interface Props {

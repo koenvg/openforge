@@ -1,6 +1,6 @@
 import builtinPluginCatalogJson from '../../../builtin-plugins.json'
 import { getBuiltinOpenForgeMetadata, manifestFromBuiltinPackage } from './builtinPluginMetadata'
-import type { OpenForgePackageMetadata } from '@openforge/plugin-sdk'
+import type { OpenForgePackageMetadata } from '@openforge-app/plugin-sdk'
 import type { PluginManifest } from './types'
 
 type BuiltinPluginCatalogEntry = {

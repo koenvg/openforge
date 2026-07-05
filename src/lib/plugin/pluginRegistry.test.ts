@@ -1,5 +1,5 @@
-import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
-import type { FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
+import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
+import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { get } from 'svelte/store'
 

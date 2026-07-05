@@ -1,5 +1,5 @@
-import type { Action, ImplementationRun } from '@openforge/plugin-sdk'
-import type { FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
+import type { Action, ImplementationRun } from '@openforge-app/plugin-sdk'
+import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import type { BoardCard } from './board'
 
 export const DEFAULT_ROADMAP_ACTIONS: Action[] = [

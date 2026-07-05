@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createMockBackendOpenForgeApi, createOpenForgeRegistryFake } from '@openforge/plugin-sdk/testing'
+import { createMockBackendOpenForgeApi, createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 import backendPlugin, {
   LIST_SCHEDULES_METHOD,
   RUN_NOW_METHOD,
@@ -11,8 +11,8 @@ import backendPlugin, {
   runScheduleNow,
   saveTaskSchedule,
 } from './backend'
-import type { BackendOpenForgeAPI } from '@openforge/plugin-sdk/backend'
-import type { Task } from '@openforge/plugin-sdk'
+import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
+import type { Task } from '@openforge-app/plugin-sdk'
 import type { TaskSchedule, TaskScheduleDraft } from './lib/types'
 
 const projectId = 'P-1'

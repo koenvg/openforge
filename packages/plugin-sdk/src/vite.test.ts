@@ -6,50 +6,50 @@ import {
   createOpenForgePluginSdkSourceAliases,
   createOpenForgePluginSdkSourceAliasRecord,
   isOpenForgeHostRuntimeExternal,
-} from '@openforge/plugin-sdk/vite'
+} from '@openforge-app/plugin-sdk/vite'
 
 describe('OpenForge plugin Vite author tooling', () => {
   it('creates exact source aliases for public plugin SDK entrypoints', () => {
     const aliases = createOpenForgePluginSdkSourceAliases(new URL('file:///repo/'))
 
     expect(aliases).toEqual([
-      { find: '@openforge/plugin-sdk/frontend', replacement: '/repo/packages/plugin-sdk/src/frontend.ts' },
-      { find: '@openforge/plugin-sdk/backend', replacement: '/repo/packages/plugin-sdk/src/backend.ts' },
-      { find: '@openforge/plugin-sdk/testing', replacement: '/repo/packages/plugin-sdk/src/testing.ts' },
-      { find: '@openforge/plugin-sdk/vite', replacement: '/repo/packages/plugin-sdk/src/vite.ts' },
-      { find: '@openforge/plugin-sdk/domain', replacement: '/repo/packages/plugin-sdk/src/domain.ts' },
-      { find: '@openforge/plugin-sdk/prStatusPresentation', replacement: '/repo/packages/plugin-sdk/src/prStatusPresentation.ts' },
-      { find: '@openforge/plugin-sdk/markdown', replacement: '/repo/packages/plugin-sdk/src/markdown.ts' },
-      { find: '@openforge/plugin-sdk/numberParsing', replacement: '/repo/packages/plugin-sdk/src/numberParsing.ts' },
-      { find: '@openforge/plugin-sdk/projectFileTree', replacement: '/repo/packages/plugin-sdk/src/projectFileTree.ts' },
-      { find: '@openforge/plugin-sdk/sanitize', replacement: '/repo/packages/plugin-sdk/src/sanitize.ts' },
-      { find: '@openforge/plugin-sdk/ui/MarkdownContent.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/MarkdownContent.svelte' },
-      { find: '@openforge/plugin-sdk/ui/ResizablePanel.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/ResizablePanel.svelte' },
-      { find: '@openforge/plugin-sdk', replacement: '/repo/packages/plugin-sdk/src/index.ts' },
+      { find: '@openforge-app/plugin-sdk/frontend', replacement: '/repo/packages/plugin-sdk/src/frontend.ts' },
+      { find: '@openforge-app/plugin-sdk/backend', replacement: '/repo/packages/plugin-sdk/src/backend.ts' },
+      { find: '@openforge-app/plugin-sdk/testing', replacement: '/repo/packages/plugin-sdk/src/testing.ts' },
+      { find: '@openforge-app/plugin-sdk/vite', replacement: '/repo/packages/plugin-sdk/src/vite.ts' },
+      { find: '@openforge-app/plugin-sdk/domain', replacement: '/repo/packages/plugin-sdk/src/domain.ts' },
+      { find: '@openforge-app/plugin-sdk/prStatusPresentation', replacement: '/repo/packages/plugin-sdk/src/prStatusPresentation.ts' },
+      { find: '@openforge-app/plugin-sdk/markdown', replacement: '/repo/packages/plugin-sdk/src/markdown.ts' },
+      { find: '@openforge-app/plugin-sdk/numberParsing', replacement: '/repo/packages/plugin-sdk/src/numberParsing.ts' },
+      { find: '@openforge-app/plugin-sdk/projectFileTree', replacement: '/repo/packages/plugin-sdk/src/projectFileTree.ts' },
+      { find: '@openforge-app/plugin-sdk/sanitize', replacement: '/repo/packages/plugin-sdk/src/sanitize.ts' },
+      { find: '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/MarkdownContent.svelte' },
+      { find: '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/ResizablePanel.svelte' },
+      { find: '@openforge-app/plugin-sdk', replacement: '/repo/packages/plugin-sdk/src/index.ts' },
     ])
     expect(aliases.every((alias) => typeof alias.find === 'string')).toBe(true)
-    expect(aliases.some((alias) => alias.find === '@openforge/plugin-runtime')).toBe(false)
-    expect(aliases.some((alias) => alias.find === '@openforge/pr-review-ui')).toBe(false)
-    expect(aliases.some((alias) => alias.find === '@openforge/terminal-runtime')).toBe(false)
+    expect(aliases.some((alias) => alias.find === '@openforge-app/plugin-runtime')).toBe(false)
+    expect(aliases.some((alias) => alias.find === '@openforge-app/pr-review-ui')).toBe(false)
+    expect(aliases.some((alias) => alias.find === '@openforge-app/terminal-runtime')).toBe(false)
     expect(createOpenForgePluginSdkSourceAliases(new URL('file:///repo'))[0]?.replacement).toBe('/repo/packages/plugin-sdk/src/frontend.ts')
     expect(() => createOpenForgePluginSdkSourceAliases(String.raw`C:\repo`)).not.toThrow()
   })
 
   it('creates a record-shaped source alias map for Vitest configs', () => {
     expect(createOpenForgePluginSdkSourceAliasRecord(new URL('file:///repo/'))).toEqual({
-      '@openforge/plugin-sdk/frontend': '/repo/packages/plugin-sdk/src/frontend.ts',
-      '@openforge/plugin-sdk/backend': '/repo/packages/plugin-sdk/src/backend.ts',
-      '@openforge/plugin-sdk/testing': '/repo/packages/plugin-sdk/src/testing.ts',
-      '@openforge/plugin-sdk/vite': '/repo/packages/plugin-sdk/src/vite.ts',
-      '@openforge/plugin-sdk/domain': '/repo/packages/plugin-sdk/src/domain.ts',
-      '@openforge/plugin-sdk/prStatusPresentation': '/repo/packages/plugin-sdk/src/prStatusPresentation.ts',
-      '@openforge/plugin-sdk/markdown': '/repo/packages/plugin-sdk/src/markdown.ts',
-      '@openforge/plugin-sdk/numberParsing': '/repo/packages/plugin-sdk/src/numberParsing.ts',
-      '@openforge/plugin-sdk/projectFileTree': '/repo/packages/plugin-sdk/src/projectFileTree.ts',
-      '@openforge/plugin-sdk/sanitize': '/repo/packages/plugin-sdk/src/sanitize.ts',
-      '@openforge/plugin-sdk/ui/MarkdownContent.svelte': '/repo/packages/plugin-sdk/src/ui/MarkdownContent.svelte',
-      '@openforge/plugin-sdk/ui/ResizablePanel.svelte': '/repo/packages/plugin-sdk/src/ui/ResizablePanel.svelte',
-      '@openforge/plugin-sdk': '/repo/packages/plugin-sdk/src/index.ts',
+      '@openforge-app/plugin-sdk/frontend': '/repo/packages/plugin-sdk/src/frontend.ts',
+      '@openforge-app/plugin-sdk/backend': '/repo/packages/plugin-sdk/src/backend.ts',
+      '@openforge-app/plugin-sdk/testing': '/repo/packages/plugin-sdk/src/testing.ts',
+      '@openforge-app/plugin-sdk/vite': '/repo/packages/plugin-sdk/src/vite.ts',
+      '@openforge-app/plugin-sdk/domain': '/repo/packages/plugin-sdk/src/domain.ts',
+      '@openforge-app/plugin-sdk/prStatusPresentation': '/repo/packages/plugin-sdk/src/prStatusPresentation.ts',
+      '@openforge-app/plugin-sdk/markdown': '/repo/packages/plugin-sdk/src/markdown.ts',
+      '@openforge-app/plugin-sdk/numberParsing': '/repo/packages/plugin-sdk/src/numberParsing.ts',
+      '@openforge-app/plugin-sdk/projectFileTree': '/repo/packages/plugin-sdk/src/projectFileTree.ts',
+      '@openforge-app/plugin-sdk/sanitize': '/repo/packages/plugin-sdk/src/sanitize.ts',
+      '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte': '/repo/packages/plugin-sdk/src/ui/MarkdownContent.svelte',
+      '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte': '/repo/packages/plugin-sdk/src/ui/ResizablePanel.svelte',
+      '@openforge-app/plugin-sdk': '/repo/packages/plugin-sdk/src/index.ts',
     })
   })
 
@@ -78,20 +78,20 @@ describe('OpenForge plugin Vite author tooling', () => {
   })
 
   it('externalizes the host-shared terminal runtime contract', () => {
-    expect(OPENFORGE_HOST_SHARED_TERMINAL_RUNTIME_IMPORTS).toContain('@openforge/terminal-runtime')
-    expect(OPENFORGE_HOST_SHARED_TERMINAL_RUNTIME_IMPORTS).toContain('@openforge/terminal-runtime/shortcuts')
-    expect(OPENFORGE_HOST_SHARED_TERMINAL_RUNTIME_IMPORTS).toContain('@openforge/terminal-runtime/TerminalTabsShell')
+    expect(OPENFORGE_HOST_SHARED_TERMINAL_RUNTIME_IMPORTS).toContain('@openforge-app/terminal-runtime')
+    expect(OPENFORGE_HOST_SHARED_TERMINAL_RUNTIME_IMPORTS).toContain('@openforge-app/terminal-runtime/shortcuts')
+    expect(OPENFORGE_HOST_SHARED_TERMINAL_RUNTIME_IMPORTS).toContain('@openforge-app/terminal-runtime/TerminalTabsShell')
 
     for (const specifier of OPENFORGE_HOST_SHARED_TERMINAL_RUNTIME_IMPORTS) {
       expect(isOpenForgeHostRuntimeExternal(specifier), `${specifier} should be host-shared`).toBe(true)
     }
 
-    expect(isOpenForgeHostRuntimeExternal('@openforge/terminal-runtime/internal')).toBe(false)
+    expect(isOpenForgeHostRuntimeExternal('@openforge-app/terminal-runtime/internal')).toBe(false)
   })
 
   it('does not externalize non-Svelte dependencies that plugins may bundle normally', () => {
-    expect(isOpenForgeHostRuntimeExternal('@openforge/plugin-sdk')).toBe(false)
-    expect(isOpenForgeHostRuntimeExternal('@openforge/plugin-sdk/frontend')).toBe(false)
+    expect(isOpenForgeHostRuntimeExternal('@openforge-app/plugin-sdk')).toBe(false)
+    expect(isOpenForgeHostRuntimeExternal('@openforge-app/plugin-sdk/frontend')).toBe(false)
     expect(isOpenForgeHostRuntimeExternal('not-svelte')).toBe(false)
     expect(isOpenForgeHostRuntimeExternal('svelte/compiler')).toBe(false)
     expect(isOpenForgeHostRuntimeExternal('svelte/server')).toBe(false)

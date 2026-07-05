@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
+  import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
 
   interface Props {
     api: FrontendOpenForgeAPI

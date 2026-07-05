@@ -1,4 +1,4 @@
-import type { JsonSchema } from '@openforge/plugin-sdk'
+import type { JsonSchema } from '@openforge-app/plugin-sdk'
 
 function schemaTypeMatches(expected: string, value: unknown): boolean {
   switch (expected) {

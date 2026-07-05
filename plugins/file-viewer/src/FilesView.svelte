@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
+  import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
   import { activeProjectId, fileBrowserStates, pendingFileReveal } from './lib/stores'
   import {
     countDefaultHiddenRootEntries,
@@ -12,7 +12,7 @@
   } from './lib/fileExplorer'
   import ProjectFileTree from './ProjectFileTree.svelte'
   import FileContentViewer from './FileContentViewer.svelte'
-  import ResizablePanel from '@openforge/plugin-sdk/ui/ResizablePanel.svelte'
+  import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
 
   interface Props {
     api: FrontendOpenForgeAPI

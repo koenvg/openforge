@@ -61,7 +61,7 @@ async function writeBuiltInPluginRuntimeArtifacts(repoRoot, directoryName, plugi
   const pluginRoot = join(repoRoot, 'plugins', directoryName)
   await mkdir(join(pluginRoot, 'dist'), { recursive: true })
   await writeFile(join(pluginRoot, 'package.json'), JSON.stringify({
-    name: `@openforge/plugin-${directoryName}`,
+    name: `@openforge-app/plugin-${directoryName}`,
     type: 'module',
     openforge: {
       id: pluginId,

@@ -11,7 +11,7 @@ function listRuntimeSources(dir = join(process.cwd(), 'packages/terminal-runtime
   })
 }
 
-describe('@openforge/terminal-runtime package boundary', () => {
+describe('@openforge-app/terminal-runtime package boundary', () => {
   it('does not import app renderer, Electron, preload, Rust, plugin-private IPC, or host internals', () => {
     const forbiddenImportPatterns = [
       /from ['"](?:\.\.\/){2,}src\//,

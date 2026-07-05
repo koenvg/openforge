@@ -1,4 +1,4 @@
-import type { PrLabel } from '@openforge/plugin-sdk/domain'
+import type { PrLabel } from '@openforge-app/plugin-sdk/domain'
 
 /**
  * Hard-coded GitHub label that forces a pull request to the bottom of its list.

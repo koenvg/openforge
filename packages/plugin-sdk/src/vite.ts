@@ -10,13 +10,13 @@ export const OPENFORGE_HOST_RUNTIME_SVELTE_SPECIFIERS = HOST_RUNTIME_SVELTE_SPEC
 
 export const OPENFORGE_HOST_SHARED_SVELTE_IMPORTS = OPENFORGE_HOST_RUNTIME_SVELTE_SPECIFIERS
 export const OPENFORGE_HOST_SHARED_TERMINAL_RUNTIME_IMPORTS = Object.freeze([
-  '@openforge/terminal-runtime',
-  '@openforge/terminal-runtime/terminalRuntime',
-  '@openforge/terminal-runtime/terminalOptions',
-  '@openforge/terminal-runtime/theme',
-  '@openforge/terminal-runtime/shortcuts',
-  '@openforge/terminal-runtime/shortcutController',
-  '@openforge/terminal-runtime/TerminalTabsShell',
+  '@openforge-app/terminal-runtime',
+  '@openforge-app/terminal-runtime/terminalRuntime',
+  '@openforge-app/terminal-runtime/terminalOptions',
+  '@openforge-app/terminal-runtime/theme',
+  '@openforge-app/terminal-runtime/shortcuts',
+  '@openforge-app/terminal-runtime/shortcutController',
+  '@openforge-app/terminal-runtime/TerminalTabsShell',
 ])
 
 export type OpenForgeHostRuntimeSvelteSpecifier = typeof OPENFORGE_HOST_RUNTIME_SVELTE_SPECIFIERS[number]
@@ -42,19 +42,19 @@ export type OpenForgePluginSdkSourceAlias = Readonly<{
 export type OpenForgePluginSdkSourceAliasRecord = Readonly<Record<string, string>>
 
 const OPENFORGE_PLUGIN_SDK_SOURCE_ENTRYPOINTS = Object.freeze([
-  ['@openforge/plugin-sdk/frontend', 'packages/plugin-sdk/src/frontend.ts'],
-  ['@openforge/plugin-sdk/backend', 'packages/plugin-sdk/src/backend.ts'],
-  ['@openforge/plugin-sdk/testing', 'packages/plugin-sdk/src/testing.ts'],
-  ['@openforge/plugin-sdk/vite', 'packages/plugin-sdk/src/vite.ts'],
-  ['@openforge/plugin-sdk/domain', 'packages/plugin-sdk/src/domain.ts'],
-  ['@openforge/plugin-sdk/prStatusPresentation', 'packages/plugin-sdk/src/prStatusPresentation.ts'],
-  ['@openforge/plugin-sdk/markdown', 'packages/plugin-sdk/src/markdown.ts'],
-  ['@openforge/plugin-sdk/numberParsing', 'packages/plugin-sdk/src/numberParsing.ts'],
-  ['@openforge/plugin-sdk/projectFileTree', 'packages/plugin-sdk/src/projectFileTree.ts'],
-  ['@openforge/plugin-sdk/sanitize', 'packages/plugin-sdk/src/sanitize.ts'],
-  ['@openforge/plugin-sdk/ui/MarkdownContent.svelte', 'packages/plugin-sdk/src/ui/MarkdownContent.svelte'],
-  ['@openforge/plugin-sdk/ui/ResizablePanel.svelte', 'packages/plugin-sdk/src/ui/ResizablePanel.svelte'],
-  ['@openforge/plugin-sdk', 'packages/plugin-sdk/src/index.ts'],
+  ['@openforge-app/plugin-sdk/frontend', 'packages/plugin-sdk/src/frontend.ts'],
+  ['@openforge-app/plugin-sdk/backend', 'packages/plugin-sdk/src/backend.ts'],
+  ['@openforge-app/plugin-sdk/testing', 'packages/plugin-sdk/src/testing.ts'],
+  ['@openforge-app/plugin-sdk/vite', 'packages/plugin-sdk/src/vite.ts'],
+  ['@openforge-app/plugin-sdk/domain', 'packages/plugin-sdk/src/domain.ts'],
+  ['@openforge-app/plugin-sdk/prStatusPresentation', 'packages/plugin-sdk/src/prStatusPresentation.ts'],
+  ['@openforge-app/plugin-sdk/markdown', 'packages/plugin-sdk/src/markdown.ts'],
+  ['@openforge-app/plugin-sdk/numberParsing', 'packages/plugin-sdk/src/numberParsing.ts'],
+  ['@openforge-app/plugin-sdk/projectFileTree', 'packages/plugin-sdk/src/projectFileTree.ts'],
+  ['@openforge-app/plugin-sdk/sanitize', 'packages/plugin-sdk/src/sanitize.ts'],
+  ['@openforge-app/plugin-sdk/ui/MarkdownContent.svelte', 'packages/plugin-sdk/src/ui/MarkdownContent.svelte'],
+  ['@openforge-app/plugin-sdk/ui/ResizablePanel.svelte', 'packages/plugin-sdk/src/ui/ResizablePanel.svelte'],
+  ['@openforge-app/plugin-sdk', 'packages/plugin-sdk/src/index.ts'],
 ] as const)
 
 function repoRootUrl(repoRoot: URL | string): URL {

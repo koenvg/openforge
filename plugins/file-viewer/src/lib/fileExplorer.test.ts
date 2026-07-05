@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { FileEntry } from '@openforge/plugin-sdk/domain'
+import type { FileEntry } from '@openforge-app/plugin-sdk/domain'
 import {
   countDefaultHiddenRootEntries,
   createEmptyFileBrowserProjectState,

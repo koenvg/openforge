@@ -1,6 +1,6 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
+import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import MarkdownFilePreview from './MarkdownFilePreview.svelte'
 
 const fsReadFile = vi.fn()

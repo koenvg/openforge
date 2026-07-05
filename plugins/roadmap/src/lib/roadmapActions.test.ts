@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createOpenForgeRegistryFake } from '@openforge/plugin-sdk/testing'
+import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 import type { BoardCard } from './board'
 import {
   DEFAULT_ROADMAP_ACTIONS,

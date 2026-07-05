@@ -1,6 +1,6 @@
-import { defineBackendPlugin } from '@openforge/plugin-sdk/backend'
-import type { BackendOpenForgeAPI } from '@openforge/plugin-sdk/backend'
-import type { JsonValue, Task } from '@openforge/plugin-sdk'
+import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
+import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
+import type { JsonValue, Task } from '@openforge-app/plugin-sdk'
 import { cronForPreset, getNextScheduledFireAt, validateFiveFieldCron } from './lib/cron'
 import type { ScheduledFireOutcome, TaskSchedule, TaskScheduleDraft, TaskScheduleMode } from './lib/types'
 

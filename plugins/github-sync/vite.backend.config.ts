@@ -15,6 +15,6 @@ export default defineConfig({
     },
   },
   ssr: {
-    noExternal: ['@openforge/plugin-sdk'],
+    noExternal: ['@openforge-app/plugin-sdk'],
   },
 })

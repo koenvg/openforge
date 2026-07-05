@@ -1,5 +1,5 @@
 {
-  "name": "@openforge/plugin-sdk",
+  "name": "@openforge-app/plugin-sdk",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",

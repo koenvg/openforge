@@ -1,6 +1,6 @@
 import { get } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
+import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
 import * as pluginLoader from './pluginLoader'
 import {
   _resetPluginLoaderForTests,

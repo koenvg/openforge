@@ -15,7 +15,7 @@ async function makeWorkspace() {
   const root = await mkdir(path.join(tmpdir(), `openforge-dev-plugin-artifacts-${Date.now()}-${Math.random().toString(16).slice(2)}`), { recursive: true })
 
   await write(root, 'packages/plugin-sdk/src/index.ts', 'export const sdk = 1\n')
-  await write(root, 'packages/plugin-sdk/package.json', '{"name":"@openforge/plugin-sdk"}\n')
+  await write(root, 'packages/plugin-sdk/package.json', '{"name":"@openforge-app/plugin-sdk"}\n')
   await write(root, 'packages/plugin-sdk/tsconfig.json', '{}\n')
   await write(root, 'scripts/build-plugin-sdk-runtime.mjs', 'export async function buildPluginSdkRuntime() {}\n')
 

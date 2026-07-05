@@ -47,10 +47,10 @@ describe('OpenForge plugin Svelte runtime contract', () => {
   it('aliases plugin SDK source entrypoints for host-bundled built-in plugins', async () => {
     const aliases = viteConfig.resolve?.alias
 
-    expect(resolveAliasReplacement(aliases, '@openforge/plugin-sdk')).toBe(
+    expect(resolveAliasReplacement(aliases, '@openforge-app/plugin-sdk')).toBe(
       resolve(process.cwd(), 'packages/plugin-sdk/src/index.ts'),
     )
-    expect(resolveAliasReplacement(aliases, '@openforge/plugin-sdk/frontend')).toBe(
+    expect(resolveAliasReplacement(aliases, '@openforge-app/plugin-sdk/frontend')).toBe(
       resolve(process.cwd(), 'packages/plugin-sdk/src/frontend.ts'),
     )
   })
@@ -85,7 +85,7 @@ describe('OpenForge plugin Svelte runtime contract', () => {
     expect(readRendererImportMapScriptBody(transformed)).toBe(rendererImportMapScriptBody())
     expect(readRendererImportMap(transformed)).toEqual({
       ...svelteHostRuntimeImportMapEntries(),
-      '@openforge/plugin-sdk': 'plugin://host-runtime/plugin-sdk/index.js',
+      '@openforge-app/plugin-sdk': 'plugin://host-runtime/plugin-sdk/index.js',
       ...terminalRuntimeImportMapEntries(),
     })
   })
@@ -116,7 +116,7 @@ describe('OpenForge plugin Svelte runtime contract', () => {
       const packageJson = JSON.parse(packageJsonText)
 
       expect(viteConfig, `${pluginName} must import the official SDK Vite external helper`).toContain(
-        "import { openforgePluginViteExternals } from '@openforge/plugin-sdk/vite'",
+        "import { openforgePluginViteExternals } from '@openforge-app/plugin-sdk/vite'",
       )
       expect(viteConfig, `${pluginName} must externalize via the official helper`).toContain(
         'external: openforgePluginViteExternals',

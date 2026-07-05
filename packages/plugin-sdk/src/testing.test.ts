@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { defineBackendPlugin } from '@openforge/plugin-sdk/backend'
-import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
+import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
+import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
 import {
   createMockBackendOpenForgeApi,
   createMockFrontendOpenForgeApi,
   createMockOpenForgeApi,
   createOpenForgeRegistryFake,
-} from '@openforge/plugin-sdk/testing'
+} from '@openforge-app/plugin-sdk/testing'
 
 const Component = (() => null) as never
 

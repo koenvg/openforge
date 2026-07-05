@@ -1,6 +1,6 @@
 import { render } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
-import type { PrFileDiff } from '@openforge/plugin-sdk/domain'
+import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
 import DiffViewer from './DiffViewer.svelte'
 
 // Regression for the AI Walkthrough tab: stepping to a walkthrough step with fewer

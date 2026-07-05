@@ -1,5 +1,5 @@
 {
-  "name": "@openforge/pr-review-ui",
+  "name": "@openforge-app/pr-review-ui",
   "version": "0.1.0",
   "type": "module",
   "exports": {
@@ -33,7 +33,7 @@
     "@git-diff-view/lowlight": "^0.1.6",
     "@git-diff-view/svelte": "^0.1.6",
     "@lucide/svelte": "^1.21.0",
-    "@openforge/plugin-sdk": "workspace:*",
+    "@openforge-app/plugin-sdk": "workspace:*",
     "@tanstack/virtual-core": "^3.17.1"
   },
   "peerDependencies": {

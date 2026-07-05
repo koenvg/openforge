@@ -1,4 +1,4 @@
-import type { JsonValue, PluginStorage, PluginStorageScope } from '@openforge/plugin-sdk'
+import type { JsonValue, PluginStorage, PluginStorageScope } from '@openforge-app/plugin-sdk'
 import {
   deletePluginStorage,
   getPluginStorage,

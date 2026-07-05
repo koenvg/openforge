@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import type { ReviewPullRequest, PrOverviewComment } from '@openforge/plugin-sdk/domain'
-  import MarkdownContent from '@openforge/plugin-sdk/ui/MarkdownContent.svelte'
+  import type { ReviewPullRequest, PrOverviewComment } from '@openforge-app/plugin-sdk/domain'
+  import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import { timeAgo, timeAgoFromSeconds } from './timeAgo'
   import { getGitHubMarkdownImageBaseUrl } from './githubMarkdown'
 

@@ -1283,13 +1283,15 @@ mod tests {
             "example-plugin"
         );
         assert_eq!(
-            resolve_requested_package_dir_name("@openforge/example-plugin@1.2.3")
+            resolve_requested_package_dir_name("@openforge-app/example-plugin@1.2.3")
                 .expect("scoped version spec should resolve"),
-            "@openforge/example-plugin"
+            "@openforge-app/example-plugin"
         );
         assert_eq!(
-            resolve_requested_package_dir_name("plugin-alias@npm:@openforge/example-plugin@1.2.3")
-                .expect("alias spec should resolve"),
+            resolve_requested_package_dir_name(
+                "plugin-alias@npm:@openforge-app/example-plugin@1.2.3"
+            )
+            .expect("alias spec should resolve"),
             "plugin-alias"
         );
     }

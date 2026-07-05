@@ -1,5 +1,5 @@
-import { isOpenForgePackageMetadata } from '@openforge/plugin-sdk'
-import type { OpenForgePackageMetadata } from '@openforge/plugin-sdk'
+import { isOpenForgePackageMetadata } from '@openforge-app/plugin-sdk'
+import type { OpenForgePackageMetadata } from '@openforge-app/plugin-sdk'
 import type { PluginManifest } from './types'
 
 type BuiltinPluginPackageJson = {

@@ -46,20 +46,20 @@ export function svelteHostRuntimeImportMapEntries() {
 
 export function terminalRuntimeImportMapEntries() {
   return {
-    '@openforge/terminal-runtime': 'plugin://host-runtime/terminal-runtime/index.js',
-    '@openforge/terminal-runtime/terminalRuntime': 'plugin://host-runtime/terminal-runtime/terminalRuntime.js',
-    '@openforge/terminal-runtime/terminalOptions': 'plugin://host-runtime/terminal-runtime/terminalOptions.js',
-    '@openforge/terminal-runtime/theme': 'plugin://host-runtime/terminal-runtime/theme.js',
-    '@openforge/terminal-runtime/shortcuts': 'plugin://host-runtime/terminal-runtime/shortcuts.js',
-    '@openforge/terminal-runtime/shortcutController': 'plugin://host-runtime/terminal-runtime/shortcutController.js',
-    '@openforge/terminal-runtime/TerminalTabsShell': 'plugin://host-runtime/terminal-runtime/TerminalTabsShell.js',
+    '@openforge-app/terminal-runtime': 'plugin://host-runtime/terminal-runtime/index.js',
+    '@openforge-app/terminal-runtime/terminalRuntime': 'plugin://host-runtime/terminal-runtime/terminalRuntime.js',
+    '@openforge-app/terminal-runtime/terminalOptions': 'plugin://host-runtime/terminal-runtime/terminalOptions.js',
+    '@openforge-app/terminal-runtime/theme': 'plugin://host-runtime/terminal-runtime/theme.js',
+    '@openforge-app/terminal-runtime/shortcuts': 'plugin://host-runtime/terminal-runtime/shortcuts.js',
+    '@openforge-app/terminal-runtime/shortcutController': 'plugin://host-runtime/terminal-runtime/shortcutController.js',
+    '@openforge-app/terminal-runtime/TerminalTabsShell': 'plugin://host-runtime/terminal-runtime/TerminalTabsShell.js',
   }
 }
 
 export function rendererImportMapEntries() {
   return {
     ...svelteHostRuntimeImportMapEntries(),
-    '@openforge/plugin-sdk': 'plugin://host-runtime/plugin-sdk/index.js',
+    '@openforge-app/plugin-sdk': 'plugin://host-runtime/plugin-sdk/index.js',
     ...terminalRuntimeImportMapEntries(),
   }
 }

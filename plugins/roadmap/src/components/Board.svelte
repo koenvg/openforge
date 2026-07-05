@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Plus } from '@lucide/svelte'
-  import type { Action } from '@openforge/plugin-sdk'
+  import type { Action } from '@openforge-app/plugin-sdk'
   import type { BoardCard, BoardColumn } from '../lib/board'
   import Card from './Card.svelte'
   import ColorPicker from './ColorPicker.svelte'

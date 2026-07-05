@@ -20,91 +20,91 @@ function createOpenForgeHostRuntimeImportMapPlugin() {
 function createOpenForgeRootAliases() {
   return [
     {
-      find: /^@openforge\/plugin-sdk$/,
+      find: /^@openforge-app\/plugin-sdk$/,
       replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/index.ts'),
     },
     {
-      find: /^@openforge\/plugin-sdk\/backend$/,
+      find: /^@openforge-app\/plugin-sdk\/backend$/,
       replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/backend.ts'),
     },
     {
-      find: /^@openforge\/plugin-sdk\/domain$/,
+      find: /^@openforge-app\/plugin-sdk\/domain$/,
       replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/domain.ts'),
     },
     {
-      find: /^@openforge\/plugin-sdk\/prStatusPresentation$/,
+      find: /^@openforge-app\/plugin-sdk\/prStatusPresentation$/,
       replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/prStatusPresentation.ts'),
     },
     {
-      find: /^@openforge\/plugin-sdk\/frontend$/,
+      find: /^@openforge-app\/plugin-sdk\/frontend$/,
       replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/frontend.ts'),
     },
     {
-      find: /^@openforge\/plugin-sdk\/markdown$/,
+      find: /^@openforge-app\/plugin-sdk\/markdown$/,
       replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/markdown.ts'),
     },
     {
-      find: /^@openforge\/plugin-sdk\/numberParsing$/,
+      find: /^@openforge-app\/plugin-sdk\/numberParsing$/,
       replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/numberParsing.ts'),
     },
     {
-      find: /^@openforge\/plugin-sdk\/projectFileTree$/,
+      find: /^@openforge-app\/plugin-sdk\/projectFileTree$/,
       replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/projectFileTree.ts'),
     },
     {
-      find: /^@openforge\/plugin-sdk\/package-metadata-schema\.json$/,
+      find: /^@openforge-app\/plugin-sdk\/package-metadata-schema\.json$/,
       replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/openforgePackageMetadataSchema.json'),
     },
     {
-      find: /^@openforge\/plugin-sdk\/sanitize$/,
+      find: /^@openforge-app\/plugin-sdk\/sanitize$/,
       replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/sanitize.ts'),
     },
     {
-      find: /^@openforge\/plugin-sdk\/testing$/,
+      find: /^@openforge-app\/plugin-sdk\/testing$/,
       replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/testing.ts'),
     },
     {
-      find: /^@openforge\/plugin-sdk\/ui\/MarkdownContent\.svelte$/,
+      find: /^@openforge-app\/plugin-sdk\/ui\/MarkdownContent\.svelte$/,
       replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/ui/MarkdownContent.svelte'),
     },
     {
-      find: /^@openforge\/plugin-sdk\/ui\/ResizablePanel\.svelte$/,
+      find: /^@openforge-app\/plugin-sdk\/ui\/ResizablePanel\.svelte$/,
       replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/ui/ResizablePanel.svelte'),
     },
     {
-      find: /^@openforge\/plugin-sdk\/vite$/,
+      find: /^@openforge-app\/plugin-sdk\/vite$/,
       replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/vite.ts'),
     },
     {
-      find: /^@openforge\/terminal-runtime$/,
+      find: /^@openforge-app\/terminal-runtime$/,
       replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/index.ts'),
     },
     {
-      find: /^@openforge\/terminal-runtime\/terminalRuntime$/,
+      find: /^@openforge-app\/terminal-runtime\/terminalRuntime$/,
       replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/terminalRuntime.ts'),
     },
     {
-      find: /^@openforge\/terminal-runtime\/terminalOptions$/,
+      find: /^@openforge-app\/terminal-runtime\/terminalOptions$/,
       replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/terminalOptions.ts'),
     },
     {
-      find: /^@openforge\/terminal-runtime\/theme$/,
+      find: /^@openforge-app\/terminal-runtime\/theme$/,
       replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/theme.ts'),
     },
     {
-      find: /^@openforge\/terminal-runtime\/shortcuts$/,
+      find: /^@openforge-app\/terminal-runtime\/shortcuts$/,
       replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/terminalShortcuts.ts'),
     },
     {
-      find: /^@openforge\/terminal-runtime\/shortcutController$/,
+      find: /^@openforge-app\/terminal-runtime\/shortcutController$/,
       replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/terminalShortcutController.ts'),
     },
     {
-      find: /^@openforge\/terminal-runtime\/TerminalTabsShell$/,
+      find: /^@openforge-app\/terminal-runtime\/TerminalTabsShell$/,
       replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/TerminalTabsShell.svelte'),
     },
     {
-      find: /^@openforge\/terminal-runtime\/xterm\.css$/,
+      find: /^@openforge-app\/terminal-runtime\/xterm\.css$/,
       replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/xterm.css'),
     },
     ...createDaisyUiTailwindPluginAliases(),

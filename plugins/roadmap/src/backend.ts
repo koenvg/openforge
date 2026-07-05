@@ -1,5 +1,5 @@
-import { defineBackendPlugin } from '@openforge/plugin-sdk/backend'
-import type { BackendOpenForgeAPI } from '@openforge/plugin-sdk/backend'
+import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
+import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
 import type {
   CreateIssueRequest,
   EditIssueRequest,

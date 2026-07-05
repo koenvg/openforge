@@ -1,8 +1,8 @@
 import { createInterface } from 'node:readline'
 import { pathToFileURL } from 'node:url'
-import { validateSchemaValue } from '@openforge/plugin-runtime/commandValidation'
-import type { AgentSession, BoardStatus, CommandDescriptor, CommandRegistration, ConfigureStartPromptContributionRequest, CreateTaskRequest, FileContent, FileEntry, ImplementationRun, JsonValue, OpenForgePackageMetadata, PluginStorage, Project, ProjectAttention, StartPromptContribution, StartTaskImplementationRequest, SubscriptionSink, Task, TaskWorkspaceInfo } from '@openforge/plugin-sdk'
-import type { BackendMethodRegistration, BackendOpenForgeAPI, BackendPlugin, BackendPluginContext, BackgroundServiceRegistration, Disposable, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/backend'
+import { validateSchemaValue } from '@openforge-app/plugin-runtime/commandValidation'
+import type { AgentSession, BoardStatus, CommandDescriptor, CommandRegistration, ConfigureStartPromptContributionRequest, CreateTaskRequest, FileContent, FileEntry, ImplementationRun, JsonValue, OpenForgePackageMetadata, PluginStorage, Project, ProjectAttention, StartPromptContribution, StartTaskImplementationRequest, SubscriptionSink, Task, TaskWorkspaceInfo } from '@openforge-app/plugin-sdk'
+import type { BackendMethodRegistration, BackendOpenForgeAPI, BackendPlugin, BackendPluginContext, BackgroundServiceRegistration, Disposable, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/backend'
 
 type JsonRpcId = number | null | undefined
 

@@ -4,9 +4,9 @@ import { get } from 'svelte/store'
 import SkillsView from './SkillsView.svelte'
 import { activeProjectId, selectedSkillIdentity, skills } from './lib/stores'
 import { getSkillIdentity, type SkillInfo } from './lib/skillDomain'
-import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
+import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
 
-vi.mock('@openforge/plugin-sdk/ui/MarkdownContent.svelte', async () => ({
+vi.mock('@openforge-app/plugin-sdk/ui/MarkdownContent.svelte', async () => ({
   default: (await import('./test/MarkdownContentTestDouble.svelte')).default,
 }))
 

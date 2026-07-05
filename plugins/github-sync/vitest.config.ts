@@ -11,10 +11,10 @@ export default defineConfig({
   resolve: {
     alias: [
       ...createOpenForgePluginSdkSourceAliases(repoRoot),
-      { find: '@openforge/plugin-runtime/commandValidation', replacement: sourcePath('packages/plugin-runtime/src/commandValidation.ts') },
-      { find: '@openforge/plugin-runtime', replacement: sourcePath('packages/plugin-runtime/src/index.ts') },
-      { find: /^@openforge\/pr-review-ui\/(.*)$/, replacement: `${sourcePath('packages/pr-review-ui/src')}/$1` },
-      { find: '@openforge/pr-review-ui', replacement: sourcePath('packages/pr-review-ui/src/index.ts') },
+      { find: '@openforge-app/plugin-runtime/commandValidation', replacement: sourcePath('packages/plugin-runtime/src/commandValidation.ts') },
+      { find: '@openforge-app/plugin-runtime', replacement: sourcePath('packages/plugin-runtime/src/index.ts') },
+      { find: /^@openforge-app\/pr-review-ui\/(.*)$/, replacement: `${sourcePath('packages/pr-review-ui/src')}/$1` },
+      { find: '@openforge-app/pr-review-ui', replacement: sourcePath('packages/pr-review-ui/src/index.ts') },
     ],
   },
   build: {

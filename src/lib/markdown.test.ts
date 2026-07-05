@@ -3,7 +3,7 @@ import { renderMarkdownHtml, resolveMarkdownImageSrc } from './markdown'
 import {
   renderMarkdownHtml as renderPluginSdkMarkdownHtml,
   resolveMarkdownImageSrc as resolvePluginSdkMarkdownImageSrc,
-} from '@openforge/plugin-sdk/markdown'
+} from '@openforge-app/plugin-sdk/markdown'
 
 describe('app markdown rendering ownership', () => {
   it('uses the plugin SDK markdown implementation as the shared owner', () => {

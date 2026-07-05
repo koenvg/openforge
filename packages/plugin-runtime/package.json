@@ -1,5 +1,5 @@
 {
-  "name": "@openforge/plugin-runtime",
+  "name": "@openforge-app/plugin-runtime",
   "version": "0.1.0",
   "type": "module",
   "private": true,
@@ -10,7 +10,7 @@
     "./commandValidation": "./src/commandValidation.ts"
   },
   "dependencies": {
-    "@openforge/plugin-sdk": "workspace:*"
+    "@openforge-app/plugin-sdk": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^6.0.3",

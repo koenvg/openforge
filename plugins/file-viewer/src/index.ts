@@ -1,4 +1,4 @@
-import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
+import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
 import FilesView from './FilesView.svelte'
 import { requestFileReveal } from './lib/stores'
 

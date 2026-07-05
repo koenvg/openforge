@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { sanitizeHtml } from './sanitize'
-import { sanitizeHtml as sanitizePluginSdkHtml } from '@openforge/plugin-sdk/sanitize'
+import { sanitizeHtml as sanitizePluginSdkHtml } from '@openforge-app/plugin-sdk/sanitize'
 
 describe('sanitizeHtml', () => {
   it('uses the plugin SDK sanitization implementation as the shared owner', () => {

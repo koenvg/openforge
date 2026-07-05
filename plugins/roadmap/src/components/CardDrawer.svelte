@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ExternalLink, Copy } from '@lucide/svelte'
-  import MarkdownContent from '@openforge/plugin-sdk/ui/MarkdownContent.svelte'
+  import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import type { BoardCard } from '../lib/board'
   import type { RepoLabel } from '../lib/types'
 

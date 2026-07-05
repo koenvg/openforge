@@ -1,11 +1,11 @@
 <script lang="ts">
-  import SharedDiffViewer from '@openforge/pr-review-ui/DiffViewer.svelte'
+  import SharedDiffViewer from '@openforge-app/pr-review-ui/DiffViewer.svelte'
   import type { PrFileDiff, ReviewComment, ReviewSubmissionComment, AgentReviewComment } from '../../../../lib/types'
   import { pendingManualComments, agentReviewComments } from '../../../../lib/stores'
   import { updateAgentReviewCommentStatus, openUrl } from '../../../../lib/ipc'
   import { clearSelfReviewInlineCommentDraft, getSelfReviewInlineCommentDraft, setSelfReviewInlineCommentDraft } from '../../../../lib/taskScopedReviewComments'
   import { getDiffTheme, themeMode } from '../../../../lib/theme'
-  import type { FileContents } from '@openforge/pr-review-ui/diffAdapter'
+  import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
   import type { Snippet } from 'svelte'
 
   interface BaseProps {

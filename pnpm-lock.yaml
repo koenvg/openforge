@@ -28,16 +28,16 @@ importers:
       '@lucide/svelte':
         specifier: ^1.21.0
         version: 1.21.0(svelte@5.56.4)
-      '@openforge/plugin-runtime':
+      '@openforge-app/plugin-runtime':
         specifier: workspace:*
         version: link:packages/plugin-runtime
-      '@openforge/plugin-sdk':
+      '@openforge-app/plugin-sdk':
         specifier: workspace:*
         version: link:packages/plugin-sdk
-      '@openforge/pr-review-ui':
+      '@openforge-app/pr-review-ui':
         specifier: workspace:*
         version: link:packages/pr-review-ui
-      '@openforge/terminal-runtime':
+      '@openforge-app/terminal-runtime':
         specifier: workspace:*
         version: link:packages/terminal-runtime
       '@tailwindcss/vite':
@@ -132,7 +132,7 @@ importers:
 
   packages/plugin-runtime:
     dependencies:
-      '@openforge/plugin-sdk':
+      '@openforge-app/plugin-sdk':
         specifier: workspace:*
         version: link:../plugin-sdk
     devDependencies:
@@ -179,7 +179,7 @@ importers:
       '@lucide/svelte':
         specifier: ^1.21.0
         version: 1.21.0(svelte@5.56.4)
-      '@openforge/plugin-sdk':
+      '@openforge-app/plugin-sdk':
         specifier: workspace:*
         version: link:../plugin-sdk
       '@tanstack/virtual-core':
@@ -209,7 +209,7 @@ importers:
 
   plugins/demo-hello-world:
     dependencies:
-      '@openforge/plugin-sdk':
+      '@openforge-app/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
     devDependencies:
@@ -234,7 +234,7 @@ importers:
       '@lucide/svelte':
         specifier: ^1.21.0
         version: 1.21.0(svelte@5.56.4)
-      '@openforge/plugin-sdk':
+      '@openforge-app/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
     devDependencies:
@@ -262,10 +262,10 @@ importers:
       '@lucide/svelte':
         specifier: ^1.21.0
         version: 1.21.0(svelte@5.56.4)
-      '@openforge/plugin-sdk':
+      '@openforge-app/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
-      '@openforge/pr-review-ui':
+      '@openforge-app/pr-review-ui':
         specifier: workspace:*
         version: link:../../packages/pr-review-ui
     devDependencies:
@@ -296,7 +296,7 @@ importers:
       '@lucide/svelte':
         specifier: ^1.21.0
         version: 1.21.0(svelte@5.56.4)
-      '@openforge/plugin-sdk':
+      '@openforge-app/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
     devDependencies:
@@ -324,7 +324,7 @@ importers:
 
   plugins/skills-viewer:
     dependencies:
-      '@openforge/plugin-sdk':
+      '@openforge-app/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
     devDependencies:
@@ -346,7 +346,7 @@ importers:
 
   plugins/task-schedules:
     dependencies:
-      '@openforge/plugin-sdk':
+      '@openforge-app/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
       cronstrue:
@@ -374,10 +374,10 @@ importers:
 
   plugins/terminal:
     dependencies:
-      '@openforge/plugin-sdk':
+      '@openforge-app/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
-      '@openforge/terminal-runtime':
+      '@openforge-app/terminal-runtime':
         specifier: workspace:*
         version: link:../../packages/terminal-runtime
     devDependencies:

@@ -22,7 +22,7 @@ describe('package build scripts', () => {
     const packageJson = await readJson('package.json')
 
     expect(packageJson.scripts['build:plugins']).toBe(
-      "pnpm --filter @openforge/plugin-sdk build && pnpm -r --filter './plugins/*' --if-present build:bundle",
+      "pnpm --filter @openforge-app/plugin-sdk build && pnpm -r --filter './plugins/*' --if-present build:bundle",
     )
   })
 
@@ -41,10 +41,10 @@ describe('package build scripts', () => {
 
     for (const { packagePath, packageJson } of pluginPackagesWithBuildScripts) {
       expect(packageJson.scripts.build, packagePath).toBe(
-        'pnpm --filter @openforge/plugin-sdk build && pnpm run build:bundle',
+        'pnpm --filter @openforge-app/plugin-sdk build && pnpm run build:bundle',
       )
       expect(packageJson.scripts['build:bundle'], packagePath).toBeTruthy()
-      expect(packageJson.scripts['build:bundle'], packagePath).not.toContain('@openforge/plugin-sdk')
+      expect(packageJson.scripts['build:bundle'], packagePath).not.toContain('@openforge-app/plugin-sdk')
     }
   })
 

@@ -1,4 +1,4 @@
-import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
+import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
 import TaskSchedulesView from './components/TaskSchedulesView.svelte'
 
 export const TaskSchedulesViewComponent = TaskSchedulesView

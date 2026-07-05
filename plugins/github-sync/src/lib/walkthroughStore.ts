@@ -1,6 +1,6 @@
-import type { BackendOpenForgeAPI } from '@openforge/plugin-sdk/backend'
-import type { JsonValue } from '@openforge/plugin-sdk'
-import type { PrWalkthrough } from '@openforge/plugin-sdk/domain'
+import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
+import type { JsonValue } from '@openforge-app/plugin-sdk'
+import type { PrWalkthrough } from '@openforge-app/plugin-sdk/domain'
 
 // The walkthrough cache lives entirely in plugin storage (JSON, namespaced by
 // plugin id) — there is no core SQLite table. Walkthroughs are keyed by

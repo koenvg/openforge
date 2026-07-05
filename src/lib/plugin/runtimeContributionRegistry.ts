@@ -1,4 +1,4 @@
-import { validateSchemaValue } from '@openforge/plugin-runtime/commandValidation'
+import { validateSchemaValue } from '@openforge-app/plugin-runtime/commandValidation'
 import type {
   Disposable,
   FrontendOpenForgeAPI,
@@ -7,14 +7,14 @@ import type {
   PluginSettingsSectionRegistration,
   PluginTaskPaneTabRegistration,
   PluginViewRegistration,
-} from '@openforge/plugin-sdk/frontend'
+} from '@openforge-app/plugin-sdk/frontend'
 import type {
   BackendMethodRegistration,
   BackendOpenForgeAPI,
   BackendPlugin,
   BackendPluginContext,
   BackgroundServiceRegistration,
-} from '@openforge/plugin-sdk/backend'
+} from '@openforge-app/plugin-sdk/backend'
 import type {
   AgentSession,
   BackendReadyState,
@@ -39,7 +39,7 @@ import type {
   Task,
   TaskWorkspaceInfo,
   WritableBoardStatus,
-} from '@openforge/plugin-sdk'
+} from '@openforge-app/plugin-sdk'
 
 type MaybePromise<T> = T | Promise<T>
 type RuntimeKind = 'commands' | 'events' | 'views' | 'taskPane' | 'settings' | 'background' | 'backend'

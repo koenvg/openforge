@@ -1,4 +1,4 @@
-import type { PrFileDiff } from '@openforge/plugin-sdk/domain'
+import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
 import { parseHunks } from './hunkParser'
 import promptTemplate from './walkthroughPrompt.md?raw'
 

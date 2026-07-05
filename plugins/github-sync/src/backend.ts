@@ -1,5 +1,5 @@
-import { defineBackendPlugin } from '@openforge/plugin-sdk/backend'
-import type { BackendOpenForgeAPI } from '@openforge/plugin-sdk/backend'
+import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
+import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
 import type {
   AgentReviewComment,
   AuthoredPullRequest,
@@ -9,7 +9,7 @@ import type {
   PrWalkthrough,
   ReviewComment,
   ReviewPullRequest,
-} from '@openforge/plugin-sdk/domain'
+} from '@openforge-app/plugin-sdk/domain'
 import type { FileAtRefRequest, FileContentRequest, PullRequestRepositoryRequest, SubmitPullRequestReviewRequest } from './review/pr/githubSyncClient'
 import { randomUUID } from 'node:crypto'
 import {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Action } from '@openforge/plugin-sdk'
+  import type { Action } from '@openforge-app/plugin-sdk'
 
   interface Props {
     visible: boolean

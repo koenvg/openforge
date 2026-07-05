@@ -6,6 +6,6 @@ describe('Task Schedules backend bundle config', () => {
   it('bundles cronstrue into the backend artifact for packaged apps', () => {
     const config = backendViteConfig as UserConfig
 
-    expect(config.ssr?.noExternal).toEqual(expect.arrayContaining(['@openforge/plugin-sdk', 'cronstrue']))
+    expect(config.ssr?.noExternal).toEqual(expect.arrayContaining(['@openforge-app/plugin-sdk', 'cronstrue']))
   })
 })

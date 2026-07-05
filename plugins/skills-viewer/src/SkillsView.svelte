@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
+  import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
   import { skills, selectedSkillIdentity, activeProjectId } from './lib/stores'
   import { getHTMLElementAt, isInputFocused } from './lib/domUtils'
 
@@ -13,7 +13,7 @@
   let { api, context: _context, projectName, projectId = null }: Props = $props()
   import { useVimNavigation } from './lib/useVimNavigation.svelte'
   import ProjectPageHeader from './ProjectPageHeader.svelte'
-  import MarkdownContent from '@openforge/plugin-sdk/ui/MarkdownContent.svelte'
+  import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import { getPreferredSkillIdentity, getSkillIdentity, getSkillLocationLabel, getSkillSourcePath, getVisibleSkills, groupSkillsBySource, isSameSkillIdentity, parseSkillFrontmatter, stripSkillFrontmatter, type SkillInfo } from './lib/skillDomain'
 
   let isLoading = $state(false)

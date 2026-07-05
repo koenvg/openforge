@@ -3,9 +3,9 @@ import { highlighter } from "@git-diff-view/lowlight";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { writable } from "svelte/store";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { configureDiffHighlighter } from "@openforge/pr-review-ui/diffHighlightConfig";
+import { configureDiffHighlighter } from "@openforge-app/pr-review-ui/diffHighlightConfig";
 import { requireElement } from "../../test-utils/dom";
-import type { DiffWorkerRequest, DiffWorkerResponse } from "@openforge/pr-review-ui/diffWorker";
+import type { DiffWorkerRequest, DiffWorkerResponse } from "@openforge-app/pr-review-ui/diffWorker";
 import type {
 	PrComment,
 	PrFileDiff,
@@ -19,7 +19,7 @@ vi.mock("../../lib/stores", () => ({
 	taskDraftNotes: writable(new Map()),
 }));
 
-vi.mock("@openforge/pr-review-ui/useVirtualizer.svelte", () => ({
+vi.mock("@openforge-app/pr-review-ui/useVirtualizer.svelte", () => ({
 	createVirtualizer: vi.fn((opts: { getCount: () => number }) => ({
 		get virtualItems() {
 			const count = opts.getCount();
@@ -74,7 +74,7 @@ import {
 	setSelfReviewDiffFiles,
 	setSelfReviewGeneralComments,
 } from "../../lib/taskScopedSelfReviewState";
-import { createVirtualizer } from "@openforge/pr-review-ui/useVirtualizer.svelte";
+import { createVirtualizer } from "@openforge-app/pr-review-ui/useVirtualizer.svelte";
 import { clearTaskReviewPaneState, getTaskReviewFileIdentity, getTaskReviewPaneState, markTaskReviewFileReviewed } from "../../lib/taskReviewPaneState";
 
 const baseTask: Task = {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { PrFileDiff } from '@openforge/plugin-sdk/domain'
+  import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
   import { getFileStatusIcon, getFileStatusClass } from './fileStatus'
 
   interface Props {

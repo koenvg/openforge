@@ -8,7 +8,7 @@ import {
 import { BUILTIN_PLUGIN_MANIFESTS, BUILTIN_PLUGIN_PACKAGE_METADATA } from './builtinPlugins'
 import { installedPlugins, loadInstalledPlugins, manifestFromPluginRow } from './pluginStore'
 import type { PluginManifest } from './types'
-import type { OpenForgePackageMetadata } from '@openforge/plugin-sdk'
+import type { OpenForgePackageMetadata } from '@openforge-app/plugin-sdk'
 
 type InstalledPluginRow = {
   id: string

@@ -51,7 +51,7 @@ async function writeMinimalHostRuntimeInputs(repoRoot, { backendCrateRoot = 'src
   await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'terminalShortcutController.ts'), 'export const terminalShortcutController = true;')
   await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'TerminalTabsShell.svelte'), '<script>export const terminalTabsShell = true;</script>')
   await writeFile(join(repoRoot, 'packages', 'plugin-runtime', 'src', 'commandValidation.ts'), 'export function validateSchemaValue() { return { valid: true, bundledRuntimeMarker: true }; }')
-  await writeFile(join(repoRoot, backendCrateRoot, 'plugin-host', 'index.ts'), "import { validateSchemaValue } from '@openforge/plugin-runtime/commandValidation'\nconsole.log(validateSchemaValue())\n")
+  await writeFile(join(repoRoot, backendCrateRoot, 'plugin-host', 'index.ts'), "import { validateSchemaValue } from '@openforge-app/plugin-runtime/commandValidation'\nconsole.log(validateSchemaValue())\n")
 
   const svelteFiles = Object.fromEntries(
     Object.values(svelteHostRuntimeBuildEntries()).map(relPath => [relPath, `export const stub = ${JSON.stringify(`svelte:${relPath}`)};`]),
@@ -379,7 +379,7 @@ describe('Electron build host-runtime assets', () => {
 
     const backendHost = await readFile(join(outDir, 'index.js'), 'utf8')
     expect(backendHost).toContain('bundledRuntimeMarker')
-    expect(backendHost).not.toContain('@openforge/plugin-runtime')
+    expect(backendHost).not.toContain('@openforge-app/plugin-runtime')
   })
 
   it('generates plugin SDK, bundles backend plugin-host runtime dependencies, and builds browser-ready Svelte host-runtime assets into dist-electron resources', async () => {
@@ -402,7 +402,7 @@ describe('Electron build host-runtime assets', () => {
     await expect(stat(join(outDir, 'plugin-host', 'svelte', 'store.js'))).resolves.toBeTruthy()
     const backendHost = await readFile(join(outDir, 'plugin-host', 'index.js'), 'utf8')
     expect(backendHost).toContain('bundledRuntimeMarker')
-    expect(backendHost).not.toContain('@openforge/plugin-runtime')
+    expect(backendHost).not.toContain('@openforge-app/plugin-runtime')
     await expect(readFile(join(outDir, 'plugin-host', 'plugin-sdk', 'index.js'), 'utf8')).resolves.toContain('pluginSdk')
     await expect(readFile(join(outDir, 'plugin-host', 'terminal-runtime', 'index.js'), 'utf8')).resolves.toContain('terminalRuntime')
     await expect(readFile(join(outDir, 'plugin-host', 'svelte', 'index.js'), 'utf8')).resolves.toContain('svelte')

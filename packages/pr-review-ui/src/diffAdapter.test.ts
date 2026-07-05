@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { PrFileDiff } from '@openforge/plugin-sdk/domain'
+import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
 import { getFileLanguage, toGitDiffViewData, isTruncated, getTruncationStats, getImageMimeType, isImageFileDiff, getImagePreviewDataUrl } from './diffAdapter'
 
 // ============================================================================

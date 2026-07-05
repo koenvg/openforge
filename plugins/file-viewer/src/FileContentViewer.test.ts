@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
-import type { FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
-import type { FileContent } from '@openforge/plugin-sdk/domain'
+import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
+import type { FileContent } from '@openforge-app/plugin-sdk/domain'
 import FileContentViewer from './FileContentViewer.svelte'
 
 vi.mock('@lucide/svelte', () => ({

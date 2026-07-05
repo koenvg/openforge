@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
-import { OPENFORGE_FRONTEND_PLUGIN_MARKER } from '@openforge/plugin-sdk/frontend'
-import { isOpenForgePackageMetadata } from '@openforge/plugin-sdk'
-import type { FrontendOpenForgeAPI, FrontendPluginContext } from '@openforge/plugin-sdk/frontend'
+import { OPENFORGE_FRONTEND_PLUGIN_MARKER } from '@openforge-app/plugin-sdk/frontend'
+import { isOpenForgePackageMetadata } from '@openforge-app/plugin-sdk'
+import type { FrontendOpenForgeAPI, FrontendPluginContext } from '@openforge-app/plugin-sdk/frontend'
 import packageJson from '../package.json'
 
 const { mockHelloWorldView, mockDemoTab } = vi.hoisted(() => ({

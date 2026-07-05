@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
 import type { ComponentProps } from 'svelte'
-import type { ReviewSubmissionComment } from '@openforge/plugin-sdk/domain'
+import type { ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
 import ReviewSubmitPanel from './ReviewSubmitPanel.svelte'
 
 function requireTextarea(container: HTMLElement): HTMLTextAreaElement {

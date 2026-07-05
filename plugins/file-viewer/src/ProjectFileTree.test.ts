@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
-import type { FileEntry } from '@openforge/plugin-sdk/domain'
+import type { FileEntry } from '@openforge-app/plugin-sdk/domain'
 import ProjectFileTree from './ProjectFileTree.svelte'
 
 function makeEntry(overrides: Partial<FileEntry>): FileEntry {

@@ -1,6 +1,6 @@
-import type { PluginStorageScope } from '@openforge/plugin-sdk/frontend'
-import type { PrFileDiff, ReviewPullRequest } from '@openforge/plugin-sdk/domain'
-import { getReviewFileIdentity } from '@openforge/pr-review-ui/reviewFileIdentity'
+import type { PluginStorageScope } from '@openforge-app/plugin-sdk/frontend'
+import type { PrFileDiff, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
+import { getReviewFileIdentity } from '@openforge-app/pr-review-ui/reviewFileIdentity'
 
 const reviewedFilesStorageKey = 'githubSync.prReview.reviewedFiles.v1'
 

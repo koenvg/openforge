@@ -1,5 +1,5 @@
 import { get } from 'svelte/store'
-import type { BackendReadyState, ConfigureStartPromptContributionRequest, CreateTaskRequest, ImplementationRun, StartPromptContribution, StartTaskImplementationRequest } from '@openforge/plugin-sdk'
+import type { BackendReadyState, ConfigureStartPromptContributionRequest, CreateTaskRequest, ImplementationRun, StartPromptContribution, StartTaskImplementationRequest } from '@openforge-app/plugin-sdk'
 import {
   createTask,
   fsReadDir,

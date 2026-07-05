@@ -1,4 +1,4 @@
-import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
+import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
 import TerminalTaskPane from './TerminalTaskPane.svelte'
 import TerminalProjectView from './TerminalProjectView.svelte'
 import { setTerminalOpenForgeApi } from './lib/ipc'

@@ -1,4 +1,4 @@
-import type { ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrComment } from '@openforge/plugin-sdk/domain'
+import type { ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrComment } from '@openforge-app/plugin-sdk/domain'
 
 /**
  * Display data for comments on a single line.

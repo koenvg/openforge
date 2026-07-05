@@ -1,14 +1,14 @@
 {
-  "name": "@openforge/plugin-demo-hello-world",
+  "name": "@openforge-app/plugin-demo-hello-world",
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "pnpm --filter @openforge/plugin-sdk build && pnpm run build:bundle",
+    "build": "pnpm --filter @openforge-app/plugin-sdk build && pnpm run build:bundle",
     "build:bundle": "vite build",
     "test": "vitest run"
   },
   "dependencies": {
-    "@openforge/plugin-sdk": "workspace:*"
+    "@openforge-app/plugin-sdk": "workspace:*"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"

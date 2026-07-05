@@ -1,4 +1,4 @@
-import type { Disposable, FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
+import type { Disposable, FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import type {
   AgentReviewComment,
   AuthoredPullRequest,
@@ -9,7 +9,7 @@ import type {
   ReviewComment,
   ReviewPullRequest,
   ReviewSubmissionComment,
-} from '@openforge/plugin-sdk/domain'
+} from '@openforge-app/plugin-sdk/domain'
 
 export type PullRequestRepositoryRequest = {
   owner: string

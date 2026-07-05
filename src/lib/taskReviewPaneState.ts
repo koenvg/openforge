@@ -1,4 +1,4 @@
-import { getReviewFileIdentity, type ReviewFileIdentityInput } from '@openforge/pr-review-ui/reviewFileIdentity';
+import { getReviewFileIdentity, type ReviewFileIdentityInput } from '@openforge-app/pr-review-ui/reviewFileIdentity';
 import type { PrFileDiff } from './types';
 
 export interface TaskReviewPaneState {

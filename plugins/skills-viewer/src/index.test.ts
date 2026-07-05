@@ -2,10 +2,10 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
-import { OPENFORGE_FRONTEND_PLUGIN_MARKER } from '@openforge/plugin-sdk/frontend'
-import { isOpenForgePackageMetadata } from '@openforge/plugin-sdk'
-import type { BackendPluginContext } from '@openforge/plugin-sdk/backend'
-import type { FrontendOpenForgeAPI, FrontendPluginContext } from '@openforge/plugin-sdk/frontend'
+import { OPENFORGE_FRONTEND_PLUGIN_MARKER } from '@openforge-app/plugin-sdk/frontend'
+import { isOpenForgePackageMetadata } from '@openforge-app/plugin-sdk'
+import type { BackendPluginContext } from '@openforge-app/plugin-sdk/backend'
+import type { FrontendOpenForgeAPI, FrontendPluginContext } from '@openforge-app/plugin-sdk/frontend'
 
 const { mockSkillsView } = vi.hoisted(() => ({
   mockSkillsView: { name: 'SkillsViewComponent' },

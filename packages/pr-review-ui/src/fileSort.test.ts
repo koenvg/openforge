@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { sortFilesAsTree } from './fileSort'
-import type { PrFileDiff } from '@openforge/plugin-sdk/domain'
+import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
 
 function makeFile(filename: string): PrFileDiff {
   return {
