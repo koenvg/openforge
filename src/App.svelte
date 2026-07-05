@@ -4,7 +4,7 @@
   import type { DesktopUnlistenFn } from './lib/desktopIpc'
   import { createDesktopWindow } from './lib/desktopWindow'
   import type { DesktopWindowTarget } from './lib/desktopWindow'
-  import { tasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, isLoading, projects, activeProjectId, activeProjectColorId, currentView, reviewRequestCount, activeRepoReviewRequestCount, reviewPrs, codeCleanupTasksEnabled, focusBoardFilters, outOfFocusTaskIdsByProject } from './lib/stores'
+  import { tasks, dependencyReferenceTasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, isLoading, projects, activeProjectId, activeProjectColorId, currentView, reviewRequestCount, activeRepoReviewRequestCount, reviewPrs, codeCleanupTasksEnabled, focusBoardFilters, outOfFocusTaskIdsByProject } from './lib/stores'
   import { getAppMode, getConfig, getProjectConfig, resumeStartupSessions, setPollContext, getProjectRepo, openUrl, markReviewPrViewed } from './lib/ipc'
   import { computePollContext, pollContextEquals, type PollContextPayload } from './lib/pollContext'
   import { GITHUB_SYNC_GLOBAL_VIEW_KEY, GITHUB_SYNC_PLUGIN_ID } from './lib/githubSyncPlugin'
@@ -524,6 +524,7 @@
                 projectId={$activeProjectId}
                 projectName={activeProject?.name ?? ''}
                 tasks={$tasks}
+                dependencyReferenceTasks={$dependencyReferenceTasks}
                 activeSessions={$activeSessions}
                 ticketPrs={$ticketPrs}
                 onOpenTask={handleOpenTask}

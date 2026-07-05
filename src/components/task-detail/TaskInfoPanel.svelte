@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Task, TaskLabel, PullRequestInfo } from '../../lib/types'
   import { deriveTaskAttention } from '../../lib/taskAttention'
-  import { activeSessions, tasks as allTasks, ticketPrs } from '../../lib/stores'
+  import { activeSessions, dependencyReferenceTasks, tasks as allTasks, ticketPrs } from '../../lib/stores'
   import { addTaskLabel, getPullRequests, removeTaskLabel } from '../../lib/ipc'
   import { getAgentSessionResumeCommand } from '../../lib/agentResumeCommand'
   import { buildTicketPullRequestMap } from '../../lib/pullRequestStore'
@@ -18,6 +18,7 @@
     task: Task
     workspacePath: string | null
     allTasksOverride?: Task[]
+    dependencyReferenceTasksOverride?: Task[]
     taskPrsOverride?: PullRequestInfo[]
     allowCommentAddressing?: boolean
     surface?: 'default' | 'transparent'
@@ -25,17 +26,18 @@
     onOpenDependentTask?: (taskId: string) => void
   }
 
-  let { task, workspacePath, allTasksOverride, taskPrsOverride, allowCommentAddressing = false, surface = 'default', onEditPrompt, onOpenDependentTask }: Props = $props()
+  let { task, workspacePath, allTasksOverride, dependencyReferenceTasksOverride, taskPrsOverride, allowCommentAddressing = false, surface = 'default', onEditPrompt, onOpenDependentTask }: Props = $props()
 
   let labels = $state<TaskLabel[]>([])
   let previousTaskId: string | null = null
   let previousTaskLabelSignature = ''
 
   let taskPrs = $derived((taskPrsOverride ?? $ticketPrs.get(task.id)) || [])
-  let taskList = $derived(allTasksOverride ?? $allTasks)
-  let dependencies = $derived(getTaskDependencySummaries(task, taskList))
-  let waitingDependencyCount = $derived(getWaitingDependencyCount(task, taskList))
-  let dependents = $derived(getTaskDependentSummaries(task, taskList))
+  let activeTaskList = $derived(allTasksOverride ?? $allTasks)
+  let dependencyTaskList = $derived([...activeTaskList, ...(dependencyReferenceTasksOverride ?? $dependencyReferenceTasks)])
+  let dependencies = $derived(getTaskDependencySummaries(task, dependencyTaskList))
+  let waitingDependencyCount = $derived(getWaitingDependencyCount(task, dependencyTaskList))
+  let dependents = $derived(getTaskDependentSummaries(task, activeTaskList, dependencyTaskList))
   let surfaceClass = $derived(surface === 'transparent' ? 'bg-transparent' : 'bg-base-200')
   let attention = $derived(deriveTaskAttention(taskPrs, waitingDependencyCount))
   let resumeCommand = $derived(getAgentSessionResumeCommand($activeSessions.get(task.id) || null))

@@ -12,6 +12,7 @@ vi.mock('./ipc', () => ({
   getProjects: vi.fn(),
   getPullRequests: vi.fn(),
   getReviewPrs: vi.fn(),
+  getTaskDetail: vi.fn(),
   getTasksForProject: vi.fn(),
 }))
 
@@ -29,6 +30,7 @@ import {
   projects,
   projectResolvedRepos,
   reviewPrs,
+  dependencyReferenceTasks,
   reviewRequestCount,
   reviewRequestCountByProject,
   activeRepoReviewRequestCount,
@@ -45,6 +47,7 @@ import {
   getProjects,
   getPullRequests,
   getReviewPrs,
+  getTaskDetail,
   getTasksForProject,
 } from './ipc'
 
@@ -139,6 +142,7 @@ describe('useAppDataOrchestrator', () => {
     projectResolvedRepos.set(new Map())
     projects.set([])
     reviewPrs.set([])
+    dependencyReferenceTasks.set([])
     tasks.set([])
     ticketPrs.set(new Map())
 
@@ -150,8 +154,32 @@ describe('useAppDataOrchestrator', () => {
     vi.mocked(getProjects).mockResolvedValue([])
     vi.mocked(getPullRequests).mockResolvedValue([])
     vi.mocked(getReviewPrs).mockResolvedValue([])
+    vi.mocked(getTaskDetail).mockRejectedValue(new Error('not found'))
     vi.mocked(getTasksForProject).mockResolvedValue([])
     vi.mocked(forceGithubSync).mockResolvedValue({} as any)
+  })
+
+  it('loads completed dependency tasks into dependency-only references without adding them to active tasks', async () => {
+    const orchestrator = useAppDataOrchestrator({ setShowProjectSetup: vi.fn() })
+    activeProjectId.set('proj-1')
+    const completedDependency = makeTask('T-done', 'proj-1')
+    completedDependency.status = 'done'
+    completedDependency.initial_prompt = 'Completed prerequisite'
+    const visibleDependency = makeTask('T-visible', 'proj-1')
+    const dependent = makeTask('T-child', 'proj-1')
+    dependent.depends_on = [completedDependency.id, visibleDependency.id, 'T-missing']
+
+    vi.mocked(getTasksForProject).mockResolvedValue([dependent, visibleDependency])
+    vi.mocked(getTaskDetail).mockImplementation(async (taskId: string) => {
+      if (taskId === completedDependency.id) return completedDependency
+      throw new Error('not found')
+    })
+
+    await orchestrator.loadTasks()
+
+    expect(get(tasks).map((task) => task.id)).toEqual(['T-child', 'T-visible'])
+    expect(get(dependencyReferenceTasks).map((task) => task.id)).toEqual(['T-done'])
+    expect(getLatestSessions).toHaveBeenCalledWith(['T-child', 'T-visible'])
   })
 
 

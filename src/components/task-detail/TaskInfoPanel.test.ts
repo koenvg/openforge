@@ -4,13 +4,14 @@ import { writable } from 'svelte/store'
 import { requireElement } from '../../test-utils/dom'
 import TaskInfoPanel from './TaskInfoPanel.svelte'
 import type { Task, PullRequestInfo, PrComment, TaskLabel, AgentSession } from '../../lib/types'
-import { activeSessions, mergingTaskIds, tasks, ticketPrs } from '../../lib/stores'
+import { activeSessions, dependencyReferenceTasks, mergingTaskIds, tasks, ticketPrs } from '../../lib/stores'
 import { addTaskLabel, forceGithubSync, getPrComments, getProjectTaskLabels, getPullRequests, linkPullRequest, mergePullRequest, refreshTaskGithubStatus, removeTaskLabel, writeClipboardText } from '../../lib/ipc'
 
 vi.mock('../../lib/stores', () => ({
   ticketPrs: writable(new Map()),
   mergingTaskIds: writable(new Set()),
   tasks: writable([]),
+  dependencyReferenceTasks: writable([]),
   activeSessions: writable(new Map()),
   setTaskMerging: vi.fn(),
 }))
@@ -80,6 +81,7 @@ describe('TaskInfoPanel', () => {
     mergingTaskIds.set(new Set())
     ticketPrs.set(new Map())
     tasks.set([])
+    dependencyReferenceTasks.set([])
     vi.mocked(getPullRequests).mockResolvedValue([])
     vi.mocked(refreshTaskGithubStatus).mockResolvedValue({
       new_comments: 0,
@@ -632,6 +634,26 @@ describe('TaskInfoPanel', () => {
     expect(dependenciesSection.textContent).toContain('Waiting on 2 dependencies')
   })
 
+  it('resolves completed dependencies from dependency-only reference tasks', () => {
+    const completedDependencyTitle = 'Completed setup task'
+    const parentTask: Task = {
+      ...baseTask,
+      id: 'T-99',
+      depends_on: ['T-done'],
+    }
+    tasks.set([parentTask])
+    dependencyReferenceTasks.set([
+      { ...baseTask, id: 'T-done', status: 'done', initial_prompt: completedDependencyTitle },
+    ])
+
+    render(TaskInfoPanel, { props: { task: parentTask, workspacePath: null } })
+
+    const dependenciesSection = screen.getByLabelText('Dependencies')
+    expect(dependenciesSection.textContent).toContain('T-done')
+    expect(dependenciesSection.textContent).toContain('done')
+    expect(dependenciesSection.textContent).toContain(completedDependencyTitle)
+    expect(screen.getByText('All dependencies done')).toBeTruthy()
+  })
   it('shows dependency readiness when every dependency is done', () => {
     const parentTask: Task = {
       ...baseTask,
@@ -663,6 +685,26 @@ describe('TaskInfoPanel', () => {
     expect(dependenciesSection.textContent).toContain('T-missing')
     expect(dependenciesSection.textContent).toContain('unknown')
     expect(dependenciesSection.textContent).toContain('Waiting on 1 dependency')
+  })
+
+  it('uses dependency references when computing dependent readiness', () => {
+    const selectedTask = { ...baseTask, id: 'T-42' }
+    const completedHiddenPrerequisite = { ...baseTask, id: 'T-7', status: 'done' as const, initial_prompt: 'Hidden completed prerequisite' }
+    const readyDependent = {
+      ...baseTask,
+      id: 'T-50',
+      initial_prompt: 'Start rollout after auth middleware',
+      depends_on: ['T-42', 'T-7'],
+    }
+    tasks.set([selectedTask, readyDependent])
+    dependencyReferenceTasks.set([completedHiddenPrerequisite])
+
+    render(TaskInfoPanel, { props: { task: selectedTask, workspacePath: null, onOpenDependentTask: vi.fn() } })
+
+    const dependentsSection = screen.getByLabelText('Dependent tasks')
+    expect(dependentsSection.textContent).toContain('T-50')
+    expect(dependentsSection.textContent).toContain('ready after this')
+    expect(dependentsSection.textContent).not.toContain('still waits on 1 dependency')
   })
 
   it('renders tasks that depend on the selected task and highlights what is ready after this', () => {

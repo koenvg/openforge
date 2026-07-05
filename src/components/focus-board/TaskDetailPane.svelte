@@ -5,13 +5,14 @@
   interface Props {
     task: Task | null
     allTasks?: Task[]
+    dependencyReferenceTasks?: Task[]
     pullRequests?: PullRequestInfo[]
     onOpenFullView?: () => void
     onOpenLinkedTask?: (taskId: string) => void
     onEditTask?: (taskId: string) => void
   }
 
-  let { task, allTasks = [], pullRequests = [], onOpenFullView, onOpenLinkedTask, onEditTask }: Props = $props()
+  let { task, allTasks = [], dependencyReferenceTasks = [], pullRequests = [], onOpenFullView, onOpenLinkedTask, onEditTask }: Props = $props()
 </script>
 
 {#if task === null}
@@ -34,6 +35,7 @@
       {task}
       workspacePath={null}
       allTasksOverride={allTasks}
+      dependencyReferenceTasksOverride={dependencyReferenceTasks}
       taskPrsOverride={pullRequests}
       allowCommentAddressing={true}
       surface="transparent"
