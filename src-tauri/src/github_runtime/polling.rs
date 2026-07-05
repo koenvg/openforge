@@ -231,8 +231,8 @@ async fn fetch_event_signal_prs(
             }
             Err(e) => {
                 error!(
-                    "[authored_prs] Failed to fetch PR details for {}/{} #{}: {}",
-                    pr_ref.repo_owner, pr_ref.repo_name, pr_ref.number, e
+                    "[authored_prs] Failed to fetch PR details pr_number={} detail_suppressed=true: {}",
+                    pr_ref.number, e
                 );
             }
         }
@@ -278,8 +278,8 @@ pub async fn fetch_authored_prs(
         .await
         .unwrap_or_else(|e| {
             error!(
-                "[authored_prs] Failed to fetch user events for {}: {}",
-                username, e
+                "[authored_prs] Failed to fetch user events username_suppressed=true: {}",
+                e
             );
             Vec::new()
         });

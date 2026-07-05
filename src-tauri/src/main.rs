@@ -36,11 +36,12 @@ mod roadmap_ai;
 mod runtime_checks;
 mod secure_store;
 mod self_review_runtime;
+mod sidecar_logger;
 mod startup_resume;
 mod task_metadata_refresh;
 mod user_environment;
 mod whisper_manager;
-use log::{info, warn};
+use log::{error, info, warn};
 use pty_manager::PtyManager;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -186,9 +187,9 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
     app.manage(pty_manager.clone());
     app.manage(github_client::GitHubClient::new());
 
-    println!(
-        "[electron-sidecar] using database {}",
-        app_data_dir.join(database_filename()).display()
+    info!(
+        "[electron-sidecar] using database filename={} app_data_dir_resolved=true",
+        database_filename()
     );
 
     tokio::runtime::Builder::new_multi_thread()
@@ -215,8 +216,12 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() {
+    if let Err(error) = sidecar_logger::initialize_electron_sidecar_logger() {
+        eprintln!("[electron-sidecar] logger initialization failed: {error}");
+    }
+
     if let Err(error) = run_electron_sidecar() {
-        eprintln!("[electron-sidecar] failed: {error}");
+        error!("[electron-sidecar] failed: {error}");
         std::process::exit(1);
     }
 }

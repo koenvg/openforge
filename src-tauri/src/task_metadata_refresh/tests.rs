@@ -93,26 +93,27 @@ fn task_metadata_refresh_diagnostic_formatter_redacts_sensitive_values() {
 }
 
 #[test]
-fn task_metadata_refresh_debug_diagnostics_require_explicit_opt_in() {
-    assert!(!super::task_metadata_refresh_debug_enabled_from_env(None));
-    assert!(!super::task_metadata_refresh_debug_enabled_from_env(Some(
-        ""
-    )));
-    assert!(!super::task_metadata_refresh_debug_enabled_from_env(Some(
-        "info"
-    )));
-    assert!(super::task_metadata_refresh_debug_enabled_from_env(Some(
-        "1"
-    )));
-    assert!(super::task_metadata_refresh_debug_enabled_from_env(Some(
-        "true"
-    )));
-    assert!(super::task_metadata_refresh_debug_enabled_from_env(Some(
-        "debug"
-    )));
-    assert!(super::task_metadata_refresh_debug_enabled_from_env(Some(
-        "trace"
-    )));
+fn task_metadata_refresh_debug_diagnostics_use_sidecar_logger_level_filter() {
+    assert_eq!(
+        crate::sidecar_logger::level_filter_from_env_value(None),
+        log::LevelFilter::Info
+    );
+    assert_eq!(
+        crate::sidecar_logger::level_filter_from_env_value(Some("")),
+        log::LevelFilter::Info
+    );
+    assert_eq!(
+        crate::sidecar_logger::level_filter_from_env_value(Some("info")),
+        log::LevelFilter::Info
+    );
+    assert_eq!(
+        crate::sidecar_logger::level_filter_from_env_value(Some("debug")),
+        log::LevelFilter::Debug
+    );
+    assert_eq!(
+        crate::sidecar_logger::level_filter_from_env_value(Some("trace")),
+        log::LevelFilter::Trace
+    );
 }
 
 #[test]

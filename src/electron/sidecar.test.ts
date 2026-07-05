@@ -194,7 +194,7 @@ describe('Electron Rust sidecar supervision', () => {
     expect(child.killCalls).toEqual(['SIGTERM'])
   })
 
-  it('streams sidecar stdout and stderr to the configured logger when enabled', async () => {
+  it('streams Rust sidecar logger stdout and stderr to the configured logger when enabled', async () => {
     const child = new FakeChild()
     const logger = { info: vi.fn(), error: vi.fn() }
     const spawn = vi.fn(() => child)
@@ -209,11 +209,11 @@ describe('Electron Rust sidecar supervision', () => {
       logger,
     })
 
-    child.stdout.emit('data', Buffer.from('[electron-sidecar] using database /tmp/openforge_dev.db\n'))
-    child.stderr.emit('data', 'warning from backend\n')
+    child.stdout.emit('data', Buffer.from('level=INFO module=openforge::main message=[electron-sidecar] using database filename=openforge_dev.db app_data_dir_resolved=true\n'))
+    child.stderr.emit('data', 'level=WARN module=openforge::startup_resume message=[startup] resume degraded task_id=T-123\n')
 
-    expect(logger.info).toHaveBeenCalledWith('[sidecar] [electron-sidecar] using database /tmp/openforge_dev.db')
-    expect(logger.error).toHaveBeenCalledWith('[sidecar:error] warning from backend')
+    expect(logger.info).toHaveBeenCalledWith('[sidecar] level=INFO module=openforge::main message=[electron-sidecar] using database filename=openforge_dev.db app_data_dir_resolved=true')
+    expect(logger.error).toHaveBeenCalledWith('[sidecar:error] level=WARN module=openforge::startup_resume message=[startup] resume degraded task_id=T-123')
   })
 
   it('force-kills a sidecar that does not exit during graceful shutdown', async () => {

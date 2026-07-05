@@ -52,4 +52,27 @@ describe('developer logs', () => {
       expect.objectContaining({ level: 'error', message: '[sidecar:error] failed' }),
     ])
   })
+
+  it('persists sanitized Rust sidecar logger lines captured from stdout and stderr', () => {
+    const logFilePath = tempLogPath()
+    const store = createDeveloperLogStore({ logFilePath })
+    const delegate = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    }
+    const logger = createDeveloperLogSink(store, delegate)
+
+    logger.info('[sidecar] level=INFO module=openforge::main message=[electron-sidecar] using database filename=openforge_dev.db app_data_dir_resolved=true')
+    logger.error('[sidecar:error] level=ERROR module=openforge::http_server message=[http_server] startup failed path=<redacted>')
+
+    const diskLog = readFileSync(logFilePath, 'utf8')
+    expect(store.getRecentLogs()).toEqual([
+      expect.objectContaining({ level: 'info', message: expect.stringContaining('level=INFO module=openforge::main') }),
+      expect.objectContaining({ level: 'error', message: expect.stringContaining('level=ERROR module=openforge::http_server') }),
+    ])
+    expect(diskLog).toContain('filename=openforge_dev.db')
+    expect(diskLog).toContain('path=<redacted>')
+    expect(diskLog).not.toContain('/Users/')
+  })
 })

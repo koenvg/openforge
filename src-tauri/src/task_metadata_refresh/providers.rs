@@ -1,5 +1,6 @@
 use super::prompt::{parse_task_display_title_output, MetadataJob, MetadataJobKind};
 use crate::user_environment::{find_tool_on_path, user_environment};
+use log::{debug, info, warn};
 use std::collections::HashMap;
 use std::path::Path;
 use std::time::Duration;
