@@ -25,7 +25,8 @@
     "lint": "node scripts/check-svelte-unused-imports.mjs",
     "packages:build": "pnpm --filter @openforge-app/plugin-sdk build",
     "packages:test": "pnpm --filter @openforge-app/plugin-sdk test",
-    "packages:pack:dry-run": "node scripts/pack-npm-packages-dry-run.mjs",
+    "packages:metadata:check": "node scripts/check-workspace-package-metadata.mjs",
+    "packages:pack:dry-run": "pnpm packages:metadata:check && node scripts/pack-npm-packages-dry-run.mjs",
     "preview": "vite preview",
     "test": "vitest run"
   },

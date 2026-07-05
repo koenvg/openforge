@@ -224,7 +224,7 @@ Commands that are intended only for programmatic integration may set `discoverab
 
 Frontend plugin UI uses native Svelte components, not iframes, webviews, or web-component isolation.
 
-Shared leaf UI packages are allowed when they do not become domain capabilities. `@openforge-app/pr-review-ui` is a reusable Svelte UI implementation package for PR/self-review presentation shared by GitHub Sync and core self-review surfaces; it is not a host-shared platform runtime, not part of the core plugin SDK surface, and does not own GitHub/PR review domain operations. GitHub Sync owns its PR review contracts unless multiple independent plugins later prove a cross-plugin platform service is needed.
+Shared leaf UI packages are allowed when they do not become domain capabilities. `@openforge-app/pr-review-ui` is a private/internal Svelte UI implementation package for PR/self-review presentation shared by GitHub Sync and core self-review surfaces; it is covered by the OpenForge app source-available/proprietary license, not the MIT SDK/runtime license. It is not a host-shared platform runtime, not part of the core plugin SDK surface, and does not own GitHub/PR review domain operations. GitHub Sync owns its PR review contracts unless multiple independent plugins later prove a cross-plugin platform service is needed.
 
 - Components receive standard stable props with API and context snapshots.
 - Components should receive API/context through props, not module globals.
