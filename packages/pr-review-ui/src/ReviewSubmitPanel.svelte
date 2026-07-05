@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ReviewSubmissionComment } from '@openforge/plugin-sdk/domain'
+  import type { ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
 
   type ReviewEvent = 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES'
 

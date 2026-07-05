@@ -1,6 +1,6 @@
 import { get } from 'svelte/store'
-import type { OpenForgeContextSnapshot } from '@openforge/plugin-sdk'
-import type { FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
+import type { OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk'
+import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import { openUrl } from '../ipc'
 import { activeProjectId } from '../stores'
 import { installedPlugins } from './pluginStore'

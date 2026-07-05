@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-import { parseStrictFiniteNumber } from '@openforge/plugin-sdk/numberParsing'
-import { sanitizeHtml } from '@openforge/plugin-sdk/sanitize'
+import { parseStrictFiniteNumber } from '@openforge-app/plugin-sdk/numberParsing'
+import { sanitizeHtml } from '@openforge-app/plugin-sdk/sanitize'
 import {
   hasMergeConflicts,
   canMergePullRequest,
@@ -16,7 +16,7 @@ import {
   type FileContent,
   type FileEntry,
   type PullRequestInfo,
-} from '@openforge/plugin-sdk/domain'
+} from '@openforge-app/plugin-sdk/domain'
 
 describe('public plugin utilities', () => {
   it('parses only strict finite decimal values', () => {

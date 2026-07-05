@@ -1,6 +1,6 @@
 import { render, screen, waitFor, cleanup } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
+import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
 
 import PluginSlot from './PluginSlot.svelte'
 import PluginSlotRuntimePropsView from './PluginSlotRuntimePropsView.svelte'

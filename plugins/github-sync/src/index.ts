@@ -1,5 +1,5 @@
-import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
-import type { ReviewPullRequest } from '@openforge/plugin-sdk/domain'
+import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
+import type { ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
 import PrReviewView from './review/pr/PrReviewView.svelte'
 import { createGithubSyncPrReviewClient } from './review/pr/githubSyncClient'
 import { pendingReviewPrOpen } from './lib/stores'

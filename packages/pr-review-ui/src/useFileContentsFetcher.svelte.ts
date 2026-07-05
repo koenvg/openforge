@@ -1,4 +1,4 @@
-import type { PrFileDiff } from '@openforge/plugin-sdk/domain'
+import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
 import { isImageFileDiff, type FileContents } from './diffAdapter'
 import { getDiffFileSectionInputKey } from './diffFileSectionIdentity'
 

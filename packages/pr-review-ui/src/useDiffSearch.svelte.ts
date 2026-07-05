@@ -10,7 +10,7 @@ import {
   countMatchesInPatch,
 } from './diffSearch'
 import { getHTMLElement } from './domUtils'
-import type { PrFileDiff } from '@openforge/plugin-sdk/domain'
+import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
 
 interface FileMatchInfo {
   filename: string

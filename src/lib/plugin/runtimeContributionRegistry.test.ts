@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { defineBackendPlugin } from '@openforge/plugin-sdk/backend'
-import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
+import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
+import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
 
 import { createRuntimeContributionRegistry, qualifyLocalContributionId } from './runtimeContributionRegistry'
 

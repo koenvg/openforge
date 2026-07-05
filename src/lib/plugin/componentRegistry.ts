@@ -1,6 +1,6 @@
 import type { Component } from 'svelte'
-import type { PluginComponentLoader, PluginComponentModule } from '@openforge/plugin-sdk'
-import type { PluginViewProps } from '@openforge/plugin-sdk/frontend'
+import type { PluginComponentLoader, PluginComponentModule } from '@openforge-app/plugin-sdk'
+import type { PluginViewProps } from '@openforge-app/plugin-sdk/frontend'
 import type { PluginViewKey } from './types'
 
 export type PluginComponentSource<Props extends Record<string, unknown> = Record<string, unknown>> =

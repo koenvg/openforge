@@ -1,15 +1,15 @@
 {
-  "name": "@openforge/plugin-terminal",
+  "name": "@openforge-app/plugin-terminal",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "build": "pnpm --filter @openforge/plugin-sdk build && pnpm run build:bundle",
+    "build": "pnpm --filter @openforge-app/plugin-sdk build && pnpm run build:bundle",
     "build:bundle": "vite build",
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@openforge/plugin-sdk": "workspace:*",
-    "@openforge/terminal-runtime": "workspace:*"
+    "@openforge-app/plugin-sdk": "workspace:*",
+    "@openforge-app/terminal-runtime": "workspace:*"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"

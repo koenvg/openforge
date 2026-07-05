@@ -5,4 +5,4 @@ export {
   syncThemeModeWithDocument,
   themeMode,
   type ThemeMode,
-} from '@openforge/terminal-runtime'
+} from '@openforge-app/terminal-runtime'

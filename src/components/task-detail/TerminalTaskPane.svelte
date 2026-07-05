@@ -6,7 +6,7 @@
     formatTerminalTaskPaneWorkspaceLookupError,
     getTerminalTaskPaneWorkspaceStatusText,
     type TerminalTaskPaneWorkspaceLookupState,
-  } from '@openforge/terminal-runtime'
+  } from '@openforge-app/terminal-runtime'
   import { onDestroy, onMount } from 'svelte'
   import { getTaskWorkspace } from '../../lib/ipc'
   import { releaseAllForTask } from '../../lib/terminalPool'

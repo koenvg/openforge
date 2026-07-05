@@ -10,8 +10,8 @@
     getProjectFileTreeKeyboardAction,
     projectFileTreePathToId,
     type ProjectFileTreeNode,
-  } from '@openforge/plugin-sdk/projectFileTree'
-  import type { FileEntry } from '@openforge/plugin-sdk/domain'
+  } from '@openforge-app/plugin-sdk/projectFileTree'
+  import type { FileEntry } from '@openforge-app/plugin-sdk/domain'
 
   interface Props {
     entries: FileEntry[]

@@ -5,4 +5,4 @@ export {
   type TerminalShortcutControllerWiring,
   type TerminalShortcutKeydownTarget,
   type TerminalTabsShortcutTarget,
-} from '@openforge/terminal-runtime/shortcutController'
+} from '@openforge-app/terminal-runtime/shortcutController'

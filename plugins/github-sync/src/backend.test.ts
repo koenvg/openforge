@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { isOpenForgePackageMetadata } from '@openforge/plugin-sdk'
+import { isOpenForgePackageMetadata } from '@openforge-app/plugin-sdk'
 import packageJson from '../package.json'
 
 function getPackageMetadata() {

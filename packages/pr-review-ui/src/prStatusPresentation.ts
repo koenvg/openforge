@@ -6,4 +6,4 @@ export {
   type PrChipVariant,
   type PrInput,
   type PrStatusChipSpec,
-} from '@openforge/plugin-sdk/prStatusPresentation'
+} from '@openforge-app/plugin-sdk/prStatusPresentation'

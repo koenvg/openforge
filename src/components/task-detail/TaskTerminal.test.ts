@@ -26,7 +26,7 @@ vi.mock('@xterm/addon-fit', () => {
   return { FitAddon }
 })
 
-vi.mock('@openforge/terminal-runtime/xterm.css', () => ({}))
+vi.mock('@openforge-app/terminal-runtime/xterm.css', () => ({}))
 
 vi.mock('../../lib/ipc', () => ({
   spawnShellPty: vi.fn().mockResolvedValue(1),

@@ -1,4 +1,4 @@
-import type { FileContent, FileEntry } from '@openforge/plugin-sdk/domain'
+import type { FileContent, FileEntry } from '@openforge-app/plugin-sdk/domain'
 
 const DEFAULT_HIDDEN_ROOT_ENTRY_NAMES = new Set([
   '.openforge-dev',

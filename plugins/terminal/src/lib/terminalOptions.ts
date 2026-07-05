@@ -5,4 +5,4 @@ export {
   TERMINAL_WEB_FONT_FACES,
   getTerminalOptions,
   preloadTerminalFonts,
-} from '@openforge/terminal-runtime'
+} from '@openforge-app/terminal-runtime'

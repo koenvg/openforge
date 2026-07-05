@@ -396,8 +396,8 @@ mod tests {
         let plugin_dev_skill_content = std::fs::read_to_string(&plugin_dev_skill_md).unwrap();
         assert!(plugin_dev_skill_content.contains("name: openforge-plugin-dev"));
         assert!(plugin_dev_skill_content.contains("docs/plugin-authoring.md"));
-        assert!(plugin_dev_skill_content.contains("@openforge/plugin-sdk/frontend"));
-        assert!(plugin_dev_skill_content.contains("@openforge/plugin-sdk/backend"));
+        assert!(plugin_dev_skill_content.contains("@openforge-app/plugin-sdk/frontend"));
+        assert!(plugin_dev_skill_content.contains("@openforge-app/plugin-sdk/backend"));
         assert!(plugin_dev_skill_content.contains("Plugin creation workflow"));
         assert!(plugin_dev_skill_content
             .contains("Default to building a normal OpenForge plugin package"));

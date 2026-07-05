@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store'
-import type { AgentReviewComment, AuthoredPullRequest, PrOverviewComment, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, PrFileDiff } from '@openforge/plugin-sdk/domain'
+import type { AgentReviewComment, AuthoredPullRequest, PrOverviewComment, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, PrFileDiff } from '@openforge-app/plugin-sdk/domain'
 
 export const activeProjectId = writable<string | null>(null)
 export const reviewPrs = writable<ReviewPullRequest[]>([])

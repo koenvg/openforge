@@ -2,9 +2,9 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
-import { OPENFORGE_FRONTEND_PLUGIN_MARKER } from '@openforge/plugin-sdk/frontend'
-import { isOpenForgePackageMetadata } from '@openforge/plugin-sdk'
-import type { FrontendOpenForgeAPI, FrontendPluginContext } from '@openforge/plugin-sdk/frontend'
+import { OPENFORGE_FRONTEND_PLUGIN_MARKER } from '@openforge-app/plugin-sdk/frontend'
+import { isOpenForgePackageMetadata } from '@openforge-app/plugin-sdk'
+import type { FrontendOpenForgeAPI, FrontendPluginContext } from '@openforge-app/plugin-sdk/frontend'
 
 const { mockPrReviewView } = vi.hoisted(() => ({
   mockPrReviewView: { name: 'PrReviewViewComponent' },
@@ -83,11 +83,11 @@ describe('github-sync plugin', () => {
   it('uses shared PR review UI components instead of plugin-local duplicate leaf components', () => {
     const prReviewSource = readFileSync(join(pluginSrcDir, 'review/pr/PrReviewView.svelte'), 'utf8')
 
-    expect(prReviewSource).toContain('@openforge/pr-review-ui/PrOverviewTab.svelte')
-    expect(prReviewSource).toContain('@openforge/pr-review-ui/ReviewSubmitPanel.svelte')
-    expect(prReviewSource).toContain('@openforge/pr-review-ui/ReviewPrCard.svelte')
-    expect(prReviewSource).toContain('@openforge/pr-review-ui/AuthoredPrCard.svelte')
-    expect(prReviewSource).toContain('@openforge/pr-review-ui/FileTree.svelte')
+    expect(prReviewSource).toContain('@openforge-app/pr-review-ui/PrOverviewTab.svelte')
+    expect(prReviewSource).toContain('@openforge-app/pr-review-ui/ReviewSubmitPanel.svelte')
+    expect(prReviewSource).toContain('@openforge-app/pr-review-ui/ReviewPrCard.svelte')
+    expect(prReviewSource).toContain('@openforge-app/pr-review-ui/AuthoredPrCard.svelte')
+    expect(prReviewSource).toContain('@openforge-app/pr-review-ui/FileTree.svelte')
     expect(existsSync(join(pluginSrcDir, 'lib/ipc.ts'))).toBe(false)
     expect(existsSync(join(pluginSrcDir, 'review/pr/PrOverviewTab.svelte'))).toBe(false)
     expect(existsSync(join(pluginSrcDir, 'review/pr/ReviewSubmitPanel.svelte'))).toBe(false)

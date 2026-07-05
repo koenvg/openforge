@@ -1,4 +1,4 @@
-export * from '@openforge/plugin-sdk/domain'
+export * from '@openforge-app/plugin-sdk/domain'
 
 export type DeveloperLogLevel = 'info' | 'warn' | 'error'
 

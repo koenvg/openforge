@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
-import type { PrOverviewComment, ReviewPullRequest } from '@openforge/plugin-sdk/domain'
+import type { PrOverviewComment, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
 import PrOverviewTab from './PrOverviewTab.svelte'
 
 const basePr: ReviewPullRequest = {

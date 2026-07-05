@@ -3,7 +3,7 @@
 `FileSystemAPI.readFile()` now resolves a `FileContent` object instead of a raw string. This lets plugin authors safely distinguish text previews from image previews, binary/document placeholders, and files that are too large to inline.
 
 ```ts
-import type { FileContent } from '@openforge/plugin-sdk'
+import type { FileContent } from '@openforge-app/plugin-sdk'
 
 const file: FileContent = await api.fs.readFile({ projectId, path: 'README.md' })
 ```
@@ -59,8 +59,8 @@ The metadata fields are always part of the contract:
 Update plugin fixtures and fakes so they return `FileContent`, not strings. The SDK mock API defaults `readFile()` to an empty text file, and tests can override it per case:
 
 ```ts
-import { createMockOpenForgeApi } from '@openforge/plugin-sdk/testing'
-import type { FileContent } from '@openforge/plugin-sdk'
+import { createMockOpenForgeApi } from '@openforge-app/plugin-sdk/testing'
+import type { FileContent } from '@openforge-app/plugin-sdk'
 
 const readme: FileContent = {
   type: 'text',
@@ -106,4 +106,4 @@ Recommended fixture coverage for file-reading plugins:
 3. A document fixture, such as PDF metadata, that asserts the plugin uses `mimeType`/`size` and does not attempt to render empty `content` as text.
 4. A binary or `large-file` fixture that asserts the plugin shows an unsupported or too-large state without reading `content`.
 
-If your tests use local hand-written API objects instead of `@openforge/plugin-sdk/testing`, update the `fs.readFile` fake signature to `Promise<FileContent>` and include `type`, `content`, `mimeType`, and `size` in every fixture.
+If your tests use local hand-written API objects instead of `@openforge-app/plugin-sdk/testing`, update the `fs.readFile` fake signature to `Promise<FileContent>` and include `type`, `content`, `mimeType`, and `size` in every fixture.

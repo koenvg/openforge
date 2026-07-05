@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { compileWalkthroughPrompt } from './walkthroughPrompt'
-import type { PrFileDiff } from '@openforge/plugin-sdk/domain'
+import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
 
 function makeFile(over: Partial<PrFileDiff>): PrFileDiff {
   return {

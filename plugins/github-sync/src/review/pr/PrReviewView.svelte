@@ -1,24 +1,24 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
-  import type { Disposable, FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
+  import type { Disposable, FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
   type UnlistenFn = Disposable
   import { reviewPrs, selectedReviewPr, prFileDiffs, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, authoredPrs, activeProjectId, pendingReviewPrOpen } from '../../lib/stores'
   import { getHTMLElementAt, isInputFocused } from '../../lib/domUtils'
   import { useVimNavigation } from '../../lib/useVimNavigation.svelte'
   import { timeAgoFromSeconds } from '../../lib/timeAgo'
-  import ReviewPrCard from '@openforge/pr-review-ui/ReviewPrCard.svelte'
-  import AuthoredPrCard from '@openforge/pr-review-ui/AuthoredPrCard.svelte'
-  import { sortDoNotReviewLast } from '@openforge/pr-review-ui/prSort'
-  import FileTree from '@openforge/pr-review-ui/FileTree.svelte'
-  import ResizablePanel from '@openforge/plugin-sdk/ui/ResizablePanel.svelte'
-  import DiffViewer from '@openforge/pr-review-ui/DiffViewer.svelte'
-  import { getReviewFileIdentity } from '@openforge/pr-review-ui/reviewFileIdentity'
+  import ReviewPrCard from '@openforge-app/pr-review-ui/ReviewPrCard.svelte'
+  import AuthoredPrCard from '@openforge-app/pr-review-ui/AuthoredPrCard.svelte'
+  import { sortDoNotReviewLast } from '@openforge-app/pr-review-ui/prSort'
+  import FileTree from '@openforge-app/pr-review-ui/FileTree.svelte'
+  import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
+  import DiffViewer from '@openforge-app/pr-review-ui/DiffViewer.svelte'
+  import { getReviewFileIdentity } from '@openforge-app/pr-review-ui/reviewFileIdentity'
   import ProjectPageHeader from '../../project/ProjectPageHeader.svelte'
-  import ReviewSubmitPanel from '@openforge/pr-review-ui/ReviewSubmitPanel.svelte'
-  import PrOverviewTab from '@openforge/pr-review-ui/PrOverviewTab.svelte'
+  import ReviewSubmitPanel from '@openforge-app/pr-review-ui/ReviewSubmitPanel.svelte'
+  import PrOverviewTab from '@openforge-app/pr-review-ui/PrOverviewTab.svelte'
   import WalkthroughTab from './WalkthroughTab.svelte'
   import { isPrLargeEnoughForWalkthroughHint } from '../../lib/walkthroughViewState'
-  import type { ReviewPullRequest, AuthoredPullRequest, PrFileDiff, PrOverviewComment, ReviewComment, ReviewSubmissionComment } from '@openforge/plugin-sdk/domain'
+  import type { ReviewPullRequest, AuthoredPullRequest, PrFileDiff, PrOverviewComment, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import { createGithubSyncPrReviewClient } from './githubSyncClient'
   import {
     getPrReviewFilesKey,
@@ -28,7 +28,7 @@
     reviewedFileMapsEqual,
     updatePrReviewedFileShas,
   } from './reviewedFilesState'
-  import { isImageFileDiff, type FileContents } from '@openforge/pr-review-ui/diffAdapter'
+  import { isImageFileDiff, type FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
 
   type PrDetailTab = 'overview' | 'files' | 'walkthrough'
 

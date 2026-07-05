@@ -6,7 +6,7 @@ import { configureDiffHighlighter } from './diffHighlightConfig'
 import { createDiffWorker, type DiffWorkerState } from './useDiffWorker.svelte'
 import type { DiffWorkerRequest, DiffWorkerResponse } from './diffWorker'
 import type { FileContents } from './diffAdapter'
-import type { PrFileDiff } from '@openforge/plugin-sdk/domain'
+import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
 
 const fileWithPatch: PrFileDiff = {
   sha: 'abc123',

@@ -1,11 +1,11 @@
 <script lang="ts">
-  import type { FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
+  import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
   import type {
     PrFileDiff,
     PrWalkthrough,
     PrWalkthroughStep,
     ReviewPullRequest,
-  } from '@openforge/plugin-sdk/domain'
+  } from '@openforge-app/plugin-sdk/domain'
   import { compileWalkthroughPrompt } from '../../lib/walkthroughPrompt'
   import { parseAndValidateWalkthroughSteps } from '../../lib/walkthroughParse'
   import {
@@ -14,10 +14,10 @@
     isWalkthroughStale,
   } from '../../lib/walkthroughViewState'
   import { isInputFocused } from '../../lib/domUtils'
-  import FileTree from '@openforge/pr-review-ui/FileTree.svelte'
-  import DiffViewer from '@openforge/pr-review-ui/DiffViewer.svelte'
+  import FileTree from '@openforge-app/pr-review-ui/FileTree.svelte'
+  import DiffViewer from '@openforge-app/pr-review-ui/DiffViewer.svelte'
   import type { GithubSyncPrReviewClient } from './githubSyncClient'
-  import type { FileContents } from '@openforge/pr-review-ui/diffAdapter'
+  import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
 
   interface Props {
     api: FrontendOpenForgeAPI

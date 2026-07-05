@@ -1,5 +1,5 @@
 <script lang="ts">
-  import MarkdownContent from '@openforge/plugin-sdk/ui/MarkdownContent.svelte'
+  import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import type { RepoLabel, TicketDraft } from '../lib/types'
 
   interface RefineDraftRequest {

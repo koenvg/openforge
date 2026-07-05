@@ -34,8 +34,8 @@ import {
   registerTerminalTaskPaneController as registerPluginController,
   unregisterTerminalTaskPaneController as unregisterPluginController,
 } from '../../plugins/terminal/src/terminalTaskPaneController'
-import { createTaskTerminalPaneLifecycle as runtimeTaskPaneLifecycle } from '@openforge/terminal-runtime'
-import { handleTerminalShortcutKeydown as runtimeShortcutHandler } from '@openforge/terminal-runtime/shortcuts'
+import { createTaskTerminalPaneLifecycle as runtimeTaskPaneLifecycle } from '@openforge-app/terminal-runtime'
+import { handleTerminalShortcutKeydown as runtimeShortcutHandler } from '@openforge-app/terminal-runtime/shortcuts'
 import { handleTerminalShortcutKeydown as appShortcutHandler } from './terminalShortcuts'
 import { handleTerminalShortcutKeydown as pluginShortcutHandler } from '../../plugins/terminal/src/terminalShortcuts'
 
@@ -66,7 +66,7 @@ describe('terminal plugin implementation boundary', () => {
 
     for (const source of [appDetailSource, appPaneSource, pluginPaneSource]) {
       expect(source).toContain("createTaskTerminalPaneLifecycle")
-      expect(source).toContain("@openforge/terminal-runtime")
+      expect(source).toContain("@openforge-app/terminal-runtime")
     }
   })
 

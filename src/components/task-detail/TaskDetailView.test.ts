@@ -29,7 +29,7 @@ vi.mock('@xterm/addon-web-links', () => {
   return { WebLinksAddon }
 })
 
-vi.mock('@openforge/terminal-runtime/xterm.css', () => ({}))
+vi.mock('@openforge-app/terminal-runtime/xterm.css', () => ({}))
 
 vi.mock('../../lib/audioRecorder', () => ({
   createAudioRecorder: vi.fn(),

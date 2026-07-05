@@ -5,7 +5,7 @@
   import { timeAgo } from '../../lib/timeAgo'
   import { createDiffLoader } from '../../lib/useDiffLoader.svelte'
   import { createCommentSelection } from '../../lib/useCommentSelection.svelte'
-  import { prCommentsToReviewComments } from '@openforge/pr-review-ui/diffComments'
+  import { prCommentsToReviewComments } from '@openforge-app/pr-review-ui/diffComments'
   import {
     getTaskReviewFileIdentity,
     getTaskReviewPaneState,
@@ -21,7 +21,7 @@
   import { buildReviewedBaselineComparison } from '../../lib/reviewedBaselineDiff'
 
   import type { Task, PrFileDiff, ReviewSubmissionComment } from '../../lib/types'
-  import type { FileContents } from '@openforge/pr-review-ui/diffAdapter'
+  import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
   import FileTree from '../review/shared/FileTree.svelte'
   import ResizablePanel from '../shared/ui/ResizablePanel.svelte'
   import ResizableBottomPanel from '../shared/ui/ResizableBottomPanel.svelte'

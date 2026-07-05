@@ -3,7 +3,7 @@ import type {
   PrWalkthrough,
   PrWalkthroughStep,
   ReviewPullRequest,
-} from '@openforge/plugin-sdk/domain'
+} from '@openforge-app/plugin-sdk/domain'
 import { buildPatchFromHunks, parseHunks, selectHunksByIndex } from './hunkParser'
 
 /** PR-size thresholds at which the Walkthrough tab shows a hint badge. */

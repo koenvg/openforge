@@ -1,6 +1,6 @@
-import type { OpenForgePackageMetadata } from '@openforge/plugin-sdk'
+import type { OpenForgePackageMetadata } from '@openforge-app/plugin-sdk'
 
-export { MAX_SUPPORTED_API_VERSION } from '@openforge/plugin-sdk'
+export { MAX_SUPPORTED_API_VERSION } from '@openforge-app/plugin-sdk'
 
 export interface PluginManifest {
   id: string

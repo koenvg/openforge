@@ -1,4 +1,4 @@
-import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
+import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
 import RoadmapView from './components/RoadmapView.svelte'
 
 export const RoadmapViewComponent = RoadmapView

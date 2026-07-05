@@ -31,8 +31,8 @@ export async function buildBackendPluginHostRuntime(root = repoRoot(), outDir = 
     logLevel: 'info',
     resolve: {
       alias: {
-        '@openforge/plugin-runtime/commandValidation': resolve(root, 'packages', 'plugin-runtime', 'src', 'commandValidation.ts'),
-        '@openforge/plugin-runtime': resolve(root, 'packages', 'plugin-runtime', 'src', 'index.ts'),
+        '@openforge-app/plugin-runtime/commandValidation': resolve(root, 'packages', 'plugin-runtime', 'src', 'commandValidation.ts'),
+        '@openforge-app/plugin-runtime': resolve(root, 'packages', 'plugin-runtime', 'src', 'index.ts'),
       },
     },
     build: {

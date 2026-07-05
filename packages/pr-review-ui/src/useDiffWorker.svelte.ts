@@ -1,7 +1,7 @@
 import { DiffFile } from '@git-diff-view/core'
 import { toGitDiffViewData, type FileContents } from './diffAdapter'
 import { getDiffFileSectionInputKey } from './diffFileSectionIdentity'
-import type { PrFileDiff } from '@openforge/plugin-sdk/domain'
+import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
 import type { DiffWorkerResponse } from './diffWorker'
 
 export interface DiffWorkerState {

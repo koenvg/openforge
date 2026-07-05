@@ -1,4 +1,4 @@
-import type { FileContents } from '@openforge/pr-review-ui/diffAdapter';
+import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter';
 import type { PrFileDiff } from './types';
 import type { ReviewedFileSnapshot } from './taskReviewPaneState';
 

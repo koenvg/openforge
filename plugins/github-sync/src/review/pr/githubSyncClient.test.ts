@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
+import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import { createGithubSyncPrReviewClient } from './githubSyncClient'
 
 function makeApi() {

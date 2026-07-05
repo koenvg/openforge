@@ -1,9 +1,9 @@
 <script lang="ts">
-  import type { ReviewPullRequest } from '@openforge/plugin-sdk/domain'
-  import { hasDoNotReviewLabel } from '@openforge/plugin-sdk/domain'
+  import type { ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
+  import { hasDoNotReviewLabel } from '@openforge-app/plugin-sdk/domain'
   import Card from './ui/Card.svelte'
   import { timeAgoFromSeconds } from './timeAgo'
-  import { getPrStatusChips } from '@openforge/plugin-sdk/prStatusPresentation'
+  import { getPrStatusChips } from '@openforge-app/plugin-sdk/prStatusPresentation'
   import PrStatusChip from './ui/PrStatusChip.svelte'
   import { labelChipStyle } from './labelColors'
 

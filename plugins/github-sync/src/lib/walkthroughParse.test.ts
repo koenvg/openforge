@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { parseAndValidateWalkthroughSteps } from './walkthroughParse'
-import type { PrFileDiff } from '@openforge/plugin-sdk/domain'
+import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
 
 function file(filename: string, hunkCount: number): PrFileDiff {
   // Build a patch with `hunkCount` distinct hunks so parseHunks() returns that many.

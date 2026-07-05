@@ -1,5 +1,5 @@
 <script lang="ts">
-  import SharedFileTree from '@openforge/pr-review-ui/FileTree.svelte'
+  import SharedFileTree from '@openforge-app/pr-review-ui/FileTree.svelte'
   import type { PrFileDiff } from '../../../lib/types'
 
   interface Props {

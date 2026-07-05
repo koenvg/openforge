@@ -10,10 +10,10 @@
     "resolveJsonModule": true,
     "types": ["vitest/globals", "node"],
     "paths": {
-      "@openforge/plugin-sdk": ["../../packages/plugin-sdk/src/index.ts"],
-      "@openforge/plugin-sdk/frontend": ["../../packages/plugin-sdk/src/frontend.ts"],
-      "@openforge/plugin-sdk/domain": ["../../packages/plugin-sdk/src/domain.ts"],
-      "@openforge/plugin-sdk/projectFileTree": ["../../packages/plugin-sdk/src/projectFileTree.ts"]
+      "@openforge-app/plugin-sdk": ["../../packages/plugin-sdk/src/index.ts"],
+      "@openforge-app/plugin-sdk/frontend": ["../../packages/plugin-sdk/src/frontend.ts"],
+      "@openforge-app/plugin-sdk/domain": ["../../packages/plugin-sdk/src/domain.ts"],
+      "@openforge-app/plugin-sdk/projectFileTree": ["../../packages/plugin-sdk/src/projectFileTree.ts"]
     }
   },
   "include": ["src"]

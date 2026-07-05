@@ -4,7 +4,7 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { build } from 'vite'
 
 const defaultWorkspaceRoot = path.resolve(import.meta.dirname, '..')
-const GENERATED_BANNER = '/* Generated host-shared @openforge/terminal-runtime asset. Do not edit. */'
+const GENERATED_BANNER = '/* Generated host-shared @openforge-app/terminal-runtime asset. Do not edit. */'
 
 export async function buildTerminalRuntime(options = {}) {
   const workspaceRoot = options.workspaceRoot ? path.resolve(options.workspaceRoot) : defaultWorkspaceRoot
@@ -20,7 +20,7 @@ export async function buildTerminalRuntime(options = {}) {
     plugins: [svelte()],
     resolve: {
       alias: {
-        '@openforge/terminal-runtime': path.join(workspaceRoot, 'packages/terminal-runtime/src/index.ts'),
+        '@openforge-app/terminal-runtime': path.join(workspaceRoot, 'packages/terminal-runtime/src/index.ts'),
       },
     },
     build: {

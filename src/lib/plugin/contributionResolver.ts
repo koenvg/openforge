@@ -1,5 +1,5 @@
 import { isPluginViewKey, parsePluginViewKey } from './types'
-import type { CommandShortcutMetadata } from '@openforge/plugin-sdk'
+import type { CommandShortcutMetadata } from '@openforge-app/plugin-sdk'
 import type {
   RuntimeBackgroundServiceContribution,
   RuntimeCommandContribution,

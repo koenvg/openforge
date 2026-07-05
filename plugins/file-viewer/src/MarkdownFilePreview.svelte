@@ -1,6 +1,6 @@
 <script lang="ts">
-  import MarkdownContent from '@openforge/plugin-sdk/ui/MarkdownContent.svelte'
-  import type { FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
+  import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
+  import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
   import { resolveMarkdownImageProjectPath } from './lib/markdownImagePaths'
 
   interface Props {

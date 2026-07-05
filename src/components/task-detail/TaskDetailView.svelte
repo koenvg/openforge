@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
   import { get } from 'svelte/store'
-  import { createTaskTerminalPaneLifecycle } from '@openforge/terminal-runtime'
+  import { createTaskTerminalPaneLifecycle } from '@openforge-app/terminal-runtime'
   import { activeProjectId, activeSessions, commandHeld, completingTasks, startingTasks, taskActiveView, taskRuntimeInfo } from '../../lib/stores'
   import { getTaskWorkspace, openInEditor } from '../../lib/ipc'
   import { confirmCompleteTask, runCompleteTask } from '../../lib/completeTask'

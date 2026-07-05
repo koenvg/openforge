@@ -58,7 +58,7 @@ Use `package.json` as the package/discovery manifest. OpenForge-specific fields 
   "name": "@acme/openforge-github",
   "version": "1.0.0",
   "peerDependencies": {
-    "@openforge/plugin-sdk": "^1.0.0"
+    "@openforge-app/plugin-sdk": "^1.0.0"
   },
   "openforge": {
     "id": "github",
@@ -77,7 +77,7 @@ Rules:
 
 - `openforge.id` is explicit and unique app-wide.
 - `openforge.apiVersion` is the hard host compatibility gate.
-- Peer dependencies on `@openforge/plugin-sdk` are advisory diagnostics, not the runtime compatibility source of truth.
+- Peer dependencies on `@openforge-app/plugin-sdk` are advisory diagnostics, not the runtime compatibility source of truth.
 - Each built artifact targets one API version.
 - Installed packages must ship built JavaScript artifacts.
 - Local path development installs also point to already-built artifacts; OpenForge should validate entries and show a helpful build-required error.
@@ -91,15 +91,15 @@ A shared JSON Schema should define `package.json#openforge` metadata and be used
 
 The public author-facing SDK stays small and stable:
 
-- `@openforge/plugin-sdk` exports shared types, API version constants, metadata helpers, schema helpers, and test utilities.
-- `@openforge/plugin-sdk/frontend` exports frontend-specific plugin helpers/types.
-- `@openforge/plugin-sdk/backend` exports backend-specific plugin helpers/types.
+- `@openforge-app/plugin-sdk` exports shared types, API version constants, metadata helpers, schema helpers, and test utilities.
+- `@openforge-app/plugin-sdk/frontend` exports frontend-specific plugin helpers/types.
+- `@openforge-app/plugin-sdk/backend` exports backend-specific plugin helpers/types.
 - Host runtime internals are private and not importable by plugins.
 
 Frontend example:
 
 ```ts
-import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
+import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
 
 export default defineFrontendPlugin({
   activate(openforge, context) {
@@ -121,7 +121,7 @@ Backend example:
 
 ```ts
 import { Type } from '@sinclair/typebox'
-import { defineBackendPlugin } from '@openforge/plugin-sdk/backend'
+import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
 
 export default defineBackendPlugin({
   activate(openforge, context) {
@@ -224,7 +224,7 @@ Commands that are intended only for programmatic integration may set `discoverab
 
 Frontend plugin UI uses native Svelte components, not iframes, webviews, or web-component isolation.
 
-Shared leaf UI packages are allowed when they do not become domain capabilities. `@openforge/pr-review-ui` is a reusable Svelte UI implementation package for PR/self-review presentation shared by GitHub Sync and core self-review surfaces; it is not a host-shared platform runtime, not part of the core plugin SDK surface, and does not own GitHub/PR review domain operations. GitHub Sync owns its PR review contracts unless multiple independent plugins later prove a cross-plugin platform service is needed.
+Shared leaf UI packages are allowed when they do not become domain capabilities. `@openforge-app/pr-review-ui` is a reusable Svelte UI implementation package for PR/self-review presentation shared by GitHub Sync and core self-review surfaces; it is not a host-shared platform runtime, not part of the core plugin SDK surface, and does not own GitHub/PR review domain operations. GitHub Sync owns its PR review contracts unless multiple independent plugins later prove a cross-plugin platform service is needed.
 
 - Components receive standard stable props with API and context snapshots.
 - Components should receive API/context through props, not module globals.
@@ -415,7 +415,7 @@ The cutover should:
 
 ## Testing, docs, and templates
 
-The SDK includes testing utilities/mocks for `OpenForgeAPI` under `@openforge/plugin-sdk/testing`. File-reading plugin tests should fixture `FileContent` objects for text, image, document, binary, and large-file paths instead of string-only reads; see [`docs/plugin-sdk-file-api-migration.md`](../plugin-sdk-file-api-migration.md) for examples.
+The SDK includes testing utilities/mocks for `OpenForgeAPI` under `@openforge-app/plugin-sdk/testing`. File-reading plugin tests should fixture `FileContent` objects for text, image, document, binary, and large-file paths instead of string-only reads; see [`docs/plugin-sdk-file-api-migration.md`](../plugin-sdk-file-api-migration.md) for examples.
 
 Available utilities:
 
@@ -437,7 +437,7 @@ A plugin package ships normal npm metadata plus `package.json#openforge`. Instal
   "type": "module",
   "main": "./dist/backend.js",
   "peerDependencies": {
-    "@openforge/plugin-sdk": "^0.1.0",
+    "@openforge-app/plugin-sdk": "^0.1.0",
     "svelte": "^5.0.0"
   },
   "devDependencies": {
@@ -509,7 +509,7 @@ Use `svelte` as both a `peerDependency` and an author-time `devDependency`, and 
 
 ```ts
 import { svelte } from '@sveltejs/vite-plugin-svelte'
-import { openforgePluginViteExternals } from '@openforge/plugin-sdk/vite'
+import { openforgePluginViteExternals } from '@openforge-app/plugin-sdk/vite'
 import { defineConfig } from 'vite'
 
 export default defineConfig({
@@ -534,7 +534,7 @@ A frontend-only plugin can use renderer-owned UI plus host capabilities such as 
 `src/frontend.ts`:
 
 ```ts
-import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
+import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
 
 export default defineFrontendPlugin({
   activate(openforge, context) {
@@ -556,7 +556,7 @@ export default defineFrontendPlugin({
 
 ```svelte
 <script lang="ts">
-  import type { PluginViewProps } from '@openforge/plugin-sdk/frontend'
+  import type { PluginViewProps } from '@openforge-app/plugin-sdk/frontend'
 
   interface Props extends PluginViewProps {}
   let { api, context }: Props = $props()
@@ -601,7 +601,7 @@ export default defineFrontendPlugin({
 `src/backend.ts` registers plugin-local RPC methods. They are only callable by this plugin's frontend after backend readiness.
 
 ```ts
-import { defineBackendPlugin } from '@openforge/plugin-sdk/backend'
+import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
 
 export default defineBackendPlugin({
   activate(openforge, context) {
@@ -630,7 +630,7 @@ export default defineBackendPlugin({
 `src/frontend.ts`:
 
 ```ts
-import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
+import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
 
 export default defineFrontendPlugin({
   activate(openforge, context) {
@@ -649,7 +649,7 @@ export default defineFrontendPlugin({
 
 ```svelte
 <script lang="ts">
-  import type { PluginViewProps } from '@openforge/plugin-sdk/frontend'
+  import type { PluginViewProps } from '@openforge-app/plugin-sdk/frontend'
 
   interface Props extends PluginViewProps {}
   let { api, context }: Props = $props()
@@ -674,7 +674,7 @@ export default defineFrontendPlugin({
 Commands are app commands. Background services are backend contributions and start when the backend activates for an enabled project.
 
 ```ts
-import { defineBackendPlugin } from '@openforge/plugin-sdk/backend'
+import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
 
 export default defineBackendPlugin({
   activate(openforge, context) {
@@ -759,7 +759,7 @@ Use the SDK testing subpath for author tests. The registry fake is the preferred
 ```ts
 import { describe, expect, it } from 'vitest'
 import plugin from '../src/frontend'
-import { createOpenForgeRegistryFake } from '@openforge/plugin-sdk/testing'
+import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 
 describe('frontend activation', () => {
   it('registers and disposes the Notes view', async () => {
@@ -780,7 +780,7 @@ describe('frontend activation', () => {
 For unit tests that only need an API object, use direct mocks. Calls to host-facing capabilities are recorded under `api.__testing.calls`.
 
 ```ts
-import { createMockOpenForgeApi } from '@openforge/plugin-sdk/testing'
+import { createMockOpenForgeApi } from '@openforge-app/plugin-sdk/testing'
 
 const api = createMockOpenForgeApi({ pluginId: 'acme.notes', projectId: 'P-1' })
 

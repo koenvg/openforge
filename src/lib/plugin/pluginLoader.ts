@@ -1,6 +1,6 @@
 import { installedPlugins } from './pluginStore'
-import { OPENFORGE_FRONTEND_PLUGIN_MARKER } from '@openforge/plugin-sdk/frontend'
-import type { FrontendPlugin } from '@openforge/plugin-sdk/frontend'
+import { OPENFORGE_FRONTEND_PLUGIN_MARKER } from '@openforge-app/plugin-sdk/frontend'
+import type { FrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
 import type { PluginState } from './types'
 
 export interface PluginESM {

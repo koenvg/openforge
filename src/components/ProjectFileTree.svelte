@@ -12,7 +12,7 @@
     getProjectFileTreeKeyboardAction,
     projectFileTreePathToId,
     type ProjectFileTreeNode,
-  } from '@openforge/plugin-sdk/projectFileTree'
+  } from '@openforge-app/plugin-sdk/projectFileTree'
   import type { FileEntry } from '../lib/types'
 
   interface Props {

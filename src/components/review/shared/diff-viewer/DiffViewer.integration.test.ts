@@ -2,8 +2,8 @@ import { DiffFile } from '@git-diff-view/core'
 import { highlighter } from '@git-diff-view/lowlight'
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { configureDiffHighlighter } from '@openforge/pr-review-ui/diffHighlightConfig'
-import type { DiffWorkerRequest, DiffWorkerResponse } from '@openforge/pr-review-ui/diffWorker'
+import { configureDiffHighlighter } from '@openforge-app/pr-review-ui/diffHighlightConfig'
+import type { DiffWorkerRequest, DiffWorkerResponse } from '@openforge-app/pr-review-ui/diffWorker'
 import type { PrFileDiff } from '../../../../lib/types'
 import DiffViewer from './DiffViewer.svelte'
 
@@ -11,7 +11,7 @@ const { virtualizerScrollToIndex } = vi.hoisted(() => ({
   virtualizerScrollToIndex: vi.fn(),
 }))
 
-vi.mock('@openforge/pr-review-ui/useVirtualizer.svelte', () => ({
+vi.mock('@openforge-app/pr-review-ui/useVirtualizer.svelte', () => ({
   createVirtualizer: vi.fn((opts: { getCount: () => number }) => ({
     get virtualItems() {
       const count = opts.getCount()

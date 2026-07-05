@@ -5,7 +5,7 @@ import {
   type TaskTerminalTabsSession,
   type TerminalRuntimeUnlistenFn,
   type TerminalTab,
-} from '@openforge/terminal-runtime'
+} from '@openforge-app/terminal-runtime'
 import { getPtyBuffer, listenOpenForgeEvent, openUrl, resizePty, writePty } from './ipc'
 import { themeMode } from './theme'
 

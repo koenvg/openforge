@@ -1,4 +1,4 @@
-import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
+import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
 import DemoTab from './components/DemoTab.svelte'
 import HelloWorldView from './components/HelloWorldView.svelte'
 

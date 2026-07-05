@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Archive, CircleAlert, FileQuestion, TriangleAlert } from '@lucide/svelte'
-  import type { FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
-  import type { FileContent } from '@openforge/plugin-sdk/domain'
+  import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
+  import type { FileContent } from '@openforge-app/plugin-sdk/domain'
   import { getLanguageForFile, highlightCode } from './lib/fileHighlighter'
   import MarkdownFilePreview from './MarkdownFilePreview.svelte'
 

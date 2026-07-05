@@ -1,1 +1,1 @@
-export { sanitizeHtml } from '@openforge/plugin-sdk/sanitize'
+export { sanitizeHtml } from '@openforge-app/plugin-sdk/sanitize'

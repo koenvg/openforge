@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { getTerminalOptions, TERMINAL_CELL_HEIGHT, TERMINAL_FONT_FAMILY, TERMINAL_FONT_SIZE, TERMINAL_WEB_FONT_FACES } from './terminalOptions'
-import { getTerminalTheme } from '@openforge/terminal-runtime/theme'
+import { getTerminalTheme } from '@openforge-app/terminal-runtime/theme'
 
 describe('terminalOptions', () => {
   it('exports TERMINAL_FONT_FAMILY constant', () => {

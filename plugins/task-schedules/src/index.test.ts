@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { OPENFORGE_FRONTEND_PLUGIN_MARKER } from '@openforge/plugin-sdk/frontend'
-import { createOpenForgeRegistryFake } from '@openforge/plugin-sdk/testing'
-import { isOpenForgePackageMetadata } from '@openforge/plugin-sdk'
+import { OPENFORGE_FRONTEND_PLUGIN_MARKER } from '@openforge-app/plugin-sdk/frontend'
+import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
+import { isOpenForgePackageMetadata } from '@openforge-app/plugin-sdk'
 import packageJson from '../package.json'
 import plugin from './index'
 

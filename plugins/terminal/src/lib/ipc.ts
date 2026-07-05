@@ -1,4 +1,4 @@
-import type { Disposable, FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
+import type { Disposable, FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import type { TaskWorkspaceInfo } from './types'
 
 let terminalOpenForgeApi: FrontendOpenForgeAPI | null = null

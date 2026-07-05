@@ -1,8 +1,8 @@
 import { readdir, readFile, writeFile, mkdir } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, extname, join, sep } from 'node:path'
-import { defineBackendPlugin } from '@openforge/plugin-sdk/backend'
-import type { BackendOpenForgeAPI } from '@openforge/plugin-sdk/backend'
+import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
+import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
 import { parseSkillFrontmatter, SKILL_SOURCE_DIRS, type SkillInfo, type SkillSourceDir } from './lib/skillDomain'
 
 type SkillLevel = SkillInfo['level']

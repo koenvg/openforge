@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildSyntheticStepFiles, clampStepIndex, isWalkthroughStale, isPrLargeEnoughForWalkthroughHint } from './walkthroughViewState'
-import type { PrFileDiff, PrWalkthrough, PrWalkthroughStep, ReviewPullRequest } from '@openforge/plugin-sdk/domain'
+import type { PrFileDiff, PrWalkthrough, PrWalkthroughStep, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
 
 function file(filename: string, hunks: number, extra: Partial<PrFileDiff> = {}): PrFileDiff {
   const parts: string[] = []

@@ -1,6 +1,6 @@
 import { writable, get } from 'svelte/store'
-import { isOpenForgePackageMetadata } from '@openforge/plugin-sdk'
-import type { OpenForgePackageMetadata } from '@openforge/plugin-sdk'
+import { isOpenForgePackageMetadata } from '@openforge-app/plugin-sdk'
+import type { OpenForgePackageMetadata } from '@openforge-app/plugin-sdk'
 import type { PluginEntry, PluginManifest } from './types'
 import * as ipc from '../ipc'
 import { resolveContributions } from './contributionResolver'

@@ -1,4 +1,4 @@
-import type { PrFileDiff, PrWalkthroughStep, PrWalkthroughStepFile } from '@openforge/plugin-sdk/domain'
+import type { PrFileDiff, PrWalkthroughStep, PrWalkthroughStepFile } from '@openforge-app/plugin-sdk/domain'
 import { parseHunks } from './hunkParser'
 
 /**

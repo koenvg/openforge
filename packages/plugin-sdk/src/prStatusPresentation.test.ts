@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getPrStatusChips, type PrInput } from '@openforge/plugin-sdk/prStatusPresentation'
+import { getPrStatusChips, type PrInput } from '@openforge-app/plugin-sdk/prStatusPresentation'
 
 describe('getPrStatusChips shared package API', () => {
   const basePr: PrInput = {

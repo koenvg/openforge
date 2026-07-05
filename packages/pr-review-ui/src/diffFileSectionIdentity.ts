@@ -1,4 +1,4 @@
-import type { PrFileDiff } from '@openforge/plugin-sdk/domain'
+import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
 
 /**
  * Identity for the inputs that determine a Diff File Section's rendered content.

@@ -1,6 +1,6 @@
 # OpenForge plugin authoring
 
-OpenForge plugins are trusted app extensions packaged as normal npm-style packages. They use the public `@openforge/plugin-sdk` contract and register contributions at runtime; they should not import OpenForge app internals.
+OpenForge plugins are trusted app extensions packaged as normal npm-style packages. They use the public `@openforge-app/plugin-sdk` contract and register contributions at runtime; they should not import OpenForge app internals.
 
 For exact types, see `packages/plugin-sdk/src/types.ts`. For the architectural rationale and longer examples, see `docs/adr/0002-openforge-plugin-package-runtime.md`.
 
@@ -13,7 +13,7 @@ Each plugin declares OpenForge metadata in `package.json#openforge` and ships al
   "name": "@acme/openforge-notes",
   "version": "1.0.0",
   "dependencies": {
-    "@openforge/plugin-sdk": "^0.1.0"
+    "@openforge-app/plugin-sdk": "^0.1.0"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"
@@ -44,7 +44,7 @@ Rules:
 Frontend plugins run in the renderer and register UI contributions plus renderer-available host capabilities:
 
 ```ts
-import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
+import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
 
 export default defineFrontendPlugin({
   activate(openforge, context) {
@@ -74,7 +74,7 @@ Svelte plugin components receive `api` and `context` props. Use Svelte 5 runes i
 Backend plugins run in the trusted shared Node plugin-host sidecar. They are appropriate for Node dependencies, background services, and plugin-local RPC methods:
 
 ```ts
-import { defineBackendPlugin } from '@openforge/plugin-sdk/backend'
+import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
 
 export default defineBackendPlugin({
   activate(openforge, context) {
@@ -167,12 +167,12 @@ Behavior and limits:
 
 ## Testing plugins
 
-Use `@openforge/plugin-sdk/testing` for plugin tests. The registry fake is best when asserting registrations, namespacing, command invocation, backend RPC, background service lifecycle, or cleanup:
+Use `@openforge-app/plugin-sdk/testing` for plugin tests. The registry fake is best when asserting registrations, namespacing, command invocation, backend RPC, background service lifecycle, or cleanup:
 
 ```ts
 import { describe, expect, it } from 'vitest'
 import plugin from '../src/frontend'
-import { createOpenForgeRegistryFake } from '@openforge/plugin-sdk/testing'
+import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 
 describe('frontend activation', () => {
   it('registers the Notes view', async () => {
@@ -191,7 +191,7 @@ For unit tests that only need an API object, use `createMockOpenForgeApi`, `crea
 
 ## Authoring checklist
 
-- Use only `@openforge/plugin-sdk`, `@openforge/plugin-sdk/frontend`, `@openforge/plugin-sdk/backend`, or documented npm dependencies from plugin code.
+- Use only `@openforge-app/plugin-sdk`, `@openforge-app/plugin-sdk/frontend`, `@openforge-app/plugin-sdk/backend`, or documented npm dependencies from plugin code.
 - Register every contribution through `context.subscriptions.add(...)` so deactivation cleans up correctly.
 - Keep frontend and backend responsibilities separate.
 - Validate command/backend method inputs when data crosses runtime boundaries.

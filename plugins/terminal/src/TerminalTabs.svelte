@@ -1,5 +1,5 @@
 <script lang="ts">
-  import TerminalTabsShell from '@openforge/terminal-runtime/TerminalTabsShell'
+  import TerminalTabsShell from '@openforge-app/terminal-runtime/TerminalTabsShell'
   import { commandHeld } from './lib/stores'
   import { killPty } from './lib/ipc'
   import {

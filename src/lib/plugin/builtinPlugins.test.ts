@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isOpenForgePackageMetadata } from '@openforge/plugin-sdk'
+import { isOpenForgePackageMetadata } from '@openforge-app/plugin-sdk'
 import { BUILTIN_PLUGIN_CATALOG, BUILTIN_PLUGIN_MANIFESTS, BUILTIN_PLUGIN_PACKAGE_METADATA } from './builtinPlugins'
 
 describe('built-in plugin package metadata', () => {
