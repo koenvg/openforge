@@ -7,10 +7,11 @@
     allTasks?: Task[]
     pullRequests?: PullRequestInfo[]
     onOpenFullView?: () => void
+    onOpenLinkedTask?: (taskId: string) => void
     onEditTask?: (taskId: string) => void
   }
 
-  let { task, allTasks = [], pullRequests = [], onOpenFullView, onEditTask }: Props = $props()
+  let { task, allTasks = [], pullRequests = [], onOpenFullView, onOpenLinkedTask, onEditTask }: Props = $props()
 </script>
 
 {#if task === null}
@@ -37,6 +38,7 @@
       allowCommentAddressing={true}
       surface="transparent"
       onEditPrompt={onEditTask ? () => onEditTask?.(task.id) : undefined}
+      onOpenDependentTask={onOpenLinkedTask}
     />
   </div>
 {/if}

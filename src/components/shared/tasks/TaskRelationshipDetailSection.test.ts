@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/svelte'
-import { describe, it, expect } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/svelte'
+import { describe, it, expect, vi } from 'vitest'
 import type { TaskDependencySummary, TaskDependentSummary } from '../../../lib/taskDependencies'
 import TaskRelationshipDetailSection from './TaskRelationshipDetailSection.svelte'
 
@@ -43,30 +43,30 @@ describe('TaskRelationshipDetailSection', () => {
     expect(section.textContent).toContain('Waiting on 1 dependency')
   })
 
-  it('renders compact dependent summaries with short readiness labels', () => {
-    const dependents: TaskDependentSummary[] = [
-      {
-        id: 'T-2',
-        status: 'backlog',
-        title: 'Begin rollout',
-        displayTitle: 'Begin rollout',
-        tooltipTitle: 'Begin rollout',
-        remainingDependencyCountAfterCurrentDone: 0,
-      },
-      {
-        id: 'T-3',
-        status: 'backlog',
-        title: 'Deploy after second prerequisite',
-        displayTitle: 'Deploy after second prerequisite',
-        tooltipTitle: 'Deploy after second prerequisite',
-        remainingDependencyCountAfterCurrentDone: 1,
-      },
-    ]
+  const dependentSummaries: TaskDependentSummary[] = [
+    {
+      id: 'T-2',
+      status: 'backlog',
+      title: 'Begin rollout',
+      displayTitle: 'Begin rollout',
+      tooltipTitle: 'Begin rollout',
+      remainingDependencyCountAfterCurrentDone: 0,
+    },
+    {
+      id: 'T-3',
+      status: 'backlog',
+      title: 'Deploy after second prerequisite',
+      displayTitle: 'Deploy after second prerequisite',
+      tooltipTitle: 'Deploy after second prerequisite',
+      remainingDependencyCountAfterCurrentDone: 1,
+    },
+  ]
 
+  it('renders compact dependent summaries with short readiness labels', () => {
     render(TaskRelationshipDetailSection, {
       props: {
         kind: 'dependents',
-        items: dependents,
+        items: dependentSummaries,
         density: 'compact',
       },
     })
@@ -81,5 +81,23 @@ describe('TaskRelationshipDetailSection', () => {
     expect(section.textContent).toContain('2 tasks depend on this one')
     expect(section.textContent).not.toContain('Begin rollout')
     expect(section.querySelector('[title="Begin rollout"]')).toBeTruthy()
+  })
+
+  it('calls the dependent task navigation callback when a dependent task is clicked', async () => {
+    const onOpenDependentTask = vi.fn()
+
+    render(TaskRelationshipDetailSection, {
+      props: {
+        kind: 'dependents',
+        items: dependentSummaries,
+        density: 'full',
+        onOpenDependentTask,
+      },
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: /T-2/ }))
+
+    expect(onOpenDependentTask).toHaveBeenCalledWith('T-2')
+    expect(onOpenDependentTask).toHaveBeenCalledTimes(1)
   })
 })
