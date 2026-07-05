@@ -50,8 +50,10 @@ struct LegacyPair {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct LegacyAppIdentifiers {
     old: String,
+    previous_open_forge: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -136,6 +138,13 @@ pub(crate) fn legacy_app_identifier() -> &'static str {
     &manifest().legacy_sources.app_identifiers.old
 }
 
+pub(crate) fn previous_openforge_app_identifier() -> &'static str {
+    &manifest()
+        .legacy_sources
+        .app_identifiers
+        .previous_open_forge
+}
+
 pub(crate) fn legacy_database_filename_for_build(debug: bool) -> &'static str {
     let names = &manifest().legacy_sources.database_filenames;
     if debug {
@@ -151,7 +160,7 @@ mod tests {
 
     #[test]
     fn data_identity_manifest_preserves_current_data_values() {
-        assert_eq!(app_data_identifier(), "com.opencode.openforge");
+        assert_eq!(app_data_identifier(), "com.openforge.app");
         assert_eq!(app_data_dir_env(), "OPENFORGE_APP_DATA_DIR");
         assert_eq!(database_filename_for_build(false), "openforge.db");
         assert_eq!(database_filename_for_build(true), "openforge_dev.db");
@@ -169,6 +178,10 @@ mod tests {
         assert_eq!(legacy_data_dir_name(), "ai-command-center");
         assert_eq!(current_data_dir_name(), "openforge");
         assert_eq!(legacy_app_identifier(), "com.opencode.ai-command-center");
+        assert_eq!(
+            previous_openforge_app_identifier(),
+            "com.opencode.openforge"
+        );
         assert_eq!(
             legacy_database_filename_for_build(false),
             "ai_command_center.db"

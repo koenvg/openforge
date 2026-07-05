@@ -196,7 +196,7 @@ describe('electron dev script environment', () => {
         homedir: () => '/Users/tester',
         platform: 'darwin',
         mkdtempSync: prefix => `${prefix}${++dirCounter}`,
-        existsSync: path => path === '/Users/tester/Library/Application Support/com.opencode.openforge/openforge_dev.db',
+        existsSync: path => path === '/Users/tester/Library/Application Support/com.openforge.app/openforge_dev.db',
         copyFileSync,
         mkdirSync,
         writeFileSync,
@@ -206,12 +206,12 @@ describe('electron dev script environment', () => {
     expect(options.appDataDir).toBe('/repo/openforge/.openforge-dev/sidecar-app-data')
     expect(options.tempRuntimeDirs).toEqual(['/tmp/openforge-electron-user-data-1'])
     expect(options.seededAppData).toMatchObject({
-      sourceDbPath: '/Users/tester/Library/Application Support/com.opencode.openforge/openforge_dev.db',
+      sourceDbPath: '/Users/tester/Library/Application Support/com.openforge.app/openforge_dev.db',
       sourceBuildMode: 'debug',
       sourceKind: 'auto-default-app-data',
       targetDbPath: '/repo/openforge/.openforge-dev/sidecar-app-data/openforge_dev.db',
     })
-    expect(copyFileSync).toHaveBeenCalledWith('/Users/tester/Library/Application Support/com.opencode.openforge/openforge_dev.db', '/repo/openforge/.openforge-dev/sidecar-app-data/openforge_dev.db')
+    expect(copyFileSync).toHaveBeenCalledWith('/Users/tester/Library/Application Support/com.openforge.app/openforge_dev.db', '/repo/openforge/.openforge-dev/sidecar-app-data/openforge_dev.db')
     expect(mkdirSync).toHaveBeenCalledWith('/repo/openforge/.openforge-dev', { recursive: true })
     expect(mkdirSync).toHaveBeenCalledWith('/repo/openforge/.openforge-dev/sidecar-app-data', { recursive: true })
     expect(writeFileSync).toHaveBeenCalledWith('/repo/openforge/.openforge-dev/electron-dev-runtime.json', expect.stringContaining('sidecar-app-data'))

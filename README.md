@@ -163,7 +163,7 @@ OPENFORGE_ELECTRON_DEV_DISABLE_AUTO_SEED=1 pnpm electron:dev
 To reuse a directory directly, set `OPENFORGE_APP_DATA_DIR=/path/to/app-data` only when no other Open Forge build is using that database. To seed from a non-default development data directory or a specific development backup file:
 
 ```bash
-OPENFORGE_ELECTRON_DEV_SEED_APP_DATA_DIR="$HOME/Library/Application Support/com.opencode.openforge" pnpm electron:dev
+OPENFORGE_ELECTRON_DEV_SEED_APP_DATA_DIR="$HOME/Library/Application Support/com.openforge.app" pnpm electron:dev
 # or seed from a specific development backup/database file:
 OPENFORGE_ELECTRON_DEV_SEED_DB_PATH="/path/to/openforge_dev.db" pnpm electron:dev
 ```
