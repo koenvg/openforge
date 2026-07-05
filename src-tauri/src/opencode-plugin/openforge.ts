@@ -54,6 +54,19 @@ function statusTypeFromEvent(event) {
   return candidates.find((value) => typeof value === "string") ?? null
 }
 
+function transcriptPathFromEvent(event) {
+  const candidates = [
+    event?.properties?.transcript_path,
+    event?.properties?.transcriptPath,
+    event?.properties?.transcript?.path,
+    event?.properties?.session?.transcript_path,
+    event?.properties?.session?.transcriptPath,
+    event?.properties?.session?.transcript?.path,
+  ]
+
+  return candidates.find((value) => typeof value === "string" && value.trim().length > 0) ?? null
+}
+
 function openForgeLifecycleKind(event) {
   switch (event?.type) {
     case "session.created":
@@ -104,6 +117,7 @@ async function postOpenForgeEvent(event) {
         kind,
         raw_event_type: event.type,
         raw_status_type: statusTypeFromEvent(event),
+        transcript_path: transcriptPathFromEvent(event),
         activity_snapshot: boundedActivitySnapshot(event),
       }),
     })

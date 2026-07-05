@@ -568,53 +568,25 @@ fn test_map_hook_to_status_full_lifecycle() {
 }
 
 #[test]
-fn opencode_status_events_match_pi_start_end_only() {
+fn opencode_status_events_follow_plugin_lifecycle_mapping() {
+    let status_for = |event_type: &str, status_type: Option<&str>| {
+        opencode_status_from_event(event_type, status_type).map(|(status, _)| status)
+    };
+
+    assert_eq!(status_for("session.created", None), Some("running"));
+    assert_eq!(status_for("session.idle", None), Some("completed"));
+    assert_eq!(status_for("session.status", Some("busy")), Some("running"));
+    assert_eq!(status_for("session.status", Some("retry")), Some("running"));
+    assert_eq!(status_for("session.status", Some("error")), Some("running"));
     assert_eq!(
-        opencode_status_from_event("session.created", None),
-        Some((
-            "running",
-            &[
-                "started",
-                "completed",
-                "paused",
-                "failed",
-                "interrupted",
-                "running"
-            ] as &[_]
-        )),
-        "OpenCode session creation should behave like Pi agent.start"
+        status_for("session.status", Some("idle")),
+        Some("completed")
     );
-    assert_eq!(
-        opencode_status_from_event("session.idle", None),
-        Some(("completed", &["running", "paused", "completed"] as &[_])),
-        "OpenCode idle should behave like Pi agent.end"
-    );
-    assert_eq!(
-        opencode_status_from_event("session.status", Some("busy")),
-        None
-    );
-    assert_eq!(
-        opencode_status_from_event("session.status", Some("retry")),
-        None
-    );
-    assert_eq!(
-        opencode_status_from_event("session.status", Some("error")),
-        None
-    );
-    assert_eq!(
-        opencode_status_from_event("session.status", Some("idle")),
-        None
-    );
-    assert_eq!(
-        opencode_status_from_event("session.updated", Some("idle")),
-        None
-    );
-    assert_eq!(opencode_status_from_event("message.updated", None), None);
-    assert_eq!(
-        opencode_status_from_event("tool.execute.before", None),
-        None
-    );
-    assert_eq!(opencode_status_from_event("tool.execute.after", None), None);
+    assert_eq!(status_for("session.updated", Some("idle")), Some("running"));
+    assert_eq!(status_for("message.updated", None), Some("running"));
+    assert_eq!(status_for("tool.execute.before", None), Some("running"));
+    assert_eq!(status_for("tool.execute.after", None), Some("running"));
+    assert_eq!(status_for("session.error", None), Some("failed"));
 }
 
 #[tokio::test]
@@ -921,6 +893,8 @@ async fn opencode_hook_stores_session_id_and_completes_on_idle_event() {
             event_type: "session.idle".to_string(),
             session_id: Some("ses_session77".to_string()),
             status_type: None,
+            transcript_path: None,
+            activity_snapshot: None,
         }),
     )
     .await
@@ -972,6 +946,8 @@ async fn opencode_hook_preserves_checkpoint_when_start_event_runs_session() {
             event_type: "session.created".to_string(),
             session_id: Some("ses_session77".to_string()),
             status_type: None,
+            transcript_path: None,
+            activity_snapshot: None,
         }),
     )
     .await
@@ -1025,6 +1001,8 @@ async fn opencode_hook_ignores_error_status_events() {
             event_type: "session.status".to_string(),
             session_id: None,
             status_type: Some("error".to_string()),
+            transcript_path: None,
+            activity_snapshot: None,
         }),
     )
     .await
@@ -1048,8 +1026,6 @@ fn task_display_title_refresh_starts_for_supported_provider_activity() {
         ("codex", "UserPromptSubmit"),
         ("claude-code", "pre-tool-use"),
         ("claude-code", "post-tool-use"),
-        ("opencode", "session.status"),
-        ("opencode", "session.updated"),
         ("opencode", "message.updated"),
         ("pi", "user_prompt"),
     ];
@@ -1078,6 +1054,16 @@ fn task_display_title_refresh_ignores_unsupported_provider_activity() {
         (
             "codex",
             "TaskComplete",
+            crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy,
+        ),
+        (
+            "opencode",
+            "session.status",
+            crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy,
+        ),
+        (
+            "opencode",
+            "session.updated",
             crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy,
         ),
         (

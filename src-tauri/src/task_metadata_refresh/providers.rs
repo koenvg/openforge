@@ -32,7 +32,7 @@ pub(super) fn build_claude_metadata_job_args(prompt: &str, output_schema: &str) 
     ]
 }
 
-pub(super) fn build_opencode_title_headless_args(prompt: &str) -> Vec<String> {
+pub(super) fn build_opencode_metadata_job_args(_job: &MetadataJob, prompt: &str) -> Vec<String> {
     vec!["run".to_string(), prompt.to_string()]
 }
 
@@ -101,7 +101,7 @@ async fn run_metadata_job(job: &MetadataJob, prompt: &str) -> Result<String, Str
             run_headless_metadata_command(job, "claude", &args, None).await
         }
         "opencode" => {
-            let args = build_opencode_title_headless_args(prompt);
+            let args = build_opencode_metadata_job_args(job, prompt);
             run_headless_metadata_command(job, "opencode", &args, None).await
         }
         "pi" => {
