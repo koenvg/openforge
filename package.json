@@ -1,6 +1,8 @@
 {
   "name": "openforge",
   "version": "0.0.1",
+  "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "main": "dist-electron/main.js",
   "packageManager": "pnpm@10.34.3",

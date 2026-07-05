@@ -4,6 +4,12 @@
 
 This guide is the developer-facing starting point for creating plugins. For exact TypeScript contracts, see `packages/plugin-sdk/src/types.ts`. For historical rationale, see `docs/adr/0002-openforge-plugin-package-runtime.md`.
 
+## SDK license and plugin ownership
+
+`@openforge-app/plugin-sdk` is MIT-licensed. You may use, copy, modify, redistribute, and sell plugins built with the SDK, including commercial and private/internal plugins, subject to the MIT license terms.
+
+The OpenForge desktop app is licensed separately under the repository root `LICENSE`; app source availability does not grant permission to commercially resell or redistribute the app itself.
+
 ## What a plugin can be
 
 An OpenForge plugin may ship either or both entry points:

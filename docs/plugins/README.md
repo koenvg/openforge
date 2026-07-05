@@ -1,6 +1,6 @@
 # OpenForge plugin documentation outline
 
-This section will become the developer-facing documentation set for building OpenForge plugins with `@openforge-app/plugin-sdk`.
+This section will become the developer-facing documentation set for building OpenForge plugins with `@openforge-app/plugin-sdk`. The SDK is MIT-licensed for personal, internal, open source, and commercial plugin development; the OpenForge app itself remains separately licensed as source-available/proprietary software with no commercial resale or redistribution permission.
 
 The existing cleaned guide at `docs/plugin-authoring.md` is the current source material. The pages below should split that material into reviewable, developer-consumable docs.
 
@@ -44,6 +44,7 @@ The existing cleaned guide at `docs/plugin-authoring.md` is the current source m
    - Versioning and API compatibility
    - Installed package contents
    - Plugin Installation vs Project Plugin Enablement
+   - SDK MIT license metadata and npm release expectations
 
 7. **Examples and recipes** (`docs/plugins/examples.md`)
    - Frontend-only view plugin

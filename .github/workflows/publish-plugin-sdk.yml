@@ -76,6 +76,10 @@ jobs:
             echo "published=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Verify SDK license metadata
+        run: |
+          LICENSE="$(node -p "JSON.parse(require('fs').readFileSync('packages/plugin-sdk/package.json', 'utf8')).license")"
+          test "$LICENSE" = "MIT"
       - name: Check package contents
         working-directory: packages/plugin-sdk
         run: npm pack --dry-run
