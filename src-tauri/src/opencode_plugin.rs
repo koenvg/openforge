@@ -55,6 +55,8 @@ mod tests {
         assert!(OPENCODE_PLUGIN_SOURCE.contains("raw_status_type"));
         assert!(OPENCODE_PLUGIN_SOURCE.contains("activity_snapshot"));
         assert!(OPENCODE_PLUGIN_SOURCE.contains("boundedActivitySnapshot"));
+        assert!(OPENCODE_PLUGIN_SOURCE.contains("transcript_path"));
+        assert!(OPENCODE_PLUGIN_SOURCE.contains("transcriptPathFromEvent"));
     }
 
     #[test]
@@ -110,7 +112,10 @@ mod tests {
                 },
                 {
                     type: "message.updated",
-                    properties: { info: { id: "msg_bad123" }, session: { id: "ses_rich123" } }
+                    properties: {
+                        info: { id: "msg_bad123" },
+                        session: { id: "ses_rich123", transcriptPath: "/tmp/opencode/transcript.jsonl" }
+                    }
                 }
             ]"#,
         );
@@ -142,6 +147,10 @@ mod tests {
             .as_str()
             .expect("activity snapshot should be string")
             .contains("ses_rich123"));
+        assert_eq!(
+            payloads[6]["transcript_path"],
+            "/tmp/opencode/transcript.jsonl"
+        );
     }
 
     #[test]

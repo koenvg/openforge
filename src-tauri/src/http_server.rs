@@ -384,6 +384,10 @@ pub struct OpenCodePluginEventPayload {
     pub event_type: String,
     pub session_id: Option<String>,
     pub status_type: Option<String>,
+    #[serde(default)]
+    pub transcript_path: Option<String>,
+    #[serde(default)]
+    pub activity_snapshot: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -545,10 +549,7 @@ fn should_start_task_display_title_refresh(
             notification.raw_event_type.as_deref(),
             Some("pre-tool-use" | "post-tool-use")
         ),
-        "opencode" => matches!(
-            notification.raw_event_type.as_deref(),
-            Some("session.status" | "session.updated" | "message.updated")
-        ),
+        "opencode" => notification.raw_event_type.as_deref() == Some("message.updated"),
         "pi" => notification.raw_event_type.as_deref() == Some("user_prompt"),
         _ => false,
     }
@@ -1153,11 +1154,20 @@ pub async fn pi_agent_end_handler(
 
 fn opencode_event_kind_from_event(
     event_type: &str,
-    _status_type: Option<&str>,
+    status_type: Option<&str>,
 ) -> Option<crate::agent_lifecycle::AgentLifecycleEventKind> {
     match event_type {
         "session.created" => Some(crate::agent_lifecycle::AgentLifecycleEventKind::Started),
         "session.idle" => Some(crate::agent_lifecycle::AgentLifecycleEventKind::Ended),
+        "session.error" => Some(crate::agent_lifecycle::AgentLifecycleEventKind::Failed),
+        "session.status" if status_type == Some("idle") => {
+            Some(crate::agent_lifecycle::AgentLifecycleEventKind::Ended)
+        }
+        "session.status"
+        | "session.updated"
+        | "message.updated"
+        | "tool.execute.before"
+        | "tool.execute.after" => Some(crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy),
         _ => None,
     }
 }
@@ -1202,8 +1212,11 @@ pub async fn opencode_event_handler(
         raw_event_type: Some(payload.event_type),
         raw_status_type: payload.status_type,
     };
+    let transcript_path = payload.transcript_path;
+    let activity_snapshot = payload.activity_snapshot;
 
-    handle_agent_lifecycle_notification(state, notification, None, None).await
+    handle_agent_lifecycle_notification(state, notification, transcript_path, activity_snapshot)
+        .await
 }
 
 pub async fn agent_lifecycle_handler(

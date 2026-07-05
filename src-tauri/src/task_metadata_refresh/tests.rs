@@ -6,7 +6,7 @@ use super::prompt::{
 };
 use super::providers::{
     build_claude_metadata_job_args, build_codex_title_headless_args,
-    build_opencode_title_headless_args, build_pi_metadata_job_args, resolve_metadata_program,
+    build_opencode_metadata_job_args, build_pi_metadata_job_args, resolve_metadata_program,
 };
 use super::refresh::{
     queue_task_display_title_refresh, refresh_queued_task_display_title_with_ai_once_after,
@@ -212,7 +212,7 @@ fn parse_task_display_title_output_reads_nested_provider_json() {
 }
 
 #[test]
-fn provider_title_headless_args_are_session_isolated() {
+fn provider_metadata_job_args_are_session_isolated_and_reusable() {
     let claude_args =
         build_claude_metadata_job_args("Name this work", TASK_DISPLAY_TITLE_JSON_SCHEMA);
     assert!(claude_args.contains(&"--no-session-persistence".to_string()));
@@ -225,11 +225,18 @@ fn provider_title_headless_args_are_session_isolated() {
     assert!(codex_args.contains(&"--ephemeral".to_string()));
     assert!(codex_args.contains(&"--ignore-rules".to_string()));
 
-    let opencode_args = build_opencode_title_headless_args("Name this work");
+    let opencode_job = build_task_display_title_metadata_job(
+        "task-provider-adapter",
+        "opencode",
+        None,
+        Some("message.updated snapshot".to_string()),
+    );
+    let opencode_args = build_opencode_metadata_job_args(&opencode_job, "Name this work");
     assert_eq!(
         opencode_args,
         vec!["run".to_string(), "Name this work".to_string()]
     );
+    assert_eq!(opencode_job.kind, MetadataJobKind::TaskDisplayTitle);
 
     let pi_args = build_pi_metadata_job_args("Name this work");
     assert_eq!(
