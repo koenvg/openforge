@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
 import TaskListItem from './TaskListItem.svelte'
 import type { Task, PullRequestInfo } from '../../lib/types'
@@ -157,19 +157,27 @@ describe('TaskListItem', () => {
     expect(screen.queryByText(/Waiting on \d+ deps?/)).toBeNull()
   })
 
-  it('summarizes card details into compact counts and label text', () => {
+  it('renders compact card details with visible label chips', () => {
     const task = {
       ...baseTask,
       depends_on: ['T-1'],
       labels: [
-        { id: 1, project_id: 'P-1', name: 'frontend', color: 'primary' },
-        { id: 2, project_id: 'P-1', name: 'UX', color: 'secondary' },
+        { id: 1, project_id: 'P-1', name: 'frontend' },
+        { id: 2, project_id: 'P-1', name: 'UX' },
+        { id: 3, project_id: 'P-1', name: 'backend' },
+        { id: 4, project_id: 'P-1', name: 'blocked' },
       ],
     } as Task
     render(TaskListItem, { props: { ...baseProps, task, showLabels: true, dependencyHint: 'Waiting on 1 dep' } })
     expect(screen.getByText('1 dep')).toBeTruthy()
-    expect(screen.getByText('2 labels')).toBeTruthy()
-    expect(screen.getByText(/frontend \+1/)).toBeTruthy()
+    expect(screen.getByText('4 labels')).toBeTruthy()
+    const labelChips = screen.getByLabelText('Task labels')
+    expect(within(labelChips).getByText('frontend')).toBeTruthy()
+    expect(within(labelChips).getByText('UX')).toBeTruthy()
+    expect(within(labelChips).getByText('backend')).toBeTruthy()
+    expect(within(labelChips).getByText('+1')).toBeTruthy()
+    expect(screen.getByLabelText('Labels: frontend, UX, backend, blocked')).toBeTruthy()
+    expect(screen.queryByText(/frontend \+3/)).toBeNull()
   })
 
   it('keeps the full reasonText available when selected', () => {
