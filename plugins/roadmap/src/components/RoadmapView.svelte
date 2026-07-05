@@ -153,6 +153,7 @@
   }
 
   async function withBusy(fn: () => Promise<void>) {
+    error = null
     busy = true
     try {
       await fn()
@@ -428,7 +429,11 @@
     labels={configLabels}
     initialColumnLabels={configColumnLabels}
     {busy}
-    onClose={() => (showColumns = false)}
+    {error}
+    onClose={() => {
+      showColumns = false
+      error = null
+    }}
     onSave={saveColumns}
     onRecolor={recolorLabel}
   />

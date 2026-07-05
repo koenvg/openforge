@@ -1,0 +1,54 @@
+import { fireEvent, render, screen } from '@testing-library/svelte'
+import { describe, expect, it, vi } from 'vitest'
+import ColumnSettingsModal from './ColumnSettingsModal.svelte'
+import type { LabelUsage } from '../lib/types'
+
+const labels: LabelUsage[] = [
+  { name: 'alpha', color: 'd73a4a', used: true },
+  { name: 'beta', color: 'a2eeef', used: true },
+  { name: 'gamma', color: '00ff00', used: true },
+]
+
+function renderModal(overrides: Record<string, unknown> = {}) {
+  return render(ColumnSettingsModal, {
+    props: {
+      repo: 'owner/repo',
+      labels,
+      initialColumnLabels: ['alpha', 'beta', 'gamma'],
+      busy: false,
+      error: null,
+      onClose: vi.fn(),
+      onSave: vi.fn(),
+      onRecolor: vi.fn(async () => {}),
+      ...overrides,
+    },
+  })
+}
+
+describe('ColumnSettingsModal', () => {
+  it('Save reports the current order', async () => {
+    const onSave = vi.fn()
+    renderModal({ onSave })
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(onSave).toHaveBeenCalledWith(['alpha', 'beta', 'gamma'])
+  })
+
+  it('Save reports the reordered labels', async () => {
+    const onSave = vi.fn()
+    renderModal({ onSave })
+    // Move alpha down: alpha,beta,gamma -> beta,alpha,gamma
+    await fireEvent.click(screen.getByRole('button', { name: 'Move alpha down' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(onSave).toHaveBeenCalledWith(['beta', 'alpha', 'gamma'])
+  })
+
+  it('shows an error message when one is provided', () => {
+    renderModal({ error: 'could not save columns' })
+    expect(screen.getByText('could not save columns')).toBeTruthy()
+  })
+
+  it('shows no error region when error is null', () => {
+    renderModal({ error: null })
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+})

@@ -7,12 +7,13 @@
     labels: LabelUsage[]
     initialColumnLabels: string[]
     busy: boolean
+    error: string | null
     onClose: () => void
     onSave: (labels: string[]) => void
     onRecolor: (name: string, color: string) => Promise<void>
   }
 
-  let { repo, labels, initialColumnLabels, busy, onClose, onSave, onRecolor }: Props = $props()
+  let { repo, labels, initialColumnLabels, busy, error, onClose, onSave, onRecolor }: Props = $props()
 
   // Seed editable local order from the initial prop; the modal re-mounts per open.
   // svelte-ignore state_referenced_locally
@@ -155,9 +156,15 @@
       {/if}
     </div>
 
+    {#if error}
+      <div class="px-5 pt-3 shrink-0">
+        <div class="alert alert-error text-sm py-2" role="alert">{error}</div>
+      </div>
+    {/if}
+
     <div class="flex justify-end gap-2 px-5 py-3 border-t border-base-300 shrink-0">
-      <button class="btn btn-sm btn-ghost" onclick={onClose} disabled={busy}>Cancel</button>
-      <button class="btn btn-sm btn-primary" onclick={() => onSave(selected)} disabled={busy}>Save</button>
+      <button type="button" class="btn btn-sm btn-ghost" onclick={onClose} disabled={busy}>Cancel</button>
+      <button type="button" class="btn btn-sm btn-primary" onclick={() => onSave(selected)} disabled={busy}>Save</button>
     </div>
   </div>
 </div>
