@@ -1,0 +1,287 @@
+# `@openforge-app/plugin-sdk` reference
+
+This page documents the public SDK surface exposed by `@openforge-app/plugin-sdk` for OpenForge plugin authors. It is intentionally limited to the package entry points declared in `packages/plugin-sdk/package.json#exports` and the types exported from `packages/plugin-sdk/src/types.ts`.
+
+Do not import from SDK internals such as `@openforge-app/plugin-sdk/dist/...` or `@openforge-app/plugin-sdk/src/...`; those paths are not part of the public contract.
+
+## Package entry points
+
+| Import path | Purpose |
+| --- | --- |
+| `@openforge-app/plugin-sdk` | Root convenience export for manifest validation, core API/context types, testing helpers, view-key helpers, domain helpers, project file-tree helpers, PR helpers, and number parsing. |
+| `@openforge-app/plugin-sdk/frontend` | Frontend plugin entry helpers and frontend-only types, including `defineFrontendPlugin`. |
+| `@openforge-app/plugin-sdk/backend` | Backend plugin entry helpers and backend-only types, including `defineBackendPlugin`. |
+| `@openforge-app/plugin-sdk/testing` | Test fakes, mock OpenForge APIs, in-memory storage, and call recording helpers. |
+| `@openforge-app/plugin-sdk/vite` | Vite/build helpers for marking host-shared OpenForge runtime dependencies as external and creating SDK source aliases. |
+| `@openforge-app/plugin-sdk/package-metadata-schema.json` | JSON schema for `package.json#openforge` metadata. Use it in plugin authoring tooling, editor schema hints, or CI/package validation when you want schema-level checks outside the runtime helper functions. |
+| `@openforge-app/plugin-sdk/domain` | OpenForge domain types and PR/merge-readiness helpers. |
+| `@openforge-app/plugin-sdk/prStatusPresentation` | PR status chip presentation helpers. |
+| `@openforge-app/plugin-sdk/projectFileTree` | Project file-tree building, flattening, sizing, accessibility, and keyboard helpers. |
+| `@openforge-app/plugin-sdk/markdown` | Markdown rendering helpers. |
+| `@openforge-app/plugin-sdk/numberParsing` | Strict finite-number parsing helper. |
+| `@openforge-app/plugin-sdk/sanitize` | HTML sanitization helper. |
+| `@openforge-app/plugin-sdk/ui/MarkdownContent.svelte` | Svelte Markdown rendering component. |
+| `@openforge-app/plugin-sdk/ui/ResizablePanel.svelte` | Svelte resizable panel component. |
+
+## Frontend plugins
+
+Frontend plugins run in the renderer and can contribute UI or call renderer-available host APIs. Define the frontend entry point with `defineFrontendPlugin` from `@openforge-app/plugin-sdk/frontend`:
+
+```ts
+import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
+
+export default defineFrontendPlugin({
+  activate(openforge, context) {
+    context.subscriptions.add(
+      openforge.commands.register({
+        id: 'say-hello',
+        title: 'Say hello',
+        async handler() {
+          await openforge.notifications.notify({
+            title: `Hello from ${context.packageMetadata.displayName}`,
+          })
+        },
+      }),
+    )
+  },
+})
+```
+
+`defineFrontendPlugin(plugin)` returns the same plugin object with a non-enumerable frontend marker. Its input must satisfy:
+
+```ts
+interface FrontendPlugin {
+  activate(openforge: FrontendOpenForgeAPI, context: FrontendPluginContext): MaybePromise<void>
+}
+```
+
+Frontend-specific API areas are:
+
+- `navigation`: read or change the active OpenForge view/project/task.
+- `views`: register plugin views.
+- `taskPane`: register task-pane tabs.
+- `settings`: register plugin settings sections.
+- `backend`: wait for and invoke this plugin's backend methods.
+
+Frontend UI contribution registrations use Svelte component loaders or components for `PluginViewProps`, `PluginTaskPaneProps`, and `PluginSettingsSectionProps`.
+
+## Backend plugins
+
+Backend plugins run in the trusted shared Node plugin host. Define the backend entry point with `defineBackendPlugin` from `@openforge-app/plugin-sdk/backend`:
+
+```ts
+import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
+
+export default defineBackendPlugin({
+  activate(openforge, context) {
+    context.subscriptions.add(
+      openforge.backend.registerMethod('summarize', {
+        async handler(input) {
+          return { pluginId: context.pluginId, input }
+        },
+      }),
+    )
+  },
+})
+```
+
+`defineBackendPlugin(plugin)` currently returns the plugin unchanged. Its input must satisfy:
+
+```ts
+interface BackendPlugin {
+  activate(openforge: BackendOpenForgeAPI, context: BackendPluginContext): MaybePromise<void>
+}
+```
+
+Backend-specific API areas are:
+
+- `backend`: register methods callable from the frontend bridge.
+- `background`: register background services with `global`, `project`, or `task` scope.
+
+## Plugin context
+
+`FrontendPluginContext` and `BackendPluginContext` are aliases of `OpenForgePluginContext`:
+
+```ts
+interface OpenForgePluginContext {
+  pluginId: string
+  apiVersion: SupportedOpenForgeApiVersion
+  packageMetadata: OpenForgePackageMetadata
+  subscriptions: SubscriptionSink
+}
+```
+
+Use `context.subscriptions.add(...)` for disposables or cleanup functions returned by registrations. OpenForge can then dispose plugin-owned contributions when the plugin is deactivated.
+
+`SupportedOpenForgeApiVersion` is currently `1`. The root export also exposes:
+
+- `SUPPORTED_OPENFORGE_API_VERSIONS`
+- `OPENFORGE_PLUGIN_API_VERSION`
+- `MIN_SUPPORTED_API_VERSION`
+- `MAX_SUPPORTED_API_VERSION`
+
+## Common OpenForge API
+
+Both frontend and backend APIs extend `OpenForgeCommonAPI`:
+
+| API | Type | Purpose |
+| --- | --- | --- |
+| `commands` | `CommandRegistry` | Register local commands, invoke local/global commands, and list command descriptors. |
+| `events` | `EventRegistry` | Register local/global event listeners and emit local/global events. |
+| `storage` | `PluginStorage` | Read/write JSON values in global, project, or task storage scopes. |
+| `context` | `{ getSnapshot(): OpenForgeContextSnapshot }` | Read the current plugin/project/task context snapshot. |
+| `tasks` | `TasksAPI` | List, read, create, update summaries/statuses, configure start-prompt contributions, start implementation runs, and inspect task workspace/session state. |
+| `projects` | `ProjectsAPI` | List projects or get one project by id. |
+| `fs` | `FileSystemAPI` | Read directories/files, write files, and search project files. |
+| `shell` | `ShellAPI` | Spawn, write, resize, kill, and read task shell buffers. |
+| `notifications` | `NotificationsAPI` | Request user-facing notifications. |
+| `attention` | `AttentionAPI` | List project attention signals. |
+| `system` | `SystemAPI` | Open external URLs through the host. |
+| `config` | `KeyValueConfigAPI` | Read/write global JSON configuration values. |
+| `projectConfig` | `KeyValueConfigAPI` | Read/write project-scoped JSON configuration values. |
+
+All storage/config values are `JsonValue` (`string`, `number`, `boolean`, `null`, arrays, or objects). File APIs use the exported domain file types such as `FileEntry` and `FileContent`.
+
+## Metadata validation
+
+Plugin packages declare OpenForge metadata in `package.json#openforge`:
+
+```json
+{
+  "name": "my-openforge-plugin",
+  "version": "0.1.0",
+  "openforge": {
+    "id": "my-plugin",
+    "apiVersion": 1,
+    "displayName": "My Plugin",
+    "description": "Adds workflow-specific OpenForge behavior.",
+    "frontend": "dist/frontend.js",
+    "backend": "dist/backend.js",
+    "requires": ["commands", "notifications"]
+  }
+}
+```
+
+The root export provides these metadata helpers:
+
+- `OPENFORGE_PACKAGE_METADATA_SCHEMA`: the schema object bundled from `openforgePackageMetadataSchema.json`.
+- `OPENFORGE_PLUGIN_CAPABILITIES`: the supported capability strings.
+- `isSupportedOpenForgeApiVersion(apiVersion)`: type guard for supported integer API versions.
+- `validateOpenForgePackageMetadata(data)`: returns `ValidationError[]`.
+- `validatePluginPackageMetadata(data)`: alias of `validateOpenForgePackageMetadata`.
+- `isOpenForgePackageMetadata(data)`: true when validation returns no errors.
+- `isPluginPackageMetadata(data)`: alias of `isOpenForgePackageMetadata`.
+
+There is no `validatePluginMetadata` export. Use `validateOpenForgePackageMetadata` or its supported alias `validatePluginPackageMetadata`.
+
+Supported `requires` capabilities are:
+
+```ts
+'commands' | 'events' | 'views' | 'taskPane' | 'settings' | 'background' |
+'backend' | 'storage' | 'context' | 'navigation' | 'tasks' | 'projects' |
+'fs' | 'shell' | 'notifications' | 'attention' | 'system.openUrl' |
+'config' | 'projectConfig'
+```
+
+Manifest contribution arrays are not supported. `validateOpenForgePackageMetadata` rejects a `contributes` field with the message that contribution arrays are not supported; register contributions at runtime in `activate()` instead.
+
+## Utility exports
+
+The root entry point re-exports plugin view-key helpers, project file-tree helpers, selected domain/PR helpers, domain types, and `parseStrictFiniteNumber`. Markdown and sanitizing helpers are public subpath exports, not root exports.
+
+### Plugin view keys
+
+- `makePluginViewKey(pluginId, viewId)`: returns a `PluginViewKey` of the form `plugin:${pluginId}:${viewId}`.
+- `isPluginViewKey(value)`: type guard for plugin view keys.
+- `parsePluginViewKey(key)`: returns `{ pluginId, viewId }`.
+
+### Project file trees
+
+From `projectFileTree` and the root entry point:
+
+- `buildProjectFileTree(entries)`
+- `flattenVisibleProjectFileTree(nodes, expandedIds)`
+- `getProjectFileTreeDepth(path)`
+- `getProjectFileTreeParentPath(path)`
+- `getProjectFileTreeItemAccessibility(...)`
+- `getProjectFileTreeKeyboardAction(...)`
+- `hasProjectFileTreeShortcutModifier(event)`
+- `formatProjectFileTreeSize(size)`
+- `projectFileTreePathToId(path)`
+
+The related public types include `ProjectFileTreeEntry`, `ProjectFileTreeNode`, `ProjectFileTreeKeyboardAction`, and `ProjectFileTreeItemAccessibility`.
+
+### Domain and PR helpers
+
+`@openforge-app/plugin-sdk/domain` exports OpenForge domain types such as `Task`, `Project`, `AgentSession`, `FileEntry`, `FileContent`, `PullRequestInfo`, `MergeStatusInfo`, and board/worktree-related types. The root entry point also re-exports domain types.
+
+PR helper exports include:
+
+- `canMergePullRequest`
+- `getMergeReadiness`
+- `hasMergeConflicts`
+- `isClosedUnmergedPullRequest`
+- `isMergedPullRequest`
+- `isQueuedForMerge`
+- `isReadyToMerge`
+- `parseCheckRuns`
+- `preservePullRequestState`
+- `splitCheckRuns`
+
+`@openforge-app/plugin-sdk/prStatusPresentation` exports `getPrStatusChips` and presentation types for PR status chips.
+
+### Markdown, sanitizing, and parsing
+
+From `@openforge-app/plugin-sdk/markdown`:
+
+- `renderMarkdownHtml(content, options?)`: renders Markdown to sanitized HTML.
+- `resolveMarkdownImageSrc(src, imageBaseUrl)`: resolves relative Markdown image URLs against an image base URL.
+
+From `@openforge-app/plugin-sdk/sanitize`:
+
+- `sanitizeHtml(dirty)`: sanitizes HTML with a safe HTML profile and strips inline styles.
+
+From `@openforge-app/plugin-sdk/numberParsing` and the root entry point:
+
+- `parseStrictFiniteNumber(value)`: returns a finite number for strict decimal input, otherwise `null`.
+
+## Testing exports
+
+Use `@openforge-app/plugin-sdk/testing` to exercise plugins without the real OpenForge host:
+
+- `createOpenForgeRegistryFake(options?)`
+- `createMockOpenForgeApi(options?)`
+- `createMockFrontendOpenForgeApi(options?)`
+- `createMockBackendOpenForgeApi(options?)`
+- `createMockPluginContext(options?)`
+- `createMemoryPluginStorage(calls?)`
+- `createTestingCalls()`
+- `TestingOpenForgeRegistryFake`
+- `TestingSubscriptionSink`
+
+The testing module also exports mock API and contribution types, including `MockFrontendOpenForgeAPI`, `MockBackendOpenForgeAPI`, `TestingOpenForgeApiCalls`, `TestingOpenForgeRegistrySnapshot`, and contribution records for commands, events, views, task-pane tabs, settings sections, backend methods, and background services.
+
+## Vite/build exports
+
+Use `@openforge-app/plugin-sdk/vite` when building plugins that need OpenForge host-shared runtime dependencies externalized or source aliases in a local monorepo setup:
+
+- `OPENFORGE_HOST_RUNTIME_SVELTE_SPECIFIERS`
+- `OPENFORGE_HOST_SHARED_SVELTE_IMPORTS`
+- `OPENFORGE_HOST_SHARED_TERMINAL_RUNTIME_IMPORTS`
+- `isOpenForgeHostRuntimeExternal(id)`
+- `openforgePluginViteExternals`
+- `createOpenForgePluginSdkSourceAliases(repoRoot)`
+- `createOpenForgePluginSdkSourceAliasRecord(repoRoot)`
+
+It also exports related host-runtime and alias record types.
+
+## UI component exports
+
+The package exposes two Svelte component subpaths:
+
+```ts
+import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
+import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
+```
+
+These are the supported component import paths. Do not import component files through SDK internals.
