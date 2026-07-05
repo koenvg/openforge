@@ -109,7 +109,7 @@ fn lifecycle_hook_command(port: u16, event_type: &str, include_tool_name: bool) 
         ""
     };
     format!(
-        "curl -s -X POST http://127.0.0.1:{}/hooks/agent-lifecycle -H 'Content-Type: application/json' -d '{{\"provider\":\"claude-code\",\"task_id\":\"'\"$CLAUDE_TASK_ID\"'\",\"pty_instance_id\":'\"$OPENFORGE_PTY_INSTANCE_ID\"',\"provider_session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"kind\":{},\"raw_event_type\":\"{}\"{} }}' ",
+        "curl -s -X POST http://127.0.0.1:{}/hooks/agent-lifecycle -H 'Content-Type: application/json' -d '{{\"provider\":\"claude-code\",\"task_id\":\"'\"$OPENFORGE_TASK_ID\"'\",\"pty_instance_id\":'\"$OPENFORGE_PTY_INSTANCE_ID\"',\"provider_session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"kind\":{},\"raw_event_type\":\"{}\"{} }}' ",
         port, kind, event_type, tool_name_field
     )
 }
@@ -279,14 +279,15 @@ mod tests {
     }
 
     #[test]
-    fn test_curl_commands_contain_env_vars() {
+    fn test_curl_commands_contain_openforge_env_vars() {
         let json = build_hooks_json(17422);
         let pre_tool_use_cmd = json["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
             .as_str()
             .unwrap();
         assert!(pre_tool_use_cmd.contains("$CLAUDE_SESSION_ID"));
         assert!(pre_tool_use_cmd.contains("$CLAUDE_TOOL_NAME"));
-        assert!(pre_tool_use_cmd.contains("$CLAUDE_TASK_ID"));
+        assert!(pre_tool_use_cmd.contains("$OPENFORGE_TASK_ID"));
+        assert!(!pre_tool_use_cmd.contains("$CLAUDE_TASK_ID"));
         assert!(pre_tool_use_cmd.contains("$OPENFORGE_PTY_INSTANCE_ID"));
     }
 

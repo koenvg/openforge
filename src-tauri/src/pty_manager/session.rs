@@ -130,6 +130,7 @@ impl AgentPtyProviderAdapter for ClaudeCodePtyAdapter {
 
     fn extra_env(&self, task_id: &str, instance_id: u64) -> HashMap<String, String> {
         HashMap::from([
+            ("OPENFORGE_TASK_ID".to_string(), task_id.to_string()),
             ("CLAUDE_TASK_ID".to_string(), task_id.to_string()),
             (
                 "OPENFORGE_PTY_INSTANCE_ID".to_string(),
@@ -1655,12 +1656,12 @@ mod tests {
         assert!(adapter.track_last_output());
 
         let env = adapter.extra_env("task-1", 42);
+        assert_eq!(env.get("OPENFORGE_TASK_ID"), Some(&"task-1".to_string()));
         assert_eq!(env.get("CLAUDE_TASK_ID"), Some(&"task-1".to_string()));
         assert_eq!(
             env.get("OPENFORGE_PTY_INSTANCE_ID"),
             Some(&"42".to_string())
         );
-        assert!(!env.contains_key("OPENFORGE_TASK_ID"));
         assert!(!env.contains_key("OPENFORGE_HTTP_PORT"));
     }
 
