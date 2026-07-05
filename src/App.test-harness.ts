@@ -147,6 +147,7 @@ vi.mock('./lib/stores', () => {
   const projectResolvedRepos = writable<Map<string, string | null>>(new Map())
   return {
   tasks: writable<Task[]>([]),
+  dependencyReferenceTasks: writable<Task[]>([]),
   pendingTask: writable<Task | null>(null),
   selectedTaskId: mockSelectedTaskIdStore,
   activeSessions: writable<Map<string, AgentSession>>(new Map()),

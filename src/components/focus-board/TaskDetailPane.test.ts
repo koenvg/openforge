@@ -9,6 +9,7 @@ vi.mock('../../lib/stores', () => ({
   ticketPrs: writable(new Map()),
   mergingTaskIds: writable(new Set()),
   tasks: writable([]),
+  dependencyReferenceTasks: writable([]),
   activeSessions: writable(new Map()),
   setTaskMerging: vi.fn(),
 }))
