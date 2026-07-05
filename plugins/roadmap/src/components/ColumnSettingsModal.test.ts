@@ -42,6 +42,20 @@ describe('ColumnSettingsModal', () => {
     expect(onSave).toHaveBeenCalledWith(['beta', 'alpha', 'gamma'])
   })
 
+  it('hands a structured-cloneable array to onSave (no reactive proxy)', async () => {
+    // The saved labels cross the Electron IPC boundary, which structured-clones
+    // the payload. A raw Svelte $state proxy throws "could not be cloned".
+    let received: unknown = null
+    renderModal({
+      onSave: (saved: string[]) => {
+        received = saved
+      },
+    })
+    await fireEvent.click(screen.getByRole('button', { name: 'Move alpha down' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(() => structuredClone(received)).not.toThrow()
+  })
+
   it('shows an error message when one is provided', () => {
     renderModal({ error: 'could not save columns' })
     expect(screen.getByText('could not save columns')).toBeTruthy()

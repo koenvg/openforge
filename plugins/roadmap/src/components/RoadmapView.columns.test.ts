@@ -29,9 +29,12 @@ type InvokeHandlers = Record<string, (payload: unknown) => Promise<unknown>>
 
 function makeApi(handlers: InvokeHandlers) {
   const invoke = vi.fn(async (method: string, payload?: unknown) => {
+    // Mirror the Electron IPC boundary: payloads are structured-cloned, so a raw
+    // Svelte $state proxy would throw "An object could not be cloned" here.
+    const clonedPayload = structuredClone(payload)
     const handler = handlers[method]
     if (!handler) return null
-    return handler(payload)
+    return handler(clonedPayload)
   })
   const api = {
     backend: {
