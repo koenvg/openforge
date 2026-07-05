@@ -138,6 +138,36 @@ describe('App navigation shortcuts', () => {
       })
     })
 
+    it('CMD+S navigates to the Task Schedules plugin view', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const pluginStore = await import('./lib/plugin/pluginStore')
+      const pluginRegistry = await import('./lib/plugin/pluginRegistry')
+      const { TASK_SCHEDULES_PLUGIN_ID, TASK_SCHEDULES_VIEW_KEY } = await import('./lib/taskSchedulesPlugin')
+      const { get } = await import('svelte/store')
+      const { tick } = await import('svelte')
+
+      stores.currentView.set('board')
+      render(App)
+      await vi.waitFor(() => {
+        expect(mockLoadEnabledForProject).toHaveBeenCalledWith('proj-1')
+      })
+      await vi.waitFor(() => {
+        expect(get(pluginStore.installedPlugins).has(TASK_SCHEDULES_PLUGIN_ID)).toBe(true)
+      })
+      pluginStore.enabledPluginIds.set(new Set([TASK_SCHEDULES_PLUGIN_ID]))
+      await pluginRegistry.activatePlugin(TASK_SCHEDULES_PLUGIN_ID)
+      pluginStore.setRuntimeContributionSource(TASK_SCHEDULES_PLUGIN_ID, {
+        views: [{ id: 'schedules', title: 'Task Schedules', icon: 'clock', placement: 'rail', order: 50, shortcut: 'Cmd+S' }],
+      })
+      await tick()
+
+      await vi.waitFor(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', code: 'KeyS', metaKey: true, bubbles: true }))
+        expect(get(stores.currentView)).toBe(TASK_SCHEDULES_VIEW_KEY)
+      })
+    })
+
     it('CMD+comma navigates to global settings view', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')

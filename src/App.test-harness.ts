@@ -33,6 +33,8 @@ function builtinRuntimeContributionSourceForTest(pluginId: string): Omit<Runtime
       }
     case 'com.openforge.skills-viewer':
       return { views: [{ id: 'skills', title: 'Skills', icon: 'sparkles', placement: 'rail', order: 30, shortcut: 'Cmd+L' }] }
+    case 'com.openforge.task-schedules':
+      return { views: [{ id: 'schedules', title: 'Task Schedules', icon: 'clock', placement: 'rail', order: 50, shortcut: 'Cmd+S' }] }
     case 'com.openforge.terminal':
       return {
         views: [{ id: 'terminal', title: 'Terminal', icon: 'terminal', placement: 'rail', order: 40, shortcut: 'Cmd+J' }],
@@ -97,7 +99,7 @@ export const mockWindowDestroy = vi.fn(async () => undefined)
 export const mockSelectedTaskIdStore = writable<string | null>(null)
 export const mockActiveProjectIdStore = writable<string | null>(null)
 export const mockMergingTaskIdsStore = writable<Set<string>>(new Set())
-export const mockCurrentViewStore = writable<'board' | 'files' | 'settings' | 'global_settings' | 'plugin:com.openforge.file-viewer:files' | 'plugin:com.openforge.github-sync:pr_review' | 'plugin:com.openforge.skills-viewer:skills'>('board')
+export const mockCurrentViewStore = writable<'board' | 'files' | 'settings' | 'global_settings' | 'plugin:com.openforge.file-viewer:files' | 'plugin:com.openforge.github-sync:pr_review' | 'plugin:com.openforge.skills-viewer:skills' | 'plugin:com.openforge.task-schedules:schedules'>('board')
 export const mockSelectedReviewPrStore = writable(null)
 const {
   mockActivatePlugin,
