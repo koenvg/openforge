@@ -1,5 +1,6 @@
 use log::{error, info, warn};
-use rusqlite::Connection;
+use rusqlite::{Connection, OpenFlags};
+use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -61,6 +62,203 @@ fn rename_if_needed(old: &Path, new: &Path, label: &str) {
     }
 }
 
+fn path_with_suffix(path: &Path, suffix: &str) -> PathBuf {
+    let mut value = OsString::from(path.as_os_str());
+    value.push(suffix);
+    PathBuf::from(value)
+}
+
+fn sqlite_companion_paths(db_path: &Path) -> [PathBuf; 2] {
+    [
+        path_with_suffix(db_path, "-wal"),
+        path_with_suffix(db_path, "-shm"),
+    ]
+}
+
+fn table_row_count(conn: &Connection, table: &str) -> rusqlite::Result<i64> {
+    let exists = conn
+        .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1")?
+        .exists([table])?;
+    if !exists {
+        return Ok(0);
+    }
+
+    conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+        row.get(0)
+    })
+}
+
+fn database_has_user_data(db_path: &Path) -> Option<bool> {
+    let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
+    let user_tables = [
+        "projects",
+        "tasks",
+        "worktrees",
+        "task_workspaces",
+        "pull_requests",
+        "review_prs",
+        "authored_prs",
+        "agent_sessions",
+    ];
+
+    for table in user_tables {
+        match table_row_count(&conn, table) {
+            Ok(count) if count > 0 => return Some(true),
+            Ok(_) => {}
+            Err(error) => {
+                warn!(
+                    "[migration] Failed to inspect {} while checking {} for user data: {}",
+                    table,
+                    db_path.display(),
+                    error
+                );
+                return None;
+            }
+        }
+    }
+
+    Some(false)
+}
+
+fn target_allows_identity_recovery(target_db: &Path) -> bool {
+    matches!(database_has_user_data(target_db), Some(false))
+}
+
+fn backup_empty_target_path(target_db: &Path) -> PathBuf {
+    let base = path_with_suffix(target_db, ".empty-before-identity-migration");
+    if !base.exists() {
+        return base;
+    }
+
+    for index in 1..1000 {
+        let candidate = path_with_suffix(
+            target_db,
+            &format!(".empty-before-identity-migration.{index}"),
+        );
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+
+    path_with_suffix(target_db, ".empty-before-identity-migration.latest")
+}
+
+fn move_target_companions_aside(target_db: &Path, backup_path: &Path, label: &str) {
+    for (target_companion, backup_companion) in sqlite_companion_paths(target_db)
+        .into_iter()
+        .zip(sqlite_companion_paths(backup_path))
+    {
+        if !target_companion.exists() {
+            continue;
+        }
+
+        match fs::rename(&target_companion, &backup_companion) {
+            Ok(()) => info!(
+                "[migration] Preserved empty {} target companion at {}",
+                label,
+                backup_companion.display()
+            ),
+            Err(error) => error!(
+                "[migration] Failed to preserve empty {} target companion {}: {}",
+                label,
+                target_companion.display(),
+                error
+            ),
+        }
+    }
+}
+
+fn move_empty_target_aside(target_db: &Path, label: &str) -> bool {
+    if !target_allows_identity_recovery(target_db) {
+        return false;
+    }
+
+    let backup_path = backup_empty_target_path(target_db);
+    match fs::rename(target_db, &backup_path) {
+        Ok(()) => {
+            move_target_companions_aside(target_db, &backup_path, label);
+            info!(
+                "[migration] Preserved empty {} target at {} before recovering existing data",
+                label,
+                backup_path.display()
+            );
+            true
+        }
+        Err(error) => {
+            error!(
+                "[migration] Failed to preserve empty {} target {}: {}",
+                label,
+                target_db.display(),
+                error
+            );
+            false
+        }
+    }
+}
+
+fn copy_sqlite_companion_files(old_db: &Path, new_db: &Path, label: &str) {
+    for (old_companion, new_companion) in sqlite_companion_paths(old_db)
+        .into_iter()
+        .zip(sqlite_companion_paths(new_db))
+    {
+        if !old_companion.exists() {
+            continue;
+        }
+        if new_companion.exists() {
+            warn!(
+                "[migration] Skipping {} SQLite companion: target already exists at {}",
+                label,
+                new_companion.display()
+            );
+            continue;
+        }
+
+        match fs::copy(&old_companion, &new_companion) {
+            Ok(_) => info!(
+                "[migration] Copied {} SQLite companion {}",
+                label,
+                new_companion.display()
+            ),
+            Err(error) => error!(
+                "[migration] Failed to copy {} SQLite companion {}: {}",
+                label,
+                old_companion.display(),
+                error
+            ),
+        }
+    }
+}
+
+fn migrate_database_file_set(old_db: &Path, new_db: &Path, label: &str) {
+    if old_db.exists() {
+        if new_db.exists() && !move_empty_target_aside(new_db, label) {
+            warn!(
+                "[migration] Skipping {}: both old and new database files exist",
+                label
+            );
+            return;
+        }
+
+        match fs::copy(old_db, new_db) {
+            Ok(_) => {
+                info!("[migration] Copied {} while preserving source", label);
+                copy_sqlite_companion_files(old_db, new_db, label);
+            }
+            Err(error) => error!("[migration] Failed to copy {}: {}", label, error),
+        }
+        return;
+    }
+
+    let has_leftover_companions = sqlite_companion_paths(old_db)
+        .iter()
+        .any(|path| path.exists());
+    if has_leftover_companions && new_db.exists() && target_allows_identity_recovery(new_db) {
+        let backup_path = backup_empty_target_path(new_db);
+        move_target_companions_aside(new_db, &backup_path, label);
+        copy_sqlite_companion_files(old_db, new_db, label);
+    }
+}
+
 fn migrate_database(
     old_app_data: &Path,
     new_app_data: &Path,
@@ -77,12 +275,12 @@ fn migrate_database(
         return;
     }
 
-    rename_if_needed(
+    migrate_database_file_set(
         &old_app_data.join(old_prod_db_name),
         &new_app_data.join(crate::data_identity::database_filename_for_build(false)),
         &format!("{} production", label),
     );
-    rename_if_needed(
+    migrate_database_file_set(
         &old_app_data.join(old_dev_db_name),
         &new_app_data.join(crate::data_identity::database_filename_for_build(true)),
         &format!("{} development", label),
@@ -332,8 +530,216 @@ mod tests {
             fs::read_to_string(new_app.join(new_db_dev())).unwrap(),
             "dev-data"
         );
-        assert!(!old_app.join(new_db_prod()).exists());
-        assert!(!old_app.join(new_db_dev()).exists());
+        assert_eq!(
+            fs::read_to_string(old_app.join(new_db_prod())).unwrap(),
+            "prod-data"
+        );
+        assert_eq!(
+            fs::read_to_string(old_app.join(new_db_dev())).unwrap(),
+            "dev-data"
+        );
+        cleanup(&base);
+    }
+
+    #[test]
+    fn migrates_previous_openforge_sqlite_companion_files() {
+        let (base, _home, data, new_app) = setup_temp_dirs("previous_openforge_sqlite_companions");
+        let old_app = data.join(previous_openforge_app_identifier());
+        fs::create_dir_all(&old_app).unwrap();
+        fs::write(old_app.join(new_db_prod()), "prod-data").unwrap();
+        fs::write(
+            format!("{}-wal", old_app.join(new_db_prod()).display()),
+            "wal-data",
+        )
+        .unwrap();
+        fs::write(
+            format!("{}-shm", old_app.join(new_db_prod()).display()),
+            "shm-data",
+        )
+        .unwrap();
+
+        migrate_database(
+            &old_app,
+            &new_app,
+            new_db_prod(),
+            new_db_dev(),
+            "previous OpenForge database",
+        );
+
+        assert_eq!(
+            fs::read_to_string(new_app.join(new_db_prod())).unwrap(),
+            "prod-data"
+        );
+        assert_eq!(
+            fs::read_to_string(format!("{}-wal", new_app.join(new_db_prod()).display())).unwrap(),
+            "wal-data"
+        );
+        assert_eq!(
+            fs::read_to_string(format!("{}-shm", new_app.join(new_db_prod()).display())).unwrap(),
+            "shm-data"
+        );
+        assert_eq!(
+            fs::read_to_string(old_app.join(new_db_prod())).unwrap(),
+            "prod-data"
+        );
+        assert_eq!(
+            fs::read_to_string(format!("{}-wal", old_app.join(new_db_prod()).display())).unwrap(),
+            "wal-data"
+        );
+        assert_eq!(
+            fs::read_to_string(format!("{}-shm", old_app.join(new_db_prod()).display())).unwrap(),
+            "shm-data"
+        );
+        cleanup(&base);
+    }
+
+    #[test]
+    fn recovers_previous_openforge_companions_after_empty_target_was_created() {
+        let (base, _home, data, new_app) =
+            setup_temp_dirs("previous_openforge_leftover_companions");
+        let old_app = data.join(previous_openforge_app_identifier());
+        fs::create_dir_all(&old_app).unwrap();
+        fs::create_dir_all(&new_app).unwrap();
+        fs::write(
+            format!("{}-wal", old_app.join(new_db_prod()).display()),
+            "wal-data",
+        )
+        .unwrap();
+        fs::write(
+            format!("{}-shm", old_app.join(new_db_prod()).display()),
+            "shm-data",
+        )
+        .unwrap();
+        let conn = Connection::open(new_app.join(new_db_prod())).unwrap();
+        conn.execute(
+            "CREATE TABLE projects (id TEXT PRIMARY KEY, name TEXT NOT NULL)",
+            [],
+        )
+        .unwrap();
+        drop(conn);
+        fs::write(
+            format!("{}-wal", new_app.join(new_db_prod()).display()),
+            "empty-target-wal-data",
+        )
+        .unwrap();
+        fs::write(
+            format!("{}-shm", new_app.join(new_db_prod()).display()),
+            "empty-target-shm-data",
+        )
+        .unwrap();
+
+        migrate_database(
+            &old_app,
+            &new_app,
+            new_db_prod(),
+            new_db_dev(),
+            "previous OpenForge database",
+        );
+
+        assert_eq!(
+            fs::read_to_string(format!("{}-wal", new_app.join(new_db_prod()).display())).unwrap(),
+            "wal-data"
+        );
+        assert_eq!(
+            fs::read_to_string(format!("{}-shm", new_app.join(new_db_prod()).display())).unwrap(),
+            "shm-data"
+        );
+        let backup_entries: Vec<String> = fs::read_dir(&new_app)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|name| name.contains("empty-before-identity-migration"))
+            .collect();
+        assert!(backup_entries
+            .iter()
+            .any(|name| name.ends_with("empty-before-identity-migration-wal")));
+        assert!(backup_entries
+            .iter()
+            .any(|name| name.ends_with("empty-before-identity-migration-shm")));
+        assert_eq!(
+            fs::read_to_string(format!("{}-wal", old_app.join(new_db_prod()).display())).unwrap(),
+            "wal-data"
+        );
+        assert_eq!(
+            fs::read_to_string(format!("{}-shm", old_app.join(new_db_prod()).display())).unwrap(),
+            "shm-data"
+        );
+        cleanup(&base);
+    }
+
+    #[test]
+    fn previous_openforge_source_replaces_empty_new_production_db() {
+        let (base, _home, data, new_app) =
+            setup_temp_dirs("previous_openforge_replaces_empty_target");
+        let old_app = data.join(previous_openforge_app_identifier());
+        fs::create_dir_all(&old_app).unwrap();
+        fs::create_dir_all(&new_app).unwrap();
+        fs::write(old_app.join(new_db_prod()), "prod-data").unwrap();
+        fs::write(
+            format!("{}-wal", old_app.join(new_db_prod()).display()),
+            "source-wal-data",
+        )
+        .unwrap();
+        fs::write(
+            format!("{}-shm", old_app.join(new_db_prod()).display()),
+            "source-shm-data",
+        )
+        .unwrap();
+        let conn = Connection::open(new_app.join(new_db_prod())).unwrap();
+        conn.execute(
+            "CREATE TABLE projects (id TEXT PRIMARY KEY, name TEXT NOT NULL)",
+            [],
+        )
+        .unwrap();
+        drop(conn);
+        fs::write(
+            format!("{}-wal", new_app.join(new_db_prod()).display()),
+            "empty-target-wal-data",
+        )
+        .unwrap();
+        fs::write(
+            format!("{}-shm", new_app.join(new_db_prod()).display()),
+            "empty-target-shm-data",
+        )
+        .unwrap();
+
+        migrate_database(
+            &old_app,
+            &new_app,
+            new_db_prod(),
+            new_db_dev(),
+            "previous OpenForge database",
+        );
+
+        assert_eq!(
+            fs::read_to_string(new_app.join(new_db_prod())).unwrap(),
+            "prod-data"
+        );
+        assert_eq!(
+            fs::read_to_string(format!("{}-wal", new_app.join(new_db_prod()).display())).unwrap(),
+            "source-wal-data"
+        );
+        assert_eq!(
+            fs::read_to_string(format!("{}-shm", new_app.join(new_db_prod()).display())).unwrap(),
+            "source-shm-data"
+        );
+        let backup_entries: Vec<String> = fs::read_dir(&new_app)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|name| name.contains("empty-before-identity-migration"))
+            .collect();
+        assert!(backup_entries
+            .iter()
+            .any(|name| name.ends_with("empty-before-identity-migration")));
+        assert!(backup_entries
+            .iter()
+            .any(|name| name.ends_with("empty-before-identity-migration-wal")));
+        assert!(backup_entries
+            .iter()
+            .any(|name| name.ends_with("empty-before-identity-migration-shm")));
+        assert_eq!(
+            fs::read_to_string(old_app.join(new_db_prod())).unwrap(),
+            "prod-data"
+        );
         cleanup(&base);
     }
 
@@ -358,20 +764,28 @@ mod tests {
             "previous-openforge-prod-data"
         );
         assert!(older_app.join(old_db_prod()).is_file());
-        assert!(!previous_openforge_app.join(new_db_prod()).exists());
+        assert!(previous_openforge_app.join(new_db_prod()).is_file());
         cleanup(&base);
     }
 
     #[test]
-    fn removes_old_app_data_dir_when_empty_after_migration() {
-        let (base, home, data, new_app) = setup_temp_dirs("empty_cleanup");
+    fn preserves_old_app_data_dir_after_database_copy() {
+        let (base, home, data, new_app) = setup_temp_dirs("preserve_old_app_data");
         let old_app = data.join(old_app_identifier());
         fs::create_dir_all(&old_app).unwrap();
         fs::write(old_app.join(old_db_prod()), "data").unwrap();
 
         run_with_dirs(Some(home), Some(data), &new_app);
 
-        assert!(!old_app.exists());
+        assert!(old_app.exists());
+        assert_eq!(
+            fs::read_to_string(old_app.join(old_db_prod())).unwrap(),
+            "data"
+        );
+        assert_eq!(
+            fs::read_to_string(new_app.join(new_db_prod())).unwrap(),
+            "data"
+        );
         cleanup(&base);
     }
 
@@ -387,7 +801,10 @@ mod tests {
 
         assert!(old_app.exists());
         assert!(old_app.join("unknown.log").is_file());
-        assert!(!old_app.join(old_db_prod()).exists());
+        assert_eq!(
+            fs::read_to_string(old_app.join(old_db_prod())).unwrap(),
+            "data"
+        );
         cleanup(&base);
     }
 
