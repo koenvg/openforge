@@ -86,7 +86,7 @@ fn claude_lifecycle_kind_from_event(
     event_type: &str,
 ) -> Option<crate::agent_lifecycle::AgentLifecycleEventKind> {
     match event_type {
-        "pre-tool-use" | "post-tool-use" => {
+        "user-prompt-submit" | "pre-tool-use" | "post-tool-use" => {
             Some(crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy)
         }
         "stop" | "session-end" => Some(crate::agent_lifecycle::AgentLifecycleEventKind::Ended),
@@ -98,23 +98,33 @@ fn claude_lifecycle_kind_from_event(
     }
 }
 
-fn lifecycle_hook_command(port: u16, event_type: &str, include_tool_name: bool) -> String {
-    let Some(kind) = claude_lifecycle_kind_from_event(event_type) else {
+fn lifecycle_hook_endpoint(event_type: &str) -> Option<&'static str> {
+    match event_type {
+        "user-prompt-submit" => Some("user-prompt-submit"),
+        "pre-tool-use" => Some("pre-tool-use"),
+        "post-tool-use" => Some("post-tool-use"),
+        "stop" => Some("stop"),
+        "session-end" => Some("session-end"),
+        "notification-permission" => Some("notification-permission"),
+        _ => None,
+    }
+}
+
+fn lifecycle_hook_command(port: u16, event_type: &str, _include_tool_name: bool) -> String {
+    let Some(_kind) = claude_lifecycle_kind_from_event(event_type) else {
         return String::new();
     };
-    let kind = serde_json::to_string(&kind).unwrap_or_else(|_| "null".to_string());
-    let tool_name_field = if include_tool_name {
-        ",\"tool_name\":\"'\"$CLAUDE_TOOL_NAME\"'\""
-    } else {
-        ""
+    let Some(endpoint) = lifecycle_hook_endpoint(event_type) else {
+        return String::new();
     };
     format!(
-        "curl -s -X POST http://127.0.0.1:{}/hooks/agent-lifecycle -H 'Content-Type: application/json' -d '{{\"provider\":\"claude-code\",\"task_id\":\"'\"$OPENFORGE_TASK_ID\"'\",\"pty_instance_id\":'\"$OPENFORGE_PTY_INSTANCE_ID\"',\"provider_session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"kind\":{},\"raw_event_type\":\"{}\"{} }}' ",
-        port, kind, event_type, tool_name_field
+        "curl -s -o /dev/null -X POST 'http://127.0.0.1:{}/hooks/{}?task_id='\"$OPENFORGE_TASK_ID\"'&pty_instance_id='\"$OPENFORGE_PTY_INSTANCE_ID\"'&session_id='\"$CLAUDE_SESSION_ID\" -H 'Content-Type: application/json' --data-binary @- ",
+        port, endpoint
     )
 }
 
 fn build_hooks_json(port: u16) -> Value {
+    let user_prompt_submit_cmd = lifecycle_hook_command(port, "user-prompt-submit", false);
     let pre_tool_use_cmd = lifecycle_hook_command(port, "pre-tool-use", true);
     let post_tool_use_cmd = lifecycle_hook_command(port, "post-tool-use", true);
     let stop_cmd = lifecycle_hook_command(port, "stop", false);
@@ -124,6 +134,16 @@ fn build_hooks_json(port: u16) -> Value {
 
     json!({
         "hooks": {
+            "UserPromptSubmit": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": user_prompt_submit_cmd
+                        }
+                    ]
+                }
+            ],
             "PreToolUse": [
                 {
                     "hooks": [
@@ -243,6 +263,7 @@ mod tests {
     fn test_hooks_json_structure() {
         let json = build_hooks_json(17422);
         assert!(json.get("hooks").is_some());
+        assert!(json["hooks"].get("UserPromptSubmit").is_some());
         assert!(json["hooks"].get("PreToolUse").is_some());
         assert!(json["hooks"].get("PostToolUse").is_some());
         assert!(json["hooks"].get("Stop").is_some());
@@ -285,10 +306,10 @@ mod tests {
             .as_str()
             .unwrap();
         assert!(pre_tool_use_cmd.contains("$CLAUDE_SESSION_ID"));
-        assert!(pre_tool_use_cmd.contains("$CLAUDE_TOOL_NAME"));
         assert!(pre_tool_use_cmd.contains("$OPENFORGE_TASK_ID"));
         assert!(!pre_tool_use_cmd.contains("$CLAUDE_TASK_ID"));
         assert!(pre_tool_use_cmd.contains("$OPENFORGE_PTY_INSTANCE_ID"));
+        assert!(pre_tool_use_cmd.contains("--data-binary @-"));
     }
 
     #[test]
@@ -401,8 +422,8 @@ mod tests {
         let port = 54321u16;
         let json = build_hooks_json(port);
 
-        // Single-entry hooks (index 0)
         let hook_entries = [
+            ("UserPromptSubmit", 0, "user-prompt-submit"),
             ("PreToolUse", 0, "pre-tool-use"),
             ("PostToolUse", 0, "post-tool-use"),
             ("Stop", 0, "stop"),
@@ -424,40 +445,44 @@ mod tests {
                 cmd
             );
             assert!(
-                cmd.contains("/hooks/agent-lifecycle"),
-                "{}[{}] command should POST to agent lifecycle seam, got: {}",
+                cmd.contains(&format!("/hooks/{}", expected_event_type)),
+                "{}[{}] command should POST to the event-specific Claude hook endpoint, got: {}",
                 hook_key,
                 idx,
                 cmd
             );
             assert!(
-                cmd.contains("\"provider\":\"claude-code\""),
-                "{}[{}] command should identify the Claude Code provider, got: {}",
+                cmd.contains("task_id=") && cmd.contains("session_id="),
+                "{}[{}] command should include task and Claude session identity, got: {}",
                 hook_key,
                 idx,
                 cmd
             );
             assert!(
-                cmd.contains(&format!("\"raw_event_type\":\"{}\"", expected_event_type)),
-                "{}[{}] command should include raw event type {}, got: {}",
-                hook_key,
-                idx,
-                expected_event_type,
-                cmd
-            );
-            assert!(
-                cmd.contains("\"kind\":"),
-                "{}[{}] command should include normalized lifecycle kind, got: {}",
-                hook_key,
-                idx,
-                cmd
-            );
-            assert!(
-                cmd.contains("\"pty_instance_id\":"),
+                cmd.contains("pty_instance_id="),
                 "{}[{}] command should include PTY instance identity, got: {}",
                 hook_key,
                 idx,
                 cmd
+            );
+            assert!(
+                cmd.contains("--data-binary @-"),
+                "{}[{}] command should forward Claude hook stdin JSON, got: {}",
+                hook_key,
+                idx,
+                cmd
+            );
+            assert!(
+                cmd.contains("-o /dev/null"),
+                "{}[{}] command must not write OpenForge hook responses into Claude stdout",
+                hook_key,
+                idx
+            );
+            assert!(
+                !cmd.contains("Task Display Title") && !cmd.contains("Return only JSON"),
+                "{}[{}] command must not inject title-generation instructions into the live Claude session",
+                hook_key,
+                idx
             );
             assert!(
                 cmd.contains("curl"),
