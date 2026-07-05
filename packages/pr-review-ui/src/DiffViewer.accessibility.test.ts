@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
 import DiffViewer from './DiffViewer.svelte'
 
@@ -43,6 +43,12 @@ const files: PrFileDiff[] = [
 ]
 
 describe('DiffViewer accessibility', () => {
+  beforeEach(() => {
+    // Line wrapping now defaults to on and persists to localStorage; clear it so the
+    // toolbar starts from the default in each test.
+    localStorage.clear()
+  })
+
   it('names toolbar icon controls and exposes pressed/expanded state', async () => {
     const onToggleFileTree = vi.fn()
     render(DiffViewer, { props: { files, fileTreeVisible: true, onToggleFileTree } })
@@ -59,6 +65,7 @@ describe('DiffViewer accessibility', () => {
     expect(screen.getByRole('button', { name: 'Split diff view' }).getAttribute('aria-pressed')).toBe('false')
     expect(screen.getByRole('button', { name: 'Unified diff view' }).getAttribute('aria-pressed')).toBe('true')
 
+    // Line wrapping defaults to off, so the button starts in the "Enable" (unpressed) state.
     const wrapButton = screen.getByRole('button', { name: 'Enable line wrapping' })
     expect(wrapButton.getAttribute('aria-pressed')).toBe('false')
     await fireEvent.click(wrapButton)
@@ -69,6 +76,20 @@ describe('DiffViewer accessibility', () => {
     expect(screen.getByRole('button', { name: 'Previous search match' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Next search match' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Close diff search' })).toBeTruthy()
+  })
+
+  it('Shift+Tab in the diff scroll area requests focus back on the file tree', async () => {
+    const onRequestFocusFileTree = vi.fn()
+    render(DiffViewer, { props: { files, onRequestFocusFileTree } })
+
+    const scrollArea = screen.getByRole('region', { name: 'Diff scroll area' })
+
+    await fireEvent.keyDown(scrollArea, { key: 'Tab', shiftKey: true })
+    expect(onRequestFocusFileTree).toHaveBeenCalledTimes(1)
+
+    // Plain Tab should not request the tree (it moves focus forward as usual).
+    await fireEvent.keyDown(scrollArea, { key: 'Tab' })
+    expect(onRequestFocusFileTree).toHaveBeenCalledTimes(1)
   })
 
   it('exposes collapsed file diff state on file header buttons', async () => {

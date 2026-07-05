@@ -104,6 +104,9 @@ globalThis.Highlight = class MockHighlight {
 describe('DiffViewer Search', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Line wrapping defaults to on and persists to localStorage; clear it so tests
+    // don't depend on a persisted toggle from a previous test.
+    localStorage.clear()
   })
 
   it('passes the configured registerHighlighter through to DiffView', async () => {
@@ -338,7 +341,7 @@ describe('DiffViewer Search', () => {
 
     it('Wrap toggle button is always visible alongside the search icon', () => {
       render(DiffViewer, { props: { files: [] } })
-      expect(screen.getByTitle('Enable line wrapping')).toBeTruthy()
+      expect(screen.getByTitle(/line wrapping/i)).toBeTruthy()
       expect(screen.getByTitle('Search (⌘F)')).toBeTruthy()
     })
   })

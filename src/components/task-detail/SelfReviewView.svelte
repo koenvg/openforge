@@ -306,6 +306,7 @@
               onSelectFile={handleFileSelect}
               {reviewedFileShas}
               getFileReviewIdentity={getVisibleFileReviewIdentity}
+              onToggleFileReviewed={handleToggleFileReviewed}
             />
           </div>
           <ResizableBottomPanel

@@ -15,6 +15,7 @@
   import { onDestroy, tick } from 'svelte'
   import { sortFilesAsTree } from './fileSort'
   import { getFileStatusIcon, getFileStatusColor, getFileStatusLabel } from './fileStatus'
+  import { loadDiffViewWrap, saveDiffViewWrap } from './diffViewPreferences'
   import type { Snippet } from 'svelte'
   interface BaseProps {
     files?: PrFileDiff[]
@@ -27,6 +28,7 @@
     batchFetchFileContents?: (files: PrFileDiff[]) => Promise<Map<string, FileContents>>
     toolbarExtra?: Snippet
     fileHeaderExtra?: Snippet<[PrFileDiff]>
+    footer?: Snippet
     includeCommitted?: boolean
     includeUncommitted?: boolean
     agentComments?: AgentReviewComment[]
@@ -45,12 +47,13 @@
     reviewedFileShas?: Map<string, string>
     onToggleFileReviewed?: (file: PrFileDiff, reviewed: boolean) => void
     getFileReviewIdentity?: (file: PrFileDiff) => string | null
+    onRequestFocusFileTree?: () => void
   }
   type Props = BaseProps
-  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, fileHeaderExtra, includeCommitted = true, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onAgentCommentsChange, onUpdateAgentCommentStatus, onOpenUrl, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, diffTheme, reviewedFileShas = new Map(), onToggleFileReviewed, getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null }: Props = $props()
+  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, fileHeaderExtra, footer, includeCommitted = true, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onAgentCommentsChange, onUpdateAgentCommentStatus, onOpenUrl, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, diffTheme, reviewedFileShas = new Map(), onToggleFileReviewed, getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null, onRequestFocusFileTree }: Props = $props()
   let internalPendingComments = $state<ReviewSubmissionComment[]>([])
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
-  let diffViewWrap = $state(false)
+  let diffViewWrap = $state(loadDiffViewWrap())
   let commentText = $state('')
   type InlineCommentDraftSide = ReviewSubmissionComment['side']
   type InlineCommentDraftKey = {
@@ -177,6 +180,20 @@
       collapsedFiles = next
     }
   })
+
+  // Move keyboard focus onto the scroll area so arrow keys scroll the current file.
+  export function focusDiff() {
+    scrollContainerEl?.focus()
+  }
+
+  // Shift+Tab hands focus back to the file tree; other keys (arrows) fall through so the
+  // browser scrolls the focused scroll area natively.
+  function handleScrollAreaKeydown(event: KeyboardEvent) {
+    if (event.key === 'Tab' && event.shiftKey && onRequestFocusFileTree) {
+      event.preventDefault()
+      onRequestFocusFileTree()
+    }
+  }
 
   export function scrollToFile(filename: string) {
     const index = sortedFiles.findIndex(f => f.filename === filename)
@@ -446,7 +463,7 @@
     <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
     <button
       class="btn btn-ghost btn-xs {diffViewWrap ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
-      onclick={() => (diffViewWrap = !diffViewWrap)}
+      onclick={() => { diffViewWrap = !diffViewWrap; saveDiffViewWrap(diffViewWrap) }}
       title={diffViewWrap ? 'Disable line wrapping' : 'Enable line wrapping'}
       aria-label={diffViewWrap ? 'Disable line wrapping' : 'Enable line wrapping'}
       aria-pressed={diffViewWrap}
@@ -512,8 +529,10 @@
   <div
     role="region"
     aria-label="Diff scroll area"
-    class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-base-100"
+    class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-base-100 pr-2 focus:outline-none focus-visible:ring-2 focus:ring-2 focus:ring-primary focus:ring-inset"
+    tabindex="-1"
     bind:this={scrollContainerEl}
+    onkeydown={handleScrollAreaKeydown}
     ondblclick={search.handleDoubleClick}
     onclick={search.handleContainerClick}
     onscroll={(e) => onScrollTopChange?.(e.currentTarget.scrollTop)}
@@ -775,5 +794,6 @@
         {/each}
       </div>
     {/if}
+    {@render footer?.()}
   </div>
 </div>

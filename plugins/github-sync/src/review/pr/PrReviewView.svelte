@@ -75,6 +75,7 @@
   let authoredError = $state<string | null>(null)
   let githubTokenConfigured = $state<boolean | null>(null)
   let diffViewer = $state<DiffViewer>()
+  let prFileTree = $state<FileTree>()
   let fileTreeVisible = $state(true)
   let activeTab = $state<PrDetailTab>('overview')
   let reviewedFileShas = $state<Map<string, string>>(new Map())
@@ -206,16 +207,9 @@
       showFilterDropdown = false
       return
     }
-    if (isInputFocused()) return
-    if (e.metaKey || e.ctrlKey || e.altKey) return
-
-    // Detail mode
-    if ($selectedReviewPr) {
-      if (e.key === 'Escape' || e.key === 'q') {
-        e.preventDefault()
-        backToList()
-        return
-      }
+    // ⌘/Ctrl + 1/2/3 switch the PR detail tabs (Overview / Files changed / Walkthrough),
+    // matching the app's ⌘-based navigation. Works regardless of input focus.
+    if ($selectedReviewPr && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
       if (e.key === '1') {
         e.preventDefault()
         activeTab = 'overview'
@@ -229,6 +223,18 @@
       if (e.key === '3') {
         e.preventDefault()
         activeTab = 'walkthrough'
+        return
+      }
+    }
+
+    if (isInputFocused()) return
+    if (e.metaKey || e.ctrlKey || e.altKey) return
+
+    // Detail mode
+    if ($selectedReviewPr) {
+      if (e.key === 'Escape' || e.key === 'q') {
+        e.preventDefault()
+        backToList()
         return
       }
       return
@@ -749,14 +755,6 @@
           >GitHub ↗</span>
         </div>
         <div class="flex items-center">
-          <div class="flex items-center gap-2 text-xs text-base-content/50">
-            <span class="font-semibold text-base-content">#{$selectedReviewPr.number}</span>
-            <span class="text-base-300">•</span>
-            <span class="font-medium">{$selectedReviewPr.user_login}</span>
-            <span class="text-base-300">•</span>
-            <span>{timeAgoFromSeconds($selectedReviewPr.created_at)}</span>
-          </div>
-          <span class="flex-1"></span>
           <div class="flex gap-1" role="tablist" aria-label="Pull request detail sections">
             <button
               role="tab"
@@ -780,6 +778,14 @@
                 <span class="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-warning"></span>
               {/if}
             </button>
+          </div>
+          <span class="flex-1"></span>
+          <div class="flex items-center gap-2 text-xs text-base-content/50">
+            <span class="font-semibold text-base-content">#{$selectedReviewPr.number}</span>
+            <span class="text-base-300">•</span>
+            <span class="font-medium">{$selectedReviewPr.user_login}</span>
+            <span class="text-base-300">•</span>
+            <span>{timeAgoFromSeconds($selectedReviewPr.created_at)}</span>
           </div>
         </div>
       </div>
@@ -817,10 +823,13 @@
             {#if fileTreeVisible}
               <ResizablePanel storageKey="pr-review-file-tree" defaultWidth={260} minWidth={160} maxWidth={500} side="left">
                 <FileTree
+                  bind:this={prFileTree}
                   files={$prFileDiffs}
                   onSelectFile={handleFileSelect}
                   {reviewedFileShas}
                   getFileReviewIdentity={getReviewFileIdentity}
+                  onToggleFileReviewed={handleToggleFileReviewed}
+                  onRequestFocusDiff={() => diffViewer?.focusDiff()}
                 />
               </ResizablePanel>
             {/if}
@@ -842,19 +851,22 @@
               {reviewedFileShas}
               onToggleFileReviewed={handleToggleFileReviewed}
               getFileReviewIdentity={getReviewFileIdentity}
-            />
+              onRequestFocusFileTree={() => prFileTree?.focusTree()}
+            >
+              {#snippet footer()}
+                <ReviewSubmitPanel
+                  repoOwner={$selectedReviewPr.repo_owner}
+                  repoName={$selectedReviewPr.repo_name}
+                  prNumber={$selectedReviewPr.number}
+                  commitId={$selectedReviewPr.head_sha}
+                  pendingComments={$pendingManualComments}
+                  onPendingCommentsChange={(comments) => { $pendingManualComments = comments }}
+                  onSubmitReview={submitReview}
+                />
+              {/snippet}
+            </DiffViewer>
           {/if}
         </div>
-
-        <ReviewSubmitPanel
-          repoOwner={$selectedReviewPr.repo_owner}
-          repoName={$selectedReviewPr.repo_name}
-          prNumber={$selectedReviewPr.number}
-          commitId={$selectedReviewPr.head_sha}
-          pendingComments={$pendingManualComments}
-          onPendingCommentsChange={(comments) => { $pendingManualComments = comments }}
-          onSubmitReview={submitReview}
-        />
       {/if}
     </div>
   {:else}
