@@ -79,6 +79,14 @@ pub(super) async fn handle_app_core_task_project_command(
                     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?,
             )?
         }
+        "repo_has_commits" => {
+            let repo_path = payload_string(&request.payload, "repoPath")?;
+            json_value(
+                crate::git_worktree::repo_has_commits(std::path::Path::new(&repo_path))
+                    .await
+                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?,
+            )?
+        }
         "inspect_existing_branch" => {
             let repo_path = payload_string(&request.payload, "repoPath")?;
             let branch = payload_string(&request.payload, "branch")?;

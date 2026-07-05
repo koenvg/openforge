@@ -34,6 +34,7 @@ import {
   installPluginFromSource,
   killPty,
   killShellsForTask,
+  repoHasCommits,
   resizePty,
   spawnShellPty,
   transcribeAudio,
@@ -324,6 +325,14 @@ describe("ipc spawnShellPty", () => {
 		]);
 
 		expect(invokeMock).toHaveBeenCalledWith("list_git_branches", { repoPath: "/repo" });
+	});
+
+	it("checks whether a repo has commits through the typed IPC wrapper", async () => {
+		invokeMock.mockResolvedValueOnce(false);
+
+		await expect(repoHasCommits("/repo")).resolves.toBe(false);
+
+		expect(invokeMock).toHaveBeenCalledWith("repo_has_commits", { repoPath: "/repo" });
 	});
 
 	it("sends task edits as mutable prompt updates, not initialPrompt updates", async () => {
