@@ -1,12 +1,21 @@
 # OpenForge plugin authoring
 
-OpenForge plugins are trusted app extensions packaged as normal npm-style packages. They use the public `@openforge-app/plugin-sdk` contract and register contributions at runtime; they should not import OpenForge app internals.
+> Status: plugin API version `1`. OpenForge plugins are **trusted app extensions** packaged as normal npm-style packages. They use `@openforge-app/plugin-sdk` and must not import OpenForge app internals.
 
-For exact types, see `packages/plugin-sdk/src/types.ts`. For the architectural rationale and longer examples, see `docs/adr/0002-openforge-plugin-package-runtime.md`.
+This guide is the developer-facing starting point for creating plugins. For exact TypeScript contracts, see `packages/plugin-sdk/src/types.ts`. For historical rationale, see `docs/adr/0002-openforge-plugin-package-runtime.md`.
+
+## What a plugin can be
+
+An OpenForge plugin may ship either or both entry points:
+
+- **Frontend plugin**: runs in the renderer, contributes Svelte UI, and can use renderer-available host capabilities.
+- **Backend plugin**: runs in the trusted shared Node plugin host, registers backend RPC methods/background services, and can use backend host callbacks.
+
+Plugins are trusted code. They are not sandboxed widgets, and they should use the documented SDK capabilities instead of reaching into Electron, preload APIs, OpenForge stores, Rust sidecar endpoints, or other app internals.
 
 ## Package metadata
 
-Each plugin declares OpenForge metadata in `package.json#openforge` and ships already-built JavaScript entry points:
+Each plugin declares OpenForge metadata in `package.json#openforge` and ships already-built JavaScript entry points. OpenForge does not compile plugin source during installation.
 
 ```json
 {
@@ -31,17 +40,40 @@ Each plugin declares OpenForge metadata in `package.json#openforge` and ships al
 }
 ```
 
-Rules:
+Metadata rules:
 
-- `openforge.id` must be unique app-wide. Runtime contribution IDs are local and auto-qualified with this plugin id.
-- `openforge.apiVersion` is the compatibility gate. Current plugin SDK types expose API version `1`.
-- `frontend` and `backend` are optional, independent built artifacts. A frontend-only plugin can still use host task, project, storage, filesystem, shell, notification, and config capabilities when enabled by the host runtime.
-- `requires` should list the host capabilities the package expects so OpenForge can validate and explain missing support.
-- Installed packages should contain built artifacts; OpenForge does not compile source on install.
+- `openforge.id` must be unique app-wide. Runtime contribution IDs are local to the plugin and are auto-qualified with the plugin id.
+- `openforge.apiVersion` is the compatibility gate. The current SDK supports API version `1`.
+- `frontend` and `backend` are optional, independent built artifacts.
+- `requires` should list the host capabilities the package expects. Metadata validation rejects unknown capability names; runtime capability availability is still determined by the active OpenForge host.
+- Installed packages should include their built `dist/` artifacts.
+
+## SDK import surface
+
+Use the public package exports only:
+
+| Import | Use |
+| --- | --- |
+| `@openforge-app/plugin-sdk` | Shared types, metadata validation, package metadata schema constants, domain helpers, and plugin view key helpers |
+| `@openforge-app/plugin-sdk/frontend` | `defineFrontendPlugin(...)` and frontend plugin types |
+| `@openforge-app/plugin-sdk/backend` | `defineBackendPlugin(...)` and backend plugin types |
+| `@openforge-app/plugin-sdk/testing` | Registry fakes and mock APIs for plugin tests |
+| `@openforge-app/plugin-sdk/vite` | SDK build helper(s) for plugin packages |
+| `@openforge-app/plugin-sdk/package-metadata-schema.json` | JSON schema for validating `package.json#openforge` metadata |
+| `@openforge-app/plugin-sdk/domain` | Shared OpenForge domain types |
+| `@openforge-app/plugin-sdk/markdown` | Markdown rendering helpers |
+| `@openforge-app/plugin-sdk/numberParsing` | Numeric parsing helpers |
+| `@openforge-app/plugin-sdk/projectFileTree` | Project file tree helpers |
+| `@openforge-app/plugin-sdk/prStatusPresentation` | Pull request status presentation helpers |
+| `@openforge-app/plugin-sdk/sanitize` | Sanitization helpers |
+| `@openforge-app/plugin-sdk/ui/MarkdownContent.svelte` | Shared Markdown Svelte component |
+| `@openforge-app/plugin-sdk/ui/ResizablePanel.svelte` | Shared resizable-panel Svelte component |
+
+Do not import from `src/`, `src-tauri/`, Electron main/preload code, app stores, or undocumented package internals.
 
 ## Frontend entry point
 
-Frontend plugins run in the renderer and register UI contributions plus renderer-available host capabilities:
+Frontend plugins run in the renderer. Use them for UI contributions and renderer interactions.
 
 ```ts
 import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
@@ -64,14 +96,14 @@ Frontend-only registries and helpers:
 - `openforge.views.register(...)`
 - `openforge.taskPane.registerTab(...)`
 - `openforge.settings.registerSection(...)`
-- `openforge.navigation.get()` / `navigate(...)`
-- `openforge.backend.whenReady()` / `invoke(...)` for the same plugin's backend methods
+- `openforge.navigation.get()` / `openforge.navigation.navigate(...)`
+- `openforge.backend.whenReady()` / `openforge.backend.invoke(...)` for the same plugin's backend methods
 
 Svelte plugin components receive `api` and `context` props. Use Svelte 5 runes in components and avoid importing app stores directly.
 
 ## Backend entry point
 
-Backend plugins run in the trusted shared Node plugin-host sidecar. They are appropriate for Node dependencies, background services, and plugin-local RPC methods:
+Backend plugins run in the trusted shared Node plugin host. Use them for Node dependencies, long-running background services, and plugin-local RPC methods.
 
 ```ts
 import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
@@ -105,19 +137,23 @@ Backend-only registries:
 
 Backend plugins can also register commands/events and use common host capabilities through the backend host callback bridge. They cannot register Svelte views, task-pane tabs, settings sections, or use frontend-only navigation/backend-readiness helpers.
 
-## Capability availability
+## Capabilities
+
+Capabilities are host APIs exposed through the `openforge` object. Unsupported calls fail with named capability errors; they are not no-ops.
 
 | Capability group | Frontend runtime | Backend runtime |
 | --- | --- | --- |
 | `commands`, `events`, `storage`, `context` | Supported | Supported |
 | `tasks`, `projects`, `fs`, `shell`, `notifications`, `attention`, `system.openUrl`, `config`, `projectConfig` | Supported through the renderer host bridge when wired for the active runtime | Supported through backend host callbacks |
-| `views`, `taskPane`, `settings`, `navigation` | Supported in the renderer | Not exposed |
+| `views`, `taskPane`, `settings`, `navigation` | Supported | Not exposed |
 | `backend.whenReady`, `backend.invoke` | Supported for same-plugin backend RPC | Not applicable |
 | `backend.registerMethod`, `background.register` | Not exposed | Supported |
 
-Unavailable capabilities fail with named capability errors. Do not treat unsupported runtime calls as no-ops.
+Current declared capability names are:
 
-## Storage
+`commands`, `events`, `views`, `taskPane`, `settings`, `background`, `backend`, `storage`, `context`, `navigation`, `tasks`, `projects`, `fs`, `shell`, `notifications`, `attention`, `system.openUrl`, `config`, `projectConfig`.
+
+## Storage and configuration
 
 Plugin storage is JSON-only and automatically namespaced by plugin id. Use the narrowest scope that matches the lifetime of the data:
 
@@ -127,11 +163,17 @@ await openforge.storage.project(projectId).set('repo', { owner: 'acme', name: 'a
 await openforge.storage.task(taskId).set('reviewState', { viewedFiles: ['README.md'] })
 ```
 
-Use task storage for task-pane state, project storage for integration state tied to one project, and global storage for plugin-wide preferences.
+Use:
 
-## Scheduler-style task APIs
+- task storage for task-pane state
+- project storage for integration state tied to one project
+- global storage for plugin-wide preferences
+- `openforge.config` for plugin-scoped key/value config
+- `openforge.projectConfig` for project-scoped plugin config
 
-Plugins can create OpenForge tasks and start native implementation runs through the versioned `tasks` capability. This is the supported path for scheduler-style plugins; do not shell out to the OpenForge CLI or call Electron/preload APIs directly from plugin code.
+## Task and implementation APIs
+
+Plugins can create OpenForge Tasks and start native Implementation Runs through the versioned `tasks` capability. This is the supported path for scheduler-style plugins. Do not shell out to the OpenForge CLI or call Electron/preload APIs directly from plugin code.
 
 ```ts
 const task = await openforge.tasks.create({
@@ -156,14 +198,33 @@ await openforge.tasks.configureStartPromptContribution({
 
 Behavior and limits:
 
-- `projectId` is required for plugin-created tasks.
-- `tasks.create` creates backlog tasks. Plugins may attach dependency task IDs and label names; missing labels are created by the host.
+- `projectId` is required for plugin-created Tasks.
+- `tasks.create` creates backlog Tasks. Plugins may attach dependency task IDs and label names; missing labels are created by the host.
 - `tasks.startImplementation` starts OpenForge's native implementation flow and returns `{ taskId, sessionId, workspacePath }` once launch is accepted.
-- `tasks.configureStartPromptContribution({ projectId, id, enabled, content, order })` is the generic plugin-owned start-prompt contribution switch. The host stores bounded prompt text per project and injects enabled contributions before OpenForge's task prompt. The host substitutes `{{taskId}}`/`{{task_id}}`; plugins still own their contribution wording.
-- Projects that never configure contributions do not receive plugin-owned prompt text in new implementation prompts. Existing tasks that already had `handoff_notes_enabled` are migrated to an equivalent generic `handoff-notes-workflow` contribution so they keep their prior behavior.
 - The host resolves provider, agent, permission mode, model, branch/worktree strategy, and project checkout from OpenForge state. Plugins cannot override those execution settings in the API call or through start-prompt contribution configuration.
-- Starting an implementation can fail when dependencies are unmet, an active agent session already exists, the task/project cannot be resolved, the checkout/workspace cannot be prepared, or the configured provider/PTY runtime is unavailable.
+- Starting an Implementation Run can fail when dependencies are unmet, an active Agent Session already exists, the Task/Project cannot be resolved, the checkout/workspace cannot be prepared, or the configured provider/PTY runtime is unavailable.
 - `tasks.getWorkspace(taskId)` and `tasks.getLatestSession(taskId)` return `null` until OpenForge has recorded that state.
+
+## Files, shell, notifications, and links
+
+- Use `openforge.fs` for project-scoped file reads/writes/searches.
+- Use `openforge.shell` for task terminal sessions keyed by `{ taskId, terminalIndex }`.
+- Use `openforge.notifications.notify(...)` for host-mediated user notifications.
+- Use `openforge.system.openUrl(url)` for external links. Plugins should not call browser or Electron APIs directly.
+
+## What is not available
+
+The current SDK does not expose:
+
+- arbitrary provider/model/permission overrides for Implementation Runs
+- raw Electron, preload, Rust sidecar, SQLite, or app-store access
+- direct OpenForge CLI execution as a plugin integration contract
+- unscoped file-system access outside host-provided project file APIs
+- frontend registration APIs from backend plugins
+- backend method/background registration APIs from frontend plugins
+- sandbox isolation for untrusted third-party code
+
+If a plugin needs a host feature that is not listed in the SDK types, treat it as unavailable until OpenForge adds a documented capability.
 
 ## Testing plugins
 
@@ -191,9 +252,10 @@ For unit tests that only need an API object, use `createMockOpenForgeApi`, `crea
 
 ## Authoring checklist
 
-- Use only `@openforge-app/plugin-sdk`, `@openforge-app/plugin-sdk/frontend`, `@openforge-app/plugin-sdk/backend`, or documented npm dependencies from plugin code.
+- Use only documented `@openforge-app/plugin-sdk` exports and normal npm dependencies.
 - Register every contribution through `context.subscriptions.add(...)` so deactivation cleans up correctly.
-- Keep frontend and backend responsibilities separate.
-- Validate command/backend method inputs when data crosses runtime boundaries.
-- Prefer SDK task APIs for scheduler work.
+- Keep frontend UI responsibilities separate from backend/background responsibilities.
+- Validate command and backend-method inputs when data crosses runtime boundaries.
+- Prefer SDK task APIs for scheduler-style Task Creation and Implementation Run requests.
+- Use host capabilities for files, shell, notifications, links, config, and task/project data.
 - Add focused tests for registrations, storage scoping, task creation/start behavior, and lifecycle cleanup.
