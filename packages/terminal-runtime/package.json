@@ -22,7 +22,7 @@
     "svelte": "^5.0.0"
   },
   "scripts": {
-    "test": "vitest run",
+    "test": "cd ../.. && vitest run --config packages/terminal-runtime/vitest.config.ts",
     "build": "tsc --noEmit"
   }
 }
