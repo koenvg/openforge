@@ -14,7 +14,7 @@ vi.mock('../../lib/stores', () => ({
 }))
 
 vi.mock('../../lib/ipc', () => ({
-  addTaskLabel: vi.fn().mockResolvedValue({ id: 1, project_id: 'project-1', name: 'bug', color: 'error' }),
+  addTaskLabel: vi.fn().mockResolvedValue({ id: 1, project_id: 'project-1', name: 'bug' }),
   forceGithubSync: vi.fn().mockResolvedValue({
     new_comments: 0,
     ci_changes: 0,
@@ -37,7 +37,7 @@ vi.mock('../../lib/desktopIpc', () => ({
   listenDesktopEvent: vi.fn().mockResolvedValue(() => {}),
 }))
 
-const bugLabel: TaskLabel = { id: 1, project_id: 'project-1', name: 'bug', color: 'error' }
+const bugLabel: TaskLabel = { id: 1, project_id: 'project-1', name: 'bug' }
 
 const baseTask: Task = {
   id: 'T-748',

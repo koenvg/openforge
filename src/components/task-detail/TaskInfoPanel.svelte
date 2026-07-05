@@ -41,7 +41,7 @@
   let resumeCommand = $derived(getAgentSessionResumeCommand($activeSessions.get(task.id) || null))
 
   function labelSignature(nextLabels: TaskLabel[]): string {
-    return JSON.stringify(nextLabels.map((label) => [label.id, label.name, label.color]))
+    return JSON.stringify(nextLabels.map((label) => [label.id, label.name]))
   }
 
   function chipClass(tone: 'error' | 'warning' | 'success' | 'info'): string {

@@ -105,7 +105,7 @@ describe('plugin-host backend runtime', () => {
       id: 'T-created',
       initial_prompt: 'Scheduled prompt',
       depends_on: ['T-parent'],
-      labels: [{ id: 1, project_id: 'P-1', name: 'scheduled', color: 'primary' }],
+      labels: [{ id: 1, project_id: 'P-1', name: 'scheduled' }],
     }
     const hostCallbacks = async (request: { method: string; params: Record<string, unknown> }) => {
       calls.push(request)

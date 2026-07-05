@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { Task, TaskLabel } from './types'
 import { getBacklogLabelCounts, getLabelsWithBacklogItems, pruneSelectedBacklogLabelIds, taskMatchesAnySelectedLabel, validateTaskLabelName } from './taskLabels'
 
-const bug: TaskLabel = { id: 1, project_id: 'proj-1', name: 'Bug', color: 'error' }
-const ui: TaskLabel = { id: 2, project_id: 'proj-1', name: 'UI', color: 'primary' }
+const bug: TaskLabel = { id: 1, project_id: 'proj-1', name: 'Bug' }
+const ui: TaskLabel = { id: 2, project_id: 'proj-1', name: 'UI' }
 
 function task(id: string, status: Task['status'], labels: TaskLabel[] = []): Task {
   return {

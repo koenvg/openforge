@@ -10,8 +10,8 @@ vi.mock('../../lib/ipc', () => ({
   deleteTaskLabel: vi.fn().mockResolvedValue(undefined),
 }))
 
-const bugLabel: TaskLabel = { id: 1, project_id: 'P-1', name: 'bug', color: 'error' }
-const docsLabel: TaskLabel = { id: 2, project_id: 'P-1', name: 'docs', color: 'info' }
+const bugLabel: TaskLabel = { id: 1, project_id: 'P-1', name: 'bug' }
+const docsLabel: TaskLabel = { id: 2, project_id: 'P-1', name: 'docs' }
 
 beforeEach(() => {
   vi.clearAllMocks()

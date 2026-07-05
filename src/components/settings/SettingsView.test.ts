@@ -22,7 +22,7 @@ vi.mock('../../lib/ipc', () => ({
   openInEditor: vi.fn(() => Promise.resolve(undefined)),
   setWhisperModel: vi.fn(),
   getProjectTaskLabels: vi.fn(() => Promise.resolve([])),
-  createTaskLabel: vi.fn(() => Promise.resolve({ id: 1, project_id: 'test-project-id', name: 'bug', color: 'error' })),
+  createTaskLabel: vi.fn(() => Promise.resolve({ id: 1, project_id: 'test-project-id', name: 'bug' })),
   deleteTaskLabel: vi.fn(() => Promise.resolve(undefined)),
   installPluginFromLocal: vi.fn(),
   installPluginFromNpm: vi.fn(),
@@ -278,7 +278,7 @@ describe('SettingsView', () => {
   })
 
   it('renders Task Labels management on the project settings page', async () => {
-    vi.mocked(getProjectTaskLabels).mockResolvedValue([{ id: 1, project_id: 'test-project-id', name: 'bug', color: 'error' }])
+    vi.mocked(getProjectTaskLabels).mockResolvedValue([{ id: 1, project_id: 'test-project-id', name: 'bug' }])
     render(SettingsView, { props: defaultProps })
 
     expect(await screen.findByText('Task Labels')).toBeTruthy()

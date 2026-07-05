@@ -1,22 +1,12 @@
 use rusqlite::{OptionalExtension, Result};
 use serde::Serialize;
 
-const LABEL_COLORS: [&str; 7] = [
-    "primary",
-    "secondary",
-    "accent",
-    "info",
-    "success",
-    "warning",
-    "error",
-];
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct TaskLabelRow {
     pub id: i64,
     pub project_id: String,
     pub name: String,
-    pub color: String,
 }
 
 /// Task row from database
@@ -99,7 +89,7 @@ fn load_task_dependency_ids(conn: &rusqlite::Connection, task_id: &str) -> Resul
 fn load_task_labels(conn: &rusqlite::Connection, task_id: &str) -> Result<Vec<TaskLabelRow>> {
     let mut stmt = conn.prepare(
         r#"
-SELECT l.id, l.project_id, l.name, l.color
+SELECT l.id, l.project_id, l.name
 FROM task_labels l
 INNER JOIN task_label_assignments tla ON tla.label_id = l.id
 WHERE tla.task_id = ?1
@@ -111,7 +101,6 @@ ORDER BY l.name COLLATE NOCASE ASC, l.id ASC
             id: row.get(0)?,
             project_id: row.get(1)?,
             name: row.get(2)?,
-            color: row.get(3)?,
         })
     })?;
     let mut result = Vec::new();
@@ -140,28 +129,19 @@ fn normalized_label_key(name: &str) -> Result<String> {
     Ok(normalize_label_name(name)?.to_lowercase())
 }
 
-fn label_color_for_name(name: &str) -> String {
-    let key = name.trim().to_lowercase();
-    let mut hash: usize = 0;
-    for byte in key.bytes() {
-        hash = hash.wrapping_mul(31).wrapping_add(byte as usize);
-    }
-    LABEL_COLORS[hash % LABEL_COLORS.len()].to_string()
-}
 
 fn query_task_label_by_id(
     conn: &rusqlite::Connection,
     label_id: i64,
 ) -> Result<Option<TaskLabelRow>> {
     conn.query_row(
-        "SELECT id, project_id, name, color FROM task_labels WHERE id = ?1",
+        "SELECT id, project_id, name FROM task_labels WHERE id = ?1",
         [label_id],
         |row| {
             Ok(TaskLabelRow {
                 id: row.get(0)?,
                 project_id: row.get(1)?,
                 name: row.get(2)?,
-                color: row.get(3)?,
             })
         },
     )
@@ -685,14 +665,13 @@ impl super::Database {
     pub fn get_project_task_labels(&self, project_id: &str) -> Result<Vec<TaskLabelRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, project_id, name, color FROM task_labels WHERE project_id = ?1 ORDER BY name COLLATE NOCASE ASC, id ASC",
+            "SELECT id, project_id, name FROM task_labels WHERE project_id = ?1 ORDER BY name COLLATE NOCASE ASC, id ASC",
         )?;
         let rows = stmt.query_map([project_id], |row| {
             Ok(TaskLabelRow {
                 id: row.get(0)?,
                 project_id: row.get(1)?,
                 name: row.get(2)?,
-                color: row.get(3)?,
             })
         })?;
         let mut result = Vec::new();
@@ -724,10 +703,9 @@ impl super::Database {
             .duration_since(std::time::UNIX_EPOCH)
             .expect("time went backwards")
             .as_secs() as i64;
-        let color = label_color_for_name(&name);
         conn.execute(
-            "INSERT INTO task_labels (project_id, name, name_normalized, color, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            rusqlite::params![project_id, name, key, color, now, now],
+            "INSERT INTO task_labels (project_id, name, name_normalized, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![project_id, name, key, now, now],
         )?;
         let label_id = conn.last_insert_rowid();
         query_task_label_by_id(&conn, label_id)?.ok_or_else(|| {
