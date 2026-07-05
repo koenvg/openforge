@@ -9,6 +9,7 @@
     reviewedFileShas?: Map<string, string>
     getFileReviewIdentity?: (file: PrFileDiff) => string | null
     onToggleFileReviewed?: (file: PrFileDiff, reviewed: boolean) => void
+    onRequestFocusDiff?: () => void
   }
 
   let {
@@ -17,11 +18,23 @@
     reviewedFileShas = new Map(),
     getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null,
     onToggleFileReviewed,
+    onRequestFocusDiff,
   }: Props = $props()
 
   let selectedFile = $state<string | null>(null)
   let expandedDirs = $state(new Set<string>())
   let treeEl = $state<HTMLElement | null>(null)
+  // The tree container is the single keyboard focus holder (activedescendant-style). The
+  // active row is highlighted purely via CSS (`group-focus-within`) whenever the tree holds
+  // focus, so keyboard users always see where they are without every row being a tab stop
+  // and without depending on JS focus/blur event timing.
+
+  // Lets a host move keyboard focus back to the tree (e.g. Shift+Tab from the diff pane)
+  // and land on the currently selected file so it's clearly highlighted.
+  export function focusTree() {
+    treeEl?.focus()
+    void tick().then(revealSelectedRow)
+  }
 
   interface TreeNode {
     name: string
@@ -124,6 +137,9 @@
   function handleFileClick(file: PrFileDiff) {
     selectedFile = file.filename
     onSelectFile(file.filename)
+    // Keep keyboard focus on the tree so the arrow keys work right after a mouse click,
+    // and the active-row highlight stays in sync.
+    treeEl?.focus()
   }
 
   function handleReviewedChange(file: PrFileDiff, event: Event) {
@@ -165,16 +181,20 @@
     flattenedNodes.map(({ node }) => node.file).filter((file): file is PrFileDiff => !!file),
   )
 
-  function focusSelectedRow() {
+  // The row highlighted while the tree has keyboard focus: the selected file, or the first
+  // visible file when nothing is selected yet (so Tab-ing in lands somewhere visible).
+  let activeRowFilename = $derived(selectedFile ?? (visibleFiles[0]?.filename ?? null))
+
+  // Scroll the selected row into view without moving focus off the tree container.
+  function revealSelectedRow() {
     if (!treeEl || !selectedFile) return
     try {
       const row = treeEl.querySelector(`[data-file="${CSS.escape(selectedFile)}"]`)
       if (row instanceof HTMLElement) {
-        row.focus()
         row.scrollIntoView({ block: 'nearest' })
       }
     } catch {
-      // Focus/scroll is a progressive enhancement; ignore lookup failures.
+      // Scrolling is a progressive enhancement; ignore lookup failures.
     }
   }
 
@@ -187,7 +207,14 @@
     if (next.filename === selectedFile) return
     selectedFile = next.filename
     onSelectFile(next.filename)
-    void tick().then(focusSelectedRow)
+    void tick().then(revealSelectedRow)
+  }
+
+  function toggleActiveFileReviewed() {
+    if (!onToggleFileReviewed || !activeRowFilename) return
+    const file = visibleFiles.find((candidate) => candidate.filename === activeRowFilename)
+    if (!file) return
+    onToggleFileReviewed(file, !isFileReviewed(file))
   }
 
   function setSelectedParentDirExpanded(expanded: boolean) {
@@ -206,11 +233,10 @@
     // <body> and break further keyboard nav. Keep focus on the tree so arrows keep
     // working; expanding re-reveals the row, so return focus to it.
     void tick().then(() => {
-      if (expanded) {
-        focusSelectedRow()
-      } else {
-        treeEl?.focus()
-      }
+      // Keep focus on the tree container either way so keyboard nav continues; when
+      // re-expanding, also scroll the revealed row back into view.
+      treeEl?.focus()
+      if (expanded) revealSelectedRow()
     })
   }
 
@@ -232,6 +258,21 @@
         event.preventDefault()
         setSelectedParentDirExpanded(false)
         break
+      case 'Tab':
+        // Tab hands keyboard focus over to the diff pane so the reviewer can scroll a
+        // tall file; Shift+Tab keeps the browser default (handled back from the diff side).
+        if (!event.shiftKey && onRequestFocusDiff) {
+          event.preventDefault()
+          onRequestFocusDiff()
+        }
+        break
+      case ' ':
+        // Space toggles the reviewed ("viewed") state of the focused file.
+        if (onToggleFileReviewed && activeRowFilename) {
+          event.preventDefault()
+          toggleActiveFileReviewed()
+        }
+        break
     }
   }
 </script>
@@ -246,7 +287,7 @@
   </div>
 
   <div
-    class="flex-1 overflow-y-auto py-2 focus:outline-none"
+    class="flex-1 overflow-y-auto py-2 focus:outline-none group/tree"
     role="tree"
     aria-label="Changed files"
     tabindex="0"
@@ -260,6 +301,7 @@
           class="w-full flex items-center gap-2 text-xs text-base-content cursor-pointer hover:bg-base-content/5 transition-colors py-1.5 pr-3"
           style="padding-left: {12 + depth * 16}px"
           role="treeitem"
+          tabindex="-1"
           aria-label="{expanded ? 'Collapse' : 'Expand'} {node.fullPath}"
           aria-expanded={expanded}
           aria-selected={false}
@@ -271,22 +313,25 @@
       {:else if node.file}
         {@const reviewed = isFileReviewed(node.file)}
         {@const selected = selectedFile === node.file.filename}
+        {@const active = node.file.filename === activeRowFilename}
         <div
-          class="flex items-center w-full gap-1.5 pr-3 {selected ? 'bg-primary/10 border-l-2 border-l-primary' : 'hover:bg-primary/5'}"
+          class="flex items-center w-full gap-1.5 pr-3 {selected ? 'bg-primary/10 border-l-2 border-l-primary' : 'hover:bg-primary/5'} {active ? 'group-focus-within/tree:ring-2 group-focus-within/tree:ring-primary group-focus-within/tree:ring-inset group-focus-within/tree:rounded-sm' : ''}"
           style="padding-left: {selected ? 10 + depth * 16 : 12 + depth * 16}px"
         >
           {#if onToggleFileReviewed}
             <input
               type="checkbox"
               class="checkbox checkbox-xs shrink-0"
+              tabindex="-1"
               aria-label="Toggle reviewed for {node.file.filename}"
               checked={reviewed}
               onchange={(event) => node.file && handleReviewedChange(node.file, event)}
             />
           {/if}
           <button
-            class="flex-1 min-w-0 flex items-center gap-2 text-xs transition-colors py-1.5 text-base-content text-left"
+            class="flex-1 min-w-0 flex items-center gap-2 text-xs transition-colors py-1.5 text-base-content text-left focus:outline-none"
             role="treeitem"
+            tabindex="-1"
             data-file={node.file.filename}
             aria-label="{selected ? 'Selected' : 'Select'} file {node.file.filename}{reviewed ? ' (reviewed)' : ''}"
             aria-selected={selected}

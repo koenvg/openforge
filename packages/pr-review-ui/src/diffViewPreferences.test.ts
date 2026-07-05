@@ -13,20 +13,20 @@ describe('diff view wrap preference', () => {
     localStorage.clear()
   })
 
-  it('defaults to true when nothing is stored', () => {
-    expect(loadDiffViewWrap()).toBe(true)
+  it('defaults to false when nothing is stored', () => {
+    expect(loadDiffViewWrap()).toBe(false)
   })
 
   it('round-trips a saved preference', () => {
-    saveDiffViewWrap(false)
-    expect(loadDiffViewWrap()).toBe(false)
-
     saveDiffViewWrap(true)
     expect(loadDiffViewWrap()).toBe(true)
+
+    saveDiffViewWrap(false)
+    expect(loadDiffViewWrap()).toBe(false)
   })
 
   it('falls back to the default when the stored value is malformed', () => {
     localStorage.setItem(DIFF_VIEW_WRAP_STORAGE_KEY, 'not-a-bool')
-    expect(loadDiffViewWrap()).toBe(true)
+    expect(loadDiffViewWrap()).toBe(false)
   })
 })

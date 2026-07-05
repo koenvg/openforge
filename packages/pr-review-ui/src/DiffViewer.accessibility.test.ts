@@ -65,17 +65,31 @@ describe('DiffViewer accessibility', () => {
     expect(screen.getByRole('button', { name: 'Split diff view' }).getAttribute('aria-pressed')).toBe('false')
     expect(screen.getByRole('button', { name: 'Unified diff view' }).getAttribute('aria-pressed')).toBe('true')
 
-    // Line wrapping defaults to on, so the button starts in the "Disable" (pressed) state.
-    const wrapButton = screen.getByRole('button', { name: 'Disable line wrapping' })
-    expect(wrapButton.getAttribute('aria-pressed')).toBe('true')
+    // Line wrapping defaults to off, so the button starts in the "Enable" (unpressed) state.
+    const wrapButton = screen.getByRole('button', { name: 'Enable line wrapping' })
+    expect(wrapButton.getAttribute('aria-pressed')).toBe('false')
     await fireEvent.click(wrapButton)
-    expect(screen.getByRole('button', { name: 'Enable line wrapping' }).getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByRole('button', { name: 'Disable line wrapping' }).getAttribute('aria-pressed')).toBe('true')
 
     await fireEvent.click(screen.getByRole('button', { name: 'Search diff' }))
     expect(screen.getByRole('textbox', { name: 'Search diff text' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Previous search match' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Next search match' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Close diff search' })).toBeTruthy()
+  })
+
+  it('Shift+Tab in the diff scroll area requests focus back on the file tree', async () => {
+    const onRequestFocusFileTree = vi.fn()
+    render(DiffViewer, { props: { files, onRequestFocusFileTree } })
+
+    const scrollArea = screen.getByRole('region', { name: 'Diff scroll area' })
+
+    await fireEvent.keyDown(scrollArea, { key: 'Tab', shiftKey: true })
+    expect(onRequestFocusFileTree).toHaveBeenCalledTimes(1)
+
+    // Plain Tab should not request the tree (it moves focus forward as usual).
+    await fireEvent.keyDown(scrollArea, { key: 'Tab' })
+    expect(onRequestFocusFileTree).toHaveBeenCalledTimes(1)
   })
 
   it('exposes collapsed file diff state on file header buttons', async () => {

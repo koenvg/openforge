@@ -42,19 +42,24 @@ the Walkthrough tab. This is intentional for consistency and minimum code.
 
 ## Changes
 
-### 1. Line wrapping in split view (default on)
+### 1. Line wrapping in split view (persisted, default off)
 
 `DiffViewer.svelte` already has a `diffViewWrap` state (`$state(false)`) and a toolbar
 toggle that passes `diffViewWrap` to `<DiffView>`; `@git-diff-view/svelte` wraps long
 lines when it is `true`.
 
-- Change the default to **on** (`true`).
-- Persist the toggle choice in `localStorage` (e.g. key
-  `openforge.prReviewUi.diffViewWrap.v1`) so the reviewer's preference survives navigation
-  and app restarts. Read the persisted value on init, falling back to `true`.
-- Keep the existing toggle button so horizontal scroll remains available on demand.
+- Keep the default **off** (`false`) — the original behavior, so nothing changes on first
+  view.
+- Persist the toggle choice in `localStorage` (key
+  `openforge.prReviewUi.diffViewWrap.v1`) so the reviewer's preference survives navigation,
+  projects, and app restarts. Read the persisted value on init, falling back to `false`.
+  Net effect: enabling wrap once makes it stick everywhere until toggled back off.
+- Keep the existing toggle button.
 
 No CSS changes needed — the library handles wrapping via the prop.
+
+> **Update:** an earlier revision defaulted wrapping to on; that was reverted per user
+> request. The persistence (a single global preference) is retained.
 
 ### 2. Un-pin the review submit panel
 
@@ -124,7 +129,36 @@ In `PrReviewView.svelte`'s header second row, the order is currently
 - Reorder to `[Overview][Files changed][Walkthrough] …flex-1 spacer… [PR metadata]` so the
   tabs pin to the left and the metadata (`#num · author · time`) moves to the right of the
   same row.
-- No behavior change; tab state and the `1/2/3` shortcuts are untouched.
+- No layout-behavior change beyond the reorder.
+
+### 6. ⌘1 / ⌘2 / ⌘3 tab shortcuts
+
+`handlePrReviewKeydown` in `PrReviewView.svelte` previously switched the detail tabs with
+bare `1`/`2`/`3`.
+
+- Switch the shortcut to **⌘/Ctrl + 1/2/3** (Overview / Files changed / Walkthrough),
+  matching the app's ⌘-based navigation. Handle the chord before the input-focus and
+  modifier guards so it works even while typing; remove the bare-number shortcuts.
+
+### 7. Focus flow between the file tree and the diff pane
+
+To read a file taller than the viewport, the reviewer needs to scroll *within* a file
+without ↓/↑ jumping to the next file.
+
+- **Tab** from the file tree moves keyboard focus to the diff scroll area; **↓/↑ then
+  scroll the current file natively**. **Shift+Tab** returns focus to the tree, where ↓/↑
+  resume switching files. Wired via `FileTree.onRequestFocusDiff` / `focusTree()` and
+  `DiffViewer.onRequestFocusFileTree` / `focusDiff()` connected in `PrReviewView`.
+- The file tree is a **single keyboard tab stop**: the `role="tree"` container holds focus
+  (`tabindex="0"`) and highlights the active row (activedescendant-style) via a focus ring
+  while focused; individual rows and the reviewed checkboxes are `tabindex="-1"` so Tab
+  doesn't stop on each one. This makes the tree reachable and visibly focused by keyboard,
+  and makes Shift+Tab land back on the selected file with a visible highlight.
+- **Space** toggles the reviewed ("viewed") checkbox of the focused file, keeping the
+  reviewed toggle keyboard-accessible even though the checkboxes aren't individual tab
+  stops.
+- The diff scroll area is `tabindex="-1"` with a focus ring; arrow keys fall through to the
+  browser's native scroll (only Shift+Tab is intercepted).
 
 ## Testing strategy
 

@@ -99,6 +99,91 @@ describe('FileTree keyboard navigation', () => {
     expect(onSelectFile).toHaveBeenCalledWith('b/y.ts')
   })
 
+  it('is a single keyboard tab stop: the tree owns focus, rows and checkboxes are not tab stops', () => {
+    render(FileTree, {
+      props: {
+        files: [makeFile('a/x.ts'), makeFile('a/y.ts')],
+        onSelectFile: vi.fn(),
+        onToggleFileReviewed: vi.fn(),
+      },
+    })
+
+    expect(screen.getByRole('tree').getAttribute('tabindex')).toBe('0')
+    for (const item of screen.getAllByRole('treeitem')) {
+      expect(item.getAttribute('tabindex')).toBe('-1')
+    }
+    for (const checkbox of screen.getAllByRole('checkbox')) {
+      expect(checkbox.getAttribute('tabindex')).toBe('-1')
+    }
+  })
+
+  it('Tab requests focus on the diff pane and does not navigate files', async () => {
+    const onSelectFile = vi.fn()
+    const onRequestFocusDiff = vi.fn()
+    render(FileTree, {
+      props: { files: [makeFile('a/x.ts'), makeFile('a/y.ts')], onSelectFile, onRequestFocusDiff },
+    })
+
+    await fireEvent.click(screen.getByRole('treeitem', { name: 'Select file a/x.ts' }))
+    onSelectFile.mockClear()
+
+    await fireEvent.keyDown(screen.getByRole('tree'), { key: 'Tab' })
+
+    expect(onRequestFocusDiff).toHaveBeenCalledTimes(1)
+    expect(onSelectFile).not.toHaveBeenCalled()
+  })
+
+  it('Shift+Tab in the tree does not request diff focus', async () => {
+    const onRequestFocusDiff = vi.fn()
+    render(FileTree, {
+      props: { files: [makeFile('a/x.ts')], onSelectFile: vi.fn(), onRequestFocusDiff },
+    })
+
+    await fireEvent.keyDown(screen.getByRole('tree'), { key: 'Tab', shiftKey: true })
+
+    expect(onRequestFocusDiff).not.toHaveBeenCalled()
+  })
+
+  it('Space marks the focused (unreviewed) file as reviewed', async () => {
+    const onToggleFileReviewed = vi.fn()
+    render(FileTree, {
+      props: {
+        files: [makeFile('a/x.ts'), makeFile('a/y.ts')],
+        onSelectFile: vi.fn(),
+        onToggleFileReviewed,
+      },
+    })
+
+    await fireEvent.click(screen.getByRole('treeitem', { name: 'Select file a/x.ts' }))
+    await fireEvent.keyDown(screen.getByRole('tree'), { key: ' ' })
+
+    expect(onToggleFileReviewed).toHaveBeenCalledWith(
+      expect.objectContaining({ filename: 'a/x.ts' }),
+      true,
+    )
+  })
+
+  it('Space unmarks the focused (reviewed) file', async () => {
+    const file = makeFile('a/x.ts')
+    const onToggleFileReviewed = vi.fn()
+    render(FileTree, {
+      props: {
+        files: [file],
+        onSelectFile: vi.fn(),
+        onToggleFileReviewed,
+        reviewedFileShas: new Map([[file.filename, file.sha]]),
+      },
+    })
+
+    await fireEvent.click(screen.getByRole('treeitem', { name: /file a\/x\.ts/ }))
+    await fireEvent.keyDown(screen.getByRole('tree'), { key: ' ' })
+
+    expect(onToggleFileReviewed).toHaveBeenCalledWith(
+      expect.objectContaining({ filename: 'a/x.ts' }),
+      false,
+    )
+  })
+
   it('ArrowDown skips files inside collapsed folders', async () => {
     const onSelectFile = vi.fn()
     render(FileTree, {

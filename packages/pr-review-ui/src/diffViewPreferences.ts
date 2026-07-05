@@ -1,12 +1,12 @@
 // Persisted user preferences for the diff viewer.
 //
-// Line wrapping defaults to ON so the split view fits the available width (like GitHub)
-// instead of scrolling horizontally. The reviewer's toggle choice is remembered across
-// PRs and app restarts.
+// Line wrapping defaults to OFF (the original behavior). The reviewer's toggle choice is
+// remembered across PRs, projects, and app restarts, so enabling wrap once makes it stick
+// everywhere until toggled back off.
 
 export const DIFF_VIEW_WRAP_STORAGE_KEY = 'openforge.prReviewUi.diffViewWrap.v1'
 
-const DEFAULT_DIFF_VIEW_WRAP = true
+const DEFAULT_DIFF_VIEW_WRAP = false
 
 export function loadDiffViewWrap(): boolean {
   try {
