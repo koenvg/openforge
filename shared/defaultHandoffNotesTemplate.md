@@ -1,5 +1,5 @@
-## Current summary
-Brief status of what changed and whether the task is ready for review.
+## Summary
+Brief accumulated summary of what changed and whether the task is ready for review.
 
 ## Decisions made
 Key choices and trade-offs.

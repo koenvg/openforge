@@ -382,7 +382,7 @@ describe('SettingsView', () => {
   it('renders the project handoff notes template textarea', () => {
     render(SettingsView, { props: defaultProps })
     expect(screen.getByText('Handoff Notes Template')).toBeTruthy()
-    expect(screen.getByPlaceholderText(/## Current summary/i)).toBeTruthy()
+    expect(screen.getByPlaceholderText(/## Summary/i)).toBeTruthy()
   })
 
   it('renders GitHub PAT field on global page', () => {
