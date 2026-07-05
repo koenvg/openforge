@@ -511,7 +511,7 @@
         {:else if pluginViewActive}
           <PluginSlot slotType="views" slotId={$currentView} />
         {:else if selectedTask}
-          <TaskDetailView task={selectedTask} onRunAction={handleRunAction} onEdit={openEditTask} onTaskUpdated={async () => { await appData.loadTasks() }} />
+          <TaskDetailView task={selectedTask} onRunAction={handleRunAction} onEdit={openEditTask} onOpenTask={handleOpenTask} onTaskUpdated={async () => { await appData.loadTasks() }} />
         {:else}
           <div class="flex-1 overflow-hidden">
             {#if $isLoading && $tasks.length === 0}

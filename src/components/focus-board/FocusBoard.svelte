@@ -449,6 +449,7 @@
         allTasks={tasks}
         pullRequests={selectedTask ? ticketPrs.get(selectedTask.id) ?? [] : []}
         onEditTask={onEditTask}
+        onOpenLinkedTask={onOpenTask}
         onOpenFullView={() => {
           if (selectedTaskIdLocal) onOpenTask(selectedTaskIdLocal)
         }}

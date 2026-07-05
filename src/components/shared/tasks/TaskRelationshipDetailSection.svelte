@@ -12,9 +12,10 @@
     items: RelationshipSummary[]
     waitingDependencyCount?: number
     density?: SectionDensity
+    onOpenDependentTask?: (taskId: string) => void
   }
 
-  let { kind, items, waitingDependencyCount = 0, density = 'full' }: Props = $props()
+  let { kind, items, waitingDependencyCount = 0, density = 'full', onOpenDependentTask }: Props = $props()
 
   let isFull = $derived(density === 'full')
   let isDependencies = $derived(kind === 'dependencies')
@@ -34,6 +35,7 @@
   let idSpanClass = $derived(isFull ? 'font-mono shrink-0' : 'font-mono')
   let statusSpanClass = $derived(isFull ? 'opacity-80 shrink-0' : 'opacity-80')
   let readinessSpanClass = $derived(isFull ? 'opacity-80 shrink-0' : 'opacity-80')
+  let clickableBadgeClass = $derived(`${badgeClass} hover:brightness-95 cursor-pointer`)
   let dependencyLabel = $derived(isFull ? 'dependency' : 'dep')
   let dependencyPluralLabel = $derived(isFull ? 'dependencies' : 'deps')
   let dependencyWaitingText = $derived(waitingDependencyCount === 0
@@ -49,6 +51,10 @@
   function getReadinessLabel(item: RelationshipSummary): string {
     return getDependentReadinessLabel(item as TaskDependentSummary, isFull)
   }
+
+  function canOpenDependentTask(): boolean {
+    return !isDependencies && onOpenDependentTask !== undefined
+  }
 </script>
 
 {#if items.length > 0}
@@ -61,16 +67,32 @@
     <div class={itemListClass}>
       {#each items as item (item.id)}
         {@const statusPresentation = getDependencyStatusPresentation(item.status)}
-        <span class="{badgeClass} {statusPresentation.badgeClass}" title={item.tooltipTitle}>
-          <span class={idSpanClass}>{item.id}</span>
-          <span class={statusSpanClass}>{statusPresentation.label}</span>
-          {#if hasDisplayTitle(item)}
-            <span class={titleSpanClass}>{item.displayTitle}</span>
-          {/if}
-          {#if !isDependencies}
+        {#if canOpenDependentTask()}
+          <button
+            type="button"
+            class="{clickableBadgeClass} {statusPresentation.badgeClass}"
+            title={item.tooltipTitle}
+            onclick={() => onOpenDependentTask?.(item.id)}
+          >
+            <span class={idSpanClass}>{item.id}</span>
+            <span class={statusSpanClass}>{statusPresentation.label}</span>
+            {#if hasDisplayTitle(item)}
+              <span class={titleSpanClass}>{item.displayTitle}</span>
+            {/if}
             <span class={readinessSpanClass}>· {getReadinessLabel(item)}</span>
-          {/if}
-        </span>
+          </button>
+        {:else}
+          <span class="{badgeClass} {statusPresentation.badgeClass}" title={item.tooltipTitle}>
+            <span class={idSpanClass}>{item.id}</span>
+            <span class={statusSpanClass}>{statusPresentation.label}</span>
+            {#if hasDisplayTitle(item)}
+              <span class={titleSpanClass}>{item.displayTitle}</span>
+            {/if}
+            {#if !isDependencies}
+              <span class={readinessSpanClass}>· {getReadinessLabel(item)}</span>
+            {/if}
+          </span>
+        {/if}
       {/each}
     </div>
     {#if isFull}

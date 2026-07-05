@@ -29,10 +29,11 @@
     task: Task
     onRunAction: (data: { taskId: string; actionPrompt: string; agent: string | null }) => void
     onEdit?: (taskId: string) => void
+    onOpenTask?: (taskId: string) => void
     onTaskUpdated?: () => void | Promise<void>
   }
 
-  let { task, onRunAction, onEdit, onTaskUpdated }: Props = $props()
+  let { task, onRunAction, onEdit, onOpenTask, onTaskUpdated }: Props = $props()
 
   const titleRename = createTaskTitleRename(() => task, () => onTaskUpdated?.())
 
@@ -399,7 +400,7 @@
                 data-scroll-owner="task-info-panel"
                 class="h-full min-h-0 overflow-y-auto bg-base-200 border-l border-base-300"
               >
-                <TaskInfoPanel task={task} {workspacePath} onEditPrompt={onEdit ? () => onEdit?.(task.id) : undefined} />
+                <TaskInfoPanel task={task} {workspacePath} onEditPrompt={onEdit ? () => onEdit?.(task.id) : undefined} onOpenDependentTask={onOpenTask} />
               </div>
             </ResizablePanel>
           {/if}

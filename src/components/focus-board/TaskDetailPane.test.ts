@@ -192,6 +192,30 @@ describe('TaskDetailPane', () => {
     expect(onOpenFullView).toHaveBeenCalledOnce()
   })
 
+  it('opens a dependent task from the focus-board side panel', async () => {
+    const onOpenLinkedTask = vi.fn()
+    const dependentTask = {
+      ...baseTask,
+      id: 'T-900',
+      initial_prompt: 'Continue after the dashboard bug is fixed.',
+      depends_on: [baseTask.id],
+    }
+
+    render(TaskDetailPane, {
+      props: {
+        task: baseTask,
+        allTasks: [baseTask, dependentTask],
+        pullRequests: [],
+        onOpenLinkedTask,
+      },
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: /T-900/ }))
+
+    expect(onOpenLinkedTask).toHaveBeenCalledWith('T-900')
+    expect(onOpenLinkedTask).toHaveBeenCalledTimes(1)
+  })
+
   it('matches the full Task Attention Pane information order', async () => {
     render(TaskDetailPane, {
       props: {

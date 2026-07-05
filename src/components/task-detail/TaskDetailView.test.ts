@@ -220,7 +220,7 @@ vi.mock('../../lib/actions', () => ({
   getEnabledActions: vi.fn((actions: { enabled: boolean }[]) => actions.filter(a => a.enabled)),
 }))
 
-import { activeSessions, completingTasks, taskActiveView, commandHeld, taskRuntimeInfo } from '../../lib/stores'
+import { activeSessions, completingTasks, taskActiveView, commandHeld, taskRuntimeInfo, tasks } from '../../lib/stores'
 import type { Task, AgentSession, TaskWorkspaceInfo } from '../../lib/types'
 import PluginSlotTestView from '../plugin/PluginSlotTestView.svelte'
 import TerminalTaskPane from './TerminalTaskPane.svelte'
@@ -311,6 +311,7 @@ describe('TaskDetailView', () => {
     taskRuntimeInfo.set(new Map())
     completingTasks.set(new Set())
     commandHeld.set(false)
+    tasks.set([])
     taskTabSessions.clear()
     clearTerminalTaskPaneControllers()
     installedPlugins.set(new Map([[
@@ -405,6 +406,22 @@ describe('TaskDetailView', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onEdit } })
     await fireEvent.click(await screen.findByRole('button', { name: 'Edit prompt' }))
     expect(onEdit).toHaveBeenCalledWith('T-42')
+  })
+
+  it('opens a dependent task from the task view info panel', async () => {
+    const onOpenTask = vi.fn()
+    const dependentTask = {
+      ...secondaryTask,
+      depends_on: [baseTask.id],
+    }
+    tasks.set([baseTask, dependentTask])
+
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onOpenTask } })
+
+    await fireEvent.click(screen.getByRole('button', { name: /T-99/ }))
+
+    expect(onOpenTask).toHaveBeenCalledWith('T-99')
+    expect(onOpenTask).toHaveBeenCalledTimes(1)
   })
 
   it('hides all action buttons for done tasks', () => {

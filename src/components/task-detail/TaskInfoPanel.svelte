@@ -22,9 +22,10 @@
     allowCommentAddressing?: boolean
     surface?: 'default' | 'transparent'
     onEditPrompt?: () => void
+    onOpenDependentTask?: (taskId: string) => void
   }
 
-  let { task, workspacePath, allTasksOverride, taskPrsOverride, allowCommentAddressing = false, surface = 'default', onEditPrompt }: Props = $props()
+  let { task, workspacePath, allTasksOverride, taskPrsOverride, allowCommentAddressing = false, surface = 'default', onEditPrompt, onOpenDependentTask }: Props = $props()
 
   let labels = $state<TaskLabel[]>([])
   let previousTaskId: string | null = null
@@ -145,6 +146,7 @@
     kind="dependents"
     items={dependents}
     density="full"
+    {onOpenDependentTask}
   />
 
   {#if workspacePath !== null}
