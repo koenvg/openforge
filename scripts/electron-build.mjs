@@ -69,6 +69,44 @@ export async function copyElectronMainRuntimeAssets(root = repoRoot(), electronD
   )
 }
 
+/**
+ * Bundles the sandbox preload into a single self-contained `preload.cjs`.
+ *
+ * Electron's sandboxed preload runs with a restricted `require` that only
+ * resolves an allowlist of Electron/Node builtins — it cannot load relative
+ * sibling modules. The preload therefore must not `require('./preloadBridge.cjs')`
+ * at runtime; the bridge has to be inlined. `preloadBridge.cjs` stays a shared
+ * source module (the non-sandboxed main process still consumes it via
+ * `preloadApi`), but the preload artifact is bundled to stand alone.
+ */
+export async function buildPreloadBundle(root = repoRoot(), electronDist = resolve(root, 'dist-electron')) {
+  await viteBuild({
+    configFile: false,
+    root,
+    publicDir: false,
+    logLevel: 'warn',
+    build: {
+      emptyOutDir: false,
+      lib: {
+        entry: resolve(root, 'src', 'electron', 'preload.cts'),
+        formats: ['cjs'],
+        fileName: () => 'preload.cjs',
+      },
+      minify: false,
+      outDir: electronDist,
+      sourcemap: false,
+      target: 'node18',
+      commonjsOptions: {
+        include: [/preloadBridge\.cjs$/, /preload\.cts$/, /node_modules/],
+        transformMixedEsModules: true,
+      },
+      rollupOptions: {
+        external: ['electron', /^node:/],
+      },
+    },
+  })
+}
+
 export async function copyHostRuntimeAssets(root = repoRoot(), electronDist = resolve(root, 'dist-electron')) {
   const hostRuntimeDir = resolve(electronDist, HOST_RUNTIME_RESOURCE_DIR)
   await rm(hostRuntimeDir, { recursive: true, force: true })
@@ -138,6 +176,7 @@ async function main() {
     shell: process.platform === 'win32',
   }), 'tsc -p tsconfig.electron.json')
   await copyElectronMainRuntimeAssets(root)
+  await buildPreloadBundle(root)
   await copyHostRuntimeAssets(root)
 }
 
