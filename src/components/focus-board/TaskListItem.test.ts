@@ -157,6 +157,21 @@ describe('TaskListItem', () => {
     expect(screen.queryByText(/Waiting on \d+ deps?/)).toBeNull()
   })
 
+  it('summarizes card details into compact counts and label text', () => {
+    const task = {
+      ...baseTask,
+      depends_on: ['T-1'],
+      labels: [
+        { id: 1, project_id: 'P-1', name: 'frontend', color: 'primary' },
+        { id: 2, project_id: 'P-1', name: 'UX', color: 'secondary' },
+      ],
+    } as Task
+    render(TaskListItem, { props: { ...baseProps, task, showLabels: true, dependencyHint: 'Waiting on 1 dep' } })
+    expect(screen.getByText('1 dep')).toBeTruthy()
+    expect(screen.getByText('2 labels')).toBeTruthy()
+    expect(screen.getByText(/frontend \+1/)).toBeTruthy()
+  })
+
   it('keeps the full reasonText available when selected', () => {
     render(TaskListItem, { props: { ...baseProps, isSelected: true, reasonText: 'A very long reason text that should be ellipsized' } })
     const item = document.querySelector('[data-vim-item]') as HTMLElement
