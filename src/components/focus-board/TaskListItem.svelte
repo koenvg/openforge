@@ -12,6 +12,7 @@
   import { timeAgoFromSeconds } from '../../lib/timeAgo'
   import { getTaskTitle } from '../../lib/taskTitle'
   import { createTaskTitleRename } from '../../lib/useTaskTitleRename.svelte'
+  import TaskLabelPills from '../shared/tasks/TaskLabelPills.svelte'
 
   interface Props {
     task: Task
@@ -52,11 +53,6 @@
   let presentation = $derived(getTaskListItemPresentation(state, reasonText, isMerging))
   let firstPr = $derived(getStateDrivingPr(pullRequests))
   let labels = $derived(getTaskLabels(task))
-  let labelSummary = $derived(labels.length === 0
-    ? null
-    : labels.length === 1
-      ? labels[0].name
-      : `${labels[0].name} +${labels.length - 1}`)
   let labelNamesText = $derived(labels.map((label) => label.name).join(', '))
   let dependencyCount = $derived(task.depends_on.length)
 </script>
@@ -148,6 +144,9 @@
       ><Pencil size={15} aria-hidden="true" /></button>
     {/if}
   </div>
+  {#if showLabels && labels.length > 0}
+    <TaskLabelPills labels={labels} max={3} />
+  {/if}
 
   {#if firstPr}
     <div class="flex gap-1">
@@ -163,10 +162,6 @@
         {presentation.reasonText}
       {:else}
         {presentation.stateLabel}
-      {/if}
-      {#if labelSummary && showLabels}
-        <span class="text-base-content/40"> · </span>{labelSummary}
-        <span class="sr-only">Labels: {labelNamesText}</span>
       {/if}
     </span>
 

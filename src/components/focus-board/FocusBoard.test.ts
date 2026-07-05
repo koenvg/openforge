@@ -357,7 +357,7 @@ describe('FocusBoard', () => {
     })
   })
 
-  it('summarizes labels on backlog cards while preserving accessible label names', async () => {
+  it('renders task label chips on backlog cards while preserving accessible label names', async () => {
     const extraLabels: TaskLabel[] = [
       bugLabel,
       uiLabel,
@@ -370,8 +370,13 @@ describe('FocusBoard', () => {
 
     const backlogCard = requireElement(document.querySelector('[data-vim-item]'), HTMLElement)
     expect(within(backlogCard).getByText('4 labels')).toBeTruthy()
-    expect(within(backlogCard).getByText(/bug \+3/)).toBeTruthy()
+    const labelChips = within(backlogCard).getByLabelText('Task labels')
+    expect(within(labelChips).getByText('bug')).toBeTruthy()
+    expect(within(labelChips).getByText('ui')).toBeTruthy()
+    expect(within(labelChips).getByText('backend')).toBeTruthy()
+    expect(within(labelChips).getByText('+1')).toBeTruthy()
     expect(within(backlogCard).getByLabelText('Labels: bug, ui, backend, blocked')).toBeTruthy()
+    expect(within(backlogCard).queryByText(/bug \+3/)).toBeNull()
   })
 
   it('shows dependency wait hint on backlog rows only in the Backlog filter', async () => {
