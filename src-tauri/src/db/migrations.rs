@@ -1555,6 +1555,77 @@ fn legacy_handoff_notes_contribution_json(project_template: Option<&str>) -> Res
         .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
 }
 
+fn refresh_legacy_handoff_notes_workflow_content(content: &str) -> Option<String> {
+    let old_default_template = "## Current summary\nBrief status of what changed and whether the task is ready for review.";
+    let new_default_template = "## Summary\nBrief accumulated summary of what changed and whether the task is ready for review.";
+    let old_example = "Good: \"## Current summary\\nScoped JWT refresh token rotation in auth middleware\\n\\n## Decisions made\\nKept rotation inside existing auth middleware.\"";
+    let new_example = "Good: \"## Summary\\nScoped JWT refresh token rotation in auth middleware\\n\\n## Decisions made\\nKept rotation inside existing auth middleware.\"";
+    let old_summary_update = "Replace the task's Handoff Notes with an accurate, up-to-date reviewer brief using the active template. Cover the active template's requested sections, including current status, decisions made, open questions, and follow-up tasks when applicable. Keep it current rather than appending run history.";
+    let new_summary_update = "Update the task's Handoff Notes with an accurate, up-to-date reviewer brief using the active template. Preserve useful existing Summary context while adding new information, decisions, open questions, and follow-up tasks; do not discard earlier relevant work just to make the note \"current\".";
+
+    if !content.contains(old_default_template)
+        && !content.contains(old_example)
+        && !content.contains(old_summary_update)
+    {
+        return None;
+    }
+
+    let updated = content
+        .replace(old_default_template, new_default_template)
+        .replace(old_example, new_example)
+        .replace(old_summary_update, new_summary_update);
+
+    (updated != content).then_some(updated)
+}
+
+fn refresh_legacy_handoff_notes_start_prompt_contributions(conn: &Connection) -> Result<()> {
+    let mut statement = conn.prepare(
+        "SELECT project_id, value
+         FROM project_config
+         WHERE key = ?1",
+    )?;
+    let rows = statement
+        .query_map(
+            [crate::agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )?
+        .collect::<Result<Vec<_>>>()?;
+
+    for (project_id, value) in rows {
+        let Ok(mut contributions) =
+            serde_json::from_str::<Vec<crate::agent_lifecycle::StartPromptContribution>>(&value)
+        else {
+            continue;
+        };
+
+        let mut changed = false;
+        for contribution in &mut contributions {
+            if contribution.id == crate::agent_lifecycle::HANDOFF_NOTES_WORKFLOW_CONTRIBUTION_ID {
+                if let Some(updated_content) =
+                    refresh_legacy_handoff_notes_workflow_content(&contribution.content)
+                {
+                    contribution.content = updated_content;
+                    changed = true;
+                }
+            }
+        }
+
+        if changed {
+            let serialized = serde_json::to_string(&contributions)
+                .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+            conn.execute(
+                "UPDATE project_config SET value = ?1 WHERE project_id = ?2 AND key = ?3",
+                rusqlite::params![
+                    serialized,
+                    project_id,
+                    crate::agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY,
+                ],
+            )?;
+        }
+    }
+
+    Ok(())
+}
 fn backfill_handoff_notes_start_prompt_contributions(conn: &Connection) -> Result<()> {
     let mut statement = conn.prepare(
         "SELECT DISTINCT project_id
@@ -1607,6 +1678,7 @@ pub(super) fn ensure_handoff_notes_workflow_backfill(conn: &Connection) -> Resul
         return Ok(());
     }
 
+    refresh_legacy_handoff_notes_start_prompt_contributions(conn)?;
     let already_applied = conn
         .query_row(
             "SELECT value FROM config WHERE key = 'start_prompt_contributions_backfill_applied'",
@@ -2572,6 +2644,88 @@ mod tests {
             )
             .expect("query new project config");
         assert_eq!(new_project_count, 0, "backfill should only run once");
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_handoff_notes_workflow_refreshes_legacy_current_summary_copy() {
+        let path = std::env::temp_dir().join(format!(
+            "test_handoff_notes_workflow_refresh_{}.db",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+
+        let old_content = crate::agent_lifecycle::legacy_handoff_notes_start_prompt_content(None)
+            .replace(
+                "## Summary\nBrief accumulated summary of what changed and whether the task is ready for review.",
+                "## Current summary\nBrief status of what changed and whether the task is ready for review.",
+            )
+            .replace(
+                "Good: \"## Summary\\nScoped JWT refresh token rotation in auth middleware\\n\\n## Decisions made\\nKept rotation inside existing auth middleware.\"",
+                "Good: \"## Current summary\\nScoped JWT refresh token rotation in auth middleware\\n\\n## Decisions made\\nKept rotation inside existing auth middleware.\"",
+            )
+            .replace(
+                "Update the task's Handoff Notes with an accurate, up-to-date reviewer brief using the active template. Preserve useful existing Summary context while adding new information, decisions, open questions, and follow-up tasks; do not discard earlier relevant work just to make the note \"current\".",
+                "Replace the task's Handoff Notes with an accurate, up-to-date reviewer brief using the active template. Cover the active template's requested sections, including current status, decisions made, open questions, and follow-up tasks when applicable. Keep it current rather than appending run history.",
+            );
+        let old_contribution = crate::agent_lifecycle::StartPromptContribution {
+            id: crate::agent_lifecycle::HANDOFF_NOTES_WORKFLOW_CONTRIBUTION_ID.to_string(),
+            enabled: true,
+            content: old_content,
+            order: 0,
+        };
+        let old_json =
+            serde_json::to_string(&vec![old_contribution]).expect("serialize legacy contribution");
+
+        {
+            let conn = rusqlite::Connection::open(&path).expect("open raw db");
+            conn.execute(&format!("PRAGMA user_version = {LATEST_USER_VERSION}"), [])
+                .expect("set user_version");
+            conn.execute(
+                "CREATE TABLE config (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+                [],
+            )
+            .expect("create config table");
+            conn.execute(
+                "CREATE TABLE project_config (project_id TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, UNIQUE(project_id, key))",
+                [],
+            )
+            .expect("create project_config table");
+            conn.execute(
+                "CREATE TABLE tasks (id TEXT PRIMARY KEY, initial_prompt TEXT NOT NULL, project_id TEXT, handoff_notes_enabled INTEGER NOT NULL DEFAULT 1)",
+                [],
+            )
+            .expect("create tasks table");
+            conn.execute(
+                "INSERT INTO config (key, value) VALUES ('start_prompt_contributions_backfill_applied', 'true')",
+                [],
+            )
+            .expect("insert applied marker");
+            conn.execute(
+                "INSERT INTO project_config (project_id, key, value) VALUES ('P-legacy', 'start_prompt_contributions', ?1)",
+                [old_json],
+            )
+            .expect("insert old contribution copy");
+        }
+
+        let db = Database::new(path.clone()).expect("Database::new");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+        let refreshed: String = conn
+            .query_row(
+                "SELECT value FROM project_config WHERE project_id = 'P-legacy' AND key = 'start_prompt_contributions'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query refreshed contribution");
+        assert!(refreshed.contains("## Summary"));
+        assert!(refreshed.contains("Brief accumulated summary"));
+        assert!(refreshed.contains("Preserve useful existing Summary context"));
+        assert!(!refreshed.contains("## Current summary"));
+        assert!(!refreshed.contains("Keep it current rather than appending run history"));
 
         drop(conn);
         drop(db);

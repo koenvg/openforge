@@ -41,12 +41,12 @@ This task is {{{{taskId}}}}. OpenForge stores this task's user-facing Handoff No
 <analysis_update trigger="after_initial_analysis">
 Once you understand the scope, run: openforge update-task --task-id "{{{{taskId}}}}" --summary "..."
 Write concise initial Handoff Notes reflecting the actual work and the active template, not the original request verbatim.
-Good: "## Current summary\nScoped JWT refresh token rotation in auth middleware\n\n## Decisions made\nKept rotation inside existing auth middleware." — Bad: "implement the auth thing"
+Good: "## Summary\nScoped JWT refresh token rotation in auth middleware\n\n## Decisions made\nKept rotation inside existing auth middleware." — Bad: "implement the auth thing"
 </analysis_update>
 
 <summary_update trigger="before_finalizing">
 Before reporting completion, run: openforge update-task --task-id "{{{{taskId}}}}" --summary "..."
-Replace the task's Handoff Notes with an accurate, up-to-date reviewer brief using the active template. Cover the active template's requested sections, including current status, decisions made, open questions, and follow-up tasks when applicable. Keep it current rather than appending run history.
+Update the task's Handoff Notes with an accurate, up-to-date reviewer brief using the active template. Preserve useful existing Summary context while adding new information, decisions, open questions, and follow-up tasks; do not discard earlier relevant work just to make the note "current".
 </summary_update>
 
 <completeness_check>
@@ -553,7 +553,7 @@ mod tests {
             DEFAULT_HANDOFF_NOTES_TEMPLATE,
             include_str!("../../shared/defaultHandoffNotesTemplate.md")
         );
-        assert!(DEFAULT_HANDOFF_NOTES_TEMPLATE.contains("## Current summary"));
+        assert!(DEFAULT_HANDOFF_NOTES_TEMPLATE.contains("## Summary"));
         assert!(DEFAULT_HANDOFF_NOTES_TEMPLATE.contains("## Follow-up tasks"));
         assert!(!DEFAULT_HANDOFF_NOTES_TEMPLATE.contains("## Review focus"));
         assert!(!DEFAULT_HANDOFF_NOTES_TEMPLATE.contains("## Risky files or lines"));
@@ -570,7 +570,7 @@ mod tests {
         assert!(prompt.contains("Test Task"));
         assert!(prompt.contains("<openforge_task_management>"));
         assert!(prompt.contains("<handoff_notes_template>"));
-        assert!(prompt.contains("## Current summary"));
+        assert!(prompt.contains("## Summary"));
         assert!(prompt.contains("## Decisions made"));
         assert!(prompt.contains("## Open questions"));
         assert!(prompt.contains("## Follow-up tasks"));
@@ -604,7 +604,7 @@ mod tests {
         assert!(!prompt.contains("<handoff_notes_template>"));
         assert!(!prompt.contains("Handoff Notes"));
         assert!(!prompt.contains("openforge update-task"));
-        assert!(!prompt.contains("## Current summary"));
+        assert!(!prompt.contains("## Summary"));
     }
 
     #[test]
@@ -651,7 +651,7 @@ mod tests {
         assert!(prompt.contains("<analysis_update trigger=\"after_initial_analysis\">"));
         assert!(prompt.contains("Write concise initial Handoff Notes"));
         assert!(prompt.contains("<summary_update trigger=\"before_finalizing\">"));
-        assert!(prompt.contains("Replace the task's Handoff Notes"));
+        assert!(prompt.contains("Update the task's Handoff Notes"));
         assert!(prompt.contains("openforge update-task --task-id \"T-124\" --summary \"...\""));
         assert!(!prompt.contains("openforge_update_task"));
         assert!(!prompt.contains("<initial_prompt_update"));
@@ -693,7 +693,7 @@ mod tests {
 
         let prompt = build_task_prompt(&task, None, false, &handoff_contributions(Some("   ")));
 
-        assert!(prompt.contains("## Current summary"));
+        assert!(prompt.contains("## Summary"));
         assert!(prompt.contains("## Follow-up tasks"));
     }
 
