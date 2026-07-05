@@ -58,6 +58,7 @@ export function validateOpenForgeDataIdentity(identity) {
   requireString(dataDirNames.old, 'legacySources.dataDirNames.old')
   requireString(dataDirNames.current, 'legacySources.dataDirNames.current')
   requireString(appIdentifiers.old, 'legacySources.appIdentifiers.old')
+  requireString(appIdentifiers.previousOpenForge, 'legacySources.appIdentifiers.previousOpenForge')
   requireString(legacyDatabaseFilenames.debug, 'legacySources.databaseFilenames.debug')
   requireString(legacyDatabaseFilenames.release, 'legacySources.databaseFilenames.release')
 

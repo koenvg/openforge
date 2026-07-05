@@ -1,6 +1,6 @@
 {
   "dataIdentity": {
-    "appDataIdentifier": "com.opencode.openforge",
+    "appDataIdentifier": "com.openforge.app",
     "appDataDirEnv": "OPENFORGE_APP_DATA_DIR",
     "databaseFilenames": {
       "debug": "openforge_dev.db",
@@ -28,7 +28,8 @@
       "current": "openforge"
     },
     "appIdentifiers": {
-      "old": "com.opencode.ai-command-center"
+      "old": "com.opencode.ai-command-center",
+      "previousOpenForge": "com.opencode.openforge"
     },
     "databaseFilenames": {
       "debug": "ai_command_center_dev.db",

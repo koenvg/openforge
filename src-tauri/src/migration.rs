@@ -26,8 +26,18 @@ fn run_with_dirs(home_dir: Option<PathBuf>, data_dir: Option<PathBuf>, new_app_d
 
     if let Some(ref data) = data_dir {
         migrate_database(
+            &data.join(crate::data_identity::previous_openforge_app_identifier()),
+            new_app_data_dir,
+            crate::data_identity::database_filename_for_build(false),
+            crate::data_identity::database_filename_for_build(true),
+            "previous OpenForge database",
+        );
+        migrate_database(
             &data.join(crate::data_identity::legacy_app_identifier()),
             new_app_data_dir,
+            crate::data_identity::legacy_database_filename_for_build(false),
+            crate::data_identity::legacy_database_filename_for_build(true),
+            "legacy ai-command-center database",
         );
     }
 
@@ -51,8 +61,14 @@ fn rename_if_needed(old: &Path, new: &Path, label: &str) {
     }
 }
 
-fn migrate_database(old_app_data: &Path, new_app_data: &Path) {
-    if !old_app_data.exists() {
+fn migrate_database(
+    old_app_data: &Path,
+    new_app_data: &Path,
+    old_prod_db_name: &str,
+    old_dev_db_name: &str,
+    label: &str,
+) {
+    if !old_app_data.exists() || old_app_data == new_app_data {
         return;
     }
 
@@ -62,18 +78,14 @@ fn migrate_database(old_app_data: &Path, new_app_data: &Path) {
     }
 
     rename_if_needed(
-        &old_app_data.join(crate::data_identity::legacy_database_filename_for_build(
-            false,
-        )),
+        &old_app_data.join(old_prod_db_name),
         &new_app_data.join(crate::data_identity::database_filename_for_build(false)),
-        "production database",
+        &format!("{} production", label),
     );
     rename_if_needed(
-        &old_app_data.join(crate::data_identity::legacy_database_filename_for_build(
-            true,
-        )),
+        &old_app_data.join(old_dev_db_name),
         &new_app_data.join(crate::data_identity::database_filename_for_build(true)),
-        "development database",
+        &format!("{} development", label),
     );
 
     let is_empty = fs::read_dir(old_app_data)
@@ -196,6 +208,10 @@ mod tests {
         crate::data_identity::legacy_app_identifier()
     }
 
+    fn previous_openforge_app_identifier() -> &'static str {
+        crate::data_identity::previous_openforge_app_identifier()
+    }
+
     fn old_db_prod() -> &'static str {
         crate::data_identity::legacy_database_filename_for_build(false)
     }
@@ -293,6 +309,56 @@ mod tests {
             fs::read_to_string(new_app.join(new_db_dev())).unwrap(),
             "dev-data"
         );
+        cleanup(&base);
+    }
+
+    #[test]
+    fn migrates_previous_openforge_app_data_identifier() {
+        let (base, home, data, new_app) = setup_temp_dirs("previous_openforge_db_files");
+        let old_app = data.join(previous_openforge_app_identifier());
+        fs::create_dir_all(&old_app).unwrap();
+        fs::write(old_app.join(new_db_prod()), "prod-data").unwrap();
+        fs::write(old_app.join(new_db_dev()), "dev-data").unwrap();
+
+        run_with_dirs(Some(home), Some(data), &new_app);
+
+        assert!(new_app.join(new_db_prod()).is_file());
+        assert!(new_app.join(new_db_dev()).is_file());
+        assert_eq!(
+            fs::read_to_string(new_app.join(new_db_prod())).unwrap(),
+            "prod-data"
+        );
+        assert_eq!(
+            fs::read_to_string(new_app.join(new_db_dev())).unwrap(),
+            "dev-data"
+        );
+        assert!(!old_app.join(new_db_prod()).exists());
+        assert!(!old_app.join(new_db_dev()).exists());
+        cleanup(&base);
+    }
+
+    #[test]
+    fn previous_openforge_database_takes_precedence_over_older_ai_command_center_database() {
+        let (base, home, data, new_app) = setup_temp_dirs("previous_openforge_precedence");
+        let older_app = data.join(old_app_identifier());
+        let previous_openforge_app = data.join(previous_openforge_app_identifier());
+        fs::create_dir_all(&older_app).unwrap();
+        fs::create_dir_all(&previous_openforge_app).unwrap();
+        fs::write(older_app.join(old_db_prod()), "older-prod-data").unwrap();
+        fs::write(
+            previous_openforge_app.join(new_db_prod()),
+            "previous-openforge-prod-data",
+        )
+        .unwrap();
+
+        run_with_dirs(Some(home), Some(data), &new_app);
+
+        assert_eq!(
+            fs::read_to_string(new_app.join(new_db_prod())).unwrap(),
+            "previous-openforge-prod-data"
+        );
+        assert!(older_app.join(old_db_prod()).is_file());
+        assert!(!previous_openforge_app.join(new_db_prod()).exists());
         cleanup(&base);
     }
 

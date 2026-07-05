@@ -23,7 +23,7 @@ describe('OpenForgeDataIdentity manifest', () => {
 
     expect(identity).toEqual(manifest)
     expect(identity.dataIdentity).toMatchObject({
-      appDataIdentifier: 'com.opencode.openforge',
+      appDataIdentifier: 'com.openforge.app',
       appDataDirEnv: 'OPENFORGE_APP_DATA_DIR',
       databaseFilenames: {
         debug: 'openforge_dev.db',
@@ -38,7 +38,7 @@ describe('OpenForgeDataIdentity manifest', () => {
     expect(identity.legacySources).toMatchObject({
       homeDirNames: { old: '.ai-command-center', current: '.openforge' },
       dataDirNames: { old: 'ai-command-center', current: 'openforge' },
-      appIdentifiers: { old: 'com.opencode.ai-command-center' },
+      appIdentifiers: { old: 'com.opencode.ai-command-center', previousOpenForge: 'com.opencode.openforge' },
       databaseFilenames: {
         release: 'ai_command_center.db',
         debug: 'ai_command_center_dev.db',
@@ -47,7 +47,7 @@ describe('OpenForgeDataIdentity manifest', () => {
   })
 
   it('makes the package/data identity split explicit', () => {
-    expect(OPENFORGE_DATA_IDENTITY.dataIdentity.appDataIdentifier).toBe('com.opencode.openforge')
+    expect(OPENFORGE_DATA_IDENTITY.dataIdentity.appDataIdentifier).toBe('com.openforge.app')
     expect(OPENFORGE_DATA_IDENTITY.packageIdentity).toMatchObject({
       appName: 'Open Forge',
       electronAppPackageName: 'openforge-electron-app',
@@ -59,7 +59,7 @@ describe('OpenForgeDataIdentity manifest', () => {
   })
 
   it('exports consumer helpers from the manifest values', () => {
-    expect(OPENFORGE_APP_DATA_IDENTIFIER).toBe('com.opencode.openforge')
+    expect(OPENFORGE_APP_DATA_IDENTIFIER).toBe('com.openforge.app')
     expect(OPENFORGE_APP_DATA_DIR_ENV).toBe('OPENFORGE_APP_DATA_DIR')
     expect(ELECTRON_APP_NAME).toBe('Open Forge')
     expect(ELECTRON_APP_PACKAGE_NAME).toBe('openforge-electron-app')

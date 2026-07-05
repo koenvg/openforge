@@ -1,6 +1,6 @@
 # Electron cutover rollback and data backup
 
-Open Forge is now launched and packaged through Electron. The Rust backend still stores user data in the same Open Forge application data directory, so rollback planning is mostly about preserving SQLite data and generated workspace state before replacing an app bundle. The shared `openforge-data-identity.json` manifest is the source of truth for this split: Electron package identity is `com.openforge.app.electron`, while durable app data identity remains `com.opencode.openforge` for data preservation.
+Open Forge is now launched and packaged through Electron. The Rust backend stores user data in the durable Open Forge application data directory, so rollback planning is mostly about preserving SQLite data and generated workspace state before replacing an app bundle. The shared `openforge-data-identity.json` manifest is the source of truth for this split: Electron package identity is `com.openforge.app.electron`, while durable app data identity is `com.openforge.app`. Older installs that used `com.opencode.openforge` are migrated as a legacy database source.
 
 ## Before installing a new Electron build
 
@@ -15,10 +15,10 @@ On macOS, the data directory is under the user application support directory for
 
 ```bash
 mkdir -p ~/OpenForgeBackups
-cp -a "$HOME/Library/Application Support/com.opencode.openforge" ~/OpenForgeBackups/openforge-$(date +%Y%m%d-%H%M%S)
+cp -a "$HOME/Library/Application Support/com.openforge.app" ~/OpenForgeBackups/openforge-$(date +%Y%m%d-%H%M%S)
 ```
 
-If your local build uses a different app identifier or data root, back up the directory printed by the sidecar startup log before installing.
+If your local build uses a different app identifier or data root, back up the directory printed by the sidecar startup log before installing. For pre-migration installs, also back up `$HOME/Library/Application Support/com.opencode.openforge` until you have verified the migrated database under `com.openforge.app`.
 
 ## Testing a dev Electron build with existing data
 
@@ -27,7 +27,7 @@ If your local build uses a different app identifier or data root, back up the di
 For an isolated test run from a non-default development data directory, seed the worktree-local sidecar app-data directory instead of pointing the dev sidecar at a live directory:
 
 ```bash
-OPENFORGE_ELECTRON_DEV_SEED_APP_DATA_DIR="$HOME/Library/Application Support/com.opencode.openforge" pnpm electron:dev
+OPENFORGE_ELECTRON_DEV_SEED_APP_DATA_DIR="$HOME/Library/Application Support/com.openforge.app" pnpm electron:dev
 ```
 
 The dev launcher only copies `openforge_dev.db` from that directory into the worktree-local sidecar directory as `openforge_dev.db`; it never copies `openforge.db`. You can also seed from a specific development database or backup file with `OPENFORGE_ELECTRON_DEV_SEED_DB_PATH=/path/to/openforge_dev.db`. This is a snapshot copy for the worktree; changes made in the dev app are kept in `.openforge-dev/sidecar-app-data` and are not written back to the source. Explicit seed settings apply before the worktree DB exists; to reseed, reset, or clean up that per-worktree state, stop `pnpm electron:dev` and delete `.openforge-dev/`. Quit other dev Open Forge builds before snapshotting their data for the most consistent SQLite copy.

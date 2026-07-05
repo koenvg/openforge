@@ -105,7 +105,7 @@ async function writeAlternateDataIdentityManifest(repoRoot) {
     legacySources: {
       homeDirNames: { old: '.alternate-old', current: '.alternate-forge' },
       dataDirNames: { old: 'alternate-old', current: 'alternate-forge' },
-      appIdentifiers: { old: 'com.example.alternate-old' },
+      appIdentifiers: { old: 'com.example.alternate-old', previousOpenForge: 'com.example.alternate-previous-openforge' },
       databaseFilenames: {
         debug: 'alternate_old_dev.db',
         release: 'alternate_old.db',
