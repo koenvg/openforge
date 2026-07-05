@@ -55,4 +55,16 @@ describe('package build scripts', () => {
     expect(ciWorkflow).toContain('pnpm build:plugins 2>&1 | tee /tmp/plugin-build.log')
     expect(ciWorkflow).toContain("steps.plugin_build.outputs.exit_code != '0'")
   })
+
+  it('runs the packaged Electron smoke guardrail in general CI on macOS instead of release-only CI', async () => {
+    const ciWorkflow = await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8')
+    const releaseWorkflow = await readFile(join(repoRoot, '.github/workflows/release.yml'), 'utf8')
+
+    expect(ciWorkflow).toContain('packaged-electron-smoke:')
+    expect(ciWorkflow).toContain('runs-on: macos-14')
+    expect(ciWorkflow).toContain('pnpm electron:package 2>&1 | tee /tmp/packaged-smoke-package.log')
+    expect(ciWorkflow).toContain('pnpm electron:smoke:packaged --skip-package 2>&1 | tee /tmp/packaged-smoke.log')
+    expect(ciWorkflow).toContain("steps.package_app.outputs.exit_code != '0' || steps.smoke.outputs.exit_code != '0'")
+    expect(releaseWorkflow).not.toContain('electron:smoke:packaged')
+  })
 })
