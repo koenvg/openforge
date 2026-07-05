@@ -142,6 +142,7 @@ vi.mock('./lib/stores', () => {
   const reviewPrs = writable<any[]>([])
   const activeResolvedRepo = writable<string | null>(null)
   const globalExcludedPrRepos = writable<ReadonlySet<string>>(new Set())
+  const projectResolvedRepos = writable<Map<string, string | null>>(new Map())
   return {
   tasks: writable<Task[]>([]),
   pendingTask: writable<Task | null>(null),
@@ -176,6 +177,7 @@ vi.mock('./lib/stores', () => {
   reviewPrs,
   activeResolvedRepo,
   globalExcludedPrRepos,
+  projectResolvedRepos,
   selectedReviewPr: mockSelectedReviewPrStore,
   prFileDiffs: writable([]),
   reviewRequestCount: derived([reviewPrs, globalExcludedPrRepos], ([$prs, $excluded]) => countAllReposUnopenedReviews($prs, $excluded)),
