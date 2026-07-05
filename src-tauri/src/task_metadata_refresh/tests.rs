@@ -9,11 +9,14 @@ use super::providers::{
     build_opencode_title_headless_args, build_pi_metadata_job_args, resolve_metadata_program,
 };
 use super::refresh::{
+    queue_task_display_title_refresh, refresh_queued_task_display_title_with_ai_once_after,
     refresh_task_display_title_once, refresh_task_display_title_once_with_provider,
 };
 use crate::db::test_helpers::*;
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 #[test]
 fn task_metadata_refresh_diagnostic_formatter_keeps_safe_metadata_only_message() {
@@ -344,6 +347,167 @@ fn refresh_task_display_title_once_uses_ai_title_when_provider_succeeds() {
     );
     let updated = db.get_task(&task.id).expect("get task").unwrap();
     assert_eq!(updated.title.as_deref(), Some("SQLite Lock Fix"));
+    assert_eq!(updated.title_source.as_deref(), Some("generated"));
+
+    let _ = std::fs::remove_file(&path);
+}
+
+#[tokio::test]
+async fn refresh_task_display_title_with_ai_once_coalesces_same_task_to_latest_snapshot() {
+    let (db, path) = make_test_db("metadata_refresh_ai_title_debounce");
+    let task = db
+        .create_task("Vague OpenCode activity", "doing", None, None, None)
+        .expect("create task");
+    let db = Arc::new(Mutex::new(db));
+    let prompts = Arc::new(Mutex::new(Vec::new()));
+    let first_queued = queue_task_display_title_refresh(
+        task.id.clone(),
+        "opencode".to_string(),
+        None,
+        Some(r#"{"type":"session.status","status":"running"}"#.to_string()),
+    );
+    let second_queued = queue_task_display_title_refresh(
+        task.id.clone(),
+        "opencode".to_string(),
+        None,
+        Some(
+            r#"{"type":"message.updated","message":"Implement debounced task display title refresh"}"#
+                .to_string(),
+        ),
+    );
+
+    let first_refresh = refresh_queued_task_display_title_with_ai_once_after(
+        Arc::clone(&db),
+        first_queued,
+        Duration::from_millis(1),
+        {
+            let prompts = Arc::clone(&prompts);
+            move |_job, prompt| {
+                let prompts = Arc::clone(&prompts);
+                async move {
+                    prompts.lock().unwrap().push(prompt);
+                    Ok(Some("Low Status Title".to_string()))
+                }
+            }
+        },
+    );
+    let second_refresh = refresh_queued_task_display_title_with_ai_once_after(
+        Arc::clone(&db),
+        second_queued,
+        Duration::from_millis(1),
+        {
+            let prompts = Arc::clone(&prompts);
+            move |_job, prompt| {
+                let prompts = Arc::clone(&prompts);
+                async move {
+                    prompts.lock().unwrap().push(prompt);
+                    Ok(Some("Debounced Title Refresh".to_string()))
+                }
+            }
+        },
+    );
+
+    let (second_result, first_result) = tokio::join!(second_refresh, first_refresh);
+
+    assert!(!first_result.expect("first refresh result"));
+    assert!(second_result.expect("second refresh result"));
+    let prompts = prompts.lock().unwrap();
+    assert_eq!(prompts.len(), 1);
+    assert!(prompts[0].contains("message.updated"));
+    assert!(prompts[0].contains("Implement debounced task display title refresh"));
+    assert!(!prompts[0].contains("session.status"));
+    drop(prompts);
+
+    let updated = db
+        .lock()
+        .unwrap()
+        .get_task(&task.id)
+        .expect("get task")
+        .unwrap();
+    assert_eq!(updated.title.as_deref(), Some("Debounced Title Refresh"));
+    assert_eq!(updated.title_source.as_deref(), Some("generated"));
+
+    let _ = std::fs::remove_file(&path);
+}
+
+#[tokio::test]
+async fn refresh_task_display_title_with_ai_once_skips_in_flight_title_when_newer_snapshot_arrives()
+{
+    let (db, path) = make_test_db("metadata_refresh_ai_title_in_flight_superseded");
+    let task = db
+        .create_task("Vague OpenCode activity", "doing", None, None, None)
+        .expect("create task");
+    let db = Arc::new(Mutex::new(db));
+    let newer_queued = Arc::new(Mutex::new(None));
+    let first_queued = queue_task_display_title_refresh(
+        task.id.clone(),
+        "opencode".to_string(),
+        None,
+        Some(r#"{"type":"session.status","status":"running"}"#.to_string()),
+    );
+
+    let first_result = refresh_queued_task_display_title_with_ai_once_after(
+        Arc::clone(&db),
+        first_queued,
+        Duration::from_millis(1),
+        {
+            let task_id = task.id.clone();
+            let newer_queued = Arc::clone(&newer_queued);
+            move |_job, _prompt| async move {
+                let queued = queue_task_display_title_refresh(
+                    task_id,
+                    "opencode".to_string(),
+                    None,
+                    Some(
+                        r#"{"type":"message.updated","message":"Richer update while provider is running"}"#
+                            .to_string(),
+                    ),
+                );
+                *newer_queued.lock().unwrap() = Some(queued);
+                Ok(Some("Low Status Title".to_string()))
+            }
+        },
+    )
+    .await
+    .expect("first refresh result");
+
+    assert!(!first_result);
+    assert_eq!(
+        db.lock()
+            .unwrap()
+            .get_task(&task.id)
+            .expect("get task")
+            .unwrap()
+            .title,
+        None
+    );
+
+    let second_queued = newer_queued
+        .lock()
+        .unwrap()
+        .take()
+        .expect("newer queued refresh");
+    let second_result = refresh_queued_task_display_title_with_ai_once_after(
+        Arc::clone(&db),
+        second_queued,
+        Duration::from_millis(1),
+        |_job, prompt| async move {
+            assert!(prompt.contains("message.updated"));
+            assert!(prompt.contains("Richer update while provider is running"));
+            Ok(Some("Richer Running Update".to_string()))
+        },
+    )
+    .await
+    .expect("second refresh result");
+
+    assert!(second_result);
+    let updated = db
+        .lock()
+        .unwrap()
+        .get_task(&task.id)
+        .expect("get task")
+        .unwrap();
+    assert_eq!(updated.title.as_deref(), Some("Richer Running Update"));
     assert_eq!(updated.title_source.as_deref(), Some("generated"));
 
     let _ = std::fs::remove_file(&path);

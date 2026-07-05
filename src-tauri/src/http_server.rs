@@ -490,13 +490,16 @@ async fn handle_agent_lifecycle_notification(
             let provider = notification.provider.clone();
             let transcript_path = transcript_path.map(PathBuf::from);
             let activity_snapshot = activity_snapshot.clone();
+            let queued_refresh = crate::task_metadata_refresh::queue_task_display_title_refresh(
+                task_id.clone(),
+                provider,
+                transcript_path,
+                activity_snapshot,
+            );
             tokio::spawn(async move {
-                match crate::task_metadata_refresh::refresh_task_display_title_with_ai_once(
+                match crate::task_metadata_refresh::refresh_queued_task_display_title_with_ai_once(
                     db,
-                    task_id.clone(),
-                    provider,
-                    transcript_path,
-                    activity_snapshot,
+                    queued_refresh,
                 )
                 .await
                 {
