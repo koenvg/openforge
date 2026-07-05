@@ -1,7 +1,6 @@
 use rusqlite::{OptionalExtension, Result};
 use serde::Serialize;
 
-
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct TaskLabelRow {
     pub id: i64,
@@ -128,7 +127,6 @@ fn normalize_label_name(name: &str) -> Result<String> {
 fn normalized_label_key(name: &str) -> Result<String> {
     Ok(normalize_label_name(name)?.to_lowercase())
 }
-
 
 fn query_task_label_by_id(
     conn: &rusqlite::Connection,
