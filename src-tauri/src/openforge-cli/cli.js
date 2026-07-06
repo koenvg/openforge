@@ -496,6 +496,7 @@ Task listing:
 
 Task creation hygiene:
   Before creating follow-up Tasks, use list-project-labels when a project id is known and reuse an existing label when it fits.
+  When creating follow-up Tasks, include useful --label values and dependency links when creating related follow-up Tasks.
   Use --label for obvious categories, and link prerequisites immediately with --depends-on or link-tasks when the order is known.
   If labels or dependency order are unclear, state that uncertainty instead of guessing.
 
@@ -525,6 +526,7 @@ ${spec.aliasUsage ? `Flat compatibility alias: ${spec.aliasUsage}\n\n` : ''}Task
 
 Task creation hygiene:
   Before creating follow-up Tasks, use list-project-labels when a project id is known and reuse an existing label when it fits.
+  When creating follow-up Tasks, include useful --label values and dependency links when creating related follow-up Tasks.
   Use --label for obvious categories, and link prerequisites immediately with --depends-on or link-tasks when the order is known.
   If labels or dependency order are unclear, state that uncertainty instead of guessing.
 `);

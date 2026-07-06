@@ -26,7 +26,7 @@ Plugin management commands are local-only for agent-facing use: install from a l
 
 ## Task Creation checklist
 
-Before creating follow-up Tasks, run the project label discovery command when you know the project id. Reuse an existing project label when it fits; only create a new label through `--label` when the category is genuinely new and useful. Add dependency links during Task Creation with `--depends-on` when known; do not invent noisy labels or guessed ordering just because labels and dependencies exist.
+Before creating follow-up Tasks, run the project label discovery command when you know the project id. Reuse an existing project label when it fits; only create a new label through `--label` when the category is genuinely new and useful. When dependency order is known, add useful --label values and dependency links during Task Creation with `--label` and `--depends-on`; do not invent noisy labels or guessed ordering just because labels and dependencies exist.
 
 When creating multiple related Tasks, decide whether any Task must be done before another can start. Link prerequisites immediately with `--depends-on` during creation when the predecessor ID is known, or use `openforge link-tasks --chain "T-1 -> T-2 -> T-3"` after all Task IDs exist.
 
