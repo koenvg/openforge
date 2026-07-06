@@ -77,6 +77,7 @@ vi.mock('../../lib/stores', () => ({
   mergingTaskIds: writable(new Set()),
   setTaskMerging: vi.fn(),
   tasks: writable([]),
+  dependencyReferenceTasks: writable([]),
   activeProjectId: writable('project-1'),
   startingTasks: writable(new Set()),
   completingTasks: writable(new Set()),

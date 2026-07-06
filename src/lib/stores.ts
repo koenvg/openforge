@@ -8,6 +8,9 @@ export interface TaskRuntimeInfo {
 }
 
 export const tasks = writable<Task[]>([]);
+// Completed tasks stay out of active board/search lists, but visible tasks can
+// still resolve them as read-only dependency metadata for dependency chips.
+export const dependencyReferenceTasks = writable<Task[]>([]);
 export const pendingTask = writable<Task | null>(null);
 // selectedTaskId serves as both selection state and navigation:
 // - null = show Flow board

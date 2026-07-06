@@ -24,6 +24,7 @@
     projectId: string | null
     projectName: string
     tasks: Task[]
+    dependencyReferenceTasks?: Task[]
     activeSessions: Map<string, AgentSession>
     ticketPrs: Map<string, PullRequestInfo[]>
     onOpenTask: (taskId: string) => void
@@ -33,6 +34,8 @@
     onRunAction: (data: { taskId: string; actionPrompt: string; agent: string | null }) => void
   }
 
+  let { projectId, projectName, tasks, dependencyReferenceTasks = [], activeSessions, ticketPrs, onOpenTask, onEditTask, onTaskUpdated, onProjectAttentionChanged, onRunAction }: Props = $props()
+  let dependencyResolutionTasks = $derived([...tasks, ...dependencyReferenceTasks])
   type TaskRow = {
     task: Task
     taskIndex: number
@@ -45,7 +48,6 @@
     { value: 'backlog' as BoardFilter, label: 'Backlog', shortcut: '⌘4' },
   ] as const
 
-  let { projectId, projectName, tasks, activeSessions, ticketPrs, onOpenTask, onEditTask, onTaskUpdated, onProjectAttentionChanged, onRunAction }: Props = $props()
 
   let selectedTaskIdLocal: string | null = $state(null)
   // Which card the user just returned from — snapshot once at init (before it's
@@ -466,7 +468,7 @@
               {session}
               {pullRequests}
               reasonText={getTaskReasonText(state, pullRequests)}
-              dependencyHint={activeFilter === 'backlog' ? getDependencyWaitLabel(task, tasks) : null}
+              dependencyHint={activeFilter === 'backlog' ? getDependencyWaitLabel(task, dependencyResolutionTasks) : null}
               showLabels={activeFilter === 'backlog'}
               isSelected={selectedTaskIdLocal === task.id}
               isFocused={vim.focusedIndex === row.taskIndex}
@@ -492,6 +494,7 @@
       <TaskDetailPane
         task={selectedTask}
         allTasks={tasks}
+        {dependencyReferenceTasks}
         pullRequests={selectedTask ? ticketPrs.get(selectedTask.id) ?? [] : []}
         onEditTask={onEditTask}
         onOpenLinkedTask={onOpenTask}

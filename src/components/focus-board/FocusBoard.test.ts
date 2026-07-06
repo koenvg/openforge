@@ -116,6 +116,7 @@ function renderBoard(overrides?: {
   tasks?: Task[]
   sessions?: Map<string, AgentSession>
   prs?: Map<string, PullRequestInfo[]>
+  dependencyReferenceTasks?: Task[]
   onProjectAttentionChanged?: () => void | Promise<void>
 }) {
   const projectId = overrides?.projectId ?? 'proj-1'
@@ -124,6 +125,7 @@ function renderBoard(overrides?: {
     [taskFocus.id, makeSession(taskFocus.id, 'paused', 'needs-review')],
     [taskDoing.id, makeSession(taskDoing.id, 'running', null)],
   ])
+  const dependencyReferenceTasks = overrides?.dependencyReferenceTasks ?? []
   const prs = overrides?.prs ?? new Map<string, PullRequestInfo[]>()
   taskStore.set(tasks)
 
@@ -134,6 +136,7 @@ function renderBoard(overrides?: {
       tasks,
       activeSessions: sessions,
       ticketPrs: prs,
+      dependencyReferenceTasks,
       onOpenTask,
       onRunAction,
       onProjectAttentionChanged: overrides?.onProjectAttentionChanged,
@@ -395,6 +398,21 @@ describe('FocusBoard', () => {
     expect(within(backlogCard).getByText('Waiting on 1 dep')).toBeTruthy()
   })
 
+  it('uses completed dependency references for backlog wait hints without rendering completed tasks', async () => {
+    const completedDependency = makeTask('T-done', 'done', 'Completed dependency')
+    const waitingBacklog = { ...taskBacklog, depends_on: [completedDependency.id] }
+    renderBoard({
+      tasks: [waitingBacklog],
+      dependencyReferenceTasks: [completedDependency],
+      sessions: new Map(),
+    })
+
+    await fireEvent.click(await screen.findByRole('button', { name: /Backlog 1/i }))
+
+    const backlogCard = requireElement(document.querySelector('[data-vim-item]'), HTMLElement)
+    expect(within(backlogCard).queryByText('Waiting on 1 dep')).toBeNull()
+    expect(within(backlogCard).queryByText('Completed dependency')).toBeNull()
+  })
   it('auto-selects the focused task in detail pane on mount', async () => {
     renderBoard()
 

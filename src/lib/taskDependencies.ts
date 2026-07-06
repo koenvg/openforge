@@ -28,8 +28,8 @@ export function getTaskDependencySummaries(task: Task, allTasks: Task[]): TaskDe
   })
 }
 
-export function getTaskDependentSummaries(task: Task, allTasks: Task[]): TaskDependentSummary[] {
-  const tasksById = new Map(allTasks.map((knownTask) => [knownTask.id, knownTask]))
+export function getTaskDependentSummaries(task: Task, allTasks: Task[], dependencyResolutionTasks: Task[] = allTasks): TaskDependentSummary[] {
+  const tasksById = new Map(dependencyResolutionTasks.map((knownTask) => [knownTask.id, knownTask]))
 
   return allTasks
     .filter((knownTask) => knownTask.id !== task.id && knownTask.depends_on.includes(task.id))

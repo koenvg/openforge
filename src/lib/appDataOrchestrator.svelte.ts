@@ -11,6 +11,7 @@ import {
   projectResolvedRepos,
   projects,
   reviewPrs,
+  dependencyReferenceTasks,
   tasks,
   ticketPrs,
 } from './stores'
@@ -24,13 +25,14 @@ import {
   getProjects,
   getPullRequests,
   getReviewPrs,
+  getTaskDetail,
   getTasksForProject,
 } from './ipc'
 import { DEFAULT_FOCUS_STATES, loadFocusFilterStates, loadOutOfFocusTaskIds } from './boardFilters'
 import { buildAttentionCountByProject } from './attentionCounts'
 import { applyProjectOrder } from './projectOrder'
 import { buildTicketPullRequestMap } from './pullRequestStore'
-import type { ProjectAttention } from './types'
+import type { ProjectAttention, Task } from './types'
 import type { TaskState } from './taskState'
 
 // The green-dot refresh fans out across every project (all tasks + sessions + per-project
@@ -50,6 +52,31 @@ export interface AppDataOrchestratorOptions {
 
 function defaultLogError(message: string, errorValue: unknown): void {
   console.error(message, errorValue)
+}
+
+function findMissingDependencyIds(activeTasks: Task[]): string[] {
+  const activeTaskIds = new Set(activeTasks.map((task) => task.id))
+  const missingDependencyIds: string[] = []
+  for (const task of activeTasks) {
+    for (const dependencyId of task.depends_on) {
+      if (activeTaskIds.has(dependencyId) || missingDependencyIds.includes(dependencyId)) continue
+      missingDependencyIds.push(dependencyId)
+    }
+  }
+  return missingDependencyIds
+}
+
+async function loadCompletedDependencyReferenceTasks(activeTasks: Task[]): Promise<Task[]> {
+  const missingDependencyIds = findMissingDependencyIds(activeTasks)
+  const referenceTasks = await Promise.all(missingDependencyIds.map(async (dependencyId) => {
+    try {
+      const dependencyTask = await getTaskDetail(dependencyId)
+      return dependencyTask.status === 'done' ? dependencyTask : null
+    } catch {
+      return null
+    }
+  }))
+  return referenceTasks.filter((task): task is Task => task !== null)
 }
 
 async function loadGlobalExcludedRepos(): Promise<Set<string>> {
@@ -122,13 +149,19 @@ export function useAppDataOrchestrator(options: AppDataOrchestratorOptions) {
 
   async function loadTasks(): Promise<void> {
     const projectId = get(activeProjectId)
-    if (!projectId) return
+    if (!projectId) {
+      dependencyReferenceTasks.set([])
+      return
+    }
 
     isLoading.set(true)
     try {
-      tasks.set(await getTasksForProject(projectId))
+      const activeTasks = await getTasksForProject(projectId)
+      tasks.set(activeTasks)
+      dependencyReferenceTasks.set(await loadCompletedDependencyReferenceTasks(activeTasks))
       await loadSessions()
     } catch (e) {
+      dependencyReferenceTasks.set([])
       logError('Failed to load tasks:', e)
       error.set(String(e))
     } finally {
