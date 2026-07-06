@@ -23,7 +23,7 @@
   import type { Task, PrFileDiff, ReviewSubmissionComment } from '../../lib/types'
   import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
   import FileTree from '../review/shared/FileTree.svelte'
-  import ResizablePanel from '../shared/ui/ResizablePanel.svelte'
+  import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
   import ResizableBottomPanel from '../shared/ui/ResizableBottomPanel.svelte'
   import DiffViewer from '../review/shared/diff-viewer/DiffViewer.svelte'
   import GeneralCommentsSidebar from '../review/shared/GeneralCommentsSidebar.svelte'

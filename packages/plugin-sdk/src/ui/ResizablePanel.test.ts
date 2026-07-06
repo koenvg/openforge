@@ -1,7 +1,13 @@
 import { render, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { requireElement } from '../../../test-utils/dom'
 import ResizablePanel from './ResizablePanel.svelte'
+
+function requireElement<T extends HTMLElement>(value: Element | null, ctor: { new (...args: never[]): T }): T {
+  if (!(value instanceof ctor)) {
+    throw new Error(`Expected ${ctor.name}`)
+  }
+  return value
+}
 
 function getPanel(container: HTMLElement) {
   return requireElement(container.querySelector('[data-testid="resizable-panel"]'), HTMLElement)
