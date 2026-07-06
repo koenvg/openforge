@@ -22,7 +22,7 @@
     "electron:smoke:packaged": "node scripts/electron-packaged-smoke.mjs",
     "electron:dev": "node scripts/electron-dev.mjs",
     "build": "pnpm build:plugin-sdk-runtime && vite build",
-    "lint": "node scripts/check-svelte-unused-imports.mjs",
+    "lint": "node scripts/check-svelte-unused-imports.mjs && node scripts/check-plugin-import-boundaries.mjs",
     "packages:build": "pnpm --filter @openforge-app/plugin-sdk build",
     "packages:test": "pnpm --filter @openforge-app/plugin-sdk test",
     "packages:metadata:check": "node scripts/check-workspace-package-metadata.mjs",
