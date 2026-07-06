@@ -298,6 +298,103 @@ describe('pluginRegistry', () => {
     expect(set.has('pb')).toBe(true)
   })
 
+  it('readies enabled backend plugins during project load without opening their view', async () => {
+    const View = vi.fn() as never
+    const frontendPlugin = defineFrontendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.views.register({
+          id: 'schedules',
+          title: 'Task Schedules',
+          icon: 'clock',
+          placement: 'rail',
+          component: View,
+        }))
+      },
+    })
+    const manifest = makeManifest({ id: 'scheduler-plugin', frontend: 'index.js', backend: 'backend.js' })
+    installedPlugins.set(new Map([['scheduler-plugin', { manifest, state: 'installed', error: null }]]))
+    getEnabledPluginsMock.mockResolvedValue([{ ...makeNormalized('scheduler-plugin'), backendEntry: 'backend.js' }])
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'scheduler-plugin', module: frontendPlugin })
+
+    await registryLoadEnabledForProject('P-1')
+
+    expect(loadPluginFrontendMock).toHaveBeenCalledWith('scheduler-plugin', 'plugin://scheduler-plugin/index.js')
+    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('scheduler-plugin')
+    expect(get(installedPlugins).get('scheduler-plugin')).toMatchObject({ state: 'active', error: null })
+  })
+
+  it('does not request backend readiness for enabled frontend-only plugins', async () => {
+    const View = vi.fn() as never
+    const frontendPlugin = defineFrontendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.views.register({
+          id: 'main',
+          title: 'Main',
+          icon: 'plug',
+          placement: 'rail',
+          component: View,
+        }))
+      },
+    })
+    const manifest = makeManifest({ id: 'frontend-only-plugin', frontend: 'index.js', backend: null })
+    installedPlugins.set(new Map([['frontend-only-plugin', { manifest, state: 'installed', error: null }]]))
+    getEnabledPluginsMock.mockResolvedValue([makeNormalized('frontend-only-plugin')])
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'frontend-only-plugin', module: frontendPlugin })
+
+    await registryLoadEnabledForProject('P-1')
+
+    expect(loadPluginFrontendMock).toHaveBeenCalledWith('frontend-only-plugin', 'plugin://frontend-only-plugin/index.js')
+    expect(pluginBackendWhenReadyMock).not.toHaveBeenCalled()
+  })
+
+  it('readies a backend plugin when it is enabled for a project', async () => {
+    const View = vi.fn() as never
+    const frontendPlugin = defineFrontendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.views.register({
+          id: 'main',
+          title: 'Backend Plugin',
+          icon: 'plug',
+          placement: 'rail',
+          component: View,
+        }))
+      },
+    })
+    const manifest = makeManifest({ id: 'enabled-backend-plugin', frontend: 'index.js', backend: 'backend.js' })
+    installedPlugins.set(new Map([['enabled-backend-plugin', { manifest, state: 'installed', error: null }]]))
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'enabled-backend-plugin', module: frontendPlugin })
+
+    await expect(enablePluginForProject('P-1', 'enabled-backend-plugin')).resolves.toBe(true)
+
+    expect(get(enabledPluginIds)).toEqual(new Set(['enabled-backend-plugin']))
+    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('enabled-backend-plugin')
+  })
+
+  it('records backend readiness failures in the existing plugin runtime error state', async () => {
+    const View = vi.fn() as never
+    const frontendPlugin = defineFrontendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.views.register({
+          id: 'main',
+          title: 'Backend Plugin',
+          icon: 'plug',
+          placement: 'rail',
+          component: View,
+        }))
+      },
+    })
+    const manifest = makeManifest({ id: 'failing-backend-plugin', frontend: 'index.js', backend: 'backend.js' })
+    installedPlugins.set(new Map([['failing-backend-plugin', { manifest, state: 'installed', error: null }]]))
+    getEnabledPluginsMock.mockResolvedValue([{ ...makeNormalized('failing-backend-plugin'), backendEntry: 'backend.js' }])
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'failing-backend-plugin', module: frontendPlugin })
+    pluginBackendWhenReadyMock.mockRejectedValueOnce(new Error('backend failed'))
+
+    await registryLoadEnabledForProject('P-1')
+
+    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('failing-backend-plugin')
+    expect(get(installedPlugins).get('failing-backend-plugin')).toMatchObject({ state: 'error', error: 'backend failed' })
+  })
+
   it('does not synthesize backend command handlers from legacy manifest contributions', async () => {
     const manifest = makeManifest({ frontend: null, backend: 'backend.js' })
     installedPlugins.set(new Map([['backend-plugin', { manifest: { ...manifest, id: 'backend-plugin' }, state: 'installed', error: null }]]))
