@@ -771,6 +771,43 @@ pub async fn delete_task_handler(
     }))
 }
 
+pub async fn hard_delete_task_handler(
+    State(state): State<AppState>,
+    Json(request): Json<DeleteTaskRequest>,
+) -> Result<Json<DeleteTaskResponse>, (StatusCode, String)> {
+    let db = state.db.lock().unwrap();
+    let task = db
+        .get_task(&request.task_id)
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get task before hard deletion: {e}"),
+            )
+        })?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                format!("Task not found: {}", request.task_id),
+            )
+        })?;
+
+    let project_id = task.project_id;
+
+    db.hard_delete_task(&request.task_id).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to hard-delete task: {e}"),
+        )
+    })?;
+    drop(db);
+
+    emit_task_changed(&state, "deleted", &request.task_id, project_id.as_deref());
+
+    Ok(Json(DeleteTaskResponse {
+        task_id: request.task_id,
+        status: "deleted".to_string(),
+    }))
+}
 pub async fn set_task_dependencies_handler(
     State(state): State<AppState>,
     Json(request): Json<SetTaskDependenciesRequest>,
@@ -1594,6 +1631,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/create_task", post(create_task_handler))
         .route("/update_task", post(update_task_handler))
         .route("/delete_task", post(delete_task_handler))
+        .route("/hard_delete_task", post(hard_delete_task_handler))
         .route(
             "/set_task_dependencies",
             post(set_task_dependencies_handler),

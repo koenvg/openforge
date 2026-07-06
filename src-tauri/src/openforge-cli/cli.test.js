@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { execFile } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -130,6 +130,49 @@ async function runCliAgainstJsonBridge(args, { url, method = 'GET', response = {
   }
 }
 
+async function writePlanFile(name, plan) {
+  const planPath = join(tmpdir(), `openforge-cli-plan-${process.pid}-${name}.json`);
+  await writeFile(planPath, JSON.stringify(plan), 'utf8');
+  return planPath;
+}
+
+async function runCliAgainstRequestSequence(args, steps, env = {}) {
+  const seenRequests = [];
+  const server = createServer((req, res) => {
+    const step = steps[seenRequests.length];
+    if (!step || req.url !== step.url || req.method !== step.method) {
+      res.writeHead(404, { 'content-type': 'text/plain' });
+      res.end('not found');
+      return;
+    }
+
+    let body = '';
+    req.on('data', (chunk) => {
+      body += chunk;
+    });
+    req.on('end', () => {
+      seenRequests.push({
+        method: req.method,
+        url: req.url,
+        body: body ? JSON.parse(body) : null,
+      });
+      res.writeHead(step.statusCode ?? 200, { 'content-type': step.contentType ?? 'application/json' });
+      res.end(typeof step.response === 'string' ? step.response : JSON.stringify(step.response));
+    });
+  });
+  const port = await listen(server);
+
+  try {
+    const result = await runCli(args, { ...env, OPENFORGE_HTTP_PORT: String(port) });
+    return { ...result, seenRequests };
+  } catch (error) {
+    error.seenRequests = seenRequests;
+    throw error;
+  } finally {
+    await close(server);
+  }
+}
+
 const COMPACT_TASK_KEYS = ['depends_on', 'id', 'labels', 'prompt_preview', 'status', 'updated_at'];
 const VERBOSE_TASK_KEYS = [
   'initial_prompt',
@@ -172,6 +215,9 @@ describe('OpenForge CLI', () => {
     expect(skill).toContain('Before creating follow-up Tasks');
     expect(skill).toContain('add useful --label values and dependency links');
     expect(skill).toContain('When creating multiple related Tasks');
+    expect(skill).toContain('openforge task plan apply --file');
+    expect(skill).toContain('Plan JSON shape');
+    expect(skill).toContain('Use dependsOn for current or prerequisite task IDs');
     expect(skill).toContain('Use labels to record task categories');
     expect(skill.match(/openforge get-task/g)).toHaveLength(1);
     expect(skill.match(/openforge list-project-labels/g)).toHaveLength(1);
@@ -194,6 +240,7 @@ describe('OpenForge CLI', () => {
     expect(stdout).toContain('Task creation hygiene:');
     expect(stdout).toContain('include useful --label values and dependency links when creating related follow-up Tasks');
     expect(stdout).toContain('link prerequisites immediately with --depends-on or link-tasks');
+    expect(stdout).toContain('openforge task plan apply --file <plan.json>');
     expect(stdout).not.toContain('node cli.js');
     expect(stdout).not.toContain('openforge mcp');
   });
@@ -273,6 +320,7 @@ describe('OpenForge CLI', () => {
       'openforge plugin enable --plugin-id <id> --project-id <id>',
       'openforge plugin disable --plugin-id <id> --project-id <id>',
       'openforge plugin reload --plugin-id <id> [--project-id <id>]',
+      'openforge task plan apply --file <plan.json>',
     ]) {
       expect(stdout).toContain(command);
     }
@@ -306,6 +354,33 @@ describe('OpenForge CLI', () => {
       expect(stdout).toContain('Flat compatibility alias: openforge create-task');
       expect(stdout).toContain('Task creation hygiene:');
       expect(stdout).toContain('include useful --label values and dependency links when creating related follow-up Tasks');
+      expect(requestCount).toBe(0);
+    } finally {
+      await close(server);
+    }
+  });
+
+  it('prints nested task plan apply help before contacting the HTTP bridge', async () => {
+    let requestCount = 0;
+    const server = createServer((_req, res) => {
+      requestCount += 1;
+      res.writeHead(500, { 'content-type': 'text/plain' });
+      res.end('should not be called');
+    });
+    const port = await listen(server);
+
+    try {
+      const { stdout } = await runCli(['task', 'plan', 'apply', '--help'], {
+        OPENFORGE_HTTP_PORT: String(port),
+      });
+
+      expect(stdout).toContain('Usage:\n  openforge task plan apply --file <plan.json>');
+      expect(stdout).toContain('preferred workflow for non-linear multi-Task follow-up work');
+      expect(stdout).toContain('Plan JSON shape:');
+      expect(stdout).toContain('"projectId": "P-1"');
+      expect(stdout).toContain('"dependsOn": ["api", "KVG-1957"]');
+      expect(stdout).toContain('dependsOn is where current or prerequisite task IDs go');
+      expect(stdout).not.toContain('"worktree"');
       expect(requestCount).toBe(0);
     } finally {
       await close(server);
@@ -537,6 +612,185 @@ describe('OpenForge CLI', () => {
         { task_id: 'T-2', depends_on: 'T-1' },
       ],
     });
+  });
+
+  it('applies a JSON task plan, resolves local dependency keys, and returns a key-to-task-id mapping', async () => {
+    const planPath = await writePlanFile('valid', {
+      projectId: 'P-1',
+      tasks: [
+        { key: 'api', prompt: 'Build API task', labels: ['backend'] },
+        { key: 'ui', prompt: 'Build UI task', labels: ['frontend', 'review'], dependsOn: ['api', 'KVG-1'] },
+      ],
+    });
+
+    const { stdout, seenRequests } = await runCliAgainstRequestSequence([
+      'task',
+      'plan',
+      'apply',
+      '--file',
+      planPath,
+    ], [
+      {
+        method: 'POST',
+        url: '/create_task',
+        response: { task_id: 'KVG-10', project_id: 'P-1', status: 'created' },
+      },
+      {
+        method: 'POST',
+        url: '/create_task',
+        response: { task_id: 'KVG-11', project_id: 'P-1', status: 'created' },
+      },
+      {
+        method: 'POST',
+        url: '/set_task_dependencies',
+        response: { task_id: 'KVG-11', status: 'updated' },
+      },
+    ]);
+
+    expect(seenRequests).toEqual([
+      {
+        method: 'POST',
+        url: '/create_task',
+        body: { initial_prompt: 'Build API task', project_id: 'P-1', labels: ['backend'] },
+      },
+      {
+        method: 'POST',
+        url: '/create_task',
+        body: { initial_prompt: 'Build UI task', project_id: 'P-1', labels: ['frontend', 'review'] },
+      },
+      {
+        method: 'POST',
+        url: '/set_task_dependencies',
+        body: { task_id: 'KVG-11', depends_on: ['KVG-10', 'KVG-1'] },
+      },
+    ]);
+    expect(JSON.parse(stdout)).toEqual({
+      status: 'created',
+      tasks: { api: 'KVG-10', ui: 'KVG-11' },
+      created: [
+        { key: 'api', task_id: 'KVG-10' },
+        { key: 'ui', task_id: 'KVG-11' },
+      ],
+      dependencies: [
+        { key: 'ui', task_id: 'KVG-11', depends_on: ['KVG-10', 'KVG-1'], status: 'updated' },
+      ],
+    });
+  });
+
+  it('rejects worktree in task plans before contacting the HTTP bridge', async () => {
+    const planPath = await writePlanFile('worktree', {
+      projectId: 'P-1',
+      worktree: '/repo',
+      tasks: [{ key: 'api', prompt: 'Build API task' }],
+    });
+    let requestCount = 0;
+    const server = createServer((_req, res) => {
+      requestCount += 1;
+      res.writeHead(500, { 'content-type': 'text/plain' });
+      res.end('should not be called');
+    });
+    const port = await listen(server);
+
+    try {
+      await expect(runCli(['task', 'plan', 'apply', '--file', planPath], {
+        OPENFORGE_HTTP_PORT: String(port),
+      })).rejects.toMatchObject({
+        stderr: expect.stringContaining('task plan worktree is not supported'),
+      });
+      expect(requestCount).toBe(0);
+    } finally {
+      await close(server);
+    }
+  });
+
+  it('rejects per-task worktree in task plans before contacting the HTTP bridge', async () => {
+    const planPath = await writePlanFile('task-worktree', {
+      projectId: 'P-1',
+      tasks: [{ key: 'api', prompt: 'Build API task', worktree: '/repo' }],
+    });
+    let requestCount = 0;
+    const server = createServer((_req, res) => {
+      requestCount += 1;
+      res.writeHead(500, { 'content-type': 'text/plain' });
+      res.end('should not be called');
+    });
+    const port = await listen(server);
+
+    try {
+      await expect(runCli(['task', 'plan', 'apply', '--file', planPath], {
+        OPENFORGE_HTTP_PORT: String(port),
+      })).rejects.toMatchObject({
+        stderr: expect.stringContaining('task plan tasks[0].worktree is not supported'),
+      });
+      expect(requestCount).toBe(0);
+    } finally {
+      await close(server);
+    }
+  });
+
+  it('rejects invalid JSON task plans before contacting the HTTP bridge', async () => {
+    const planPath = await writePlanFile('invalid', {
+      tasks: [
+        { key: 'api', prompt: 'Build API task' },
+        { key: 'ui', prompt: 'Build UI task', dependsOn: ['missing'] },
+      ],
+    });
+    let requestCount = 0;
+    const server = createServer((_req, res) => {
+      requestCount += 1;
+      res.writeHead(500, { 'content-type': 'text/plain' });
+      res.end('should not be called');
+    });
+    const port = await listen(server);
+
+    try {
+      await expect(runCli(['task', 'plan', 'apply', '--file', planPath], {
+        OPENFORGE_HTTP_PORT: String(port),
+      })).rejects.toMatchObject({
+        stderr: expect.stringContaining('unknown dependsOn key "missing"'),
+      });
+      expect(requestCount).toBe(0);
+    } finally {
+      await close(server);
+    }
+  });
+
+  it('rolls back created tasks when task plan dependency linking fails', async () => {
+    const planPath = await writePlanFile('rollback', {
+      tasks: [
+        { key: 'api', prompt: 'Build API task' },
+        { key: 'ui', prompt: 'Build UI task', dependsOn: ['api'] },
+      ],
+    });
+
+    let seenRequests = [];
+    try {
+      await runCliAgainstRequestSequence([
+        'task',
+        'plan',
+        'apply',
+        '--file',
+        planPath,
+      ], [
+        { method: 'POST', url: '/create_task', response: { task_id: 'KVG-20', status: 'created' } },
+        { method: 'POST', url: '/create_task', response: { task_id: 'KVG-21', status: 'created' } },
+        { method: 'POST', url: '/set_task_dependencies', statusCode: 500, response: { error: 'dependency write failed' } },
+        { method: 'POST', url: '/hard_delete_task', response: { task_id: 'KVG-21', status: 'deleted' } },
+        { method: 'POST', url: '/hard_delete_task', response: { task_id: 'KVG-20', status: 'deleted' } },
+      ]);
+      throw new Error('expected task plan apply to fail');
+    } catch (error) {
+      seenRequests = error.seenRequests ?? [];
+      expect(error.stderr).toContain('rolled back created tasks: KVG-21,KVG-20');
+    }
+
+    expect(seenRequests).toEqual([
+      { method: 'POST', url: '/create_task', body: { initial_prompt: 'Build API task' } },
+      { method: 'POST', url: '/create_task', body: { initial_prompt: 'Build UI task' } },
+      { method: 'POST', url: '/set_task_dependencies', body: { task_id: 'KVG-21', depends_on: ['KVG-20'] } },
+      { method: 'POST', url: '/hard_delete_task', body: { task_id: 'KVG-21' } },
+      { method: 'POST', url: '/hard_delete_task', body: { task_id: 'KVG-20' } },
+    ]);
   });
 
   it('lists projects through the nested project list command', async () => {
