@@ -1,10 +1,13 @@
 <script lang="ts">
   import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
   import type {
+    AgentReviewComment,
     PrFileDiff,
     PrWalkthrough,
     PrWalkthroughStep,
+    ReviewComment,
     ReviewPullRequest,
+    ReviewSubmissionComment,
   } from '@openforge-app/plugin-sdk/domain'
   import { compileWalkthroughPrompt } from '../../lib/walkthroughPrompt'
   import { parseAndValidateWalkthroughSteps } from '../../lib/walkthroughParse'
@@ -26,9 +29,30 @@
     files: PrFileDiff[]
     fetchFileContents: (file: PrFileDiff) => Promise<FileContents>
     projectId: string | null
+    existingComments: ReviewComment[]
+    pendingComments: ReviewSubmissionComment[]
+    onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
+    agentComments: AgentReviewComment[]
+    onAgentCommentsChange: (comments: AgentReviewComment[]) => void
+    onUpdateAgentCommentStatus: (commentId: number, status: 'approved' | 'dismissed') => Promise<void> | void
+    onOpenUrl: (url: string) => void | Promise<void>
   }
 
-  let { api: _api, githubSync, pr, files, fetchFileContents, projectId }: Props = $props()
+  let {
+    api: _api,
+    githubSync,
+    pr,
+    files,
+    fetchFileContents,
+    projectId,
+    existingComments,
+    pendingComments,
+    onPendingCommentsChange,
+    agentComments,
+    onAgentCommentsChange,
+    onUpdateAgentCommentStatus,
+    onOpenUrl,
+  }: Props = $props()
 
   let walkthrough = $state<PrWalkthrough | null>(null)
   let isLoading = $state(false)
@@ -323,10 +347,17 @@
         <DiffViewer
           bind:this={diffViewer}
           files={stepFiles}
+          existingComments={existingComments}
           repoOwner={pr.repo_owner}
           repoName={pr.repo_name}
           fileTreeVisible={false}
           {fetchFileContents}
+          agentComments={agentComments}
+          pendingComments={pendingComments}
+          onPendingCommentsChange={onPendingCommentsChange}
+          onAgentCommentsChange={onAgentCommentsChange}
+          onUpdateAgentCommentStatus={onUpdateAgentCommentStatus}
+          onOpenUrl={onOpenUrl}
         />
       </div>
     </div>
