@@ -61,12 +61,14 @@ describe('settingsSaver', () => {
       taskIdPrefix: 'T-',
       githubToken: 'gh-token',
       codeCleanupTasksEnabled: true,
+      taskDisplayTitleMetadataUpdatesEnabled: true,
       githubPollInterval: 45,
     })
 
     expect(setConfig).toHaveBeenCalledWith('task_id_prefix', 'T-')
     expect(setConfig).toHaveBeenCalledWith('github_token', 'gh-token')
     expect(setConfig).toHaveBeenCalledWith('code_cleanup_tasks_enabled', 'true')
+    expect(setConfig).toHaveBeenCalledWith('task_display_title_metadata_updates_enabled', 'true')
     expect(setConfig).toHaveBeenCalledWith('github_poll_interval', '45')
   })
 
@@ -75,6 +77,7 @@ describe('settingsSaver', () => {
       taskIdPrefix: 'T-',
       githubToken: 'gh-token',
       codeCleanupTasksEnabled: true,
+      taskDisplayTitleMetadataUpdatesEnabled: false,
       githubPollInterval: 0,
     })
 
@@ -86,6 +89,7 @@ describe('settingsSaver', () => {
       taskIdPrefix: 'T-',
       githubToken: 'gh-token',
       codeCleanupTasksEnabled: true,
+      taskDisplayTitleMetadataUpdatesEnabled: false,
       githubPollInterval: 10,
     })
 
@@ -97,6 +101,7 @@ describe('settingsSaver', () => {
       taskIdPrefix: 'T-',
       githubToken: 'gh-token',
       codeCleanupTasksEnabled: true,
+      taskDisplayTitleMetadataUpdatesEnabled: false,
       githubPollInterval: 301,
     })
 
@@ -108,6 +113,7 @@ describe('settingsSaver', () => {
       taskIdPrefix: 'T-',
       githubToken: 'gh-token',
       codeCleanupTasksEnabled: true,
+      taskDisplayTitleMetadataUpdatesEnabled: false,
       githubPollInterval: Number.NaN,
     })
 

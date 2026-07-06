@@ -87,6 +87,7 @@
 
   // Feature flag state
   let isCodeCleanupTasksEnabled = $state($codeCleanupTasksEnabled)
+  let isTaskDisplayTitleMetadataUpdatesEnabled = $state(false)
   // Theme state
   let isDarkMode = $state($themeMode === 'dark')
 
@@ -102,6 +103,10 @@
   function handleCodeCleanupTasksToggle() {
     isCodeCleanupTasksEnabled = !isCodeCleanupTasksEnabled
     $codeCleanupTasksEnabled = isCodeCleanupTasksEnabled
+  }
+
+  function handleTaskDisplayTitleMetadataUpdatesToggle() {
+    isTaskDisplayTitleMetadataUpdatesEnabled = !isTaskDisplayTitleMetadataUpdatesEnabled
   }
 
   function handleProjectColorChange(value: string) {
@@ -257,6 +262,7 @@
       githubToken = globalSettings.githubToken
       isCodeCleanupTasksEnabled = globalSettings.codeCleanupTasksEnabled
       $codeCleanupTasksEnabled = isCodeCleanupTasksEnabled
+      isTaskDisplayTitleMetadataUpdatesEnabled = globalSettings.taskDisplayTitleMetadataUpdatesEnabled
       githubPollInterval = globalSettings.githubPollInterval
       globalSettingsLoaded = true
     } catch (e) {
@@ -333,6 +339,7 @@
         taskIdPrefix,
         githubToken,
         codeCleanupTasksEnabled: isCodeCleanupTasksEnabled,
+        taskDisplayTitleMetadataUpdatesEnabled: isTaskDisplayTitleMetadataUpdatesEnabled,
         githubPollInterval,
       }
       return true
@@ -669,7 +676,9 @@
 
         <SettingsExperimentalCard
           codeCleanupTasksEnabled={isCodeCleanupTasksEnabled}
+          taskDisplayTitleMetadataUpdatesEnabled={isTaskDisplayTitleMetadataUpdatesEnabled}
           onCodeCleanupTasksToggle={() => { handleCodeCleanupTasksToggle(); scheduleSave() }}
+          onTaskDisplayTitleMetadataUpdatesToggle={() => { handleTaskDisplayTitleMetadataUpdatesToggle(); scheduleSave() }}
           disabled={!globalSettingsLoaded}
         />
 

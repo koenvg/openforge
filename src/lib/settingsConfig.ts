@@ -26,6 +26,7 @@ export interface GlobalSettingsConfig {
   taskIdPrefix: string
   githubToken: string
   codeCleanupTasksEnabled: boolean
+  taskDisplayTitleMetadataUpdatesEnabled: boolean
   githubPollInterval: number
 }
 
@@ -86,6 +87,7 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettingsConfig = {
   taskIdPrefix: '',
   githubToken: '',
   codeCleanupTasksEnabled: false,
+  taskDisplayTitleMetadataUpdatesEnabled: false,
   githubPollInterval: DEFAULT_GITHUB_POLL_INTERVAL_SECONDS,
 }
 
@@ -112,10 +114,11 @@ export async function loadProjectSettings(projectId: string): Promise<ProjectSet
 }
 
 export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
-  const [taskIdPrefix, githubToken, codeCleanupTasksEnabled, githubPollInterval] = await Promise.all([
+  const [taskIdPrefix, githubToken, codeCleanupTasksEnabled, taskDisplayTitleMetadataUpdatesEnabled, githubPollInterval] = await Promise.all([
     getConfig('task_id_prefix'),
     getConfig('github_token'),
     getConfig('code_cleanup_tasks_enabled'),
+    getConfig('task_display_title_metadata_updates_enabled'),
     getConfig('github_poll_interval'),
   ])
 
@@ -123,6 +126,7 @@ export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
     taskIdPrefix: taskIdPrefix ?? DEFAULT_GLOBAL_SETTINGS.taskIdPrefix,
     githubToken: githubToken ?? DEFAULT_GLOBAL_SETTINGS.githubToken,
     codeCleanupTasksEnabled: codeCleanupTasksEnabled === 'true',
+    taskDisplayTitleMetadataUpdatesEnabled: taskDisplayTitleMetadataUpdatesEnabled === 'true',
     githubPollInterval: parseGitHubPollIntervalSeconds(githubPollInterval),
   }
 }

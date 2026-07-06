@@ -28,6 +28,8 @@ use std::{
     time::Duration,
 };
 
+const TASK_DISPLAY_TITLE_METADATA_UPDATES_ENABLED_CONFIG_KEY: &str =
+    "task_display_title_metadata_updates_enabled";
 const APP_INVOKE_MAX_BODY_BYTES: usize = 96 * 1024 * 1024;
 const APP_EVENT_KEEPALIVE_TEXT: &str = "openforge-event-stream-keepalive";
 /// Rust-sidecar internal cleanup budget after SIGTERM.
@@ -494,7 +496,7 @@ async fn handle_agent_lifecycle_notification(
 
     if let Some(change) = status_change {
         emit_agent_status_changed(&state, &change);
-        if should_start_task_display_title_refresh(&notification) {
+        if should_start_task_display_title_refresh(&state, &notification) {
             let refresh_state = state.clone();
             let db = Arc::clone(&refresh_state.db);
             let task_id = notification.task_id.clone();
@@ -543,9 +545,26 @@ async fn handle_agent_lifecycle_notification(
     Ok(Json(serde_json::json!({ "status": "ok" })))
 }
 
+fn task_display_title_metadata_updates_enabled(state: &AppState) -> bool {
+    state
+        .db
+        .lock()
+        .unwrap()
+        .get_config(TASK_DISPLAY_TITLE_METADATA_UPDATES_ENABLED_CONFIG_KEY)
+        .ok()
+        .flatten()
+        .as_deref()
+        == Some("true")
+}
+
 fn should_start_task_display_title_refresh(
+    state: &AppState,
     notification: &crate::agent_lifecycle::AgentLifecycleNotification,
 ) -> bool {
+    if !task_display_title_metadata_updates_enabled(state) {
+        return false;
+    }
+
     if notification.kind != crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy {
         return false;
     }

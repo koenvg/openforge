@@ -6,7 +6,9 @@ import SettingsExperimentalCard from './SettingsExperimentalCard.svelte'
 function defaultProps(overrides: Record<string, unknown> = {}) {
 	return {
 		codeCleanupTasksEnabled: false,
+		taskDisplayTitleMetadataUpdatesEnabled: false,
 		onCodeCleanupTasksToggle: vi.fn(),
+		onTaskDisplayTitleMetadataUpdatesToggle: vi.fn(),
 		disabled: false,
 		...overrides,
 	}
@@ -69,6 +71,59 @@ describe('SettingsExperimentalCard', () => {
 			render(SettingsExperimentalCard, { props: defaultProps() })
 
 			expect(screen.getByText('Agents create tasks for code that needs cleanup or splitting')).toBeTruthy()
+		})
+	})
+
+	describe('Task Display Title updates experiment toggle', () => {
+		it('renders Task Display Title Updates label', () => {
+			render(SettingsExperimentalCard, { props: defaultProps() })
+
+			expect(screen.getByText('Task Display Title Updates')).toBeTruthy()
+		})
+
+		it('renders toggle unchecked when taskDisplayTitleMetadataUpdatesEnabled is false', () => {
+			render(SettingsExperimentalCard, {
+				props: defaultProps({ taskDisplayTitleMetadataUpdatesEnabled: false }),
+			})
+
+			const toggle = requireElement(screen.getByTestId('task-display-title-metadata-updates-toggle'), HTMLInputElement)
+			expect(toggle.checked).toBe(false)
+		})
+
+		it('renders toggle checked when taskDisplayTitleMetadataUpdatesEnabled is true', () => {
+			render(SettingsExperimentalCard, {
+				props: defaultProps({ taskDisplayTitleMetadataUpdatesEnabled: true }),
+			})
+
+			const toggle = requireElement(screen.getByTestId('task-display-title-metadata-updates-toggle'), HTMLInputElement)
+			expect(toggle.checked).toBe(true)
+		})
+
+		it('calls onTaskDisplayTitleMetadataUpdatesToggle when toggle is clicked', async () => {
+			const onTaskDisplayTitleMetadataUpdatesToggle = vi.fn()
+			render(SettingsExperimentalCard, {
+				props: defaultProps({ onTaskDisplayTitleMetadataUpdatesToggle }),
+			})
+
+			const toggle = screen.getByTestId('task-display-title-metadata-updates-toggle')
+			await fireEvent.click(toggle)
+
+			expect(onTaskDisplayTitleMetadataUpdatesToggle).toHaveBeenCalledOnce()
+		})
+
+		it('disables Task Display Title updates toggle when disabled', () => {
+			render(SettingsExperimentalCard, {
+				props: defaultProps({ disabled: true }),
+			})
+
+			const toggle = requireElement(screen.getByTestId('task-display-title-metadata-updates-toggle'), HTMLInputElement)
+			expect(toggle.disabled).toBe(true)
+		})
+
+		it('renders description text for Task Display Title updates toggle', () => {
+			render(SettingsExperimentalCard, { props: defaultProps() })
+
+			expect(screen.getByText('Generate Task Display Titles from agent activity metadata')).toBeTruthy()
 		})
 	})
 })
