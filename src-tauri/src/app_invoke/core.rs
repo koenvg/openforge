@@ -110,6 +110,21 @@ pub(super) async fn handle_app_core_task_project_command(
             })?;
             serde_json::Value::Null
         }
+        "create_project_from_git" => {
+            let url = payload_string(&request.payload, "url")?;
+            let parent_dir = payload_string(&request.payload, "parentDir")?;
+            let name = payload_string(&request.payload, "name")?;
+            let project = crate::git_clone::create_project_from_git(
+                &state.db,
+                &state.github_client,
+                &url,
+                &parent_dir,
+                &name,
+            )
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+            json_value(project)?
+        }
         _ => return Ok(None),
     };
 

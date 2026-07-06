@@ -180,6 +180,65 @@ pub fn cleanup_partial_clone(target: &Path) {
     }
 }
 
+use std::sync::{Arc, Mutex};
+
+/// End-to-end: parse the URL, guard against collisions, optionally pre-check
+/// access with the stored PAT, clone, then register the project.
+pub async fn create_project_from_git(
+    db: &Arc<Mutex<crate::db::Database>>,
+    github_client: &crate::github_client::GitHubClient,
+    url: &str,
+    parent_dir: &str,
+    name: &str,
+) -> Result<crate::db::ProjectRow, String> {
+    let parsed = parse_repo_url(url)?;
+    let target = resolve_target_path(Path::new(parent_dir), &parsed.repo)?;
+
+    // Serialize concurrent clones to the same destination.
+    let lock = crate::git_worktree::acquire_lock(&target);
+    let _guard = lock.lock().await;
+
+    // Collision guard — release the DB lock before any network/subprocess work.
+    {
+        let db = crate::db::acquire_db(db);
+        check_target_available(&target, &db)?;
+    }
+
+    // Access pre-check only when a PAT is stored; tolerate inconclusive results.
+    let token = crate::github_runtime::github_token().ok();
+    if let Some(token) = token.as_deref() {
+        match github_client
+            .check_repo_access(&parsed.owner, &parsed.repo, token)
+            .await
+        {
+            Ok(true) => {}
+            Ok(false) => {
+                return Err(format!(
+                    "Repository {}/{} was not found or you don't have access to it.",
+                    parsed.owner, parsed.repo
+                ));
+            }
+            Err(err) => {
+                log::warn!("GitHub access pre-check failed, proceeding to clone: {err}");
+            }
+        }
+    }
+
+    clone_repo(&parsed, &target, token.as_deref()).await?;
+
+    let project = {
+        let db = crate::db::acquire_db(db);
+        db.create_project(name, &target.to_string_lossy())
+            .map_err(|e| {
+                // The row failed to insert after a successful clone — roll back the
+                // on-disk clone so the destination is free for a retry.
+                cleanup_partial_clone(&target);
+                format!("Failed to create project: {e}")
+            })?
+    };
+    Ok(project)
+}
+
 /// Clones `parsed` into `target` via the `git` binary, cleaning up on failure.
 pub async fn clone_repo(
     parsed: &ParsedRepo,
@@ -391,5 +450,30 @@ mod tests {
         std::fs::write(target.join("nested/file.txt"), b"x").unwrap();
         cleanup_partial_clone(&target);
         assert!(!target.exists());
+    }
+
+    #[tokio::test]
+    async fn create_project_from_git_rejects_existing_target_before_cloning() {
+        let (db, dbpath) = crate::db::test_helpers::make_test_db("clone_orch_collision");
+        let db = std::sync::Arc::new(std::sync::Mutex::new(db));
+        let client = crate::github_client::GitHubClient::new();
+
+        let parent = tempdir().unwrap();
+        // Pre-create the destination so the collision guard trips.
+        std::fs::create_dir(parent.path().join("widgets")).unwrap();
+
+        // Use a shorthand-style owner/repo so parsing yields repo "widgets".
+        let result = create_project_from_git(
+            &db,
+            &client,
+            "acme/widgets",
+            &parent.path().to_string_lossy(),
+            "Widgets",
+        )
+        .await;
+
+        assert!(result.is_err(), "existing target dir must be rejected");
+        drop(db);
+        let _ = std::fs::remove_file(&dbpath);
     }
 }
