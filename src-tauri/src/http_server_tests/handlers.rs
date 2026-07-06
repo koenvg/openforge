@@ -63,8 +63,7 @@ async fn test_get_project_task_labels_handler_lists_existing_project_labels() {
             .expect("create other task");
         db.add_task_label(&first.id, "cleanup")
             .expect("add cleanup label");
-        db.add_task_label(&second.id, "Bug")
-            .expect("add bug label");
+        db.add_task_label(&second.id, "Bug").expect("add bug label");
         db.add_task_label(&other.id, "other")
             .expect("add other label");
     }

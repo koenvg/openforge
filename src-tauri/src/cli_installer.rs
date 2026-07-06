@@ -385,7 +385,9 @@ mod tests {
         assert!(skill_content.contains("When creating multiple related Tasks"));
         assert_eq!(skill_content.matches("openforge get-task").count(), 1);
         assert_eq!(
-            skill_content.matches("openforge list-project-labels").count(),
+            skill_content
+                .matches("openforge list-project-labels")
+                .count(),
             1
         );
         assert_eq!(
