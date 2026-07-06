@@ -19,7 +19,7 @@ type DesktopEventSubscription = {
   disposed: boolean
 }
 
-const HOST_EVENT_NAMES = new Set(['context-changed', 'navigation-changed', 'selection-changed'])
+const HOST_EVENT_NAMES = new Set(['context-changed', 'navigation-changed', 'selection-changed', 'view-invoked'])
 const pluginHostListeners = new Map<PluginHostEventName, Set<PluginHostListener>>()
 const desktopEventSubscriptions = new Map<string, DesktopEventSubscription>()
 const pluginHostUnsubscribers = new Map<string, Set<() => void>>()

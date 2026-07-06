@@ -727,6 +727,13 @@
         silentRefreshPrs()
       })
     )
+    unlisteners.push(
+      api.events.onGlobal<{ view: string }>('openforge.view-invoked', (payload) => {
+        if (payload?.view === api.navigation.get().currentView) {
+          backToList()
+        }
+      })
+    )
   })
 
   onDestroy(() => {

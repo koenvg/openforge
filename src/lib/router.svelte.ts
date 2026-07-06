@@ -1,4 +1,5 @@
 import { isPluginViewKey } from './plugin/types'
+import { emitPluginHostEvent } from './plugin/pluginHostEvents'
 import { get } from 'svelte/store'
 import {
   activeProjectId,
@@ -137,6 +138,7 @@ export function useAppRouter() {
     if (view === 'board') {
       resetToBoardRoute()
       currentViewState = 'board'
+      notifyViewInvoked(view)
       return
     }
 
@@ -147,6 +149,12 @@ export function useAppRouter() {
     if (TASK_CLEARING_VIEWS.has(view) || isPluginViewKey(view)) {
       selectedTaskId.set(null)
     }
+
+    notifyViewInvoked(view)
+  }
+
+  function notifyViewInvoked(view: AppView) {
+    emitPluginHostEvent('view-invoked', { view })
   }
 
   function navigateToTask(taskId: string) {
