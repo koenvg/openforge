@@ -1,8 +1,9 @@
 <script lang="ts">
   import type { AuthoredPullRequest, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
+  import PluginPageHeader from '@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte'
+  import PluginViewState from '@openforge-app/plugin-sdk/ui/PluginViewState.svelte'
   import AuthoredPrCard from '@openforge-app/pr-review-ui/AuthoredPrCard.svelte'
   import ReviewPrCard from '@openforge-app/pr-review-ui/ReviewPrCard.svelte'
-  import ProjectPageHeader from '../../project/ProjectPageHeader.svelte'
   import RepositoryFilterSection from './RepositoryFilterSection.svelte'
 
   interface Props {
@@ -85,7 +86,7 @@
 </script>
 
 <div class="flex flex-col h-full overflow-hidden">
-  <ProjectPageHeader
+  <PluginPageHeader
     title={headerTitle}
     subtitle={headerSubtitle}
   >
@@ -104,14 +105,14 @@
         />
       {/if}
     {/snippet}
-  </ProjectPageHeader>
+  </PluginPageHeader>
 
   {#if projectHasNoRepo}
-    <div class="flex flex-col items-center justify-center flex-1 gap-3 text-base-content/70 text-center p-8">
-      <div class="badge badge-ghost badge-lg">Not linked</div>
-      <h3 class="text-xl font-semibold text-base-content m-0">This project isn't linked to a GitHub repository</h3>
-      <p class="text-sm m-0 max-w-md">{projectName} has no GitHub remote, so there are no pull requests to show here. Open <span class="font-medium">All Pull Requests</span> to review pull requests across all your repositories.</p>
-    </div>
+    <PluginViewState
+      empty
+      emptyTitle="This project isn't linked to a GitHub repository"
+      emptyDescription={`${projectName} has no GitHub remote, so there are no pull requests to show here. Open All Pull Requests to review pull requests across all your repositories.`}
+    />
   {:else}
     <div class="flex flex-1 overflow-hidden">
       <div class="flex-1 flex flex-col overflow-hidden border-r border-base-300">
@@ -127,46 +128,45 @@
 
         <div class="flex-1 overflow-y-auto p-5 pb-8">
           {#if isLoading && filteredReviewPrs.length === 0}
-            <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm">
-              <span class="loading loading-spinner loading-md text-primary"></span>
-              <span>Loading PRs...</span>
-            </div>
+            <PluginViewState loading loadingLabel="Loading PRs..." />
           {:else if error}
-            <div class="flex flex-col items-center justify-center h-full gap-3 text-error text-sm text-center p-5" role="alert">
-              <div class="badge badge-error badge-lg">Sync issue</div>
-              <h3 class="text-xl font-semibold text-base-content m-0">Unable to load review requests</h3>
-              <p class="text-sm m-0 max-w-md text-base-content/70">{error}</p>
-              <div class="flex flex-wrap items-center justify-center gap-2 pt-1">
+            <PluginViewState error={error} errorTitle="Unable to load review requests">
+              {#snippet errorActions()}
                 <button class="btn btn-primary btn-sm" onclick={onRefreshPrs}>Retry loading review requests</button>
                 <button class="btn btn-ghost btn-sm" onclick={onOpenGithubSettings}>Open GitHub settings</button>
-              </div>
-            </div>
+              {/snippet}
+            </PluginViewState>
           {:else if filteredReviewPrs.length === 0 && allReviewPrs.length > 0 && hiddenReviewRepos.length > 0}
-            <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/70 text-center">
-              <div class="badge badge-warning badge-lg">Filtered</div>
-              <h3 class="text-xl font-semibold text-base-content m-0">All review requests are hidden by filters</h3>
-              <p class="text-sm m-0 max-w-md">
-                {allReviewPrs.length} {pluralize(allReviewPrs.length, 'PR')} from {hiddenReviewRepos.join(', ')} {pluralize(hiddenReviewRepos.length, 'is', 'are')} currently unchecked for this project.
-              </p>
-              <button class="btn btn-primary btn-sm" onclick={onOpenRepositoryFilters}>Review repository filters</button>
-            </div>
+            <PluginViewState
+              empty
+              emptyTitle="All review requests are hidden by filters"
+              emptyDescription={`${allReviewPrs.length} ${pluralize(allReviewPrs.length, 'PR')} from ${hiddenReviewRepos.join(', ')} ${pluralize(hiddenReviewRepos.length, 'is', 'are')} currently unchecked for this project.`}
+            >
+              {#snippet emptyActions()}
+                <button class="btn btn-primary btn-sm" onclick={onOpenRepositoryFilters}>Review repository filters</button>
+              {/snippet}
+            </PluginViewState>
           {:else if filteredReviewPrs.length === 0 && githubTokenConfigured === false}
-            <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/70 text-center">
-              <div class="badge badge-warning badge-lg">Not connected</div>
-              <h3 class="text-xl font-semibold text-base-content m-0">Connect GitHub to check review requests</h3>
-              <p class="text-sm m-0 max-w-md">No GitHub token is configured, so OpenForge cannot check review requests for {projectName}.</p>
-              <button class="btn btn-primary btn-sm" onclick={onOpenGithubSettings}>Open GitHub settings</button>
-            </div>
+            <PluginViewState
+              empty
+              emptyTitle="Connect GitHub to check review requests"
+              emptyDescription={`No GitHub token is configured, so OpenForge cannot check review requests for ${projectName}.`}
+            >
+              {#snippet emptyActions()}
+                <button class="btn btn-primary btn-sm" onclick={onOpenGithubSettings}>Open GitHub settings</button>
+              {/snippet}
+            </PluginViewState>
           {:else if filteredReviewPrs.length === 0}
-            <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/70 text-center">
-              <div class="badge badge-success badge-lg">Checked</div>
-              <h3 class="text-xl font-semibold text-base-content m-0">No PRs requesting your review</h3>
-              <p class="text-sm m-0 max-w-md">GitHub is connected for {projectName}. Sync again if you expected review requests, or check repository filters for hidden repos.</p>
-              <div class="flex flex-wrap items-center justify-center gap-2 pt-1">
+            <PluginViewState
+              empty
+              emptyTitle="No PRs requesting your review"
+              emptyDescription={`GitHub is connected for ${projectName}. Sync again if you expected review requests, or check repository filters for hidden repos.`}
+            >
+              {#snippet emptyActions()}
                 <button class="btn btn-primary btn-sm" onclick={onRefreshPrs}>Sync review requests</button>
                 {#if showFilters}<button class="btn btn-ghost btn-sm" onclick={onOpenRepositoryFilters}>Review repository filters</button>{/if}
-              </div>
-            </div>
+              {/snippet}
+            </PluginViewState>
           {:else}
             {#each [...groupedPrs.entries()] as [repo, prs]}
               <div class="mb-6">
@@ -202,46 +202,45 @@
 
         <div class="flex-1 overflow-y-auto p-5 pb-8">
           {#if isLoadingAuthored && filteredAuthoredPrs.length === 0}
-            <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm">
-              <span class="loading loading-spinner loading-md text-primary"></span>
-              <span>Loading PRs...</span>
-            </div>
+            <PluginViewState loading loadingLabel="Loading PRs..." />
           {:else if authoredError}
-            <div class="flex flex-col items-center justify-center h-full gap-3 text-error text-sm text-center p-5" role="alert">
-              <div class="badge badge-error badge-lg">Sync issue</div>
-              <h3 class="text-xl font-semibold text-base-content m-0">Unable to load your pull requests</h3>
-              <p class="text-sm m-0 max-w-md text-base-content/70">{authoredError}</p>
-              <div class="flex flex-wrap items-center justify-center gap-2 pt-1">
+            <PluginViewState error={authoredError} errorTitle="Unable to load your pull requests">
+              {#snippet errorActions()}
                 <button class="btn btn-primary btn-sm" onclick={onRefreshAuthoredPrs}>Retry loading your pull requests</button>
                 <button class="btn btn-ghost btn-sm" onclick={onOpenGithubSettings}>Open GitHub settings</button>
-              </div>
-            </div>
+              {/snippet}
+            </PluginViewState>
           {:else if filteredAuthoredPrs.length === 0 && allAuthoredPrs.length > 0 && hiddenAuthoredRepos.length > 0}
-            <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/70 text-center">
-              <div class="badge badge-warning badge-lg">Filtered</div>
-              <h3 class="text-xl font-semibold text-base-content m-0">All authored PRs are hidden by filters</h3>
-              <p class="text-sm m-0 max-w-md">
-                {allAuthoredPrs.length} {pluralize(allAuthoredPrs.length, 'PR')} from {hiddenAuthoredRepos.join(', ')} {pluralize(hiddenAuthoredRepos.length, 'is', 'are')} currently unchecked for this project.
-              </p>
-              <button class="btn btn-primary btn-sm" onclick={onOpenRepositoryFilters}>Review repository filters</button>
-            </div>
+            <PluginViewState
+              empty
+              emptyTitle="All authored PRs are hidden by filters"
+              emptyDescription={`${allAuthoredPrs.length} ${pluralize(allAuthoredPrs.length, 'PR')} from ${hiddenAuthoredRepos.join(', ')} ${pluralize(hiddenAuthoredRepos.length, 'is', 'are')} currently unchecked for this project.`}
+            >
+              {#snippet emptyActions()}
+                <button class="btn btn-primary btn-sm" onclick={onOpenRepositoryFilters}>Review repository filters</button>
+              {/snippet}
+            </PluginViewState>
           {:else if filteredAuthoredPrs.length === 0 && githubTokenConfigured === false}
-            <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/70 text-center">
-              <div class="badge badge-warning badge-lg">Not connected</div>
-              <h3 class="text-xl font-semibold text-base-content m-0">Connect GitHub to check your PRs</h3>
-              <p class="text-sm m-0 max-w-md">No GitHub token is configured, so OpenForge cannot check pull requests authored by your account.</p>
-              <button class="btn btn-primary btn-sm" onclick={onOpenGithubSettings}>Open GitHub settings</button>
-            </div>
+            <PluginViewState
+              empty
+              emptyTitle="Connect GitHub to check your PRs"
+              emptyDescription="No GitHub token is configured, so OpenForge cannot check pull requests authored by your account."
+            >
+              {#snippet emptyActions()}
+                <button class="btn btn-primary btn-sm" onclick={onOpenGithubSettings}>Open GitHub settings</button>
+              {/snippet}
+            </PluginViewState>
           {:else if filteredAuthoredPrs.length === 0}
-            <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/70 text-center">
-              <div class="badge badge-success badge-lg">Checked</div>
-              <h3 class="text-xl font-semibold text-base-content m-0">No open pull requests</h3>
-              <p class="text-sm m-0 max-w-md">GitHub is connected for your account. Sync again if you expected authored PRs, or check repository filters for hidden repos.</p>
-              <div class="flex flex-wrap items-center justify-center gap-2 pt-1">
+            <PluginViewState
+              empty
+              emptyTitle="No open pull requests"
+              emptyDescription="GitHub is connected for your account. Sync again if you expected authored PRs, or check repository filters for hidden repos."
+            >
+              {#snippet emptyActions()}
                 <button class="btn btn-primary btn-sm" onclick={onRefreshAuthoredPrs}>Sync my pull requests</button>
                 {#if showFilters}<button class="btn btn-ghost btn-sm" onclick={onOpenRepositoryFilters}>Review repository filters</button>{/if}
-              </div>
-            </div>
+              {/snippet}
+            </PluginViewState>
           {:else}
             {#each [...groupedAuthoredPrs.entries()] as [repo, prs]}
               <div class="mb-6">

@@ -12,7 +12,7 @@
 
   let { api, context: _context, projectName, projectId = null }: Props = $props()
   import { useVimNavigation } from './lib/useVimNavigation.svelte'
-  import ProjectPageHeader from './ProjectPageHeader.svelte'
+  import PluginPageHeader from '@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte'
   import SkillDetailSection from './SkillDetailSection.svelte'
   import SkillsListSection from './SkillsListSection.svelte'
   import { getPreferredSkillIdentity, getSkillIdentity, getSkillSourcePath, getVisibleSkills, groupSkillsBySource, isSameSkillIdentity, parseSkillFrontmatter, stripSkillFrontmatter, type SkillInfo } from './lib/skillDomain'
@@ -282,7 +282,7 @@
 <svelte:window onkeydown={handleSkillsKeydown} />
 
 <div class="flex flex-col h-full overflow-hidden">
-  <ProjectPageHeader
+  <PluginPageHeader
     title={projectName ? `${projectName} — Skills` : 'Skills'}
     subtitle={$activeProjectId ? 'View and edit project and personal skills' : 'Select a project to view skills'}
   >
@@ -294,7 +294,7 @@
         </button>
       </div>
     {/snippet}
-  </ProjectPageHeader>
+  </PluginPageHeader>
 
   <div class="flex flex-1 overflow-hidden">
     <SkillsListSection

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
+  import PluginPageHeader from '@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte'
   import { activeProjectId, fileBrowserStates, pendingFileReveal } from './lib/stores'
   import {
     countDefaultHiddenRootEntries,
@@ -314,24 +315,28 @@
 </script>
 
 <div class="flex flex-col h-full min-h-0 overflow-hidden">
-  <div class="flex items-center justify-between gap-3 px-4 py-2 border-b border-base-300 shrink-0 bg-base-200">
-    <h2 class="text-sm font-semibold text-base-content min-w-0 truncate">{projectName} — Files</h2>
-    {#if hasLoaded && !loading}
-      <div class="flex items-center gap-2 shrink-0">
-        {#if hiddenRootEntryCount > 0}
-          <button
-            class="btn btn-ghost btn-xs"
-            type="button"
-            onclick={toggleHiddenRootEntries}
-            aria-pressed={showHiddenRootEntries}
-          >
-            {showHiddenRootEntries ? 'Hide generated folders' : `Show generated folders (${hiddenRootEntryCount})`}
-          </button>
-        {/if}
-        <span class="badge badge-neutral badge-sm">{visibleRootEntryCount} {visibleRootEntryCount === 1 ? 'item' : 'items'}</span>
-      </div>
-    {/if}
-  </div>
+  <PluginPageHeader
+    title={`${projectName || 'Project'} — Files`}
+    subtitle="Browse and preview project files"
+  >
+    {#snippet actions()}
+      {#if hasLoaded && !loading}
+        <div class="flex items-center gap-2 shrink-0">
+          {#if hiddenRootEntryCount > 0}
+            <button
+              class="btn btn-ghost btn-xs"
+              type="button"
+              onclick={toggleHiddenRootEntries}
+              aria-pressed={showHiddenRootEntries}
+            >
+              {showHiddenRootEntries ? 'Hide generated folders' : `Show generated folders (${hiddenRootEntryCount})`}
+            </button>
+          {/if}
+          <span class="badge badge-neutral badge-sm">{visibleRootEntryCount} {visibleRootEntryCount === 1 ? 'item' : 'items'}</span>
+        </div>
+      {/if}
+    {/snippet}
+  </PluginPageHeader>
 
   <FilesBrowserSection
     {api}

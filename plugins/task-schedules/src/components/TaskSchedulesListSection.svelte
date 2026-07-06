@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PluginViewState from '@openforge-app/plugin-sdk/ui/PluginViewState.svelte'
   import type { TaskSchedule } from '../lib/types'
 
   interface Props {
@@ -36,12 +37,13 @@
 
 <section class="min-w-0 space-y-3" aria-label="Task schedules list">
   {#if loading && schedules.length === 0}
-    <div class="loading loading-spinner loading-md" aria-label="Loading Task Schedules"></div>
+    <PluginViewState loading loadingLabel="Loading Task Schedules" />
   {:else if schedules.length === 0}
-    <div class="rounded-box border border-dashed border-base-300 bg-base-100 px-4 py-6 text-sm text-base-content/70">
-      <h2 class="text-base font-semibold text-base-content">No Task Schedules yet</h2>
-      <p class="mt-1">Create the first project-scoped Task Schedule with the composer.</p>
-    </div>
+    <PluginViewState
+      empty
+      emptyTitle="No Task Schedules yet"
+      emptyDescription="Create the first project-scoped Task Schedule with the composer."
+    />
   {:else}
     {#each schedules as schedule (schedule.id)}
       <article class="rounded-box border border-base-300 bg-base-100 px-3 py-4 shadow-sm">

@@ -53,7 +53,9 @@
     },
     "./ui/MarkdownContent.svelte": "./dist/ui/MarkdownContent.svelte",
     "./ui/ResizablePanel.svelte": "./dist/ui/ResizablePanel.svelte",
-    "./ui/Modal.svelte": "./dist/ui/Modal.svelte"
+    "./ui/Modal.svelte": "./dist/ui/Modal.svelte",
+    "./ui/PluginPageHeader.svelte": "./dist/ui/PluginPageHeader.svelte",
+    "./ui/PluginViewState.svelte": "./dist/ui/PluginViewState.svelte"
   },
   "files": [
     "dist",

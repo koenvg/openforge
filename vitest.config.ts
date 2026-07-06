@@ -59,6 +59,7 @@ export default defineConfig({
           name: 'plugin-sdk',
           environment: 'jsdom',
           globals: true,
+          setupFiles: ['src/test-setup.ts'],
           include: ['packages/plugin-sdk/src/**/*.test.ts'],
           alias: {
             ...pluginSdkAliases,

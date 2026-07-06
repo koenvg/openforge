@@ -20,6 +20,8 @@ export default defineConfig({
       { find: '@openforge-app/plugin-sdk/sanitize', replacement: sourcePath('packages/plugin-sdk/src/sanitize.ts') },
       { find: '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte', replacement: sourcePath('packages/plugin-sdk/src/ui/MarkdownContent.svelte') },
       { find: '@openforge-app/plugin-sdk/ui/Modal.svelte', replacement: sourcePath('packages/plugin-sdk/src/ui/Modal.svelte') },
+      { find: '@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte', replacement: sourcePath('packages/plugin-sdk/src/ui/PluginPageHeader.svelte') },
+      { find: '@openforge-app/plugin-sdk/ui/PluginViewState.svelte', replacement: sourcePath('packages/plugin-sdk/src/ui/PluginViewState.svelte') },
       { find: '@openforge-app/plugin-sdk', replacement: sourcePath('packages/plugin-sdk/src/index.ts') },
     ],
   },
