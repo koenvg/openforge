@@ -20,13 +20,13 @@ Do not bypass the launcher with the underlying script path.
 
 If OpenForge is listening on a non-default HTTP bridge port, set `OPENFORGE_HTTP_PORT` before running the command. The default is `17422`.
 
-Prefer nested command groups for new usage (`openforge task create`, `openforge task update`, `openforge task list`, `openforge project list`). The flat task/project commands below remain compatibility aliases for existing agent prompts and handoff tooling.
+Prefer nested command groups for new usage (`openforge task create`, `openforge task update`, `openforge task list`, `openforge project list`, `openforge project labels list`). The flat task/project commands below remain compatibility aliases for existing agent prompts and handoff tooling.
 
 Plugin management commands are local-only for agent-facing use: install from a local source path with `openforge plugin install --path <local-plugin-source>`, separately enable or disable an installed plugin for a project with `openforge plugin enable|disable --plugin-id <id> --project-id <id>`, and explicitly reload installed artifacts with `openforge plugin reload --plugin-id <id> [--project-id <id>]`. Do not pass npm, git, source-spec, watch, or rebuild inputs to these commands.
 
 ## Task Creation checklist
 
-Before creating follow-up Tasks, decide whether each one has obvious project-relevant Task Labels and dependency links to the current or prerequisite work, then add useful --label values and dependency links during Task Creation with `--label` and `--depends-on` when known; do not invent noisy labels or guessed ordering just because labels and dependencies exist.
+Before creating follow-up Tasks, run the project label discovery command when you know the project id. Reuse an existing project label when it fits; only create a new label through `--label` when the category is genuinely new and useful. Add dependency links during Task Creation with `--depends-on` when known; do not invent noisy labels or guessed ordering just because labels and dependencies exist.
 
 When creating multiple related Tasks, decide whether any Task must be done before another can start. Link prerequisites immediately with `--depends-on` during creation when the predecessor ID is known, or use `openforge link-tasks --chain "T-1 -> T-2 -> T-3"` after all Task IDs exist.
 
@@ -38,7 +38,7 @@ If labels or dependency order are unclear, mention that uncertainty in Handoff N
 openforge create-task --initial-prompt "Describe the follow-up work" --worktree "$PWD" --depends-on T-122 --label cleanup
 openforge update-task --task-id T-123 --summary "What changed and what needs attention"
 openforge get-task --task-id T-123
-openforge list-tasks --project-id P-1 --state doing
+openforge list-project-labels --project-id P-1
 openforge list-task-labels --task-id T-123
 openforge add-task-label --task-id T-123 --label bug
 openforge remove-task-label --task-id T-123 --label-id 42
@@ -51,7 +51,7 @@ openforge delete-task --task-id T-123
 
 `list-tasks` prints compact rows by default (`id`, `prompt_preview`, `status`, `labels`, `depends_on`, `updated_at`) for broad scans and excludes done tasks by default. Pass `--full` when you need complete TaskRow objects. Pass `--state done` only when you explicitly need completed tasks. Use `--worktree "$PWD"` with `create-task` when the project can be inferred from the current worktree and no project id is known.
 
-Labels are project-scoped. Use `--label` on `create-task` for AI-created follow-up work that already has an obvious category, and pair it with `--depends-on` when the follow-up is related to a known active task or prerequisite. `--label` can be repeated or comma-separated, e.g. `--label bug --label "needs review"` or `--label bug,cleanup`. Use `add-task-label`, `remove-task-label`, and `list-task-labels` to manage labels on existing tasks.
+Labels are project-scoped. Use `list-project-labels --project-id <id>` before creating follow-up tasks when a project id is available, and reuse an existing label when it fits. Use `--label` on `create-task` for AI-created follow-up work that already has an obvious category, and pair it with `--depends-on` when the follow-up is related to a known active task or prerequisite. `--label` can be repeated or comma-separated, e.g. `--label bug --label "needs review"` or `--label bug,cleanup`. Use `add-task-label`, `remove-task-label`, and `list-task-labels` to manage labels on existing tasks.
 
 Rare prompt-repair workflow: if a task was created with the wrong initial prompt, do not try to repair it with `update-task`. Use the CLI help for the full safe replacement workflow:
 
@@ -66,6 +66,6 @@ openforge update-task --help
 - Update the active task with concise Handoff Notes before finishing; this writes the task summary only.
 - Use `delete-task` only when the user explicitly wants an OpenForge task removed; it returns JSON status output from the backend deletion bridge.
 - Use dependencies to record prerequisite ordering, not to mark tasks blocked; Start Task enforcement is intentionally left to the app UX.
-- Use labels to record task categories or triage context when they are useful for backlog filtering; do not add noisy labels just because the CLI supports them.
+- Use labels to record task categories or triage context when useful. Run `list-project-labels` before creating follow-up tasks when a project id is available; reuse useful existing labels and avoid noisy one-off labels.
 - Task summaries are Markdown-formatted; use short paragraphs or bullets when they improve readability.
 - The CLI prints JSON so you can pass results back into your reasoning without scraping UI text.

@@ -202,6 +202,11 @@ async function listProjects() {
   printJson(await requestJson('/projects'));
 }
 
+async function listProjectLabels(flags) {
+  const projectId = encodeURIComponent(requireFlag(flags, 'projectId'));
+  printJson(await requestJson(`/project/${projectId}/labels`));
+}
+
 const LOCAL_PLUGIN_INSTALL_ERROR = 'plugin install supports local Plugin Installation only; pass --path <local-plugin-source>';
 const PLUGIN_RELOAD_SOURCE_ERROR = 'plugin reload uses installed Plugin Installation artifacts only';
 
@@ -343,6 +348,14 @@ const COMMAND_SPECS = [
     handler: listProjects,
   },
   {
+    path: ['project', 'labels', 'list'],
+    aliases: [['list-project-labels']],
+    flags: ['projectId'],
+    usage: 'openforge project labels list --project-id <id>',
+    aliasUsage: 'openforge list-project-labels',
+    handler: listProjectLabels,
+  },
+  {
     path: ['plugin', 'install'],
     flags: ['path', 'npm', 'git', 'source'],
     allowPositionals: true,
@@ -454,6 +467,7 @@ Usage:
   openforge remove-task-label --task-id <id> --label-id <id>
   openforge list-tasks --project-id <id> [--state backlog|doing|done] [--full]
   openforge list-projects
+  openforge list-project-labels --project-id <id>
 
 Nested command groups:
 ${COMMAND_SPECS.map((spec) => `  ${spec.usage}`).join('\n')}
@@ -462,7 +476,7 @@ Flat compatibility aliases:
   openforge create-task, update-task, delete-task, get-task, list-tasks
   openforge list-task-labels, add-task-label, remove-task-label
   openforge set-task-dependencies, add-task-dependency, link-tasks
-  openforge list-projects
+  openforge list-projects, list-project-labels
 
 Plugin Installation is local-only for now:
   Local Plugin Source: use openforge plugin install --path <local-plugin-source>
@@ -481,11 +495,12 @@ Task listing:
   list-tasks excludes done tasks unless --state done is passed.
 
 Task creation hygiene:
-  When creating follow-up Tasks, include useful --label values and dependency links when creating related follow-up Tasks.
+  Before creating follow-up Tasks, use list-project-labels when a project id is known and reuse an existing label when it fits.
   Use --label for obvious categories, and link prerequisites immediately with --depends-on or link-tasks when the order is known.
   If labels or dependency order are unclear, state that uncertainty instead of guessing.
 
 Examples:
+  openforge project labels list --project-id P-1
   openforge task list --project-id P-1
   openforge task delete --task-id T-123
   openforge task create --initial-prompt "Correct task prompt" --project-id P-1 --depends-on T-122 --label cleanup
@@ -509,7 +524,7 @@ ${spec.aliasUsage ? `Flat compatibility alias: ${spec.aliasUsage}\n\n` : ''}Task
   If a task was created with the wrong initial prompt, first record its labels, own depends_on list, and reverse dependents by listing project tasks and finding depends_on entries containing the old id. Delete the incorrect task, create a replacement with the desired --initial-prompt, then repoint each dependent with set-task-dependencies.
 
 Task creation hygiene:
-  When creating follow-up Tasks, include useful --label values and dependency links when creating related follow-up Tasks.
+  Before creating follow-up Tasks, use list-project-labels when a project id is known and reuse an existing label when it fits.
   Use --label for obvious categories, and link prerequisites immediately with --depends-on or link-tasks when the order is known.
   If labels or dependency order are unclear, state that uncertainty instead of guessing.
 `);

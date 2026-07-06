@@ -160,6 +160,7 @@ describe('OpenForge CLI', () => {
       'openforge delete-task',
       'openforge get-task',
       'openforge list-tasks',
+      'openforge list-project-labels',
       'openforge list-task-labels',
       'openforge add-task-label',
       'openforge remove-task-label',
@@ -173,6 +174,7 @@ describe('OpenForge CLI', () => {
     expect(skill).toContain('When creating multiple related Tasks');
     expect(skill).toContain('Use labels to record task categories');
     expect(skill.match(/openforge get-task/g)).toHaveLength(1);
+    expect(skill.match(/openforge list-project-labels/g)).toHaveLength(1);
     expect(skill.match(/openforge list-task-labels/g)).toHaveLength(1);
     expect(skill).not.toContain('reverse dependents');
     expect(skill).not.toContain('repoint each dependent');
@@ -185,6 +187,7 @@ describe('OpenForge CLI', () => {
     expect(stdout).toContain('Usage:\n  openforge create-task');
     expect(stdout).toContain('openforge delete-task --task-id <id>');
     expect(stdout).toContain('openforge list-projects');
+    expect(stdout).toContain('openforge list-project-labels --project-id <id>');
     expect(stdout).toContain('list-tasks prints compact rows by default');
     expect(stdout).toContain('Pass --full to print complete TaskRow objects');
     expect(stdout).toContain('list-tasks excludes done tasks unless --state done is passed');
@@ -265,6 +268,7 @@ describe('OpenForge CLI', () => {
       'openforge task dependencies set --task-id <id> --depends-on <task-id>',
       'openforge task dependencies add --task-id <id> --depends-on <task-id>',
       'openforge project list',
+      'openforge project labels list --project-id <id>',
       'openforge plugin install --path <local-plugin-source>',
       'openforge plugin enable --plugin-id <id> --project-id <id>',
       'openforge plugin disable --plugin-id <id> --project-id <id>',
@@ -278,6 +282,7 @@ describe('OpenForge CLI', () => {
     expect(stdout).toContain('Flat compatibility aliases:');
     expect(stdout).toContain('openforge create-task');
     expect(stdout).toContain('openforge list-projects');
+    expect(stdout).toContain('openforge list-project-labels');
     expect(stdout).not.toContain('openforge plugin install --npm');
     expect(stdout).not.toContain('openforge plugin install --git');
     expect(stdout).not.toContain('openforge plugin install --source');
@@ -543,6 +548,23 @@ describe('OpenForge CLI', () => {
     });
 
     expect(result).toEqual(projects);
+  });
+
+  it('lists project labels through nested and flat project label commands', async () => {
+    const labels = [
+      { id: 1, project_id: 'P-1', name: 'bug' },
+      { id: 2, project_id: 'P-1', name: 'cleanup' },
+    ];
+
+    await expect(runCliAgainstJsonBridge(['project', 'labels', 'list', '--project-id', 'P-1'], {
+      url: '/project/P-1/labels',
+      response: labels,
+    })).resolves.toEqual(labels);
+
+    await expect(runCliAgainstJsonBridge(['list-project-labels', '--project-id', 'P-1'], {
+      url: '/project/P-1/labels',
+      response: labels,
+    })).resolves.toEqual(labels);
   });
 
   it('creates tasks with dependency IDs from repeated and comma-separated depends-on flags', async () => {
