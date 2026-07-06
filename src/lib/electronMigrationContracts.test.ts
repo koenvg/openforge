@@ -169,6 +169,9 @@ describe('Electron migration Phase 0 contract inventory', () => {
       'review-pr-count-changed',
       'authored-prs-updated',
       'github-rate-limited',
+      'plugin-installation-changed',
+      'project-plugin-enablement-changed',
+      'plugin-reload-requested',
       'task-changed',
     ])
   })

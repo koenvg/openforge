@@ -20,6 +20,10 @@ Do not bypass the launcher with the underlying script path.
 
 If OpenForge is listening on a non-default HTTP bridge port, set `OPENFORGE_HTTP_PORT` before running the command. The default is `17422`.
 
+Prefer nested command groups for new usage (`openforge task create`, `openforge task update`, `openforge task list`, `openforge project list`). The flat task/project commands below remain compatibility aliases for existing agent prompts and handoff tooling.
+
+Plugin management commands are local-only for agent-facing use: install from a local source path with `openforge plugin install --path <local-plugin-source>`, separately enable or disable an installed plugin for a project with `openforge plugin enable|disable --plugin-id <id> --project-id <id>`, and explicitly reload installed artifacts with `openforge plugin reload --plugin-id <id> [--project-id <id>]`. Do not pass npm, git, source-spec, watch, or rebuild inputs to these commands.
+
 ## Task Creation checklist
 
 Before creating follow-up Tasks, decide whether each one has obvious project-relevant Task Labels. Add them during Task Creation with `--label`; do not invent noisy labels just because labels exist.

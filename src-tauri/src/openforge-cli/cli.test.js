@@ -96,6 +96,40 @@ function close(server) {
   });
 }
 
+async function runCliAgainstJsonBridge(args, { url, method = 'GET', response = { ok: true }, expectedBody = null } = {}) {
+  let seenRequest = null;
+  const server = createServer((req, res) => {
+    if (req.url !== url || req.method !== method) {
+      res.writeHead(404, { 'content-type': 'text/plain' });
+      res.end('not found');
+      return;
+    }
+
+    let body = '';
+    req.on('data', (chunk) => {
+      body += chunk;
+    });
+    req.on('end', () => {
+      seenRequest = {
+        method: req.method,
+        url: req.url,
+        body: body ? JSON.parse(body) : null,
+      };
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(response));
+    });
+  });
+  const port = await listen(server);
+
+  try {
+    const { stdout } = await runCli(args, { OPENFORGE_HTTP_PORT: String(port) });
+    expect(seenRequest).toEqual({ method, url, body: expectedBody });
+    return JSON.parse(stdout);
+  } finally {
+    await close(server);
+  }
+}
+
 const COMPACT_TASK_KEYS = ['depends_on', 'id', 'labels', 'prompt_preview', 'status', 'updated_at'];
 const VERBOSE_TASK_KEYS = [
   'initial_prompt',
@@ -215,6 +249,61 @@ describe('OpenForge CLI', () => {
     }
   });
 
+  it('prints nested CLI groups, flat compatibility aliases, and local-only plugin install guidance', async () => {
+    const { stdout } = await runCli(['--help']);
+
+    for (const command of [
+      'openforge task create --initial-prompt <text>',
+      'openforge task update --task-id <id> --summary <text>',
+      'openforge task list --project-id <id>',
+      'openforge task get --task-id <id>',
+      'openforge task labels list --task-id <id>',
+      'openforge task labels add --task-id <id> --label <name>',
+      'openforge task labels remove --task-id <id> --label-id <id>',
+      'openforge task dependencies set --task-id <id> --depends-on <task-id>',
+      'openforge task dependencies add --task-id <id> --depends-on <task-id>',
+      'openforge project list',
+      'openforge plugin install --path <local-plugin-source>',
+      'openforge plugin enable --plugin-id <id> --project-id <id>',
+      'openforge plugin disable --plugin-id <id> --project-id <id>',
+      'openforge plugin reload --plugin-id <id> [--project-id <id>]',
+    ]) {
+      expect(stdout).toContain(command);
+    }
+
+    expect(stdout).toContain('Plugin Installation is local-only for now');
+    expect(stdout).toContain('Local Plugin Source');
+    expect(stdout).toContain('Flat compatibility aliases:');
+    expect(stdout).toContain('openforge create-task');
+    expect(stdout).toContain('openforge list-projects');
+    expect(stdout).not.toContain('openforge plugin install --npm');
+    expect(stdout).not.toContain('openforge plugin install --git');
+    expect(stdout).not.toContain('openforge plugin install --source');
+  });
+
+  it('prints nested task command help before contacting the HTTP bridge', async () => {
+    let requestCount = 0;
+    const server = createServer((_req, res) => {
+      requestCount += 1;
+      res.writeHead(500, { 'content-type': 'text/plain' });
+      res.end('should not be called');
+    });
+    const port = await listen(server);
+
+    try {
+      const { stdout } = await runCli(['task', 'create', '--help'], {
+        OPENFORGE_HTTP_PORT: String(port),
+      });
+
+      expect(stdout).toContain('Usage:\n  openforge task create --initial-prompt <text>');
+      expect(stdout).toContain('Flat compatibility alias: openforge create-task');
+      expect(stdout).toContain('Task creation hygiene:');
+      expect(requestCount).toBe(0);
+    } finally {
+      await close(server);
+    }
+  });
+
   it('does not expose mcp as a CLI command', async () => {
     await expect(runCli(['mcp'])).rejects.toMatchObject({
       stderr: expect.stringContaining('unknown command: mcp'),
@@ -274,6 +363,183 @@ describe('OpenForge CLI', () => {
     } finally {
       await close(server);
     }
+  });
+
+  it('creates tasks through the nested task create command with dependency IDs and labels', async () => {
+    const result = await runCliAgainstJsonBridge([
+      'task',
+      'create',
+      '--initial-prompt',
+      'Nested dependent task',
+      '--project-id',
+      'P-1',
+      '--depends-on',
+      'T-1,T-0',
+      '--depends-on',
+      'T-1',
+      '--label',
+      'agent-facing,cli',
+    ], {
+      method: 'POST',
+      url: '/create_task',
+      expectedBody: {
+        initial_prompt: 'Nested dependent task',
+        project_id: 'P-1',
+        depends_on: ['T-1', 'T-0'],
+        labels: ['agent-facing', 'cli'],
+      },
+      response: { task_id: 'T-3', project_id: 'P-1', status: 'created' },
+    });
+
+    expect(result).toEqual({ task_id: 'T-3', project_id: 'P-1', status: 'created' });
+  });
+
+  it('updates task summaries through the nested task update command', async () => {
+    const result = await runCliAgainstJsonBridge([
+      'task',
+      'update',
+      '--task-id',
+      'T-1',
+      '--summary',
+      'Nested summary',
+    ], {
+      method: 'POST',
+      url: '/update_task',
+      expectedBody: { task_id: 'T-1', summary: 'Nested summary' },
+      response: { task_id: 'T-1', status: 'updated' },
+    });
+
+    expect(result).toEqual({ task_id: 'T-1', status: 'updated' });
+  });
+
+  it('retrieves task rows through the nested task get command', async () => {
+    const task = {
+      id: 'T-1',
+      initial_prompt: 'Nested get',
+      prompt: 'Nested get full prompt',
+      summary: 'Nested handoff',
+      status: 'backlog',
+      labels: [],
+      depends_on: [],
+    };
+
+    const result = await runCliAgainstJsonBridge(['task', 'get', '--task-id', 'T-1'], {
+      url: '/task/T-1',
+      response: task,
+    });
+
+    expect(result).toEqual(task);
+  });
+
+  it('lists compact non-done task rows through the nested task list command', async () => {
+    const tasks = [
+      {
+        id: 'T-1',
+        prompt_preview: 'Nested list',
+        status: 'backlog',
+        labels: [{ id: 1, name: 'cli' }],
+        depends_on: ['T-0'],
+        updated_at: 400,
+      },
+    ];
+
+    const result = await runCliAgainstJsonBridge(['task', 'list', '--project-id', 'P-1'], {
+      url: '/tasks?project_id=P-1&exclude_done=true&compact=true',
+      response: tasks,
+    });
+
+    expect(result).toEqual(tasks);
+    expectCompactTaskRow(result[0], tasks[0]);
+  });
+
+  it('manages task labels through the nested task labels group', async () => {
+    const labels = [{ id: 2, name: 'nested' }];
+    await expect(runCliAgainstJsonBridge(['task', 'labels', 'list', '--task-id', 'T-1'], {
+      url: '/task/T-1/labels',
+      response: labels,
+    })).resolves.toEqual(labels);
+
+    await expect(runCliAgainstJsonBridge(['task', 'labels', 'add', '--task-id', 'T-1', '--label', 'nested'], {
+      method: 'POST',
+      url: '/add_task_label',
+      expectedBody: { task_id: 'T-1', label: 'nested' },
+      response: { task_id: 'T-1', label: 'nested', status: 'added' },
+    })).resolves.toEqual({ task_id: 'T-1', label: 'nested', status: 'added' });
+
+    await expect(runCliAgainstJsonBridge(['task', 'labels', 'remove', '--task-id', 'T-1', '--label-id', '2'], {
+      method: 'POST',
+      url: '/remove_task_label',
+      expectedBody: { task_id: 'T-1', label_id: 2 },
+      response: { task_id: 'T-1', label_id: 2, status: 'removed' },
+    })).resolves.toEqual({ task_id: 'T-1', label_id: 2, status: 'removed' });
+  });
+
+  it('manages task dependencies through the nested task dependencies group', async () => {
+    await expect(runCliAgainstJsonBridge([
+      'task',
+      'dependencies',
+      'set',
+      '--task-id',
+      'T-2',
+      '--depends-on',
+      'T-1,T-0',
+    ], {
+      method: 'POST',
+      url: '/set_task_dependencies',
+      expectedBody: { task_id: 'T-2', depends_on: ['T-1', 'T-0'] },
+      response: { task_id: 'T-2', status: 'updated' },
+    })).resolves.toEqual({ task_id: 'T-2', status: 'updated' });
+
+    await expect(runCliAgainstJsonBridge([
+      'task',
+      'dependencies',
+      'add',
+      '--task-id',
+      'T-2',
+      '--depends-on',
+      'T-1',
+    ], {
+      method: 'POST',
+      url: '/add_task_dependency',
+      expectedBody: { task_id: 'T-2', depends_on: 'T-1' },
+      response: { task_id: 'T-2', depends_on: 'T-1', status: 'updated' },
+    })).resolves.toEqual({ task_id: 'T-2', depends_on: 'T-1', status: 'updated' });
+
+    await expect(runCliAgainstJsonBridge([
+      'task',
+      'dependencies',
+      'link',
+      '--chain',
+      'T-0 -> T-1 -> T-2',
+    ], {
+      method: 'POST',
+      url: '/link_task_chain',
+      expectedBody: { chain: ['T-0', 'T-1', 'T-2'] },
+      response: {
+        status: 'updated',
+        links: [
+          { task_id: 'T-1', depends_on: 'T-0' },
+          { task_id: 'T-2', depends_on: 'T-1' },
+        ],
+      },
+    })).resolves.toEqual({
+      status: 'updated',
+      links: [
+        { task_id: 'T-1', depends_on: 'T-0' },
+        { task_id: 'T-2', depends_on: 'T-1' },
+      ],
+    });
+  });
+
+  it('lists projects through the nested project list command', async () => {
+    const projects = [{ id: 'P-1', name: 'Nested', path: '/tmp/nested', created_at: 1, updated_at: 2 }];
+
+    const result = await runCliAgainstJsonBridge(['project', 'list'], {
+      url: '/projects',
+      response: projects,
+    });
+
+    expect(result).toEqual(projects);
   });
 
   it('creates tasks with dependency IDs from repeated and comma-separated depends-on flags', async () => {
@@ -800,6 +1066,149 @@ describe('OpenForge CLI', () => {
 
       expect(seenUrl).toBe('/projects');
       expect(JSON.parse(stdout)).toEqual(projects);
+    } finally {
+      await close(server);
+    }
+  });
+
+  it('installs local plugin packages through the nested plugin install command only after an explicit path', async () => {
+    const row = {
+      id: 'review-helper',
+      name: 'Review Helper',
+      version: '1.0.0',
+      api_version: '1',
+      description: null,
+      permissions: '[]',
+      install_path: '/Users/me/openforge-plugins/review-helper',
+      frontend_entry: './dist/frontend.js',
+      backend_entry: null,
+      contributes: '{}',
+      is_builtin: false,
+      source_kind: 'local',
+      source_spec: '/Users/me/openforge-plugins/review-helper',
+      package_metadata: '{"id":"review-helper","apiVersion":"1","displayName":"Review Helper"}',
+      installed_at: 123,
+    };
+
+    const result = await runCliAgainstJsonBridge([
+      'plugin',
+      'install',
+      '--path',
+      '/Users/me/openforge-plugins/review-helper',
+    ], {
+      method: 'POST',
+      url: '/install_plugin_from_local',
+      expectedBody: { sourcePath: '/Users/me/openforge-plugins/review-helper' },
+      response: row,
+    });
+
+    expect(result).toEqual(row);
+  });
+
+  it.each([
+    ['npm flag', ['plugin', 'install', '--npm', '@acme/openforge-helper']],
+    ['git flag', ['plugin', 'install', '--git', 'github.com/acme/openforge-helper@main']],
+    ['generic source spec flag', ['plugin', 'install', '--source', 'npm:@acme/openforge-helper']],
+    ['npm source spec positional', ['plugin', 'install', 'npm:@acme/openforge-helper']],
+    ['git source spec positional', ['plugin', 'install', 'git:github.com/acme/openforge-helper@main']],
+  ])('rejects plugin install %s before contacting the HTTP bridge', async (_label, args) => {
+    let requestCount = 0;
+    const server = createServer((_req, res) => {
+      requestCount += 1;
+      res.writeHead(500, { 'content-type': 'text/plain' });
+      res.end('should not be called');
+    });
+    const port = await listen(server);
+
+    try {
+      await expect(runCli(args, { OPENFORGE_HTTP_PORT: String(port) })).rejects.toMatchObject({
+        stderr: expect.stringContaining('plugin install supports local Plugin Installation only; pass --path <local-plugin-source>'),
+      });
+      expect(requestCount).toBe(0);
+    } finally {
+      await close(server);
+    }
+  });
+
+  it('enables and disables installed plugins for a project through nested plugin commands', async () => {
+    await expect(runCliAgainstJsonBridge([
+      'plugin',
+      'enable',
+      '--plugin-id',
+      'review-helper',
+      '--project-id',
+      'P-1',
+    ], {
+      method: 'POST',
+      url: '/set_plugin_enabled',
+      expectedBody: { pluginId: 'review-helper', projectId: 'P-1', enabled: true },
+      response: { plugin_id: 'review-helper', project_id: 'P-1', enabled: true },
+    })).resolves.toEqual({ plugin_id: 'review-helper', project_id: 'P-1', enabled: true });
+
+    await expect(runCliAgainstJsonBridge([
+      'plugin',
+      'disable',
+      '--plugin-id',
+      'review-helper',
+      '--project-id',
+      'P-1',
+    ], {
+      method: 'POST',
+      url: '/set_plugin_enabled',
+      expectedBody: { pluginId: 'review-helper', projectId: 'P-1', enabled: false },
+      response: { plugin_id: 'review-helper', project_id: 'P-1', enabled: false },
+    })).resolves.toEqual({ plugin_id: 'review-helper', project_id: 'P-1', enabled: false });
+  });
+
+  it('reloads installed plugin artifacts globally or for one project through nested plugin reload', async () => {
+    await expect(runCliAgainstJsonBridge([
+      'plugin',
+      'reload',
+      '--plugin-id',
+      'review-helper',
+    ], {
+      method: 'POST',
+      url: '/reload_plugin',
+      expectedBody: { pluginId: 'review-helper' },
+      response: { plugin_id: 'review-helper', reloaded: true },
+    })).resolves.toEqual({ plugin_id: 'review-helper', reloaded: true });
+
+    await expect(runCliAgainstJsonBridge([
+      'plugin',
+      'reload',
+      '--plugin-id',
+      'review-helper',
+      '--project-id',
+      'P-1',
+    ], {
+      method: 'POST',
+      url: '/reload_plugin',
+      expectedBody: { pluginId: 'review-helper', projectId: 'P-1' },
+      response: { plugin_id: 'review-helper', project_id: 'P-1', reloaded: true },
+    })).resolves.toEqual({ plugin_id: 'review-helper', project_id: 'P-1', reloaded: true });
+  });
+
+  it('rejects plugin reload source inputs so reload only targets installed artifacts', async () => {
+    let requestCount = 0;
+    const server = createServer((_req, res) => {
+      requestCount += 1;
+      res.writeHead(500, { 'content-type': 'text/plain' });
+      res.end('should not be called');
+    });
+    const port = await listen(server);
+
+    try {
+      await expect(runCli([
+        'plugin',
+        'reload',
+        '--plugin-id',
+        'review-helper',
+        '--path',
+        '/Users/me/openforge-plugins/review-helper',
+      ], { OPENFORGE_HTTP_PORT: String(port) })).rejects.toMatchObject({
+        stderr: expect.stringContaining('plugin reload uses installed Plugin Installation artifacts only'),
+      });
+      expect(requestCount).toBe(0);
     } finally {
       await close(server);
     }

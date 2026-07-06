@@ -317,6 +317,41 @@ pub struct RemoveTaskLabelRequest {
     pub label_id: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstallPluginFromLocalRequest {
+    pub source_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetPluginEnabledRequest {
+    pub plugin_id: String,
+    pub project_id: String,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SetPluginEnabledResponse {
+    pub plugin_id: String,
+    pub project_id: String,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReloadPluginRequest {
+    pub plugin_id: String,
+    pub project_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ReloadPluginResponse {
+    pub plugin_id: String,
+    pub project_id: Option<String>,
+    pub reloaded: bool,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct AddTaskLabelResponse {
     pub task_id: String,
@@ -1545,6 +1580,139 @@ async fn app_invoke_handler(
     Ok(Json(AppInvokeResponse { value }))
 }
 
+fn http_plugin_app_data_dir(state: &AppState) -> Result<PathBuf, (StatusCode, String)> {
+    let Some(app) = state.app.as_ref() else {
+        return Err((
+            StatusCode::NOT_IMPLEMENTED,
+            "plugin installation requires app data path state before Electron sidecar support"
+                .to_string(),
+        ));
+    };
+
+    app.path().app_data_dir().map_err(|error| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to resolve app data directory: {error}"),
+        )
+    })
+}
+
+fn http_plugin_platform(
+    state: &AppState,
+    require_app_data_dir: bool,
+) -> Result<crate::plugin_platform::PluginPlatform<'_>, (StatusCode, String)> {
+    let app_data_dir = if require_app_data_dir {
+        Some(http_plugin_app_data_dir(state)?)
+    } else {
+        None
+    };
+
+    Ok(crate::plugin_platform::PluginPlatform::new(
+        state.db.as_ref(),
+        app_data_dir,
+        state.plugin_host.as_ref(),
+    ))
+}
+
+fn http_plugin_error_status(message: &str) -> StatusCode {
+    if message.starts_with("Unknown plugin:") {
+        StatusCode::NOT_FOUND
+    } else if message.contains("built-in plugin")
+        || message.contains("sourceKind builtin")
+        || message.contains("sourceSpec to match")
+        || message.contains("app data directory is required")
+        || message.contains("backend not configured")
+        || message.contains("backend entry")
+        || message.contains("install root")
+    {
+        StatusCode::BAD_REQUEST
+    } else if message.contains("plugin host state is not available") {
+        StatusCode::SERVICE_UNAVAILABLE
+    } else {
+        StatusCode::INTERNAL_SERVER_ERROR
+    }
+}
+
+fn map_http_plugin_error(message: String) -> (StatusCode, String) {
+    (http_plugin_error_status(&message), message)
+}
+
+async fn install_plugin_from_local_handler(
+    State(state): State<AppState>,
+    Json(request): Json<InstallPluginFromLocalRequest>,
+) -> Result<Json<db::PluginRow>, (StatusCode, String)> {
+    let plugin = http_plugin_platform(&state, true)?
+        .install_local_plugin_bundle(&PathBuf::from(request.source_path))
+        .map_err(map_http_plugin_error)?;
+    let payload = serde_json::json!({
+        "plugin_id": plugin.id.clone(),
+    });
+    publish_app_event_to_runtime(
+        state.app.as_ref(),
+        &state.app_event_tx,
+        "plugin-installation-changed",
+        &payload,
+    );
+    Ok(Json(plugin))
+}
+
+async fn set_plugin_enabled_handler(
+    State(state): State<AppState>,
+    Json(request): Json<SetPluginEnabledRequest>,
+) -> Result<Json<SetPluginEnabledResponse>, (StatusCode, String)> {
+    http_plugin_platform(&state, false)?
+        .set_plugin_enabled(&request.project_id, &request.plugin_id, request.enabled)
+        .map_err(map_http_plugin_error)?;
+
+    let payload = serde_json::json!({
+        "plugin_id": request.plugin_id.clone(),
+        "project_id": request.project_id.clone(),
+        "enabled": request.enabled,
+    });
+    publish_app_event_to_runtime(
+        state.app.as_ref(),
+        &state.app_event_tx,
+        "project-plugin-enablement-changed",
+        &payload,
+    );
+    Ok(Json(SetPluginEnabledResponse {
+        plugin_id: request.plugin_id,
+        project_id: request.project_id,
+        enabled: request.enabled,
+    }))
+}
+
+async fn reload_plugin_handler(
+    State(state): State<AppState>,
+    Json(request): Json<ReloadPluginRequest>,
+) -> Result<Json<ReloadPluginResponse>, (StatusCode, String)> {
+    let plugin_id = request.plugin_id;
+    let project_id = request.project_id;
+    let installed = http_plugin_platform(&state, false)?
+        .plugin(&plugin_id)
+        .map_err(map_http_plugin_error)?;
+    if installed.is_none() {
+        return Err((StatusCode::NOT_FOUND, format!("Unknown plugin: {plugin_id}")));
+    }
+
+    let payload = serde_json::json!({
+        "plugin_id": plugin_id.clone(),
+        "project_id": project_id.clone(),
+    });
+    publish_app_event_to_runtime(
+        state.app.as_ref(),
+        &state.app_event_tx,
+        "plugin-reload-requested",
+        &payload,
+    );
+
+    Ok(Json(ReloadPluginResponse {
+        plugin_id,
+        project_id,
+        reloaded: true,
+    }))
+}
+
 /// Create the HTTP router with all available routes
 pub fn create_router(state: AppState) -> Router {
     Router::new()
@@ -1570,6 +1738,12 @@ pub fn create_router(state: AppState) -> Router {
         .route("/task/:id", get(get_task_info_handler))
         .route("/projects", get(get_projects_handler))
         .route("/tasks", get(get_tasks_handler))
+        .route(
+            "/install_plugin_from_local",
+            post(install_plugin_from_local_handler),
+        )
+        .route("/set_plugin_enabled", post(set_plugin_enabled_handler))
+        .route("/reload_plugin", post(reload_plugin_handler))
         .route("/project/:id/attention", get(get_project_attention_handler))
         .route("/hooks/agent-lifecycle", post(agent_lifecycle_handler))
         .route("/hooks/pi-agent-start", post(pi_agent_start_handler))
