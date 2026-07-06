@@ -31,6 +31,13 @@ const sampleProjects: Project[] = [
   { id: 'proj-3', name: 'Gamma Repo', path: '/users/carol/gamma', created_at: 0, updated_at: 0 },
 ]
 
+// The modal now delegates selection to an onSelectProject callback (App owns the
+// switch + last-viewed restore). Mirror the real switchToProject side effect — setting
+// the active project — so the existing "which project was selected" assertions hold.
+const mockSelectProject = vi.fn((projectId: string) => {
+  mockActiveProjectId.set(projectId)
+})
+
 describe('ProjectSwitcherModal', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
@@ -42,7 +49,7 @@ describe('ProjectSwitcherModal', () => {
   describe('Rendering', () => {
     it('renders a dialog with search input', async () => {
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
-      render(Modal, { props: { onClose: vi.fn() } })
+      render(Modal, { props: { onClose: vi.fn(), onSelectProject: mockSelectProject } })
 
       const dialog = screen.getByRole('dialog')
       expect(dialog).toBeTruthy()
@@ -53,7 +60,7 @@ describe('ProjectSwitcherModal', () => {
 
     it('auto-focuses the search input on mount', async () => {
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
-      render(Modal, { props: { onClose: vi.fn() } })
+      render(Modal, { props: { onClose: vi.fn(), onSelectProject: mockSelectProject } })
 
       await vi.waitFor(() => {
         const input = screen.getByPlaceholderText('Switch project...')
@@ -63,7 +70,7 @@ describe('ProjectSwitcherModal', () => {
 
     it('renders all project names from store', async () => {
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
-      render(Modal, { props: { onClose: vi.fn() } })
+      render(Modal, { props: { onClose: vi.fn(), onSelectProject: mockSelectProject } })
 
       expect(screen.getByText('Alpha Project')).toBeTruthy()
       expect(screen.getByText('Beta Project')).toBeTruthy()
@@ -72,7 +79,7 @@ describe('ProjectSwitcherModal', () => {
 
     it('shows empty state when no projects match search', async () => {
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
-      render(Modal, { props: { onClose: vi.fn() } })
+      render(Modal, { props: { onClose: vi.fn(), onSelectProject: mockSelectProject } })
 
       const input = screen.getByPlaceholderText('Switch project...')
       await fireEvent.input(input, { target: { value: 'zzznomatch' } })
@@ -83,7 +90,7 @@ describe('ProjectSwitcherModal', () => {
     it('shows checkmark for the currently active project', async () => {
       mockActiveProjectId.set('proj-2')
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
-      render(Modal, { props: { onClose: vi.fn() } })
+      render(Modal, { props: { onClose: vi.fn(), onSelectProject: mockSelectProject } })
 
       // The active project row should contain a checkmark
       const checkmarks = screen.getAllByText('✓')
@@ -92,7 +99,7 @@ describe('ProjectSwitcherModal', () => {
 
     it('has aria-modal attribute for accessibility', async () => {
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
-      render(Modal, { props: { onClose: vi.fn() } })
+      render(Modal, { props: { onClose: vi.fn(), onSelectProject: mockSelectProject } })
 
       const dialog = screen.getByRole('dialog')
       expect(dialog.getAttribute('aria-modal')).toBe('true')
@@ -102,7 +109,7 @@ describe('ProjectSwitcherModal', () => {
   describe('Search filtering', () => {
     it('filters projects by name on input (case-insensitive)', async () => {
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
-      render(Modal, { props: { onClose: vi.fn() } })
+      render(Modal, { props: { onClose: vi.fn(), onSelectProject: mockSelectProject } })
 
       const input = screen.getByPlaceholderText('Switch project...')
       await fireEvent.input(input, { target: { value: 'alpha' } })
@@ -114,7 +121,7 @@ describe('ProjectSwitcherModal', () => {
 
     it('filters case-insensitively with uppercase query', async () => {
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
-      render(Modal, { props: { onClose: vi.fn() } })
+      render(Modal, { props: { onClose: vi.fn(), onSelectProject: mockSelectProject } })
 
       const input = screen.getByPlaceholderText('Switch project...')
       await fireEvent.input(input, { target: { value: 'BETA' } })
@@ -127,7 +134,7 @@ describe('ProjectSwitcherModal', () => {
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
       mockActiveProjectId.set(null)
       const onClose = vi.fn()
-      render(Modal, { props: { onClose } })
+      render(Modal, { props: { onClose, onSelectProject: mockSelectProject } })
 
       const input = screen.getByPlaceholderText('Switch project...')
       await fireEvent.input(input, { target: { value: 'beta' } })
@@ -141,7 +148,7 @@ describe('ProjectSwitcherModal', () => {
 
     it('shows all projects when search is empty', async () => {
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
-      render(Modal, { props: { onClose: vi.fn() } })
+      render(Modal, { props: { onClose: vi.fn(), onSelectProject: mockSelectProject } })
 
       const input = screen.getByPlaceholderText('Switch project...')
       await fireEvent.input(input, { target: { value: 'alpha' } })
@@ -156,7 +163,7 @@ describe('ProjectSwitcherModal', () => {
   describe('Keyboard navigation', () => {
     it('pressing ArrowDown moves highlight to next item', async () => {
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
-      render(Modal, { props: { onClose: vi.fn() } })
+      render(Modal, { props: { onClose: vi.fn(), onSelectProject: mockSelectProject } })
 
       const input = screen.getByPlaceholderText('Switch project...')
       await fireEvent.keyDown(input, { key: 'ArrowDown' })
@@ -165,7 +172,7 @@ describe('ProjectSwitcherModal', () => {
       // We verify by pressing Enter and checking which project gets selected
       const onClose = vi.fn()
       // Re-render fresh to avoid state bleed
-      const { unmount } = render(Modal, { props: { onClose } })
+      const { unmount } = render(Modal, { props: { onClose, onSelectProject: mockSelectProject } })
       const input2 = screen.getAllByPlaceholderText('Switch project...')[1]
       await fireEvent.keyDown(input2, { key: 'ArrowDown' })
       mockActiveProjectId.set(null) // reset
@@ -181,7 +188,7 @@ describe('ProjectSwitcherModal', () => {
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
       mockActiveProjectId.set(null)
       const onClose = vi.fn()
-      render(Modal, { props: { onClose } })
+      render(Modal, { props: { onClose, onSelectProject: mockSelectProject } })
 
       const input = screen.getByPlaceholderText('Switch project...')
       // Go to first item
@@ -196,7 +203,7 @@ describe('ProjectSwitcherModal', () => {
     it('Ctrl+N and Ctrl+P keep palette navigation working through the shared modal', async () => {
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
       mockActiveProjectId.set(null)
-      render(Modal, { props: { onClose: vi.fn() } })
+      render(Modal, { props: { onClose: vi.fn(), onSelectProject: mockSelectProject } })
 
       const input = screen.getByPlaceholderText('Switch project...')
       await fireEvent.keyDown(input, { key: 'n', ctrlKey: true })
@@ -210,7 +217,7 @@ describe('ProjectSwitcherModal', () => {
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
       mockActiveProjectId.set(null)
       const onClose = vi.fn()
-      render(Modal, { props: { onClose } })
+      render(Modal, { props: { onClose, onSelectProject: mockSelectProject } })
 
       const input = screen.getByPlaceholderText('Switch project...')
       // Navigate to last item (3 downs from -1: 0,1,2)
@@ -226,24 +233,24 @@ describe('ProjectSwitcherModal', () => {
   })
 
   describe('Selection via Enter', () => {
-    it('Enter on highlighted item sets activeProjectId, resets to board and calls onClose', async () => {
+    it('Enter on highlighted item selects the project and calls onClose', async () => {
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
       const onClose = vi.fn()
-      render(Modal, { props: { onClose } })
+      render(Modal, { props: { onClose, onSelectProject: mockSelectProject } })
 
       const input = screen.getByPlaceholderText('Switch project...')
       await fireEvent.keyDown(input, { key: 'ArrowDown' }) // select first
       await fireEvent.keyDown(input, { key: 'Enter' })
 
+      expect(mockSelectProject).toHaveBeenCalledWith('proj-1')
       expect(get(mockActiveProjectId)).toBe('proj-1')
-      expect(mockResetToBoard).toHaveBeenCalled()
       expect(onClose).toHaveBeenCalledOnce()
     })
 
     it('Enter with no item highlighted does nothing', async () => {
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
       const onClose = vi.fn()
-      render(Modal, { props: { onClose } })
+      render(Modal, { props: { onClose, onSelectProject: mockSelectProject } })
 
       const input = screen.getByPlaceholderText('Switch project...')
       await fireEvent.keyDown(input, { key: 'Enter' }) // selectedIndex = -1
@@ -253,15 +260,15 @@ describe('ProjectSwitcherModal', () => {
   })
 
   describe('Selection via click', () => {
-    it('clicking a project row sets activeProjectId, resets to board and calls onClose', async () => {
+    it('clicking a project row selects the project and calls onClose', async () => {
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
       const onClose = vi.fn()
-      render(Modal, { props: { onClose } })
+      render(Modal, { props: { onClose, onSelectProject: mockSelectProject } })
 
       await fireEvent.click(screen.getByText('Beta Project'))
 
+      expect(mockSelectProject).toHaveBeenCalledWith('proj-2')
       expect(get(mockActiveProjectId)).toBe('proj-2')
-      expect(mockResetToBoard).toHaveBeenCalled()
       expect(onClose).toHaveBeenCalledOnce()
     })
   })
@@ -270,7 +277,7 @@ describe('ProjectSwitcherModal', () => {
     it('Escape key calls onClose', async () => {
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
       const onClose = vi.fn()
-      render(Modal, { props: { onClose } })
+      render(Modal, { props: { onClose, onSelectProject: mockSelectProject } })
 
       const input = screen.getByPlaceholderText('Switch project...')
       await fireEvent.keyDown(input, { key: 'Escape' })
@@ -281,7 +288,7 @@ describe('ProjectSwitcherModal', () => {
     it('clicking the backdrop calls onClose', async () => {
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
       const onClose = vi.fn()
-      render(Modal, { props: { onClose } })
+      render(Modal, { props: { onClose, onSelectProject: mockSelectProject } })
 
       const dialog = screen.getByRole('dialog')
       await fireEvent.click(dialog)
@@ -295,7 +302,7 @@ describe('ProjectSwitcherModal', () => {
       mockActiveProjectId.set('proj-2')
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
       const onClose = vi.fn()
-      render(Modal, { props: { onClose } })
+      render(Modal, { props: { onClose, onSelectProject: mockSelectProject } })
 
       const input = screen.getByPlaceholderText('Switch project...')
       // Without moving, Enter should select the pre-highlighted active project
@@ -312,7 +319,7 @@ describe('ProjectSwitcherModal', () => {
         ['proj-1', { project_id: 'proj-1', needs_input: 2, running_agents: 0, ci_failures: 0, unaddressed_comments: 0, completed_agents: 0 }]
       ]))
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
-      render(Modal, { props: { onClose: vi.fn() } })
+      render(Modal, { props: { onClose: vi.fn(), onSelectProject: mockSelectProject } })
 
       const indicator = screen.getByTitle(/2 agent.*need/i)
       expect(indicator).toBeTruthy()
@@ -323,7 +330,7 @@ describe('ProjectSwitcherModal', () => {
         ['proj-2', { project_id: 'proj-2', needs_input: 0, running_agents: 1, ci_failures: 0, unaddressed_comments: 0, completed_agents: 0 }]
       ]))
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
-      render(Modal, { props: { onClose: vi.fn() } })
+      render(Modal, { props: { onClose: vi.fn(), onSelectProject: mockSelectProject } })
 
       const indicator = screen.getByTitle(/1 agent.*running/i)
       expect(indicator).toBeTruthy()

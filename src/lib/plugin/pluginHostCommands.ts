@@ -240,16 +240,20 @@ export function createPluginRuntimeHost(pluginId: string) {
       selectedTaskId: get(selectedTaskId),
     }),
     navigate: async (request: { viewId?: string; projectId?: string | null; taskId?: string | null }) => {
+      // Change the project first: the projectViewSnapshots capture subscriber
+      // (router.svelte.ts) snapshots the OUTGOING project when activeProjectId changes
+      // and must read the view stores while they still reflect where the user was —
+      // before the lines below rewrite them for the destination.
+      if (request.projectId !== undefined) {
+        activeProjectId.set(request.projectId)
+      }
+
       if (isAppView(request.viewId)) {
         currentView.set(request.viewId)
       }
 
       if (request.taskId !== undefined) {
         selectedTaskId.set(request.taskId)
-      }
-
-      if (request.projectId !== undefined) {
-        activeProjectId.set(request.projectId)
       }
 
       return {
@@ -364,16 +368,18 @@ export async function invokePluginHostCommand(command: string, payload: unknown)
     case 'startImplementation':
       return startTaskImplementationFromPluginRequest({ taskId: String(commandPayload?.taskId ?? '') })
     case 'navigate': {
+      // activeProjectId first — see the capture-ordering note in the navigate() host
+      // method above: the snapshot subscriber must see the outgoing project's view.
+      if (typeof commandPayload?.activeProjectId === 'string' || commandPayload?.activeProjectId === null) {
+        activeProjectId.set(commandPayload?.activeProjectId ?? null)
+      }
+
       if (isAppView(commandPayload?.currentView)) {
         currentView.set(commandPayload.currentView)
       }
 
       if (typeof commandPayload?.selectedTaskId === 'string' || commandPayload?.selectedTaskId === null) {
         selectedTaskId.set(commandPayload?.selectedTaskId ?? null)
-      }
-
-      if (typeof commandPayload?.activeProjectId === 'string' || commandPayload?.activeProjectId === null) {
-        activeProjectId.set(commandPayload?.activeProjectId ?? null)
       }
 
       return getContextSnapshot()

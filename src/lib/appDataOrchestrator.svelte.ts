@@ -157,6 +157,13 @@ export function useAppDataOrchestrator(options: AppDataOrchestratorOptions) {
     isLoading.set(true)
     try {
       const activeTasks = await getTasksForProject(projectId)
+      // A newer project switch may have started while this fetch was in flight (e.g.
+      // rapid ⌘-cycling or a sidebar switch, each of which also kicks off a load).
+      // Don't clobber the tasks store with a stale project's data — the newer load
+      // will populate the correct tasks for the now-active project.
+      if (get(activeProjectId) !== projectId) {
+        return
+      }
       tasks.set(activeTasks)
       dependencyReferenceTasks.set(await loadCompletedDependencyReferenceTasks(activeTasks))
       await loadSessions()

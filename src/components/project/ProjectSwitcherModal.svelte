@@ -1,16 +1,15 @@
 <script lang="ts">
   import { projects, activeProjectId, projectAttention } from '../../lib/stores'
-  import { useAppRouter } from '../../lib/router.svelte'
   import { useListNavigation } from '../../lib/useListNavigation.svelte'
   import Modal from '../shared/ui/Modal.svelte'
   import type { ProjectAttention } from '../../lib/types'
 
   interface Props {
     onClose: () => void
+    onSelectProject: (projectId: string) => void
   }
 
-  let { onClose }: Props = $props()
-  const router = useAppRouter()
+  let { onClose, onSelectProject }: Props = $props()
 
   let searchQuery = $state('')
   let selectedIndex = $state(-1)
@@ -36,8 +35,7 @@
   }
 
   function selectProject(projectId: string) {
-    $activeProjectId = projectId
-    router.resetToBoard()
+    onSelectProject(projectId)
     onClose()
   }
 

@@ -69,13 +69,21 @@ const sampleProjects: Project[] = [
   { id: 'proj-3', name: 'Gamma Project', path: '/users/charlie/gamma', created_at: 0, updated_at: 0 },
 ]
 
-function renderSidebar(props?: Partial<{ collapsed: boolean; currentView: AppView; onToggleCollapse: () => void; onNewProject?: () => void; onNavigate: (view: AppView) => void; pluginNavItems: typeof globalPrNavItem[]; reviewRequestCount: number }>) {
+// The sidebar now delegates project selection to an onSelectProject callback (App owns
+// the switch + last-viewed restore). Mirror the real switchToProject side effect —
+// setting the active project — so selection assertions still hold.
+const mockSelectProject = vi.fn((projectId: string) => {
+  activeProjectId.set(projectId)
+})
+
+function renderSidebar(props?: Partial<{ collapsed: boolean; currentView: AppView; onToggleCollapse: () => void; onNewProject?: () => void; onNavigate: (view: AppView) => void; onSelectProject: (projectId: string) => void; pluginNavItems: typeof globalPrNavItem[]; reviewRequestCount: number }>) {
   const defaultProps = {
     collapsed: false,
     currentView: 'board' as AppView,
     onToggleCollapse: vi.fn(),
     onNewProject: vi.fn(),
     onNavigate: vi.fn(),
+    onSelectProject: mockSelectProject,
   }
 
   return render(AppSidebar, { props: { ...defaultProps, ...props } })
@@ -126,20 +134,22 @@ describe('AppSidebar', () => {
     expect(screen.getByText('Beta Project')).toBeTruthy()
   })
 
-  it('clicking a project button sets activeProjectId', async () => {
+  it('clicking a project button selects that project', async () => {
     renderSidebar({ collapsed: false })
 
     await fireEvent.click(screen.getByRole('button', { name: /^beta project$/i }))
+    expect(mockSelectProject).toHaveBeenCalledWith('proj-2')
     expect(get(activeProjectId)).toBe('proj-2')
   })
 
-  it('clicking a project while on global_settings resets to board', async () => {
-    const { resetToBoard } = await import('../../lib/router.svelte')
-    vi.mocked(resetToBoard).mockClear()
-    renderSidebar({ currentView: 'global_settings' })
+  it('clicking a project delegates the switch to onSelectProject regardless of the current view', async () => {
+    // Landing on the right view (board vs. the project's last-viewed tab) is App's
+    // responsibility via switchToProject; the sidebar only reports the selection.
+    const onSelectProject = vi.fn()
+    renderSidebar({ currentView: 'global_settings', onSelectProject })
 
     await fireEvent.click(screen.getByRole('button', { name: /^beta project$/i }))
-    expect(resetToBoard).toHaveBeenCalled()
+    expect(onSelectProject).toHaveBeenCalledWith('proj-2')
   })
 
   it('does not render Work Queue nav button', () => {

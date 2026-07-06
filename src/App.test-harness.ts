@@ -336,6 +336,14 @@ export const mockRouterResetToBoard = vi.fn(() => {
   mockSelectedTaskIdStore.set(null)
   mockSelectedReviewPrStore.set(null)
 })
+export const mockRouterRestoreProjectView = vi.fn((_projectId: string) => {
+  // Mirror the real fallback for a project with no snapshot: land on the board with
+  // nothing open, and report no remembered task so switchToProject skips the reload.
+  mockCurrentViewStore.set('board')
+  mockSelectedTaskIdStore.set(null)
+  mockSelectedReviewPrStore.set(null)
+  return null
+})
 export const mockRouterNavigate = vi.fn((view: string) => {
   if (view === 'board') {
     mockRouterResetToBoard()
@@ -350,6 +358,7 @@ export const mockRouterNavigate = vi.fn((view: string) => {
 vi.mock('./lib/router.svelte', () => ({
   pushNavState: mockRouterPushNavState,
   resetToBoard: mockRouterResetToBoard,
+  restoreProjectView: mockRouterRestoreProjectView,
   useAppRouter: () => ({
     navigate: mockRouterNavigate,
     navigateToTask: mockRouterNavigateToTask,

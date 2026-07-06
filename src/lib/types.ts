@@ -1,5 +1,18 @@
 export * from '@openforge-app/plugin-sdk/domain'
 
+import type { AppView, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
+
+/**
+ * A project's last-viewed in-project location: the active tab plus whichever task
+ * or PR was open within it. Kept per-project (in memory) so switching away and
+ * returning lands the user back where they were instead of on the board.
+ */
+export interface ProjectViewSnapshot {
+  currentView: AppView
+  selectedTaskId: string | null
+  selectedReviewPr: ReviewPullRequest | null
+}
+
 export type DeveloperLogLevel = 'info' | 'warn' | 'error'
 
 export interface DeveloperLogEntry {
