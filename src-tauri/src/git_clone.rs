@@ -159,11 +159,15 @@ pub fn build_clone_args(
     args
 }
 
-/// Trims and length-caps git's stderr for user display.
+/// Trims and length-caps git's stderr for user display. Truncation is by
+/// character (never mid-UTF-8) and appends an ellipsis so the user can see the
+/// message was cut off.
 pub fn sanitize_clone_error(stderr: &str) -> String {
+    const MAX_CHARS: usize = 500;
     let trimmed = stderr.trim();
-    if trimmed.len() > 500 {
-        trimmed[..500].to_string()
+    if trimmed.chars().count() > MAX_CHARS {
+        let truncated: String = trimmed.chars().take(MAX_CHARS).collect();
+        format!("{truncated}…")
     } else {
         trimmed.to_string()
     }
@@ -345,6 +349,7 @@ mod tests {
         );
         assert!(!args.iter().any(|a| a == "-c"));
         assert!(!args.iter().any(|a| a.contains("extraHeader")));
+        assert!(!args.iter().any(|a| a.contains("tok")), "the token string must never appear in SSH clone args");
     }
 
     #[test]
@@ -364,7 +369,18 @@ mod tests {
         let noisy = format!("  {}  ", "x".repeat(5000));
         let cleaned = sanitize_clone_error(&noisy);
         assert!(!cleaned.starts_with(' '));
-        assert!(cleaned.len() <= 500);
+        assert!(cleaned.ends_with('…'), "truncated output should end with an ellipsis");
+        // 500 content chars + 1 ellipsis char
+        assert_eq!(cleaned.chars().count(), 501);
+    }
+
+    #[test]
+    fn sanitize_clone_error_handles_multibyte_without_panic() {
+        // A long non-ASCII message must not panic on a byte-boundary slice.
+        let noisy = "é".repeat(600);
+        let cleaned = sanitize_clone_error(&noisy);
+        assert!(cleaned.ends_with('…'));
+        assert_eq!(cleaned.chars().count(), 501);
     }
 
     #[test]
