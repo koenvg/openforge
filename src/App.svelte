@@ -455,6 +455,8 @@
       loadPullRequests: appData.loadPullRequests,
       loadProjectAttention: appData.loadProjectAttention,
       refreshPrCounts: appData.refreshPrCounts,
+      getActiveProjectId: () => $activeProjectId,
+      loadEnabledPluginsForProject: loadEnabledForProject,
     }))
 
     try {

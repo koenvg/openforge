@@ -34,6 +34,10 @@ export interface AppDesktopEventDeps {
   loadPullRequests(): Promise<void> | void
   loadProjectAttention(): Promise<void> | void
   refreshPrCounts(): Promise<void> | void
+  getActiveProjectId?(): string | null
+  reloadInstalledPluginMetadata?(pluginId: string): Promise<boolean> | boolean
+  reloadPluginForProject?(projectId: string, pluginId: string): Promise<boolean> | boolean
+  loadEnabledPluginsForProject?(projectId: string): Promise<void> | void
   listen?: AppEventListen
 }
 
@@ -94,6 +98,21 @@ function setAgentNeedsPermissionNotification(taskId: string, session: AgentSessi
     timestamp: Date.now(),
   })
   return true
+}
+
+async function defaultReloadInstalledPluginMetadata(pluginId: string): Promise<boolean> {
+  const registry = await import('./plugin/pluginRegistry')
+  return registry.reloadInstalledPluginMetadata(pluginId)
+}
+
+async function defaultReloadPluginForProject(projectId: string, pluginId: string): Promise<boolean> {
+  const registry = await import('./plugin/pluginRegistry')
+  return registry.reloadPluginForProject(projectId, pluginId)
+}
+
+async function defaultLoadEnabledPluginsForProject(projectId: string): Promise<void> {
+  const registry = await import('./plugin/pluginRegistry')
+  return registry.loadEnabledForProject(projectId)
 }
 
 async function getOrLoadActiveSession(taskId: string): Promise<AgentSession | null> {
@@ -367,6 +386,46 @@ export async function registerAppDesktopEventListeners(deps: AppDesktopEventDeps
         reset_at: event.payload.reset_at,
         timestamp: Date.now(),
       })
+    }),
+  )
+
+  unlisteners.push(
+    await listen<{ plugin_id: string }>('plugin-installation-changed', async (event) => {
+      const pluginId = event.payload.plugin_id
+      try {
+        await (deps.reloadInstalledPluginMetadata ?? defaultReloadInstalledPluginMetadata)(pluginId)
+      } catch (e) {
+        console.error('[plugins] Failed to refresh installed plugin from sidecar event:', pluginId, e)
+      }
+    }),
+  )
+
+  unlisteners.push(
+    await listen<{ plugin_id: string; project_id: string; enabled: boolean }>('project-plugin-enablement-changed', async (event) => {
+      const projectId = event.payload.project_id
+      if ((deps.getActiveProjectId?.() ?? projectId) !== projectId) return
+      try {
+        await (deps.loadEnabledPluginsForProject ?? defaultLoadEnabledPluginsForProject)(projectId)
+      } catch (e) {
+        console.error('[plugins] Failed to refresh project plugin enablement from sidecar event:', projectId, e)
+      }
+    }),
+  )
+
+  unlisteners.push(
+    await listen<{ plugin_id: string; project_id?: string | null }>('plugin-reload-requested', async (event) => {
+      const pluginId = event.payload.plugin_id
+      const projectId = event.payload.project_id
+      if (projectId && (deps.getActiveProjectId?.() ?? projectId) !== projectId) return
+      try {
+        if (projectId) {
+          await (deps.reloadPluginForProject ?? defaultReloadPluginForProject)(projectId, pluginId)
+        } else {
+          await (deps.reloadInstalledPluginMetadata ?? defaultReloadInstalledPluginMetadata)(pluginId)
+        }
+      } catch (e) {
+        console.error('[plugins] Failed to reload plugin from sidecar request:', pluginId, e)
+      }
     }),
   )
 

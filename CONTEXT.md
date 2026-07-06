@@ -108,6 +108,18 @@ _Avoid_: Project plugin install, global enablement
 A project-owned choice that makes an installed **Trusted Plugin** active or inactive for one **Project**.
 _Avoid_: Plugin installation, global plugin toggle
 
+**Agent-facing Plugin Management**:
+A host-mediated way for an **Agent Session** to request **Plugin Installation** or **Project Plugin Enablement** without relying on settings UI navigation.
+_Avoid_: UI automation, install-and-enable shortcut, agent-owned plugin policy
+
+**Plugin Reload**:
+An explicit request to deactivate and reactivate an installed plugin from its current installed artifacts.
+_Avoid_: Source watcher, automatic rebuild, reinstall
+
+**Local Plugin Source**:
+A filesystem path to an already-built plugin package used as the package source for **Plugin Installation** during plugin development.
+_Avoid_: npm package source, git package source, unbuilt source folder
+
 **GitHub Sync**:
 OpenForge's local-first process for refreshing GitHub pull request, comment, CI, review, and merge-readiness signals into the desktop app.
 _Avoid_: Webhook service, hosted sync, GitHub polling when referring to the product capability
@@ -255,6 +267,9 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - Built-in **Trusted Plugins** may be enabled by default for projects, while still allowing explicit **Project Plugin Enablement** disablement.
 - Global plugin settings manage the **Plugin Installation** inventory; project plugin settings manage **Project Plugin Enablement** for the active project.
 - A completed **Plugin Installation** may offer a convenience action to enable the plugin for the active project, but that action is still **Project Plugin Enablement** and must be explicit.
+- The agent-facing plugin management surface keeps **Plugin Installation** and **Project Plugin Enablement** as separate requests and does not provide an install-and-enable shortcut.
+- **Plugin Reload** uses the artifacts already recorded by **Plugin Installation**; rebuilding a plugin package is external development work that must happen before the reload request.
+- Initial agent-facing **Plugin Installation** accepts local plugin sources only; npm and git plugin package sources remain outside the initial agent-facing plugin management surface.
 - Moving plugin management UI between global and project settings does not require migrating existing **Plugin Installation** or **Project Plugin Enablement** data when the persisted model already separates them.
 - The **Backend Crate** builds the **Rust Sidecar**.
 - Electron main supervises the **Rust Sidecar** rather than embedding backend domain logic in the renderer or relying on a Tauri shell.
@@ -338,6 +353,9 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - "Codex thread title" was used for a short generated task label — resolved: use **Task Display Title** because the label belongs to the **Task** and may be generated from any provider's **Agent Session**.
 - "Skill" was considered as a core OpenForge platform concept because one built-in plugin manages skills — resolved: skill discovery and editing are a **Plugin-owned Domain** unless multiple plugins need a shared platform contract.
 - "Install plugin globally" could mean enabling a plugin everywhere — resolved: use **Plugin Installation** for app-wide availability and **Project Plugin Enablement** for per-project activation.
+- "Agent installs a plugin" could mean only app-wide availability or also project activation — resolved: **Agent-facing Plugin Management** may request both **Plugin Installation** and **Project Plugin Enablement**, but they remain separate actions with no install-and-enable shortcut.
+- "Reload plugin" could mean watching source files, rebuilding, reinstalling, or reactivating — resolved: **Plugin Reload** means explicit reactivation of installed artifacts only; it does not watch source files or rebuild plugin packages.
+- "Local plugin install" could mean project-scoped enablement or a local package source — resolved: use **Local Plugin Source** for filesystem package paths, and keep npm and git plugin package sources out of the initial agent-facing scope.
 - Plugin defaults could make newly installed plugins active everywhere — resolved: newly installed non-built-in **Trusted Plugins** start disabled for projects; built-ins may keep their default-enabled project behavior.
 - Plugin UI migration sounded like a data migration — resolved: the existing persisted model already separates app-wide **Plugin Installation** from **Project Plugin Enablement**, so the change is UI responsibility and wording.
 - `src-tauri` was used to describe both a historical directory and the active Rust process — resolved: use **Rust Sidecar** for the supervised runtime process and **Backend Crate** for the Rust package that builds it.

@@ -68,6 +68,10 @@ function createHarness() {
     loadPullRequests: vi.fn(async () => undefined),
     loadProjectAttention: vi.fn(async () => undefined),
     refreshPrCounts: vi.fn(async () => undefined),
+    getActiveProjectId: vi.fn(() => 'P-1' as string | null),
+    reloadInstalledPluginMetadata: vi.fn(async () => true),
+    reloadPluginForProject: vi.fn(async () => true),
+    loadEnabledPluginsForProject: vi.fn(async () => undefined),
     listen: listen as unknown as AppEventListen,
   }
 
@@ -314,6 +318,33 @@ describe('registerAppDesktopEventListeners', () => {
 
     expect(finalizeAgentSession).toHaveBeenCalledWith('task-1', true, 42)
     vi.useRealTimers()
+  })
+
+  it('refreshes plugin state from sidecar plugin management events without rebuilding plugin source', async () => {
+    const { deps, handlers } = createHarness()
+
+    await registerAppDesktopEventListeners(deps)
+    await handlers.get('plugin-installation-changed')?.({ payload: { plugin_id: 'review-helper' } })
+    await handlers.get('project-plugin-enablement-changed')?.({ payload: { plugin_id: 'review-helper', project_id: 'P-1', enabled: true } })
+    await handlers.get('plugin-reload-requested')?.({ payload: { plugin_id: 'review-helper', project_id: null } })
+    await handlers.get('plugin-reload-requested')?.({ payload: { plugin_id: 'review-helper', project_id: 'P-1' } })
+
+    expect(deps.reloadInstalledPluginMetadata).toHaveBeenCalledTimes(2)
+    expect(deps.reloadInstalledPluginMetadata).toHaveBeenCalledWith('review-helper')
+    expect(deps.loadEnabledPluginsForProject).toHaveBeenCalledWith('P-1')
+    expect(deps.reloadPluginForProject).toHaveBeenCalledWith('P-1', 'review-helper')
+  })
+
+  it('ignores project plugin enablement and reload events for inactive projects', async () => {
+    const { deps, handlers } = createHarness()
+    deps.getActiveProjectId.mockReturnValue('P-2')
+
+    await registerAppDesktopEventListeners(deps)
+    await handlers.get('project-plugin-enablement-changed')?.({ payload: { plugin_id: 'review-helper', project_id: 'P-1', enabled: true } })
+    await handlers.get('plugin-reload-requested')?.({ payload: { plugin_id: 'review-helper', project_id: 'P-1' } })
+
+    expect(deps.loadEnabledPluginsForProject).not.toHaveBeenCalled()
+    expect(deps.reloadPluginForProject).not.toHaveBeenCalled()
   })
 
   it('clears active session and releases terminal when task is deleted', async () => {
