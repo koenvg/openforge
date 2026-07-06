@@ -10,6 +10,8 @@ const assetPaths = [
   'src/ui/MarkdownContent.svelte',
   'src/ui/ResizablePanel.svelte',
   'src/ui/Modal.svelte',
+  'src/ui/PluginPageHeader.svelte',
+  'src/ui/PluginViewState.svelte',
 ]
 await Promise.all(assetPaths.map(async (assetPath) => {
   const relativeOutputPath = assetPath.replace(/^src\//, '')

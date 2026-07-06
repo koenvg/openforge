@@ -3,6 +3,8 @@
   import { RefreshCw, Plus, Columns3 } from '@lucide/svelte'
   import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
   import type { Action } from '@openforge-app/plugin-sdk'
+  import PluginPageHeader from '@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte'
+  import PluginViewState from '@openforge-app/plugin-sdk/ui/PluginViewState.svelte'
   import {
     buildBoard,
     applyCreate,
@@ -336,62 +338,53 @@
 </script>
 
 <div class="flex flex-col h-full overflow-hidden">
-  <div class="flex items-center justify-between px-6 py-3 border-b border-base-300 shrink-0" style="background-color: var(--project-bg-alt, oklch(var(--b2)))">
-    <div class="min-w-0">
-      <h2 class="text-[22px] font-semibold text-base-content tracking-tight m-0 truncate">
-        {projectName || 'Roadmap'}
-      </h2>
-      <p class="text-[13px] text-secondary mt-0.5 m-0 truncate">
-        {#if repoSlug}{repoSlug}{:else}Roadmap board{/if}
-      </p>
-    </div>
-    <div class="flex items-center gap-2 shrink-0">
-      <button class="btn btn-sm" onclick={() => openCreate()} disabled={!board || busy}>
-        <Plus size={14} /> Create
-      </button>
-      <button class="btn btn-sm" onclick={openColumns} disabled={!board || busy}>
-        <Columns3 size={14} /> Columns
-      </button>
-      <button class="btn btn-sm" onclick={() => loadBoard()} disabled={isLoading || !projectId}>
-        <RefreshCw size={14} class={isLoading ? 'animate-spin' : ''} /> Refresh
-      </button>
-    </div>
-  </div>
+  <PluginPageHeader
+    title={projectName || 'Roadmap'}
+    subtitle={repoSlug || 'Roadmap board'}
+  >
+    {#snippet actions()}
+      <div class="flex items-center gap-2 shrink-0">
+        <button class="btn btn-sm" onclick={() => openCreate()} disabled={!board || busy}>
+          <Plus size={14} /> Create
+        </button>
+        <button class="btn btn-sm" onclick={openColumns} disabled={!board || busy}>
+          <Columns3 size={14} /> Columns
+        </button>
+        <button class="btn btn-sm" onclick={() => loadBoard()} disabled={isLoading || !projectId}>
+          <RefreshCw size={14} class={isLoading ? 'animate-spin' : ''} /> Refresh
+        </button>
+      </div>
+    {/snippet}
+  </PluginPageHeader>
 
   <div class="flex-1 overflow-hidden">
-    {#if !projectId}
-      <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm text-center p-6">
-        <p class="m-0">Select a project to view its roadmap.</p>
-      </div>
-    {:else if isLoading && !board}
-      <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm">
-        <span class="loading loading-spinner loading-md text-primary"></span>
-        <span>Loading board…</span>
-      </div>
-    {:else if error && !board}
-      <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/60 text-sm text-center p-6 max-w-md mx-auto">
-        <span class="text-3xl">⚠</span>
-        <p class="m-0">No GitHub board for this project.</p>
-        <p class="text-xs text-base-content/40 m-0">{error}</p>
-      </div>
-    {:else if board}
-      <Board
-        columns={board.columns}
-        repo={repoSlug}
-        {actions}
-        {busy}
-        onCardClick={(c) => (selectedIssueNumber = c.issueNumber)}
-        onOpenUrl={openUrl}
-        onCopyLink={copyLink}
-        onRecolor={(name, color) => {
-          void recolorLabel(name, color).catch(() => undefined)
-        }}
-        onRunAction={(card, actionPrompt) => {
-          void runIssueAction(card, actionPrompt)
-        }}
-        onAddCard={(label) => openCreate(label ? [label] : [])}
-      />
-    {/if}
+    <PluginViewState
+      loading={isLoading && !board}
+      loadingLabel="Loading board…"
+      error={projectId && error && !board ? error : null}
+      errorTitle="No GitHub board for this project."
+      empty={!projectId}
+      emptyTitle="Select a project to view its roadmap."
+    >
+      {#if board}
+        <Board
+          columns={board.columns}
+          repo={repoSlug}
+          {actions}
+          {busy}
+          onCardClick={(c) => (selectedIssueNumber = c.issueNumber)}
+          onOpenUrl={openUrl}
+          onCopyLink={copyLink}
+          onRecolor={(name, color) => {
+            void recolorLabel(name, color).catch(() => undefined)
+          }}
+          onRunAction={(card, actionPrompt) => {
+            void runIssueAction(card, actionPrompt)
+          }}
+          onAddCard={(label) => openCreate(label ? [label] : [])}
+        />
+      {/if}
+    </PluginViewState>
   </div>
 </div>
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PluginViewState from '@openforge-app/plugin-sdk/ui/PluginViewState.svelte'
   import type { SkillIdentity, SkillInfo, SkillSourceGroup } from './lib/skillDomain'
   import { getSkillLocationLabel, getSkillSourcePath, isSameSkillIdentity } from './lib/skillDomain'
 
@@ -85,31 +86,25 @@
 
   <div class="flex-1 overflow-y-auto">
     {#if !activeProjectId}
-      <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm text-center p-5">
-        <span class="text-3xl">📁</span>
-        <span class="font-medium text-base-content/70">Select a project</span>
-        <span>Choose a project to view and edit its skills.</span>
-      </div>
+      <PluginViewState
+        empty
+        emptyTitle="Select a project"
+        emptyDescription="Choose a project to view and edit its skills."
+      />
     {:else if isLoading && skillsCount === 0}
-      <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm" role="status" aria-live="polite">
-        <span class="loading loading-spinner loading-md text-primary"></span>
-        <span>Loading skills...</span>
-      </div>
+      <PluginViewState loading loadingLabel="Loading skills..." />
     {:else if error}
-      <div class="flex flex-col items-center justify-center h-full gap-3 text-error text-sm text-center p-5" role="alert">
-        <span class="text-3xl">⚠</span>
-        <span>{error}</span>
-        <button class="btn btn-sm btn-outline" onclick={onRetryLoad} disabled={isLoading}>Retry loading skills</button>
-      </div>
+      <PluginViewState
+        error={error}
+        errorTitle="Failed to load skills"
+        retryLabel="Retry loading skills"
+        onRetry={onRetryLoad}
+        retryDisabled={isLoading}
+      />
     {:else if skillsCount === 0}
-      <div class="flex flex-col items-center justify-center h-full gap-4 text-base-content/50 text-center p-6">
-        <span class="text-4xl">📝</span>
-        <p class="text-sm m-0">No skills found. Create your first skill!</p>
-      </div>
+      <PluginViewState empty emptyTitle="No skills found. Create your first skill!" />
     {:else if filteredSkills.length === 0}
-      <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-center p-6">
-        <p class="text-sm m-0">No skills match your filter.</p>
-      </div>
+      <PluginViewState empty emptyTitle="No skills match your filter." />
     {:else}
       {#if projectSkills.length > 0}
         {@const levelCollapsed = collapsed.get('project') ?? false}

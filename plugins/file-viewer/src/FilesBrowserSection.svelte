@@ -5,6 +5,7 @@
   import ProjectFileTree from './ProjectFileTree.svelte'
   import FileContentViewer from './FileContentViewer.svelte'
   import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
+  import PluginViewState from '@openforge-app/plugin-sdk/ui/PluginViewState.svelte'
 
   interface Props {
     api: FrontendOpenForgeAPI
@@ -67,28 +68,16 @@
 
 <div class="flex flex-1 min-h-0 overflow-hidden">
   {#if !activeProjectId}
-    <div class="flex-1 flex items-center justify-center text-base-content/50 text-sm p-6 text-center">
-      Select a project to browse files
-    </div>
+    <PluginViewState empty emptyTitle="Select a project to browse files" />
   {:else if loading}
-    <div class="flex-1 flex items-center justify-center p-6">
-      <div class="flex flex-col items-center gap-3 text-center">
-        <span class="loading loading-spinner loading-md text-primary" aria-hidden="true"></span>
-        <p class="text-sm text-base-content/70">Loading project files…</p>
-      </div>
-    </div>
+    <PluginViewState loading loadingLabel="Loading project files…" />
   {:else if rootError !== null && rootEntries.length === 0}
-    <div class="flex-1 flex items-center justify-center p-6">
-      <div class="text-center space-y-3 max-w-sm">
-        <div class="space-y-2">
-          <h3 class="text-base font-semibold">Failed to load files</h3>
-          <p class="text-sm text-error">{rootError}</p>
-        </div>
-        <button class="btn btn-sm btn-outline" type="button" onclick={onRetryRootLoad}>
-          Retry loading project files
-        </button>
-      </div>
-    </div>
+    <PluginViewState
+      error={rootError}
+      errorTitle="Failed to load files"
+      retryLabel="Retry loading project files"
+      onRetry={onRetryRootLoad}
+    />
   {:else}
     <ResizablePanel storageKey="files-tree" defaultWidth={240} side="left">
       <div class="flex h-full min-h-0 flex-col">

@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
+  import PluginPageHeader from '@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte'
+  import PluginViewState from '@openforge-app/plugin-sdk/ui/PluginViewState.svelte'
   import { dayOfWeekFromCron, describeCronExpression, timeOfDayFromCron, validateFiveFieldCron } from '../lib/cron'
   import type { ScheduledFireOutcome, SchedulePreset, TaskSchedule, TaskScheduleDraft, TaskScheduleMode } from '../lib/types'
   import TaskScheduleComposerSection from './TaskScheduleComposerSection.svelte'
@@ -264,21 +266,22 @@
 </script>
 
 <div class="flex h-full min-h-0 flex-col overflow-hidden">
-  <div class="flex items-center justify-between border-b border-base-300 bg-base-200 px-4 py-2 shrink-0">
-    <div>
-      <h2 class="text-sm font-semibold text-base-content">{projectName || 'Project'} — Task Schedules</h2>
-      <p class="text-xs text-base-content/60">Create recurring project tasks and optional implementation runs.</p>
-    </div>
-    {#if projectId}
-      <button class="btn btn-sm" type="button" disabled={loading} onclick={() => loadSchedules(projectId)}>{loading ? 'Refreshing…' : 'Refresh'}</button>
-    {/if}
-  </div>
+  <PluginPageHeader
+    title={`${projectName || 'Project'} — Task Schedules`}
+    subtitle="Create recurring project tasks and optional implementation runs."
+  >
+    {#snippet actions()}
+      {#if projectId}
+        <button class="btn btn-sm" type="button" disabled={loading} onclick={() => loadSchedules(projectId)}>{loading ? 'Refreshing…' : 'Refresh'}</button>
+      {/if}
+    {/snippet}
+  </PluginPageHeader>
 
   <div role="status" aria-live="polite" class="sr-only">{editAnnouncement}</div>
 
   <div class="flex-1 overflow-auto px-3 py-6 sm:px-4">
   {#if !projectId}
-    <div class="alert alert-info">Select a project to manage Task Schedules.</div>
+    <PluginViewState empty emptyTitle="Select a project to manage Task Schedules." />
   {:else}
     {#if error}
       <div class="alert alert-error mb-4" role="alert" aria-live="assertive">{error}</div>
