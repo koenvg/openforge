@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { ImagePlus } from '@lucide/svelte'
-  import type { Task, PermissionMode, Action, GitBranchInfo, WorktreeSource } from '../lib/types'
-  import { createTask, updateTask, getProjectConfig, getResolvedAiProvider, listGitBranches, repoHasCommits } from '../lib/ipc'
+  import type { Task, PermissionMode, Action, GitBranchInfo, WorktreeSource, ClaudeSessionSummary } from '../lib/types'
+  import { createTask, updateTask, getProjectConfig, getResolvedAiProvider, listGitBranches, repoHasCommits, listClaudeSessions } from '../lib/ipc'
+  import { formatSessionRelativeTime, sessionTitle } from '../lib/claudeSessionDisplay'
   import { dedupeBranchesForSelector, type BranchLocation } from '../lib/branchSelector'
   import { resolveWorktreeAvailability } from '../lib/worktreeAvailability'
   import {
@@ -70,6 +71,13 @@
   let taskTitle = $state('')
   let handoffNotesEnabled = $state(true)
   let taskDefaultsLoading = $state(true)
+  // "Continue an existing Claude session" picker (Claude provider only).
+  let resumeSessionId = $state<string | null>(null)
+  let claudeSessions = $state<ClaudeSessionSummary[]>([])
+  let sessionsLoading = $state(false)
+  let sessionsLoaded = $state(false)
+  let sessionsError = $state<string | null>(null)
+  let sessionPickerExpanded = $state(false)
 
   const initialPrompt = $derived(mode === 'edit' && task ? getTaskPromptText(task) : '')
   const promptReady = $derived(promptDraft.trim().length > 0)
@@ -83,6 +91,11 @@
     pastedImages.length === 0
       ? ''
       : `${pastedImages.length} image${pastedImages.length === 1 ? '' : 's'} ready`
+  )
+  // Continuing a local session only applies to new Claude tasks.
+  const canContinueSession = $derived(mode === 'create' && aiProvider === 'claude-code')
+  const selectedSession = $derived(
+    resumeSessionId ? claudeSessions.find((session) => session.sessionId === resumeSessionId) ?? null : null
   )
 
   $effect(() => {
@@ -128,6 +141,51 @@
     return { worktreeSource: 'newBranchFromMain', worktreeBranch: null }
   }
 
+  async function loadClaudeSessions() {
+    if (sessionsLoaded || sessionsLoading) return
+    sessionsLoading = true
+    sessionsError = null
+    try {
+      claudeSessions = await listClaudeSessions(projectPath)
+      sessionsLoaded = true
+    } catch (e) {
+      sessionsError = String(e)
+    } finally {
+      sessionsLoading = false
+    }
+  }
+
+  function toggleSessionPicker() {
+    sessionPickerExpanded = !sessionPickerExpanded
+    if (sessionPickerExpanded) void loadClaudeSessions()
+  }
+
+  function selectSession(session: ClaudeSessionSummary) {
+    resumeSessionId = session.sessionId
+    // Prefill the title from the session when the user hasn't set one.
+    const derivedTitle = session.title?.trim()
+    if (!taskTitle.trim() && derivedTitle) taskTitle = derivedTitle
+    // Line the worktree up with the branch the session last worked on, so the resumed
+    // conversation and the checked-out code agree. Only when that branch is actually
+    // available in this repo; otherwise leave the workspace choice untouched.
+    const recordedBranch = session.gitBranch?.trim()
+    if (recordedBranch && worktreeAllowed) {
+      const match = branchSelectorOptions.find(
+        (option) => option.label === recordedBranch || option.value === recordedBranch,
+      )
+      if (match) {
+        useWorktree = true
+        selectedWorktreeSource = 'existingBranch'
+        selectedExistingBranch = match.value
+      }
+    }
+    sessionPickerExpanded = false
+  }
+
+  function clearSelectedSession() {
+    resumeSessionId = null
+  }
+
   onMount(() => {
     document.addEventListener('pointerdown', handleDocumentPointerDown)
     void initializeDialog()
@@ -139,6 +197,11 @@
     taskDefaultsLoading = mode === 'create'
     useWorktree = true
     worktreeAllowed = true
+    resumeSessionId = null
+    claudeSessions = []
+    sessionsLoaded = false
+    sessionsError = null
+    sessionPickerExpanded = false
     try {
       if ($activeProjectId) {
         const defaultUseWorktrees = await getProjectConfig($activeProjectId, 'use_worktrees')
@@ -415,7 +478,7 @@
           'backlog',
           $activeProjectId,
           selectedPermissionMode,
-          { ...buildWorktreeOptions(), title: taskTitle.trim() || null, handoffNotesEnabled }
+          { ...buildWorktreeOptions(), title: taskTitle.trim() || null, handoffNotesEnabled, resumeSessionId: canContinueSession ? resumeSessionId : null }
         )
 
         if (autoStart && onRunAction) {
@@ -574,7 +637,7 @@
                 aria-controls="create-task-environment"
                 onclick={() => { environmentExpanded = !environmentExpanded }}
               >
-                <span class="text-base-content/50">Environment:</span>
+                <span class="text-base-content/50">Additional configuration:</span>
                 <span>{environmentSummary}</span>
                 <span class="text-base-content/50">{environmentExpanded ? '⌃' : '⌄'}</span>
               </button>
@@ -596,6 +659,57 @@
                         <option value="bypassPermissions">Bypass Permissions</option>
                         <option value="dontAsk">Don't Ask (dangerous)</option>
                       </select>
+                    </div>
+                  {/if}
+
+                  {#if canContinueSession}
+                    <div class="overflow-hidden rounded-lg border border-base-300 bg-base-100">
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-sm h-auto min-h-8 w-full justify-start gap-2 rounded-none border-0 text-left font-normal"
+                        aria-expanded={sessionPickerExpanded}
+                        aria-controls="create-task-session-picker"
+                        onclick={toggleSessionPicker}
+                      >
+                        <span class="shrink-0 text-base-content/50">Continue session:</span>
+                        <span class="min-w-0 flex-1 truncate">{selectedSession ? sessionTitle(selectedSession) : 'start fresh'}</span>
+                        <span class="shrink-0 text-base-content/50">{sessionPickerExpanded ? '⌃' : '⌄'}</span>
+                      </button>
+
+                      {#if sessionPickerExpanded}
+                        <div id="create-task-session-picker" class="space-y-2 border-t border-base-300 p-3">
+                          {#if sessionsLoading}
+                            <p class="m-0 text-xs text-base-content/60">Loading local Claude sessions…</p>
+                          {:else if sessionsError}
+                            <p class="m-0 text-xs text-error">{sessionsError}</p>
+                          {:else if claudeSessions.length === 0}
+                            <p class="m-0 text-xs text-base-content/60">No local Claude sessions found for this project.</p>
+                          {:else}
+                            <div class="max-h-56 space-y-1 overflow-y-auto">
+                              {#each claudeSessions as session (session.sessionId)}
+                                <button
+                                  type="button"
+                                  class="flex w-full flex-col items-start gap-0.5 rounded-md border p-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                                  class:border-primary={resumeSessionId === session.sessionId}
+                                  class:border-base-300={resumeSessionId !== session.sessionId}
+                                  class:bg-base-200={resumeSessionId !== session.sessionId}
+                                  onclick={() => selectSession(session)}
+                                >
+                                  <span class="w-full truncate text-xs font-medium text-base-content">{sessionTitle(session)}</span>
+                                  <span class="flex w-full items-center gap-2 text-[0.7rem] text-base-content/60">
+                                    {#if session.gitBranch}<span class="badge badge-ghost badge-xs shrink-0">{session.gitBranch}</span>{/if}
+                                    <span class="shrink-0">{formatSessionRelativeTime(session.updatedAt)}</span>
+                                    {#if session.lastPrompt}<span class="min-w-0 truncate">· {session.lastPrompt}</span>{/if}
+                                  </span>
+                                </button>
+                              {/each}
+                            </div>
+                          {/if}
+                          {#if selectedSession}
+                            <button type="button" class="btn btn-ghost btn-xs" onclick={clearSelectedSession}>Clear selection (start fresh)</button>
+                          {/if}
+                        </div>
+                      {/if}
                     </div>
                   {/if}
 

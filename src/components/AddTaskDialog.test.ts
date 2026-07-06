@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import AddTaskDialog from './AddTaskDialog.svelte'
 import type { Action, Task } from '../lib/types'
-import { createTask, updateTask, getProjectConfig, getResolvedAiProvider, listGitBranches, repoHasCommits, listOpenCodeCommands } from '../lib/ipc'
+import { createTask, updateTask, getProjectConfig, getResolvedAiProvider, listGitBranches, repoHasCommits, listOpenCodeCommands, listClaudeSessions } from '../lib/ipc'
 import { loadActions } from '../lib/actions'
 
 vi.mock('../lib/ipc', () => ({
@@ -33,6 +33,9 @@ vi.mock('../lib/ipc', () => ({
   listOpenCodeCommands: vi.fn().mockResolvedValue([]),
   searchOpenCodeFiles: vi.fn().mockResolvedValue([]),
   listOpenCodeAgents: vi.fn().mockResolvedValue([]),
+  listClaudeSessions: vi.fn().mockResolvedValue([
+    { sessionId: 'sess-1', title: 'Check main branch', lastPrompt: 'pnpm i', cwd: '/repo', gitBranch: 'main', updatedAt: '2026-07-05T00:00:00.000Z', messageCount: 4 },
+  ]),
 }))
 
 const DEFAULT_WORKTREE_OPTIONS = {
@@ -40,6 +43,7 @@ const DEFAULT_WORKTREE_OPTIONS = {
   worktreeBranch: null,
   title: null,
   handoffNotesEnabled: true,
+  resumeSessionId: null,
 }
 
 vi.mock('../lib/actions', () => ({
@@ -75,7 +79,7 @@ async function clickAddToBacklogFromMore() {
 }
 
 async function expandEnvironment() {
-  await fireEvent.click(await screen.findByRole('button', { name: /Environment:/ }))
+  await fireEvent.click(await screen.findByRole('button', { name: /Additional configuration:/ }))
 }
 
 function setClipboardRead(read: () => Promise<Array<{ types: string[], getType: (type: string) => Promise<Blob> }>>) {
@@ -99,6 +103,7 @@ const mockTask = {
   worktree_source: null,
   worktree_branch: null,
   handoff_notes_enabled: true,
+  resume_session_id: null,
   depends_on: [],
   project_id: null,
   created_at: 1000,
@@ -173,12 +178,95 @@ describe('AddTaskDialog', () => {
     })
   })
 
+  it('includes the selected Claude session id when creating the task', async () => {
+    render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
+
+    await findPromptTextbox()
+    // The picker lives under Additional configuration; open it, then choose a session.
+    await expandEnvironment()
+    await fireEvent.click(await screen.findByRole('button', { name: /Continue session/ }))
+    await fireEvent.click(await screen.findByText('Check main branch'))
+
+    const textbox = await findPromptTextbox()
+    await fireEvent.input(textbox, { target: { value: 'Keep going' } })
+    await clickAddToBacklogFromMore()
+
+    await waitFor(() => {
+      expect(createTask).toHaveBeenCalledWith(
+        'Keep going',
+        'backlog',
+        'test-project-id',
+        'default',
+        expect.objectContaining({ resumeSessionId: 'sess-1' }),
+      )
+    })
+  })
+
+  it('pre-selects the session\'s branch as the worktree when it exists in the repo', async () => {
+    vi.mocked(listClaudeSessions).mockResolvedValue([
+      { sessionId: 'sess-2', title: 'PR work', lastPrompt: 'open pr', cwd: '/repo', gitBranch: 'feature/open-pr', updatedAt: '2026-07-06T00:00:00.000Z', messageCount: 2 },
+    ])
+    render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
+
+    await findPromptTextbox()
+    await expandEnvironment()
+    await fireEvent.click(await screen.findByRole('button', { name: /Continue session/ }))
+    await fireEvent.click(await screen.findByText('PR work'))
+
+    // Selecting the session lines the worktree up with the branch it was working on.
+    expect(screen.getByRole('button', { name: /Additional configuration: Worktree · feature\/open-pr/ })).toBeTruthy()
+
+    const textbox = await findPromptTextbox()
+    await fireEvent.input(textbox, { target: { value: 'Keep going' } })
+    await clickAddToBacklogFromMore()
+
+    await waitFor(() => {
+      expect(createTask).toHaveBeenCalledWith(
+        'Keep going',
+        'backlog',
+        'test-project-id',
+        'default',
+        expect.objectContaining({
+          resumeSessionId: 'sess-2',
+          worktreeSource: 'existingBranch',
+          worktreeBranch: 'feature/open-pr',
+        }),
+      )
+    })
+  })
+
+  it('leaves the worktree choice untouched when the session\'s branch is not in the repo', async () => {
+    vi.mocked(listClaudeSessions).mockResolvedValue([
+      { sessionId: 'sess-3', title: 'Old branch', lastPrompt: 'x', cwd: '/repo', gitBranch: 'gone/deleted', updatedAt: '2026-07-06T00:00:00.000Z', messageCount: 1 },
+    ])
+    render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
+
+    await findPromptTextbox()
+    await expandEnvironment()
+    await fireEvent.click(await screen.findByRole('button', { name: /Continue session/ }))
+    await fireEvent.click(await screen.findByText('Old branch'))
+
+    // No matching branch → default worktree source stays, no invalid branch is forced.
+    expect(screen.getByRole('button', { name: /Additional configuration: Worktree · latest main/ })).toBeTruthy()
+  })
+
+  it('hides the session picker when the project is not a Claude project', async () => {
+    vi.mocked(getResolvedAiProvider).mockResolvedValue('opencode')
+    render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
+
+    await findPromptTextbox()
+    // Even with Additional configuration open, a non-Claude project never offers it.
+    await expandEnvironment()
+    expect(screen.queryByRole('button', { name: /Continue session/ })).toBeNull()
+    expect(listClaudeSessions).not.toHaveBeenCalled()
+  })
+
   it('collapses environment controls behind a summary by default', async () => {
     render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
 
     await findPromptTextbox()
 
-    expect(screen.getByRole('button', { name: /Environment: Worktree · latest main · default permissions/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Additional configuration: Worktree · latest main · default permissions/ })).toBeTruthy()
     expect(screen.queryByLabelText('Worktree')).toBeNull()
     expect(screen.queryByLabelText('New branch from latest main')).toBeNull()
     expect(screen.queryByRole('combobox')).toBeNull()
@@ -192,7 +280,7 @@ describe('AddTaskDialog', () => {
     await fireEvent.click(await screen.findByRole('button', { name: 'More' }))
     expect(screen.getByRole('menuitem', { name: 'Add to Backlog' })).toBeTruthy()
 
-    const environmentButton = await screen.findByRole('button', { name: /Environment:/ })
+    const environmentButton = await screen.findByRole('button', { name: /Additional configuration:/ })
     await fireEvent.pointerDown(environmentButton)
     await fireEvent.click(environmentButton)
 
@@ -250,6 +338,7 @@ describe('AddTaskDialog', () => {
           worktreeBranch: null,
           title: null,
           handoffNotesEnabled: true,
+          resumeSessionId: null,
         },
       )
     })
@@ -263,7 +352,7 @@ describe('AddTaskDialog', () => {
     await expandEnvironment()
     const worktreeToggle = await screen.findByLabelText('Worktree') as HTMLInputElement
     expect(worktreeToggle.checked).toBe(false)
-    expect(screen.getByRole('button', { name: /Environment: Project directory · default permissions/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Additional configuration: Project directory · default permissions/ })).toBeTruthy()
 
     const textbox = await findPromptTextbox()
     await fireEvent.input(textbox, { target: { value: 'Default project-directory task' } })
@@ -280,6 +369,7 @@ describe('AddTaskDialog', () => {
           worktreeBranch: null,
           title: null,
           handoffNotesEnabled: true,
+          resumeSessionId: null,
         },
       )
       expect(onTaskSaved).toHaveBeenCalled()
@@ -311,6 +401,7 @@ describe('AddTaskDialog', () => {
           worktreeBranch: null,
           title: null,
           handoffNotesEnabled: true,
+          resumeSessionId: null,
         },
       )
       expect(onTaskSaved).toHaveBeenCalled()
@@ -331,7 +422,7 @@ describe('AddTaskDialog', () => {
     await fireEvent.click(screen.getByLabelText('Existing branch'))
     await fireEvent.click(screen.getByRole('combobox', { name: 'Branch' }))
     await fireEvent.click(await screen.findByRole('option', { name: /^feature\/open-pr/ }))
-    expect(screen.getByRole('button', { name: /Environment: Worktree · feature\/open-pr · default permissions/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Additional configuration: Worktree · feature\/open-pr · default permissions/ })).toBeTruthy()
 
     const textbox = await findPromptTextbox()
     await fireEvent.input(textbox, { target: { value: 'Continue PR work' } })
@@ -348,6 +439,7 @@ describe('AddTaskDialog', () => {
           worktreeBranch: 'feature/open-pr',
           title: null,
           handoffNotesEnabled: true,
+          resumeSessionId: null,
         },
       )
       expect(onTaskSaved).toHaveBeenCalled()
@@ -360,7 +452,7 @@ describe('AddTaskDialog', () => {
 
     await expandEnvironment()
     await fireEvent.click(await screen.findByLabelText('Worktree'))
-    expect(screen.getByRole('button', { name: /Environment: Project directory · default permissions/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Additional configuration: Project directory · default permissions/ })).toBeTruthy()
     expect(screen.queryByLabelText('New branch from latest main')).toBeNull()
     expect(screen.queryByLabelText('Existing branch')).toBeNull()
 
@@ -379,6 +471,7 @@ describe('AddTaskDialog', () => {
           worktreeBranch: null,
           title: null,
           handoffNotesEnabled: true,
+          resumeSessionId: null,
         },
       )
       expect(onTaskSaved).toHaveBeenCalled()
@@ -555,7 +648,7 @@ describe('AddTaskDialog', () => {
     const handoffToggle = await screen.findByLabelText('Handoff notes') as HTMLInputElement
     expect(handoffToggle.checked).toBe(true)
     await fireEvent.click(handoffToggle)
-    expect(screen.getByRole('button', { name: /Environment:.*no handoff notes/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Additional configuration:.*no handoff notes/ })).toBeTruthy()
 
     await fireEvent.input(textbox, { target: { value: 'No handoff task' } })
     await clickAddToBacklogFromMore()
@@ -801,7 +894,7 @@ describe('AddTaskDialog', () => {
     const select = await screen.findByRole('combobox') as HTMLSelectElement
 
     await fireEvent.change(select, { target: { value: 'auto' } })
-    expect(screen.getByRole('button', { name: /Environment: Worktree · latest main · autorun/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Additional configuration: Worktree · latest main · autorun/ })).toBeTruthy()
     await fireEvent.input(textbox, { target: { value: 'Task with autorun' } })
     await clickAddToBacklogFromMore()
 

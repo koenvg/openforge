@@ -26,6 +26,7 @@ import {
   getTaskBatchFileContents,
   getPtyBuffer,
   getResolvedAiProvider,
+  listClaudeSessions,
   listGitBranches,
   registerBuiltinPlugin,
   installPluginFromGit,
@@ -242,6 +243,7 @@ describe("ipc spawnShellPty", () => {
 			worktreeBranch: null,
 			title: null,
 			handoffNotesEnabled: true,
+			resumeSessionId: null,
 		});
 	});
 
@@ -278,6 +280,7 @@ describe("ipc spawnShellPty", () => {
 			worktreeBranch: "feature/open-pr",
 			title: null,
 			handoffNotesEnabled: true,
+			resumeSessionId: null,
 		});
 	});
 
@@ -314,6 +317,7 @@ describe("ipc spawnShellPty", () => {
 			worktreeBranch: null,
 			title: null,
 			handoffNotesEnabled: true,
+			resumeSessionId: null,
 		});
 	});
 
@@ -333,6 +337,24 @@ describe("ipc spawnShellPty", () => {
 		await expect(repoHasCommits("/repo")).resolves.toBe(false);
 
 		expect(invokeMock).toHaveBeenCalledWith("repo_has_commits", { repoPath: "/repo" });
+	});
+
+	it("lists local Claude sessions through the typed IPC wrapper", async () => {
+		const sessions = [
+			{ sessionId: "abc-123", title: "Check main", lastPrompt: "pnpm i", cwd: "/repo", gitBranch: "main", updatedAt: "2026-07-05T00:00:00.000Z", messageCount: 4 },
+		];
+		invokeMock.mockResolvedValueOnce(sessions);
+
+		await expect(listClaudeSessions("/repo")).resolves.toEqual(sessions);
+		expect(invokeMock).toHaveBeenCalledWith("list_claude_sessions", { projectRoot: "/repo" });
+	});
+
+	it("defaults the Claude session projectRoot to null", async () => {
+		invokeMock.mockResolvedValueOnce([]);
+
+		await listClaudeSessions();
+
+		expect(invokeMock).toHaveBeenCalledWith("list_claude_sessions", { projectRoot: null });
 	});
 
 	it("sends task edits as mutable prompt updates, not initialPrompt updates", async () => {

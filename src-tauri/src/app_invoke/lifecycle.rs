@@ -438,7 +438,8 @@ pub(super) async fn handle_app_start_implementation_command(
         crate::providers::Provider::from_name(&start_context.provider_name, pty_manager.clone())
             .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     let provider_start_context =
-        crate::providers::ProviderStartContext::new(state.app.clone(), state.app_event_tx.clone());
+        crate::providers::ProviderStartContext::new(state.app.clone(), state.app_event_tx.clone())
+            .with_resume_session_id(start_context.task.resume_session_id.clone());
     let provider_result = match provider
         .start(
             &task_id,
@@ -542,6 +543,7 @@ mod tests {
             title_source: None,
             title_generated_at: None,
             handoff_notes_enabled: true,
+            resume_session_id: None,
             depends_on: Vec::new(),
             labels: Vec::new(),
         }

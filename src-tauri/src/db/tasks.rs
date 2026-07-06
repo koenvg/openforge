@@ -34,6 +34,9 @@ pub struct TaskRow {
     /// Whether the task's start prompt includes the OpenForge handoff-notes
     /// (task management) block. Defaults to `true`; `false` opts the task out.
     pub handoff_notes_enabled: bool,
+    /// When set, the task continues an existing Claude session with this id
+    /// (`claude --resume <id>`) instead of starting fresh. Claude provider only.
+    pub resume_session_id: Option<String>,
     pub depends_on: Vec<String>,
     pub labels: Vec<TaskLabelRow>,
 }
@@ -71,6 +74,7 @@ pub struct NewTaskOptions<'a> {
     pub worktree_branch: Option<&'a str>,
     pub title: Option<&'a str>,
     pub handoff_notes_enabled: bool,
+    pub resume_session_id: Option<&'a str>,
 }
 
 fn load_task_dependency_ids(conn: &rusqlite::Connection, task_id: &str) -> Result<Vec<String>> {
@@ -281,7 +285,7 @@ fn normalize_worktree_source(
     }
 }
 
-const TASK_ROW_COLUMNS: &str = "id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, title_source, title_generated_at, worktree_source, worktree_branch, handoff_notes_enabled";
+const TASK_ROW_COLUMNS: &str = "id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, title_source, title_generated_at, worktree_source, worktree_branch, handoff_notes_enabled, resume_session_id";
 const COMPACT_TASK_ROW_COLUMNS: &str = "id, status, project_id, created_at, updated_at, agent, permission_mode, worktree_source, worktree_branch, COALESCE(NULLIF(title, ''), substr(initial_prompt, 1, 120)) AS title, title_source, title_generated_at, handoff_notes_enabled";
 
 fn task_from_row(row: &rusqlite::Row<'_>) -> Result<TaskRow> {
@@ -302,6 +306,7 @@ fn task_from_row(row: &rusqlite::Row<'_>) -> Result<TaskRow> {
         worktree_source: row.get(13)?,
         worktree_branch: row.get(14)?,
         handoff_notes_enabled: row.get(15)?,
+        resume_session_id: row.get(16)?,
         depends_on: Vec::new(),
         labels: Vec::new(),
     })
@@ -479,6 +484,7 @@ impl super::Database {
             worktree_branch,
             title: None,
             handoff_notes_enabled: true,
+            resume_session_id: None,
         })
     }
 
@@ -493,6 +499,7 @@ impl super::Database {
             worktree_branch,
             title,
             handoff_notes_enabled,
+            resume_session_id,
         } = opts;
         let conn = self.conn.lock().unwrap();
         let defaulted_worktree_source =
@@ -543,8 +550,8 @@ impl super::Database {
         let final_prompt = prompt.unwrap_or(initial_prompt);
 
         conn.execute(
-            "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, worktree_source, worktree_branch, title, title_source, title_generated_at, handoff_notes_enabled)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+            "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, worktree_source, worktree_branch, title, title_source, title_generated_at, handoff_notes_enabled, resume_session_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
             rusqlite::params![
                 &task_id,
                 initial_prompt,
@@ -562,6 +569,7 @@ impl super::Database {
                 title_source.as_deref(),
                 None::<i64>,
                 handoff_notes_enabled,
+                resume_session_id,
             ],
         )?;
 
@@ -582,6 +590,7 @@ impl super::Database {
             title_source,
             title_generated_at: None,
             handoff_notes_enabled,
+            resume_session_id: resume_session_id.map(|s| s.to_string()),
             depends_on: Vec::new(),
             labels: Vec::new(),
         })
@@ -590,7 +599,7 @@ impl super::Database {
     pub fn get_all_tasks(&self) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, title_source, title_generated_at, worktree_source, worktree_branch, handoff_notes_enabled
+            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, title_source, title_generated_at, worktree_source, worktree_branch, handoff_notes_enabled, resume_session_id
              FROM tasks ORDER BY updated_at DESC"
         )?;
 
@@ -612,6 +621,7 @@ impl super::Database {
                 worktree_source: row.get(13)?,
                 worktree_branch: row.get(14)?,
                 handoff_notes_enabled: row.get(15)?,
+                resume_session_id: row.get(16)?,
                 depends_on: Vec::new(),
                 labels: Vec::new(),
             })
@@ -630,7 +640,7 @@ impl super::Database {
     pub fn get_task(&self, id: &str) -> Result<Option<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, title_source, title_generated_at, worktree_source, worktree_branch, handoff_notes_enabled
+            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, title_source, title_generated_at, worktree_source, worktree_branch, handoff_notes_enabled, resume_session_id
              FROM tasks WHERE id = ?1"
         )?;
         let mut rows = stmt.query([id])?;
@@ -652,6 +662,7 @@ impl super::Database {
                 worktree_source: row.get(13)?,
                 worktree_branch: row.get(14)?,
                 handoff_notes_enabled: row.get(15)?,
+                resume_session_id: row.get(16)?,
                 depends_on: load_task_dependency_ids(&conn, id)?,
                 labels: load_task_labels(&conn, id)?,
             }))
@@ -1317,6 +1328,7 @@ mod tests {
                 worktree_branch: None,
                 title: Some("  Custom title  "),
                 handoff_notes_enabled: false,
+                resume_session_id: None,
             })
             .expect("create failed");
 
@@ -1337,6 +1349,49 @@ mod tests {
     }
 
     #[test]
+    fn test_create_task_persists_resume_session_id() {
+        let (db, path) = make_test_db("create_task_resume_session_id");
+
+        let task = db
+            .create_task_with_options(super::NewTaskOptions {
+                initial_prompt: "Continue where I left off",
+                status: "backlog",
+                project_id: None,
+                prompt: None,
+                permission_mode: None,
+                worktree_source: None,
+                worktree_branch: None,
+                title: None,
+                handoff_notes_enabled: true,
+                resume_session_id: Some("86c3fa06-9b59-47ec-b522-0d1c3c58fde7"),
+            })
+            .expect("create failed");
+
+        assert_eq!(
+            task.resume_session_id.as_deref(),
+            Some("86c3fa06-9b59-47ec-b522-0d1c3c58fde7")
+        );
+
+        // Survives a reload from the database.
+        let retrieved = db.get_task(&task.id).expect("get failed").unwrap();
+        assert_eq!(
+            retrieved.resume_session_id.as_deref(),
+            Some("86c3fa06-9b59-47ec-b522-0d1c3c58fde7")
+        );
+
+        // Tasks created without one leave the column null.
+        let plain = db
+            .create_task("Fresh task", "backlog", None, None, None)
+            .expect("create failed");
+        assert_eq!(plain.resume_session_id, None);
+        let plain_reloaded = db.get_task(&plain.id).expect("get failed").unwrap();
+        assert_eq!(plain_reloaded.resume_session_id, None);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
     fn test_create_task_with_options_blank_title_falls_back_to_null() {
         let (db, path) = make_test_db("create_task_options_blank_title");
 
@@ -1351,6 +1406,7 @@ mod tests {
                 worktree_branch: None,
                 title: Some("   "),
                 handoff_notes_enabled: true,
+                resume_session_id: None,
             })
             .expect("create failed");
 
@@ -1451,6 +1507,7 @@ mod tests {
                 worktree_branch: None,
                 title: Some("Manual title"),
                 handoff_notes_enabled: true,
+                resume_session_id: None,
             })
             .expect("create failed");
 

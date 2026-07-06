@@ -37,6 +37,11 @@ export interface Task {
    * agent is not instructed to maintain Handoff Notes.
    */
   handoff_notes_enabled: boolean;
+  /**
+   * When set, the task continues an existing Claude session (`claude --resume
+   * <id>`) instead of starting fresh. Claude provider only; null otherwise.
+   */
+  resume_session_id: string | null;
   depends_on: string[];
   project_id: string | null;
   created_at: number;

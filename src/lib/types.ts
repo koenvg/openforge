@@ -15,6 +15,21 @@ export interface DeveloperLogSnapshot {
   totalEntries: number
 }
 
+/** A local Claude session transcript surfaced for the "continue a session" picker. */
+export interface ClaudeSessionSummary {
+  sessionId: string
+  /** Claude's generated title, falling back to the first user prompt. */
+  title: string | null
+  /** The most recent prompt in the session. */
+  lastPrompt: string | null
+  /** The working directory the session was recorded in. */
+  cwd: string | null
+  gitBranch: string | null
+  /** Latest ISO-8601 timestamp seen in the transcript. */
+  updatedAt: string | null
+  messageCount: number
+}
+
 export interface TaskLabel {
   id: number
   project_id: string

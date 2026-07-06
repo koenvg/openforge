@@ -533,6 +533,7 @@ mod tests {
             title_source: None,
             title_generated_at: None,
             handoff_notes_enabled: true,
+            resume_session_id: None,
             depends_on: Vec::new(),
             labels: Vec::new(),
         }

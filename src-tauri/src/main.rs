@@ -7,6 +7,7 @@ mod app_invoke;
 mod backend_runtime;
 mod builtin_plugins;
 mod claude_hooks;
+mod claude_sessions;
 mod cli_installer;
 mod codex_hooks;
 pub mod command_discovery;

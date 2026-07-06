@@ -33,13 +33,26 @@ impl ClaudeCodeProvider {
         let hooks_path = crate::claude_hooks::generate_hooks_settings(port)
             .map_err(|e| ProviderError::Other(e.to_string()))?;
 
+        // Continue an existing local session when one was chosen at task creation.
+        let resume_id = start_context.resume_session_id.as_deref();
+        if let Some(id) = resume_id {
+            // Stage the picked session's transcript into this worktree's Claude
+            // project directory so `claude --resume <id>` resolves it deterministically,
+            // independent of Claude's own worktree scoping. Best-effort: if staging
+            // fails we still attempt the resume so Claude can try to locate it itself.
+            if let Err(e) = crate::claude_sessions::copy_transcript_into_worktree(id, worktree_path)
+            {
+                log::warn!("[claude] could not stage transcript for resume of {id}: {e}");
+            }
+        }
+
         let pty_instance_id = self
             .pty_mgr
             .spawn_claude_pty(
                 task_id,
                 worktree_path,
                 prompt,
-                None,
+                resume_id,
                 false,
                 &hooks_path,
                 permission_mode,

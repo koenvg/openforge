@@ -87,6 +87,16 @@ pub(super) async fn handle_app_core_task_project_command(
                     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?,
             )?
         }
+        "list_claude_sessions" => {
+            // Enumerate local Claude session transcripts so the New Task dialog can
+            // offer "continue an existing session". Optional projectRoot filters to
+            // sessions recorded within that repo.
+            let project_root = payload_optional_string(&request.payload, "projectRoot")?;
+            let sessions = crate::claude_sessions::list_sessions(
+                project_root.as_deref().map(std::path::Path::new),
+            );
+            json_value(sessions)?
+        }
         "inspect_existing_branch" => {
             let repo_path = payload_string(&request.payload, "repoPath")?;
             let branch = payload_string(&request.payload, "branch")?;
@@ -238,6 +248,7 @@ pub(super) async fn handle_app_unmatched_command(
             let worktree_source = payload_optional_string(&request.payload, "worktreeSource")?;
             let worktree_branch = payload_optional_string(&request.payload, "worktreeBranch")?;
             let title = payload_optional_string(&request.payload, "title")?;
+            let resume_session_id = payload_optional_string(&request.payload, "resumeSessionId")?;
             // Default to enabled so callers that omit the flag keep handoff notes.
             let handoff_notes_enabled = request
                 .payload
@@ -255,6 +266,7 @@ pub(super) async fn handle_app_unmatched_command(
                     worktree_branch: worktree_branch.as_deref(),
                     title: title.as_deref(),
                     handoff_notes_enabled,
+                    resume_session_id: resume_session_id.as_deref(),
                 })
                 .map_err(|e| {
                     (

@@ -132,6 +132,7 @@ describe('App desktop events', () => {
         worktree_source: null,
         worktree_branch: null,
         handoff_notes_enabled: true,
+        resume_session_id: null,
         depends_on: [],
         project_id: 'proj-1',
         created_at: 1000,

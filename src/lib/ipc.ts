@@ -1,7 +1,7 @@
 import { invokeDesktopCommand as invoke, isElectronDesktopBridgeAvailable } from "./desktopIpc";
 import { normalizeTask } from "./boardStatus"
 import type { JsonValue } from '@openforge-app/plugin-sdk'
-import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, DeveloperLogEntry, DeveloperLogSnapshot, DivergenceResolution, ExistingBranchPlan, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, PrWalkthrough, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource, WritableBoardStatus } from "./types";
+import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, ClaudeSessionSummary, CommandInfo, CommitInfo, DeveloperLogEntry, DeveloperLogSnapshot, DivergenceResolution, ExistingBranchPlan, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, PrWalkthrough, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource, WritableBoardStatus } from "./types";
 
 type RawTask = Omit<Task, 'status'> & { status: string }
 
@@ -14,6 +14,8 @@ export interface CreateTaskOptions {
   title?: string | null
   /** When false, the task's start prompt omits the handoff-notes block. Defaults to true. */
   handoffNotesEnabled?: boolean
+  /** When set, the task continues this existing Claude session instead of starting fresh. */
+  resumeSessionId?: string | null
 }
 
 export async function createTask(initialPrompt: string, status: BoardStatus, projectId: string | null, permissionMode: string | null, options: CreateTaskOptions = {}): Promise<Task> {
@@ -24,9 +26,19 @@ export async function createTask(initialPrompt: string, status: BoardStatus, pro
     worktreeBranch = null,
     title = null,
     handoffNotesEnabled = true,
+    resumeSessionId = null,
   } = options
-  const task = await invoke<RawTask>("create_task", { initialPrompt, status, projectId, permissionMode, dependsOn, labelNames, worktreeSource, worktreeBranch, title, handoffNotesEnabled });
+  const task = await invoke<RawTask>("create_task", { initialPrompt, status, projectId, permissionMode, dependsOn, labelNames, worktreeSource, worktreeBranch, title, handoffNotesEnabled, resumeSessionId });
   return normalizeTask(task)
+}
+
+/**
+ * Enumerate local Claude session transcripts (`~/.claude/projects/*.jsonl`) so a
+ * new task can continue an existing session. When `projectRoot` is given, only
+ * sessions recorded within that repo are returned. Newest-updated first.
+ */
+export async function listClaudeSessions(projectRoot: string | null = null): Promise<ClaudeSessionSummary[]> {
+  return invoke<ClaudeSessionSummary[]>("list_claude_sessions", { projectRoot });
 }
 
 export async function updateTask(id: string, prompt: string): Promise<void> {

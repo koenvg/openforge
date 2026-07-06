@@ -42,7 +42,7 @@ export interface DynamicShellEventContract {
 }
 
 export const ipcCommandContracts = [
-  { functionName: 'createTask', ipcCommand: 'create_task', payloadKeys: ['initialPrompt', 'status', 'projectId', 'permissionMode', 'dependsOn', 'labelNames', 'worktreeSource', 'worktreeBranch', 'title', 'handoffNotesEnabled'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
+  { functionName: 'createTask', ipcCommand: 'create_task', payloadKeys: ['initialPrompt', 'status', 'projectId', 'permissionMode', 'dependsOn', 'labelNames', 'worktreeSource', 'worktreeBranch', 'title', 'handoffNotesEnabled', 'resumeSessionId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'updateTask', ipcCommand: 'update_task', payloadKeys: ['id', 'prompt'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'updateTaskTitle', ipcCommand: 'update_task_title', payloadKeys: ['id', 'title'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'updateTaskSummary', ipcCommand: 'update_task_summary', payloadKeys: ['id', 'summary'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
@@ -70,6 +70,7 @@ export const ipcCommandContracts = [
   { functionName: 'getWorktreeForTask', ipcCommand: 'get_worktree_for_task', payloadKeys: ['taskId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'listGitBranches', ipcCommand: 'list_git_branches', payloadKeys: ['repoPath'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'repoHasCommits', ipcCommand: 'repo_has_commits', payloadKeys: ['repoPath'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
+  { functionName: 'listClaudeSessions', ipcCommand: 'list_claude_sessions', payloadKeys: ['projectRoot'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'inspectExistingBranch', ipcCommand: 'inspect_existing_branch', payloadKeys: ['repoPath', 'branch'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'getTaskWorkspace', ipcCommand: 'get_task_workspace', payloadKeys: ['taskId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'getSessionStatus', ipcCommand: 'get_session_status', payloadKeys: ['sessionId'], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },

@@ -65,6 +65,9 @@ pub struct ProviderStartContext {
     pub app_event_tx: Option<AppEventSender>,
     pub cols: u16,
     pub rows: u16,
+    /// When set, start by resuming this existing session id instead of starting
+    /// fresh. Only the Claude provider acts on it in the current POC.
+    pub resume_session_id: Option<String>,
 }
 
 impl ProviderStartContext {
@@ -74,7 +77,14 @@ impl ProviderStartContext {
             app_event_tx,
             cols: 80,
             rows: 24,
+            resume_session_id: None,
         }
+    }
+
+    /// Builder: attach an existing session id to resume when the session starts.
+    pub fn with_resume_session_id(mut self, resume_session_id: Option<String>) -> Self {
+        self.resume_session_id = resume_session_id;
+        self
     }
 }
 

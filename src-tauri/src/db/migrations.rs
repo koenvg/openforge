@@ -1280,6 +1280,33 @@ CREATE TABLE IF NOT EXISTS roadmap_repo_config (
         }
         Ok(())
     }),
+    // AVIV-169: let a task continue an existing local Claude session. When set,
+    // startup runs `claude --resume <resume_session_id>` instead of a fresh
+    // session. Guarded + idempotent so re-runs on existing DBs are safe.
+    M::up_with_hook("", |tx| {
+        let tasks_table_exists: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='tasks'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if !tasks_table_exists {
+            return Ok(());
+        }
+        let has_column: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'resume_session_id'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+        if !has_column {
+            tx.execute("ALTER TABLE tasks ADD COLUMN resume_session_id TEXT", [])
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
