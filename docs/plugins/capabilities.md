@@ -1,0 +1,111 @@
+# Plugin capabilities
+
+OpenForge plugin capabilities are the host API areas a plugin expects to use. They are declared in `package.json#openforge.requires` and are represented by the SDK type `OpenForgePluginCapability` in `packages/plugin-sdk/src/types.ts`.
+
+Use this page as the available/unavailable capability reference for API version `1`.
+
+## The `requires` metadata field
+
+`requires` is an optional array in `package.json#openforge`:
+
+```json
+{
+  "openforge": {
+    "id": "acme.notes",
+    "apiVersion": 1,
+    "displayName": "Notes",
+    "description": "Project notes and scheduled follow-ups",
+    "frontend": "./dist/frontend.js",
+    "backend": "./dist/backend.js",
+    "requires": ["commands", "views", "backend", "storage", "tasks"]
+  }
+}
+```
+
+Declare only the host capabilities your plugin needs. The field is useful for review, installation UI, and package validation, but today it is **declarative metadata**, not a runtime permission sandbox. The current SDK/runtime validates that listed capability names are known; it does not currently deny `openforge.*` API access because a plugin omitted a capability from `requires`.
+
+Validation that exists today:
+
+- `@openforge-app/plugin-sdk/package-metadata-schema.json` defines the supported enum and `uniqueItems: true` for schema-based tooling.
+- `validateOpenForgePackageMetadata()` / `validatePluginPackageMetadata()` report:
+  - `requires`: `Must be an array` when `requires` is not an array.
+  - `requires[index]`: `Must be a string` when an item is not a string.
+  - `requires[index]`: `Unknown OpenForge capability "..."` when a string is not in the supported capability list.
+
+Do not depend on `requires` to enforce security boundaries. OpenForge plugins are Trusted Plugins; install and enable only code you trust.
+
+## Available capabilities
+
+### Shared capabilities
+
+These capabilities are exposed through `OpenForgeCommonAPI`, so plugin code can use them from both frontend and backend entry points unless a specific host callback is unavailable in the current runtime.
+
+| Capability | API area | What it means |
+| --- | --- | --- |
+| `commands` | `openforge.commands` | Register plugin commands, invoke local/global commands, and list command descriptors. |
+| `events` | `openforge.events` | Register local/global event handlers and emit local/global plugin events. |
+| `storage` | `openforge.storage` | Read/write plugin JSON values in global, project, or task scopes. |
+| `context` | `openforge.context` | Read the current plugin/project/task context snapshot. |
+| `tasks` | `openforge.tasks` | List/get/create tasks, update task summaries/statuses, configure start-prompt contributions, start implementation runs, and inspect task workspace/session state. |
+| `projects` | `openforge.projects` | List projects or get a project by id. |
+| `fs` | `openforge.fs` | Read directories/files, write files, and search files within an OpenForge project workspace. |
+| `shell` | `openforge.shell` | Spawn, write, resize, kill, and read buffers for task shell sessions. |
+| `notifications` | `openforge.notifications` | Ask OpenForge to show user-facing notifications. |
+| `attention` | `openforge.attention` | Read project attention signals. |
+| `system.openUrl` | `openforge.system.openUrl` | Open external URLs through the host instead of directly calling browser/Electron APIs. |
+| `config` | `openforge.config` | Read/write global plugin JSON configuration. |
+| `projectConfig` | `openforge.projectConfig` | Read/write project-scoped plugin JSON configuration. |
+
+### Frontend-only capabilities
+
+These capabilities are part of `FrontendOpenForgeAPI` and are available to frontend plugins loaded with `defineFrontendPlugin(...)`.
+
+| Capability | API area | What it means |
+| --- | --- | --- |
+| `views` | `openforge.views` | Register plugin views that OpenForge can route to and surface in navigation. |
+| `taskPane` | `openforge.taskPane` | Register task-pane tabs rendered for a selected task. |
+| `settings` | `openforge.settings` | Register plugin settings sections. |
+| `navigation` | `openforge.navigation` | Read or request changes to the active OpenForge view/project/task. |
+
+Frontend plugins also receive `openforge.backend`, but the capability name is `backend` and it is documented once below because it spans the frontend bridge and backend method registry.
+
+### Backend-only capabilities
+
+Backend plugins are loaded with `defineBackendPlugin(...)` in the trusted shared Node plugin host. Backend-only API shape is:
+
+| Capability | API area | What it means |
+| --- | --- | --- |
+| `background` | `openforge.background` | Register background services with `global`, `project`, or `task` scope. OpenForge starts newly registered services after backend activation. |
+
+### Frontend/backend bridge capability
+
+| Capability | API area | What it means |
+| --- | --- | --- |
+| `backend` | Frontend: `openforge.backend`; Backend: `openforge.backend` | On the frontend, wait for and invoke the same plugin's backend methods. On the backend, register methods callable through that bridge. If a plugin only needs background services and no frontend RPC bridge, use `background` instead. |
+
+## Named capability errors
+
+OpenForge errors try to name the missing or invalid capability/API path so plugin authors can fix the right call site.
+
+- Unknown `requires` entries are reported by metadata validation as `Unknown OpenForge capability "<name>"` at `requires[index]`.
+- Runtime host callbacks that are not wired throw `OpenForge host capability is unavailable: <api.method>`, such as `tasks.create` or `notifications.notify`.
+- Render props for a plugin that has not activated provide an unavailable frontend API for most calls. Those calls throw `OpenForge frontend runtime API is unavailable for plugin <pluginId>: <api.method>`. A few safe frontend render-prop operations still return fallbacks, such as registering no-op UI contributions, reading a context/navigation snapshot, and `system.openUrl`.
+- Invalid runtime registrations throw `RuntimeValidationError` with messages like `views registration requires a component`, `commands registration requires a non-empty id`, or `background registration requires scope to be global, project, or task`.
+
+These errors describe actual missing host wiring or invalid registrations. They are not evidence that `requires` currently gates access to a capability at runtime.
+
+## Explicitly unavailable APIs and non-goals
+
+The SDK boundary is intentionally smaller than OpenForge internals. Treat anything not exposed through `@openforge-app/plugin-sdk` types as unavailable unless a future SDK version documents it.
+
+Unavailable or non-goal APIs include:
+
+- Direct Electron, preload, IPC, browser-window, clipboard, menu, or shell APIs.
+- Direct Rust sidecar commands, HTTP sidecar endpoints, SQLite/database access, or migration hooks.
+- Direct imports from OpenForge source internals, Svelte stores, renderer components, Electron main files, or `@openforge-app/plugin-runtime`.
+- Manifest `contributes` arrays. Register commands, views, task-pane tabs, settings sections, backend methods, events, and background services at runtime in `activate()` instead.
+- Provider/model/permission-mode/branch/worktree control for Implementation Runs. Use `openforge.tasks.startImplementation()` and let OpenForge own the native task workflow.
+- A sandbox or OS-level permission system. Plugins are Trusted Plugins; `requires` documents intent and supports validation/review, but it is not currently an enforcement mechanism.
+- Arbitrary filesystem, process, network, or environment access through the frontend SDK. Use documented project file, shell, backend, notification, system URL, and config APIs.
+
+If a needed integration is not represented by `OpenForgePluginCapability` and an SDK API type, file a platform request instead of reaching into internals.

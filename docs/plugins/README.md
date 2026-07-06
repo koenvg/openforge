@@ -44,6 +44,7 @@ Plugins can participate in the **Handoff Notes** workflow by configuring start-p
 ## Where to go next
 
 - [Plugin authoring guide](../plugin-authoring.md): package metadata, SDK import surface, frontend and backend entry points, capabilities, storage/configuration, task APIs, unavailable APIs, testing, and the authoring checklist.
+- [Plugin capabilities reference](./capabilities.md): available/unavailable capability names, `requires` metadata behavior, frontend/backend capability split, and capability error messages.
 - [Plugin SDK file content migration](../plugin-sdk-file-api-migration.md): how to handle `FileSystemAPI.readFile()` returning typed `FileContent` values for text, images, documents, binary files, and large-file placeholders.
 - [Plugin package/runtime ADR](../adr/0002-openforge-plugin-package-runtime.md): historical rationale for the trusted package runtime model. Read this only when you need design background; the authoring guide is the source for day-to-day plugin development.
 
