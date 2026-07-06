@@ -54,6 +54,7 @@ const OPENFORGE_PLUGIN_SDK_SOURCE_ENTRYPOINTS = Object.freeze([
   ['@openforge-app/plugin-sdk/sanitize', 'packages/plugin-sdk/src/sanitize.ts'],
   ['@openforge-app/plugin-sdk/ui/MarkdownContent.svelte', 'packages/plugin-sdk/src/ui/MarkdownContent.svelte'],
   ['@openforge-app/plugin-sdk/ui/ResizablePanel.svelte', 'packages/plugin-sdk/src/ui/ResizablePanel.svelte'],
+  ['@openforge-app/plugin-sdk/ui/Modal.svelte', 'packages/plugin-sdk/src/ui/Modal.svelte'],
   ['@openforge-app/plugin-sdk', 'packages/plugin-sdk/src/index.ts'],
 ] as const)
 

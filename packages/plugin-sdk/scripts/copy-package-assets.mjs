@@ -9,8 +9,8 @@ const assetPaths = [
   'src/svelteHostRuntimeContract.d.mts',
   'src/ui/MarkdownContent.svelte',
   'src/ui/ResizablePanel.svelte',
+  'src/ui/Modal.svelte',
 ]
-
 await Promise.all(assetPaths.map(async (assetPath) => {
   const relativeOutputPath = assetPath.replace(/^src\//, '')
   const from = join(packageRoot, assetPath)

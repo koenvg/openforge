@@ -65,4 +65,15 @@ describe('ColumnSettingsModal', () => {
     renderModal({ error: null })
     expect(screen.queryByRole('alert')).toBeNull()
   })
+
+  it('uses shared modal close behavior for Escape and backdrop clicks', async () => {
+    const onClose = vi.fn()
+    renderModal({ onClose })
+
+    const dialog = screen.getByRole('dialog', { name: 'Columns for owner/repo' })
+    await fireEvent.keyDown(dialog, { key: 'Escape' })
+    await fireEvent.click(dialog)
+
+    expect(onClose).toHaveBeenCalledTimes(2)
+  })
 })

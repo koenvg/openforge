@@ -72,6 +72,10 @@ function createOpenForgeRootAliases() {
       replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/ui/ResizablePanel.svelte'),
     },
     {
+      find: /^@openforge-app\/plugin-sdk\/ui\/Modal\.svelte$/,
+      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/ui/Modal.svelte'),
+    },
+    {
       find: /^@openforge-app\/plugin-sdk\/vite$/,
       replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/vite.ts'),
     },

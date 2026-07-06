@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ExternalLink, Copy } from '@lucide/svelte'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
+  import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
   import type { BoardCard } from '../lib/board'
   import type { RepoLabel } from '../lib/types'
 
@@ -60,41 +61,20 @@
     return `background-color: #${color}33; border-color: #${color};`
   }
 
-  function handleOverlayClick(e: MouseEvent) {
-    if (e.target === e.currentTarget) onClose()
-  }
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.metaKey || e.ctrlKey || e.altKey) return
-    if (e.key === 'Escape') {
-      e.stopPropagation()
-      onClose()
-    }
-  }
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div
-  class="modal modal-open"
-  role="dialog"
-  aria-modal="true"
-  tabindex="-1"
-  onclick={handleOverlayClick}
-  onkeydown={handleKeydown}
->
-  <div class="modal-box bg-base-100 max-w-2xl p-0 flex flex-col max-h-[90vh]">
-    <div class="flex items-center justify-between px-5 py-3 border-b border-base-300 shrink-0">
-      <h3 class="text-base font-semibold m-0">#{card.issueNumber}</h3>
-      <div class="flex items-center gap-2">
-        <button class="btn btn-sm" type="button" onclick={() => onOpenUrl(issueUrl)}>
-          <ExternalLink size={14} /> Open on GitHub
-        </button>
-        <button class="btn btn-sm" type="button" onclick={() => onCopyLink(card.issueNumber)}>
-          <Copy size={14} /> Copy link
-        </button>
-        <button class="btn btn-ghost btn-sm btn-square" type="button" aria-label="Close" onclick={onClose}>✕</button>
-      </div>
+<Modal ariaLabel={`Issue #${card.issueNumber}`} closeLabel="Close" maxWidth="42rem" {onClose}>
+  {#snippet header()}
+    <h3 class="text-base font-semibold m-0">#{card.issueNumber}</h3>
+    <div class="flex items-center gap-2">
+      <button class="btn btn-sm" type="button" onclick={() => onOpenUrl(issueUrl)}>
+        <ExternalLink size={14} /> Open on GitHub
+      </button>
+      <button class="btn btn-sm" type="button" onclick={() => onCopyLink(card.issueNumber)}>
+        <Copy size={14} /> Copy link
+      </button>
     </div>
+  {/snippet}
 
     <div class="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
       <div class="flex flex-col gap-2">
@@ -163,5 +143,4 @@
         <button class="btn btn-sm btn-error btn-outline" onclick={onCloseIssue} disabled={busy}>Close issue</button>
       </div>
     </div>
-  </div>
-</div>
+</Modal>

@@ -25,6 +25,7 @@ describe('OpenForge plugin Vite author tooling', () => {
       { find: '@openforge-app/plugin-sdk/sanitize', replacement: '/repo/packages/plugin-sdk/src/sanitize.ts' },
       { find: '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/MarkdownContent.svelte' },
       { find: '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/ResizablePanel.svelte' },
+      { find: '@openforge-app/plugin-sdk/ui/Modal.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/Modal.svelte' },
       { find: '@openforge-app/plugin-sdk', replacement: '/repo/packages/plugin-sdk/src/index.ts' },
     ])
     expect(aliases.every((alias) => typeof alias.find === 'string')).toBe(true)
@@ -49,6 +50,7 @@ describe('OpenForge plugin Vite author tooling', () => {
       '@openforge-app/plugin-sdk/sanitize': '/repo/packages/plugin-sdk/src/sanitize.ts',
       '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte': '/repo/packages/plugin-sdk/src/ui/MarkdownContent.svelte',
       '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte': '/repo/packages/plugin-sdk/src/ui/ResizablePanel.svelte',
+      '@openforge-app/plugin-sdk/ui/Modal.svelte': '/repo/packages/plugin-sdk/src/ui/Modal.svelte',
       '@openforge-app/plugin-sdk': '/repo/packages/plugin-sdk/src/index.ts',
     })
   })
