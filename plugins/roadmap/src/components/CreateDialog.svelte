@@ -1,5 +1,6 @@
 <script lang="ts">
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
+  import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
   import type { RepoLabel, TicketDraft } from '../lib/types'
 
   interface RefineDraftRequest {
@@ -94,33 +95,18 @@
     onCreate(t, body.trim(), [...labels])
   }
 
-  function handleOverlayClick(e: MouseEvent) {
-    if (e.target === e.currentTarget) onClose()
-  }
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.metaKey || e.ctrlKey || e.altKey) return
-    if (e.key === 'Escape') {
-      e.stopPropagation()
-      onClose()
-    }
-  }
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div
-  class="modal modal-open"
-  role="dialog"
-  aria-modal="true"
-  tabindex="-1"
-  onclick={handleOverlayClick}
-  onkeydown={handleKeydown}
+<Modal
+  ariaLabel={hasDraft ? 'Review & create' : 'New ticket'}
+  closeLabel="Close"
+  maxWidth="36rem"
+  initialFocus="#create-note"
+  {onClose}
 >
-  <div class="modal-box bg-base-100 max-w-xl p-0 flex flex-col max-h-[90vh]">
-    <div class="flex items-center justify-between px-5 py-3 border-b border-base-300 shrink-0">
-      <h3 class="text-base font-semibold m-0">{hasDraft ? 'Review & create' : 'New ticket'}</h3>
-      <button class="btn btn-ghost btn-sm btn-square" type="button" aria-label="Close" onclick={onClose}>✕</button>
-    </div>
+  {#snippet header()}
+    <h3 class="text-base font-semibold m-0">{hasDraft ? 'Review & create' : 'New ticket'}</h3>
+  {/snippet}
 
     <div class="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
       {#if !hasDraft}
@@ -215,5 +201,4 @@
         </button>
       {/if}
     </div>
-  </div>
-</div>
+</Modal>

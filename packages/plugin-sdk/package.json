@@ -52,7 +52,8 @@
       "default": "./dist/sanitize.js"
     },
     "./ui/MarkdownContent.svelte": "./dist/ui/MarkdownContent.svelte",
-    "./ui/ResizablePanel.svelte": "./dist/ui/ResizablePanel.svelte"
+    "./ui/ResizablePanel.svelte": "./dist/ui/ResizablePanel.svelte",
+    "./ui/Modal.svelte": "./dist/ui/Modal.svelte"
   },
   "files": [
     "dist",

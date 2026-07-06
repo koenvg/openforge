@@ -29,7 +29,7 @@ Use these layer names in docs, reviews, and follow-up tasks.
 | --- | --- | --- | --- | --- |
 | App-private UI | OpenForge renderer only | `src/lib/*`, IPC wrappers, renderer stores, app domain types, app DOM utilities | Imported through app source only; not a plugin contract | `src/components/shared/ui/*` |
 | Domain app shared UI | OpenForge renderer features for one domain | App domain types and app-private helpers for that domain | Shared inside the app; not generic SDK UI | `src/components/shared/tasks/*` |
-| Plugin-safe SDK UI | Trusted plugin authors using public SDK exports | Only SDK/public helpers and normal Svelte/browser APIs; no app internals | Stable public package exports from `@openforge-app/plugin-sdk` | `MarkdownContent.svelte`, `ResizablePanel.svelte` |
+| Plugin-safe SDK UI | Trusted plugin authors using public SDK exports | Only SDK/public helpers and normal Svelte/browser APIs; no app internals | Stable public package exports from `@openforge-app/plugin-sdk` | `MarkdownContent.svelte`, `ResizablePanel.svelte`, `Modal.svelte` |
 | Internal package UI | Internal workspace packages for a domain | Package-local domain helpers; avoid app-private imports unless the package explicitly owns that boundary | Package-public but domain-scoped, not generic UI | `packages/pr-review-ui` |
 | Host-shared runtime UI | Runtime packages that must own singleton/lifecycle behavior | Runtime package internals plus public plugin capabilities | Public or host-shared runtime API, not core SDK atoms | `packages/terminal-runtime` |
 | Plugin-local UI | One built-in or external plugin | Plugin SDK exports, public runtime packages, plugin-local code | Private to that plugin until reuse is proven | `plugins/*/src/**` components |
@@ -160,7 +160,7 @@ The audit proves several real follow-ups, but they should remain separate from t
 
 - Define and enforce import-boundary checks for app-private versus plugin-safe UI.
 - Choose ownership and deduplicate cloned `Card` and `ResizablePanel` components.
-- Design a plugin-safe dialog/modal primitive before migrating GitHub Sync or Roadmap dialog shells.
+- Continue deduplicating plugin-local dialog callers onto the plugin-safe SDK `Modal.svelte` primitive when another repeated shell appears.
 - Split large plugin view containers (`PrReviewView.svelte`, `SkillsView.svelte`, `TaskSchedulesView.svelte`, `FilesView.svelte`) into state containers plus presentational sections before extracting generic UI.
 - Consolidate plugin page headers and empty/loading/error shells after API convergence is clear.
 

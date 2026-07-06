@@ -25,6 +25,7 @@ const FALLBACK_OPENFORGE_PACKAGE_EXPORTS = new Map([
       '/sanitize',
       '/ui/MarkdownContent.svelte',
       '/ui/ResizablePanel.svelte',
+      '/ui/Modal.svelte',
     ]),
   ],
   [

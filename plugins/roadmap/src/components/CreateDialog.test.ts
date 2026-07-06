@@ -80,4 +80,15 @@ describe('CreateDialog', () => {
       labels: [],
     })
   })
+
+  it('uses shared modal close behavior for Escape and backdrop clicks', async () => {
+    const onClose = vi.fn()
+    renderDialog({ onClose })
+
+    const dialog = screen.getByRole('dialog')
+    await fireEvent.keyDown(dialog, { key: 'Escape' })
+    await fireEvent.click(dialog)
+
+    expect(onClose).toHaveBeenCalledTimes(2)
+  })
 })

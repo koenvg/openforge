@@ -54,6 +54,7 @@ export default defineConfig({
         },
       },
       {
+        plugins: [svelte(), svelteTesting()],
         test: {
           name: 'plugin-sdk',
           environment: 'jsdom',

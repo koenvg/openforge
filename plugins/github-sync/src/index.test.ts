@@ -94,6 +94,7 @@ describe('github-sync plugin', () => {
     expect(existsSync(join(pluginSrcDir, 'review/pr/ReviewPrCard.svelte'))).toBe(false)
     expect(existsSync(join(pluginSrcDir, 'review/pr/AuthoredPrCard.svelte'))).toBe(false)
     expect(existsSync(join(pluginSrcDir, 'review/shared/FileTree.svelte'))).toBe(false)
+    expect(existsSync(join(pluginSrcDir, 'shared/ui/Modal.svelte'))).toBe(false)
   })
 
   it('does not keep a legacy host-app PR review UI copy alongside the GitHub Sync plugin view', () => {

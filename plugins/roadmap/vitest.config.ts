@@ -19,6 +19,7 @@ export default defineConfig({
       { find: '@openforge-app/plugin-sdk/markdown', replacement: sourcePath('packages/plugin-sdk/src/markdown.ts') },
       { find: '@openforge-app/plugin-sdk/sanitize', replacement: sourcePath('packages/plugin-sdk/src/sanitize.ts') },
       { find: '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte', replacement: sourcePath('packages/plugin-sdk/src/ui/MarkdownContent.svelte') },
+      { find: '@openforge-app/plugin-sdk/ui/Modal.svelte', replacement: sourcePath('packages/plugin-sdk/src/ui/Modal.svelte') },
       { find: '@openforge-app/plugin-sdk', replacement: sourcePath('packages/plugin-sdk/src/index.ts') },
     ],
   },

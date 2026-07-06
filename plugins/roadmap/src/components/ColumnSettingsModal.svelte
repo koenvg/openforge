@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
   import type { LabelUsage } from '../lib/types'
   import ColorPicker from './ColorPicker.svelte'
 
@@ -71,33 +72,12 @@
     }
   }
 
-  function handleOverlayClick(e: MouseEvent) {
-    if (e.target === e.currentTarget) onClose()
-  }
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.metaKey || e.ctrlKey || e.altKey) return
-    if (e.key === 'Escape') {
-      e.stopPropagation()
-      onClose()
-    }
-  }
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div
-  class="modal modal-open"
-  role="dialog"
-  aria-modal="true"
-  tabindex="-1"
-  onclick={handleOverlayClick}
-  onkeydown={handleKeydown}
->
-  <div class="modal-box bg-base-100 max-w-lg p-0 flex flex-col max-h-[90vh]">
-    <div class="flex items-center justify-between px-5 py-3 border-b border-base-300 shrink-0">
-      <h3 class="text-base font-semibold m-0">Columns for {repo}</h3>
-      <button class="btn btn-ghost btn-sm btn-square" type="button" aria-label="Close" onclick={onClose}>✕</button>
-    </div>
+<Modal ariaLabel={`Columns for ${repo}`} closeLabel="Close" maxWidth="32rem" {onClose}>
+  {#snippet header()}
+    <h3 class="text-base font-semibold m-0">Columns for {repo}</h3>
+  {/snippet}
 
     <div class="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
       <p class="text-sm text-base-content/60 m-0">
@@ -173,5 +153,4 @@
       <button type="button" class="btn btn-sm btn-ghost" onclick={onClose} disabled={busy}>Cancel</button>
       <button type="button" class="btn btn-sm btn-primary" onclick={save} disabled={busy}>Save</button>
     </div>
-  </div>
-</div>
+</Modal>
