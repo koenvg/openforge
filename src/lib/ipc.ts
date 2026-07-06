@@ -62,6 +62,14 @@ export async function createProject(name: string, path: string): Promise<Project
   return invoke<Project>("create_project", { name, path });
 }
 
+export async function createProjectFromGit(args: {
+  url: string
+  parentDir: string
+  name: string
+}): Promise<Project> {
+  return invoke<Project>("create_project_from_git", args);
+}
+
 export async function getProjects(): Promise<Project[]> {
   return invoke<Project[]>("get_projects");
 }
