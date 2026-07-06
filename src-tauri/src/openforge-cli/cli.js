@@ -481,8 +481,8 @@ Task listing:
   list-tasks excludes done tasks unless --state done is passed.
 
 Task creation hygiene:
-  When creating follow-up Tasks, include useful --label values when the category is obvious.
-  For multi-Task follow-up work, link prerequisites immediately with --depends-on or link-tasks.
+  When creating follow-up Tasks, include useful --label values and dependency links when creating related follow-up Tasks.
+  Use --label for obvious categories, and link prerequisites immediately with --depends-on or link-tasks when the order is known.
   If labels or dependency order are unclear, state that uncertainty instead of guessing.
 
 Examples:
@@ -509,8 +509,8 @@ ${spec.aliasUsage ? `Flat compatibility alias: ${spec.aliasUsage}\n\n` : ''}Task
   If a task was created with the wrong initial prompt, first record its labels, own depends_on list, and reverse dependents by listing project tasks and finding depends_on entries containing the old id. Delete the incorrect task, create a replacement with the desired --initial-prompt, then repoint each dependent with set-task-dependencies.
 
 Task creation hygiene:
-  When creating follow-up Tasks, include useful --label values when the category is obvious.
-  For multi-Task follow-up work, link prerequisites immediately with --depends-on or link-tasks.
+  When creating follow-up Tasks, include useful --label values and dependency links when creating related follow-up Tasks.
+  Use --label for obvious categories, and link prerequisites immediately with --depends-on or link-tasks when the order is known.
   If labels or dependency order are unclear, state that uncertainty instead of guessing.
 `);
 }
