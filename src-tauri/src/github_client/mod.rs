@@ -72,13 +72,22 @@ pub(crate) enum RepoAccess {
     Unknown,
 }
 
-/// Maps a repo-lookup HTTP status to an access verdict. 401/403/404 mean the
-/// caller cannot see the repo (private-without-access or nonexistent); anything
-/// non-2xx and non-denied is treated as unknown so the clone attempt decides.
+/// Maps a repo-lookup HTTP status to an access verdict.
+/// 200-299 means accessible.
+/// 401 (bad/expired token) and 404 (not found, or private-without-access —
+/// GitHub returns 404 rather than 403 to avoid leaking a private repo's
+/// existence) are a definitive "you can't see this repo".
+/// 403 is typically rate-limiting or a forbidden action, not an access denial,
+/// so treat it as Unknown and let the actual clone decide rather than wrongly blocking it.
 pub(crate) fn classify_repo_access_status(status: u16) -> RepoAccess {
     match status {
         200..=299 => RepoAccess::Accessible,
-        401 | 403 | 404 => RepoAccess::Denied,
+        // 401 (bad/expired token) and 404 (not found, or private-without-access —
+        // GitHub returns 404 rather than 403 to avoid leaking a private repo's
+        // existence) are a definitive "you can't see this repo". 403 is typically
+        // rate-limiting or a forbidden action, not an access denial, so treat it as
+        // Unknown and let the actual clone decide rather than wrongly blocking it.
+        401 | 404 => RepoAccess::Denied,
         _ => RepoAccess::Unknown,
     }
 }
@@ -737,7 +746,7 @@ mod tests {
         assert!(matches!(classify_repo_access_status(200), RepoAccess::Accessible));
         assert!(matches!(classify_repo_access_status(301), RepoAccess::Unknown));
         assert!(matches!(classify_repo_access_status(401), RepoAccess::Denied));
-        assert!(matches!(classify_repo_access_status(403), RepoAccess::Denied));
+        assert!(matches!(classify_repo_access_status(403), RepoAccess::Unknown));
         assert!(matches!(classify_repo_access_status(404), RepoAccess::Denied));
         assert!(matches!(classify_repo_access_status(500), RepoAccess::Unknown));
     }

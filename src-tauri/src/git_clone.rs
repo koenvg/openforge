@@ -4,6 +4,7 @@
 //! the project registry into a single "add project from GitHub" flow.
 
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use base64::{engine::general_purpose, Engine as _};
 use tokio::process::Command;
 
@@ -179,8 +180,6 @@ pub fn cleanup_partial_clone(target: &Path) {
         let _ = std::fs::remove_dir_all(target);
     }
 }
-
-use std::sync::{Arc, Mutex};
 
 /// End-to-end: parse the URL, guard against collisions, optionally pre-check
 /// access with the stored PAT, clone, then register the project.
