@@ -177,6 +177,25 @@ export function clearPluginRuntimeHostState(pluginId: string): void {
   pluginBackendReadyStates.delete(pluginId)
 }
 
+export async function ensurePluginBackendReady(pluginId: string): Promise<void> {
+  const entry = get(installedPlugins).get(pluginId)
+  if (!entry?.manifest.backend) {
+    throw new Error(`Plugin backend is unavailable for ${pluginId}`)
+  }
+
+  if (pluginBackendReadyStates.get(pluginId) !== 'ready') {
+    pluginBackendReadyStates.set(pluginId, 'starting')
+  }
+
+  try {
+    await pluginBackendWhenReady(pluginId)
+    pluginBackendReadyStates.set(pluginId, 'ready')
+  } catch (error) {
+    pluginBackendReadyStates.set(pluginId, 'error')
+    throw error
+  }
+}
+
 export function createPluginRuntimeHost(pluginId: string) {
   const entry = get(installedPlugins).get(pluginId)
   if (entry?.manifest.backend && entry.state !== 'active') {
@@ -246,20 +265,7 @@ export function createPluginRuntimeHost(pluginId: string) {
       return pluginBackendReadyStates.get(pluginId) ?? 'starting'
     },
     whenBackendReady: async () => {
-      const entry = get(installedPlugins).get(pluginId)
-      if (!entry?.manifest.backend) {
-        throw new Error(`Plugin backend is unavailable for ${pluginId}`)
-      }
-      if (pluginBackendReadyStates.get(pluginId) !== 'ready') {
-        pluginBackendReadyStates.set(pluginId, 'starting')
-      }
-      try {
-        await pluginBackendWhenReady(pluginId)
-        pluginBackendReadyStates.set(pluginId, 'ready')
-      } catch (error) {
-        pluginBackendReadyStates.set(pluginId, 'error')
-        throw error
-      }
+      await ensurePluginBackendReady(pluginId)
     },
     onBackendReady: (handler: () => void) => {
       const entry = get(installedPlugins).get(pluginId)

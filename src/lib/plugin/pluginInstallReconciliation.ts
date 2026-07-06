@@ -11,7 +11,8 @@ import {
   loadEnabledPluginIdsForProject,
 } from './pluginStore'
 import { activatePlugin, deactivatePluginById } from './pluginActivationLifecycle'
-import { upsertInstalledPlugin } from './pluginInstallState'
+import { setPluginRuntimeError, upsertInstalledPlugin } from './pluginInstallState'
+import { ensurePluginBackendReady } from './pluginHostCommands'
 
 export async function uninstallPlugin(pluginId: string): Promise<void> {
   await deactivatePluginById(pluginId)
@@ -23,17 +24,31 @@ export async function uninstallPlugin(pluginId: string): Promise<void> {
   })
 }
 
+async function activateEnabledPlugin(pluginId: string): Promise<boolean> {
+  const activated = await activatePlugin(pluginId)
+  if (!activated) return false
+
+  const entry = get(installedPlugins).get(pluginId)
+  if (!entry?.manifest.backend) return true
+
+  try {
+    await ensurePluginBackendReady(pluginId)
+    return true
+  } catch (error) {
+    setPluginRuntimeError(pluginId, error)
+    return false
+  }
+}
+
 export async function loadEnabledForProject(projectId: string): Promise<void> {
   await loadEnabledPluginIdsForProject(projectId)
 
-  for (const pluginId of Array.from(get(enabledPluginIds))) {
-    void activatePlugin(pluginId)
-  }
+  await Promise.all(Array.from(get(enabledPluginIds)).map(activateEnabledPlugin))
 }
 
 export async function enablePluginForProject(projectId: string, pluginId: string): Promise<boolean> {
   await enablePluginInStore(projectId, pluginId)
-  return activatePlugin(pluginId)
+  return activateEnabledPlugin(pluginId)
 }
 
 export async function disablePluginForProject(projectId: string, pluginId: string): Promise<void> {
@@ -88,7 +103,7 @@ export async function reloadPluginForProject(projectId: string, pluginId: string
     return false
   }
 
-  return activatePlugin(pluginId)
+  return activateEnabledPlugin(pluginId)
 }
 
 async function reconcileLoadedPlugins(): Promise<void> {
