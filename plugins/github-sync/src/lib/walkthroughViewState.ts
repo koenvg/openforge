@@ -69,6 +69,24 @@ export function clampStepIndex(index: number, total: number): number {
   return index
 }
 
+/**
+ * Total number of steps shown in the Walkthrough: every parsed per-concept step
+ * plus a trailing "Review & submit" step that shows the full diff and the submit
+ * panel. Kept out of `parsedSteps` (which mirrors the agent's JSON) so the extra
+ * step never leaks into parsing/validation.
+ */
+export function totalWalkthroughSteps(steps: PrWalkthroughStep[]): number {
+  return steps.length + 1
+}
+
+/**
+ * The trailing step (index === steps.length) is the full-diff "Review & submit"
+ * step, not one of the parsed per-concept steps.
+ */
+export function isReviewSubmitStep(index: number, steps: PrWalkthroughStep[]): boolean {
+  return index === steps.length
+}
+
 export function isWalkthroughStale(
   walkthrough: PrWalkthrough | null,
   pr: ReviewPullRequest,
