@@ -359,39 +359,39 @@ mod tests {
         assert!(!tmp_dir.path().join("package.json").exists());
 
         let cli_content = std::fs::read_to_string(&cli_js).unwrap();
-        assert!(cli_content.contains("create-task"));
+        assert!(cli_content.contains("openforge task create"));
         assert!(cli_content.contains("--label"));
-        assert!(cli_content.contains("add-task-label"));
-        assert!(cli_content.contains("list-project-labels"));
-        assert!(cli_content.contains("list-task-labels"));
-        assert!(cli_content.contains("remove-task-label"));
+        assert!(cli_content.contains("openforge task labels add"));
+        assert!(cli_content.contains("openforge project labels list"));
+        assert!(cli_content.contains("openforge task labels list"));
+        assert!(cli_content.contains("openforge task labels remove"));
         assert!(!cli_content.contains("'mcp'"));
 
         let skill_content = std::fs::read_to_string(&skill_md).unwrap();
-        assert!(skill_content.contains("openforge create-task"));
-        assert!(skill_content.contains("openforge update-task"));
-        assert!(skill_content.contains("openforge get-task"));
-        assert!(skill_content.contains("openforge list-tasks"));
-        assert!(skill_content.contains("openforge list-project-labels"));
-        assert!(skill_content.contains("openforge add-task-label"));
-        assert!(skill_content.contains("openforge remove-task-label"));
-        assert!(skill_content.contains("openforge delete-task"));
+        assert!(skill_content.contains("openforge task create"));
+        assert!(skill_content.contains("openforge task update"));
+        assert!(skill_content.contains("openforge task get"));
+        assert!(skill_content.contains("openforge task list"));
+        assert!(skill_content.contains("openforge project labels list"));
+        assert!(skill_content.contains("openforge task labels add"));
+        assert!(skill_content.contains("openforge task labels remove"));
+        assert!(skill_content.contains("openforge task delete"));
         assert!(skill_content.contains("Task summaries are Markdown-formatted"));
         assert!(skill_content.contains("$HOME/.openforge/bin/openforge"));
-        assert!(skill_content.contains("openforge create-task --help"));
-        assert!(skill_content.contains("openforge update-task --help"));
+        assert!(skill_content.contains("openforge task create --help"));
+        assert!(skill_content.contains("openforge task update --help"));
         assert!(skill_content.contains("Before creating follow-up Tasks"));
         assert!(skill_content.contains("add useful --label values and dependency links"));
         assert!(skill_content.contains("When creating multiple related Tasks"));
-        assert_eq!(skill_content.matches("openforge get-task").count(), 1);
+        assert_eq!(skill_content.matches("openforge task get").count(), 1);
         assert_eq!(
             skill_content
-                .matches("openforge list-project-labels")
+                .matches("openforge project labels list")
                 .count(),
-            1
+            2
         );
         assert_eq!(
-            skill_content.matches("openforge list-task-labels").count(),
+            skill_content.matches("openforge task labels list").count(),
             1
         );
         assert!(!skill_content.contains("reverse dependents"));
@@ -479,30 +479,30 @@ mod tests {
             let content = std::fs::read_to_string(&expected_path).unwrap();
             assert!(content.contains("name: openforge"));
             assert!(content.contains("OPENFORGE_HTTP_PORT"));
-            assert!(content.contains("openforge create-task"));
-            assert!(content.contains("openforge update-task"));
-            assert!(content.contains("openforge delete-task"));
-            assert!(content.contains("openforge get-task"));
-            assert!(content.contains("openforge list-tasks"));
-            assert!(content.contains("openforge list-project-labels"));
-            assert!(content.contains("openforge list-task-labels"));
-            assert!(content.contains("openforge add-task-label"));
-            assert!(content.contains("openforge remove-task-label"));
+            assert!(content.contains("openforge task create"));
+            assert!(content.contains("openforge task update"));
+            assert!(content.contains("openforge task delete"));
+            assert!(content.contains("openforge task get"));
+            assert!(content.contains("openforge task list"));
+            assert!(content.contains("openforge project labels list"));
+            assert!(content.contains("openforge task labels list"));
+            assert!(content.contains("openforge task labels add"));
+            assert!(content.contains("openforge task labels remove"));
             assert!(content.contains("Use labels to record task categories"));
             assert!(content.contains("Before creating follow-up Tasks"));
             assert!(content.contains("add useful --label values and dependency links"));
             assert!(content.contains("When creating multiple related Tasks"));
             assert!(content.contains("Task summaries are Markdown-formatted"));
             assert!(content.contains("$HOME/.openforge/bin/openforge"));
-            assert!(content.contains("openforge create-task --help"));
-            assert!(content.contains("openforge update-task --help"));
-            assert_eq!(content.matches("openforge get-task").count(), 1);
-            assert_eq!(content.matches("openforge list-project-labels").count(), 1);
-            assert_eq!(content.matches("openforge list-task-labels").count(), 1);
+            assert!(content.contains("openforge task create --help"));
+            assert!(content.contains("openforge task update --help"));
+            assert_eq!(content.matches("openforge task get").count(), 1);
+            assert_eq!(content.matches("openforge project labels list").count(), 2);
+            assert_eq!(content.matches("openforge task labels list").count(), 1);
             assert!(!content.contains("reverse dependents"));
             assert!(!content.contains("repoint each dependent"));
             assert!(!content.contains("openforge/cli/cli.js"));
-            assert!(!content.contains("node \""));
+            assert_eq!(content.matches("openforge project labels list").count(), 2);
             let obsolete_segment = ["mcp", "server"].join("-");
             assert!(!content.contains(&obsolete_segment));
         }

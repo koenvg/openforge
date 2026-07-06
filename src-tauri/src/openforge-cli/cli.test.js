@@ -198,20 +198,20 @@ describe('OpenForge CLI', () => {
     const skill = await readFile(SKILL_PATH, 'utf8');
 
     for (const command of [
-      'openforge create-task',
-      'openforge update-task',
-      'openforge delete-task',
-      'openforge get-task',
-      'openforge list-tasks',
-      'openforge list-project-labels',
-      'openforge list-task-labels',
-      'openforge add-task-label',
-      'openforge remove-task-label',
+      'openforge task create',
+      'openforge task update',
+      'openforge task delete',
+      'openforge task get',
+      'openforge task list',
+      'openforge project labels list',
+      'openforge task labels list',
+      'openforge task labels add',
+      'openforge task labels remove',
     ]) {
       expect(skill).toContain(command);
     }
-    expect(skill).toContain('openforge create-task --help');
-    expect(skill).toContain('openforge update-task --help');
+    expect(skill).toContain('openforge task create --help');
+    expect(skill).toContain('openforge task update --help');
     expect(skill).toContain('Before creating follow-up Tasks');
     expect(skill).toContain('add useful --label values and dependency links');
     expect(skill).toContain('When creating multiple related Tasks');
@@ -219,9 +219,17 @@ describe('OpenForge CLI', () => {
     expect(skill).toContain('Plan JSON shape');
     expect(skill).toContain('Use dependsOn for current or prerequisite task IDs');
     expect(skill).toContain('Use labels to record task categories');
-    expect(skill.match(/openforge get-task/g)).toHaveLength(1);
-    expect(skill.match(/openforge list-project-labels/g)).toHaveLength(1);
-    expect(skill.match(/openforge list-task-labels/g)).toHaveLength(1);
+    for (const removedAlias of [
+      'openforge create-task',
+      'openforge update-task',
+      'openforge delete-task',
+      'openforge get-task',
+      'openforge list-tasks',
+      'openforge list-project-labels',
+      'openforge list-task-labels',
+    ]) {
+      expect(skill).not.toContain(removedAlias);
+    }
     expect(skill).not.toContain('reverse dependents');
     expect(skill).not.toContain('repoint each dependent');
     expect(skill).not.toContain('Correct task prompt');
@@ -230,16 +238,16 @@ describe('OpenForge CLI', () => {
   it('prints launcher-based help without the MCP command', async () => {
     const { stdout } = await runCli(['--help']);
 
-    expect(stdout).toContain('Usage:\n  openforge create-task');
-    expect(stdout).toContain('openforge delete-task --task-id <id>');
-    expect(stdout).toContain('openforge list-projects');
-    expect(stdout).toContain('openforge list-project-labels --project-id <id>');
-    expect(stdout).toContain('list-tasks prints compact rows by default');
+    expect(stdout).toContain('Usage:\n  openforge task create');
+    expect(stdout).toContain('openforge task delete --task-id <id>');
+    expect(stdout).toContain('openforge project list');
+    expect(stdout).toContain('openforge project labels list --project-id <id>');
+    expect(stdout).toContain('task list prints compact rows by default');
     expect(stdout).toContain('Pass --full to print complete TaskRow objects');
-    expect(stdout).toContain('list-tasks excludes done tasks unless --state done is passed');
+    expect(stdout).toContain('task list excludes done tasks unless --state done is passed');
     expect(stdout).toContain('Task creation hygiene:');
     expect(stdout).toContain('include useful --label values and dependency links when creating related follow-up Tasks');
-    expect(stdout).toContain('link prerequisites immediately with --depends-on or link-tasks');
+    expect(stdout).toContain('link prerequisites immediately with --depends-on or task dependencies link');
     expect(stdout).toContain('openforge task plan apply --file <plan.json>');
     expect(stdout).not.toContain('node cli.js');
     expect(stdout).not.toContain('openforge mcp');
@@ -253,7 +261,7 @@ describe('OpenForge CLI', () => {
       NODE_OPTIONS: nodeOptions,
     });
 
-    expect(stdout).toContain('Usage:\n  openforge create-task');
+    expect(stdout).toContain('Usage:\n  openforge task create');
     expect(stderr).not.toContain('--localstorage-file');
   });
 
@@ -272,7 +280,7 @@ describe('OpenForge CLI', () => {
     expect(stderr).toBe('');
   });
 
-  it('prints help for command-specific --help before contacting the HTTP bridge', async () => {
+  it('rejects removed flat aliases before contacting the HTTP bridge', async () => {
     let requestCount = 0;
     const server = createServer((_req, res) => {
       requestCount += 1;
@@ -282,26 +290,20 @@ describe('OpenForge CLI', () => {
     const port = await listen(server);
 
     try {
-      const { stdout } = await runCli(['create-task', '--help'], {
-        OPENFORGE_HTTP_PORT: String(port),
-      });
-
-      expect(stdout).toContain('Usage:\n  openforge create-task');
-      expect(stdout).toContain('openforge update-task --task-id <id> --summary <text>');
-      expect(stdout).toContain('openforge delete-task --task-id <id>');
-      expect(stdout).toContain('update-task updates only the task summary/handoff notes');
-      expect(stdout).toContain('reverse dependents');
-      expect(stdout).toContain('Task creation hygiene:');
-      expect(stdout).toContain('include useful --label values and dependency links when creating related follow-up Tasks');
-      expect(stdout).toContain('link prerequisites immediately with --depends-on or link-tasks');
-      expect(stdout).toContain('set-task-dependencies');
+      for (const removedAlias of ['create-task', 'list-projects', 'list-project-labels']) {
+        await expect(runCli([removedAlias, '--help'], {
+          OPENFORGE_HTTP_PORT: String(port),
+        })).rejects.toMatchObject({
+          stderr: expect.stringContaining(`unknown command: ${removedAlias}`),
+        });
+      }
       expect(requestCount).toBe(0);
     } finally {
       await close(server);
     }
   });
 
-  it('prints nested CLI groups, flat compatibility aliases, and local-only plugin install guidance', async () => {
+  it('prints canonical CLI commands and local-only plugin install guidance', async () => {
     const { stdout } = await runCli(['--help']);
 
     for (const command of [
@@ -327,10 +329,10 @@ describe('OpenForge CLI', () => {
 
     expect(stdout).toContain('Plugin Installation is local-only for now');
     expect(stdout).toContain('Local Plugin Source');
-    expect(stdout).toContain('Flat compatibility aliases:');
-    expect(stdout).toContain('openforge create-task');
-    expect(stdout).toContain('openforge list-projects');
-    expect(stdout).toContain('openforge list-project-labels');
+    expect(stdout).not.toContain('Flat compatibility aliases:');
+    expect(stdout).not.toContain('openforge create-task');
+    expect(stdout).not.toContain('openforge list-projects');
+    expect(stdout).not.toContain('openforge list-project-labels');
     expect(stdout).not.toContain('openforge plugin install --npm');
     expect(stdout).not.toContain('openforge plugin install --git');
     expect(stdout).not.toContain('openforge plugin install --source');
@@ -351,7 +353,7 @@ describe('OpenForge CLI', () => {
       });
 
       expect(stdout).toContain('Usage:\n  openforge task create --initial-prompt <text>');
-      expect(stdout).toContain('Flat compatibility alias: openforge create-task');
+      expect(stdout).not.toContain('Flat compatibility alias:');
       expect(stdout).toContain('Task creation hygiene:');
       expect(stdout).toContain('include useful --label values and dependency links when creating related follow-up Tasks');
       expect(requestCount).toBe(0);
@@ -393,16 +395,16 @@ describe('OpenForge CLI', () => {
     });
   });
 
-  it('prints update-task help without initial-prompt support', async () => {
+  it('prints task update help without initial-prompt support', async () => {
     const { stdout } = await runCli(['--help']);
 
-    expect(stdout).toContain('openforge update-task --task-id <id> --summary <text>');
-    expect(stdout).toContain('update-task does not change initial_prompt or prompt');
+    expect(stdout).toContain('openforge task update --task-id <id> --summary <text>');
+    expect(stdout).toContain('task update does not change initial_prompt or prompt');
     expect(stdout).toContain('finding depends_on entries containing the old id');
-    expect(stdout).not.toContain('update-task --task-id <id> [--initial-prompt <text>]');
+    expect(stdout).not.toContain('task update --task-id <id> [--initial-prompt <text>]');
   });
 
-  it('rejects update-task initial-prompt updates before contacting the HTTP bridge', async () => {
+  it('rejects task update initial-prompt updates before contacting the HTTP bridge', async () => {
     let requestCount = 0;
     const server = createServer((_req, res) => {
       requestCount += 1;
@@ -413,11 +415,11 @@ describe('OpenForge CLI', () => {
 
     try {
       await expect(
-        runCli(['update-task', '--task-id', 'T-1', '--initial-prompt'], {
+        runCli(['task', 'update', '--task-id', 'T-1', '--initial-prompt'], {
           OPENFORGE_HTTP_PORT: String(port),
         }),
       ).rejects.toMatchObject({
-        stderr: expect.stringContaining('update-task does not support --initial-prompt'),
+        stderr: expect.stringContaining('task update does not support --initial-prompt'),
       });
       expect(requestCount).toBe(0);
     } finally {
@@ -436,11 +438,11 @@ describe('OpenForge CLI', () => {
 
     try {
       await expect(
-        runCli(['create-task', '--initial-prompt', 'Test task', '--summary', 'Wrong command'], {
+        runCli(['task', 'create', '--initial-prompt', 'Test task', '--summary', 'Wrong command'], {
           OPENFORGE_HTTP_PORT: String(port),
         }),
       ).rejects.toMatchObject({
-        stderr: expect.stringContaining('create-task does not support --summary'),
+        stderr: expect.stringContaining('task create does not support --summary'),
       });
       expect(requestCount).toBe(0);
     } finally {
@@ -804,18 +806,13 @@ describe('OpenForge CLI', () => {
     expect(result).toEqual(projects);
   });
 
-  it('lists project labels through nested and flat project label commands', async () => {
+  it('lists project labels through the canonical nested project label command', async () => {
     const labels = [
       { id: 1, project_id: 'P-1', name: 'bug' },
       { id: 2, project_id: 'P-1', name: 'cleanup' },
     ];
 
     await expect(runCliAgainstJsonBridge(['project', 'labels', 'list', '--project-id', 'P-1'], {
-      url: '/project/P-1/labels',
-      response: labels,
-    })).resolves.toEqual(labels);
-
-    await expect(runCliAgainstJsonBridge(['list-project-labels', '--project-id', 'P-1'], {
       url: '/project/P-1/labels',
       response: labels,
     })).resolves.toEqual(labels);
@@ -844,7 +841,8 @@ describe('OpenForge CLI', () => {
 
     try {
       const { stdout } = await runCli([
-        'create-task',
+        'task',
+        'create',
         '--initial-prompt',
         'Dependent task',
         '--project-id',
@@ -889,7 +887,9 @@ describe('OpenForge CLI', () => {
 
     try {
       const { stdout } = await runCli([
-        'set-task-dependencies',
+        'task',
+        'dependencies',
+        'set',
         '--task-id',
         'T-2',
         '--depends-on',
@@ -932,7 +932,9 @@ describe('OpenForge CLI', () => {
 
     try {
       const { stdout } = await runCli([
-        'link-tasks',
+        'task',
+        'dependencies',
+        'link',
         '--chain',
         'KVG-1129 -> KVG-1133 -> KVG-1131',
       ], { OPENFORGE_HTTP_PORT: String(port) });
@@ -972,7 +974,7 @@ describe('OpenForge CLI', () => {
     const port = await listen(server);
 
     try {
-      const { stdout } = await runCli(['delete-task', '--task-id', 'T-1'], {
+      const { stdout } = await runCli(['task', 'delete', '--task-id', 'T-1'], {
         OPENFORGE_HTTP_PORT: String(port),
       });
 
@@ -1050,19 +1052,19 @@ describe('OpenForge CLI', () => {
     const port = await listen(server);
 
     try {
-      await runCli(['delete-task', '--task-id', 'T-1'], { OPENFORGE_HTTP_PORT: String(port) });
+      await runCli(['task', 'delete', '--task-id', 'T-1'], { OPENFORGE_HTTP_PORT: String(port) });
 
-      const { stdout: getTaskStdout } = await runCli(['get-task', '--task-id', 'T-1'], {
+      const { stdout: getTaskStdout } = await runCli(['task', 'get', '--task-id', 'T-1'], {
         OPENFORGE_HTTP_PORT: String(port),
       });
       expect(JSON.parse(getTaskStdout)).toEqual(completedTask);
 
-      const { stdout: normalListStdout } = await runCli(['list-tasks', '--project-id', 'P-1'], {
+      const { stdout: normalListStdout } = await runCli(['task', 'list', '--project-id', 'P-1'], {
         OPENFORGE_HTTP_PORT: String(port),
       });
       expect(JSON.parse(normalListStdout)).toEqual([openTask]);
 
-      const { stdout: doneListStdout } = await runCli(['list-tasks', '--project-id', 'P-1', '--state', 'done'], {
+      const { stdout: doneListStdout } = await runCli(['task', 'list', '--project-id', 'P-1', '--state', 'done'], {
         OPENFORGE_HTTP_PORT: String(port),
       });
       const doneTasks = JSON.parse(doneListStdout);
@@ -1083,7 +1085,7 @@ describe('OpenForge CLI', () => {
     const port = await listen(server);
 
     try {
-      await expect(runCli(['delete-task'], { OPENFORGE_HTTP_PORT: String(port) })).rejects.toMatchObject({
+      await expect(runCli(['task', 'delete'], { OPENFORGE_HTTP_PORT: String(port) })).rejects.toMatchObject({
         stderr: expect.stringContaining('missing required flag --task-id'),
       });
       expect(requestCount).toBe(0);
@@ -1114,7 +1116,7 @@ describe('OpenForge CLI', () => {
     const port = await listen(server);
 
     try {
-      const { stdout } = await runCli(['update-task', '--task-id', 'T-1', '--summary', 'Done'], {
+      const { stdout } = await runCli(['task', 'update', '--task-id', 'T-1', '--summary', 'Done'], {
         OPENFORGE_HTTP_PORT: String(port),
       });
 
@@ -1158,7 +1160,7 @@ describe('OpenForge CLI', () => {
     const port = await listen(server);
 
     try {
-      const { stdout } = await runCli(['list-tasks', '--project-id', 'P-1'], { OPENFORGE_HTTP_PORT: String(port) });
+      const { stdout } = await runCli(['task', 'list', '--project-id', 'P-1'], { OPENFORGE_HTTP_PORT: String(port) });
       const listedTasks = JSON.parse(stdout);
 
       expect(seenUrl).toBe('/tasks?project_id=P-1&exclude_done=true&compact=true');
@@ -1199,7 +1201,7 @@ describe('OpenForge CLI', () => {
     const port = await listen(server);
 
     try {
-      const { stdout } = await runCli(['list-tasks', '--project-id', 'P-1', '--full'], {
+      const { stdout } = await runCli(['task', 'list', '--project-id', 'P-1', '--full'], {
         OPENFORGE_HTTP_PORT: String(port),
       });
 
@@ -1235,7 +1237,7 @@ describe('OpenForge CLI', () => {
     const port = await listen(server);
 
     try {
-      const { stdout } = await runCli(['list-tasks', '--project-id', 'P-1', '--state', 'done'], { OPENFORGE_HTTP_PORT: String(port) });
+      const { stdout } = await runCli(['task', 'list', '--project-id', 'P-1', '--state', 'done'], { OPENFORGE_HTTP_PORT: String(port) });
       const listedTasks = JSON.parse(stdout);
 
       expect(seenUrl).toBe('/tasks?project_id=P-1&state=done&compact=true');
@@ -1276,7 +1278,7 @@ describe('OpenForge CLI', () => {
     const port = await listen(server);
 
     try {
-      const { stdout } = await runCli(['list-tasks', '--project-id', 'P-1', '--state', 'done', '--full'], {
+      const { stdout } = await runCli(['task', 'list', '--project-id', 'P-1', '--state', 'done', '--full'], {
         OPENFORGE_HTTP_PORT: String(port),
       });
 
@@ -1312,7 +1314,7 @@ describe('OpenForge CLI', () => {
     const port = await listen(server);
 
     try {
-      const { stdout } = await runCli(['list-tasks', '--project-id', 'P-1', '--state', state], { OPENFORGE_HTTP_PORT: String(port) });
+      const { stdout } = await runCli(['task', 'list', '--project-id', 'P-1', '--state', state], { OPENFORGE_HTTP_PORT: String(port) });
       const listedTasks = JSON.parse(stdout);
 
       expect(seenUrl).toBe(`/tasks?project_id=P-1&state=${state}&compact=true`);
@@ -1341,7 +1343,7 @@ describe('OpenForge CLI', () => {
     const port = await listen(server);
 
     try {
-      const { stdout } = await runCli(['list-projects'], { OPENFORGE_HTTP_PORT: String(port) });
+      const { stdout } = await runCli(['project', 'list'], { OPENFORGE_HTTP_PORT: String(port) });
 
       expect(seenUrl).toBe('/projects');
       expect(JSON.parse(stdout)).toEqual(projects);
