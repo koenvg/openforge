@@ -4,6 +4,8 @@
 //! the project registry into a single "add project from GitHub" flow.
 
 use std::path::{Path, PathBuf};
+use base64::{engine::general_purpose, Engine as _};
+use tokio::process::Command;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParsedRepo {
@@ -128,11 +130,80 @@ pub fn check_target_available(target: &Path, db: &crate::db::Database) -> Result
     Ok(())
 }
 
+/// Builds the `Authorization: Basic <base64>` header value used to authenticate
+/// an HTTPS clone. GitHub accepts a PAT as the password with any username; we
+/// use `x-access-token` to match the actions/checkout convention.
+pub fn auth_header_value(token: &str) -> String {
+    let encoded = general_purpose::STANDARD.encode(format!("x-access-token:{token}"));
+    format!("Authorization: Basic {encoded}")
+}
+
+/// Assembles the `git` args for the clone. For HTTPS clones with a token, the
+/// credential is passed via an ephemeral `-c http.extraHeader` so it is used for
+/// the fetch but never written into the cloned repo's `.git/config`. SSH clones
+/// rely on the user's ambient SSH keys and never receive the token.
+pub fn build_clone_args(
+    clone_url: &str,
+    target: &Path,
+    is_ssh: bool,
+    token: Option<&str>,
+) -> Vec<String> {
+    let mut args: Vec<String> = Vec::new();
+    if let (false, Some(token)) = (is_ssh, token) {
+        args.push("-c".to_string());
+        args.push(format!("http.extraHeader={}", auth_header_value(token)));
+    }
+    args.push("clone".to_string());
+    args.push(clone_url.to_string());
+    args.push(target.to_string_lossy().to_string());
+    args
+}
+
+/// Trims and length-caps git's stderr for user display.
+pub fn sanitize_clone_error(stderr: &str) -> String {
+    let trimmed = stderr.trim();
+    if trimmed.len() > 500 {
+        trimmed[..500].to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+/// Removes a partial clone directory so a failed attempt doesn't block a retry.
+pub fn cleanup_partial_clone(target: &Path) {
+    if target.exists() {
+        let _ = std::fs::remove_dir_all(target);
+    }
+}
+
+/// Clones `parsed` into `target` via the `git` binary, cleaning up on failure.
+pub async fn clone_repo(
+    parsed: &ParsedRepo,
+    target: &Path,
+    token: Option<&str>,
+) -> Result<(), String> {
+    let args = build_clone_args(&parsed.clone_url, target, parsed.is_ssh, token);
+    let output = Command::new("git")
+        .env("PATH", crate::user_environment::user_tool_path())
+        .args(&args)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run git clone: {e}"))?;
+
+    if !output.status.success() {
+        cleanup_partial_clone(target);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("git clone failed: {}", sanitize_clone_error(&stderr)));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::path::Path;
     use tempfile::tempdir;
+    use base64::{engine::general_purpose, Engine as _};
 
     #[test]
     fn resolve_target_joins_repo_name_onto_parent() {
@@ -235,5 +306,74 @@ mod tests {
     #[test]
     fn rejects_missing_repo_segment() {
         assert!(parse_repo_url("acme").is_err());
+    }
+
+    #[test]
+    fn auth_header_uses_basic_scheme_with_token_as_password() {
+        let header = auth_header_value("secret-token");
+        let encoded = header
+            .strip_prefix("Authorization: Basic ")
+            .expect("basic scheme prefix");
+        let decoded =
+            String::from_utf8(general_purpose::STANDARD.decode(encoded).expect("valid base64"))
+                .unwrap();
+        assert_eq!(decoded, "x-access-token:secret-token");
+    }
+
+    #[test]
+    fn https_clone_with_token_injects_ephemeral_auth_header() {
+        let args = build_clone_args(
+            "https://github.com/acme/widgets.git",
+            Path::new("/tmp/widgets"),
+            false,
+            Some("tok"),
+        );
+        assert_eq!(args[0], "-c");
+        assert!(args[1].starts_with("http.extraHeader=Authorization: Basic "));
+        assert!(args.contains(&"clone".to_string()));
+        assert!(args.contains(&"https://github.com/acme/widgets.git".to_string()));
+        assert!(args.contains(&"/tmp/widgets".to_string()));
+    }
+
+    #[test]
+    fn ssh_clone_never_injects_token() {
+        let args = build_clone_args(
+            "git@github.com:acme/widgets.git",
+            Path::new("/tmp/widgets"),
+            true,
+            Some("tok"),
+        );
+        assert!(!args.iter().any(|a| a == "-c"));
+        assert!(!args.iter().any(|a| a.contains("extraHeader")));
+    }
+
+    #[test]
+    fn https_clone_without_token_has_no_auth_header() {
+        let args = build_clone_args(
+            "https://github.com/acme/widgets.git",
+            Path::new("/tmp/widgets"),
+            false,
+            None,
+        );
+        assert!(!args.iter().any(|a| a == "-c"));
+        assert_eq!(args[0], "clone");
+    }
+
+    #[test]
+    fn sanitize_clone_error_trims_and_caps_length() {
+        let noisy = format!("  {}  ", "x".repeat(5000));
+        let cleaned = sanitize_clone_error(&noisy);
+        assert!(!cleaned.starts_with(' '));
+        assert!(cleaned.len() <= 500);
+    }
+
+    #[test]
+    fn cleanup_partial_clone_removes_directory() {
+        let parent = tempdir().unwrap();
+        let target = parent.path().join("half-clone");
+        std::fs::create_dir_all(target.join("nested")).unwrap();
+        std::fs::write(target.join("nested/file.txt"), b"x").unwrap();
+        cleanup_partial_clone(&target);
+        assert!(!target.exists());
     }
 }
