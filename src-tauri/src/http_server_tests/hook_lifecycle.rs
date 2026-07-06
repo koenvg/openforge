@@ -1101,9 +1101,36 @@ async fn claude_user_prompt_hook_uses_query_identity_and_payload_transcript_meta
 
     let _ = std::fs::remove_file(path);
 }
+#[test]
+fn task_display_title_refresh_is_disabled_by_default() {
+    let (state, path) = test_state("task_title_refresh_disabled_by_default");
+    let notification = crate::agent_lifecycle::AgentLifecycleNotification {
+        provider: "codex".to_string(),
+        task_id: "task-title-refresh".to_string(),
+        pty_instance_id: Some(1),
+        provider_session_id: None,
+        kind: crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy,
+        raw_event_type: Some("UserPromptSubmit".to_string()),
+        raw_status_type: None,
+    };
+
+    assert!(!should_start_task_display_title_refresh(
+        &state,
+        &notification
+    ));
+
+    let _ = std::fs::remove_file(path);
+}
 
 #[test]
-fn task_display_title_refresh_starts_for_supported_provider_activity() {
+fn task_display_title_refresh_starts_for_supported_provider_activity_when_enabled() {
+    let (state, path) = test_state("task_title_refresh_enabled_supported_activity");
+    state
+        .db
+        .lock()
+        .expect("lock db")
+        .set_config("task_display_title_metadata_updates_enabled", "true")
+        .expect("set task display title experiment config");
     let cases = [
         ("codex", "UserPromptSubmit"),
         ("claude-code", "user-prompt-submit"),
@@ -1123,14 +1150,23 @@ fn task_display_title_refresh_starts_for_supported_provider_activity() {
         };
 
         assert!(
-            should_start_task_display_title_refresh(&notification),
+            should_start_task_display_title_refresh(&state, &notification),
             "{provider} {raw_event_type} should start title refresh"
         );
     }
+
+    let _ = std::fs::remove_file(path);
 }
 
 #[test]
 fn task_display_title_refresh_ignores_unsupported_provider_activity() {
+    let (state, path) = test_state("task_title_refresh_enabled_unsupported_activity");
+    state
+        .db
+        .lock()
+        .expect("lock db")
+        .set_config("task_display_title_metadata_updates_enabled", "true")
+        .expect("set task display title experiment config");
     let cases = [
         (
             "codex",
@@ -1186,8 +1222,10 @@ fn task_display_title_refresh_ignores_unsupported_provider_activity() {
         };
 
         assert!(
-            !should_start_task_display_title_refresh(&notification),
+            !should_start_task_display_title_refresh(&state, &notification),
             "{provider} {raw_event_type} should not start title refresh"
         );
     }
+
+    let _ = std::fs::remove_file(path);
 }

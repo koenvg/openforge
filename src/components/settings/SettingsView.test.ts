@@ -629,26 +629,28 @@ describe('SettingsView', () => {
       const pollIntervalInput = requireElement(screen.getByTestId('poll-interval-input'), HTMLInputElement)
       const tokenInput = requireElement(screen.getByPlaceholderText('ghp_...'), HTMLInputElement)
       const cleanupToggle = requireElement(screen.getByTestId('code-cleanup-tasks-toggle'), HTMLInputElement)
-
+      const titleMetadataToggle = requireElement(screen.getByTestId('task-display-title-metadata-updates-toggle'), HTMLInputElement)
       expect(prefixInput.disabled).toBe(true)
       expect(pollIntervalInput.disabled).toBe(true)
       expect(tokenInput.disabled).toBe(true)
       expect(cleanupToggle.disabled).toBe(true)
+      expect(titleMetadataToggle.disabled).toBe(true)
 
       await vi.waitFor(() => {
-        expect(resolvers.size).toBeGreaterThanOrEqual(4)
+        expect(resolvers.size).toBeGreaterThanOrEqual(5)
       })
 
       resolvers.get('task_id_prefix')?.('OF')
       resolvers.get('github_token')?.('ghp_old')
       resolvers.get('code_cleanup_tasks_enabled')?.('false')
+      resolvers.get('task_display_title_metadata_updates_enabled')?.('false')
       resolvers.get('github_poll_interval')?.('60')
-
       await vi.waitFor(() => {
         expect(prefixInput.disabled).toBe(false)
         expect(pollIntervalInput.disabled).toBe(false)
         expect(tokenInput.disabled).toBe(false)
         expect(cleanupToggle.disabled).toBe(false)
+        expect(titleMetadataToggle.disabled).toBe(false)
       })
     })
 
@@ -763,6 +765,32 @@ describe('SettingsView', () => {
       expect(vi.mocked(setConfig)).toHaveBeenCalled()
     })
 
+    it('hydrates and saves the Task Display Title metadata updates experiment toggle', async () => {
+      activeProjectId.set(null)
+      projects.set([])
+      vi.mocked(getConfig).mockImplementation(async (key: string) => {
+        if (key === 'task_display_title_metadata_updates_enabled') return 'true'
+        if (key === 'github_poll_interval') return '60'
+        return null
+      })
+
+      render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
+
+      const toggle = requireElement(
+        await screen.findByTestId('task-display-title-metadata-updates-toggle'),
+        HTMLInputElement,
+      )
+
+      await vi.waitFor(() => {
+        expect(toggle.checked).toBe(true)
+      })
+      vi.mocked(setConfig).mockClear()
+
+      await fireEvent.click(toggle)
+      await vi.advanceTimersByTimeAsync(600)
+
+      expect(vi.mocked(setConfig)).toHaveBeenCalledWith('task_display_title_metadata_updates_enabled', 'false')
+    })
     it('does not save active project settings from the global settings page', async () => {
       render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
 

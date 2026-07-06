@@ -119,21 +119,24 @@ describe('settingsConfig', () => {
         .mockResolvedValueOnce('T-')
         .mockResolvedValueOnce('gh-token')
         .mockResolvedValueOnce('true')
+        .mockResolvedValueOnce('true')
         .mockResolvedValueOnce('45')
 
       const result = await loadGlobalSettings()
 
-      expect(getConfig).toHaveBeenCalledTimes(4)
+      expect(getConfig).toHaveBeenCalledTimes(5)
       expect(result).toEqual({
         taskIdPrefix: 'T-',
         githubToken: 'gh-token',
         codeCleanupTasksEnabled: true,
+        taskDisplayTitleMetadataUpdatesEnabled: true,
         githubPollInterval: 45,
       })
     })
 
     it('uses current fallback values when config is empty or invalid', async () => {
       vi.mocked(getConfig)
+        .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(null)
@@ -145,12 +148,14 @@ describe('settingsConfig', () => {
         taskIdPrefix: '',
         githubToken: '',
         codeCleanupTasksEnabled: false,
+        taskDisplayTitleMetadataUpdatesEnabled: false,
         githubPollInterval: 60,
       })
     })
 
     it('clamps persisted GitHub poll interval of 0 seconds to the minimum supported value', async () => {
       vi.mocked(getConfig)
+        .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(null)
@@ -166,6 +171,7 @@ describe('settingsConfig', () => {
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
         .mockResolvedValueOnce('10')
 
       const result = await loadGlobalSettings()
@@ -175,6 +181,7 @@ describe('settingsConfig', () => {
 
     it('clamps persisted GitHub poll interval above the maximum supported value', async () => {
       vi.mocked(getConfig)
+        .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(null)
@@ -190,6 +197,7 @@ describe('settingsConfig', () => {
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
         .mockResolvedValueOnce('45abc')
 
       const result = await loadGlobalSettings()
@@ -199,6 +207,7 @@ describe('settingsConfig', () => {
 
     it('defaults decimal persisted GitHub poll interval strings to the current default', async () => {
       vi.mocked(getConfig)
+        .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(null)

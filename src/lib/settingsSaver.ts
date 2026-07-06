@@ -22,6 +22,7 @@ export interface GlobalSettingsSavePayload {
   taskIdPrefix: string
   githubToken: string
   codeCleanupTasksEnabled: boolean
+  taskDisplayTitleMetadataUpdatesEnabled: boolean
   githubPollInterval: number
 }
 
@@ -40,5 +41,6 @@ export async function saveGlobalSettings(payload: GlobalSettingsSavePayload): Pr
   await setConfig('task_id_prefix', payload.taskIdPrefix)
   await setConfig('github_token', payload.githubToken)
   await setConfig('code_cleanup_tasks_enabled', payload.codeCleanupTasksEnabled ? 'true' : 'false')
+  await setConfig('task_display_title_metadata_updates_enabled', payload.taskDisplayTitleMetadataUpdatesEnabled ? 'true' : 'false')
   await setConfig('github_poll_interval', String(normalizeGitHubPollIntervalSeconds(payload.githubPollInterval)))
 }
