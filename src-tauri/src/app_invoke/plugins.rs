@@ -76,62 +76,22 @@ impl AppRegisterBuiltinPluginRequest {
     }
 }
 
-fn app_data_dir(state: &AppState) -> Result<std::path::PathBuf, (StatusCode, String)> {
-    let Some(app) = state.app.as_ref() else {
-        return Err((
-            StatusCode::NOT_IMPLEMENTED,
-            "app IPC command requires app data path state before Electron sidecar support"
-                .to_string(),
-        ));
-    };
-
-    app.path().app_data_dir().map_err(|error| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to resolve app data directory: {error}"),
-        )
-    })
-}
-
 fn plugin_platform(
     state: &AppState,
     require_app_data_dir: bool,
 ) -> Result<crate::plugin_platform::PluginPlatform<'_>, (StatusCode, String)> {
-    let app_data_dir = if require_app_data_dir {
-        Some(app_data_dir(state)?)
-    } else {
-        None
-    };
-
-    Ok(crate::plugin_platform::PluginPlatform::new(
-        state.db.as_ref(),
-        app_data_dir,
-        state.plugin_host.as_ref(),
-    ))
-}
-
-fn plugin_platform_error_status(message: &str) -> StatusCode {
-    if message.starts_with("Unknown plugin:") {
-        StatusCode::NOT_FOUND
-    } else if message.contains("built-in plugin")
-        || message.contains("sourceKind builtin")
-        || message.contains("sourceSpec to match")
-    {
-        StatusCode::BAD_REQUEST
-    } else if message.contains("backend not configured")
-        || message.contains("backend entry")
-        || message.contains("install root")
-    {
-        StatusCode::BAD_REQUEST
-    } else if message.contains("plugin host state is not available") {
-        StatusCode::SERVICE_UNAVAILABLE
-    } else {
-        StatusCode::INTERNAL_SERVER_ERROR
-    }
+    crate::plugin_platform_adapter::plugin_platform_for_state(
+        state,
+        require_app_data_dir,
+        crate::plugin_platform_adapter::PluginPlatformTransport::AppInvoke,
+    )
 }
 
 fn map_plugin_platform_error(message: String) -> (StatusCode, String) {
-    (plugin_platform_error_status(&message), message)
+    crate::plugin_platform_adapter::map_plugin_platform_error(
+        message,
+        crate::plugin_platform_adapter::PluginPlatformTransport::AppInvoke,
+    )
 }
 
 pub(super) async fn handle_app_plugin_command(

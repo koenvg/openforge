@@ -26,6 +26,7 @@ mod pi_extension;
 mod plugin_host;
 mod plugin_installation;
 mod plugin_platform;
+mod plugin_platform_adapter;
 mod plugin_rpc;
 mod project_fs;
 mod provider_runtime;
