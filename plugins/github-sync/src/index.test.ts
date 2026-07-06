@@ -82,12 +82,15 @@ describe('github-sync plugin', () => {
 
   it('uses shared PR review UI components instead of plugin-local duplicate leaf components', () => {
     const prReviewSource = readFileSync(join(pluginSrcDir, 'review/pr/PrReviewView.svelte'), 'utf8')
+    const prReviewListSource = readFileSync(join(pluginSrcDir, 'review/pr/PrReviewListSection.svelte'), 'utf8')
+    const prReviewDetailSource = readFileSync(join(pluginSrcDir, 'review/pr/PrReviewDetailSection.svelte'), 'utf8')
+    const combinedReviewSource = `${prReviewSource}\n${prReviewListSource}\n${prReviewDetailSource}`
 
-    expect(prReviewSource).toContain('@openforge-app/pr-review-ui/PrOverviewTab.svelte')
-    expect(prReviewSource).toContain('@openforge-app/pr-review-ui/ReviewSubmitPanel.svelte')
-    expect(prReviewSource).toContain('@openforge-app/pr-review-ui/ReviewPrCard.svelte')
-    expect(prReviewSource).toContain('@openforge-app/pr-review-ui/AuthoredPrCard.svelte')
-    expect(prReviewSource).toContain('@openforge-app/pr-review-ui/FileTree.svelte')
+    expect(combinedReviewSource).toContain('@openforge-app/pr-review-ui/PrOverviewTab.svelte')
+    expect(combinedReviewSource).toContain('@openforge-app/pr-review-ui/ReviewSubmitPanel.svelte')
+    expect(combinedReviewSource).toContain('@openforge-app/pr-review-ui/ReviewPrCard.svelte')
+    expect(combinedReviewSource).toContain('@openforge-app/pr-review-ui/AuthoredPrCard.svelte')
+    expect(combinedReviewSource).toContain('@openforge-app/pr-review-ui/FileTree.svelte')
     expect(existsSync(join(pluginSrcDir, 'lib/ipc.ts'))).toBe(false)
     expect(existsSync(join(pluginSrcDir, 'review/pr/PrOverviewTab.svelte'))).toBe(false)
     expect(existsSync(join(pluginSrcDir, 'review/pr/ReviewSubmitPanel.svelte'))).toBe(false)
