@@ -143,3 +143,51 @@ describe('WalkthroughTab comment sync', () => {
     expect(within(stub).queryByText('src/checkout.ts')).toBeNull()
   })
 })
+
+describe('WalkthroughTab review/submit step', () => {
+  it('adds a trailing Review & submit step beyond the parsed steps', async () => {
+    renderWalkthrough()
+    await screen.findByText('Step one')
+
+    // 2 parsed steps + 1 review/submit step.
+    expect(screen.getByText('of 3')).toBeTruthy()
+    // The submit panel is not shown on a normal step.
+    expect(screen.queryByText('Submit Review')).toBeNull()
+  })
+
+  it('renders the full diff and the submit panel on the final step', async () => {
+    renderWalkthrough()
+    await screen.findByText('Step one')
+
+    await fireEvent.click(screen.getByRole('button', { name: '3' }))
+
+    expect(await screen.findByText('Review & submit')).toBeTruthy()
+    const stub = screen.getByTestId('diff-viewer-stub')
+    expect(stub.getAttribute('data-file-count')).toBe('2')
+    expect(within(stub).getByText('src/main.rs')).toBeTruthy()
+    expect(within(stub).getByText('src/checkout.ts')).toBeTruthy()
+    expect(screen.getByText('Submit Review')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy()
+  })
+
+  it('submits the pending review from the final step', async () => {
+    const comment: ReviewSubmissionComment = { path: 'src/main.rs', line: 2, side: 'RIGHT', body: 'nit' }
+    const { onSubmitReview } = renderWalkthrough({ pendingComments: [comment] })
+    await screen.findByText('Step one')
+
+    await fireEvent.click(screen.getByRole('button', { name: '3' }))
+    await screen.findByText('Review & submit')
+    await fireEvent.click(screen.getByRole('button', { name: 'Comment' }))
+
+    expect(onSubmitReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'COMMENT',
+        comments: [comment],
+        prNumber: basePr.number,
+        commitId: basePr.head_sha,
+        repoOwner: basePr.repo_owner,
+        repoName: basePr.repo_name,
+      }),
+    )
+  })
+})

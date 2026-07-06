@@ -164,6 +164,7 @@
       onAgentCommentsChange={onAgentCommentsChange}
       onUpdateAgentCommentStatus={onUpdateAgentCommentStatus}
       {onOpenUrl}
+      onSubmitReview={onSubmitReview}
     />
   {:else}
     <div class="flex flex-1 min-h-0 overflow-hidden">
