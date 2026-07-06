@@ -1692,7 +1692,10 @@ async fn reload_plugin_handler(
         .plugin(&plugin_id)
         .map_err(map_http_plugin_error)?;
     if installed.is_none() {
-        return Err((StatusCode::NOT_FOUND, format!("Unknown plugin: {plugin_id}")));
+        return Err((
+            StatusCode::NOT_FOUND,
+            format!("Unknown plugin: {plugin_id}"),
+        ));
     }
 
     let payload = serde_json::json!({
