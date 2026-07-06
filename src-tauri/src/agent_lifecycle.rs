@@ -39,13 +39,13 @@ This task is {{{{taskId}}}}. OpenForge stores this task's user-facing Handoff No
 </handoff_notes_template>
 
 <analysis_update trigger="after_initial_analysis">
-Once you understand the scope, run: openforge update-task --task-id "{{{{taskId}}}}" --summary "..."
+Once you understand the scope, run: openforge task update --task-id "{{{{taskId}}}}" --summary "..."
 Write concise initial Handoff Notes reflecting the actual work and the active template, not the original request verbatim.
 Good: "## Summary\nScoped JWT refresh token rotation in auth middleware\n\n## Decisions made\nKept rotation inside existing auth middleware." — Bad: "implement the auth thing"
 </analysis_update>
 
 <summary_update trigger="before_finalizing">
-Before reporting completion, run: openforge update-task --task-id "{{{{taskId}}}}" --summary "..."
+Before reporting completion, run: openforge task update --task-id "{{{{taskId}}}}" --summary "..."
 Update the task's Handoff Notes with an accurate, up-to-date reviewer brief using the active template. Preserve useful existing Summary context while adding new information, decisions, open questions, and follow-up tasks; do not discard earlier relevant work just to make the note "current".
 </summary_update>
 
@@ -438,7 +438,7 @@ Create a task when you find:
 - Dead code, unused imports, or stale abstractions that should be cleaned up
 
 How to create a cleanup task:
-- Run: openforge create-task --initial-prompt "..." --worktree "$PWD" --depends-on "{task_id}" --label cleanup
+- Run: openforge task create --initial-prompt "..." --worktree "$PWD" --depends-on "{task_id}" --label cleanup
 - Write a clear, actionable prompt (e.g. "Extract shared validation logic from UserForm and AdminForm")
 - Add useful --label values when the category is obvious (for example, cleanup, bug, docs, or tests); do not invent noisy labels just because labels exist
 - Keep the --depends-on link to "{task_id}" for cleanup tasks that are related to this work, and add additional prerequisite links when the order is known
@@ -586,7 +586,7 @@ mod tests {
         assert!(prompt.contains(
             "OpenForge stores this task's user-facing Handoff Notes in the task summary field"
         ));
-        assert!(prompt.contains("openforge update-task --task-id \"T-123\" --summary \"...\""));
+        assert!(prompt.contains("openforge task update --task-id \"T-123\" --summary \"...\""));
         assert!(!prompt.contains("openforge_update_task"));
         assert!(prompt.contains("T-123"));
         assert!(!prompt.contains("initial_prompt=\"...\""));
@@ -605,7 +605,7 @@ mod tests {
         assert!(!prompt.contains("<openforge_task_management>"));
         assert!(!prompt.contains("<handoff_notes_template>"));
         assert!(!prompt.contains("Handoff Notes"));
-        assert!(!prompt.contains("openforge update-task"));
+        assert!(!prompt.contains("openforge task update"));
         assert!(!prompt.contains("## Summary"));
     }
 
@@ -619,7 +619,7 @@ mod tests {
         assert!(prompt.contains("Project has not enabled workflow"));
         assert!(!prompt.contains("<openforge_task_management>"));
         assert!(!prompt.contains("<handoff_notes_template>"));
-        assert!(!prompt.contains("openforge update-task"));
+        assert!(!prompt.contains("openforge task update"));
     }
 
     #[test]
@@ -630,7 +630,7 @@ mod tests {
         let prompt = build_task_prompt(&task, None, false, &handoff_contributions(None));
 
         assert!(prompt.contains("<openforge_task_management>"));
-        assert!(prompt.contains("openforge update-task --task-id \"T-201\" --summary \"...\""));
+        assert!(prompt.contains("openforge task update --task-id \"T-201\" --summary \"...\""));
     }
 
     #[test]
@@ -654,7 +654,7 @@ mod tests {
         assert!(prompt.contains("Write concise initial Handoff Notes"));
         assert!(prompt.contains("<summary_update trigger=\"before_finalizing\">"));
         assert!(prompt.contains("Update the task's Handoff Notes"));
-        assert!(prompt.contains("openforge update-task --task-id \"T-124\" --summary \"...\""));
+        assert!(prompt.contains("openforge task update --task-id \"T-124\" --summary \"...\""));
         assert!(!prompt.contains("openforge_update_task"));
         assert!(!prompt.contains("<initial_prompt_update"));
         assert!(!prompt.contains("initial_prompt=\"...\""));
@@ -1257,7 +1257,7 @@ mod tests {
         assert!(!prompt.contains("<openforge_code_cleanup>"));
         assert!(!prompt.contains("openforge_create_task"));
         assert!(!prompt.contains("openforge_update_task"));
-        assert!(prompt.contains("openforge update-task --task-id \"T-800\" --summary \"...\""));
+        assert!(prompt.contains("openforge task update --task-id \"T-800\" --summary \"...\""));
     }
 
     #[test]
@@ -1269,11 +1269,11 @@ mod tests {
         assert!(prompt.contains("<openforge_code_cleanup>"));
         assert!(prompt.contains("</openforge_code_cleanup>"));
         assert!(prompt.contains(
-            "openforge create-task --initial-prompt \"...\" --worktree \"$PWD\" --depends-on \"T-801\" --label cleanup"
+            "openforge task create --initial-prompt \"...\" --worktree \"$PWD\" --depends-on \"T-801\" --label cleanup"
         ));
         assert!(prompt.contains("Add useful --label values"));
         assert!(prompt.contains("Keep the --depends-on link"));
-        assert!(prompt.contains("openforge update-task --task-id \"T-801\" --summary \"...\""));
+        assert!(prompt.contains("openforge task update --task-id \"T-801\" --summary \"...\""));
         assert!(!prompt.contains("openforge_create_task"));
         assert!(!prompt.contains("openforge_update_task"));
     }

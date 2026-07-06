@@ -302,7 +302,7 @@ async function updateTask(flags) {
     summary: typeof flags.summary === 'string' ? flags.summary : undefined,
   };
   if (!payload.summary) {
-    throw new Error('update-task requires --summary');
+    throw new Error('task update requires --summary');
   }
   printJson(await requestJson('/update_task', { method: 'POST', body: JSON.stringify(payload) }));
 }
@@ -317,7 +317,7 @@ async function deleteTask(flags) {
 async function setTaskDependencies(flags) {
   const dependsOn = dependencyIdsFromFlag(flags);
   if (dependsOn.length === 0) {
-    throw new Error('set-task-dependencies requires --depends-on');
+    throw new Error('task dependencies set requires --depends-on');
   }
   printJson(await requestJson('/set_task_dependencies', {
     method: 'POST',
@@ -328,7 +328,7 @@ async function setTaskDependencies(flags) {
 async function addTaskDependency(flags) {
   const dependsOn = dependencyIdsFromFlag(flags);
   if (dependsOn.length !== 1) {
-    throw new Error('add-task-dependency requires exactly one --depends-on task id');
+    throw new Error('task dependencies add requires exactly one --depends-on task id');
   }
   printJson(await requestJson('/add_task_dependency', {
     method: 'POST',
@@ -339,7 +339,7 @@ async function addTaskDependency(flags) {
 async function linkTasks(flags) {
   const chain = parseTaskChain(requireFlag(flags, 'chain'));
   if (chain.length < 2) {
-    throw new Error('link-tasks requires a chain with at least two task ids');
+    throw new Error('task dependencies link requires a chain with at least two task ids');
   }
   printJson(await requestJson('/link_task_chain', {
     method: 'POST',
@@ -360,7 +360,7 @@ async function listTaskLabels(flags) {
 async function addTaskLabel(flags) {
   const labels = labelNamesFromFlag(flags);
   if (labels.length !== 1) {
-    throw new Error('add-task-label requires exactly one --label');
+    throw new Error('task labels add requires exactly one --label');
   }
   printJson(await requestJson('/add_task_label', {
     method: 'POST',
@@ -372,7 +372,7 @@ async function removeTaskLabel(flags) {
   const labelIdRaw = requireFlag(flags, 'labelId');
   const labelId = Number(labelIdRaw);
   if (!Number.isInteger(labelId) || labelId <= 0) {
-    throw new Error('remove-task-label requires a positive integer --label-id');
+    throw new Error('task labels remove requires a positive integer --label-id');
   }
   printJson(await requestJson('/remove_task_label', {
     method: 'POST',
@@ -446,114 +446,86 @@ async function reloadPlugin(flags) {
 const COMMAND_SPECS = [
   {
     path: ['task', 'create'],
-    aliases: [['create-task']],
     flags: ['initialPrompt', 'projectId', 'worktree', 'dependsOn', 'label'],
     usage: 'openforge task create --initial-prompt <text> [--project-id <id>] [--worktree <path>] [--depends-on <task-id>[,<task-id>...]] [--label <name>[,<name>...]]',
-    aliasUsage: 'openforge create-task',
     handler: createTask,
   },
   {
     path: ['task', 'update'],
-    aliases: [['update-task']],
     flags: ['taskId', 'summary'],
     usage: 'openforge task update --task-id <id> --summary <text>',
-    aliasUsage: 'openforge update-task',
     handler: updateTask,
   },
   {
     path: ['task', 'delete'],
-    aliases: [['delete-task']],
     flags: ['taskId'],
     usage: 'openforge task delete --task-id <id>',
-    aliasUsage: 'openforge delete-task',
     handler: deleteTask,
   },
   {
     path: ['task', 'dependencies', 'set'],
-    aliases: [['set-task-dependencies']],
     flags: ['taskId', 'dependsOn'],
     usage: 'openforge task dependencies set --task-id <id> --depends-on <task-id>[,<task-id>...]',
-    aliasUsage: 'openforge set-task-dependencies',
     handler: setTaskDependencies,
   },
   {
     path: ['task', 'dependencies', 'add'],
-    aliases: [['add-task-dependency']],
     flags: ['taskId', 'dependsOn'],
     usage: 'openforge task dependencies add --task-id <id> --depends-on <task-id>',
-    aliasUsage: 'openforge add-task-dependency',
     handler: addTaskDependency,
   },
   {
     path: ['task', 'dependencies', 'link'],
-    aliases: [['link-tasks']],
     flags: ['chain'],
     usage: 'openforge task dependencies link --chain "T-1 -> T-2 -> T-3"',
-    aliasUsage: 'openforge link-tasks',
     handler: linkTasks,
   },
   {
     path: ['task', 'get'],
-    aliases: [['get-task']],
     flags: ['taskId'],
     usage: 'openforge task get --task-id <id>',
-    aliasUsage: 'openforge get-task',
     handler: getTask,
   },
   {
     path: ['task', 'labels', 'list'],
-    aliases: [['list-task-labels']],
     flags: ['taskId'],
     usage: 'openforge task labels list --task-id <id>',
-    aliasUsage: 'openforge list-task-labels',
     handler: listTaskLabels,
   },
   {
     path: ['task', 'labels', 'add'],
-    aliases: [['add-task-label']],
     flags: ['taskId', 'label'],
     usage: 'openforge task labels add --task-id <id> --label <name>',
-    aliasUsage: 'openforge add-task-label',
     handler: addTaskLabel,
   },
   {
     path: ['task', 'labels', 'remove'],
-    aliases: [['remove-task-label']],
     flags: ['taskId', 'labelId'],
     usage: 'openforge task labels remove --task-id <id> --label-id <id>',
-    aliasUsage: 'openforge remove-task-label',
     handler: removeTaskLabel,
   },
   {
     path: ['task', 'list'],
-    aliases: [['list-tasks']],
     flags: ['projectId', 'state', 'full'],
     usage: 'openforge task list --project-id <id> [--state backlog|doing|done] [--full]',
-    aliasUsage: 'openforge list-tasks',
     handler: listTasks,
   },
   {
     path: ['task', 'plan', 'apply'],
-    aliases: [['create-task-plan']],
     flags: ['file'],
     usage: 'openforge task plan apply --file <plan.json>',
-    aliasUsage: 'openforge create-task-plan',
     handler: applyTaskPlan,
   },
   {
     path: ['project', 'list'],
-    aliases: [['list-projects']],
     flags: [],
     usage: 'openforge project list',
-    aliasUsage: 'openforge list-projects',
     handler: listProjects,
   },
   {
     path: ['project', 'labels', 'list'],
-    aliases: [['list-project-labels']],
     flags: ['projectId'],
     usage: 'openforge project labels list --project-id <id>',
-    aliasUsage: 'openforge list-project-labels',
     handler: listProjectLabels,
   },
   {
@@ -586,10 +558,10 @@ const COMMAND_SPECS = [
   },
 ];
 
-const COMMAND_MATCHES = COMMAND_SPECS.flatMap((spec) => [
-  { spec, tokens: spec.path, isAlias: false },
-  ...(spec.aliases ?? []).map((tokens) => ({ spec, tokens, isAlias: true })),
-]).sort((left, right) => right.tokens.length - left.tokens.length);
+const COMMAND_MATCHES = COMMAND_SPECS.map((spec) => ({
+  spec,
+  tokens: spec.path,
+})).sort((left, right) => right.tokens.length - left.tokens.length);
 
 function tokensMatch(argv, tokens) {
   if (argv.length < tokens.length) return false;
@@ -602,7 +574,6 @@ function resolveCommand(argv) {
       return {
         spec: match.spec,
         commandName: match.tokens.join(' '),
-        isAlias: match.isAlias,
         rest: argv.slice(match.tokens.length),
       };
     }
@@ -656,29 +627,7 @@ function printHelp() {
   console.log(`OpenForge CLI
 
 Usage:
-  openforge create-task --initial-prompt <text> [--project-id <id>] [--worktree <path>] [--depends-on <task-id>[,<task-id>...]] [--label <name>[,<name>...]]
-  openforge update-task --task-id <id> --summary <text>
-  openforge delete-task --task-id <id>
-  openforge set-task-dependencies --task-id <id> --depends-on <task-id>[,<task-id>...]
-  openforge add-task-dependency --task-id <id> --depends-on <task-id>
-  openforge link-tasks --chain "T-1 -> T-2 -> T-3"
-  openforge get-task --task-id <id>
-  openforge list-task-labels --task-id <id>
-  openforge add-task-label --task-id <id> --label <name>
-  openforge remove-task-label --task-id <id> --label-id <id>
-  openforge list-tasks --project-id <id> [--state backlog|doing|done] [--full]
-  openforge task plan apply --file <plan.json>
-  openforge list-projects
-  openforge list-project-labels --project-id <id>
-
-Nested command groups:
 ${COMMAND_SPECS.map((spec) => `  ${spec.usage}`).join('\n')}
-
-Flat compatibility aliases:
-  openforge create-task, update-task, delete-task, get-task, list-tasks
-  openforge list-task-labels, add-task-label, remove-task-label
-  openforge set-task-dependencies, add-task-dependency, link-tasks
-  openforge create-task-plan, list-projects, list-project-labels
 
 Plugin Installation is local-only for now:
   Local Plugin Source: use openforge plugin install --path <local-plugin-source>
@@ -686,21 +635,21 @@ Plugin Installation is local-only for now:
   Plugin reload explicitly reloads installed artifacts only; it does not watch or rebuild source.
 
 Task prompt semantics:
-  create-task sets the task's initial_prompt from --initial-prompt.
-  update-task updates only the task summary/handoff notes via --summary.
-  update-task does not change initial_prompt or prompt; do not use it to fix a bad task prompt.
-  If a task was created with the wrong initial prompt, first record its labels, own depends_on list, and reverse dependents by listing project tasks and finding depends_on entries containing the old id. Delete the incorrect task, create a replacement with the desired --initial-prompt, then repoint each dependent with set-task-dependencies.
+  task create sets the task's initial_prompt from --initial-prompt.
+  task update updates only the task summary/handoff notes via --summary.
+  task update does not change initial_prompt or prompt; do not use it to fix a bad task prompt.
+  If a task was created with the wrong initial prompt, first record its labels, own depends_on list, and reverse dependents by listing project tasks and finding depends_on entries containing the old id. Delete the incorrect task, create a replacement with the desired --initial-prompt, then repoint each dependent with task dependencies set.
 
 Task listing:
-  list-tasks prints compact rows by default for broad scans: id, prompt_preview, status, labels, depends_on, updated_at.
+  task list prints compact rows by default for broad scans: id, prompt_preview, status, labels, depends_on, updated_at.
   Pass --full to print complete TaskRow objects.
-  list-tasks excludes done tasks unless --state done is passed.
+  task list excludes done tasks unless --state done is passed.
 
 Task creation hygiene:
-  Before creating follow-up Tasks, use list-project-labels when a project id is known and reuse an existing label when it fits.
+  Before creating follow-up Tasks, use project labels list when a project id is known and reuse an existing label when it fits.
   When creating follow-up Tasks, include useful --label values and dependency links when creating related follow-up Tasks.
   For non-linear multi-Task follow-up work, use task plan apply as the preferred workflow for non-linear multi-Task follow-up work so local dependency keys are resolved in one operation.
-  For simple follow-up work, link prerequisites immediately with --depends-on or link-tasks.
+  For simple follow-up work, link prerequisites immediately with --depends-on or task dependencies link.
   If labels or dependency order are unclear, state that uncertainty instead of guessing.
 
 Examples:
@@ -724,17 +673,17 @@ function printCommandHelp(spec) {
 Usage:
   ${spec.usage}
 ${planJsonHelp}
-${spec.aliasUsage ? `Flat compatibility alias: ${spec.aliasUsage}\n\n` : ''}Task prompt semantics:
-  create-task sets the task's initial_prompt from --initial-prompt.
-  update-task updates only the task summary/handoff notes via --summary.
-  update-task does not change initial_prompt or prompt; do not use it to fix a bad task prompt.
-  If a task was created with the wrong initial prompt, first record its labels, own depends_on list, and reverse dependents by listing project tasks and finding depends_on entries containing the old id. Delete the incorrect task, create a replacement with the desired --initial-prompt, then repoint each dependent with set-task-dependencies.
+Task prompt semantics:
+  task create sets the task's initial_prompt from --initial-prompt.
+  task update updates only the task summary/handoff notes via --summary.
+  task update does not change initial_prompt or prompt; do not use it to fix a bad task prompt.
+  If a task was created with the wrong initial prompt, first record its labels, own depends_on list, and reverse dependents by listing project tasks and finding depends_on entries containing the old id. Delete the incorrect task, create a replacement with the desired --initial-prompt, then repoint each dependent with task dependencies set.
 
 Task creation hygiene:
-  Before creating follow-up Tasks, use list-project-labels when a project id is known and reuse an existing label when it fits.
+  Before creating follow-up Tasks, use project labels list when a project id is known and reuse an existing label when it fits.
   When creating follow-up Tasks, include useful --label values and dependency links when creating related follow-up Tasks.
   For non-linear multi-Task follow-up work, use task plan apply as the preferred workflow for non-linear multi-Task follow-up work so local dependency keys are resolved in one operation.
-  For simple follow-up work, link prerequisites immediately with --depends-on or link-tasks.
+  For simple follow-up work, link prerequisites immediately with --depends-on or task dependencies link.
   If labels or dependency order are unclear, state that uncertainty instead of guessing.
 `);
 }
@@ -750,15 +699,11 @@ async function main(argv) {
     throw new Error(`unknown command: ${argv[0]}`);
   }
 
-  const { spec, commandName, isAlias, rest } = resolved;
+  const { spec, commandName, rest } = resolved;
   const { flags, positionals } = parseFlags(rest);
 
   if (shouldPrintCommandHelp(flags)) {
-    if (isAlias) {
-      printHelp();
-    } else {
-      printCommandHelp(spec);
-    }
+    printCommandHelp(spec);
     return;
   }
 
