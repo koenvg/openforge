@@ -149,7 +149,13 @@
       >From GitHub</button>
     </div>
 
-    <p class="text-sm text-base-content/70 m-0">Connect a local repository so OpenForge can track tasks and agent handoffs for it.</p>
+    <p class="text-sm text-base-content/70 m-0">
+      {#if mode === 'github'}
+        Paste a GitHub repository URL and OpenForge will clone it and set up the project.
+      {:else}
+        Connect a local repository so OpenForge can track tasks and agent handoffs for it.
+      {/if}
+    </p>
 
     {#if createError}
       <div id={creationFeedbackId} class="alert alert-error py-2 text-sm" role="alert">
@@ -238,6 +244,7 @@
           placeholder="My Awesome Project"
           oninput={handleNameInput}
           autocomplete="off"
+          aria-describedby={createError || successMessage ? creationFeedbackId : undefined}
         />
       </label>
 
