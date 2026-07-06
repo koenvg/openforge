@@ -26,7 +26,7 @@ Plugin management commands are local-only for agent-facing use: install from a l
 
 ## Task Creation checklist
 
-Before creating follow-up Tasks, decide whether each one has obvious project-relevant Task Labels. Add them during Task Creation with `--label`; do not invent noisy labels just because labels exist.
+Before creating follow-up Tasks, decide whether each one has obvious project-relevant Task Labels and dependency links to the current or prerequisite work, then add useful --label values and dependency links during Task Creation with `--label` and `--depends-on` when known; do not invent noisy labels or guessed ordering just because labels and dependencies exist.
 
 When creating multiple related Tasks, decide whether any Task must be done before another can start. Link prerequisites immediately with `--depends-on` during creation when the predecessor ID is known, or use `openforge link-tasks --chain "T-1 -> T-2 -> T-3"` after all Task IDs exist.
 
@@ -51,7 +51,7 @@ openforge delete-task --task-id T-123
 
 `list-tasks` prints compact rows by default (`id`, `prompt_preview`, `status`, `labels`, `depends_on`, `updated_at`) for broad scans and excludes done tasks by default. Pass `--full` when you need complete TaskRow objects. Pass `--state done` only when you explicitly need completed tasks. Use `--worktree "$PWD"` with `create-task` when the project can be inferred from the current worktree and no project id is known.
 
-Labels are project-scoped. Use `--label` on `create-task` for AI-created follow-up work that already has an obvious category. `--label` can be repeated or comma-separated, e.g. `--label bug --label "needs review"` or `--label bug,cleanup`. Use `add-task-label`, `remove-task-label`, and `list-task-labels` to manage labels on existing tasks.
+Labels are project-scoped. Use `--label` on `create-task` for AI-created follow-up work that already has an obvious category, and pair it with `--depends-on` when the follow-up is related to a known active task or prerequisite. `--label` can be repeated or comma-separated, e.g. `--label bug --label "needs review"` or `--label bug,cleanup`. Use `add-task-label`, `remove-task-label`, and `list-task-labels` to manage labels on existing tasks.
 
 Rare prompt-repair workflow: if a task was created with the wrong initial prompt, do not try to repair it with `update-task`. Use the CLI help for the full safe replacement workflow:
 

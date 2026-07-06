@@ -169,6 +169,7 @@ describe('OpenForge CLI', () => {
     expect(skill).toContain('openforge create-task --help');
     expect(skill).toContain('openforge update-task --help');
     expect(skill).toContain('Before creating follow-up Tasks');
+    expect(skill).toContain('add useful --label values and dependency links');
     expect(skill).toContain('When creating multiple related Tasks');
     expect(skill).toContain('Use labels to record task categories');
     expect(skill.match(/openforge get-task/g)).toHaveLength(1);
@@ -188,7 +189,7 @@ describe('OpenForge CLI', () => {
     expect(stdout).toContain('Pass --full to print complete TaskRow objects');
     expect(stdout).toContain('list-tasks excludes done tasks unless --state done is passed');
     expect(stdout).toContain('Task creation hygiene:');
-    expect(stdout).toContain('include useful --label values when the category is obvious');
+    expect(stdout).toContain('include useful --label values and dependency links when creating related follow-up Tasks');
     expect(stdout).toContain('link prerequisites immediately with --depends-on or link-tasks');
     expect(stdout).not.toContain('node cli.js');
     expect(stdout).not.toContain('openforge mcp');
@@ -241,6 +242,7 @@ describe('OpenForge CLI', () => {
       expect(stdout).toContain('update-task updates only the task summary/handoff notes');
       expect(stdout).toContain('reverse dependents');
       expect(stdout).toContain('Task creation hygiene:');
+      expect(stdout).toContain('include useful --label values and dependency links when creating related follow-up Tasks');
       expect(stdout).toContain('link prerequisites immediately with --depends-on or link-tasks');
       expect(stdout).toContain('set-task-dependencies');
       expect(requestCount).toBe(0);
@@ -298,6 +300,7 @@ describe('OpenForge CLI', () => {
       expect(stdout).toContain('Usage:\n  openforge task create --initial-prompt <text>');
       expect(stdout).toContain('Flat compatibility alias: openforge create-task');
       expect(stdout).toContain('Task creation hygiene:');
+      expect(stdout).toContain('include useful --label values and dependency links when creating related follow-up Tasks');
       expect(requestCount).toBe(0);
     } finally {
       await close(server);

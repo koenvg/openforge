@@ -438,8 +438,10 @@ Create a task when you find:
 - Dead code, unused imports, or stale abstractions that should be cleaned up
 
 How to create a cleanup task:
-- Run: openforge create-task --initial-prompt "..." --worktree "$PWD" --depends-on "{task_id}"
+- Run: openforge create-task --initial-prompt "..." --worktree "$PWD" --depends-on "{task_id}" --label cleanup
 - Write a clear, actionable prompt (e.g. "Extract shared validation logic from UserForm and AdminForm")
+- Add useful --label values when the category is obvious (for example, cleanup, bug, docs, or tests); do not invent noisy labels just because labels exist
+- Keep the --depends-on link to "{task_id}" for cleanup tasks that are related to this work, and add additional prerequisite links when the order is known
 - Do NOT fix these issues yourself — just log them as tasks and stay focused on your current task
 
 Only create tasks for genuine issues worth addressing. Do not create tasks for minor style preferences or trivial nitpicks.
@@ -1267,8 +1269,10 @@ mod tests {
         assert!(prompt.contains("<openforge_code_cleanup>"));
         assert!(prompt.contains("</openforge_code_cleanup>"));
         assert!(prompt.contains(
-            "openforge create-task --initial-prompt \"...\" --worktree \"$PWD\" --depends-on \"T-801\""
+            "openforge create-task --initial-prompt \"...\" --worktree \"$PWD\" --depends-on \"T-801\" --label cleanup"
         ));
+        assert!(prompt.contains("Add useful --label values"));
+        assert!(prompt.contains("Keep the --depends-on link"));
         assert!(prompt.contains("openforge update-task --task-id \"T-801\" --summary \"...\""));
         assert!(!prompt.contains("openforge_create_task"));
         assert!(!prompt.contains("openforge_update_task"));
