@@ -218,7 +218,7 @@ describe('App window and project shortcuts', () => {
       expect(mockWindowDestroy).not.toHaveBeenCalled()
     })
 
-    it('pressing 2 cycles to next project and resets to board', async () => {
+    it('pressing 2 cycles to next project and restores its last-viewed location', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
       const ipc = await import('./lib/ipc')
@@ -237,12 +237,12 @@ describe('App window and project shortcuts', () => {
         expect(get(stores.projects)).toHaveLength(2)
       })
 
-      vi.mocked(nav.resetToBoard).mockClear()
+      vi.mocked(nav.restoreProjectView).mockClear()
       stores.activeProjectId.set('proj-1')
       window.dispatchEvent(new KeyboardEvent('keydown', { key: '2', bubbles: true }))
 
       expect(get(stores.activeProjectId)).toBe('proj-2')
-      expect(nav.resetToBoard).toHaveBeenCalled()
+      expect(nav.restoreProjectView).toHaveBeenCalledWith('proj-2')
     })
 
     it('resets remembered Flow board tab when switching projects', async () => {
@@ -333,7 +333,7 @@ describe('App window and project shortcuts', () => {
       expect(get(stores.activeProjectId)).toBe('proj-1')
     })
 
-    it('pressing Ctrl+N cycles to next project on the board and resets to board', async () => {
+    it('pressing Ctrl+N cycles to next project on the board and restores its last-viewed location', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
       const ipc = await import('./lib/ipc')
@@ -354,13 +354,13 @@ describe('App window and project shortcuts', () => {
 
       stores.currentView.set('board')
       stores.selectedTaskId.set(null)
-      vi.mocked(nav.resetToBoard).mockClear()
+      vi.mocked(nav.restoreProjectView).mockClear()
       stores.activeProjectId.set('proj-1')
 
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', ctrlKey: true, bubbles: true }))
 
       expect(get(stores.activeProjectId)).toBe('proj-2')
-      expect(nav.resetToBoard).toHaveBeenCalled()
+      expect(nav.restoreProjectView).toHaveBeenCalledWith('proj-2')
     })
 
     it('pressing Ctrl+P cycles to previous project on the board', async () => {
@@ -384,13 +384,13 @@ describe('App window and project shortcuts', () => {
 
       stores.currentView.set('board')
       stores.selectedTaskId.set(null)
-      vi.mocked(nav.resetToBoard).mockClear()
+      vi.mocked(nav.restoreProjectView).mockClear()
       stores.activeProjectId.set('proj-2')
 
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', ctrlKey: true, bubbles: true }))
 
       expect(get(stores.activeProjectId)).toBe('proj-1')
-      expect(nav.resetToBoard).toHaveBeenCalled()
+      expect(nav.restoreProjectView).toHaveBeenCalledWith('proj-1')
     })
 
     it('1 and 2 do not fire when input is focused', async () => {

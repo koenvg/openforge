@@ -1,7 +1,6 @@
 <script lang="ts">
   import { projects, activeProjectId, attentionCountByProject, reviewRequestCountByProject } from '../../lib/stores'
   import { getGitBranch, setConfig } from '../../lib/ipc'
-  import { useAppRouter } from '../../lib/router.svelte'
   import { ChevronLeft, ChevronRight, Settings, Plus, ArrowUp, ArrowDown } from '@lucide/svelte'
   import { resolveIconRailIcon } from '../../lib/iconRailIcons'
   import { GITHUB_SYNC_GLOBAL_VIEW_KEY } from '../../lib/githubSyncPlugin'
@@ -16,6 +15,7 @@
     onToggleCollapse: () => void
     onNewProject?: () => void
     onNavigate: (view: AppView) => void
+    onSelectProject: (projectId: string) => void
     pluginNavItems?: IconRailPluginNavItem[]
     reviewRequestCount?: number
   }
@@ -27,10 +27,10 @@
     onToggleCollapse,
     onNewProject,
     onNavigate,
+    onSelectProject,
     pluginNavItems = [],
     reviewRequestCount = 0,
   }: Props = $props()
-  const router = useAppRouter()
 
   let sidebarPluginNavItems = $derived(
     pluginNavItems.map((item) => ({
@@ -60,8 +60,7 @@
   })
 
   function selectProject(projectId: string) {
-    $activeProjectId = projectId
-    router.resetToBoard()
+    onSelectProject(projectId)
   }
 
   // The green dot: distinct Focus-tab tasks needing attention, excluding in-flight (running)

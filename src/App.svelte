@@ -33,7 +33,7 @@
   import { enabledPluginIds, runtimeContributionSources } from './lib/plugin/pluginStore'
   import { isPluginViewKey, makePluginViewKey } from './lib/plugin/types'
   import { activatePlugin, executePluginCommand, initializePluginRuntime, loadEnabledForProject } from './lib/plugin/pluginRegistry'
-  import { useAppRouter } from './lib/router.svelte'
+  import { useAppRouter, restoreProjectView } from './lib/router.svelte'
   import { getProjectColor } from './lib/projectColors'
   import { themeMode } from './lib/theme'
   import { useCommandHeld } from './lib/useCommandHeld.svelte'
@@ -387,6 +387,28 @@
     showCloseConfirm = false
   }
 
+  // Switch to a project, restoring its last-viewed location (tab + open task/PR)
+  // instead of always resetting to the board. The outgoing project's location is
+  // snapshotted automatically by the activeProjectId subscriber in router.svelte.ts.
+  // The remembered task is re-applied only after the target project's tasks have
+  // loaded — otherwise the "clear unknown selected task" effect drops it, because the
+  // tasks store still holds the previous project's tasks (same pattern as
+  // handleOpenTaskFromOverview). This is the single entry point every user-initiated
+  // project switch (sidebar, switcher, ⌘-cycle) goes through.
+  async function switchToProject(projectId: string) {
+    if ($activeProjectId === projectId) return
+
+    $activeProjectId = projectId
+    const rememberedTaskId = restoreProjectView(projectId)
+
+    if (rememberedTaskId) {
+      await appData.loadTasks()
+      if (get(activeProjectId) === projectId && get(tasks).some((t) => t.id === rememberedTaskId)) {
+        selectedTaskId.set(rememberedTaskId)
+      }
+    }
+  }
+
   function cycleActiveProject(direction: 'previous' | 'next', options?: { boardOnly?: boolean }) {
     if (options?.boardOnly && ($currentView !== 'board' || selectedTask !== null)) {
       return
@@ -400,8 +422,7 @@
       ? (currentIndex < 0 ? 0 : (currentIndex + 1) % projectList.length)
       : (currentIndex <= 0 ? projectList.length - 1 : currentIndex - 1)
 
-    $activeProjectId = projectList[nextIndex].id
-    router.resetToBoard()
+    void switchToProject(projectList[nextIndex].id)
   }
 
   onMount(async () => {
@@ -496,6 +517,7 @@
     onToggleCollapse={() => { appSidebarCollapsed = !appSidebarCollapsed; localStorage.setItem('appSidebarCollapsed', String(appSidebarCollapsed)) }}
     onNewProject={() => showProjectSetup = true}
     onNavigate={handleNavigate}
+    onSelectProject={switchToProject}
     pluginNavItems={sidebarPluginNavItems}
     reviewRequestCount={$reviewRequestCount}
   />
@@ -582,7 +604,7 @@
 <RateLimitToast />
 
 {#if showProjectSwitcher}
-  <ProjectSwitcherModal onClose={() => showProjectSwitcher = false} />
+  <ProjectSwitcherModal onClose={() => showProjectSwitcher = false} onSelectProject={switchToProject} />
 {/if}
 
 {#if showAttentionOverview}

@@ -1,5 +1,5 @@
 import { writable, derived } from "svelte/store";
-import type { Task, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, CiFailureNotification, RateLimitNotification, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrOverviewComment, ProjectAttention } from "./types";
+import type { Task, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, CiFailureNotification, RateLimitNotification, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrOverviewComment, ProjectAttention, ProjectViewSnapshot } from "./types";
 import type { BoardFilter } from './boardFilters'
 import { buildReviewRequestCountByProject, countAllReposUnopenedReviews, countRepoUnopenedReviews } from './prReviewBadgeCounts'
 
@@ -52,6 +52,11 @@ export const agentEvents = writable<Map<string, AgentEvent[]>>(new Map());
 export const taskRuntimeInfo = writable<Map<string, TaskRuntimeInfo>>(new Map());
 
 export const currentView = writable<AppView>("board");
+// Per-project snapshot of the last-viewed location (tab + open task/PR), keyed by
+// project id. Session-scoped (in memory only): the router captures a project's
+// location when the user switches away and restores it when they return, so
+// switching projects no longer forces everyone back to the board. See router.svelte.ts.
+export const projectViewSnapshots = writable<Map<string, ProjectViewSnapshot>>(new Map());
 export const reviewPrs = writable<ReviewPullRequest[]>([]);
 export const selectedReviewPr = writable<ReviewPullRequest | null>(null);
 export const prFileDiffs = writable<PrFileDiff[]>([]);
