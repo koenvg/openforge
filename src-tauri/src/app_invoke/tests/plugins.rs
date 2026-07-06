@@ -348,3 +348,24 @@ async fn installs_local_plugin_with_backend_app_path_state() {
     );
     let _ = std::fs::remove_file(path);
 }
+
+#[tokio::test]
+async fn install_local_plugin_preserves_app_invoke_missing_app_path_contract() {
+    let (state, path) = test_state("app_invoke_local_plugin_missing_app_path");
+
+    let err = invoke(
+        &state,
+        "install_plugin_from_local",
+        json!({ "sourcePath": "/tmp/plugin" }),
+    )
+    .await
+    .expect_err("install should require app path state before PluginPlatform install work");
+
+    assert_eq!(err.0, StatusCode::NOT_IMPLEMENTED);
+    assert_eq!(
+        err.1,
+        "app IPC command requires app data path state before Electron sidecar support"
+    );
+
+    let _ = std::fs::remove_file(path);
+}
