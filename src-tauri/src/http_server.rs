@@ -945,6 +945,21 @@ pub async fn get_projects_handler(
     Ok(Json(projects))
 }
 
+pub async fn get_project_task_labels_handler(
+    State(state): State<AppState>,
+    Path(project_id): Path<String>,
+) -> Result<Json<Vec<db::TaskLabelRow>>, (StatusCode, String)> {
+    let db = state.db.lock().unwrap();
+    let labels = db.get_project_task_labels(&project_id).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to get project labels: {e}"),
+        )
+    })?;
+
+    Ok(Json(labels))
+}
+
 pub async fn get_tasks_handler(
     State(state): State<AppState>,
     Query(query): Query<TasksQuery>,
@@ -1590,6 +1605,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/remove_task_label", post(remove_task_label_handler))
         .route("/task/:id", get(get_task_info_handler))
         .route("/projects", get(get_projects_handler))
+        .route("/project/:id/labels", get(get_project_task_labels_handler))
         .route("/tasks", get(get_tasks_handler))
         .merge(plugin_management::router())
         .route("/project/:id/attention", get(get_project_attention_handler))

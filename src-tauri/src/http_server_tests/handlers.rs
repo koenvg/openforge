@@ -42,6 +42,56 @@ async fn test_get_projects_handler_returns_all_projects() {
 }
 
 #[tokio::test]
+async fn test_get_project_task_labels_handler_lists_existing_project_labels() {
+    let (state, path) = test_state("http_get_project_task_labels_handler_lists_labels");
+    {
+        let db = state.db.lock().expect("lock db");
+        let project = db
+            .create_project("Project", "/tmp/project")
+            .expect("create project");
+        let other_project = db
+            .create_project("Other", "/tmp/other")
+            .expect("create other project");
+        let first = db
+            .create_task("First", "backlog", Some(&project.id), None, None)
+            .expect("create first task");
+        let second = db
+            .create_task("Second", "backlog", Some(&project.id), None, None)
+            .expect("create second task");
+        let other = db
+            .create_task("Other", "backlog", Some(&other_project.id), None, None)
+            .expect("create other task");
+        db.add_task_label(&first.id, "cleanup")
+            .expect("add cleanup label");
+        db.add_task_label(&second.id, "Bug").expect("add bug label");
+        db.add_task_label(&other.id, "other")
+            .expect("add other label");
+    }
+
+    let router = create_router(state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/project/P-1/labels")
+                .method("GET")
+                .body(Body::empty())
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = response_body_json(response).await;
+    let labels = json.as_array().expect("array response");
+    assert_eq!(labels.len(), 2);
+    assert_eq!(labels[0]["name"], "Bug");
+    assert_eq!(labels[1]["name"], "cleanup");
+    assert!(labels.iter().all(|label| label["project_id"] == "P-1"));
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn test_get_tasks_handler_returns_tasks_for_project() {
     let (state, path) = test_state("http_get_tasks_handler_returns_tasks");
     {

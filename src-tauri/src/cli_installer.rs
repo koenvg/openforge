@@ -362,6 +362,7 @@ mod tests {
         assert!(cli_content.contains("create-task"));
         assert!(cli_content.contains("--label"));
         assert!(cli_content.contains("add-task-label"));
+        assert!(cli_content.contains("list-project-labels"));
         assert!(cli_content.contains("list-task-labels"));
         assert!(cli_content.contains("remove-task-label"));
         assert!(!cli_content.contains("'mcp'"));
@@ -371,6 +372,7 @@ mod tests {
         assert!(skill_content.contains("openforge update-task"));
         assert!(skill_content.contains("openforge get-task"));
         assert!(skill_content.contains("openforge list-tasks"));
+        assert!(skill_content.contains("openforge list-project-labels"));
         assert!(skill_content.contains("openforge add-task-label"));
         assert!(skill_content.contains("openforge remove-task-label"));
         assert!(skill_content.contains("openforge delete-task"));
@@ -382,6 +384,12 @@ mod tests {
         assert!(skill_content.contains("add useful --label values and dependency links"));
         assert!(skill_content.contains("When creating multiple related Tasks"));
         assert_eq!(skill_content.matches("openforge get-task").count(), 1);
+        assert_eq!(
+            skill_content
+                .matches("openforge list-project-labels")
+                .count(),
+            1
+        );
         assert_eq!(
             skill_content.matches("openforge list-task-labels").count(),
             1
@@ -476,6 +484,7 @@ mod tests {
             assert!(content.contains("openforge delete-task"));
             assert!(content.contains("openforge get-task"));
             assert!(content.contains("openforge list-tasks"));
+            assert!(content.contains("openforge list-project-labels"));
             assert!(content.contains("openforge list-task-labels"));
             assert!(content.contains("openforge add-task-label"));
             assert!(content.contains("openforge remove-task-label"));
@@ -488,6 +497,7 @@ mod tests {
             assert!(content.contains("openforge create-task --help"));
             assert!(content.contains("openforge update-task --help"));
             assert_eq!(content.matches("openforge get-task").count(), 1);
+            assert_eq!(content.matches("openforge list-project-labels").count(), 1);
             assert_eq!(content.matches("openforge list-task-labels").count(), 1);
             assert!(!content.contains("reverse dependents"));
             assert!(!content.contains("repoint each dependent"));
