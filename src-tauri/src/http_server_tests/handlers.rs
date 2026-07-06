@@ -460,6 +460,48 @@ async fn test_delete_task_handler_completes_task_and_keeps_cli_retrieval() {
 }
 
 #[tokio::test]
+async fn test_hard_delete_task_handler_removes_task_row() {
+    let (state, path) = test_state("http_hard_delete_task_handler_removes_task");
+    {
+        let db = state.db.lock().expect("lock db");
+        let project = db
+            .create_project("Project", "/tmp/project")
+            .expect("create project");
+        db.set_config("task_id_prefix", "T")
+            .expect("set task prefix");
+        db.create_task("Task to remove", "backlog", Some(&project.id), None, None)
+            .expect("create task");
+    }
+
+    let router = create_router(state.clone());
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/hard_delete_task")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"task_id":"T-1"}"#))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = response_body_json(response).await;
+    assert_eq!(json["task_id"], "T-1");
+    assert_eq!(json["status"], "deleted");
+    assert!(state
+        .db
+        .lock()
+        .expect("lock db")
+        .get_task("T-1")
+        .expect("get task")
+        .is_none());
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn test_delete_task_handler_rejects_non_backlog_task() {
     let (state, path) = test_state("http_delete_task_handler_non_backlog_task");
     {
