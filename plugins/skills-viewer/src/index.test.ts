@@ -85,12 +85,14 @@ describe('skills-viewer plugin', () => {
 
   it('keeps native list button semantics until full ARIA tree keyboarding exists', () => {
     const skillsViewSource = readFileSync(join(pluginSrcDir, 'SkillsView.svelte'), 'utf8')
+    const skillsListSource = readFileSync(join(pluginSrcDir, 'SkillsListSection.svelte'), 'utf8')
+    const combinedSource = `${skillsViewSource}\n${skillsListSource}`
 
-    expect(skillsViewSource).not.toContain('role="tree"')
-    expect(skillsViewSource).not.toContain('role="treeitem"')
-    expect(skillsViewSource).not.toContain('aria-selected')
-    expect(skillsViewSource).toContain('aria-expanded')
-    expect(skillsViewSource).toContain('aria-current')
+    expect(combinedSource).not.toContain('role="tree"')
+    expect(combinedSource).not.toContain('role="treeitem"')
+    expect(combinedSource).not.toContain('aria-selected')
+    expect(skillsListSource).toContain('aria-expanded')
+    expect(skillsListSource).toContain('aria-current')
   })
 
   it('registers plugin-owned backend methods for skill list and save contracts', async () => {

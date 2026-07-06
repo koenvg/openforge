@@ -10,9 +10,7 @@
     updateFileBrowserProjectState,
     type FileBrowserProjectState,
   } from './lib/fileExplorer'
-  import ProjectFileTree from './ProjectFileTree.svelte'
-  import FileContentViewer from './FileContentViewer.svelte'
-  import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
+  import FilesBrowserSection from './FilesBrowserSection.svelte'
 
   interface Props {
     api: FrontendOpenForgeAPI
@@ -335,99 +333,32 @@
     {/if}
   </div>
 
-  <div class="flex flex-1 min-h-0 overflow-hidden">
-    {#if !$activeProjectId}
-      <div class="flex-1 flex items-center justify-center text-base-content/50 text-sm p-6 text-center">
-        Select a project to browse files
-      </div>
-    {:else if loading}
-      <div class="flex-1 flex items-center justify-center p-6">
-        <div class="flex flex-col items-center gap-3 text-center">
-          <span class="loading loading-spinner loading-md text-primary" aria-hidden="true"></span>
-          <p class="text-sm text-base-content/70">Loading project files…</p>
-        </div>
-      </div>
-    {:else if rootError !== null && rootEntries.length === 0}
-      <div class="flex-1 flex items-center justify-center p-6">
-        <div class="text-center space-y-3 max-w-sm">
-          <div class="space-y-2">
-            <h3 class="text-base font-semibold">Failed to load files</h3>
-            <p class="text-sm text-error">{rootError}</p>
-          </div>
-          <button class="btn btn-sm btn-outline" type="button" onclick={retryRootLoad}>
-            Retry loading project files
-          </button>
-        </div>
-      </div>
-    {:else}
-      <ResizablePanel storageKey="files-tree" defaultWidth={240} side="left">
-        <div class="flex h-full min-h-0 flex-col">
-          {#if directoryError !== null}
-            <div class="border-b border-base-300 bg-base-100 p-3 text-xs">
-              <div class="space-y-2">
-                <div>
-                  <p class="font-medium text-base-content break-all">Unable to load directory {directoryError.path}</p>
-                  <p class="mt-1 text-error break-words">{directoryError.message}</p>
-                </div>
-                <button class="btn btn-xs btn-outline" type="button" onclick={() => retryDirectoryLoad(directoryError?.path ?? '')}>
-                  Retry loading {directoryError.path} directory
-                </button>
-              </div>
-            </div>
-          {/if}
-          {#if failedRevealPath !== null}
-            <div class="border-b border-base-300 bg-base-100 p-3 text-xs">
-              <div class="space-y-2">
-                <p class="font-medium text-base-content break-all">Unable to reveal {failedRevealPath}</p>
-                <button class="btn btn-xs btn-outline" type="button" onclick={() => retryRevealPath(failedRevealPath ?? '')}>
-                  Retry revealing {failedRevealPath}
-                </button>
-              </div>
-            </div>
-          {/if}
-          <div class="min-h-0 flex-1">
-            {#if rootEntries.length === 0}
-              <div class="flex items-center justify-center h-full text-base-content/50 text-xs p-4 text-center">
-                This project folder is empty
-              </div>
-            {:else}
-              <ProjectFileTree
-                entries={flatEntries}
-                expandedDirs={expandedPaths}
-                {selectedPath}
-                onToggleDir={toggleDir}
-                onSelectFile={selectFile}
-                initialScrollTop={projectState.treeScrollTop}
-                onScrollTopChange={updateTreeScrollTop}
-                focusSelectedRequest={treeFocusRequest}
-              />
-            {/if}
-          </div>
-        </div>
-      </ResizablePanel>
-
-      <div class="flex-1 min-h-0 overflow-hidden flex flex-col">
-        {#if selectedPath === null}
-          <div class="flex-1 flex items-center justify-center text-base-content/40 text-sm p-6 text-center">
-            Select a file to view its content
-          </div>
-        {:else}
-          <FileContentViewer
-            {api}
-            content={fileContent}
-            fileName={selectedFileName}
-            filePath={selectedPath}
-            projectId={$activeProjectId}
-            error={fileError}
-            modifiedAt={selectedEntry?.modifiedAt ?? null}
-            scrollTop={projectState.contentScrollTop}
-            onScrollTopChange={updateContentScrollTop}
-            onRetryFile={retrySelectedFile}
-            focusRequestKey={previewFocusRequest}
-            onReturnFocusToTree={returnFocusToSelectedFile}
-          />
-        {/if}
-      </div>
-    {/if}
-  </div>
+  <FilesBrowserSection
+    {api}
+    activeProjectId={$activeProjectId}
+    {loading}
+    {rootError}
+    {directoryError}
+    {fileError}
+    {failedRevealPath}
+    {rootEntries}
+    {flatEntries}
+    {expandedPaths}
+    {selectedPath}
+    {selectedEntry}
+    {selectedFileName}
+    {projectState}
+    {fileContent}
+    {previewFocusRequest}
+    {treeFocusRequest}
+    onRetryRootLoad={retryRootLoad}
+    onRetryDirectoryLoad={retryDirectoryLoad}
+    onRetrySelectedFile={retrySelectedFile}
+    onRetryRevealPath={retryRevealPath}
+    onToggleDir={toggleDir}
+    onSelectFile={selectFile}
+    onTreeScrollTopChange={updateTreeScrollTop}
+    onContentScrollTopChange={updateContentScrollTop}
+    onReturnFocusToSelectedFile={returnFocusToSelectedFile}
+  />
 </div>

@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { tick } from 'svelte'
   import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
   import { dayOfWeekFromCron, describeCronExpression, timeOfDayFromCron, validateFiveFieldCron } from '../lib/cron'
   import type { ScheduledFireOutcome, SchedulePreset, TaskSchedule, TaskScheduleDraft, TaskScheduleMode } from '../lib/types'
+  import TaskScheduleComposerSection from './TaskScheduleComposerSection.svelte'
+  import TaskSchedulesListSection from './TaskSchedulesListSection.svelte'
 
   interface Props {
     api: FrontendOpenForgeAPI
@@ -78,7 +79,7 @@
   let error = $state<string | null>(null)
   let previousProjectId: string | null = null
   let loadRequestId = 0
-  let titleInput = $state<HTMLInputElement | null>(null)
+  let titleFocusRequest = $state(0)
   let editAnnouncement = $state('')
 
   let sortedSchedules = $derived([...schedules].sort((a, b) => a.nextFireAt - b.nextFireAt || a.title.localeCompare(b.title)))
@@ -161,8 +162,7 @@
     fieldErrors = emptyFieldErrors()
     error = null
     editAnnouncement = `Editing ${schedule.title}`
-    await tick()
-    titleInput?.focus()
+    titleFocusRequest += 1
   }
 
   async function deleteSchedule(schedule: TaskSchedule) {
@@ -284,181 +284,39 @@
       <div class="alert alert-error mb-4" role="alert" aria-live="assertive">{error}</div>
     {/if}
 
-
     <div class="grid items-start gap-y-6 gap-x-4 md:grid-cols-[minmax(18rem,1fr)_minmax(22rem,28rem)]">
-      <section class="min-w-0 space-y-3" aria-label="Task schedules list">
-        {#if loading && schedules.length === 0}
-          <div class="loading loading-spinner loading-md" aria-label="Loading Task Schedules"></div>
-        {:else if sortedSchedules.length === 0}
-          <div class="rounded-box border border-dashed border-base-300 bg-base-100 px-4 py-6 text-sm text-base-content/70">
-            <h2 class="text-base font-semibold text-base-content">No Task Schedules yet</h2>
-            <p class="mt-1">Create the first project-scoped Task Schedule with the composer.</p>
-          </div>
-        {:else}
-          {#each sortedSchedules as schedule (schedule.id)}
-            <article class="rounded-box border border-base-300 bg-base-100 px-3 py-4 shadow-sm">
-              <div class="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h2 class="text-lg font-semibold">{schedule.title}</h2>
-                  <p class="mt-1 line-clamp-3 whitespace-pre-wrap text-sm text-base-content/70">{schedule.prompt}</p>
-                </div>
-                <div class="badge {schedule.enabled ? 'badge-success' : 'badge-ghost'}">
-                  {schedule.enabled ? 'Enabled' : 'Disabled'}
-                </div>
-              </div>
+      <TaskSchedulesListSection
+        {loading}
+        schedules={sortedSchedules}
+        {runningScheduleId}
+        {deletingScheduleId}
+        {confirmingDeleteId}
+        onEditSchedule={(schedule) => { void editSchedule(schedule) }}
+        onDeleteSchedule={(schedule) => { void deleteSchedule(schedule) }}
+        onRunNow={(scheduleId) => { void runNow(scheduleId) }}
+        onConfirmDelete={(scheduleId) => { confirmingDeleteId = scheduleId }}
+        {runNowDescription}
+        {schedulePresetLabel}
+        {scheduleHumanDescription}
+        {formatDate}
+      />
 
-              <dl class="mt-4 grid gap-2 text-sm sm:grid-cols-2">
-                <div>
-                  <dt class="text-base-content/60">Schedule Preset</dt>
-                  <dd class="font-medium">{schedulePresetLabel(schedule)}</dd>
-                  {#if scheduleHumanDescription(schedule)}
-                    <dd class="text-xs text-base-content/60">{scheduleHumanDescription(schedule)}</dd>
-                  {/if}
-                </div>
-                <div>
-                  <dt class="text-base-content/60">Mode</dt>
-                  <dd class="font-medium">{schedule.mode === 'create-and-start' ? 'Create + start' : 'Create only'}</dd>
-                </div>
-                <div>
-                  <dt class="text-base-content/60">Next Scheduled Fire</dt>
-                  <dd class="font-medium">{formatDate(schedule.nextFireAt)}</dd>
-                </div>
-                <div>
-                  <dt class="text-base-content/60">Last scheduled Task</dt>
-                  <dd class="font-medium">{schedule.lastTaskId ?? 'None'}</dd>
-                </div>
-              </dl>
-
-              <p class="mt-3 text-xs leading-relaxed text-base-content/60">{runNowDescription(schedule)}</p>
-
-              {#if schedule.history.length > 0}
-                <div class="mt-4 rounded-box bg-base-200 p-3">
-                  <h3 class="text-sm font-semibold">Recent Scheduled Fires</h3>
-                  <ul class="mt-2 space-y-1 text-xs text-base-content/70">
-                    {#each [...schedule.history].reverse() as outcome (outcome.id)}
-                      <li>{formatDate(outcome.firedAt)} · {outcome.status} · {outcome.message}</li>
-                    {/each}
-                  </ul>
-                </div>
-              {/if}
-
-              <div class="mt-4 flex flex-wrap gap-2">
-                <button class="btn btn-primary btn-sm" type="button" disabled={runningScheduleId === schedule.id || deletingScheduleId === schedule.id} onclick={() => runNow(schedule.id)}>
-                  {runningScheduleId === schedule.id ? 'Running now…' : 'Run now'}
-                </button>
-                <button class="btn btn-sm" type="button" disabled={runningScheduleId === schedule.id || deletingScheduleId === schedule.id} onclick={() => { void editSchedule(schedule) }}>Edit</button>
-                {#if confirmingDeleteId === schedule.id}
-                  <span class="inline-flex flex-wrap items-center gap-2 rounded-box bg-base-200 px-2 py-1 text-sm" role="group" aria-label="Confirm delete Task Schedule">
-                    <span>Delete this Task Schedule?</span>
-                    <button class="btn btn-error btn-xs" type="button" disabled={deletingScheduleId === schedule.id} onclick={() => deleteSchedule(schedule)}>
-                      {deletingScheduleId === schedule.id ? 'Deleting…' : 'Confirm delete'}
-                    </button>
-                    <button class="btn btn-ghost btn-xs" type="button" disabled={deletingScheduleId === schedule.id} onclick={() => { confirmingDeleteId = null }}>Cancel</button>
-                  </span>
-                {:else}
-                  <button class="btn btn-ghost btn-sm" type="button" disabled={runningScheduleId === schedule.id || deletingScheduleId === schedule.id} onclick={() => { confirmingDeleteId = schedule.id }}>Delete</button>
-                {/if}
-              </div>
-            </article>
-          {/each}
-        {/if}
-      </section>
-
-      <aside class="rounded-box border border-base-300 bg-base-100 px-4 py-5 shadow-sm md:sticky md:top-4" role="region" aria-label="Task schedule composer">
-        <div class="space-y-1">
-          <h2 class="text-lg font-semibold">{composerTitle}</h2>
-          <p class="text-xs leading-relaxed text-base-content/60">Use a plain prompt and simple cadence. Scheduled Fires create normal board Tasks.</p>
-        </div>
-        <form class="mt-5 flex flex-col gap-4" onsubmit={(event) => { event.preventDefault(); void saveSchedule() }}>
-          <label class="form-control flex w-full flex-col gap-1">
-            <span class="label-text text-xs font-medium uppercase tracking-wide text-base-content/60">Title</span>
-            <input bind:this={titleInput} class="input input-bordered w-full" bind:value={draft.title} placeholder="Daily dependency triage" required />
-          </label>
-
-          <label class="form-control flex w-full flex-col gap-1">
-            <span class="label-text text-xs font-medium uppercase tracking-wide text-base-content/60">Plain prompt</span>
-            <textarea class="textarea textarea-bordered min-h-40 w-full resize-y leading-relaxed" bind:value={draft.prompt} placeholder="Describe the Task to create on each Scheduled Fire" required></textarea>
-          </label>
-
-          {#if draft.advancedCron}
-            <div class="form-control flex w-full flex-col gap-1">
-              <label for="cron-expression" class="label-text text-xs font-medium uppercase tracking-wide text-base-content/60">Cron expression</label>
-              <input
-                id="cron-expression"
-                class="input input-bordered w-full font-mono {fieldErrors.cron ? 'input-error' : ''}"
-                bind:value={draft.cron}
-                placeholder="*/30 * * * *"
-                aria-describedby="cron-help"
-                aria-invalid={fieldErrors.cron ? 'true' : 'false'}
-                oninput={() => { fieldErrors = { ...fieldErrors, cron: null } }}
-                onblur={() => { if (draft.advancedCron && draft.cron.trim()) validateDraft() }}
-              />
-              <span id="cron-help" class="text-xs {fieldErrors.cron ? 'text-error' : 'text-base-content/60'}">{fieldErrors.cron ?? CRON_HELP_TEXT}</span>
-            </div>
-          {:else}
-            <div class="grid gap-3 sm:grid-cols-2">
-              <label class="form-control flex w-full flex-col gap-1">
-                <span class="label-text text-xs font-medium uppercase tracking-wide text-base-content/60">Interval</span>
-                <select class="select select-bordered w-full" bind:value={draft.preset}>
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
-                </select>
-              </label>
-
-              <label class="form-control flex w-full flex-col gap-1">
-                <span class="label-text text-xs font-medium uppercase tracking-wide text-base-content/60">Run at</span>
-                <select class="select select-bordered w-full" bind:value={draft.timeOfDay}>
-                  {#each timeOptions as time}
-                    <option value={time}>{time}</option>
-                  {/each}
-                </select>
-              </label>
-
-              {#if draft.preset === 'weekly'}
-                <label class="form-control flex w-full flex-col gap-1">
-                  <span class="label-text text-xs font-medium uppercase tracking-wide text-base-content/60">Day</span>
-                  <select class="select select-bordered w-full" bind:value={draft.dayOfWeek}>
-                    {#each dayOfWeekOptions as day}
-                      <option value={day.value}>{day.label}</option>
-                    {/each}
-                  </select>
-                </label>
-              {/if}
-            </div>
-          {/if}
-
-          <label class="flex min-h-11 items-center gap-3 rounded-box bg-base-200/60 px-3 text-sm">
-            <input class="checkbox checkbox-primary checkbox-sm" type="checkbox" bind:checked={draft.advancedCron} onchange={() => { fieldErrors = emptyFieldErrors() }} />
-            <span>Advanced: use a cron expression</span>
-          </label>
-
-          <div class="form-control flex w-full flex-col gap-1">
-            <label for="schedule-mode" class="label-text text-xs font-medium uppercase tracking-wide text-base-content/60">Mode</label>
-            <select id="schedule-mode" class="select select-bordered w-full" bind:value={draft.mode} aria-describedby="schedule-mode-help">
-              <option value="create-and-start">Create + start</option>
-              <option value="create-only">Create only</option>
-            </select>
-            <span id="schedule-mode-help" class="text-xs text-base-content/60">
-              {draft.mode === 'create-and-start'
-                ? 'Scheduled Fires create a board Task and start implementation when no previous scheduled Task is still open.'
-                : 'Scheduled Fires create a board Task and leave it in the backlog for manual start.'}
-            </span>
-          </div>
-
-          <label class="flex min-h-11 items-center gap-3 rounded-box bg-base-200/60 px-3 text-sm">
-            <input class="toggle toggle-primary" type="checkbox" bind:checked={draft.enabled} />
-            <span>{enabledToggleLabel}</span>
-          </label>
-
-          <div class="flex flex-wrap gap-2 pt-1">
-            <button class="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save Task Schedule'}</button>
-            {#if draft.id}
-              <button class="btn btn-ghost" type="button" disabled={saving} onclick={() => { draft = emptyDraft(); fieldErrors = emptyFieldErrors() }}>Cancel</button>
-            {/if}
-          </div>
-        </form>
-      </aside>
+      <TaskScheduleComposerSection
+        {draft}
+        {fieldErrors}
+        {timeOptions}
+        {dayOfWeekOptions}
+        {composerTitle}
+        {enabledToggleLabel}
+        {saving}
+        cronHelpText={CRON_HELP_TEXT}
+        {titleFocusRequest}
+        onDraftChange={(nextDraft) => { draft = nextDraft }}
+        onFieldErrorsChange={(nextFieldErrors) => { fieldErrors = nextFieldErrors }}
+        onValidateDraft={() => { validateDraft() }}
+        onSaveSchedule={() => { void saveSchedule() }}
+        onCancelEdit={() => { draft = emptyDraft(); fieldErrors = emptyFieldErrors() }}
+      />
     </div>
   {/if}
   </div>

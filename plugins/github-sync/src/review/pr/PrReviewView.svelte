@@ -5,19 +5,9 @@
   import { reviewPrs, selectedReviewPr, prFileDiffs, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, authoredPrs, activeProjectId, pendingReviewPrOpen } from '../../lib/stores'
   import { getHTMLElementAt, isInputFocused } from '../../lib/domUtils'
   import { useVimNavigation } from '../../lib/useVimNavigation.svelte'
-  import { timeAgoFromSeconds } from '../../lib/timeAgo'
-  import ReviewPrCard from '@openforge-app/pr-review-ui/ReviewPrCard.svelte'
-  import AuthoredPrCard from '@openforge-app/pr-review-ui/AuthoredPrCard.svelte'
   import { sortDoNotReviewLast } from '@openforge-app/pr-review-ui/prSort'
-  import FileTree from '@openforge-app/pr-review-ui/FileTree.svelte'
-  import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
-  import DiffViewer from '@openforge-app/pr-review-ui/DiffViewer.svelte'
-  import { getReviewFileIdentity } from '@openforge-app/pr-review-ui/reviewFileIdentity'
-  import ProjectPageHeader from '../../project/ProjectPageHeader.svelte'
-  import ReviewSubmitPanel from '@openforge-app/pr-review-ui/ReviewSubmitPanel.svelte'
-  import PrOverviewTab from '@openforge-app/pr-review-ui/PrOverviewTab.svelte'
-  import WalkthroughTab from './WalkthroughTab.svelte'
-  import { isPrLargeEnoughForWalkthroughHint } from '../../lib/walkthroughViewState'
+  import PrReviewDetailSection from './PrReviewDetailSection.svelte'
+  import PrReviewListSection from './PrReviewListSection.svelte'
   import type { ReviewPullRequest, AuthoredPullRequest, PrFileDiff, PrOverviewComment, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import { createGithubSyncPrReviewClient } from './githubSyncClient'
   import {
@@ -74,8 +64,6 @@
   let error = $state<string | null>(null)
   let authoredError = $state<string | null>(null)
   let githubTokenConfigured = $state<boolean | null>(null)
-  let diffViewer = $state<DiffViewer>()
-  let prFileTree = $state<FileTree>()
   let fileTreeVisible = $state(true)
   let activeTab = $state<PrDetailTab>('overview')
   let reviewedFileShas = $state<Map<string, string>>(new Map())
@@ -534,12 +522,6 @@
     activeTab = 'overview'
   }
 
-  function handleFileSelect(filename: string) {
-    if (diffViewer) {
-      diffViewer.scrollToFile(filename)
-    }
-  }
-
   function openPrOnGitHub() {
     if ($selectedReviewPr) {
       api.system.openUrl($selectedReviewPr.html_url)
@@ -740,375 +722,73 @@
 
 <div class="flex flex-col w-full h-full min-h-0 overflow-hidden">
   {#if $selectedReviewPr}
-    <div class="flex flex-col h-full min-h-0 overflow-hidden">
-      <div class="flex flex-col gap-1.5 px-4 py-2.5 border-b border-base-300 shrink-0" style="background-color: var(--project-bg-alt, oklch(var(--b2)))">
-        <div class="flex items-center gap-2 min-w-0">
-          <button class="btn btn-ghost btn-xs text-base-content/50 shrink-0" onclick={backToList}>← Back</button>
-          <span class="badge badge-primary badge-sm shrink-0">{$selectedReviewPr.repo_owner}/{$selectedReviewPr.repo_name}</span>
-          <h2 class="text-sm font-semibold text-base-content m-0 truncate flex-1">{$selectedReviewPr.title}</h2>
-          <span
-            class="text-xs text-primary font-medium cursor-pointer hover:opacity-80 hover:underline shrink-0"
-            role="link"
-            tabindex="0"
-            onclick={openPrOnGitHub}
-            onkeydown={(e: KeyboardEvent) => e.key === 'Enter' && openPrOnGitHub()}
-          >GitHub ↗</span>
-        </div>
-        <div class="flex items-center">
-          <div class="flex gap-1" role="tablist" aria-label="Pull request detail sections">
-            <button
-              role="tab"
-              aria-selected={activeTab === 'overview'}
-              class="btn btn-ghost btn-xs {activeTab === 'overview' ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
-              onclick={() => { activeTab = 'overview' }}
-            >Overview</button>
-            <button
-              role="tab"
-              aria-selected={activeTab === 'files'}
-              class="btn btn-ghost btn-xs {activeTab === 'files' ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
-              onclick={() => { activeTab = 'files' }}
-            >Files changed <span class="badge badge-xs ml-1">{$prFileDiffs.length}</span></button>
-            <button
-              class="btn btn-ghost btn-xs {activeTab === 'walkthrough' ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
-              onclick={() => { activeTab = 'walkthrough' }}
-              title={isPrLargeEnoughForWalkthroughHint($selectedReviewPr, $prFileDiffs) ? 'This PR is large — a walkthrough may help.' : 'AI walkthrough'}
-            >
-              Walkthrough
-              {#if isPrLargeEnoughForWalkthroughHint($selectedReviewPr, $prFileDiffs)}
-                <span class="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-warning"></span>
-              {/if}
-            </button>
-          </div>
-          <span class="flex-1"></span>
-          <div class="flex items-center gap-2 text-xs text-base-content/50">
-            <span class="font-semibold text-base-content">#{$selectedReviewPr.number}</span>
-            <span class="text-base-300">•</span>
-            <span class="font-medium">{$selectedReviewPr.user_login}</span>
-            <span class="text-base-300">•</span>
-            <span>{timeAgoFromSeconds($selectedReviewPr.created_at)}</span>
-          </div>
-        </div>
-      </div>
-
-      {#if activeTab === 'overview'}
-        <PrOverviewTab
-          pr={$selectedReviewPr}
-          comments={$prOverviewComments}
-          onCommentsChange={(comments) => { $prOverviewComments = comments }}
-          loadComments={loadOverviewComments}
-          onOpenUrl={(url) => api.system.openUrl(url)}
-        />
-      {:else if activeTab === 'walkthrough'}
-        <WalkthroughTab
-          {api}
-          {githubSync}
-          pr={$selectedReviewPr}
-          files={$prFileDiffs}
-          fetchFileContents={fetchPrFileContents}
-          projectId={$activeProjectId}
-        />
-      {:else}
-        <div class="flex flex-1 min-h-0 overflow-hidden">
-          {#if isLoading}
-            <div class="flex flex-col items-center justify-center flex-1 gap-3 text-base-content/50 text-sm" role="status" aria-live="polite" aria-atomic="true">
-              <span class="loading loading-spinner loading-md text-primary" aria-hidden="true"></span>
-              <span>Loading diffs...</span>
-            </div>
-          {:else if error}
-            <div class="flex flex-col items-center justify-center h-full gap-3 text-error text-sm text-center p-5" role="alert" aria-live="assertive">
-              <span class="text-5xl" aria-hidden="true">⚠</span>
-              <span>{error}</span>
-            </div>
-          {:else}
-            {#if fileTreeVisible}
-              <ResizablePanel storageKey="pr-review-file-tree" defaultWidth={260} minWidth={160} maxWidth={500} side="left">
-                <FileTree
-                  bind:this={prFileTree}
-                  files={$prFileDiffs}
-                  onSelectFile={handleFileSelect}
-                  {reviewedFileShas}
-                  getFileReviewIdentity={getReviewFileIdentity}
-                  onToggleFileReviewed={handleToggleFileReviewed}
-                  onRequestFocusDiff={() => diffViewer?.focusDiff()}
-                />
-              </ResizablePanel>
-            {/if}
-            <DiffViewer
-              bind:this={diffViewer}
-              files={$prFileDiffs}
-              existingComments={$reviewComments}
-              repoOwner={$selectedReviewPr.repo_owner}
-              repoName={$selectedReviewPr.repo_name}
-              {fileTreeVisible}
-              onToggleFileTree={() => { fileTreeVisible = !fileTreeVisible }}
-              fetchFileContents={fetchPrFileContents}
-              agentComments={$agentReviewComments}
-              pendingComments={$pendingManualComments}
-              onPendingCommentsChange={(comments) => { $pendingManualComments = comments }}
-              onAgentCommentsChange={(comments) => { $agentReviewComments = comments }}
-              onUpdateAgentCommentStatus={(commentId, status) => githubSync.updateAgentReviewCommentStatus({ commentId, status })}
-              onOpenUrl={(url) => api.system.openUrl(url)}
-              {reviewedFileShas}
-              onToggleFileReviewed={handleToggleFileReviewed}
-              getFileReviewIdentity={getReviewFileIdentity}
-              onRequestFocusFileTree={() => prFileTree?.focusTree()}
-            >
-              {#snippet footer()}
-                <ReviewSubmitPanel
-                  repoOwner={$selectedReviewPr.repo_owner}
-                  repoName={$selectedReviewPr.repo_name}
-                  prNumber={$selectedReviewPr.number}
-                  commitId={$selectedReviewPr.head_sha}
-                  pendingComments={$pendingManualComments}
-                  onPendingCommentsChange={(comments) => { $pendingManualComments = comments }}
-                  onSubmitReview={submitReview}
-                />
-              {/snippet}
-            </DiffViewer>
-          {/if}
-        </div>
-      {/if}
-    </div>
+    <PrReviewDetailSection
+      {api}
+      {githubSync}
+      pr={$selectedReviewPr}
+      activeProjectId={$activeProjectId}
+      {activeTab}
+      files={$prFileDiffs}
+      {isLoading}
+      {error}
+      reviewComments={$reviewComments}
+      pendingManualComments={$pendingManualComments}
+      overviewComments={$prOverviewComments}
+      agentReviewComments={$agentReviewComments}
+      {fileTreeVisible}
+      {reviewedFileShas}
+      onBackToList={backToList}
+      onOpenPrOnGitHub={openPrOnGitHub}
+      onActiveTabChange={(tab) => { activeTab = tab }}
+      onOverviewCommentsChange={(comments) => { $prOverviewComments = comments }}
+      {loadOverviewComments}
+      fetchFileContents={fetchPrFileContents}
+      onToggleFileTree={() => { fileTreeVisible = !fileTreeVisible }}
+      onPendingCommentsChange={(comments) => { $pendingManualComments = comments }}
+      onAgentCommentsChange={(comments) => { $agentReviewComments = comments }}
+      onUpdateAgentCommentStatus={(commentId, status) => githubSync.updateAgentReviewCommentStatus({ commentId, status })}
+      onToggleFileReviewed={handleToggleFileReviewed}
+      onSubmitReview={submitReview}
+      onOpenUrl={(url) => api.system.openUrl(url)}
+    />
   {:else}
-    <div class="flex flex-col h-full overflow-hidden">
-      <ProjectPageHeader
-        title={headerTitle}
-        subtitle={headerSubtitle}
-      >
-        {#snippet actions()}
-          {#if showFilters}
-          <div class="relative">
-            <button
-              class="btn btn-ghost btn-sm gap-1 {excludedRepos.size > 0 ? 'text-warning' : 'text-base-content/50'}"
-              title="Filter repositories"
-              aria-label="Filter repositories"
-              aria-haspopup="dialog"
-              aria-expanded={showFilterDropdown}
-              onclick={() => { showFilterDropdown = !showFilterDropdown }}
-            >
-              {#if excludedRepos.size > 0}
-                <span class="badge badge-warning badge-xs">{excludedRepos.size}</span>
-              {/if}
-              Filter
-            </button>
-              {#if showFilterDropdown}
-                <!-- Invisible backdrop to close dropdown on outside click -->
-               <!-- svelte-ignore a11y_click_events_have_key_events -->
-               <div role="presentation" class="fixed inset-0 z-40" onclick={() => { showFilterDropdown = false }}></div>
-               <div class="absolute right-0 top-full mt-1 z-50 bg-base-100 border border-base-300 rounded-lg shadow-lg w-[320px] p-3" role="dialog" aria-label="Excluded repositories filter">
-                <div class="text-xs font-semibold text-base-content/50 mb-2">Excluded Repositories</div>
-
-                <!-- Manual input to add a repo -->
-                <form class="flex gap-1.5 mb-3" onsubmit={(e) => { e.preventDefault(); addExcludedRepo(newRepoInput) }}>
-                  <input
-                    type="text"
-                    class="input input-bordered input-xs flex-1"
-                    aria-label="Repository to exclude"
-                    placeholder="owner/repo"
-                    bind:value={newRepoInput}
-                  />
-                  <button type="submit" class="btn btn-primary btn-xs" disabled={!newRepoInput.trim()}>Add</button>
-                </form>
-
-                <!-- Current exclusion list -->
-                {#if excludedRepos.size > 0}
-                  <div class="flex flex-col gap-1 mb-3 max-h-[160px] overflow-y-auto">
-                    {#each [...excludedRepos].sort() as repo}
-                      <div class="flex items-center justify-between px-2 py-1 rounded bg-base-200 text-sm">
-                        <span class="text-base-content truncate">{repo}</span>
-                        <button
-                          class="btn btn-ghost btn-xs text-base-content/40 hover:text-error"
-                          onclick={() => removeExcludedRepo(repo)}
-                          title="Remove from exclusion list"
-                          aria-label="Remove {repo} from excluded repositories"
-                        ><span aria-hidden="true">✕</span></button>
-                      </div>
-                    {/each}
-                  </div>
-                {:else}
-                  <div class="text-xs text-base-content/40 px-1 mb-3">No repositories excluded</div>
-                {/if}
-
-                <!-- Quick-add suggestions from current PRs -->
-                {#if suggestedRepos().length > 0}
-                  <div class="border-t border-base-300 pt-2">
-                    <div class="text-xs text-base-content/40 mb-1.5">Quick add from open PRs</div>
-                    <div class="flex flex-wrap gap-1">
-                      {#each suggestedRepos() as repo}
-                        <button
-                          class="btn btn-ghost btn-xs text-base-content/60"
-                          aria-label="Exclude {repo} from pull request lists"
-                          onclick={() => addExcludedRepo(repo)}
-                        >+ {repo}</button>
-                      {/each}
-                    </div>
-                  </div>
-                {/if}
-              </div>
-            {/if}
-          </div>
-          {/if}
-        {/snippet}
-      </ProjectPageHeader>
-
-      {#if projectHasNoRepo}
-        <div class="flex flex-col items-center justify-center flex-1 gap-3 text-base-content/70 text-center p-8">
-          <div class="badge badge-ghost badge-lg">Not linked</div>
-          <h3 class="text-xl font-semibold text-base-content m-0">This project isn't linked to a GitHub repository</h3>
-          <p class="text-sm m-0 max-w-md">{projectName} has no GitHub remote, so there are no pull requests to show here. Open <span class="font-medium">All Pull Requests</span> to review pull requests across all your repositories.</p>
-        </div>
-      {:else}
-      <div class="flex flex-1 overflow-hidden">
-        <!-- Left column: Review Requests -->
-        <div class="flex-1 flex flex-col overflow-hidden border-r border-base-300">
-          <div class="flex items-center justify-between px-5 py-3 bg-base-200/50 border-b border-base-300 shrink-0">
-            <div class="flex items-center gap-2">
-              <h3 class="text-sm font-semibold text-base-content m-0">Review Requests</h3>
-              <span class="badge badge-primary badge-xs">{filteredReviewPrs.length}</span>
-            </div>
-            <button class="btn btn-xs btn-ghost text-base-content/50" aria-label="Refresh review requests" onclick={refreshPrs} disabled={isLoading}>
-              {isLoading ? 'Refreshing' : 'Refresh'}
-            </button>
-          </div>
-
-          <div class="flex-1 overflow-y-auto p-5 pb-8">
-            {#if isLoading && filteredReviewPrs.length === 0}
-              <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm">
-                <span class="loading loading-spinner loading-md text-primary"></span>
-                <span>Loading PRs...</span>
-              </div>
-            {:else if error}
-              <div class="flex flex-col items-center justify-center h-full gap-3 text-error text-sm text-center p-5" role="alert">
-                <div class="badge badge-error badge-lg">Sync issue</div>
-                <h3 class="text-xl font-semibold text-base-content m-0">Unable to load review requests</h3>
-                <p class="text-sm m-0 max-w-md text-base-content/70">{error}</p>
-                <div class="flex flex-wrap items-center justify-center gap-2 pt-1">
-                  <button class="btn btn-primary btn-sm" onclick={refreshPrs}>Retry loading review requests</button>
-                  <button class="btn btn-ghost btn-sm" onclick={openGithubSettings}>Open GitHub settings</button>
-                </div>
-              </div>
-            {:else if filteredReviewPrs.length === 0 && $reviewPrs.length > 0 && hiddenReviewRepos.length > 0}
-              <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/70 text-center">
-                <div class="badge badge-warning badge-lg">Filtered</div>
-                <h3 class="text-xl font-semibold text-base-content m-0">All review requests are hidden by filters</h3>
-                <p class="text-sm m-0 max-w-md">
-                  {$reviewPrs.length} {pluralize($reviewPrs.length, 'PR')} from {hiddenReviewRepos.join(', ')} {pluralize(hiddenReviewRepos.length, 'is', 'are')} currently unchecked for this project.
-                </p>
-                <button class="btn btn-primary btn-sm" onclick={openRepositoryFilters}>Review repository filters</button>
-              </div>
-            {:else if filteredReviewPrs.length === 0 && githubTokenConfigured === false}
-              <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/70 text-center">
-                <div class="badge badge-warning badge-lg">Not connected</div>
-                <h3 class="text-xl font-semibold text-base-content m-0">Connect GitHub to check review requests</h3>
-                <p class="text-sm m-0 max-w-md">No GitHub token is configured, so OpenForge cannot check review requests for {projectName}.</p>
-                <button class="btn btn-primary btn-sm" onclick={openGithubSettings}>Open GitHub settings</button>
-              </div>
-            {:else if filteredReviewPrs.length === 0}
-              <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/70 text-center">
-                <div class="badge badge-success badge-lg">Checked</div>
-                <h3 class="text-xl font-semibold text-base-content m-0">No PRs requesting your review</h3>
-                <p class="text-sm m-0 max-w-md">GitHub is connected for {projectName}. Sync again if you expected review requests, or check repository filters for hidden repos.</p>
-                <div class="flex flex-wrap items-center justify-center gap-2 pt-1">
-                  <button class="btn btn-primary btn-sm" onclick={refreshPrs}>Sync review requests</button>
-                  {#if showFilters}<button class="btn btn-ghost btn-sm" onclick={openRepositoryFilters}>Review repository filters</button>{/if}
-                </div>
-              </div>
-            {:else}
-              {#each [...groupedPrs.entries()] as [repo, prs]}
-                <div class="mb-6">
-                  <h3 class="text-xs font-semibold text-base-content/50 m-0 mb-3 uppercase tracking-wider">{repo}</h3>
-                  <div class="flex flex-col gap-3">
-                    {#each prs as pr}
-                      {@const flatIdx = flatPrList.indexOf(pr)}
-                      <div data-vim-pr-item class={flatIdx === vimList.focusedIndex ? 'vim-focus' : ''}>
-                        <ReviewPrCard
-                          {pr}
-                          selected={false}
-                          onClick={() => selectPr(pr)}
-                        />
-                      </div>
-                    {/each}
-                  </div>
-                </div>
-              {/each}
-            {/if}
-          </div>
-        </div>
-
-        <!-- Right column: My Pull Requests -->
-        <div class="flex-1 flex flex-col overflow-hidden">
-          <div class="flex items-center justify-between px-5 py-3 bg-base-200/50 border-b border-base-300 shrink-0">
-            <div class="flex items-center gap-2">
-              <h3 class="text-sm font-semibold text-base-content m-0">My Pull Requests</h3>
-              <span class="badge badge-primary badge-xs">{filteredAuthoredPrs.length}</span>
-            </div>
-            <button class="btn btn-xs btn-ghost text-base-content/50" aria-label="Refresh authored pull requests" onclick={refreshAuthoredPrs} disabled={isLoadingAuthored}>
-              {isLoadingAuthored ? 'Refreshing' : 'Refresh'}
-            </button>
-          </div>
-
-          <div class="flex-1 overflow-y-auto p-5 pb-8">
-            {#if isLoadingAuthored && filteredAuthoredPrs.length === 0}
-              <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm">
-                <span class="loading loading-spinner loading-md text-primary"></span>
-                <span>Loading PRs...</span>
-              </div>
-            {:else if authoredError}
-              <div class="flex flex-col items-center justify-center h-full gap-3 text-error text-sm text-center p-5" role="alert">
-                <div class="badge badge-error badge-lg">Sync issue</div>
-                <h3 class="text-xl font-semibold text-base-content m-0">Unable to load your pull requests</h3>
-                <p class="text-sm m-0 max-w-md text-base-content/70">{authoredError}</p>
-                <div class="flex flex-wrap items-center justify-center gap-2 pt-1">
-                  <button class="btn btn-primary btn-sm" onclick={refreshAuthoredPrs}>Retry loading your pull requests</button>
-                  <button class="btn btn-ghost btn-sm" onclick={openGithubSettings}>Open GitHub settings</button>
-                </div>
-              </div>
-            {:else if filteredAuthoredPrs.length === 0 && $authoredPrs.length > 0 && hiddenAuthoredRepos.length > 0}
-              <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/70 text-center">
-                <div class="badge badge-warning badge-lg">Filtered</div>
-                <h3 class="text-xl font-semibold text-base-content m-0">All authored PRs are hidden by filters</h3>
-                <p class="text-sm m-0 max-w-md">
-                  {$authoredPrs.length} {pluralize($authoredPrs.length, 'PR')} from {hiddenAuthoredRepos.join(', ')} {pluralize(hiddenAuthoredRepos.length, 'is', 'are')} currently unchecked for this project.
-                </p>
-                <button class="btn btn-primary btn-sm" onclick={openRepositoryFilters}>Review repository filters</button>
-              </div>
-            {:else if filteredAuthoredPrs.length === 0 && githubTokenConfigured === false}
-              <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/70 text-center">
-                <div class="badge badge-warning badge-lg">Not connected</div>
-                <h3 class="text-xl font-semibold text-base-content m-0">Connect GitHub to check your PRs</h3>
-                <p class="text-sm m-0 max-w-md">No GitHub token is configured, so OpenForge cannot check pull requests authored by your account.</p>
-                <button class="btn btn-primary btn-sm" onclick={openGithubSettings}>Open GitHub settings</button>
-              </div>
-            {:else if filteredAuthoredPrs.length === 0}
-              <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/70 text-center">
-                <div class="badge badge-success badge-lg">Checked</div>
-                <h3 class="text-xl font-semibold text-base-content m-0">No open pull requests</h3>
-                <p class="text-sm m-0 max-w-md">GitHub is connected for your account. Sync again if you expected authored PRs, or check repository filters for hidden repos.</p>
-                <div class="flex flex-wrap items-center justify-center gap-2 pt-1">
-                  <button class="btn btn-primary btn-sm" onclick={refreshAuthoredPrs}>Sync my pull requests</button>
-                  {#if showFilters}<button class="btn btn-ghost btn-sm" onclick={openRepositoryFilters}>Review repository filters</button>{/if}
-                </div>
-              </div>
-            {:else}
-              {#each [...groupedAuthoredPrs.entries()] as [repo, prs]}
-                <div class="mb-6">
-                  <h3 class="text-xs font-semibold text-base-content/50 m-0 mb-3 uppercase tracking-wider">{repo}</h3>
-                  <div class="flex flex-col gap-3">
-                    {#each prs as pr}
-                      <AuthoredPrCard
-                        {pr}
-                        selected={false}
-                        onClick={() => api.system.openUrl(pr.html_url)}
-                      />
-                    {/each}
-                  </div>
-                </div>
-              {/each}
-            {/if}
-          </div>
-        </div>
-      </div>
-      {/if}
-    </div>
+    <PrReviewListSection
+      {headerTitle}
+      {headerSubtitle}
+      {projectName}
+      {showFilters}
+      {projectHasNoRepo}
+      {excludedRepos}
+      {showFilterDropdown}
+      {newRepoInput}
+      suggestedRepos={suggestedRepos()}
+      {isLoading}
+      {isLoadingAuthored}
+      {error}
+      {authoredError}
+      {githubTokenConfigured}
+      {filteredReviewPrs}
+      {filteredAuthoredPrs}
+      allReviewPrs={$reviewPrs}
+      allAuthoredPrs={$authoredPrs}
+      {hiddenReviewRepos}
+      {hiddenAuthoredRepos}
+      {groupedPrs}
+      {groupedAuthoredPrs}
+      {flatPrList}
+      focusedIndex={vimList.focusedIndex}
+      onToggleFilterDropdown={() => { showFilterDropdown = !showFilterDropdown }}
+      onCloseFilterDropdown={() => { showFilterDropdown = false }}
+      onNewRepoInputChange={(value) => { newRepoInput = value }}
+      onAddExcludedRepo={(repo) => { void addExcludedRepo(repo) }}
+      onRemoveExcludedRepo={(repo) => { void removeExcludedRepo(repo) }}
+      onRefreshPrs={() => { void refreshPrs() }}
+      onRefreshAuthoredPrs={() => { void refreshAuthoredPrs() }}
+      onOpenGithubSettings={openGithubSettings}
+      onOpenRepositoryFilters={openRepositoryFilters}
+      onSelectPr={(pr) => { void selectPr(pr) }}
+      onOpenAuthoredPr={(url) => api.system.openUrl(url)}
+      {pluralize}
+    />
   {/if}
 </div>

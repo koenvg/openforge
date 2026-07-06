@@ -13,8 +13,9 @@
   let { api, context: _context, projectName, projectId = null }: Props = $props()
   import { useVimNavigation } from './lib/useVimNavigation.svelte'
   import ProjectPageHeader from './ProjectPageHeader.svelte'
-  import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
-  import { getPreferredSkillIdentity, getSkillIdentity, getSkillLocationLabel, getSkillSourcePath, getVisibleSkills, groupSkillsBySource, isSameSkillIdentity, parseSkillFrontmatter, stripSkillFrontmatter, type SkillInfo } from './lib/skillDomain'
+  import SkillDetailSection from './SkillDetailSection.svelte'
+  import SkillsListSection from './SkillsListSection.svelte'
+  import { getPreferredSkillIdentity, getSkillIdentity, getSkillSourcePath, getVisibleSkills, groupSkillsBySource, isSameSkillIdentity, parseSkillFrontmatter, stripSkillFrontmatter, type SkillInfo } from './lib/skillDomain'
 
   let isLoading = $state(false)
   let error = $state<string | null>(null)
@@ -281,7 +282,6 @@
 <svelte:window onkeydown={handleSkillsKeydown} />
 
 <div class="flex flex-col h-full overflow-hidden">
-  <!-- Header -->
   <ProjectPageHeader
     title={projectName ? `${projectName} — Skills` : 'Skills'}
     subtitle={$activeProjectId ? 'View and edit project and personal skills' : 'Select a project to view skills'}
@@ -296,262 +296,50 @@
     {/snippet}
   </ProjectPageHeader>
 
-  <!-- Content -->
   <div class="flex flex-1 overflow-hidden">
-    <!-- Left panel: Skill list -->
-    <div class="w-72 border-r border-base-300 flex flex-col shrink-0" style="background-color: var(--project-bg, oklch(var(--b1)))">
-      <!-- Search -->
-      <div class="p-3 border-b border-base-300">
-        <label for={skillFilterId} class="sr-only">Filter skills</label>
-        <input
-          id={skillFilterId}
-          type="text"
-          placeholder="Filter skills..."
-          class="input input-sm input-bordered w-full"
-          bind:value={searchFilter}
-        />
-      </div>
+    <SkillsListSection
+      activeProjectId={$activeProjectId}
+      {isLoading}
+      {error}
+      skillsCount={$skills.length}
+      {filteredSkills}
+      {projectSkills}
+      {userSkills}
+      {projectGroups}
+      {userGroups}
+      {visibleSkills}
+      selectedSkillIdentity={$selectedSkillIdentity}
+      {collapsed}
+      focusedIndex={vimSkills.focusedIndex}
+      {skillFilterId}
+      {searchFilter}
+      onSearchFilterChange={(value) => { searchFilter = value }}
+      onRetryLoad={() => { void loadSkills() }}
+      onSelectSkill={selectSkill}
+      onToggleCollapsed={(key, value) => { collapsed = new Map(collapsed).set(key, value) }}
+      {hasNameCollision}
+      {groupPanelId}
+    />
 
-      {#snippet skillRow(skill: SkillInfo)}
-        {@const flatIdx = visibleSkills.indexOf(skill)}
-        {@const selected = isSameSkillIdentity(skill, $selectedSkillIdentity)}
-        <button
-          data-vim-skill
-          aria-current={selected ? 'true' : undefined}
-          class="w-full text-left pl-8 pr-3 py-2 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {selected ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'vim-focus' : ''}"
-          onclick={() => selectSkill(skill)}
-        >
-          <span class="text-sm font-medium text-base-content truncate block">{skill.name}</span>
-          {#if hasNameCollision(skill)}
-            <p class="text-xs text-base-content/50 m-0 mt-0.5 line-clamp-1">{getSkillLocationLabel(skill)}</p>
-          {/if}
-          {#if skill.description}
-            <p class="text-xs text-base-content/50 m-0 mt-0.5 line-clamp-1">{skill.description}</p>
-          {/if}
-        </button>
-      {/snippet}
-
-      <!-- Skill list -->
-      <div class="flex-1 overflow-y-auto">
-        {#if !$activeProjectId}
-          <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm text-center p-5">
-            <span class="text-3xl">📁</span>
-            <span class="font-medium text-base-content/70">Select a project</span>
-            <span>Choose a project to view and edit its skills.</span>
-          </div>
-        {:else if isLoading && $skills.length === 0}
-          <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm" role="status" aria-live="polite">
-            <span class="loading loading-spinner loading-md text-primary"></span>
-            <span>Loading skills...</span>
-          </div>
-        {:else if error}
-          <div class="flex flex-col items-center justify-center h-full gap-3 text-error text-sm text-center p-5" role="alert">
-            <span class="text-3xl">⚠</span>
-            <span>{error}</span>
-            <button class="btn btn-sm btn-outline" onclick={() => loadSkills()} disabled={isLoading}>Retry loading skills</button>
-          </div>
-        {:else if $skills.length === 0}
-          <div class="flex flex-col items-center justify-center h-full gap-4 text-base-content/50 text-center p-6">
-            <span class="text-4xl">📝</span>
-            <p class="text-sm m-0">No skills found. Create your first skill!</p>
-          </div>
-        {:else if filteredSkills.length === 0}
-          <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-center p-6">
-            <p class="text-sm m-0">No skills match your filter.</p>
-          </div>
-        {:else}
-          {#if projectSkills.length > 0}
-            {@const levelCollapsed = collapsed.get('project') ?? false}
-            <button
-              class="w-full flex items-center gap-1.5 px-3 pt-3 pb-1 cursor-pointer hover:bg-base-200/50"
-              aria-expanded={!levelCollapsed}
-              aria-controls="skills-project-groups"
-              onclick={() => { collapsed = new Map(collapsed).set('project', !levelCollapsed) }}
-            >
-              <span class="text-xs text-base-content/40 transition-transform {levelCollapsed ? '' : 'rotate-90'}">&rsaquo;</span>
-              <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Repository</span>
-              <span class="text-xs text-base-content/30 ml-auto">{projectSkills.length}</span>
-            </button>
-            {#if !levelCollapsed}
-              <div id="skills-project-groups">
-              {#each projectGroups as group}
-                {@const groupKey = `project:${group.source}`}
-                {@const groupCollapsed = collapsed.get(groupKey) ?? false}
-                <button
-                  class="w-full flex items-center gap-1.5 pl-5 pr-3 pt-2 pb-1 cursor-pointer hover:bg-base-200/50"
-                  aria-expanded={!groupCollapsed}
-                  aria-controls={groupPanelId('project', group.source)}
-                  onclick={() => { collapsed = new Map(collapsed).set(groupKey, !groupCollapsed) }}
-                >
-                  <span class="text-xs text-base-content/40 transition-transform {groupCollapsed ? '' : 'rotate-90'}">&rsaquo;</span>
-                  <span class="text-xs font-medium text-base-content/40">{getSkillSourcePath(group.source, 'project')}</span>
-                  <span class="text-xs text-base-content/30 ml-auto">{group.skills.length}</span>
-                </button>
-                {#if !groupCollapsed}
-                  <div id={groupPanelId('project', group.source)}>
-                  {#each group.skills as skill}
-                    {@render skillRow(skill)}
-                  {/each}
-                  </div>
-                {/if}
-              {/each}
-              </div>
-            {/if}
-          {/if}
-
-          {#if userSkills.length > 0}
-            {@const levelCollapsed = collapsed.get('user') ?? false}
-            <button
-              class="w-full flex items-center gap-1.5 px-3 pt-3 pb-1 cursor-pointer hover:bg-base-200/50"
-              aria-expanded={!levelCollapsed}
-              aria-controls="skills-user-groups"
-              onclick={() => { collapsed = new Map(collapsed).set('user', !levelCollapsed) }}
-            >
-              <span class="text-xs text-base-content/40 transition-transform {levelCollapsed ? '' : 'rotate-90'}">&rsaquo;</span>
-              <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Personal</span>
-              <span class="text-xs text-base-content/30 ml-auto">{userSkills.length}</span>
-            </button>
-            {#if !levelCollapsed}
-              <div id="skills-user-groups">
-              {#each userGroups as group}
-                {@const groupKey = `user:${group.source}`}
-                {@const groupCollapsed = collapsed.get(groupKey) ?? false}
-                <button
-                  class="w-full flex items-center gap-1.5 pl-5 pr-3 pt-2 pb-1 cursor-pointer hover:bg-base-200/50"
-                  aria-expanded={!groupCollapsed}
-                  aria-controls={groupPanelId('user', group.source)}
-                  onclick={() => { collapsed = new Map(collapsed).set(groupKey, !groupCollapsed) }}
-                >
-                  <span class="text-xs text-base-content/40 transition-transform {groupCollapsed ? '' : 'rotate-90'}">&rsaquo;</span>
-                  <span class="text-xs font-medium text-base-content/40">~/{getSkillSourcePath(group.source, 'user')}</span>
-                  <span class="text-xs text-base-content/30 ml-auto">{group.skills.length}</span>
-                </button>
-                {#if !groupCollapsed}
-                  <div id={groupPanelId('user', group.source)}>
-                  {#each group.skills as skill}
-                    {@render skillRow(skill)}
-                  {/each}
-                  </div>
-                {/if}
-              {/each}
-              </div>
-            {/if}
-          {/if}
-        {/if}
-      </div>
-    </div>
-
-    <!-- Right panel: Skill detail -->
-    <div class="flex-1 flex flex-col overflow-hidden" style="background-color: var(--project-bg, oklch(var(--b1)))">
-      {#if $activeProjectId && selectedSkill}
-        <!-- Skill detail header -->
-        <div class="flex items-center justify-between px-6 py-3 border-b border-base-300 shrink-0" style="background-color: var(--project-bg-alt, oklch(var(--b2)))">
-          <div class="flex items-center gap-3 min-w-0">
-            <h3 class="text-base font-semibold text-base-content m-0 truncate">{selectedSkill.name}</h3>
-            <span class="badge badge-sm {selectedSkill.level === 'project' ? 'badge-primary' : 'badge-secondary'} shrink-0">{selectedSkill.level === 'project' ? 'repository' : 'personal'}</span>
-            <span class="text-xs text-base-content/40 shrink-0">{getSkillLocationLabel(selectedSkill)}</span>
-          </div>
-          <div class="flex items-center gap-2 shrink-0">
-            {#if editMode}
-              <button
-                class="btn btn-ghost btn-sm text-base-content/70"
-                onclick={cancelEdit}
-                disabled={selectedSkillSavePending}
-              >Cancel</button>
-              <button
-                class="btn btn-primary btn-sm"
-                onclick={saveEdit}
-                disabled={selectedSkillSavePending}
-              >{selectedSkillSavePending ? 'Saving...' : 'Save'}</button>
-            {:else}
-              <button
-                class="btn btn-ghost btn-sm text-base-content/70"
-                onclick={enterEditMode}
-                disabled={selectedSkillSavePending}
-              >{selectedSkillSavePending ? 'Saving...' : 'Manually Edit'}</button>
-            {/if}
-          </div>
-        </div>
-
-        {#if saveError}
-          <div class="px-6 py-2 bg-error/10 border-b border-error/20 shrink-0" role="alert">
-            <div class="flex items-center justify-between gap-3">
-              <p class="text-xs text-error m-0">{saveError}</p>
-              {#if editMode}
-                <button class="btn btn-xs btn-error btn-outline" onclick={saveEdit} disabled={selectedSkillSavePending}>Retry saving skill</button>
-              {/if}
-            </div>
-          </div>
-        {/if}
-
-        <!-- Metadata -->
-        {#if !editMode}
-          <section class="px-6 py-3 border-b border-base-300 shrink-0" aria-label="Skill metadata">
-            {#if selectedSkill.description}
-              <p class="text-sm text-base-content/75 leading-relaxed m-0 mb-3">{selectedSkill.description}</p>
-            {/if}
-            <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-              <dt class="font-medium text-base-content/50">Scope</dt>
-              <dd class="text-base-content/75 m-0">{selectedSkill.level === 'project' ? 'Repository' : 'Personal'}</dd>
-              <dt class="font-medium text-base-content/50">Source</dt>
-              <dd class="text-base-content/75 m-0 font-mono break-all">{selectedSkillSourcePath}</dd>
-              <dt class="font-medium text-base-content/50">File</dt>
-              <dd class="text-base-content/75 m-0 font-mono break-all">{selectedSkillFileLabel}</dd>
-              {#if selectedSkill.agent}
-                <dt class="font-medium text-base-content/50">Agent</dt>
-                <dd class="text-base-content/75 m-0 font-mono break-all">{selectedSkill.agent}</dd>
-              {/if}
-            </dl>
-          </section>
-        {/if}
-
-        {#if editMode}
-          <!-- Edit mode: raw markdown textarea -->
-          <div class="flex-1 overflow-hidden flex flex-col">
-            <textarea
-              class="flex-1 w-full p-4 font-mono text-sm text-base-content resize-none border-none outline-none"
-              style="background-color: var(--project-bg, oklch(var(--b1)))"
-              bind:value={editContent}
-              spellcheck="false"
-            ></textarea>
-          </div>
-        {:else}
-          <!-- Read mode: rendered markdown -->
-          <div class="flex-1 overflow-y-auto px-6 py-4" role="region" aria-labelledby={skillMarkdownHeadingId}>
-            {#if selectedSkill.template}
-              <article
-                class="max-w-3xl text-base-content leading-relaxed [&_.markdown-body]:text-sm [&_.markdown-body]:leading-relaxed [&_.markdown-body_a]:rounded-sm [&_.markdown-body_a]:focus-visible:outline-none [&_.markdown-body_a]:focus-visible:ring-2 [&_.markdown-body_a]:focus-visible:ring-primary [&_.markdown-body_a]:focus-visible:ring-offset-2 [&_.markdown-body_a]:focus-visible:ring-offset-base-100"
-                aria-labelledby={skillMarkdownHeadingId}
-              >
-                <h4 id={skillMarkdownHeadingId} class="sr-only">{selectedSkill.name} skill markdown</h4>
-                <MarkdownContent content={renderedSkillMarkdown} onOpenUrl={(url) => api.system.openUrl(url)} />
-              </article>
-            {:else}
-              <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-center">
-                <span class="text-3xl">📄</span>
-                <p class="text-sm m-0">No content available for this skill.</p>
-              </div>
-            {/if}
-          </div>
-        {/if}
-      {:else}
-        <!-- No skill selected -->
-        <div class="flex flex-col items-center justify-center h-full gap-4 text-base-content/50 text-center">
-          {#if !$activeProjectId}
-            <span class="text-5xl">📁</span>
-            <h3 class="text-lg font-semibold text-base-content/70 m-0">Select a project</h3>
-            <p class="text-sm m-0">Choose a project to view and edit its skills.</p>
-          {:else if $skills.length > 0}
-            <span class="text-5xl">👈</span>
-            <h3 class="text-lg font-semibold text-base-content/70 m-0">Select a skill</h3>
-            <p class="text-sm m-0">Choose a skill from the list to view its content.</p>
-          {:else if !isLoading && !error}
-            <span class="text-5xl">📝</span>
-            <h3 class="text-lg font-semibold text-base-content/70 m-0">No skills yet</h3>
-            <p class="text-sm m-0">Add skills to your project or personal directories to see them here.</p>
-          {/if}
-        </div>
-      {/if}
-    </div>
+    <SkillDetailSection
+      activeProjectId={$activeProjectId}
+      skillsCount={$skills.length}
+      {isLoading}
+      {error}
+      {selectedSkill}
+      {selectedSkillSavePending}
+      {selectedSkillSourcePath}
+      {selectedSkillFileLabel}
+      {renderedSkillMarkdown}
+      {skillMarkdownHeadingId}
+      {editMode}
+      {editContent}
+      {saveError}
+      onCancelEdit={cancelEdit}
+      onSaveEdit={() => { void saveEdit() }}
+      onEnterEditMode={enterEditMode}
+      onEditContentChange={(content) => { editContent = content }}
+      onOpenUrl={(url) => api.system.openUrl(url)}
+    />
   </div>
 </div>
