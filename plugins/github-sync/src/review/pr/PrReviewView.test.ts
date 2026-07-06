@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PrFileDiff, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
 import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 import type { TestingOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
-import { requireElement } from '../../../../../src/test-utils/dom'
 
 vi.mock('@openforge-app/pr-review-ui/useVirtualizer.svelte', () => ({
   createVirtualizer: vi.fn((opts: { getCount: () => number }) => ({
@@ -69,6 +68,23 @@ import {
   reviewPrs,
   selectedReviewPr,
 } from '../../lib/stores'
+
+type Constructor<T> = {
+  new (...args: never[]): T
+  name: string
+}
+
+function requireElement<T extends Element>(
+  value: Element | null | undefined,
+  ctor: Constructor<T>,
+  message = `Expected ${ctor.name}`,
+): T {
+  if (!(value instanceof ctor)) {
+    throw new Error(message)
+  }
+
+  return value
+}
 
 const GLOBAL_VIEW_ID = 'plugin:com.openforge.github-sync:pr_review_global'
 

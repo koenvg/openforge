@@ -75,7 +75,7 @@ Use the public package exports only:
 | `@openforge-app/plugin-sdk/ui/MarkdownContent.svelte` | Shared Markdown Svelte component |
 | `@openforge-app/plugin-sdk/ui/ResizablePanel.svelte` | Shared resizable-panel Svelte component |
 
-Do not import from `src/`, `src-tauri/`, Electron main/preload code, app stores, or undocumented package internals.
+Do not import from `src/`, `src-tauri/`, Electron main/preload code, app stores, or undocumented package internals. For the full component-layer contract, see [OpenForge UI component layer boundaries](./ui-component-boundaries.md).
 
 ## Frontend entry point
 
@@ -258,7 +258,7 @@ For unit tests that only need an API object, use `createMockOpenForgeApi`, `crea
 
 ## Authoring checklist
 
-- Use only documented `@openforge-app/plugin-sdk` exports and normal npm dependencies.
+- Use only documented `@openforge-app/plugin-sdk` exports, documented host-shared runtime UI exports, plugin-local files, and normal npm dependencies.
 - Register every contribution through `context.subscriptions.add(...)` so deactivation cleans up correctly.
 - Keep frontend UI responsibilities separate from backend/background responsibilities.
 - Validate command and backend-method inputs when data crosses runtime boundaries.
