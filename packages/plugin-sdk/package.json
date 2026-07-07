@@ -69,6 +69,7 @@
     "clean": "node -e \"import('node:fs').then(({ rmSync }) => rmSync('dist', { recursive: true, force: true }))\"",
     "build": "pnpm run clean && tsc && pnpm run build:assets",
     "build:assets": "node ./scripts/copy-package-assets.mjs",
+    "icons:generate": "node ./scripts/generate-file-type-icons.mjs",
     "prepack": "pnpm run build",
     "test": "vitest run"
   },
@@ -82,6 +83,7 @@
   "devDependencies": {
     "@types/node": "26.0.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.9",
+    "vscode-material-icons": "^0.1.1"
   }
 }

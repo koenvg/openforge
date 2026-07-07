@@ -1,3 +1,6 @@
+import { existsSync, readdirSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   BUNDLED_ICON_NAMES,
@@ -85,5 +88,25 @@ describe('BUNDLED_ICON_NAMES', () => {
     const sorted = [...BUNDLED_ICON_NAMES].sort()
     expect(BUNDLED_ICON_NAMES).toEqual(sorted)
     expect(new Set(BUNDLED_ICON_NAMES).size).toBe(BUNDLED_ICON_NAMES.length)
+  })
+})
+
+describe('vendored icon assets', () => {
+  // NB: use import.meta.url directly (not `new URL('./x', import.meta.url)`),
+  // which Vite would rewrite into a non-file asset URL.
+  const iconsDir = join(dirname(fileURLToPath(import.meta.url)), 'ui', 'icons')
+
+  it('has an SVG file for every bundled icon name', () => {
+    for (const name of BUNDLED_ICON_NAMES) {
+      expect(existsSync(join(iconsDir, `${name}.svg`)), `missing icon: ${name}.svg`).toBe(true)
+    }
+  })
+
+  it('vendors exactly the bundled set (no missing, no extras)', () => {
+    const vendored = readdirSync(iconsDir)
+      .filter((file) => file.endsWith('.svg'))
+      .map((file) => file.replace(/\.svg$/, ''))
+      .sort()
+    expect(vendored).toEqual([...BUNDLED_ICON_NAMES].sort())
   })
 })
