@@ -59,15 +59,15 @@ Before restarting custom CDP launches, stop stale Vite/Electron/sidecar processe
 In a second shell, use the installed launcher only:
 
 ```bash
-openforge list-projects
+openforge project list
 # fallback when PATH is not loaded:
-"$HOME/.openforge/bin/openforge" list-projects
+"$HOME/.openforge/bin/openforge" project list
 ```
 
 If the dev app uses a non-default bridge port, set it before invoking the launcher:
 
 ```bash
-OPENFORGE_HTTP_PORT=17645 openforge list-projects
+OPENFORGE_HTTP_PORT=17645 openforge project list
 ```
 
 Do not call the underlying `cli.js` directly.
@@ -75,12 +75,12 @@ Do not call the underlying `cli.js` directly.
 Read-only CLI checks are safe defaults. Discover IDs first, then use the relevant project/task for the current app context:
 
 ```bash
-openforge list-projects
-openforge list-tasks --project-id <project-id> --state doing
-openforge get-task --task-id <current-task-id>
+openforge project list
+openforge task list --project-id <project-id> --state doing
+openforge task get --task-id <current-task-id>
 ```
 
-Skip task-specific lookups when no current task id is known. Avoid CLI commands that mutate data (`create-task`, `update-task`, deletes, provider starts) unless the validation specifically requires them.
+Skip task-specific lookups when no current task id is known. Avoid CLI commands that mutate data (`task create`, `task update`, deletes, provider starts) unless the validation specifically requires them.
 
 ## Basic click-through map
 
