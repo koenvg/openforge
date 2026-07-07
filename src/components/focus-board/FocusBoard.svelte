@@ -66,6 +66,7 @@
   let fallbackFilter: BoardFilter = $state('focus')
   let previousProjectId: string | null | undefined = undefined
   let labelLoadRequest = 0
+  let labelLoadProjectId: string | null = null
   let focusStateLoadRequest = 0
   let outOfFocusLoadRequest = 0
 
@@ -135,24 +136,30 @@
   }
 
   $effect(() => {
+    const currentProjectId = projectId
     const isInitialProject = previousProjectId === undefined
-    if (!isInitialProject && projectId !== previousProjectId) {
+    if (!isInitialProject && currentProjectId !== previousProjectId) {
       backlogLabelFilters.set(new Map())
       selectedTaskIdLocal = null
     }
-    previousProjectId = projectId
+    previousProjectId = currentProjectId
 
-    if (!projectId) {
+    if (!currentProjectId) {
+      labelLoadProjectId = null
       projectLabels = []
       return
     }
+    if (labelLoadProjectId === currentProjectId) return
+
+    labelLoadProjectId = currentProjectId
+    projectLabels = []
     const requestId = ++labelLoadRequest
-    getProjectTaskLabels(projectId)
+    getProjectTaskLabels(currentProjectId)
       .then((labels) => {
-        if (requestId === labelLoadRequest) projectLabels = labels
+        if (requestId === labelLoadRequest && labelLoadProjectId === currentProjectId) projectLabels = labels
       })
       .catch(() => {
-        if (requestId === labelLoadRequest) projectLabels = []
+        if (requestId === labelLoadRequest && labelLoadProjectId === currentProjectId) projectLabels = []
       })
   })
 

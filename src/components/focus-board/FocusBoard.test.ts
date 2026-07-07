@@ -107,6 +107,14 @@ const taskBacklog = makeTask('T-4', 'backlog', 'Backlog task')
 const onOpenTask = vi.fn()
 const onRunAction = vi.fn()
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+  return { promise, resolve }
+}
+
 function getCurrentVimItem(): HTMLElement {
   return requireElement(document.querySelector('[data-vim-item][aria-current="true"]'), HTMLElement)
 }
@@ -249,6 +257,77 @@ describe('FocusBoard', () => {
     expect(screen.queryByText('Focus task')).toBeNull()
     expect(screen.queryByText('Doing task')).toBeNull()
     expect(screen.queryByText('Done task')).toBeNull()
+  })
+
+  it('shows backlog label filters on the first backlog navigation when labeled tasks arrive before label metadata', async () => {
+    const ipc = await import('../../lib/ipc')
+    const projectLabels = deferred<TaskLabel[]>()
+    vi.mocked(ipc.getProjectTaskLabels).mockReturnValue(projectLabels.promise)
+
+    const view = renderBoard({ tasks: [], sessions: new Map() })
+
+    await fireEvent.click(await screen.findByRole('button', { name: /Backlog 0/i }))
+    expect(screen.queryByLabelText('Backlog label filters')).toBeNull()
+
+    const bugTask = makeTask('T-5', 'backlog', 'Bug task', [bugLabel])
+    const uiTask = makeTask('T-6', 'backlog', 'UI task', [uiLabel])
+    await view.rerender({
+      projectId: 'proj-1',
+      projectName: 'Test Project',
+      tasks: [bugTask, uiTask],
+      dependencyReferenceTasks: [],
+      activeSessions: new Map(),
+      ticketPrs: new Map(),
+      onOpenTask,
+      onRunAction,
+    })
+
+    const firstVisitFilters = await screen.findByLabelText('Backlog label filters')
+    expect(within(firstVisitFilters).getByRole('button', { name: /bug 1/i })).toBeTruthy()
+    expect(within(firstVisitFilters).getByRole('button', { name: /ui 1/i })).toBeTruthy()
+    expect(screen.getAllByText('Bug task').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('UI task').length).toBeGreaterThan(0)
+
+    await fireEvent.click(screen.getByRole('button', { name: /^Focus 0$/i }))
+    await fireEvent.click(screen.getByRole('button', { name: /^Backlog 2$/i }))
+    const revisitedFilters = screen.getByLabelText('Backlog label filters')
+    expect(within(revisitedFilters).getByRole('button', { name: /bug 1/i })).toBeTruthy()
+    expect(within(revisitedFilters).getByRole('button', { name: /ui 1/i })).toBeTruthy()
+
+    projectLabels.resolve([bugLabel, uiLabel])
+    await waitFor(() => {
+      expect(ipc.getProjectTaskLabels).toHaveBeenCalledWith('proj-1')
+      expect(within(screen.getByLabelText('Backlog label filters')).getByRole('button', { name: /bug 1/i })).toBeTruthy()
+      expect(within(screen.getByLabelText('Backlog label filters')).getByRole('button', { name: /ui 1/i })).toBeTruthy()
+    })
+  })
+
+  it('does not duplicate the board label-metadata request before backlog tasks arrive', async () => {
+    const ipc = await import('../../lib/ipc')
+    vi.mocked(ipc.getProjectTaskLabels).mockResolvedValue([bugLabel])
+    focusBoardFilters.set(new Map([['proj-1', 'backlog']]))
+
+    const view = renderBoard({ tasks: [], sessions: new Map() })
+
+    await waitFor(() => {
+      expect(ipc.getProjectTaskLabels).toHaveBeenCalledTimes(1)
+    })
+
+    await view.rerender({
+      projectId: 'proj-1',
+      projectName: 'Test Project',
+      tasks: [makeTask('T-5', 'backlog', 'Bug task', [bugLabel])],
+      dependencyReferenceTasks: [],
+      activeSessions: new Map(),
+      ticketPrs: new Map(),
+      onOpenTask,
+      onRunAction,
+    })
+
+    expect(await screen.findByRole('button', { name: /bug 1/i })).toBeTruthy()
+    // The rerender selects the backlog task, so TaskInfoPanel's TaskLabelEditor
+    // makes the second project-label request. A duplicate board request would be a third call.
+    expect(ipc.getProjectTaskLabels).toHaveBeenCalledTimes(2)
   })
 
   it('filters backlog tasks by selected label chips using OR semantics and shows backlog counts', async () => {
