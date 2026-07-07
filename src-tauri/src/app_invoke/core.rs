@@ -125,6 +125,21 @@ pub(super) async fn handle_app_core_task_project_command(
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
             json_value(project)?
         }
+        "create_project_from_new_repo" => {
+            let name = payload_string(&request.payload, "name")?;
+            let parent_dir = payload_string(&request.payload, "parentDir")?;
+            let private = payload_bool(&request.payload, "private")?;
+            let project = crate::git_clone::create_project_from_new_repo(
+                &state.db,
+                &state.github_client,
+                &name,
+                &parent_dir,
+                private,
+            )
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+            json_value(project)?
+        }
         _ => return Ok(None),
     };
 
