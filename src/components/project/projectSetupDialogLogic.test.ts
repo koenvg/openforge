@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeTargetPathPreview, canSubmitGithub } from './projectSetupDialogLogic'
+import { computeTargetPathPreview, canSubmitGithub, canSubmitNewRepo } from './projectSetupDialogLogic'
 
 describe('computeTargetPathPreview', () => {
   it('joins parent and repo name with a slash', () => {
@@ -32,5 +32,18 @@ describe('canSubmitGithub', () => {
 
   it('is false when project name is empty', () => {
     expect(canSubmitGithub({ repoUrl: 'acme/widgets', parentDir: '/tmp', projectName: '  ', isSubmitting: false })).toBe(false)
+  })
+})
+
+describe('canSubmitNewRepo', () => {
+  it('is true when name + parent are set and not submitting', () => {
+    expect(canSubmitNewRepo({ name: 'my-idea', parentDir: '/repos', isSubmitting: false })).toBe(true)
+  })
+  it('is false while submitting', () => {
+    expect(canSubmitNewRepo({ name: 'my-idea', parentDir: '/repos', isSubmitting: true })).toBe(false)
+  })
+  it('is false when name or parent is missing', () => {
+    expect(canSubmitNewRepo({ name: '', parentDir: '/repos', isSubmitting: false })).toBe(false)
+    expect(canSubmitNewRepo({ name: 'my-idea', parentDir: '', isSubmitting: false })).toBe(false)
   })
 })

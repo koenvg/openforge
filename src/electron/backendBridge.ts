@@ -65,6 +65,7 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'inspect_existing_branch',
   'create_project',
   'create_project_from_git',
+  'create_project_from_new_repo',
   'get_projects',
   'get_project_attention',
   'update_project',

@@ -70,6 +70,14 @@ export async function createProjectFromGit(args: {
   return invoke<Project>("create_project_from_git", args);
 }
 
+export async function createProjectFromNewRepo(args: {
+  name: string
+  parentDir: string
+  private: boolean
+}): Promise<Project> {
+  return invoke<Project>("create_project_from_new_repo", args);
+}
+
 export async function getProjects(): Promise<Project[]> {
   return invoke<Project[]>("get_projects");
 }

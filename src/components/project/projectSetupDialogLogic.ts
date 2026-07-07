@@ -6,6 +6,19 @@ export function computeTargetPathPreview(parentDir: string, repoName: string): s
   return `${parent}/${repo}`
 }
 
+/** Submit gating for the "New GitHub repo" mode. */
+export function canSubmitNewRepo(args: {
+  name: string
+  parentDir: string
+  isSubmitting: boolean
+}): boolean {
+  return (
+    !args.isSubmitting &&
+    args.name.trim().length > 0 &&
+    args.parentDir.trim().length > 0
+  )
+}
+
 /** Submit gating for the "From GitHub" mode. */
 export function canSubmitGithub(args: {
   repoUrl: string
