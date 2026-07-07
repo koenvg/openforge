@@ -347,4 +347,17 @@ describe('ProjectFileTree', () => {
     expect(screen.getByRole('treeitem', { name: /utils\.ts/ }).getAttribute('aria-current')).toBe('true')
     expect(screen.getByRole('treeitem', { name: /utils\.ts/ }).getAttribute('aria-selected')).toBe('true')
   })
+
+  it('renders a file-type icon for files and a folder icon for directories', () => {
+    renderTree({
+      entries: [
+        makeEntry({ name: 'src', path: 'src', isDir: true }),
+        makeEntry({ name: 'main.ts', path: 'src/main.ts', isDir: false }),
+      ],
+      expandedDirs: new Set(['src']),
+    })
+
+    expect(document.querySelector('[data-icon="folder-open"]')).not.toBeNull()
+    expect(document.querySelector('[data-icon="typescript"]')).not.toBeNull()
+  })
 })

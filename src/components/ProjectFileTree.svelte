@@ -1,8 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte'
-  import FileText from '@lucide/svelte/icons/file-text'
-  import Folder from '@lucide/svelte/icons/folder'
-  import FolderOpen from '@lucide/svelte/icons/folder-open'
+  import FileTypeIcon from '@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte'
   import {
     buildProjectFileTree,
     flattenVisibleProjectFileTree,
@@ -159,14 +157,10 @@
           >
             {#if entry.isDir}
               <span class="text-[0.6rem] text-base-content/50 shrink-0" data-testid={`dir-indicator-${entry.path}`} aria-hidden="true">{isExpanded ? '▼' : '▶'}</span>
-              {#if isExpanded}
-                <FolderOpen class="w-3.5 h-3.5 text-base-content/60 shrink-0" data-testid={`folder-icon-${entry.path}`} aria-hidden="true" />
-              {:else}
-                <Folder class="w-3.5 h-3.5 text-base-content/60 shrink-0" data-testid={`folder-icon-${entry.path}`} aria-hidden="true" />
-              {/if}
+              <FileTypeIcon folder open={isExpanded} class="w-3.5 h-3.5" />
               <span id={labelId} class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left" data-testid="entry-label">{entry.name}/</span>
             {:else}
-              <FileText class="w-3.5 h-3.5 text-base-content/60 shrink-0" data-testid={`file-icon-${entry.path}`} aria-hidden="true" />
+              <FileTypeIcon filename={entry.path} class="w-3.5 h-3.5" />
               <span id={labelId} class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left" data-testid="entry-label">{entry.name}</span>
               <span id={sizeId} class="text-base-content/50 text-[0.7rem] ml-auto">{formatProjectFileTreeSize(entry.size)}</span>
             {/if}
