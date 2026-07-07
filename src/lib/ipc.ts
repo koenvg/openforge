@@ -67,7 +67,7 @@ export async function createProjectFromGit(args: {
   parentDir: string
   name: string
 }): Promise<Project> {
-  return invoke<Project>("create_project_from_git", args);
+  return invoke<Project>("create_project_from_git", { url: args.url, parentDir: args.parentDir, name: args.name });
 }
 
 export async function createProjectFromNewRepo(args: {
@@ -75,7 +75,7 @@ export async function createProjectFromNewRepo(args: {
   parentDir: string
   private: boolean
 }): Promise<Project> {
-  return invoke<Project>("create_project_from_new_repo", args);
+  return invoke<Project>("create_project_from_new_repo", { name: args.name, parentDir: args.parentDir, private: args.private });
 }
 
 export async function getProjects(): Promise<Project[]> {

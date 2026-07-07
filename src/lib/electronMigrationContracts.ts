@@ -51,6 +51,8 @@ export const ipcCommandContracts = [
   { functionName: 'getAppMode', ipcCommand: 'get_app_mode', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'getGitBranch', ipcCommand: 'get_git_branch', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'createProject', ipcCommand: 'create_project', payloadKeys: ['name', 'path'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
+  { functionName: 'createProjectFromGit', ipcCommand: 'create_project_from_git', payloadKeys: ['url', 'parentDir', 'name'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
+  { functionName: 'createProjectFromNewRepo', ipcCommand: 'create_project_from_new_repo', payloadKeys: ['name', 'parentDir', 'private'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'getProjects', ipcCommand: 'get_projects', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'updateProject', ipcCommand: 'update_project', payloadKeys: ['id', 'name', 'path'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'deleteProject', ipcCommand: 'delete_project', payloadKeys: ['id'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },

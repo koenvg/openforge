@@ -3,9 +3,9 @@
 //! Composes the existing `git`-binary clone pattern, the stored GitHub PAT, and
 //! the project registry into a single "add project from GitHub" flow.
 
+use base64::{engine::general_purpose, Engine as _};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use base64::{engine::general_purpose, Engine as _};
 use tokio::process::Command;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -264,8 +264,7 @@ pub async fn create_project_from_new_repo(
     private: bool,
 ) -> Result<crate::db::ProjectRow, String> {
     let token = crate::github_runtime::github_token().map_err(|_| {
-        "Connect a GitHub token with 'repo' scope in Settings to create repositories."
-            .to_string()
+        "Connect a GitHub token with 'repo' scope in Settings to create repositories.".to_string()
     })?;
 
     let created = github_client
@@ -294,7 +293,10 @@ pub async fn clone_repo(
     if !output.status.success() {
         cleanup_partial_clone(target);
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("git clone failed: {}", sanitize_clone_error(&stderr)));
+        return Err(format!(
+            "git clone failed: {}",
+            sanitize_clone_error(&stderr)
+        ));
     }
     Ok(())
 }
@@ -302,9 +304,9 @@ pub async fn clone_repo(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::{engine::general_purpose, Engine as _};
     use std::path::Path;
     use tempfile::tempdir;
-    use base64::{engine::general_purpose, Engine as _};
 
     #[test]
     fn resolve_target_joins_repo_name_onto_parent() {
@@ -415,9 +417,12 @@ mod tests {
         let encoded = header
             .strip_prefix("Authorization: Basic ")
             .expect("basic scheme prefix");
-        let decoded =
-            String::from_utf8(general_purpose::STANDARD.decode(encoded).expect("valid base64"))
-                .unwrap();
+        let decoded = String::from_utf8(
+            general_purpose::STANDARD
+                .decode(encoded)
+                .expect("valid base64"),
+        )
+        .unwrap();
         assert_eq!(decoded, "x-access-token:secret-token");
     }
 
@@ -446,7 +451,10 @@ mod tests {
         );
         assert!(!args.iter().any(|a| a == "-c"));
         assert!(!args.iter().any(|a| a.contains("extraHeader")));
-        assert!(!args.iter().any(|a| a.contains("tok")), "the token string must never appear in SSH clone args");
+        assert!(
+            !args.iter().any(|a| a.contains("tok")),
+            "the token string must never appear in SSH clone args"
+        );
     }
 
     #[test]
@@ -466,7 +474,10 @@ mod tests {
         let noisy = format!("  {}  ", "x".repeat(5000));
         let cleaned = sanitize_clone_error(&noisy);
         assert!(!cleaned.starts_with(' '));
-        assert!(cleaned.ends_with('…'), "truncated output should end with an ellipsis");
+        assert!(
+            cleaned.ends_with('…'),
+            "truncated output should end with an ellipsis"
+        );
         // 500 content chars + 1 ellipsis char
         assert_eq!(cleaned.chars().count(), 501);
     }

@@ -380,10 +380,12 @@ impl GitHubClient {
             .send()
             .await
             .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
-        Ok(match classify_repo_access_status(response.status().as_u16()) {
-            RepoAccess::Accessible | RepoAccess::Unknown => true,
-            RepoAccess::Denied => false,
-        })
+        Ok(
+            match classify_repo_access_status(response.status().as_u16()) {
+                RepoAccess::Accessible | RepoAccess::Unknown => true,
+                RepoAccess::Denied => false,
+            },
+        )
     }
 }
 
@@ -744,11 +746,29 @@ mod tests {
 
     #[test]
     fn classify_repo_access_status_maps_codes() {
-        assert!(matches!(classify_repo_access_status(200), RepoAccess::Accessible));
-        assert!(matches!(classify_repo_access_status(301), RepoAccess::Unknown));
-        assert!(matches!(classify_repo_access_status(401), RepoAccess::Denied));
-        assert!(matches!(classify_repo_access_status(403), RepoAccess::Unknown));
-        assert!(matches!(classify_repo_access_status(404), RepoAccess::Denied));
-        assert!(matches!(classify_repo_access_status(500), RepoAccess::Unknown));
+        assert!(matches!(
+            classify_repo_access_status(200),
+            RepoAccess::Accessible
+        ));
+        assert!(matches!(
+            classify_repo_access_status(301),
+            RepoAccess::Unknown
+        ));
+        assert!(matches!(
+            classify_repo_access_status(401),
+            RepoAccess::Denied
+        ));
+        assert!(matches!(
+            classify_repo_access_status(403),
+            RepoAccess::Unknown
+        ));
+        assert!(matches!(
+            classify_repo_access_status(404),
+            RepoAccess::Denied
+        ));
+        assert!(matches!(
+            classify_repo_access_status(500),
+            RepoAccess::Unknown
+        ));
     }
 }
