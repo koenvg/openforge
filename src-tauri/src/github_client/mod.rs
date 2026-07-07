@@ -22,6 +22,7 @@ mod graphql;
 mod issues;
 mod labels;
 mod pulls;
+mod repos;
 mod reviews;
 pub mod types;
 
