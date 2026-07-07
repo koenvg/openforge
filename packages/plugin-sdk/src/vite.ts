@@ -52,11 +52,13 @@ const OPENFORGE_PLUGIN_SDK_SOURCE_ENTRYPOINTS = Object.freeze([
   ['@openforge-app/plugin-sdk/numberParsing', 'packages/plugin-sdk/src/numberParsing.ts'],
   ['@openforge-app/plugin-sdk/projectFileTree', 'packages/plugin-sdk/src/projectFileTree.ts'],
   ['@openforge-app/plugin-sdk/sanitize', 'packages/plugin-sdk/src/sanitize.ts'],
+  ['@openforge-app/plugin-sdk/fileIcons', 'packages/plugin-sdk/src/fileIcons.ts'],
   ['@openforge-app/plugin-sdk/ui/MarkdownContent.svelte', 'packages/plugin-sdk/src/ui/MarkdownContent.svelte'],
   ['@openforge-app/plugin-sdk/ui/ResizablePanel.svelte', 'packages/plugin-sdk/src/ui/ResizablePanel.svelte'],
   ['@openforge-app/plugin-sdk/ui/Modal.svelte', 'packages/plugin-sdk/src/ui/Modal.svelte'],
   ['@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte', 'packages/plugin-sdk/src/ui/PluginPageHeader.svelte'],
   ['@openforge-app/plugin-sdk/ui/PluginViewState.svelte', 'packages/plugin-sdk/src/ui/PluginViewState.svelte'],
+  ['@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte', 'packages/plugin-sdk/src/ui/FileTypeIcon.svelte'],
   ['@openforge-app/plugin-sdk', 'packages/plugin-sdk/src/index.ts'],
 ] as const)
 
