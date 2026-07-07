@@ -12,6 +12,8 @@
     "./ReviewSubmitPanel.svelte": "./src/ReviewSubmitPanel.svelte",
     "./PrOverviewTab.svelte": "./src/PrOverviewTab.svelte",
     "./DiffViewer.svelte": "./src/DiffViewer.svelte",
+    "./NonApplicationFilesToggle.svelte": "./src/NonApplicationFilesToggle.svelte",
+    "./applicationFiles": "./src/applicationFiles.ts",
     "./diffAdapter": "./src/diffAdapter.ts",
     "./diffComments": "./src/diffComments.ts",
     "./diffHighlightConfig": "./src/diffHighlightConfig.ts",

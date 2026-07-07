@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { countNonApplicationFiles, filterApplicationFiles, isNonApplicationFile } from '@openforge-app/pr-review-ui/applicationFiles'
 import { toGitDiffViewData } from '@openforge-app/pr-review-ui/diffAdapter'
 import { prCommentsToReviewComments } from '@openforge-app/pr-review-ui/diffComments'
 import { configureDiffHighlighter } from '@openforge-app/pr-review-ui/diffHighlightConfig'
@@ -20,6 +21,9 @@ import { createVirtualizer } from '@openforge-app/pr-review-ui/useVirtualizer.sv
  */
 describe('@openforge-app/pr-review-ui diff helper exports', () => {
   it('exposes the shared diff utility entrypoints consumed by host and plugins', () => {
+    expect(isNonApplicationFile).toBeTypeOf('function')
+    expect(countNonApplicationFiles).toBeTypeOf('function')
+    expect(filterApplicationFiles).toBeTypeOf('function')
     expect(toGitDiffViewData).toBeTypeOf('function')
     expect(prCommentsToReviewComments).toBeTypeOf('function')
     expect(configureDiffHighlighter).toBeTypeOf('function')

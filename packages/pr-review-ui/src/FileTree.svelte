@@ -3,6 +3,7 @@
   import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
   import FileTypeIcon from '@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte'
   import { getFileStatusIcon, getFileStatusClass } from './fileStatus'
+  import NonApplicationFilesToggle from './NonApplicationFilesToggle.svelte'
 
   interface Props {
     files?: PrFileDiff[]
@@ -11,6 +12,12 @@
     getFileReviewIdentity?: (file: PrFileDiff) => string | null
     onToggleFileReviewed?: (file: PrFileDiff, reviewed: boolean) => void
     onRequestFocusDiff?: () => void
+    // Optional "non-application files" filter control, shown under the stats header when a
+    // handler and a non-zero count are provided. The host owns the state and does the
+    // filtering; this component only renders the toggle and reports changes.
+    includeNonApplicationFiles?: boolean
+    nonApplicationFileCount?: number
+    onToggleNonApplicationFiles?: (include: boolean) => void
   }
 
   let {
@@ -20,6 +27,9 @@
     getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null,
     onToggleFileReviewed,
     onRequestFocusDiff,
+    includeNonApplicationFiles = true,
+    nonApplicationFileCount = 0,
+    onToggleNonApplicationFiles,
   }: Props = $props()
 
   let selectedFile = $state<string | null>(null)
@@ -286,6 +296,16 @@
       <span class="text-error">−{getTotalStats().deletions}</span>
     </div>
   </div>
+
+  {#if onToggleNonApplicationFiles && nonApplicationFileCount > 0}
+    <div class="px-3 py-2 border-b border-base-300">
+      <NonApplicationFilesToggle
+        checked={includeNonApplicationFiles}
+        hiddenCount={nonApplicationFileCount}
+        onToggle={onToggleNonApplicationFiles}
+      />
+    </div>
+  {/if}
 
   <div
     class="flex-1 overflow-y-auto py-2 focus:outline-none group/tree"

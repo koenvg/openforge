@@ -105,3 +105,61 @@ describe('FileTree file-type icons', () => {
     expect(document.querySelector('[data-icon="folder-open"]')).not.toBeNull()
   })
 })
+
+describe('FileTree non-application files toggle', () => {
+  it('renders the toggle when a handler and a non-zero count are provided', () => {
+    const onToggleNonApplicationFiles = vi.fn()
+    render(FileTree, {
+      props: {
+        files: [makeFile('src/app.ts')],
+        onSelectFile: vi.fn(),
+        includeNonApplicationFiles: true,
+        nonApplicationFileCount: 2,
+        onToggleNonApplicationFiles,
+      },
+    })
+
+    expect(screen.getByRole('checkbox', { name: /Also include non-application files/i })).toBeTruthy()
+  })
+
+  it('reports the new state when the toggle is deselected', async () => {
+    const onToggleNonApplicationFiles = vi.fn()
+    render(FileTree, {
+      props: {
+        files: [makeFile('src/app.ts')],
+        onSelectFile: vi.fn(),
+        includeNonApplicationFiles: true,
+        nonApplicationFileCount: 2,
+        onToggleNonApplicationFiles,
+      },
+    })
+
+    await fireEvent.click(screen.getByRole('checkbox', { name: /Also include non-application files/i }))
+    expect(onToggleNonApplicationFiles).toHaveBeenCalledWith(false)
+  })
+
+  it('omits the toggle when there are no non-application files', () => {
+    render(FileTree, {
+      props: {
+        files: [makeFile('src/app.ts')],
+        onSelectFile: vi.fn(),
+        nonApplicationFileCount: 0,
+        onToggleNonApplicationFiles: vi.fn(),
+      },
+    })
+
+    expect(screen.queryByRole('checkbox', { name: /Also include non-application files/i })).toBeNull()
+  })
+
+  it('omits the toggle when no handler is provided', () => {
+    render(FileTree, {
+      props: {
+        files: [makeFile('src/app.ts')],
+        onSelectFile: vi.fn(),
+        nonApplicationFileCount: 3,
+      },
+    })
+
+    expect(screen.queryByRole('checkbox', { name: /Also include non-application files/i })).toBeNull()
+  })
+})

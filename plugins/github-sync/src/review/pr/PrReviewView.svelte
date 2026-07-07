@@ -66,6 +66,10 @@
   let githubTokenConfigured = $state<boolean | null>(null)
   let fileTreeVisible = $state(true)
   let activeTab = $state<PrDetailTab>('overview')
+  // Non-application files (tests, fixtures, snapshots, docs, generated scaffolding) are
+  // shown by default in the "Files changed" tab; the reviewer deselects the file-tree
+  // toggle to hide them. Reset on each PR open so every PR starts with everything shown.
+  let includeNonApplicationFiles = $state(true)
   let reviewedFileShas = $state<Map<string, string>>(new Map())
   let loadedReviewedFilesKey = $state<string | null>(null)
   let reviewedFilesLoadSequence = 0
@@ -474,6 +478,7 @@
     const updatedPr = { ...pr, viewed_at: now, viewed_head_sha: pr.head_sha }
     $selectedReviewPr = updatedPr
     $reviewPrs = $reviewPrs.map(p => p.id === pr.id ? updatedPr : p)
+    includeNonApplicationFiles = true
     $prFileDiffs = []
     $reviewComments = []
     $pendingManualComments = []
@@ -744,6 +749,8 @@
       agentReviewComments={$agentReviewComments}
       {fileTreeVisible}
       {reviewedFileShas}
+      {includeNonApplicationFiles}
+      onToggleNonApplicationFiles={(value) => { includeNonApplicationFiles = value }}
       onBackToList={backToList}
       onOpenPrOnGitHub={openPrOnGitHub}
       onActiveTabChange={(tab) => { activeTab = tab }}
