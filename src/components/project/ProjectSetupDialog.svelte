@@ -316,7 +316,7 @@
       </label>
 
       {#if newRepoTargetPreview}
-        <p class="text-[0.65rem] text-base-content/40 m-0">Will clone into <span class="font-mono">{newRepoTargetPreview}</span></p>
+        <p class="text-[0.65rem] text-base-content/40 m-0">Will create at <span class="font-mono">{newRepoTargetPreview}</span></p>
       {/if}
     {/if}
   </form>
