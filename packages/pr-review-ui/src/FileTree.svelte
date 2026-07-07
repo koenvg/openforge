@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte'
   import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
+  import FileTypeIcon from '@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte'
   import { getFileStatusIcon, getFileStatusClass } from './fileStatus'
 
   interface Props {
@@ -308,6 +309,7 @@
           onclick={() => toggleDir(node.fullPath)}
         >
           <span class="text-[0.6rem] text-base-content/50 shrink-0" aria-hidden="true">{expanded ? '▼' : '▶'}</span>
+          <FileTypeIcon folder open={expanded} class="w-4 h-4" />
           <span class="text-base-content/50 font-medium flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">{node.name}/</span>
         </button>
       {:else if node.file}
@@ -340,6 +342,7 @@
             <span class="font-bold text-sm w-4 text-center shrink-0 {getFileStatusClass(node.file.status)}">
               {getFileStatusIcon(node.file.status)}
             </span>
+            <FileTypeIcon filename={node.file.filename} class="w-4 h-4" />
             <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left {reviewed ? 'line-through' : ''}" aria-label={reviewed ? `Reviewed file ${node.file.filename}` : undefined}>{node.name}</span>
           </button>
         </div>
