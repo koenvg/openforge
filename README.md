@@ -101,28 +101,28 @@ The installer creates an `openforge` CLI launcher at `~/.openforge/bin/openforge
 
 ```bash
 openforge --help
-openforge list-projects
-openforge get-task --task-id T-123
-openforge update-task --task-id T-123 --summary "Done"
-openforge create-task --initial-prompt "Correct task prompt" --worktree "$PWD" --depends-on T-122 --label cleanup
+openforge project list
+openforge task get --task-id T-123
+openforge task update --task-id T-123 --summary "Done"
+openforge task create --initial-prompt "Correct task prompt" --worktree "$PWD" --depends-on T-122 --label cleanup
 ```
 
-The CLI talks to the local Open Forge HTTP bridge and is used by the auto-installed provider skills. `openforge list-tasks` prints compact rows by default (`id`, `prompt_preview`, `status`, `labels`, `depends_on`, `updated_at`) for broad agent scans; pass `--full` when complete TaskRow objects are needed. It excludes done tasks by default; pass `--state done` only when completed tasks are explicitly needed.
+The CLI talks to the local Open Forge HTTP bridge and is used by the auto-installed provider skills. `openforge task list` prints compact rows by default (`id`, `prompt_preview`, `status`, `labels`, `depends_on`, `updated_at`) for broad agent scans; pass `--full` when complete TaskRow objects are needed. It excludes done tasks by default; pass `--state done` only when completed tasks are explicitly needed.
 
-`openforge update-task` is summary-only: it updates the task `summary` field, which Open Forge uses for Handoff Notes. It does not change `initial_prompt` or `prompt`, and should not be documented or used as a way to correct task prompt text.
+`openforge task update` is summary-only: it updates the task `summary` field, which Open Forge uses for Handoff Notes. It does not change `initial_prompt` or `prompt`, and should not be documented or used as a way to correct task prompt text.
 
-If a task was created with the wrong initial prompt, do not try to repair it with `update-task`. Before deleting it, record the old task's labels, its own `depends_on` list, and any dependent tasks whose `depends_on` entries include the old task id. Then delete the incorrect task, create a replacement with the desired initial prompt, and repoint each dependent task to the replacement:
+If a task was created with the wrong initial prompt, do not try to repair it with `task update`. Before deleting it, record the old task's labels, its own `depends_on` list, and any dependent tasks whose `depends_on` entries include the old task id. Then delete the incorrect task, create a replacement with the desired initial prompt, and repoint each dependent task to the replacement:
 
 ```bash
-openforge get-task --task-id T-123
-openforge list-task-labels --task-id T-123
-openforge list-tasks --project-id P-1 --full # record tasks whose depends_on includes T-123
-openforge delete-task --task-id T-123
-openforge create-task --initial-prompt "Correct task prompt" --project-id P-1 --depends-on T-122 --label cleanup
-openforge set-task-dependencies --task-id T-999 --depends-on T-456,T-122 # replace T-123 with new task T-456
+openforge task get --task-id T-123
+openforge task labels list --task-id T-123
+openforge task list --project-id P-1 --full # record tasks whose depends_on includes T-123
+openforge task delete --task-id T-123
+openforge task create --initial-prompt "Correct task prompt" --project-id P-1 --depends-on T-122 --label cleanup
+openforge task dependencies set --task-id T-999 --depends-on T-456,T-122 # replace T-123 with new task T-456
 ```
 
-When repointing dependents, pass each dependent task's full desired dependency list to `set-task-dependencies`, replacing only the old task id with the new one.
+When repointing dependents, pass each dependent task's full desired dependency list to `task dependencies set`, replacing only the old task id with the new one.
 
 ## Tech stack
 
