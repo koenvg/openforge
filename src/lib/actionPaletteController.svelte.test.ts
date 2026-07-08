@@ -185,7 +185,7 @@ describe('useActionPaletteController', () => {
     expect(taskActions.enqueueReadyPullRequest).toHaveBeenCalledWith(selectedTask)
   })
 
-  it('delegates Set aside and Return to board to the task action runner with the captured task', async () => {
+  it('delegates Set aside and Move task back in focus to the task action runner with the captured task', async () => {
     const taskActions = {
       handleRunAction: vi.fn(async () => undefined),
       deleteTaskAndReload: vi.fn(async () => undefined),

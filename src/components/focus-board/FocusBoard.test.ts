@@ -213,7 +213,7 @@ describe('FocusBoard', () => {
     expect(screen.queryByText('Done task')).toBeNull()
   })
 
-  it('sets aside tasks into Out of Focus and Return to board restores normal placement', async () => {
+  it('sets aside tasks into Out of Focus and Move task back in focus restores normal placement', async () => {
     const ipc = await import('../../lib/ipc')
     const onProjectAttentionChanged = vi.fn(async () => undefined)
     renderBoard({ onProjectAttentionChanged })
@@ -235,7 +235,7 @@ describe('FocusBoard', () => {
     expect(screen.queryByText('Focus task')).toBeNull()
 
     await fireEvent.contextMenu(screen.getAllByText('Doing task')[0])
-    await fireEvent.click(screen.getByText('Return to board'))
+    await fireEvent.click(screen.getByText('Move task back in focus'))
 
     await waitFor(() => {
       expect(get(outOfFocusTaskIdsByProject).get('proj-1')).toBeUndefined()

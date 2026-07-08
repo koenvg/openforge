@@ -99,11 +99,11 @@ describe('getTaskActions', () => {
     expect(ids.indexOf('set-aside-task')).toBeGreaterThan(ids.indexOf('custom-action-custom-1'))
   })
 
-  it('returns Return to board for doing task already Out of Focus', () => {
+  it('returns Move task back in focus for doing task already Out of Focus', () => {
     const task = makeTask({ status: 'doing' })
     const actions = getTaskActions(task, [], [], new Set([task.id]))
     const ids = actions.map(a => a.id)
-    expect(actions.find(a => a.id === 'return-to-board')?.label).toBe('Return to board')
+    expect(actions.find(a => a.id === 'return-to-board')?.label).toBe('Move task back in focus')
     expect(ids).not.toContain('set-aside-task')
     expect(ids).toContain('delete-task')
   })
