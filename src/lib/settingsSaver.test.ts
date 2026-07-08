@@ -60,6 +60,7 @@ describe('settingsSaver', () => {
     await saveGlobalSettings({
       taskIdPrefix: 'T-',
       githubToken: 'gh-token',
+      anthropicApiKey: 'sk-ant-token',
       codeCleanupTasksEnabled: true,
       taskDisplayTitleMetadataUpdatesEnabled: true,
       githubPollInterval: 45,
@@ -67,6 +68,7 @@ describe('settingsSaver', () => {
 
     expect(setConfig).toHaveBeenCalledWith('task_id_prefix', 'T-')
     expect(setConfig).toHaveBeenCalledWith('github_token', 'gh-token')
+    expect(setConfig).toHaveBeenCalledWith('anthropic_api_key', 'sk-ant-token')
     expect(setConfig).toHaveBeenCalledWith('code_cleanup_tasks_enabled', 'true')
     expect(setConfig).toHaveBeenCalledWith('task_display_title_metadata_updates_enabled', 'true')
     expect(setConfig).toHaveBeenCalledWith('github_poll_interval', '45')
@@ -76,6 +78,7 @@ describe('settingsSaver', () => {
     await saveGlobalSettings({
       taskIdPrefix: 'T-',
       githubToken: 'gh-token',
+      anthropicApiKey: '',
       codeCleanupTasksEnabled: true,
       taskDisplayTitleMetadataUpdatesEnabled: false,
       githubPollInterval: 0,
@@ -88,6 +91,7 @@ describe('settingsSaver', () => {
     await saveGlobalSettings({
       taskIdPrefix: 'T-',
       githubToken: 'gh-token',
+      anthropicApiKey: '',
       codeCleanupTasksEnabled: true,
       taskDisplayTitleMetadataUpdatesEnabled: false,
       githubPollInterval: 10,
@@ -100,6 +104,7 @@ describe('settingsSaver', () => {
     await saveGlobalSettings({
       taskIdPrefix: 'T-',
       githubToken: 'gh-token',
+      anthropicApiKey: '',
       codeCleanupTasksEnabled: true,
       taskDisplayTitleMetadataUpdatesEnabled: false,
       githubPollInterval: 301,
@@ -112,6 +117,7 @@ describe('settingsSaver', () => {
     await saveGlobalSettings({
       taskIdPrefix: 'T-',
       githubToken: 'gh-token',
+      anthropicApiKey: '',
       codeCleanupTasksEnabled: true,
       taskDisplayTitleMetadataUpdatesEnabled: false,
       githubPollInterval: Number.NaN,

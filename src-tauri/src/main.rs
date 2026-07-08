@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod agent_lifecycle;
+mod anthropic_client;
 mod app_events;
 mod app_invoke;
 mod backend_runtime;

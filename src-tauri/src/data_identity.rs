@@ -168,6 +168,7 @@ mod tests {
         assert_eq!(keychain_service_name_for_build(true), "openforge-dev");
         assert_eq!(package_app_name(), "Open Forge");
         assert!(is_secret_account("github_token"));
+        assert!(is_secret_account("anthropic_api_key"));
         assert!(!is_secret_account("github_username"));
     }
 

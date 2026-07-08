@@ -14,13 +14,18 @@
     labelOptions: RepoLabel[]
     initialLabels?: string[]
     busy: boolean
+    /** Whether cloud Refine is available (an Anthropic API key is configured). */
+    aiAvailable?: boolean
     onClose: () => void
     onCreate: (title: string, body: string, labels: string[]) => void
     onRefine: (request: RefineDraftRequest) => Promise<TicketDraft>
     onOpenUrl: (url: string) => void
   }
 
-  let { labelOptions, initialLabels = [], busy, onClose, onCreate, onRefine, onOpenUrl }: Props = $props()
+  // Fail closed: Refine stays disabled unless a caller confirms availability.
+  let { labelOptions, initialLabels = [], busy, aiAvailable = false, onClose, onCreate, onRefine, onOpenUrl }: Props = $props()
+
+  const REFINE_UNAVAILABLE_TOOLTIP = 'Add an Anthropic API key in Settings to use Refine'
 
   let note = $state('')
   let title = $state('')
@@ -177,7 +182,13 @@
             bind:value={feedback}
             placeholder="Adjust the draft"
           ></textarea>
-          <button class="btn btn-sm self-start" type="button" onclick={revise} disabled={busy || refining || !feedback.trim()}>
+          <button
+            class="btn btn-sm self-start"
+            type="button"
+            onclick={revise}
+            disabled={busy || refining || !feedback.trim() || !aiAvailable}
+            title={aiAvailable ? undefined : REFINE_UNAVAILABLE_TOOLTIP}
+          >
             {refining ? 'Refining…' : 'Refine with feedback'}
           </button>
         </div>
@@ -196,7 +207,13 @@
         </button>
       {:else}
         <button class="btn btn-sm" type="button" onclick={skipAi} disabled={!note.trim() || busy || refining}>Skip AI</button>
-        <button class="btn btn-sm btn-primary" type="button" onclick={refine} disabled={!note.trim() || busy || refining}>
+        <button
+          class="btn btn-sm btn-primary"
+          type="button"
+          onclick={refine}
+          disabled={!note.trim() || busy || refining || !aiAvailable}
+          title={aiAvailable ? undefined : REFINE_UNAVAILABLE_TOOLTIP}
+        >
           {refining ? 'Refining…' : 'Refine'}
         </button>
       {/if}

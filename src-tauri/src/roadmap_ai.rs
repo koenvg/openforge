@@ -1,11 +1,12 @@
-use crate::user_environment::{find_tool_on_path, user_environment, user_tool_path};
+//! Shared ticket-draft prompt building and response parsing for roadmap Refine.
+//!
+//! The refinement call itself is made against the Anthropic cloud API (see
+//! `anthropic_client`). This module keeps the provider-agnostic pieces: the
+//! ticket-draft types, the prompt builder, and the robust JSON parser for the
+//! model's `{ title, body }` output.
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::path::{Path, PathBuf};
-use std::time::Duration;
-
-const TICKET_DRAFT_JSON_SCHEMA: &str = r#"{"type":"object","additionalProperties":false,"properties":{"title":{"type":"string","minLength":1},"body":{"type":"string"}},"required":["title","body"]}"#;
-const HEADLESS_TIMEOUT_SECONDS: u64 = 120;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct TicketDraft {
@@ -34,28 +35,6 @@ impl TicketDraftRequest {
             return Err("text is required".to_string());
         }
         Ok(())
-    }
-}
-
-pub(crate) async fn refine_ticket(
-    provider: &str,
-    project_path: Option<&Path>,
-    request: &TicketDraftRequest,
-) -> Result<TicketDraft, String> {
-    request.validate()?;
-    let prompt = build_ticket_draft_prompt(request);
-
-    match provider {
-        "codex" => run_codex_headless(project_path, &prompt).await,
-        "claude-code" => run_claude_headless(project_path, &prompt).await,
-        "opencode" => run_opencode_headless(project_path, &prompt).await,
-        "pi" => Err(
-            "Pi headless ticket drafting is not supported yet; switch this project to Codex or Claude Code to use Refine."
-                .to_string(),
-        ),
-        other => Err(format!(
-            "AI ticket drafting is not supported for provider '{other}'"
-        )),
     }
 }
 
@@ -97,165 +76,6 @@ Keep the title concise and action-oriented.\n\n",
     prompt
 }
 
-pub(crate) fn build_codex_headless_args(
-    schema_path: &Path,
-    output_path: &Path,
-    project_path: Option<&Path>,
-    prompt: &str,
-) -> Vec<String> {
-    let mut args = vec![
-        "exec".to_string(),
-        "--sandbox".to_string(),
-        "read-only".to_string(),
-        "--ask-for-approval".to_string(),
-        "never".to_string(),
-        "--skip-git-repo-check".to_string(),
-        "--ephemeral".to_string(),
-        "--ignore-rules".to_string(),
-        "--color".to_string(),
-        "never".to_string(),
-        "--output-schema".to_string(),
-        schema_path.to_string_lossy().to_string(),
-        "--output-last-message".to_string(),
-        output_path.to_string_lossy().to_string(),
-    ];
-    if let Some(path) = project_path {
-        args.push("-C".to_string());
-        args.push(path.to_string_lossy().to_string());
-    }
-    args.push(prompt.to_string());
-    args
-}
-
-fn build_claude_headless_args(prompt: &str) -> Vec<String> {
-    vec![
-        "--print".to_string(),
-        "--output-format".to_string(),
-        "json".to_string(),
-        "--json-schema".to_string(),
-        TICKET_DRAFT_JSON_SCHEMA.to_string(),
-        "--no-session-persistence".to_string(),
-        "--permission-mode".to_string(),
-        "dontAsk".to_string(),
-        prompt.to_string(),
-    ]
-}
-
-fn build_opencode_headless_args(prompt: &str) -> Vec<String> {
-    vec![
-        "run".to_string(),
-        "--prompt".to_string(),
-        prompt.to_string(),
-    ]
-}
-
-async fn run_codex_headless(
-    project_path: Option<&Path>,
-    prompt: &str,
-) -> Result<TicketDraft, String> {
-    let temp_dir =
-        std::env::temp_dir().join(format!("openforge-roadmap-ai-{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&temp_dir)
-        .map_err(|error| format!("failed to create temporary Codex schema directory: {error}"))?;
-    let schema_path = temp_dir.join("ticket-draft.schema.json");
-    let output_path = temp_dir.join("ticket-draft.output.json");
-    if let Err(error) = std::fs::write(&schema_path, TICKET_DRAFT_JSON_SCHEMA) {
-        let _ = std::fs::remove_dir_all(&temp_dir);
-        return Err(format!("failed to write Codex output schema: {error}"));
-    }
-
-    let args = build_codex_headless_args(&schema_path, &output_path, project_path, prompt);
-    let result = run_headless_command("codex", &args, None, Some(&output_path))
-        .await
-        .and_then(|stdout| parse_ticket_draft_output(&stdout));
-    let _ = std::fs::remove_dir_all(&temp_dir);
-    result
-}
-
-async fn run_claude_headless(
-    project_path: Option<&Path>,
-    prompt: &str,
-) -> Result<TicketDraft, String> {
-    let args = build_claude_headless_args(prompt);
-    let stdout = run_headless_command("claude", &args, project_path, None).await?;
-    parse_ticket_draft_output(&stdout)
-}
-
-async fn run_opencode_headless(
-    project_path: Option<&Path>,
-    prompt: &str,
-) -> Result<TicketDraft, String> {
-    let args = build_opencode_headless_args(prompt);
-    let stdout = run_headless_command("opencode", &args, project_path, None).await?;
-    parse_ticket_draft_output(&stdout)
-}
-
-/// Resolve a headless AI CLI to an absolute path using the user's effective
-/// tool PATH.
-///
-/// GUI-launched processes inherit macOS's minimal PATH (e.g.
-/// `/usr/bin:/bin:...`), which omits the user tool directories where these CLIs
-/// live (`~/.local/bin`, node-manager bins, Homebrew, etc.). A bare-name spawn
-/// therefore fails with ENOENT even when the CLI works from a terminal, so we
-/// resolve to an absolute path here and spawn with the augmented environment.
-fn resolve_headless_program(program: &str, path: &str) -> Result<PathBuf, String> {
-    find_tool_on_path(program, path)
-        .ok_or_else(|| format!("{program} executable was not found on PATH"))
-}
-
-async fn run_headless_command(
-    program: &str,
-    args: &[String],
-    current_dir: Option<&Path>,
-    output_file: Option<&Path>,
-) -> Result<String, String> {
-    let env = user_environment();
-    let path = env.get("PATH").cloned().unwrap_or_else(user_tool_path);
-    let binary = resolve_headless_program(program, &path)?;
-
-    let mut command = tokio::process::Command::new(&binary);
-    command.args(args);
-    command.envs(&env);
-    command.env("NO_COLOR", "1");
-    if let Some(path) = current_dir {
-        command.current_dir(path);
-    }
-
-    let output = tokio::time::timeout(
-        Duration::from_secs(HEADLESS_TIMEOUT_SECONDS),
-        command.output(),
-    )
-    .await
-    .map_err(|_| {
-        format!("{program} ticket drafting timed out after {HEADLESS_TIMEOUT_SECONDS} seconds")
-    })?
-    .map_err(|error| format!("failed to launch {program} for ticket drafting: {error}"))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        let detail = if !stderr.is_empty() { stderr } else { stdout };
-        return Err(format!(
-            "{program} ticket drafting failed{}",
-            if detail.is_empty() {
-                String::new()
-            } else {
-                format!(": {detail}")
-            }
-        ));
-    }
-
-    if let Some(path) = output_file {
-        if let Ok(content) = std::fs::read_to_string(path) {
-            if !content.trim().is_empty() {
-                return Ok(content);
-            }
-        }
-    }
-
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
-}
-
 pub(crate) fn parse_ticket_draft_output(raw: &str) -> Result<TicketDraft, String> {
     parse_ticket_draft_output_inner(raw, 0)
 }
@@ -277,7 +97,7 @@ fn parse_ticket_draft_output_inner(raw: &str, depth: u8) -> Result<TicketDraft, 
     if value.get("is_error").and_then(Value::as_bool) == Some(true) {
         let detail = provider_error_detail(&value);
         return Err(format!(
-            "Claude Code ticket drafting failed{}",
+            "ticket drafting failed{}",
             detail
                 .as_deref()
                 .map(|message| format!(": {message}"))
@@ -422,7 +242,7 @@ mod tests {
     }
 
     #[test]
-    fn roadmap_ai_parses_claude_result_wrapper_json() {
+    fn roadmap_ai_parses_result_wrapper_json() {
         let draft = parse_ticket_draft_output(
             r#"{"type":"result","result":"{\"title\":\"Tighter title\",\"body\":\"Markdown body\"}"}"#,
         )
@@ -433,7 +253,7 @@ mod tests {
     }
 
     #[test]
-    fn roadmap_ai_parses_claude_structured_output_before_result_text() {
+    fn roadmap_ai_parses_structured_output_before_result_text() {
         let draft = parse_ticket_draft_output(
             r#"{"type":"result","subtype":"success","is_error":false,"result":"Done.","structured_output":{"title":"Tighter title","body":"Markdown body"}}"#,
         )
@@ -444,13 +264,13 @@ mod tests {
     }
 
     #[test]
-    fn roadmap_ai_reports_claude_error_wrapper() {
+    fn roadmap_ai_reports_error_wrapper() {
         let err = parse_ticket_draft_output(
             r#"{"type":"result","subtype":"error_max_budget_usd","is_error":true,"errors":["Reached maximum budget ($0.02)"]}"#,
         )
         .expect_err("provider error wrapper should fail");
 
-        assert!(err.contains("Claude Code ticket drafting failed"));
+        assert!(err.contains("ticket drafting failed"));
         assert!(err.contains("Reached maximum budget ($0.02)"));
     }
 
@@ -467,27 +287,6 @@ mod tests {
         let err = parse_ticket_draft_output("").expect_err("empty output should fail");
 
         assert!(err.contains("failed to parse ticket draft JSON"));
-    }
-
-    #[test]
-    fn roadmap_ai_builds_codex_headless_args_with_schema_and_output_paths() {
-        let args = build_codex_headless_args(
-            Path::new("/tmp/schema.json"),
-            Path::new("/tmp/output.json"),
-            Some(Path::new("/repo")),
-            "draft a ticket",
-        );
-
-        assert_eq!(args[0], "exec");
-        assert!(args.contains(&"--sandbox".to_string()));
-        assert!(args.contains(&"read-only".to_string()));
-        assert!(args.contains(&"--output-schema".to_string()));
-        assert!(args.contains(&"/tmp/schema.json".to_string()));
-        assert!(args.contains(&"--output-last-message".to_string()));
-        assert!(args.contains(&"/tmp/output.json".to_string()));
-        assert!(args.contains(&"-C".to_string()));
-        assert!(args.contains(&"/repo".to_string()));
-        assert_eq!(args.last().map(String::as_str), Some("draft a ticket"));
     }
 
     #[test]
@@ -513,33 +312,19 @@ mod tests {
     }
 
     #[test]
-    fn roadmap_ai_resolves_headless_program_from_effective_path() {
-        use std::os::unix::fs::PermissionsExt;
+    fn roadmap_ai_builds_initial_prompt_from_rough_note() {
+        let request = TicketDraftRequest {
+            repo: "acme/widgets".to_string(),
+            text: "users lose drafts on reload".to_string(),
+            draft: None,
+            feedback: String::new(),
+            labels: vec![],
+        };
 
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let executable = temp_dir.path().join("claude");
-        std::fs::write(&executable, "#!/bin/sh\n").expect("write executable");
-        let mut permissions = std::fs::metadata(&executable)
-            .expect("metadata")
-            .permissions();
-        permissions.set_mode(0o755);
-        std::fs::set_permissions(&executable, permissions).expect("chmod executable");
+        let prompt = build_ticket_draft_prompt(&request);
 
-        // A minimal, GUI-style PATH that does not contain the CLI, plus the real dir.
-        let path = format!("/usr/bin:/bin:{}", temp_dir.path().display());
-
-        assert_eq!(
-            resolve_headless_program("claude", &path).expect("claude should resolve"),
-            executable
-        );
-    }
-
-    #[test]
-    fn roadmap_ai_reports_missing_headless_program_clearly() {
-        let err = resolve_headless_program("definitely-missing-cli", "/usr/bin:/bin")
-            .expect_err("missing program should error");
-
-        assert!(err.contains("definitely-missing-cli"));
-        assert!(err.contains("not found on PATH"));
+        assert!(prompt.contains("acme/widgets"));
+        assert!(prompt.contains("Selected labels: none"));
+        assert!(prompt.contains("users lose drafts on reload"));
     }
 }

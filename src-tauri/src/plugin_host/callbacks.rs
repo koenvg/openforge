@@ -36,6 +36,7 @@ fn openforge_global_command_to_app_invoke(qualified_id: &str) -> Result<&'static
         "roadmapEditIssue" => Ok("roadmap_edit_issue"),
         "roadmapUpdateLabelColor" => Ok("roadmap_update_label_color"),
         "roadmapRefineTicket" => Ok("roadmap_refine_ticket"),
+        "roadmapRefineAvailable" => Ok("roadmap_refine_available"),
         "agentGenerate" => Ok("agent_generate"),
         "abortAgentGenerate" => Ok("abort_agent_generate"),
         _ => Err(format!(
@@ -70,6 +71,19 @@ fn plugin_may_invoke_command(plugin_id: &str, command: &str) -> bool {
         ROADMAP_PLUGIN_ID => is_roadmap_app_command(command),
         _ => false,
     }
+}
+
+/// Secret config keys that plugins are permitted to read through the host config
+/// bridge (`openforge.config.get`).
+///
+/// The config bridge otherwise returns any keychain secret to any plugin, so
+/// secrets that plugins must never see (e.g. `anthropic_api_key`) are withheld
+/// here. Such capabilities are exposed to plugins through purpose-built
+/// boolean/command surfaces instead (e.g. `roadmap_refine_available`). Only
+/// `github_token` remains readable for backward compatibility with the
+/// github-sync plugin, which already reads it through this bridge.
+fn plugin_may_read_secret(key: &str) -> bool {
+    matches!(key, "github_token")
 }
 
 fn required_shell_session_key(params: &Value) -> Result<String, String> {
@@ -336,6 +350,11 @@ impl PluginHost {
             .ok_or_else(|| "plugin host database state is not available".to_string())?;
         let db = crate::db::acquire_db(db_state.inner().as_ref());
         let value = if crate::secure_store::is_secret(&key) {
+            if !plugin_may_read_secret(&key) {
+                return Err(format!(
+                    "plugin host is not permitted to read secret config key '{key}'"
+                ));
+            }
             crate::secure_store::get_secret(&key)
                 .map_err(|error| format!("failed to get secret config: {error}"))?
                 .or_else(|| db.get_config(&key).ok().flatten())
@@ -479,6 +498,28 @@ mod tests {
             required_shell_session_key(&params).expect_err("terminalIndex should be required"),
             "plugin host callback missing integer param: terminalIndex"
         );
+    }
+
+    #[test]
+    fn plugin_may_read_github_token_but_not_other_secrets() {
+        assert!(plugin_may_read_secret("github_token"));
+        assert!(!plugin_may_read_secret("anthropic_api_key"));
+        assert!(!plugin_may_read_secret("some_future_secret"));
+    }
+
+    #[test]
+    fn roadmap_refine_available_command_maps_to_app_invoke() {
+        assert_eq!(
+            openforge_global_command_to_app_invoke("openforge.roadmapRefineAvailable").unwrap(),
+            "roadmap_refine_available"
+        );
+        // The availability command stays within the roadmap namespace so the
+        // roadmap plugin is authorized to invoke it.
+        assert!(is_roadmap_app_command("roadmap_refine_available"));
+        assert!(plugin_may_invoke_command(
+            ROADMAP_PLUGIN_ID,
+            "roadmap_refine_available"
+        ));
     }
 
     #[test]

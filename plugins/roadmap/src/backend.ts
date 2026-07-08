@@ -3,6 +3,7 @@ import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
 import type {
   CreateIssueRequest,
   EditIssueRequest,
+  RefineAvailability,
   RoadmapBoard,
   RoadmapConfig,
   RefineTicketRequest,
@@ -78,6 +79,12 @@ export default defineBackendPlugin({
     context.subscriptions.add(
       openforge.backend.registerMethod<RefineTicketRequest, TicketDraft>('roadmap_refine_ticket', {
         handler: (request) => invokeHostCommand<TicketDraft>(openforge, 'roadmapRefineTicket', request),
+      }),
+    )
+
+    context.subscriptions.add(
+      openforge.backend.registerMethod<void, RefineAvailability>('roadmap_refine_available', {
+        handler: () => invokeHostCommand<RefineAvailability>(openforge, 'roadmapRefineAvailable'),
       }),
     )
   },

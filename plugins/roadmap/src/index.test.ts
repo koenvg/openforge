@@ -101,11 +101,11 @@ describe('roadmap backend plugin', () => {
 
     await backend.activate(api, context)
 
-    const methods = ['roadmap_get_board', 'roadmap_set_value', 'roadmap_get_config', 'roadmap_set_column_labels', 'roadmap_create_issue', 'roadmap_edit_issue', 'roadmap_update_label_color', 'roadmap_refine_ticket']
+    const methods = ['roadmap_get_board', 'roadmap_set_value', 'roadmap_get_config', 'roadmap_set_column_labels', 'roadmap_create_issue', 'roadmap_edit_issue', 'roadmap_update_label_color', 'roadmap_refine_ticket', 'roadmap_refine_available']
     for (const method of methods) {
       expect(api.backend.registerMethod).toHaveBeenCalledWith(method, expect.objectContaining({ handler: expect.any(Function) }))
     }
-    expect(subscriptions.add).toHaveBeenCalledTimes(8)
+    expect(subscriptions.add).toHaveBeenCalledTimes(9)
 
     // Invoking the registered roadmap_get_board handler must proxy to the
     // camelCase host command id the core callback router expects.

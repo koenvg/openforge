@@ -15,6 +15,7 @@ describe('CreateDialog', () => {
         labelOptions: labels,
         initialLabels: [],
         busy: false,
+        aiAvailable: true,
         onClose: vi.fn(),
         onCreate: vi.fn(),
         onOpenUrl: vi.fn(),
@@ -79,6 +80,36 @@ describe('CreateDialog', () => {
       feedback: 'make it tighter',
       labels: [],
     })
+  })
+
+  it('disables Refine when no Anthropic API key is available', async () => {
+    renderDialog({ aiAvailable: false })
+
+    await fireEvent.input(screen.getByLabelText('Describe the issue'), { target: { value: 'something worth refining' } })
+
+    const refine = screen.getByRole('button', { name: 'Refine' }) as HTMLButtonElement
+    expect(refine.disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Skip AI' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('disables Refine with feedback when no Anthropic API key is available', async () => {
+    renderDialog({ aiAvailable: false })
+
+    await fireEvent.input(screen.getByLabelText('Describe the issue'), { target: { value: 'something' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Skip AI' }))
+    await fireEvent.input(screen.getByLabelText('Feedback'), { target: { value: 'make it tighter' } })
+
+    const refineFeedback = screen.getByRole('button', { name: 'Refine with feedback' }) as HTMLButtonElement
+    expect(refineFeedback.disabled).toBe(true)
+  })
+
+  it('keeps Refine enabled when an Anthropic API key is available', async () => {
+    renderDialog({ aiAvailable: true })
+
+    await fireEvent.input(screen.getByLabelText('Describe the issue'), { target: { value: 'something worth refining' } })
+
+    const refine = screen.getByRole('button', { name: 'Refine' }) as HTMLButtonElement
+    expect(refine.disabled).toBe(false)
   })
 
   it('uses shared modal close behavior for Escape and backdrop clicks', async () => {

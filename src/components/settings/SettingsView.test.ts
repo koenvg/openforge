@@ -642,6 +642,7 @@ describe('SettingsView', () => {
 
       resolvers.get('task_id_prefix')?.('OF')
       resolvers.get('github_token')?.('ghp_old')
+      resolvers.get('anthropic_api_key')?.('')
       resolvers.get('code_cleanup_tasks_enabled')?.('false')
       resolvers.get('task_display_title_metadata_updates_enabled')?.('false')
       resolvers.get('github_poll_interval')?.('60')

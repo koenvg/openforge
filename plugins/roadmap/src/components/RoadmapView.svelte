@@ -48,6 +48,9 @@
   let selectedIssueNumber = $state<number | null>(null)
   let showCreate = $state(false)
   let createLabels = $state<string[]>([])
+  // Whether cloud Refine is available (an Anthropic API key is configured).
+  // Defaults to false so Refine stays disabled until availability is confirmed.
+  let aiAvailable = $state(false)
   let showColumns = $state(false)
   let configLabels = $state<LabelUsage[]>([])
   let configColumnLabels = $state<string[]>([])
@@ -68,6 +71,7 @@
   // pass a new prop object with the same logical projectId).
   let lastProjectId = $state<string | null | undefined>(undefined)
   let actionLoadRequest = 0
+  let availabilityRequest = 0
 
   function modelFromBoard(raw: RoadmapBoard): BoardModel {
     const values: Record<number, number> = {}
@@ -250,7 +254,20 @@
 
   function openCreate(labels: string[] = []) {
     createLabels = [...labels]
+    aiAvailable = false
     showCreate = true
+    // Refresh availability each time the dialog opens so a key added in Settings
+    // is reflected without reloading the board. Guard against a stale response
+    // from an earlier open overwriting a newer one; on failure leave Refine off.
+    const requestId = ++availabilityRequest
+    void client
+      .refineAvailable()
+      .then((available) => {
+        if (requestId === availabilityRequest) aiAvailable = available
+      })
+      .catch(() => {
+        if (requestId === availabilityRequest) aiAvailable = false
+      })
   }
 
   function closeCreate() {
@@ -409,6 +426,7 @@
     labelOptions={repoLabels}
     initialLabels={createLabels}
     {busy}
+    {aiAvailable}
     onClose={closeCreate}
     onCreate={createIssue}
     onRefine={refineTicketDraft}

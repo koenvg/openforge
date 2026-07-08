@@ -98,3 +98,8 @@ export interface RefineTicketRequest {
   feedback: string
   labels: string[]
 }
+
+/** Whether cloud Refine is available (an Anthropic API key is configured). */
+export interface RefineAvailability {
+  available: boolean
+}

@@ -121,13 +121,16 @@ describe('settingsConfig', () => {
         .mockResolvedValueOnce('true')
         .mockResolvedValueOnce('true')
         .mockResolvedValueOnce('45')
+        .mockResolvedValueOnce('sk-ant-test')
 
       const result = await loadGlobalSettings()
 
-      expect(getConfig).toHaveBeenCalledTimes(5)
+      expect(getConfig).toHaveBeenCalledTimes(6)
+      expect(getConfig).toHaveBeenCalledWith('anthropic_api_key')
       expect(result).toEqual({
         taskIdPrefix: 'T-',
         githubToken: 'gh-token',
+        anthropicApiKey: 'sk-ant-test',
         codeCleanupTasksEnabled: true,
         taskDisplayTitleMetadataUpdatesEnabled: true,
         githubPollInterval: 45,
@@ -147,6 +150,7 @@ describe('settingsConfig', () => {
       expect(result).toEqual({
         taskIdPrefix: '',
         githubToken: '',
+        anthropicApiKey: '',
         codeCleanupTasksEnabled: false,
         taskDisplayTitleMetadataUpdatesEnabled: false,
         githubPollInterval: 60,

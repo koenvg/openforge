@@ -61,6 +61,7 @@
   // Global state
   let taskIdPrefix = $state('')
   let githubToken = $state('')
+  let anthropicApiKey = $state('')
   let githubPollInterval = $state(DEFAULT_GITHUB_POLL_INTERVAL_SECONDS)
   let globalSettingsLoaded = $state(false)
   let globalSettingsLoadError = $state<string | null>(null)
@@ -260,6 +261,7 @@
 
       taskIdPrefix = globalSettings.taskIdPrefix
       githubToken = globalSettings.githubToken
+      anthropicApiKey = globalSettings.anthropicApiKey
       isCodeCleanupTasksEnabled = globalSettings.codeCleanupTasksEnabled
       $codeCleanupTasksEnabled = isCodeCleanupTasksEnabled
       isTaskDisplayTitleMetadataUpdatesEnabled = globalSettings.taskDisplayTitleMetadataUpdatesEnabled
@@ -338,6 +340,7 @@
       pendingGlobalSettingsSave = {
         taskIdPrefix,
         githubToken,
+        anthropicApiKey,
         codeCleanupTasksEnabled: isCodeCleanupTasksEnabled,
         taskDisplayTitleMetadataUpdatesEnabled: isTaskDisplayTitleMetadataUpdatesEnabled,
         githubPollInterval,
@@ -666,6 +669,8 @@
         <SettingsCredentialsCard
           {githubToken}
           onGithubTokenChange={(v: string) => { githubToken = v; scheduleSave() }}
+          {anthropicApiKey}
+          onAnthropicApiKeyChange={(v: string) => { anthropicApiKey = v; scheduleSave() }}
           disabled={!globalSettingsLoaded}
         />
 

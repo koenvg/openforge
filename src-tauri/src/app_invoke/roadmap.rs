@@ -15,7 +15,6 @@ use crate::{http_server::AppInvokeRequest, http_server::AppState};
 use axum::http::StatusCode;
 use serde::Serialize;
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 fn runtime_error(error: String) -> (StatusCode, String) {
     (StatusCode::INTERNAL_SERVER_ERROR, error)
@@ -361,29 +360,30 @@ pub(super) async fn handle_app_roadmap_command(
                 .await
                 .map_err(bad_request)?;
 
-            let (provider, project_path) = {
-                let db = crate::db::acquire_db(&state.db);
-                let provider = db.resolve_ai_provider(&project_id);
-                let project_path = db
-                    .get_project(&project_id)
-                    .map_err(|e| runtime_error(format!("failed to load project: {e}")))?
-                    .map(|project| PathBuf::from(project.path));
-                (provider, project_path)
-            };
+            let api_key = crate::anthropic_client::api_key().ok_or_else(|| {
+                bad_request(
+                    "Anthropic API key required. Add it in Settings \u{2192} Credentials to use Refine."
+                        .to_string(),
+                )
+            })?;
 
-            let request = TicketDraftRequest {
+            let refine_request = TicketDraftRequest {
                 repo: format!("{}/{}", repo.owner, repo.name),
                 text,
                 draft,
                 feedback,
                 labels,
             };
-            let draft =
-                crate::roadmap_ai::refine_ticket(&provider, project_path.as_deref(), &request)
-                    .await
-                    .map_err(runtime_error)?;
+            let draft = crate::anthropic_client::refine_ticket_draft(&api_key, &refine_request)
+                .await
+                .map_err(runtime_error)?;
 
             json_value(draft)?
+        }
+        "roadmap_refine_available" => {
+            json_value(serde_json::json!({
+                "available": crate::anthropic_client::is_configured(),
+            }))?
         }
         _ => return Ok(None),
     };
