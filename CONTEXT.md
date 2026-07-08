@@ -76,6 +76,14 @@ _Avoid_: Tauri backend, `src-tauri`, backend service
 The Rust package that contains the **Rust Sidecar** implementation and build metadata.
 _Avoid_: `src-tauri`, generic backend folder
 
+**App Update**:
+A user-initiated in-app flow for moving the installed OpenForge desktop app to a newer trusted published version.
+_Avoid_: CLI update, reinstall script, Codex update
+
+**App Update Indicator**:
+A subtle global signal that a newer OpenForge desktop version is available without interrupting the user's current task.
+_Avoid_: modal prompt, forced update banner, always-visible update button
+
 **Terminal Runtime**:
 The shared OpenForge runtime that owns terminal session lifecycle for **Terminal Surfaces**.
 _Avoid_: Terminal plugin internals, ordinary plugin dependency, private terminal pool, private forwarding package
@@ -188,6 +196,17 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - A **Trusted Plugin** may start an **Implementation Run** for any **Task** when using the host-provided task capability.
 - A **Trusted Plugin** may own a **Plugin-owned Domain** when the concept is not shared across plugins or core workflows.
 - The **Backend Crate** builds the **Rust Sidecar**.
+- An **App Update** updates the whole OpenForge desktop app rather than only updating the OpenForge CLI.
+- An **App Update** may be discovered quietly, but installing it is user-initiated.
+- An **App Update** is offered only for trusted stable published releases that satisfy the project's release security bar.
+- An **App Update** must warn before quitting OpenForge while active **Agent Sessions** or **Terminal Surfaces** could be interrupted.
+- An **App Update Indicator** appears only when an **App Update** is available and points to the primary Settings action.
+- Electron main owns **App Update** orchestration because replacing and relaunching the app bundle is shell-level work.
+- An **App Update** preserves the current installed app if download, verification, staging, or replacement fails.
+- After explicit confirmation, an **App Update** completes the download, verification, app replacement, CLI payload refresh, and relaunch without requiring manual Finder steps.
+- **App Update** availability is determined by comparing the current packaged app version with the latest trusted stable published release.
+- **App Update** v1 does not provide automatic rollback after a successful replacement; users can manually reinstall a prior trusted release if needed.
+- **App Update** UI links to release notes rather than embedding a changelog in the Settings card.
 - Electron main supervises the **Rust Sidecar** rather than embedding backend domain logic in the renderer or relying on a Tauri shell.
 - A **Terminal Surface** uses the **Terminal Runtime** and does not own shell process state.
 - The **Terminal Runtime** is shared across **Terminal Surfaces** when they need one terminal lifecycle owner.
@@ -260,6 +279,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - Worktree branch names were considered for prompt-derived descriptions — resolved: **Task Branches** should be stable task identifiers because they are visible as PR source branches.
 - "Skill" was considered as a core OpenForge platform concept because one built-in plugin manages skills — resolved: skill discovery and editing are a **Plugin-owned Domain** unless multiple plugins need a shared platform contract.
 - `src-tauri` was used to describe both a historical directory and the active Rust process — resolved: use **Rust Sidecar** for the supervised runtime process and **Backend Crate** for the Rust package that builds it.
+- "Codex update" was used as shorthand for a visible in-app app update button — resolved: use **App Update** for the OpenForge desktop update flow.
 - "Terminal pooling" was used for plugin UI, shell process state, and reusable terminal lifecycle — resolved: **Terminal Surface** names the UI, while **Terminal Runtime** names the shared lifecycle owner.
 - "Terminal API" could mean a host `openforge.terminal` capability, a normal package dependency, or the shared runtime — resolved: **Terminal Runtime** names the shared runtime; lower-level shell/event APIs remain capability primitives.
 - "Latest hash" in self-review could mean branch HEAD, latest commit, or the last accepted file version — resolved: use **Reviewed File Snapshot** for the last accepted file version.
