@@ -157,6 +157,14 @@
       {files}
       {fetchFileContents}
       projectId={activeProjectId}
+      existingComments={reviewComments}
+      agentComments={agentReviewComments}
+      pendingComments={pendingManualComments}
+      onPendingCommentsChange={onPendingCommentsChange}
+      onAgentCommentsChange={onAgentCommentsChange}
+      onUpdateAgentCommentStatus={onUpdateAgentCommentStatus}
+      {onOpenUrl}
+      onSubmitReview={onSubmitReview}
     />
   {:else}
     <div class="flex flex-1 min-h-0 overflow-hidden">

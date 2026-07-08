@@ -1,21 +1,27 @@
 <script lang="ts">
   import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
   import type {
+    AgentReviewComment,
     PrFileDiff,
     PrWalkthrough,
     PrWalkthroughStep,
+    ReviewComment,
     ReviewPullRequest,
+    ReviewSubmissionComment,
   } from '@openforge-app/plugin-sdk/domain'
   import { compileWalkthroughPrompt } from '../../lib/walkthroughPrompt'
   import { parseAndValidateWalkthroughSteps } from '../../lib/walkthroughParse'
   import {
     buildSyntheticStepFiles,
     clampStepIndex,
+    isReviewSubmitStep,
     isWalkthroughStale,
+    totalWalkthroughSteps,
   } from '../../lib/walkthroughViewState'
   import { isInputFocused } from '../../lib/domUtils'
   import FileTree from '@openforge-app/pr-review-ui/FileTree.svelte'
   import DiffViewer from '@openforge-app/pr-review-ui/DiffViewer.svelte'
+  import ReviewSubmitPanel from '@openforge-app/pr-review-ui/ReviewSubmitPanel.svelte'
   import type { GithubSyncPrReviewClient } from './githubSyncClient'
   import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
 
@@ -26,9 +32,40 @@
     files: PrFileDiff[]
     fetchFileContents: (file: PrFileDiff) => Promise<FileContents>
     projectId: string | null
+    existingComments: ReviewComment[]
+    pendingComments: ReviewSubmissionComment[]
+    onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
+    agentComments: AgentReviewComment[]
+    onAgentCommentsChange: (comments: AgentReviewComment[]) => void
+    onUpdateAgentCommentStatus: (commentId: number, status: 'approved' | 'dismissed') => Promise<void> | void
+    onOpenUrl: (url: string) => void | Promise<void>
+    onSubmitReview: (request: {
+      repoOwner: string
+      repoName: string
+      prNumber: number
+      event: 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES'
+      body: string
+      comments: ReviewSubmissionComment[]
+      commitId: string
+    }) => Promise<void>
   }
 
-  let { api: _api, githubSync, pr, files, fetchFileContents, projectId }: Props = $props()
+  let {
+    api: _api,
+    githubSync,
+    pr,
+    files,
+    fetchFileContents,
+    projectId,
+    existingComments,
+    pendingComments,
+    onPendingCommentsChange,
+    agentComments,
+    onAgentCommentsChange,
+    onUpdateAgentCommentStatus,
+    onOpenUrl,
+    onSubmitReview,
+  }: Props = $props()
 
   let walkthrough = $state<PrWalkthrough | null>(null)
   let isLoading = $state(false)
@@ -48,14 +85,30 @@
 
   let isGenerating = $derived(walkthrough?.status === 'generating')
 
-  let activeStep = $derived<PrWalkthroughStep | null>(
-    parsedSteps && parsedSteps.length > 0
-      ? parsedSteps[clampStepIndex(activeStepIndex, parsedSteps.length)]
-      : null,
+  let totalSteps = $derived(parsedSteps ? totalWalkthroughSteps(parsedSteps) : 0)
+
+  let clampedStepIndex = $derived(
+    parsedSteps ? clampStepIndex(activeStepIndex, totalSteps) : 0,
   )
 
+  let isFinalStep = $derived(
+    parsedSteps ? isReviewSubmitStep(clampedStepIndex, parsedSteps) : false,
+  )
+
+  let activeStep = $derived<PrWalkthroughStep | null>(
+    parsedSteps && !isFinalStep ? parsedSteps[clampedStepIndex] : null,
+  )
+
+  // The final step shows every file; a per-concept step shows only its hunks.
   let stepFiles = $derived<PrFileDiff[]>(
-    activeStep ? buildSyntheticStepFiles(files, activeStep) : [],
+    isFinalStep ? files : activeStep ? buildSyntheticStepFiles(files, activeStep) : [],
+  )
+
+  let stepTitle = $derived(isFinalStep ? 'Review & submit' : activeStep?.title ?? '')
+  let stepSummary = $derived(
+    isFinalStep
+      ? 'Review every change together, then submit your review.'
+      : activeStep?.summary ?? '',
   )
 
   $effect(() => {
@@ -185,17 +238,17 @@
 
   function goPrev() {
     if (!parsedSteps) return
-    activeStepIndex = clampStepIndex(activeStepIndex - 1, parsedSteps.length)
+    activeStepIndex = clampStepIndex(activeStepIndex - 1, totalSteps)
   }
 
   function goNext() {
     if (!parsedSteps) return
-    activeStepIndex = clampStepIndex(activeStepIndex + 1, parsedSteps.length)
+    activeStepIndex = clampStepIndex(activeStepIndex + 1, totalSteps)
   }
 
   function selectStep(index: number) {
     if (!parsedSteps) return
-    activeStepIndex = clampStepIndex(index, parsedSteps.length)
+    activeStepIndex = clampStepIndex(index, totalSteps)
   }
 
   function handleFileSelect(filename: string) {
@@ -273,14 +326,14 @@
     <div class="flex flex-col gap-5 px-6 py-5 border-b border-base-300 shrink-0">
       <div class="flex items-start gap-5">
         <div class="flex flex-col items-center leading-none shrink-0 pt-0.5">
-          <span class="text-4xl font-bold text-base-content tabular-nums">{clampStepIndex(activeStepIndex, parsedSteps.length) + 1}</span>
-          <span class="text-[10px] font-medium uppercase tracking-wider text-base-content/40 mt-2 whitespace-nowrap">of {parsedSteps.length}</span>
+          <span class="text-4xl font-bold text-base-content tabular-nums">{clampedStepIndex + 1}</span>
+          <span class="text-[10px] font-medium uppercase tracking-wider text-base-content/40 mt-2 whitespace-nowrap">of {totalSteps}</span>
         </div>
 
         <div class="flex flex-col gap-1.5 min-w-0 flex-1">
-          <h3 class="text-sm font-semibold text-base-content m-0 leading-snug">{activeStep?.title}</h3>
-          {#if activeStep}
-            <p class="text-lg leading-relaxed text-base-content/90 m-0">{activeStep.summary}</p>
+          <h3 class="text-sm font-semibold text-base-content m-0 leading-snug">{stepTitle}</h3>
+          {#if stepSummary}
+            <p class="text-lg leading-relaxed text-base-content/90 m-0">{stepSummary}</p>
           {/if}
         </div>
 
@@ -288,13 +341,13 @@
           <button
             class="btn btn-ghost btn-xs"
             onclick={goPrev}
-            disabled={activeStepIndex <= 0}
+            disabled={clampedStepIndex <= 0}
             title="Previous step (←)"
           >◀ Prev</button>
           <button
             class="btn btn-ghost btn-xs"
             onclick={goNext}
-            disabled={activeStepIndex >= parsedSteps.length - 1}
+            disabled={clampedStepIndex >= totalSteps - 1}
             title="Next step (→)"
           >Next ▶</button>
           {#if !stale}
@@ -307,11 +360,17 @@
         {#each parsedSteps as step, i}
           <button
             type="button"
-            class="btn btn-sm btn-circle {i === clampStepIndex(activeStepIndex, parsedSteps.length) ? 'btn-primary' : 'btn-ghost text-base-content/60'}"
+            class="btn btn-sm btn-circle {i === clampedStepIndex ? 'btn-primary' : 'btn-ghost text-base-content/60'}"
             onclick={() => selectStep(i)}
             title={step.title}
           >{i + 1}</button>
         {/each}
+        <button
+          type="button"
+          class="btn btn-sm btn-circle {isFinalStep ? 'btn-primary' : 'btn-ghost text-base-content/60'}"
+          onclick={() => selectStep(parsedSteps.length)}
+          title="Review & submit"
+        >{parsedSteps.length + 1}</button>
       </div>
     </div>
 
@@ -323,11 +382,32 @@
         <DiffViewer
           bind:this={diffViewer}
           files={stepFiles}
+          existingComments={existingComments}
           repoOwner={pr.repo_owner}
           repoName={pr.repo_name}
           fileTreeVisible={false}
           {fetchFileContents}
-        />
+          agentComments={agentComments}
+          pendingComments={pendingComments}
+          onPendingCommentsChange={onPendingCommentsChange}
+          onAgentCommentsChange={onAgentCommentsChange}
+          onUpdateAgentCommentStatus={onUpdateAgentCommentStatus}
+          onOpenUrl={onOpenUrl}
+        >
+          {#snippet footer()}
+            {#if isFinalStep}
+              <ReviewSubmitPanel
+                repoOwner={pr.repo_owner}
+                repoName={pr.repo_name}
+                prNumber={pr.number}
+                commitId={pr.head_sha}
+                pendingComments={pendingComments}
+                onPendingCommentsChange={onPendingCommentsChange}
+                onSubmitReview={onSubmitReview}
+              />
+            {/if}
+          {/snippet}
+        </DiffViewer>
       </div>
     </div>
   {/if}

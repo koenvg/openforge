@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildSyntheticStepFiles, clampStepIndex, isWalkthroughStale, isPrLargeEnoughForWalkthroughHint } from './walkthroughViewState'
+import { buildSyntheticStepFiles, clampStepIndex, isWalkthroughStale, isPrLargeEnoughForWalkthroughHint, totalWalkthroughSteps, isReviewSubmitStep } from './walkthroughViewState'
 import type { PrFileDiff, PrWalkthrough, PrWalkthroughStep, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
 
 function file(filename: string, hunks: number, extra: Partial<PrFileDiff> = {}): PrFileDiff {
@@ -181,6 +181,37 @@ describe('isWalkthroughStale', () => {
   it('returns false for a generating walkthrough even if shas match — caller should use status', () => {
     const w = makeWalkthrough({ head_sha: 'sha-current', status: 'generating' })
     expect(isWalkthroughStale(w, makePr({ head_sha: 'sha-current' }))).toBe(false)
+  })
+})
+
+function walkthroughStep(id: string): PrWalkthroughStep {
+  return { id, title: id, summary: id, files: [{ filename: 'a.ts', hunk_indexes: null }] }
+}
+
+describe('totalWalkthroughSteps', () => {
+  it('adds one trailing review/submit step to the parsed steps', () => {
+    expect(totalWalkthroughSteps([walkthroughStep('a'), walkthroughStep('b')])).toBe(3)
+  })
+
+  it('is 1 (just the review/submit step) when there are no parsed steps', () => {
+    expect(totalWalkthroughSteps([])).toBe(1)
+  })
+})
+
+describe('isReviewSubmitStep', () => {
+  const steps = [walkthroughStep('a'), walkthroughStep('b')]
+
+  it('is true at the final index (equal to steps.length)', () => {
+    expect(isReviewSubmitStep(2, steps)).toBe(true)
+  })
+
+  it('is false for every real step index', () => {
+    expect(isReviewSubmitStep(0, steps)).toBe(false)
+    expect(isReviewSubmitStep(1, steps)).toBe(false)
+  })
+
+  it('treats index 0 as the review/submit step when there are no parsed steps', () => {
+    expect(isReviewSubmitStep(0, [])).toBe(true)
   })
 })
 
