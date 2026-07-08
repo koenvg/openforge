@@ -41,6 +41,37 @@ async fn test_get_projects_handler_returns_all_projects() {
     let _ = std::fs::remove_file(path);
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn test_debug_process_memory_handler_returns_read_only_diagnostics() {
+    let (state, path) = test_state("http_debug_process_memory_handler");
+    let router = create_router(state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/debug/process-memory")
+                .method("GET")
+                .body(Body::empty())
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = response_body_json(response).await;
+    assert_eq!(json["sidecar"]["pid"], std::process::id());
+    assert!(json["sidecar"]["rssBytes"].as_u64().unwrap_or(0) > 0);
+    assert!(
+        json["totals"]["trackedUniqueRssBytes"]
+            .as_u64()
+            .unwrap_or(0)
+            >= json["sidecar"]["rssBytes"].as_u64().unwrap_or(0)
+    );
+    assert!(json["ptyProcessTrees"].as_array().is_some());
+
+    let _ = std::fs::remove_file(path);
+}
+
 #[tokio::test]
 async fn test_get_project_task_labels_handler_lists_existing_project_labels() {
     let (state, path) = test_state("http_get_project_task_labels_handler_lists_labels");

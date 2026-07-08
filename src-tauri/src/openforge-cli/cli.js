@@ -395,6 +395,10 @@ async function listProjects() {
   printJson(await requestJson('/projects'));
 }
 
+async function showProcessMemoryDiagnostics() {
+  printJson(await requestJson('/debug/process-memory'));
+}
+
 async function listProjectLabels(flags) {
   const projectId = encodeURIComponent(requireFlag(flags, 'projectId'));
   printJson(await requestJson(`/project/${projectId}/labels`));
@@ -523,6 +527,12 @@ const COMMAND_SPECS = [
     handler: listProjects,
   },
   {
+    path: ['debug', 'process-memory'],
+    flags: [],
+    usage: 'openforge debug process-memory',
+    handler: showProcessMemoryDiagnostics,
+  },
+  {
     path: ['project', 'labels', 'list'],
     flags: ['projectId'],
     usage: 'openforge project labels list --project-id <id>',
@@ -645,6 +655,9 @@ Task listing:
   Pass --full to print complete TaskRow objects.
   task list excludes done tasks unless --state done is passed.
 
+Diagnostics:
+  debug process-memory prints read-only Rust sidecar, plugin host, and PTY process-tree RSS attribution.
+
 Task creation hygiene:
   Before creating follow-up Tasks, use project labels list when a project id is known and reuse an existing label when it fits.
   When creating follow-up Tasks, include useful --label values and dependency links when creating related follow-up Tasks.
@@ -654,6 +667,7 @@ Task creation hygiene:
 
 Examples:
   openforge project labels list --project-id P-1
+  openforge debug process-memory
   openforge task list --project-id P-1
   openforge task delete --task-id T-123
   openforge task create --initial-prompt "Correct task prompt" --project-id P-1 --depends-on T-122 --label cleanup

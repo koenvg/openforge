@@ -36,6 +36,7 @@ sha1 = "0.11"
 axum = "0.7"
 rand = "0.8"
 keyring = { version = "3", features = ["apple-native"] }
+sysinfo = "0.37.2"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

@@ -3,6 +3,7 @@ mod events;
 mod pids;
 mod session;
 
+use serde::Serialize;
 use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
@@ -73,6 +74,17 @@ pub struct PtyManager {
     last_output: LastOutputTimes,
     output_buffers: PtyOutputBuffers,
     agent_spawn_generations: AgentSpawnGenerations,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PtyProcessDiagnosticSession {
+    pub session_key: String,
+    pub task_id: String,
+    pub session_kind: String,
+    pub pid: Option<u32>,
+    pub pty_instance_id: u64,
+    pub pid_file_name: String,
 }
 
 impl PtyManager {

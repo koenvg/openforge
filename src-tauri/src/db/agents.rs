@@ -220,6 +220,36 @@ impl super::Database {
         Ok(result)
     }
 
+    pub fn get_agent_sessions_for_tickets(
+        &self,
+        ticket_ids: &[String],
+    ) -> Result<Vec<AgentSessionRow>> {
+        if ticket_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let conn = self.conn.lock().unwrap();
+        let placeholders: Vec<String> = ticket_ids
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("?{}", i + 1))
+            .collect();
+        let sql = format!(
+            "SELECT {AGENT_SESSION_SELECT_COLUMNS} FROM agent_sessions WHERE ticket_id IN ({}) ORDER BY ticket_id ASC, created_at DESC, rowid DESC",
+            placeholders.join(", ")
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let params: Vec<&dyn rusqlite::types::ToSql> = ticket_ids
+            .iter()
+            .map(|id| id as &dyn rusqlite::types::ToSql)
+            .collect();
+        let rows = stmt.query_map(params.as_slice(), agent_session_from_row)?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
     pub fn get_sessions_by_provider(&self, provider: &str) -> Result<Vec<AgentSessionRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(&format!(
@@ -584,6 +614,58 @@ mod tests {
         assert_eq!(
             session.claude_session_id,
             Some("claude-ses-123".to_string())
+        );
+
+        drop(db);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_get_agent_sessions_for_tickets_returns_all_matching_sessions_latest_first() {
+        let (db, path) = make_test_db("agent_sessions_for_tickets");
+        insert_test_task(&db);
+        db.conn
+            .lock()
+            .unwrap()
+            .execute(
+                "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                rusqlite::params!["T-200", "second task", "doing", None::<String>, 1, 1, "second task", None::<String>, None::<String>, None::<String>],
+            )
+            .expect("create second task failed");
+
+        db.create_agent_session("ses-old", "T-100", None, "implement", "completed", "pi")
+            .expect("create old failed");
+        db.create_agent_session("ses-new", "T-100", None, "implement", "running", "pi")
+            .expect("create new failed");
+        db.create_agent_session(
+            "ses-other",
+            "T-200",
+            None,
+            "implement",
+            "running",
+            "claude-code",
+        )
+        .expect("create other failed");
+
+        db.conn
+            .lock()
+            .unwrap()
+            .execute(
+                "UPDATE agent_sessions SET created_at = CASE id WHEN 'ses-old' THEN 100 WHEN 'ses-new' THEN 200 ELSE 150 END",
+                [],
+            )
+            .expect("adjust created_at");
+
+        let sessions = db
+            .get_agent_sessions_for_tickets(&["T-100".to_string(), "T-200".to_string()])
+            .expect("get sessions failed");
+
+        assert_eq!(
+            sessions
+                .iter()
+                .map(|session| session.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["ses-new", "ses-old", "ses-other"]
         );
 
         drop(db);

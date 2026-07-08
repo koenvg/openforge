@@ -20,7 +20,7 @@ Do not bypass the launcher with the underlying script path.
 
 If OpenForge is listening on a non-default HTTP bridge port, set `OPENFORGE_HTTP_PORT` before running the command. The default is `17422`.
 
-Use canonical nested command groups (`openforge task create`, `openforge task update`, `openforge task list`, `openforge task plan apply`, `openforge project list`, `openforge project labels list`). Flat task/project compatibility aliases are no longer supported.
+Use canonical nested command groups (`openforge task create`, `openforge task update`, `openforge task list`, `openforge task plan apply`, `openforge project list`, `openforge project labels list`, `openforge debug process-memory`). Flat task/project compatibility aliases are no longer supported.
 
 Plugin management commands are local-only for agent-facing use: install from a local source path with `openforge plugin install --path <local-plugin-source>`, separately enable or disable an installed plugin for a project with `openforge plugin enable|disable --plugin-id <id> --project-id <id>`, and explicitly reload installed artifacts with `openforge plugin reload --plugin-id <id> [--project-id <id>]`. Do not pass npm, git, source-spec, watch, or rebuild inputs to these commands.
 
@@ -40,6 +40,7 @@ openforge task create --initial-prompt "Describe the follow-up work" --worktree 
 openforge task update --task-id T-123 --summary "What changed and what needs attention"
 openforge task get --task-id T-123
 openforge project labels list --project-id P-1
+openforge debug process-memory
 openforge task labels list --task-id T-123
 openforge task labels add --task-id T-123 --label bug
 openforge task labels remove --task-id T-123 --label-id 42
