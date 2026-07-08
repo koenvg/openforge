@@ -1,8 +1,11 @@
 <script lang="ts">
-  import { tick } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import type { Project } from '../../lib/types'
-  import { createProject, selectDirectory } from '../../lib/ipc'
+  import { createProject, createProjectFromGit, createProjectFromNewRepo, selectDirectory, getConfig, setConfig } from '../../lib/ipc'
   import { deriveProjectNameFromPath } from '../../lib/deriveProjectName'
+  import { deriveRepoNameFromUrl } from '../../lib/deriveRepoNameFromUrl'
+  import { computeTargetPathPreview, canSubmitGithub, canSubmitNewRepo } from './projectSetupDialogLogic'
+  import { Sparkles, GitBranch, FolderOpen } from '@lucide/svelte'
   import Modal from '../shared/ui/Modal.svelte'
 
   interface Props {
@@ -21,7 +24,31 @@
 
   const creationFeedbackId = 'add-project-creation-feedback'
 
-  let canSubmit = $derived(!isSubmitting && path.trim().length > 0 && projectName.trim().length > 0)
+  const DEFAULT_REPOS_DIR_KEY = 'default_repositories_dir'
+
+  let mode = $state<'newRepo' | 'github' | 'local'>('local')
+  let repoUrl = $state('')
+  let parentDir = $state('')
+  let repoPrivate = $state(true)
+
+  let githubTargetPreview = $derived(computeTargetPathPreview(parentDir, deriveRepoNameFromUrl(repoUrl)))
+  let newRepoTargetPreview = $derived(computeTargetPathPreview(parentDir, projectName))
+
+  let canSubmitLocal = $derived(!isSubmitting && path.trim().length > 0 && projectName.trim().length > 0)
+  let canSubmitGithubMode = $derived(canSubmitGithub({ repoUrl, parentDir, projectName, isSubmitting }))
+  let canSubmitNewRepoMode = $derived(canSubmitNewRepo({ name: projectName, parentDir, isSubmitting }))
+  let canSubmit = $derived(
+    mode === 'local' ? canSubmitLocal : mode === 'github' ? canSubmitGithubMode : canSubmitNewRepoMode
+  )
+
+  onMount(async () => {
+    try {
+      const remembered = await getConfig(DEFAULT_REPOS_DIR_KEY)
+      if (remembered && !parentDir) parentDir = remembered
+    } catch (e) {
+      console.error('Failed to load default repositories directory:', e)
+    }
+  })
 
   function getFailureMessage(error: unknown): string {
     if (error instanceof Error && error.message.trim()) return error.message
@@ -57,14 +84,59 @@
     if (createError) createError = null
   }
 
+  function handleRepoUrlInput() {
+    if (createError) createError = null
+    if (!nameManuallyEdited || !projectName.trim()) {
+      const derived = deriveRepoNameFromUrl(repoUrl)
+      if (derived) projectName = derived
+    }
+  }
+
+  async function handleSelectParentFolder() {
+    createError = null
+    try {
+      const selected = await selectDirectory({
+        defaultPath: parentDir.trim() || undefined,
+        buttonLabel: 'Choose Parent Folder',
+        message: 'Choose the folder OpenForge should clone the repository into.',
+      })
+      if (!selected) return
+      parentDir = selected
+    } catch (e) {
+      createError = getFailureMessage(e)
+      console.error('Failed to select parent folder:', e)
+    }
+  }
+
   async function handleSubmit() {
     createError = null
     successMessage = null
-    if (!path.trim() || !projectName.trim()) return
 
     isSubmitting = true
     try {
-      const project = await createProject(projectName.trim(), path.trim())
+      let project: Project
+      if (mode === 'local') {
+        if (!path.trim() || !projectName.trim()) return
+        project = await createProject(projectName.trim(), path.trim())
+      } else if (mode === 'github') {
+        if (!repoUrl.trim() || !parentDir.trim() || !projectName.trim()) return
+        project = await createProjectFromGit({
+          url: repoUrl.trim(),
+          parentDir: parentDir.trim(),
+          name: projectName.trim(),
+        })
+      } else {
+        if (!projectName.trim() || !parentDir.trim()) return
+        project = await createProjectFromNewRepo({
+          name: projectName.trim(),
+          parentDir: parentDir.trim(),
+          private: repoPrivate,
+        })
+      }
+      // Remember where repos live for next time (clone + new-repo modes).
+      if (mode !== 'local' && parentDir.trim()) {
+        void setConfig(DEFAULT_REPOS_DIR_KEY, parentDir.trim())
+      }
       successMessage = `Project created. Opening ${project.name}.`
       await tick()
       await new Promise((resolve) => window.setTimeout(resolve, 300))
@@ -88,7 +160,37 @@
   {/snippet}
 
   <form id="add-project-form" class="flex-1 overflow-y-auto p-5 flex flex-col gap-4" onsubmit={(e: SubmitEvent) => { e.preventDefault(); void handleSubmit() }}>
-    <p class="text-sm text-base-content/70 m-0">Connect a local repository so OpenForge can track tasks and agent handoffs for it.</p>
+    <div role="radiogroup" aria-label="How to add the project" class="grid grid-cols-3 gap-2">
+      {#each [
+        { id: 'newRepo', icon: Sparkles, title: 'New repo', desc: 'Create it on GitHub & clone it' },
+        { id: 'github', icon: GitBranch, title: 'From GitHub', desc: 'Clone an existing repo by URL' },
+        { id: 'local', icon: FolderOpen, title: 'Local folder', desc: 'Use a repo already on your disk' },
+      ] as option (option.id)}
+        {@const Icon = option.icon}
+        <button
+          type="button"
+          role="radio"
+          aria-checked={mode === option.id}
+          class="flex flex-col items-start gap-1 rounded-lg border border-base-300 p-3 text-left transition hover:bg-base-200 {mode === option.id ? 'ring-2 ring-primary' : ''}"
+          onclick={() => { mode = option.id as typeof mode; createError = null }}
+          disabled={isSubmitting}
+        >
+          <Icon class="size-4 text-base-content/70" />
+          <span class="text-xs font-semibold text-base-content">{option.title}</span>
+          <span class="text-[0.65rem] text-base-content/50 leading-tight">{option.desc}</span>
+        </button>
+      {/each}
+    </div>
+
+    <p class="text-sm text-base-content/70 m-0">
+      {#if mode === 'newRepo'}
+        Name a new project and OpenForge will create the repository on GitHub, clone it, and open it. You make the first commit.
+      {:else if mode === 'github'}
+        Paste a GitHub repository URL and OpenForge will clone it and set up the project.
+      {:else}
+        Connect a local repository so OpenForge can track tasks and agent handoffs for it.
+      {/if}
+    </p>
 
     {#if createError}
       <div id={creationFeedbackId} class="alert alert-error py-2 text-sm" role="alert">
@@ -100,33 +202,70 @@
       </div>
     {/if}
 
-    {#if !path}
-      <div class="flex flex-col gap-1.5">
-        <button
-          data-select-repository
-          class="btn btn-primary btn-sm w-full"
-          type="button"
-          onclick={handleSelectRepository}
-          disabled={isSubmitting}
-        >
-          Select Repository
-        </button>
-        <span class="text-[0.65rem] text-base-content/40">Pick the local git repository for this project. Using the picker lets OpenForge access folders in macOS Documents/Desktop.</span>
-      </div>
-    {:else}
-      <div class="flex flex-col gap-1.5">
-        <span id="add-project-repository-label" class="text-xs text-base-content/60 font-medium">Repository</span>
-        <div class="flex items-center gap-2">
-          <span class="input input-bordered input-sm w-full flex items-center font-mono text-xs truncate" role="group" aria-labelledby="add-project-repository-label" title={path}>{path}</span>
+    {#if mode === 'local'}
+      {#if !path}
+        <div class="flex flex-col gap-1.5">
           <button
             data-select-repository
-            class="btn btn-ghost btn-sm"
+            class="btn btn-primary btn-sm w-full"
             type="button"
             onclick={handleSelectRepository}
             disabled={isSubmitting}
           >
-            Change
+            Select Repository
           </button>
+          <span class="text-[0.65rem] text-base-content/40">Pick the local git repository for this project. Using the picker lets OpenForge access folders in macOS Documents/Desktop.</span>
+        </div>
+      {:else}
+        <div class="flex flex-col gap-1.5">
+          <span id="add-project-repository-label" class="text-xs text-base-content/60 font-medium">Repository</span>
+          <div class="flex items-center gap-2">
+            <span class="input input-bordered input-sm w-full flex items-center font-mono text-xs truncate" role="group" aria-labelledby="add-project-repository-label" title={path}>{path}</span>
+            <button
+              data-select-repository
+              class="btn btn-ghost btn-sm"
+              type="button"
+              onclick={handleSelectRepository}
+              disabled={isSubmitting}
+            >
+              Change
+            </button>
+          </div>
+        </div>
+
+        <label class="flex flex-col gap-1.5">
+          <span class="text-xs text-base-content/60 font-medium">Project Name <span class="text-error" aria-hidden="true">*</span></span>
+          <input
+            data-project-name-input
+            type="text"
+            class="input input-bordered input-sm w-full"
+            bind:value={projectName}
+            placeholder="My Awesome Project"
+            oninput={handleNameInput}
+            autocomplete="off"
+            aria-describedby={createError || successMessage ? creationFeedbackId : undefined}
+          />
+        </label>
+      {/if}
+    {:else if mode === 'github'}
+      <label class="flex flex-col gap-1.5">
+        <span class="text-xs text-base-content/60 font-medium">Repository URL <span class="text-error" aria-hidden="true">*</span></span>
+        <input
+          type="text"
+          class="input input-bordered input-sm w-full"
+          bind:value={repoUrl}
+          oninput={handleRepoUrlInput}
+          placeholder="https://github.com/owner/repo"
+          autocomplete="off"
+        />
+        <span class="text-[0.65rem] text-base-content/40">Paste an HTTPS or SSH URL, or owner/repo. Private repos use your saved GitHub token.</span>
+      </label>
+
+      <div class="flex flex-col gap-1.5">
+        <span id="add-project-parent-label" class="text-xs text-base-content/60 font-medium">Parent Folder <span class="text-error" aria-hidden="true">*</span></span>
+        <div class="flex items-center gap-2">
+          <span class="input input-bordered input-sm w-full flex items-center font-mono text-xs truncate" role="group" aria-labelledby="add-project-parent-label" title={parentDir}>{parentDir || 'No folder selected'}</span>
+          <button class="btn btn-ghost btn-sm" type="button" onclick={handleSelectParentFolder} disabled={isSubmitting}>Choose</button>
         </div>
       </div>
 
@@ -143,6 +282,42 @@
           aria-describedby={createError || successMessage ? creationFeedbackId : undefined}
         />
       </label>
+
+      {#if githubTargetPreview}
+        <p class="text-[0.65rem] text-base-content/40 m-0">Will clone into <span class="font-mono">{githubTargetPreview}</span></p>
+      {/if}
+    {:else}
+      <label class="flex flex-col gap-1.5">
+        <span class="text-xs text-base-content/60 font-medium">Project Name <span class="text-error" aria-hidden="true">*</span></span>
+        <input
+          data-project-name-input
+          type="text"
+          class="input input-bordered input-sm w-full"
+          bind:value={projectName}
+          placeholder="my-idea"
+          oninput={handleNameInput}
+          autocomplete="off"
+          aria-describedby={createError || successMessage ? creationFeedbackId : undefined}
+        />
+        <span class="text-[0.65rem] text-base-content/40">GitHub normalizes spaces to hyphens; the folder uses the created repo's name.</span>
+      </label>
+
+      <div class="flex flex-col gap-1.5">
+        <span id="add-project-newrepo-parent-label" class="text-xs text-base-content/60 font-medium">Repositories Folder <span class="text-error" aria-hidden="true">*</span></span>
+        <div class="flex items-center gap-2">
+          <span class="input input-bordered input-sm w-full flex items-center font-mono text-xs truncate" role="group" aria-labelledby="add-project-newrepo-parent-label" title={parentDir}>{parentDir || 'No folder selected'}</span>
+          <button class="btn btn-ghost btn-sm" type="button" onclick={handleSelectParentFolder} disabled={isSubmitting}>Choose</button>
+        </div>
+      </div>
+
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" class="toggle toggle-sm toggle-primary" bind:checked={repoPrivate} disabled={isSubmitting} />
+        <span class="text-xs text-base-content/70">Private repository</span>
+      </label>
+
+      {#if newRepoTargetPreview}
+        <p class="text-[0.65rem] text-base-content/40 m-0">Will create at <span class="font-mono">{newRepoTargetPreview}</span></p>
+      {/if}
     {/if}
   </form>
 
@@ -155,7 +330,7 @@
       disabled={!canSubmit}
       aria-describedby={createError || successMessage ? creationFeedbackId : undefined}
     >
-      {isSubmitting ? 'Creating...' : 'Create Project'}
+      {isSubmitting ? (mode === 'newRepo' ? 'Creating repo...' : mode === 'github' ? 'Cloning...' : 'Creating...') : 'Create Project'}
     </button>
   </div>
 </Modal>

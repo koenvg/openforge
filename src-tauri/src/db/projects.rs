@@ -68,6 +68,17 @@ impl super::Database {
         })
     }
 
+    /// Returns true if any project is registered at the exact given path.
+    pub fn project_with_path_exists(&self, path: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM projects WHERE path = ?1",
+            [path],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
     /// Get all projects
     pub fn get_all_projects(&self) -> Result<Vec<ProjectRow>> {
         let conn = self.conn.lock().unwrap();
@@ -737,6 +748,34 @@ mod tests {
         // Empty project ID should fall back to global
         let provider = db.resolve_ai_provider("");
         assert_eq!(provider, "claude-code");
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_project_with_path_exists() {
+        let (db, path) = make_test_db("project_with_path_exists");
+
+        assert!(
+            !db.project_with_path_exists("/tmp/does-not-exist")
+                .expect("query failed"),
+            "no project registered yet"
+        );
+
+        db.create_project("Widgets", "/tmp/widgets")
+            .expect("create failed");
+
+        assert!(
+            db.project_with_path_exists("/tmp/widgets")
+                .expect("query failed"),
+            "path should now be registered"
+        );
+        assert!(
+            !db.project_with_path_exists("/tmp/other")
+                .expect("query failed"),
+            "unrelated path should not match"
+        );
 
         drop(db);
         let _ = fs::remove_file(&path);

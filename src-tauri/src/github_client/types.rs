@@ -315,6 +315,22 @@ pub(crate) struct CreateIssueRequest {
     pub labels: Vec<String>,
 }
 
+/// Request body for creating a repository on the authenticated user's account.
+#[derive(Debug, Serialize)]
+pub(crate) struct CreateRepoRequest {
+    pub name: String,
+    pub private: bool,
+    /// Always false — OpenForge creates an empty repo and the user makes the
+    /// first commit; an auto-init README is never injected.
+    pub auto_init: bool,
+}
+
+/// Subset of the GitHub repo object we need from a create response.
+#[derive(Debug, Deserialize)]
+pub struct CreatedRepo {
+    pub clone_url: String,
+}
+
 /// Input for editing an issue. Only the populated fields are sent to GitHub.
 ///
 /// `add_labels`/`remove_labels` are applied to the issue's existing labels to

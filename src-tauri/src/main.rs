@@ -13,6 +13,7 @@ pub mod command_discovery;
 mod data_identity;
 mod db;
 mod diff_parser;
+mod git_clone;
 mod git_worktree;
 mod github_client;
 mod github_poller;

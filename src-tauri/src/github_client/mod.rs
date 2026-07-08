@@ -22,6 +22,7 @@ mod graphql;
 mod issues;
 mod labels;
 mod pulls;
+mod repos;
 mod reviews;
 pub mod types;
 
@@ -62,6 +63,34 @@ pub struct GitHubClient {
     client: Client,
     etag_cache: Arc<Mutex<HashMap<String, CachedResponse>>>,
     last_rate_limit_reset: Arc<Mutex<Option<i64>>>,
+}
+
+/// Result of interpreting the HTTP status of a `GET /repos/{owner}/{repo}` call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RepoAccess {
+    Accessible,
+    Denied,
+    Unknown,
+}
+
+/// Maps a repo-lookup HTTP status to an access verdict.
+/// 200-299 means accessible.
+/// 401 (bad/expired token) and 404 (not found, or private-without-access —
+/// GitHub returns 404 rather than 403 to avoid leaking a private repo's
+/// existence) are a definitive "you can't see this repo".
+/// 403 is typically rate-limiting or a forbidden action, not an access denial,
+/// so treat it as Unknown and let the actual clone decide rather than wrongly blocking it.
+pub(crate) fn classify_repo_access_status(status: u16) -> RepoAccess {
+    match status {
+        200..=299 => RepoAccess::Accessible,
+        // 401 (bad/expired token) and 404 (not found, or private-without-access —
+        // GitHub returns 404 rather than 403 to avoid leaking a private repo's
+        // existence) are a definitive "you can't see this repo". 403 is typically
+        // rate-limiting or a forbidden action, not an access denial, so treat it as
+        // Unknown and let the actual clone decide rather than wrongly blocking it.
+        401 | 404 => RepoAccess::Denied,
+        _ => RepoAccess::Unknown,
+    }
 }
 
 impl GitHubClient {
@@ -334,6 +363,29 @@ impl GitHubClient {
         let user: AuthenticatedUser = self.get_with_etag(url, token).await?;
 
         Ok(user.login)
+    }
+
+    /// Checks whether the authenticated token can see the given repository.
+    /// Returns Ok(true) when accessible or when the outcome is inconclusive
+    /// (let the clone decide), Ok(false) only when GitHub clearly denies access.
+    pub async fn check_repo_access(
+        &self,
+        owner: &str,
+        repo: &str,
+        token: &str,
+    ) -> Result<bool, GitHubError> {
+        let url = format!("https://api.github.com/repos/{owner}/{repo}");
+        let response = self
+            .github_get(&url, token)
+            .send()
+            .await
+            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+        Ok(
+            match classify_repo_access_status(response.status().as_u16()) {
+                RepoAccess::Accessible | RepoAccess::Unknown => true,
+                RepoAccess::Denied => false,
+            },
+        )
     }
 }
 
@@ -690,5 +742,33 @@ mod tests {
         assert!(message.contains("status 429"));
         assert!(!message.contains("resource "));
         assert!(!message.contains("retry-after "));
+    }
+
+    #[test]
+    fn classify_repo_access_status_maps_codes() {
+        assert!(matches!(
+            classify_repo_access_status(200),
+            RepoAccess::Accessible
+        ));
+        assert!(matches!(
+            classify_repo_access_status(301),
+            RepoAccess::Unknown
+        ));
+        assert!(matches!(
+            classify_repo_access_status(401),
+            RepoAccess::Denied
+        ));
+        assert!(matches!(
+            classify_repo_access_status(403),
+            RepoAccess::Unknown
+        ));
+        assert!(matches!(
+            classify_repo_access_status(404),
+            RepoAccess::Denied
+        ));
+        assert!(matches!(
+            classify_repo_access_status(500),
+            RepoAccess::Unknown
+        ));
     }
 }
