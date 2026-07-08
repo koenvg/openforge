@@ -709,6 +709,13 @@
         silentRefreshPrs()
       })
     )
+    unlisteners.push(
+      githubSync.onViewInvoked((payload) => {
+        if (payload?.view === api.navigation.get().currentView) {
+          backToList()
+        }
+      })
+    )
   })
 
   onDestroy(() => {

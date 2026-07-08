@@ -271,6 +271,62 @@ describe('PrReviewView host-driven open', () => {
   })
 })
 
+describe('PrReviewView view re-invocation', () => {
+  beforeEach(() => {
+    resetStores()
+    vi.clearAllMocks()
+  })
+
+  it('returns to the PR list when its own view is re-invoked (rail icon / Cmd+G)', async () => {
+    const REPO_VIEW_ID = 'plugin:com.openforge.github-sync:pr_review'
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1', viewId: REPO_VIEW_ID })
+    registerPrReviewBackends(registry, () => [baseDiff])
+
+    render(PrReviewView, {
+      props: {
+        api: registry.frontendApi,
+        context: registry.frontendApi.context.getSnapshot(),
+        projectName: 'Demo Project',
+        projectId: 'project-1',
+      },
+    })
+
+    const title = await screen.findByText('Fix authentication middleware')
+    await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
+    await waitFor(() => expect(get(selectedReviewPr)?.id).toBe(basePr.id))
+
+    await registry.frontendApi.events.emitGlobal('openforge.view-invoked', { view: REPO_VIEW_ID })
+
+    await waitFor(() => expect(get(selectedReviewPr)).toBeNull())
+    await screen.findByText('Fix authentication middleware')
+  })
+
+  it('ignores view-invoked events for a different view (e.g. the sibling all-repos PR view)', async () => {
+    const REPO_VIEW_ID = 'plugin:com.openforge.github-sync:pr_review'
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1', viewId: REPO_VIEW_ID })
+    registerPrReviewBackends(registry, () => [baseDiff])
+
+    render(PrReviewView, {
+      props: {
+        api: registry.frontendApi,
+        context: registry.frontendApi.context.getSnapshot(),
+        projectName: 'Demo Project',
+        projectId: 'project-1',
+      },
+    })
+
+    const title = await screen.findByText('Fix authentication middleware')
+    await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
+    await waitFor(() => expect(get(selectedReviewPr)?.id).toBe(basePr.id))
+
+    await registry.frontendApi.events.emitGlobal('openforge.view-invoked', { view: GLOBAL_VIEW_ID })
+    await registry.frontendApi.events.emitGlobal('openforge.view-invoked', { view: 'settings' })
+
+    await Promise.resolve()
+    expect(get(selectedReviewPr)?.id).toBe(basePr.id)
+  })
+})
+
 describe('PrReviewView tab shortcuts', () => {
   beforeEach(() => {
     resetStores()

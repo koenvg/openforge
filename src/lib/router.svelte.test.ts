@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { get } from 'svelte/store'
 import { activeProjectId, currentView, lastViewedTaskId, projectViewSnapshots, selectedReviewPr, selectedTaskId } from './stores'
 import { captureProjectView, pushNavState, resetToBoard, restoreProjectView, useAppRouter } from './router.svelte'
+import { subscribeToPluginHostEvent } from './plugin/pluginHostEvents'
 import type { ReviewPullRequest } from './types'
 
 const samplePr = { id: 'pr-1', number: 1 } as unknown as ReviewPullRequest
+const PR_REVIEW_VIEW = 'plugin:com.openforge.github-sync:pr_review'
 
 describe('useAppRouter', () => {
   beforeEach(() => {
@@ -31,6 +33,29 @@ describe('useAppRouter', () => {
 
     expect(get(selectedTaskId)).toBeNull()
     expect(get(currentView)).toBe('plugin:com.openforge.github-sync:pr_review')
+  })
+
+  it('navigate emits a view-invoked host event carrying the target view', () => {
+    const router = useAppRouter()
+    const invoked: unknown[] = []
+    const unsubscribe = subscribeToPluginHostEvent('test-plugin', 'view-invoked', (payload) => invoked.push(payload))
+
+    router.navigate(PR_REVIEW_VIEW)
+    unsubscribe()
+
+    expect(invoked).toContainEqual({ view: PR_REVIEW_VIEW })
+  })
+
+  it('navigate re-emits view-invoked even when navigating to the already-active view', () => {
+    const router = useAppRouter()
+    currentView.set(PR_REVIEW_VIEW)
+    const invoked: unknown[] = []
+    const unsubscribe = subscribeToPluginHostEvent('test-plugin', 'view-invoked', (payload) => invoked.push(payload))
+
+    router.navigate(PR_REVIEW_VIEW)
+    unsubscribe()
+
+    expect(invoked).toEqual([{ view: PR_REVIEW_VIEW }])
   })
 
   it('navigate(settings) clears selectedTaskId synchronously', () => {

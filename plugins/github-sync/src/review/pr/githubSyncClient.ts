@@ -72,6 +72,7 @@ export interface GithubSyncPrReviewClient {
   abortAgentWalkthrough(request: { walkthroughSessionKey: string }): Promise<void>
   onAuthoredPullRequestsUpdated(handler: () => void): Disposable
   onReviewPullRequestCountChanged(handler: () => void): Disposable
+  onViewInvoked(handler: (payload: { view: string }) => void): Disposable
 }
 
 const HOST_COMMAND_NAMESPACE = ['open', 'forge'].join('')
@@ -117,5 +118,6 @@ export function createGithubSyncPrReviewClient(api: Pick<FrontendOpenForgeAPI, '
     abortAgentWalkthrough: ({ walkthroughSessionKey }) => invokeBackend<void>(api, 'abortAgentWalkthrough', { walkthroughSessionKey }),
     onAuthoredPullRequestsUpdated: (handler) => api.events.onGlobal(hostEventId('authored-prs-updated'), handler),
     onReviewPullRequestCountChanged: (handler) => api.events.onGlobal(hostEventId('review-pr-count-changed'), handler),
+    onViewInvoked: (handler) => api.events.onGlobal<{ view: string }>(hostEventId('view-invoked'), handler),
   }
 }
