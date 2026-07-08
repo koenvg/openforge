@@ -6,6 +6,7 @@
   import { createDiffLoader } from '../../lib/useDiffLoader.svelte'
   import { createCommentSelection } from '../../lib/useCommentSelection.svelte'
   import { prCommentsToReviewComments } from '@openforge-app/pr-review-ui/diffComments'
+  import { countNonApplicationFiles, filterApplicationFiles } from '@openforge-app/pr-review-ui/applicationFiles'
   import {
     getTaskReviewFileIdentity,
     getTaskReviewPaneState,
@@ -43,6 +44,10 @@
   let includeCommitted = $state(true)
   let includeUncommitted = $state(true)
   let showAddressed = $state(false)
+  // Non-application files (tests, fixtures, snapshots, docs, generated scaffolding) are
+  // shown by default; the reviewer deselects the file-tree toggle to hide them and focus
+  // on the source changes. Not persisted — each review opens with everything shown.
+  let includeNonApplicationFiles = $state(true)
 
   // At least one scope must always stay selected. Whichever checkbox is the only
   // one currently on is locked so it can't be unchecked, leaving nothing to show.
@@ -79,7 +84,11 @@
 
   let selfReviewState = $derived($selfReviewStateByTask.get(task.id))
   let selfReviewDiffFiles = $derived(selfReviewState?.diffFiles ?? [])
-  let visibleDiffFiles = $derived(selfReviewDiffFiles.map((file) => reviewedComparisonByFilename.get(file.filename)?.file ?? file))
+  let nonApplicationFileCount = $derived(countNonApplicationFiles(selfReviewDiffFiles))
+  // The file tree and diff must show the same set, so both derive from the same toggle.
+  let treeFiles = $derived(filterApplicationFiles(selfReviewDiffFiles, includeNonApplicationFiles))
+  let comparisonMappedDiffFiles = $derived(selfReviewDiffFiles.map((file) => reviewedComparisonByFilename.get(file.filename)?.file ?? file))
+  let visibleDiffFiles = $derived(filterApplicationFiles(comparisonMappedDiffFiles, includeNonApplicationFiles))
   let selfReviewGeneralComments = $derived(selfReviewState?.generalComments ?? [])
   let inlineReviewComments = $derived(prCommentsToReviewComments(diffLoader.prComments))
   let pendingInlineComments = $derived(selfReviewState?.pendingInlineComments ?? [])
@@ -302,11 +311,14 @@
           <div class="px-2 py-1.5 text-[0.65rem] uppercase tracking-wider font-semibold text-base-content/50 border-b border-base-300 bg-base-200">Files</div>
           <div class="flex-1 overflow-hidden">
             <FileTree
-              files={selfReviewDiffFiles}
+              files={treeFiles}
               onSelectFile={handleFileSelect}
               {reviewedFileShas}
               getFileReviewIdentity={getVisibleFileReviewIdentity}
               onToggleFileReviewed={handleToggleFileReviewed}
+              {includeNonApplicationFiles}
+              {nonApplicationFileCount}
+              onToggleNonApplicationFiles={(value) => { includeNonApplicationFiles = value }}
             />
           </div>
           <ResizableBottomPanel
@@ -405,26 +417,42 @@
           <span>{diffLoader.error}</span>
         </div>
       {:else if visibleDiffFiles.length === 0}
-            <div class="flex flex-col items-center justify-center flex-1 gap-4 text-base-content/50 text-center p-10">
-              <span class="text-6xl">📂</span>
-              <h3 class="text-xl font-semibold text-base-content m-0">No changes for current selection</h3>
-              <p class="text-sm m-0">
-                {#if diffLoader.selectedCommitSha === null}
-                  Make changes or enable uncommitted changes from the commit history pane.
-                {:else}
-                  This commit has no displayable diff. Switch back to All changes from the commit history pane.
-                {/if}
-              </p>
-              {#if !fileTreeVisible}
+            {#if !includeNonApplicationFiles && selfReviewDiffFiles.length > 0}
+              <div class="flex flex-col items-center justify-center flex-1 gap-4 text-base-content/50 text-center p-10">
+                <span class="text-6xl">🗂️</span>
+                <h3 class="text-xl font-semibold text-base-content m-0">Only non-application files changed</h3>
+                <p class="text-sm m-0 max-w-md">
+                  All {nonApplicationFileCount} changed {nonApplicationFileCount === 1 ? 'file is a non-application file' : 'files are non-application files'} (tests, fixtures, snapshots, docs, or generated files), which are hidden by default.
+                </p>
                 <button
                   class="btn btn-soft btn-sm"
-                  onclick={() => { fileTreeVisible = true }}
-                  title="Show file tree"
+                  onclick={() => { includeNonApplicationFiles = true }}
                 >
-                  Show file tree
+                  Show non-application files
                 </button>
-              {/if}
-            </div>
+              </div>
+            {:else}
+              <div class="flex flex-col items-center justify-center flex-1 gap-4 text-base-content/50 text-center p-10">
+                <span class="text-6xl">📂</span>
+                <h3 class="text-xl font-semibold text-base-content m-0">No changes for current selection</h3>
+                <p class="text-sm m-0">
+                  {#if diffLoader.selectedCommitSha === null}
+                    Make changes or enable uncommitted changes from the commit history pane.
+                  {:else}
+                    This commit has no displayable diff. Switch back to All changes from the commit history pane.
+                  {/if}
+                </p>
+                {#if !fileTreeVisible}
+                  <button
+                    class="btn btn-soft btn-sm"
+                    onclick={() => { fileTreeVisible = true }}
+                    title="Show file tree"
+                  >
+                    Show file tree
+                  </button>
+                {/if}
+              </div>
+            {/if}
           {:else}
             <DiffViewer
               bind:this={diffViewer}

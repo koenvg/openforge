@@ -12,6 +12,7 @@
   import type { GithubSyncPrReviewClient } from './githubSyncClient'
   import WalkthroughTab from './WalkthroughTab.svelte'
   import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
+  import { countNonApplicationFiles, filterApplicationFiles } from '@openforge-app/pr-review-ui/applicationFiles'
 
   type PrDetailTab = 'overview' | 'files' | 'walkthrough'
 
@@ -30,6 +31,8 @@
     agentReviewComments: AgentReviewComment[]
     fileTreeVisible: boolean
     reviewedFileShas: Map<string, string>
+    includeNonApplicationFiles: boolean
+    onToggleNonApplicationFiles: (include: boolean) => void
     onBackToList: () => void
     onOpenPrOnGitHub: () => void
     onActiveTabChange: (tab: PrDetailTab) => void
@@ -68,6 +71,8 @@
     agentReviewComments,
     fileTreeVisible,
     reviewedFileShas,
+    includeNonApplicationFiles,
+    onToggleNonApplicationFiles,
     onBackToList,
     onOpenPrOnGitHub,
     onActiveTabChange,
@@ -85,6 +90,11 @@
 
   let diffViewer = $state<DiffViewer>()
   let prFileTree = $state<FileTree>()
+
+  // The "Files changed" tab filters non-application files out of the tree and diff, but the
+  // tab badge and the Walkthrough tab keep the full changed-file list.
+  let visibleFiles = $derived(filterApplicationFiles(files, includeNonApplicationFiles))
+  let nonApplicationFileCount = $derived(countNonApplicationFiles(files))
 
   function handleFileSelect(filename: string) {
     diffViewer?.scrollToFile(filename)
@@ -183,18 +193,21 @@
           <ResizablePanel storageKey="pr-review-file-tree" defaultWidth={260} minWidth={160} maxWidth={500} side="left">
             <FileTree
               bind:this={prFileTree}
-              {files}
+              files={visibleFiles}
               onSelectFile={handleFileSelect}
               {reviewedFileShas}
               getFileReviewIdentity={getReviewFileIdentity}
               onToggleFileReviewed={onToggleFileReviewed}
               onRequestFocusDiff={() => diffViewer?.focusDiff()}
+              {includeNonApplicationFiles}
+              {nonApplicationFileCount}
+              {onToggleNonApplicationFiles}
             />
           </ResizablePanel>
         {/if}
         <DiffViewer
           bind:this={diffViewer}
-          {files}
+          files={visibleFiles}
           existingComments={reviewComments}
           repoOwner={pr.repo_owner}
           repoName={pr.repo_name}

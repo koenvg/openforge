@@ -830,6 +830,114 @@ describe('PrReviewView repository filter scope', () => {
   })
 })
 
+describe('PrReviewView non-application file filter', () => {
+  beforeEach(() => {
+    resetStores()
+    vi.clearAllMocks()
+  })
+
+  const docDiff: PrFileDiff = { ...baseDiff, sha: 'doc-sha', filename: 'README.md' }
+  const mdxDiff: PrFileDiff = { ...baseDiff, sha: 'mdx-sha', filename: 'docs/guide.mdx' }
+
+  it('shows every file by default and hides non-application files when the toggle is deselected', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    registerPrReviewBackends(registry, () => [baseDiff, docDiff])
+
+    await openFilesTab(registry)
+
+    // Both files are shown by default; the file-tree toggle is selected.
+    expect(screen.getByLabelText('Mark src/main.rs reviewed')).toBeTruthy()
+    expect(screen.getByLabelText('Mark README.md reviewed')).toBeTruthy()
+
+    const toggle = requireElement(
+      screen.getByRole('checkbox', { name: /Also include non-application files/i }),
+      HTMLInputElement,
+    )
+    expect(toggle.checked).toBe(true)
+
+    await fireEvent.click(toggle)
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Mark README.md reviewed')).toBeNull()
+    })
+    expect(screen.getByText('(1 hidden)')).toBeTruthy()
+  })
+
+  it('resets to showing all files when a different PR is opened', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    registerPrReviewBackends(
+      registry,
+      ({ prNumber }) => prNumber === basePr.number ? [baseDiff, docDiff] : [secondDiff, docDiff],
+      [basePr, secondPr],
+    )
+
+    // Open the first PR and deselect the toggle to hide the non-application file.
+    await openFilesTab(registry)
+    await fireEvent.click(requireElement(
+      screen.getByRole('checkbox', { name: /Also include non-application files/i }),
+      HTMLInputElement,
+    ))
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Mark README.md reviewed')).toBeNull()
+    })
+
+    // Switch to the second PR — the same component instance is reused.
+    selectedReviewPr.set(null)
+    await fireEvent.click(requireElement((await screen.findByText('Add checkout flow')).closest('button'), HTMLButtonElement))
+    await fireEvent.click(await screen.findByRole('tab', { name: /Files changed/i }))
+    await screen.findByLabelText('Mark src/checkout.ts reviewed')
+
+    // The filter is back to showing everything, including the non-application file.
+    expect(screen.getByLabelText('Mark README.md reviewed')).toBeTruthy()
+    expect(requireElement(
+      screen.getByRole('checkbox', { name: /Also include non-application files/i }),
+      HTMLInputElement,
+    ).checked).toBe(true)
+  })
+
+  it('keeps the sidebar toggle reachable after deselecting hides every file', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    registerPrReviewBackends(registry, () => [docDiff, mdxDiff])
+
+    render(PrReviewView, {
+      props: {
+        api: registry.frontendApi,
+        context: registry.frontendApi.context.getSnapshot(),
+        projectName: 'Demo Project',
+        projectId: 'project-1',
+      },
+    })
+
+    const title = await screen.findByText('Fix authentication middleware')
+    await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
+    await fireEvent.click(await screen.findByRole('tab', { name: /Files changed/i }))
+
+    // Both non-application files show by default.
+    await screen.findByLabelText('Mark README.md reviewed')
+
+    // Deselecting hides everything, but the sidebar toggle stays present so the reviewer
+    // can bring the files back.
+    await fireEvent.click(requireElement(
+      screen.getByRole('checkbox', { name: /Also include non-application files/i }),
+      HTMLInputElement,
+    ))
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Mark README.md reviewed')).toBeNull()
+    })
+
+    const toggleAfter = requireElement(
+      screen.getByRole('checkbox', { name: /Also include non-application files/i }),
+      HTMLInputElement,
+    )
+    expect(toggleAfter.checked).toBe(false)
+
+    await fireEvent.click(toggleAfter)
+    await waitFor(() => {
+      expect(screen.getByLabelText('Mark README.md reviewed')).toBeTruthy()
+    })
+  })
+})
+
 describe('PrReviewView header title', () => {
   beforeEach(() => {
     resetStores()

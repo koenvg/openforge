@@ -8,9 +8,30 @@
     reviewedFileShas?: Map<string, string>
     getFileReviewIdentity?: (file: PrFileDiff) => string | null
     onToggleFileReviewed?: (file: PrFileDiff, reviewed: boolean) => void
+    includeNonApplicationFiles?: boolean
+    nonApplicationFileCount?: number
+    onToggleNonApplicationFiles?: (include: boolean) => void
   }
 
-  let { files = [], onSelectFile, reviewedFileShas = new Map(), getFileReviewIdentity, onToggleFileReviewed }: Props = $props()
+  let {
+    files = [],
+    onSelectFile,
+    reviewedFileShas = new Map(),
+    getFileReviewIdentity,
+    onToggleFileReviewed,
+    includeNonApplicationFiles = true,
+    nonApplicationFileCount = 0,
+    onToggleNonApplicationFiles,
+  }: Props = $props()
 </script>
 
-<SharedFileTree {files} {onSelectFile} {reviewedFileShas} {getFileReviewIdentity} {onToggleFileReviewed} />
+<SharedFileTree
+  {files}
+  {onSelectFile}
+  {reviewedFileShas}
+  {getFileReviewIdentity}
+  {onToggleFileReviewed}
+  {includeNonApplicationFiles}
+  {nonApplicationFileCount}
+  {onToggleNonApplicationFiles}
+/>

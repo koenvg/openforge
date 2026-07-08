@@ -53,6 +53,8 @@ const FALLBACK_OPENFORGE_PACKAGE_EXPORTS = new Map([
       '/ReviewSubmitPanel.svelte',
       '/PrOverviewTab.svelte',
       '/DiffViewer.svelte',
+      '/NonApplicationFilesToggle.svelte',
+      '/applicationFiles',
       '/diffAdapter',
       '/diffComments',
       '/diffHighlightConfig',
