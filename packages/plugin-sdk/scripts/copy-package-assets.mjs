@@ -1,4 +1,4 @@
-import { copyFile, mkdir } from 'node:fs/promises'
+import { copyFile, cp, mkdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -12,6 +12,7 @@ const assetPaths = [
   'src/ui/Modal.svelte',
   'src/ui/PluginPageHeader.svelte',
   'src/ui/PluginViewState.svelte',
+  'src/ui/FileTypeIcon.svelte',
 ]
 await Promise.all(assetPaths.map(async (assetPath) => {
   const relativeOutputPath = assetPath.replace(/^src\//, '')
@@ -21,3 +22,11 @@ await Promise.all(assetPaths.map(async (assetPath) => {
   await mkdir(dirname(to), { recursive: true })
   await copyFile(from, to)
 }))
+
+// FileTypeIcon.svelte inlines these vendored SVGs via a relative `?raw` glob,
+// so the built package must ship them alongside the component.
+await cp(
+  join(packageRoot, 'src/ui/icons'),
+  join(packageRoot, 'dist/ui/icons'),
+  { recursive: true },
+)

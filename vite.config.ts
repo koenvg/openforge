@@ -64,6 +64,10 @@ function createOpenForgeRootAliases() {
       replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/testing.ts'),
     },
     {
+      find: /^@openforge-app\/plugin-sdk\/fileIcons$/,
+      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/fileIcons.ts'),
+    },
+    {
       find: /^@openforge-app\/plugin-sdk\/ui\/MarkdownContent\.svelte$/,
       replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/ui/MarkdownContent.svelte'),
     },
@@ -74,6 +78,10 @@ function createOpenForgeRootAliases() {
     {
       find: /^@openforge-app\/plugin-sdk\/ui\/Modal\.svelte$/,
       replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/ui/Modal.svelte'),
+    },
+    {
+      find: /^@openforge-app\/plugin-sdk\/ui\/FileTypeIcon\.svelte$/,
+      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/ui/FileTypeIcon.svelte'),
     },
     {
       find: /^@openforge-app\/plugin-sdk\/vite$/,

@@ -23,11 +23,13 @@ describe('OpenForge plugin Vite author tooling', () => {
       { find: '@openforge-app/plugin-sdk/numberParsing', replacement: '/repo/packages/plugin-sdk/src/numberParsing.ts' },
       { find: '@openforge-app/plugin-sdk/projectFileTree', replacement: '/repo/packages/plugin-sdk/src/projectFileTree.ts' },
       { find: '@openforge-app/plugin-sdk/sanitize', replacement: '/repo/packages/plugin-sdk/src/sanitize.ts' },
+      { find: '@openforge-app/plugin-sdk/fileIcons', replacement: '/repo/packages/plugin-sdk/src/fileIcons.ts' },
       { find: '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/MarkdownContent.svelte' },
       { find: '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/ResizablePanel.svelte' },
       { find: '@openforge-app/plugin-sdk/ui/Modal.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/Modal.svelte' },
       { find: '@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/PluginPageHeader.svelte' },
       { find: '@openforge-app/plugin-sdk/ui/PluginViewState.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/PluginViewState.svelte' },
+      { find: '@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/FileTypeIcon.svelte' },
       { find: '@openforge-app/plugin-sdk', replacement: '/repo/packages/plugin-sdk/src/index.ts' },
     ])
     expect(aliases.every((alias) => typeof alias.find === 'string')).toBe(true)
@@ -50,11 +52,13 @@ describe('OpenForge plugin Vite author tooling', () => {
       '@openforge-app/plugin-sdk/numberParsing': '/repo/packages/plugin-sdk/src/numberParsing.ts',
       '@openforge-app/plugin-sdk/projectFileTree': '/repo/packages/plugin-sdk/src/projectFileTree.ts',
       '@openforge-app/plugin-sdk/sanitize': '/repo/packages/plugin-sdk/src/sanitize.ts',
+      '@openforge-app/plugin-sdk/fileIcons': '/repo/packages/plugin-sdk/src/fileIcons.ts',
       '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte': '/repo/packages/plugin-sdk/src/ui/MarkdownContent.svelte',
       '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte': '/repo/packages/plugin-sdk/src/ui/ResizablePanel.svelte',
       '@openforge-app/plugin-sdk/ui/Modal.svelte': '/repo/packages/plugin-sdk/src/ui/Modal.svelte',
       '@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte': '/repo/packages/plugin-sdk/src/ui/PluginPageHeader.svelte',
       '@openforge-app/plugin-sdk/ui/PluginViewState.svelte': '/repo/packages/plugin-sdk/src/ui/PluginViewState.svelte',
+      '@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte': '/repo/packages/plugin-sdk/src/ui/FileTypeIcon.svelte',
       '@openforge-app/plugin-sdk': '/repo/packages/plugin-sdk/src/index.ts',
     })
   })

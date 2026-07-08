@@ -92,3 +92,16 @@ describe('FileTree compact folders', () => {
     expect(screen.queryByRole('treeitem', { name: `Select file ${filename}` })).toBeNull()
   })
 })
+
+describe('FileTree file-type icons', () => {
+  it('renders a file-type icon for each file', () => {
+    render(FileTree, { props: { files: [makeFile('src/foo.ts')], onSelectFile: vi.fn() } })
+    expect(document.querySelector('[data-icon="typescript"]')).not.toBeNull()
+  })
+
+  it('renders a folder icon for directories', () => {
+    render(FileTree, { props: { files: [makeFile('src/deep/foo.ts')], onSelectFile: vi.fn() } })
+    // Directories default to expanded, so they render the open folder icon.
+    expect(document.querySelector('[data-icon="folder-open"]')).not.toBeNull()
+  })
+})
