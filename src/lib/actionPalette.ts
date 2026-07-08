@@ -54,10 +54,10 @@ export function getTaskActions(task: Task, customActions: Action[], taskPrs: Pul
   if (task.status === 'doing' && outOfFocusTaskIds.has(task.id)) {
     actions.push({
       id: 'return-to-board',
-      label: 'Return to board',
+      label: 'Move task back in focus',
       shortcut: null,
       category: 'task',
-      keywords: ['focus', 'board', 'return', 'out of focus'],
+      keywords: ['focus', 'board', 'move', 'out of focus'],
     })
   }
 

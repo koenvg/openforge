@@ -89,7 +89,7 @@
     <ContextMenuItem label="Edit Task" onclick={handleEdit} />
   {/if}
   {#if hasReturnToBoardAction}
-    <ContextMenuItem label="Return to board" onclick={handleReturnToBoard} />
+    <ContextMenuItem label="Move task back in focus" onclick={handleReturnToBoard} />
   {/if}
   {#if hasActionsBeforeComplete}
     <div class="border-t border-base-content/10 my-1"></div>
