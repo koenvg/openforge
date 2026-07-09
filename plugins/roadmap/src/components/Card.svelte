@@ -41,6 +41,9 @@
     </div>
     <div class="flex items-center gap-1">
       <span class="text-xs text-base-content/40">#{card.issueNumber}</span>
+      {#if card.taskLink}
+        <span class="badge badge-outline badge-xs" title="OpenForge task">{card.taskLink.taskId}</span>
+      {/if}
       <div class="ml-auto flex items-center gap-1">
         <button
           type="button"

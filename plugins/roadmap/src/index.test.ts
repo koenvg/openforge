@@ -4,12 +4,17 @@ import { isOpenForgePackageMetadata } from '@openforge-app/plugin-sdk'
 import type { FrontendOpenForgeAPI, FrontendPluginContext } from '@openforge-app/plugin-sdk/frontend'
 import type { BackendOpenForgeAPI, BackendPluginContext } from '@openforge-app/plugin-sdk/backend'
 
-const { mockRoadmapView } = vi.hoisted(() => ({
+const { mockRoadmapView, mockRoadmapTaskPane } = vi.hoisted(() => ({
   mockRoadmapView: { name: 'RoadmapViewComponent' },
+  mockRoadmapTaskPane: { name: 'RoadmapTaskPaneComponent' },
 }))
 
 vi.mock('./components/RoadmapView.svelte', () => ({
   default: mockRoadmapView,
+}))
+
+vi.mock('./components/RoadmapTaskPane.svelte', () => ({
+  default: mockRoadmapTaskPane,
 }))
 
 import packageJson from '../package.json'
@@ -18,6 +23,7 @@ function makeFrontendHarness() {
   const subscriptions = { add: vi.fn() }
   const api = {
     views: { register: vi.fn(() => ({ dispose: vi.fn() })) },
+    taskPane: { registerTab: vi.fn(() => ({ dispose: vi.fn() })) },
   } as unknown as FrontendOpenForgeAPI
   const context = {
     pluginId: packageJson.openforge.id,
@@ -36,14 +42,14 @@ describe('roadmap plugin metadata', () => {
     expect(packageJson.openforge.frontend).toBe('./dist/frontend.js')
     expect(packageJson.openforge.backend).toBe('./dist/backend.js')
     expect(packageJson.openforge.requires).toEqual(
-      expect.arrayContaining(['views', 'backend', 'commands', 'events', 'tasks', 'projectConfig', 'system.openUrl', 'context']),
+      expect.arrayContaining(['views', 'taskPane', 'backend', 'commands', 'events', 'tasks', 'projectConfig', 'storage', 'system.openUrl', 'context']),
     )
   })
 })
 
 describe('roadmap frontend plugin', () => {
   it('registers the Roadmap rail view with a non-colliding Cmd shortcut', async () => {
-    const { default: plugin, RoadmapViewComponent } = await import('./index')
+    const { default: plugin, RoadmapViewComponent, RoadmapTaskPaneComponent } = await import('./index')
     const { api, context, subscriptions } = makeFrontendHarness()
 
     await plugin.activate(api, context)
@@ -64,6 +70,15 @@ describe('roadmap frontend plugin', () => {
     const reserved = ['Cmd+H', 'Cmd+G', 'Cmd+L', 'Cmd+,']
     const registration = (api.views.register as ReturnType<typeof vi.fn>).mock.calls[0][0]
     expect(reserved).not.toContain(registration.shortcut)
+    expect(api.taskPane.registerTab).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'roadmap-ticket',
+        title: 'Roadmap ticket',
+        icon: 'ticket',
+        order: 30,
+        component: RoadmapTaskPaneComponent,
+      }),
+    )
     expect(subscriptions.add).toHaveBeenCalledWith(expect.objectContaining({ dispose: expect.any(Function) }))
   })
 

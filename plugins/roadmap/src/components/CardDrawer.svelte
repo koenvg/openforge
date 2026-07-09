@@ -17,6 +17,7 @@
     onSetValue: (value: number | null) => void
     onToggleLabel: (name: string, currentlyOn: boolean) => void
     onCloseIssue: () => void
+    onOpenTask: (taskId: string) => void
   }
 
   let {
@@ -31,6 +32,7 @@
     onSetValue,
     onToggleLabel,
     onCloseIssue,
+    onOpenTask,
   }: Props = $props()
 
   // Editable copies, re-seeded only when the open issue's identity changes (via the
@@ -70,6 +72,16 @@
       <button class="btn btn-sm" type="button" onclick={() => onOpenUrl(issueUrl)}>
         <ExternalLink size={14} /> Open on GitHub
       </button>
+      {#if card.taskLink}
+        <button
+          class="btn btn-sm"
+          type="button"
+          aria-label={`Open task details ${card.taskLink.taskId}`}
+          onclick={() => onOpenTask(card.taskLink.taskId)}
+        >
+          Open task details {card.taskLink.taskId}
+        </button>
+      {/if}
       <button class="btn btn-sm" type="button" onclick={() => onCopyLink(card.issueNumber)}>
         <Copy size={14} /> Copy link
       </button>
