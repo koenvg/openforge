@@ -686,24 +686,35 @@ impl GitHubReadinessSnapshot {
     }
 
     pub fn from_graphql_response(payload: &serde_json::Value) -> Result<Self, String> {
-        if let Some(errors) = payload.get("errors").and_then(|v| v.as_array()) {
-            if !errors.is_empty() {
+        let error_reason = payload
+            .get("errors")
+            .and_then(|value| value.as_array())
+            .filter(|errors| !errors.is_empty())
+            .map(|errors| {
                 let reason = errors
                     .iter()
                     .filter_map(|error| error.get("message").and_then(|message| message.as_str()))
                     .collect::<Vec<_>>()
                     .join("; ");
-                return Ok(Self::unknown(if reason.is_empty() {
-                    "GraphQL readiness unavailable"
+                if reason.is_empty() {
+                    "GraphQL readiness unavailable".to_string()
                 } else {
-                    &reason
-                }));
-            }
-        }
+                    reason
+                }
+            });
 
-        let pr = payload
-            .pointer("/data/repository/pullRequest")
-            .ok_or_else(|| "GraphQL response missing pullRequest".to_string())?;
+        // GitHub GraphQL routinely returns partial responses: fully usable
+        // pullRequest data alongside a field-level error (e.g.
+        // baseRef.branchProtectionRule requires admin access). Salvage the data we
+        // did get so the poller keeps a valid head SHA instead of falling back to
+        // REST on every poll; only when pullRequest data is absent do we return a
+        // fully-unknown snapshot.
+        let Some(pr) = payload.pointer("/data/repository/pullRequest") else {
+            return match error_reason {
+                Some(reason) => Ok(Self::unknown(reason)),
+                None => Err("GraphQL response missing pullRequest".to_string()),
+            };
+        };
         let source_head_sha = string_field(pr, "headRefOid");
         let merge_state_status = string_field(pr, "mergeStateStatus");
         let review_decision = string_field(pr, "reviewDecision");
@@ -770,6 +781,15 @@ impl GitHubReadinessSnapshot {
                 .to_string();
             policy.requires_conversation_resolution = PolicyValue::unknown(reason.clone());
             policy.unknown_reasons.push(reason.clone());
+            warnings.push(reason);
+        }
+
+        // A partial error may have nulled out branch-protection fields, and a null
+        // branchProtectionRule is otherwise read as "no protection required". We
+        // cannot tell those apart, so treat all policy coverage as unknown and let
+        // the REST fallback fill only that gap.
+        if let Some(reason) = error_reason {
+            policy = RepositoryPolicyFacts::unknown(reason.clone());
             warnings.push(reason);
         }
 
@@ -1816,6 +1836,9 @@ mod tests {
         });
 
         let snapshot = GitHubReadinessSnapshot::from_graphql_response(&payload).unwrap();
+        // With errors and no usable pullRequest data there is nothing to salvage,
+        // so the snapshot stays fully unknown.
+        assert!(snapshot.source_head_sha.is_none());
         assert!(!snapshot.policy.required_checks.known);
         assert!(!snapshot.policy.required_reviews.known);
         assert!(!snapshot.policy.merge_queue_required.known);
@@ -1845,5 +1868,65 @@ mod tests {
         assert_eq!(snapshot.source_head_sha.as_deref(), Some("head-sha-2"));
         assert_eq!(snapshot.status_check_rollup_sha.as_deref(), Some("old-sha"));
         assert!(snapshot.requires_rest_check_fallback());
+    }
+
+    #[test]
+    fn github_readiness_partial_errors_preserve_pull_request_data() {
+        // GitHub GraphQL routinely returns valid PR data alongside a field-level
+        // error (e.g. baseRef.branchProtectionRule requires admin access). The
+        // usable headRefOid must survive so the poller does not needlessly fall
+        // back to REST for the head SHA on every poll.
+        let payload = serde_json::json!({
+            "errors": [{
+                "type": "FORBIDDEN",
+                "path": ["repository", "pullRequest", "baseRef", "branchProtectionRule"],
+                "message": "Resource not accessible by personal access token"
+            }],
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "headRefOid": "head-sha-9",
+                        "mergeStateStatus": "CLEAN",
+                        "reviewDecision": "APPROVED",
+                        "commits": {
+                            "nodes": [{
+                                "commit": {
+                                    "oid": "head-sha-9",
+                                    "statusCheckRollup": {
+                                        "state": "SUCCESS",
+                                        "contexts": { "nodes": [{ "__typename": "CheckRun", "name": "ci", "status": "COMPLETED", "conclusion": "SUCCESS", "detailsUrl": "https://example.com/ci" }] }
+                                    }
+                                }
+                            }]
+                        },
+                        "reviewThreads": { "nodes": [] },
+                        "baseRef": { "name": "main", "branchProtectionRule": null }
+                    }
+                }
+            }
+        });
+
+        let snapshot = GitHubReadinessSnapshot::from_graphql_response(&payload).unwrap();
+
+        // Usable PR data from the partial response is preserved.
+        assert_eq!(snapshot.source_head_sha.as_deref(), Some("head-sha-9"));
+        assert_eq!(snapshot.status_check_rollup_sha.as_deref(), Some("head-sha-9"));
+        assert_eq!(snapshot.check_runs.check_runs[0].name, "ci");
+        assert_eq!(snapshot.review_status.as_deref(), Some("approved"));
+        // The rollup SHA matches the head SHA, so the salvaged GraphQL checks are
+        // trusted and no REST check re-fetch is needed for this PR.
+        assert!(!snapshot.requires_rest_check_fallback());
+
+        // Branch-protection coverage is unknown because the field errored, so the
+        // REST fallback must fill only that gap rather than trusting an empty policy.
+        assert!(!snapshot.policy.required_checks.known);
+        assert!(!snapshot.policy.required_reviews.known);
+        assert!(!snapshot.policy.merge_queue_required.known);
+
+        // The error message is surfaced for diagnostics.
+        assert!(snapshot
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Resource not accessible")));
     }
 }
