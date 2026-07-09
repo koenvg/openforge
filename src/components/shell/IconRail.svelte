@@ -13,6 +13,7 @@
     modalsOpen?: boolean
     railBg?: string
     activeRepoReviewRequestCount?: number
+    activeProjectAttentionCount?: number
   }
 
   let {
@@ -22,6 +23,7 @@
     modalsOpen = false,
     railBg = 'oklch(var(--b2))',
     activeRepoReviewRequestCount = 0,
+    activeProjectAttentionCount = 0,
   }: Props = $props()
 
   let navItems = $derived(
@@ -43,6 +45,15 @@
       onclick={() => onNavigate(view)}
     >
       <Icon size={24} />
+      <!-- Active project's Focus attention count. Uses the same success/green as the
+           project sidebar's green dot, so the rail badge matches the sidebar for the
+           active project. Only shown when there are tasks in focus. -->
+      {#if view === 'board' && activeProjectAttentionCount > 0}
+        <span
+          class="badge badge-success badge-xs absolute -top-2 -right-3 text-[0.6rem] font-bold min-w-4 h-4"
+          title="{activeProjectAttentionCount} task{activeProjectAttentionCount === 1 ? '' : 's'} in focus"
+        >{activeProjectAttentionCount}</span>
+      {/if}
       <!-- Per-repo unopened review requests for the active project's repo. Uses the
            same error/red as the "All Pull Requests" sidebar badge for consistency. -->
       {#if view === GITHUB_SYNC_VIEW_KEY && activeRepoReviewRequestCount > 0}

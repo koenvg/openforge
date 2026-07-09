@@ -48,6 +48,14 @@ export const projectAttention = writable<Map<string, ProjectAttention>>(new Map(
 // orchestrator using the board's own getFilterCounts, so the dot matches the board's Focus
 // count exactly. Keyed by project id; missing projects report zero.
 export const attentionCountByProject = writable<Map<string, number>>(new Map());
+// Rail "Board" icon badge (the green dot): the active project's Focus attention count,
+// scoped from attentionCountByProject exactly the way activeRepoReviewRequestCount scopes
+// the red PR badge. Zero when there is no active project or the project has no entry, so the
+// rail badge always matches the active project's sidebar green dot.
+export const activeProjectAttentionCount = derived(
+  [attentionCountByProject, activeProjectId],
+  ([$counts, $projectId]) => ($projectId ? ($counts.get($projectId) ?? 0) : 0),
+);
 export const agentEvents = writable<Map<string, AgentEvent[]>>(new Map());
 export const taskRuntimeInfo = writable<Map<string, TaskRuntimeInfo>>(new Map());
 
