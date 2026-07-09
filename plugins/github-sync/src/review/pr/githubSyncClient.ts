@@ -44,6 +44,7 @@ export interface GithubSyncPrReviewClient {
   listAuthoredPullRequests(): Promise<AuthoredPullRequest[]>
   refreshAuthoredPullRequests(): Promise<AuthoredPullRequest[]>
   markReviewPullRequestViewed(request: { prId: number; headSha: string }): Promise<void>
+  markReviewPullRequestUnviewed(request: { prId: number }): Promise<void>
   listPullRequestFileDiffs(request: PullRequestRepositoryRequest): Promise<PrFileDiff[]>
   getFileContent(request: FileContentRequest): Promise<string>
   getFileContentBase64(request: FileContentRequest): Promise<string>
@@ -94,6 +95,7 @@ export function createGithubSyncPrReviewClient(api: Pick<FrontendOpenForgeAPI, '
     listAuthoredPullRequests: () => invokeBackend<AuthoredPullRequest[]>(api, 'getAuthoredPrs'),
     refreshAuthoredPullRequests: () => invokeBackend<AuthoredPullRequest[]>(api, 'fetchAuthoredPrs'),
     markReviewPullRequestViewed: ({ prId, headSha }) => invokeBackend<void>(api, 'markReviewPrViewed', { prId, headSha }),
+    markReviewPullRequestUnviewed: ({ prId }) => invokeBackend<void>(api, 'markReviewPrUnviewed', { prId }),
     listPullRequestFileDiffs: ({ owner, repo, prNumber }) => invokeBackend<PrFileDiff[]>(api, 'getPrFileDiffs', { owner, repo, prNumber }),
     getFileContent: ({ owner, repo, sha }) => invokeBackend<string>(api, 'getFileContent', { owner, repo, sha }),
     getFileContentBase64: ({ owner, repo, sha }) => invokeBackend<string>(api, 'getFileContentBase64', { owner, repo, sha }),

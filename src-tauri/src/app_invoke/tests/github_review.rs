@@ -274,6 +274,11 @@ async fn handles_db_backed_commands_and_events() {
     // refresh the sidebar/rail badges immediately.
     let viewed_event = events.recv().await.expect("review pr count changed event");
     assert_eq!(viewed_event.event_name, "review-pr-count-changed");
+    invoke_ok(&state, "mark_review_pr_unviewed", json!({ "prId": 20 })).await;
+    // Marking a PR unviewed resets it to unread, again changing the unopened count, so
+    // the renderer is notified to refresh the sidebar/rail badges.
+    let unviewed_event = events.recv().await.expect("review pr count changed event");
+    assert_eq!(unviewed_event.event_name, "review-pr-count-changed");
     assert_eq!(
         invoke_ok(&state, "get_authored_prs", serde_json::Value::Null).await[0]["title"],
         "Authored by me"

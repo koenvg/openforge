@@ -177,6 +177,7 @@ function registerPrReviewBackends(
   backend.registerMethod('getAuthoredPrs', { handler: async () => [] })
   backend.registerMethod('fetchAuthoredPrs', { handler: async () => [] })
   backend.registerMethod('markReviewPrViewed', { handler: async () => undefined })
+  backend.registerMethod('markReviewPrUnviewed', { handler: async () => undefined })
   backend.registerMethod('getPrFileDiffs', { handler: async (payload) => getDiffs(payload as { prNumber: number }) })
   backend.registerMethod('getReviewComments', {
     handler: async () => typeof reviewCommentResults === 'function'
@@ -268,6 +269,39 @@ describe('PrReviewView host-driven open', () => {
     })
     // The request is consumed so it does not re-fire on later store updates.
     expect(get(pendingReviewPrOpen)).toBeNull()
+  })
+})
+
+describe('PrReviewView mark as unread', () => {
+  beforeEach(() => {
+    resetStores()
+    vi.clearAllMocks()
+  })
+
+  it('optimistically resets a read PR to unread when its Mark as unread control is clicked', async () => {
+    const viewedPr: ReviewPullRequest = { ...basePr, viewed_at: 1_700_000_000, viewed_head_sha: basePr.head_sha }
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    registerPrReviewBackends(registry, () => [baseDiff], [viewedPr])
+
+    render(PrReviewView, {
+      props: {
+        api: registry.frontendApi,
+        context: registry.frontendApi.context.getSnapshot(),
+        projectName: 'Demo Project',
+        projectId: 'project-1',
+      },
+    })
+
+    await screen.findByText('Fix authentication middleware')
+    await waitFor(() => expect(get(reviewPrs)[0]?.viewed_at).toBe(1_700_000_000))
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Mark as unread' }))
+
+    await waitFor(() => {
+      const stored = get(reviewPrs).find((pr) => pr.id === viewedPr.id)
+      expect(stored?.viewed_at).toBeNull()
+      expect(stored?.viewed_head_sha).toBeNull()
+    })
   })
 })
 

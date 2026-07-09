@@ -148,4 +148,37 @@ describe('ReviewPrCard', () => {
     expect(screen.getByText('+2')).toBeTruthy()
   })
 
+  const viewedPr: ReviewPullRequest = { ...basePr, viewed_at: 1_700_000_000, viewed_head_sha: 'abc123' }
+
+  it('renders a Mark as unread control for a read PR when onMarkUnread is provided', () => {
+    render(ReviewPrCard, { props: { pr: viewedPr, selected: false, onClick: () => {}, onMarkUnread: () => {} } })
+    expect(screen.getByRole('button', { name: 'Mark as unread' })).toBeTruthy()
+  })
+
+  it('does not render the Mark as unread control for an unread PR', () => {
+    render(ReviewPrCard, { props: { pr: basePr, selected: false, onClick: () => {}, onMarkUnread: () => {} } })
+    expect(screen.queryByRole('button', { name: 'Mark as unread' })).toBeNull()
+  })
+
+  it('does not render the Mark as unread control when onMarkUnread is omitted', () => {
+    render(ReviewPrCard, { props: { pr: viewedPr, selected: false, onClick: () => {} } })
+    expect(screen.queryByRole('button', { name: 'Mark as unread' })).toBeNull()
+  })
+
+  it('calls onMarkUnread but not onClick when the Mark as unread control is clicked', async () => {
+    let marked = false
+    let selected = false
+    render(ReviewPrCard, {
+      props: {
+        pr: viewedPr,
+        selected: false,
+        onClick: () => { selected = true },
+        onMarkUnread: () => { marked = true },
+      },
+    })
+    await fireEvent.click(screen.getByRole('button', { name: 'Mark as unread' }))
+    expect(marked).toBe(true)
+    expect(selected).toBe(false)
+  })
+
 })

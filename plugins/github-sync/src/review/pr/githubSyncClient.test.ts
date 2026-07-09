@@ -22,11 +22,13 @@ describe('GitHub Sync PR review client contracts', () => {
     await client.refreshReviewPullRequests()
     await client.listPullRequestFileDiffs({ owner: 'acme', repo: 'repo', prNumber: 42 })
     await client.markReviewPullRequestViewed({ prId: 7, headSha: 'abc' })
+    await client.markReviewPullRequestUnviewed({ prId: 7 })
 
-    expect(api.backend.whenReady).toHaveBeenCalledTimes(3)
+    expect(api.backend.whenReady).toHaveBeenCalledTimes(4)
     expect(api.backend.invoke).toHaveBeenNthCalledWith(1, 'fetchReviewPrs', undefined)
     expect(api.backend.invoke).toHaveBeenNthCalledWith(2, 'getPrFileDiffs', { owner: 'acme', repo: 'repo', prNumber: 42 })
     expect(api.backend.invoke).toHaveBeenNthCalledWith(3, 'markReviewPrViewed', { prId: 7, headSha: 'abc' })
+    expect(api.backend.invoke).toHaveBeenNthCalledWith(4, 'markReviewPrUnviewed', { prId: 7 })
     expect(api.commands.invokeGlobal).not.toHaveBeenCalled()
   })
 

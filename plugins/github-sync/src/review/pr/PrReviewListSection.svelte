@@ -41,6 +41,7 @@
     onOpenGithubSettings: () => void
     onOpenRepositoryFilters: () => void
     onSelectPr: (pr: ReviewPullRequest) => void
+    onMarkUnread: (pr: ReviewPullRequest) => void
     onOpenAuthoredPr: (url: string) => void
     pluralize: (count: number, singular: string, plural?: string) => string
   }
@@ -80,6 +81,7 @@
     onOpenGithubSettings,
     onOpenRepositoryFilters,
     onSelectPr,
+    onMarkUnread,
     onOpenAuthoredPr,
     pluralize,
   }: Props = $props()
@@ -179,6 +181,7 @@
                         {pr}
                         selected={false}
                         onClick={() => onSelectPr(pr)}
+                        onMarkUnread={() => onMarkUnread(pr)}
                       />
                     </div>
                   {/each}

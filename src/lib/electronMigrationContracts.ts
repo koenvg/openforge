@@ -106,6 +106,7 @@ export const ipcCommandContracts = [
   { functionName: 'fetchReviewPrs', ipcCommand: 'fetch_review_prs', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'getReviewPrs', ipcCommand: 'get_review_prs', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'markReviewPrViewed', ipcCommand: 'mark_review_pr_viewed', payloadKeys: ['prId', 'headSha'], targetOwner: 'rust-sidecar', domain: 'github-review' },
+  { functionName: 'markReviewPrUnviewed', ipcCommand: 'mark_review_pr_unviewed', payloadKeys: ['prId'], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'getPrFileDiffs', ipcCommand: 'get_pr_file_diffs', payloadKeys: ['owner', 'repo', 'prNumber'], targetOwner: 'rust-sidecar', domain: 'files-review' },
   { functionName: 'getFileContent', ipcCommand: 'get_file_content', payloadKeys: ['owner', 'repo', 'sha'], targetOwner: 'rust-sidecar', domain: 'files-review' },
   { functionName: 'getFileContentBase64', ipcCommand: 'get_file_content_base64', payloadKeys: ['owner', 'repo', 'sha'], targetOwner: 'rust-sidecar', domain: 'files-review' },

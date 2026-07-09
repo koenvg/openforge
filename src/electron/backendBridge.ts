@@ -108,6 +108,7 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'fetch_review_prs',
   'get_review_prs',
   'mark_review_pr_viewed',
+  'mark_review_pr_unviewed',
   'get_pr_file_diffs',
   'get_file_content',
   'get_file_content_base64',

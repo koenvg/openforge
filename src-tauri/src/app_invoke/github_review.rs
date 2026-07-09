@@ -96,6 +96,13 @@ pub(super) async fn handle_app_github_review_command(
             publish_review_pr_count_changed(state);
             serde_json::Value::Null
         }
+        "mark_review_pr_unviewed" => {
+            let pr_id = payload_i64(&request.payload, "prId")?;
+            crate::github_runtime::mark_review_pr_unviewed(&state.db, pr_id)
+                .map_err(runtime_error)?;
+            publish_review_pr_count_changed(state);
+            serde_json::Value::Null
+        }
         "get_authored_prs" => to_app_value(
             crate::github_runtime::get_authored_prs(&state.db).map_err(runtime_error)?,
         )?,

@@ -515,6 +515,18 @@
     }
   }
 
+  // Reset a read PR back to unread. Mirrors openPrDetail's optimistic update in reverse:
+  // clear viewed_at/viewed_head_sha locally so the card immediately re-surfaces as unread,
+  // then persist via the backend (which re-emits the review-pr-count-changed badge event).
+  function markPrUnread(pr: ReviewPullRequest) {
+    const updatedPr = { ...pr, viewed_at: null, viewed_head_sha: null }
+    $reviewPrs = $reviewPrs.map(p => p.id === pr.id ? updatedPr : p)
+    if ($selectedReviewPr?.id === pr.id) {
+      $selectedReviewPr = updatedPr
+    }
+    githubSync.markReviewPullRequestUnviewed({ prId: pr.id }).catch(e => console.error('Failed to mark unread:', e))
+  }
+
   function backToList() {
     prDetailsLoadSequence += 1
     isLoading = false
@@ -801,6 +813,7 @@
       onOpenGithubSettings={openGithubSettings}
       onOpenRepositoryFilters={openRepositoryFilters}
       onSelectPr={(pr) => { void selectPr(pr) }}
+      onMarkUnread={(pr) => markPrUnread(pr)}
       onOpenAuthoredPr={(url) => api.system.openUrl(url)}
       {pluralize}
     />
