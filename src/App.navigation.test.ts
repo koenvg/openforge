@@ -437,5 +437,43 @@ describe('App navigation shortcuts', () => {
 
       expect(nav.restoreProjectView).toHaveBeenCalledWith('proj-1')
     })
+
+    it('hides the per-project IconRail on a cross-project sidebar plugin view', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const pluginStore = await import('./lib/plugin/pluginStore')
+      const pluginRegistry = await import('./lib/plugin/pluginRegistry')
+      const { GITHUB_SYNC_PLUGIN_ID, GITHUB_SYNC_GLOBAL_VIEW_ID, GITHUB_SYNC_GLOBAL_VIEW_KEY } = await import('./lib/githubSyncPlugin')
+      const IconRail = (await import('./components/shell/IconRail.svelte')).default
+      const { get } = await import('svelte/store')
+      const { tick } = await import('svelte')
+
+      stores.currentView.set('board')
+      render(App)
+      await vi.waitFor(() => {
+        expect(get(stores.activeProjectId)).toBe('proj-1')
+        expect(get(pluginStore.installedPlugins).has(GITHUB_SYNC_PLUGIN_ID)).toBe(true)
+      })
+
+      pluginStore.enabledPluginIds.set(new Set([GITHUB_SYNC_PLUGIN_ID]))
+      await pluginRegistry.activatePlugin(GITHUB_SYNC_PLUGIN_ID)
+      pluginStore.setRuntimeContributionSource(GITHUB_SYNC_PLUGIN_ID, {
+        views: [{ id: GITHUB_SYNC_GLOBAL_VIEW_ID, title: 'All Pull Requests', icon: 'git-pull-request', placement: 'sidebar', order: 20 }],
+      })
+      await tick()
+
+      // The per-project rail is mounted on the board; moving to a cross-project sidebar
+      // view must unmount it, so returning to the board remounts it (a fresh render call).
+      // A mocked component is only invoked on mount, never on prop change (verified), so
+      // if the rail wrongly stayed mounted on the cross-project view there would be no
+      // remount call here.
+      stores.currentView.set(GITHUB_SYNC_GLOBAL_VIEW_KEY)
+      await tick()
+      vi.mocked(IconRail).mockClear()
+      stores.currentView.set('board')
+      await tick()
+
+      expect(vi.mocked(IconRail)).toHaveBeenCalled()
+    })
   })
 })

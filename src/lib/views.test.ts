@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import PluginSlot from '../components/plugin/PluginSlot.svelte'
 import type { RuntimeContributionSource } from './plugin/contributionResolver'
-import { ICON_RAIL_HIDDEN_VIEWS, TASK_CLEARING_VIEWS, VIEWS, getPluginViewEntries, getViews, isCrossProjectView } from './views'
+import { TASK_CLEARING_VIEWS, VIEWS, getPluginViewEntries, getViews, isCrossProjectView } from './views'
 import type { ViewContext } from './views'
 
 function makeSource(overrides: Partial<RuntimeContributionSource> = {}): RuntimeContributionSource {
@@ -50,10 +50,6 @@ describe('views registry', () => {
       'files',
       'global_settings',
       'settings',
-    ])
-
-    expect([...ICON_RAIL_HIDDEN_VIEWS].sort()).toEqual([
-      'global_settings',
     ])
   })
 

@@ -38,7 +38,7 @@
   import { themeMode } from './lib/theme'
   import { useCommandHeld } from './lib/useCommandHeld.svelte'
   import { useShortcutRegistry } from './lib/shortcuts.svelte'
-  import { ICON_RAIL_HIDDEN_VIEWS, getViews, isCrossProjectView } from './lib/views'
+  import { getViews, isCrossProjectView } from './lib/views'
   import { registerAppShortcuts } from './lib/appShortcuts'
   import { getGlobalShortcutHelpEntries } from './lib/appShortcutDefinitions'
   import { registerAppDesktopEventListeners } from './lib/appDesktopEventListeners'
@@ -534,7 +534,7 @@
     pluginNavItems={sidebarPluginNavItems}
     reviewRequestCount={$reviewRequestCount}
   />
-  {#if !ICON_RAIL_HIDDEN_VIEWS.has($currentView)}
+  {#if !isCrossProjectView($currentView, sidebarPluginViewKeySet)}
     <IconRail currentView={$currentView} onNavigate={handleNavigate} pluginNavItems={pluginNavItems} modalsOpen={showCommandPalette || showProjectSwitcher || showAttentionOverview || actionPalette.showActionPalette || showAddDialog || showFileQuickOpen} railBg={iconRailBg} activeRepoReviewRequestCount={$activeRepoReviewRequestCount} activeProjectAttentionCount={$activeProjectAttentionCount} />
   {/if}
 

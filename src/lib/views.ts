@@ -34,10 +34,6 @@ export const TASK_CLEARING_VIEWS: ReadonlySet<AppView> = new Set([
   'files',
 ])
 
-export const ICON_RAIL_HIDDEN_VIEWS: ReadonlySet<AppView> = new Set([
-  'global_settings',
-])
-
 // A view that is not tied to the active project: Global Settings or a sidebar-placed
 // (cross-project) plugin view such as "All Pull Requests". While one of these is showing,
 // activeProjectId still points at the last project even though its content isn't on
