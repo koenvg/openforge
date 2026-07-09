@@ -129,7 +129,6 @@
           onclick={() => switchToTab(tabPosition)}
         >
           <span>{tab.label}</span>
-          {#if activeTabIndex === tab.index}<span class="badge badge-primary badge-xs">Active</span>{/if}
           {#if isTabExited(tab.key)}<span class="badge badge-warning badge-xs">Exited</span>{/if}
           {#if shortcutHintsVisible && tabPosition < 9}<kbd class="kbd kbd-xs opacity-50">⌘⇧{tabPosition + 1}</kbd>{/if}
         </button>
