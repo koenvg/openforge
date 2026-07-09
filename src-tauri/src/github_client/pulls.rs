@@ -30,6 +30,28 @@ fn should_cache_enriched_search_results(detail_error_count: usize) -> bool {
     detail_error_count == 0
 }
 
+fn review_requested_pr_search_url(username: &str) -> String {
+    format!(
+        "https://api.github.com/search/issues?q=review-requested:{}+type:pr+state:open+draft:false&per_page=100",
+        username
+    )
+}
+
+fn exclude_draft_search_pr_results(
+    prs: Vec<SearchPrResult>,
+    safe_search_ids: Vec<i64>,
+) -> (Vec<SearchPrResult>, Vec<i64>) {
+    let draft_ids: std::collections::HashSet<i64> =
+        prs.iter().filter(|pr| pr.draft).map(|pr| pr.id).collect();
+    let filtered_prs = prs.into_iter().filter(|pr| !pr.draft).collect();
+    let filtered_safe_search_ids = safe_search_ids
+        .into_iter()
+        .filter(|id| !draft_ids.contains(id))
+        .collect();
+
+    (filtered_prs, filtered_safe_search_ids)
+}
+
 impl GitHubClient {
     pub async fn merge_pr(
         &self,
@@ -322,12 +344,10 @@ impl GitHubClient {
         username: &str,
         token: &str,
     ) -> Result<(Vec<SearchPrResult>, Vec<i64>), GitHubError> {
-        let url = format!(
-            "https://api.github.com/search/issues?q=review-requested:{}+type:pr+state:open&per_page=100",
-            username
-        );
+        let url = review_requested_pr_search_url(username);
+        let (prs, safe_search_ids) = self.search_prs_with_details(&url, token).await?;
 
-        self.search_prs_with_details(&url, token).await
+        Ok(exclude_draft_search_pr_results(prs, safe_search_ids))
     }
 
     pub async fn search_authored_prs(
@@ -471,6 +491,32 @@ impl GitHubClient {
 mod tests {
     use super::*;
 
+    fn make_search_pr_result(id: i64, draft: bool) -> SearchPrResult {
+        SearchPrResult {
+            id,
+            number: id,
+            title: format!("PR {id}"),
+            body: Some("body".to_string()),
+            state: "open".to_string(),
+            draft,
+            html_url: format!("https://github.com/acme/repo/pull/{id}"),
+            user_login: "alice".to_string(),
+            user_avatar_url: None,
+            repo_owner: "acme".to_string(),
+            repo_name: "repo".to_string(),
+            head_ref: format!("feature/T-{id}"),
+            base_ref: "main".to_string(),
+            head_sha: format!("sha-{id}"),
+            additions: 10,
+            deletions: 2,
+            changed_files: 1,
+            mergeable: Some(true),
+            mergeable_state: Some("clean".to_string()),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            updated_at: "2026-01-02T00:00:00Z".to_string(),
+            labels: vec![],
+        }
+    }
     #[test]
     fn normalize_base64_content_removes_newlines_without_decoding() {
         assert_eq!(normalize_base64_content("SGVs\nbG8="), "SGVsbG8=");
@@ -526,6 +572,32 @@ mod tests {
     fn search_pr_results_cache_is_skipped_when_any_detail_fetch_failed() {
         assert!(should_cache_enriched_search_results(0));
         assert!(!should_cache_enriched_search_results(1));
+    }
+
+    #[test]
+    fn review_requested_pr_search_url_excludes_drafts_at_query_time() {
+        let url = review_requested_pr_search_url("octocat");
+
+        assert!(url.contains("review-requested:octocat"));
+        assert!(url.contains("type:pr"));
+        assert!(url.contains("state:open"));
+        assert!(url.contains("draft:false"));
+    }
+
+    #[test]
+    fn exclude_draft_search_pr_results_removes_drafts_and_keeps_non_drafts() {
+        let (prs, safe_ids) = exclude_draft_search_pr_results(
+            vec![
+                make_search_pr_result(1, false),
+                make_search_pr_result(2, true),
+            ],
+            vec![1, 2],
+        );
+
+        assert_eq!(prs.len(), 1);
+        assert_eq!(prs[0].id, 1);
+        assert!(!prs[0].draft);
+        assert_eq!(safe_ids, vec![1]);
     }
 
     #[test]
