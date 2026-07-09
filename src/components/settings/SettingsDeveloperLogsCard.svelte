@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte'
+  import { onDestroy, onMount, tick } from 'svelte'
   import { Terminal } from '@lucide/svelte'
   import { getDeveloperLogSnapshot, openInEditor } from '../../lib/ipc'
   import type { DeveloperLogEntry } from '../../lib/types'
@@ -14,6 +14,7 @@
   let loadError = $state<string | null>(null)
   let liveRefreshTimer: ReturnType<typeof setInterval> | null = null
   let refreshInFlight = false
+  let logTraceElement = $state<HTMLPreElement | null>(null)
 
   const formattedLogs = $derived(logs.map(formatLogEntry).join('\n'))
   const showingSummary = $derived(totalEntries > logs.length
@@ -28,10 +29,22 @@
     return `[${entry.timestamp}] ${entry.level.toUpperCase()} ${entry.message}`
   }
 
+  function isLogTraceAtBottom(): boolean {
+    if (!logTraceElement) return true
+    const distanceFromBottom = logTraceElement.scrollHeight - logTraceElement.clientHeight - logTraceElement.scrollTop
+    return distanceFromBottom <= 2
+  }
+
+  function scrollLogTraceToBottom() {
+    if (!logTraceElement) return
+    logTraceElement.scrollTop = logTraceElement.scrollHeight
+  }
+
   async function refreshLogs(options: { showLoading?: boolean } = {}) {
     if (refreshInFlight) return
     const showLoading = options.showLoading ?? true
     refreshInFlight = true
+    const shouldStickToBottom = logs.length === 0 || isLogTraceAtBottom()
     if (showLoading) loading = true
     loadError = null
     try {
@@ -39,6 +52,10 @@
       logs = snapshot.entries
       totalEntries = snapshot.totalEntries
       logFilePath = snapshot.logFilePath
+      if (shouldStickToBottom && snapshot.entries.length > 0) {
+        await tick()
+        scrollLogTraceToBottom()
+      }
     } catch (error) {
       loadError = errorMessage(error)
     } finally {
@@ -103,7 +120,7 @@
     {:else if logs.length === 0}
       <p class="text-sm text-base-content/60 m-0">No logs captured yet.</p>
     {:else}
-      <pre aria-label="OpenForge log trace" class="max-h-96 overflow-auto whitespace-pre-wrap rounded bg-base-200 p-3 text-xs text-base-content">{formattedLogs}</pre>
+      <pre bind:this={logTraceElement} aria-label="OpenForge log trace" class="max-h-96 overflow-auto whitespace-pre-wrap rounded bg-base-200 p-3 text-xs text-base-content">{formattedLogs}</pre>
     {/if}
   </div>
 </div>
