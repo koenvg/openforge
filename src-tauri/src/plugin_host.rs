@@ -25,6 +25,12 @@ pub struct PluginHost {
     task_claims: TaskClaims,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PluginHostProcessDiagnostics {
+    pub state: String,
+    pub pid: Option<u32>,
+}
+
 impl Clone for PluginHost {
     fn clone(&self) -> Self {
         Self {
@@ -122,5 +128,13 @@ impl PluginHost {
         self.transport
             .lock()
             .map_err(|_| "plugin host transport lock poisoned".to_string())
+    }
+
+    pub fn runtime_process_diagnostics(&self) -> Result<PluginHostProcessDiagnostics, String> {
+        let runtime = self.runtime_lock()?;
+        Ok(PluginHostProcessDiagnostics {
+            state: format!("{:?}", runtime.state),
+            pid: runtime.pid,
+        })
     }
 }

@@ -17,7 +17,7 @@ use super::events::{
     RingBuffer, SharedRingBuffer, CLAUDE_BUFFER_CAPACITY,
 };
 use super::pids::{pid_file_name_for_session_key, shell_session_key};
-use super::{PtyError, PtyManager};
+use super::{PtyError, PtyManager, PtyProcessDiagnosticSession};
 
 pub(super) type PtySessions = Arc<Mutex<HashMap<String, PtySession>>>;
 pub(super) type LastOutputTimes = Arc<Mutex<HashMap<String, Arc<AtomicU64>>>>;
@@ -43,6 +43,20 @@ pub(super) enum PtySessionKind {
 impl PtySessionKind {
     fn is_shell_for_task(&self, task_id: &str) -> bool {
         matches!(self, Self::Shell { task_id: shell_task_id } if shell_task_id == task_id)
+    }
+
+    fn task_id_for_session_key<'a>(&'a self, session_key: &'a str) -> &'a str {
+        match self {
+            Self::Agent => session_key,
+            Self::Shell { task_id } => task_id,
+        }
+    }
+
+    fn diagnostic_kind(&self) -> &'static str {
+        match self {
+            Self::Agent => "agent",
+            Self::Shell { .. } => "shell",
+        }
     }
 }
 
@@ -1216,6 +1230,32 @@ impl PtyManager {
     pub async fn get_session_keys(&self) -> Vec<String> {
         let sessions = self.sessions.lock().await;
         sessions.keys().cloned().collect()
+    }
+
+    /// Returns a read-only snapshot of live PTY roots for diagnostics.
+    pub async fn process_diagnostic_sessions(&self) -> Vec<PtyProcessDiagnosticSession> {
+        let sessions = self.sessions.lock().await;
+        let mut diagnostics: Vec<PtyProcessDiagnosticSession> = sessions
+            .iter()
+            .map(|(session_key, session)| PtyProcessDiagnosticSession {
+                session_key: session_key.clone(),
+                task_id: session
+                    .kind
+                    .task_id_for_session_key(session_key)
+                    .to_string(),
+                session_kind: session.kind.diagnostic_kind().to_string(),
+                pid: session.child.process_id(),
+                pty_instance_id: session.instance_id,
+                pid_file_name: session.pid_file_name.clone(),
+            })
+            .collect();
+        diagnostics.sort_by(|left, right| {
+            left.task_id
+                .cmp(&right.task_id)
+                .then_with(|| left.session_key.cmp(&right.session_key))
+                .then_with(|| left.pty_instance_id.cmp(&right.pty_instance_id))
+        });
+        diagnostics
     }
 
     pub async fn get_pty_buffer(&self, task_id: &str) -> Option<String> {

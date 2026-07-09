@@ -318,6 +318,7 @@ describe('OpenForge CLI', () => {
       'openforge task dependencies add --task-id <id> --depends-on <task-id>',
       'openforge project list',
       'openforge project labels list --project-id <id>',
+      'openforge debug process-memory',
       'openforge plugin install --path <local-plugin-source>',
       'openforge plugin enable --plugin-id <id> --project-id <id>',
       'openforge plugin disable --plugin-id <id> --project-id <id>',
@@ -804,6 +805,22 @@ describe('OpenForge CLI', () => {
     });
 
     expect(result).toEqual(projects);
+  });
+
+  it('prints read-only process memory diagnostics through the nested debug command', async () => {
+    const response = {
+      sidecar: { pid: 10, rssBytes: 1024, totalTreeRssBytes: 3072, command: 'openforge' },
+      pluginHost: null,
+      ptyProcessTrees: [],
+      totals: { trackedUniqueRssBytes: 3072 },
+    };
+
+    const result = await runCliAgainstJsonBridge(['debug', 'process-memory'], {
+      url: '/debug/process-memory',
+      response,
+    });
+
+    expect(result).toEqual(response);
   });
 
   it('lists project labels through the canonical nested project label command', async () => {

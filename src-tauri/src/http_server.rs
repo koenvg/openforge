@@ -6,6 +6,7 @@ use crate::{
     db,
     github_client::GitHubClient,
     plugin_host::PluginHost,
+    process_memory::{collect_process_memory_diagnostics, ProcessMemoryDiagnostics},
     pty_manager::PtyManager,
     whisper_manager::WhisperManager,
 };
@@ -1618,6 +1619,19 @@ async fn app_invoke_handler(
     Ok(Json(AppInvokeResponse { value }))
 }
 
+async fn debug_process_memory_handler(
+    State(state): State<AppState>,
+) -> Result<Json<ProcessMemoryDiagnostics>, (StatusCode, String)> {
+    collect_process_memory_diagnostics(
+        Arc::clone(&state.db),
+        state.pty_manager.clone(),
+        state.plugin_host.clone(),
+    )
+    .await
+    .map(Json)
+    .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error))
+}
+
 /// Create the HTTP router with all available routes
 pub fn create_router(state: AppState) -> Router {
     Router::new()
@@ -1628,6 +1642,7 @@ pub fn create_router(state: AppState) -> Router {
             "/app/invoke",
             post(app_invoke_handler).layer(DefaultBodyLimit::max(APP_INVOKE_MAX_BODY_BYTES)),
         )
+        .route("/debug/process-memory", get(debug_process_memory_handler))
         .route("/create_task", post(create_task_handler))
         .route("/update_task", post(update_task_handler))
         .route("/delete_task", post(delete_task_handler))
