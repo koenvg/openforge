@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import PluginSlot from '../components/plugin/PluginSlot.svelte'
 import type { RuntimeContributionSource } from './plugin/contributionResolver'
-import { ICON_RAIL_HIDDEN_VIEWS, TASK_CLEARING_VIEWS, VIEWS, getPluginViewEntries, getViews } from './views'
+import { ICON_RAIL_HIDDEN_VIEWS, TASK_CLEARING_VIEWS, VIEWS, getPluginViewEntries, getViews, isCrossProjectView } from './views'
 import type { ViewContext } from './views'
 
 function makeSource(overrides: Partial<RuntimeContributionSource> = {}): RuntimeContributionSource {
@@ -149,6 +149,27 @@ describe('views registry', () => {
     expect(pluginViews['plugin:com.openforge.terminal:terminal']).toBeDefined()
     expect('files' in pluginViews).toBe(false)
     expect(pluginViews['plugin:com.openforge.file-viewer:files']?.component).toBe(PluginSlot)
+  })
+
+  describe('isCrossProjectView', () => {
+    const globalPrKey = 'plugin:com.openforge.github-sync:pr_review_global'
+    const sidebarKeys: ReadonlySet<string> = new Set([globalPrKey])
+
+    it('treats Global Settings as cross-project regardless of plugin views', () => {
+      expect(isCrossProjectView('global_settings', new Set())).toBe(true)
+    })
+
+    it('treats a sidebar-placed plugin view as cross-project', () => {
+      expect(isCrossProjectView(globalPrKey, sidebarKeys)).toBe(true)
+    })
+
+    it('treats the board and project-context views as NOT cross-project', () => {
+      expect(isCrossProjectView('board', sidebarKeys)).toBe(false)
+      // Project settings shows the active project's own settings — a project location.
+      expect(isCrossProjectView('settings', sidebarKeys)).toBe(false)
+      // A rail (per-project) plugin view not registered as a sidebar view.
+      expect(isCrossProjectView('plugin:com.openforge.github-sync:pr_review', sidebarKeys)).toBe(false)
+    })
   })
 
   it('passes plugin slot props for builtin fullpage views', () => {

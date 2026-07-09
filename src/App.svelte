@@ -4,7 +4,7 @@
   import type { DesktopUnlistenFn } from './lib/desktopIpc'
   import { createDesktopWindow } from './lib/desktopWindow'
   import type { DesktopWindowTarget } from './lib/desktopWindow'
-  import { tasks, dependencyReferenceTasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, isLoading, projects, activeProjectId, activeProjectColorId, currentView, reviewRequestCount, activeRepoReviewRequestCount, activeProjectAttentionCount, reviewPrs, codeCleanupTasksEnabled, focusBoardFilters, outOfFocusTaskIdsByProject } from './lib/stores'
+  import { tasks, dependencyReferenceTasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, isLoading, projects, activeProjectId, activeProjectColorId, currentView, reviewRequestCount, activeRepoReviewRequestCount, activeProjectAttentionCount, reviewPrs, codeCleanupTasksEnabled, focusBoardFilters, outOfFocusTaskIdsByProject, sidebarPluginViewKeys } from './lib/stores'
   import { getAppMode, getConfig, getProjectConfig, resumeStartupSessions, setPollContext, getProjectRepo, openUrl, markReviewPrViewed } from './lib/ipc'
   import { computePollContext, pollContextEquals, type PollContextPayload } from './lib/pollContext'
   import { GITHUB_SYNC_GLOBAL_VIEW_KEY, GITHUB_SYNC_PLUGIN_ID } from './lib/githubSyncPlugin'
@@ -38,7 +38,7 @@
   import { themeMode } from './lib/theme'
   import { useCommandHeld } from './lib/useCommandHeld.svelte'
   import { useShortcutRegistry } from './lib/shortcuts.svelte'
-  import { ICON_RAIL_HIDDEN_VIEWS, getViews } from './lib/views'
+  import { ICON_RAIL_HIDDEN_VIEWS, getViews, isCrossProjectView } from './lib/views'
   import { registerAppShortcuts } from './lib/appShortcuts'
   import { getGlobalShortcutHelpEntries } from './lib/appShortcutDefinitions'
   import { registerAppDesktopEventListeners } from './lib/appDesktopEventListeners'
@@ -126,6 +126,12 @@
         shortcut: view.shortcut,
       }))
   )
+  let sidebarPluginViewKeySet = $derived(new Set(sidebarPluginNavItems.map((item) => item.viewKey)))
+  // Mirror the sidebar (cross-project) plugin view keys into the store so the router's
+  // restoreProjectView can reject them as project snapshots without importing plugin state.
+  $effect(() => {
+    sidebarPluginViewKeys.set(sidebarPluginViewKeySet)
+  })
   let activeViewEntry = $derived($currentView === 'board' ? null : resolvedViews[$currentView] ?? null)
   let renderedActiveView = $derived.by(() => {
     if (activeViewEntry === null) {
@@ -396,7 +402,12 @@
   // handleOpenTaskFromOverview). This is the single entry point every user-initiated
   // project switch (sidebar, switcher, ⌘-cycle) goes through.
   async function switchToProject(projectId: string) {
-    if ($activeProjectId === projectId) return
+    // Re-enter the project even when it is already active but a cross-project view —
+    // Global Settings or a sidebar plugin view like "All Pull Requests" — is showing.
+    // Those views change only currentView and leave activeProjectId pointing at the
+    // project, so without the cross-project check this guard would bail and strand the
+    // user on the global view instead of returning to the project (#1285).
+    if ($activeProjectId === projectId && !isCrossProjectView($currentView, sidebarPluginViewKeySet)) return
 
     $activeProjectId = projectId
     const rememberedTaskId = restoreProjectView(projectId)
