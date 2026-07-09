@@ -251,11 +251,7 @@
       if (board) board = applyCreate(board, newCard)
       showCreate = false
       createLabels = []
-      // Do not refetch the board here: GitHub's issue list is eventually
-      // consistent and frequently omits the just-created issue, which would wipe
-      // the optimistic card inserted above (it would appear then vanish). The
-      // applyCreate insert already reflects the new issue; a later Refresh or edit
-      // reconciles with GitHub once the list catches up.
+      await loadBoard()
     })
   }
 
