@@ -72,6 +72,15 @@ afterEach(() => {
 })
 
 describe('RoadmapView column save', () => {
+  it('shows the loaded repository slug in the header subtitle', async () => {
+    renderView({
+      roadmap_get_board: async () => board,
+    })
+
+    expect(await screen.findByText('octo/cat')).toBeTruthy()
+    expect(screen.queryByText('undefined/undefined')).toBeNull()
+  })
+
   it('saves the reordered labels and closes the dialog on success', async () => {
     const { invoke } = renderView({
       roadmap_get_board: async () => board,

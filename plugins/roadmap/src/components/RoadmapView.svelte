@@ -63,7 +63,8 @@
     return null
   })
 
-  let repoSlug = $derived(board ? `${board.repo.owner}/${board.repo.name}` : '')
+  // BoardModel.repo is the owner/name slug built from roadmap_get_board's raw RepoRef in modelFromBoard().
+  let repoSlug = $derived(board ? board.repo : '')
 
   // Track the previous projectId to guard the load effect (a board refresh can
   // pass a new prop object with the same logical projectId).
