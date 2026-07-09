@@ -177,6 +177,7 @@ vi.mock('./lib/stores', () => {
   agentEvents: writable<Map<string, any>>(new Map()),
   taskRuntimeInfo: writable(new Map()),
   currentView: mockCurrentViewStore,
+  sidebarPluginViewKeys: writable<ReadonlySet<string>>(new Set()),
   reviewPrs,
   activeResolvedRepo,
   globalExcludedPrRepos,

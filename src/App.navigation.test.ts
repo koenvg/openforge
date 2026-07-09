@@ -3,6 +3,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Task } from './lib/types'
 import { installAppTestLifecycle, mockLoadEnabledForProject } from './App.test-harness'
 
+function getLatestComponentProps<T extends Record<string, unknown>>(
+  mockComponent: { mock: { calls: unknown[][] } },
+  propName: keyof T,
+): T {
+  for (const call of [...mockComponent.mock.calls].reverse()) {
+    const props = call.find(
+      (arg): arg is T => typeof arg === 'object' && arg !== null && (propName as PropertyKey) in arg,
+    )
+    if (props) return props
+  }
+
+  throw new Error(`Expected mocked component props with ${String(propName)}`)
+}
+
 describe('App navigation shortcuts', () => {
   installAppTestLifecycle()
   describe('keyboard shortcuts', () => {
@@ -318,5 +332,148 @@ describe('App navigation shortcuts', () => {
       expect(fileQuickOpenModule.default).not.toHaveBeenCalled()
     })
 
+  })
+
+  describe('project re-entry from cross-project views', () => {
+    // Regression for #1285: cross-project views (Global Settings, sidebar plugin views)
+    // change only currentView and leave activeProjectId pointing at the project, so
+    // re-clicking that project used to trip switchToProject's "already active" guard and
+    // strand the user on the global view. Clicking it must now re-enter the project.
+    it('re-enters the active project when its sidebar row is clicked from global settings', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const nav = await import('./lib/router.svelte')
+      const AppSidebar = (await import('./components/shell/AppSidebar.svelte')).default
+      const { get } = await import('svelte/store')
+      const { tick } = await import('svelte')
+
+      render(App)
+      await vi.waitFor(() => {
+        expect(vi.mocked(AppSidebar)).toHaveBeenCalled()
+      })
+
+      stores.activeProjectId.set('proj-1')
+      stores.currentView.set('global_settings')
+      await tick()
+
+      const props = getLatestComponentProps<{ onSelectProject: (id: string) => void }>(
+        vi.mocked(AppSidebar),
+        'onSelectProject',
+      )
+      vi.mocked(nav.restoreProjectView).mockClear()
+
+      props.onSelectProject('proj-1')
+
+      expect(nav.restoreProjectView).toHaveBeenCalledWith('proj-1')
+      expect(get(stores.currentView)).toBe('board')
+    })
+
+    it('does not re-navigate when clicking the already-active project on its board', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const nav = await import('./lib/router.svelte')
+      const AppSidebar = (await import('./components/shell/AppSidebar.svelte')).default
+      const { tick } = await import('svelte')
+
+      render(App)
+      await vi.waitFor(() => {
+        expect(vi.mocked(AppSidebar)).toHaveBeenCalled()
+      })
+
+      stores.activeProjectId.set('proj-1')
+      stores.currentView.set('board')
+      await tick()
+
+      const props = getLatestComponentProps<{ onSelectProject: (id: string) => void }>(
+        vi.mocked(AppSidebar),
+        'onSelectProject',
+      )
+      vi.mocked(nav.restoreProjectView).mockClear()
+
+      props.onSelectProject('proj-1')
+
+      expect(nav.restoreProjectView).not.toHaveBeenCalled()
+    })
+
+    it('re-enters the active project when clicked from a cross-project sidebar plugin view', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const nav = await import('./lib/router.svelte')
+      const pluginStore = await import('./lib/plugin/pluginStore')
+      const pluginRegistry = await import('./lib/plugin/pluginRegistry')
+      const { GITHUB_SYNC_PLUGIN_ID, GITHUB_SYNC_GLOBAL_VIEW_ID, GITHUB_SYNC_GLOBAL_VIEW_KEY } = await import('./lib/githubSyncPlugin')
+      const AppSidebar = (await import('./components/shell/AppSidebar.svelte')).default
+      const { get } = await import('svelte/store')
+      const { tick } = await import('svelte')
+
+      stores.currentView.set('board')
+      render(App)
+
+      // Let startup settle the active project so registering the sidebar view below is
+      // not clobbered by the project's plugin (re)load.
+      await vi.waitFor(() => {
+        expect(get(stores.activeProjectId)).toBe('proj-1')
+        expect(get(pluginStore.installedPlugins).has(GITHUB_SYNC_PLUGIN_ID)).toBe(true)
+      })
+
+      pluginStore.enabledPluginIds.set(new Set([GITHUB_SYNC_PLUGIN_ID]))
+      await pluginRegistry.activatePlugin(GITHUB_SYNC_PLUGIN_ID)
+      // Register the github-sync global "All Pull Requests" view as a sidebar (cross-project) view.
+      pluginStore.setRuntimeContributionSource(GITHUB_SYNC_PLUGIN_ID, {
+        views: [{ id: GITHUB_SYNC_GLOBAL_VIEW_ID, title: 'All Pull Requests', icon: 'git-pull-request', placement: 'sidebar', order: 20 }],
+      })
+      await tick()
+
+      stores.currentView.set(GITHUB_SYNC_GLOBAL_VIEW_KEY)
+      await tick()
+
+      const props = getLatestComponentProps<{ onSelectProject: (id: string) => void }>(
+        vi.mocked(AppSidebar),
+        'onSelectProject',
+      )
+      vi.mocked(nav.restoreProjectView).mockClear()
+
+      props.onSelectProject('proj-1')
+
+      expect(nav.restoreProjectView).toHaveBeenCalledWith('proj-1')
+    })
+
+    it('hides the per-project IconRail on a cross-project sidebar plugin view', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const pluginStore = await import('./lib/plugin/pluginStore')
+      const pluginRegistry = await import('./lib/plugin/pluginRegistry')
+      const { GITHUB_SYNC_PLUGIN_ID, GITHUB_SYNC_GLOBAL_VIEW_ID, GITHUB_SYNC_GLOBAL_VIEW_KEY } = await import('./lib/githubSyncPlugin')
+      const IconRail = (await import('./components/shell/IconRail.svelte')).default
+      const { get } = await import('svelte/store')
+      const { tick } = await import('svelte')
+
+      stores.currentView.set('board')
+      render(App)
+      await vi.waitFor(() => {
+        expect(get(stores.activeProjectId)).toBe('proj-1')
+        expect(get(pluginStore.installedPlugins).has(GITHUB_SYNC_PLUGIN_ID)).toBe(true)
+      })
+
+      pluginStore.enabledPluginIds.set(new Set([GITHUB_SYNC_PLUGIN_ID]))
+      await pluginRegistry.activatePlugin(GITHUB_SYNC_PLUGIN_ID)
+      pluginStore.setRuntimeContributionSource(GITHUB_SYNC_PLUGIN_ID, {
+        views: [{ id: GITHUB_SYNC_GLOBAL_VIEW_ID, title: 'All Pull Requests', icon: 'git-pull-request', placement: 'sidebar', order: 20 }],
+      })
+      await tick()
+
+      // The per-project rail is mounted on the board; moving to a cross-project sidebar
+      // view must unmount it, so returning to the board remounts it (a fresh render call).
+      // A mocked component is only invoked on mount, never on prop change (verified), so
+      // if the rail wrongly stayed mounted on the cross-project view there would be no
+      // remount call here.
+      stores.currentView.set(GITHUB_SYNC_GLOBAL_VIEW_KEY)
+      await tick()
+      vi.mocked(IconRail).mockClear()
+      stores.currentView.set('board')
+      await tick()
+
+      expect(vi.mocked(IconRail)).toHaveBeenCalled()
+    })
   })
 })

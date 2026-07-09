@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { get } from 'svelte/store'
-import { activeProjectId, currentView, lastViewedTaskId, projectViewSnapshots, selectedReviewPr, selectedTaskId } from './stores'
+import { activeProjectId, currentView, lastViewedTaskId, projectViewSnapshots, selectedReviewPr, selectedTaskId, sidebarPluginViewKeys } from './stores'
 import { captureProjectView, pushNavState, resetToBoard, restoreProjectView, useAppRouter } from './router.svelte'
 import { subscribeToPluginHostEvent } from './plugin/pluginHostEvents'
 import type { ReviewPullRequest } from './types'
@@ -318,6 +318,7 @@ describe('project view memory', () => {
     // snapshot map afterwards so each test starts from a clean slate.
     activeProjectId.set(null)
     projectViewSnapshots.set(new Map())
+    sidebarPluginViewKeys.set(new Set())
   })
 
   it('captureProjectView snapshots the current tab, task, and PR under the project id', () => {
@@ -349,6 +350,39 @@ describe('project view memory', () => {
     // The task is not restored synchronously — the caller re-applies it once that
     // project's tasks have loaded, so the "clear unknown task" effect can't drop it.
     expect(get(selectedTaskId)).toBeNull()
+  })
+
+  it('restoreProjectView never restores Global Settings as a project view', () => {
+    // Global Settings is a cross-project view, not a project location. If it leaked into
+    // a project's snapshot (e.g. switching to another project while it was open), it must
+    // never be restored — returning to the project falls back to the board. (#1285)
+    projectViewSnapshots.set(
+      new Map([['proj-A', { currentView: 'global_settings', selectedTaskId: null, selectedReviewPr: null }]]),
+    )
+    currentView.set('global_settings')
+    selectedReviewPr.set(null)
+
+    const taskId = restoreProjectView('proj-A')
+
+    expect(get(currentView)).toBe('board')
+    expect(taskId).toBeNull()
+  })
+
+  it('restoreProjectView never restores a cross-project sidebar plugin view as a project view', () => {
+    // Same class as the global_settings case: switching projects while "All Pull
+    // Requests" (a sidebar plugin view) is open can snapshot it as the outgoing project's
+    // location. It must not be restored — fall back to the board. (#1285)
+    const globalPrKey = 'plugin:com.openforge.github-sync:pr_review_global'
+    sidebarPluginViewKeys.set(new Set([globalPrKey]))
+    projectViewSnapshots.set(
+      new Map([['proj-A', { currentView: globalPrKey, selectedTaskId: null, selectedReviewPr: null }]]),
+    )
+    currentView.set(globalPrKey)
+
+    const taskId = restoreProjectView('proj-A')
+
+    expect(get(currentView)).toBe('board')
+    expect(taskId).toBeNull()
   })
 
   it('restoreProjectView falls back to the board and clears the PR for an unknown project', () => {

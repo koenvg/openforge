@@ -60,6 +60,10 @@ export const agentEvents = writable<Map<string, AgentEvent[]>>(new Map());
 export const taskRuntimeInfo = writable<Map<string, TaskRuntimeInfo>>(new Map());
 
 export const currentView = writable<AppView>("board");
+// View keys of sidebar-placed (cross-project) plugin views, e.g. "All Pull Requests".
+// Mirrored here from App.svelte's resolved plugin contributions so the router can tell
+// project-context views from cross-project ones without importing plugin state. (#1285)
+export const sidebarPluginViewKeys = writable<ReadonlySet<string>>(new Set());
 // Per-project snapshot of the last-viewed location (tab + open task/PR), keyed by
 // project id. Session-scoped (in memory only): the router captures a project's
 // location when the user switches away and restores it when they return, so

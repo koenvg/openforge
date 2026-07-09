@@ -12,9 +12,10 @@ import {
   reviewComments,
   selectedReviewPr,
   selectedTaskId,
+  sidebarPluginViewKeys,
 } from './stores'
 import type { AppView, ReviewPullRequest } from './types'
-import { TASK_CLEARING_VIEWS } from './views'
+import { isCrossProjectView, TASK_CLEARING_VIEWS } from './views'
 
 interface NavState {
   currentView: AppView
@@ -77,7 +78,14 @@ export function captureProjectView(projectId: string): void {
 // selected task" effect, which drops any selectedTaskId not present in the (still
 // stale) tasks store mid-switch.
 export function restoreProjectView(projectId: string): string | null {
-  const snapshot = get(projectViewSnapshots).get(projectId)
+  const rawSnapshot = get(projectViewSnapshots).get(projectId)
+  // A snapshot whose view is cross-project (Global Settings or a sidebar plugin view) is
+  // not a project location — it can leak in when the user switches projects while such a
+  // view is open. Ignore it and fall back to the board so returning to the project shows
+  // its board rather than a global view (#1285).
+  const snapshot = rawSnapshot && isCrossProjectView(rawSnapshot.currentView, get(sidebarPluginViewKeys))
+    ? undefined
+    : rawSnapshot
   history.length = 0
   selectedTaskId.set(null)
   currentView.set(snapshot?.currentView ?? 'board')
