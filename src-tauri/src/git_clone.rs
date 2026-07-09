@@ -304,7 +304,7 @@ pub async fn clone_repo(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use base64::{engine::general_purpose, Engine as _};
+    use base64::engine::general_purpose;
     use std::path::Path;
     use tempfile::tempdir;
 
