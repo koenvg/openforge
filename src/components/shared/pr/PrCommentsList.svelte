@@ -21,20 +21,22 @@
   }: Props = $props()
 </script>
 
-<div class="flex flex-col gap-2">
+<div class="flex flex-col gap-2 min-w-0">
   {#each comments as comment (comment.id)}
     <article class={density === 'compact'
-      ? 'rounded-xl bg-base-200/50 border border-base-300/40 p-3 flex flex-col gap-1.5'
-      : 'rounded-md border border-base-300/70 bg-base-100 p-2.5 flex flex-col gap-1.5'} aria-label={`Comment by ${comment.author}`}>
-      <div class={showMarkAddressed ? 'flex items-center justify-between gap-2' : 'flex flex-wrap items-center gap-1.5 text-[0.7rem] text-base-content/50'}>
-        <span class={showMarkAddressed ? 'text-[0.65rem] font-semibold text-base-content/60' : 'font-semibold text-base-content/80'}>{comment.author}</span>
-        {#if showLocation && comment.file_path}
-          <span>·</span>
-          <span>{comment.file_path}{comment.line_number ? `:${comment.line_number}` : ''}</span>
-        {/if}
+      ? 'rounded-xl bg-base-200/50 border border-base-300/40 p-3 flex flex-col gap-1.5 min-w-0'
+      : 'rounded-md border border-base-300/70 bg-base-100 p-2.5 flex flex-col gap-1.5 min-w-0'} aria-label={`Comment by ${comment.author}`}>
+      <div class={showMarkAddressed ? 'flex items-start gap-2 min-w-0' : 'flex flex-wrap items-center gap-1.5 text-[0.7rem] text-base-content/50 min-w-0'}>
+        <div class={showMarkAddressed ? 'min-w-0 flex-1 flex flex-wrap items-center gap-1.5 text-[0.7rem] text-base-content/50' : 'contents'}>
+          <span class={showMarkAddressed ? 'text-[0.65rem] font-semibold text-base-content/60 shrink-0' : 'font-semibold text-base-content/80'}>{comment.author}</span>
+          {#if showLocation && comment.file_path}
+            <span class="shrink-0">·</span>
+            <span class="min-w-0 break-all" title={comment.file_path}>{comment.file_path}{comment.line_number ? `:${comment.line_number}` : ''}</span>
+          {/if}
+        </div>
         {#if showMarkAddressed && onMarkAddressed}
           <button
-            class="btn btn-ghost btn-xs text-success text-[0.65rem] h-auto min-h-0 py-0.5"
+            class="btn btn-ghost btn-xs text-success text-[0.65rem] h-auto min-h-0 py-0.5 shrink-0"
             onclick={() => void onMarkAddressed(comment.id)}
           >
             ✓ Mark addressed

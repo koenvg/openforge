@@ -288,6 +288,38 @@ describe('TaskPullRequestStatus', () => {
     })
   })
 
+  it('renders deeply nested comment paths with the shared address control', async () => {
+    const deeplyNestedPath = 'packages/classspotter-backoffice/src/features/remediation/schedule-url-change/components/review-panel/very/deeply/nested/ReviewCommentResolutionTimeline.svelte'
+    vi.mocked(ipc.getPrComments).mockResolvedValue([
+      createComment({
+        id: 456,
+        file_path: deeplyNestedPath,
+        line_number: 318,
+        body: 'Shared task-view comment renderer keeps this long-path comment addressable.',
+      }),
+    ])
+
+    render(TaskPullRequestStatus, {
+      props: {
+        taskId: 'T-42',
+        taskPrs: [createPullRequest({ unaddressed_comment_count: 1 })],
+        allowCommentAddressing: true,
+      },
+    })
+
+    const commentArticle = await screen.findByLabelText('Comment by reviewer')
+    expect(commentArticle.textContent).toContain(`${deeplyNestedPath}:318`)
+    expect(commentArticle.textContent).toContain('Shared task-view comment renderer keeps this long-path comment addressable.')
+
+    const markAddressedButton = screen.getByRole('button', { name: /mark addressed/i })
+    expect(markAddressedButton).toBeTruthy()
+    await fireEvent.click(markAddressedButton)
+
+    await waitFor(() => {
+      expect(ipc.markCommentAddressed).toHaveBeenCalledWith(456)
+    })
+  })
+
   it('resolves relative comment images against the related PR head commit', async () => {
     vi.mocked(ipc.getPrComments).mockResolvedValue([
       createComment({ body: '![Screenshot](docs/review.png)' }),

@@ -266,4 +266,36 @@ describe('TaskDetailPane', () => {
       expect(ipc.markCommentAddressed).toHaveBeenCalledWith(501)
     })
   })
+
+  it('keeps dashboard PR comments with deeply nested file paths addressable in the shared pane', async () => {
+    const deeplyNestedPath = 'packages/classspotter-backoffice/src/features/remediation/schedule-url-change/components/review-panel/very/deeply/nested/ReviewCommentResolutionTimeline.svelte'
+    vi.mocked(ipc.getPrComments).mockResolvedValue([
+      makeComment({
+        id: 777,
+        file_path: deeplyNestedPath,
+        line_number: 318,
+        body: 'This long-path dashboard comment still needs a visible resolution control.',
+      }),
+    ])
+
+    render(TaskDetailPane, {
+      props: {
+        task: baseTask,
+        allTasks: [baseTask],
+        pullRequests: [{ ...basePr, unaddressed_comment_count: 1 }],
+      },
+    })
+
+    const commentArticle = await screen.findByLabelText('Comment by reviewer')
+    expect(commentArticle.textContent).toContain(`${deeplyNestedPath}:318`)
+    expect(commentArticle.textContent).toContain('This long-path dashboard comment still needs a visible resolution control.')
+
+    const markAddressedButton = screen.getByRole('button', { name: /mark addressed/i })
+    expect(markAddressedButton).toBeTruthy()
+    await fireEvent.click(markAddressedButton)
+
+    await waitFor(() => {
+      expect(ipc.markCommentAddressed).toHaveBeenCalledWith(777)
+    })
+  })
 })
