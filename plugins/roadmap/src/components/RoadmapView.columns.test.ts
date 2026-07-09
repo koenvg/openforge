@@ -110,3 +110,39 @@ describe('RoadmapView column save', () => {
     expect(screen.getByRole('button', { name: 'Save' })).toBeTruthy()
   })
 })
+
+describe('RoadmapView issue creation', () => {
+  it('keeps a newly created issue visible when the immediate board reload has not caught up', async () => {
+    let boardLoads = 0
+    renderView({
+      roadmap_get_board: async () => {
+        boardLoads += 1
+        return board
+      },
+      roadmap_create_issue: async () => ({
+        issue: {
+          number: 99,
+          title: 'Persist created ticket',
+          body: '',
+          state: 'open',
+          html_url: 'https://github.com/octo/cat/issues/99',
+          labels: [],
+        },
+      }),
+    })
+
+    await screen.findByRole('button', { name: 'Create issue with no label' })
+    await fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+    await fireEvent.input(screen.getByLabelText('Describe the issue'), {
+      target: { value: 'Persist created ticket' },
+    })
+    await fireEvent.click(screen.getByRole('button', { name: 'Skip AI' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Create issue' }))
+
+    await waitFor(() => {
+      expect(boardLoads).toBeGreaterThanOrEqual(2)
+      expect((screen.getByRole('button', { name: 'Create' }) as HTMLButtonElement).disabled).toBe(false)
+    })
+    expect(screen.getByText('Persist created ticket')).toBeTruthy()
+  })
+})

@@ -43,6 +43,7 @@
   let isLoading = $state(false)
   let error = $state<string | null>(null)
   let busy = $state(false)
+  let pendingCreatedCards = $state<BoardCard[]>([])
 
   // Modal / drawer state.
   let selectedIssueNumber = $state<number | null>(null)
@@ -90,6 +91,12 @@
     })
   }
 
+  function withPendingCreatedCards(model: BoardModel, raw: RoadmapBoard): BoardModel {
+    const loadedIssueNumbers = new Set(raw.issues.map((issue) => issue.number))
+    pendingCreatedCards = pendingCreatedCards.filter((card) => !loadedIssueNumbers.has(card.issueNumber))
+    return pendingCreatedCards.reduce((current, card) => applyCreate(current, card), model)
+  }
+
   async function loadBoard() {
     if (!projectId) {
       board = null
@@ -100,7 +107,7 @@
     try {
       const raw = await client.getBoard(projectId)
       repoLabels = raw.labels
-      board = modelFromBoard(raw)
+      board = withPendingCreatedCards(modelFromBoard(raw), raw)
     } catch (e) {
       board = null
       error = String(e instanceof Error ? e.message : e)
@@ -133,6 +140,7 @@
       selectedIssueNumber = null
       showCreate = false
       createLabels = []
+      pendingCreatedCards = []
       showColumns = false
       void loadBoard()
       void loadActionsForProject(pid)
@@ -231,6 +239,10 @@
         labels: issue.labels.map((l) => l.name),
         value: null,
       }
+      pendingCreatedCards = [
+        ...pendingCreatedCards.filter((card) => card.issueNumber !== newCard.issueNumber),
+        newCard,
+      ]
       if (board) board = applyCreate(board, newCard)
       showCreate = false
       createLabels = []
