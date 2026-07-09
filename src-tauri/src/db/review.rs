@@ -167,6 +167,18 @@ impl super::Database {
         Ok(())
     }
 
+    /// Mark a review PR as unread again.
+    /// Clears `viewed_at` and `viewed_head_sha` to NULL so the PR re-surfaces as unread
+    /// (and re-sorts to the top of the list), mirroring the never-viewed state.
+    pub fn mark_review_pr_unviewed(&self, pr_id: i64) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE review_prs SET viewed_at = NULL, viewed_head_sha = NULL WHERE id = ?1",
+            rusqlite::params![pr_id],
+        )?;
+        Ok(())
+    }
+
     pub fn delete_stale_review_prs(&self, current_ids: &[i64]) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         if current_ids.is_empty() {
@@ -568,6 +580,50 @@ mod tests {
         assert_eq!(prs.len(), 1);
         assert!(prs[0].viewed_at.is_some());
         assert_eq!(prs[0].viewed_head_sha, Some("sha1".to_string()));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_mark_review_pr_unviewed() {
+        let (db, path) = make_test_db("review_pr_mark_unviewed");
+
+        db.upsert_review_pr(
+            1,
+            10,
+            "PR 1",
+            None,
+            "open",
+            false,
+            "https://github.com/owner/repo/pull/10",
+            "user1",
+            None,
+            "owner",
+            "repo",
+            "branch1",
+            "main",
+            "sha1",
+            10,
+            5,
+            2,
+            &[],
+            1000,
+            2000,
+        )
+        .expect("upsert failed");
+
+        // Mark it viewed first so we can prove unviewed clears the state.
+        db.mark_review_pr_viewed(1, "sha1")
+            .expect("mark viewed failed");
+
+        db.mark_review_pr_unviewed(1)
+            .expect("mark unviewed failed");
+
+        let prs = db.get_all_review_prs().expect("get_all failed");
+        assert_eq!(prs.len(), 1);
+        assert!(prs[0].viewed_at.is_none());
+        assert!(prs[0].viewed_head_sha.is_none());
 
         drop(db);
         let _ = fs::remove_file(&path);

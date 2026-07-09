@@ -18,6 +18,7 @@ fn openforge_global_command_to_app_invoke(qualified_id: &str) -> Result<&'static
         "fetchAuthoredPrs" => Ok("fetch_authored_prs"),
         "getAuthoredPrs" => Ok("get_authored_prs"),
         "markReviewPrViewed" => Ok("mark_review_pr_viewed"),
+        "markReviewPrUnviewed" => Ok("mark_review_pr_unviewed"),
         "getPrFileDiffs" => Ok("get_pr_file_diffs"),
         "getFileContent" => Ok("get_file_content"),
         "getFileContentBase64" => Ok("get_file_content_base64"),

@@ -218,7 +218,8 @@ describe('github-sync plugin', () => {
     expect(api.backend.registerMethod).toHaveBeenCalledWith('deletePrWalkthrough', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('startAgentWalkthrough', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('abortAgentWalkthrough', expect.objectContaining({ handler: expect.any(Function) }))
-    expect(subscriptions.add).toHaveBeenCalledTimes(20)
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('markReviewPrUnviewed', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(subscriptions.add).toHaveBeenCalledTimes(21)
   })
 
   it('does not add a GitHub-specific SDK namespace', () => {

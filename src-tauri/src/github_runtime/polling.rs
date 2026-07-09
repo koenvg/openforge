@@ -30,6 +30,13 @@ pub fn mark_review_pr_viewed(
         .map_err(|e| format!("Failed to mark review PR viewed: {e}"))
 }
 
+pub fn mark_review_pr_unviewed(db: &Arc<Mutex<db::Database>>, pr_id: i64) -> Result<(), String> {
+    let db_lock = crate::db::acquire_db(db);
+    db_lock
+        .mark_review_pr_unviewed(pr_id)
+        .map_err(|e| format!("Failed to mark review PR unviewed: {e}"))
+}
+
 pub fn get_authored_prs(db: &Arc<Mutex<db::Database>>) -> Result<Vec<db::AuthoredPrRow>, String> {
     let db_lock = crate::db::acquire_db(db);
     db_lock

@@ -11,7 +11,8 @@ pub use comments::{
     submit_pr_review, SubmitPrReviewRequest,
 };
 pub use polling::{
-    fetch_authored_prs, fetch_review_prs, get_authored_prs, get_review_prs, mark_review_pr_viewed,
+    fetch_authored_prs, fetch_review_prs, get_authored_prs, get_review_prs,
+    mark_review_pr_unviewed, mark_review_pr_viewed,
 };
 pub use pr_actions::{
     enqueue_pull_request, get_pr_comments, get_pull_requests, link_pull_request, merge_pull_request,

@@ -410,6 +410,7 @@ describe('Electron backend bridge command forwarding', () => {
     expect(isSidecarBackedCommand('fetch_review_prs')).toBe(true)
     expect(isSidecarBackedCommand('get_review_prs')).toBe(true)
     expect(isSidecarBackedCommand('mark_review_pr_viewed')).toBe(true)
+    expect(isSidecarBackedCommand('mark_review_pr_unviewed')).toBe(true)
     expect(isSidecarBackedCommand('fetch_authored_prs')).toBe(true)
     expect(isSidecarBackedCommand('get_authored_prs')).toBe(true)
     expect(isSidecarBackedCommand('fs_read_dir')).toBe(true)
