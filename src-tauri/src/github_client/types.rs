@@ -1910,7 +1910,10 @@ mod tests {
 
         // Usable PR data from the partial response is preserved.
         assert_eq!(snapshot.source_head_sha.as_deref(), Some("head-sha-9"));
-        assert_eq!(snapshot.status_check_rollup_sha.as_deref(), Some("head-sha-9"));
+        assert_eq!(
+            snapshot.status_check_rollup_sha.as_deref(),
+            Some("head-sha-9")
+        );
         assert_eq!(snapshot.check_runs.check_runs[0].name, "ci");
         assert_eq!(snapshot.review_status.as_deref(), Some("approved"));
         // The rollup SHA matches the head SHA, so the salvaged GraphQL checks are
