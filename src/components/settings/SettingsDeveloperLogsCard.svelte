@@ -2,10 +2,14 @@
   import { onDestroy, onMount } from 'svelte'
   import { Terminal } from '@lucide/svelte'
   import { getDeveloperLogSnapshot, openInEditor } from '../../lib/ipc'
+  import { isNearBottom } from '../../lib/developerLogsScroll'
   import type { DeveloperLogEntry } from '../../lib/types'
 
   const LIVE_REFRESH_INTERVAL_MS = 1000
   const DISPLAY_LOG_LIMIT = 1000
+  // Grace distance from the bottom that still counts as "pinned", so the view
+  // keeps following new logs without needing pixel-perfect scroll positioning.
+  const STICK_TO_BOTTOM_THRESHOLD_PX = 32
 
   let logs = $state<DeveloperLogEntry[]>([])
   let totalEntries = $state(0)
@@ -14,11 +18,24 @@
   let loadError = $state<string | null>(null)
   let liveRefreshTimer: ReturnType<typeof setInterval> | null = null
   let refreshInFlight = false
+  let logContainer = $state<HTMLPreElement | null>(null)
+  // Follow new logs while the user is at the bottom; pause once they scroll up.
+  let stickToBottom = $state(true)
 
   const formattedLogs = $derived(logs.map(formatLogEntry).join('\n'))
   const showingSummary = $derived(totalEntries > logs.length
     ? `Showing latest ${logs.length.toLocaleString()} of ${totalEntries.toLocaleString()} entries. Full trace is written to disk.`
     : `Showing ${logs.length.toLocaleString()} entries. Full trace is written to disk.`)
+
+  // Auto-scroll to the newest entry whenever the rendered log text changes,
+  // but only while pinned to the bottom so we never yank a user who scrolled up.
+  $effect(() => {
+    // Read the derived text so this effect re-runs on every log update.
+    void formattedLogs
+    const el = logContainer
+    if (!el || !stickToBottom) return
+    el.scrollTop = el.scrollHeight
+  })
 
   function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error)
@@ -50,6 +67,12 @@
   function openFullLogFile() {
     if (!logFilePath) return
     void openInEditor(logFilePath)
+  }
+
+  function handleLogScroll() {
+    const el = logContainer
+    if (!el) return
+    stickToBottom = isNearBottom(el.scrollTop, el.scrollHeight, el.clientHeight, STICK_TO_BOTTOM_THRESHOLD_PX)
   }
 
   onMount(() => {
@@ -103,7 +126,7 @@
     {:else if logs.length === 0}
       <p class="text-sm text-base-content/60 m-0">No logs captured yet.</p>
     {:else}
-      <pre aria-label="OpenForge log trace" class="max-h-96 overflow-auto whitespace-pre-wrap rounded bg-base-200 p-3 text-xs text-base-content">{formattedLogs}</pre>
+      <pre bind:this={logContainer} onscroll={handleLogScroll} aria-label="OpenForge log trace" class="max-h-96 overflow-auto whitespace-pre-wrap rounded bg-base-200 p-3 text-xs text-base-content">{formattedLogs}</pre>
     {/if}
   </div>
 </div>
