@@ -62,7 +62,8 @@
     return null
   })
 
-  let repoSlug = $derived(board ? `${board.repo.owner}/${board.repo.name}` : '')
+  // `board.repo` is already the flattened "owner/name" slug (see modelFromBoard).
+  let repoSlug = $derived(board?.repo ?? '')
 
   // Track the previous projectId to guard the load effect (a board refresh can
   // pass a new prop object with the same logical projectId).
