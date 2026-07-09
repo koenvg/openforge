@@ -2,6 +2,7 @@
   import type { Task } from '../../lib/types'
   import { parseTaskPrompt } from '../../lib/taskPrompt'
   import MarkdownContent from '../shared/adapters/MarkdownContent.svelte'
+  import CollapsibleInfoSection from '../shared/ui/CollapsibleInfoSection.svelte'
 
   interface Props {
     task: Task
@@ -44,8 +45,7 @@
   })
 </script>
 
-<section data-task-info-card="handoff-notes" data-card-sizing="natural" class="rounded-lg border border-base-300/70 bg-base-100 overflow-hidden shrink-0" aria-label="Handoff Notes">
-  <h3 class="m-0 px-3 py-2 text-sm font-semibold text-base-content border-b border-base-300/70">Handoff Notes</h3>
+<CollapsibleInfoSection sectionKey="handoff-notes" title="Handoff Notes" cardId="handoff-notes">
   <div class="px-3 py-2 flex flex-col gap-2">
     {#if handoffNotes}
       <div
@@ -73,11 +73,10 @@
       </div>
     {/if}
   </div>
-</section>
+</CollapsibleInfoSection>
 
-<section data-task-info-card="initial-prompt" data-card-sizing="natural" class="rounded-lg border border-base-300/70 bg-base-100 overflow-hidden shrink-0" aria-label="Initial Prompt">
-  <div class="flex items-center gap-1.5 px-3 py-2 border-b border-base-300/70">
-    <h3 class="m-0 text-sm font-semibold text-base-content">Initial Prompt</h3>
+<CollapsibleInfoSection sectionKey="initial-prompt" title="Initial Prompt" cardId="initial-prompt">
+  {#snippet actions()}
     {#if canEditPrompt}
       <button
         type="button"
@@ -86,7 +85,7 @@
         onclick={() => onEditPrompt?.()}
       >✎</button>
     {/if}
-  </div>
+  {/snippet}
   <div class="px-3 py-2 flex flex-col gap-2">
     <div id={promptContentId} role="region" aria-label="Initial Prompt content" class="text-xs text-base-content/65 leading-relaxed whitespace-pre-wrap break-words">{visibleInitialPrompt}</div>
     {#if initialPromptHasOverflow}
@@ -103,4 +102,4 @@
       </div>
     {/if}
   </div>
-</section>
+</CollapsibleInfoSection>

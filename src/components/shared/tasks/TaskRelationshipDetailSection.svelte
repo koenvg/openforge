@@ -2,6 +2,7 @@
   import type { TaskDependencySummary, TaskDependentSummary } from '../../../lib/taskDependencies'
   import { getDependentReadinessLabel } from '../../../lib/taskDependencies'
   import { getDependencyStatusPresentation } from '../../../lib/dependencyStatusPresentation'
+  import CollapsibleInfoSection from '../ui/CollapsibleInfoSection.svelte'
 
   type RelationshipKind = 'dependencies' | 'dependents'
   type SectionDensity = 'full' | 'compact'
@@ -57,60 +58,61 @@
   }
 </script>
 
-{#if items.length > 0}
-  <section data-task-info-card={kind} data-card-sizing="natural" class={sectionElementClass} aria-label={sectionLabel} aria-live="polite">
-    {#if isFull}
-      <h3 class={headingElementClass}>{sectionLabel}</h3>
-    {:else}
-      <span class={headingElementClass}>{sectionLabel}</span>
-    {/if}
-    <div class={itemListClass}>
-      {#each items as item (item.id)}
-        {@const statusPresentation = getDependencyStatusPresentation(item.status)}
-        {#if canOpenDependentTask()}
-          <button
-            type="button"
-            class="{clickableBadgeClass} {statusPresentation.badgeClass}"
-            title={item.tooltipTitle}
-            onclick={() => onOpenDependentTask?.(item.id)}
-          >
-            <span class={idSpanClass}>{item.id}</span>
-            <span class={statusSpanClass}>{statusPresentation.label}</span>
-            {#if hasDisplayTitle(item)}
-              <span class={titleSpanClass}>{item.displayTitle}</span>
-            {/if}
+{#snippet itemList()}
+  <div class={itemListClass}>
+    {#each items as item (item.id)}
+      {@const statusPresentation = getDependencyStatusPresentation(item.status)}
+      {#if canOpenDependentTask()}
+        <button
+          type="button"
+          class="{clickableBadgeClass} {statusPresentation.badgeClass}"
+          title={item.tooltipTitle}
+          onclick={() => onOpenDependentTask?.(item.id)}
+        >
+          <span class={idSpanClass}>{item.id}</span>
+          <span class={statusSpanClass}>{statusPresentation.label}</span>
+          {#if hasDisplayTitle(item)}
+            <span class={titleSpanClass}>{item.displayTitle}</span>
+          {/if}
+          <span class={readinessSpanClass}>· {getReadinessLabel(item)}</span>
+        </button>
+      {:else}
+        <span class="{badgeClass} {statusPresentation.badgeClass}" title={item.tooltipTitle}>
+          <span class={idSpanClass}>{item.id}</span>
+          <span class={statusSpanClass}>{statusPresentation.label}</span>
+          {#if hasDisplayTitle(item)}
+            <span class={titleSpanClass}>{item.displayTitle}</span>
+          {/if}
+          {#if !isDependencies}
             <span class={readinessSpanClass}>· {getReadinessLabel(item)}</span>
-          </button>
-        {:else}
-          <span class="{badgeClass} {statusPresentation.badgeClass}" title={item.tooltipTitle}>
-            <span class={idSpanClass}>{item.id}</span>
-            <span class={statusSpanClass}>{statusPresentation.label}</span>
-            {#if hasDisplayTitle(item)}
-              <span class={titleSpanClass}>{item.displayTitle}</span>
-            {/if}
-            {#if !isDependencies}
-              <span class={readinessSpanClass}>· {getReadinessLabel(item)}</span>
-            {/if}
-          </span>
-        {/if}
-      {/each}
-    </div>
-    {#if isFull}
-      <div class={footerClass}>
-        {#if isDependencies}
-          {dependencyWaitingText}
-        {:else}
-          {dependentSummaryText}
-        {/if}
+          {/if}
+        </span>
+      {/if}
+    {/each}
+  </div>
+{/snippet}
+
+{#snippet footerText()}
+  {#if isDependencies}
+    {dependencyWaitingText}
+  {:else}
+    {dependentSummaryText}
+  {/if}
+{/snippet}
+
+{#if items.length > 0}
+  {#if isFull}
+    <CollapsibleInfoSection sectionKey={kind} title={sectionLabel} cardId={kind} ariaLive="polite">
+      <div class="flex flex-col gap-2.5 px-3 py-2">
+        {@render itemList()}
+        <div class={footerClass}>{@render footerText()}</div>
       </div>
-    {:else}
-      <p class={footerClass}>
-        {#if isDependencies}
-          {dependencyWaitingText}
-        {:else}
-          {dependentSummaryText}
-        {/if}
-      </p>
-    {/if}
-  </section>
+    </CollapsibleInfoSection>
+  {:else}
+    <section data-task-info-card={kind} data-card-sizing="natural" class={sectionElementClass} aria-label={sectionLabel} aria-live="polite">
+      <span class={headingElementClass}>{sectionLabel}</span>
+      {@render itemList()}
+      <p class={footerClass}>{@render footerText()}</p>
+    </section>
+  {/if}
 {/if}

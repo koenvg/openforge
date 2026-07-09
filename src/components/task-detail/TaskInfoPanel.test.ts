@@ -9,6 +9,7 @@ import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '
 import { clearComponentRegistry, registerRenderableContributionComponent } from '../../lib/plugin/componentRegistry'
 import PluginSlotTestView from '../plugin/PluginSlotTestView.svelte'
 import { addTaskLabel, forceGithubSync, getPrComments, getProjectTaskLabels, getPullRequests, linkPullRequest, mergePullRequest, refreshTaskGithubStatus, removeTaskLabel, writeClipboardText } from '../../lib/ipc'
+import { clearInfoPanelSectionCollapse } from '../../lib/infoPanelSectionState'
 
 vi.mock('../../lib/stores', () => ({
   activeProjectId: writable(null),
@@ -89,6 +90,8 @@ const baseTask: Task = {
 describe('TaskInfoPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
+    clearInfoPanelSectionCollapse()
     activeSessions.set(new Map())
     mergingTaskIds.set(new Set())
     ticketPrs.set(new Map())
@@ -1431,5 +1434,39 @@ describe('TaskInfoPanel', () => {
     ticketPrs.set(new Map([['T-42', [resolvedPr]]]))
     render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
     await screen.findByRole('button', { name: 'Merge' })
+  })
+
+  it('collapses the Details section when its header is clicked, hiding its content', async () => {
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: '/repo/T-42' } })
+
+    expect(screen.getByText('Workspace')).toBeTruthy()
+    const detailsToggle = within(screen.getByLabelText('Details')).getByRole('button', { name: 'Details' })
+    await fireEvent.click(detailsToggle)
+
+    expect(screen.queryByText('Workspace')).toBeNull()
+    expect(detailsToggle.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('keeps a collapsed section collapsed across remounts and other tasks (global state)', async () => {
+    const view = render(TaskInfoPanel, { props: { task: baseTask, workspacePath: '/repo/T-42' } })
+    await fireEvent.click(within(screen.getByLabelText('Details')).getByRole('button', { name: 'Details' }))
+    expect(screen.queryByText('Workspace')).toBeNull()
+    view.unmount()
+
+    render(TaskInfoPanel, { props: { task: { ...baseTask, id: 'T-99' }, workspacePath: '/repo/T-99' } })
+    expect(screen.queryByText('Workspace')).toBeNull()
+  })
+
+  it('renders the Attention banner as a collapsible boxed section', () => {
+    ticketPrs.set(new Map([['T-42', [createPullRequest({
+      ci_status: 'failure',
+      review_status: 'changes_requested',
+      unaddressed_comment_count: 1,
+    })]]]))
+
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
+
+    const attention = screen.getByLabelText('Attention')
+    expect(within(attention).getByRole('button', { name: 'Attention' })).toBeTruthy()
   })
 })
