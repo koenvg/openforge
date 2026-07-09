@@ -16,6 +16,7 @@ const card = (n: number, labels: string[], value: number | null = null): BoardCa
   body: null,
   labels,
   value,
+  taskLink: null,
 })
 
 describe('placeCards', () => {
@@ -117,6 +118,31 @@ describe('buildBoard', () => {
   it('exposes the repo on the model', () => {
     const model = buildBoard({ repo: 'octo/cat', issues: [], columnLabels: [], values: {} })
     expect(model.repo).toBe('octo/cat')
+  })
+
+  it('attaches OpenForge task links to matching issue cards', () => {
+    const model = buildBoard({
+      repo: 'a/b',
+      issues: [
+        { number: 1, title: 'linked', body: null, labels: ['bug'] },
+        { number: 2, title: 'plain', body: null, labels: ['bug'] },
+      ],
+      columnLabels: ['bug'],
+      values: {},
+      taskLinks: {
+        1: { taskId: 'KVG-9', sessionId: 'session-9', workspacePath: '/tmp/kvg-9', repo: 'a/b', title: 'linked' },
+      },
+    })
+
+    const cards = model.columns.find((c) => c.label === 'bug')!.cards
+    expect(cards.find((c) => c.issueNumber === 1)!.taskLink).toEqual({
+      taskId: 'KVG-9',
+      sessionId: 'session-9',
+      workspacePath: '/tmp/kvg-9',
+      repo: 'a/b',
+      title: 'linked',
+    })
+    expect(cards.find((c) => c.issueNumber === 2)!.taskLink).toBeNull()
   })
 })
 

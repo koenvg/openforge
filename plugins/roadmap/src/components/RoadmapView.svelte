@@ -12,10 +12,11 @@
     applyRelabel,
     type BoardCard,
     type BoardModel,
+    type RoadmapIssueTaskLink,
   } from '../lib/board'
   import type { LabelUsage, RefineTicketRequest, RepoLabel, RoadmapBoard, TicketDraft } from '../lib/types'
   import { normalizeLabelColor } from '../lib/labelColors'
-  import { loadRoadmapActions, startRoadmapIssueAction } from '../lib/roadmapActions'
+  import { loadRoadmapActions, loadRoadmapIssueTaskLinks, startRoadmapIssueAction } from '../lib/roadmapActions'
   import { createRoadmapClient } from '../lib/roadmapClient'
   import Board from './Board.svelte'
   import CardDrawer from './CardDrawer.svelte'
@@ -71,7 +72,7 @@
   let lastProjectId = $state<string | null | undefined>(undefined)
   let actionLoadRequest = 0
 
-  function modelFromBoard(raw: RoadmapBoard): BoardModel {
+  function modelFromBoard(raw: RoadmapBoard, taskLinks: Record<number, RoadmapIssueTaskLink> = {}): BoardModel {
     const values: Record<number, number> = {}
     for (const [key, value] of Object.entries(raw.values)) {
       values[Number(key)] = value
@@ -89,6 +90,7 @@
       columnLabels: raw.columnLabels,
       labelColors,
       values,
+      taskLinks,
     })
   }
 
@@ -107,8 +109,9 @@
     error = null
     try {
       const raw = await client.getBoard(projectId)
+      const taskLinks = await loadRoadmapIssueTaskLinks(api, projectId)
       repoLabels = raw.labels
-      board = withPendingCreatedCards(modelFromBoard(raw), raw)
+      board = withPendingCreatedCards(modelFromBoard(raw, taskLinks), raw)
     } catch (e) {
       board = null
       error = String(e instanceof Error ? e.message : e)
@@ -239,6 +242,7 @@
         body: issue.body,
         labels: issue.labels.map((l) => l.name),
         value: null,
+        taskLink: null,
       }
       pendingCreatedCards = [
         ...pendingCreatedCards.filter((card) => card.issueNumber !== newCard.issueNumber),
@@ -274,6 +278,10 @@
     showCreate = false
     createLabels = []
   }
+  function openTask(taskId: string) {
+    if (!projectId) return
+    void api.navigation.navigate({ projectId, viewId: 'board', taskId })
+  }
 
   async function runIssueAction(card: BoardCard, actionPrompt: string) {
     if (!projectId || !repoSlug) return
@@ -284,6 +292,7 @@
         card,
         actionPrompt,
       })
+      await loadBoard()
     })
   }
 
@@ -418,6 +427,7 @@
     onSetValue={setValue}
     onToggleLabel={toggleLabel}
     onCloseIssue={closeIssue}
+    onOpenTask={openTask}
   />
 {/if}
 

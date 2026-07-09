@@ -10,6 +10,7 @@ const card: BoardCard = {
   body: 'Keep GitHub issues and local values aligned.',
   labels: ['bug'],
   value: 5,
+  taskLink: null,
 }
 
 const labels: RepoLabel[] = [
@@ -31,6 +32,7 @@ function renderDrawer(overrides: Record<string, unknown> = {}) {
       onSetValue: vi.fn(),
       onToggleLabel: vi.fn(),
       onCloseIssue: vi.fn(),
+      onOpenTask: vi.fn(),
       ...overrides,
     },
   })
@@ -46,5 +48,26 @@ describe('CardDrawer', () => {
     await fireEvent.click(dialog)
 
     expect(onClose).toHaveBeenCalledTimes(2)
+  })
+
+  it('links to the OpenForge task started from the ticket', async () => {
+    const onOpenTask = vi.fn()
+    renderDrawer({
+      card: {
+        ...card,
+        taskLink: {
+          taskId: 'KVG-42',
+          sessionId: 'session-42',
+          workspacePath: '/tmp/kvg-42',
+          repo: 'owner/repo',
+          title: 'Improve roadmap sync',
+        },
+      },
+      onOpenTask,
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Open task details KVG-42' }))
+
+    expect(onOpenTask).toHaveBeenCalledWith('KVG-42')
   })
 })

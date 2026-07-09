@@ -9,6 +9,13 @@ export interface BoardIssue {
   body: string | null
   labels: string[]
 }
+export interface RoadmapIssueTaskLink {
+  taskId: string
+  sessionId: string
+  workspacePath: string
+  repo: string | null
+  title: string | null
+}
 
 export interface BoardCard {
   issueNumber: number
@@ -16,6 +23,7 @@ export interface BoardCard {
   body: string | null
   labels: string[]
   value: number | null
+  taskLink: RoadmapIssueTaskLink | null
 }
 
 export interface BoardColumn {
@@ -42,6 +50,8 @@ export interface BuildBoardInput {
   labelColors?: Record<string, string>
   /** issue number → value (1..10). */
   values: Record<number, number>
+  /** issue number → OpenForge task started from this roadmap issue. */
+  taskLinks?: Record<number, RoadmapIssueTaskLink>
 }
 
 export const OTHER_TITLE = 'No label / Other'
@@ -86,6 +96,7 @@ export function buildBoard(input: BuildBoardInput): BoardModel {
     body: i.body,
     labels: i.labels,
     value: input.values[i.number] ?? null,
+    taskLink: input.taskLinks?.[i.number] ?? null,
   }))
 
   const columns = placeCards(cards, input.columnLabels, input.labelColors).map((col) => ({

@@ -33,11 +33,13 @@
     "backend": "./dist/backend.js",
     "requires": [
       "views",
+      "taskPane",
       "backend",
       "commands",
       "events",
       "tasks",
       "projectConfig",
+      "storage",
       "system.openUrl",
       "navigation",
       "context"
