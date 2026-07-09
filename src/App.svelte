@@ -4,7 +4,7 @@
   import type { DesktopUnlistenFn } from './lib/desktopIpc'
   import { createDesktopWindow } from './lib/desktopWindow'
   import type { DesktopWindowTarget } from './lib/desktopWindow'
-  import { tasks, dependencyReferenceTasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, isLoading, projects, activeProjectId, activeProjectColorId, currentView, reviewRequestCount, activeRepoReviewRequestCount, reviewPrs, codeCleanupTasksEnabled, focusBoardFilters, outOfFocusTaskIdsByProject } from './lib/stores'
+  import { tasks, dependencyReferenceTasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, isLoading, projects, activeProjectId, activeProjectColorId, currentView, reviewRequestCount, activeRepoReviewRequestCount, activeProjectAttentionCount, reviewPrs, codeCleanupTasksEnabled, focusBoardFilters, outOfFocusTaskIdsByProject } from './lib/stores'
   import { getAppMode, getConfig, getProjectConfig, resumeStartupSessions, setPollContext, getProjectRepo, openUrl, markReviewPrViewed } from './lib/ipc'
   import { computePollContext, pollContextEquals, type PollContextPayload } from './lib/pollContext'
   import { GITHUB_SYNC_GLOBAL_VIEW_KEY, GITHUB_SYNC_PLUGIN_ID } from './lib/githubSyncPlugin'
@@ -524,7 +524,7 @@
     reviewRequestCount={$reviewRequestCount}
   />
   {#if !ICON_RAIL_HIDDEN_VIEWS.has($currentView)}
-    <IconRail currentView={$currentView} onNavigate={handleNavigate} pluginNavItems={pluginNavItems} modalsOpen={showCommandPalette || showProjectSwitcher || showAttentionOverview || actionPalette.showActionPalette || showAddDialog || showFileQuickOpen} railBg={iconRailBg} activeRepoReviewRequestCount={$activeRepoReviewRequestCount} />
+    <IconRail currentView={$currentView} onNavigate={handleNavigate} pluginNavItems={pluginNavItems} modalsOpen={showCommandPalette || showProjectSwitcher || showAttentionOverview || actionPalette.showActionPalette || showAddDialog || showFileQuickOpen} railBg={iconRailBg} activeRepoReviewRequestCount={$activeRepoReviewRequestCount} activeProjectAttentionCount={$activeProjectAttentionCount} />
   {/if}
 
   <div class="flex flex-col flex-1 min-w-0 relative" style="background: linear-gradient(180deg, var(--project-bg-alt) 0%, var(--project-bg) 100%)">

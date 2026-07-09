@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
+import { render, screen, fireEvent, within } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
 import IconRail from './IconRail.svelte'
 import type { AppView } from '../../lib/types'
@@ -113,6 +113,56 @@ describe('IconRail', () => {
       })
       // Only Board + Project Settings render; neither is the PR view, so no badge appears.
       expect(screen.queryByText('3')).toBeNull()
+    })
+  })
+
+  describe('board attention count badge (green dot)', () => {
+    const prRailItem = {
+      viewKey: 'plugin:com.openforge.github-sync:pr_review' as AppView,
+      icon: 'git-pull-request',
+      title: 'Pull Requests',
+      shortcut: '⌘G',
+    }
+
+    it('renders the active-project Focus attention count on the Board rail item', () => {
+      render(IconRail, {
+        props: {
+          currentView: 'board' as AppView,
+          onNavigate: vi.fn(),
+          activeProjectAttentionCount: 3,
+        },
+      })
+      const boardButton = screen.getByRole('button', { name: 'Board' })
+      expect(within(boardButton).getByText('3')).toBeTruthy()
+    })
+
+    it('omits the attention badge when the active-project count is zero', () => {
+      render(IconRail, {
+        props: {
+          currentView: 'board' as AppView,
+          onNavigate: vi.fn(),
+          activeProjectAttentionCount: 0,
+        },
+      })
+      expect(screen.queryByText('0')).toBeNull()
+    })
+
+    it('places the attention count only on the Board item, not Project Settings or the PR item', () => {
+      render(IconRail, {
+        props: {
+          currentView: 'board' as AppView,
+          onNavigate: vi.fn(),
+          pluginNavItems: [prRailItem],
+          activeProjectAttentionCount: 5,
+          activeRepoReviewRequestCount: 0,
+        },
+      })
+      const boardButton = screen.getByRole('button', { name: 'Board' })
+      const settingsButton = screen.getByRole('button', { name: 'Project Settings' })
+      const prButton = screen.getByRole('button', { name: 'Pull Requests' })
+      expect(within(boardButton).getByText('5')).toBeTruthy()
+      expect(within(settingsButton).queryByText('5')).toBeNull()
+      expect(within(prButton).queryByText('5')).toBeNull()
     })
   })
 
