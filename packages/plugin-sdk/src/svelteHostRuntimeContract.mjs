@@ -26,6 +26,22 @@ export const OPENFORGE_HOST_RUNTIME_SVELTE_SPECIFIERS = Object.freeze(
   SVELTE_HOST_RUNTIME_MODULES.map(module => module.specifier),
 )
 
+const OPENFORGE_HOST_RUNTIME_SVELTE_MODULE_SET = new Set(OPENFORGE_HOST_RUNTIME_SVELTE_SPECIFIERS)
+
+/**
+ * True for the Svelte host-runtime specifiers the HOST renderer build must externalize.
+ *
+ * Externalizing these makes the host emit bare `svelte` / `svelte/internal/client` imports
+ * that resolve through the injected renderer import map to `plugin://host-runtime/svelte`
+ * — the same Svelte instance external plugins load. Host + plugins then share ONE Svelte
+ * instance, so mounting an external plugin component from the host tree no longer throws
+ * `effect_orphan`. Deliberately Svelte-only: once Svelte is external, host-bundled
+ * terminal-runtime resolves Svelte to the shared instance too, so nothing wider is needed.
+ */
+export function isOpenForgeHostRuntimeSvelteExternal(id) {
+  return OPENFORGE_HOST_RUNTIME_SVELTE_MODULE_SET.has(id)
+}
+
 export const SVELTE_HOST_RUNTIME_IMPORTS = Object.freeze(Object.fromEntries(
   SVELTE_HOST_RUNTIME_MODULES.map(module => [module.specifier, `${HOST_RUNTIME_SVELTE_BASE_URL}${module.assetPath}`]),
 ))

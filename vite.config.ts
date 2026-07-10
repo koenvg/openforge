@@ -2,7 +2,7 @@ import { resolve } from 'node:path'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import tailwindcss from '@tailwindcss/vite'
 import { defineConfig } from 'vite'
-import { rendererImportMapHtml } from './packages/plugin-sdk/src/svelteHostRuntimeContract.mjs'
+import { isOpenForgeHostRuntimeSvelteExternal, rendererImportMapHtml } from './packages/plugin-sdk/src/svelteHostRuntimeContract.mjs'
 import { createDaisyUiTailwindPluginAliases } from './src/lib/viteDaisyUi'
 import { createOpenForgeChunkGroups, OPEN_FORGE_CHUNK_SIZE_WARNING_LIMIT } from './src/lib/viteChunks'
 import { createOpenForgeViteLogger } from './src/lib/viteLogger'
@@ -78,6 +78,14 @@ function createOpenForgeRootAliases() {
     {
       find: /^@openforge-app\/plugin-sdk\/ui\/Modal\.svelte$/,
       replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/ui/Modal.svelte'),
+    },
+    {
+      find: /^@openforge-app\/plugin-sdk\/ui\/PluginPageHeader\.svelte$/,
+      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/ui/PluginPageHeader.svelte'),
+    },
+    {
+      find: /^@openforge-app\/plugin-sdk\/ui\/PluginViewState\.svelte$/,
+      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/ui/PluginViewState.svelte'),
     },
     {
       find: /^@openforge-app\/plugin-sdk\/ui\/FileTypeIcon\.svelte$/,
@@ -158,6 +166,11 @@ export default defineConfig({
     // sizes are not a real perf problem, only a bundler noise warning.
     chunkSizeWarningLimit: OPEN_FORGE_CHUNK_SIZE_WARNING_LIMIT,
     rolldownOptions: {
+      // Share ONE Svelte instance between the host renderer and external plugins so
+      // mounting a plugin component from the host tree does not throw effect_orphan — see
+      // isOpenForgeHostRuntimeSvelteExternal in svelteHostRuntimeContract.mjs. NOTE: this
+      // only affects `vite build` (packaged app), not `vite` dev serve (electron:dev).
+      external: isOpenForgeHostRuntimeSvelteExternal,
       output: {
         codeSplitting: {
           groups: createOpenForgeChunkGroups(),
