@@ -2,6 +2,7 @@
   import { FolderOpen } from '@lucide/svelte'
   import { DEFAULT_PROJECT_COLOR, PROJECT_COLORS } from '../../lib/projectColors'
   import SettingsSectionCard from './SettingsSectionCard.svelte'
+  import HoverTooltip from '../shared/ui/HoverTooltip.svelte'
   import { openUrl } from '../../lib/ipc'
 
   // Where to send a user to install each provider when it is not on PATH. Opened
@@ -158,7 +159,7 @@
     const target = event.currentTarget
     if (!(target instanceof HTMLElement)) return
 
-    const radioGroup = target.parentElement
+    const radioGroup = target.closest('[role="radiogroup"]')
     const radios = radioGroup
       ? Array.from(radioGroup.querySelectorAll<HTMLButtonElement>('button[role="radio"]'))
       : []
@@ -413,19 +414,20 @@
       <span class="text-[0.7rem] text-base-content/50 uppercase tracking-wider">Project Color</span>
       <div class="flex gap-2 flex-wrap" role="radiogroup" aria-label="Project Color">
         {#each projectColorOptions as color (color.id)}
-          <button
-            type="button"
-            role="radio"
-            aria-label="{color.label} project color"
-            aria-checked={selectedProjectColor === color.id}
-            aria-disabled={disabled}
-            tabindex={disabled ? -1 : selectedProjectColor === color.id ? 0 : -1}
-            class="w-7 h-7 rounded-full border-2 transition-all duration-150 cursor-pointer hover:scale-110 {selectedProjectColor === color.id ? 'border-primary ring-2 ring-primary/30 scale-110' : 'border-base-content/20'}"
-            style="background-color: {color.swatch}"
-            title={color.label}
-            onclick={() => handleProjectColorClick(color.id)}
-            onkeydown={(event) => handleProjectColorKeydown(event, color.id)}
-          ></button>
+          <HoverTooltip text={color.label}>
+            <button
+              type="button"
+              role="radio"
+              aria-label={color.id === '' ? `${color.label} (no accent color)` : `${color.label} project color`}
+              aria-checked={selectedProjectColor === color.id}
+              aria-disabled={disabled}
+              tabindex={disabled ? -1 : selectedProjectColor === color.id ? 0 : -1}
+              class="w-7 h-7 rounded-full border-2 transition-all duration-150 cursor-pointer hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none motion-reduce:hover:scale-100 {color.id === '' ? 'border-dashed bg-base-100 flex items-center justify-center overflow-hidden' : ''} {selectedProjectColor === color.id ? 'border-primary ring-2 ring-primary/30 scale-110' : 'border-base-content/20'}"
+              style={color.id === '' ? undefined : `background-color: ${color.swatch}`}
+              onclick={() => handleProjectColorClick(color.id)}
+              onkeydown={(event) => handleProjectColorKeydown(event, color.id)}
+            >{#if color.id === ''}<span class="block w-5 h-px rotate-45 bg-base-content/40"></span>{/if}</button>
+          </HoverTooltip>
         {/each}
       </div>
     </div>

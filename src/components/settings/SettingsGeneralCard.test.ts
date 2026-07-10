@@ -53,14 +53,14 @@ describe('SettingsGeneralCard', () => {
     render(SettingsGeneralCard, { props: defaultProps({ projectColor: 'rose' }) })
 
     expect(screen.getByRole('radiogroup', { name: 'Project Color' })).toBeTruthy()
-    expect(screen.getByRole('radio', { name: 'Default Gray project color' }).getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByRole('radio', { name: 'Default Gray (no accent color)' }).getAttribute('aria-checked')).toBe('false')
     expect(screen.getByRole('radio', { name: 'Rose project color' }).getAttribute('aria-checked')).toBe('true')
   })
 
   it('uses roving tabindex for project color radio swatches', () => {
     render(SettingsGeneralCard, { props: defaultProps({ projectColor: 'rose' }) })
 
-    expect(screen.getByRole('radio', { name: 'Default Gray project color' }).getAttribute('tabindex')).toBe('-1')
+    expect(screen.getByRole('radio', { name: 'Default Gray (no accent color)' }).getAttribute('tabindex')).toBe('-1')
     expect(screen.getByRole('radio', { name: 'Rose project color' }).getAttribute('tabindex')).toBe('0')
   })
 
@@ -96,7 +96,7 @@ describe('SettingsGeneralCard', () => {
     })
 
     const selectedRadio = screen.getByRole('radio', { name: 'Rose project color' })
-    const defaultRadio = screen.getByRole('radio', { name: 'Default Gray project color' })
+    const defaultRadio = screen.getByRole('radio', { name: 'Default Gray (no accent color)' })
 
     expect(selectedRadio.getAttribute('aria-disabled')).toBe('true')
     expect(selectedRadio.getAttribute('tabindex')).toBe('-1')
