@@ -53,6 +53,44 @@ describe('plugin SDK testing utilities', () => {
     await expect(registry.frontendApi.commands.invoke('refresh', { force: true })).rejects.toThrow('Unknown command: github.refresh')
   })
 
+  it('records canonical task UI tabs and sections while preserving the deprecated task pane tab alias', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'roadmap', projectId: 'P-1' })
+    const plugin = defineFrontendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.taskUI.registerTab({
+          id: 'roadmap',
+          title: 'Roadmap',
+          component: Component,
+        }))
+        context.subscriptions.add(openforge.taskUI.registerSection({
+          id: 'roadmap-context',
+          order: 20,
+          component: Component,
+        }))
+        context.subscriptions.add(openforge.taskPane.registerTab({
+          id: 'legacy-activity',
+          title: 'Legacy Activity',
+          component: Component,
+        }))
+      },
+    })
+
+    await registry.activateFrontend(plugin)
+
+    expect(registry.snapshot.taskPaneTabs).toMatchObject([
+      { id: 'roadmap', qualifiedId: 'roadmap.roadmap', pluginId: 'roadmap', projectId: 'P-1' },
+      { id: 'legacy-activity', qualifiedId: 'roadmap.legacy-activity', pluginId: 'roadmap', projectId: 'P-1' },
+    ])
+    expect(registry.snapshot.taskUISections).toMatchObject([
+      { id: 'roadmap-context', qualifiedId: 'roadmap.roadmap-context', pluginId: 'roadmap', projectId: 'P-1', order: 20 },
+    ])
+    expect(registry.snapshot.taskUISections[0]).not.toHaveProperty('title')
+
+    await registry.disposeAll()
+    expect(registry.snapshot.taskPaneTabs).toEqual([])
+    expect(registry.snapshot.taskUISections).toEqual([])
+  })
+
   it('shares storage, backend methods, background services, and events across frontend/backend API fakes', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'sync', projectId: 'P-1' })
     const seen: unknown[] = []

@@ -6,6 +6,7 @@ import type {
   FrontendPluginContext,
   PluginSettingsSectionRegistration,
   PluginTaskPaneTabRegistration,
+  PluginTaskUISectionRegistration,
   PluginViewRegistration,
 } from '@openforge-app/plugin-sdk/frontend'
 import type {
@@ -42,7 +43,7 @@ import type {
 } from '@openforge-app/plugin-sdk'
 
 type MaybePromise<T> = T | Promise<T>
-type RuntimeKind = 'commands' | 'events' | 'views' | 'taskPane' | 'settings' | 'background' | 'backend'
+type RuntimeKind = 'commands' | 'events' | 'views' | 'taskPane' | 'taskUI' | 'settings' | 'background' | 'backend'
 type RuntimeScope = 'global' | 'project' | 'task'
 type RuntimeHandler = (payload?: unknown) => MaybePromise<unknown>
 type RuntimeEventHandler = (payload: unknown) => void
@@ -118,6 +119,7 @@ export type RuntimeEventListenerContribution = RuntimeContributionBase & {
 
 export type RuntimeViewContribution = RuntimeContributionBase & PluginViewRegistration
 export type RuntimeTaskPaneTabContribution = RuntimeContributionBase & PluginTaskPaneTabRegistration
+export type RuntimeTaskUISectionContribution = RuntimeContributionBase & PluginTaskUISectionRegistration
 export type RuntimeSettingsSectionContribution = RuntimeContributionBase & PluginSettingsSectionRegistration
 
 export type RuntimeBackgroundServiceContribution = RuntimeContributionBase & BackgroundServiceRegistration & {
@@ -133,6 +135,7 @@ export type RuntimeContributionSnapshot = {
   projectId: string | null
   views: RuntimeViewContribution[]
   taskPaneTabs: RuntimeTaskPaneTabContribution[]
+  taskUISections: RuntimeTaskUISectionContribution[]
   settingsSections: RuntimeSettingsSectionContribution[]
   commands: RuntimeCommandContribution[]
   eventListeners: RuntimeEventListenerContribution[]
@@ -344,6 +347,7 @@ class RuntimeContributionRegistry {
   private readonly commands = new Map<string, RuntimeCommandContribution>()
   private readonly views = new Map<string, RuntimeViewContribution>()
   private readonly taskPaneTabs = new Map<string, RuntimeTaskPaneTabContribution>()
+  private readonly taskUISections = new Map<string, RuntimeTaskUISectionContribution>()
   private readonly settingsSections = new Map<string, RuntimeSettingsSectionContribution>()
   private readonly eventListeners = new Map<string, RuntimeEventListenerContribution>()
   private readonly backendMethods = new Map<string, RuntimeBackendMethodContribution>()
@@ -391,6 +395,7 @@ class RuntimeContributionRegistry {
       projectId: this.projectId,
       views: Array.from(this.views.values()),
       taskPaneTabs: Array.from(this.taskPaneTabs.values()),
+      taskUISections: Array.from(this.taskUISections.values()),
       settingsSections: Array.from(this.settingsSections.values()),
       commands: Array.from(this.commands.values()),
       eventListeners: Array.from(this.eventListeners.values()),
@@ -409,6 +414,10 @@ class RuntimeContributionRegistry {
       ...this.createCommonApi(),
       views: {
         register: (registration) => this.registerView(registration),
+      },
+      taskUI: {
+        registerTab: (registration) => this.registerTaskPaneTab(registration),
+        registerSection: (registration) => this.registerTaskUISection(registration),
       },
       taskPane: {
         registerTab: (registration) => this.registerTaskPaneTab(registration),
@@ -595,7 +604,7 @@ class RuntimeContributionRegistry {
         get: async (key, projectId = this.projectId ?? '') => this.host.getProjectConfig ? this.host.getProjectConfig(projectId, key) as never : unavailableCapability('projectConfig.get'),
         set: async (key, value, projectId = this.projectId ?? '') => this.host.setProjectConfig ? this.host.setProjectConfig(projectId, key, value) : unavailableCapability('projectConfig.set'),
       },
-    } satisfies Omit<FrontendOpenForgeAPI, 'views' | 'taskPane' | 'settings' | 'backend'>
+    } satisfies Omit<FrontendOpenForgeAPI, 'views' | 'taskUI' | 'taskPane' | 'settings' | 'backend'>
   }
 
   private qualifiedId(kind: RuntimeKind, localId: string): string {
@@ -724,6 +733,26 @@ class RuntimeContributionRegistry {
     return this.trackActivationDisposable(createDisposable(() => {
       this.taskPaneTabs.delete(qualifiedId)
       this.release('taskPane', qualifiedId)
+    }))
+  }
+
+  private registerTaskUISection(registration: PluginTaskUISectionRegistration): Disposable {
+    const qualifiedId = this.qualifiedId('taskUI', registration?.id)
+    assertComponent('taskUI', registration?.component)
+    this.claim('taskUI', qualifiedId)
+
+    const contribution: RuntimeTaskUISectionContribution = {
+      ...registration,
+      id: registration.id.trim(),
+      qualifiedId,
+      pluginId: this.pluginId,
+      projectId: this.projectId,
+    }
+    this.taskUISections.set(qualifiedId, contribution)
+
+    return this.trackActivationDisposable(createDisposable(() => {
+      this.taskUISections.delete(qualifiedId)
+      this.release('taskUI', qualifiedId)
     }))
   }
 

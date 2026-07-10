@@ -13,6 +13,7 @@
   import TaskGitStatus from './TaskGitStatus.svelte'
   import TaskLabelEditor from '../shared/tasks/TaskLabelEditor.svelte'
   import TaskRelationshipDetailSection from '../shared/tasks/TaskRelationshipDetailSection.svelte'
+  import PluginSlot from '../plugin/PluginSlot.svelte'
 
   interface Props {
     task: Task
@@ -107,6 +108,8 @@
   <TaskPullRequestStatus taskId={task.id} {taskPrs} onPullRequestLinked={refreshLinkedPullRequests} onGithubStatusRefreshed={refreshLinkedPullRequests} {allowCommentAddressing} />
 
   <TaskPromptSummary {task} {onEditPrompt} />
+
+  <PluginSlot slotType="taskUISections" taskId={task.id} projectId={task.project_id} />
 
   <section data-task-info-card="details" data-card-sizing="natural" class="rounded-lg border border-base-300/70 bg-base-100 overflow-hidden shrink-0" aria-label="Details">
     <h3 class="m-0 px-3 py-2 text-sm font-semibold text-base-content border-b border-base-300/70">Details</h3>

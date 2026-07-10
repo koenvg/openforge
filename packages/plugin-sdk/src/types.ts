@@ -208,6 +208,8 @@ export interface PluginTaskPaneProps extends Record<string, unknown> {
   projectId: string | null
 }
 
+export type PluginTaskUISectionProps = PluginTaskPaneProps
+
 export interface PluginSettingsSectionProps extends Record<string, unknown> {
   api: FrontendOpenForgeAPI
   context: OpenForgeContextSnapshot
@@ -236,6 +238,12 @@ export interface PluginTaskPaneTabRegistration {
   component: PluginComponentLoader<PluginTaskPaneProps> | PluginComponent<PluginTaskPaneProps>
 }
 
+export interface PluginTaskUISectionRegistration {
+  id: string
+  order?: number
+  component: PluginComponentLoader<PluginTaskUISectionProps> | PluginComponent<PluginTaskUISectionProps>
+}
+
 export interface PluginSettingsSectionRegistration {
   id: string
   title: string
@@ -247,6 +255,12 @@ export interface FrontendViewRegistry {
   register(registration: PluginViewRegistration): Disposable
 }
 
+export interface FrontendTaskUIRegistry {
+  registerTab(registration: PluginTaskPaneTabRegistration): Disposable
+  registerSection(registration: PluginTaskUISectionRegistration): Disposable
+}
+
+/** @deprecated Use `FrontendTaskUIRegistry.registerTab` through `openforge.taskUI`. */
 export interface FrontendTaskPaneRegistry {
   registerTab(registration: PluginTaskPaneTabRegistration): Disposable
 }
@@ -417,6 +431,8 @@ export interface OpenForgeCommonAPI {
 export interface FrontendOpenForgeAPI extends OpenForgeCommonAPI {
   navigation: NavigationAPI
   views: FrontendViewRegistry
+  taskUI: FrontendTaskUIRegistry
+  /** @deprecated Use `taskUI.registerTab(...)`. */
   taskPane: FrontendTaskPaneRegistry
   settings: FrontendSettingsRegistry
   backend: FrontendBackendBridge

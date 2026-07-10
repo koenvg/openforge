@@ -65,6 +65,7 @@ export type {
   PluginSettingsSectionProps,
   PluginState,
   PluginTaskPaneProps,
+  PluginTaskUISectionProps,
   PluginViewProps,
   PluginStorage,
   PluginStorageScope,
@@ -99,6 +100,7 @@ export type {
   TestingRuntimeScope,
   TestingSettingsSectionContribution,
   TestingTaskPaneTabContribution,
+  TestingTaskUISectionContribution,
   TestingViewContribution,
 } from './testing'
 

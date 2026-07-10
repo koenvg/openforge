@@ -1,1 +1,1 @@
-export type PluginSlotType = 'views' | 'taskPaneTabs' | 'settingsSections'
+export type PluginSlotType = 'views' | 'taskPaneTabs' | 'taskUISections' | 'settingsSections'

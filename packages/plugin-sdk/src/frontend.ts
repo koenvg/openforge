@@ -10,6 +10,7 @@ import type {
   FrontendPluginContext,
   FrontendSettingsRegistry,
   FrontendTaskPaneRegistry,
+  FrontendTaskUIRegistry,
   FrontendViewRegistry,
   NavigationAPI,
   OpenForgeContextSnapshot,
@@ -20,6 +21,8 @@ import type {
   PluginStorageScope,
   PluginTaskPaneProps,
   PluginTaskPaneTabRegistration,
+  PluginTaskUISectionProps,
+  PluginTaskUISectionRegistration,
   PluginViewProps,
   PluginViewRegistration,
 } from './types'
@@ -51,6 +54,7 @@ export type {
   FrontendPluginContext,
   FrontendSettingsRegistry,
   FrontendTaskPaneRegistry,
+  FrontendTaskUIRegistry,
   FrontendViewRegistry,
   NavigationAPI,
   OpenForgeContextSnapshot,
@@ -61,6 +65,8 @@ export type {
   PluginStorageScope,
   PluginTaskPaneProps,
   PluginTaskPaneTabRegistration,
+  PluginTaskUISectionProps,
+  PluginTaskUISectionRegistration,
   PluginViewProps,
   PluginViewRegistration,
 }

@@ -27,6 +27,7 @@ function acceptsPluginSlotType(_slotType: PluginSlotType): void {}
 
 acceptsPluginSlotType('views')
 acceptsPluginSlotType('taskPaneTabs')
+acceptsPluginSlotType('taskUISections')
 acceptsPluginSlotType('settingsSections')
 // @ts-expect-error PluginSlot only renders runtime contribution slots, not commands.
 acceptsPluginSlotType('commands')
@@ -214,6 +215,109 @@ describe('PluginSlot', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('plugin-slot-view').textContent).toContain('Project Gamma')
+    })
+  })
+
+  it('renders direct and lazy task UI section components with task plugin props', async () => {
+    const manifest = makeManifest('plugin.sections')
+    enablePlugin(
+      { manifest, state: 'active', error: null },
+      {
+        pluginId: 'plugin.sections',
+        taskUISections: [
+          { id: 'direct', order: 10 },
+          { id: 'lazy', order: 20 },
+        ],
+      }
+    )
+    registerRenderableContributionComponent('taskUISections', 'plugin.sections:direct', PluginSlotTestView)
+    registerRenderableContributionComponent(
+      'taskUISections',
+      'plugin.sections:lazy',
+      () => Promise.resolve({ default: PluginSlotRuntimePropsView })
+    )
+
+    render(PluginSlot, {
+      props: {
+        slotType: 'taskUISections',
+        projectId: 'P-1',
+        taskId: 'T-42',
+        projectName: 'Project Sections',
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('plugin-slot-view').textContent).toContain('Project Sections')
+      expect(screen.getByTestId('plugin-runtime-props').textContent).toContain('plugin.sections:P-1:T-42:T-42:P-1:api')
+    })
+  })
+
+  it('filters disabled task UI sections before component loading', async () => {
+    const manifest = makeManifest('plugin.disabled')
+    installedPlugins.set(new Map([[manifest.id, { manifest, state: 'active', error: null }]]))
+    enabledPluginIds.set(new Set())
+    runtimeContributionSources.set(new Map([[
+      manifest.id,
+      { pluginId: manifest.id, taskUISections: [{ id: 'context' }] },
+    ]]))
+    registerRenderableContributionComponent('taskUISections', 'plugin.disabled:context', PluginSlotTestView)
+
+    const { container } = render(PluginSlot, { props: { slotType: 'taskUISections' } })
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    expect(screen.queryByTestId('plugin-slot-view')).toBeNull()
+    expect(container.childElementCount).toBe(0)
+  })
+
+  it('uses the standard plugin error boundary for task UI section loader failures', async () => {
+    const manifest = makeManifest('plugin.loader-error')
+    enablePlugin(
+      { manifest, state: 'active', error: null },
+      { pluginId: manifest.id, taskUISections: [{ id: 'context' }] }
+    )
+    registerRenderableContributionComponent(
+      'taskUISections',
+      'plugin.loader-error:context',
+      () => Promise.reject(new Error('section loader failed'))
+    )
+
+    render(PluginSlot, { props: { slotType: 'taskUISections' } })
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain('section loader failed')
+    })
+  })
+
+  it('uses the standard plugin error boundary for task UI section render failures', async () => {
+    const manifest = makeManifest('plugin.render-error')
+    enablePlugin(
+      { manifest, state: 'active', error: null },
+      { pluginId: manifest.id, taskUISections: [{ id: 'context' }] }
+    )
+    registerRenderableContributionComponent('taskUISections', 'plugin.render-error:context', PluginSlotCrashingView)
+
+    render(PluginSlot, { props: { slotType: 'taskUISections' } })
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain('plugin render failed')
+    })
+  })
+
+  it('leaves no host or placeholder in layout when a task UI section renders nothing', async () => {
+    const manifest = makeManifest('plugin.empty')
+    const EmptySection = ((_anchor: Node, _props: Record<string, unknown>) => undefined) as never
+    enablePlugin(
+      { manifest, state: 'active', error: null },
+      { pluginId: manifest.id, taskUISections: [{ id: 'context' }] }
+    )
+    registerRenderableContributionComponent('taskUISections', 'plugin.empty:context', EmptySection)
+
+    const { container } = render(PluginSlot, { props: { slotType: 'taskUISections' } })
+
+    await waitFor(() => {
+      expect(container.childElementCount).toBe(0)
+      expect(container.querySelector('[data-contribution-id]')).toBeNull()
+      expect(container.querySelector('[data-slot-type="taskUISections"]')).toBeNull()
     })
   })
 

@@ -23,6 +23,7 @@ import type {
   PluginStorage,
   PluginStorageScope,
   PluginTaskPaneTabRegistration,
+  PluginTaskUISectionRegistration,
   StartPromptContribution,
   StartTaskImplementationRequest,
   PluginViewRegistration,
@@ -30,7 +31,7 @@ import type {
 } from './types'
 
 export type TestingRuntimeScope = 'global' | 'project' | 'task'
-export type TestingRuntimeKind = 'commands' | 'events' | 'views' | 'taskPane' | 'settings' | 'backend' | 'background'
+export type TestingRuntimeKind = 'commands' | 'events' | 'views' | 'taskPane' | 'taskUI' | 'settings' | 'backend' | 'background'
 
 type MaybePromise<T> = T | Promise<T>
 type CommandHandler = (payload?: unknown) => MaybePromise<unknown>
@@ -93,6 +94,7 @@ export type TestingEventListenerContribution = TestingContributionBase & {
 
 export type TestingViewContribution = TestingContributionBase & PluginViewRegistration
 export type TestingTaskPaneTabContribution = TestingContributionBase & PluginTaskPaneTabRegistration
+export type TestingTaskUISectionContribution = TestingContributionBase & PluginTaskUISectionRegistration
 export type TestingSettingsSectionContribution = TestingContributionBase & PluginSettingsSectionRegistration
 export type TestingBackendMethodContribution = TestingContributionBase & {
   registration: BackendMethodRegistration
@@ -106,6 +108,7 @@ export interface TestingOpenForgeRegistrySnapshot {
   projectId: string | null
   views: TestingViewContribution[]
   taskPaneTabs: TestingTaskPaneTabContribution[]
+  taskUISections: TestingTaskUISectionContribution[]
   settingsSections: TestingSettingsSectionContribution[]
   commands: TestingCommandContribution[]
   eventListeners: TestingEventListenerContribution[]
@@ -165,6 +168,7 @@ export class TestingOpenForgeRegistryFake {
   private readonly commands = new Map<string, TestingCommandContribution>()
   private readonly views = new Map<string, TestingViewContribution>()
   private readonly taskPaneTabs = new Map<string, TestingTaskPaneTabContribution>()
+  private readonly taskUISections = new Map<string, TestingTaskUISectionContribution>()
   private readonly settingsSections = new Map<string, TestingSettingsSectionContribution>()
   private readonly eventListeners = new Map<string, TestingEventListenerContribution>()
   private readonly eventHandlers = new Map<string, Set<EventHandler>>()
@@ -210,6 +214,10 @@ export class TestingOpenForgeRegistryFake {
       ...this.createCommonApi(),
       views: {
         register: (registration: PluginViewRegistration) => this.registerView(registration),
+      },
+      taskUI: {
+        registerTab: (registration: PluginTaskPaneTabRegistration) => this.registerTaskPaneTab(registration),
+        registerSection: (registration: PluginTaskUISectionRegistration) => this.registerTaskUISection(registration),
       },
       taskPane: {
         registerTab: (registration: PluginTaskPaneTabRegistration) => this.registerTaskPaneTab(registration),
@@ -286,6 +294,7 @@ export class TestingOpenForgeRegistryFake {
       projectId: this.projectId,
       views: Array.from(this.views.values()),
       taskPaneTabs: Array.from(this.taskPaneTabs.values()),
+      taskUISections: Array.from(this.taskUISections.values()),
       settingsSections: Array.from(this.settingsSections.values()),
       commands: Array.from(this.commands.values()),
       eventListeners: Array.from(this.eventListeners.values()),
@@ -307,7 +316,7 @@ export class TestingOpenForgeRegistryFake {
     return Array.isArray(raw) ? raw.filter((entry): entry is StartPromptContribution => Boolean(entry) && typeof entry === 'object' && typeof (entry as { id?: unknown }).id === 'string' && typeof (entry as { content?: unknown }).content === 'string') : []
   }
 
-  private createCommonApi(): Omit<FrontendOpenForgeAPI, 'views' | 'taskPane' | 'settings' | 'backend'> {
+  private createCommonApi(): Omit<FrontendOpenForgeAPI, 'views' | 'taskUI' | 'taskPane' | 'settings' | 'backend'> {
     return {
       commands: {
         register: (registration) => this.registerCommand(registration),
@@ -541,6 +550,26 @@ export class TestingOpenForgeRegistryFake {
     return createDisposable(() => {
       this.taskPaneTabs.delete(qualifiedId)
       this.release('taskPane', qualifiedId)
+    })
+  }
+
+  private registerTaskUISection(registration: PluginTaskUISectionRegistration): Disposable {
+    const qualifiedId = this.localQualifiedId('taskUI', registration.id)
+    assertFunction('taskUI', 'component', registration.component)
+    this.claim('taskUI', qualifiedId)
+
+    const contribution = {
+      ...registration,
+      id: registration.id.trim(),
+      qualifiedId,
+      pluginId: this.pluginId,
+      projectId: this.projectId,
+    }
+    this.taskUISections.set(qualifiedId, contribution)
+
+    return createDisposable(() => {
+      this.taskUISections.delete(qualifiedId)
+      this.release('taskUI', qualifiedId)
     })
   }
 

@@ -5,6 +5,7 @@ import type { RuntimeContributionSource } from './contributionResolver'
 
 type RuntimeViewSource = NonNullable<RuntimeContributionSource['views']>[number]
 type RuntimeTaskPaneTabSource = NonNullable<RuntimeContributionSource['taskPaneTabs']>[number]
+type RuntimeTaskUISectionSource = NonNullable<RuntimeContributionSource['taskUISections']>[number]
 type RuntimeCommandSource = NonNullable<RuntimeContributionSource['commands']>[number]
 type RuntimeSettingsSectionSource = NonNullable<RuntimeContributionSource['settingsSections']>[number]
 type RuntimeBackgroundServiceSource = NonNullable<RuntimeContributionSource['backgroundServices']>[number]
@@ -30,6 +31,13 @@ function makeTab(overrides: Partial<RuntimeTaskPaneTabSource> = {}): RuntimeTask
   return {
     id: 'details',
     title: 'Details',
+    ...overrides,
+  }
+}
+
+function makeTaskUISection(overrides: Partial<RuntimeTaskUISectionSource> = {}): RuntimeTaskUISectionSource {
+  return {
+    id: 'context',
     ...overrides,
   }
 }
@@ -123,12 +131,40 @@ describe('resolveContributions', () => {
     ])
   })
 
+  it('resolves task UI sections without presentation metadata and sorts by order then namespaced id', () => {
+    const result = resolveContributions([
+      makeSource({
+        pluginId: 'plugin.zeta',
+        taskUISections: [
+          makeTaskUISection({ id: 'later', order: 30 }),
+          makeTaskUISection({ id: 'same-order', order: 10 }),
+        ],
+      }),
+      makeSource({
+        pluginId: 'plugin.alpha',
+        taskUISections: [
+          makeTaskUISection({ id: 'same-order', order: 10 }),
+          makeTaskUISection({ id: 'default-order' }),
+        ],
+      }),
+    ])
+
+    expect(result.taskUISections).toEqual([
+      { pluginId: 'plugin.alpha', contributionId: 'default-order', namespacedId: 'plugin.alpha:default-order', order: 0 },
+      { pluginId: 'plugin.alpha', contributionId: 'same-order', namespacedId: 'plugin.alpha:same-order', order: 10 },
+      { pluginId: 'plugin.zeta', contributionId: 'same-order', namespacedId: 'plugin.zeta:same-order', order: 10 },
+      { pluginId: 'plugin.zeta', contributionId: 'later', namespacedId: 'plugin.zeta:later', order: 30 },
+    ])
+    expect(result.taskUISections.every((section) => !('title' in section) && !('icon' in section))).toBe(true)
+  })
+
   it('handles empty contribution sources gracefully', () => {
     const result = resolveContributions([makeSource()])
 
     expect(result).toEqual({
       views: [],
       taskPaneTabs: [],
+      taskUISections: [],
       commands: [],
       settingsSections: [],
       backgroundServices: [],
@@ -226,6 +262,7 @@ describe('resolveContributions', () => {
     const contributions: Partial<RuntimeContributionSource> = {
       views: [makeView({ id: 'view' })],
       taskPaneTabs: [makeTab({ id: 'tab' })],
+      taskUISections: [makeTaskUISection({ id: 'section', order: 3 })],
       commands: [makeCommand({ id: 'command', shortcut: 'Cmd+K' })],
       settingsSections: [makeSettingsSection({ id: 'settings', order: 2 })],
       backgroundServices: [makeBackgroundService({ id: 'service', scope: 'global' })],
@@ -236,6 +273,9 @@ describe('resolveContributions', () => {
 
     expect(result.views).toHaveLength(1)
     expect(result.taskPaneTabs).toHaveLength(1)
+    expect(result.taskUISections).toEqual([
+      { pluginId: 'plugin.all', contributionId: 'section', namespacedId: 'plugin.all:section', order: 3 },
+    ])
     expect(result.commands).toHaveLength(1)
     expect(result.settingsSections).toHaveLength(1)
     expect(result.settingsSections[0]?.order).toBe(2)
@@ -251,6 +291,7 @@ describe('resolveContributionsForSlot', () => {
         pluginId: 'plugin.slot',
         views: [makeView({ id: 'main' })],
         taskPaneTabs: [makeTab({ id: 'details' })],
+        taskUISections: [makeTaskUISection({ id: 'context' })],
       }),
     ])
 
@@ -258,6 +299,7 @@ describe('resolveContributionsForSlot', () => {
     expect(resolveContributionsForSlot(resolved, 'views', 'plugin.slot:main')).toHaveLength(1)
     expect(resolveContributionsForSlot(resolved, 'views', 'plugin:plugin.slot:main')).toHaveLength(1)
     expect(resolveContributionsForSlot(resolved, 'taskPaneTabs', 'plugin.slot:details')).toHaveLength(1)
+    expect(resolveContributionsForSlot(resolved, 'taskUISections', 'plugin.slot:context')).toHaveLength(1)
     expect(resolveContributionsForSlot(resolved, 'views', 'missing')).toEqual([])
   })
 })

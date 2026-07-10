@@ -5,11 +5,13 @@ import type {
   RuntimeCommandContribution,
   RuntimeSettingsSectionContribution,
   RuntimeTaskPaneTabContribution,
+  RuntimeTaskUISectionContribution,
   RuntimeViewContribution,
 } from './runtimeContributionRegistry'
 
 type RuntimeViewSource = Pick<RuntimeViewContribution, 'id' | 'title' | 'icon' | 'shortcut'> & Partial<Pick<RuntimeViewContribution, 'placement' | 'order'>>
 type RuntimeTaskPaneTabSource = Pick<RuntimeTaskPaneTabContribution, 'id' | 'title' | 'icon' | 'order'>
+type RuntimeTaskUISectionSource = Pick<RuntimeTaskUISectionContribution, 'id' | 'order'>
 type RuntimeCommandSource = Pick<RuntimeCommandContribution, 'id' | 'title' | 'shortcut' | 'discoverable'>
 type RuntimeSettingsSectionSource = Pick<RuntimeSettingsSectionContribution, 'id' | 'title' | 'order'>
 type RuntimeBackgroundServiceSource = Pick<RuntimeBackgroundServiceContribution, 'id' | 'scope'>
@@ -32,6 +34,13 @@ export interface ResolvedTab {
   namespacedId: string
   title: string
   icon: string | null
+  order: number
+}
+
+export interface ResolvedTaskUISection {
+  pluginId: string
+  contributionId: string
+  namespacedId: string
   order: number
 }
 
@@ -63,6 +72,7 @@ export interface RuntimeContributionSource {
   pluginId: string
   views?: RuntimeViewSource[]
   taskPaneTabs?: RuntimeTaskPaneTabSource[]
+  taskUISections?: RuntimeTaskUISectionSource[]
   commands?: RuntimeCommandSource[]
   settingsSections?: RuntimeSettingsSectionSource[]
   backgroundServices?: RuntimeBackgroundServiceSource[]
@@ -71,6 +81,7 @@ export interface RuntimeContributionSource {
 export interface ResolvedContributions {
   views: ResolvedView[]
   taskPaneTabs: ResolvedTab[]
+  taskUISections: ResolvedTaskUISection[]
   commands: ResolvedCommand[]
   settingsSections: ResolvedSettingsSection[]
   backgroundServices: ResolvedBackgroundService[]
@@ -81,6 +92,7 @@ type ResolvedSlot = keyof ResolvedContributions
 type ResolvedSlotItems = {
   views: ResolvedView[]
   taskPaneTabs: ResolvedTab[]
+  taskUISections: ResolvedTaskUISection[]
   commands: ResolvedCommand[]
   settingsSections: ResolvedSettingsSection[]
   backgroundServices: ResolvedBackgroundService[]
@@ -173,6 +185,24 @@ function resolveTab(pluginId: string, item: unknown): ResolvedTab | null {
   }
 }
 
+function resolveTaskUISection(pluginId: string, item: unknown): ResolvedTaskUISection | null {
+  if (!isRecord(item)) {
+    return null
+  }
+
+  const { id, order } = item
+  if (!isNonEmptyString(id)) {
+    return null
+  }
+
+  return {
+    pluginId,
+    contributionId: id,
+    namespacedId: toNamespacedId(pluginId, id),
+    order: isNumber(order) ? order : 0,
+  }
+}
+
 function normalizeCommandShortcut(shortcut: unknown): string | null {
   if (isNonEmptyString(shortcut)) {
     return normalizeShortcut(shortcut)
@@ -258,6 +288,7 @@ export function resolveContributions(enabledPlugins: RuntimeContributionSource[]
   const resolved: ResolvedContributions = {
     views: [],
     taskPaneTabs: [],
+    taskUISections: [],
     commands: [],
     settingsSections: [],
     backgroundServices: [],
@@ -270,11 +301,13 @@ export function resolveContributions(enabledPlugins: RuntimeContributionSource[]
 
     resolved.views.push(...collectResolved(plugin.pluginId, plugin.views, resolveView))
     resolved.taskPaneTabs.push(...collectResolved(plugin.pluginId, plugin.taskPaneTabs, resolveTab))
+    resolved.taskUISections.push(...collectResolved(plugin.pluginId, plugin.taskUISections, resolveTaskUISection))
     resolved.commands.push(...collectResolved(plugin.pluginId, plugin.commands, resolveCommand))
     resolved.settingsSections.push(...collectResolved(plugin.pluginId, plugin.settingsSections, resolveSettingsSection))
     resolved.backgroundServices.push(...collectResolved(plugin.pluginId, plugin.backgroundServices, resolveBackgroundService))
   }
 
+  resolved.taskUISections.sort((left, right) => left.order - right.order || left.namespacedId.localeCompare(right.namespacedId))
   return resolved
 }
 

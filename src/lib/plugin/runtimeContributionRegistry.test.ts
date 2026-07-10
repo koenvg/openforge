@@ -6,6 +6,7 @@ import { createRuntimeContributionRegistry, qualifyLocalContributionId } from '.
 
 const PluginView = vi.fn() as never
 const TaskPaneTab = vi.fn() as never
+const TaskUISection = vi.fn() as never
 const SettingsSection = vi.fn() as never
 
 function makeRegistry() {
@@ -97,6 +98,59 @@ describe('runtime contribution registry', () => {
         { id: 'poller', qualifiedId: 'github.poller', pluginId: 'github', projectId: 'project-1', scope: 'project' },
       ],
     })
+  })
+
+  it('uses taskUI as the canonical tab and section registry and disposes both contribution types', async () => {
+    const registry = makeRegistry()
+    const frontend = registry.getFrontendApi()
+
+    const canonicalTab = frontend.taskUI.registerTab({
+      id: 'activity',
+      title: 'Activity',
+      component: TaskPaneTab,
+    })
+    const section = frontend.taskUI.registerSection({
+      id: 'roadmap-context',
+      order: 15,
+      component: TaskUISection,
+    })
+    const legacyTab = frontend.taskPane.registerTab({
+      id: 'legacy',
+      title: 'Legacy',
+      component: TaskPaneTab,
+    })
+
+    expect(registry.getSnapshot()).toMatchObject({
+      taskPaneTabs: [
+        { id: 'activity', qualifiedId: 'github.activity', pluginId: 'github' },
+        { id: 'legacy', qualifiedId: 'github.legacy', pluginId: 'github' },
+      ],
+      taskUISections: [
+        { id: 'roadmap-context', qualifiedId: 'github.roadmap-context', pluginId: 'github', order: 15 },
+      ],
+    })
+    expect(registry.getSnapshot().taskUISections[0]).not.toHaveProperty('title')
+
+    await canonicalTab.dispose()
+    await section.dispose()
+    await legacyTab.dispose()
+    expect(registry.getSnapshot().taskPaneTabs).toEqual([])
+    expect(registry.getSnapshot().taskUISections).toEqual([])
+  })
+
+  it('rolls back task UI tabs and sections when frontend activation fails', async () => {
+    const registry = makeRegistry()
+
+    await expect(registry.activateFrontend(defineFrontendPlugin({
+      activate(openforge) {
+        openforge.taskUI.registerTab({ id: 'activity', title: 'Activity', component: TaskPaneTab })
+        openforge.taskUI.registerSection({ id: 'roadmap-context', component: TaskUISection })
+        openforge.taskUI.registerSection({ id: '', component: TaskUISection })
+      },
+    }))).rejects.toThrow(/taskUI.*non-empty id/i)
+
+    expect(registry.getSnapshot().taskPaneTabs).toEqual([])
+    expect(registry.getSnapshot().taskUISections).toEqual([])
   })
 
   it('cleans up only disposables added to context.subscriptions and ignores activation-returned cleanup', async () => {

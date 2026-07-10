@@ -739,6 +739,7 @@ describe('pluginRegistry', () => {
         title: 'Activity',
         component: tabComponent,
       }],
+      taskUISections: [],
       settingsSections: [],
       commands: [{
         id: 'open-demo',

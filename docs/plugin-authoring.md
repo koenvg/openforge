@@ -101,12 +101,14 @@ export default defineFrontendPlugin({
 Frontend-only registries and helpers:
 
 - `openforge.views.register(...)`
-- `openforge.taskPane.registerTab(...)`
+- `openforge.taskUI.registerTab(...)`
+- `openforge.taskUI.registerSection({ id, order?, component })`
+- `openforge.taskPane.registerTab(...)` (deprecated API-v1 alias for `taskUI.registerTab`)
 - `openforge.settings.registerSection(...)`
 - `openforge.navigation.get()` / `openforge.navigation.navigate(...)`
 - `openforge.backend.whenReady()` / `openforge.backend.invoke(...)` for the same plugin's backend methods
 
-Svelte plugin components receive `api` and `context` props. Use Svelte 5 runes in components and avoid importing app stores directly.
+Svelte plugin components receive `api` and `context` props. Task UI tabs and sections also receive `taskId` and `projectId`. Task UI sections are rendered as plugin-owned content in the shared task information pane; they do not require a title, icon, heading, or host card. Use Svelte 5 runes in components and avoid importing app stores directly.
 
 ## Backend entry point
 
@@ -152,7 +154,7 @@ Capabilities are host APIs exposed through the `openforge` object. Unsupported c
 | --- | --- | --- |
 | `commands`, `events`, `storage`, `context` | Supported | Supported |
 | `tasks`, `projects`, `fs`, `shell`, `notifications`, `attention`, `system.openUrl`, `config`, `projectConfig` | Supported through the renderer host bridge when wired for the active runtime | Supported through backend host callbacks |
-| `views`, `taskPane`, `settings`, `navigation` | Supported | Not exposed |
+| `views`, `taskUI` (`taskPane` compatibility alias), `settings`, `navigation` | Supported | Not exposed |
 | `backend.whenReady`, `backend.invoke` | Supported for same-plugin backend RPC | Not applicable |
 | `backend.registerMethod`, `background.register` | Not exposed | Supported |
 
