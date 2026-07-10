@@ -6,6 +6,7 @@ export type SvelteHostRuntimeModule = Readonly<{
 
 export const SVELTE_HOST_RUNTIME_MODULES: readonly SvelteHostRuntimeModule[]
 export const OPENFORGE_HOST_RUNTIME_SVELTE_SPECIFIERS: readonly string[]
+export function isOpenForgeHostRuntimeSvelteExternal(id: string): boolean
 export const SVELTE_HOST_RUNTIME_IMPORTS: Readonly<Record<string, string>>
 export function svelteHostRuntimeImportUrl(specifier: string): string | null
 export function svelteHostRuntimeBuildEntries(): Record<string, string>

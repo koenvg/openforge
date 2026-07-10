@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import viteConfig from '../vite.config.ts'
 import { OPENFORGE_HOST_SHARED_SVELTE_IMPORTS, OPENFORGE_HOST_SHARED_TERMINAL_RUNTIME_IMPORTS } from '../packages/plugin-sdk/src/vite.ts'
 import {
+  OPENFORGE_HOST_RUNTIME_SVELTE_SPECIFIERS,
   SVELTE_HOST_RUNTIME_MODULES,
   rendererImportMapHtml,
   rendererImportMapScriptBody,
@@ -13,6 +14,12 @@ import {
   svelteHostRuntimeImportMapEntries,
   terminalRuntimeImportMapEntries,
 } from '../packages/plugin-sdk/src/svelteHostRuntimeContract.mjs'
+
+function isSpecifierExternalized(external, id) {
+  if (typeof external === 'function') return external(id, undefined, false) === true
+  if (Array.isArray(external)) return external.includes(id)
+  return false
+}
 
 function readRendererImportMapScriptBody(indexHtml) {
   const importMapBody = indexHtml.match(/<script type="importmap">([\s\S]*?)<\/script>/)?.[1]
@@ -74,6 +81,45 @@ describe('OpenForge plugin Svelte runtime contract', () => {
     for (const specifier of OPENFORGE_HOST_SHARED_TERMINAL_RUNTIME_IMPORTS) {
       expect(imports[specifier], `${specifier} must be mapped by the host renderer import map`).toBeTruthy()
       expect(imports[specifier]).toMatch(/^plugin:\/\/host-runtime\/terminal-runtime\//)
+    }
+  })
+
+  it('externalizes host-runtime Svelte in the host renderer build so host and external plugins share one Svelte instance', () => {
+    // Root cause of effect_orphan for external plugins: the host bundled its OWN Svelte
+    // (instance A) while external plugins resolve Svelte through the injected import map
+    // to plugin://host-runtime/svelte (instance B). Externalizing the host-runtime Svelte
+    // specifiers makes the host emit bare `svelte` imports resolved through that same import
+    // map, so PluginSlot (host) and the mounted plugin component share ONE Svelte instance.
+    //
+    // This is a contract test, not a render test: the effect_orphan crash only manifests
+    // with TWO distinct Svelte module realms, which cannot exist in a single-instance Vitest
+    // environment — a render test would pass with OR without the fix. The behavioural proof
+    // (built host bundle emits bare svelte imports and no longer inlines Svelte internals)
+    // lives in the real `pnpm build` verification for this change.
+    const external = viteConfig.build?.rolldownOptions?.external
+    expect(external, 'host renderer build must configure rolldownOptions.external').toBeTruthy()
+
+    const importMap = svelteHostRuntimeImportMapEntries()
+    for (const specifier of OPENFORGE_HOST_RUNTIME_SVELTE_SPECIFIERS) {
+      expect(
+        isSpecifierExternalized(external, specifier),
+        `${specifier} must be externalized by the host renderer build`,
+      ).toBe(true)
+      // Closing the loop: an externalized bare import is only safe if the renderer import map
+      // resolves it at runtime to the shared plugin://host-runtime/svelte instance.
+      expect(
+        importMap[specifier],
+        `${specifier} is externalized but has no plugin://host-runtime/svelte import-map target`,
+      ).toMatch(/^plugin:\/\/host-runtime\/svelte\//)
+    }
+
+    // Guard against over-externalization: only the Svelte host-runtime specifiers should be
+    // externalized. Application code, relative imports, and unrelated packages stay bundled.
+    for (const nonSvelte of ['react', 'svelte-not-a-real-submodule', './foo', '../bar', '@openforge-app/terminal-runtime']) {
+      expect(
+        isSpecifierExternalized(external, nonSvelte),
+        `${nonSvelte} must NOT be externalized by the host renderer build`,
+      ).toBe(false)
     }
   })
 
