@@ -18,12 +18,10 @@
   import { enabledPluginIds, runtimeContributionSources } from '../../lib/plugin/pluginStore'
   import { TERMINAL_PLUGIN_ID } from '../../lib/terminalPlugin'
   import { useShortcutRegistry } from '../../lib/shortcuts.svelte'
-  import {
-    getShellLifecycleState,
-    getTaskTerminalTabsSession,
-    releaseAllForTask,
-    subscribeShellLifecycle,
-  } from '../../lib/terminalPool'
+  import { releaseAllForTask } from '../../lib/terminalPool'
+  // Session + shell lifecycle must come from the terminal PLUGIN runtime (the one
+  // rendering the task-view terminal), not the app pool — see liveTerminalPool.
+  import { getShellLifecycleState, getTaskTerminalTabsSession } from '../../lib/liveTerminalPool'
   import type { Action, Task } from '../../lib/types'
   import AgentPanel from './AgentPanel.svelte'
   import AgentStatusPill from './AgentStatusPill.svelte'
@@ -264,7 +262,6 @@
       await runAppCommandInTaskTerminal(task.id, runCommand, {
         getSession: getTaskTerminalTabsSession,
         getShellLifecycleState,
-        subscribeShellLifecycle,
         writePty,
         openTerminalView: () => setActiveView(terminalTab.namespacedId),
       })

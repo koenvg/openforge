@@ -29,7 +29,6 @@ function makeDeps(overrides: Partial<RunAppCommandDeps> = {}): RunAppCommandDeps
   return {
     getSession: vi.fn(() => makeSession()),
     getShellLifecycleState: vi.fn(() => activeState),
-    subscribeShellLifecycle: vi.fn(() => () => {}),
     writePty: vi.fn(async () => {}),
     openTerminalView: vi.fn(),
     ...overrides,
@@ -83,61 +82,60 @@ describe('runAppCommandInTaskTerminal', () => {
     expect(deps.writePty).not.toHaveBeenCalled()
   })
 
-  it('waits for the shell PTY to become active before writing', async () => {
-    const subscribe = vi.fn((_key: string, _listener: (state: ShellLifecycleState) => void) => () => {})
-    const deps = makeDeps({
-      getShellLifecycleState: vi.fn(() => inactiveState),
-      subscribeShellLifecycle: subscribe,
+  it('polls the shell lifecycle and writes once ptyActive turns true on a later tick', async () => {
+    let active = false
+    const getShellLifecycleState = vi.fn(() => (active ? activeState : inactiveState))
+    const intervalHandlers: Array<() => void> = []
+    const clearIntervalFn = vi.fn()
+    const deps = makeDeps({ getShellLifecycleState })
+
+    const promise = runAppCommandInTaskTerminal('task-1', 'pnpm dev', deps, {
+      timeoutMs: 10_000,
+      pollIntervalMs: 50,
+      setIntervalFn: (handler) => {
+        intervalHandlers.push(handler)
+        return 1
+      },
+      clearIntervalFn,
+      setTimeoutFn: () => 2,
+      clearTimeoutFn: () => {},
     })
 
-    const promise = runAppCommandInTaskTerminal('task-1', 'pnpm dev', deps, { timeoutMs: 1000 })
-
-    // Shell not active yet: nothing written.
+    // Not active yet: nothing written, view already opened.
+    expect(deps.openTerminalView).toHaveBeenCalledOnce()
     expect(deps.writePty).not.toHaveBeenCalled()
 
-    const notify = subscribe.mock.calls[0]?.[1]
-    notify?.(activeState)
+    active = true
+    intervalHandlers[0]?.()
     const result = await promise
 
     expect(result).toBe(true)
     expect(deps.writePty).toHaveBeenCalledWith('task-1-shell-0', 'pnpm dev\r')
-  })
-
-  it('unsubscribes from lifecycle updates after the command runs', async () => {
-    const unsubscribe = vi.fn()
-    const subscribe = vi.fn((_key: string, _listener: (state: ShellLifecycleState) => void) => unsubscribe)
-    const deps = makeDeps({
-      getShellLifecycleState: vi.fn(() => inactiveState),
-      subscribeShellLifecycle: subscribe,
-    })
-
-    const promise = runAppCommandInTaskTerminal('task-1', 'pnpm dev', deps, { timeoutMs: 1000 })
-    subscribe.mock.calls[0]?.[1]?.(activeState)
-    await promise
-
-    expect(unsubscribe).toHaveBeenCalledOnce()
+    expect(clearIntervalFn).toHaveBeenCalledOnce()
   })
 
   it('does not write and resolves false when the shell never becomes active before the timeout', async () => {
-    const unsubscribe = vi.fn()
-    const setTimeoutFn = vi.fn((_handler: () => void, _ms: number): unknown => 1)
-    const deps = makeDeps({
-      getShellLifecycleState: vi.fn(() => inactiveState),
-      subscribeShellLifecycle: vi.fn(() => unsubscribe),
-    })
+    const clearIntervalFn = vi.fn()
+    const deps = makeDeps({ getShellLifecycleState: vi.fn(() => inactiveState) })
+    let fireTimeout: (() => void) | undefined
 
     const promise = runAppCommandInTaskTerminal('task-1', 'pnpm dev', deps, {
-      timeoutMs: 1000,
-      setTimeoutFn,
+      timeoutMs: 1_000,
+      pollIntervalMs: 50,
+      setIntervalFn: () => 1,
+      clearIntervalFn,
+      setTimeoutFn: (handler) => {
+        fireTimeout = handler
+        return 2
+      },
       clearTimeoutFn: () => {},
     })
 
-    const fireTimeout = setTimeoutFn.mock.calls[0]?.[0]
     fireTimeout?.()
     const result = await promise
 
     expect(result).toBe(false)
     expect(deps.writePty).not.toHaveBeenCalled()
-    expect(unsubscribe).toHaveBeenCalledOnce()
+    expect(clearIntervalFn).toHaveBeenCalledOnce()
   })
 })

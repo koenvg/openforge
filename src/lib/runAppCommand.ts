@@ -12,6 +12,11 @@ export const RUN_COMMAND_CONFIG_KEY = 'run_command'
 export const DEFAULT_RUN_APP_TIMEOUT_MS = 15000
 
 /**
+ * How often to re-check whether the target shell's PTY is active while waiting.
+ */
+export const DEFAULT_RUN_APP_POLL_INTERVAL_MS = 100
+
+/**
  * Resolve the PTY session key of the task terminal's currently active shell tab.
  * Falls back to the default `${taskId}-shell-${activeTabIndex}` key when the session
  * has no tab entry for the active index (e.g. a not-yet-hydrated default session).
@@ -24,17 +29,16 @@ export function activeShellKey(taskId: string, session: TaskTerminalTabsSession)
 export interface RunAppCommandDeps {
   getSession: (taskId: string) => TaskTerminalTabsSession
   getShellLifecycleState: (terminalKey: string) => ShellLifecycleState
-  subscribeShellLifecycle: (
-    terminalKey: string,
-    listener: (state: ShellLifecycleState) => void,
-  ) => () => void
   writePty: (terminalKey: string, data: string) => Promise<void>
   openTerminalView: () => void
 }
 
 export interface RunAppCommandOptions {
   timeoutMs?: number
-  setTimeoutFn?: (handler: () => void, timeoutMs: number) => unknown
+  pollIntervalMs?: number
+  setIntervalFn?: (handler: () => void, ms: number) => unknown
+  clearIntervalFn?: (handle: unknown) => void
+  setTimeoutFn?: (handler: () => void, ms: number) => unknown
   clearTimeoutFn?: (handle: unknown) => void
 }
 
@@ -64,6 +68,9 @@ export async function runAppCommandInTaskTerminal(
   return true
 }
 
+// Poll the shell lifecycle rather than subscribing: `ptyActive` can flip true via
+// several paths (fresh spawn, PTY output, buffer restore) and not every path notifies
+// listeners, so a condition-poll is the robust readiness signal.
 function waitForShellReady(
   terminalKey: string,
   deps: RunAppCommandDeps,
@@ -74,32 +81,30 @@ function waitForShellReady(
   }
 
   const timeoutMs = options.timeoutMs ?? DEFAULT_RUN_APP_TIMEOUT_MS
+  const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_RUN_APP_POLL_INTERVAL_MS
+  const setIntervalFn = options.setIntervalFn ?? ((handler, ms) => setInterval(handler, ms))
+  const clearIntervalFn =
+    options.clearIntervalFn ?? ((handle) => clearInterval(handle as ReturnType<typeof setInterval>))
   const setTimeoutFn = options.setTimeoutFn ?? ((handler, ms) => setTimeout(handler, ms))
   const clearTimeoutFn =
     options.clearTimeoutFn ?? ((handle) => clearTimeout(handle as ReturnType<typeof setTimeout>))
 
   return new Promise<boolean>((resolve) => {
     let settled = false
-    let unsubscribe: (() => void) | null = null
+    let intervalHandle: unknown = null
     let timeoutHandle: unknown = null
 
     const finish = (result: boolean) => {
       if (settled) return
       settled = true
+      if (intervalHandle !== null) clearIntervalFn(intervalHandle)
       if (timeoutHandle !== null) clearTimeoutFn(timeoutHandle)
-      unsubscribe?.()
       resolve(result)
     }
 
-    unsubscribe = deps.subscribeShellLifecycle(terminalKey, (state) => {
-      if (state.ptyActive) finish(true)
-    })
-
-    // Guard against the shell activating between the initial check and the subscribe.
-    if (deps.getShellLifecycleState(terminalKey).ptyActive) {
-      finish(true)
-      return
-    }
+    intervalHandle = setIntervalFn(() => {
+      if (deps.getShellLifecycleState(terminalKey).ptyActive) finish(true)
+    }, pollIntervalMs)
 
     timeoutHandle = setTimeoutFn(() => finish(false), timeoutMs)
   })
