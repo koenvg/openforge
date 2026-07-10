@@ -268,6 +268,7 @@ pub(super) async fn handle_app_unmatched_command(
             let worktree_source = payload_optional_string(&request.payload, "worktreeSource")?;
             let worktree_branch = payload_optional_string(&request.payload, "worktreeBranch")?;
             let title = payload_optional_string(&request.payload, "title")?;
+            let source_ticket_url = payload_optional_string(&request.payload, "sourceTicketUrl")?;
             // Default to enabled so callers that omit the flag keep handoff notes.
             let handoff_notes_enabled = request
                 .payload
@@ -285,6 +286,7 @@ pub(super) async fn handle_app_unmatched_command(
                     worktree_branch: worktree_branch.as_deref(),
                     title: title.as_deref(),
                     handoff_notes_enabled,
+                    source_ticket_url: source_ticket_url.as_deref(),
                 })
                 .map_err(|e| {
                     (

@@ -40,6 +40,7 @@ const DEFAULT_WORKTREE_OPTIONS = {
   worktreeBranch: null,
   title: null,
   handoffNotesEnabled: true,
+  sourceTicketUrl: null,
 }
 
 vi.mock('../lib/actions', () => ({
@@ -99,6 +100,7 @@ const mockTask = {
   worktree_source: null,
   worktree_branch: null,
   handoff_notes_enabled: true,
+  source_ticket_url: null,
   depends_on: [],
   project_id: null,
   created_at: 1000,
@@ -287,6 +289,7 @@ describe('AddTaskDialog', () => {
           worktreeBranch: null,
           title: null,
           handoffNotesEnabled: true,
+          sourceTicketUrl: null,
         },
       )
     })
@@ -317,6 +320,7 @@ describe('AddTaskDialog', () => {
           worktreeBranch: null,
           title: null,
           handoffNotesEnabled: true,
+          sourceTicketUrl: null,
         },
       )
       expect(onTaskSaved).toHaveBeenCalled()
@@ -348,6 +352,7 @@ describe('AddTaskDialog', () => {
           worktreeBranch: null,
           title: null,
           handoffNotesEnabled: true,
+          sourceTicketUrl: null,
         },
       )
       expect(onTaskSaved).toHaveBeenCalled()
@@ -385,6 +390,7 @@ describe('AddTaskDialog', () => {
           worktreeBranch: 'feature/open-pr',
           title: null,
           handoffNotesEnabled: true,
+          sourceTicketUrl: null,
         },
       )
       expect(onTaskSaved).toHaveBeenCalled()
@@ -416,6 +422,7 @@ describe('AddTaskDialog', () => {
           worktreeBranch: null,
           title: null,
           handoffNotesEnabled: true,
+          sourceTicketUrl: null,
         },
       )
       expect(onTaskSaved).toHaveBeenCalled()
@@ -581,6 +588,35 @@ describe('AddTaskDialog', () => {
 
     await waitFor(() => {
       expect(createTask).toHaveBeenCalledWith('Untitled body', 'backlog', 'test-project-id', 'default', DEFAULT_WORKTREE_OPTIONS)
+    })
+  })
+
+  it('passes the entered source ticket link when creating a task', async () => {
+    render(AddTaskDialog, { props: { mode: 'create' } })
+
+    const textbox = await findPromptTextbox()
+    const sourceTicketInput = screen.getByLabelText('Source ticket link') as HTMLInputElement
+    await fireEvent.input(sourceTicketInput, { target: { value: '  https://github.com/koenvg/openforge/issues/1294  ' } })
+    await fireEvent.input(textbox, { target: { value: 'Body of task' } })
+    await clickAddToBacklogFromMore()
+
+    await waitFor(() => {
+      expect(createTask).toHaveBeenCalledWith('Body of task', 'backlog', 'test-project-id', 'default', {
+        ...DEFAULT_WORKTREE_OPTIONS,
+        sourceTicketUrl: 'https://github.com/koenvg/openforge/issues/1294',
+      })
+    })
+  })
+
+  it('omits the source ticket link (null) when none is entered', async () => {
+    render(AddTaskDialog, { props: { mode: 'create' } })
+
+    const textbox = await findPromptTextbox()
+    await fireEvent.input(textbox, { target: { value: 'No ticket body' } })
+    await clickAddToBacklogFromMore()
+
+    await waitFor(() => {
+      expect(createTask).toHaveBeenCalledWith('No ticket body', 'backlog', 'test-project-id', 'default', DEFAULT_WORKTREE_OPTIONS)
     })
   })
 

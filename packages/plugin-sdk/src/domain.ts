@@ -37,6 +37,11 @@ export interface Task {
    * agent is not instructed to maintain Handoff Notes.
    */
   handoff_notes_enabled: boolean;
+  /**
+   * Optional link to the source ticket this task originated from (e.g. a GitHub
+   * issue URL or Jira browse link). `null` when no ticket was provided.
+   */
+  source_ticket_url: string | null;
   depends_on: string[];
   project_id: string | null;
   created_at: number;

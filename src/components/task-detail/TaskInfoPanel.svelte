@@ -8,6 +8,7 @@
   import { getTaskLabels, hasLabelNamed } from '../../lib/taskLabels'
   import { getTaskDependentSummaries, getTaskDependencySummaries, getWaitingDependencyCount } from '../../lib/taskDependencies'
   import CopyButton from './CopyButton.svelte'
+  import SourceTicketLink from './SourceTicketLink.svelte'
   import TaskPromptSummary from './TaskPromptSummary.svelte'
   import TaskPullRequestStatus from './TaskPullRequestStatus.svelte'
   import TaskGitStatus from './TaskGitStatus.svelte'
@@ -95,6 +96,8 @@
 </script>
 
 <div data-testid="task-info-panel" data-scroll-owner="false" class="flex flex-col gap-3 p-3 {surfaceClass} min-h-max">
+  <SourceTicketLink url={task.source_ticket_url} />
+
   {#if attention}
     <CollapsibleInfoSection sectionKey="attention" title="Attention" cardId="attention">
       <div class="flex flex-wrap items-center gap-1.5 px-3 py-2">

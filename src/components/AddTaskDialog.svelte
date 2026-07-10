@@ -70,6 +70,7 @@
   let nextPastedImageId = 1
   let nextImageMarkerInsertRequestId = 1
   let taskTitle = $state('')
+  let sourceTicketDraft = $state('')
   let handoffNotesEnabled = $state(true)
   let taskDefaultsLoading = $state(true)
 
@@ -400,7 +401,12 @@
           'backlog',
           $activeProjectId,
           selectedPermissionMode,
-          { ...buildWorktreeOptions(), title: taskTitle.trim() || null, handoffNotesEnabled }
+          {
+            ...buildWorktreeOptions(),
+            title: taskTitle.trim() || null,
+            handoffNotesEnabled,
+            sourceTicketUrl: sourceTicketDraft.trim() || null,
+          }
         )
 
         if (autoStart && onRunAction) {
@@ -435,6 +441,14 @@
         placeholder="Title (optional)"
         aria-label="Task title"
         bind:value={taskTitle}
+      />
+      <input
+        type="text"
+        inputmode="url"
+        class="input input-bordered input-sm mb-3 w-full"
+        placeholder="Source ticket link (optional, e.g. GitHub issue or Jira URL)"
+        aria-label="Source ticket link"
+        bind:value={sourceTicketDraft}
       />
     {/if}
     <PromptInput

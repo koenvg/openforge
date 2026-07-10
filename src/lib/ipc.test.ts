@@ -242,6 +242,7 @@ describe("ipc spawnShellPty", () => {
 			worktreeBranch: null,
 			title: null,
 			handoffNotesEnabled: true,
+			sourceTicketUrl: null,
 		});
 	});
 
@@ -278,6 +279,7 @@ describe("ipc spawnShellPty", () => {
 			worktreeBranch: "feature/open-pr",
 			title: null,
 			handoffNotesEnabled: true,
+			sourceTicketUrl: null,
 		});
 	});
 
@@ -314,6 +316,7 @@ describe("ipc spawnShellPty", () => {
 			worktreeBranch: null,
 			title: null,
 			handoffNotesEnabled: true,
+			sourceTicketUrl: null,
 		});
 	});
 

@@ -377,6 +377,7 @@ var TestingOpenForgeRegistryFake = class {
 						worktree_source: null,
 						worktree_branch: null,
 						handoff_notes_enabled: true,
+						source_ticket_url: null,
 						depends_on: request.dependsOn ?? [],
 						project_id: request.projectId,
 						created_at: 0,
