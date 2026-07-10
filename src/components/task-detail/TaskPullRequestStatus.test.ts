@@ -242,6 +242,25 @@ describe('TaskPullRequestStatus', () => {
     expect(screen.getByLabelText('GitHub pull request URL')).toBeTruthy()
   })
 
+  it('lets users add another pull request when the task already has one', async () => {
+    const onPullRequestLinked = vi.fn().mockResolvedValue(undefined)
+    render(TaskPullRequestStatus, {
+      props: { taskId: 'T-42', taskPrs: [createPullRequest()], onPullRequestLinked },
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Add PR' }))
+    await fireEvent.input(screen.getByLabelText('GitHub pull request URL'), {
+      target: { value: ' https://github.com/owner/repo/pull/99 ' },
+    })
+    await fireEvent.click(screen.getByRole('button', { name: 'Link PR' }))
+
+    await waitFor(() => {
+      expect(ipc.linkPullRequest).toHaveBeenCalledWith('T-42', 'https://github.com/owner/repo/pull/99')
+      expect(onPullRequestLinked).toHaveBeenCalled()
+    })
+    expect(screen.queryByLabelText('GitHub pull request URL')).toBeNull()
+  })
+
   it('fetches comments for every PR and renders only unaddressed comments', async () => {
     const firstPr = createPullRequest({ id: 42, title: 'First PR', unaddressed_comment_count: 1 })
     const secondPr = createPullRequest({ id: 99, pr_number: 99, title: 'Second PR', url: 'https://github.com/owner/repo/pull/99', unaddressed_comment_count: 1 })
