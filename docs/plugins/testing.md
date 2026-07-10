@@ -69,7 +69,8 @@ it('activates frontend contributions and records command calls', async () => {
 
 The registry creates both runtime API shapes from one fake host:
 
-- `registry.frontendApi` includes frontend-only areas such as `views`, `taskPane`, `settings`, `navigation`, and `backend.invoke()`.
+- `registry.frontendApi` includes frontend-only areas such as `views`, canonical `taskUI`, the deprecated `taskPane` tab alias, `settings`, `navigation`, and `backend.invoke()`.
+- `registry.snapshot.taskUISections` records section metadata and component sources; disposing the returned registrations removes them just like other runtime contributions.
 - `registry.backendApi` includes backend-only areas such as `backend.registerMethod()` and `background.register()`.
 - Both APIs share common host areas: commands, events, storage, tasks, projects, fs, shell, notifications, attention, system, config, and projectConfig.
 

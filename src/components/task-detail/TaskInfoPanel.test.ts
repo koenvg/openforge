@@ -5,9 +5,13 @@ import { requireElement } from '../../test-utils/dom'
 import TaskInfoPanel from './TaskInfoPanel.svelte'
 import type { Task, PullRequestInfo, PrComment, TaskLabel, AgentSession } from '../../lib/types'
 import { activeSessions, dependencyReferenceTasks, mergingTaskIds, tasks, ticketPrs } from '../../lib/stores'
+import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
+import { clearComponentRegistry, registerRenderableContributionComponent } from '../../lib/plugin/componentRegistry'
+import PluginSlotTestView from '../plugin/PluginSlotTestView.svelte'
 import { addTaskLabel, forceGithubSync, getPrComments, getProjectTaskLabels, getPullRequests, linkPullRequest, mergePullRequest, refreshTaskGithubStatus, removeTaskLabel, writeClipboardText } from '../../lib/ipc'
 
 vi.mock('../../lib/stores', () => ({
+  activeProjectId: writable(null),
   ticketPrs: writable(new Map()),
   mergingTaskIds: writable(new Set()),
   tasks: writable([]),
@@ -51,6 +55,14 @@ vi.mock('../../lib/desktopIpc', () => ({
   listenDesktopEvent: vi.fn().mockResolvedValue(() => {}),
 }))
 
+vi.mock('../../lib/plugin/pluginRegistry', () => ({
+  activatePlugin: vi.fn(async () => true),
+  getPluginRenderProps: (pluginId: string, options: { projectId: string | null; taskId?: string | null }) => ({
+    api: {},
+    context: { pluginId, projectId: options.projectId, taskId: options.taskId ?? null },
+  }),
+}))
+
 const bugLabel: TaskLabel = { id: 1, project_id: 'proj-1', name: 'bug' }
 const uiLabel: TaskLabel = { id: 2, project_id: 'proj-1', name: 'ui' }
 
@@ -82,6 +94,10 @@ describe('TaskInfoPanel', () => {
     ticketPrs.set(new Map())
     tasks.set([])
     dependencyReferenceTasks.set([])
+    installedPlugins.set(new Map())
+    enabledPluginIds.set(new Set())
+    runtimeContributionSources.set(new Map())
+    clearComponentRegistry()
     vi.mocked(getPullRequests).mockResolvedValue([])
     vi.mocked(refreshTaskGithubStatus).mockResolvedValue({
       new_comments: 0,
@@ -219,6 +235,41 @@ describe('TaskInfoPanel', () => {
       const element = document.querySelector(`[data-task-info-card="${card}"]`)
       expect(element?.getAttribute('data-card-sizing')).toBe('natural')
     }
+  })
+
+  it('hosts task UI sections after TaskPromptSummary and before the built-in Details card', async () => {
+    const pluginId = 'plugin.task-context'
+    installedPlugins.set(new Map([[
+      pluginId,
+      {
+        manifest: {
+          id: pluginId,
+          name: 'Task Context',
+          version: '1.0.0',
+          apiVersion: 1,
+          description: 'Task context test plugin',
+          permissions: [],
+          frontend: 'index.js',
+          backend: null,
+        },
+        state: 'active',
+        error: null,
+      },
+    ]]))
+    enabledPluginIds.set(new Set([pluginId]))
+    runtimeContributionSources.set(new Map([[
+      pluginId,
+      { pluginId, taskUISections: [{ id: 'context', order: 10 }] },
+    ]]))
+    registerRenderableContributionComponent('taskUISections', `${pluginId}:context`, PluginSlotTestView)
+
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
+
+    const section = await screen.findByTestId('plugin-slot-view')
+    const prompt = requireElement(document.querySelector('[data-task-info-card="initial-prompt"]'), HTMLElement)
+    const details = requireElement(document.querySelector('[data-task-info-card="details"]'), HTMLElement)
+    expect(Boolean(prompt.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+    expect(Boolean(section.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
   })
 
   it('shows a copyable resume command in details when the active session can be resumed', () => {

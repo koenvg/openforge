@@ -10,6 +10,7 @@ export type PluginComponentSource<Props extends Record<string, unknown> = Record
 const registry = new Map<PluginViewKey, PluginComponentSource<PluginViewProps>>()
 const renderableRegistries = {
   taskPaneTabs: new Map<string, PluginComponentSource<Record<string, unknown>>>(),
+  taskUISections: new Map<string, PluginComponentSource<Record<string, unknown>>>(),
   settingsSections: new Map<string, PluginComponentSource<Record<string, unknown>>>(),
 } as const
 

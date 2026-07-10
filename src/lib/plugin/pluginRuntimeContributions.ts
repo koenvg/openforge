@@ -7,6 +7,7 @@ import type {
   RuntimeContributionSnapshot,
   RuntimeSettingsSectionContribution,
   RuntimeTaskPaneTabContribution,
+  RuntimeTaskUISectionContribution,
 } from './runtimeContributionRegistry'
 
 const pluginCommandHandlers = new Map<string, RuntimeCommandContribution['handler']>()
@@ -31,6 +32,10 @@ function runtimeSnapshotToContributionSource(snapshot: RuntimeContributionSnapsh
       title: tab.title,
       icon: tab.icon,
       order: tab.order,
+    })),
+    taskUISections: snapshot.taskUISections.map((section) => ({
+      id: section.id,
+      order: section.order,
     })),
     settingsSections: snapshot.settingsSections.map((section) => ({
       id: section.id,
@@ -84,9 +89,9 @@ export async function stopPluginBackgroundServices(pluginId: string): Promise<vo
   return stopBackgroundServiceEntries(stopEntries)
 }
 
-function registerRenderableContributions<T extends RuntimeTaskPaneTabContribution | RuntimeSettingsSectionContribution>(
+function registerRenderableContributions<T extends RuntimeTaskPaneTabContribution | RuntimeTaskUISectionContribution | RuntimeSettingsSectionContribution>(
   pluginId: string,
-  slotType: 'taskPaneTabs' | 'settingsSections',
+  slotType: 'taskPaneTabs' | 'taskUISections' | 'settingsSections',
   contributions: T[] | undefined
 ): void {
   for (const contribution of contributions ?? []) {
@@ -152,6 +157,7 @@ export async function applyRuntimeSnapshotContributions(pluginId: string, snapsh
     }
 
     registerRenderableContributions(pluginId, 'taskPaneTabs', snapshot.taskPaneTabs)
+    registerRenderableContributions(pluginId, 'taskUISections', snapshot.taskUISections)
     registerRenderableContributions(pluginId, 'settingsSections', snapshot.settingsSections)
     registerCommandContributions(pluginId, snapshot.commands)
     await startBackgroundServices(pluginId, snapshot.backgroundServices, registeredStopKeys)

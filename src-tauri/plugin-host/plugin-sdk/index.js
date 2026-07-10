@@ -220,6 +220,7 @@ var TestingOpenForgeRegistryFake = class {
 	commands = /* @__PURE__ */ new Map();
 	views = /* @__PURE__ */ new Map();
 	taskPaneTabs = /* @__PURE__ */ new Map();
+	taskUISections = /* @__PURE__ */ new Map();
 	settingsSections = /* @__PURE__ */ new Map();
 	eventListeners = /* @__PURE__ */ new Map();
 	eventHandlers = /* @__PURE__ */ new Map();
@@ -258,6 +259,10 @@ var TestingOpenForgeRegistryFake = class {
 		const api = {
 			...this.createCommonApi(),
 			views: { register: (registration) => this.registerView(registration) },
+			taskUI: {
+				registerTab: (registration) => this.registerTaskPaneTab(registration),
+				registerSection: (registration) => this.registerTaskUISection(registration)
+			},
 			taskPane: { registerTab: (registration) => this.registerTaskPaneTab(registration) },
 			settings: { registerSection: (registration) => this.registerSettingsSection(registration) },
 			backend: {
@@ -315,6 +320,7 @@ var TestingOpenForgeRegistryFake = class {
 			projectId: this.projectId,
 			views: Array.from(this.views.values()),
 			taskPaneTabs: Array.from(this.taskPaneTabs.values()),
+			taskUISections: Array.from(this.taskUISections.values()),
 			settingsSections: Array.from(this.settingsSections.values()),
 			commands: Array.from(this.commands.values()),
 			eventListeners: Array.from(this.eventListeners.values()),
@@ -564,6 +570,23 @@ var TestingOpenForgeRegistryFake = class {
 		return createDisposable(() => {
 			this.taskPaneTabs.delete(qualifiedId);
 			this.release("taskPane", qualifiedId);
+		});
+	}
+	registerTaskUISection(registration) {
+		const qualifiedId = this.localQualifiedId("taskUI", registration.id);
+		assertFunction("taskUI", "component", registration.component);
+		this.claim("taskUI", qualifiedId);
+		const contribution = {
+			...registration,
+			id: registration.id.trim(),
+			qualifiedId,
+			pluginId: this.pluginId,
+			projectId: this.projectId
+		};
+		this.taskUISections.set(qualifiedId, contribution);
+		return createDisposable(() => {
+			this.taskUISections.delete(qualifiedId);
+			this.release("taskUI", qualifiedId);
 		});
 	}
 	registerSettingsSection(registration) {

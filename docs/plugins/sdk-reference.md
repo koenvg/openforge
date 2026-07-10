@@ -59,11 +59,12 @@ Frontend-specific API areas are:
 
 - `navigation`: read or change the active OpenForge view/project/task.
 - `views`: register plugin views.
-- `taskPane`: register task-pane tabs.
+- `taskUI`: register task-pane tabs and plugin-owned task information sections.
+- `taskPane`: deprecated API-v1 alias for `taskUI.registerTab(...)`.
 - `settings`: register plugin settings sections.
 - `backend`: wait for and invoke this plugin's backend methods.
 
-Frontend UI contribution registrations use Svelte component loaders or components for `PluginViewProps`, `PluginTaskPaneProps`, and `PluginSettingsSectionProps`.
+Frontend UI contribution registrations use Svelte component loaders or components for `PluginViewProps`, `PluginTaskPaneProps`, `PluginTaskUISectionProps`, and `PluginSettingsSectionProps`. Register sections with `openforge.taskUI.registerSection({ id, order?, component })`; sections receive `api`, `context`, `taskId`, and `projectId`, and do not require presentation metadata such as a title, icon, heading, or host card. Sections are ordered by numeric `order`, then namespaced contribution id.
 
 ## Backend plugins
 

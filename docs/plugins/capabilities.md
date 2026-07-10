@@ -63,7 +63,7 @@ These capabilities are part of `FrontendOpenForgeAPI` and are available to front
 | Capability | API area | What it means |
 | --- | --- | --- |
 | `views` | `openforge.views` | Register plugin views that OpenForge can route to and surface in navigation. |
-| `taskPane` | `openforge.taskPane` | Register task-pane tabs rendered for a selected task. |
+| `taskPane` | `openforge.taskUI` | Register task-pane tabs and titleless plugin-owned sections rendered for a selected task. The API-v1 capability identifier remains `taskPane`; `openforge.taskPane.registerTab(...)` is a deprecated compatibility alias. |
 | `settings` | `openforge.settings` | Register plugin settings sections. |
 | `navigation` | `openforge.navigation` | Read or request changes to the active OpenForge view/project/task. |
 

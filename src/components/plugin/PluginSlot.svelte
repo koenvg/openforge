@@ -45,7 +45,7 @@
       return getRegisteredComponent(makePluginViewKey(contrib.pluginId, contrib.contributionId))
     }
 
-    if (slotType === 'taskPaneTabs' || slotType === 'settingsSections') {
+    if (slotType === 'taskPaneTabs' || slotType === 'taskUISections' || slotType === 'settingsSections') {
       return getRegisteredRenderableComponent(slotType, contrib.namespacedId)
     }
 
@@ -54,6 +54,10 @@
 
   function normalizeErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error)
+  }
+
+  function contributionName(contrib: (typeof slotContributions)[number]): string {
+    return 'title' in contrib && typeof contrib.title === 'string' ? contrib.title : contrib.pluginId
   }
 
   function setRenderError(viewKey: string, error: unknown): void {
@@ -120,32 +124,42 @@
   })
 </script>
 
-<div data-slot-type={slotType} data-slot-id={slotId} data-slot-layout={slotLayout} class={slotHostClass}>
-  {#each slotContributions as contrib (contrib.namespacedId)}
-    {@const viewKey = makePluginViewKey(contrib.pluginId, contrib.contributionId)}
-    {@const Component = renderedComponents.get(viewKey)}
-    {@const errorMessage = renderErrors.get(viewKey) ?? $installedPlugins.get(contrib.pluginId)?.error ?? null}
+{#snippet renderContribution(contrib: (typeof slotContributions)[number])}
+  {@const viewKey = makePluginViewKey(contrib.pluginId, contrib.contributionId)}
+  {@const Component = renderedComponents.get(viewKey)}
+  {@const errorMessage = renderErrors.get(viewKey) ?? $installedPlugins.get(contrib.pluginId)?.error ?? null}
 
-    {#if errorMessage}
-      <PluginErrorBoundary
-        pluginId={contrib.pluginId}
-        pluginName={contrib.title ?? contrib.pluginId}
-        errorMessage={errorMessage}
-      />
-    {:else if Component}
-      <svelte:boundary onerror={(error) => setRenderError(viewKey, error)}>
-        {#snippet failed(error, _reset)}
-          <PluginErrorBoundary
-            pluginId={contrib.pluginId}
-            pluginName={contrib.title ?? contrib.pluginId}
-            errorMessage={normalizeErrorMessage(error)}
-          />
-        {/snippet}
-        {@const renderProps = getPluginRenderProps(contrib.pluginId, { projectId, taskId })}
-        <Component {...renderProps} {taskId} {projectId} {projectName} {projectPath} />
-      </svelte:boundary>
-    {:else}
-      <div data-contribution-id={contrib.contributionId}></div>
-    {/if}
+  {#if errorMessage}
+    <PluginErrorBoundary
+      pluginId={contrib.pluginId}
+      pluginName={contributionName(contrib)}
+      errorMessage={errorMessage}
+    />
+  {:else if Component}
+    <svelte:boundary onerror={(error) => setRenderError(viewKey, error)}>
+      {#snippet failed(error, _reset)}
+        <PluginErrorBoundary
+          pluginId={contrib.pluginId}
+          pluginName={contributionName(contrib)}
+          errorMessage={normalizeErrorMessage(error)}
+        />
+      {/snippet}
+      {@const renderProps = getPluginRenderProps(contrib.pluginId, { projectId, taskId })}
+      <Component {...renderProps} {taskId} {projectId} {projectName} {projectPath} />
+    </svelte:boundary>
+  {:else if slotType !== 'taskUISections'}
+    <div data-contribution-id={contrib.contributionId}></div>
+  {/if}
+{/snippet}
+
+{#if slotType === 'taskUISections'}
+  {#each slotContributions as contrib (contrib.namespacedId)}
+    {@render renderContribution(contrib)}
   {/each}
-</div>
+{:else}
+  <div data-slot-type={slotType} data-slot-id={slotId} data-slot-layout={slotLayout} class={slotHostClass}>
+    {#each slotContributions as contrib (contrib.namespacedId)}
+      {@render renderContribution(contrib)}
+    {/each}
+  </div>
+{/if}
