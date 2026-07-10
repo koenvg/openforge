@@ -133,6 +133,28 @@
   }
 </script>
 
+{#snippet addPrForm()}
+  <form class="flex flex-col gap-2" novalidate onsubmit={(event) => { event.preventDefault(); void submitPullRequestLink() }}>
+    <label class="form-control w-full">
+      <span class="label-text text-xs">GitHub pull request URL</span>
+      <input
+        class="input input-bordered input-sm w-full"
+        type="url"
+        placeholder="https://github.com/owner/repo/pull/123"
+        bind:value={prUrl}
+        disabled={isLinking}
+      />
+    </label>
+    {#if linkError}
+      <p class="m-0 text-xs text-error" role="alert">{linkError}</p>
+    {/if}
+    <div class="flex items-center justify-end gap-2">
+      <button type="button" class="btn btn-ghost btn-xs" disabled={isLinking} onclick={() => { isAddingPr = false; prUrl = ''; linkError = null }}>Cancel</button>
+      <button type="submit" class="btn btn-primary btn-xs" disabled={isLinking}>{isLinking ? 'Linking…' : 'Link PR'}</button>
+    </div>
+  </form>
+{/snippet}
+
 <section data-task-info-card="pull-requests" data-card-sizing="natural" class="flex flex-col gap-2.5 border-b border-base-300/70 pb-3 shrink-0" aria-label="Pull Requests">
   <div class="flex items-center justify-between gap-2">
     <h3 class="m-0 text-sm font-semibold text-base-content">Pull Requests</h3>
@@ -142,6 +164,7 @@
           {isRefreshingGithubStatus ? 'Refreshing…' : 'Refresh GitHub status'}
         </button>
         <span class="badge badge-ghost badge-sm font-mono">{taskPrs.length} {taskPrs.length === 1 ? 'PR' : 'PRs'}</span>
+        <button type="button" class="btn btn-ghost btn-xs" onclick={() => { isAddingPr = !isAddingPr; linkError = null }}>Add PR</button>
       </div>
     {/if}
   </div>
@@ -159,28 +182,15 @@
         </button>
       </div>
       {#if isAddingPr}
-        <form class="flex flex-col gap-2" novalidate onsubmit={(event) => { event.preventDefault(); void submitPullRequestLink() }}>
-          <label class="form-control w-full">
-            <span class="label-text text-xs">GitHub pull request URL</span>
-            <input
-              class="input input-bordered input-sm w-full"
-              type="url"
-              placeholder="https://github.com/owner/repo/pull/123"
-              bind:value={prUrl}
-              disabled={isLinking}
-            />
-          </label>
-          {#if linkError}
-            <p class="m-0 text-xs text-error" role="alert">{linkError}</p>
-          {/if}
-          <div class="flex items-center justify-end gap-2">
-            <button type="button" class="btn btn-ghost btn-xs" disabled={isLinking} onclick={() => { isAddingPr = false; prUrl = ''; linkError = null }}>Cancel</button>
-            <button type="submit" class="btn btn-primary btn-xs" disabled={isLinking}>{isLinking ? 'Linking…' : 'Link PR'}</button>
-          </div>
-        </form>
+        {@render addPrForm()}
       {/if}
     </div>
   {:else}
+    {#if isAddingPr}
+      <div class="rounded-lg border border-dashed border-base-300 bg-base-100/60 px-3 py-2">
+        {@render addPrForm()}
+      </div>
+    {/if}
     <div class="flex flex-col gap-2.5">
       {#each taskPrs as pr (pr.id)}
         {@const chips = getPrStatusChips(pr, 'detail')}
