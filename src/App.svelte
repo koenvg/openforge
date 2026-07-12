@@ -398,13 +398,23 @@
   // handleOpenTaskFromOverview). This is the single entry point every user-initiated
   // project switch (sidebar, switcher, ⌘-cycle) goes through.
   async function switchToProject(projectId: string) {
-    // Re-enter the project even when it is already active but a cross-project view —
-    // Global Settings or a sidebar plugin view like "All Pull Requests" — is showing.
-    // Those views change only currentView and leave activeProjectId pointing at the
-    // project, so without the cross-project check this guard would bail and strand the
-    // user on the global view instead of returning to the project (#1285).
-    if ($activeProjectId === projectId && !isCrossProjectView($currentView, sidebarPluginViewKeySet)) return
+    // Already on this project, viewing one of its own tabs (a per-project, non
+    // cross-project view). Re-clicking the project name is a shortcut back to the
+    // Dashboard: from any other tab (Pull Requests, Skills, Project Settings, …) jump to
+    // the board. On the board already there is nothing to do — and we must NOT reset
+    // there, or an open task detail (which renders on the board view) would be wiped.
+    if ($activeProjectId === projectId && !isCrossProjectView($currentView, sidebarPluginViewKeySet)) {
+      if ($currentView !== 'board') {
+        router.resetToBoard()
+      }
+      return
+    }
 
+    // Falls through here when switching to a different project, or re-entering the active
+    // one while a cross-project view — Global Settings or a sidebar plugin view like "All
+    // Pull Requests" — is showing. Those views change only currentView and leave
+    // activeProjectId pointing at the project, so without the cross-project check above
+    // this would strand the user on the global view instead of returning them (#1285).
     $activeProjectId = projectId
     const rememberedTaskId = restoreProjectView(projectId)
 

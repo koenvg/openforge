@@ -389,10 +389,48 @@ describe('App navigation shortcuts', () => {
         'onSelectProject',
       )
       vi.mocked(nav.restoreProjectView).mockClear()
+      vi.mocked(nav.resetToBoard).mockClear()
 
       props.onSelectProject('proj-1')
 
       expect(nav.restoreProjectView).not.toHaveBeenCalled()
+      // Re-clicking the project while already on its board tab must not reset — that
+      // would wipe an open task detail (which renders on the board view).
+      expect(nav.resetToBoard).not.toHaveBeenCalled()
+    })
+
+    it('jumps to the board when clicking the already-active project from a non-board tab', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const nav = await import('./lib/router.svelte')
+      const AppSidebar = (await import('./components/shell/AppSidebar.svelte')).default
+      const { get } = await import('svelte/store')
+      const { tick } = await import('svelte')
+
+      render(App)
+      await vi.waitFor(() => {
+        expect(vi.mocked(AppSidebar)).toHaveBeenCalled()
+      })
+
+      stores.activeProjectId.set('proj-1')
+      // A per-project (non-cross-project) tab: the github-sync Pull Requests rail view.
+      stores.currentView.set('plugin:com.openforge.github-sync:pr_review')
+      await tick()
+
+      const props = getLatestComponentProps<{ onSelectProject: (id: string) => void }>(
+        vi.mocked(AppSidebar),
+        'onSelectProject',
+      )
+      vi.mocked(nav.resetToBoard).mockClear()
+      vi.mocked(nav.restoreProjectView).mockClear()
+
+      props.onSelectProject('proj-1')
+
+      // Re-clicking the active project from another of its tabs is a shortcut back to
+      // the Dashboard (board) — not a full project re-entry.
+      expect(nav.resetToBoard).toHaveBeenCalled()
+      expect(nav.restoreProjectView).not.toHaveBeenCalled()
+      expect(get(stores.currentView)).toBe('board')
     })
 
     it('re-enters the active project when clicked from a cross-project sidebar plugin view', async () => {
