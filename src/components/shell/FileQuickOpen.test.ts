@@ -84,8 +84,34 @@ describe('FileQuickOpen', () => {
 
     await waitFor(() => {
       expect(mockFsSearchFiles).toHaveBeenCalled()
-      expect(screen.getByText(/No files match your search/i)).toBeTruthy()
+      expect(screen.getByRole('status').textContent).toMatch(/No files match your search/i)
+      expect(screen.getByRole('status').getAttribute('aria-live')).toBe('polite')
     }, { timeout: 400 })
+  })
+
+  it('links the search input to the active file option and clears the active descendant when results empty', async () => {
+    mockFsSearchFiles.mockResolvedValue(['src/a.ts', 'src/b.ts'])
+    await renderFileQuickOpen()
+
+    const input = getDialogInput()
+    expect(input.getAttribute('aria-activedescendant')).toBeNull()
+    await fireEvent.input(input, { target: { value: 'ts' } })
+
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(2), { timeout: 400 })
+
+    const listbox = screen.getByRole('listbox')
+    const options = screen.getAllByRole('option')
+    expect(listbox.id).not.toBe('')
+    expect(input.getAttribute('aria-controls')).toBe(listbox.id)
+    expect(options.every(option => option.id !== '')).toBe(true)
+    expect(input.getAttribute('aria-activedescendant')).toBe(options[0].id)
+
+    mockFsSearchFiles.mockResolvedValueOnce([])
+    await fireEvent.input(input, { target: { value: 'nothing' } })
+
+    await waitFor(() => expect(screen.getByText(/no files match your search/i)).toBeTruthy(), { timeout: 400 })
+    expect(screen.queryAllByRole('option')).toHaveLength(0)
+    expect(input.getAttribute('aria-activedescendant')).toBeNull()
   })
 
   it('filters out directory entries from results', async () => {

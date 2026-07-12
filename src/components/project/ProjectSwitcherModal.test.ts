@@ -87,6 +87,29 @@ describe('ProjectSwitcherModal', () => {
       expect(screen.getByText(/no projects match/i)).toBeTruthy()
     })
 
+    it('links the search input to the active listbox option and clears the link when filtered empty', async () => {
+      mockActiveProjectId.set('proj-2')
+      const { default: Modal } = await import('./ProjectSwitcherModal.svelte')
+      render(Modal, { props: { onClose: vi.fn(), onSelectProject: mockSelectProject } })
+
+      const input = screen.getByPlaceholderText('Switch project...')
+      const listbox = screen.getByRole('listbox')
+      const options = screen.getAllByRole('option')
+      const activeOptionId = input.getAttribute('aria-activedescendant')
+
+      expect(listbox.id).not.toBe('')
+      expect(input.getAttribute('aria-controls')).toBe(listbox.id)
+      expect(activeOptionId).not.toBeNull()
+      expect(options.every(option => option.id !== '')).toBe(true)
+      expect(options.find(option => option.id === activeOptionId)?.textContent).toContain('Beta Project')
+
+      await fireEvent.input(input, { target: { value: 'zzznomatch' } })
+
+      expect(screen.getByText(/no projects match/i)).toBeTruthy()
+      expect(screen.queryAllByRole('option')).toHaveLength(0)
+      expect(input.getAttribute('aria-activedescendant')).toBeNull()
+    })
+
     it('shows checkmark for the currently active project', async () => {
       mockActiveProjectId.set('proj-2')
       const { default: Modal } = await import('./ProjectSwitcherModal.svelte')

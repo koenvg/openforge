@@ -82,9 +82,9 @@ describe('ActionPalette component', () => {
     })
 
     const dialog = screen.getByRole('dialog')
-    const actionButtons = screen.getAllByRole('button')
+    const actionOptions = screen.getAllByRole('option')
     const searchTasksLabel = getAppShortcutHelpLabel('search-tasks') ?? 'search-tasks'
-    const searchTasksIndex = actionButtons.findIndex(button => button.textContent?.includes(searchTasksLabel))
+    const searchTasksIndex = actionOptions.findIndex(option => option.textContent?.includes(searchTasksLabel))
 
     expect(searchTasksIndex).toBeGreaterThan(0)
 
@@ -103,6 +103,61 @@ describe('ActionPalette component', () => {
     await fireEvent.keyDown(dialog, { key: 'Enter' })
 
     expect(onExecute).toHaveBeenCalledWith('search-tasks')
+  })
+
+  it('links keyboard movement to option ids and clears the active descendant for an empty search', async () => {
+    const { default: ActionPalette } = await import('./ActionPalette.svelte')
+    render(ActionPalette, {
+      props: {
+        task: makeTask({ id: 'T-100', status: 'backlog' }),
+        customActions: [],
+        taskPrs: [],
+        onClose: vi.fn(),
+        onExecute: vi.fn(),
+      },
+    })
+
+    const input = screen.getByPlaceholderText('Type an action...')
+    const dialog = screen.getByRole('dialog')
+    const listbox = screen.getByRole('listbox')
+    const options = screen.getAllByRole('option')
+
+    expect(listbox.id).not.toBe('')
+    expect(input.getAttribute('aria-controls')).toBe(listbox.id)
+    expect(options.every(option => option.id !== '')).toBe(true)
+    expect(input.getAttribute('aria-activedescendant')).toBe(options[0].id)
+
+    await fireEvent.keyDown(dialog, { key: 'ArrowDown' })
+    expect(input.getAttribute('aria-activedescendant')).toBe(options[1].id)
+
+    await fireEvent.input(input, { target: { value: 'no such action anywhere' } })
+    expect(screen.getByText(/no actions match/i)).toBeTruthy()
+    expect(screen.queryAllByRole('option')).toHaveLength(0)
+    expect(input.getAttribute('aria-activedescendant')).toBeNull()
+  })
+
+  it('uses each option as the mouse target without moving focus from the combobox', async () => {
+    const { default: ActionPalette } = await import('./ActionPalette.svelte')
+    const onExecute = vi.fn()
+    render(ActionPalette, {
+      props: {
+        task: makeTask({ id: 'T-100', status: 'backlog' }),
+        customActions: [],
+        taskPrs: [],
+        onClose: vi.fn(),
+        onExecute,
+      },
+    })
+
+    const input = screen.getByPlaceholderText('Type an action...')
+    const option = screen.getByRole('option', { name: /start task/i })
+    input.focus()
+
+    expect(option.querySelector('button')).toBeNull()
+    expect(await fireEvent.mouseDown(option)).toBe(false)
+    expect(document.activeElement).toBe(input)
+    await fireEvent.click(option)
+    expect(onExecute).toHaveBeenCalledWith('start-task')
   })
 
   it('shows CMD+K as the toggle hint', async () => {
