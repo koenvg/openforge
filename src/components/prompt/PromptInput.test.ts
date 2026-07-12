@@ -325,6 +325,41 @@ describe('PromptInput', () => {
       expect(textarea.value).toBe('@beta')
     })
 
+    it('links the composer to active autocomplete option ids and clears the link when suggestions close', async () => {
+      const { listOpenCodeCommands } = await import('../../lib/ipc')
+      vi.mocked(listOpenCodeCommands).mockResolvedValue([
+        { name: 'cmd1', description: '', source: null, agent: null },
+        { name: 'cmd2', description: '', source: null, agent: null },
+      ])
+
+      render(PromptInput, { props: { ...baseProps } })
+      const textarea = requireElement(
+        screen.getByPlaceholderText('Describe what you want to implement...'),
+        HTMLTextAreaElement,
+      )
+
+      textarea.value = '/'
+      textarea.selectionStart = 1
+      textarea.selectionEnd = 1
+      await fireEvent.input(textarea)
+
+      await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(2))
+
+      const listbox = screen.getByRole('listbox')
+      const options = screen.getAllByRole('option')
+      expect(listbox.id).not.toBe('')
+      expect(textarea.getAttribute('aria-controls')).toBe(listbox.id)
+      expect(options.every(option => option.id !== '')).toBe(true)
+      expect(textarea.getAttribute('aria-activedescendant')).toBe(options[0].id)
+
+      await fireEvent.keyDown(textarea, { key: 'ArrowDown' })
+      expect(textarea.getAttribute('aria-activedescendant')).toBe(options[1].id)
+
+      await fireEvent.keyDown(textarea, { key: 'Escape' })
+      expect(screen.queryByRole('listbox')).toBeNull()
+      expect(textarea.getAttribute('aria-activedescendant')).toBeNull()
+    })
+
     it('inserts Codex skill commands with the dollar trigger', async () => {
       const { listOpenCodeCommands } = await import('../../lib/ipc')
       vi.mocked(listOpenCodeCommands).mockResolvedValue([

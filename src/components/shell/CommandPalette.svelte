@@ -6,8 +6,10 @@
   import { resolveContributions } from '../../lib/plugin/contributionResolver'
   import { executePluginCommand } from '../../lib/plugin/pluginRegistry'
   import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
-  import { useListNavigation } from '../../lib/useListNavigation.svelte'
   import type { Task } from '../../lib/types'
+  import PaletteFooter from '../shared/ui/PaletteFooter.svelte'
+  import PaletteInput from '../shared/ui/PaletteInput.svelte'
+  import PaletteListbox from '../shared/ui/PaletteListbox.svelte'
   import PaletteModal from './PaletteModal.svelte'
 
   interface Props {
@@ -162,30 +164,15 @@
     onClose()
   }
 
-  const listNav = useListNavigation({
-    get itemCount() { return paletteItems.length },
-    get selectedIndex() { return selectedIndex },
-    set selectedIndex(index: number) {
-      if (paletteItems.length > 0) {
-        selectedTaskKey = paletteItems[index].key
-      }
-    },
-    wrap: true,
-    onSelect() {
-      if (selectedIndex >= 0 && selectedIndex < paletteItems.length) {
-        const item = paletteItems[selectedIndex]
-        if (item.kind === 'task') {
-          selectTask(item.task)
-        } else {
-          void selectPluginCommand(item.pluginId, item.commandId)
-        }
-      }
-    },
-    onCancel() { onClose() }
-  })
+  let paletteListbox: { handleKeydown: (event: KeyboardEvent) => boolean } | null = $state(null)
+
+  function selectPaletteItem(item: PaletteItem) {
+    if (item.kind === 'task') selectTask(item.task)
+    else void selectPluginCommand(item.pluginId, item.commandId)
+  }
 
   function handleKeyDown(e: KeyboardEvent): boolean {
-    return listNav.handleKeydown(e)
+    return paletteListbox?.handleKeydown(e) ?? false
   }
 
   function getProjectName(projectId: string | null): string | null {
@@ -205,15 +192,6 @@
     void loadAllTasks()
   })
 
-  let listContainer: HTMLDivElement | null = $state(null)
-
-  $effect(() => {
-    // Scroll selected item into view
-    if (listContainer && selectedIndex >= 0) {
-      const items = listContainer.querySelectorAll('[data-palette-item]')
-      items[selectedIndex]?.scrollIntoView({ block: 'nearest' })
-    }
-  })
 </script>
 
 <PaletteModal
@@ -222,85 +200,57 @@
   {onClose}
   onKeydown={handleKeyDown}
 >
-    <!-- Search input -->
-    <div class="p-3 border-b border-base-300">
-      <input
-        data-palette-initial-focus
-        type="text"
-        class="input input-sm w-full bg-base-100 border-base-300 focus:outline-none text-base-content placeholder:text-base-content/40"
-        placeholder="Search tasks or commands..."
-        bind:value={searchQuery}
-      />
-    </div>
-
-    <!-- Task list -->
-    <div class="max-h-[400px] overflow-y-auto" bind:this={listContainer}>
-      {#if loading}
-        <div class="px-4 py-6 text-center text-base-content/50 text-sm">
-          Loading tasks...
+  <PaletteListbox
+    bind:this={paletteListbox}
+    items={paletteItems}
+    {selectedIndex}
+    onSelectedIndexChange={(index) => { selectedTaskKey = paletteItems[index]?.key ?? null }}
+    onSelect={selectPaletteItem}
+    getKey={(item) => item.key}
+    idPrefix="command-palette"
+    listboxLabel="Tasks and commands"
+    {loading}
+    onCancel={onClose}
+    listClass="max-h-[400px] overflow-y-auto"
+    optionClass={(_item, _index, highlighted) => `flex items-center gap-3 w-full px-4 py-2.5 text-left text-sm text-base-content transition-colors ${highlighted ? 'bg-base-300' : 'hover:bg-base-300/60'}`}
+  >
+    {#snippet input(listboxId, activeDescendantId)}
+      <PaletteInput {listboxId} {activeDescendantId} bind:value={searchQuery} placeholder="Search tasks or commands..." />
+    {/snippet}
+    {#snippet loadingContent()}
+      <div class="px-4 py-6 text-center text-base-content/50 text-sm">Loading tasks...</div>
+    {/snippet}
+    {#snippet emptyContent()}
+      <div class="px-4 py-6 text-center text-base-content/50 text-sm">No tasks or commands match your search</div>
+    {/snippet}
+    {#snippet item(item)}
+      {#if item.kind === 'task'}
+        {@const sessionStatus = getSessionStatus(item.task.id)}
+        {@const label = statusLabel(sessionStatus)}
+        {@const badgeClass = statusBadgeClass(sessionStatus)}
+        {@const projectName = getProjectName(item.task.project_id)}
+        {@const isOtherProject = item.task.project_id !== $activeProjectId}
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-1.5">
+            <span class="font-mono text-xs font-semibold text-primary shrink-0">{item.task.id}</span>
+            {#if label}<span class="badge {badgeClass} badge-xs shrink-0 {sessionStatus === 'paused' ? 'animate-pulse' : ''}">{label}</span>{/if}
+            {#if projectName && isOtherProject}<span class="badge badge-outline badge-xs shrink-0 opacity-60">{projectName}</span>{/if}
+          </div>
+          <div class="text-xs text-base-content/70 truncate mt-0.5">{truncate(firstLine(item.task.initial_prompt), 80)}</div>
         </div>
-      {:else if paletteItems.length === 0}
-        <div class="px-4 py-6 text-center text-base-content/50 text-sm">
-          No tasks or commands match your search
-        </div>
+        <span class="text-[10px] text-base-content/30 shrink-0">{item.task.status}</span>
       {:else}
-        {#each paletteItems as item, i (item.key)}
-          {@const isHighlighted = i === selectedIndex}
-          <button
-            type="button"
-            data-palette-item
-            class="flex items-center gap-3 w-full px-4 py-2.5 text-left text-sm text-base-content transition-colors
-              {isHighlighted ? 'bg-base-300' : 'hover:bg-base-300/60'}"
-            onclick={() => item.kind === 'task' ? selectTask(item.task) : void selectPluginCommand(item.pluginId, item.commandId)}
-          >
-            {#if item.kind === 'task'}
-              {@const sessionStatus = getSessionStatus(item.task.id)}
-              {@const label = statusLabel(sessionStatus)}
-              {@const badgeClass = statusBadgeClass(sessionStatus)}
-              {@const projectName = getProjectName(item.task.project_id)}
-              {@const isOtherProject = item.task.project_id !== $activeProjectId}
-              <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-1.5">
-                  <span class="font-mono text-xs font-semibold text-primary shrink-0">{item.task.id}</span>
-                   {#if label}
-                     <span class="badge {badgeClass} badge-xs shrink-0 {sessionStatus === 'paused' ? 'animate-pulse' : ''}">{label}</span>
-                   {/if}
-                   {#if projectName && isOtherProject}
-                     <span class="badge badge-outline badge-xs shrink-0 opacity-60">{projectName}</span>
-                   {/if}
-                </div>
-                <div class="text-xs text-base-content/70 truncate mt-0.5">
-                  {truncate(firstLine(item.task.initial_prompt), 80)}
-                </div>
-              </div>
-
-              <span class="text-[10px] text-base-content/30 shrink-0">{item.task.status}</span>
-            {:else}
-              <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-1.5">
-                  <span class="font-mono text-xs font-semibold text-primary shrink-0">cmd</span>
-                  <span class="badge badge-outline badge-xs shrink-0 opacity-70">{item.pluginName}</span>
-                  {#if item.shortcut}
-                    <span class="badge badge-ghost badge-xs shrink-0">{item.shortcut}</span>
-                  {/if}
-                </div>
-                <div class="text-xs text-base-content/70 truncate mt-0.5">
-                  {item.title}
-                </div>
-              </div>
-
-              <span class="text-[10px] text-base-content/30 shrink-0">command</span>
-            {/if}
-          </button>
-        {/each}
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-1.5">
+            <span class="font-mono text-xs font-semibold text-primary shrink-0">cmd</span>
+            <span class="badge badge-outline badge-xs shrink-0 opacity-70">{item.pluginName}</span>
+            {#if item.shortcut}<span class="badge badge-ghost badge-xs shrink-0">{item.shortcut}</span>{/if}
+          </div>
+          <div class="text-xs text-base-content/70 truncate mt-0.5">{item.title}</div>
+        </div>
+        <span class="text-[10px] text-base-content/30 shrink-0">command</span>
       {/if}
-    </div>
-
-    <!-- Hints bar -->
-     <div class="flex items-center gap-4 px-3 py-1.5 border-t border-base-300 bg-base-300/30">
-       <span class="text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">↑↓</kbd> navigate</span>
-       <span class="text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">Enter</kbd> open or run</span>
-       <span class="text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">Esc</kbd> close</span>
-       <span class="text-[10px] text-base-content/40 ml-auto"><kbd class="kbd kbd-xs">Ctrl+N/P</kbd> navigate</span>
-     </div>
+    {/snippet}
+  </PaletteListbox>
+  <PaletteFooter actionLabel="open or run" trailingKey="Ctrl+N/P" />
 </PaletteModal>

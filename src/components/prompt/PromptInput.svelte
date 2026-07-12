@@ -1,12 +1,11 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
   import type { AutocompleteItem } from '../../lib/types'
-  import AutocompletePopover from './AutocompletePopover.svelte'
+  import PaletteListbox from '../shared/ui/PaletteListbox.svelte'
   import VoiceInput from '../shared/input/VoiceInput.svelte'
   import ModelDownloadProgress from '../shared/input/ModelDownloadProgress.svelte'
   import { useAutocomplete } from '../../lib/useAutocomplete.svelte'
   import type { CommandTrigger } from '../../lib/useAutocomplete.svelte'
-  import { useListNavigation } from '../../lib/useListNavigation.svelte'
 
   interface Props {
     value?: string
@@ -219,21 +218,21 @@
   }
 
   // ── Keyboard handler ──────────────────────────────────────────────────────────
-  const listNav = useListNavigation({
-    get itemCount() { return ac.autocompleteItems.length },
-    get selectedIndex() { return ac.selectedIndex },
-    set selectedIndex(index: number) { ac.setSelectedIndex(index) },
-    wrap: false,
-    onSelect() {
-      const item = ac.autocompleteItems[ac.selectedIndex]
-      if (item) handleSelect(item)
-    },
-    onCancel() { ac.closePopover() }
-  })
+  let paletteListbox: { handleKeydown: (event: KeyboardEvent) => boolean } | null = $state(null)
+
+  function typeIcon(type: AutocompleteItem['type']): string | undefined {
+    switch (type) {
+      case 'file': return '📄'
+      case 'directory': return '📁'
+      case 'agent': return '🤖'
+      case 'skill': return '⚡'
+      case 'command': return '⌘'
+    }
+  }
 
   function handleKeydown(e: KeyboardEvent) {
     if (ac.popoverVisible) {
-      const handled = listNav.handleKeydown(e)
+      const handled = paletteListbox?.handleKeydown(e) ?? false
       if (handled) return
     }
 
@@ -259,26 +258,51 @@
 
 <div class="bg-base-100">
   <div class="relative">
-    <textarea
-      bind:this={textareaEl}
-      bind:value={textValue}
-      class="w-full resize-none bg-transparent border-none outline-none p-3 text-sm"
-      rows={2}
-      {placeholder}
-      style="max-height: 15rem; overflow-y: auto;"
-      oninput={handleInput}
-      onkeydown={handleKeydown}
-      onpaste={handlePaste}
-      onclick={handleClick}
-    ></textarea>
-
-    <AutocompletePopover
-      items={ac.autocompleteItems}
-      visible={ac.popoverVisible}
-      selectedIndex={ac.selectedIndex}
-      onSelect={handleSelect}
-      onClose={ac.closePopover}
-    />
+  <PaletteListbox
+    bind:this={paletteListbox}
+    items={ac.autocompleteItems}
+    selectedIndex={ac.selectedIndex}
+    onSelectedIndexChange={ac.setSelectedIndex}
+    onSelect={handleSelect}
+    getKey={(item) => `${item.type}-${item.label}`}
+    idPrefix="prompt-autocomplete"
+    listboxLabel="Autocomplete suggestions"
+    visible={ac.popoverVisible && ac.autocompleteItems.length > 0}
+    wrap={false}
+    onCancel={ac.closePopover}
+    listClass="absolute top-full left-0 right-0 z-50 mt-1 bg-base-100 border border-base-300 shadow-lg rounded-lg overflow-hidden max-h-[320px] overflow-y-auto"
+    optionClass={(_item, _index, highlighted) => `px-3 py-2 cursor-pointer flex items-center gap-2 hover:bg-base-200 ${highlighted ? 'bg-primary/10 text-primary' : ''}`}
+  >
+    {#snippet input(listboxId, activeDescendantId)}
+      <textarea
+        bind:this={textareaEl}
+        bind:value={textValue}
+        class="w-full resize-none bg-transparent border-none outline-none p-3 text-sm"
+        rows={2}
+        {placeholder}
+        style="max-height: 15rem; overflow-y: auto;"
+        role={ac.popoverVisible ? 'combobox' : undefined}
+        aria-autocomplete={ac.popoverVisible ? 'list' : undefined}
+        aria-controls={ac.popoverVisible && ac.autocompleteItems.length > 0 ? listboxId : undefined}
+        aria-expanded={ac.popoverVisible && ac.autocompleteItems.length > 0 ? true : undefined}
+        aria-activedescendant={activeDescendantId}
+        oninput={handleInput}
+        onkeydown={handleKeydown}
+        onpaste={handlePaste}
+        onclick={handleClick}
+      ></textarea>
+    {/snippet}
+    {#snippet item(item)}
+      <span class="shrink-0 text-base leading-none" aria-hidden="true">{typeIcon(item.type)}</span>
+      <span class="flex-1 min-w-0 flex items-baseline gap-2">
+        <span class="text-sm font-medium truncate">{item.label}</span>
+        {#if item.description}<span class="text-xs text-base-content/50 truncate flex-1">{item.description}</span>{/if}
+      </span>
+      {#if item.type === 'command' && item.source}
+        <span class="shrink-0 text-[0.6rem] bg-base-200 px-1 rounded text-base-content/50">{item.source}</span>
+      {/if}
+    {/snippet}
+  </PaletteListbox>
   </div>
 
   {#if extras}

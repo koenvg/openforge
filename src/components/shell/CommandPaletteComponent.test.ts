@@ -103,6 +103,42 @@ describe('CommandPalette component', () => {
     mockExecutePluginCommand.mockResolvedValue(true)
   })
 
+  it('keeps listbox option ids linked to the search input and has no active descendant while loading or empty', async () => {
+    let resolveTasks: (tasks: Task[]) => void = () => {}
+    mockGetAllTasks.mockReturnValue(new Promise<Task[]>((resolve) => {
+      resolveTasks = resolve
+    }))
+    mockGetLatestSessions.mockResolvedValue([])
+
+    const { default: CommandPalette } = await import('./CommandPalette.svelte')
+    render(CommandPalette, { props: { onClose: vi.fn() } })
+
+    const input = screen.getByPlaceholderText('Search tasks or commands...')
+    expect(screen.getByRole('status').textContent).toContain('Loading tasks...')
+    expect(screen.getByRole('status').getAttribute('aria-live')).toBe('polite')
+    expect(input.getAttribute('aria-activedescendant')).toBeNull()
+
+    resolveTasks([
+      makeTask({ id: 'T-100', updated_at: 200 }),
+      makeTask({ id: 'T-200', updated_at: 100 }),
+    ])
+
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(2))
+
+    const listbox = screen.getByRole('listbox')
+    const options = screen.getAllByRole('option')
+    expect(listbox.id).not.toBe('')
+    expect(input.getAttribute('aria-controls')).toBe(listbox.id)
+    expect(options.every(option => option.id !== '')).toBe(true)
+    expect(input.getAttribute('aria-activedescendant')).toBe(options[0].id)
+
+    await fireEvent.input(input, { target: { value: 'no matching task' } })
+
+    expect(screen.getByText(/no tasks or commands match/i)).toBeTruthy()
+    expect(screen.queryAllByRole('option')).toHaveLength(0)
+    expect(input.getAttribute('aria-activedescendant')).toBeNull()
+  })
+
   it('preserves keyboard selection when async session updates re-render the list', async () => {
     const paletteTasks = [
       makeTask({ id: 'T-100', updated_at: 300 }),
@@ -176,7 +212,7 @@ describe('CommandPalette component', () => {
     })
     expect(screen.queryByText('Internal Sync')).toBeNull()
 
-    await fireEvent.click(screen.getByRole('button', { name: /sync now/i }))
+    await fireEvent.click(screen.getByRole('option', { name: /sync now/i }))
 
     expect(mockExecutePluginCommand).toHaveBeenCalledWith('plugin.commands', 'sync-now')
     expect(onClose).toHaveBeenCalledOnce()
