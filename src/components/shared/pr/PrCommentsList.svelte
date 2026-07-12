@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { PrComment } from '../../../lib/types'
-  import MarkdownContent from '../content/MarkdownContent.svelte'
+  import MarkdownContent from '../adapters/MarkdownContent.svelte'
 
   interface Props {
     comments: PrComment[]

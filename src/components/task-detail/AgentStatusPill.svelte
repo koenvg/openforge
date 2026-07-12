@@ -5,7 +5,7 @@
   import { listenToAgentStatusChanged, getAgentPanelStatusFromSessionStatus, type AgentPanelStatus } from '../../lib/agentPanelSessionSync'
   import { writeAgentTerminalTranscription } from '../../lib/agentTerminalPanel'
   import { deriveAgentStatusPillView } from '../../lib/agentStatusPill'
-  import VoiceInput from '../shared/input/VoiceInput.svelte'
+  import VoiceInput from '../shared/adapters/VoiceInput.svelte'
 
   interface Props {
     taskId: string

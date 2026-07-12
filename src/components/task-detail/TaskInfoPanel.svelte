@@ -7,7 +7,7 @@
   import { buildTicketPullRequestMap } from '../../lib/pullRequestStore'
   import { getTaskLabels, hasLabelNamed } from '../../lib/taskLabels'
   import { getTaskDependentSummaries, getTaskDependencySummaries, getWaitingDependencyCount } from '../../lib/taskDependencies'
-  import CopyButton from '../shared/ui/CopyButton.svelte'
+  import CopyButton from './CopyButton.svelte'
   import TaskPromptSummary from './TaskPromptSummary.svelte'
   import TaskPullRequestStatus from './TaskPullRequestStatus.svelte'
   import TaskGitStatus from './TaskGitStatus.svelte'

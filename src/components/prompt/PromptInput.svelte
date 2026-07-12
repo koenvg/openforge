@@ -2,8 +2,8 @@
   import type { Snippet } from 'svelte'
   import type { AutocompleteItem } from '../../lib/types'
   import PaletteListbox from '../shared/ui/PaletteListbox.svelte'
-  import VoiceInput from '../shared/input/VoiceInput.svelte'
-  import ModelDownloadProgress from '../shared/input/ModelDownloadProgress.svelte'
+  import VoiceInput from '../shared/adapters/VoiceInput.svelte'
+  import ModelDownloadProgress from '../shared/adapters/ModelDownloadProgress.svelte'
   import { useAutocomplete } from '../../lib/useAutocomplete.svelte'
   import type { CommandTrigger } from '../../lib/useAutocomplete.svelte'
 

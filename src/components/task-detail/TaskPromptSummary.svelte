@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Task } from '../../lib/types'
   import { parseTaskPrompt } from '../../lib/taskPrompt'
-  import MarkdownContent from '../shared/content/MarkdownContent.svelte'
+  import MarkdownContent from '../shared/adapters/MarkdownContent.svelte'
 
   interface Props {
     task: Task

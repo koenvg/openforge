@@ -29,7 +29,7 @@
   import DiffViewer from '../review/shared/diff-viewer/DiffViewer.svelte'
   import GeneralCommentsSidebar from '../review/shared/GeneralCommentsSidebar.svelte'
   import SendToAgentPanel from './SendToAgentPanel.svelte'
-  import MarkdownContent from '../shared/content/MarkdownContent.svelte'
+  import MarkdownContent from '../shared/adapters/MarkdownContent.svelte'
 
   interface Props {
     task: Task

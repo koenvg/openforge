@@ -17,7 +17,7 @@
   import ToastHost from './components/feedback/toasts/ToastHost.svelte'
   import AppSidebar from './components/shell/AppSidebar.svelte'
   import ProjectSwitcherModal from './components/project/ProjectSwitcherModal.svelte'
-  import AttentionOverviewDialog from './components/shared/AttentionOverviewDialog.svelte'
+  import AttentionOverviewDialog from './components/attention/AttentionOverviewDialog.svelte'
   import ProjectSetupDialog from './components/project/ProjectSetupDialog.svelte'
   import IconRail from './components/shell/IconRail.svelte'
   import CommandPalette from './components/shell/CommandPalette.svelte'
