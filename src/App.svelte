@@ -14,11 +14,7 @@
   import AddTaskDialog from './components/AddTaskDialog.svelte'
   import BranchDivergenceModal from './components/BranchDivergenceModal.svelte'
   import Modal from './components/shared/ui/Modal.svelte'
-  import Toast from './components/feedback/toasts/Toast.svelte'
-  import CheckpointToast from './components/feedback/toasts/CheckpointToast.svelte'
-  import CiFailureToast from './components/feedback/toasts/CiFailureToast.svelte'
-  import TaskSpawnedToast from './components/feedback/toasts/TaskSpawnedToast.svelte'
-  import RateLimitToast from './components/feedback/toasts/RateLimitToast.svelte'
+  import ToastHost from './components/feedback/toasts/ToastHost.svelte'
   import AppSidebar from './components/shell/AppSidebar.svelte'
   import ProjectSwitcherModal from './components/project/ProjectSwitcherModal.svelte'
   import AttentionOverviewDialog from './components/shared/AttentionOverviewDialog.svelte'
@@ -610,11 +606,7 @@
   </div>
 </div>
 
-<Toast />
-<CheckpointToast />
-<CiFailureToast />
-<TaskSpawnedToast />
-<RateLimitToast />
+<ToastHost />
 
 {#if showProjectSwitcher}
   <ProjectSwitcherModal onClose={() => showProjectSwitcher = false} onSelectProject={switchToProject} />
