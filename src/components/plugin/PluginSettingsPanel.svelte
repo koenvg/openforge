@@ -10,6 +10,7 @@
     enablePluginForProject,
   } from '../../lib/plugin/pluginRegistry'
   import type { PluginEntry } from '../../lib/plugin/types'
+  import SettingsSectionCard from '../settings/SettingsSectionCard.svelte'
 
   interface Props {
     projectId: string
@@ -86,28 +87,21 @@
   }
 </script>
 
-<div id="section-plugins" class="rounded-lg border border-base-300 overflow-hidden {disabled ? 'opacity-50 pointer-events-none' : ''}" style="background-color: var(--project-bg, oklch(var(--b1)))">
-  <div class="flex flex-col gap-4 border-b border-base-300 px-5 py-4 md:flex-row md:items-start md:justify-between">
-    <div class="flex items-start gap-3">
-      <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
-        <Blocks size={18} />
-      </div>
-      <div class="flex flex-col gap-1">
-        <h3 class="text-base font-semibold text-base-content m-0">Project plugins</h3>
-        <p class="text-sm text-base-content/60 m-0">Enable installed plugins for this project.</p>
-      </div>
-    </div>
-
-    <div class="flex flex-wrap gap-2 text-xs">
-      <span class="badge badge-success badge-outline">{enabledCount} enabled</span>
-      {#if attentionCount > 0}
-        <span class="badge badge-error badge-outline">{attentionCount} needs attention</span>
-      {/if}
-      <span class="badge badge-ghost">{disabledCount} disabled</span>
-    </div>
-  </div>
-
-  <div class="flex flex-col gap-4 p-5">
+<SettingsSectionCard
+  id="section-plugins"
+  title="Project plugins"
+  description="Enable installed plugins for this project."
+  {disabled}
+>
+  {#snippet icon()}<Blocks size={18} />{/snippet}
+  {#snippet actions()}
+    <span class="badge badge-success badge-outline">{enabledCount} enabled</span>
+    {#if attentionCount > 0}
+      <span class="badge badge-error badge-outline">{attentionCount} needs attention</span>
+    {/if}
+    <span class="badge badge-ghost">{disabledCount} disabled</span>
+  {/snippet}
+  <div class="flex flex-col gap-4">
     <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
       <label class="input input-bordered input-sm flex items-center gap-2 xl:w-80">
         <Search size={16} class="text-base-content/50" />
@@ -192,4 +186,4 @@
       </div>
     {/if}
   </div>
-</div>
+</SettingsSectionCard>

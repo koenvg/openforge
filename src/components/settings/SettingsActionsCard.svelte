@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Zap } from '@lucide/svelte';
 	import type { Action } from '../../lib/types';
+	import SettingsSectionCard from './SettingsSectionCard.svelte';
 
 	interface Props {
 		actions: Action[];
@@ -58,12 +59,9 @@
 	}
 </script>
 
-<div id="section-actions" class="rounded-lg border border-base-300 overflow-hidden" style="background-color: var(--project-bg, oklch(var(--b1)))">
-	<div class="flex items-center justify-between px-5 py-3 border-b border-base-300">
-		<div class="flex items-center gap-2">
-			<Zap size={16} class="text-base-content" />
-			<h3 class="text-xs font-semibold text-base-content uppercase tracking-wider">Actions</h3>
-		</div>
+<SettingsSectionCard id="section-actions" title="Actions" {disabled}>
+	{#snippet icon()}<Zap size={16} />{/snippet}
+	{#snippet actions()}
 		<button
 			class="btn btn-sm bg-neutral text-neutral-content"
 			disabled={disabled}
@@ -71,9 +69,8 @@
 		>
 			Add Action
 		</button>
-	</div>
-
-	<div class="p-5 flex flex-col gap-3 {disabled ? 'opacity-50 pointer-events-none' : ''}">
+	{/snippet}
+	<div class="flex flex-col gap-3">
 		<p class="text-[0.7rem] text-base-content/50 mb-2 leading-snug">
 			Configure reusable prompt templates for tasks.
 		</p>
@@ -135,4 +132,4 @@
 			Reset to Defaults
 		</button>
 	</div>
-</div>
+</SettingsSectionCard>

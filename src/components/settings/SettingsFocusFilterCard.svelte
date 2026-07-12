@@ -3,6 +3,7 @@
 	import type { TaskState } from '../../lib/taskState';
 	import { TASK_STATE_LABELS } from '../../lib/taskStatePresentation';
 	import { DEFAULT_FOCUS_STATES, FOCUS_FILTER_STATES } from '../../lib/boardFilters';
+	import SettingsSectionCard from './SettingsSectionCard.svelte';
 
 	interface Props {
 		focusStates: TaskState[];
@@ -27,15 +28,9 @@
 	}
 </script>
 
-<div id="section-focus-filter" class="rounded-lg border border-base-300 overflow-hidden" style="background-color: var(--project-bg, oklch(var(--b1)))">
-	<div class="flex items-center justify-between px-5 py-3 border-b border-base-300">
-		<div class="flex items-center gap-2">
-			<ListFilter size={16} class="text-base-content" />
-			<h3 class="text-xs font-semibold text-base-content uppercase tracking-wider">Focus Filter States</h3>
-		</div>
-	</div>
-
-	<div class="p-5 flex flex-col gap-3 {disabled ? 'opacity-50 pointer-events-none' : ''}">
+<SettingsSectionCard id="section-focus-filter" title="Focus Filter States" {disabled}>
+	{#snippet icon()}<ListFilter size={16} />{/snippet}
+	<div class="flex flex-col gap-3">
 		<p class="text-xs text-base-content/50">Choose which task states appear in the "Focus" filter chip on the board.</p>
 
 		<div class="flex flex-col gap-1">
@@ -61,4 +56,4 @@
 			Reset to Default
 		</button>
 	</div>
-</div>
+</SettingsSectionCard>

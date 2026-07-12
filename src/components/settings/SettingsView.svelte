@@ -34,6 +34,7 @@
   import SettingsTaskLabelsCard from './SettingsTaskLabelsCard.svelte'
   import SettingsExperimentalCard from './SettingsExperimentalCard.svelte'
   import SettingsDeveloperLogsCard from './SettingsDeveloperLogsCard.svelte'
+  import SettingsSectionCard from './SettingsSectionCard.svelte'
   import ProjectPageHeader from '../project/ProjectPageHeader.svelte'
   import PluginSlot from '../plugin/PluginSlot.svelte'
   import PluginSettingsPanel from '../plugin/PluginSettingsPanel.svelte'
@@ -588,19 +589,14 @@
         />
 
         {#each pluginSettingsSections as section (section.namespacedId)}
-          <div class="bg-base-100 rounded-lg border border-base-300 overflow-hidden">
-            <div class="px-5 py-3 border-b border-base-300">
-              <h3 class="text-sm font-semibold text-base-content m-0">{section.title}</h3>
-            </div>
-            <div class="p-5">
-              <PluginSlot
-                slotType="settingsSections"
-                slotId={section.namespacedId}
-                projectId={$activeProjectId}
-                projectName={projectName}
-              />
-            </div>
-          </div>
+          <SettingsSectionCard title={section.title}>
+            <PluginSlot
+              slotType="settingsSections"
+              slotId={section.namespacedId}
+              projectId={$activeProjectId}
+              projectName={projectName}
+            />
+          </SettingsSectionCard>
         {/each}
 
         <SettingsActionsCard
@@ -614,11 +610,8 @@
         />
 
         {#if hasProject}
-          <div class="bg-base-100 rounded-lg border border-error/30 overflow-hidden">
-            <div class="px-5 py-3 border-b border-error/30">
-              <h3 class="text-sm font-semibold text-error m-0">Danger Zone</h3>
-            </div>
-            <div class="p-5 flex flex-col gap-3">
+          <SettingsSectionCard title="Danger Zone" tone="danger">
+            <div class="flex flex-col gap-3">
               <div class="flex items-center gap-3">
                 {#if confirmingDelete}
                   <span class="text-sm text-error">Delete "{projectName}"? This cannot be undone.</span>
@@ -638,7 +631,7 @@
                 <p class="text-sm text-error font-mono break-all">{deleteError}</p>
               {/if}
             </div>
-          </div>
+          </SettingsSectionCard>
         {/if}
       {:else}
         <SettingsPreferencesCard
