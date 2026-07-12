@@ -3,6 +3,7 @@
   import { createTaskLabel, deleteTaskLabel, getProjectTaskLabels } from '../../lib/ipc'
   import type { TaskLabel } from '../../lib/types'
   import { hasLabelNamed, normalizeTaskLabelNameInput, validateTaskLabelName } from '../../lib/taskLabels'
+  import SettingsSectionCard from './SettingsSectionCard.svelte'
 
   interface Props {
     projectId: string | null
@@ -87,15 +88,9 @@
   }
 </script>
 
-<div id="section-labels" class="rounded-lg border border-base-300 overflow-hidden" style="background-color: var(--project-bg, oklch(var(--b1)))">
-  <div class="flex items-center justify-between px-5 py-3 border-b border-base-300">
-    <div class="flex items-center gap-2">
-      <Tags size={16} class="text-base-content" />
-      <h3 class="text-xs font-semibold text-base-content uppercase tracking-wider">Task Labels</h3>
-    </div>
-  </div>
-
-  <div class="p-5 flex flex-col gap-3 {disabled ? 'opacity-50 pointer-events-none' : ''}">
+<SettingsSectionCard id="section-labels" title="Task Labels" {disabled}>
+  {#snippet icon()}<Tags size={16} />{/snippet}
+  <div class="flex flex-col gap-3">
     <p class="text-[0.7rem] text-base-content/50 mb-2 leading-snug">
       Manage the project labels available for tasks.
     </p>
@@ -152,4 +147,4 @@
       </div>
     {/if}
   </div>
-</div>
+</SettingsSectionCard>

@@ -5,6 +5,7 @@
 		MIN_GITHUB_POLL_INTERVAL_SECONDS,
 		parseGitHubPollIntervalSeconds,
 	} from '../../lib/settingsConfig'
+	import SettingsSectionCard from './SettingsSectionCard.svelte'
 
 	interface Props {
 		taskIdPrefix: string
@@ -38,14 +39,9 @@
 	const previewTaskId = $derived(isValid ? `${taskIdPrefix}-${nextTaskNumber}` : '')
 </script>
 
-<div id="section-preferences" class="rounded-lg border border-base-300 overflow-hidden" style="background-color: var(--project-bg, oklch(var(--b1)))">
-	<div class="flex items-center gap-2 px-5 py-3 border-b border-base-300">
-		<Settings2 size={16} />
-		<h3 class="text-sm font-semibold text-base-content m-0">Preferences</h3>
-	</div>
-
-	<div class="p-5">
-		<div class="flex flex-col gap-4">
+<SettingsSectionCard id="section-preferences" title="Preferences" {disabled}>
+	{#snippet icon()}<Settings2 size={16} />{/snippet}
+	<div class="flex flex-col gap-4">
 			<label class="flex items-center justify-between cursor-pointer">
 				<div class="flex flex-col gap-0.5">
 					<span class="text-sm text-base-content">Dark Mode</span>
@@ -109,5 +105,4 @@
 			<p class="text-xs text-base-content/70">Polls every {githubPollInterval} seconds</p>
 		</div>
 	</div>
-</div>
-</div>
+</SettingsSectionCard>

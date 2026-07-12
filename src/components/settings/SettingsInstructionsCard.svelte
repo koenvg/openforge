@@ -1,6 +1,7 @@
 <script lang="ts">
   import { FileText } from '@lucide/svelte'
   import { DEFAULT_HANDOFF_NOTES_TEMPLATE } from '../../lib/handoffNotes'
+  import SettingsSectionCard from './SettingsSectionCard.svelte'
 
   interface Props {
     agentInstructions: string
@@ -24,15 +25,9 @@
   }
 </script>
 
-<div id="section-instructions" class="rounded-lg border border-base-300 overflow-hidden" style="background-color: var(--project-bg, oklch(var(--b1)))">
-  <!-- Header -->
-  <div class="px-5 py-4 border-b border-base-300 flex items-center gap-3">
-    <FileText size={16} class="text-primary" />
-    <h2 class="text-sm font-semibold">AI Instructions</h2>
-  </div>
-
-  <!-- Body -->
-  <div class="p-5 flex flex-col gap-4">
+<SettingsSectionCard id="section-instructions" title="AI Instructions" {disabled}>
+  {#snippet icon()}<FileText size={16} />{/snippet}
+  <div class="flex flex-col gap-4">
     <p class="text-[0.7rem] text-base-content/50">
       Custom instructions prepended to the first prompt when starting a new task with an AI agent.
     </p>
@@ -79,4 +74,4 @@
       </button>
     </div>
   </div>
-</div>
+</SettingsSectionCard>

@@ -16,6 +16,7 @@
   } from '../../lib/plugin/pluginRegistry'
   import { writeClipboardText } from '../../lib/ipc'
   import type { PluginEntry } from '../../lib/plugin/types'
+  import SettingsSectionCard from '../settings/SettingsSectionCard.svelte'
 
   interface Props {
     activeProjectId?: string | null
@@ -171,13 +172,9 @@
   }
 </script>
 
-<div id="section-plugins" class="rounded-lg border border-base-300 overflow-hidden {disabled ? 'opacity-50 pointer-events-none' : ''}" style="background-color: var(--project-bg, oklch(var(--b1)))">
-  <div class="flex items-center gap-2 px-5 py-3 border-b border-base-300">
-    <Blocks size={16} class="text-base-content" />
-    <h3 class="text-sm font-semibold text-base-content m-0">Plugins</h3>
-  </div>
-
-  <div class="p-5 flex flex-col gap-6">
+<SettingsSectionCard id="section-plugins" title="Plugins" {disabled}>
+  {#snippet icon()}<Blocks size={16} />{/snippet}
+  <div class="flex flex-col gap-6">
     <form class="flex flex-col gap-3 p-4 border border-base-300 rounded-lg bg-base-200/30" onsubmit={handleInstall}>
       <div class="flex flex-col gap-1">
         <span class="text-[0.7rem] text-base-content/50 uppercase tracking-wider">Install package</span>
@@ -301,4 +298,4 @@
       {/if}
     </div>
   </div>
-</div>
+</SettingsSectionCard>

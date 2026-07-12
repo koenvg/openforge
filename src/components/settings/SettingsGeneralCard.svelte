@@ -1,6 +1,7 @@
 <script lang="ts">
   import { FolderOpen } from '@lucide/svelte'
   import { DEFAULT_PROJECT_COLOR, PROJECT_COLORS } from '../../lib/projectColors'
+  import SettingsSectionCard from './SettingsSectionCard.svelte'
   import { openUrl } from '../../lib/ipc'
 
   // Where to send a user to install each provider when it is not on PATH. Opened
@@ -192,13 +193,9 @@
   }
 </script>
 
-<div id="section-general" class="rounded-lg border border-base-300 overflow-hidden" style="background-color: var(--project-bg, oklch(var(--b1)))">
-  <div class="flex items-center gap-2 px-5 py-3 border-b border-base-300">
-    <FolderOpen size={16} class="text-base-content" />
-    <h3 class="text-sm font-semibold text-base-content m-0">General</h3>
-  </div>
-
-  <div class="p-5 flex flex-col gap-4 {disabled ? 'opacity-50 pointer-events-none' : ''}">
+<SettingsSectionCard id="section-general" title="General" {disabled}>
+  {#snippet icon()}<FolderOpen size={16} />{/snippet}
+  <div class="flex flex-col gap-4">
     <div class="grid grid-cols-2 gap-4">
       <label class="flex flex-col gap-1">
         <span class="text-[0.7rem] text-base-content/50 uppercase tracking-wider">Project Name</span>
@@ -409,4 +406,4 @@
       </div>
     </div>
   </div>
-</div>
+</SettingsSectionCard>

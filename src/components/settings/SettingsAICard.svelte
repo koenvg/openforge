@@ -2,6 +2,7 @@
   import { Brain } from '@lucide/svelte'
   import ModelDownloadProgress from '../shared/input/ModelDownloadProgress.svelte'
   import type { WhisperModelStatus, WhisperModelSizeId } from '../../lib/types'
+  import SettingsSectionCard from './SettingsSectionCard.svelte'
 
   interface Props {
     modelStatuses: WhisperModelStatus[]
@@ -30,15 +31,9 @@
   const activeModel = $derived(modelStatuses.find(m => m.size === activeModelSize))
 </script>
 
-<div id="section-ai" class="rounded-lg border border-base-300 overflow-hidden" style="background-color: var(--project-bg, oklch(var(--b1)))">
-  <!-- Header -->
-  <div class="px-5 py-4 border-b border-base-300 flex items-center gap-3">
-    <Brain size={16} class="text-primary" />
-    <h2 class="text-sm font-semibold">Voice & Whisper</h2>
-  </div>
-
-  <!-- Body -->
-  <div class="p-5 flex flex-col gap-4">
+<SettingsSectionCard id="section-ai" title="Voice & Whisper">
+  {#snippet icon()}<Brain size={16} />{/snippet}
+  <div class="flex flex-col gap-4">
     <!-- Whisper Model Select -->
     <label class="flex flex-col gap-1">
       <span class="text-[0.7rem] text-base-content/50">Whisper Model</span>
@@ -105,4 +100,4 @@
     </p>
     <p class="text-[0.7rem] text-base-content/50">Note: macOS controls microphone access per installed app bundle; re-approve access after replacing a local build if prompted.</p>
   </div>
-</div>
+</SettingsSectionCard>

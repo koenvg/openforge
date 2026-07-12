@@ -3,6 +3,7 @@
   import { Terminal } from '@lucide/svelte'
   import { getDeveloperLogSnapshot, openInEditor } from '../../lib/ipc'
   import type { DeveloperLogEntry } from '../../lib/types'
+  import SettingsSectionCard from './SettingsSectionCard.svelte'
 
   const LIVE_REFRESH_INTERVAL_MS = 1000
   const DISPLAY_LOG_LIMIT = 1000
@@ -84,23 +85,17 @@
   })
 </script>
 
-<div id="section-developer" class="rounded-lg border border-base-300 overflow-hidden" style="background-color: var(--project-bg, oklch(var(--b1)))">
-  <div class="flex items-center justify-between gap-3 px-5 py-3 border-b border-base-300">
-    <div class="flex items-center gap-2">
-      <Terminal size={16} />
-      <h3 class="text-sm font-semibold text-base-content m-0">Developer</h3>
-    </div>
-    <div class="flex items-center gap-2">
-      <button type="button" class="btn btn-xs btn-ghost" onclick={openFullLogFile} disabled={!logFilePath}>
-        Open full log file
-      </button>
-      <button type="button" class="btn btn-xs btn-ghost" onclick={() => { void refreshLogs() }} disabled={loading}>
-        {loading ? 'Refreshing…' : 'Refresh logs'}
-      </button>
-    </div>
-  </div>
-
-  <div class="p-5 flex flex-col gap-3">
+<SettingsSectionCard id="section-developer" title="Developer">
+  {#snippet icon()}<Terminal size={16} />{/snippet}
+  {#snippet actions()}
+    <button type="button" class="btn btn-xs btn-ghost" onclick={openFullLogFile} disabled={!logFilePath}>
+      Open full log file
+    </button>
+    <button type="button" class="btn btn-xs btn-ghost" onclick={() => { void refreshLogs() }} disabled={loading}>
+      {loading ? 'Refreshing…' : 'Refresh logs'}
+    </button>
+  {/snippet}
+  <div class="flex flex-col gap-3">
     <p class="text-sm text-base-content/70 m-0">
       Live OpenForge desktop log tail, including Electron and Rust sidecar output. The full trace is appended to a file so it does not have to stay in memory.
     </p>
@@ -123,4 +118,4 @@
       <pre bind:this={logTraceElement} aria-label="OpenForge log trace" class="max-h-96 overflow-auto whitespace-pre-wrap rounded bg-base-200 p-3 text-xs text-base-content">{formattedLogs}</pre>
     {/if}
   </div>
-</div>
+</SettingsSectionCard>
