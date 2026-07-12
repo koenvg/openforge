@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte'
   import type { Action } from '../../../lib/types'
   import HoverTooltip from './HoverTooltip.svelte'
+  import AnchoredMenu from './AnchoredMenu.svelte'
+  import ContextMenuItem from './ContextMenuItem.svelte'
   import { ChevronDown } from '@lucide/svelte'
 
   interface Props {
@@ -13,7 +14,7 @@
   let { actions, disabled = false, onAction }: Props = $props()
 
   let isOpen = $state(false)
-  let dropdownRef: HTMLDivElement | null = $state(null)
+  let triggerRef: HTMLButtonElement | null = $state(null)
 
   let primaryAction = $derived(actions[0])
   let otherActions = $derived(actions.slice(1))
@@ -30,33 +31,10 @@
   }
 
   function handleActionClick(action: Action) {
-    onAction(action)
+    if (!action.enabled) return
     isOpen = false
+    onAction(action)
   }
-
-  function handleClickOutside(e: MouseEvent) {
-    if (!(e.target instanceof Node)) return
-    if (dropdownRef && !dropdownRef.contains(e.target)) {
-      isOpen = false
-    }
-  }
-
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape' && isOpen) {
-      e.stopPropagation()
-      isOpen = false
-    }
-  }
-
-  onMount(() => {
-    document.addEventListener('click', handleClickOutside)
-    document.addEventListener('keydown', handleKeydown)
-  })
-
-  onDestroy(() => {
-    document.removeEventListener('click', handleClickOutside)
-    document.removeEventListener('keydown', handleKeydown)
-  })
 </script>
 
 {#if actions.length === 0}
@@ -82,7 +60,7 @@
     </button>
   {/if}
 {:else}
-  <div class="relative" bind:this={dropdownRef}>
+  <div class="relative">
     <div class="flex items-stretch">
       {#if primaryAction.prompt}
         <HoverTooltip text={primaryAction.prompt} position="left">
@@ -105,42 +83,29 @@
       {/if}
       
       <button
+        bind:this={triggerRef}
         class="btn btn-soft btn-sm shadow-sm hover:shadow-md hover:btn-primary transition-all duration-200 rounded-l-none px-1.5"
         disabled={disabled}
         onclick={toggleDropdown}
         aria-label="More actions"
         aria-expanded={isOpen}
+        aria-haspopup="menu"
       >
         <ChevronDown size={14} class="transition-transform duration-200 {isOpen ? 'rotate-180' : ''}" />
       </button>
     </div>
 
-    {#if isOpen}
-      <div class="absolute top-[calc(100%+4px)] right-0 min-w-[180px] bg-base-200 border border-base-300 rounded-lg shadow-lg z-[100] overflow-hidden">
-        <div class="max-h-[300px] overflow-y-auto py-1">
-          {#each otherActions as action (action.id)}
-            {#if action.prompt}
-              <HoverTooltip text={action.prompt} position="left">
-                <button
-                  class="flex items-center w-full px-3.5 py-2 cursor-pointer text-sm text-base-content hover:bg-base-300 transition-colors text-left"
-                  onclick={() => handleActionClick(action)}
-                  type="button"
-                >
-                  {action.name}
-                </button>
-              </HoverTooltip>
-            {:else}
-              <button
-                class="flex items-center w-full px-3.5 py-2 cursor-pointer text-sm text-base-content hover:bg-base-300 transition-colors text-left"
-                onclick={() => handleActionClick(action)}
-                type="button"
-              >
-                {action.name}
-              </button>
-            {/if}
-          {/each}
-        </div>
+    <AnchoredMenu visible={isOpen} trigger={triggerRef} onClose={() => { isOpen = false }}>
+      <div class="max-h-[300px] overflow-y-auto">
+        {#each otherActions as action (action.id)}
+          <ContextMenuItem
+            label={action.name}
+            description={action.prompt || undefined}
+            disabled={!action.enabled}
+            onclick={() => handleActionClick(action)}
+          />
+        {/each}
       </div>
-    {/if}
+    </AnchoredMenu>
   </div>
 {/if}

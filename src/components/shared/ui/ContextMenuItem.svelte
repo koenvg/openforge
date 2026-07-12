@@ -28,6 +28,7 @@
       class="context-item block w-full text-left px-3 py-2 text-sm rounded {variantClasses}"
       {onclick}
       {disabled}
+      title={description}
       role="menuitem"
     >
       {label}

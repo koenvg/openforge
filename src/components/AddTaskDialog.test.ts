@@ -184,6 +184,43 @@ describe('AddTaskDialog', () => {
     expect(screen.queryByRole('combobox')).toBeNull()
   })
 
+  it('opens More as a semantic menu, focuses its first item, and contains Escape', async () => {
+    render(AddTaskDialog, { props: { mode: 'create' } })
+    const textbox = await findPromptTextbox()
+    await fireEvent.input(textbox, { target: { value: 'Accessible menu task' } })
+
+    const trigger = await screen.findByRole('button', { name: 'More' })
+    await fireEvent.click(trigger)
+
+    expect(screen.getByRole('menu')).toBeTruthy()
+    const firstItem = screen.getByRole('menuitem', { name: 'Add to Backlog' })
+    await waitFor(() => expect(document.activeElement).toBe(firstItem))
+
+    const onDocumentKeydown = vi.fn()
+    document.addEventListener('keydown', onDocumentKeydown)
+    await fireEvent.keyDown(firstItem, { key: 'Escape' })
+    document.removeEventListener('keydown', onDocumentKeydown)
+
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(document.activeElement).toBe(trigger)
+    expect(onDocumentKeydown).not.toHaveBeenCalled()
+  })
+
+  it('closes More on an outside pointer and restores focus to its trigger', async () => {
+    render(AddTaskDialog, { props: { mode: 'create' } })
+    const textbox = await findPromptTextbox()
+    await fireEvent.input(textbox, { target: { value: 'Outside pointer task' } })
+
+    const trigger = await screen.findByRole('button', { name: 'More' })
+    await fireEvent.click(trigger)
+    expect(screen.getByRole('menu')).toBeTruthy()
+
+    await fireEvent.pointerDown(document.body)
+
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(document.activeElement).toBe(trigger)
+  })
+
   it('dismisses the More menu when expanding Environment', async () => {
     render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
 
