@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
-import type { Action } from '../../../lib/types'
+import type { Action } from '../../lib/types'
 import ActionDropdown from './ActionDropdown.svelte'
 
 const actions: Action[] = [
