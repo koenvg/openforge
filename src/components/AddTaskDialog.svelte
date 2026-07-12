@@ -14,6 +14,8 @@
   import { activeProjectId } from '../lib/stores'
   import Modal from './shared/ui/Modal.svelte'
   import SearchableSelect from './shared/ui/SearchableSelect.svelte'
+  import AnchoredMenu from './shared/ui/AnchoredMenu.svelte'
+  import ContextMenuItem from './shared/ui/ContextMenuItem.svelte'
   import PromptInput from './prompt/PromptInput.svelte'
   import { getEnabledActions, loadActions } from '../lib/actions'
 
@@ -58,7 +60,7 @@
   let promptDraft = $state('')
   let lastInitialPrompt = $state<string | null>(null)
   let showMoreMenu = $state(false)
-  let createActionsEl = $state<HTMLElement | null>(null)
+  let moreMenuTrigger = $state<HTMLButtonElement | null>(null)
   let pastedImages = $state<PastedTaskImage[]>([])
   let previewImage = $state<PastedTaskImage | null>(null)
   let imagePasteError = $state<string | null>(null)
@@ -129,9 +131,7 @@
   }
 
   onMount(() => {
-    document.addEventListener('pointerdown', handleDocumentPointerDown)
     void initializeDialog()
-    return () => document.removeEventListener('pointerdown', handleDocumentPointerDown)
   })
 
   async function initializeDialog() {
@@ -210,21 +210,6 @@
   function toggleMoreMenu() {
     if (!promptReady || !createReady) return
     showMoreMenu = !showMoreMenu
-  }
-
-  function handleMoreMenuKeydown(e: KeyboardEvent) {
-    if (e.key !== 'Escape') return
-    e.preventDefault()
-    e.stopPropagation()
-    showMoreMenu = false
-  }
-
-  function handleDocumentPointerDown(e: PointerEvent) {
-    if (!showMoreMenu) return
-    const target = e.target
-    if (!(target instanceof Node)) return
-    if (createActionsEl?.contains(target)) return
-    showMoreMenu = false
   }
 
   async function handleStartTaskFromDraft() {
@@ -478,42 +463,33 @@
       {#snippet controls()}
         {#if mode === 'create'}
           {#if promptReady && createReady}
-            <div class="relative" bind:this={createActionsEl}>
+            <div class="relative">
               <button
+                bind:this={moreMenuTrigger}
                 class="btn btn-ghost btn-sm"
                 type="button"
                 onclick={toggleMoreMenu}
                 aria-expanded={showMoreMenu}
                 aria-haspopup="menu"
                 aria-controls="create-task-more-actions"
-                onkeydown={handleMoreMenuKeydown}
               >More</button>
 
-              {#if showMoreMenu}
-                <div
-                  id="create-task-more-actions"
-                  role="menu"
-                  class="absolute bottom-[calc(100%+0.5rem)] right-0 z-[100] min-w-48 overflow-hidden rounded-lg border border-base-300 bg-base-100 shadow-lg"
-                >
-                  <button
-                    class="block w-full px-3 py-2 text-left text-sm text-base-content hover:bg-base-200 focus:bg-base-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                    type="button"
-                    role="menuitem"
-                    onclick={handleAddToBacklogFromDraft}
-                    onkeydown={handleMoreMenuKeydown}
-                  >Add to Backlog</button>
-                  {#each availableActions as action (action.id)}
-                    <button
-                      class="block w-full px-3 py-2 text-left text-sm text-base-content hover:bg-base-200 focus:bg-base-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                      type="button"
-                      role="menuitem"
-                      title={action.prompt || action.name}
-                      onclick={() => handleCustomActionFromDraft(action.prompt)}
-                      onkeydown={handleMoreMenuKeydown}
-                    >{action.name}</button>
-                  {/each}
-                </div>
-              {/if}
+              <AnchoredMenu
+                id="create-task-more-actions"
+                visible={showMoreMenu}
+                trigger={moreMenuTrigger}
+                onClose={() => { showMoreMenu = false }}
+                placementClass="bottom-[calc(100%+0.5rem)] right-0 min-w-48"
+              >
+                <ContextMenuItem label="Add to Backlog" onclick={handleAddToBacklogFromDraft} />
+                {#each availableActions as action (action.id)}
+                  <ContextMenuItem
+                    label={action.name}
+                    description={action.prompt || action.name}
+                    onclick={() => handleCustomActionFromDraft(action.prompt)}
+                  />
+                {/each}
+              </AnchoredMenu>
             </div>
           {/if}
           <button
