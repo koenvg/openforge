@@ -23,7 +23,7 @@
   import TaskInfoPanel from './TaskInfoPanel.svelte'
   import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
   import SelfReviewView from './SelfReviewView.svelte'
-  import ActionDropdown from '../shared/ui/ActionDropdown.svelte'
+  import ActionDropdown from './ActionDropdown.svelte'
 
   interface Props {
     task: Task

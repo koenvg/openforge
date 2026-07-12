@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte'
   import { get } from 'svelte/store'
-  import Modal from './ui/Modal.svelte'
+  import Modal from '../shared/ui/Modal.svelte'
   import { projects, activeProjectId, reviewPrs, globalExcludedPrRepos, ticketPrs } from '../../lib/stores'
   import { getAllTasks, getLatestSessions, getProjectConfig, getConfig, setConfig } from '../../lib/ipc'
   import { loadOutOfFocusTaskIds, loadFocusFilterStates, DEFAULT_FOCUS_STATES } from '../../lib/boardFilters'

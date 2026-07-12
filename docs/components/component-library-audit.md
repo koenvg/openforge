@@ -4,11 +4,14 @@ Task: KVG-1906
 Date: 2026-07-05
 Status: spike / inventory only — no component implementation in this task.
 
+Historical findings below remain the 2026-07-05 audit snapshot. Renderer paths and ownership notes affected by KVG-2052 were refreshed on 2026-07-12 so this document does not direct contributors to files moved by that task.
+
 ## Scope
 
 This audit covers reusable UI and repeated component patterns across:
 
 - `src/components/shared/ui`
+- `src/components/shared/adapters`
 - `src/components/shared/tasks`
 - repeated feature-level UI under `src/components/**`
 - `packages/plugin-sdk/src/ui`
@@ -20,9 +23,9 @@ The goal is to clarify what exists today, where boundaries are unclear, what is 
 
 ## Executive summary
 
-OpenForge has useful shared UI primitives, but it does not yet have one coherent component-library layer. The current state is three overlapping layers:
+OpenForge has useful shared UI primitives, but it does not have one universal component-library layer. The current ownership model separates:
 
-1. **App-private shared UI** in `src/components/shared/ui`, mostly built for renderer internals and allowed to import app `src/lib/*` modules.
+1. **App-private renderer tiers**: pure primitives in `src/components/shared/ui`, cross-feature host adapters in `src/components/shared/adapters`, and named domain folders such as `src/components/shared/tasks`.
 2. **Public or package-level plugin surfaces** in `packages/plugin-sdk`, `packages/pr-review-ui`, and `packages/terminal-runtime`.
 3. **Plugin-local copied UI** in built-in plugins, especially card, modal/dialog, page header, and large page-shell patterns.
 
@@ -40,8 +43,9 @@ Use these names consistently before adding more components:
 
 | Layer | Intended audience | Examples today | Import rules | Notes |
 | --- | --- | --- | --- | --- |
-| App-private UI | OpenForge renderer only | `src/components/shared/ui/*`, `src/components/shared/tasks/*` | May import `src/lib/*`, IPC wrappers, stores, app types | Good place for host-only behavior like clipboard IPC or task actions. Not plugin-safe. |
-| Domain app shared UI | OpenForge renderer features | `src/components/shared/tasks/*`, review/task detail shared components | May depend on app task/review domain types | Keep separate from generic atoms; these should not migrate into plugin SDK wholesale. |
+| Renderer pure UI primitives | OpenForge renderer only | `src/components/shared/ui/*` | Svelte/browser APIs, other primitives, and presentation-only renderer utilities; no IPC, stores, or domain rules | App-private despite the pure dependency boundary; not plugin-safe. |
+| Renderer app-bound adapters | OpenForge renderer surfaces sharing host capabilities | `src/components/shared/adapters/*` | Pure primitives plus typed `src/lib/*` APIs such as IPC, markdown, and audio | Cross-feature host integration belongs here; not plugin-safe. |
+| Domain app shared UI | OpenForge renderer features | `src/components/shared/tasks/*`, `src/components/shared/pr/*` | May depend on same-domain types/helpers, adapters, and primitives | Keep separate from generic atoms; these should not migrate into plugin SDK wholesale. |
 | Plugin-safe SDK UI | Trusted plugin authors | `packages/plugin-sdk/src/ui/MarkdownContent.svelte`, `ResizablePanel.svelte` | Must not import app renderer stores, IPC, Electron, Rust, or private host internals | Public API; small, stable, and MIT-compatible. Add only primitives proven by multiple plugins. |
 | Internal package UI | Built-in app/plugin sharing, not public SDK | `packages/pr-review-ui` | May be package-public but should stay domain-scoped | ADR 0002 says PR review UI is internal/private shared UI, not a core platform capability. |
 | Host-shared runtime UI | Plugins needing singleton lifecycle/runtime ownership | `packages/terminal-runtime` | Composes public plugin capabilities; should be externalized/host-shared | ADR 0004 says terminal runtime should not live in core plugin SDK and should avoid private host forwarding. |
@@ -53,11 +57,9 @@ Use these names consistently before adding more components:
 
 Current files:
 
-- `ActionDropdown.svelte` — app action dropdown around the app `Action` type; uses `HoverTooltip` and lucide icons. Useful app-private pattern, not plugin-safe because it imports app types.
 - `Card.svelte` — generic button-card shell with `selected` / `featured` states. Exact copy also exists in `packages/pr-review-ui/src/ui/Card.svelte` and `plugins/github-sync/src/shared/ui/Card.svelte`.
 - `ContextMenu.svelte` — minimal fixed-position menu shell.
 - `ContextMenuItem.svelte` — menu item with `default` / `primary` / `danger` variants and optional `HoverTooltip` description.
-- `CopyButton.svelte` — app-private clipboard button using `writeClipboardText()` from `src/lib/ipc.ts`.
 - `HoverTooltip.svelte` — tooltip wrapper with a body portal and app DOM utility imports.
 - `Modal.svelte` — most complete app dialog primitive: focus handling, overlay close, configurable header, classes, close disabled state, keyboard callback, and test id.
 - `ModalTestWrapper.svelte` — test helper for `Modal`.
@@ -67,9 +69,22 @@ Current files:
 
 Assessment:
 
-- This folder is useful, but it is **app-private**, not a clean public component library. Several components import app modules (`src/lib/ipc.ts`, `src/lib/domUtils.ts`, `src/lib/numberParsing.ts`, `src/lib/types.ts`).
+- This folder is **app-private**, not a public component library, but it is now the renderer's pure-primitive tier: components here must not import IPC, stores, app services, or feature/domain types and rules. Presentation-only renderer utilities such as DOM helpers remain allowed.
 - It is missing common documented primitives that other code already hand-rolls: button wrappers, field/form rows, toolbar/page header, tabs, empty state, skeleton/loading state, table/list rows, status chip, toast/alert, dialog body/footer conventions, and plugin settings shell.
-- Existing tests cover some behavior-heavy primitives (`Modal`, resizable panels, searchable select, card, context menu), which is a good base for extraction.
+- Existing tests cover behavior-heavy primitives such as `Modal`, `ResizableBottomPanel`, `SearchableSelect`, and context menus, which is a good base for extraction.
+
+### `src/components/shared/adapters`
+
+Current files:
+
+- `MarkdownContent.svelte` — renderer markdown rendering and external-link handling through typed app APIs.
+- `ModelDownloadProgress.svelte` — shared model-download progress UI backed by desktop events and Whisper IPC.
+- `VoiceInput.svelte` — shared voice capture/transcription UI backed by app audio and Whisper APIs.
+
+Assessment:
+
+- This folder owns cross-feature UI that adapts typed host/app capabilities. It may depend on pure primitives and `src/lib/*` APIs, but must not absorb feature-specific stores or domain rules.
+- `ActionDropdown.svelte` and `CopyButton.svelte` are not shared adapters: both have a single task-detail consumer and now live under `src/components/task-detail/` with that feature.
 
 ### `src/components/shared/tasks`
 
@@ -118,7 +133,7 @@ Assessment:
 
 - The SDK UI surface is intentionally tiny, which is good for public API stability.
 - `ResizablePanel` duplication is a maintenance smell: the app and SDK implementations are the same except import path. Either make the SDK version the canonical implementation for plugin-safe usage or generate/share a common source without widening app-private APIs.
-- Do not move app-private components like `CopyButton`, task menus, app action dropdowns, or IPC-backed controls into SDK UI.
+- Do not move feature-local components like `src/components/task-detail/CopyButton.svelte` or `ActionDropdown.svelte`, task menus, or other IPC-backed controls into SDK UI.
 
 ### `packages/pr-review-ui`
 
@@ -202,7 +217,7 @@ Assessment:
 
 ### Boundaries that need documentation or enforcement
 
-- `src/components/shared/ui` sounds generic but includes app-private dependencies. Document it as app-private or split app-safe vs public-safe folders.
+- `src/components/shared/ui` is the app-private pure-primitive tier. Its generic name does not make it plugin-safe; host/app dependencies belong in `src/components/shared/adapters` and feature/domain dependencies belong beside their owner.
 - `packages/plugin-sdk/src/ui` is public API. Every new component here becomes an author contract; require stronger justification than "two app files look similar".
 - `packages/pr-review-ui` has package-public exports but is intentionally internal/domain-scoped. Avoid treating it as a generic source for SDK components.
 - `packages/terminal-runtime` is host-shared runtime UI, not a UI atom library. Keep terminal lifecycle in that package and generic UI elsewhere.
@@ -226,9 +241,9 @@ Do not add all of these at once. This is a backlog of proven gaps:
 
 ### Do now
 
-1. **Document the layer boundaries and keep `src/components/shared/ui` app-private until split.**
-   - Add or reference this audit from plugin authoring docs.
-   - Make it explicit that plugins should not import `src/components/shared/ui`.
+1. **Document the layer boundaries and keep all renderer shared tiers app-private.**
+   - Completed by the renderer tier documentation linked from `src/components/shared/README.md` and `docs/ui-component-boundaries.md`.
+   - Plugins must not import `src/components/shared/ui`, `src/components/shared/adapters`, or another root `src/**` path.
 
 2. **Deduplicate exact copies first, but only after choosing ownership.**
    - `Card` needs a single owner or a generated/shared source.
@@ -253,7 +268,7 @@ Do not add all of these at once. This is a backlog of proven gaps:
 
 ### Do not do
 
-- Do not move `TaskContextMenu`, `TaskLabelEditor`, `CopyButton`, app action dropdowns, or IPC/store-backed controls into `@openforge-app/plugin-sdk/ui`.
+- Do not move `TaskContextMenu`, `TaskLabelEditor`, feature-local controls such as `src/components/task-detail/CopyButton.svelte` or `ActionDropdown.svelte`, or other IPC/store-backed controls into `@openforge-app/plugin-sdk/ui`.
 - Do not put terminal/xterm components into the core plugin SDK; keep `@openforge-app/terminal-runtime` separate and host-shared.
 - Do not make `@openforge-app/pr-review-ui` a general component library or public PR platform API.
 - Do not create wrappers for every Tailwind/daisyUI class combination. Favor behavior-bearing components and repeated semantic shells.

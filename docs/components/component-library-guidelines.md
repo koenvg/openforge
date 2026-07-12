@@ -27,18 +27,22 @@ Use these layer names in docs, reviews, and follow-up tasks.
 
 | Layer | Owner / audience | Allowed dependencies | Export posture | Current examples |
 | --- | --- | --- | --- | --- |
-| App-private UI | OpenForge renderer only | `src/lib/*`, IPC wrappers, renderer stores, app domain types, app DOM utilities | Imported through app source only; not a plugin contract | `src/components/shared/ui/*` |
-| Domain app shared UI | OpenForge renderer features for one domain | App domain types and app-private helpers for that domain | Shared inside the app; not generic SDK UI | `src/components/shared/tasks/*` |
+| Renderer pure UI primitives | OpenForge renderer only | Svelte/browser APIs, other primitives, and presentation-only renderer utilities; no IPC, stores, or domain rules | Concrete imports from app source only; not a plugin contract | `src/components/shared/ui/*` |
+| Renderer app-bound adapters | OpenForge renderer surfaces using shared host capabilities | Pure primitives plus typed `src/lib/*` app APIs such as IPC, markdown, and audio | Concrete imports from app source only; not a plugin contract | `src/components/shared/adapters/*` |
+| Renderer feature/domain shared UI | OpenForge renderer features within one domain | Same-domain types/helpers plus adapters and pure primitives | Shared inside the app/domain; not generic SDK UI | `src/components/shared/tasks/*`, `src/components/shared/pr/*` |
 | Plugin-safe SDK UI | Trusted plugin authors using public SDK exports | Only SDK/public helpers and normal Svelte/browser APIs; no app internals | Stable public package exports from `@openforge-app/plugin-sdk` | `MarkdownContent.svelte`, `ResizablePanel.svelte`, `Modal.svelte` |
 | Internal package UI | Internal workspace packages for a domain | Package-local domain helpers; avoid app-private imports unless the package explicitly owns that boundary | Package-public but domain-scoped, not generic UI | `packages/pr-review-ui` |
 | Host-shared runtime UI | Runtime packages that must own singleton/lifecycle behavior | Runtime package internals plus public plugin capabilities | Public or host-shared runtime API, not core SDK atoms | `packages/terminal-runtime` |
 | Plugin-local UI | One built-in or external plugin | Plugin SDK exports, public runtime packages, plugin-local code | Private to that plugin until reuse is proven | `plugins/*/src/**` components |
 
+The renderer tier contract, dependency direction, and addition checklist live in [`src/components/shared/README.md`](../../src/components/shared/README.md).
+
 Boundary rules:
 
-- Treat `src/components/shared/ui` as **app-private** until a follow-up explicitly splits app-safe from plugin-safe components.
-- Built-in plugins must not import `src/components/shared/ui`, `src/lib/*`, Electron/preload code, Rust sidecar APIs, or app stores directly.
-- Do not move `TaskContextMenu`, `TaskLabelEditor`, `CopyButton`, app action dropdowns, task lifecycle controls, IPC-backed controls, or store-backed controls into `@openforge-app/plugin-sdk/ui`.
+- Treat all of `src/components/shared` as **app-private**, including components in the pure `ui/` tier. “Pure” describes dependency ownership, not a public/plugin-safe API.
+- Built-in plugins must not import `src/components/shared`, `src/lib/*`, Electron/preload code, Rust sidecar APIs, or app stores directly.
+- Keep feature-only components beside their feature; for example, the attention overview and task action dropdown do not belong under `shared`.
+- Do not move `TaskContextMenu`, `TaskLabelEditor`, task lifecycle controls, or feature-local IPC/store-backed controls into `@openforge-app/plugin-sdk/ui`.
 - Keep `packages/pr-review-ui` as PR-review-domain UI. Do not turn it into a generic component library or public PR platform API.
 - Keep `packages/terminal-runtime` separate from the core plugin SDK. Terminal/xterm lifecycle, PTY session invariants, WebGL/xterm CSS, reconnect replay, and shell key behavior belong in the runtime package.
 - Plugin-local UI can remain local when only one plugin needs it. Promote only after at least two surfaces prove the same semantic primitive and a stable API.
@@ -120,7 +124,7 @@ Package guidance:
 
 When adding or promoting a component, include enough documentation for its layer.
 
-- App-private/domain components: document unusual lifecycle behavior, destructive actions, host IPC use, and domain invariants in the component or adjacent docs/tests.
+- Renderer primitives/adapters/domain components: follow `src/components/shared/README.md`; document unusual lifecycle behavior, destructive actions, host IPC use, and domain invariants in the component or adjacent docs/tests.
 - Plugin-safe SDK components: update plugin authoring or SDK reference docs with import path, minimal example, props/callbacks, accessibility notes, and testing guidance.
 - Internal package UI: document domain assumptions and whether the export is intended for app internals only.
 - Runtime UI: document lifecycle ownership and singleton/host-sharing expectations.

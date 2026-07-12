@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Brain } from '@lucide/svelte'
-  import ModelDownloadProgress from '../shared/input/ModelDownloadProgress.svelte'
+  import ModelDownloadProgress from '../shared/adapters/ModelDownloadProgress.svelte'
   import type { WhisperModelStatus, WhisperModelSizeId } from '../../lib/types'
   import SettingsSectionCard from './SettingsSectionCard.svelte'
 

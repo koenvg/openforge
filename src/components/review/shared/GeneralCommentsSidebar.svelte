@@ -16,8 +16,8 @@
   import { relativeTimeWithFallback } from '../../../lib/timeAgo'
   import type { SelfReviewComment } from '../../../lib/types'
 
-  import VoiceInput from '../../shared/input/VoiceInput.svelte'
-  import MarkdownContent from '../../shared/content/MarkdownContent.svelte'
+  import VoiceInput from '../../shared/adapters/VoiceInput.svelte'
+  import MarkdownContent from '../../shared/adapters/MarkdownContent.svelte'
   interface Props {
     taskId: string
   }

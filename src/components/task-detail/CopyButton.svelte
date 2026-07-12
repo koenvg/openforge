@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { writeClipboardText } from '../../../lib/ipc'
+  import { writeClipboardText } from '../../lib/ipc'
 
   interface Props {
     text: string

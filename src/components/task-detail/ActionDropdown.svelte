@@ -1,8 +1,8 @@
 <script lang="ts">
-  import type { Action } from '../../../lib/types'
-  import HoverTooltip from './HoverTooltip.svelte'
-  import AnchoredMenu from './AnchoredMenu.svelte'
-  import ContextMenuItem from './ContextMenuItem.svelte'
+  import type { Action } from '../../lib/types'
+  import HoverTooltip from '../shared/ui/HoverTooltip.svelte'
+  import AnchoredMenu from '../shared/ui/AnchoredMenu.svelte'
+  import ContextMenuItem from '../shared/ui/ContextMenuItem.svelte'
   import { ChevronDown } from '@lucide/svelte'
 
   interface Props {

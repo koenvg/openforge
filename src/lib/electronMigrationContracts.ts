@@ -253,7 +253,7 @@ export const dynamicShellEventContracts = [
   },
   {
     eventPattern: 'whisper-download-progress',
-    currentSubscribers: ['src/components/shared/input/ModelDownloadProgress.svelte'],
+    currentSubscribers: ['src/components/shared/adapters/ModelDownloadProgress.svelte'],
     currentProducers: ['src-tauri/src/whisper_manager.rs'],
     payload: '{ model_size: string; bytes_downloaded: number; total_bytes: number; percentage: number }',
     producer: 'rust-backend',
