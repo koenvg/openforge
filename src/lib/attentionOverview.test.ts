@@ -198,6 +198,52 @@ describe('buildAttentionOverview — review PRs', () => {
   })
 })
 
+describe('buildAttentionOverview — hidden projects', () => {
+  it('excludes a hidden project from the groups and its focus tasks from the totals', () => {
+    const result = buildAttentionOverview(baseInput({
+      projects: [project('p1'), project('p2')],
+      allTasks: [task('a', 'p1'), task('b', 'p2')],
+      hiddenProjectIds: new Set(['p2']),
+    }))
+    expect(result.groups.map((g) => g.project.id)).toEqual(['p1'])
+    expect(result.totalFocusTasks).toBe(1)
+  })
+
+  it('drops a review PR whose repo is owned only by a hidden project (not surfaced under Other)', () => {
+    const result = buildAttentionOverview(baseInput({
+      projects: [project('p1')],
+      resolvedRepoByProject: new Map([['p1', 'me/app']]),
+      reviewPrs: [review(1, 'me', 'app')],
+      hiddenProjectIds: new Set(['p1']),
+    }))
+    expect(result.groups).toHaveLength(0)
+    expect(result.otherReviewPrs).toHaveLength(0)
+    expect(result.totalReviewPrs).toBe(0)
+  })
+
+  it('still surfaces a shared-repo PR under a visible project even if a hidden project owns the same repo', () => {
+    const result = buildAttentionOverview(baseInput({
+      // p-hidden appears first in order but is hidden; p-visible owns the same repo.
+      projects: [project('p-hidden'), project('p-visible')],
+      resolvedRepoByProject: new Map([['p-hidden', 'me/shared'], ['p-visible', 'me/shared']]),
+      reviewPrs: [review(1, 'me', 'shared')],
+      hiddenProjectIds: new Set(['p-hidden']),
+    }))
+    expect(result.groups.map((g) => g.project.id)).toEqual(['p-visible'])
+    expect(result.groups[0].reviewPrs.map((p) => p.id)).toEqual([1])
+  })
+
+  it('still routes a PR with no local project to otherReviewPrs', () => {
+    const result = buildAttentionOverview(baseInput({
+      projects: [project('p1')],
+      resolvedRepoByProject: new Map([['p1', 'me/app']]),
+      reviewPrs: [review(9, 'someone', 'unknown')],
+      hiddenProjectIds: new Set(['p1']),
+    }))
+    expect(result.otherReviewPrs.map((p) => p.id)).toEqual([9])
+  })
+})
+
 describe('buildAttentionOverview — grouping, order, totals', () => {
   it('preserves sidebar project order and hides empty projects', () => {
     const result = buildAttentionOverview(baseInput({
