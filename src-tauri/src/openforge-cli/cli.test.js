@@ -233,6 +233,7 @@ describe('OpenForge CLI', () => {
     expect(skill).not.toContain('reverse dependents');
     expect(skill).not.toContain('repoint each dependent');
     expect(skill).not.toContain('Correct task prompt');
+    expect(skill).toContain("When an LLM picks up a task, OpenForge passes only the task's initial prompt; the task summary/Handoff Notes are not included.");
   });
 
   it('prints launcher-based help without the MCP command', async () => {

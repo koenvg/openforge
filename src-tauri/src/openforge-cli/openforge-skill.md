@@ -9,6 +9,8 @@ Use this skill when you need to create follow-up work, inspect task context, or 
 
 Task prompt semantics are intentionally narrow: `openforge task update` only updates the task `summary` field (Handoff Notes). It does not update `initial_prompt` or `prompt`, and must not be presented as a way to change task prompt text.
 
+When an LLM picks up a task, OpenForge passes only the task's initial prompt; the task summary/Handoff Notes are not included.
+
 Use the installed `openforge` launcher directly. If `openforge` is not available on PATH in a non-interactive shell, call the launcher with its explicit fallback path:
 
 ```bash
