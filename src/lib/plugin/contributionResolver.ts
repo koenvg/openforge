@@ -308,6 +308,7 @@ export function resolveContributions(enabledPlugins: RuntimeContributionSource[]
   }
 
   resolved.taskUISections.sort((left, right) => left.order - right.order || left.namespacedId.localeCompare(right.namespacedId))
+  resolved.settingsSections.sort((left, right) => left.order - right.order)
   return resolved
 }
 
