@@ -55,6 +55,7 @@
       "types": "./dist/fileIcons.d.ts",
       "default": "./dist/fileIcons.js"
     },
+    "./ui/Button.svelte": "./dist/ui/Button.svelte",
     "./ui/MarkdownContent.svelte": "./dist/ui/MarkdownContent.svelte",
     "./ui/ResizablePanel.svelte": "./dist/ui/ResizablePanel.svelte",
     "./ui/Modal.svelte": "./dist/ui/Modal.svelte",
@@ -87,6 +88,7 @@
   },
   "devDependencies": {
     "@types/node": "26.1.1",
+    "svelte": "5.56.4",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10",
     "vscode-material-icons": "^0.1.1"

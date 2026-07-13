@@ -7,6 +7,7 @@ const packageRoot = fileURLToPath(new URL('..', import.meta.url))
 const assetPaths = [
   'src/svelteHostRuntimeContract.mjs',
   'src/svelteHostRuntimeContract.d.mts',
+  'src/ui/Button.svelte',
   'src/ui/MarkdownContent.svelte',
   'src/ui/ResizablePanel.svelte',
   'src/ui/Modal.svelte',

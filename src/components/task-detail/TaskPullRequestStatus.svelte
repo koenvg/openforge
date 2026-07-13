@@ -3,6 +3,7 @@
   import { canEnqueuePullRequest, canMergePullRequest, getMergeReadiness, isClosedOrMergedPullRequest, isClosedUnmergedPullRequest, isMergedPullRequest } from '../../lib/types'
   import { linkPullRequest, openUrl, refreshTaskGithubStatus } from '../../lib/ipc'
   import { getPrStatusChips } from '@openforge-app/plugin-sdk/prStatusPresentation'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import { getGitHubMarkdownImageBaseUrl } from '../../lib/githubMarkdown'
   import { createPrCommentLoader } from '../../lib/prComments.svelte'
   import { mergingTaskIds } from '../../lib/stores'
@@ -234,8 +235,8 @@
 
               {#if canEnqueuePullRequest(pr)}
                 <div class="flex items-center gap-2">
-                  <button
-                    class="btn btn-success btn-xs"
+                  <Button
+                    size="xs"
                     disabled={orchestration.mergingPrId !== null || $mergingTaskIds.has(taskId)}
                     onclick={() => orchestration.handleEnqueue(taskId, pr)}
                   >
@@ -245,15 +246,15 @@
                     {:else}
                       Enqueue
                     {/if}
-                  </button>
+                  </Button>
                   {#if feedback}
                     <span class="text-[0.7rem] {feedback.kind === 'success' ? 'text-success' : feedback.kind === 'warning' ? 'text-warning' : 'text-error'}">{feedback.message}</span>
                   {/if}
                 </div>
               {:else if canMergePullRequest(pr)}
                 <div class="flex items-center gap-2">
-                  <button
-                    class="btn btn-success btn-xs"
+                  <Button
+                    size="xs"
                     disabled={orchestration.mergingPrId !== null || $mergingTaskIds.has(taskId)}
                     onclick={() => orchestration.handleMerge(taskId, pr)}
                   >
@@ -263,7 +264,7 @@
                     {:else}
                       Merge
                     {/if}
-                  </button>
+                  </Button>
                   {#if feedback}
                     <span class="text-[0.7rem] {feedback.kind === 'success' ? 'text-success' : feedback.kind === 'warning' ? 'text-warning' : 'text-error'}">{feedback.message}</span>
                   {/if}

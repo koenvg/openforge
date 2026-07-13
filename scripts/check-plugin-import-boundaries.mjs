@@ -23,6 +23,7 @@ const FALLBACK_OPENFORGE_PACKAGE_EXPORTS = new Map([
       '/markdown',
       '/numberParsing',
       '/sanitize',
+      '/ui/Button.svelte',
       '/ui/MarkdownContent.svelte',
       '/ui/ResizablePanel.svelte',
       '/ui/Modal.svelte',

@@ -16,6 +16,7 @@
   } from '../../lib/plugin/pluginRegistry'
   import { writeClipboardText } from '../../lib/ipc'
   import type { PluginEntry } from '../../lib/plugin/types'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import SettingsSectionCard from '../settings/SettingsSectionCard.svelte'
 
   interface Props {
@@ -210,9 +211,9 @@
         <div class="text-xs text-success bg-success/10 p-2 rounded flex flex-col gap-2">
           <span>{installMessage}</span>
           {#if canEnableInstalledPluginForActiveProject && installedPluginToEnable}
-            <button class="btn btn-success btn-xs self-start" type="button" onclick={handleEnableForActiveProject} disabled={disabled}>
+            <Button class="self-start" size="xs" type="button" onclick={handleEnableForActiveProject} disabled={disabled}>
               Enable for active project: {installedPluginToEnable.manifest.name}
-            </button>
+            </Button>
           {/if}
         </div>
       {/if}
