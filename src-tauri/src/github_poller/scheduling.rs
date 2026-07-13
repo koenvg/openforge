@@ -296,7 +296,6 @@ pub fn decide_poll(ctx: &PollContextSnapshot) -> PollDecision {
 }
 
 /// Pure project selection: which projects to poll for the given scope.
-
 pub(super) fn select_projects(all: Vec<ProjectRow>, scope: &PollScope) -> Vec<ProjectRow> {
     match scope {
         PollScope::Global => all,
@@ -322,7 +321,6 @@ pub(super) fn select_projects(all: Vec<ProjectRow>, scope: &PollScope) -> Vec<Pr
 /// PRs, polls comments and CI status for each PR, and polls review-requested
 /// PRs. All event emissions happen inside this function exactly as they did in
 /// the original loop body.
-
 pub(super) fn poll_scheduler_snapshot(
     db: &Mutex<Database>,
     rate_limited: bool,

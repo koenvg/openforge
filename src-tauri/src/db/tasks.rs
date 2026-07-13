@@ -57,10 +57,14 @@ pub struct CompactTaskRow {
     pub labels: Vec<TaskLabelRow>,
 }
 
-/// Full option set for creating a task. Existing `create_task` /
-/// `create_task_with_worktree_source` helpers delegate here with defaults so
-/// their call sites stay stable while new optional fields (display title,
-/// handoff-notes opt-out) flow through a single code path.
+/// Worktree-specific options for the task creation convenience method.
+pub struct TaskWorktreeOptions<'a> {
+    pub source: Option<&'a str>,
+    pub branch: Option<&'a str>,
+}
+
+/// Full option set for creating a task. Task creation helpers delegate here
+/// with defaults so optional fields flow through a single code path.
 pub struct NewTaskOptions<'a> {
     pub initial_prompt: &'a str,
     pub status: &'a str,
@@ -454,8 +458,10 @@ impl super::Database {
             project_id,
             prompt,
             permission_mode,
-            None,
-            None,
+            TaskWorktreeOptions {
+                source: None,
+                branch: None,
+            },
         )
     }
 
@@ -466,8 +472,7 @@ impl super::Database {
         project_id: Option<&str>,
         prompt: Option<&str>,
         permission_mode: Option<&str>,
-        worktree_source: Option<&str>,
-        worktree_branch: Option<&str>,
+        worktree: TaskWorktreeOptions<'_>,
     ) -> Result<TaskRow> {
         self.create_task_with_options(NewTaskOptions {
             initial_prompt,
@@ -475,8 +480,8 @@ impl super::Database {
             project_id,
             prompt,
             permission_mode,
-            worktree_source,
-            worktree_branch,
+            worktree_source: worktree.source,
+            worktree_branch: worktree.branch,
             title: None,
             handoff_notes_enabled: true,
         })
@@ -1998,8 +2003,10 @@ mod tests {
                 None,
                 None,
                 None,
-                Some("existingBranch"),
-                Some("feature/open-pr"),
+                super::TaskWorktreeOptions {
+                    source: Some("existingBranch"),
+                    branch: Some("feature/open-pr"),
+                },
             )
             .expect("create failed");
 
@@ -2028,8 +2035,10 @@ mod tests {
                 None,
                 None,
                 None,
-                Some("disabled"),
-                Some("feature/ignored"),
+                super::TaskWorktreeOptions {
+                    source: Some("disabled"),
+                    branch: Some("feature/ignored"),
+                },
             )
             .expect("create failed");
 

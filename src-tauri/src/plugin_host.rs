@@ -96,7 +96,7 @@ impl PluginHost {
             .app_handle
             .try_state::<crate::github_client::GitHubClient>()
             .map(|state| state.inner().clone())
-            .unwrap_or_else(crate::github_client::GitHubClient::new);
+            .unwrap_or_default();
 
         Ok(crate::http_server::AppState {
             app: Some(self.app_handle.clone()),

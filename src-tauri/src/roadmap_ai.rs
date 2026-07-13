@@ -267,7 +267,7 @@ fn parse_ticket_draft_output_inner(raw: &str, depth: u8) -> Result<TicketDraft, 
 
     let cleaned = strip_json_code_fence(raw.trim());
     let value = serde_json::from_str::<Value>(cleaned)
-        .or_else(|_| extract_json_object(cleaned).and_then(|json| serde_json::from_str(json)))
+        .or_else(|_| extract_json_object(cleaned).and_then(serde_json::from_str))
         .map_err(|error| format!("failed to parse ticket draft JSON: {error}"))?;
 
     if value.get("title").is_some() || value.get("body").is_some() {

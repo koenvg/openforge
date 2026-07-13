@@ -262,13 +262,15 @@ impl PluginHost {
         serde_json::to_value(
             pty_manager
                 .spawn_shell_pty(
-                    &task_id,
-                    std::path::Path::new(&cwd),
-                    cols,
-                    rows,
+                    crate::pty_manager::PtySpawnContext {
+                        task_id: &task_id,
+                        cwd: std::path::Path::new(&cwd),
+                        cols,
+                        rows,
+                        app_handle: Some(self.app_handle.clone()),
+                        app_event_tx: self.app_event_tx.clone(),
+                    },
                     terminal_index,
-                    Some(self.app_handle.clone()),
-                    self.app_event_tx.clone(),
                 )
                 .await
                 .map_err(|error| format!("failed to spawn shell PTY: {error}"))?,

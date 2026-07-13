@@ -196,20 +196,31 @@ pub async fn get_pr_overview_comments(
     Ok(map_pr_overview_comments_for_frontend(comments))
 }
 
+pub struct SubmitPrReviewRequest<'a> {
+    pub owner: &'a str,
+    pub repo: &'a str,
+    pub pr_number: i64,
+    pub event: &'a str,
+    pub body: &'a str,
+    pub comments: Vec<ReviewSubmitComment>,
+    pub commit_id: &'a str,
+}
+
 pub async fn submit_pr_review(
     github_client: &GitHubClient,
-    owner: &str,
-    repo: &str,
-    pr_number: i64,
-    event: &str,
-    body: &str,
-    comments: Vec<ReviewSubmitComment>,
-    commit_id: &str,
+    request: SubmitPrReviewRequest<'_>,
 ) -> Result<(), String> {
     let token = github_token()?;
     github_client
         .submit_review(
-            owner, repo, pr_number, event, body, comments, commit_id, &token,
+            request.owner,
+            request.repo,
+            request.pr_number,
+            request.event,
+            request.body,
+            request.comments,
+            request.commit_id,
+            &token,
         )
         .await
         .map_err(|e| format!("Failed to submit review: {e}"))

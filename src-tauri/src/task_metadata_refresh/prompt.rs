@@ -209,7 +209,7 @@ fn parse_task_display_title_output_inner(raw: &str, depth: u8) -> Result<Option<
         .trim_end_matches("```")
         .trim();
     let value = serde_json::from_str::<Value>(cleaned)
-        .or_else(|_| extract_json_object(cleaned).and_then(|json| serde_json::from_str(json)))
+        .or_else(|_| extract_json_object(cleaned).and_then(serde_json::from_str))
         .map_err(|error| format!("failed to parse task display title JSON: {error}"))?;
 
     if let Some(title) = title_from_value(&value) {

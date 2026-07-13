@@ -367,11 +367,7 @@ fn classify_enqueue_graphql_errors(
 }
 
 fn extract_enqueue_pull_request_result(body: &Value) -> Result<(), String> {
-    if let Err(message) =
-        classify_enqueue_graphql_errors(body, "the authenticated actor", "unknown", "unknown", 0)
-    {
-        return Err(message);
-    }
+    classify_enqueue_graphql_errors(body, "the authenticated actor", "unknown", "unknown", 0)?;
 
     if body
         .pointer("/data/enqueuePullRequest/pullRequest/id")

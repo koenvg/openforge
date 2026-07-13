@@ -8,7 +8,7 @@ pub use auth::{github_token, github_username};
 pub use comments::{
     get_file_at_ref, get_file_at_ref_base64, get_file_content, get_file_content_base64,
     get_pr_file_diffs, get_pr_overview_comments, get_review_comments, mark_comment_addressed,
-    submit_pr_review,
+    submit_pr_review, SubmitPrReviewRequest,
 };
 pub use polling::{
     fetch_authored_prs, fetch_review_prs, get_authored_prs, get_review_prs, mark_review_pr_viewed,

@@ -325,8 +325,10 @@ async fn start_implementation_starts_configured_pi_provider_through_app_invoke_b
             Some(&project.id),
             None,
             None,
-            Some("disabled"),
-            None,
+            crate::db::TaskWorktreeOptions {
+                source: Some("disabled"),
+                branch: None,
+            },
         )
         .expect("create task")
         .id
@@ -363,27 +365,28 @@ async fn start_implementation_starts_configured_pi_provider_through_app_invoke_b
         "handoff workflow should stay disabled until project config enables it, got provider log: {log}"
     );
 
-    let db = crate::db::acquire_db(&state.db);
-    let task = db
-        .get_task(&task_id)
-        .expect("get task")
-        .expect("task exists");
-    assert_eq!(task.status, "doing");
-    let session = db
-        .get_latest_session_for_ticket(&task_id)
-        .expect("get latest session")
-        .expect("session should be recorded");
-    assert_eq!(session.provider, "pi");
-    assert_eq!(session.status, "running");
-    assert!(session.pty_instance_id.is_some());
-    let workspace = db
-        .get_task_workspace_for_task(&task_id)
-        .expect("get task workspace")
-        .expect("workspace should be recorded");
-    assert_eq!(workspace.provider_name, "pi");
-    assert_eq!(workspace.kind, "project_dir");
-    assert_eq!(workspace.status, "active");
-    drop(db);
+    {
+        let db = crate::db::acquire_db(&state.db);
+        let task = db
+            .get_task(&task_id)
+            .expect("get task")
+            .expect("task exists");
+        assert_eq!(task.status, "doing");
+        let session = db
+            .get_latest_session_for_ticket(&task_id)
+            .expect("get latest session")
+            .expect("session should be recorded");
+        assert_eq!(session.provider, "pi");
+        assert_eq!(session.status, "running");
+        assert!(session.pty_instance_id.is_some());
+        let workspace = db
+            .get_task_workspace_for_task(&task_id)
+            .expect("get task workspace")
+            .expect("workspace should be recorded");
+        assert_eq!(workspace.provider_name, "pi");
+        assert_eq!(workspace.kind, "project_dir");
+        assert_eq!(workspace.status, "active");
+    }
 
     if let Some(pty_manager) = state.pty_manager.as_ref() {
         let _ = pty_manager.kill_pty(&task_id).await;
@@ -427,8 +430,10 @@ async fn start_implementation_injects_plugin_configured_handoff_workflow() {
             Some(&project.id),
             None,
             None,
-            Some("disabled"),
-            None,
+            crate::db::TaskWorktreeOptions {
+                source: Some("disabled"),
+                branch: None,
+            },
         )
         .expect("create task")
         .id
@@ -493,8 +498,10 @@ async fn start_implementation_materializes_pasted_image_references_for_provider_
             Some(&project.id),
             None,
             None,
-            Some("disabled"),
-            None,
+            crate::db::TaskWorktreeOptions {
+                source: Some("disabled"),
+                branch: None,
+            },
         )
         .expect("create task")
         .id
@@ -559,8 +566,10 @@ async fn start_implementation_passes_task_agent_to_configured_opencode_provider(
                 Some(&project.id),
                 None,
                 None,
-                Some("disabled"),
-                None,
+                crate::db::TaskWorktreeOptions {
+                    source: Some("disabled"),
+                    branch: None,
+                },
             )
             .expect("create task");
         let conn = db.connection();
@@ -599,15 +608,16 @@ async fn start_implementation_passes_task_agent_to_configured_opencode_provider(
         "prompt should cross the provider boundary, got provider log: {log}"
     );
 
-    let db = crate::db::acquire_db(&state.db);
-    let session = db
-        .get_latest_session_for_ticket(&task_id)
-        .expect("get latest session")
-        .expect("session should be recorded");
-    assert_eq!(session.provider, "opencode");
-    assert_eq!(session.status, "running");
-    assert!(session.pty_instance_id.is_some());
-    drop(db);
+    {
+        let db = crate::db::acquire_db(&state.db);
+        let session = db
+            .get_latest_session_for_ticket(&task_id)
+            .expect("get latest session")
+            .expect("session should be recorded");
+        assert_eq!(session.provider, "opencode");
+        assert_eq!(session.status, "running");
+        assert!(session.pty_instance_id.is_some());
+    }
 
     if let Some(pty_manager) = state.pty_manager.as_ref() {
         let _ = pty_manager.kill_pty(&task_id).await;
@@ -639,8 +649,10 @@ async fn start_implementation_starts_configured_codex_provider_through_app_invok
             Some(&project.id),
             None,
             None,
-            Some("disabled"),
-            None,
+            crate::db::TaskWorktreeOptions {
+                source: Some("disabled"),
+                branch: None,
+            },
         )
         .expect("create task")
         .id
@@ -669,22 +681,23 @@ async fn start_implementation_starts_configured_codex_provider_through_app_invok
         "prompt should cross the provider boundary, got provider log: {log}"
     );
 
-    let db = crate::db::acquire_db(&state.db);
-    let session = db
-        .get_latest_session_for_ticket(&task_id)
-        .expect("get latest session")
-        .expect("session should be recorded");
-    assert_eq!(session.provider, "codex");
-    assert_eq!(session.status, "running");
-    assert!(session.pty_instance_id.is_some());
-    let workspace = db
-        .get_task_workspace_for_task(&task_id)
-        .expect("get task workspace")
-        .expect("workspace should be recorded");
-    assert_eq!(workspace.provider_name, "codex");
-    assert_eq!(workspace.kind, "project_dir");
-    assert_eq!(workspace.status, "active");
-    drop(db);
+    {
+        let db = crate::db::acquire_db(&state.db);
+        let session = db
+            .get_latest_session_for_ticket(&task_id)
+            .expect("get latest session")
+            .expect("session should be recorded");
+        assert_eq!(session.provider, "codex");
+        assert_eq!(session.status, "running");
+        assert!(session.pty_instance_id.is_some());
+        let workspace = db
+            .get_task_workspace_for_task(&task_id)
+            .expect("get task workspace")
+            .expect("workspace should be recorded");
+        assert_eq!(workspace.provider_name, "codex");
+        assert_eq!(workspace.kind, "project_dir");
+        assert_eq!(workspace.status, "active");
+    }
 
     if let Some(pty_manager) = state.pty_manager.as_ref() {
         let _ = pty_manager.kill_pty(&task_id).await;
@@ -725,8 +738,10 @@ async fn start_implementation_uses_persisted_existing_worktree_branch() {
             Some(&project.id),
             None,
             None,
-            Some("existingBranch"),
-            Some("feature/open-pr"),
+            crate::db::TaskWorktreeOptions {
+                source: Some("existingBranch"),
+                branch: Some("feature/open-pr"),
+            },
         )
         .expect("create task")
         .id
@@ -752,18 +767,19 @@ async fn start_implementation_uses_persisted_existing_worktree_branch() {
         "feature/open-pr"
     );
 
-    let db = crate::db::acquire_db(&state.db);
-    let worktree = db
-        .get_worktree_for_task(&task_id)
-        .expect("get worktree")
-        .expect("worktree should exist");
-    assert_eq!(worktree.branch_name, "feature/open-pr");
-    let workspace = db
-        .get_task_workspace_for_task(&task_id)
-        .expect("get task workspace")
-        .expect("workspace should exist");
-    assert_eq!(workspace.branch_name.as_deref(), Some("feature/open-pr"));
-    drop(db);
+    {
+        let db = crate::db::acquire_db(&state.db);
+        let worktree = db
+            .get_worktree_for_task(&task_id)
+            .expect("get worktree")
+            .expect("worktree should exist");
+        assert_eq!(worktree.branch_name, "feature/open-pr");
+        let workspace = db
+            .get_task_workspace_for_task(&task_id)
+            .expect("get task workspace")
+            .expect("workspace should exist");
+        assert_eq!(workspace.branch_name.as_deref(), Some("feature/open-pr"));
+    }
 
     invoke_ok(&state, "delete_task", json!({ "id": task_id })).await;
     let workspace_dir = std::path::PathBuf::from(workspace_path);
@@ -817,8 +833,10 @@ async fn start_implementation_replaces_stale_existing_branch_worktree_path() {
             Some(&project.id),
             None,
             None,
-            Some("existingBranch"),
-            Some("feature/open-pr"),
+            crate::db::TaskWorktreeOptions {
+                source: Some("existingBranch"),
+                branch: Some("feature/open-pr"),
+            },
         )
         .expect("create task")
         .id
@@ -1030,8 +1048,10 @@ async fn start_implementation_reports_invalid_workspace_cwd_as_bad_request() {
             Some(&project.id),
             None,
             None,
-            Some("disabled"),
-            None,
+            crate::db::TaskWorktreeOptions {
+                source: Some("disabled"),
+                branch: None,
+            },
         )
         .expect("create task")
         .id
