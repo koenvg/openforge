@@ -21,6 +21,7 @@
   import AgentPanel from './AgentPanel.svelte'
   import AgentStatusPill from './AgentStatusPill.svelte'
   import TaskInfoPanel from './TaskInfoPanel.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
   import SelfReviewView from './SelfReviewView.svelte'
   import ActionDropdown from './ActionDropdown.svelte'
@@ -310,8 +311,9 @@
             <ActionDropdown {actions} disabled={isStarting} onAction={handleActionClick} />
           {/if}
         {:else if task.status === 'doing'}
-          <button
-            class="btn btn-success btn-sm shrink-0 shadow-sm hover:shadow-md transition-shadow"
+          <Button
+            size="sm"
+            class="shrink-0 shadow-sm hover:shadow-md transition-shadow"
             disabled={isCompleting}
             onclick={handleComplete}
           >
@@ -321,7 +323,7 @@
             {:else}
               Complete 🏁
             {/if}
-          </button>
+          </Button>
           {#if actions.length > 0}
             <ActionDropdown {actions} disabled={isStarting} onAction={handleActionClick} />
           {/if}

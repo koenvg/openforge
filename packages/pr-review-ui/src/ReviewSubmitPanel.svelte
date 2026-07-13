@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
 
   type ReviewEvent = 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES'
 
@@ -143,13 +144,13 @@
       >
         {isSubmitting && selectedEvent === 'COMMENT' ? 'Submitting...' : 'Comment'}
       </button>
-      <button
-        class="btn btn-sm btn-success"
+      <Button
+        size="sm"
         onclick={handleApproveClick}
         disabled={!canApprove}
       >
         {isSubmitting && selectedEvent === 'APPROVE' ? 'Submitting...' : 'Approve'}
-      </button>
+      </Button>
       <button
         class="btn btn-sm btn-error"
         onclick={handleRequestChangesClick}
