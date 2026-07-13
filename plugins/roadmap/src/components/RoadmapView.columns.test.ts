@@ -121,7 +121,7 @@ describe('RoadmapView column save', () => {
 })
 
 describe('RoadmapView issue creation', () => {
-  it('keeps a newly created issue visible when the immediate board reload has not caught up', async () => {
+  it('keeps a newly created issue visible when a manual board reload has not caught up', async () => {
     let boardLoads = 0
     renderView({
       roadmap_get_board: async () => {
@@ -149,8 +149,16 @@ describe('RoadmapView issue creation', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Create issue' }))
 
     await waitFor(() => {
-      expect(boardLoads).toBeGreaterThanOrEqual(2)
+      expect(screen.getByText('Persist created ticket')).toBeTruthy()
       expect((screen.getByRole('button', { name: 'Create' }) as HTMLButtonElement).disabled).toBe(false)
+    })
+    expect(boardLoads).toBe(1)
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+
+    await waitFor(() => {
+      expect(boardLoads).toBe(2)
+      expect((screen.getByRole('button', { name: 'Refresh' }) as HTMLButtonElement).disabled).toBe(false)
     })
     expect(screen.getByText('Persist created ticket')).toBeTruthy()
   })

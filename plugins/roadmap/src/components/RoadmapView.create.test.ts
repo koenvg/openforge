@@ -62,10 +62,17 @@ afterEach(() => {
 })
 
 describe('RoadmapView issue creation', () => {
-  it('keeps the newly created card visible when the board refetch would not include it yet', async () => {
+  it('keeps the newly created card visible without immediately refetching the eventually-consistent board', async () => {
+    let releaseCreate!: () => void
+    const createGate = new Promise<void>((resolve) => {
+      releaseCreate = resolve
+    })
     const { invoke } = renderView({
       roadmap_get_board: async () => staleBoard,
-      roadmap_create_issue: async () => ({ issue: createdIssue }),
+      roadmap_create_issue: async () => {
+        await createGate
+        return { issue: createdIssue }
+      },
     })
 
     // Board loaded once the "No label / Other" column's add button appears.
@@ -79,10 +86,12 @@ describe('RoadmapView issue creation', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Skip AI' }))
     await fireEvent.click(screen.getByRole('button', { name: 'Create issue' }))
 
-    // Wait for the whole create flow to settle. `busy` is released only in the
-    // finally block after create completes (and, in the buggy version, after the
-    // post-create board reload completes), so a re-enabled add button means the
-    // entire flow — including any refetch — has finished.
+    // Hold the backend response until the UI has entered its busy state. This
+    // makes the test observe the full create lifecycle rather than racing the
+    // asynchronous click handler before creation has actually started.
+    await screen.findByRole('button', { name: 'Creating…' })
+    releaseCreate()
+
     await waitFor(() => {
       const button = screen.getByRole('button', {
         name: 'Create issue with no label',
