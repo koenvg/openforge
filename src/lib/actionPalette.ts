@@ -63,7 +63,7 @@ export function getTaskActions(task: Task, customActions: Action[], taskPrs: Pul
 
   actions.push({
     id: 'delete-task',
-    label: 'Complete',
+    label: task.status === 'backlog' ? 'Delete' : 'Complete',
     shortcut: null,
     category: 'task',
     keywords: ['remove', 'trash', 'complete', 'finish', 'close', 'done'],
