@@ -18,37 +18,3 @@ Multi-shell PTY sessions must be keyed per shell tab end-to-end (`${taskId}-shel
 Terminal lifecycle ownership should live in `src/lib/terminalPool.ts`, not be split across `TaskTerminal.svelte` and the pool. Shell liveness/exited state, current PTY instance id, and tab session state must have one authoritative owner in the pool; component-local state should only mirror/render pool state, not invent parallel lifecycle truth.
 `needsClear` is reset/replay state, not a second liveness source. Do not leave entries in contradictory states like `ptyActive = true` with an exited flag still latched. Stale PTY `output` and `exit` events must always be filtered by current `instance_id` in the pool.
 Never use `$effect` return-cleanup to release resources keyed by a prop value. Svelte 5 re-runs the effect (and fires its cleanup) whenever the prop signal changes — including when the parent passes a new object reference with the same logical identity (e.g. `$derived($tasks.find(...))` after a store refresh). Use explicit previous-value comparison inside the effect body, and `onDestroy` for component teardown, so cleanup only fires on actual value change or unmount.
-
-## Babysitter
-
-At the start of every request in this repository, first classify whether the user is asking for development work. Development work means implementation, bug fixes, refactors, migrations, UI/API behavior changes, test writing, code verification, or an explicit Babysitter/process workflow request. For development work, load the Babysitter `call` skill and follow its instructions, including loading any skill it delegates to. Do not load Babysitter or create/drive a Babysitter CLI run for random questions, analysis-only requests, planning/research with no code or process artifact change, or other non-development work unless the user explicitly asks for Babysitter.
-
-Always create and drive a Babysitter CLI run for development work before editing files; loading the Babysitter skill is not enough. Before editing files:
-- Store run-specific process JS files under the current worktree's `.a5c/processes/`, not `/tmp` or another worktree.
-- Before `run:create`, verify the process file exists and `.a5c/node_modules/@a5c-ai/babysitter-sdk` exists; if the SDK is missing, install it from a subshell such as `(cd .a5c && npm i @a5c-ai/babysitter-sdk@<version>)` so the repository CWD does not change.
-- Run `babysitter run:create ... --harness pi` from the project root using an absolute `--entry` path to the current worktree process file.
-- Report the created run id before implementation work begins.
-- Continue with `babysitter run:iterate`, execute/post effects with `babysitter task:post`, and keep iterating until the run reaches a terminal state or requires explicit user input.
-- For implementation tasks that change product code or behavior, the Babysitter process must include an explicit post-implementation review effect after objective verification and before final handoff. Use the `review` skill, a reviewer subagent, or a code-review agent task; post the findings into the run and resolve any blocking findings before completing.
-- Do not bypass the Babysitter orchestration model with direct implementation. If `run:create` or iteration cannot proceed, stop and ask the user instead of continuing.
-
-Project profile: Open Forge is an Electron desktop command center with a Rust sidecar for coordinating multiple projects and AI coding agents while keeping the user focused on one active thing at a time. Babysitter guidance should preserve that product goal: timely nudges for meaningful handoffs, blocked agents, review readiness, CI failures, and destructive decisions; otherwise stay quiet.
-
-Recommended local Babysitter usage:
-- Use `/babysitter:project-install` to refresh `.a5c/project-profile.json` and `.a5c/project-profile.md` after major architecture, workflow, or product-direction changes.
-- Use TDD-driven iterative convergence for feature, bugfix, business-logic, and product-behavior implementation work. For documentation-only, configuration-only, planning, metadata, process-only, or similarly low-risk development changes, use a lighter verification-first workflow instead of inventing failing product tests. Do not create or drive a Babysitter CLI run for random questions, analysis-only requests, or planning/research that does not change code or process artifacts unless explicitly requested.
-- Use repo mapping before broad changes touching high-churn integration points such as `src/App.svelte`, `src/electron/main.ts`, `src-tauri/src/main.rs`, `src/lib/ipc.ts`, `src/lib/types.ts`, `src-tauri/src/github_poller.rs`, or `src/lib/terminalPool.ts`.
-
-Recommended verification gates:
-- Product-code or behavior implementation changes: include a Babysitter-tracked review step after tests/typecheck and before final Handoff Notes.
-- Frontend/type changes: `pnpm exec tsc --noEmit` and `pnpm test`.
-- Electron shell changes: targeted `pnpm test src/electron` or relevant `scripts/electron-*.test.mjs` tests.
-- Rust sidecar/backend changes: `cargo test` from `src-tauri/`.
-- Plugin platform changes: include built-in plugin build/runtime verification where relevant (`pnpm build:plugins` plus targeted tests).
-
-Recommended specialties/processes:
-- `rust` skill for Rust sidecar/backend work.
-- `ui-ux-pro-max` for focus-mode, attention queue, notification/nudge, and low-distraction UX decisions.
-- Electron desktop, Rust sidecar, Svelte/TypeScript/Vitest, and iterative TDD processes for implementation tasks where product behavior or business logic changes.
-
-CI/CD note: Babysitter GitHub Actions integration was intentionally skipped during project install. Do not add CI babysitter automation unless a future task explicitly asks for a focused workflow such as PR failure diagnosis or scheduled project health checks.
