@@ -3,6 +3,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import viteConfig from '../vite.config.ts'
+import { OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS } from '../packages/plugin-sdk/src/publicUiExports.mjs'
 import { OPENFORGE_HOST_SHARED_SVELTE_IMPORTS, OPENFORGE_HOST_SHARED_TERMINAL_RUNTIME_IMPORTS } from '../packages/plugin-sdk/src/vite.ts'
 import {
   OPENFORGE_HOST_RUNTIME_SVELTE_SPECIFIERS,
@@ -60,6 +61,16 @@ describe('OpenForge plugin Svelte runtime contract', () => {
     expect(resolveAliasReplacement(aliases, '@openforge-app/plugin-sdk/frontend')).toBe(
       resolve(process.cwd(), 'packages/plugin-sdk/src/frontend.ts'),
     )
+  })
+
+  it('derives host renderer aliases for every canonical plugin SDK UI export', () => {
+    const aliases = viteConfig.resolve?.alias
+
+    for (const { importSpecifier, workspaceSourcePath } of OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS) {
+      expect(resolveAliasReplacement(aliases, importSpecifier), importSpecifier).toBe(
+        resolve(process.cwd(), workspaceSourcePath),
+      )
+    }
   })
 
   it('keeps the renderer import map complete for every SDK-externalized Svelte runtime import', async () => {

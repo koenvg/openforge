@@ -3,6 +3,7 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 import tailwindcss from '@tailwindcss/vite'
 import { defineConfig } from 'vite'
 import { isOpenForgeHostRuntimeSvelteExternal, rendererImportMapHtml } from './packages/plugin-sdk/src/svelteHostRuntimeContract.mjs'
+import { createOpenForgePluginSdkSourceAliases } from './packages/plugin-sdk/src/vite'
 import { createDaisyUiTailwindPluginAliases } from './src/lib/viteDaisyUi'
 import { createOpenForgeChunkGroups, OPEN_FORGE_CHUNK_SIZE_WARNING_LIMIT } from './src/lib/viteChunks'
 import { createOpenForgeViteLogger } from './src/lib/viteLogger'
@@ -19,82 +20,7 @@ function createOpenForgeHostRuntimeImportMapPlugin() {
 
 function createOpenForgeRootAliases() {
   return [
-    {
-      find: /^@openforge-app\/plugin-sdk$/,
-      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/index.ts'),
-    },
-    {
-      find: /^@openforge-app\/plugin-sdk\/backend$/,
-      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/backend.ts'),
-    },
-    {
-      find: /^@openforge-app\/plugin-sdk\/domain$/,
-      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/domain.ts'),
-    },
-    {
-      find: /^@openforge-app\/plugin-sdk\/prStatusPresentation$/,
-      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/prStatusPresentation.ts'),
-    },
-    {
-      find: /^@openforge-app\/plugin-sdk\/frontend$/,
-      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/frontend.ts'),
-    },
-    {
-      find: /^@openforge-app\/plugin-sdk\/markdown$/,
-      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/markdown.ts'),
-    },
-    {
-      find: /^@openforge-app\/plugin-sdk\/numberParsing$/,
-      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/numberParsing.ts'),
-    },
-    {
-      find: /^@openforge-app\/plugin-sdk\/projectFileTree$/,
-      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/projectFileTree.ts'),
-    },
-    {
-      find: /^@openforge-app\/plugin-sdk\/package-metadata-schema\.json$/,
-      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/openforgePackageMetadataSchema.json'),
-    },
-    {
-      find: /^@openforge-app\/plugin-sdk\/sanitize$/,
-      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/sanitize.ts'),
-    },
-    {
-      find: /^@openforge-app\/plugin-sdk\/testing$/,
-      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/testing.ts'),
-    },
-    {
-      find: /^@openforge-app\/plugin-sdk\/fileIcons$/,
-      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/fileIcons.ts'),
-    },
-    {
-      find: /^@openforge-app\/plugin-sdk\/ui\/MarkdownContent\.svelte$/,
-      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/ui/MarkdownContent.svelte'),
-    },
-    {
-      find: /^@openforge-app\/plugin-sdk\/ui\/ResizablePanel\.svelte$/,
-      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/ui/ResizablePanel.svelte'),
-    },
-    {
-      find: /^@openforge-app\/plugin-sdk\/ui\/Modal\.svelte$/,
-      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/ui/Modal.svelte'),
-    },
-    {
-      find: /^@openforge-app\/plugin-sdk\/ui\/PluginPageHeader\.svelte$/,
-      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/ui/PluginPageHeader.svelte'),
-    },
-    {
-      find: /^@openforge-app\/plugin-sdk\/ui\/PluginViewState\.svelte$/,
-      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/ui/PluginViewState.svelte'),
-    },
-    {
-      find: /^@openforge-app\/plugin-sdk\/ui\/FileTypeIcon\.svelte$/,
-      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/ui/FileTypeIcon.svelte'),
-    },
-    {
-      find: /^@openforge-app\/plugin-sdk\/vite$/,
-      replacement: resolve(process.cwd(), 'packages/plugin-sdk/src/vite.ts'),
-    },
+    ...createOpenForgePluginSdkSourceAliases(new URL('./', import.meta.url)),
     {
       find: /^@openforge-app\/terminal-runtime$/,
       replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/index.ts'),

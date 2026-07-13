@@ -41,6 +41,7 @@ describe('findPluginImportBoundaryViolations', () => {
           import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
           import PluginPageHeader from '@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte'
           import PluginViewState from '@openforge-app/plugin-sdk/ui/PluginViewState.svelte'
+          import FileTypeIcon from '@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte'
           import TerminalTabsShell from '@openforge-app/terminal-runtime/TerminalTabsShell'
           import PrOverviewTab from '@openforge-app/pr-review-ui/PrOverviewTab.svelte'
           import LocalCard from './components/LocalCard.svelte'

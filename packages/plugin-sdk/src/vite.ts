@@ -4,6 +4,7 @@
  * plugin://host-runtime assets are derived from the same host-runtime contract.
  */
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS } from './publicUiExports.mjs'
 import { OPENFORGE_HOST_RUNTIME_SVELTE_SPECIFIERS as HOST_RUNTIME_SVELTE_SPECIFIERS } from './svelteHostRuntimeContract.mjs'
 
 export const OPENFORGE_HOST_RUNTIME_SVELTE_SPECIFIERS = HOST_RUNTIME_SVELTE_SPECIFIERS
@@ -41,11 +42,12 @@ export type OpenForgePluginSdkSourceAlias = Readonly<{
 
 export type OpenForgePluginSdkSourceAliasRecord = Readonly<Record<string, string>>
 
-const OPENFORGE_PLUGIN_SDK_SOURCE_ENTRYPOINTS = Object.freeze([
+const OPENFORGE_PLUGIN_SDK_SOURCE_ENTRYPOINTS: readonly (readonly [string, string])[] = Object.freeze([
   ['@openforge-app/plugin-sdk/frontend', 'packages/plugin-sdk/src/frontend.ts'],
   ['@openforge-app/plugin-sdk/backend', 'packages/plugin-sdk/src/backend.ts'],
   ['@openforge-app/plugin-sdk/testing', 'packages/plugin-sdk/src/testing.ts'],
   ['@openforge-app/plugin-sdk/vite', 'packages/plugin-sdk/src/vite.ts'],
+  ['@openforge-app/plugin-sdk/package-metadata-schema.json', 'packages/plugin-sdk/src/openforgePackageMetadataSchema.json'],
   ['@openforge-app/plugin-sdk/domain', 'packages/plugin-sdk/src/domain.ts'],
   ['@openforge-app/plugin-sdk/prStatusPresentation', 'packages/plugin-sdk/src/prStatusPresentation.ts'],
   ['@openforge-app/plugin-sdk/markdown', 'packages/plugin-sdk/src/markdown.ts'],
@@ -53,15 +55,10 @@ const OPENFORGE_PLUGIN_SDK_SOURCE_ENTRYPOINTS = Object.freeze([
   ['@openforge-app/plugin-sdk/projectFileTree', 'packages/plugin-sdk/src/projectFileTree.ts'],
   ['@openforge-app/plugin-sdk/sanitize', 'packages/plugin-sdk/src/sanitize.ts'],
   ['@openforge-app/plugin-sdk/fileIcons', 'packages/plugin-sdk/src/fileIcons.ts'],
-  ['@openforge-app/plugin-sdk/ui/Button.svelte', 'packages/plugin-sdk/src/ui/Button.svelte'],
-  ['@openforge-app/plugin-sdk/ui/MarkdownContent.svelte', 'packages/plugin-sdk/src/ui/MarkdownContent.svelte'],
-  ['@openforge-app/plugin-sdk/ui/ResizablePanel.svelte', 'packages/plugin-sdk/src/ui/ResizablePanel.svelte'],
-  ['@openforge-app/plugin-sdk/ui/Modal.svelte', 'packages/plugin-sdk/src/ui/Modal.svelte'],
-  ['@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte', 'packages/plugin-sdk/src/ui/PluginPageHeader.svelte'],
-  ['@openforge-app/plugin-sdk/ui/PluginViewState.svelte', 'packages/plugin-sdk/src/ui/PluginViewState.svelte'],
-  ['@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte', 'packages/plugin-sdk/src/ui/FileTypeIcon.svelte'],
+  ...OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS.map(({ importSpecifier, workspaceSourcePath }) =>
+    [importSpecifier, workspaceSourcePath] as const),
   ['@openforge-app/plugin-sdk', 'packages/plugin-sdk/src/index.ts'],
-] as const)
+])
 
 function repoRootUrl(repoRoot: URL | string): URL {
   if (repoRoot instanceof URL) {
