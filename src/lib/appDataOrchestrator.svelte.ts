@@ -6,6 +6,7 @@ import {
   attentionCountByProject,
   error,
   globalExcludedPrRepos,
+  hiddenProjectIds,
   isLoading,
   projectAttention,
   projectResolvedRepos,
@@ -31,6 +32,7 @@ import {
 import { DEFAULT_FOCUS_STATES, loadFocusFilterStates, loadOutOfFocusTaskIds } from './boardFilters'
 import { buildAttentionCountByProject } from './attentionCounts'
 import { applyProjectOrder } from './projectOrder'
+import { loadHiddenProjectIds } from './projectVisibility'
 import { buildTicketPullRequestMap } from './pullRequestStore'
 import type { ProjectAttention, Task } from './types'
 import type { TaskState } from './taskState'
@@ -114,6 +116,12 @@ export function useAppDataOrchestrator(options: AppDataOrchestratorOptions) {
 
       const orderedProjects = applyProjectOrder(fetchedProjects, savedOrder)
       projects.set(orderedProjects)
+
+      try {
+        hiddenProjectIds.set(await loadHiddenProjectIds())
+      } catch (hiddenError) {
+        logError('Failed to load hidden projects:', hiddenError)
+      }
 
       const currentActiveProjectId = get(activeProjectId)
       if (currentActiveProjectId && !orderedProjects.find(p => p.id === currentActiveProjectId)) {

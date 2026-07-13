@@ -4,7 +4,7 @@ import type { Writable } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { setConfig } from '../../lib/ipc'
-import { activeProjectId, attentionCountByProject, projects, reviewRequestCountByProject } from '../../lib/stores'
+import { activeProjectId, attentionCountByProject, hiddenProjectIds, projects, reviewRequestCountByProject } from '../../lib/stores'
 import type { AppView, Project } from '../../lib/types'
 import AppSidebar from './AppSidebar.svelte'
 
@@ -16,6 +16,7 @@ vi.mock('../../lib/stores', async () => {
   const { writable } = await import('svelte/store')
   return {
     projects: writable<Project[]>([]),
+    hiddenProjectIds: writable<Set<string>>(new Set()),
     activeProjectId: writable<string | null>(null),
     attentionCountByProject: writable<Map<string, number>>(new Map()),
     reviewRequestCountByProject: writable<Map<string, number>>(new Map()),
@@ -24,6 +25,7 @@ vi.mock('../../lib/stores', async () => {
 
 vi.mock('../../lib/ipc', () => ({
   setConfig: vi.fn(async () => {}),
+  getConfig: vi.fn(async () => null),
   getGitBranch: vi.fn(async () => 'main'),
 }))
 
@@ -43,10 +45,13 @@ vi.mock('@lucide/svelte', () => {
   return {
     ChevronLeft: stub,
     ChevronRight: stub,
+    ChevronDown: stub,
     Settings: stub,
     Plus: stub,
     ArrowUp: stub,
     ArrowDown: stub,
+    EyeOff: stub,
+    Eye: stub,
   }
 })
 
@@ -93,6 +98,7 @@ describe('AppSidebar', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     projects.set(sampleProjects)
+    hiddenProjectIds.set(new Set())
     activeProjectId.set('proj-1')
     attentionCountByProject.set(new Map())
     reviewCountByProject.set(new Map())
@@ -391,6 +397,85 @@ describe('AppSidebar', () => {
       expect(setConfig).toHaveBeenCalledTimes(1)
 
       resolveSave()
+    })
+  })
+
+  describe('Hiding projects', () => {
+    it('shows a hide control for each visible project when expanded', () => {
+      renderSidebar({ collapsed: false })
+      expect(screen.getByLabelText(/Hide Alpha Project/i)).toBeTruthy()
+      expect(screen.getByLabelText(/Hide Beta Project/i)).toBeTruthy()
+    })
+
+    it('does not show hide controls when collapsed', () => {
+      renderSidebar({ collapsed: true })
+      expect(screen.queryByLabelText(/Hide Alpha Project/i)).toBeNull()
+    })
+
+    it('hiding a project persists it and removes it from the visible list', async () => {
+      renderSidebar({ collapsed: false })
+      await fireEvent.click(screen.getByLabelText(/Hide Beta Project/i))
+
+      expect(get(hiddenProjectIds)).toEqual(new Set(['proj-2']))
+      expect(setConfig).toHaveBeenCalledWith('project_sidebar_hidden', JSON.stringify(['proj-2']))
+      // Beta's own row button is gone from the visible list; the collapsed Hidden section hides it.
+      expect(screen.queryByRole('button', { name: /^beta project$/i })).toBeNull()
+    })
+
+    it('reverts the optimistic hide if persisting fails', async () => {
+      vi.mocked(setConfig).mockRejectedValueOnce(new Error('save failed'))
+      renderSidebar({ collapsed: false })
+      await fireEvent.click(screen.getByLabelText(/Hide Beta Project/i))
+
+      expect(get(hiddenProjectIds)).toEqual(new Set())
+    })
+
+    it('renders a silent Hidden section with the hidden count', () => {
+      hiddenProjectIds.set(new Set(['proj-2', 'proj-3']))
+      renderSidebar({ collapsed: false })
+      expect(screen.getByText(/Hidden \(2\)/i)).toBeTruthy()
+    })
+
+    it('does not render the Hidden section when nothing is hidden', () => {
+      renderSidebar({ collapsed: false })
+      expect(screen.queryByText(/Hidden \(/i)).toBeNull()
+    })
+
+    it('does not render the Hidden section when collapsed', () => {
+      hiddenProjectIds.set(new Set(['proj-2']))
+      renderSidebar({ collapsed: true })
+      expect(screen.queryByText(/Hidden \(/i)).toBeNull()
+    })
+
+    it('expanding the Hidden section reveals hidden projects with an unhide control', async () => {
+      hiddenProjectIds.set(new Set(['proj-2']))
+      renderSidebar({ collapsed: false })
+      // Collapsed by default — the hidden project's unhide control is not yet shown.
+      expect(screen.queryByLabelText(/Unhide Beta Project/i)).toBeNull()
+
+      await fireEvent.click(screen.getByText(/Hidden \(1\)/i))
+      expect(screen.getByLabelText(/Unhide Beta Project/i)).toBeTruthy()
+    })
+
+    it('unhiding a project persists its removal from the hidden set', async () => {
+      hiddenProjectIds.set(new Set(['proj-2']))
+      renderSidebar({ collapsed: false })
+      await fireEvent.click(screen.getByText(/Hidden \(1\)/i))
+      await fireEvent.click(screen.getByLabelText(/Unhide Beta Project/i))
+
+      expect(get(hiddenProjectIds)).toEqual(new Set())
+      expect(setConfig).toHaveBeenCalledWith('project_sidebar_hidden', JSON.stringify([]))
+    })
+
+    it('reordering targets the correct visible neighbour when a project is hidden', async () => {
+      // Hide Beta (proj-2), which sits between Alpha and Gamma. Moving Alpha down must
+      // swap it with Gamma (the next VISIBLE project), leaving Beta in its slot.
+      hiddenProjectIds.set(new Set(['proj-2']))
+      renderSidebar({ collapsed: false })
+      await fireEvent.click(screen.getByLabelText(/Move Alpha Project down/i))
+
+      expect(get(projects).map((p) => p.id)).toEqual(['proj-3', 'proj-2', 'proj-1'])
+      expect(setConfig).toHaveBeenCalledWith('project_sidebar_order', JSON.stringify(['proj-3', 'proj-2', 'proj-1']))
     })
   })
 })

@@ -2,7 +2,7 @@
   import { onMount, tick } from 'svelte'
   import { get } from 'svelte/store'
   import Modal from '../shared/ui/Modal.svelte'
-  import { projects, activeProjectId, reviewPrs, globalExcludedPrRepos, ticketPrs } from '../../lib/stores'
+  import { projects, activeProjectId, reviewPrs, globalExcludedPrRepos, ticketPrs, hiddenProjectIds } from '../../lib/stores'
   import { getAllTasks, getLatestSessions, getProjectConfig, getConfig, setConfig } from '../../lib/ipc'
   import { loadOutOfFocusTaskIds, loadFocusFilterStates, DEFAULT_FOCUS_STATES } from '../../lib/boardFilters'
   import { buildAttentionOverview } from '../../lib/attentionOverview'
@@ -227,6 +227,7 @@
         reviewPrs: get(reviewPrs),
         excludedRepos: get(globalExcludedPrRepos),
         resolvedRepoByProject,
+        hiddenProjectIds: get(hiddenProjectIds),
       })
       collapsedIds = parseCollapsed(collapsedRaw)
 

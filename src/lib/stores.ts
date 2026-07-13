@@ -40,6 +40,9 @@ export function setTaskMerging(taskId: string, isMerging: boolean): void {
 export const isLoading = writable(false);
 export const error = writable<string | null>(null);
 export const projects = writable<Project[]>([]);
+// Project ids the user has hidden from the sidebar (and the ⌘⇧A attention overview).
+// Persisted to the global config key `project_sidebar_hidden`. See projectVisibility.ts.
+export const hiddenProjectIds = writable<Set<string>>(new Set());
 export const activeProjectId = writable<string | null>(null);
 export const activeProjectColorId = writable<string | null>(null);
 export const projectAttention = writable<Map<string, ProjectAttention>>(new Map());

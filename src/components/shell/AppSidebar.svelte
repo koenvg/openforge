@@ -1,7 +1,13 @@
 <script lang="ts">
-  import { projects, activeProjectId, attentionCountByProject, reviewRequestCountByProject } from '../../lib/stores'
+  import { projects, activeProjectId, attentionCountByProject, reviewRequestCountByProject, hiddenProjectIds } from '../../lib/stores'
   import { getGitBranch, setConfig } from '../../lib/ipc'
-  import { ChevronLeft, ChevronRight, Settings, Plus, ArrowUp, ArrowDown } from '@lucide/svelte'
+  import { ChevronLeft, ChevronRight, ChevronDown, Settings, Plus, ArrowUp, ArrowDown, EyeOff, Eye } from '@lucide/svelte'
+  import {
+    partitionProjectsByHidden,
+    withProjectHidden,
+    moveVisibleProject,
+    saveHiddenProjectIds,
+  } from '../../lib/projectVisibility'
   import { resolveIconRailIcon } from '../../lib/iconRailIcons'
   import { GITHUB_SYNC_GLOBAL_VIEW_KEY } from '../../lib/githubSyncPlugin'
   import { isPluginViewKey } from '../../lib/plugin/types'
@@ -50,6 +56,14 @@
 
   let branchName = $state<string | null>(null)
   let isSavingProjectOrder = $state(false)
+  let isSavingHidden = $state(false)
+  let hiddenExpanded = $state(false)
+
+  // Hidden projects live in a separate silent "Hidden" section; a project is never removed
+  // from $projects, only relocated. See projectVisibility.ts.
+  let partitionedProjects = $derived(partitionProjectsByHidden($projects, $hiddenProjectIds))
+  let visibleProjects = $derived(partitionedProjects.visible)
+  let hiddenProjects = $derived(partitionedProjects.hidden)
 
   $effect(() => {
     if (appMode === 'dev' && !branchName) {
@@ -71,19 +85,17 @@
   }
 
   
-  async function moveProject(index: number, direction: 'up' | 'down') {
+  // `visibleIndex` is the position within the visible list; reordering swaps a project
+  // with its adjacent visible neighbour while hidden projects keep their absolute slots.
+  async function moveProject(visibleIndex: number, direction: 'up' | 'down') {
     if (isSavingProjectOrder) {
       return
     }
 
     const previousProjects = [...$projects]
-    const nextProjects = [...$projects]
+    const nextProjects = moveVisibleProject($projects, $hiddenProjectIds, visibleIndex, direction)
 
-    if (direction === 'up' && index > 0) {
-      ;[nextProjects[index - 1], nextProjects[index]] = [nextProjects[index], nextProjects[index - 1]]
-    } else if (direction === 'down' && index < nextProjects.length - 1) {
-      ;[nextProjects[index], nextProjects[index + 1]] = [nextProjects[index + 1], nextProjects[index]]
-    } else {
+    if (nextProjects.every((project, i) => project.id === previousProjects[i]?.id)) {
       return
     }
 
@@ -98,6 +110,26 @@
       $projects = previousProjects
     } finally {
       isSavingProjectOrder = false
+    }
+  }
+
+  async function setProjectHidden(projectId: string, shouldHide: boolean) {
+    if (isSavingHidden) {
+      return
+    }
+
+    const previousHidden = $hiddenProjectIds
+    const nextHidden = withProjectHidden(previousHidden, projectId, shouldHide)
+    $hiddenProjectIds = nextHidden
+    isSavingHidden = true
+
+    try {
+      await saveHiddenProjectIds(nextHidden)
+    } catch (error) {
+      console.error('Failed to persist hidden projects:', error)
+      $hiddenProjectIds = previousHidden
+    } finally {
+      isSavingHidden = false
     }
   }
 
@@ -146,7 +178,7 @@
   </div>
 
   <div class="flex-1 overflow-y-auto">
-    {#each $projects as project, index (project.id)}
+    {#each visibleProjects as project, index (project.id)}
       {@const attentionCount = getAttentionCount(project.id)}
       {@const isActive = project.id === $activeProjectId && isProjectContextView}
       {@const reviewCount = $reviewRequestCountByProject.get(project.id) ?? 0}
@@ -203,33 +235,90 @@
                </div>
              {/if}
           </button>
-          <div class="absolute right-1 top-1/2 flex -translate-y-1/2 flex-col gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-            {#if index > 0}
-              <button
-                type="button"
-                class="btn btn-ghost btn-xs p-0.5 min-h-0 h-auto"
-                aria-label="Move {project.name} up"
-                disabled={isSavingProjectOrder}
-                onclick={(e) => { e.stopPropagation(); moveProject(index, 'up') }}
-              >
-                <ArrowUp size={12} />
-              </button>
-            {/if}
-            {#if index < $projects.length - 1}
-              <button
-                type="button"
-                class="btn btn-ghost btn-xs p-0.5 min-h-0 h-auto"
-                aria-label="Move {project.name} down"
-                disabled={isSavingProjectOrder}
-                onclick={(e) => { e.stopPropagation(); moveProject(index, 'down') }}
-              >
-                <ArrowDown size={12} />
-              </button>
-            {/if}
+          <div class="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs p-0.5 min-h-0 h-auto"
+              aria-label="Hide {project.name}"
+              disabled={isSavingHidden}
+              onclick={(e) => { e.stopPropagation(); setProjectHidden(project.id, true) }}
+            >
+              <EyeOff size={12} />
+            </button>
+            <div class="flex flex-col gap-0.5">
+              {#if index > 0}
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs p-0.5 min-h-0 h-auto"
+                  aria-label="Move {project.name} up"
+                  disabled={isSavingProjectOrder}
+                  onclick={(e) => { e.stopPropagation(); moveProject(index, 'up') }}
+                >
+                  <ArrowUp size={12} />
+                </button>
+              {/if}
+              {#if index < visibleProjects.length - 1}
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs p-0.5 min-h-0 h-auto"
+                  aria-label="Move {project.name} down"
+                  disabled={isSavingProjectOrder}
+                  onclick={(e) => { e.stopPropagation(); moveProject(index, 'down') }}
+                >
+                  <ArrowDown size={12} />
+                </button>
+              {/if}
+            </div>
           </div>
         </div>
       {/if}
     {/each}
+
+    <!-- Hidden projects: a silent, collapsible section (count only). Only in the expanded
+         sidebar — the collapsed icon rail shows visible projects exclusively. -->
+    {#if !collapsed && hiddenProjects.length > 0}
+      <div class="border-t border-base-300/40 mt-1">
+        <button
+          type="button"
+          class="w-full flex items-center gap-1 px-3 py-2 text-left text-base-content/50 hover:text-base-content/80 transition-colors"
+          aria-expanded={hiddenExpanded}
+          onclick={() => (hiddenExpanded = !hiddenExpanded)}
+        >
+          {#if hiddenExpanded}
+            <ChevronDown size={12} />
+          {:else}
+            <ChevronRight size={12} />
+          {/if}
+          <span class="text-[10px] font-bold uppercase tracking-wide">Hidden ({hiddenProjects.length})</span>
+        </button>
+        {#if hiddenExpanded}
+          {#each hiddenProjects as project (project.id)}
+            {@const isActive = project.id === $activeProjectId && isProjectContextView}
+            <div class="group relative flex border-l-2 transition-colors {isActive ? 'border-primary bg-base-100' : 'border-transparent hover:bg-base-300/30'}">
+              <button
+                type="button"
+                class="flex-1 px-3 py-2 text-left"
+                aria-current={isActive ? 'true' : undefined}
+                onclick={() => selectProject(project.id)}
+              >
+                <div class="text-xs {isActive ? 'font-bold text-base-content' : 'font-medium text-base-content/70'}">{project.name}</div>
+              </button>
+              <div class="absolute right-1 top-1/2 flex -translate-y-1/2 items-center opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs p-0.5 min-h-0 h-auto"
+                  aria-label="Unhide {project.name}"
+                  disabled={isSavingHidden}
+                  onclick={(e) => { e.stopPropagation(); setProjectHidden(project.id, false) }}
+                >
+                  <Eye size={12} />
+                </button>
+              </div>
+            </div>
+          {/each}
+        {/if}
+      </div>
+    {/if}
   </div>
 
   <div class="border-t border-base-300/50 py-2">
