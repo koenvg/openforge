@@ -445,7 +445,7 @@
       {/if}
 
       {#if activeFilter === 'backlog' && visibleFilterLabels.length > 0}
-        <div class="flex flex-wrap items-center gap-2" aria-label="Backlog label filters">
+        <div class="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-base-300 bg-base-200 py-2" aria-label="Backlog label filters">
           <span class="text-xs font-semibold text-base-content/50">Labels</span>
           {#each visibleFilterLabels as label (label.id)}
             <button
