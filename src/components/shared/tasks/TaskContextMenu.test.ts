@@ -221,10 +221,18 @@ describe('TaskContextMenu', () => {
     }
   })
 
-  it('always shows the Complete option instead of Delete', () => {
-    tasks.set([makeTask('T-1', 'doing')])
+  it('shows Delete instead of Complete for backlog tasks', () => {
+    tasks.set([makeTask('T-1', 'backlog')])
     render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
-    expect(screen.getByText(/Complete/)).toBeTruthy()
+    expect(screen.getByText('Delete')).toBeTruthy()
+    expect(screen.queryByText(/Complete/)).toBeNull()
+  })
+
+  it.each(['doing', 'done'] as BoardStatus[])('shows Complete instead of Delete for %s tasks', status => {
+    tasks.set([makeTask('T-1', status)])
+    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
+    expect(screen.getByText('Complete', { exact: true })).toBeTruthy()
+    expect(screen.queryByText('Complete 🏁', { exact: true })).toBeNull()
     expect(screen.queryByText('Delete')).toBeNull()
   })
 

@@ -75,13 +75,15 @@ function makePR(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
 }
 
 describe('getTaskActions', () => {
-  it('returns Start Task and Delete for backlog task', () => {
+  it('labels the terminal action Delete for a backlog task and does not show Complete', () => {
     const task = makeTask({ status: 'backlog' })
     const actions = getTaskActions(task, [], [])
     const ids = actions.map(a => a.id)
     expect(ids).toContain('start-task')
     expect(ids).not.toContain('move-to-done')
     expect(ids).toContain('delete-task')
+    expect(actions.find(a => a.id === 'delete-task')?.label).toBe('Delete')
+    expect(actions.some(a => a.label === 'Complete')).toBe(false)
   })
 
   it('returns Set aside + Complete (delete) + custom actions for doing task outside Out of Focus', () => {
@@ -94,6 +96,7 @@ describe('getTaskActions', () => {
     expect(actions.find(a => a.id === 'set-aside-task')?.label).toBe('Set aside')
     expect(ids).not.toContain('return-to-board')
     expect(ids).toContain('delete-task')
+    expect(actions.find(a => a.id === 'delete-task')?.label).toBe('Complete')
     expect(ids).toContain('custom-action-custom-1')
     expect(ids.indexOf('set-aside-task')).toBeGreaterThan(ids.indexOf('delete-task'))
     expect(ids.indexOf('set-aside-task')).toBeGreaterThan(ids.indexOf('custom-action-custom-1'))
@@ -108,11 +111,13 @@ describe('getTaskActions', () => {
     expect(ids).toContain('delete-task')
   })
 
-  it('returns Delete only for done task', () => {
+  it('labels the terminal action Complete for a done task', () => {
     const task = makeTask({ status: 'done' })
     const actions = getTaskActions(task, [], [])
     const ids = actions.map(a => a.id)
     expect(ids).toContain('delete-task')
+    expect(actions.find(a => a.id === 'delete-task')?.label).toBe('Complete')
+    expect(actions.some(a => a.label === 'Delete')).toBe(false)
     expect(ids).not.toContain('move-to-done')
     expect(ids).not.toContain('start-task')
   })

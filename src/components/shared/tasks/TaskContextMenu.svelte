@@ -94,7 +94,7 @@
   {#if hasActionsBeforeComplete}
     <div class="border-t border-base-content/10 my-1"></div>
   {/if}
-  <ContextMenuItem label={isCompleting ? 'Completing…' : 'Complete 🏁'} disabled={isCompleting} onclick={handleComplete} />
+  <ContextMenuItem label={isCompleting ? 'Completing…' : taskStatus === 'backlog' ? 'Delete' : 'Complete'} disabled={isCompleting} onclick={handleComplete} />
   {#if taskStatus === 'doing' && !isOutOfFocusTask && onMoveToOutOfFocus}
     <ContextMenuItem label="Set aside" onclick={handleSetAside} />
   {/if}
