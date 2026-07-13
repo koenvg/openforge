@@ -158,6 +158,32 @@ describe('resolveContributions', () => {
     expect(result.taskUISections.every((section) => !('title' in section) && !('icon' in section))).toBe(true)
   })
 
+  it('sorts settings sections by order while preserving registration order for ties', () => {
+    const result = resolveContributions([
+      makeSource({
+        pluginId: 'plugin.zeta',
+        settingsSections: [
+          makeSettingsSection({ id: 'same-order-first', title: 'Same Order First', order: 10 }),
+          makeSettingsSection({ id: 'later', title: 'Later', order: 30 }),
+        ],
+      }),
+      makeSource({
+        pluginId: 'plugin.alpha',
+        settingsSections: [
+          makeSettingsSection({ id: 'same-order-second', title: 'Same Order Second', order: 10 }),
+          makeSettingsSection({ id: 'default-order', title: 'Default Order' }),
+        ],
+      }),
+    ])
+
+    expect(result.settingsSections).toEqual([
+      { pluginId: 'plugin.alpha', contributionId: 'default-order', namespacedId: 'plugin.alpha:default-order', title: 'Default Order', order: 0 },
+      { pluginId: 'plugin.zeta', contributionId: 'same-order-first', namespacedId: 'plugin.zeta:same-order-first', title: 'Same Order First', order: 10 },
+      { pluginId: 'plugin.alpha', contributionId: 'same-order-second', namespacedId: 'plugin.alpha:same-order-second', title: 'Same Order Second', order: 10 },
+      { pluginId: 'plugin.zeta', contributionId: 'later', namespacedId: 'plugin.zeta:later', title: 'Later', order: 30 },
+    ])
+  })
+
   it('handles empty contribution sources gracefully', () => {
     const result = resolveContributions([makeSource()])
 

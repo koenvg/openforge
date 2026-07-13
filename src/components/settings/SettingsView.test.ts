@@ -319,6 +319,54 @@ describe('SettingsView', () => {
     })
   })
 
+  it('renders plugin settings sections in resolved order and preserves registration order for ties', async () => {
+    enabledPluginIds.set(new Set(['plugin.zeta', 'plugin.alpha']))
+    runtimeContributionSources.set(new Map([
+      [
+        'plugin.zeta',
+        {
+          pluginId: 'plugin.zeta',
+          settingsSections: [
+            { id: 'same-order-first', title: 'Same Order First', order: 10 },
+            { id: 'later', title: 'Later', order: 30 },
+          ],
+        },
+      ],
+      [
+        'plugin.alpha',
+        {
+          pluginId: 'plugin.alpha',
+          settingsSections: [
+            { id: 'same-order-second', title: 'Same Order Second', order: 10 },
+            { id: 'default-order', title: 'Default Order' },
+          ],
+        },
+      ],
+    ]))
+
+    for (const namespacedId of [
+      'plugin.zeta:same-order-first',
+      'plugin.zeta:later',
+      'plugin.alpha:same-order-second',
+      'plugin.alpha:default-order',
+    ]) {
+      registerRenderableContributionComponent('settingsSections', namespacedId, PluginSlotTestView)
+    }
+
+    render(SettingsView, { props: defaultProps })
+
+    await vi.waitFor(() => {
+      const renderedSlotIds = Array.from(document.querySelectorAll('[data-slot-type="settingsSections"]'))
+        .map((element) => element.getAttribute('data-slot-id'))
+      expect(renderedSlotIds).toEqual([
+        'plugin.alpha:default-order',
+        'plugin.zeta:same-order-first',
+        'plugin.alpha:same-order-second',
+        'plugin.zeta:later',
+      ])
+    })
+  })
+
   it('renders plugin installation and inventory management on the global settings page', async () => {
     installedPlugins.set(new Map([[
       'plugin.global',
