@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import ts from 'typescript'
+import { OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS } from '../packages/plugin-sdk/src/publicUiExports.mjs'
 
 const DEFAULT_PLUGIN_SOURCE_ROOT = 'plugins'
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.svelte'])
@@ -23,12 +24,7 @@ const FALLBACK_OPENFORGE_PACKAGE_EXPORTS = new Map([
       '/markdown',
       '/numberParsing',
       '/sanitize',
-      '/ui/Button.svelte',
-      '/ui/MarkdownContent.svelte',
-      '/ui/ResizablePanel.svelte',
-      '/ui/Modal.svelte',
-      '/ui/PluginPageHeader.svelte',
-      '/ui/PluginViewState.svelte',
+      ...OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS.map(({ packageSubpath }) => packageSubpath.slice(1)),
     ]),
   ],
   [

@@ -1,19 +1,22 @@
-import { copyFile, cp, mkdir } from 'node:fs/promises'
+import { copyFile, cp, mkdir, readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS,
+  assertOpenForgePluginSdkPublicUiPackageExports,
+} from '../src/publicUiExports.mjs'
 
 const packageRoot = fileURLToPath(new URL('..', import.meta.url))
+
+const packageJson = JSON.parse(await readFile(join(packageRoot, 'package.json'), 'utf8'))
+assertOpenForgePluginSdkPublicUiPackageExports(packageJson.exports)
 
 const assetPaths = [
   'src/svelteHostRuntimeContract.mjs',
   'src/svelteHostRuntimeContract.d.mts',
-  'src/ui/Button.svelte',
-  'src/ui/MarkdownContent.svelte',
-  'src/ui/ResizablePanel.svelte',
-  'src/ui/Modal.svelte',
-  'src/ui/PluginPageHeader.svelte',
-  'src/ui/PluginViewState.svelte',
-  'src/ui/FileTypeIcon.svelte',
+  'src/publicUiExports.mjs',
+  'src/publicUiExports.d.mts',
+  ...OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS.map(({ sourcePath }) => sourcePath),
 ]
 await Promise.all(assetPaths.map(async (assetPath) => {
   const relativeOutputPath = assetPath.replace(/^src\//, '')
