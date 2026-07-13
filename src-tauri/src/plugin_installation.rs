@@ -142,9 +142,7 @@ impl PackageMetadataSchemaRules {
     }
 
     fn supports_api_version(&self, api_version: i64) -> bool {
-        self.supported_api_versions
-            .iter()
-            .any(|supported_version| *supported_version == api_version)
+        self.supported_api_versions.contains(&api_version)
     }
 
     fn supports_capability(&self, capability: &str) -> bool {

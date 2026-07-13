@@ -476,10 +476,8 @@ mod tests {
             assert!(latest_session_allows_startup_resume(Some(&session)));
         }
 
-        for status in ["failed"] {
-            let session = test_agent_session_with_status(status);
-            assert!(!latest_session_allows_startup_resume(Some(&session)));
-        }
+        let failed_session = test_agent_session_with_status("failed");
+        assert!(!latest_session_allows_startup_resume(Some(&failed_session)));
 
         assert!(!latest_session_allows_startup_resume(None));
     }

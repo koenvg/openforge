@@ -87,6 +87,15 @@ pub struct PtyProcessDiagnosticSession {
     pub pid_file_name: String,
 }
 
+pub(crate) struct PtySpawnContext<'a> {
+    pub task_id: &'a str,
+    pub cwd: &'a std::path::Path,
+    pub cols: u16,
+    pub rows: u16,
+    pub app_handle: Option<crate::backend_runtime::AppHandle>,
+    pub app_event_tx: Option<crate::app_events::AppEventSender>,
+}
+
 impl PtyManager {
     pub fn new() -> Self {
         Self {

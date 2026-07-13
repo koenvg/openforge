@@ -17,7 +17,7 @@ use super::events::{
     RingBuffer, SharedRingBuffer, CLAUDE_BUFFER_CAPACITY,
 };
 use super::pids::{pid_file_name_for_session_key, shell_session_key};
-use super::{PtyError, PtyManager, PtyProcessDiagnosticSession};
+use super::{PtyError, PtyManager, PtyProcessDiagnosticSession, PtySpawnContext};
 
 pub(super) type PtySessions = Arc<Mutex<HashMap<String, PtySession>>>;
 pub(super) type LastOutputTimes = Arc<Mutex<HashMap<String, Arc<AtomicU64>>>>;
@@ -463,12 +463,14 @@ impl PtyManager {
                 agent,
                 model_name.as_deref(),
             ),
-            task_id,
-            cwd,
-            cols,
-            rows,
-            app_handle,
-            app_event_tx,
+            PtySpawnContext {
+                task_id,
+                cwd,
+                cols,
+                rows,
+                app_handle,
+                app_event_tx,
+            },
         )
         .await
     }
@@ -488,12 +490,14 @@ impl PtyManager {
     ) -> Result<u64, PtyError> {
         self.spawn_agent_pty(
             CodexPtyAdapter::new(prompt, resume_session_id, continue_session),
-            task_id,
-            cwd,
-            cols,
-            rows,
-            app_handle,
-            app_event_tx,
+            PtySpawnContext {
+                task_id,
+                cwd,
+                cols,
+                rows,
+                app_handle,
+                app_event_tx,
+            },
         )
         .await
     }
@@ -540,12 +544,14 @@ impl PtyManager {
                 hooks_settings_path,
                 permission_mode,
             ),
-            task_id,
-            cwd,
-            cols,
-            rows,
-            app_handle,
-            app_event_tx,
+            PtySpawnContext {
+                task_id,
+                cwd,
+                cols,
+                rows,
+                app_handle,
+                app_event_tx,
+            },
         )
         .await
     }
@@ -565,12 +571,14 @@ impl PtyManager {
     ) -> Result<u64, PtyError> {
         self.spawn_agent_pty(
             PiPtyAdapter::new(prompt, resume_session_id, continue_session, None),
-            task_id,
-            cwd,
-            cols,
-            rows,
-            app_handle,
-            app_event_tx,
+            PtySpawnContext {
+                task_id,
+                cwd,
+                cols,
+                rows,
+                app_handle,
+                app_event_tx,
+            },
         )
         .await
     }
@@ -604,13 +612,16 @@ impl PtyManager {
     async fn spawn_agent_pty<A: AgentPtyProviderAdapter>(
         &self,
         mut adapter: A,
-        task_id: &str,
-        cwd: &Path,
-        cols: u16,
-        rows: u16,
-        app_handle: Option<crate::backend_runtime::AppHandle>,
-        app_event_tx: Option<AppEventSender>,
+        context: PtySpawnContext<'_>,
     ) -> Result<u64, PtyError> {
+        let PtySpawnContext {
+            task_id,
+            cwd,
+            cols,
+            rows,
+            app_handle,
+            app_event_tx,
+        } = context;
         let resolved_cwd = resolve_pty_cwd(cwd)?;
         let spawn_generation = NEXT_AGENT_SPAWN_GENERATION.fetch_add(1, Ordering::Relaxed);
         {
@@ -910,16 +921,19 @@ impl PtyManager {
         Ok(instance_id)
     }
 
-    pub async fn spawn_shell_pty(
+    pub(crate) async fn spawn_shell_pty(
         &self,
-        task_id: &str,
-        cwd: &Path,
-        cols: u16,
-        rows: u16,
+        context: PtySpawnContext<'_>,
         terminal_index: Option<u32>,
-        app_handle: Option<crate::backend_runtime::AppHandle>,
-        app_event_tx: Option<AppEventSender>,
     ) -> Result<u64, PtyError> {
+        let PtySpawnContext {
+            task_id,
+            cwd,
+            cols,
+            rows,
+            app_handle,
+            app_event_tx,
+        } = context;
         let resolved_cwd = resolve_pty_cwd(cwd)?;
         let key = shell_session_key(task_id, terminal_index);
         let pid_file_name = pid_file_name_for_session_key(&key);
@@ -1370,7 +1384,17 @@ mod tests {
         };
 
         manager
-            .spawn_agent_pty(adapter, task_id, tmp_dir.path(), 80, 24, None, None)
+            .spawn_agent_pty(
+                adapter,
+                PtySpawnContext {
+                    task_id,
+                    cwd: tmp_dir.path(),
+                    cols: 80,
+                    rows: 24,
+                    app_handle: None,
+                    app_event_tx: None,
+                },
+            )
             .await
             .expect("agent PTY should spawn without holding sessions lock during slow setup");
 
@@ -1430,12 +1454,14 @@ mod tests {
                 .expect("test runtime should build");
             runtime.block_on(old_manager.spawn_agent_pty(
                 old_adapter,
-                &old_task_id,
-                &old_cwd,
-                80,
-                24,
-                None,
-                None,
+                PtySpawnContext {
+                    task_id: &old_task_id,
+                    cwd: &old_cwd,
+                    cols: 80,
+                    rows: 24,
+                    app_handle: None,
+                    app_event_tx: None,
+                },
             ))
         });
 
@@ -1451,7 +1477,17 @@ mod tests {
             check_lock: false,
         };
         let new_instance_id = manager
-            .spawn_agent_pty(new_adapter, task_id, tmp_dir.path(), 80, 24, None, None)
+            .spawn_agent_pty(
+                new_adapter,
+                PtySpawnContext {
+                    task_id,
+                    cwd: tmp_dir.path(),
+                    cols: 80,
+                    rows: 24,
+                    app_handle: None,
+                    app_event_tx: None,
+                },
+            )
             .await
             .expect("newer spawn should become current");
 
@@ -1508,12 +1544,14 @@ mod tests {
                 .expect("test runtime should build");
             runtime.block_on(spawn_manager.spawn_agent_pty(
                 adapter,
-                &spawn_task_id,
-                &spawn_cwd,
-                80,
-                24,
-                None,
-                None,
+                PtySpawnContext {
+                    task_id: &spawn_task_id,
+                    cwd: &spawn_cwd,
+                    cols: 80,
+                    rows: 24,
+                    app_handle: None,
+                    app_event_tx: None,
+                },
             ))
         });
 
@@ -1598,12 +1636,14 @@ mod tests {
         manager
             .spawn_agent_pty(
                 CwdPrintingAgentAdapter,
-                "agent-space-cwd",
-                &workspace_path,
-                80,
-                24,
-                None,
-                None,
+                PtySpawnContext {
+                    task_id: "agent-space-cwd",
+                    cwd: &workspace_path,
+                    cols: 80,
+                    rows: 24,
+                    app_handle: None,
+                    app_event_tx: None,
+                },
             )
             .await
             .expect("agent PTY should spawn in workspace with spaces");
@@ -1641,12 +1681,14 @@ mod tests {
         let result = manager
             .spawn_agent_pty(
                 CwdPrintingAgentAdapter,
-                "agent-missing-cwd",
-                &missing_workspace,
-                80,
-                24,
-                None,
-                None,
+                PtySpawnContext {
+                    task_id: "agent-missing-cwd",
+                    cwd: &missing_workspace,
+                    cols: 80,
+                    rows: 24,
+                    app_handle: None,
+                    app_event_tx: None,
+                },
             )
             .await;
 

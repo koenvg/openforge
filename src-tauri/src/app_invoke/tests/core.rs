@@ -163,31 +163,32 @@ async fn app_invoke_delete_task_completes_record_and_removes_worktree_metadata()
 
     invoke_ok(&state, "delete_task", json!({ "id": task_id })).await;
 
-    let db = crate::db::acquire_db(&state.db);
-    let completed = db
-        .get_task(&task_id)
-        .expect("get completed task")
-        .expect("completed task record should remain");
-    assert_eq!(completed.status, "done");
-    assert_eq!(completed.initial_prompt, "Preserve the handoff notes");
-    assert_eq!(
-        completed.summary.as_deref(),
-        Some("## Handoff Notes\nUseful reference")
-    );
-    assert!(db
-        .get_worktree_for_task(&task_id)
-        .expect("get worktree")
-        .is_none());
-    assert!(db
-        .get_tasks_for_project_excluding_state(project_id, "done")
-        .expect("get normal board tasks")
-        .is_empty());
-    let completed_tasks = db
-        .get_tasks_for_project_by_state(project_id, "done")
-        .expect("get completed tasks");
-    assert_eq!(completed_tasks.len(), 1);
-    assert_eq!(completed_tasks[0].id, task_id);
-    drop(db);
+    {
+        let db = crate::db::acquire_db(&state.db);
+        let completed = db
+            .get_task(&task_id)
+            .expect("get completed task")
+            .expect("completed task record should remain");
+        assert_eq!(completed.status, "done");
+        assert_eq!(completed.initial_prompt, "Preserve the handoff notes");
+        assert_eq!(
+            completed.summary.as_deref(),
+            Some("## Handoff Notes\nUseful reference")
+        );
+        assert!(db
+            .get_worktree_for_task(&task_id)
+            .expect("get worktree")
+            .is_none());
+        assert!(db
+            .get_tasks_for_project_excluding_state(project_id, "done")
+            .expect("get normal board tasks")
+            .is_empty());
+        let completed_tasks = db
+            .get_tasks_for_project_by_state(project_id, "done")
+            .expect("get completed tasks");
+        assert_eq!(completed_tasks.len(), 1);
+        assert_eq!(completed_tasks[0].id, task_id);
+    }
     let visible_tasks = invoke_ok(
         &state,
         "get_tasks_for_project",

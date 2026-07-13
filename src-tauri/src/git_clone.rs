@@ -73,10 +73,7 @@ fn split_owner_repo(rest: &str) -> Result<(String, String), String> {
     if owner.is_empty() || repo_seg.is_empty() {
         return Err(format!("Could not parse owner/repo from: {rest}"));
     }
-    let repo = repo_seg
-        .split(|c| c == '?' || c == '#')
-        .next()
-        .unwrap_or(repo_seg);
+    let repo = repo_seg.split(['?', '#']).next().unwrap_or(repo_seg);
     let repo = repo.strip_suffix(".git").unwrap_or(repo).to_string();
     if repo.is_empty() {
         return Err(format!("Could not parse repository name from: {rest}"));

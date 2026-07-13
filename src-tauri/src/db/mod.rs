@@ -34,6 +34,8 @@ pub(crate) use pull_request_readiness::{
 pub use pull_requests::{PrCommentRow, PrRow};
 pub use review::ReviewPrRow;
 pub use task_workspaces::TaskWorkspaceRow;
+#[cfg(test)]
+pub use tasks::TaskWorktreeOptions;
 pub use tasks::{CompactTaskRow, NewTaskOptions, TaskLabelRow, TaskRow};
 pub use worktrees::WorktreeRow;
 

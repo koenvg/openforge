@@ -53,7 +53,7 @@ pub async fn get_task_diff_for_workspace(
     };
 
     let mut cmd = tokio::process::Command::new("git");
-    cmd.arg("-C").arg(&worktree_path).arg("diff").arg(&base_ref);
+    cmd.arg("-C").arg(worktree_path).arg("diff").arg(&base_ref);
     if !include_uncommitted {
         cmd.arg("HEAD");
     }
@@ -74,7 +74,7 @@ pub async fn get_task_diff_for_workspace(
     if include_uncommitted {
         let untracked_output = tokio::process::Command::new("git")
             .arg("-C")
-            .arg(&worktree_path)
+            .arg(worktree_path)
             .args(["ls-files", "--others", "--exclude-standard"])
             .output()
             .await
@@ -322,7 +322,7 @@ pub async fn get_task_batch_file_contents_for_workspace(
     let mut results = Vec::with_capacity(files.len());
     for file in files {
         let contents = fetch_file_contents(
-            &worktree_path,
+            worktree_path,
             &base_ref,
             &file.path,
             file.old_path.as_deref(),
@@ -343,7 +343,7 @@ pub async fn get_task_commits_for_workspace(
 
     let log_output = tokio::process::Command::new("git")
         .arg("-C")
-        .arg(&worktree_path)
+        .arg(worktree_path)
         .args([
             "log",
             "--ancestry-path",
@@ -448,7 +448,7 @@ pub async fn get_commit_diff_for_workspace(
 
     let diff_output = tokio::process::Command::new("git")
         .arg("-C")
-        .arg(&worktree_path)
+        .arg(worktree_path)
         .args(["diff", &parent_sha, commit_sha])
         .output()
         .await
@@ -473,7 +473,7 @@ pub async fn get_commit_file_contents_for_workspace(
     let parent_sha = get_parent_sha(worktree_path, commit_sha).await?;
 
     fetch_commit_file_contents(
-        &worktree_path,
+        worktree_path,
         &parent_sha,
         commit_sha,
         path,
@@ -493,7 +493,7 @@ pub async fn get_commit_batch_file_contents_for_workspace(
     let mut results = Vec::with_capacity(files.len());
     for file in files {
         let contents = fetch_commit_file_contents(
-            &worktree_path,
+            worktree_path,
             &parent_sha,
             commit_sha,
             &file.path,

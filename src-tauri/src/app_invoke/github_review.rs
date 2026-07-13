@@ -310,13 +310,15 @@ pub(super) async fn handle_app_github_review_command(
             };
             crate::github_runtime::submit_pr_review(
                 &state.github_client,
-                &owner,
-                &repo,
-                pr_number,
-                &event,
-                &body,
-                comments,
-                &commit_id,
+                crate::github_runtime::SubmitPrReviewRequest {
+                    owner: &owner,
+                    repo: &repo,
+                    pr_number,
+                    event: &event,
+                    body: &body,
+                    comments,
+                    commit_id: &commit_id,
+                },
             )
             .await
             .map_err(runtime_error)?;

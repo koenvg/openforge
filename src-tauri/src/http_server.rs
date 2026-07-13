@@ -1805,12 +1805,11 @@ async fn start_http_server_with_app_state(
         .as_ref()
         .and_then(|app| app.try_state::<GitHubClient>())
         .map(|state| state.inner().clone())
-        .unwrap_or_else(GitHubClient::new);
+        .unwrap_or_default();
     let task_claims = TaskClaims::new();
     let poll_context = crate::github_poller::PollContext::new();
     let plugin_host = Some(PluginHost::with_app_event_sender_and_task_claims(
-        app.clone()
-            .unwrap_or_else(crate::backend_runtime::AppHandle::new),
+        app.clone().unwrap_or_default(),
         Some(app_event_tx.clone()),
         task_claims.clone(),
     ));

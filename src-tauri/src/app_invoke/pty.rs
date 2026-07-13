@@ -35,13 +35,15 @@ pub(super) async fn handle_app_pty_command(
             let payload = PtySpawnShellPayload::decode(&request.command, &request.payload)?;
             let instance_id = pty_manager
                 .spawn_shell_pty(
-                    &payload.task_id,
-                    std::path::Path::new(&payload.cwd),
-                    payload.cols,
-                    payload.rows,
+                    crate::pty_manager::PtySpawnContext {
+                        task_id: &payload.task_id,
+                        cwd: std::path::Path::new(&payload.cwd),
+                        cols: payload.cols,
+                        rows: payload.rows,
+                        app_handle: app,
+                        app_event_tx: state.app_event_tx.clone(),
+                    },
                     payload.terminal_index,
-                    app,
-                    state.app_event_tx.clone(),
                 )
                 .await
                 .map_err(|e| pty_command_error_response("Failed to spawn shell PTY", e))?;
