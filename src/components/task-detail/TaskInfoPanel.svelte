@@ -14,6 +14,7 @@
   import TaskLabelEditor from '../shared/tasks/TaskLabelEditor.svelte'
   import TaskRelationshipDetailSection from '../shared/tasks/TaskRelationshipDetailSection.svelte'
   import PluginSlot from '../plugin/PluginSlot.svelte'
+  import CollapsibleInfoSection from '../shared/ui/CollapsibleInfoSection.svelte'
 
   interface Props {
     task: Task
@@ -95,14 +96,11 @@
 
 <div data-testid="task-info-panel" data-scroll-owner="false" class="flex flex-col gap-3 p-3 {surfaceClass} min-h-max">
   {#if attention}
-    <section
-      data-task-info-card="attention"
-      data-card-sizing="natural"
-      class="flex flex-wrap items-center gap-1.5 shrink-0"
-      aria-label="Attention"
-    >
-      <span class="badge badge-sm rounded-md {chipClass(attention.tone)}">{attention.message}</span>
-    </section>
+    <CollapsibleInfoSection sectionKey="attention" title="Attention" cardId="attention">
+      <div class="flex flex-wrap items-center gap-1.5 px-3 py-2">
+        <span class="badge badge-sm rounded-md {chipClass(attention.tone)}">{attention.message}</span>
+      </div>
+    </CollapsibleInfoSection>
   {/if}
 
   <TaskPullRequestStatus taskId={task.id} {taskPrs} onPullRequestLinked={refreshLinkedPullRequests} onGithubStatusRefreshed={refreshLinkedPullRequests} {allowCommentAddressing} />
@@ -111,9 +109,7 @@
 
   <PluginSlot slotType="taskUISections" taskId={task.id} projectId={task.project_id} />
 
-  <section data-task-info-card="details" data-card-sizing="natural" class="rounded-lg border border-base-300/70 bg-base-100 overflow-hidden shrink-0" aria-label="Details">
-    <h3 class="m-0 px-3 py-2 text-sm font-semibold text-base-content border-b border-base-300/70">Details</h3>
-
+  <CollapsibleInfoSection sectionKey="details" title="Details" cardId="details">
     <div class="px-3 py-2 border-b border-base-300/70">
       <TaskLabelEditor
         projectId={task.project_id}
@@ -138,7 +134,7 @@
         <CopyButton text={resumeCommand} label="Copy resume command" />
       </div>
     {/if}
-  </section>
+  </CollapsibleInfoSection>
 
   <TaskRelationshipDetailSection
     kind="dependencies"

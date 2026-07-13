@@ -11,6 +11,7 @@
   import PrStatusChip from '@openforge-app/pr-review-ui/PrStatusChip.svelte'
   import PrCommentsList from '../shared/pr/PrCommentsList.svelte'
   import PrPipelineChecks from '../shared/pr/PrPipelineChecks.svelte'
+  import CollapsibleInfoSection from '../shared/ui/CollapsibleInfoSection.svelte'
 
   interface Props {
     taskId: string
@@ -156,20 +157,18 @@
   </form>
 {/snippet}
 
-<section data-task-info-card="pull-requests" data-card-sizing="natural" class="flex flex-col gap-2.5 border-b border-base-300/70 pb-3 shrink-0" aria-label="Pull Requests">
-  <div class="flex items-center justify-between gap-2">
-    <h3 class="m-0 text-sm font-semibold text-base-content">Pull Requests</h3>
+<CollapsibleInfoSection sectionKey="pull-requests" title="Pull Requests" cardId="pull-requests">
+  {#snippet actions()}
     {#if taskPrs.length > 0}
-      <div class="flex items-center gap-2">
-        <button type="button" class="btn btn-ghost btn-xs" disabled={isRefreshingGithubStatus} onclick={() => void refreshGithubStatus()}>
-          {isRefreshingGithubStatus ? 'Refreshing…' : 'Refresh GitHub status'}
-        </button>
-        <span class="badge badge-ghost badge-sm font-mono">{taskPrs.length} {taskPrs.length === 1 ? 'PR' : 'PRs'}</span>
-        <button type="button" class="btn btn-ghost btn-xs" onclick={() => { isAddingPr = !isAddingPr; linkError = null }}>Add PR</button>
-      </div>
+      <button type="button" class="btn btn-ghost btn-xs" disabled={isRefreshingGithubStatus} onclick={() => void refreshGithubStatus()}>
+        {isRefreshingGithubStatus ? 'Refreshing…' : 'Refresh GitHub status'}
+      </button>
+      <span class="badge badge-ghost badge-sm font-mono">{taskPrs.length} {taskPrs.length === 1 ? 'PR' : 'PRs'}</span>
+      <button type="button" class="btn btn-ghost btn-xs" onclick={() => { isAddingPr = !isAddingPr; linkError = null }}>Add PR</button>
     {/if}
-  </div>
+  {/snippet}
 
+  <div class="flex flex-col gap-2.5 px-3 py-2">
   {#if githubStatusRefreshError}
     <p class="m-0 text-xs text-error" role="alert">Could not refresh GitHub status: {githubStatusRefreshError}</p>
   {/if}
@@ -303,4 +302,5 @@
       {/each}
     </div>
   {/if}
-</section>
+  </div>
+</CollapsibleInfoSection>

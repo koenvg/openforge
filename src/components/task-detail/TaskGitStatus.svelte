@@ -2,6 +2,7 @@
   import { getTaskGitStatus } from '../../lib/ipc'
   import type { GitStatusSummary } from '../../lib/types'
   import { activeSessions } from '../../lib/stores'
+  import CollapsibleInfoSection from '../shared/ui/CollapsibleInfoSection.svelte'
 
   interface Props {
     taskId: string
@@ -44,9 +45,8 @@
   })
 </script>
 
-<section data-task-info-card="git-status" data-card-sizing="natural" class="rounded-lg border border-base-300/70 bg-base-100 overflow-hidden shrink-0" aria-label="Changes">
-  <div class="flex items-center justify-between px-3 py-2 border-b border-base-300/70">
-    <h3 class="m-0 text-sm font-semibold text-base-content">Changes</h3>
+<CollapsibleInfoSection sectionKey="git-status" title="Changes" cardId="git-status">
+  {#snippet actions()}
     <button
       type="button"
       class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-base-content"
@@ -54,7 +54,7 @@
       disabled={loading}
       onclick={() => void refresh()}
     >↻</button>
-  </div>
+  {/snippet}
 
   {#if errored}
     <div class="px-3 py-2 text-xs text-base-content/50">Unable to read changes</div>
@@ -97,4 +97,4 @@
       </div>
     </div>
   {/if}
-</section>
+</CollapsibleInfoSection>
