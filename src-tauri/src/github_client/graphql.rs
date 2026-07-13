@@ -12,7 +12,7 @@ query OpenForgePullRequestReadiness($owner: String!, $repo: String!, $number: In
       mergeStateStatus
       reviewDecision
       autoMergeRequest { enabledAt }
-      mergeQueueEntry { state mergeGroup { headSha } }
+      mergeQueueEntry { state }
       commits(last: 1) {
         nodes {
           commit {
@@ -41,7 +41,6 @@ query OpenForgePullRequestReadiness($owner: String!, $repo: String!, $number: In
           requiresConversationResolution
           requiresDeployments
           requiredDeploymentEnvironments
-          requiresMergeQueue
         }
       }
     }
@@ -76,18 +75,6 @@ query OpenForgePullRequestReadinessCore($owner: String!, $repo: String!, $number
         }
       }
       reviewThreads(first: 100) { pageInfo { hasNextPage } nodes { isResolved } }
-      baseRef {
-        name
-        branchProtectionRule {
-          requiredStatusCheckContexts
-          requiredApprovingReviewCount
-          requiresStrictStatusChecks
-          requiresConversationResolution
-          requiresDeployments
-          requiredDeploymentEnvironments
-          requiresMergeQueue
-        }
-      }
     }
   }
 }
@@ -133,7 +120,7 @@ impl GitHubClient {
             let fallback_body = self
                 .send_pr_readiness_query(owner, repo, pr_number, token, PR_READINESS_CORE_QUERY)
                 .await?;
-            return GitHubReadinessSnapshot::from_graphql_response(&fallback_body)
+            return parse_pr_readiness_fallback(&body, &fallback_body)
                 .map_err(GitHubError::ParseError);
         }
 
@@ -288,6 +275,26 @@ fn graphql_error_messages(body: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
+fn parse_pr_readiness_fallback(
+    primary_body: &Value,
+    fallback_body: &Value,
+) -> Result<GitHubReadinessSnapshot, String> {
+    let mut snapshot = GitHubReadinessSnapshot::from_graphql_response(fallback_body)?;
+    let policy_error = {
+        let messages = graphql_error_messages(primary_body);
+        if messages.is_empty() {
+            "GraphQL readiness query returned no pull request data".to_string()
+        } else {
+            messages.join("; ")
+        }
+    };
+
+    snapshot.policy = super::types::RepositoryPolicyFacts::unknown(policy_error.clone());
+    snapshot.merge_queue_required = None;
+    snapshot.warnings.push(policy_error);
+    Ok(snapshot)
+}
+
 fn is_unsupported_enqueue_error(message: &str) -> bool {
     let lower = message.to_lowercase();
     lower.contains("enqueuepullrequest")
@@ -383,6 +390,21 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn core_readiness_query_avoids_permission_sensitive_policy_fields() {
+        assert!(PR_READINESS_CORE_QUERY.contains("headRefOid"));
+        assert!(!PR_READINESS_CORE_QUERY.contains("branchProtectionRule"));
+        assert!(!PR_READINESS_CORE_QUERY.contains("requiredDeploymentEnvironments"));
+        assert!(!PR_READINESS_CORE_QUERY.contains("requiresMergeQueue"));
+    }
+
+    #[test]
+    fn readiness_query_only_uses_supported_github_schema_fields() {
+        assert!(PR_READINESS_QUERY.contains("mergeQueueEntry { state }"));
+        assert!(!PR_READINESS_QUERY.contains("mergeGroup"));
+        assert!(!PR_READINESS_QUERY.contains("requiresMergeQueue"));
+    }
+
+    #[test]
     fn enqueue_response_success_requires_pull_request_payload() {
         let body = json!({
             "data": {
@@ -432,5 +454,49 @@ mod tests {
             .expect_err("GitHub error should surface");
         assert!(err.contains("GitHub refused to enqueue pull request owner/repo#42"));
         assert!(err.contains("mergeability is UNKNOWN"));
+    }
+
+    #[test]
+    fn readiness_fallback_preserves_head_sha_but_marks_policy_unknown() {
+        let primary_body = json!({
+            "errors": [{
+                "message": "Field 'requiresMergeQueue' doesn't exist on type 'BranchProtectionRule'"
+            }]
+        });
+        let fallback_body = json!({
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "headRefOid": "head-sha-42",
+                        "mergeStateStatus": "CLEAN",
+                        "reviewDecision": "APPROVED",
+                        "commits": {
+                            "nodes": [{
+                                "commit": {
+                                    "oid": "head-sha-42",
+                                    "statusCheckRollup": {
+                                        "state": "SUCCESS",
+                                        "contexts": { "nodes": [] }
+                                    }
+                                }
+                            }]
+                        }
+                    }
+                }
+            }
+        });
+
+        let snapshot = parse_pr_readiness_fallback(&primary_body, &fallback_body)
+            .expect("fallback readiness should parse");
+
+        assert_eq!(snapshot.source_head_sha.as_deref(), Some("head-sha-42"));
+        assert!(!snapshot.policy.required_checks.known);
+        assert!(!snapshot.policy.required_reviews.known);
+        assert!(!snapshot.policy.merge_queue_required.known);
+        assert_eq!(snapshot.merge_queue_required, None);
+        assert!(snapshot
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("requiresMergeQueue")));
     }
 }
