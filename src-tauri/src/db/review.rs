@@ -617,8 +617,7 @@ mod tests {
         db.mark_review_pr_viewed(1, "sha1")
             .expect("mark viewed failed");
 
-        db.mark_review_pr_unviewed(1)
-            .expect("mark unviewed failed");
+        db.mark_review_pr_unviewed(1).expect("mark unviewed failed");
 
         let prs = db.get_all_review_prs().expect("get_all failed");
         assert_eq!(prs.len(), 1);
