@@ -1343,6 +1343,63 @@ CREATE TABLE IF NOT EXISTS roadmap_repo_config (
         }
         Ok(())
     }),
+    // Personal, machine-global reusable text snippets shown in the Injectable
+    // Picker. Unlike skills/commands (file-scanned), snippets are not per-project
+    // and not file-backed; they live only here and insert their literal `body`.
+    // Appended last so it takes the highest user_version after the merge.
+    M::up(
+        r#"
+CREATE TABLE IF NOT EXISTS snippets (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,
+    body       TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+        "#,
+    ),
+    // Per-snippet project scoping: an `all_projects` flag (default 1 = visible
+    // everywhere, including projects created later) plus a join table for the
+    // explicit project subset. Existing snippets keep all_projects=1. Guarded so it
+    // is idempotent and heals partially-migrated databases (matches the sibling
+    // column-add migrations).
+    M::up_with_hook("", |tx| {
+        let snippets_exists: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='snippets'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+        if snippets_exists {
+            let has_all_projects: bool = tx
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM pragma_table_info('snippets') WHERE name = 'all_projects'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap_or(false);
+            if !has_all_projects {
+                tx.execute(
+                    "ALTER TABLE snippets ADD COLUMN all_projects INTEGER NOT NULL DEFAULT 1",
+                    [],
+                )
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            }
+        }
+        tx.execute(
+            "CREATE TABLE IF NOT EXISTS snippet_projects (
+                snippet_id TEXT NOT NULL,
+                project_id TEXT NOT NULL,
+                PRIMARY KEY (snippet_id, project_id),
+                FOREIGN KEY (snippet_id) REFERENCES snippets(id) ON DELETE CASCADE,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            )",
+            [],
+        )
+        .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets

@@ -60,6 +60,10 @@ pub struct SkillInfo {
     pub source_dir: String,        // ".agents", ".claude", ".opencode", or ".pi"
     pub source_path: String,       // stable folder/file identity under the source skills directory
     pub file_name: Option<String>, // direct root markdown file name for provider-specific skills
+    #[serde(rename = "disableModelInvocation")]
+    pub disable_model_invocation: Option<bool>, // frontmatter: agent auto-invocation disabled
+    #[serde(rename = "userInvocable")]
+    pub user_invocable: Option<bool>, // frontmatter: hidden from the / menu when false
 }
 
 #[cfg(test)]

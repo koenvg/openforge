@@ -17,6 +17,7 @@
   import AnchoredMenu from './shared/ui/AnchoredMenu.svelte'
   import ContextMenuItem from './shared/ui/ContextMenuItem.svelte'
   import PromptInput from './prompt/PromptInput.svelte'
+import { pickerState } from '../lib/injectables/pickerState.svelte'
   import { getEnabledActions, loadActions } from '../lib/actions'
 
   interface Props {
@@ -66,9 +67,21 @@
   let imagePasteError = $state<string | null>(null)
   let imagePastePending = $state(false)
   let imageMarkerInsertRequest = $state<{ id: number, marker: string } | null>(null)
+  let injectableInsertRequest = $state<{ id: number, text: string } | null>(null)
   let loadedPromptSourceKey = $state<string | null>(null)
   let nextPastedImageId = 1
   let nextImageMarkerInsertRequestId = 1
+  let nextInjectableInsertRequestId = 1
+
+  function openInjectables() {
+    pickerState.openPicker({
+      projectId: $activeProjectId,
+      onInsert: (text) => {
+        injectableInsertRequest = { id: nextInjectableInsertRequestId, text }
+        nextInjectableInsertRequestId += 1
+      },
+    })
+  }
   let taskTitle = $state('')
   let handoffNotesEnabled = $state(true)
   let taskDefaultsLoading = $state(true)
@@ -446,6 +459,8 @@
       onPasteImage={attachPastedImage}
       onImageMarkerClick={openImagePreview}
       imageMarkerInsertRequest={imageMarkerInsertRequest}
+      injectableInsertRequest={injectableInsertRequest}
+      onOpenPicker={openInjectables}
       onSubmit={(prompt) => mode === 'create' ? handleCreateOrUpdate(prompt, '', true) : handleCreateOrUpdate(prompt)}
       onValueChange={handlePromptDraftChange}
       onCancel={() => onClose?.()}

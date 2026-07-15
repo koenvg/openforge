@@ -7,12 +7,12 @@ import { isOpenForgePackageMetadata } from '@openforge-app/plugin-sdk'
 import type { BackendPluginContext } from '@openforge-app/plugin-sdk/backend'
 import type { FrontendOpenForgeAPI, FrontendPluginContext } from '@openforge-app/plugin-sdk/frontend'
 
-const { mockSkillsView } = vi.hoisted(() => ({
-  mockSkillsView: { name: 'SkillsViewComponent' },
+const { mockView } = vi.hoisted(() => ({
+  mockView: { name: 'InjectablesView' },
 }))
 
-vi.mock('./SkillsView.svelte', () => ({
-  default: mockSkillsView,
+vi.mock('./InjectablesView.svelte', () => ({
+  default: mockView,
 }))
 
 import packageJson from '../package.json'
@@ -47,12 +47,12 @@ describe('skills-viewer plugin', () => {
     expect(packageJson.openforge).not.toHaveProperty('contributes')
     expect(packageJson.openforge.frontend).toBe('./dist/frontend.js')
     expect(packageJson.openforge.backend).toBe('./dist/backend.js')
-    expect(packageJson.openforge.requires).toEqual(expect.arrayContaining(['views', 'backend', 'projects', 'navigation', 'system.openUrl', 'context']))
+    expect(packageJson.openforge.requires).toEqual(expect.arrayContaining(['views', 'backend', 'projects', 'system.openUrl', 'context', 'commands', 'storage']))
     expect(packageJson.openforge.requires).not.toContain('fs')
   })
 
   it('registers the Skills view at runtime through defineFrontendPlugin', async () => {
-    const { default: plugin, SkillsViewComponent } = await import('./index')
+    const { default: plugin, SkillsTabComponent } = await import('./index')
     const { api, context, subscriptions } = makeRuntimeHarness()
 
     await plugin.activate(api, context)
@@ -64,38 +64,19 @@ describe('skills-viewer plugin', () => {
       icon: 'sparkles',
       placement: 'rail',
       order: 30,
-      component: SkillsViewComponent,
+      component: SkillsTabComponent,
     }))
-    expect(SkillsViewComponent).toBe(mockSkillsView)
+    expect(SkillsTabComponent).toBe(mockView)
     expect(subscriptions.add).toHaveBeenCalledWith(expect.objectContaining({ dispose: expect.any(Function) }))
   })
 
-  it('does not keep plugin-local runtime adapter modules or host command calls in the view', () => {
-    const skillsViewSource = readFileSync(join(pluginSrcDir, 'SkillsView.svelte'), 'utf8')
-
+  it('does not keep plugin-local runtime adapter modules in the plugin', () => {
+    // Skills/commands come from the host catalog capability; snippets from
+    // storage.global. No plugin-local IPC adapter should exist.
     expect(existsSync(join(pluginSrcDir, 'lib/ipc.ts'))).toBe(false)
-    expect(skillsViewSource).not.toContain('./lib/ipc')
-    expect(skillsViewSource).not.toContain('openforge.listOpenCodeSkills')
-    expect(skillsViewSource).not.toContain('openforge.saveSkillContent')
-    expect(skillsViewSource).not.toContain('openforge.navigate')
-    expect(skillsViewSource).toContain("api.backend.invoke<SkillInfo[]>('listSkills'")
-    expect(skillsViewSource).toContain('api.navigation.navigate')
   })
 
-
-  it('keeps native list button semantics until full ARIA tree keyboarding exists', () => {
-    const skillsViewSource = readFileSync(join(pluginSrcDir, 'SkillsView.svelte'), 'utf8')
-    const skillsListSource = readFileSync(join(pluginSrcDir, 'SkillsListSection.svelte'), 'utf8')
-    const combinedSource = `${skillsViewSource}\n${skillsListSource}`
-
-    expect(combinedSource).not.toContain('role="tree"')
-    expect(combinedSource).not.toContain('role="treeitem"')
-    expect(combinedSource).not.toContain('aria-selected')
-    expect(skillsListSource).toContain('aria-expanded')
-    expect(skillsListSource).toContain('aria-current')
-  })
-
-  it('registers plugin-owned backend methods for skill list and save contracts', async () => {
+  it('registers plugin-owned backend methods for skill list, save, and delete contracts', async () => {
     const { default: backend } = await import('./backend')
     const subscriptions = { add: vi.fn() }
     const api = { backend: { registerMethod: vi.fn(() => ({ dispose: vi.fn() })) } }
@@ -104,6 +85,7 @@ describe('skills-viewer plugin', () => {
 
     expect(api.backend.registerMethod).toHaveBeenCalledWith('listSkills', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('saveSkillContent', expect.objectContaining({ handler: expect.any(Function) }))
-    expect(subscriptions.add).toHaveBeenCalledTimes(2)
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('deleteSkill', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(subscriptions.add).toHaveBeenCalledTimes(3)
   })
 })

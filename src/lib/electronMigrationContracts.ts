@@ -141,6 +141,8 @@ export const ipcCommandContracts = [
   { functionName: 'abortAgentWalkthrough', ipcCommand: 'abort_agent_walkthrough', payloadKeys: ['walkthroughSessionKey'], targetOwner: 'rust-sidecar', domain: 'misc' },
   { functionName: 'deletePrWalkthrough', ipcCommand: 'delete_pr_walkthrough', payloadKeys: ['reviewPrId', 'headSha'], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'listOpenCodeCommands', ipcCommand: 'list_opencode_commands', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },
+  { functionName: 'writePersonalSkill', ipcCommand: 'claude_skill_write', payloadKeys: ['sourceDir', 'sourcePath', 'content'], targetOwner: 'rust-sidecar', domain: 'files-review' },
+  { functionName: 'deletePersonalSkill', ipcCommand: 'claude_skill_delete', payloadKeys: ['sourceDir', 'sourcePath'], targetOwner: 'rust-sidecar', domain: 'files-review' },
   { functionName: 'searchOpenCodeFiles', ipcCommand: 'search_opencode_files', payloadKeys: ['projectId', 'query'], targetOwner: 'rust-sidecar', domain: 'files-review' },
   { functionName: 'listOpenCodeAgents', ipcCommand: 'list_opencode_agents', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },
   { functionName: 'listOpenCodeModels', ipcCommand: 'list_opencode_models', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },

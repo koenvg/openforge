@@ -273,4 +273,24 @@ describe('skills-viewer backend skill discovery', () => {
     await expect(readFile(join(projectPath, '.agents/skills/folder-review/SKILL.md'), 'utf8')).resolves.toBe('# After\n')
     await expect(stat(join(projectPath, '.agents/skills/display-review'))).rejects.toThrow()
   })
+
+  it('deleteSkill removes the skill directory from disk', async () => {
+    const projectPath = await mkdtemp(join(tempRoot(), 'skills-viewer-project-'))
+    await createSkillFile(projectPath, '.agents/skills/review/SKILL.md', `---\nname: review\n---\n# Review\n`)
+
+    const methods = await activateBackendWithProject(projectPath)
+    await expect(stat(join(projectPath, '.agents/skills/review'))).resolves.toBeTruthy()
+
+    await methods.get('deleteSkill')?.({
+      projectId: 'P-1',
+      name: 'review',
+      level: 'project',
+      sourceDir: '.agents',
+      sourcePath: 'review',
+      relativePath: 'review/SKILL.md',
+      fileName: null,
+    })
+
+    await expect(stat(join(projectPath, '.agents/skills/review'))).rejects.toThrow()
+  })
 })

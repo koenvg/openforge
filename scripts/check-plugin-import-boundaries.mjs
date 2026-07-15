@@ -24,6 +24,7 @@ const FALLBACK_OPENFORGE_PACKAGE_EXPORTS = new Map([
       '/markdown',
       '/numberParsing',
       '/sanitize',
+      '/injectables',
       ...OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS.map(({ packageSubpath }) => packageSubpath.slice(1)),
     ]),
   ],

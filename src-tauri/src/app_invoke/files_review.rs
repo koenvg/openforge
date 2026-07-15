@@ -306,6 +306,33 @@ pub(super) async fn handle_app_files_review_command(
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?,
             )?
         }
+        "claude_skill_write" => {
+            let source_dir = payload_string(&request.payload, "sourceDir")?;
+            let source_path = payload_string(&request.payload, "sourcePath")?;
+            let content = payload_string(&request.payload, "content")?;
+            let home = dirs::home_dir().ok_or_else(|| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Could not determine home directory".to_string(),
+                )
+            })?;
+            crate::claude_assets::write_personal_skill(&home, &source_dir, &source_path, &content)
+                .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+            serde_json::Value::Null
+        }
+        "claude_skill_delete" => {
+            let source_dir = payload_string(&request.payload, "sourceDir")?;
+            let source_path = payload_string(&request.payload, "sourcePath")?;
+            let home = dirs::home_dir().ok_or_else(|| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Could not determine home directory".to_string(),
+                )
+            })?;
+            crate::claude_assets::delete_personal_skill(&home, &source_dir, &source_path)
+                .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+            serde_json::Value::Null
+        }
         _ => return Ok(None),
     };
 

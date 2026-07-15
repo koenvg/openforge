@@ -34,7 +34,9 @@
       "projects",
       "navigation",
       "system.openUrl",
-      "context"
+      "context",
+      "commands",
+      "storage"
     ]
   }
 }

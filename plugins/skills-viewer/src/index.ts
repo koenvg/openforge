@@ -1,7 +1,7 @@
 import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
-import SkillsView from './SkillsView.svelte'
+import InjectablesView from './InjectablesView.svelte'
 
-export const SkillsViewComponent = SkillsView
+export const SkillsTabComponent = InjectablesView
 
 export default defineFrontendPlugin({
   activate(openforge, context) {
@@ -12,7 +12,7 @@ export default defineFrontendPlugin({
       placement: 'rail',
       order: 30,
       shortcut: 'Cmd+L',
-      component: SkillsView,
+      component: InjectablesView,
     }))
   },
 })

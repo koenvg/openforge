@@ -635,12 +635,71 @@ export interface AgentInfo {
 // Autocomplete Types
 // ============================================================================
 
-/** Command info from provider command endpoints — used for / autocomplete */
+/** Command info from provider command endpoints — used for / autocomplete and the injectable picker */
 export interface CommandInfo {
   name: string;
   description: string | null;
   source: string | null;
   agent: string | null;
+  /** Where it comes from: "personal" | "project" | "plugin" | "builtin". Optional enrichment — only claude-code populates it. */
+  origin?: string | null;
+  /** "auto+manual" | "manual-only" — derived from disable-model-invocation / command semantics */
+  triggerMode?: string | null;
+  /** false => hidden background skill; the injectable picker drops it */
+  userInvocable?: boolean | null;
+  /** e.g. ".claude" | ".agents"; null for builtin/plugin */
+  sourceDir?: string | null;
+  /** stable on-disk identity under the source skills dir — for a skill, its folder name
+   * (a single path component, e.g. "pr-writer"); for a command, the file name. null for builtin */
+  sourcePath?: string | null;
+  /** full SKILL.md body for the picker reading pane; null when there is no source file */
+  content?: string | null;
+}
+
+/**
+ * A personal, reusable text snippet shown in the injectable picker. Owned by the
+ * skills plugin (persisted in its `storage.global`); the app's ⌘⇧I picker reads
+ * the same records. Inserts its literal `body` verbatim.
+ */
+export interface Snippet {
+  id: string;
+  name: string;
+  body: string;
+  /** When true, the snippet is available in every project (including future ones). */
+  allProjects: boolean;
+  /** Explicit project ids the snippet is scoped to; empty when `allProjects`. */
+  projectIds: string[];
+}
+
+// ── Injectable picker ───────────────────────────────────────────────────────
+// The view model behind the injectable picker (skills + commands + snippets),
+// shared by the app's ⌘⇧I picker and the skills plugin's Skills tab.
+
+export type InjectableKind = 'skill' | 'command' | 'snippet';
+export type InjectableOrigin = 'personal' | 'project' | 'plugin' | 'builtin';
+export type InjectableTriggerMode = 'auto+manual' | 'manual-only';
+export type InjectableGroupBy = 'origin' | 'trigger';
+
+/** Snippets are grouped/filtered as their own top-level section, ahead of the
+ * file-scanned origins, in both group-by modes. */
+export type InjectableSection = 'snippet' | InjectableOrigin;
+
+export interface Injectable {
+  /** `${origin}:${kind}:${name}` for skills/commands; `snippet:${dbId}` for snippets — unique, safe for keyed {#each} */
+  id: string;
+  kind: InjectableKind;
+  name: string;
+  description: string | null;
+  origin: InjectableOrigin;
+  triggerMode: InjectableTriggerMode;
+  /** Claude source dir the item lives under (e.g. `.claude`); null when tool/plugin-provided */
+  sourceDir: string | null;
+  /** dir/file identity + the detail "source" line */
+  sourcePath: string | null;
+  /** full SKILL.md body for the reading pane; null when there is no source file */
+  content: string | null;
+  /** `/${name} ` */
+  invocationText: string;
 }
 
 /** Extended agent info from provider agent endpoints — used for @ autocomplete */

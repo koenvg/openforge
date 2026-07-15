@@ -6,6 +6,7 @@ mod app_events;
 mod app_invoke;
 mod backend_runtime;
 mod builtin_plugins;
+mod claude_assets;
 mod claude_hooks;
 mod cli_installer;
 mod codex_hooks;

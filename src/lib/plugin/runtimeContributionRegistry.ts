@@ -20,6 +20,7 @@ import type {
   AgentSession,
   BackendReadyState,
   CommandDescriptor,
+  CommandInfo,
   CommandShortcutMetadata,
   ConfigureStartPromptContributionRequest,
   CreateTaskRequest,
@@ -61,6 +62,7 @@ export type RuntimeHostBridge = {
   startTaskImplementation?(request: StartTaskImplementationRequest): Promise<ImplementationRun>
   getTaskWorkspace?(taskId: string): Promise<TaskWorkspaceInfo | null>
   getLatestSession?(taskId: string): Promise<AgentSession | null>
+  listCommandCatalog?(request?: { projectId?: string | null }): Promise<CommandInfo[]>
   readDir?(request: { projectId: string; path?: string | null }): Promise<FileEntry[]>
   readFile?(request: { projectId: string; path: string }): Promise<FileContent>
   writeFile?(request: { projectId: string; path: string; content: string }): Promise<void>
@@ -543,6 +545,7 @@ class RuntimeContributionRegistry {
         invoke: async <TOutput>(id: string, payload?: unknown) => this.invokeCommand<TOutput>(id, payload),
         invokeGlobal: async <TOutput>(qualifiedId: string, payload?: unknown) => this.invokeGlobalCommand<TOutput>(qualifiedId, payload),
         list: async () => Array.from(globalCommands.values()).map(commandDescriptor),
+        listCatalog: async (request?: { projectId?: string | null }) => this.host.listCommandCatalog ? this.host.listCommandCatalog(request) : unavailableCapability('commands.listCatalog'),
       },
       events: {
         on: <TPayload>(event: string, handler: (payload: TPayload) => void) => this.registerEventListener(event, handler as RuntimeEventHandler, false),

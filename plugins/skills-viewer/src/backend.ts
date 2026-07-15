@@ -1,4 +1,4 @@
-import { readdir, readFile, writeFile, mkdir } from 'node:fs/promises'
+import { readdir, readFile, writeFile, mkdir, rm } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, extname, join, sep } from 'node:path'
 import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
@@ -21,6 +21,8 @@ interface SaveSkillContentRequest {
   fileName?: string | null
   relativePath?: string | null
 }
+
+type DeleteSkillRequest = Omit<SaveSkillContentRequest, 'content'>
 
 function codexHomeDir(): string {
   const codexHome = process.env.CODEX_HOME
@@ -244,6 +246,40 @@ async function saveSkillContent(api: BackendOpenForgeAPI, request: SaveSkillCont
   await writeFile(join(skillDir, 'SKILL.md'), request.content, 'utf8')
 }
 
+/** Remove a skill from disk. Mirrors saveSkillContent's target resolution: a
+ * directory-backed skill (SKILL.md nested under its folder) deletes the folder;
+ * a root markdown skill (.pi) or a bare relative path deletes that file. */
+async function deleteSkill(api: BackendOpenForgeAPI, request: DeleteSkillRequest): Promise<void> {
+  if (!isSupportedSkillSourceDir(request.sourceDir)) {
+    throw new Error(`Unsupported skill source directory: ${request.sourceDir}`)
+  }
+  if (request.level !== 'project' && request.level !== 'user') {
+    throw new Error(`Unsupported skill level: ${request.level}`)
+  }
+
+  const root = request.level === 'project'
+    ? (await api.projects.get(request.projectId))?.path
+    : homedir()
+  if (!root) {
+    throw new Error(`Project not found: ${request.projectId}`)
+  }
+
+  const skillsDir = skillSourceDir(root, request.sourceDir, request.level)
+  let target: string
+  if (request.relativePath) {
+    const parts = getValidatedRelativeSkillPathSegments(request.relativePath, request.sourceDir)
+    // A nested `<folder>/SKILL.md` deletes the folder; a bare file deletes the file.
+    target = parts.length > 1 ? join(skillsDir, ...parts.slice(0, -1)) : join(skillsDir, ...parts)
+  } else if (request.fileName) {
+    target = join(skillsDir, request.fileName)
+  } else {
+    const sourcePath = request.sourcePath ?? request.name
+    assertSafeSkillName(sourcePath)
+    target = join(skillsDir, sourcePath)
+  }
+  await rm(target, { recursive: true, force: true })
+}
+
 export default defineBackendPlugin({
   activate(openforge, context) {
     context.subscriptions.add(openforge.backend.registerMethod<ListSkillsRequest, SkillInfo[]>('listSkills', {
@@ -271,6 +307,23 @@ export default defineBackendPlugin({
         },
       },
       handler: (request) => saveSkillContent(openforge, request),
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<DeleteSkillRequest, void>('deleteSkill', {
+      input: {
+        type: 'object',
+        required: ['projectId', 'name', 'level', 'sourceDir'],
+        properties: {
+          projectId: { type: 'string' },
+          name: { type: 'string' },
+          level: { enum: ['project', 'user'] },
+          sourceDir: { type: 'string' },
+          sourcePath: { type: ['string', 'null'] },
+          fileName: { type: ['string', 'null'] },
+          relativePath: { type: ['string', 'null'] },
+        },
+      },
+      handler: (request) => deleteSkill(openforge, request),
     }))
   },
 })

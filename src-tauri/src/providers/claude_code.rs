@@ -10,6 +10,43 @@ pub struct ClaudeCodeProvider {
     pub discovery_cache: Arc<Mutex<Option<crate::command_discovery::CachedDiscovery>>>,
 }
 
+/// "manual-only" when the skill disables model auto-invocation, else "auto+manual".
+fn trigger_for(disable_model_invocation: Option<bool>) -> &'static str {
+    if disable_model_invocation == Some(true) {
+        "manual-only"
+    } else {
+        "auto+manual"
+    }
+}
+
+/// Attach injectable-picker enrichment onto a CommandInfo via its flattened `extra` map,
+/// so it serializes as top-level camelCase keys without changing the shared struct.
+fn enrich_command(
+    cmd: &mut crate::opencode_client::CommandInfo,
+    origin: &str,
+    trigger_mode: &str,
+    source_dir: Option<&str>,
+    source_path: Option<&str>,
+    user_invocable: Option<bool>,
+) {
+    use serde_json::Value;
+    cmd.extra.insert("origin".to_string(), Value::from(origin));
+    cmd.extra
+        .insert("triggerMode".to_string(), Value::from(trigger_mode));
+    cmd.extra.insert(
+        "sourceDir".to_string(),
+        source_dir.map(Value::from).unwrap_or(Value::Null),
+    );
+    cmd.extra.insert(
+        "sourcePath".to_string(),
+        source_path.map(Value::from).unwrap_or(Value::Null),
+    );
+    cmd.extra.insert(
+        "userInvocable".to_string(),
+        user_invocable.map(Value::from).unwrap_or(Value::Null),
+    );
+}
+
 impl ClaudeCodeProvider {
     pub fn new(pty_mgr: PtyManager) -> Self {
         Self {
@@ -148,7 +185,8 @@ impl ClaudeCodeProvider {
 
         let mut commands_map = HashMap::<String, crate::opencode_client::CommandInfo>::new();
 
-        for cmd in builtin_claude_commands() {
+        for mut cmd in builtin_claude_commands() {
+            enrich_command(&mut cmd, "builtin", "manual-only", None, None, None);
             commands_map.insert(cmd.name.clone(), cmd);
         }
 
@@ -156,30 +194,33 @@ impl ClaudeCodeProvider {
             .map(|home| resolve_active_plugins(&home))
             .unwrap_or_default();
 
-        for cmd in scan_plugin_commands(&active_plugins) {
+        for mut cmd in scan_plugin_commands(&active_plugins) {
+            enrich_command(&mut cmd, "plugin", "auto+manual", None, None, None);
             commands_map.insert(cmd.name.clone(), cmd);
         }
 
-        // User-level commands
+        // User-level commands (manual-only by definition)
         if let Some(home) = dirs::home_dir() {
-            for commands_dir in &[
-                home.join(".claude").join("commands"),
-                home.join(".opencode").join("commands"),
+            for (commands_dir, source_dir) in [
+                (home.join(".claude").join("commands"), ".claude"),
+                (home.join(".opencode").join("commands"), ".opencode"),
             ] {
-                for cmd in scan_commands_directory(commands_dir) {
+                for mut cmd in scan_commands_directory(&commands_dir) {
+                    enrich_command(&mut cmd, "personal", "manual-only", Some(source_dir), None, None);
                     commands_map.insert(cmd.name.clone(), cmd);
                 }
             }
         }
 
-        // Project-level commands
+        // Project-level commands (manual-only by definition)
         if let Some(proj_path) = project_path {
             let proj = std::path::Path::new(proj_path);
-            for commands_dir in &[
-                proj.join(".claude").join("commands"),
-                proj.join(".opencode").join("commands"),
+            for (commands_dir, source_dir) in [
+                (proj.join(".claude").join("commands"), ".claude"),
+                (proj.join(".opencode").join("commands"), ".opencode"),
             ] {
-                for cmd in scan_commands_directory(commands_dir) {
+                for mut cmd in scan_commands_directory(&commands_dir) {
+                    enrich_command(&mut cmd, "project", "manual-only", Some(source_dir), None, None);
                     commands_map.insert(cmd.name.clone(), cmd);
                 }
             }
@@ -188,15 +229,30 @@ impl ClaudeCodeProvider {
         // User-level skills
         if let Some(home) = dirs::home_dir() {
             for skill in scan_skill_directories_for_root(&home, "user") {
-                commands_map.entry(skill.name.clone()).or_insert(
-                    crate::opencode_client::CommandInfo {
-                        name: skill.name,
-                        description: skill.description,
-                        source: Some("skill".to_string()),
-                        agent: skill.agent,
-                        extra: serde_json::Map::new(),
-                    },
+                let name = skill.name.clone();
+                let mut cmd = crate::opencode_client::CommandInfo {
+                    name: skill.name,
+                    description: skill.description,
+                    source: Some("skill".to_string()),
+                    agent: skill.agent,
+                    extra: serde_json::Map::new(),
+                };
+                enrich_command(
+                    &mut cmd,
+                    "personal",
+                    trigger_for(skill.disable_model_invocation),
+                    Some(&skill.source_dir),
+                    Some(&skill.source_path),
+                    skill.user_invocable,
                 );
+                cmd.extra.insert(
+                    "content".to_string(),
+                    skill
+                        .template
+                        .map(serde_json::Value::from)
+                        .unwrap_or(serde_json::Value::Null),
+                );
+                commands_map.entry(name).or_insert(cmd);
             }
         }
 
@@ -204,16 +260,30 @@ impl ClaudeCodeProvider {
         if let Some(proj_path) = project_path {
             let proj = std::path::Path::new(proj_path);
             for skill in scan_skill_directories_for_root(proj, "project") {
-                commands_map.insert(
-                    skill.name.clone(),
-                    crate::opencode_client::CommandInfo {
-                        name: skill.name,
-                        description: skill.description,
-                        source: Some("skill".to_string()),
-                        agent: skill.agent,
-                        extra: serde_json::Map::new(),
-                    },
+                let name = skill.name.clone();
+                let mut cmd = crate::opencode_client::CommandInfo {
+                    name: skill.name,
+                    description: skill.description,
+                    source: Some("skill".to_string()),
+                    agent: skill.agent,
+                    extra: serde_json::Map::new(),
+                };
+                enrich_command(
+                    &mut cmd,
+                    "project",
+                    trigger_for(skill.disable_model_invocation),
+                    Some(&skill.source_dir),
+                    Some(&skill.source_path),
+                    skill.user_invocable,
                 );
+                cmd.extra.insert(
+                    "content".to_string(),
+                    skill
+                        .template
+                        .map(serde_json::Value::from)
+                        .unwrap_or(serde_json::Value::Null),
+                );
+                commands_map.insert(name, cmd);
             }
         }
 
@@ -302,6 +372,53 @@ mod tests {
 
         let second_result = provider.list_commands(None);
         assert_eq!(first_result.len(), second_result.len());
+    }
+
+    #[test]
+    fn list_commands_enriches_project_skill_origin_and_trigger() {
+        let tmp = std::env::temp_dir().join(format!("of-cc-enrich-{}", std::process::id()));
+        let skill_dir = tmp.join(".claude").join("skills").join("manual");
+        std::fs::create_dir_all(&skill_dir).unwrap();
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: manual\ndescription: d\ndisable-model-invocation: true\n---\nbody",
+        )
+        .unwrap();
+
+        let provider = ClaudeCodeProvider::new(PtyManager::new());
+        let cmds = provider.list_commands(Some(tmp.to_str().unwrap()));
+        let c = cmds
+            .iter()
+            .find(|c| c.name == "manual")
+            .expect("project skill present");
+        assert_eq!(c.extra.get("origin").and_then(|v| v.as_str()), Some("project"));
+        assert_eq!(
+            c.extra.get("triggerMode").and_then(|v| v.as_str()),
+            Some("manual-only")
+        );
+        assert_eq!(
+            c.extra.get("sourceDir").and_then(|v| v.as_str()),
+            Some(".claude")
+        );
+        assert!(c.extra.get("sourcePath").and_then(|v| v.as_str()).is_some());
+        assert!(
+            c.extra
+                .get("content")
+                .and_then(|v| v.as_str())
+                .map(|s| s.contains("body"))
+                .unwrap_or(false),
+            "reading-pane content should carry the SKILL.md body"
+        );
+
+        // Guard: flattened `extra` keys serialize as TOP-LEVEL camelCase (what the frontend reads).
+        let json = serde_json::to_value(c).unwrap();
+        assert_eq!(json.get("origin").and_then(|v| v.as_str()), Some("project"));
+        assert_eq!(
+            json.get("triggerMode").and_then(|v| v.as_str()),
+            Some("manual-only")
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]

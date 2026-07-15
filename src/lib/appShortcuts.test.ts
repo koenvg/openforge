@@ -34,6 +34,7 @@ describe('registerAppShortcuts', () => {
       resetToBoard: vi.fn(),
       navigateToGlobalSettings: vi.fn(),
       cycleActiveProject: vi.fn(),
+      openInjectablePicker: vi.fn(),
     })
 
     const definitionKeys = APP_SHORTCUT_DEFINITIONS.flatMap((definition) =>
@@ -55,6 +56,7 @@ describe('registerAppShortcuts', () => {
       { id: 'terminal', label: 'Terminal', keys: [['⌘J']] },
       { id: 'search-tasks', label: 'Search Tasks', keys: [['⌘', '⇧', 'F']] },
       { id: 'action-palette', label: 'Action palette', keys: [['⌘K']] },
+      { id: 'injectables', label: 'Injectables', keys: [['⌘', '⇧', 'I']] },
       { id: 'show-shortcuts', label: 'Show shortcuts', keys: [['?']] },
     ])
   })
@@ -73,6 +75,7 @@ describe('registerAppShortcuts', () => {
     const resetToBoard = vi.fn()
     const navigateToGlobalSettings = vi.fn()
     const cycleActiveProject = vi.fn()
+    const openInjectablePicker = vi.fn()
 
     registerAppShortcuts(registry, {
       showShortcuts,
@@ -89,6 +92,7 @@ describe('registerAppShortcuts', () => {
       resetToBoard,
       navigateToGlobalSettings,
       cycleActiveProject,
+      openInjectablePicker,
     })
 
     handlers.get('?')?.()
@@ -106,6 +110,7 @@ describe('registerAppShortcuts', () => {
     handlers.get('⌃p')?.()
     handlers.get('1')?.()
     handlers.get('2')?.()
+    handlers.get('⌘⇧i')?.()
 
     expect(showShortcuts).toHaveBeenCalledOnce()
     expect(openActionPalette).toHaveBeenCalledOnce()
@@ -122,6 +127,7 @@ describe('registerAppShortcuts', () => {
     expect(cycleActiveProject).toHaveBeenNthCalledWith(2, 'previous', { boardOnly: true })
     expect(cycleActiveProject).toHaveBeenNthCalledWith(3, 'previous')
     expect(cycleActiveProject).toHaveBeenNthCalledWith(4, 'next')
+    expect(openInjectablePicker).toHaveBeenCalledOnce()
   })
 
   it('does not toggle file quick open while modal state blocks it', () => {
@@ -143,6 +149,7 @@ describe('registerAppShortcuts', () => {
       resetToBoard: vi.fn(),
       navigateToGlobalSettings: vi.fn(),
       cycleActiveProject: vi.fn(),
+      openInjectablePicker: vi.fn(),
     })
 
     handlers.get('⌘p')?.()

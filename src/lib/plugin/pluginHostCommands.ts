@@ -16,6 +16,7 @@ import {
   getTaskWorkspace,
   getLatestSession,
   killPty,
+  listOpenCodeCommands,
   openUrl,
   pluginBackendWhenReady,
   pluginInvoke,
@@ -217,6 +218,10 @@ export function createPluginRuntimeHost(pluginId: string) {
     startTaskImplementation: (request: StartTaskImplementationRequest) => startTaskImplementationFromPluginRequest(request),
     getTaskWorkspace: (taskId: string) => getTaskWorkspace(taskId),
     getLatestSession: (taskId: string) => getLatestSession(taskId),
+    // The Claude catalog is project-scoped in the sidecar; with no project there
+    // are no project-independent entries to return yet, so yield an empty list.
+    listCommandCatalog: (request?: { projectId?: string | null }) =>
+      request?.projectId ? listOpenCodeCommands(request.projectId) : Promise.resolve([]),
     readDir: (request: { projectId: string; path?: string | null }) => fsReadDir(request.projectId, request.path ?? null),
     readFile: (request: { projectId: string; path: string }) => fsReadFile(request.projectId, request.path),
     searchFiles: (request: { projectId: string; query: string; limit?: number }) => fsSearchFiles(request.projectId, request.query, request.limit),

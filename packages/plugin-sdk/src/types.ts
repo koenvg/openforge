@@ -3,6 +3,7 @@ import packageMetadataSchemaData from './openforgePackageMetadataSchema.json'
 import type { Component } from 'svelte'
 import type {
   AgentSession,
+  CommandInfo,
   FileContent,
   FileEntry,
   Project,
@@ -180,7 +181,16 @@ export interface CommandRegistry {
   register<TInput = unknown, TOutput = unknown>(registration: CommandRegistration<TInput, TOutput>): Disposable
   invoke<TOutput = unknown>(id: string, payload?: unknown): Promise<TOutput>
   invokeGlobal<TOutput = unknown>(qualifiedId: string, payload?: unknown): Promise<TOutput>
+  /** Plugin-registered commands (this and other enabled plugins). */
   list(): Promise<CommandDescriptor[]>
+  /**
+   * The host's Claude skills/commands catalog for the given project (skills from
+   * `~/.claude`/`.agents`, builtin commands, and plugin-provided commands), as the
+   * app's own injectable/autocomplete surfaces see it. Omitting `projectId` (or
+   * passing null) yields only project-independent entries. Distinct from `list()`,
+   * which returns plugin-registered commands.
+   */
+  listCatalog(request?: { projectId?: string | null }): Promise<CommandInfo[]>
 }
 
 export type EventHandler<TPayload = unknown> = (payload: TPayload) => void

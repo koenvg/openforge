@@ -17,6 +17,8 @@
     onPasteImage?: (file: File) => string | null | void | Promise<string | null | void>
     onImageMarkerClick?: (marker: string) => void
     imageMarkerInsertRequest?: { id: number, marker: string } | null
+    injectableInsertRequest?: { id: number, text: string } | null
+    onOpenPicker?: () => void
     onCancel: () => void
     autofocus?: boolean
     extras?: Snippet
@@ -35,6 +37,8 @@
     onPasteImage,
     onImageMarkerClick,
     imageMarkerInsertRequest = null,
+    injectableInsertRequest = null,
+    onOpenPicker,
     onCancel,
     autofocus = false,
     extras,
@@ -53,6 +57,7 @@
   let textareaEl = $state<HTMLTextAreaElement | null>(null)
   const promptReady = $derived(textValue.trim().length > 0)
   let lastImageMarkerInsertRequestId = 0
+  let lastInjectableInsertRequestId = 0
 
   interface TextSelectionSnapshot {
     text: string
@@ -79,7 +84,7 @@
   })
 
   // ── Transcription ────────────────────────────────────────────────────────────
-  function handleTranscription(text: string) {
+  function insertTextAtCursor(text: string) {
     if (!textareaEl) return
     const cursorPos = textareaEl.selectionStart ?? textValue.length
     const before = textValue.slice(0, cursorPos)
@@ -88,9 +93,14 @@
     updateTextValue(before + separator + text + after)
     const newPos = cursorPos + separator.length + text.length
     setTimeout(() => {
+      textareaEl?.focus()
       textareaEl?.setSelectionRange(newPos, newPos)
       autoGrow()
     }, 0)
+  }
+
+  function handleTranscription(text: string) {
+    insertTextAtCursor(text)
   }
 
   function imageMarkerInsertionText(marker: string, before: string, after: string): string {
@@ -137,6 +147,14 @@
 
     lastImageMarkerInsertRequestId = request.id
     insertImageMarkerAtCursor(request.marker)
+  })
+
+  $effect(() => {
+    const request = injectableInsertRequest
+    if (!request || request.id === lastInjectableInsertRequestId || !textareaEl) return
+
+    lastInjectableInsertRequestId = request.id
+    insertTextAtCursor(request.text)
   })
 
   // ── Auto-grow ────────────────────────────────────────────────────────────────
@@ -314,6 +332,17 @@
   <div class="flex items-center justify-between gap-3 px-3 pb-2">
     <div class="flex min-w-0 items-center gap-2">
       <VoiceInput onTranscription={handleTranscription} listenToHotkey />
+      {#if onOpenPicker}
+        <button
+          type="button"
+          class="btn btn-ghost btn-xs gap-1"
+          aria-label="Open injectables"
+          title="Insert a skill, command, or snippet (⌘⇧I)"
+          onclick={() => onOpenPicker?.()}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3z"/></svg>
+        </button>
+      {/if}
       {#if footerHelp}
         {@render footerHelp()}
       {/if}

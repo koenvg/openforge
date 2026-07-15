@@ -72,6 +72,46 @@ pub fn parse_skill_frontmatter(content: &str) -> (Option<String>, Option<String>
     (name, desc)
 }
 
+/// Trigger-mode flags parsed from SKILL.md frontmatter.
+#[derive(Debug, Clone, Default)]
+pub struct SkillFrontmatterFlags {
+    pub disable_model_invocation: Option<bool>,
+    pub user_invocable: Option<bool>,
+}
+
+/// Parse the boolean trigger-mode flags from SKILL.md frontmatter.
+/// Reuses the same `---`-delimited block detection as `parse_skill_frontmatter`.
+pub fn parse_skill_frontmatter_flags(content: &str) -> SkillFrontmatterFlags {
+    let mut flags = SkillFrontmatterFlags::default();
+    let trimmed = content.trim_start();
+    if !trimmed.starts_with("---") {
+        return flags;
+    }
+    let after_first = &trimmed[3..];
+    let end_idx = match after_first.find("\n---") {
+        Some(idx) => idx,
+        None => return flags,
+    };
+    let frontmatter = &after_first[..end_idx];
+    for line in frontmatter.lines() {
+        let trimmed_line = line.trim();
+        if let Some(val) = trimmed_line.strip_prefix("disable-model-invocation:") {
+            flags.disable_model_invocation = parse_yaml_bool(val);
+        } else if let Some(val) = trimmed_line.strip_prefix("user-invocable:") {
+            flags.user_invocable = parse_yaml_bool(val);
+        }
+    }
+    flags
+}
+
+fn parse_yaml_bool(val: &str) -> Option<bool> {
+    match val.trim().to_ascii_lowercase().as_str() {
+        "true" | "yes" => Some(true),
+        "false" | "no" => Some(false),
+        _ => None,
+    }
+}
+
 pub const GENERIC_SKILLS_SOURCE_DIR: &str = ".agents";
 pub const PI_SKILLS_SOURCE_DIR: &str = ".pi";
 pub const CODEX_SKILLS_SOURCE_DIR: &str = ".codex";
@@ -165,6 +205,7 @@ pub fn scan_skills_directory(
             None => continue,
         };
         let (fm_name, fm_desc) = parse_skill_frontmatter(&content);
+        let flags = parse_skill_frontmatter_flags(&content);
         let name = fm_name.unwrap_or_else(|| dir_name.clone());
         skills.push(crate::opencode_client::SkillInfo {
             name,
@@ -175,6 +216,8 @@ pub fn scan_skills_directory(
             source_dir: source_dir.to_string(),
             source_path: dir_name,
             file_name: None,
+            disable_model_invocation: flags.disable_model_invocation,
+            user_invocable: flags.user_invocable,
         });
     }
     skills
@@ -209,6 +252,7 @@ pub fn scan_pi_skills_directory(dir: &Path, level: &str) -> Vec<crate::opencode_
             None => continue,
         };
         let (fm_name, fm_desc) = parse_skill_frontmatter(&content);
+        let flags = parse_skill_frontmatter_flags(&content);
         let name = fm_name.unwrap_or(file_stem);
         skills.push(crate::opencode_client::SkillInfo {
             name,
@@ -219,6 +263,8 @@ pub fn scan_pi_skills_directory(dir: &Path, level: &str) -> Vec<crate::opencode_
             source_dir: PI_SKILLS_SOURCE_DIR.to_string(),
             source_path: file_name.clone(),
             file_name: Some(file_name),
+            disable_model_invocation: flags.disable_model_invocation,
+            user_invocable: flags.user_invocable,
         });
     }
 
@@ -685,6 +731,50 @@ pub fn scan_plugin_agents(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── parse_skill_frontmatter_flags ────────────────────────────────────────
+
+    #[test]
+    fn parses_trigger_flags_from_frontmatter() {
+        let content = "---\nname: refactor\ndescription: do it\ndisable-model-invocation: true\nuser-invocable: false\n---\nbody";
+        let flags = parse_skill_frontmatter_flags(content);
+        assert_eq!(flags.disable_model_invocation, Some(true));
+        assert_eq!(flags.user_invocable, Some(false));
+    }
+
+    #[test]
+    fn missing_trigger_flags_are_none() {
+        let content = "---\nname: refactor\ndescription: do it\n---\nbody";
+        let flags = parse_skill_frontmatter_flags(content);
+        assert_eq!(flags.disable_model_invocation, None);
+        assert_eq!(flags.user_invocable, None);
+    }
+
+    #[test]
+    fn no_frontmatter_returns_none_flags() {
+        let flags = parse_skill_frontmatter_flags("# just a heading\n");
+        assert_eq!(flags.disable_model_invocation, None);
+        assert_eq!(flags.user_invocable, None);
+    }
+
+    #[test]
+    fn scan_skills_directory_populates_trigger_flags() {
+        let tmp = std::env::temp_dir().join(format!("of-skills-flags-{}", std::process::id()));
+        let skill_dir = tmp.join("manual-skill");
+        std::fs::create_dir_all(&skill_dir).unwrap();
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: manual-skill\ndescription: d\ndisable-model-invocation: true\n---\nbody",
+        )
+        .unwrap();
+
+        let skills = scan_skills_directory(&tmp, "project", ".claude");
+        let s = skills.iter().find(|s| s.name == "manual-skill").unwrap();
+        assert_eq!(s.disable_model_invocation, Some(true));
+        assert_eq!(s.user_invocable, None);
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 
     // ── Test fixtures ────────────────────────────────────────────────────────
 

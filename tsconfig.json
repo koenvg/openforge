@@ -30,6 +30,7 @@
       "@openforge-app/plugin-sdk/sanitize": ["packages/plugin-sdk/src/sanitize.ts"],
       "@openforge-app/plugin-sdk/testing": ["packages/plugin-sdk/src/testing.ts"],
       "@openforge-app/plugin-sdk/fileIcons": ["packages/plugin-sdk/src/fileIcons.ts"],
+      "@openforge-app/plugin-sdk/injectables": ["packages/plugin-sdk/src/injectables/index.ts"],
       "@openforge-app/plugin-sdk/ui/MarkdownContent.svelte": ["packages/plugin-sdk/src/ui/MarkdownContent.svelte"],
       "@openforge-app/plugin-sdk/ui/ResizablePanel.svelte": ["packages/plugin-sdk/src/ui/ResizablePanel.svelte"],
       "@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte": ["packages/plugin-sdk/src/ui/FileTypeIcon.svelte"],

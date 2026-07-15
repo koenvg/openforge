@@ -15,6 +15,7 @@ export type AppShortcutAction =
   | 'cyclePreviousProjectOnBoard'
   | 'cyclePreviousProject'
   | 'cycleNextProject'
+  | 'openInjectablePicker'
 
 export interface AppShortcutRegistration {
   key: string
@@ -91,6 +92,11 @@ export const APP_SHORTCUT_DEFINITIONS: readonly AppShortcutDefinition[] = [
     id: 'action-palette',
     registrations: [{ key: '⌘K', action: 'openActionPalette' }],
     help: { id: 'action-palette', label: 'Action palette', keys: [['⌘K']] },
+  },
+  {
+    id: 'injectables',
+    registrations: [{ key: '⌘⇧I', action: 'openInjectablePicker' }],
+    help: { id: 'injectables', label: 'Injectables', keys: [['⌘', '⇧', 'I']] },
   },
   {
     id: 'show-shortcuts',
