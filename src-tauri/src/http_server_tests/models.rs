@@ -213,40 +213,40 @@ fn test_delete_task_request_response_models_use_task_id_and_completed_status() {
 }
 
 #[test]
-fn test_update_task_request_creation_with_forbidden_initial_prompt_marker() {
+fn test_update_task_request_creation_with_initial_prompt() {
     let request = UpdateTaskRequest {
         task_id: "T-123".to_string(),
-        initial_prompt: Some("Forbidden prompt update".to_string()),
+        initial_prompt: Some("Replacement prompt".to_string()),
         summary: Some("New Summary".to_string()),
     };
     assert_eq!(request.task_id, "T-123");
     assert_eq!(
         request.initial_prompt,
-        Some("Forbidden prompt update".to_string())
+        Some("Replacement prompt".to_string())
     );
     assert_eq!(request.summary, Some("New Summary".to_string()));
 }
 
 #[test]
-fn test_update_task_request_deserializes_forbidden_initial_prompt_for_rejection() {
-    let json = r#"{"task_id": "T-456", "initial_prompt": "Forbidden prompt update", "summary": "Updated Summary"}"#;
+fn test_update_task_request_deserializes_both_fields_for_handler_validation() {
+    let json = r#"{"task_id": "T-456", "initial_prompt": "Replacement prompt", "summary": "Updated Summary"}"#;
     let request: UpdateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
     assert_eq!(request.task_id, "T-456");
     assert_eq!(
         request.initial_prompt,
-        Some("Forbidden prompt update".to_string())
+        Some("Replacement prompt".to_string())
     );
     assert_eq!(request.summary, Some("Updated Summary".to_string()));
 }
 
 #[test]
-fn test_update_task_request_deserializes_forbidden_initial_prompt_without_summary() {
-    let json = r#"{"task_id": "T-789", "initial_prompt": "Forbidden prompt update"}"#;
+fn test_update_task_request_deserializes_initial_prompt_without_summary() {
+    let json = r#"{"task_id": "T-789", "initial_prompt": "Replacement prompt"}"#;
     let request: UpdateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
     assert_eq!(request.task_id, "T-789");
     assert_eq!(
         request.initial_prompt,
-        Some("Forbidden prompt update".to_string())
+        Some("Replacement prompt".to_string())
     );
     assert!(request.summary.is_none());
 }
@@ -271,7 +271,7 @@ fn test_update_task_request_deserialize_no_update_fields() {
 
 #[test]
 fn test_update_task_request_deserialize_missing_task_id_fails() {
-    let json = r#"{"initial_prompt": "Forbidden prompt update"}"#;
+    let json = r#"{"initial_prompt": "Replacement prompt"}"#;
     let result: Result<UpdateTaskRequest, _> = serde_json::from_str(json);
     assert!(
         result.is_err(),
@@ -280,10 +280,10 @@ fn test_update_task_request_deserialize_missing_task_id_fails() {
 }
 
 #[test]
-fn test_update_task_request_serialize_roundtrip_preserves_forbidden_marker() {
+fn test_update_task_request_serialize_roundtrip_preserves_fields() {
     let original = UpdateTaskRequest {
         task_id: "T-555".to_string(),
-        initial_prompt: Some("Forbidden prompt update".to_string()),
+        initial_prompt: Some("Replacement prompt".to_string()),
         summary: Some("Roundtrip Summary".to_string()),
     };
     let json = serde_json::to_string(&original).expect("Failed to serialize");

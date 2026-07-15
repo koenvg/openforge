@@ -36,7 +36,9 @@ pub use review::ReviewPrRow;
 pub use task_workspaces::TaskWorkspaceRow;
 #[cfg(test)]
 pub use tasks::TaskWorktreeOptions;
-pub use tasks::{CompactTaskRow, NewTaskOptions, TaskLabelRow, TaskRow};
+pub use tasks::{
+    CompactTaskRow, NewTaskOptions, TaskInitialPromptUpdateError, TaskLabelRow, TaskRow,
+};
 pub use worktrees::WorktreeRow;
 
 pub(crate) const STARTUP_RESUMABLE_AGENT_SESSION_STATUSES: [&str; 4] =

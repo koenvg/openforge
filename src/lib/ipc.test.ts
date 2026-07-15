@@ -38,7 +38,7 @@ import {
   resizePty,
   spawnShellPty,
   transcribeAudio,
-  updateTask,
+  updateTaskInitialPrompt,
   updateTaskSummary,
   writePty,
 } from "./ipc";
@@ -335,12 +335,12 @@ describe("ipc spawnShellPty", () => {
 		expect(invokeMock).toHaveBeenCalledWith("repo_has_commits", { repoPath: "/repo" });
 	});
 
-	it("sends task edits as mutable prompt updates, not initialPrompt updates", async () => {
-		await updateTask("T-42", "Updated prompt");
+	it("sends task edits as initial prompt updates", async () => {
+		await updateTaskInitialPrompt("T-42", "Updated prompt");
 
 		expect(invokeMock).toHaveBeenCalledWith("update_task", {
 			id: "T-42",
-			prompt: "Updated prompt",
+			initialPrompt: "Updated prompt",
 		});
 	});
 

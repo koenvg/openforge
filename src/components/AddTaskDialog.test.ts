@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import AddTaskDialog from './AddTaskDialog.svelte'
 import type { Action, Task } from '../lib/types'
-import { createTask, updateTask, getProjectConfig, getResolvedAiProvider, listGitBranches, repoHasCommits, listOpenCodeCommands } from '../lib/ipc'
+import { createTask, updateTaskInitialPrompt, getProjectConfig, getResolvedAiProvider, listGitBranches, repoHasCommits, listOpenCodeCommands } from '../lib/ipc'
 import { loadActions } from '../lib/actions'
 
 vi.mock('../lib/ipc', () => ({
@@ -21,7 +21,7 @@ vi.mock('../lib/ipc', () => ({
     created_at: 1000,
     updated_at: 1000,
   }),
-  updateTask: vi.fn().mockResolvedValue(undefined),
+  updateTaskInitialPrompt: vi.fn().mockResolvedValue(undefined),
   getProjectConfig: vi.fn().mockResolvedValue(null),
   getResolvedAiProvider: vi.fn().mockResolvedValue('claude-code'),
   listGitBranches: vi.fn().mockResolvedValue([
@@ -721,8 +721,8 @@ describe('AddTaskDialog', () => {
     await fireEvent.click(await screen.findByRole('button', { name: /Submit/ }))
 
     await waitFor(() => {
-      const prompt = vi.mocked(updateTask).mock.calls[0][1]
-      expect(updateTask).toHaveBeenCalledWith('T-42', prompt)
+      const prompt = vi.mocked(updateTaskInitialPrompt).mock.calls[0][1]
+      expect(updateTaskInitialPrompt).toHaveBeenCalledWith('T-42', prompt)
       expect(prompt).toContain('Inspect [image#1] carefully [image#2]')
       expect(prompt).toContain('[image#1]: data:image/png;base64,aW1hZ2UtYnl0ZXM=')
       expect(prompt).toContain('[image#2]: data:image/jpeg;base64,')
@@ -751,7 +751,7 @@ describe('AddTaskDialog', () => {
     })
   })
 
-  it('calls updateTask when submitted in edit mode', async () => {
+  it('updates the initial prompt when submitted in edit mode', async () => {
     const onTaskSaved = vi.fn()
     render(AddTaskDialog, { props: { mode: 'edit', task: mockTask, onTaskSaved } })
     
@@ -759,7 +759,7 @@ describe('AddTaskDialog', () => {
     await fireEvent.click(submitBtn)
     
     await waitFor(() => {
-      expect(updateTask).toHaveBeenCalledWith('T-42', 'Existing Task')
+      expect(updateTaskInitialPrompt).toHaveBeenCalledWith('T-42', 'Existing Task')
       expect(onTaskSaved).toHaveBeenCalled()
     })
   })
@@ -782,7 +782,7 @@ describe('AddTaskDialog', () => {
     await fireEvent.click(await screen.findByRole('button', { name: /Submit/ }))
 
     await waitFor(() => {
-      expect(updateTask).toHaveBeenCalledWith(
+      expect(updateTaskInitialPrompt).toHaveBeenCalledWith(
         'T-42',
         'Inspect [image#1] again\n\n[image#1]: data:image/png;base64,aW1hZ2UtYnl0ZXM=',
       )
@@ -806,7 +806,7 @@ describe('AddTaskDialog', () => {
     await fireEvent.click(await screen.findByRole('button', { name: /Submit/ }))
 
     await waitFor(() => {
-      expect(updateTask).toHaveBeenCalledWith('T-42', 'Inspect carefully')
+      expect(updateTaskInitialPrompt).toHaveBeenCalledWith('T-42', 'Inspect carefully')
     })
   })
 

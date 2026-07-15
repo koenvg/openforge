@@ -29,8 +29,8 @@ export async function createTask(initialPrompt: string, status: BoardStatus, pro
   return normalizeTask(task)
 }
 
-export async function updateTask(id: string, prompt: string): Promise<void> {
-  return invoke("update_task", { id, prompt });
+export async function updateTaskInitialPrompt(id: string, initialPrompt: string): Promise<void> {
+  return invoke("update_task", { id, initialPrompt });
 }
 
 export async function updateTaskTitle(id: string, title: string): Promise<void> {

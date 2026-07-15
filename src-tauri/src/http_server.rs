@@ -78,15 +78,30 @@ pub struct AppState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TaskOperation {
     StartImplementation,
+    UpdateInitialPrompt,
     DeleteTask,
 }
 
-/// Registry of in-flight exclusive per-task operations. Claiming a
-/// (task, operation) pair fails while a previous claim for the same pair is
-/// alive, so duplicate concurrent starts or deletes cannot run.
+/// Registry of in-flight exclusive per-task operations. Duplicate operations
+/// conflict, and implementation start conflicts with initial-prompt replacement
+/// so a launched provider cannot observe a stale prompt snapshot.
 #[derive(Debug, Clone, Default)]
 pub struct TaskClaims {
     active: Arc<Mutex<HashSet<(String, TaskOperation)>>>,
+}
+
+fn task_operations_conflict(active: TaskOperation, requested: TaskOperation) -> bool {
+    active == requested
+        || matches!(
+            (active, requested),
+            (
+                TaskOperation::StartImplementation,
+                TaskOperation::UpdateInitialPrompt
+            ) | (
+                TaskOperation::UpdateInitialPrompt,
+                TaskOperation::StartImplementation
+            )
+        )
 }
 
 pub struct TaskClaim {
@@ -101,11 +116,13 @@ impl TaskClaims {
 
     pub(crate) fn try_claim(&self, task_id: &str, operation: TaskOperation) -> Option<TaskClaim> {
         let mut active = self.active.lock().ok()?;
-        let key = (task_id.to_string(), operation);
-        if !active.insert(key.clone()) {
+        if active.iter().any(|(active_task_id, active_operation)| {
+            active_task_id == task_id && task_operations_conflict(*active_operation, operation)
+        }) {
             return None;
         }
-
+        let key = (task_id.to_string(), operation);
+        active.insert(key.clone());
         Some(TaskClaim {
             key,
             active: Arc::clone(&self.active),
@@ -237,7 +254,8 @@ pub struct CreateTaskResponse {
     pub status: String,
 }
 
-/// Request to update a task summary. `initial_prompt` is retained only to detect and reject mutation attempts with a clear error.
+/// Request to update exactly one task field. Summary remains the Handoff Notes
+/// channel; initial_prompt invokes the guarded never-started prompt replacement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateTaskRequest {
     pub task_id: String,
@@ -690,31 +708,55 @@ pub async fn update_task_handler(
     State(state): State<AppState>,
     Json(request): Json<UpdateTaskRequest>,
 ) -> Result<Json<UpdateTaskResponse>, (StatusCode, String)> {
-    if request.initial_prompt.is_some() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "initial_prompt cannot be updated after task creation".to_string(),
-        ));
+    match (
+        request.initial_prompt.as_deref(),
+        request.summary.as_deref(),
+    ) {
+        (Some(_), Some(_)) | (None, None) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "update_task requires exactly one of initial_prompt or summary".to_string(),
+            ));
+        }
+        (Some(initial_prompt), None) => {
+            let _claim = state
+                .task_claims
+                .try_claim(&request.task_id, TaskOperation::UpdateInitialPrompt)
+                .ok_or_else(|| {
+                    (
+                        StatusCode::CONFLICT,
+                        format!(
+                            "task {} is starting; create a replacement task instead",
+                            request.task_id
+                        ),
+                    )
+                })?;
+            let db = state.db.lock().unwrap();
+            db.update_task_initial_prompt(&request.task_id, initial_prompt)
+                .map_err(|error| match error {
+                    db::TaskInitialPromptUpdateError::NotFound(_) => {
+                        (StatusCode::NOT_FOUND, error.to_string())
+                    }
+                    db::TaskInitialPromptUpdateError::AlreadyStarted(_) => {
+                        (StatusCode::CONFLICT, error.to_string())
+                    }
+                    db::TaskInitialPromptUpdateError::Database(_) => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to update task initial prompt: {error}"),
+                    ),
+                })?;
+        }
+        (None, Some(summary)) => {
+            let db = state.db.lock().unwrap();
+            db.update_task_summary(&request.task_id, summary)
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to update task summary: {e}"),
+                    )
+                })?;
+        }
     }
-
-    let Some(summary) = request.summary.as_deref() else {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "update_task requires summary".to_string(),
-        ));
-    };
-
-    let db = state.db.lock().unwrap();
-
-    db.update_task_summary(&request.task_id, summary)
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to update task summary: {e}"),
-            )
-        })?;
-
-    drop(db);
 
     emit_task_changed(&state, "updated", &request.task_id, None);
 

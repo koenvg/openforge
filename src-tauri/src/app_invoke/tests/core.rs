@@ -122,6 +122,62 @@ async fn handles_config_projects_tasks_and_unmatched_commands() {
 }
 
 #[tokio::test]
+async fn app_invoke_updates_only_never_started_initial_prompts() {
+    let (state, path) = test_state("app_invoke_initial_prompt_lifecycle_guard");
+    let task = invoke_ok(
+        &state,
+        "create_task",
+        json!({
+            "initialPrompt": "Original prompt",
+            "status": "backlog",
+            "projectId": null,
+            "permissionMode": null,
+        }),
+    )
+    .await;
+    let task_id = task["id"].as_str().expect("task id");
+
+    invoke_ok(
+        &state,
+        "update_task",
+        json!({ "id": task_id, "initialPrompt": "Updated prompt" }),
+    )
+    .await;
+    let updated = crate::db::acquire_db(&state.db)
+        .get_task(task_id)
+        .expect("get updated task")
+        .expect("task exists");
+    assert_eq!(updated.initial_prompt, "Updated prompt");
+    assert_eq!(updated.prompt.as_deref(), Some("Updated prompt"));
+    drop(updated);
+
+    invoke_ok(
+        &state,
+        "update_task_status",
+        json!({ "id": task_id, "status": "doing" }),
+    )
+    .await;
+    let error = invoke(
+        &state,
+        "update_task",
+        json!({ "id": task_id, "initialPrompt": "Too late" }),
+    )
+    .await
+    .expect_err("started task prompt update should fail");
+    assert_eq!(error.0, StatusCode::CONFLICT);
+    assert!(error.1.contains("replacement task"));
+
+    let unchanged = crate::db::acquire_db(&state.db)
+        .get_task(task_id)
+        .expect("get unchanged task")
+        .expect("task exists");
+    assert_eq!(unchanged.initial_prompt, "Updated prompt");
+    assert_eq!(unchanged.prompt.as_deref(), Some("Updated prompt"));
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn app_invoke_delete_task_completes_record_and_removes_worktree_metadata() {
     let (state, path) = test_state("app_invoke_delete_task_completes_record");
     let project = invoke_ok(

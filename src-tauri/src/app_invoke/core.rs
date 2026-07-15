@@ -329,13 +329,29 @@ pub(super) async fn handle_app_unmatched_command(
         }
         "update_task" => {
             let id = payload_string(&request.payload, "id")?;
-            let prompt = payload_string(&request.payload, "prompt")?;
-            db.update_task(&id, &prompt).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to update task prompt: {e}"),
-                )
-            })?;
+            let initial_prompt = payload_string(&request.payload, "initialPrompt")?;
+            let _claim = state
+                .task_claims
+                .try_claim(&id, TaskOperation::UpdateInitialPrompt)
+                .ok_or_else(|| {
+                    (
+                        StatusCode::CONFLICT,
+                        format!("task {id} is starting; create a replacement task instead"),
+                    )
+                })?;
+            db.update_task_initial_prompt(&id, &initial_prompt)
+                .map_err(|error| match error {
+                    db::TaskInitialPromptUpdateError::NotFound(_) => {
+                        (StatusCode::NOT_FOUND, error.to_string())
+                    }
+                    db::TaskInitialPromptUpdateError::AlreadyStarted(_) => {
+                        (StatusCode::CONFLICT, error.to_string())
+                    }
+                    db::TaskInitialPromptUpdateError::Database(_) => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to update task initial prompt: {error}"),
+                    ),
+                })?;
             serde_json::Value::Null
         }
         "update_task_title" => {

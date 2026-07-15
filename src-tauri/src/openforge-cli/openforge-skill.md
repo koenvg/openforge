@@ -5,9 +5,9 @@ description: Manage OpenForge tasks from AI providers using the installed OpenFo
 
 # OpenForge task management
 
-Use this skill when you need to create follow-up work, inspect task context, or update the current task summary in OpenForge.
+Use this skill when you need to create follow-up work, inspect task context, update Handoff Notes, or correct a task prompt before execution starts.
 
-Task prompt semantics are intentionally narrow: `openforge task update` only updates the task `summary` field (Handoff Notes). It does not update `initial_prompt` or `prompt`, and must not be presented as a way to change task prompt text.
+`openforge task update --summary` updates only the task `summary` field (Handoff Notes). `openforge task update --initial-prompt` atomically replaces both `initial_prompt` and the effective `prompt`, but only while the task has never started. Started or completed tasks require a replacement task.
 
 When an LLM picks up a task, OpenForge passes only the task's initial prompt; the task summary/Handoff Notes are not included.
 
@@ -40,6 +40,7 @@ If labels or dependency order are unclear, mention that uncertainty in Handoff N
 openforge task plan apply --file follow-up-plan.json
 openforge task create --initial-prompt "Describe the follow-up work" --worktree "$PWD" --depends-on T-122 --label cleanup
 openforge task update --task-id T-123 --summary "What changed and what needs attention"
+openforge task update --task-id T-124 --initial-prompt "Corrected backlog prompt"
 openforge task get --task-id T-123
 openforge project labels list --project-id P-1
 openforge debug process-memory
@@ -71,9 +72,10 @@ Use dependsOn for current or prerequisite task IDs or for local task keys from t
 
 Labels are project-scoped. Use `project labels list --project-id <id>` before creating follow-up tasks when a project id is available, and reuse an existing label when it fits. Use `--label` on `task create` for AI-created follow-up work that already has an obvious category, and pair it with `--depends-on` when the follow-up is related to a known active task or prerequisite. `--label` can be repeated or comma-separated, e.g. `--label bug --label "needs review"` or `--label bug,cleanup`. Use `task labels add`, `task labels remove`, and `task labels list` to manage labels on existing tasks.
 
-Rare prompt-repair workflow: if a task was created with the wrong initial prompt, do not try to repair it with `task update`. Use the CLI help for the full safe replacement workflow:
+Prompt repair workflow: use `task update --initial-prompt` only for a never-started backlog task. If OpenForge reports that execution has started, create a replacement task instead; the original task's execution history is intentionally immutable.
 
 ```bash
+openforge task update --task-id T-123 --initial-prompt "Corrected prompt"
 openforge task create --help
 openforge task update --help
 ```

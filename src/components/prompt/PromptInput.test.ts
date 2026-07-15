@@ -16,7 +16,7 @@ vi.mock('../../lib/ipc', () => ({
   searchOpenCodeFiles: vi.fn().mockResolvedValue([]),
   listOpenCodeAgents: vi.fn().mockResolvedValue([]),
   createTask: vi.fn(),
-  updateTask: vi.fn(),
+  updateTaskInitialPrompt: vi.fn(),
   getProjectConfig: vi.fn().mockResolvedValue('test-board'),
 }))
 
