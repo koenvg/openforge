@@ -11,9 +11,11 @@
     applyRename,
     applyRelabel,
     type BoardCard,
+    type BoardColumn,
     type BoardModel,
     type RoadmapIssueTaskLink,
   } from '../lib/board'
+  import { stepIndex } from '../lib/queue'
   import type { LabelUsage, RefineTicketRequest, RepoLabel, RoadmapBoard, TicketDraft } from '../lib/types'
   import { normalizeLabelColor } from '../lib/labelColors'
   import { loadRoadmapActions, loadRoadmapIssueTaskLinks, startRoadmapIssueAction } from '../lib/roadmapActions'
@@ -50,23 +52,67 @@
   // once on mount: the key may have been added in settings since this view loaded.
   let hasApiKey = $state(false)
 
-  // Modal / drawer state.
-  let selectedIssueNumber = $state<number | null>(null)
+  // The label group the drawer is walking. `issueNumbers` is snapshotted when a card is opened
+  // and never recomputed: the drawer mutates its own group (toggling a label, closing an issue),
+  // so a live list would renumber under the reader or lose its anchor mid-review.
+  interface OpenQueue {
+    groupTitle: string
+    issueNumbers: number[]
+    index: number
+  }
+  let open = $state<OpenQueue | null>(null)
   let showCreate = $state(false)
   let createLabels = $state<string[]>([])
   let showColumns = $state(false)
   let configLabels = $state<LabelUsage[]>([])
   let configColumnLabels = $state<string[]>([])
 
+  // Every issue currently on the board. The queue is frozen but the board is live, so entries
+  // can name issues that have since left — stepIndex uses this to skip them.
+  let present = $derived.by<Set<number>>(() => {
+    const set = new Set<number>()
+    if (board) for (const col of board.columns) for (const c of col.cards) set.add(c.issueNumber)
+    return set
+  })
+
+  let openIssueNumber = $derived(open ? (open.issueNumbers[open.index] ?? null) : null)
+
   // The currently open card, derived live from the board so optimistic edits reflect.
   let selectedCard = $derived.by<BoardCard | null>(() => {
-    if (selectedIssueNumber === null || !board) return null
+    if (openIssueNumber === null || !board) return null
     for (const col of board.columns) {
-      const found = col.cards.find((c) => c.issueNumber === selectedIssueNumber)
+      const found = col.cards.find((c) => c.issueNumber === openIssueNumber)
       if (found) return found
     }
     return null
   })
+
+  // Freeze the column's order at open. A card carrying two column labels sits in two columns,
+  // so the group has to come from the click — the issue number alone can't identify it.
+  function openFrom(card: BoardCard, column: BoardColumn) {
+    open = {
+      groupTitle: column.title,
+      issueNumbers: column.cards.map((c) => c.issueNumber),
+      index: column.cards.findIndex((c) => c.issueNumber === card.issueNumber),
+    }
+  }
+
+  function go(dir: 1 | -1) {
+    if (!open) return
+    const i = stepIndex(open.issueNumbers, open.index, dir, present)
+    open = i === null ? null : { ...open, index: i } // null → nothing left to review
+  }
+
+  // A closed issue leaves the board, which would null the open card and unmount the drawer.
+  // Step past it first so a review sweep keeps its place. The closed number is excluded
+  // explicitly because it advances before the board refresh has dropped it from `present`.
+  function advancePastClosed(closed: number) {
+    if (!open) return
+    const remaining = new Set(present)
+    remaining.delete(closed)
+    const i = stepIndex(open.issueNumbers, open.index, 1, remaining)
+    open = i === null ? null : { ...open, index: i } // null → nothing left to review
+  }
 
   // BoardModel.repo is the owner/name slug built from roadmap_get_board's raw RepoRef in modelFromBoard().
   let repoSlug = $derived(board ? board.repo : '')
@@ -145,7 +191,7 @@
     const pid = projectId
     if (pid !== lastProjectId) {
       lastProjectId = pid
-      selectedIssueNumber = null
+      open = null
       showCreate = false
       createLabels = []
       pendingCreatedCards = []
@@ -170,21 +216,25 @@
     }
   }
 
-  async function withBusy(fn: () => Promise<void>) {
+  // Returns whether `fn` completed without throwing, so callers that navigate on success
+  // (Save & continue, close-and-advance) don't move off an edit that never reached GitHub.
+  async function withBusy(fn: () => Promise<void>): Promise<boolean> {
     error = null
     busy = true
     try {
       await fn()
+      return true
     } catch (e) {
       error = String(e instanceof Error ? e.message : e)
+      return false
     } finally {
       busy = false
     }
   }
 
   async function setValue(value: number | null) {
-    if (selectedIssueNumber === null || !projectId || !board) return
-    const issueNumber = selectedIssueNumber
+    if (openIssueNumber === null || !projectId || !board) return
+    const issueNumber = openIssueNumber
     // Optimistic: patch the local card value, then persist.
     board = {
       ...board,
@@ -198,19 +248,19 @@
     })
   }
 
-  async function saveText(title: string, body: string) {
-    if (selectedIssueNumber === null || !projectId || !board) return
-    const issueNumber = selectedIssueNumber
+  async function saveText(title: string, body: string): Promise<boolean> {
+    if (openIssueNumber === null || !projectId || !board) return false
+    const issueNumber = openIssueNumber
     if (title) board = applyRename(board, issueNumber, title)
-    await withBusy(async () => {
+    return withBusy(async () => {
       await client.editIssue({ projectId, number: issueNumber, title, body })
       await loadBoard()
     })
   }
 
   async function toggleLabel(name: string, currentlyOn: boolean) {
-    if (selectedIssueNumber === null || !projectId || !board) return
-    const issueNumber = selectedIssueNumber
+    if (openIssueNumber === null || !projectId || !board) return
+    const issueNumber = openIssueNumber
     // Optimistically re-place the card (removing or adding the toggled label).
     board = currentlyOn
       ? applyRelabel(board, issueNumber, name, '')
@@ -227,13 +277,16 @@
   }
 
   async function closeIssue() {
-    if (selectedIssueNumber === null || !projectId) return
-    const issueNumber = selectedIssueNumber
-    await withBusy(async () => {
+    if (openIssueNumber === null || !projectId) return
+    const issueNumber = openIssueNumber
+    const ok = await withBusy(async () => {
       await client.editIssue({ projectId, number: issueNumber, state: 'closed' })
-      selectedIssueNumber = null
-      await loadBoard()
     })
+    // A failed close must not move the reader off the issue.
+    if (!ok) return
+    // Advance before the refresh so the drawer never unmounts on the now-missing card.
+    advancePastClosed(issueNumber)
+    await loadBoard()
   }
 
   async function createIssue(title: string, body: string, labels: string[]) {
@@ -374,7 +427,7 @@
   }
 
   onDestroy(() => {
-    selectedIssueNumber = null
+    open = null
   })
 </script>
 
@@ -413,7 +466,7 @@
           repo={repoSlug}
           {actions}
           {busy}
-          onCardClick={(c) => (selectedIssueNumber = c.issueNumber)}
+          onCardClick={openFrom}
           onOpenUrl={openUrl}
           onCopyLink={copyLink}
           onRecolor={(name, color) => {
@@ -429,13 +482,18 @@
   </div>
 </div>
 
-{#if selectedCard && board}
+{#if open && selectedCard && board}
   <CardDrawer
     card={selectedCard}
     repo={repoSlug}
     allLabels={repoLabels}
     {busy}
-    onClose={() => (selectedIssueNumber = null)}
+    index={open.index}
+    total={open.issueNumbers.length}
+    groupTitle={open.groupTitle}
+    onPrev={() => go(-1)}
+    onNext={() => go(1)}
+    onClose={() => (open = null)}
     onOpenUrl={openUrl}
     onCopyLink={copyLink}
     onSaveText={saveText}
