@@ -1,4 +1,4 @@
-import { getTaskTitle } from './taskTitle'
+import { getTaskDisplayTitle } from './taskTitle'
 import type { BoardStatus, Task } from './types'
 
 export interface TaskDependencySummary {
@@ -17,7 +17,7 @@ export function getTaskDependencySummaries(task: Task, allTasks: Task[]): TaskDe
   const tasksById = new Map(allTasks.map((knownTask) => [knownTask.id, knownTask]))
   return task.depends_on.map((dependencyId) => {
     const dependencyTask = tasksById.get(dependencyId)
-    const displayTitle = dependencyTask ? getTaskTitle(dependencyTask) : null
+    const displayTitle = dependencyTask ? getTaskDisplayTitle(dependencyTask) : null
     return {
       id: dependencyId,
       status: dependencyTask?.status ?? null,
@@ -34,7 +34,7 @@ export function getTaskDependentSummaries(task: Task, allTasks: Task[], dependen
   return allTasks
     .filter((knownTask) => knownTask.id !== task.id && knownTask.depends_on.includes(task.id))
     .map((dependentTask) => {
-      const displayTitle = getTaskTitle(dependentTask)
+      const displayTitle = getTaskDisplayTitle(dependentTask)
       const remainingDependencyCountAfterCurrentDone = dependentTask.depends_on
         .filter((dependencyId) => dependencyId !== task.id)
         .filter((dependencyId) => tasksById.get(dependencyId)?.status !== 'done')

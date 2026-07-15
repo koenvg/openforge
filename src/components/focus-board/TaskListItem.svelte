@@ -10,7 +10,7 @@
   import { getStateDrivingPr } from '../../lib/taskState'
   import { getTaskListItemPresentation, getTaskStateBadgeClass } from '../../lib/taskStatePresentation'
   import { timeAgoFromSeconds } from '../../lib/timeAgo'
-  import { getTaskTitle } from '../../lib/taskTitle'
+  import { getTaskDisplayTitle } from '../../lib/taskTitle'
   import { createTaskTitleRename } from '../../lib/useTaskTitleRename.svelte'
   import TaskLabelPills from '../shared/tasks/TaskLabelPills.svelte'
 
@@ -48,7 +48,7 @@
     return `${count} ${count === 1 ? singular : plural}`
   }
 
-  let title = $derived(truncate(getTaskTitle(task), 80))
+  let title = $derived(truncate(getTaskDisplayTitle(task), 80))
   let badgeClass = $derived(getTaskStateBadgeClass(state))
   let presentation = $derived(getTaskListItemPresentation(state, reasonText, isMerging))
   let firstPr = $derived(getStateDrivingPr(pullRequests))

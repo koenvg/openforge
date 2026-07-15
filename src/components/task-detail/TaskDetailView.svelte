@@ -7,7 +7,7 @@
   import { getProjectConfig, getTaskWorkspace, openInEditor, writePty } from '../../lib/ipc'
   import { RUN_COMMAND_CONFIG_KEY, runAppCommandInTaskTerminal } from '../../lib/runAppCommand'
   import { confirmCompleteTask, runCompleteTask } from '../../lib/completeTask'
-  import { getTaskTitle } from '../../lib/taskTitle'
+  import { getTaskDisplayTitle } from '../../lib/taskTitle'
   import { createTaskTitleRename } from '../../lib/useTaskTitleRename.svelte'
   import { useAppRouter } from '../../lib/router.svelte'
   import { isInputFocused } from '../../lib/domUtils'
@@ -78,7 +78,7 @@
     }
   }
 
-  let displayTitle = $derived(getTaskTitle(task))
+  let displayTitle = $derived(getTaskDisplayTitle(task))
   let enabledPluginContributionSources = $derived(
     Array.from($enabledPluginIds)
       .map((id) => $runtimeContributionSources.get(id))
