@@ -549,6 +549,13 @@ pub struct GitStatusSummary {
     pub insertions: i32,
     /// Deleted lines across uncommitted changes.
     pub deletions: i32,
+    /// New files git is not tracking yet, excluding gitignored paths. `git diff`
+    /// cannot see these, so they are counted separately from `uncommitted_files`
+    /// rather than folded into it.
+    pub untracked_files: i32,
+    /// Lines across untracked files. Binary or unreadable files contribute none,
+    /// mirroring how git reports them as "Bin" with no line stats.
+    pub untracked_insertions: i32,
 }
 
 /// Find the first base-branch candidate (origin/main, origin/HEAD, main, master)
@@ -604,8 +611,38 @@ pub fn parse_ahead_behind(rev_list: &str) -> (i32, i32) {
     (ahead, behind)
 }
 
+/// Count untracked (but not gitignored) files and the lines across them.
+/// `git diff HEAD` reports nothing for these, so they need their own pass.
+async fn count_untracked(worktree_path: &str) -> Result<(i32, i32), String> {
+    // -z: NUL-separated, so filenames containing newlines or quotes survive.
+    let output = tokio::process::Command::new("git")
+        .arg("-C")
+        .arg(worktree_path)
+        .args(["ls-files", "--others", "--exclude-standard", "-z"])
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run git ls-files: {}", e))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("git ls-files failed: {}", stderr.trim()));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut files = 0;
+    let mut insertions = 0;
+    for filename in stdout.split('\0').filter(|name| !name.is_empty()) {
+        files += 1;
+        let full_path = std::path::Path::new(worktree_path).join(filename);
+        if let Ok(content) = tokio::fs::read_to_string(&full_path).await {
+            insertions += content.lines().count() as i32;
+        }
+    }
+    Ok((files, insertions))
+}
+
 /// Summarize a worktree's git state: commits ahead/behind its upstream tracking
-/// branch, plus the uncommitted diff vs HEAD (files / insertions / deletions).
+/// branch, the uncommitted diff vs HEAD (files / insertions / deletions), and
+/// untracked new files, which the diff cannot see.
 pub async fn get_task_git_status_for_workspace(
     worktree_path: &str,
 ) -> Result<GitStatusSummary, String> {
@@ -625,6 +662,8 @@ pub async fn get_task_git_status_for_workspace(
     }
     let (uncommitted_files, insertions, deletions) =
         parse_diff_shortstat(&String::from_utf8_lossy(&diff_output.stdout));
+
+    let (untracked_files, untracked_insertions) = count_untracked(worktree_path).await?;
 
     // Ahead/behind vs the branch's own upstream (remote tracking) branch. When the
     // branch has no upstream, rev-list fails and we report "no remote".
@@ -679,6 +718,8 @@ pub async fn get_task_git_status_for_workspace(
         uncommitted_files,
         insertions,
         deletions,
+        untracked_files,
+        untracked_insertions,
     })
 }
 
@@ -788,6 +829,62 @@ mod tests {
         assert_eq!(summary.uncommitted_files, 1);
         assert_eq!(summary.insertions, 1);
         assert_eq!(summary.deletions, 0);
+    }
+
+    #[tokio::test]
+    async fn git_status_summary_counts_untracked_files_and_their_lines() {
+        let repo = init_git_repo();
+        fs::write(repo.path().join("a.txt"), "1\n").expect("write a.txt");
+        run_git(repo.path(), &["add", "."]);
+        run_git(repo.path(), &["commit", "-m", "base"]);
+        // Brand-new files, which `git diff HEAD` cannot see at all.
+        fs::write(repo.path().join("new1.txt"), "one\ntwo\nthree\n").expect("write new1.txt");
+        fs::write(repo.path().join("new2.txt"), "solo").expect("write new2.txt");
+
+        let summary = get_task_git_status_for_workspace(repo.path().to_str().unwrap())
+            .await
+            .expect("git status summary");
+
+        assert_eq!(summary.untracked_files, 2);
+        // 3 lines, plus 1 line that has no trailing newline.
+        assert_eq!(summary.untracked_insertions, 4);
+        // Untracked files must stay out of the tracked-diff counts.
+        assert_eq!(summary.uncommitted_files, 0);
+        assert_eq!(summary.insertions, 0);
+    }
+
+    #[tokio::test]
+    async fn git_status_summary_untracked_excludes_gitignored_files() {
+        let repo = init_git_repo();
+        fs::write(repo.path().join(".gitignore"), "ignored/\n").expect("write .gitignore");
+        run_git(repo.path(), &["add", "."]);
+        run_git(repo.path(), &["commit", "-m", "base"]);
+        fs::create_dir(repo.path().join("ignored")).expect("create ignored dir");
+        fs::write(repo.path().join("ignored/junk.txt"), "noise\n").expect("write junk.txt");
+
+        let summary = get_task_git_status_for_workspace(repo.path().to_str().unwrap())
+            .await
+            .expect("git status summary");
+
+        assert_eq!(summary.untracked_files, 0);
+        assert_eq!(summary.untracked_insertions, 0);
+    }
+
+    #[tokio::test]
+    async fn git_status_summary_untracked_counts_binary_file_without_lines() {
+        let repo = init_git_repo();
+        fs::write(repo.path().join("a.txt"), "1\n").expect("write a.txt");
+        run_git(repo.path(), &["add", "."]);
+        run_git(repo.path(), &["commit", "-m", "base"]);
+        // Invalid UTF-8 — counts as a file, but contributes no lines.
+        fs::write(repo.path().join("blob.bin"), [0xff, 0xfe, 0x00, 0x01]).expect("write blob.bin");
+
+        let summary = get_task_git_status_for_workspace(repo.path().to_str().unwrap())
+            .await
+            .expect("git status summary");
+
+        assert_eq!(summary.untracked_files, 1);
+        assert_eq!(summary.untracked_insertions, 0);
     }
 
     #[tokio::test]

@@ -48,7 +48,7 @@ vi.mock('../../lib/ipc', () => ({
   getProjectTaskLabels: vi.fn().mockResolvedValue([]),
   addTaskLabel: vi.fn().mockResolvedValue({ id: 1, project_id: 'proj-1', name: 'bug' }),
   removeTaskLabel: vi.fn().mockResolvedValue(undefined),
-  getTaskGitStatus: vi.fn().mockResolvedValue({ has_remote: false, remote_ahead: 0, remote_behind: 0, local_commits: 0, uncommitted_files: 0, insertions: 0, deletions: 0 }),
+  getTaskGitStatus: vi.fn().mockResolvedValue({ has_remote: false, remote_ahead: 0, remote_behind: 0, local_commits: 0, uncommitted_files: 0, insertions: 0, deletions: 0, untracked_files: 0, untracked_insertions: 0 }),
   writeClipboardText: vi.fn().mockResolvedValue(undefined),
 }))
 
