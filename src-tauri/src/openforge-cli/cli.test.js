@@ -309,7 +309,7 @@ describe('OpenForge CLI', () => {
 
     for (const command of [
       'openforge task create --initial-prompt <text>',
-      'openforge task update --task-id <id> --summary <text>',
+      'openforge task update --task-id <id> (--summary <text> | --initial-prompt <text>)',
       'openforge task list --project-id <id>',
       'openforge task get --task-id <id>',
       'openforge task labels list --task-id <id>',
@@ -397,16 +397,15 @@ describe('OpenForge CLI', () => {
     });
   });
 
-  it('prints task update help without initial-prompt support', async () => {
+  it('documents guarded initial-prompt updates and replacement guidance', async () => {
     const { stdout } = await runCli(['--help']);
 
-    expect(stdout).toContain('openforge task update --task-id <id> --summary <text>');
-    expect(stdout).toContain('task update does not change initial_prompt or prompt');
-    expect(stdout).toContain('finding depends_on entries containing the old id');
-    expect(stdout).not.toContain('task update --task-id <id> [--initial-prompt <text>]');
+    expect(stdout).toContain('openforge task update --task-id <id> (--summary <text> | --initial-prompt <text>)');
+    expect(stdout).toContain('updates initial_prompt and prompt together only while the task has never started');
+    expect(stdout).toContain('create a replacement task instead');
   });
 
-  it('rejects task update initial-prompt updates before contacting the HTTP bridge', async () => {
+  it('requires exactly one task update field before contacting the HTTP bridge', async () => {
     let requestCount = 0;
     const server = createServer((_req, res) => {
       requestCount += 1;
@@ -417,11 +416,18 @@ describe('OpenForge CLI', () => {
 
     try {
       await expect(
-        runCli(['task', 'update', '--task-id', 'T-1', '--initial-prompt'], {
+        runCli(['task', 'update', '--task-id', 'T-1'], {
           OPENFORGE_HTTP_PORT: String(port),
         }),
       ).rejects.toMatchObject({
-        stderr: expect.stringContaining('task update does not support --initial-prompt'),
+        stderr: expect.stringContaining('requires exactly one of --summary or --initial-prompt'),
+      });
+      await expect(
+        runCli([
+          'task', 'update', '--task-id', 'T-1', '--summary', 'Summary', '--initial-prompt', 'Prompt',
+        ], { OPENFORGE_HTTP_PORT: String(port) }),
+      ).rejects.toMatchObject({
+        stderr: expect.stringContaining('requires exactly one of --summary or --initial-prompt'),
       });
       expect(requestCount).toBe(0);
     } finally {
@@ -493,6 +499,24 @@ describe('OpenForge CLI', () => {
       method: 'POST',
       url: '/update_task',
       expectedBody: { task_id: 'T-1', summary: 'Nested summary' },
+      response: { task_id: 'T-1', status: 'updated' },
+    });
+
+    expect(result).toEqual({ task_id: 'T-1', status: 'updated' });
+  });
+
+  it('updates never-started task prompts through the nested task update command', async () => {
+    const result = await runCliAgainstJsonBridge([
+      'task',
+      'update',
+      '--task-id',
+      'T-1',
+      '--initial-prompt',
+      'Replacement prompt',
+    ], {
+      method: 'POST',
+      url: '/update_task',
+      expectedBody: { task_id: 'T-1', initial_prompt: 'Replacement prompt' },
       response: { task_id: 'T-1', status: 'updated' },
     });
 

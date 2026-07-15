@@ -1254,6 +1254,69 @@ CREATE TABLE IF NOT EXISTS roadmap_repo_config (
         }
         Ok(())
     }),
+    // Durable lifecycle evidence for the authoritative "never started" prompt-edit guard.
+    // Once set, this timestamp is never cleared even if a task returns to backlog or
+    // execution-session rows are cleaned up.
+    M::up_with_hook("", |tx| {
+        let tasks_table_exists: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='tasks'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if !tasks_table_exists {
+            return Ok(());
+        }
+
+        let column_exists: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'execution_started_at'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if !column_exists {
+            tx.execute(
+                "ALTER TABLE tasks ADD COLUMN execution_started_at INTEGER",
+                [],
+            )
+            .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
+
+        let sessions_table_exists: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='agent_sessions'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if sessions_table_exists {
+            tx.execute(
+                "UPDATE tasks
+                 SET execution_started_at = COALESCE(
+                     (SELECT MIN(created_at) FROM agent_sessions WHERE ticket_id = tasks.id),
+                     CAST(strftime('%s', 'now') AS INTEGER)
+                 )
+                 WHERE execution_started_at IS NULL
+                   AND (
+                     status != 'backlog'
+                     OR EXISTS (SELECT 1 FROM agent_sessions WHERE ticket_id = tasks.id)
+                   )",
+                [],
+            )
+            .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        } else {
+            tx.execute(
+                "UPDATE tasks
+                 SET execution_started_at = CAST(strftime('%s', 'now') AS INTEGER)
+                 WHERE execution_started_at IS NULL AND status != 'backlog'",
+                [],
+            )
+            .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
+        Ok(())
+    }),
     // Internal task labels no longer expose or store presentation colors.
     M::up_with_hook("", |tx| {
         let table_exists: bool = tx
@@ -1349,6 +1412,49 @@ pub(super) fn ensure_tasks_columns(conn: &Connection) -> Result<()> {
             "ALTER TABLE tasks ADD COLUMN title_generated_at INTEGER",
             [],
         )?;
+    }
+    let execution_started_at_exists: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'execution_started_at'",
+        [],
+        |row| row.get(0),
+    )?;
+    if !execution_started_at_exists {
+        conn.execute(
+            "ALTER TABLE tasks ADD COLUMN execution_started_at INTEGER",
+            [],
+        )?;
+        let status_exists: bool = conn.query_row(
+            "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'status'",
+            [],
+            |row| row.get(0),
+        )?;
+        if !status_exists {
+            return Ok(());
+        }
+        let sessions_table_exists: bool = conn.query_row(
+            "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='agent_sessions'",
+            [],
+            |row| row.get(0),
+        )?;
+        if sessions_table_exists {
+            conn.execute(
+                "UPDATE tasks
+                 SET execution_started_at = COALESCE(
+                     (SELECT MIN(created_at) FROM agent_sessions WHERE ticket_id = tasks.id),
+                     CAST(strftime('%s', 'now') AS INTEGER)
+                 )
+                 WHERE status != 'backlog'
+                    OR EXISTS (SELECT 1 FROM agent_sessions WHERE ticket_id = tasks.id)",
+                [],
+            )?;
+        } else {
+            conn.execute(
+                "UPDATE tasks
+                 SET execution_started_at = CAST(strftime('%s', 'now') AS INTEGER)
+                 WHERE status != 'backlog'",
+                [],
+            )?;
+        }
     }
     Ok(())
 }

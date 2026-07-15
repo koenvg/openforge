@@ -2,7 +2,7 @@
   import { onMount } from 'svelte'
   import { ImagePlus } from '@lucide/svelte'
   import type { Task, PermissionMode, Action, GitBranchInfo, WorktreeSource } from '../lib/types'
-  import { createTask, updateTask, getProjectConfig, getResolvedAiProvider, listGitBranches, repoHasCommits } from '../lib/ipc'
+  import { createTask, updateTaskInitialPrompt, getProjectConfig, getResolvedAiProvider, listGitBranches, repoHasCommits } from '../lib/ipc'
   import { dedupeBranchesForSelector, type BranchLocation } from '../lib/branchSelector'
   import { resolveWorktreeAvailability } from '../lib/worktreeAvailability'
   import {
@@ -386,7 +386,7 @@
       const taskPrompt = promptWithPastedImageReferences(normalizedPrompt)
 
       if (mode === 'edit' && task) {
-        await updateTask(task.id, taskPrompt)
+        await updateTaskInitialPrompt(task.id, taskPrompt)
         savedTask = task
         await onTaskSaved?.()
       } else {

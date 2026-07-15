@@ -12,6 +12,13 @@ async fn response_body_json(response: axum::response::Response) -> serde_json::V
     serde_json::from_slice(&bytes).expect("parse response JSON")
 }
 
+async fn response_body_text(response: axum::response::Response) -> String {
+    let bytes = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("read response body");
+    String::from_utf8(bytes.to_vec()).expect("response body should be UTF-8")
+}
+
 fn test_state(name: &str) -> (AppState, std::path::PathBuf) {
     let (db, path) = crate::db::test_helpers::make_test_db(name);
     let (app_event_tx, _) = tokio::sync::broadcast::channel(16);

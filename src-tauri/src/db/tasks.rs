@@ -1,5 +1,41 @@
 use rusqlite::{OptionalExtension, Result};
 use serde::Serialize;
+use std::fmt;
+
+#[derive(Debug)]
+pub enum TaskInitialPromptUpdateError {
+    NotFound(String),
+    AlreadyStarted(String),
+    Database(rusqlite::Error),
+}
+
+impl fmt::Display for TaskInitialPromptUpdateError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NotFound(task_id) => write!(formatter, "task {task_id} does not exist"),
+            Self::AlreadyStarted(task_id) => write!(
+                formatter,
+                "task {task_id} has already started; create a replacement task instead"
+            ),
+            Self::Database(error) => error.fmt(formatter),
+        }
+    }
+}
+
+impl std::error::Error for TaskInitialPromptUpdateError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Database(error) => Some(error),
+            Self::NotFound(_) | Self::AlreadyStarted(_) => None,
+        }
+    }
+}
+
+impl From<rusqlite::Error> for TaskInitialPromptUpdateError {
+    fn from(error: rusqlite::Error) -> Self {
+        Self::Database(error)
+    }
+}
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct TaskLabelRow {
@@ -544,12 +580,14 @@ impl super::Database {
             .expect("time went backwards")
             .as_secs() as i64;
 
-        // Default prompt to initial_prompt if not provided (backward compat)
+        // Default prompt to initial_prompt if not provided (backward compat). A task
+        // created outside backlog has already entered its execution lifecycle.
         let final_prompt = prompt.unwrap_or(initial_prompt);
+        let execution_started_at = (status != "backlog").then_some(now);
 
         conn.execute(
-            "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, worktree_source, worktree_branch, title, title_source, title_generated_at, handoff_notes_enabled)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+            "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, worktree_source, worktree_branch, title, title_source, title_generated_at, handoff_notes_enabled, execution_started_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
             rusqlite::params![
                 &task_id,
                 initial_prompt,
@@ -567,6 +605,7 @@ impl super::Database {
                 title_source.as_deref(),
                 None::<i64>,
                 handoff_notes_enabled,
+                execution_started_at,
             ],
         )?;
 
@@ -860,23 +899,46 @@ impl super::Database {
         Ok(labels)
     }
 
-    pub fn update_task(&self, id: &str, prompt: &str) -> Result<()> {
+    /// Replace both prompt columns for a task that has never entered execution.
+    ///
+    /// The guarded SQL statement is the authoritative lifecycle check: a mutable
+    /// task must still be in backlog, have no durable execution marker, and have
+    /// no agent-session history. The predicate and both prompt writes execute
+    /// atomically while holding the database connection lock.
+    pub fn update_task_initial_prompt(
+        &self,
+        id: &str,
+        initial_prompt: &str,
+    ) -> std::result::Result<(), TaskInitialPromptUpdateError> {
         let conn = self.conn.lock().unwrap();
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("time went backwards")
             .as_secs() as i64;
-        // For never-started (backlog) tasks the prompt has not been injected into a
-        // session yet, so editing replaces the prompt of record (initial_prompt) too
-        // and the change is visible everywhere. Once a task has started, initial_prompt
-        // is frozen as the historical original and only the working prompt changes.
-        conn.execute(
-            "UPDATE tasks SET prompt = ?1, \
-             initial_prompt = CASE WHEN status = 'backlog' THEN ?1 ELSE initial_prompt END, \
-             updated_at = ?2 WHERE id = ?3",
-            rusqlite::params![prompt, now, id],
+        let changed = conn.execute(
+            "UPDATE tasks
+             SET initial_prompt = ?1, prompt = ?1, updated_at = ?2
+             WHERE id = ?3
+               AND status = 'backlog'
+               AND execution_started_at IS NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM agent_sessions WHERE ticket_id = tasks.id
+               )",
+            rusqlite::params![initial_prompt, now, id],
         )?;
-        Ok(())
+
+        if changed > 0 {
+            return Ok(());
+        }
+
+        let exists = conn
+            .query_row("SELECT 1 FROM tasks WHERE id = ?1", [id], |_| Ok(()))
+            .optional()?;
+        if exists.is_none() {
+            Err(TaskInitialPromptUpdateError::NotFound(id.to_string()))
+        } else {
+            Err(TaskInitialPromptUpdateError::AlreadyStarted(id.to_string()))
+        }
     }
 
     /// Update a task's explicit display title. Editable at any status because the
@@ -934,7 +996,14 @@ impl super::Database {
             .expect("time went backwards")
             .as_secs() as i64;
         conn.execute(
-            "UPDATE tasks SET status = ?1, updated_at = ?2 WHERE id = ?3",
+            "UPDATE tasks
+             SET status = ?1,
+                 updated_at = ?2,
+                 execution_started_at = CASE
+                     WHEN ?1 != 'backlog' THEN COALESCE(execution_started_at, ?2)
+                     ELSE execution_started_at
+                 END
+             WHERE id = ?3",
             rusqlite::params![status, now, id],
         )?;
         Ok(())
@@ -1113,7 +1182,11 @@ impl super::Database {
                 .expect("time went backwards")
                 .as_secs() as i64;
             conn.execute(
-                "UPDATE tasks SET status = 'done', updated_at = ?1 WHERE id = ?2",
+                "UPDATE tasks
+                 SET status = 'done',
+                     updated_at = ?1,
+                     execution_started_at = COALESCE(execution_started_at, ?1)
+                 WHERE id = ?2",
                 rusqlite::params![now, id],
             )?;
             Ok(())
@@ -1145,8 +1218,11 @@ impl super::Database {
 #[cfg(test)]
 mod tests {
     use crate::db::test_helpers::*;
-    use std::fs;
-
+    use std::{
+        fs,
+        sync::{Arc, Barrier},
+        thread,
+    };
     #[test]
     fn test_create_task_with_prompt() {
         let (db, path) = make_test_db("create_task_with_prompt");
@@ -1190,21 +1266,33 @@ mod tests {
     }
 
     #[test]
-    fn test_update_task_backlog_replaces_initial_prompt_and_prompt() {
-        let (db, path) = make_test_db("update_task_backlog_replaces_initial_prompt");
-
+    fn test_update_task_initial_prompt_replaces_prompt_atomically_and_preserves_relationships() {
+        let (db, path) = make_test_db("update_task_initial_prompt_preserves_metadata");
+        let project = db
+            .create_project("Project", "/tmp/update-task-initial-prompt")
+            .expect("create project");
+        let dependency = db
+            .create_task("Dependency", "backlog", Some(&project.id), None, None)
+            .expect("create dependency");
         let task = db
-            .create_task("Original", "backlog", None, None, None)
-            .expect("create failed");
+            .create_task("Original", "backlog", Some(&project.id), None, None)
+            .expect("create task");
+        db.update_task_summary(&task.id, "Existing handoff notes")
+            .expect("set summary");
+        db.add_task_dependency(&task.id, &dependency.id)
+            .expect("add dependency");
+        db.add_task_label(&task.id, "feature").expect("add label");
+        let before = db.get_task(&task.id).expect("get task").unwrap();
 
-        db.update_task(&task.id, "Updated prompt")
-            .expect("update prompt failed");
+        db.update_task_initial_prompt(&task.id, "Updated prompt")
+            .expect("update initial prompt");
 
-        // A never-started (backlog) task has no separate "original" yet, so editing
-        // replaces the prompt of record (initial_prompt) as well as the working prompt.
-        let updated = db.get_task(&task.id).expect("get failed").unwrap();
+        let updated = db.get_task(&task.id).expect("get updated task").unwrap();
         assert_eq!(updated.initial_prompt, "Updated prompt");
-        assert_eq!(updated.prompt, Some("Updated prompt".to_string()));
+        assert_eq!(updated.prompt.as_deref(), Some("Updated prompt"));
+        assert_eq!(updated.summary, before.summary);
+        assert_eq!(updated.labels, before.labels);
+        assert_eq!(updated.depends_on, before.depends_on);
 
         drop(db);
         let _ = fs::remove_file(&path);
@@ -1252,23 +1340,100 @@ mod tests {
     }
 
     #[test]
-    fn test_update_task_started_task_preserves_initial_prompt() {
-        let (db, path) = make_test_db("update_task_started_preserves_initial_prompt");
+    fn test_update_task_initial_prompt_rejects_active_task_and_preserves_prompts() {
+        let (db, path) = make_test_db("update_task_initial_prompt_rejects_active");
 
         let task = db
             .create_task("Original", "backlog", None, None, None)
             .expect("create failed");
-        // Once a task has started (left backlog), its initial_prompt is frozen.
         db.update_task_status(&task.id, "doing")
             .expect("update status failed");
 
-        db.update_task(&task.id, "Updated prompt")
-            .expect("update failed");
+        let error = db
+            .update_task_initial_prompt(&task.id, "Updated prompt")
+            .expect_err("started task must reject initial prompt updates");
 
-        let tasks = db.get_all_tasks().expect("get_all failed");
-        assert_eq!(tasks.len(), 1);
-        assert_eq!(tasks[0].initial_prompt, "Original");
-        assert_eq!(tasks[0].prompt, Some("Updated prompt".to_string()));
+        assert!(error.to_string().contains("replacement task"));
+        let updated = db.get_task(&task.id).expect("get failed").unwrap();
+        assert_eq!(updated.initial_prompt, "Original");
+        assert_eq!(updated.prompt.as_deref(), Some("Original"));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_update_task_initial_prompt_rejects_task_with_execution_history_even_if_backlog() {
+        let (db, path) = make_test_db("update_task_initial_prompt_rejects_history");
+        let task = db
+            .create_task("Original", "backlog", None, None, None)
+            .expect("create failed");
+        db.create_agent_session("session-1", &task.id, None, "implement", "completed", "pi")
+            .expect("create execution history");
+        {
+            let conn = db.connection();
+            conn.lock()
+                .expect("lock connection")
+                .execute(
+                    "DELETE FROM agent_sessions WHERE ticket_id = ?1",
+                    [&task.id],
+                )
+                .expect("simulate execution-session cleanup");
+        }
+
+        let error = db
+            .update_task_initial_prompt(&task.id, "Updated prompt")
+            .expect_err("task with execution history must reject initial prompt updates");
+
+        assert!(error.to_string().contains("replacement task"));
+        let updated = db.get_task(&task.id).expect("get failed").unwrap();
+        assert_eq!(updated.initial_prompt, "Original");
+        assert_eq!(updated.prompt.as_deref(), Some("Original"));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_update_task_initial_prompt_is_atomic_when_racing_lifecycle_transition() {
+        let (db, path) = make_test_db("update_task_initial_prompt_race");
+        let task = db
+            .create_task("Original", "backlog", None, None, None)
+            .expect("create failed");
+        let task_id = task.id.clone();
+        let db = Arc::new(db);
+        let barrier = Arc::new(Barrier::new(2));
+
+        let prompt_db = Arc::clone(&db);
+        let prompt_barrier = Arc::clone(&barrier);
+        let prompt_task_id = task_id.clone();
+        let prompt_update = thread::spawn(move || {
+            prompt_barrier.wait();
+            prompt_db.update_task_initial_prompt(&prompt_task_id, "Updated prompt")
+        });
+        let lifecycle_db = Arc::clone(&db);
+        let lifecycle_barrier = Arc::clone(&barrier);
+        let lifecycle_task_id = task_id.clone();
+        let lifecycle_update = thread::spawn(move || {
+            lifecycle_barrier.wait();
+            lifecycle_db.update_task_status(&lifecycle_task_id, "doing")
+        });
+
+        let prompt_result = prompt_update.join().expect("prompt thread");
+        lifecycle_update
+            .join()
+            .expect("lifecycle thread")
+            .expect("lifecycle update");
+
+        let updated = db.get_task(&task_id).expect("get failed").unwrap();
+        assert_eq!(updated.status, "doing");
+        if prompt_result.is_ok() {
+            assert_eq!(updated.initial_prompt, "Updated prompt");
+            assert_eq!(updated.prompt.as_deref(), Some("Updated prompt"));
+        } else {
+            assert_eq!(updated.initial_prompt, "Original");
+            assert_eq!(updated.prompt.as_deref(), Some("Original"));
+        }
 
         drop(db);
         let _ = fs::remove_file(&path);

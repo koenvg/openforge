@@ -924,9 +924,29 @@ async fn test_update_task_handler_updates_summary_without_changing_initial_promp
     let _ = std::fs::remove_file(path);
 }
 
+#[test]
+fn task_claims_make_start_and_initial_prompt_update_mutually_exclusive() {
+    let claims = TaskClaims::new();
+    let start_claim = claims
+        .try_claim("T-1", TaskOperation::StartImplementation)
+        .expect("start claim");
+
+    assert!(claims
+        .try_claim("T-1", TaskOperation::UpdateInitialPrompt)
+        .is_none());
+    assert!(claims
+        .try_claim("T-2", TaskOperation::UpdateInitialPrompt)
+        .is_some());
+
+    drop(start_claim);
+    assert!(claims
+        .try_claim("T-1", TaskOperation::UpdateInitialPrompt)
+        .is_some());
+}
+
 #[tokio::test]
-async fn test_update_task_handler_rejects_initial_prompt_and_preserves_task() {
-    let (state, path) = test_state("http_update_task_rejects_initial_prompt");
+async fn test_update_task_handler_updates_never_started_initial_prompt_and_preserves_summary() {
+    let (state, path) = test_state("http_update_task_initial_prompt");
     let task_id = {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -948,7 +968,7 @@ async fn test_update_task_handler_rejects_initial_prompt_and_preserves_task() {
                 .method("POST")
                 .header("content-type", "application/json")
                 .body(Body::from(format!(
-                    r#"{{"task_id":"{}","initial_prompt":"New prompt","summary":"New Summary"}}"#,
+                    r#"{{"task_id":"{}","initial_prompt":"New prompt"}}"#,
                     task_id
                 )))
                 .expect("build request"),
@@ -956,7 +976,56 @@ async fn test_update_task_handler_rejects_initial_prompt_and_preserves_task() {
         .await
         .expect("request should succeed");
 
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(response.status(), StatusCode::OK);
+    let task = state
+        .db
+        .lock()
+        .expect("lock db")
+        .get_task(&task_id)
+        .expect("get task")
+        .expect("task exists");
+    assert_eq!(task.initial_prompt, "New prompt");
+    assert_eq!(task.prompt.as_deref(), Some("New prompt"));
+    assert_eq!(task.summary.as_deref(), Some("Existing Summary"));
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn test_update_task_handler_rejects_started_initial_prompt_with_replacement_guidance() {
+    let (state, path) = test_state("http_update_task_rejects_started_initial_prompt");
+    let task_id = {
+        let db = state.db.lock().expect("lock db");
+        let project = db
+            .create_project("Project", "/tmp/project")
+            .expect("create project");
+        let task = db
+            .create_task("Original prompt", "backlog", Some(&project.id), None, None)
+            .expect("create task");
+        db.update_task_status(&task.id, "doing")
+            .expect("start task");
+        task.id
+    };
+
+    let router = create_router(state.clone());
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/update_task")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(
+                    r#"{{"task_id":"{}","initial_prompt":"New prompt"}}"#,
+                    task_id
+                )))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let body = response_body_text(response).await;
+    assert!(body.contains("replacement task"));
 
     let task = state
         .db
@@ -966,7 +1035,7 @@ async fn test_update_task_handler_rejects_initial_prompt_and_preserves_task() {
         .expect("get task")
         .expect("task exists");
     assert_eq!(task.initial_prompt, "Original prompt");
-    assert_eq!(task.summary, Some("Existing Summary".to_string()));
+    assert_eq!(task.prompt.as_deref(), Some("Original prompt"));
 
     let _ = std::fs::remove_file(path);
 }

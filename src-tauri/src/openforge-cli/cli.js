@@ -297,13 +297,15 @@ async function createTask(flags) {
 }
 
 async function updateTask(flags) {
-  const payload = {
-    task_id: requireFlag(flags, 'taskId'),
-    summary: typeof flags.summary === 'string' ? flags.summary : undefined,
-  };
-  if (!payload.summary) {
-    throw new Error('task update requires --summary');
+  const taskId = requireFlag(flags, 'taskId');
+  const summary = optionalString(flags, 'summary');
+  const initialPrompt = optionalString(flags, 'initialPrompt');
+  if ((summary === undefined) === (initialPrompt === undefined)) {
+    throw new Error('task update requires exactly one of --summary or --initial-prompt');
   }
+  const payload = { task_id: taskId };
+  if (summary !== undefined) payload.summary = summary;
+  if (initialPrompt !== undefined) payload.initial_prompt = initialPrompt;
   printJson(await requestJson('/update_task', { method: 'POST', body: JSON.stringify(payload) }));
 }
 
@@ -456,8 +458,8 @@ const COMMAND_SPECS = [
   },
   {
     path: ['task', 'update'],
-    flags: ['taskId', 'summary'],
-    usage: 'openforge task update --task-id <id> --summary <text>',
+    flags: ['taskId', 'summary', 'initialPrompt'],
+    usage: 'openforge task update --task-id <id> (--summary <text> | --initial-prompt <text>)',
     handler: updateTask,
   },
   {
@@ -646,9 +648,9 @@ Plugin Installation is local-only for now:
 
 Task prompt semantics:
   task create sets the task's initial_prompt from --initial-prompt.
-  task update updates only the task summary/handoff notes via --summary.
-  task update does not change initial_prompt or prompt; do not use it to fix a bad task prompt.
-  If a task was created with the wrong initial prompt, first record its labels, own depends_on list, and reverse dependents by listing project tasks and finding depends_on entries containing the old id. Delete the incorrect task, create a replacement with the desired --initial-prompt, then repoint each dependent with task dependencies set.
+  task update --summary updates only the task summary/Handoff Notes.
+  task update --initial-prompt updates initial_prompt and prompt together only while the task has never started.
+  Started or completed tasks reject prompt updates; create a replacement task instead.
 
 Task listing:
   task list prints compact rows by default for broad scans: id, prompt_preview, status, labels, depends_on, updated_at.
@@ -689,9 +691,9 @@ Usage:
 ${planJsonHelp}
 Task prompt semantics:
   task create sets the task's initial_prompt from --initial-prompt.
-  task update updates only the task summary/handoff notes via --summary.
-  task update does not change initial_prompt or prompt; do not use it to fix a bad task prompt.
-  If a task was created with the wrong initial prompt, first record its labels, own depends_on list, and reverse dependents by listing project tasks and finding depends_on entries containing the old id. Delete the incorrect task, create a replacement with the desired --initial-prompt, then repoint each dependent with task dependencies set.
+  task update --summary updates only the task summary/Handoff Notes.
+  task update --initial-prompt updates initial_prompt and prompt together only while the task has never started.
+  Started or completed tasks reject prompt updates; create a replacement task instead.
 
 Task creation hygiene:
   Before creating follow-up Tasks, use project labels list when a project id is known and reuse an existing label when it fits.

@@ -255,7 +255,7 @@ vi.mock('./lib/ipc', () => ({
   getPtyBuffer: vi.fn(),
   createTask: vi.fn(),
   getTaskDetail: vi.fn(),
-  updateTask: vi.fn(),
+  updateTaskInitialPrompt: vi.fn(),
   updateTaskStatus: vi.fn(async () => undefined),
   deleteTask: vi.fn(),
   listOpenCodeAgents: vi.fn().mockResolvedValue([]),

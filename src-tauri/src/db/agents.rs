@@ -51,12 +51,13 @@ impl super::Database {
         status: &str,
         provider: &str,
     ) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let mut conn = self.conn.lock().unwrap();
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("time went backwards")
             .as_secs() as i64;
-        conn.execute(
+        let tx = conn.transaction()?;
+        tx.execute(
             "INSERT INTO agent_sessions (id, ticket_id, opencode_session_id, stage, status, provider, claude_session_id, pi_session_id, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             rusqlite::params![
@@ -72,6 +73,13 @@ impl super::Database {
                 now
             ],
         )?;
+        tx.execute(
+            "UPDATE tasks
+             SET execution_started_at = COALESCE(execution_started_at, ?1)
+             WHERE id = ?2",
+            rusqlite::params![now, ticket_id],
+        )?;
+        tx.commit()?;
         Ok(())
     }
 
