@@ -75,6 +75,7 @@ describe('settingsConfig', () => {
         .mockResolvedValueOnce('opencode')
         .mockResolvedValueOnce('amber')
         .mockResolvedValueOnce('false')
+        .mockResolvedValueOnce('pnpm dev')
 
       vi.mocked(loadActions).mockResolvedValue([
         { id: 'a1', name: 'Action', prompt: '', builtin: false, enabled: true },
@@ -83,8 +84,9 @@ describe('settingsConfig', () => {
 
       const result = await loadProjectSettings('project-1')
 
-      expect(getProjectConfig).toHaveBeenCalledTimes(5)
+      expect(getProjectConfig).toHaveBeenCalledTimes(6)
       expect(getProjectConfig).toHaveBeenCalledWith('project-1', 'use_worktrees')
+      expect(getProjectConfig).toHaveBeenCalledWith('project-1', 'run_command')
       expect(loadActions).toHaveBeenCalledWith('project-1')
       expect(loadFocusFilterStates).toHaveBeenCalledWith('project-1')
       expect(result).toEqual({
@@ -93,6 +95,7 @@ describe('settingsConfig', () => {
         aiProvider: 'opencode',
         projectColor: 'amber',
         useWorktrees: false,
+        runCommand: 'pnpm dev',
         actions: [{ id: 'a1', name: 'Action', prompt: '', builtin: false, enabled: true }],
         focusFilterStates: ['idle'],
       })
@@ -107,6 +110,7 @@ describe('settingsConfig', () => {
         aiProvider: 'claude-code',
         projectColor: '',
         useWorktrees: true,
+        runCommand: '',
         actions: [],
         focusFilterStates: [],
       })

@@ -19,6 +19,7 @@
     aiProvider: string
     projectColor: string
     useWorktrees: boolean
+    runCommand: string
     disabled: boolean
     opencodeInstalled: boolean
     opencodeVersion: string | null
@@ -36,6 +37,7 @@
     onAiProviderChange: (value: string) => void
     onProjectColorChange: (value: string) => void
     onUseWorktreesChange: (value: boolean) => void
+    onRunCommandChange: (value: string) => void
     onRefreshInstallationStatus: () => void
   }
 
@@ -57,6 +59,7 @@
     aiProvider,
     projectColor,
     useWorktrees,
+    runCommand,
     disabled,
     opencodeInstalled,
     opencodeVersion,
@@ -74,6 +77,7 @@
     onAiProviderChange,
     onProjectColorChange,
     onUseWorktreesChange,
+    onRunCommandChange,
     onRefreshInstallationStatus,
   }: Props = $props()
 
@@ -382,6 +386,26 @@
             onUseWorktreesChange(e.currentTarget.checked)
           }}
         />
+      </label>
+    </div>
+
+    <div class="flex flex-col gap-2">
+      <label class="flex flex-col gap-1">
+        <span class="text-[0.7rem] text-base-content/50 uppercase tracking-wider">Run Command</span>
+        <input
+          type="text"
+          value={runCommand}
+          oninput={(e) => {
+            if (disabled) return
+            onRunCommandChange(e.currentTarget.value)
+          }}
+          placeholder="pnpm dev"
+          class="input input-bordered input-sm w-full max-w-xl font-mono"
+          disabled={disabled}
+        />
+        <span class="text-xs text-base-content/60">
+          Command run in the task terminal by the “Run app” button (e.g. <span class="font-mono">pnpm dev</span>). Leave blank to disable the button.
+        </span>
       </label>
     </div>
 

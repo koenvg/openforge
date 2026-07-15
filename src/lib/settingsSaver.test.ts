@@ -39,6 +39,7 @@ describe('settingsSaver', () => {
       aiProvider: 'opencode',
       projectColor: 'violet',
       useWorktrees: false,
+      runCommand: 'pnpm dev',
       actions: [{ id: 'a1', name: 'Action', prompt: '', builtin: false, enabled: true }],
       focusFilterStates: ['idle'],
     })
@@ -50,6 +51,7 @@ describe('settingsSaver', () => {
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'ai_provider', 'opencode')
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'use_worktrees', 'false')
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'project_color', 'violet')
+    expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'run_command', 'pnpm dev')
     expect(saveActions).toHaveBeenCalledWith('project-1', [
       { id: 'a1', name: 'Action', prompt: '', builtin: false, enabled: true },
     ])

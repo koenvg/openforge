@@ -2,8 +2,10 @@
   import { onDestroy } from 'svelte'
   import { get } from 'svelte/store'
   import { createTaskTerminalPaneLifecycle } from '@openforge-app/terminal-runtime'
+  import { Play } from '@lucide/svelte'
   import { activeProjectId, activeSessions, commandHeld, completingTasks, startingTasks, taskActiveView, taskRuntimeInfo } from '../../lib/stores'
-  import { getTaskWorkspace, openInEditor } from '../../lib/ipc'
+  import { getProjectConfig, getTaskWorkspace, openInEditor, writePty } from '../../lib/ipc'
+  import { RUN_COMMAND_CONFIG_KEY, runAppCommandInTaskTerminal } from '../../lib/runAppCommand'
   import { confirmCompleteTask, runCompleteTask } from '../../lib/completeTask'
   import { getTaskTitle } from '../../lib/taskTitle'
   import { createTaskTitleRename } from '../../lib/useTaskTitleRename.svelte'
@@ -17,6 +19,9 @@
   import { TERMINAL_PLUGIN_ID } from '../../lib/terminalPlugin'
   import { useShortcutRegistry } from '../../lib/shortcuts.svelte'
   import { releaseAllForTask } from '../../lib/terminalPool'
+  // Session + shell lifecycle must come from the terminal PLUGIN runtime (the one
+  // rendering the task-view terminal), not the app pool — see liveTerminalPool.
+  import { getShellLifecycleState, getTaskTerminalTabsSession } from '../../lib/liveTerminalPool'
   import type { Action, Task } from '../../lib/types'
   import AgentPanel from './AgentPanel.svelte'
   import AgentStatusPill from './AgentStatusPill.svelte'
@@ -48,6 +53,8 @@
   let workspacePath = $state<string | null>(null)
   let lastTaskId = ''
   let actions = $state<Action[]>([])
+  let runCommand = $state('')
+  let isRunningApp = $state(false)
   const taskShortcuts = useShortcutRegistry()
 
   const PANEL_HIDDEN_STORAGE_PREFIX = 'task-info-panel-hidden:'
@@ -174,6 +181,27 @@
   })
 
   $effect(() => {
+    const projectId = $activeProjectId
+    if (!projectId) {
+      runCommand = ''
+      return
+    }
+    getProjectConfig(projectId, RUN_COMMAND_CONFIG_KEY)
+      .then((value) => { runCommand = (value ?? '').trim() })
+      .catch((e) => { console.error('[TaskDetailView] Failed to load run command:', e) })
+  })
+
+  let hasRunCommand = $derived(runCommand !== '')
+  let canRunApp = $derived(hasRunCommand && terminalTaskPaneTab !== null)
+  let runAppTitle = $derived(
+    terminalTaskPaneTab === null
+      ? 'Enable the Terminal plugin to run the app locally'
+      : hasRunCommand
+        ? `Run app locally: ${runCommand}`
+        : 'Set a run command in this project’s settings to run the app locally',
+  )
+
+  $effect(() => {
     if (workspacePath !== null) {
       taskShortcuts.register('⌘1', () => {
         setActiveView('agent')
@@ -225,6 +253,24 @@
 
   function handleActionClick(action: Action) {
     onRunAction({ taskId: task.id, actionPrompt: action.prompt, agent: null })
+  }
+
+  async function handleRunApp() {
+    const terminalTab = terminalTaskPaneTab
+    if (!hasRunCommand || isRunningApp || terminalTab === null) return
+    isRunningApp = true
+    try {
+      await runAppCommandInTaskTerminal(task.id, runCommand, {
+        getSession: getTaskTerminalTabsSession,
+        getShellLifecycleState,
+        writePty,
+        openTerminalView: () => setActiveView(terminalTab.namespacedId),
+      })
+    } catch (e) {
+      console.error('[TaskDetailView] Failed to run app command:', e)
+    } finally {
+      isRunningApp = false
+    }
   }
 
   function handleSendToAgent(prompt: string) {
@@ -352,6 +398,20 @@
             >{tab.title}{#if $commandHeld && terminalTaskPaneTab?.namespacedId === tab.namespacedId}<kbd class="kbd kbd-xs opacity-50">⌘3</kbd>{/if}</button>
           {/each}
           <span class="mx-1 text-base-content/20 select-none" aria-hidden="true">|</span>
+          <button
+            class="btn btn-ghost btn-xs gap-1.5 text-base-content/50 border border-base-300 shrink-0 hover:text-base-content"
+            aria-label="Run app locally"
+            title={runAppTitle}
+            disabled={!canRunApp || isRunningApp}
+            onclick={handleRunApp}
+          >
+            {#if isRunningApp}
+              <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
+            {:else}
+              <Play class="w-3.5 h-3.5" aria-hidden="true" />
+            {/if}
+            Run app
+          </button>
           <button
             class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-base-content"
             aria-label="Open in VS Code"

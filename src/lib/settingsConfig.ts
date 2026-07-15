@@ -9,6 +9,7 @@ import {
   getConfig,
   getProjectConfig,
 } from './ipc'
+import { RUN_COMMAND_CONFIG_KEY } from './runAppCommand'
 import type { TaskState } from './taskState'
 import type { Action, ClaudeInstallStatus, WhisperModelStatus } from './types'
 
@@ -18,6 +19,7 @@ export interface ProjectSettingsConfig {
   aiProvider: string
   projectColor: string
   useWorktrees: boolean
+  runCommand: string
   actions: Action[]
   focusFilterStates: TaskState[]
 }
@@ -81,6 +83,7 @@ const DEFAULT_PROJECT_SETTINGS: Omit<ProjectSettingsConfig, 'actions' | 'focusFi
   aiProvider: 'claude-code',
   projectColor: '',
   useWorktrees: true,
+  runCommand: '',
 }
 
 const DEFAULT_GLOBAL_SETTINGS: GlobalSettingsConfig = {
@@ -92,12 +95,13 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettingsConfig = {
 }
 
 export async function loadProjectSettings(projectId: string): Promise<ProjectSettingsConfig> {
-  const [instructions, handoffTemplate, provider, color, useWorktrees, actions, focusFilterStates] = await Promise.all([
+  const [instructions, handoffTemplate, provider, color, useWorktrees, runCommand, actions, focusFilterStates] = await Promise.all([
     getProjectConfig(projectId, 'additional_instructions'),
     getProjectConfig(projectId, 'handoff_notes_template'),
     getProjectConfig(projectId, 'ai_provider'),
     getProjectConfig(projectId, 'project_color'),
     getProjectConfig(projectId, 'use_worktrees'),
+    getProjectConfig(projectId, RUN_COMMAND_CONFIG_KEY),
     loadActions(projectId),
     loadFocusFilterStates(projectId),
   ])
@@ -108,6 +112,7 @@ export async function loadProjectSettings(projectId: string): Promise<ProjectSet
     aiProvider: provider ?? DEFAULT_PROJECT_SETTINGS.aiProvider,
     projectColor: color ?? DEFAULT_PROJECT_SETTINGS.projectColor,
     useWorktrees: useWorktrees == null ? DEFAULT_PROJECT_SETTINGS.useWorktrees : useWorktrees === 'true',
+    runCommand: runCommand ?? DEFAULT_PROJECT_SETTINGS.runCommand,
     actions,
     focusFilterStates,
   }

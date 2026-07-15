@@ -58,6 +58,7 @@
   let aiProvider = $state('claude-code')
   let projectColor = $state('')
   let useWorktrees = $state(true)
+  let runCommand = $state('')
 
   // Global state
   let taskIdPrefix = $state('')
@@ -214,6 +215,7 @@
           aiProvider = settings.aiProvider
           projectColor = settings.projectColor
           useWorktrees = settings.useWorktrees
+          runCommand = settings.runCommand
           actions = settings.actions
           focusFilterStates = settings.focusFilterStates
         })
@@ -234,6 +236,7 @@
       aiProvider = 'claude-code'
       projectColor = ''
       useWorktrees = true
+      runCommand = ''
       actions = []
       focusFilterStates = [...DEFAULT_FOCUS_STATES]
     }
@@ -329,6 +332,7 @@
         aiProvider,
         projectColor,
         useWorktrees,
+        runCommand,
         actions,
         focusFilterStates,
       }
@@ -545,6 +549,7 @@
           {aiProvider}
           {projectColor}
           {useWorktrees}
+          {runCommand}
           disabled={!hasProject}
           {opencodeInstalled}
           {opencodeVersion}
@@ -562,6 +567,7 @@
           onAiProviderChange={(v) => { aiProvider = v; scheduleSave() }}
           onProjectColorChange={handleProjectColorChange}
           onUseWorktreesChange={(v) => { useWorktrees = v; scheduleSave() }}
+          onRunCommandChange={(v) => { runCommand = v; scheduleSave() }}
           onRefreshInstallationStatus={refreshInstallationStatus}
         />
         <SettingsTaskLabelsCard
