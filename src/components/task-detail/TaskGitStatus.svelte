@@ -95,6 +95,18 @@
           </span>
         {/if}
       </div>
+
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-xs text-base-content/55">Untracked</span>
+        {#if (summary?.untracked_files ?? 0) === 0}
+          <span class="text-xs text-base-content/50">none</span>
+        {:else}
+          <span class="flex items-center gap-2 font-mono text-xs" aria-label="Untracked files">
+            <span class="text-base-content/70">{summary.untracked_files} {summary.untracked_files === 1 ? 'file' : 'files'}</span>
+            <span class="text-success">+{summary.untracked_insertions}</span>
+          </span>
+        {/if}
+      </div>
     </div>
   {/if}
 </CollapsibleInfoSection>

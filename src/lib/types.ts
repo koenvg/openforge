@@ -42,4 +42,6 @@ export interface GitStatusSummary {
   uncommitted_files: number
   insertions: number
   deletions: number
+  untracked_files: number
+  untracked_insertions: number
 }
