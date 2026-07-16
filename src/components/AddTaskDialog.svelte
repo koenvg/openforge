@@ -18,6 +18,8 @@
   import ContextMenuItem from './shared/ui/ContextMenuItem.svelte'
   import PromptInput from './prompt/PromptInput.svelte'
 import { pickerState } from '../lib/injectables/pickerState.svelte'
+  import InjectionPointSlot from './plugin/InjectionPointSlot.svelte'
+  import type { InjectionPointLocation } from '@openforge-app/plugin-sdk'
 
   interface Props {
     mode?: 'create' | 'edit'
@@ -70,6 +72,7 @@ import { pickerState } from '../lib/injectables/pickerState.svelte'
   let nextPastedImageId = 1
   let nextImageMarkerInsertRequestId = 1
   let nextInjectableInsertRequestId = 1
+  let injectionLocation = $derived<InjectionPointLocation>(mode === 'create' ? 'createTaskPrompt' : 'backlogPrompt')
 
   function openInjectables() {
     pickerState.openPicker({
@@ -438,6 +441,15 @@ import { pickerState } from '../lib/injectables/pickerState.svelte'
         bind:value={taskTitle}
       />
     {/if}
+    <InjectionPointSlot
+      location={injectionLocation}
+      projectId={$activeProjectId}
+      taskId={mode === 'edit' && task ? task.id : null}
+      onInsert={(text) => {
+        injectableInsertRequest = { id: nextInjectableInsertRequestId, text }
+        nextInjectableInsertRequestId += 1
+      }}
+    />
     <PromptInput
       projectId={$activeProjectId || ''}
       value={initialPrompt}
