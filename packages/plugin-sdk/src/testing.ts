@@ -13,12 +13,14 @@ import type {
   FrontendOpenForgeAPI,
   FrontendPlugin,
   FrontendPluginContext,
+  InjectionPointLocation,
   JsonValue,
   NotificationRequest,
   OpenForgeContextSnapshot,
   OpenForgeNavigationRequest,
   OpenForgeNavigationSnapshot,
   OpenForgePackageMetadata,
+  PluginInjectionPointRegistration,
   PluginSettingsSectionRegistration,
   PluginStorage,
   PluginStorageScope,
@@ -103,6 +105,11 @@ export type TestingBackgroundServiceContribution = TestingContributionBase & Bac
   started: boolean
 }
 
+export interface TestingInjectionPointContribution {
+  id: string
+  location: InjectionPointLocation
+}
+
 export interface TestingOpenForgeRegistrySnapshot {
   pluginId: string
   projectId: string | null
@@ -114,6 +121,7 @@ export interface TestingOpenForgeRegistrySnapshot {
   eventListeners: TestingEventListenerContribution[]
   backendMethods: TestingBackendMethodContribution[]
   backgroundServices: TestingBackgroundServiceContribution[]
+  injectionPoints: TestingInjectionPointContribution[]
 }
 
 export type MockFrontendOpenForgeAPI = FrontendOpenForgeAPI & {
@@ -174,6 +182,7 @@ export class TestingOpenForgeRegistryFake {
   private readonly eventHandlers = new Map<string, Set<EventHandler>>()
   private readonly backendMethods = new Map<string, TestingBackendMethodContribution>()
   private readonly backgroundServices = new Map<string, TestingBackgroundServiceContribution>()
+  private readonly injectionPointsMap = new Map<string, TestingInjectionPointContribution>()
   private readonly claimedIds = new Set<string>()
   private readonly config = new Map<string, JsonValue>()
   private eventListenerSequence = 0
@@ -233,6 +242,15 @@ export class TestingOpenForgeRegistryFake {
           return createDisposable(() => undefined)
         },
         invoke: async <TOutput = unknown>(method: string, payload?: unknown) => this.invokeBackend<TOutput>(method, payload),
+      },
+      injectionPoints: {
+        register: (registration: PluginInjectionPointRegistration) => {
+          this.injectionPointsMap.set(registration.id, {
+            id: registration.id,
+            location: registration.location,
+          })
+          return createDisposable(() => { this.injectionPointsMap.delete(registration.id) })
+        },
       },
       __testing: {
         calls: this.calls,
@@ -300,6 +318,7 @@ export class TestingOpenForgeRegistryFake {
       eventListeners: Array.from(this.eventListeners.values()),
       backendMethods: Array.from(this.backendMethods.values()),
       backgroundServices: Array.from(this.backgroundServices.values()),
+      injectionPoints: Array.from(this.injectionPointsMap.values()),
     }
   }
 
@@ -316,7 +335,7 @@ export class TestingOpenForgeRegistryFake {
     return Array.isArray(raw) ? raw.filter((entry): entry is StartPromptContribution => Boolean(entry) && typeof entry === 'object' && typeof (entry as { id?: unknown }).id === 'string' && typeof (entry as { content?: unknown }).content === 'string') : []
   }
 
-  private createCommonApi(): Omit<FrontendOpenForgeAPI, 'views' | 'taskUI' | 'taskPane' | 'settings' | 'backend'> {
+  private createCommonApi(): Omit<FrontendOpenForgeAPI, 'views' | 'taskUI' | 'taskPane' | 'settings' | 'backend' | 'injectionPoints'> {
     return {
       commands: {
         register: (registration) => this.registerCommand(registration),
