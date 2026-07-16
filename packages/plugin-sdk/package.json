@@ -51,6 +51,10 @@
       "types": "./dist/sanitize.d.ts",
       "default": "./dist/sanitize.js"
     },
+    "./pluginIcons": {
+      "types": "./dist/pluginIcons.d.ts",
+      "default": "./dist/pluginIcons.js"
+    },
     "./fileIcons": {
       "types": "./dist/fileIcons.d.ts",
       "default": "./dist/fileIcons.js"

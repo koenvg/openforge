@@ -223,6 +223,21 @@ describe('resolveContributions', () => {
     expect(result.views[0]?.icon).toBe('custom-plugin-icon')
   })
 
+  it('preserves sanitized custom SVG icons while resolving plugin views', () => {
+    const icon = {
+      type: 'svg' as const,
+      svg: '<svg viewBox="0 0 24 24"><path d="M12 2 22 12 12 22 2 12Z" fill="currentColor"></path></svg>',
+    }
+    const source = makeSource({
+      views: [makeView({ id: 'issues', icon })],
+    })
+
+    const result = resolveContributions([source])
+
+    expect(result.views).toHaveLength(1)
+    expect(result.views[0]?.icon).toEqual(icon)
+  })
+
   it('normalizes view shortcuts', () => {
     const source = makeSource({ views: [makeView({ shortcut: 'Cmd+O' })] })
 

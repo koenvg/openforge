@@ -1,6 +1,12 @@
 import { Boxes, Clock, Code, FileText, FolderOpen, GitPullRequest, Kanban, LayoutDashboard, Plug, Puzzle, Settings, Sparkles, Terminal, Wrench } from '@lucide/svelte'
+import { sanitizePluginIcon } from '@openforge-app/plugin-sdk/pluginIcons'
+import type { PluginIcon } from '@openforge-app/plugin-sdk'
 
 type IconComponent = typeof LayoutDashboard
+
+export type ResolvedPluginNavigationIcon =
+  | { type: 'component'; component: IconComponent }
+  | { type: 'svg'; svg: string }
 
 const iconRegistry: Record<string, IconComponent> = {
   'layout-dashboard': LayoutDashboard,
@@ -21,4 +27,16 @@ const iconRegistry: Record<string, IconComponent> = {
 
 export function resolveIconRailIcon(icon: string): IconComponent {
   return iconRegistry[icon] ?? Plug
+}
+
+export function resolvePluginNavigationIcon(icon: PluginIcon): ResolvedPluginNavigationIcon {
+  try {
+    const sanitizedIcon = sanitizePluginIcon(icon)
+    if (typeof sanitizedIcon === 'string') {
+      return { type: 'component', component: resolveIconRailIcon(sanitizedIcon) }
+    }
+    return { type: 'svg', svg: sanitizedIcon.svg }
+  } catch {
+    return { type: 'component', component: Plug }
+  }
 }

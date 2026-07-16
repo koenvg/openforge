@@ -215,10 +215,27 @@ export interface PluginSettingsSectionProps extends Record<string, unknown> {
   context: OpenForgeContextSnapshot
 }
 
+/**
+ * Inline SVG geometry for a plugin view icon.
+ *
+ * The host sanitizes the markup, strips root sizing and accessibility metadata,
+ * renders it decoratively at the navigation surface's size, and uses the view
+ * title as the accessible navigation label. Plugins own the `viewBox`, paths,
+ * and paint. Use `currentColor` when the icon should follow host navigation
+ * states; literal safe colors remain plugin-owned and do not change with state.
+ */
+export interface PluginSvgIcon {
+  type: 'svg'
+  svg: string
+}
+
+/** A host-registered icon name or inline SVG geometry. */
+export type PluginIcon = string | PluginSvgIcon
+
 export interface PluginViewRegistration {
   id: string
   title: string
-  icon: string
+  icon: PluginIcon
   /**
    * Where the host surfaces the view's nav entry. `'rail'` (default) places it on
    * the icon rail; `'sidebar'` places it in the left projects sidebar. Either way

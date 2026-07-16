@@ -1,4 +1,5 @@
 import { validateSchemaValue } from '@openforge-app/plugin-runtime/commandValidation'
+import { sanitizePluginIcon } from '@openforge-app/plugin-sdk/pluginIcons'
 import type {
   Disposable,
   FrontendOpenForgeAPI,
@@ -238,6 +239,15 @@ function assertHandler(kind: RuntimeKind, handler: unknown): asserts handler is 
 function assertComponent(kind: RuntimeKind, component: unknown): void {
   if (!isFunction(component)) {
     throw new RuntimeValidationError(kind, 'requires a component')
+  }
+}
+
+function sanitizeViewIcon(icon: unknown) {
+  try {
+    return sanitizePluginIcon(icon)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new RuntimeValidationError('views', `has invalid icon: ${message}`)
   }
 }
 
@@ -696,10 +706,12 @@ class RuntimeContributionRegistry {
     const qualifiedId = this.qualifiedId('views', registration?.id)
     assertTitle('views', registration?.title)
     assertComponent('views', registration?.component)
+    const icon = sanitizeViewIcon(registration?.icon)
     this.claim('views', qualifiedId)
 
     const contribution: RuntimeViewContribution = {
       ...registration,
+      icon,
       id: registration.id.trim(),
       title: registration.title.trim(),
       qualifiedId,
