@@ -7,6 +7,7 @@
   import { deriveAgentStatusPillView } from '../../lib/agentStatusPill'
   import { pickerState } from '../../lib/injectables/pickerState.svelte'
   import VoiceInput from '../shared/adapters/VoiceInput.svelte'
+  import InjectionPointSlot from '../plugin/InjectionPointSlot.svelte'
 
   interface Props {
     taskId: string
@@ -62,6 +63,12 @@
   }
 </script>
 
+<InjectionPointSlot
+  location="agentSession"
+  projectId={injectableProjectId}
+  taskId={taskId}
+  onInsert={(text) => { void writeAgentTerminalTranscription(taskId, text, 'InjectionPoint') }}
+/>
 {#if view}
   <div class="flex items-center gap-2 min-w-0" data-testid="agent-status-pill" aria-label="Agent status">
     <span class="shrink-0 {dotClass(status)}"></span>
