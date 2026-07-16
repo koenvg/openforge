@@ -2,7 +2,9 @@
   import { onMount } from 'svelte'
   import { ImagePlus } from '@lucide/svelte'
   import type { Task, PermissionMode, Action, GitBranchInfo, WorktreeSource } from '../lib/types'
-  import { createTask, updateTaskInitialPrompt, getProjectConfig, getResolvedAiProvider, listGitBranches, repoHasCommits } from '../lib/ipc'
+  import { createTask, updateTaskInitialPrompt, listGitBranches, repoHasCommits } from '../lib/ipc'
+  import { loadTaskLevelDefaults } from '../lib/taskDefaults'
+  import { HIERARCHICAL_SETTINGS } from '../lib/hierarchicalSettings'
   import { dedupeBranchesForSelector, type BranchLocation } from '../lib/branchSelector'
   import { resolveWorktreeAvailability } from '../lib/worktreeAvailability'
   import {
@@ -33,6 +35,9 @@
   }
 
   const MAX_PASTED_IMAGE_BYTES = 5 * 1024 * 1024
+  // Provider choices come from the shared settings registry so the task-level
+  // control never drifts from the global/project provider options.
+  const aiProviderOptions = HIERARCHICAL_SETTINGS.find((setting) => setting.key === 'ai_provider')?.options ?? []
 
   let { mode = 'create', task = null, projectPath = null, onClose, onTaskSaved, onRunAction }: Props = $props()
 
@@ -72,6 +77,8 @@
   let taskTitle = $state('')
   let sourceTicketDraft = $state('')
   let handoffNotesEnabled = $state(true)
+  let codeCleanupEnabled = $state(false)
+  let taskDisplayTitleUpdatesEnabled = $state(false)
   let taskDefaultsLoading = $state(true)
 
   const initialPrompt = $derived(mode === 'edit' && task ? getTaskPromptText(task) : '')
@@ -142,10 +149,13 @@
     worktreeAllowed = true
     try {
       if ($activeProjectId) {
-        const defaultUseWorktrees = await getProjectConfig($activeProjectId, 'use_worktrees')
-        const projectDefaultUseWorktree = defaultUseWorktrees == null ? true : defaultUseWorktrees === 'true'
+        const defaults = await loadTaskLevelDefaults($activeProjectId)
+        codeCleanupEnabled = defaults.codeCleanupEnabled
+        taskDisplayTitleUpdatesEnabled = defaults.taskDisplayTitleUpdatesEnabled
+        handoffNotesEnabled = defaults.handoffNotesEnabled
+        aiProvider = defaults.aiProvider
+        const projectDefaultUseWorktree = defaults.useWorktrees
         useWorktree = projectDefaultUseWorktree
-        aiProvider = await getResolvedAiProvider($activeProjectId)
 
         const allActions = await loadActions($activeProjectId)
         availableActions = getEnabledActions(allActions)
@@ -188,6 +198,9 @@
         }
       } else {
         aiProvider = 'claude-code'
+        codeCleanupEnabled = false
+        taskDisplayTitleUpdatesEnabled = false
+        handoffNotesEnabled = true
         availableActions = []
         gitBranches = []
         selectedExistingBranch = ''
@@ -406,6 +419,9 @@
             title: taskTitle.trim() || null,
             handoffNotesEnabled,
             sourceTicketUrl: sourceTicketDraft.trim() || null,
+            codeCleanupEnabled,
+            taskDisplayTitleUpdatesEnabled,
+            aiProvider,
           }
         )
 
@@ -571,6 +587,20 @@
 
               {#if environmentExpanded}
                 <div id="create-task-environment" class="space-y-3 rounded-lg border border-base-300 bg-base-200/50 p-3">
+                  <div class="flex items-center gap-2">
+                    <label for="create-task-ai-provider" class="text-xs font-medium text-base-content/50 shrink-0">Provider</label>
+                    <select
+                      id="create-task-ai-provider"
+                      class="select select-bordered select-sm flex-1"
+                      value={aiProvider ?? 'claude-code'}
+                      onchange={(e) => { aiProvider = e.currentTarget.value }}
+                    >
+                      {#each aiProviderOptions as option (option.value)}
+                        <option value={option.value}>{option.label}</option>
+                      {/each}
+                    </select>
+                  </div>
+
                   {#if aiProvider === 'claude-code'}
                     <div class="flex items-center gap-2">
                       <label for="create-task-permission-mode" class="text-xs font-medium text-base-content/50 shrink-0">Mode</label>
@@ -695,17 +725,37 @@
                     </div>
                   </div>
 
-                  <div class="grid grid-cols-[4.75rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
-                    <span class="text-xs font-medium text-base-content/50">Handoff</span>
-                    <label class="flex min-w-0 items-center gap-2 text-xs font-medium text-base-content/80">
-                      <input
-                        type="checkbox"
-                        class="toggle toggle-primary toggle-xs"
-                        aria-label="Handoff notes"
-                        bind:checked={handoffNotesEnabled}
-                      />
-                      <span>Include handoff notes</span>
-                    </label>
+                  <div class="grid grid-cols-[4.75rem_minmax(0,1fr)] items-start gap-x-3 gap-y-2">
+                    <span class="pt-0.5 text-xs font-medium text-base-content/50">Handoff</span>
+                    <div class="flex min-w-0 flex-col gap-2">
+                      <label class="flex min-w-0 items-center gap-2 text-xs font-medium text-base-content/80">
+                        <input
+                          type="checkbox"
+                          class="toggle toggle-primary toggle-xs"
+                          aria-label="Handoff notes"
+                          bind:checked={handoffNotesEnabled}
+                        />
+                        <span>Include handoff notes</span>
+                      </label>
+                      <label class="flex min-w-0 items-center gap-2 text-xs font-medium text-base-content/80">
+                        <input
+                          type="checkbox"
+                          class="toggle toggle-primary toggle-xs"
+                          aria-label="Code cleanup tasks"
+                          bind:checked={codeCleanupEnabled}
+                        />
+                        <span>Create code cleanup tasks</span>
+                      </label>
+                      <label class="flex min-w-0 items-center gap-2 text-xs font-medium text-base-content/80">
+                        <input
+                          type="checkbox"
+                          class="toggle toggle-primary toggle-xs"
+                          aria-label="Task display title updates"
+                          bind:checked={taskDisplayTitleUpdatesEnabled}
+                        />
+                        <span>Auto-update task display title</span>
+                      </label>
+                    </div>
                   </div>
                 </div>
               {/if}

@@ -125,16 +125,22 @@ describe('settingsConfig', () => {
         .mockResolvedValueOnce('true')
         .mockResolvedValueOnce('true')
         .mockResolvedValueOnce('45')
+        .mockResolvedValueOnce('true')
+        .mockResolvedValueOnce('false')
+        .mockResolvedValueOnce('opencode')
 
       const result = await loadGlobalSettings()
 
-      expect(getConfig).toHaveBeenCalledTimes(5)
+      expect(getConfig).toHaveBeenCalledTimes(8)
       expect(result).toEqual({
         taskIdPrefix: 'T-',
         githubToken: 'gh-token',
         codeCleanupTasksEnabled: true,
         taskDisplayTitleMetadataUpdatesEnabled: true,
         githubPollInterval: 45,
+        handoffNotesEnabled: true,
+        useWorktrees: false,
+        aiProvider: 'opencode',
       })
     })
 
@@ -154,6 +160,9 @@ describe('settingsConfig', () => {
         codeCleanupTasksEnabled: false,
         taskDisplayTitleMetadataUpdatesEnabled: false,
         githubPollInterval: 60,
+        handoffNotesEnabled: true,
+        useWorktrees: true,
+        aiProvider: 'claude-code',
       })
     })
 
@@ -220,6 +229,31 @@ describe('settingsConfig', () => {
       const result = await loadGlobalSettings()
 
       expect(result.githubPollInterval).toBe(60)
+    })
+  })
+
+  describe('loadGlobalSettings hierarchy keys', () => {
+    it('loads handoff + worktrees globals with correct defaults', async () => {
+      vi.mocked(getConfig).mockImplementation(async (key: string) => {
+        const map: Record<string, string> = {
+          handoff_notes_enabled: 'true',
+          use_worktrees: 'false',
+        }
+        return map[key] ?? null
+      })
+
+      const result = await loadGlobalSettings()
+
+      expect(result.handoffNotesEnabled).toBe(true)
+      expect(result.useWorktrees).toBe(false)
+    })
+
+    it('defaults handoff + worktrees to enabled and provider to claude-code when unset', async () => {
+      const result = await loadGlobalSettings()
+
+      expect(result.handoffNotesEnabled).toBe(true)
+      expect(result.useWorktrees).toBe(true)
+      expect(result.aiProvider).toBe('claude-code')
     })
   })
 

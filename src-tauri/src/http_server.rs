@@ -571,23 +571,19 @@ async fn handle_agent_lifecycle_notification(
     Ok(Json(serde_json::json!({ "status": "ok" })))
 }
 
-fn task_display_title_metadata_updates_enabled(state: &AppState) -> bool {
-    state
-        .db
-        .lock()
-        .unwrap()
-        .get_config(TASK_DISPLAY_TITLE_METADATA_UPDATES_ENABLED_CONFIG_KEY)
-        .ok()
-        .flatten()
-        .as_deref()
-        == Some("true")
+fn task_display_title_metadata_updates_enabled(state: &AppState, task_id: &str) -> bool {
+    state.db.lock().unwrap().resolve_task_bool(
+        task_id,
+        TASK_DISPLAY_TITLE_METADATA_UPDATES_ENABLED_CONFIG_KEY,
+        false,
+    )
 }
 
 fn should_start_task_display_title_refresh(
     state: &AppState,
     notification: &crate::agent_lifecycle::AgentLifecycleNotification,
 ) -> bool {
-    if !task_display_title_metadata_updates_enabled(state) {
+    if !task_display_title_metadata_updates_enabled(state, &notification.task_id) {
         return false;
     }
 

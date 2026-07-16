@@ -134,7 +134,7 @@ describe('SettingsView plugin integration', () => {
 
     await vi.waitFor(() => {
       expect(screen.getByRole('button', { name: /install package/i })).toBeTruthy()
-      expect(screen.getByText('Global Plugin')).toBeTruthy()
+      expect(screen.getAllByText('Global Plugin').length).toBeGreaterThan(0)
     })
     expect(screen.getByText('Install plugins app-wide. Projects enable installed plugins explicitly.')).toBeTruthy()
     expect(screen.getByRole('button', { name: /reload plugin: global plugin/i })).toBeTruthy()
@@ -151,7 +151,8 @@ describe('SettingsView plugin integration', () => {
     render(SettingsView, { props: defaultProps })
 
     await vi.waitFor(() => {
-      expect(screen.getByText('Project Plugin')).toBeTruthy()
+      // Rendered by both the shared configuration card and the plugin panel.
+      expect(screen.getAllByText('Project Plugin').length).toBeGreaterThan(0)
     })
     expect(screen.queryByText('Install package')).toBeNull()
     expect(screen.getByText('Enable installed plugins for this project.')).toBeTruthy()

@@ -78,6 +78,12 @@ describe('PluginSettingsPanel', () => {
     expect(screen.getByText('No plugins installed app-wide')).toBeTruthy()
   })
 
+  it('clarifies that plugin enablement inherits global defaults and applies to this project only', () => {
+    render(PluginSettingsPanel, { projectId: 'proj-1' })
+    expect(screen.getByText(/inherit(s)? your global plugin defaults/i)).toBeTruthy()
+    expect(screen.getByText(/apply to this project only/i)).toBeTruthy()
+  })
+
   it('renders only per-project enablement metadata for installed plugins', () => {
     installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
 

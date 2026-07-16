@@ -546,6 +546,9 @@ fn refresh_task_display_title_once_skips_manual_title() {
             title: Some("Manual title"),
             handoff_notes_enabled: true,
             source_ticket_url: None,
+            code_cleanup_enabled: None,
+            task_display_title_updates_enabled: None,
+            ai_provider: None,
         })
         .expect("create task");
 

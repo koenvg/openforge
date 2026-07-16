@@ -1,3 +1,4 @@
+import { resetProjectSettingsToGlobal } from './ipc'
 import type { Project } from './types'
 
 export interface ProjectIdentity {
@@ -33,4 +34,17 @@ export function mergeUpdatedProject(projectList: Project[], updatedProject: Upda
       ? { ...project, name: updatedProject.name, path: updatedProject.path }
       : project
   )
+}
+
+/**
+ * Clear a project's unified-settings overrides so it re-inherits global defaults,
+ * then re-run the caller's project-settings load so the UI shows the re-inherited
+ * effective values.
+ */
+export async function resetProjectAndReload(
+  projectId: string,
+  reload: () => Promise<void>,
+): Promise<void> {
+  await resetProjectSettingsToGlobal(projectId)
+  await reload()
 }
