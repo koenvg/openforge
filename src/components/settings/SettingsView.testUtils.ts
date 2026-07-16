@@ -44,9 +44,6 @@ const mocks = vi.hoisted(() => {
     getAllWhisperModelStatuses: vi.fn(),
     getDeveloperLogSnapshot: vi.fn(),
     getProjectTaskLabels: vi.fn(),
-    loadActions: vi.fn(),
-    saveActions: vi.fn(),
-    createAction: vi.fn(),
     activeProjectId: createMockWritable<string | null>('test-project-id'),
     activeProjectColorId: createMockWritable<string | null>(null),
     codeCleanupTasksEnabled: createMockWritable(false),
@@ -89,15 +86,6 @@ vi.mock('../../lib/ipc', () => ({
   getPlugin: vi.fn(),
   setPluginEnabled: vi.fn(),
   getEnabledPlugins: vi.fn(() => Promise.resolve([])),
-}))
-
-vi.mock('../../lib/actions', () => ({
-  loadActions: mocks.loadActions,
-  saveActions: mocks.saveActions,
-  createAction: mocks.createAction,
-  DEFAULT_ACTIONS: [
-    { id: 'builtin-go', name: 'Go', prompt: '', builtin: true, enabled: true },
-  ],
 }))
 
 vi.mock('../../lib/boardFilters', () => ({
@@ -154,7 +142,6 @@ export async function resetSettingsViewTest() {
   mocks.checkPiInstalled.mockResolvedValue({ installed: false, path: null, version: null })
   mocks.getAllWhisperModelStatuses.mockResolvedValue([])
   mocks.getDeveloperLogSnapshot.mockResolvedValue({ entries: [], logFilePath: '/tmp/openforge.log', totalEntries: 0 })
-  mocks.loadActions.mockResolvedValue([])
   mocks.getProjectTaskLabels.mockResolvedValue([])
 
   mocks.activeProjectId.set('test-project-id')

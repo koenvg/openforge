@@ -1,6 +1,6 @@
 import { getAppShortcutHelpLabel, getPrimaryAppShortcutKey } from './appShortcutDefinitions'
 import { getMergeReadiness } from './types'
-import type { Action, PullRequestInfo, Task } from './types'
+import type { PullRequestInfo, Task } from './types'
 
 export interface PaletteAction {
   id: string
@@ -10,7 +10,7 @@ export interface PaletteAction {
   keywords: string[]
 }
 
-export function getTaskActions(task: Task, customActions: Action[], taskPrs: PullRequestInfo[] = [], outOfFocusTaskIds: Set<string> = new Set()): PaletteAction[] {
+export function getTaskActions(task: Task, taskPrs: PullRequestInfo[] = [], outOfFocusTaskIds: Set<string> = new Set()): PaletteAction[] {
   const actions: PaletteAction[] = []
 
   if (task.status === 'backlog') {
@@ -69,16 +69,6 @@ export function getTaskActions(task: Task, customActions: Action[], taskPrs: Pul
     keywords: ['remove', 'trash', 'complete', 'finish', 'close', 'done'],
   })
 
-  for (const action of customActions) {
-    actions.push({
-      id: `custom-action-${action.id}`,
-      label: action.name,
-      shortcut: null,
-      category: 'task',
-      keywords: ['custom', 'action'],
-    })
-  }
-
   if (task.status === 'doing' && !outOfFocusTaskIds.has(task.id)) {
     actions.push({
       id: 'set-aside-task',
@@ -125,8 +115,8 @@ export function getGlobalActions(): PaletteAction[] {
   return GLOBAL_ACTION_DEFINITIONS.map(getShortcutBackedGlobalAction)
 }
 
-export function getAvailableActions(task: Task | null, customActions: Action[], taskPrs: PullRequestInfo[] = [], outOfFocusTaskIds: Set<string> = new Set()): PaletteAction[] {
-  const taskActions = task ? getTaskActions(task, customActions, taskPrs, outOfFocusTaskIds) : []
+export function getAvailableActions(task: Task | null, taskPrs: PullRequestInfo[] = [], outOfFocusTaskIds: Set<string> = new Set()): PaletteAction[] {
+  const taskActions = task ? getTaskActions(task, taskPrs, outOfFocusTaskIds) : []
   return [...taskActions, ...getGlobalActions()]
 }
 

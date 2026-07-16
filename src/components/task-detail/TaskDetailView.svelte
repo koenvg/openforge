@@ -11,7 +11,6 @@
   import { createTaskTitleRename } from '../../lib/useTaskTitleRename.svelte'
   import { useAppRouter } from '../../lib/router.svelte'
   import { isInputFocused } from '../../lib/domUtils'
-  import { loadActions, getEnabledActions } from '../../lib/actions'
   import PluginSlot from '../plugin/PluginSlot.svelte'
   import { resolveContributions } from '../../lib/plugin/contributionResolver'
   import type { ResolvedTab } from '../../lib/plugin/contributionResolver'
@@ -22,14 +21,13 @@
   // Session + shell lifecycle must come from the terminal PLUGIN runtime (the one
   // rendering the task-view terminal), not the app pool — see liveTerminalPool.
   import { getShellLifecycleState, getTaskTerminalTabsSession } from '../../lib/liveTerminalPool'
-  import type { Action, Task } from '../../lib/types'
+  import type { Task } from '../../lib/types'
   import AgentPanel from './AgentPanel.svelte'
   import AgentStatusPill from './AgentStatusPill.svelte'
   import TaskInfoPanel from './TaskInfoPanel.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
   import SelfReviewView from './SelfReviewView.svelte'
-  import ActionDropdown from './ActionDropdown.svelte'
 
   interface Props {
     task: Task
@@ -52,7 +50,6 @@
   let activeView = $state('agent')
   let workspacePath = $state<string | null>(null)
   let lastTaskId = ''
-  let actions = $state<Action[]>([])
   let runCommand = $state('')
   let isRunningApp = $state(false)
   const taskShortcuts = useShortcutRegistry()
@@ -175,12 +172,6 @@
   })
 
   $effect(() => {
-    if ($activeProjectId) {
-      loadActions($activeProjectId).then(a => { actions = getEnabledActions(a) })
-    }
-  })
-
-  $effect(() => {
     const projectId = $activeProjectId
     if (!projectId) {
       runCommand = ''
@@ -249,10 +240,6 @@
     if (await runCompleteTask(task.id)) {
       router.resetToBoard()
     }
-  }
-
-  function handleActionClick(action: Action) {
-    onRunAction({ taskId: task.id, actionPrompt: action.prompt, agent: null })
   }
 
   async function handleRunApp() {
@@ -353,9 +340,6 @@
               Start Task
             {/if}
           </button>
-          {#if actions.length > 0}
-            <ActionDropdown {actions} disabled={isStarting} onAction={handleActionClick} />
-          {/if}
         {:else if task.status === 'doing'}
           <Button
             size="sm"
@@ -370,9 +354,6 @@
               Complete 🏁
             {/if}
           </Button>
-          {#if actions.length > 0}
-            <ActionDropdown {actions} disabled={isStarting} onAction={handleActionClick} />
-          {/if}
         {/if}
       </div>
     </header>

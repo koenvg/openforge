@@ -1,8 +1,7 @@
 <script lang="ts">
-  import type { Task, Action, PullRequestInfo } from '../../lib/types'
+  import type { Task, PullRequestInfo } from '../../lib/types'
   import { getAvailableActions, filterActions, type PaletteAction } from '../../lib/actionPalette'
   import { activeProjectId, outOfFocusTaskIdsByProject } from '../../lib/stores'
-  import HoverTooltip from '../shared/ui/HoverTooltip.svelte'
   import PaletteFooter from '../shared/ui/PaletteFooter.svelte'
   import PaletteInput from '../shared/ui/PaletteInput.svelte'
   import PaletteListbox from '../shared/ui/PaletteListbox.svelte'
@@ -10,13 +9,12 @@
 
   interface Props {
     task: Task | null
-    customActions: Action[]
     taskPrs: PullRequestInfo[]
     onClose: () => void
     onExecute: (actionId: string) => void
   }
 
-  let { task, customActions, taskPrs, onClose, onExecute }: Props = $props()
+  let { task, taskPrs, onClose, onExecute }: Props = $props()
   let searchQuery = $state('')
   let selectedActionId = $state<string | null>(null)
   let paletteListbox: { handleKeydown: (event: KeyboardEvent) => boolean } | null = $state(null)
@@ -25,7 +23,7 @@
     const taskProjectId = task?.project_id ?? $activeProjectId
     return taskProjectId ? $outOfFocusTaskIdsByProject.get(taskProjectId) ?? new Set<string>() : new Set<string>()
   })
-  let allActions = $derived(getAvailableActions(task, customActions, taskPrs, outOfFocusTaskIds))
+  let allActions = $derived(getAvailableActions(task, taskPrs, outOfFocusTaskIds))
   let filtered = $derived(filterActions(allActions, searchQuery))
   let orderedActions = $derived(
     ['task', 'navigation', 'general'].flatMap(category => filtered.filter(action => action.category === category))
@@ -56,12 +54,6 @@
     return paletteListbox?.handleKeydown(event) ?? false
   }
 
-  function getActionTooltip(action: PaletteAction): string | undefined {
-    if (!action.id.startsWith('custom-action-')) return undefined
-    const realId = action.id.replace('custom-action-', '')
-    return customActions.find(candidate => candidate.id === realId)?.prompt
-  }
-
   function groupLabel(action: PaletteAction, index: number): string | null {
     if (index > 0 && orderedActions[index - 1].category === action.category) return null
     return action.category === 'task' ? 'Task' : action.category === 'navigation' ? 'Navigation' : 'General'
@@ -90,14 +82,7 @@
       <div class="px-4 py-6 text-center text-base-content/50 text-sm">No actions match your search</div>
     {/snippet}
     {#snippet item(action)}
-      {@const tooltip = getActionTooltip(action)}
-      {#if tooltip}
-        <HoverTooltip text={tooltip}>
-          <span class="flex-1">{action.label}</span>
-        </HoverTooltip>
-      {:else}
-        <span class="flex-1">{action.label}</span>
-      {/if}
+      <span class="flex-1">{action.label}</span>
       {#if action.shortcut}
         <kbd class="kbd kbd-xs bg-base-content/5 text-base-content/40 border-base-content/10">{action.shortcut}</kbd>
       {/if}

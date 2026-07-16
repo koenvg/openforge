@@ -74,7 +74,6 @@ describe('ActionPalette component', () => {
     const { rerender } = render(ActionPalette, {
       props: {
         task,
-        customActions: [],
         taskPrs: [],
         onClose,
         onExecute,
@@ -94,7 +93,6 @@ describe('ActionPalette component', () => {
 
     await rerender({
       task: makeTask({ id: 'T-100', status: 'done' }),
-      customActions: [],
       taskPrs: [],
       onClose,
       onExecute,
@@ -110,7 +108,6 @@ describe('ActionPalette component', () => {
     render(ActionPalette, {
       props: {
         task: makeTask({ id: 'T-100', status: 'backlog' }),
-        customActions: [],
         taskPrs: [],
         onClose: vi.fn(),
         onExecute: vi.fn(),
@@ -142,7 +139,6 @@ describe('ActionPalette component', () => {
     render(ActionPalette, {
       props: {
         task: makeTask({ id: 'T-100', status: 'backlog' }),
-        customActions: [],
         taskPrs: [],
         onClose: vi.fn(),
         onExecute,
@@ -166,7 +162,6 @@ describe('ActionPalette component', () => {
     render(ActionPalette, {
       props: {
         task: makeTask({ id: 'T-100', status: 'backlog' }),
-        customActions: [],
         taskPrs: [],
         onClose: vi.fn(),
         onExecute: vi.fn(),
@@ -184,7 +179,6 @@ describe('ActionPalette component', () => {
     render(ActionPalette, {
       props: {
         task: makeTask({ id: 'T-100', status: 'doing' }),
-        customActions: [],
         taskPrs: [makePullRequest()],
         onClose: vi.fn(),
         onExecute: vi.fn(),

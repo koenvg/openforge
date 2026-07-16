@@ -1,4 +1,3 @@
-import { loadActions } from './actions'
 import { loadFocusFilterStates } from './boardFilters'
 import {
   checkClaudeInstalled,
@@ -11,7 +10,7 @@ import {
 } from './ipc'
 import { RUN_COMMAND_CONFIG_KEY } from './runAppCommand'
 import type { TaskState } from './taskState'
-import type { Action, ClaudeInstallStatus, WhisperModelStatus } from './types'
+import type { ClaudeInstallStatus, WhisperModelStatus } from './types'
 
 export interface ProjectSettingsConfig {
   agentInstructions: string
@@ -20,7 +19,6 @@ export interface ProjectSettingsConfig {
   projectColor: string
   useWorktrees: boolean
   runCommand: string
-  actions: Action[]
   focusFilterStates: TaskState[]
 }
 
@@ -77,7 +75,7 @@ interface OpenCodeInstallStatus {
   version: string | null
 }
 
-const DEFAULT_PROJECT_SETTINGS: Omit<ProjectSettingsConfig, 'actions' | 'focusFilterStates'> = {
+const DEFAULT_PROJECT_SETTINGS: Omit<ProjectSettingsConfig, 'focusFilterStates'> = {
   agentInstructions: '',
   handoffNotesTemplate: '',
   aiProvider: 'claude-code',
@@ -95,14 +93,13 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettingsConfig = {
 }
 
 export async function loadProjectSettings(projectId: string): Promise<ProjectSettingsConfig> {
-  const [instructions, handoffTemplate, provider, color, useWorktrees, runCommand, actions, focusFilterStates] = await Promise.all([
+  const [instructions, handoffTemplate, provider, color, useWorktrees, runCommand, focusFilterStates] = await Promise.all([
     getProjectConfig(projectId, 'additional_instructions'),
     getProjectConfig(projectId, 'handoff_notes_template'),
     getProjectConfig(projectId, 'ai_provider'),
     getProjectConfig(projectId, 'project_color'),
     getProjectConfig(projectId, 'use_worktrees'),
     getProjectConfig(projectId, RUN_COMMAND_CONFIG_KEY),
-    loadActions(projectId),
     loadFocusFilterStates(projectId),
   ])
 
@@ -113,7 +110,6 @@ export async function loadProjectSettings(projectId: string): Promise<ProjectSet
     projectColor: color ?? DEFAULT_PROJECT_SETTINGS.projectColor,
     useWorktrees: useWorktrees == null ? DEFAULT_PROJECT_SETTINGS.useWorktrees : useWorktrees === 'true',
     runCommand: runCommand ?? DEFAULT_PROJECT_SETTINGS.runCommand,
-    actions,
     focusFilterStates,
   }
 }

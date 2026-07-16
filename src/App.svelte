@@ -661,7 +661,6 @@
 {#if actionPalette.showActionPalette}
   <ActionPalette
     task={actionPalette.actionPaletteTask}
-    customActions={actionPalette.actionPaletteActions}
     taskPrs={actionPalette.actionPaletteTask ? ($ticketPrs.get(actionPalette.actionPaletteTask.id) || []) : []}
     onClose={actionPalette.closeActionPalette}
     onExecute={actionPalette.executeAction}

@@ -1,10 +1,8 @@
-import { saveActions } from './actions'
 import { saveFocusFilterStates } from './boardFilters'
 import { setConfig, setProjectConfig, updateProject } from './ipc'
 import { RUN_COMMAND_CONFIG_KEY } from './runAppCommand'
 import { normalizeGitHubPollIntervalSeconds } from './settingsConfig'
 import type { TaskState } from './taskState'
-import type { Action } from './types'
 
 export interface ProjectSettingsSavePayload {
   projectId: string
@@ -16,7 +14,6 @@ export interface ProjectSettingsSavePayload {
   projectColor: string
   useWorktrees: boolean
   runCommand: string
-  actions: Action[]
   focusFilterStates: TaskState[]
 }
 
@@ -36,7 +33,6 @@ export async function saveProjectSettings(payload: ProjectSettingsSavePayload): 
   await setProjectConfig(payload.projectId, 'use_worktrees', payload.useWorktrees ? 'true' : 'false')
   await setProjectConfig(payload.projectId, 'project_color', payload.projectColor)
   await setProjectConfig(payload.projectId, RUN_COMMAND_CONFIG_KEY, payload.runCommand)
-  await saveActions(payload.projectId, payload.actions)
   await saveFocusFilterStates(payload.projectId, payload.focusFilterStates)
 }
 

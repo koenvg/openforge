@@ -6,15 +6,10 @@ vi.mock('./ipc', () => ({
   setConfig: vi.fn(),
 }))
 
-vi.mock('./actions', () => ({
-  saveActions: vi.fn(),
-}))
-
 vi.mock('./boardFilters', () => ({
   saveFocusFilterStates: vi.fn(),
 }))
 
-import { saveActions } from './actions'
 import { saveFocusFilterStates } from './boardFilters'
 import { setConfig, setProjectConfig, updateProject } from './ipc'
 import { saveGlobalSettings, saveProjectSettings } from './settingsSaver'
@@ -25,7 +20,6 @@ describe('settingsSaver', () => {
     vi.mocked(updateProject).mockResolvedValue(undefined)
     vi.mocked(setProjectConfig).mockResolvedValue(undefined)
     vi.mocked(setConfig).mockResolvedValue(undefined)
-    vi.mocked(saveActions).mockResolvedValue(undefined)
     vi.mocked(saveFocusFilterStates).mockResolvedValue(undefined)
   })
 
@@ -40,7 +34,6 @@ describe('settingsSaver', () => {
       projectColor: 'violet',
       useWorktrees: false,
       runCommand: 'pnpm dev',
-      actions: [{ id: 'a1', name: 'Action', prompt: '', builtin: false, enabled: true }],
       focusFilterStates: ['idle'],
     })
 
@@ -52,9 +45,6 @@ describe('settingsSaver', () => {
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'use_worktrees', 'false')
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'project_color', 'violet')
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'run_command', 'pnpm dev')
-    expect(saveActions).toHaveBeenCalledWith('project-1', [
-      { id: 'a1', name: 'Action', prompt: '', builtin: false, enabled: true },
-    ])
     expect(saveFocusFilterStates).toHaveBeenCalledWith('project-1', ['idle'])
   })
 

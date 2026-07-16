@@ -95,11 +95,6 @@ describe('SettingsView rendering and navigation', () => {
     }
   })
 
-  it('renders Actions section', () => {
-    render(SettingsView, { props: defaultProps })
-    expect(screen.queryAllByText(/actions/i).length).toBeGreaterThan(0)
-  })
-
   it('renders General section card', () => {
     render(SettingsView, { props: defaultProps })
     expect(screen.queryAllByText(/general/i).length).toBeGreaterThan(0)
@@ -136,11 +131,6 @@ describe('SettingsView rendering and navigation', () => {
   it('ensures SettingsSidebar component has been removed as part of the single-column architecture', () => {
     const sidebarPath = path.join(process.cwd(), 'src/components/settings/SettingsSidebar.svelte')
     expect(fs.existsSync(sidebarPath)).toBe(false)
-  })
-
-  it('renders Actions section card', () => {
-    render(SettingsView, { props: defaultProps })
-    expect(screen.queryAllByText(/actions/i).length).toBeGreaterThan(0)
   })
 
   it('renders Task Labels management on the project settings page', async () => {

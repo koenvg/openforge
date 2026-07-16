@@ -1051,14 +1051,6 @@ export function splitCheckRuns(checks: CheckRunInfo[]): { visible: CheckRunInfo[
   return { visible, passingCount };
 }
 
-export interface Action {
-  id: string;
-  name: string;
-  prompt: string;
-  builtin: boolean;
-  enabled: boolean;
-}
-
 // ============================================================================
 // Voice Input / Whisper Types
 // ============================================================================
