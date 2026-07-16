@@ -176,6 +176,7 @@ describe('Electron plugin:// protocol security contract', () => {
     const installRoot = join(workspaceRoot, 'installed-plugin')
     await mkdir(join(installRoot, 'assets'), { recursive: true })
     await writeFile(join(installRoot, 'assets', 'index.js'), 'export const ok = true;')
+    await writeFile(join(installRoot, 'assets', 'plugin.css'), '.plugin-view { color: red; }')
 
     const fetch = vi.fn(async () => new Response(JSON.stringify({
       value: {
@@ -205,6 +206,17 @@ describe('Electron plugin:// protocol security contract', () => {
     expect(response.headers.get('Content-Type')).toBe('application/javascript')
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*')
     expect(await response.text()).toBe('export const ok = true;')
+
+    const stylesheetResponse = await handlePluginProtocolRequest('plugin://com.example.plugin/assets/plugin.css', {
+      workspaceRoot,
+      sidecarConfig,
+      fetch,
+      readFile,
+      realpath,
+    })
+    expect(stylesheetResponse.status).toBe(200)
+    expect(stylesheetResponse.headers.get('Content-Type')).toBe('text/css')
+    expect(await stylesheetResponse.text()).toContain('.plugin-view')
   })
 
   it('propagates reload cache-busting to plugin-owned JavaScript dependency imports', async () => {
@@ -395,6 +407,9 @@ describe('Electron plugin:// protocol security contract', () => {
     expect(ELECTRON_RENDERER_CSP).toContain("default-src 'self'")
     expect(cspDirective(ELECTRON_RENDERER_CSP, 'script-src')).toBe(`script-src 'self' plugin: ${rendererImportMapScriptHashSource()}`)
     expect(cspDirective(ELECTRON_RENDERER_CSP, 'script-src')).not.toContain("'unsafe-inline'")
+    expect(cspDirective(ELECTRON_RENDERER_CSP, 'style-src')).toBe("style-src 'self' plugin: 'unsafe-inline'")
+    expect(cspDirective(ELECTRON_RENDERER_CSP, 'img-src')).toBe("img-src 'self' plugin: https: data:")
+    expect(cspDirective(ELECTRON_RENDERER_CSP, 'font-src')).toBe("font-src 'self' plugin: data:")
     expect(ELECTRON_RENDERER_CSP).toContain(`connect-src 'self' http://127.0.0.1:${DEFAULT_SIDECAR_PORT} https://api.github.com https://*.atlassian.net`)
     expect(createElectronRendererCsp({ host: '127.0.0.1', port: 18000 })).toContain('http://127.0.0.1:18000')
     expect(ELECTRON_RENDERER_CSP).not.toContain('file:')

@@ -101,6 +101,33 @@ describe('pluginStore', () => {
     })
   })
 
+  it('reads frontend stylesheet metadata persisted by installed local packages', async () => {
+    listPluginsMock.mockResolvedValue([{
+      ...makePlugin('local-svelte'),
+      sourceKind: 'local',
+      sourceSpec: '/plugins/local-svelte',
+      packageMetadata: JSON.stringify({
+        name: '@acme/local-svelte',
+        version: '1.0.0',
+        openforge: {
+          id: 'local-svelte',
+          apiVersion: 1,
+          displayName: 'Local Svelte',
+          description: 'Styled local plugin',
+          frontend: './dist/frontend.js',
+          frontendStyles: ['./dist/local-svelte.css'],
+        },
+      }),
+    }])
+
+    await loadInstalledPlugins()
+
+    expect(get(installedPlugins).get('local-svelte')?.packageMetadata).toMatchObject({
+      frontend: './dist/frontend.js',
+      frontendStyles: ['./dist/local-svelte.css'],
+    })
+  })
+
   it('enables plugin for project', async () => {
     setPluginEnabledMock.mockResolvedValue(undefined)
     await enablePlugin('proj1', 'p1')

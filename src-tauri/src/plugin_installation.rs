@@ -107,6 +107,8 @@ struct OpenForgePackageMetadata {
     #[serde(default)]
     frontend: Option<String>,
     #[serde(default)]
+    frontend_styles: Option<Vec<String>>,
+    #[serde(default)]
     backend: Option<String>,
     #[serde(default, rename = "requires")]
     _requires: Option<Vec<String>>,
@@ -503,6 +505,36 @@ fn validate_package_json_shape(value: &Value) -> Result<(), String> {
         None => {}
     }
 
+    if let Some(frontend_styles) = openforge.get("frontendStyles") {
+        let frontend_styles = frontend_styles
+            .as_array()
+            .ok_or_else(|| "package.json openforge.frontendStyles must be an array".to_string())?;
+        if frontend_styles.is_empty() {
+            return Err(
+                "package.json openforge.frontendStyles must contain at least one stylesheet path"
+                    .to_string(),
+            );
+        }
+        for (index, stylesheet) in frontend_styles.iter().enumerate() {
+            let stylesheet = stylesheet
+                .as_str()
+                .filter(|stylesheet| !stylesheet.trim().is_empty())
+                .ok_or_else(|| {
+                    format!(
+                        "package.json openforge.frontendStyles[{index}] must be a non-empty string"
+                    )
+                })?;
+            if frontend_styles[..index]
+                .iter()
+                .any(|previous| previous.as_str() == Some(stylesheet))
+            {
+                return Err(format!(
+                    "package.json openforge.frontendStyles[{index}] duplicates an earlier stylesheet path"
+                ));
+            }
+        }
+    }
+
     if let Some(requires) = openforge.get("requires") {
         let requires = requires
             .as_array()
@@ -547,20 +579,53 @@ fn validate_package(package: &PackageJsonFile, dir: &Path) -> Result<(), String>
         );
     }
 
-    if let Some(frontend) = package.openforge.frontend.as_deref() {
-        validate_relative_js_entry_path(dir, frontend, "frontend")?;
-    }
-    if let Some(backend) = package.openforge.backend.as_deref() {
-        validate_relative_js_entry_path(dir, backend, "backend")?;
+    if package.openforge.frontend.is_none() && package.openforge.frontend_styles.is_some() {
+        return Err("package.json openforge.frontendStyles requires a frontend entry".to_string());
     }
 
+    if let Some(frontend) = package.openforge.frontend.as_deref() {
+        validate_relative_entry_path(
+            dir,
+            frontend,
+            "frontend",
+            &["js", "mjs", "cjs"],
+            "built JavaScript artifact",
+        )?;
+    }
+    if let Some(backend) = package.openforge.backend.as_deref() {
+        validate_relative_entry_path(
+            dir,
+            backend,
+            "backend",
+            &["js", "mjs", "cjs"],
+            "built JavaScript artifact",
+        )?;
+    }
+    for (index, stylesheet) in package
+        .openforge
+        .frontend_styles
+        .as_deref()
+        .unwrap_or_default()
+        .iter()
+        .enumerate()
+    {
+        validate_relative_entry_path(
+            dir,
+            stylesheet,
+            &format!("frontendStyles[{index}]"),
+            &["css"],
+            "built CSS artifact",
+        )?;
+    }
     Ok(())
 }
 
-fn validate_relative_js_entry_path(
+fn validate_relative_entry_path(
     dir: &Path,
     entry: &str,
     field_name: &str,
+    allowed_extensions: &[&str],
+    artifact_description: &str,
 ) -> Result<(), String> {
     let entry_path = Path::new(entry);
     if entry_path.is_absolute()
@@ -584,9 +649,14 @@ fn validate_relative_js_entry_path(
     let extension = candidate
         .extension()
         .and_then(|extension| extension.to_str());
-    if !matches!(extension, Some("js" | "mjs" | "cjs")) {
+    if !extension.is_some_and(|extension| allowed_extensions.contains(&extension)) {
+        let extension_label = allowed_extensions
+            .iter()
+            .map(|extension| format!(".{extension}"))
+            .collect::<Vec<_>>()
+            .join(", ");
         return Err(format!(
-            "package.json openforge.{field_name} must point to a built JavaScript artifact (.js, .mjs, or .cjs)"
+            "package.json openforge.{field_name} must point to a {artifact_description} ({extension_label})"
         ));
     }
 
@@ -645,13 +715,10 @@ fn package_metadata_json(value: &Value) -> Result<String, String> {
     let object = value
         .as_object()
         .ok_or_else(|| "OpenForge plugin package.json must be an object".to_string())?;
-    let mut metadata = Map::new();
-    for key in ["name", "version", "peerDependencies", "openforge"] {
-        if let Some(value) = object.get(key) {
-            metadata.insert(key.to_string(), value.clone());
-        }
-    }
-    serde_json::to_string(&Value::Object(metadata))
+    let metadata = object.get("openforge").ok_or_else(|| {
+        "OpenForge plugin package.json must include openforge metadata".to_string()
+    })?;
+    serde_json::to_string(metadata)
         .map_err(|error| format!("failed to serialize OpenForge package metadata: {error}"))
 }
 
@@ -1151,15 +1218,20 @@ mod tests {
     }
 
     #[test]
-    fn install_local_package_source_references_source_path_directly() {
+    fn install_local_svelte_package_preserves_declared_frontend_styles() {
         let source = tempdir().expect("source tempdir should create");
         let managed = tempdir().expect("managed tempdir should create");
         fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
         fs::write(source.path().join("dist/frontend.js"), "export default {};")
             .expect("frontend should write");
+        fs::write(
+            source.path().join("dist/plugin-local.css"),
+            ".plugin-view { color: red; }",
+        )
+        .expect("frontend stylesheet should write");
         write_package_json(
             source.path(),
-            r#"{"id":"acme.local","apiVersion":1,"displayName":"Local Plugin","description":"A local plugin","frontend":"dist/frontend.js","requires":["views"]}"#,
+            r#"{"id":"acme.local","apiVersion":1,"displayName":"Local Plugin","description":"A local plugin","frontend":"dist/frontend.js","frontendStyles":["dist/plugin-local.css"],"requires":["views"]}"#,
         );
 
         let row = install_plugin_package_from_source_spec(
@@ -1177,9 +1249,33 @@ mod tests {
             source.path().canonicalize().unwrap().to_string_lossy()
         );
         assert!(!managed_plugin_dir(managed.path(), "acme.local").exists());
-        assert!(row
-            .package_metadata
-            .contains("\"displayName\":\"Local Plugin\""));
+        let metadata: Value = serde_json::from_str(&row.package_metadata)
+            .expect("stored package metadata should parse");
+        assert_eq!(metadata["displayName"], "Local Plugin");
+        assert_eq!(metadata["frontendStyles"][0], "dist/plugin-local.css");
+        assert!(metadata.get("openforge").is_none());
+    }
+
+    #[test]
+    fn install_package_source_rejects_missing_declared_frontend_stylesheet() {
+        let source = tempdir().expect("source tempdir should create");
+        let managed = tempdir().expect("managed tempdir should create");
+        fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
+        fs::write(source.path().join("dist/frontend.js"), "export default {};")
+            .expect("frontend should write");
+        write_package_json(
+            source.path(),
+            r#"{"id":"acme.missing-style","apiVersion":1,"displayName":"Missing Style","description":"Needs CSS build","frontend":"dist/frontend.js","frontendStyles":["dist/missing.css"]}"#,
+        );
+
+        let error = install_plugin_package_from_source_spec(
+            &source.path().to_string_lossy(),
+            managed.path(),
+        )
+        .expect_err("install should fail");
+
+        assert!(error.contains("frontendStyles[0] entry is missing"));
+        assert!(error.contains("run the package build first"));
     }
 
     #[test]

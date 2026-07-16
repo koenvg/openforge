@@ -1,6 +1,19 @@
 # @openforge-app/plugin-sdk
 
-Public SDK for building OpenForge plugins.
+Public SDK for building OpenForge plugins. See [`docs/plugin-authoring.md`](../../docs/plugin-authoring.md) for the complete package, runtime, Svelte-sharing, and CSS-loading contract.
+
+Styled frontend plugins must declare Vite/Svelte's emitted CSS artifacts in `package.json#openforge.frontendStyles`:
+
+```json
+{
+  "openforge": {
+    "frontend": "./dist/frontend.js",
+    "frontendStyles": ["./dist/plugin.css"]
+  }
+}
+```
+
+The host validates, attaches, reloads, and removes these package-relative stylesheets with the frontend plugin lifecycle.
 
 ## License
 

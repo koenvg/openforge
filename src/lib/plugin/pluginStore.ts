@@ -23,8 +23,11 @@ export const error = writable<string | null>(null)
 export function parsePackageMetadata(raw: string | null | undefined): OpenForgePackageMetadata | null {
   if (!raw) return null
   try {
-    const parsed = JSON.parse(raw)
-    return isOpenForgePackageMetadata(parsed) ? parsed : null
+    const parsed: unknown = JSON.parse(raw)
+    const metadata = typeof parsed === 'object' && parsed !== null && 'openforge' in parsed
+      ? (parsed as { openforge: unknown }).openforge
+      : parsed
+    return isOpenForgePackageMetadata(metadata) ? metadata : null
   } catch {
     return null
   }

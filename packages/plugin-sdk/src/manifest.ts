@@ -37,6 +37,31 @@ function validateOptionalString(value: unknown, path: string): ValidationError[]
   return []
 }
 
+function validateFrontendStyles(value: unknown): ValidationError[] {
+  if (value === undefined) return []
+  if (!Array.isArray(value)) {
+    return [{ path: 'frontendStyles', message: 'Must be an array' }]
+  }
+
+  const errors: ValidationError[] = []
+  if (value.length === 0) {
+    errors.push({ path: 'frontendStyles', message: 'Must contain at least one stylesheet path' })
+  }
+  const seen = new Set<string>()
+  value.forEach((item, index) => {
+    if (!isNonEmptyString(item)) {
+      errors.push({ path: `frontendStyles[${index}]`, message: 'Must be a non-empty string' })
+    } else if (!item.endsWith('.css')) {
+      errors.push({ path: `frontendStyles[${index}]`, message: 'Must point to a built CSS artifact' })
+    } else if (seen.has(item)) {
+      errors.push({ path: `frontendStyles[${index}]`, message: 'Duplicate stylesheet path' })
+    } else {
+      seen.add(item)
+    }
+  })
+  return errors
+}
+
 export function isSupportedOpenForgeApiVersion(apiVersion: unknown): apiVersion is (typeof SUPPORTED_OPENFORGE_API_VERSIONS)[number] {
   return typeof apiVersion === 'number'
     && Number.isInteger(apiVersion)
@@ -94,6 +119,10 @@ export function validateOpenForgePackageMetadata(data: unknown): ValidationError
   errors.push(...validateRequiredString(data.description, 'description'))
   errors.push(...validateOptionalString(data.icon, 'icon'))
   errors.push(...validateOptionalString(data.frontend, 'frontend'))
+  errors.push(...validateFrontendStyles(data.frontendStyles))
+  if (data.frontendStyles !== undefined && !isNonEmptyString(data.frontend)) {
+    errors.push({ path: 'frontendStyles', message: 'Requires a frontend entry' })
+  }
   errors.push(...validateOptionalString(data.backend, 'backend'))
   errors.push(...validateRequires(data.requires))
 

@@ -71,6 +71,7 @@ export interface OpenForgePackageMetadata {
   description: string
   icon?: string
   frontend?: string
+  frontendStyles?: string[]
   backend?: string
   requires?: OpenForgePluginCapability[]
 }

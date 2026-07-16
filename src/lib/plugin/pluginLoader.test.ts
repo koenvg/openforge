@@ -57,6 +57,53 @@ describe('pluginLoader', () => {
     expect(loader).toHaveBeenCalledWith('plugin://plugin.default/dist/frontend.js')
   })
 
+  it('attaches and removes declared Svelte component styles for an installed local plugin', async () => {
+    seedPlugin('plugin.local-svelte')
+    const module = defineFrontendPlugin({ activate: vi.fn((_api, _context) => undefined) })
+    _setModuleLoader(async () => ({ default: module }))
+
+    const loaded = await loadPluginFrontend(
+      'plugin.local-svelte',
+      'plugin://plugin.local-svelte/dist/frontend.js',
+      ['plugin://plugin.local-svelte/dist/plugin-local-svelte.css'],
+    )
+
+    expect(loaded?.module).toBe(module)
+    const stylesheet = document.head.querySelector<HTMLLinkElement>('link[data-openforge-plugin-stylesheet="plugin.local-svelte"]')
+    expect(stylesheet).not.toBeNull()
+    expect(stylesheet?.rel).toBe('stylesheet')
+    expect(stylesheet?.href).toBe('plugin://plugin.local-svelte/dist/plugin-local-svelte.css')
+
+    clearLoadedPlugin('plugin.local-svelte')
+
+    expect(document.head.querySelector('link[data-openforge-plugin-stylesheet="plugin.local-svelte"]')).toBeNull()
+  })
+
+  it('cancels a pending frontend load when the plugin is disabled', async () => {
+    seedPlugin('plugin.pending')
+    const module = defineFrontendPlugin({ activate: vi.fn((_api, _context) => undefined) })
+    let resolveModule: ((module: unknown) => void) | null = null
+    _setModuleLoader(() => new Promise((resolve) => {
+      resolveModule = resolve
+    }))
+
+    const load = loadPluginFrontend(
+      'plugin.pending',
+      'plugin://plugin.pending/dist/frontend.js',
+      ['plugin://plugin.pending/dist/frontend.css'],
+    )
+    expect(document.head.querySelector('link[data-openforge-plugin-stylesheet="plugin.pending"]')).not.toBeNull()
+
+    await deactivatePlugin('plugin.pending')
+
+    expect(document.head.querySelector('link[data-openforge-plugin-stylesheet="plugin.pending"]')).toBeNull()
+    const finishLoad = resolveModule as ((module: unknown) => void) | null
+    if (!finishLoad) throw new Error('Expected the module load to be pending')
+    finishLoad({ default: module })
+    await expect(load).resolves.toBeNull()
+    expect(isPluginLoaded('plugin.pending')).toBe(false)
+  })
+
   it('loads legacy activate(context) ESM but does not activate it through compatibility paths', async () => {
     seedPlugin('plugin.legacy')
     const module = {
@@ -96,6 +143,21 @@ describe('pluginLoader', () => {
       state: 'error',
       error: 'Unexpected token export',
     })
+  })
+
+  it('removes attached styles when the frontend module fails to load', async () => {
+    seedPlugin('plugin.style-load-error')
+    _setModuleLoader(async () => {
+      throw new Error('frontend failed')
+    })
+
+    await loadPluginFrontend(
+      'plugin.style-load-error',
+      'plugin://plugin.style-load-error/dist/frontend.js',
+      ['plugin://plugin.style-load-error/dist/frontend.css'],
+    )
+
+    expect(document.head.querySelector('link[data-openforge-plugin-stylesheet="plugin.style-load-error"]')).toBeNull()
   })
 
   it('refuses direct activation of defineFrontendPlugin modules because the runtime registry owns them', async () => {
