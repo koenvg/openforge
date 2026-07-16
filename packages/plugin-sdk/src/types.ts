@@ -265,6 +265,29 @@ export interface FrontendViewRegistry {
   register(registration: PluginViewRegistration): Disposable
 }
 
+export type InjectionPointLocation = 'createTaskPrompt' | 'agentSession' | 'backlogPrompt'
+
+export interface PluginInjectionPointProps extends Record<string, unknown> {
+  api: FrontendOpenForgeAPI
+  context: OpenForgeContextSnapshot
+  location: InjectionPointLocation
+  projectId: string | null
+  taskId: string | null
+  onInsert: (text: string) => void
+}
+
+export interface PluginInjectionPointRegistration {
+  id: string
+  location: InjectionPointLocation
+  component:
+    | PluginComponentLoader<PluginInjectionPointProps>
+    | PluginComponent<PluginInjectionPointProps>
+}
+
+export interface FrontendInjectionPointRegistry {
+  register(registration: PluginInjectionPointRegistration): Disposable
+}
+
 export interface FrontendTaskUIRegistry {
   registerTab(registration: PluginTaskPaneTabRegistration): Disposable
   registerSection(registration: PluginTaskUISectionRegistration): Disposable
@@ -446,6 +469,7 @@ export interface FrontendOpenForgeAPI extends OpenForgeCommonAPI {
   taskPane: FrontendTaskPaneRegistry
   settings: FrontendSettingsRegistry
   backend: FrontendBackendBridge
+  injectionPoints: FrontendInjectionPointRegistry
 }
 
 export interface BackendOpenForgeAPI extends OpenForgeCommonAPI {
