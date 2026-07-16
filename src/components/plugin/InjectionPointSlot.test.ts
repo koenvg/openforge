@@ -5,7 +5,7 @@ import { enabledPluginIds, installedPlugins } from '../../lib/plugin/pluginStore
 import { clearComponentRegistry, registerRenderableContributionComponent } from '../../lib/plugin/componentRegistry'
 
 const { listInjectionPointsAcrossPluginsMock, activatePluginMock } = vi.hoisted(() => ({
-  listInjectionPointsAcrossPluginsMock: vi.fn(() => []),
+  listInjectionPointsAcrossPluginsMock: vi.fn((): Array<{ id: string; qualifiedId: string; pluginId: string; projectId: string | null; location: string }> => []),
   activatePluginMock: vi.fn(async () => true),
 }))
 
