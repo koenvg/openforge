@@ -269,6 +269,7 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
     },
     taskPane: { registerTab: () => ({ dispose: () => undefined }) },
     settings: { registerSection: () => ({ dispose: () => undefined }) },
+    injectionPoints: { register: () => ({ dispose: () => undefined }) },
     backend: {
       state: 'missing',
       whenReady: unavailable('backend.whenReady'),

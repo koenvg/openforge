@@ -4,6 +4,7 @@ import type {
   FrontendOpenForgeAPI,
   FrontendPlugin,
   FrontendPluginContext,
+  PluginInjectionPointRegistration,
   PluginSettingsSectionRegistration,
   PluginTaskPaneTabRegistration,
   PluginTaskUISectionRegistration,
@@ -27,6 +28,7 @@ import type {
   FileContent,
   FileEntry,
   ImplementationRun,
+  InjectionPointLocation,
   JsonSchema,
   OpenForgeContextSnapshot,
   OpenForgeNavigationRequest,
@@ -44,7 +46,7 @@ import type {
 } from '@openforge-app/plugin-sdk'
 
 type MaybePromise<T> = T | Promise<T>
-type RuntimeKind = 'commands' | 'events' | 'views' | 'taskPane' | 'taskUI' | 'settings' | 'background' | 'backend'
+type RuntimeKind = 'commands' | 'events' | 'views' | 'taskPane' | 'taskUI' | 'settings' | 'background' | 'backend' | 'injectionPoints'
 type RuntimeScope = 'global' | 'project' | 'task'
 type RuntimeHandler = (payload?: unknown) => MaybePromise<unknown>
 type RuntimeEventHandler = (payload: unknown) => void
@@ -123,6 +125,10 @@ export type RuntimeViewContribution = RuntimeContributionBase & PluginViewRegist
 export type RuntimeTaskPaneTabContribution = RuntimeContributionBase & PluginTaskPaneTabRegistration
 export type RuntimeTaskUISectionContribution = RuntimeContributionBase & PluginTaskUISectionRegistration
 export type RuntimeSettingsSectionContribution = RuntimeContributionBase & PluginSettingsSectionRegistration
+export type RuntimeInjectionPointContribution = RuntimeContributionBase & {
+  location: InjectionPointLocation
+  component: PluginInjectionPointRegistration['component']
+}
 
 export type RuntimeBackgroundServiceContribution = RuntimeContributionBase & BackgroundServiceRegistration & {
   started: boolean
@@ -139,6 +145,7 @@ export type RuntimeContributionSnapshot = {
   taskPaneTabs: RuntimeTaskPaneTabContribution[]
   taskUISections: RuntimeTaskUISectionContribution[]
   settingsSections: RuntimeSettingsSectionContribution[]
+  injectionPoints: RuntimeInjectionPointContribution[]
   commands: RuntimeCommandContribution[]
   eventListeners: RuntimeEventListenerContribution[]
   backendMethods: RuntimeBackendMethodContribution[]
@@ -351,6 +358,7 @@ class RuntimeContributionRegistry {
   private readonly taskPaneTabs = new Map<string, RuntimeTaskPaneTabContribution>()
   private readonly taskUISections = new Map<string, RuntimeTaskUISectionContribution>()
   private readonly settingsSections = new Map<string, RuntimeSettingsSectionContribution>()
+  private readonly injectionPointContributions = new Map<string, RuntimeInjectionPointContribution>()
   private readonly eventListeners = new Map<string, RuntimeEventListenerContribution>()
   private readonly backendMethods = new Map<string, RuntimeBackendMethodContribution>()
   private readonly backgroundServices = new Map<string, RuntimeBackgroundServiceContribution>()
@@ -399,6 +407,7 @@ class RuntimeContributionRegistry {
       taskPaneTabs: Array.from(this.taskPaneTabs.values()),
       taskUISections: Array.from(this.taskUISections.values()),
       settingsSections: Array.from(this.settingsSections.values()),
+      injectionPoints: Array.from(this.injectionPointContributions.values()),
       commands: Array.from(this.commands.values()),
       eventListeners: Array.from(this.eventListeners.values()),
       backendMethods: Array.from(this.backendMethods.values()),
@@ -426,6 +435,9 @@ class RuntimeContributionRegistry {
       },
       settings: {
         registerSection: (registration) => this.registerSettingsSection(registration),
+      },
+      injectionPoints: {
+        register: (registration) => this.registerInjectionPoint(registration),
       },
       backend: {
         get state() {
@@ -464,6 +476,10 @@ class RuntimeContributionRegistry {
     }
 
     return this.backendApi
+  }
+
+  listInjectionPoints(location: InjectionPointLocation): RuntimeInjectionPointContribution[] {
+    return Array.from(this.injectionPointContributions.values()).filter((c) => c.location === location)
   }
 
   getContextSnapshot(): OpenForgeContextSnapshot {
@@ -607,7 +623,7 @@ class RuntimeContributionRegistry {
         get: async (key, projectId = this.projectId ?? '') => this.host.getProjectConfig ? this.host.getProjectConfig(projectId, key) as never : unavailableCapability('projectConfig.get'),
         set: async (key, value, projectId = this.projectId ?? '') => this.host.setProjectConfig ? this.host.setProjectConfig(projectId, key, value) : unavailableCapability('projectConfig.set'),
       },
-    } satisfies Omit<FrontendOpenForgeAPI, 'views' | 'taskUI' | 'taskPane' | 'settings' | 'backend'>
+    } satisfies Omit<FrontendOpenForgeAPI, 'views' | 'taskUI' | 'taskPane' | 'settings' | 'injectionPoints' | 'backend'>
   }
 
   private qualifiedId(kind: RuntimeKind, localId: string): string {
@@ -778,6 +794,27 @@ class RuntimeContributionRegistry {
     return this.trackActivationDisposable(createDisposable(() => {
       this.settingsSections.delete(qualifiedId)
       this.release('settings', qualifiedId)
+    }))
+  }
+
+  private registerInjectionPoint(registration: PluginInjectionPointRegistration): Disposable {
+    const qualifiedId = this.qualifiedId('injectionPoints', registration?.id)
+    assertComponent('injectionPoints', registration?.component)
+    this.claim('injectionPoints', qualifiedId)
+
+    const contribution: RuntimeInjectionPointContribution = {
+      id: registration.id.trim(),
+      qualifiedId,
+      pluginId: this.pluginId,
+      projectId: this.projectId,
+      location: registration.location,
+      component: registration.component,
+    }
+    this.injectionPointContributions.set(qualifiedId, contribution)
+
+    return this.trackActivationDisposable(createDisposable(() => {
+      this.injectionPointContributions.delete(qualifiedId)
+      this.release('injectionPoints', qualifiedId)
     }))
   }
 
