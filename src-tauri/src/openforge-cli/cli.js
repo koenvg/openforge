@@ -309,6 +309,13 @@ async function updateTask(flags) {
   printJson(await requestJson('/update_task', { method: 'POST', body: JSON.stringify(payload) }));
 }
 
+async function startTask(flags) {
+  printJson(await requestJson('/start_task', {
+    method: 'POST',
+    body: JSON.stringify({ task_id: requireFlag(flags, 'taskId') }),
+  }));
+}
+
 async function deleteTask(flags) {
   printJson(await requestJson('/delete_task', {
     method: 'POST',
@@ -461,6 +468,12 @@ const COMMAND_SPECS = [
     flags: ['taskId', 'summary', 'initialPrompt'],
     usage: 'openforge task update --task-id <id> (--summary <text> | --initial-prompt <text>)',
     handler: updateTask,
+  },
+  {
+    path: ['task', 'start'],
+    flags: ['taskId'],
+    usage: 'openforge task start --task-id <id>',
+    handler: startTask,
   },
   {
     path: ['task', 'delete'],
@@ -652,6 +665,10 @@ Task prompt semantics:
   task update --initial-prompt updates initial_prompt and prompt together only while the task has never started.
   Started or completed tasks reject prompt updates; create a replacement task instead.
 
+Task starting:
+  task start uses persisted task and project configuration to start the native configured implementation flow.
+  Existing dependency, concurrent-start, active-session, workspace, provider, and PTY safeguards remain enforced.
+
 Task listing:
   task list prints compact rows by default for broad scans: id, prompt_preview, status, labels, depends_on, updated_at.
   Pass --full to print complete TaskRow objects.
@@ -671,6 +688,7 @@ Examples:
   openforge project labels list --project-id P-1
   openforge debug process-memory
   openforge task list --project-id P-1
+  openforge task start --task-id T-123
   openforge task delete --task-id T-123
   openforge task create --initial-prompt "Correct task prompt" --project-id P-1 --depends-on T-122 --label cleanup
   openforge task dependencies set --task-id T-999 --depends-on T-456,T-122
@@ -683,12 +701,13 @@ Environment:
 
 function printCommandHelp(spec) {
   const planJsonHelp = spec.path.join(' ') === 'task plan apply' ? `\nPlan JSON shape:\n  {\n    "projectId": "P-1",\n    "tasks": [\n      { "key": "api", "prompt": "Build API", "labels": ["backend"] },\n      { "key": "ui", "prompt": "Build UI", "dependsOn": ["api", "KVG-1957"] }\n    ]\n  }\n\nPlan JSON fields:\n  projectId is optional when the OpenForge bridge can infer the project; include it when known.\n  tasks[].key is a stable local name used by other tasks in dependsOn.\n  tasks[].prompt becomes the new task prompt; initialPrompt is also accepted.\n  tasks[].labels is optional.\n  dependsOn is where current or prerequisite task IDs go; values may be local keys or existing task IDs.\n` : '';
+  const startHelp = spec.path.join(' ') === 'task start' ? `\nTask starting:\n  task start uses persisted task and project configuration and starts the native configured implementation flow.\n  Existing dependency and active-session safeguards remain enforced alongside concurrent-start, workspace, provider, and PTY checks.\n` : '';
 
   console.log(`OpenForge CLI
 
 Usage:
   ${spec.usage}
-${planJsonHelp}
+${planJsonHelp}${startHelp}
 Task prompt semantics:
   task create sets the task's initial_prompt from --initial-prompt.
   task update --summary updates only the task summary/Handoff Notes.

@@ -363,21 +363,12 @@ fn persist_active_task_workspace(
     })
 }
 
-pub(super) async fn handle_app_start_implementation_command(
+pub(crate) async fn start_implementation(
     state: &AppState,
-    request: &AppInvokeRequest,
-) -> Result<Option<serde_json::Value>, (StatusCode, String)> {
-    if request.command != "start_implementation" {
-        return Ok(None);
-    }
-
-    let task_id = payload_string(&request.payload, "taskId")?;
-    let repo_path = payload_string(&request.payload, "repoPath")?;
-    // Optional: the frontend divergence gate supplies how to resolve a diverged
-    // existing branch. Absent (or null) means the defensive `Auto` behavior.
-    let divergence_resolution: crate::git_worktree::DivergenceResolution =
-        payload_field(&request.payload, "divergenceResolution")
-            .unwrap_or(crate::git_worktree::DivergenceResolution::Auto);
+    task_id: &str,
+    repo_path: &str,
+    divergence_resolution: crate::git_worktree::DivergenceResolution,
+) -> Result<serde_json::Value, (StatusCode, String)> {
     let pty_manager = state.pty_manager.as_ref().ok_or_else(|| {
         (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -386,7 +377,7 @@ pub(super) async fn handle_app_start_implementation_command(
     })?;
     let _start_claim = state
         .task_claims
-        .try_claim(&task_id, TaskOperation::StartImplementation)
+        .try_claim(task_id, TaskOperation::StartImplementation)
         .ok_or_else(|| {
             (
                 StatusCode::CONFLICT,
@@ -394,12 +385,12 @@ pub(super) async fn handle_app_start_implementation_command(
             )
         })?;
 
-    let start_context = load_start_implementation_context(state, &task_id)?;
+    let start_context = load_start_implementation_context(state, task_id)?;
     let workspace = prepare_start_workspace(
         state,
         &start_context.project_id,
-        &task_id,
-        &repo_path,
+        task_id,
+        repo_path,
         start_context.task.worktree_source.as_deref(),
         start_context.task.worktree_branch.as_deref(),
         divergence_resolution,
@@ -425,9 +416,9 @@ pub(super) async fn handle_app_start_implementation_command(
         })?
         .unwrap_or_else(|| std::env::temp_dir().join("openforge"));
     let image_attachment_dir =
-        crate::agent_lifecycle::task_prompt_image_attachment_dir(&image_attachment_root, &task_id);
+        crate::agent_lifecycle::task_prompt_image_attachment_dir(&image_attachment_root, task_id);
     let prompt = crate::agent_lifecycle::materialize_task_prompt_images(
-        &task_id,
+        task_id,
         &prompt,
         &image_attachment_dir,
     )
@@ -441,7 +432,7 @@ pub(super) async fn handle_app_start_implementation_command(
         crate::providers::ProviderStartContext::new(state.app.clone(), state.app_event_tx.clone());
     let provider_result = match provider
         .start(
-            &task_id,
+            task_id,
             &workspace.working_dir,
             &prompt,
             provider_options.agent,
@@ -461,8 +452,8 @@ pub(super) async fn handle_app_start_implementation_command(
                 start_context.task.worktree_source.as_deref() == Some("existingBranch");
             rollback_failed_start_workspace(
                 state,
-                &task_id,
-                &repo_path,
+                task_id,
+                repo_path,
                 &workspace,
                 uses_existing_branch,
             )
@@ -477,16 +468,16 @@ pub(super) async fn handle_app_start_implementation_command(
 
     persist_active_task_workspace(
         state,
-        &task_id,
+        task_id,
         &start_context.project_id,
-        &repo_path,
+        repo_path,
         &workspace,
         &start_context.provider_name,
     )?;
 
     let agent_session_id = crate::agent_lifecycle::create_and_record_session(
         &state.db,
-        &task_id,
+        task_id,
         &provider_result,
         &start_context.provider_name,
     )
@@ -494,18 +485,18 @@ pub(super) async fn handle_app_start_implementation_command(
 
     if start_context.task.status == "backlog" {
         let db = crate::db::acquire_db(&state.db);
-        db.update_task_status(&task_id, "doing").map_err(|e| {
+        db.update_task_status(task_id, "doing").map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Failed to update task status: {e}"),
             )
         })?;
         drop(db);
-        publish_task_changed(state, &task_id);
+        publish_task_changed(state, task_id);
     }
 
-    Ok(Some(crate::agent_lifecycle::build_start_response(
-        &task_id,
+    Ok(crate::agent_lifecycle::build_start_response(
+        task_id,
         &agent_session_id,
         workspace.working_dir.to_str().ok_or_else(|| {
             (
@@ -514,7 +505,28 @@ pub(super) async fn handle_app_start_implementation_command(
             )
         })?,
         provider_result.port,
-    )))
+    ))
+}
+
+pub(super) async fn handle_app_start_implementation_command(
+    state: &AppState,
+    request: &AppInvokeRequest,
+) -> Result<Option<serde_json::Value>, (StatusCode, String)> {
+    if request.command != "start_implementation" {
+        return Ok(None);
+    }
+
+    let task_id = payload_string(&request.payload, "taskId")?;
+    let repo_path = payload_string(&request.payload, "repoPath")?;
+    // Optional: the frontend divergence gate supplies how to resolve a diverged
+    // existing branch. Absent (or null) means the defensive `Auto` behavior.
+    let divergence_resolution: crate::git_worktree::DivergenceResolution =
+        payload_field(&request.payload, "divergenceResolution")
+            .unwrap_or(crate::git_worktree::DivergenceResolution::Auto);
+
+    Ok(Some(
+        start_implementation(state, &task_id, &repo_path, divergence_resolution).await?,
+    ))
 }
 
 #[cfg(test)]
