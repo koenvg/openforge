@@ -16,3 +16,6 @@ __pycache__/
 
 # Local screenshot scratch output (scripts/capture-screenshots.mjs)
 /screenshots/
+
+# a5c agent tooling cache/run artifacts (local only)
+.a5c/
