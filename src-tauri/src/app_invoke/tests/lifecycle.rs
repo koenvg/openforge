@@ -342,6 +342,9 @@ async fn start_implementation_starts_configured_pi_provider_through_app_invoke_b
     .await;
 
     assert_eq!(response["task_id"], task_id);
+    assert!(response["session_id"]
+        .as_str()
+        .is_some_and(|session_id| !session_id.is_empty()));
     assert_eq!(
         response["workspace_path"],
         repo_dir.to_string_lossy().as_ref()

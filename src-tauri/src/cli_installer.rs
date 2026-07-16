@@ -370,6 +370,7 @@ mod tests {
         let skill_content = std::fs::read_to_string(&skill_md).unwrap();
         assert!(skill_content.contains("openforge task create"));
         assert!(skill_content.contains("openforge task update"));
+        assert!(skill_content.contains("openforge task start --task-id"));
         assert!(skill_content.contains("openforge task get"));
         assert!(skill_content.contains("openforge task list"));
         assert!(skill_content.contains("openforge project labels list"));
@@ -481,6 +482,7 @@ mod tests {
             assert!(content.contains("OPENFORGE_HTTP_PORT"));
             assert!(content.contains("openforge task create"));
             assert!(content.contains("openforge task update"));
+            assert!(content.contains("openforge task start --task-id"));
             assert!(content.contains("openforge task delete"));
             assert!(content.contains("openforge task get"));
             assert!(content.contains("openforge task list"));
