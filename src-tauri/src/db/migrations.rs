@@ -1343,6 +1343,34 @@ CREATE TABLE IF NOT EXISTS roadmap_repo_config (
         }
         Ok(())
     }),
+    // Add a nullable `source_ticket_url` column so a task can link back to the
+    // source ticket it originated from (e.g. a GitHub issue or Jira browse URL).
+    // Additive and idempotent so it heals databases regardless of prior state.
+    M::up_with_hook("", |tx| {
+        let tasks_table_exists: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='tasks'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if !tasks_table_exists {
+            return Ok(());
+        }
+
+        let has_column: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'source_ticket_url'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+        if !has_column {
+            tx.execute("ALTER TABLE tasks ADD COLUMN source_ticket_url TEXT", [])
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -1382,6 +1410,7 @@ pub(super) fn ensure_tasks_columns(conn: &Connection) -> Result<()> {
         ("worktree_branch", false),
         ("title", false),
         ("title_source", false),
+        ("source_ticket_url", false),
     ] {
         let exists: bool = conn.query_row(
             &format!(

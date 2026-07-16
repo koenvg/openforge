@@ -14,6 +14,8 @@ export interface CreateTaskOptions {
   title?: string | null
   /** When false, the task's start prompt omits the handoff-notes block. Defaults to true. */
   handoffNotesEnabled?: boolean
+  /** Optional link to the source ticket (e.g. GitHub issue / Jira URL); null/empty stores nothing. */
+  sourceTicketUrl?: string | null
 }
 
 export async function createTask(initialPrompt: string, status: BoardStatus, projectId: string | null, permissionMode: string | null, options: CreateTaskOptions = {}): Promise<Task> {
@@ -24,8 +26,9 @@ export async function createTask(initialPrompt: string, status: BoardStatus, pro
     worktreeBranch = null,
     title = null,
     handoffNotesEnabled = true,
+    sourceTicketUrl = null,
   } = options
-  const task = await invoke<RawTask>("create_task", { initialPrompt, status, projectId, permissionMode, dependsOn, labelNames, worktreeSource, worktreeBranch, title, handoffNotesEnabled });
+  const task = await invoke<RawTask>("create_task", { initialPrompt, status, projectId, permissionMode, dependsOn, labelNames, worktreeSource, worktreeBranch, title, handoffNotesEnabled, sourceTicketUrl });
   return normalizeTask(task)
 }
 

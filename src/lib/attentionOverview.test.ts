@@ -23,6 +23,7 @@ function task(id: string, projectId: string, overrides: Partial<Task> = {}): Tas
     worktree_source: null,
     worktree_branch: null,
     handoff_notes_enabled: true,
+    source_ticket_url: null,
     depends_on: [],
     project_id: projectId,
     created_at: 0,

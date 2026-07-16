@@ -534,6 +534,7 @@ fn refresh_task_display_title_once_skips_manual_title() {
             worktree_branch: None,
             title: Some("Manual title"),
             handoff_notes_enabled: true,
+            source_ticket_url: None,
         })
         .expect("create task");
 
