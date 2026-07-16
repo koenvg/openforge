@@ -298,6 +298,20 @@ export function getPluginRenderProps(pluginId: string, options: { projectId: str
   }
 }
 
+export function listInjectionPointsAcrossPlugins(
+  location: import('@openforge-app/plugin-sdk').InjectionPointLocation,
+  enabledIds: Iterable<string>,
+): import('./runtimeContributionRegistry').RuntimeInjectionPointContribution[] {
+  const result: import('./runtimeContributionRegistry').RuntimeInjectionPointContribution[] = []
+  for (const pluginId of enabledIds) {
+    const registry = activeRuntimeRegistries.get(pluginId)
+    if (registry) {
+      result.push(...registry.listInjectionPoints(location))
+    }
+  }
+  return result
+}
+
 export async function deactivatePluginById(pluginId: string): Promise<void> {
   await deactivateLoadedPluginModule(pluginId)
   bumpPluginFrontendReloadGeneration(pluginId)

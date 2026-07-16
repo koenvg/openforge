@@ -3,6 +3,7 @@ export {
   deactivatePluginById,
   executePluginCommand,
   getPluginRenderProps,
+  listInjectionPointsAcrossPlugins,
 } from './pluginActivationLifecycle'
 export { emitPluginHostEvent } from './pluginHostEvents'
 export {
