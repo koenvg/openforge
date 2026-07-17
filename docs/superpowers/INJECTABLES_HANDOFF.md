@@ -34,19 +34,24 @@ Three sequential plans:
   User smoke-tested; no regressions.
 - **Task-0 prereq: DONE** — `injectionPoints` added as a declarable SDK capability
   (openforge commit `a16a12dd`), SDK rebuilt.
-- **Plan 2: IN PROGRESS.** Task 1 (scaffold) **DONE** — openforge-plugins commit `4f95539`;
-  `plugins/injectables/` installs, tests (1), and builds; SDK link + `requires:
-  ['injectionPoints']` confirmed. **NEXT: Task 2** (port injectable domain + `/injectables`
-  logic, plugin-local).
+- **Plan 2: IN PROGRESS.** Tasks 1–4 **DONE + pushed** on the `openforge-plugins` branch
+  `aviv/openforge/injectable-picker-design` (→ `koenvangeert/openforge-plugins`):
+  - Task 1 scaffold `cd29406`.
+  - Task 2 (plugin-local injectable domain + `/injectables` logic) `3775e78`.
+  - Task 3 (backend: verbatim skill fs + filesystem snippet store; all 7 methods) `4ad32e6`.
+  - Task 4 (Injectables rail view + catalog; snippets via `api.backend.invoke`) `6a5e3f0`.
+  Full plugin suite 101/101, `tsc --noEmit` + build clean. Each task got a fresh implementer +
+  independent reviewer (all ✅ Approved, no Critical/Important findings).
+  **NEXT: Task 5** (port the ~990-line injectable picker dialog — import-remap per the plan's table).
 
 ## Plan 2 — Task Status (authoritative)
 
 - Task 0: **DONE** — env resolved (worktree SDK link) + `injectionPoints` capability added to SDK schema (openforge commit `a16a12dd`).
 - Task 1: **DONE + pushed** — plugins branch `aviv/openforge/injectable-picker-design` @ `cd29406` on `koenvangeert/openforge-plugins` (scaffold, sibling SDK link). Machine B checks it out; no re-run needed.
-- Task 2: **TODO** — port injectable domain types + `/injectables` logic into `src/lib/` (plugin-local; import only generic `CommandInfo` from SDK).
-- Task 3: **TODO** — backend: skill fs methods + filesystem snippet store (`~/.openforge/injectables/snippets.json`).
-- Task 4: **TODO** — port the Injectables rail view (⌘L).
-- Task 5: **TODO** — port the injectable picker dialog (import-remap per the plan's table).
+- Task 2: **DONE + pushed** — `3775e78`. Plugin-local injectable domain (`src/lib/injectableDomain.ts`) + `/injectables` logic (`src/lib/injectables/`), byte-identical port, only `CommandInfo` imported from SDK. 53 tests.
+- Task 3: **DONE + pushed** — `4ad32e6`. Backend: verbatim skill fs backend + `skillDomain` + filesystem snippet store (`src/backend/snippetFileStore.ts`, persists to `~/.openforge/injectables/snippets.json`, env override `OPENFORGE_INJECTABLES_DIR`); `src/lib/protocol.ts` METHOD constants; all 7 methods registered. 40/40. NOTE: the copied `skillDomain.test.ts` Rust-parity test (read `src-tauri/.../command_discovery.rs`) was replaced with a standalone `SKILL_SOURCE_DIRS` literal assertion — that cross-repo coupling can't exist in the standalone plugin (controller decision).
+- Task 4: **DONE + pushed** — `6a5e3f0`. Ported `InjectablesView.svelte` + `src/lib/injectableCatalog.ts`; snippet reads/writes via `api.backend.invoke(METHOD.*)`; view registered id=`injectables`, title=`Injectables`, ⌘L. 101/101, tsc + build clean.
+- Task 5: **TODO — NEXT** — port the ~990-line injectable picker dialog (`src/InjectablePicker.svelte` + `src/lib/useInjectableCatalog.svelte.ts`); apply the Task-5 import-remap table; new `api` prop.
 - Task 6: **TODO** — register injection-point components at the 3 locations.
 - Task 7: **TODO** — full verify + user install + smoke test (incl. modal-stacking check).
 - **Plan 3:** not written yet — author it after Plan 2 is verified.
@@ -86,6 +91,13 @@ Machine setup:
 An OpenForge task on the `openforge` repo runs in an **isolated worktree**. That worktree HAS
 Plan 1's SDK, but it is NOT the sibling that `openforge-plugins`'s committed `link:../../../openforge/...`
 resolves to. So the ONE task drives both repos like this:
+
+> **Resolved on the current dev machine (user `avivhadar`):** the `openforge-plugins` clone is at
+> `/Users/avivhadar/repos/openforge-plugins`. Each OpenForge task gets a NEW worktree path
+> (e.g. `/Users/avivhadar/.openforge/worktrees/openforge/AVIV-<n>`), so the machine-local SDK
+> `link:` in `plugins/injectables/package.json` must be re-pointed at THIS run's worktree every
+> resume (and never committed). The earlier handoff paths under `/Users/aviv.hadar/...` are a
+> different, retired machine.
 1. In the task worktree (openforge): `pnpm install && pnpm --filter @openforge-app/plugin-sdk build`.
    Record its path: `WT=$(git rev-parse --show-toplevel)`.
 2. In the `openforge-plugins` checkout (ASK the user for its absolute path — it is a normal on-disk
