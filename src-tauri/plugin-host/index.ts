@@ -101,6 +101,7 @@ type RuntimePluginState = {
   state: BackendReadyState
   error: Error | null
   activationPromise: Promise<void> | null
+  importGeneration: number
   module: Record<string, unknown> | null
   methods: Map<string, RuntimeBackendMethod>
   commands: Map<string, RuntimeBackendCommand>
@@ -413,6 +414,7 @@ function createInitialPluginState(pluginId: string, storage: PluginStorage): Run
     state: 'missing',
     error: null,
     activationPromise: null,
+    importGeneration: 0,
     module: null,
     methods: new Map(),
     commands: new Map(),
@@ -433,8 +435,10 @@ function extractBackendPlugin(module: Record<string, unknown>): BackendPlugin | 
   return null
 }
 
-async function loadBackendModule(backendPath: string): Promise<Record<string, unknown>> {
-  return await import(pathToFileURL(backendPath).href) as Record<string, unknown>
+async function loadBackendModule(backendPath: string, importGeneration: number): Promise<Record<string, unknown>> {
+  const moduleUrl = pathToFileURL(backendPath)
+  moduleUrl.searchParams.set('openforgeReload', String(importGeneration))
+  return await import(moduleUrl.href) as Record<string, unknown>
 }
 
 export class PluginHostRuntime {
@@ -625,7 +629,8 @@ export class PluginHostRuntime {
 
   private async activatePluginState(state: RuntimePluginState): Promise<void> {
     try {
-      state.module = await loadBackendModule(state.backendPath ?? '')
+      state.importGeneration += 1
+      state.module = await loadBackendModule(state.backendPath ?? '', state.importGeneration)
       const plugin = extractBackendPlugin(state.module)
 
       if (!plugin) {

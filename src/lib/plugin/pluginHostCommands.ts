@@ -17,6 +17,7 @@ import {
   getLatestSession,
   killPty,
   openUrl,
+  pluginBackendDeactivate,
   pluginBackendWhenReady,
   pluginInvoke,
   resizePty,
@@ -175,6 +176,14 @@ async function startTaskImplementationFromPluginRequest(request: StartTaskImplem
 
 export function clearPluginRuntimeHostState(pluginId: string): void {
   pluginBackendReadyStates.delete(pluginId)
+}
+
+export async function deactivatePluginBackend(pluginId: string): Promise<void> {
+  const entry = get(installedPlugins).get(pluginId)
+  if (!entry?.manifest.backend) return
+
+  await pluginBackendDeactivate(pluginId)
+  clearPluginRuntimeHostState(pluginId)
 }
 
 export async function ensurePluginBackendReady(pluginId: string): Promise<void> {

@@ -14,6 +14,7 @@ const {
   uninstallPluginIpcMock,
   getEnabledPluginsMock,
   pluginInvokeMock,
+  pluginBackendDeactivateMock,
   pluginBackendWhenReadyMock,
   getPluginStorageMock,
   setPluginStorageMock,
@@ -38,6 +39,7 @@ const {
   uninstallPluginIpcMock: vi.fn(),
   getEnabledPluginsMock: vi.fn(),
   pluginInvokeMock: vi.fn(),
+  pluginBackendDeactivateMock: vi.fn(),
   pluginBackendWhenReadyMock: vi.fn(),
   getPluginStorageMock: vi.fn(),
   setPluginStorageMock: vi.fn(),
@@ -65,6 +67,7 @@ vi.mock('../ipc', () => ({
   installPluginFromLocal: installPluginFromLocalIpcMock,
   installPluginFromNpm: installPluginFromNpmIpcMock,
   pluginInvoke: pluginInvokeMock,
+  pluginBackendDeactivate: pluginBackendDeactivateMock,
   pluginBackendWhenReady: pluginBackendWhenReadyMock,
   getPluginStorage: getPluginStorageMock,
   setPluginStorage: setPluginStorageMock,
@@ -202,6 +205,8 @@ describe('pluginRegistry', () => {
     getEnabledPluginsMock.mockReset()
     pluginInvokeMock.mockReset()
     pluginInvokeMock.mockResolvedValue(undefined)
+    pluginBackendDeactivateMock.mockReset()
+    pluginBackendDeactivateMock.mockResolvedValue(undefined)
     pluginBackendWhenReadyMock.mockReset()
     pluginBackendWhenReadyMock.mockResolvedValue(undefined)
     getPluginStorageMock.mockReset()
@@ -1111,6 +1116,54 @@ describe('pluginRegistry', () => {
     )
     expect(firstActivate).toHaveBeenCalledOnce()
     expect(secondActivate).toHaveBeenCalledOnce()
+  })
+
+  it('reloadPluginForProject deactivates the backend before refreshing installed artifacts', async () => {
+    const manifest = makeManifest({ id: 'reload-plugin', frontend: null, backend: './dist/backend.js' })
+    enabledPluginIds.set(new Set(['reload-plugin']))
+    installedPlugins.set(new Map([['reload-plugin', {
+      manifest,
+      state: 'active',
+      error: null,
+      sourceKind: 'local',
+      sourceSpec: '/plugins/reload-plugin',
+    }]]))
+    getPluginIpcMock.mockResolvedValue({
+      ...makeNormalized('reload-plugin'),
+      frontendEntry: null,
+      backendEntry: './dist/backend.js',
+      sourceKind: 'local',
+      sourceSpec: '/plugins/reload-plugin',
+    })
+    getEnabledPluginsMock.mockResolvedValue([{
+      ...makeNormalized('reload-plugin'),
+      frontendEntry: null,
+      backendEntry: './dist/backend.js',
+    }])
+
+    await expect(reloadPluginForProject('project-1', 'reload-plugin')).resolves.toBe(true)
+
+    expect(pluginBackendDeactivateMock).toHaveBeenCalledWith('reload-plugin')
+    expect(pluginBackendDeactivateMock.mock.invocationCallOrder[0]).toBeLessThan(getPluginIpcMock.mock.invocationCallOrder[0])
+    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('reload-plugin')
+  })
+
+  it('reloadPluginForProject aborts before refreshing artifacts when backend deactivation fails', async () => {
+    const manifest = makeManifest({ id: 'reload-plugin', backend: './dist/backend.js' })
+    installedPlugins.set(new Map([['reload-plugin', {
+      manifest,
+      state: 'active',
+      error: null,
+      sourceKind: 'local',
+      sourceSpec: '/plugins/reload-plugin',
+    }]]))
+    pluginBackendDeactivateMock.mockRejectedValue(new Error('backend deactivation failed'))
+
+    await expect(reloadPluginForProject('project-1', 'reload-plugin')).rejects.toThrow('backend deactivation failed')
+
+    expect(getPluginIpcMock).not.toHaveBeenCalled()
+    expect(getEnabledPluginsMock).not.toHaveBeenCalled()
+    expect(loadPluginFrontendMock).not.toHaveBeenCalled()
   })
 
   it('reloadPluginForProject refreshes target metadata and preserves other active plugins', async () => {

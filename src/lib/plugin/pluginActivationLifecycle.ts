@@ -10,7 +10,7 @@ import type { RuntimeContributionRegistryInstance } from './runtimeContributionR
 import { createIpcPluginStorage } from './pluginStorage'
 import type { PluginManifest } from './types'
 import { getPackageMetadataForPlugin, setPluginRuntimeError, setPluginRuntimeState } from './pluginInstallState'
-import { clearPluginRuntimeHostState, createPluginRuntimeHost } from './pluginHostCommands'
+import { clearPluginRuntimeHostState, createPluginRuntimeHost, deactivatePluginBackend } from './pluginHostCommands'
 import { clearPluginHostSubscriptions } from './pluginHostEvents'
 import {
   applyRuntimeSnapshotContributions,
@@ -340,6 +340,7 @@ export function getPluginRenderProps(pluginId: string, options: { projectId: str
 }
 
 export async function deactivatePluginById(pluginId: string): Promise<void> {
+  await deactivatePluginBackend(pluginId)
   bumpPluginFrontendReloadGeneration(pluginId)
   await deactivateLoadedPluginModule(pluginId)
   clearPluginRuntimeContributions(pluginId)

@@ -707,6 +707,10 @@ export async function pluginBackendWhenReady(pluginId: string): Promise<void> {
   await invoke('plugin_backend_when_ready', { pluginId })
 }
 
+export async function pluginBackendDeactivate(pluginId: string): Promise<void> {
+  await invoke('plugin_backend_deactivate', { pluginId })
+}
+
 export async function stopPluginSidecar(): Promise<void> {
   return invoke('stop_plugin_sidecar', {})
 }
