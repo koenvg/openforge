@@ -462,7 +462,13 @@
                 data-scroll-owner="task-info-panel"
                 class="h-full min-h-0 overflow-y-auto bg-base-200 border-l border-base-300"
               >
-                <TaskInfoPanel task={task} {workspacePath} onEditPrompt={onEdit ? () => onEdit?.(task.id) : undefined} onOpenDependentTask={onOpenTask} />
+                <TaskInfoPanel
+                  task={task}
+                  {workspacePath}
+                  allowCommentAddressing={true}
+                  onEditPrompt={onEdit ? () => onEdit?.(task.id) : undefined}
+                  onOpenDependentTask={onOpenTask}
+                />
               </div>
             </ResizablePanel>
           {/if}

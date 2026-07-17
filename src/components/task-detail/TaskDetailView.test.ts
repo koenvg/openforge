@@ -221,8 +221,8 @@ vi.mock('../../lib/actions', () => ({
   getEnabledActions: vi.fn((actions: { enabled: boolean }[]) => actions.filter(a => a.enabled)),
 }))
 
-import { activeSessions, completingTasks, taskActiveView, commandHeld, taskRuntimeInfo, tasks } from '../../lib/stores'
-import type { Task, AgentSession, TaskWorkspaceInfo } from '../../lib/types'
+import { activeSessions, completingTasks, taskActiveView, commandHeld, taskRuntimeInfo, tasks, ticketPrs } from '../../lib/stores'
+import type { Task, AgentSession, PrComment, PullRequestInfo, TaskWorkspaceInfo } from '../../lib/types'
 import PluginSlotTestView from '../plugin/PluginSlotTestView.svelte'
 import TerminalTaskPane from './TerminalTaskPane.svelte'
 import { clearComponentRegistry, registerRenderableContributionComponent } from '../../lib/plugin/componentRegistry'
@@ -314,6 +314,7 @@ describe('TaskDetailView', () => {
     completingTasks.set(new Set())
     commandHeld.set(false)
     tasks.set([])
+    ticketPrs.set(new Map())
     taskTabSessions.clear()
     clearTerminalTaskPaneControllers()
     installedPlugins.set(new Map([[
@@ -369,6 +370,67 @@ describe('TaskDetailView', () => {
   it('has TaskInfoPanel child with Initial Prompt section', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     expect(screen.getByText('Initial Prompt')).toBeTruthy()
+  })
+
+  it('marks an unaddressed pull request comment from the Agent tab', async () => {
+    const pullRequest: PullRequestInfo = {
+      id: 42,
+      pr_number: 42,
+      ticket_id: baseTask.id,
+      repo_owner: 'owner',
+      repo_name: 'repo',
+      title: 'Agent feedback',
+      url: 'https://github.com/owner/repo/pull/42',
+      state: 'open',
+      head_sha: 'abc123',
+      ci_status: null,
+      ci_check_runs: null,
+      review_status: null,
+      mergeable: null,
+      mergeable_state: null,
+      merged_at: null,
+      created_at: 1000,
+      updated_at: 2000,
+      draft: false,
+      is_queued: false,
+      unaddressed_comment_count: 1,
+      merge_readiness_status: null,
+      merge_readiness_action: null,
+      merge_readiness_blockers: null,
+      merge_readiness_warnings: null,
+      readiness_source_head_sha: null,
+      merge_group_sha: null,
+      required_checks_policy_known: null,
+      required_reviews_policy_known: null,
+      merge_queue_required: null,
+      merge_queue_state: null,
+      readiness_updated_at: null,
+    }
+    const comment: PrComment = {
+      id: 123,
+      pr_id: pullRequest.id,
+      author: 'reviewer',
+      body: 'Please address this from the Agent tab.',
+      comment_type: 'review',
+      file_path: 'src/App.svelte',
+      line_number: 42,
+      addressed: 0,
+      created_at: 1000,
+    }
+    const { getPrComments, markCommentAddressed } = await import('../../lib/ipc')
+    vi.mocked(getPrComments)
+      .mockResolvedValueOnce([comment])
+      .mockResolvedValueOnce([{ ...comment, addressed: 1 }])
+    ticketPrs.set(new Map([[baseTask.id, [pullRequest]]]))
+
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+
+    await fireEvent.click(await screen.findByRole('button', { name: /mark addressed/i }))
+
+    await waitFor(() => {
+      expect(markCommentAddressed).toHaveBeenCalledWith(comment.id)
+      expect(screen.queryByText(comment.body)).toBeNull()
+    })
   })
 
   it('owns right info pane scrolling at the sidebar boundary', () => {

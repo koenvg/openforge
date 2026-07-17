@@ -137,6 +137,16 @@ describe('registerAppDesktopEventListeners', () => {
     expect(deps.refreshPrCounts).toHaveBeenCalledOnce()
   })
 
+  it('reloads pull request counts and attention after a comment is addressed', async () => {
+    const { deps, handlers } = createHarness()
+
+    await registerAppDesktopEventListeners(deps)
+    await handlers.get('comment-addressed')?.({ payload: undefined })
+
+    expect(deps.loadPullRequests).toHaveBeenCalledOnce()
+    expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
+  })
+
   it('reloads authoritative state when the app event stream reports a delivery gap', async () => {
     const { deps, handlers } = createHarness()
 

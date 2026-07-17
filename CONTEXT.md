@@ -84,6 +84,10 @@ _Avoid_: File tree row, reviewed-files group
 The compiled bundle of inline, general, and PR review comments sent as an **Implementation Input** when the user sends collected feedback to the agent.
 _Avoid_: Send-to-agent message, fix-and-push instruction, commit prompt
 
+**Addressed Pull Request Comment**:
+A pull request comment the user has marked as handled in OpenForge's local review workflow; it remains a GitHub comment and does not imply that its GitHub conversation was resolved.
+_Avoid_: Resolved GitHub comment, dismissed comment
+
 **Project Handoff Notes Template**:
 A project-owned format that defines what **Handoff Notes** must contain for that project.
 _Avoid_: Global summary format, additional instructions
