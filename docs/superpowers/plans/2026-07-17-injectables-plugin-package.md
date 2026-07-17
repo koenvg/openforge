@@ -11,7 +11,7 @@
 
 ## Global Constraints
 
-- **This plan runs in the `openforge-plugins` repo at `/Users/aviv.hadar/repos/openforge-plugins`** (on `main`, currently empty). The plugin's SDK dep is a DEV-TIME link straight to this feature branch's worktree SDK (which has Plan 1's `injectionPoints`): `link:/Users/aviv.hadar/.openforge/worktrees/openforge/AVIV-124/packages/plugin-sdk`. (The main `openforge` checkout lacks Plan 1, so the usual sibling `link:../../../openforge/...` is NOT usable yet; normalize to it once Plan 1 merges to `main`.)
+- **This plan runs in the `openforge-plugins` repo**, which sits as a **sibling** of an `openforge` checkout. The plugin's SDK dep uses the sibling link `link:../../../openforge/packages/plugin-sdk`. That sibling `openforge` MUST be on branch `aviv/openforge/injectable-picker-design` (which has Plan 1's `injectionPoints`) and have its SDK built — `pnpm --filter @openforge-app/plugin-sdk build` — before `pnpm install` in the plugins repo. (Once Plan 1 merges to `openforge` `main`, any `openforge` sibling works.)
 - **Plugin id:** `com.openforge.injectables`. **Display name:** `Injectables`. **Package name:** `@openforge-app/plugin-injectables`. **Rail view:** id `injectables`, title `Injectables`, icon `sparkles`, `placement: 'rail'`, shortcut `Cmd+L`.
 - **Import only the public SDK surface.** Never import OpenForge app `src/**`, Rust, Electron, or app IPC. Frontend externalizes Svelte via `openforgePluginViteExternals`; backend SSR-bundles the SDK (`noExternal: ['@openforge-app/plugin-sdk']`).
 - **Snippets persist to the filesystem** via plugin backend methods — never `storage.global`, never any OpenForge DB.
@@ -44,9 +44,9 @@ The linked SDK must export: `injectionPoints` on `FrontendOpenForgeAPI` (Plan 1)
 
 **Files:** none created yet — environment setup + verification.
 
-- [ ] **Step 1: Repo locations (decided).** Work in `/Users/aviv.hadar/repos/openforge-plugins` (on `main`, empty). The plugin's SDK dep links directly to this feature branch's worktree SDK: `link:/Users/aviv.hadar/.openforge/worktrees/openforge/AVIV-124/packages/plugin-sdk` (the main `openforge` checkout lacks Plan 1, so we do NOT use the sibling `link:../../../openforge/...` yet). No folders are moved.
+- [ ] **Step 1: Repo locations.** Work in the `openforge-plugins` checkout that is a sibling of your `openforge` checkout. The `openforge` sibling must be on branch `aviv/openforge/injectable-picker-design` (it has Plan 1). The plugin's SDK dep uses the sibling link `link:../../../openforge/packages/plugin-sdk`.
 
-- [ ] **Step 2: Build the SDK and install.** Build this branch's SDK: `pnpm --filter @openforge-app/plugin-sdk build` (run in the OpenForge worktree, `/Users/aviv.hadar/.openforge/worktrees/openforge/AVIV-124`). Then from the `openforge-plugins` root run `pnpm install` so the workspace resolves the `link:` to the freshly-built SDK.
+- [ ] **Step 2: Build the SDK and install.** In the sibling `openforge` checkout (on the feature branch): `pnpm install` then `pnpm --filter @openforge-app/plugin-sdk build`. Then from the `openforge-plugins` root run `pnpm install` so the workspace resolves the `link:` to the freshly-built SDK.
 
 - [ ] **Step 3: Verify the SDK exposes the Plan-1 surface.** Confirm the built SDK exports what the plugin needs:
   - `grep -R "injectionPoints" ../openforge/packages/plugin-sdk/dist/frontend.d.ts` → hit.
@@ -84,7 +84,7 @@ git commit -m "feat(sdk): register injectionPoints as a declarable plugin capabi
     "test": "vitest run"
   },
   "dependencies": {
-    "@openforge-app/plugin-sdk": "link:/Users/aviv.hadar/.openforge/worktrees/openforge/AVIV-124/packages/plugin-sdk"
+    "@openforge-app/plugin-sdk": "link:../../../openforge/packages/plugin-sdk"
   },
   "peerDependencies": { "svelte": "^5.0.0" },
   "devDependencies": {

@@ -42,7 +42,7 @@ Three sequential plans:
 ## Plan 2 — Task Status (authoritative)
 
 - Task 0: **DONE** — env resolved (worktree SDK link) + `injectionPoints` capability added to SDK schema (openforge commit `a16a12dd`).
-- Task 1: **DONE** — scaffold `plugins/injectables` (openforge-plugins commit `4f95539`).
+- Task 1: **DONE on retired machine, NOT pushed** (no write access to the plugins remote). On the primary machine, **re-run Task 1** from the plan (deterministic; uses the sibling SDK link) before Task 2 — see *Cross-machine resume*.
 - Task 2: **TODO** — port injectable domain types + `/injectables` logic into `src/lib/` (plugin-local; import only generic `CommandInfo` from SDK).
 - Task 3: **TODO** — backend: skill fs methods + filesystem snippet store (`~/.openforge/injectables/snippets.json`).
 - Task 4: **TODO** — port the Injectables rail view (⌘L).
@@ -56,28 +56,31 @@ Three sequential plans:
 - **OpenForge app repo, this branch:** `/Users/aviv.hadar/.openforge/worktrees/openforge/AVIV-124`
   (branch `aviv/openforge/injectable-picker-design`). This is the orchestration cwd.
 - **Plugins repo (Plan 2 work):** `/Users/aviv.hadar/repos/openforge-plugins` (on `main`, was empty).
-- **Plugin SDK link:** `link:/Users/aviv.hadar/.openforge/worktrees/openforge/AVIV-124/packages/plugin-sdk`
-  — the main `openforge` checkout (`/Users/aviv.hadar/repos/1-collibra/openforge`) is on `main`
-  and LACKS Plan 1, so we link straight to this worktree's SDK. Normalize to the sibling
-  `link:../../../openforge/...` convention only once Plan 1 merges to `main`.
+- **Plugin SDK link:** sibling convention `link:../../../openforge/packages/plugin-sdk`. Requires
+  `openforge-plugins` to sit beside an `openforge` checkout that is on branch
+  `aviv/openforge/injectable-picker-design` (has Plan 1) with its SDK built. (This is the standard
+  layout on the primary dev machine; the retired machine used an absolute worktree link instead.)
 - **Plugin id** `com.openforge.injectables` · pkg `@openforge-app/plugin-injectables` · view
   "Injectables" (⌘L). Snippets persist to `~/.openforge/injectables/snippets.json`.
 - **NEVER run `pnpm electron:dev`** — ask the user to run the app and report.
 
 ### Cross-machine resume (IMPORTANT)
 
-The openforge branch `aviv/openforge/injectable-picker-design` is pushed to origin
-(`git@github.com:koenvg/openforge.git`), through the docs-handoff commit `18718346`. On a new
-machine: clone/fetch that fork, `git checkout aviv/openforge/injectable-picker-design`,
-`pnpm install`, then `pnpm --filter @openforge-app/plugin-sdk build`.
+Everything needed to resume is pushed in the **openforge** repo — branch
+`aviv/openforge/injectable-picker-design` on `git@github.com:koenvg/openforge.git` (Plan 1, the
+SDK capability, the spec + plan docs + this handoff). The **plugins scaffold was NOT pushed**:
+`Avivhdr` lacks write access to `koenvangeert/openforge-plugins` (403). Nothing is lost — Plan 2
+Task 1 (scaffold) is deterministic from this committed plan, so the primary machine just recreates
+it. Machine setup:
 
-**The plugin's SDK `link:` in `plugins/injectables/package.json` is an ABSOLUTE path to
-machine-A's worktree** — it will NOT exist elsewhere. On the new machine, repoint it to that
-machine's openforge checkout SDK (`link:<abs path>/packages/plugin-sdk`) and re-run `pnpm install`
-in the plugins repo. Because Plan 2 Task 1 (scaffold) is fully deterministic from the committed
-plan, the simplest path on machine B is: fresh-clone `openforge-plugins`, then re-run Task 1
-against machine B's SDK path (this also picks up the latest `main`, since machine-A's scaffold
-commit `4f95539` sits on a stale base). Then continue at Task 2.
+1. In your `openforge` checkout: `git fetch && git checkout aviv/openforge/injectable-picker-design`,
+   `pnpm install`, `pnpm --filter @openforge-app/plugin-sdk build`.
+2. In the sibling `openforge-plugins` checkout: **re-run Plan 2 Task 1** (scaffold) from the plan —
+   it writes `plugins/injectables/` with the sibling link `../../../openforge/packages/plugin-sdk`,
+   then `pnpm install`. (Ledger will then show Task 1 done; continue at Task 2.)
+3. **To push plugin work in future:** you can't push to `koenvangeert/openforge-plugins`. Fork it to
+   your account and add your fork as a remote (e.g. `git remote add mine <your-fork>`), then push the
+   plugin branch there. Not required to continue locally, but needed for the next cross-machine hop.
 - Root `tsc --noEmit` fails locally (a local `ignoreDeprecations` artifact); CI passes.
   Typecheck per-package + rely on the harness LSP diagnostics.
 
