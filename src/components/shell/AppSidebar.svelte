@@ -317,7 +317,7 @@
       {@const isActive = currentView === viewKey}
       <button
         type="button"
-        class="relative w-full flex items-center {collapsed ? 'justify-center px-0' : 'px-3'} gap-2 py-2 cursor-pointer transition-colors {isActive ? 'text-primary' : 'text-base-content/50 hover:text-base-content hover:bg-base-content/10 active:bg-base-content/20'}"
+        class="relative w-full flex items-center {collapsed ? 'justify-center px-0' : 'px-3'} gap-2 py-2 cursor-pointer transition-colors {isActive ? 'text-primary' : 'text-base-content/50 hover:text-base-content'}"
         title={collapsed ? title : undefined}
         aria-label={title}
         aria-current={isActive ? 'page' : undefined}
@@ -344,7 +344,7 @@
       {@const isActive = currentView === view}
       <button
         type="button"
-        class="w-full flex items-center {collapsed ? 'justify-center px-0' : 'px-3'} gap-2 py-2 cursor-pointer transition-colors {isActive ? 'text-primary' : 'text-base-content/50 hover:text-base-content hover:bg-base-content/10 active:bg-base-content/20'}"
+        class="w-full flex items-center {collapsed ? 'justify-center px-0' : 'px-3'} gap-2 py-2 cursor-pointer transition-colors {isActive ? 'text-primary' : 'text-base-content/50 hover:text-base-content'}"
         title={collapsed ? label : undefined}
         aria-label={label}
         aria-current={isActive ? 'page' : undefined}
