@@ -1061,6 +1061,70 @@ describe('pluginRegistry', () => {
     })
   })
 
+  it('reloadPluginForProject waits for pending activation cleanup before activating refreshed artifacts', async () => {
+    const manifest = makeManifest({ id: 'reload-plugin', frontend: './dist/frontend.js' })
+    const StaleComponent = vi.fn() as never
+    const RefreshedComponent = vi.fn() as never
+    let markActivationStarted: (() => void) | null = null
+    let finishActivation: (() => void) | null = null
+    const activationStarted = new Promise<void>((resolve) => {
+      markActivationStarted = resolve
+    })
+    const activationGate = new Promise<void>((resolve) => {
+      finishActivation = resolve
+    })
+    const staleFrontendPlugin = defineFrontendPlugin({
+      async activate(openforge, context) {
+        markActivationStarted?.()
+        await activationGate
+        context.subscriptions.add(openforge.views.register({
+          id: 'main',
+          title: 'Stale Main',
+          icon: 'sparkles',
+          placement: 'rail',
+          component: StaleComponent,
+        }))
+      },
+    })
+    const refreshedFrontendPlugin = defineFrontendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.views.register({
+          id: 'main',
+          title: 'Refreshed Main',
+          icon: 'sparkles',
+          placement: 'rail',
+          component: RefreshedComponent,
+        }))
+      },
+    })
+    installedPlugins.set(new Map([['reload-plugin', { manifest, state: 'installed', error: null }]]))
+    enabledPluginIds.set(new Set(['reload-plugin']))
+    getPluginIpcMock.mockResolvedValue(makeNormalized('reload-plugin'))
+    getEnabledPluginsMock.mockResolvedValue([makeNormalized('reload-plugin')])
+    loadPluginFrontendMock
+      .mockResolvedValueOnce({ pluginId: 'reload-plugin', module: staleFrontendPlugin })
+      .mockResolvedValueOnce({ pluginId: 'reload-plugin', module: refreshedFrontendPlugin })
+
+    const pendingActivation = activatePlugin('reload-plugin')
+    await activationStarted
+    const reload = reloadPluginForProject('project-1', 'reload-plugin')
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const releaseActivation = finishActivation as (() => void) | null
+    if (!releaseActivation) throw new Error('Expected frontend activation to be pending')
+    releaseActivation()
+
+    await expect(pendingActivation).resolves.toBe(false)
+    await expect(reload).resolves.toBe(true)
+    expect(loadPluginFrontendMock).toHaveBeenCalledTimes(2)
+    expect(getRegisteredComponent('plugin:reload-plugin:main')).toBe(RefreshedComponent)
+    expect(get(installedPlugins).get('reload-plugin')).toMatchObject({
+      state: 'active',
+      error: null,
+    })
+  })
+
   it('reloadPluginForProject re-imports changed local frontend bundles with a cache-busted URL', async () => {
     const manifest = makeManifest({ id: 'reload-plugin', frontend: './dist/frontend.js' })
     const packageMetadata = {
