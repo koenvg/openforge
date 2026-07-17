@@ -1,0 +1,107 @@
+<script lang="ts">
+  import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
+  import type { ComponentProps, Snippet } from 'svelte'
+  import { getTruncationStats, isTruncated } from './diffAdapter'
+  import DiffFileContent from './DiffFileContent.svelte'
+  import DiffFileHeader from './DiffFileHeader.svelte'
+
+  type ContentProps = Omit<ComponentProps<typeof DiffFileContent>, 'file' | 'richDiffActive'>
+
+  interface SectionProps {
+    file: PrFileDiff
+    collapsed: boolean
+    richDiffSupported: boolean
+    richDiffActive: boolean
+    reviewed: boolean
+    fileHeaderExtra?: Snippet<[PrFileDiff]>
+    onToggleCollapse: () => void
+    onSetRichDiffActive: (active: boolean) => void
+    onReviewedChange?: (reviewed: boolean) => void
+  }
+
+  type Props = SectionProps & ContentProps
+
+  let {
+    file,
+    collapsed,
+    richDiffSupported,
+    richDiffActive,
+    reviewed,
+    fileContents,
+    canFetchFileContents,
+    workerDiffFile,
+    diffViewMode,
+    diffViewWrap,
+    diffViewTheme,
+    githubMarkdownImageBaseUrl,
+    existingComments,
+    pendingComments,
+    agentComments,
+    fileHeaderExtra,
+    resolveRepositoryImage,
+    onOpenRepositoryPath,
+    onOpenUrl,
+    onToggleCollapse,
+    onSetRichDiffActive,
+    onReviewedChange,
+    onOpenInlineCommentWidget,
+    getInlineCommentText,
+    onSetInlineCommentText,
+    onClearInlineCommentText,
+    onSubmitInlineComment,
+    onPendingCommentsChange,
+    onAgentCommentsChange,
+    onUpdateAgentCommentStatus,
+  }: Props = $props()
+
+  const truncated = $derived(isTruncated(file))
+  const truncationStats = $derived(getTruncationStats(file))
+</script>
+
+<div class="border border-base-300 rounded-md">
+  <DiffFileHeader
+    {file}
+    {collapsed}
+    {richDiffSupported}
+    {richDiffActive}
+    {reviewed}
+    {fileHeaderExtra}
+    {onToggleCollapse}
+    {onSetRichDiffActive}
+    {onReviewedChange}
+  />
+  {#if !collapsed}
+    {#if truncated}
+      <div class="alert alert-info py-1.5 px-4 rounded-none border-x-0 text-xs">
+        <span>
+          Diff truncated — {truncationStats ? `${truncationStats.total} lines total, showing first ${truncationStats.shown}` : 'showing partial diff'}
+        </span>
+      </div>
+    {/if}
+    <DiffFileContent
+      {file}
+      {richDiffActive}
+      {fileContents}
+      {canFetchFileContents}
+      {workerDiffFile}
+      {diffViewMode}
+      {diffViewWrap}
+      {diffViewTheme}
+      {githubMarkdownImageBaseUrl}
+      {existingComments}
+      {pendingComments}
+      {agentComments}
+      {resolveRepositoryImage}
+      {onOpenRepositoryPath}
+      {onOpenUrl}
+      {onOpenInlineCommentWidget}
+      {getInlineCommentText}
+      {onSetInlineCommentText}
+      {onClearInlineCommentText}
+      {onSubmitInlineComment}
+      {onPendingCommentsChange}
+      {onAgentCommentsChange}
+      {onUpdateAgentCommentStatus}
+    />
+  {/if}
+</div>
