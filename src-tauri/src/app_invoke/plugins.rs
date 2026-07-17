@@ -242,6 +242,13 @@ pub(super) async fn handle_app_plugin_command(
                 .await
                 .map_err(map_plugin_platform_error)?
         }
+        "plugin_backend_deactivate" => {
+            let plugin_id = payload_string(&request.payload, "pluginId")?;
+            plugin_platform(state, false)?
+                .deactivate_backend(&plugin_id)
+                .await
+                .map_err(map_plugin_platform_error)?
+        }
         "stop_plugin_sidecar" => {
             plugin_platform(state, false)?
                 .stop_sidecar()

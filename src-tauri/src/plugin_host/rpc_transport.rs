@@ -76,6 +76,20 @@ impl PluginHost {
         .await
     }
 
+    pub async fn deactivate_backend(&self, plugin_id: &str) -> Result<Value, String> {
+        let params = json!({ "pluginId": plugin_id });
+        let (request_id, request) =
+            crate::plugin_rpc::format_request("plugin", "backend.deactivate", params);
+        self.send_request_and_wait(
+            request_id,
+            &request,
+            &format!("plugin backend deactivation: {plugin_id}"),
+            &format!("deactivating plugin backend: {plugin_id}"),
+            crate::plugin_rpc::DEFAULT_TIMEOUT,
+        )
+        .await
+    }
+
     async fn send_request_and_wait(
         &self,
         request_id: u64,
