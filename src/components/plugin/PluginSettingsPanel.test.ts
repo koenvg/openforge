@@ -355,4 +355,53 @@ describe('GlobalPluginSettingsPanel', () => {
 
     expect(screen.queryByRole('button', { name: /Uninstall plugin/i })).toBeNull()
   })
+
+  it('renders an enable-by-default toggle per plugin reflecting the passed global default', () => {
+    installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
+
+    render(GlobalPluginSettingsPanel, {
+      pluginDefaults: new Map([['test-plugin', true]]),
+      onToggleDefault: vi.fn(),
+    })
+
+    const toggle = screen.getByRole('switch', { name: 'Enable by default: Test Plugin' }) as HTMLInputElement
+    expect(toggle.checked).toBe(true)
+    expect(toggle.dataset.testid).toBe('plugin-default-test-plugin')
+  })
+
+  it('reflects a plugin without an explicit global default as unchecked', () => {
+    installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
+
+    render(GlobalPluginSettingsPanel, {
+      pluginDefaults: new Map(),
+      onToggleDefault: vi.fn(),
+    })
+
+    expect((screen.getByRole('switch', { name: 'Enable by default: Test Plugin' }) as HTMLInputElement).checked).toBe(false)
+  })
+
+  it('invokes onToggleDefault with the plugin id and next enabled state', async () => {
+    installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
+    const onToggleDefault = vi.fn()
+
+    render(GlobalPluginSettingsPanel, {
+      pluginDefaults: new Map([['test-plugin', false]]),
+      onToggleDefault,
+    })
+
+    await fireEvent.click(screen.getByRole('switch', { name: 'Enable by default: Test Plugin' }))
+    expect(onToggleDefault).toHaveBeenCalledWith('test-plugin', true)
+  })
+
+  it('disables the enable-by-default toggle when the panel is disabled', () => {
+    installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
+
+    render(GlobalPluginSettingsPanel, {
+      disabled: true,
+      pluginDefaults: new Map([['test-plugin', true]]),
+      onToggleDefault: vi.fn(),
+    })
+
+    expect((screen.getByRole('switch', { name: 'Enable by default: Test Plugin' }) as HTMLInputElement).disabled).toBe(true)
+  })
 })

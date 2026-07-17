@@ -277,13 +277,16 @@
     github_poll_interval: String(githubPollInterval),
   })
 
-  // Per-plugin global default rows: explicit global default if present, else builtin default.
-  let globalPluginRows = $derived(
-    Array.from($installedPlugins.values()).map((plugin) => ({
-      id: plugin.manifest.id,
-      name: plugin.manifest.name,
-      enabled: globalPluginDefaults.get(plugin.manifest.id) ?? (plugin.isBuiltin ?? false),
-    }))
+  // Per-plugin global default keyed by plugin id: explicit global default if
+  // present, else builtin default. Consumed by the dedicated plugin panel's
+  // enable-by-default toggles (the grouped Configuration card no longer renders plugins).
+  let globalPluginDefaultsById = $derived(
+    new Map(
+      Array.from($installedPlugins.values()).map((plugin) => [
+        plugin.manifest.id,
+        globalPluginDefaults.get(plugin.manifest.id) ?? (plugin.isBuiltin ?? false),
+      ]),
+    )
   )
 
   // Grouped hierarchy settings (project mode) — effective = project override ?? global ?? default.
@@ -779,9 +782,8 @@
         <HierarchicalSettingsCard
           mode="global"
           values={globalHierarchyValues}
-          pluginRows={globalPluginRows}
+          excludeKeys={['plugins']}
           onChange={handleGlobalSettingChange}
-          onPluginToggle={handleGlobalPluginToggle}
           disabled={!globalSettingsLoaded}
         />
 
@@ -810,6 +812,8 @@
 
         <GlobalPluginSettingsPanel
           activeProjectId={$activeProjectId}
+          pluginDefaults={globalPluginDefaultsById}
+          onToggleDefault={handleGlobalPluginToggle}
           disabled={!globalSettingsLoaded}
         />
 

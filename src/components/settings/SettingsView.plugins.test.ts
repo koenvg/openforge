@@ -140,6 +140,11 @@ describe('SettingsView plugin integration', () => {
     expect(screen.getByRole('button', { name: /reload plugin: global plugin/i })).toBeTruthy()
     expect(screen.getByRole('button', { name: /uninstall plugin: global plugin/i })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /enable for this project: global plugin/i })).toBeNull()
+
+    // Enable-by-default lives only in the dedicated plugin panel now — it must not
+    // be duplicated inside the grouped Configuration card.
+    expect(screen.queryByRole('switch', { name: /toggle plugin default: global plugin/i })).toBeNull()
+    expect(screen.getByRole('switch', { name: /enable by default: global plugin/i })).toBeTruthy()
   })
 
   it('renders only project enablement controls for installed plugins on the project settings page', async () => {
