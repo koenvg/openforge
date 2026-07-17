@@ -260,6 +260,21 @@ describe('FocusBoard', () => {
     expect(screen.queryByText('Done task')).toBeNull()
   })
 
+  it('keeps backlog label filters outside the task list scroll region', async () => {
+    const ipc = await import('../../lib/ipc')
+    vi.mocked(ipc.getProjectTaskLabels).mockResolvedValue([bugLabel])
+    const bugTask = makeTask('T-5', 'backlog', 'Bug task', [bugLabel])
+
+    renderBoard({ tasks: [bugTask], sessions: new Map() })
+
+    await fireEvent.click(await screen.findByRole('button', { name: /Backlog 1/i }))
+
+    const filters = await screen.findByRole('group', { name: 'Backlog label filters' })
+    const taskList = screen.getByRole('region', { name: 'Task list' })
+    expect(taskList.contains(filters)).toBe(false)
+    expect(within(taskList).getByText('Bug task')).toBeTruthy()
+  })
+
   it('shows backlog label filters on the first backlog navigation when labeled tasks arrive before label metadata', async () => {
     const ipc = await import('../../lib/ipc')
     const projectLabels = deferred<TaskLabel[]>()
