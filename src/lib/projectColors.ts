@@ -24,7 +24,7 @@ export const DEFAULT_PROJECT_COLOR: ProjectColor = {
 }
 
 export const PROJECT_COLORS: ProjectColor[] = [
-  { id: 'slate',    label: 'Slate',    swatch: '#64748b', light: '#F3F5F9', dark: '#1A1C22', lightAlt: '#E6EAF1', darkAlt: '#15171C' },
+  { id: 'slate',    label: 'Slate',    swatch: '#94a3b8', light: '#f8fafc', dark: '#1A1C22', lightAlt: '#f1f5f9', darkAlt: '#15171C' },
   { id: 'rose',     label: 'Rose',     swatch: '#fb7185', light: '#FEF7F7', dark: '#1F1A1C', lightAlt: '#FCE8EA', darkAlt: '#1A1618' },
   { id: 'amber',    label: 'Amber',    swatch: '#fbbf24', light: '#FEFCE8', dark: '#1F1D18', lightAlt: '#FEF9C3', darkAlt: '#1A1914' },
   { id: 'emerald',  label: 'Emerald',  swatch: '#4CAF50', light: '#F0FDF4', dark: '#1A1F1C', lightAlt: '#DCFCE7', darkAlt: '#161A18' },
