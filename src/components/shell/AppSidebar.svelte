@@ -9,7 +9,7 @@
     saveHiddenProjectIds,
   } from '../../lib/projectVisibility'
   import { GITHUB_SYNC_GLOBAL_VIEW_KEY } from '../../lib/githubSyncPlugin'
-  import { isPluginViewKey } from '../../lib/plugin/types'
+  import { isCrossProjectView } from '../../lib/views'
   import type { IconRailPluginNavItem } from '../../lib/iconRailNav'
   import type { AppView } from '../../lib/types'
   import PluginNavigationIcon from './PluginNavigationIcon.svelte'
@@ -43,9 +43,7 @@
   // the per-repo PR review. Global views — global settings and sidebar-placed plugin
   // views like "All Pull Requests" — are cross-project, so no project row highlights.
   let sidebarPluginViewKeys = $derived(new Set(pluginNavItems.map((item) => item.viewKey)))
-  let isProjectContextView = $derived(
-    currentView === 'board' || (isPluginViewKey(currentView) && !sidebarPluginViewKeys.has(currentView))
-  )
+  let isProjectContextView = $derived(!isCrossProjectView(currentView, sidebarPluginViewKeys))
 
   let branchName = $state<string | null>(null)
   let isSavingProjectOrder = $state(false)
@@ -165,7 +163,7 @@
      {#if !collapsed}
        <span class="text-[10px] text-secondary font-bold">PROJECTS</span>
      {/if}
-    <button type="button" class="btn btn-ghost btn-xs" aria-label="Add project" onclick={() => onNewProject?.()}>
+    <button type="button" class="btn btn-ghost btn-xs btn-square" aria-label="Add project" onclick={() => onNewProject?.()}>
       <Plus size={14} />
     </button>
   </div>
@@ -319,7 +317,7 @@
       {@const isActive = currentView === viewKey}
       <button
         type="button"
-        class="relative w-full flex items-center {collapsed ? 'justify-center px-0' : 'px-3'} gap-2 py-2 cursor-pointer transition-colors {isActive ? 'text-primary' : 'text-base-content/50 hover:text-base-content'}"
+        class="relative w-full flex items-center {collapsed ? 'justify-center px-0' : 'px-3'} gap-2 py-2 cursor-pointer transition-colors {isActive ? 'text-primary' : 'text-base-content/50 hover:text-base-content hover:bg-base-content/10 active:bg-base-content/20'}"
         title={collapsed ? title : undefined}
         aria-label={title}
         aria-current={isActive ? 'page' : undefined}
@@ -346,7 +344,7 @@
       {@const isActive = currentView === view}
       <button
         type="button"
-        class="w-full flex items-center {collapsed ? 'justify-center px-0' : 'px-3'} gap-2 py-2 cursor-pointer transition-colors {isActive ? 'text-primary' : 'text-base-content/50 hover:text-base-content'}"
+        class="w-full flex items-center {collapsed ? 'justify-center px-0' : 'px-3'} gap-2 py-2 cursor-pointer transition-colors {isActive ? 'text-primary' : 'text-base-content/50 hover:text-base-content hover:bg-base-content/10 active:bg-base-content/20'}"
         title={collapsed ? label : undefined}
         aria-label={label}
         aria-current={isActive ? 'page' : undefined}
