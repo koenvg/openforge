@@ -7,18 +7,19 @@
 
   type ContentProps = Omit<ComponentProps<typeof DiffFileContent>, 'file' | 'richDiffActive'>
 
-  interface Props {
+  interface SectionProps {
     file: PrFileDiff
     collapsed: boolean
     richDiffSupported: boolean
     richDiffActive: boolean
     reviewed: boolean
-    content: ContentProps
     fileHeaderExtra?: Snippet<[PrFileDiff]>
     onToggleCollapse: () => void
     onSetRichDiffActive: (active: boolean) => void
     onReviewedChange?: (reviewed: boolean) => void
   }
+
+  type Props = SectionProps & ContentProps
 
   let {
     file,
@@ -26,11 +27,31 @@
     richDiffSupported,
     richDiffActive,
     reviewed,
-    content,
+    fileContents,
+    canFetchFileContents,
+    workerDiffFile,
+    diffViewMode,
+    diffViewWrap,
+    diffViewTheme,
+    githubMarkdownImageBaseUrl,
+    existingComments,
+    pendingComments,
+    agentComments,
     fileHeaderExtra,
+    resolveRepositoryImage,
+    onOpenRepositoryPath,
+    onOpenUrl,
     onToggleCollapse,
     onSetRichDiffActive,
     onReviewedChange,
+    onOpenInlineCommentWidget,
+    getInlineCommentText,
+    onSetInlineCommentText,
+    onClearInlineCommentText,
+    onSubmitInlineComment,
+    onPendingCommentsChange,
+    onAgentCommentsChange,
+    onUpdateAgentCommentStatus,
   }: Props = $props()
 
   const truncated = $derived(isTruncated(file))
@@ -57,6 +78,30 @@
         </span>
       </div>
     {/if}
-    <DiffFileContent {file} {richDiffActive} {...content} />
+    <DiffFileContent
+      {file}
+      {richDiffActive}
+      {fileContents}
+      {canFetchFileContents}
+      {workerDiffFile}
+      {diffViewMode}
+      {diffViewWrap}
+      {diffViewTheme}
+      {githubMarkdownImageBaseUrl}
+      {existingComments}
+      {pendingComments}
+      {agentComments}
+      {resolveRepositoryImage}
+      {onOpenRepositoryPath}
+      {onOpenUrl}
+      {onOpenInlineCommentWidget}
+      {getInlineCommentText}
+      {onSetInlineCommentText}
+      {onClearInlineCommentText}
+      {onSubmitInlineComment}
+      {onPendingCommentsChange}
+      {onAgentCommentsChange}
+      {onUpdateAgentCommentStatus}
+    />
   {/if}
 </div>

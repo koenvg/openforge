@@ -591,29 +591,27 @@
               richDiffSupported={supportsRichDiff(file)}
               richDiffActive={isRichDiffActive(file)}
               reviewed={isFileReviewed(file)}
-              content={{
-                fileContents: fileContentsFetcher.fileContentsMap.get(file.filename),
-                canFetchFileContents: Boolean(fetchFileContents || batchFetchFileContents),
-                workerDiffFile: diffWorker.getDiffFile(file.filename),
-                diffViewMode,
-                diffViewWrap,
-                diffViewTheme: resolveDiffTheme(),
-                githubMarkdownImageBaseUrl,
-                existingComments,
-                pendingComments: visiblePendingComments,
-                agentComments,
-                resolveRepositoryImage,
-                onOpenRepositoryPath: openRepositoryPath,
-                onOpenUrl,
-                onOpenInlineCommentWidget: (lineNumber, side) => openInlineCommentWidget(file.filename, lineNumber, side),
-                getInlineCommentText: (lineNumber, side) => getInlineCommentText(file.filename, lineNumber, side),
-                onSetInlineCommentText: (lineNumber, side, text) => setInlineCommentText(file.filename, lineNumber, side, text),
-                onClearInlineCommentText: (lineNumber, side) => clearInlineCommentText(file.filename, lineNumber, side),
-                onSubmitInlineComment: (lineNumber, side, onClose) => submitInlineComment(file.filename, lineNumber, side, onClose),
-                onPendingCommentsChange: setVisiblePendingComments,
-                onAgentCommentsChange: setVisibleAgentComments,
-                onUpdateAgentCommentStatus,
-              }}
+              fileContents={fileContentsFetcher.fileContentsMap.get(file.filename)}
+              canFetchFileContents={Boolean(fetchFileContents || batchFetchFileContents)}
+              workerDiffFile={diffWorker.getDiffFile(file.filename)}
+              {diffViewMode}
+              {diffViewWrap}
+              diffViewTheme={resolveDiffTheme()}
+              {githubMarkdownImageBaseUrl}
+              {existingComments}
+              pendingComments={visiblePendingComments}
+              {agentComments}
+              {resolveRepositoryImage}
+              onOpenRepositoryPath={openRepositoryPath}
+              {onOpenUrl}
+              onOpenInlineCommentWidget={(lineNumber, side) => openInlineCommentWidget(file.filename, lineNumber, side)}
+              getInlineCommentText={(lineNumber, side) => getInlineCommentText(file.filename, lineNumber, side)}
+              onSetInlineCommentText={(lineNumber, side, text) => setInlineCommentText(file.filename, lineNumber, side, text)}
+              onClearInlineCommentText={(lineNumber, side) => clearInlineCommentText(file.filename, lineNumber, side)}
+              onSubmitInlineComment={(lineNumber, side, onClose) => submitInlineComment(file.filename, lineNumber, side, onClose)}
+              onPendingCommentsChange={setVisiblePendingComments}
+              onAgentCommentsChange={setVisibleAgentComments}
+              {onUpdateAgentCommentStatus}
               {fileHeaderExtra}
               onToggleCollapse={() => toggleCollapse(file.filename)}
               onSetRichDiffActive={(active) => setRichDiffActive(file, active)}
