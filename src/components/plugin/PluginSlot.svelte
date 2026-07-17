@@ -17,9 +17,15 @@
     projectId?: string | null
     projectName?: string
     projectPath?: string
+    /**
+     * Resolve contributions from these plugin ids instead of the project-enabled set.
+     * The global settings page uses this to render an installed plugin's global
+     * settings section, which is not tied to any project's enabled plugins.
+     */
+    sourcePluginIds?: string[] | null
   }
 
-  let { slotType, slotId = '', taskId = '', projectId = null, projectName = '', projectPath = '' }: Props = $props()
+  let { slotType, slotId = '', taskId = '', projectId = null, projectName = '', projectPath = '', sourcePluginIds = null }: Props = $props()
 
   let renderedComponents = $state(new Map<string, Component<Record<string, unknown>>>())
   let renderErrors = $state(new Map<string, string>())
@@ -28,13 +34,14 @@
   let slotLayout = $derived(slotType === 'views' || slotType === 'taskPaneTabs' ? 'fill' : null)
   let slotHostClass = $derived(slotLayout === 'fill' ? 'flex flex-col flex-1 min-h-0 overflow-hidden' : '')
 
-  let enabledContributionSources = $derived(
-    Array.from($enabledPluginIds)
+  let contributionSourceIds = $derived(sourcePluginIds ?? Array.from($enabledPluginIds))
+  let resolvedContributionSources = $derived(
+    contributionSourceIds
       .map(id => $runtimeContributionSources.get(id))
       .filter((source) => source !== undefined)
   )
 
-  let allContributions = $derived(resolveContributions(enabledContributionSources))
+  let allContributions = $derived(resolveContributions(resolvedContributionSources))
   let slotContributions = $derived.by(() => slotId
     ? resolveContributionsForSlot(allContributions, slotType, slotId)
     : allContributions[slotType]

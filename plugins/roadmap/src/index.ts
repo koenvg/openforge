@@ -33,6 +33,10 @@ export default defineFrontendPlugin({
       openforge.settings.registerSection({
         id: 'roadmap-settings',
         title: 'Roadmap',
+        // The API key is one value for the whole app (stored in global plugin
+        // storage), so it belongs in the plugin's card in global settings, not on a
+        // per-project page.
+        scope: 'global',
         component: SettingsSection,
       }),
     )

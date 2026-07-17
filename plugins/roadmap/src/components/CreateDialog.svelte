@@ -23,11 +23,9 @@
 
   let { labelOptions, initialLabels = [], busy, hasApiKey, onClose, onCreate, onRefine, onOpenUrl }: Props = $props()
 
-  // Points at where the field actually renders. The SDK's only settings contribution
-  // point (settings.registerSection) is mounted on the project settings page, so
-  // "global settings" would send people somewhere the field isn't — even though the
-  // key itself is stored globally and shared across projects.
-  const NO_KEY_HINT = 'Add API key in project settings → Roadmap.'
+  // The key field lives in the Roadmap card in global settings (the section is
+  // registered with scope: 'global').
+  const NO_KEY_HINT = 'Add API key in global settings → Roadmap.'
   let refineHint = $derived(hasApiKey ? null : NO_KEY_HINT)
 
   let note = $state('')

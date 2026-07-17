@@ -262,10 +262,20 @@ export interface PluginTaskUISectionRegistration {
   component: PluginComponentLoader<PluginTaskUISectionProps> | PluginComponent<PluginTaskUISectionProps>
 }
 
+/**
+ * Where a settings section is surfaced. `'project'` (the default) renders it on the
+ * per-project settings page, scoped to the active project. `'global'` renders it
+ * inside the plugin's own card on the global settings page — for configuration that
+ * is one value for the whole app (an API key, a credential) rather than per-project.
+ */
+export type PluginSettingsSectionScope = 'project' | 'global'
+
 export interface PluginSettingsSectionRegistration {
   id: string
   title: string
   order?: number
+  /** Defaults to `'project'` when omitted. */
+  scope?: PluginSettingsSectionScope
   component: PluginComponentLoader<PluginSettingsSectionProps> | PluginComponent<PluginSettingsSectionProps>
 }
 

@@ -41,6 +41,7 @@ function runtimeSnapshotToContributionSource(snapshot: RuntimeContributionSnapsh
       id: section.id,
       title: section.title,
       order: section.order,
+      scope: section.scope,
     })),
     commands: snapshot.commands.map((command) => ({
       id: command.id,

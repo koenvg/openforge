@@ -43,6 +43,39 @@ describe('SettingsView plugin integration', () => {
     })
   })
 
+  it('does not render a global-scoped settings section on the project settings page', async () => {
+    installedPlugins.set(new Map([[
+      'plugin.settings',
+      {
+        manifest: {
+          id: 'plugin.settings',
+          name: 'Settings Plugin',
+          version: '1.0.0',
+          apiVersion: 1,
+          description: 'Adds a settings section',
+          permissions: [],
+          frontend: 'index.js',
+          backend: null,
+        },
+        state: 'installed',
+        error: null,
+      },
+    ]]))
+    enabledPluginIds.set(new Set(['plugin.settings']))
+    runtimeContributionSources.set(new Map([[
+      'plugin.settings',
+      { pluginId: 'plugin.settings', settingsSections: [{ id: 'global-key', title: 'Global Key Section', scope: 'global' }] },
+    ]]))
+    registerRenderableContributionComponent('settingsSections', 'plugin.settings:global-key', PluginSlotTestView)
+
+    render(SettingsView, { props: defaultProps })
+
+    // Give the project page a beat; the global-scoped section must never appear here.
+    await new Promise((r) => setTimeout(r, 20))
+    expect(screen.queryByText('Global Key Section')).toBeNull()
+    expect(document.querySelector('[data-slot-id="plugin.settings:global-key"]')).toBeNull()
+  })
+
   it('renders plugin settings sections in resolved order and preserves registration order for ties', async () => {
     enabledPluginIds.set(new Set(['plugin.zeta', 'plugin.alpha']))
     runtimeContributionSources.set(new Map([

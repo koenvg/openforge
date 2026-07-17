@@ -190,7 +190,11 @@
       .map((id) => $runtimeContributionSources.get(id))
       .filter((source) => source !== undefined)
   )
-  let pluginSettingsSections = $derived(resolveContributions(enabledPluginContributionSources).settingsSections)
+  // Project settings page shows only project-scoped sections; global-scoped ones
+  // render in the plugin's card on the global settings page instead.
+  let pluginSettingsSections = $derived(
+    resolveContributions(enabledPluginContributionSources).settingsSections.filter((section) => section.scope !== 'global'),
+  )
 
   // Sync project name/path from project list
   $effect(() => {

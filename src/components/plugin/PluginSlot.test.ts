@@ -156,6 +156,53 @@ describe('PluginSlot', () => {
     })
   })
 
+  it('resolves a settings section from sourcePluginIds even when the plugin is not project-enabled', async () => {
+    const manifest = makeManifest('plugin.roadmap')
+    // Installed with a contribution source, but NOT in the enabled set — this is the
+    // global settings page's situation.
+    installedPlugins.set(new Map([[manifest.id, { manifest, state: 'active', error: null }]]))
+    enabledPluginIds.set(new Set())
+    runtimeContributionSources.set(new Map([[
+      manifest.id,
+      { pluginId: manifest.id, settingsSections: [{ id: 'roadmap-settings', title: 'Roadmap', scope: 'global' }] },
+    ]]))
+    registerRenderableContributionComponent('settingsSections', 'plugin.roadmap:roadmap-settings', PluginSlotTestView)
+
+    render(PluginSlot, {
+      props: {
+        slotType: 'settingsSections',
+        slotId: 'plugin.roadmap:roadmap-settings',
+        sourcePluginIds: ['plugin.roadmap'],
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('plugin-slot-view')).toBeTruthy()
+    })
+  })
+
+  it('renders nothing for a sourcePluginIds set that excludes the plugin', async () => {
+    const manifest = makeManifest('plugin.roadmap')
+    installedPlugins.set(new Map([[manifest.id, { manifest, state: 'active', error: null }]]))
+    enabledPluginIds.set(new Set(['plugin.roadmap']))
+    runtimeContributionSources.set(new Map([[
+      manifest.id,
+      { pluginId: manifest.id, settingsSections: [{ id: 'roadmap-settings', title: 'Roadmap', scope: 'global' }] },
+    ]]))
+    registerRenderableContributionComponent('settingsSections', 'plugin.roadmap:roadmap-settings', PluginSlotTestView)
+
+    render(PluginSlot, {
+      props: {
+        slotType: 'settingsSections',
+        slotId: 'plugin.roadmap:roadmap-settings',
+        sourcePluginIds: ['plugin.other'],
+      },
+    })
+
+    await new Promise((r) => setTimeout(r, 10))
+    expect(screen.queryByTestId('plugin-slot-view')).toBeNull()
+  })
+
   it('resolves lazy plugin component factories and injects API/context props', async () => {
     const manifest = makeManifest()
     enablePlugin({ manifest, state: 'active', error: null }, makeViewSource())

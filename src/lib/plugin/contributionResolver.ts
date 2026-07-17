@@ -14,7 +14,7 @@ type RuntimeViewSource = Pick<RuntimeViewContribution, 'id' | 'title' | 'icon' |
 type RuntimeTaskPaneTabSource = Pick<RuntimeTaskPaneTabContribution, 'id' | 'title' | 'icon' | 'order'>
 type RuntimeTaskUISectionSource = Pick<RuntimeTaskUISectionContribution, 'id' | 'order'>
 type RuntimeCommandSource = Pick<RuntimeCommandContribution, 'id' | 'title' | 'shortcut' | 'discoverable'>
-type RuntimeSettingsSectionSource = Pick<RuntimeSettingsSectionContribution, 'id' | 'title' | 'order'>
+type RuntimeSettingsSectionSource = Pick<RuntimeSettingsSectionContribution, 'id' | 'title' | 'order' | 'scope'>
 type RuntimeBackgroundServiceSource = Pick<RuntimeBackgroundServiceContribution, 'id' | 'scope'>
 
 export interface ResolvedView {
@@ -60,6 +60,7 @@ export interface ResolvedSettingsSection {
   namespacedId: string
   title: string
   order: number
+  scope: 'project' | 'global'
 }
 
 export interface ResolvedBackgroundService {
@@ -249,7 +250,7 @@ function resolveSettingsSection(pluginId: string, item: unknown): ResolvedSettin
     return null
   }
 
-  const { id, title, order } = item
+  const { id, title, order, scope } = item
   if (!isNonEmptyString(id) || !isNonEmptyString(title)) {
     return null
   }
@@ -260,6 +261,9 @@ function resolveSettingsSection(pluginId: string, item: unknown): ResolvedSettin
     namespacedId: toNamespacedId(pluginId, id),
     title,
     order: isNumber(order) ? order : 0,
+    // Unknown values fall back to project so a typo can't strand a section off
+    // both pages.
+    scope: scope === 'global' ? 'global' : 'project',
   }
 }
 
