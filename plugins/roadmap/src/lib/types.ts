@@ -91,10 +91,21 @@ export interface TicketDraft {
   body: string
 }
 
+/**
+ * Refine is handled inside the plugin (see lib/anthropic/client.ts), so unlike the
+ * types above this shape answers to no core command.
+ *
+ * `repo` and `repoLabels` ride along from the board the dialog was opened over: the
+ * prompt grounds drafts in the repo's real terminology, and the frontend already
+ * loaded both, so passing them beats re-fetching them in the backend.
+ */
 export interface RefineTicketRequest {
   projectId: string
+  /** owner/name. */
+  repo: string
+  /** Every label in the repo — vocabulary for the model, not the ticket's own labels. */
+  repoLabels: string[]
   text: string
   draft: TicketDraft | null
   feedback: string
-  labels: string[]
 }

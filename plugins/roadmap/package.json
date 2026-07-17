@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.111.0",
     "@lucide/svelte": "^1.23.0",
     "@openforge-app/plugin-sdk": "workspace:*"
   },
@@ -35,12 +36,14 @@
     "requires": [
       "views",
       "taskPane",
+      "settings",
       "backend",
       "commands",
       "events",
       "tasks",
       "projectConfig",
       "storage",
+      "fs",
       "system.openUrl",
       "navigation",
       "context"

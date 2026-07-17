@@ -18,6 +18,7 @@
   import { normalizeLabelColor } from '../lib/labelColors'
   import { loadRoadmapActions, loadRoadmapIssueTaskLinks, startRoadmapIssueAction } from '../lib/roadmapActions'
   import { createRoadmapClient } from '../lib/roadmapClient'
+  import { readApiKey } from '../lib/settings/apiKey'
   import Board from './Board.svelte'
   import CardDrawer from './CardDrawer.svelte'
   import CreateDialog from './CreateDialog.svelte'
@@ -45,6 +46,9 @@
   let error = $state<string | null>(null)
   let busy = $state(false)
   let pendingCreatedCards = $state<BoardCard[]>([])
+  // Gates Refine in the create dialog. Re-read whenever the dialog opens rather than
+  // once on mount: the key may have been added in settings since this view loaded.
+  let hasApiKey = $state(false)
 
   // Modal / drawer state.
   let selectedIssueNumber = $state<number | null>(null)
@@ -257,10 +261,20 @@
     })
   }
 
-  async function refineTicketDraft(request: Omit<RefineTicketRequest, 'projectId'>): Promise<TicketDraft> {
+  // repo and repoLabels ground the draft in this project's terminology. Both are already
+  // loaded on the board behind this dialog, so they ride along rather than being
+  // re-fetched backend-side.
+  async function refineTicketDraft(
+    request: Omit<RefineTicketRequest, 'projectId' | 'repo' | 'repoLabels'>,
+  ): Promise<TicketDraft> {
     if (!projectId) throw new Error('Select a project before refining a ticket.')
     try {
-      return await client.refineTicket({ projectId, ...request })
+      return await client.refineTicket({
+        projectId,
+        repo: repoSlug,
+        repoLabels: repoLabels.map((label) => label.name),
+        ...request,
+      })
     } catch (e) {
       error = String(e instanceof Error ? e.message : e)
       throw e
@@ -270,6 +284,9 @@
   function openCreate(labels: string[] = []) {
     createLabels = [...labels]
     showCreate = true
+    void readApiKey(api.storage).then((key) => {
+      hasApiKey = Boolean(key)
+    })
   }
 
   function closeCreate() {
@@ -434,6 +451,7 @@
     labelOptions={repoLabels}
     initialLabels={createLabels}
     {busy}
+    {hasApiKey}
     onClose={closeCreate}
     onCreate={createIssue}
     onRefine={refineTicketDraft}
