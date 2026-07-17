@@ -167,6 +167,7 @@ function registerPrReviewBackends(
   prs: ReviewPullRequest[] = [basePr],
   reviewCommentResults: ReviewComment[] | (() => ReviewComment[] | Promise<ReviewComment[]>) = [],
   submitReview: () => Promise<void> = async () => undefined,
+  fileContent = '',
 ) {
   // Per-repo scope now shows only the project's resolved repo (never all repos), so
   // tests that exercise the repo-scoped view must resolve to the fixtures' repo.
@@ -187,7 +188,7 @@ function registerPrReviewBackends(
   backend.registerMethod('getPrOverviewComments', { handler: async () => [] })
   backend.registerMethod('getAgentReviewComments', { handler: async () => [] })
   backend.registerMethod('updateAgentReviewCommentStatus', { handler: async () => undefined })
-  backend.registerMethod('getFileContent', { handler: async () => '' })
+  backend.registerMethod('getFileContent', { handler: async () => fileContent })
   backend.registerMethod('getFileAtRef', { handler: async () => '' })
   backend.registerMethod('submitPrReview', { handler: submitReview })
 }
@@ -995,5 +996,48 @@ describe('PrReviewView header title', () => {
 
     expect(await screen.findByText('All Pull Requests')).toBeTruthy()
     expect(screen.queryByText('Demo Project — Pull Requests')).toBeNull()
+  })
+})
+
+describe('PrReviewView Rich Diff repository paths', () => {
+  beforeEach(() => {
+    resetStores()
+    vi.clearAllMocks()
+  })
+
+  it('resolves nested Markdown images and links at the pull request head', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    const markdownFile: PrFileDiff = { ...baseDiff, filename: 'docs/guides/README.md', sha: 'markdown-sha' }
+    registerPrReviewBackends(
+      registry,
+      () => [markdownFile],
+      [basePr],
+      [],
+      async () => undefined,
+      '![Diagram](../assets/diagram.png)\n\n[Setup](../SETUP.md#installation)',
+    )
+    const getFileAtRefBase64 = vi.fn().mockResolvedValue('base64-diagram')
+    registry.backendApi.backend.registerMethod('getFileAtRefBase64', { handler: getFileAtRefBase64 })
+
+    renderPrReviewView(registry)
+    const title = await screen.findByText(basePr.title)
+    await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
+    await fireEvent.click(await screen.findByRole('tab', { name: /Files changed/i }))
+    await fireEvent.click(await screen.findByRole('button', { name: `Show rich diff for ${markdownFile.filename}` }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('img', { name: 'Diagram' }).getAttribute('src'))
+        .toBe('data:image/png;base64,base64-diagram')
+    })
+    expect(getFileAtRefBase64).toHaveBeenCalledWith({
+      owner: basePr.repo_owner,
+      repo: basePr.repo_name,
+      path: 'docs/assets/diagram.png',
+      refSha: basePr.head_sha,
+    })
+
+    await fireEvent.click(screen.getByRole('link', { name: 'Setup' }))
+    expect(registry.frontendApi.__testing.calls.openUrl)
+      .toContain(`https://github.com/acme/repo/blob/${basePr.head_sha}/docs/SETUP.md#installation`)
   })
 })

@@ -17,12 +17,14 @@
   import { getFileStatusIcon, getFileStatusColor, getFileStatusLabel } from './fileStatus'
   import { loadDiffViewWrap, saveDiffViewWrap } from './diffViewPreferences'
   import { getDiffFileSectionInputKey } from './diffFileSectionIdentity'
+  import { getGitHubMarkdownImageBaseUrl, getGitHubMarkdownLinkUrl } from './githubMarkdown'
   import type { Snippet } from 'svelte'
   interface BaseProps {
     files?: PrFileDiff[]
     existingComments?: ReviewComment[]
     repoOwner?: string
     repoName?: string
+    headSha?: string
     fileTreeVisible?: boolean
     onToggleFileTree?: () => void
     fetchFileContents?: (file: PrFileDiff) => Promise<FileContents>
@@ -38,6 +40,8 @@
     onAgentCommentsChange?: (comments: AgentReviewComment[]) => void
     onUpdateAgentCommentStatus?: (commentId: number, status: 'approved' | 'dismissed') => Promise<void> | void
     onOpenUrl?: (url: string) => void | Promise<void>
+    resolveRepositoryImage?: (repositoryPath: string) => Promise<string | null>
+    onOpenRepositoryPath?: (repositoryPath: string, suffix: string) => void | Promise<void>
     onScrollTopChange?: (scrollTop: number) => void
     initialScrollTop?: number
     inlineDraftScopeId?: string
@@ -51,7 +55,7 @@
     onRequestFocusFileTree?: () => void
   }
   type Props = BaseProps
-  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, fileHeaderExtra, footer, includeCommitted = true, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onAgentCommentsChange, onUpdateAgentCommentStatus, onOpenUrl, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, diffTheme, reviewedFileShas = new Map(), onToggleFileReviewed, getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null, onRequestFocusFileTree }: Props = $props()
+  let { files = [], existingComments = [], repoOwner = '', repoName = '', headSha = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, fileHeaderExtra, footer, includeCommitted = true, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onAgentCommentsChange, onUpdateAgentCommentStatus, onOpenUrl, resolveRepositoryImage, onOpenRepositoryPath, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, diffTheme, reviewedFileShas = new Map(), onToggleFileReviewed, getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null, onRequestFocusFileTree }: Props = $props()
   let internalPendingComments = $state<ReviewSubmissionComment[]>([])
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
   let diffViewWrap = $state(loadDiffViewWrap())
@@ -112,6 +116,23 @@
 
   function supportsRichDiff(file: PrFileDiff): boolean {
     return getFileLanguage(file.filename) === 'markdown' && file.status !== 'removed' && file.status !== 'deleted'
+  }
+
+  const githubMarkdownImageBaseUrl = $derived(getGitHubMarkdownImageBaseUrl({
+    repo_owner: repoOwner,
+    repo_name: repoName,
+    head_sha: headSha,
+  }))
+
+  function openRepositoryPath(repositoryPath: string, suffix: string) {
+    if (onOpenRepositoryPath) {
+      return onOpenRepositoryPath(repositoryPath, suffix)
+    }
+
+    const githubUrl = getGitHubMarkdownLinkUrl(repoOwner, repoName, headSha, repositoryPath, suffix)
+    if (githubUrl) {
+      return onOpenUrl?.(githubUrl)
+    }
   }
 
   function isRichDiffActive(file: PrFileDiff): boolean {
@@ -651,7 +672,14 @@
                   {@const markdownContents = fileContentsFetcher.fileContentsMap.get(file.filename)}
                   <div class="bg-base-100 p-6 text-base-content leading-relaxed" role="region" aria-label="Rich diff for {file.filename}">
                     {#if markdownContents}
-                      <MarkdownContent content={markdownContents.newContent} {onOpenUrl} />
+                      <MarkdownContent
+                        content={markdownContents.newContent}
+                        imageBaseUrl={githubMarkdownImageBaseUrl}
+                        markdownFilePath={file.filename}
+                        {resolveRepositoryImage}
+                        onOpenRepositoryPath={openRepositoryPath}
+                        {onOpenUrl}
+                      />
                     {:else if fetchFileContents || batchFetchFileContents}
                       <div
                         class="flex min-h-48 items-center justify-center"

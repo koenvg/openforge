@@ -1,11 +1,11 @@
 import { marked } from 'marked'
 import { sanitizeHtml } from './sanitize'
 
-const RELATIVE_PARENT_SEGMENT = /^\.\.\//
-const RELATIVE_CURRENT_SEGMENT = /^\.\//
 
 export interface RenderMarkdownOptions {
   imageBaseUrl?: string | null
+  markdownFilePath?: string | null
+  deferRepositoryImages?: boolean
 }
 
 const markedOptions = {
@@ -17,45 +17,108 @@ function hasAbsoluteOrSpecialUrl(value: string): boolean {
   return /^[a-z][a-z\d+.-]*:/i.test(value) || value.startsWith('//') || value.startsWith('#')
 }
 
-function normalizeRepoRelativeImagePath(value: string): string {
-  let normalized = value.startsWith('/') ? value.slice(1) : value
+function decodeMarkdownPath(value: string): string {
+  try {
+    return decodeURI(value)
+  } catch {
+    return value
+  }
+}
 
-  while (RELATIVE_CURRENT_SEGMENT.test(normalized)) {
-    normalized = normalized.replace(RELATIVE_CURRENT_SEGMENT, '')
+interface MarkdownRepositoryReference {
+  pathValue: string
+  suffix: string
+}
+
+function splitMarkdownRepositoryReference(value: string): MarkdownRepositoryReference {
+  const suffixIndex = value.search(/[?#]/)
+  return suffixIndex < 0
+    ? { pathValue: value, suffix: '' }
+    : { pathValue: value.slice(0, suffixIndex), suffix: value.slice(suffixIndex) }
+}
+
+export function resolveMarkdownRepositoryPath(value: string | null, markdownFilePath: string): string | null {
+  if (!value) return null
+
+  const trimmedValue = value.trim()
+  if (!trimmedValue || hasAbsoluteOrSpecialUrl(trimmedValue)) return null
+
+  const { pathValue } = splitMarkdownRepositoryReference(trimmedValue)
+  if (!pathValue) return null
+
+  const repositoryPath = decodeMarkdownPath(pathValue)
+  if (repositoryPath.includes('\\')) return null
+
+  const markdownDirectory = markdownFilePath.split('/').slice(0, -1).join('/')
+  const candidate = repositoryPath.startsWith('/')
+    ? repositoryPath.slice(1)
+    : [markdownDirectory, repositoryPath].filter(Boolean).join('/')
+  const parts: string[] = []
+
+  for (const segment of candidate.split('/')) {
+    if (!segment || segment === '.') continue
+    if (segment === '..') {
+      if (parts.length === 0) return null
+      parts.pop()
+    } else {
+      parts.push(segment)
+    }
   }
 
-  while (RELATIVE_PARENT_SEGMENT.test(normalized)) {
-    normalized = normalized.replace(RELATIVE_PARENT_SEGMENT, '')
-  }
+  return parts.length > 0 ? parts.join('/') : null
+}
 
-  return normalized
+export function getMarkdownRepositoryLinkSuffix(value: string): string {
+  return splitMarkdownRepositoryReference(value.trim()).suffix
 }
 
 function withTrailingSlash(value: string): string {
   return value.endsWith('/') ? value : `${value}/`
 }
 
-export function resolveMarkdownImageSrc(src: string | null, imageBaseUrl: string | null | undefined): string | null {
-  if (!src || !imageBaseUrl) return null
+export function resolveMarkdownImageSrc(
+  src: string | null,
+  imageBaseUrl: string | null | undefined,
+  markdownFilePath = '',
+): string | null {
+  if (!imageBaseUrl) return null
 
-  const trimmedSrc = src.trim()
-  if (!trimmedSrc || hasAbsoluteOrSpecialUrl(trimmedSrc)) return null
+  const repositoryPath = resolveMarkdownRepositoryPath(src, markdownFilePath)
+  if (!repositoryPath) return null
 
   try {
-    return new URL(normalizeRepoRelativeImagePath(trimmedSrc), withTrailingSlash(imageBaseUrl)).href
+    return new URL(repositoryPath, withTrailingSlash(imageBaseUrl)).href
   } catch {
     return null
   }
 }
 
-function resolveMarkdownImageSources(html: string, imageBaseUrl: string | null | undefined): string {
-  if (!imageBaseUrl || typeof document === 'undefined') return html
+function prepareMarkdownImageSources(
+  html: string,
+  options: RenderMarkdownOptions,
+): string {
+  if (typeof document === 'undefined' || (!options.imageBaseUrl && !options.deferRepositoryImages)) return html
 
   const template = document.createElement('template')
   template.innerHTML = html
 
   for (const image of template.content.querySelectorAll('img[src]')) {
-    const resolvedSrc = resolveMarkdownImageSrc(image.getAttribute('src'), imageBaseUrl)
+    const source = image.getAttribute('src')?.trim() ?? ''
+    const shouldDefer = options.deferRepositoryImages && source.length > 0 && !hasAbsoluteOrSpecialUrl(source)
+
+    if (shouldDefer) {
+      image.removeAttribute('src')
+      const repositoryPath = resolveMarkdownRepositoryPath(source, options.markdownFilePath ?? '')
+      if (repositoryPath) {
+        image.setAttribute('data-markdown-repository-path', repositoryPath)
+      }
+      continue
+    }
+
+    const repositoryPath = resolveMarkdownRepositoryPath(source, options.markdownFilePath ?? '')
+    if (!repositoryPath) continue
+
+    const resolvedSrc = resolveMarkdownImageSrc(repositoryPath, options.imageBaseUrl)
     if (resolvedSrc) {
       image.setAttribute('src', resolvedSrc)
     }
@@ -66,5 +129,5 @@ function resolveMarkdownImageSources(html: string, imageBaseUrl: string | null |
 
 export function renderMarkdownHtml(content: string, options: RenderMarkdownOptions = {}): string {
   const rawHtml = marked.parse(content, markedOptions) as string
-  return sanitizeHtml(resolveMarkdownImageSources(rawHtml, options.imageBaseUrl))
+  return sanitizeHtml(prepareMarkdownImageSources(rawHtml, options))
 }

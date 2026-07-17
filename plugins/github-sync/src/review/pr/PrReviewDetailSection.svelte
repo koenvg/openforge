@@ -39,6 +39,7 @@
     onOverviewCommentsChange: (comments: PrOverviewComment[]) => void
     loadOverviewComments: (pr: ReviewPullRequest) => Promise<PrOverviewComment[]>
     fetchFileContents: (file: PrFileDiff) => Promise<FileContents>
+    resolveRepositoryImage: (repositoryPath: string) => Promise<string | null>
     onToggleFileTree: () => void
     onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
     onAgentCommentsChange: (comments: AgentReviewComment[]) => void
@@ -79,6 +80,7 @@
     onOverviewCommentsChange,
     loadOverviewComments,
     fetchFileContents,
+    resolveRepositoryImage,
     onToggleFileTree,
     onPendingCommentsChange,
     onAgentCommentsChange,
@@ -166,6 +168,7 @@
       {pr}
       {files}
       {fetchFileContents}
+      {resolveRepositoryImage}
       projectId={activeProjectId}
       existingComments={reviewComments}
       agentComments={agentReviewComments}
@@ -211,9 +214,11 @@
           existingComments={reviewComments}
           repoOwner={pr.repo_owner}
           repoName={pr.repo_name}
+          headSha={pr.head_sha}
           {fileTreeVisible}
           onToggleFileTree={onToggleFileTree}
           {fetchFileContents}
+          {resolveRepositoryImage}
           agentComments={agentReviewComments}
           pendingComments={pendingManualComments}
           onPendingCommentsChange={onPendingCommentsChange}

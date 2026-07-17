@@ -31,6 +31,7 @@
     pr: ReviewPullRequest
     files: PrFileDiff[]
     fetchFileContents: (file: PrFileDiff) => Promise<FileContents>
+    resolveRepositoryImage: (repositoryPath: string) => Promise<string | null>
     projectId: string | null
     existingComments: ReviewComment[]
     pendingComments: ReviewSubmissionComment[]
@@ -56,6 +57,7 @@
     pr,
     files,
     fetchFileContents,
+    resolveRepositoryImage,
     projectId,
     existingComments,
     pendingComments,
@@ -385,8 +387,10 @@
           existingComments={existingComments}
           repoOwner={pr.repo_owner}
           repoName={pr.repo_name}
+          headSha={pr.head_sha}
           fileTreeVisible={false}
           {fetchFileContents}
+          {resolveRepositoryImage}
           agentComments={agentComments}
           pendingComments={pendingComments}
           onPendingCommentsChange={onPendingCommentsChange}

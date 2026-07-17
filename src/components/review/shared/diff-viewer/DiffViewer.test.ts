@@ -437,6 +437,61 @@ describe('DiffViewer Rich Diff View', () => {
     expect(screen.getByRole('button', { name: 'Show source diff for README.md' }).getAttribute('aria-pressed')).toBe('true')
     expect(screen.getByRole('button', { name: 'Show rich diff for README.md' }).getAttribute('aria-pressed')).toBe('false')
   })
+
+  it('resolves nested worktree images and links through Rich Diff repository callbacks', async () => {
+    const markdownFile: PrFileDiff = { ...fileWithPatch, filename: 'docs/guides/README.md' }
+    const resolveRepositoryImage = vi.fn().mockResolvedValue('data:image/png;base64,diagram')
+    const onOpenRepositoryPath = vi.fn()
+    render(DiffViewer, {
+      props: {
+        files: [markdownFile],
+        batchFetchFileContents: vi.fn().mockResolvedValue(new Map([[markdownFile.filename, {
+          oldContent: '',
+          newContent: '![Diagram](../assets/diagram.png)\n\n[Setup](../SETUP.md)',
+        }]])),
+        resolveRepositoryImage,
+        onOpenRepositoryPath,
+      },
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: `Show rich diff for ${markdownFile.filename}` }))
+
+    await waitFor(() => {
+      expect(resolveRepositoryImage).toHaveBeenCalledWith('docs/assets/diagram.png')
+      expect(screen.getByRole('img', { name: 'Diagram' }).getAttribute('src')).toBe('data:image/png;base64,diagram')
+    })
+
+    await fireEvent.click(screen.getByRole('link', { name: 'Setup' }))
+    expect(onOpenRepositoryPath).toHaveBeenCalledWith('docs/SETUP.md', '')
+  })
+
+  it('resolves nested GitHub Rich Diff images and links at the pull request head', async () => {
+    const markdownFile: PrFileDiff = { ...fileWithPatch, filename: 'docs/guides/README.md' }
+    const onOpenUrl = vi.fn()
+    render(DiffViewer, {
+      props: {
+        files: [markdownFile],
+        repoOwner: 'acme',
+        repoName: 'repo',
+        headSha: 'abc123',
+        batchFetchFileContents: vi.fn().mockResolvedValue(new Map([[markdownFile.filename, {
+          oldContent: '',
+          newContent: '![Diagram](../assets/diagram.png)\n\n[Setup](../SETUP.md)',
+        }]])),
+        onOpenUrl,
+      },
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: `Show rich diff for ${markdownFile.filename}` }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('img', { name: 'Diagram' }).getAttribute('src'))
+        .toBe('https://raw.githubusercontent.com/acme/repo/abc123/docs/assets/diagram.png')
+    })
+
+    await fireEvent.click(screen.getByRole('link', { name: 'Setup' }))
+    expect(onOpenUrl).toHaveBeenCalledWith('https://github.com/acme/repo/blob/abc123/docs/SETUP.md')
+  })
 })
 
 describe('DiffViewer reviewed files', () => {
