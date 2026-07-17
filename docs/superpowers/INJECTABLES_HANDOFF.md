@@ -63,6 +63,21 @@ Three sequential plans:
 - **Plugin id** `com.openforge.injectables` · pkg `@openforge-app/plugin-injectables` · view
   "Injectables" (⌘L). Snippets persist to `~/.openforge/injectables/snippets.json`.
 - **NEVER run `pnpm electron:dev`** — ask the user to run the app and report.
+
+### Cross-machine resume (IMPORTANT)
+
+The openforge branch `aviv/openforge/injectable-picker-design` is pushed to origin
+(`git@github.com:koenvg/openforge.git`), through the docs-handoff commit `18718346`. On a new
+machine: clone/fetch that fork, `git checkout aviv/openforge/injectable-picker-design`,
+`pnpm install`, then `pnpm --filter @openforge-app/plugin-sdk build`.
+
+**The plugin's SDK `link:` in `plugins/injectables/package.json` is an ABSOLUTE path to
+machine-A's worktree** — it will NOT exist elsewhere. On the new machine, repoint it to that
+machine's openforge checkout SDK (`link:<abs path>/packages/plugin-sdk`) and re-run `pnpm install`
+in the plugins repo. Because Plan 2 Task 1 (scaffold) is fully deterministic from the committed
+plan, the simplest path on machine B is: fresh-clone `openforge-plugins`, then re-run Task 1
+against machine B's SDK path (this also picks up the latest `main`, since machine-A's scaffold
+commit `4f95539` sits on a stale base). Then continue at Task 2.
 - Root `tsc --noEmit` fails locally (a local `ignoreDeprecations` artifact); CI passes.
   Typecheck per-package + rely on the harness LSP diagnostics.
 
