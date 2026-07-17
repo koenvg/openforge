@@ -40,6 +40,7 @@ Each plugin declares OpenForge metadata in `package.json#openforge` and ships al
     "description": "Project notes and scheduled follow-ups",
     "icon": "notebook-text",
     "frontend": "./dist/frontend.js",
+    "frontendStyles": ["./dist/openforge-notes.css"],
     "backend": "./dist/backend.js",
     "requires": ["views", "tasks", "storage", "notifications", "backend"]
   }
@@ -50,7 +51,8 @@ Metadata rules:
 
 - `openforge.id` must be unique app-wide. Runtime contribution IDs are local to the plugin and are auto-qualified with the plugin id.
 - `openforge.apiVersion` is the compatibility gate. The current SDK supports API version `1`.
-- `frontend` and `backend` are optional, independent built artifacts.
+- `frontend` and `backend` are optional, independent built JavaScript artifacts.
+- `frontendStyles` optionally lists one or more built CSS artifacts for a frontend plugin. Paths are package-relative, must end in `.css`, and are validated during installation.
 - `requires` should list the host capabilities the package expects. Metadata validation rejects unknown capability names; runtime capability availability is still determined by the active OpenForge host.
 - Installed packages should include their built `dist/` artifacts.
 
@@ -109,6 +111,23 @@ Frontend-only registries and helpers:
 - `openforge.backend.whenReady()` / `openforge.backend.invoke(...)` for the same plugin's backend methods
 
 Svelte plugin components receive `api` and `context` props. Task UI tabs and sections also receive `taskId` and `projectId`. Task UI sections are rendered as plugin-owned content in the shared task information pane; they do not require a title, icon, heading, or host card. Use Svelte 5 runes in components and avoid importing app stores directly.
+
+### Svelte build and CSS contract
+
+Frontend plugins share the host's Svelte runtime. Declare `svelte` as both a peer dependency and an author-time dev dependency, and use `openforgePluginViteExternals` from `@openforge-app/plugin-sdk/vite` in the frontend Vite build so Svelte is not bundled into the plugin.
+
+`@sveltejs/vite-plugin-svelte` library builds extract component styles into separate CSS files. Declare every emitted file explicitly in `package.json#openforge.frontendStyles`; the host does not guess Vite's output filename:
+
+```json
+{
+  "openforge": {
+    "frontend": "./dist/frontend.js",
+    "frontendStyles": ["./dist/plugin-handoff-notes-workflow.css"]
+  }
+}
+```
+
+OpenForge validates the JavaScript and CSS artifacts during installation, serves them through `plugin://<plugin-id>/...`, attaches stylesheets before importing the frontend entry, and removes them when the plugin is disabled, reloaded, or uninstalled. Reload cache-busting applies to both JavaScript and CSS. Package-relative URLs inside the CSS continue to resolve through the same plugin asset protocol.
 
 ## Backend entry point
 
@@ -268,3 +287,4 @@ For unit tests that only need an API object, use `createMockOpenForgeApi`, `crea
 - Prefer SDK task APIs for scheduler-style Task Creation and Implementation Run requests.
 - Use host capabilities for files, shell, notifications, links, config, and task/project data.
 - Add focused tests for registrations, storage scoping, task creation/start behavior, and lifecycle cleanup.
+- For styled Svelte components, build first and declare every emitted CSS file in `openforge.frontendStyles`.

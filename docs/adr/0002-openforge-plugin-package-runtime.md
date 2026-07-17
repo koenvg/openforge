@@ -67,6 +67,7 @@ Use `package.json` as the package/discovery manifest. OpenForge-specific fields 
     "description": "GitHub PR review and sync",
     "icon": "github",
     "frontend": "./dist/frontend.js",
+    "frontendStyles": ["./dist/openforge-github.css"],
     "backend": "./dist/backend.js",
     "requires": ["projects", "tasks", "commands", "storage"]
   }
@@ -79,7 +80,7 @@ Rules:
 - `openforge.apiVersion` is the hard host compatibility gate.
 - Peer dependencies on `@openforge-app/plugin-sdk` are advisory diagnostics, not the runtime compatibility source of truth.
 - Each built artifact targets one API version.
-- Installed packages must ship built JavaScript artifacts.
+- Installed packages must ship every declared built JavaScript and CSS artifact.
 - Local path development installs also point to already-built artifacts; OpenForge should validate entries and show a helpful build-required error.
 - Package-level display metadata is for plugin management UI; runtime contributions have their own titles/icons.
 - Icons can be semantic OpenForge icon keys or package asset references.
@@ -143,7 +144,7 @@ Cleanup is only through `context.subscriptions`. `activate()` does not return a 
 
 ## Runtime model
 
-- A plugin package can include optional `frontend` and `backend` entries.
+- A plugin package can include optional `frontend` and `backend` entries. Frontend packages may also declare `frontendStyles` CSS artifacts that share the frontend lifecycle.
 - Frontend and backend are separate runtime boundaries but should feel like one plugin package to authors and users.
 - Frontend activation does not globally wait for backend readiness.
 - Backend methods cannot be invoked before backend activation/registration is ready.
@@ -457,6 +458,7 @@ A plugin package ships normal npm metadata plus `package.json#openforge`. Instal
     "description": "Project and task notes for OpenForge",
     "icon": "notebook-text",
     "frontend": "./dist/frontend.js",
+    "frontendStyles": ["./dist/openforge-notes.css"],
     "backend": "./dist/backend.js",
     "requires": ["views", "commands", "backend", "background", "storage", "notifications"]
   }
@@ -473,6 +475,7 @@ Metadata variants:
     "displayName": "Frontend Only",
     "description": "Adds a native Svelte view",
     "frontend": "./dist/frontend.js",
+    "frontendStyles": ["./dist/frontend-only.css"],
     "requires": ["views", "storage"]
   }
 }
@@ -504,6 +507,8 @@ git:github.com/acme/openforge-notes@main
 Official contract: host-shared Svelte. Frontend plugins that ship Svelte components must not bundle their own copy of Svelte. `PluginSlot` renders plugin components inside the host renderer's Svelte tree, so the component and host must share the same Svelte active-effect/runtime singleton. Bundling Svelte into the plugin can crash at render time with errors such as `Cannot read properties of null (reading nodes)`.
 
 Use `svelte` as both a `peerDependency` and an author-time `devDependency`, and externalize Svelte in the frontend Vite build with `openforgePluginViteExternals`. The SDK exports the complete host-shared runtime list as `OPENFORGE_HOST_SHARED_SVELTE_IMPORTS`; the host renderer import map and packaged `plugin://host-runtime/svelte/*` assets must cover every specifier in that list, including compiled-component imports such as `svelte/internal/client` and `svelte/internal/disclose-version`.
+
+Svelte library builds may extract component CSS from the JavaScript entry. Every emitted stylesheet must be declared explicitly in `package.json#openforge.frontendStyles`; output-name discovery is not part of the host contract. The installer validates package-relative `.css` paths. The renderer attaches them through the plugin asset protocol before importing `frontend`, removes them with frontend deactivation, and cache-busts them on reload. The Electron renderer CSP must therefore allow `plugin:` in `style-src`.
 
 `vite.config.ts`:
 

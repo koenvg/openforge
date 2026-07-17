@@ -47,7 +47,7 @@ describe('Renderer Trust Policy Module', () => {
         corsEnabled: true,
       },
     })
-    expect(policy.contentSecurityPolicy(sidecarConfig)).toBe(`default-src 'self'; script-src 'self' plugin: ${rendererImportMapScriptHashSource()}; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src 'self' http://127.0.0.1:17642 https://api.github.com https://*.atlassian.net`)
+    expect(policy.contentSecurityPolicy(sidecarConfig)).toBe(`default-src 'self'; script-src 'self' plugin: ${rendererImportMapScriptHashSource()}; style-src 'self' plugin: 'unsafe-inline'; img-src 'self' plugin: https: data:; font-src 'self' plugin: data:; connect-src 'self' http://127.0.0.1:17642 https://api.github.com https://*.atlassian.net`)
     expect(policy.contentSecurityPolicy(null)).toContain(`connect-src 'self' http://127.0.0.1:${DEFAULT_SIDECAR_PORT}`)
     expect(cspDirective(policy.contentSecurityPolicy(sidecarConfig), 'script-src')).toContain(rendererImportMapScriptHashSource())
     expect(cspDirective(policy.contentSecurityPolicy(sidecarConfig), 'script-src')).not.toContain("'unsafe-inline'")

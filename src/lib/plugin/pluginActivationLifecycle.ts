@@ -55,20 +55,55 @@ function createFrontendRuntimeRegistryForPlugin(pluginId: string, manifest: Plug
   })
 }
 
+async function discardFrontendRuntimeActivation(pluginId: string, runtimeRegistry: RuntimeContributionRegistryInstance): Promise<void> {
+  let cleanupError: unknown = null
+  try {
+    await runtimeRegistry.deactivate()
+  } catch (error) {
+    cleanupError = error
+  }
+
+  activeRuntimeRegistries.delete(pluginId)
+  clearPluginRuntimeHostState(pluginId)
+  try {
+    await stopPluginBackgroundServices(pluginId)
+  } catch (error) {
+    cleanupError ??= error
+  } finally {
+    clearPluginRuntimeContributions(pluginId)
+  }
+
+  if (cleanupError !== null) {
+    console.error(`[pluginActivationLifecycle] Failed to discard frontend runtime activation for ${pluginId}:`, cleanupError)
+  }
+}
+
 async function activateFrontendRuntimePlugin(pluginId: string, manifest: PluginManifest, frontendPlugin: Parameters<RuntimeContributionRegistryInstance['activateFrontend']>[0]): Promise<boolean> {
+  const activationGeneration = pluginFrontendReloadGenerations.get(pluginId) ?? 0
   const runtimeRegistry = createFrontendRuntimeRegistryForPlugin(pluginId, manifest)
 
   try {
     await runtimeRegistry.activateFrontend(frontendPlugin)
-    activeRuntimeRegistries.set(pluginId, runtimeRegistry)
+    if ((pluginFrontendReloadGenerations.get(pluginId) ?? 0) !== activationGeneration) {
+      await discardFrontendRuntimeActivation(pluginId, runtimeRegistry)
+      setPluginRuntimeState(pluginId, 'installed', null)
+      return false
+    }
     await applyRuntimeSnapshotContributions(pluginId, runtimeRegistry.getSnapshot())
+    if ((pluginFrontendReloadGenerations.get(pluginId) ?? 0) !== activationGeneration) {
+      await discardFrontendRuntimeActivation(pluginId, runtimeRegistry)
+      setPluginRuntimeState(pluginId, 'installed', null)
+      return false
+    }
+    activeRuntimeRegistries.set(pluginId, runtimeRegistry)
     setPluginRuntimeState(pluginId, 'active', null)
     return true
   } catch (error) {
-    await runtimeRegistry.deactivate()
-    activeRuntimeRegistries.delete(pluginId)
-    clearPluginRuntimeHostState(pluginId)
-    clearPluginRuntimeContributions(pluginId)
+    await discardFrontendRuntimeActivation(pluginId, runtimeRegistry)
+    if ((pluginFrontendReloadGenerations.get(pluginId) ?? 0) !== activationGeneration) {
+      setPluginRuntimeState(pluginId, 'installed', null)
+      return false
+    }
     setPluginRuntimeError(pluginId, error)
     return false
   }
@@ -108,13 +143,21 @@ async function activateExternalPluginModule(pluginId: string, manifest: PluginMa
     return true
   }
 
-  const loaded = await loadPluginFrontend(pluginId, normalizePluginAssetUrl(pluginId, manifest.frontend))
+  const frontendUrl = normalizePluginAssetUrl(pluginId, manifest.frontend)
+  const frontendStyles = get(installedPlugins).get(pluginId)?.packageMetadata?.frontendStyles ?? []
+  const stylesheetUrls = frontendStyles.map(stylesheet => normalizePluginAssetUrl(pluginId, stylesheet))
+  const loaded = stylesheetUrls.length > 0
+    ? await loadPluginFrontend(pluginId, frontendUrl, stylesheetUrls)
+    : await loadPluginFrontend(pluginId, frontendUrl)
   if (!loaded) return false
 
   if (isFrontendPluginModule(loaded.module)) {
-    return activateFrontendRuntimePlugin(pluginId, manifest, loaded.module)
+    const activated = await activateFrontendRuntimePlugin(pluginId, manifest, loaded.module)
+    if (!activated) clearLoadedPlugin(pluginId)
+    return activated
   }
 
+  clearLoadedPlugin(pluginId)
   setPluginRuntimeError(pluginId, new Error(`Plugin ${pluginId} uses the legacy activate(context) API, which is no longer supported; export defineFrontendPlugin(...) and register contributions at runtime`))
   return false
 }
@@ -297,8 +340,8 @@ export function getPluginRenderProps(pluginId: string, options: { projectId: str
 }
 
 export async function deactivatePluginById(pluginId: string): Promise<void> {
-  await deactivateLoadedPluginModule(pluginId)
   bumpPluginFrontendReloadGeneration(pluginId)
+  await deactivateLoadedPluginModule(pluginId)
   clearPluginRuntimeContributions(pluginId)
   await stopPluginBackgroundServices(pluginId)
   clearPluginHostSubscriptions(pluginId)
