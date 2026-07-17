@@ -87,7 +87,14 @@
     {/if}
   {/snippet}
   <div class="px-3 py-2 flex flex-col gap-2">
-    <div id={promptContentId} role="region" aria-label="Initial Prompt content" class="text-xs text-base-content/65 leading-relaxed whitespace-pre-wrap break-words">{visibleInitialPrompt}</div>
+    <div
+      id={promptContentId}
+      role="region"
+      aria-label="Initial Prompt content"
+      class="text-xs text-base-content/65 leading-relaxed break-words [&_.markdown-body]:text-xs [&_.markdown-body_pre]:text-[10px] [&_.markdown-body_code]:text-[10px] [&_.markdown-body_p]:my-1"
+    >
+      <MarkdownContent content={visibleInitialPrompt} />
+    </div>
     {#if initialPromptHasOverflow}
       <div role="group" aria-label="Initial Prompt actions" class="flex justify-start">
         <button

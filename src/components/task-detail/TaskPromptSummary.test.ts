@@ -47,6 +47,22 @@ describe('TaskPromptSummary', () => {
     expect(screen.getByText('Implemented JWT auth')).toBeTruthy()
   })
 
+  it('renders the collapsed Initial Prompt preview as Markdown', () => {
+    render(TaskPromptSummary, {
+      props: {
+        task: {
+          ...baseTask,
+          initial_prompt: '# Release plan\n\nShip the **renderer**\nHidden fourth line',
+        },
+      },
+    })
+
+    const promptContent = screen.getByRole('region', { name: 'Initial Prompt content' })
+    expect(screen.getByRole('heading', { name: 'Release plan' })).toBeTruthy()
+    expect(promptContent.querySelector('strong')?.textContent).toBe('renderer')
+    expect(promptContent.textContent).not.toContain('Hidden fourth line')
+  })
+
   it('expands and collapses the initial prompt text when the toggle is clicked', async () => {
     render(TaskPromptSummary, {
       props: {
