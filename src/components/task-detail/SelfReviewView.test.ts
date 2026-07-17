@@ -19,6 +19,17 @@ vi.mock("../../lib/stores", () => ({
 	taskDraftNotes: writable(new Map()),
 }));
 
+const { navigateMock } = vi.hoisted(() => ({ navigateMock: vi.fn() }))
+
+vi.mock('../../lib/fileViewerPlugin', () => ({
+  FILE_VIEWER_VIEW_KEY: 'plugin:com.openforge.file-viewer:files',
+  revealFileInFileViewer: vi.fn().mockResolvedValue(true),
+}))
+
+vi.mock('../../lib/router.svelte', () => ({
+  useAppRouter: () => ({ navigate: navigateMock }),
+}))
+
 vi.mock("@openforge-app/pr-review-ui/useVirtualizer.svelte", () => ({
 	createVirtualizer: vi.fn((opts: { getCount: () => number }) => ({
 		get virtualItems() {
@@ -76,7 +87,7 @@ import {
 } from "../../lib/taskScopedSelfReviewState";
 import { createVirtualizer } from "@openforge-app/pr-review-ui/useVirtualizer.svelte";
 import { clearTaskReviewPaneState, getTaskReviewFileIdentity, getTaskReviewPaneState, markTaskReviewFileReviewed } from "../../lib/taskReviewPaneState";
-
+import { FILE_VIEWER_VIEW_KEY, revealFileInFileViewer } from '../../lib/fileViewerPlugin';
 const baseTask: Task = {
 	id: "task-1",
 	initial_prompt: "Test Task",
@@ -1167,4 +1178,48 @@ describe("SelfReviewView — non-application file filter", () => {
 			expect(screen.getByLabelText("Mark docs/guide.mdx reviewed")).toBeTruthy();
 		});
 	});
+});
+
+describe('SelfReviewView Rich Diff repository paths', () => {
+  beforeEach(() => {
+    clearTaskReviewPaneState();
+    selfReviewStateByTask.set(new Map());
+    pendingManualComments.set([]);
+    ticketPrs.set(new Map());
+    vi.clearAllMocks();
+    globalThis.Worker = InlineDiffWorker as unknown as typeof Worker;
+  });
+
+  it('loads nested worktree images and reveals relative links in the file viewer', async () => {
+    const markdownFile: PrFileDiff = { ...baseDiff, filename: 'docs/guides/README.md', sha: 'docs-sha' };
+    vi.mocked(getTaskDiff).mockResolvedValue([markdownFile]);
+    vi.mocked(getTaskBatchFileContents).mockResolvedValue([[
+      '',
+      '![Diagram](../assets/diagram.png)\n\n[Setup](../SETUP.md)',
+    ]]);
+    vi.mocked(getTaskFileContents).mockResolvedValue(['', 'base64-diagram']);
+
+    render(SelfReviewView, {
+      props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
+    });
+
+    await fireEvent.click(await screen.findByRole('button', { name: `Show rich diff for ${markdownFile.filename}` }));
+
+    await waitFor(() => {
+      expect(getTaskFileContents).toHaveBeenCalledWith(
+        baseTask.id,
+        'docs/assets/diagram.png',
+        null,
+        'modified',
+        true,
+        true,
+      );
+      expect(screen.getByRole('img', { name: 'Diagram' }).getAttribute('src'))
+        .toBe('data:image/png;base64,base64-diagram');
+    });
+
+    await fireEvent.click(screen.getByRole('link', { name: 'Setup' }));
+    expect(revealFileInFileViewer).toHaveBeenCalledWith('docs/SETUP.md');
+    expect(navigateMock).toHaveBeenCalledWith(FILE_VIEWER_VIEW_KEY);
+  });
 });

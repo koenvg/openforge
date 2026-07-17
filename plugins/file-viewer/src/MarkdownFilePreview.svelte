@@ -1,7 +1,6 @@
 <script lang="ts">
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
-  import { resolveMarkdownImageProjectPath } from './lib/markdownImagePaths'
 
   interface Props {
     api: FrontendOpenForgeAPI
@@ -10,13 +9,13 @@
     projectId: string | null
     scrollTop?: number
     onScrollTopChange?: (scrollTop: number) => void
+    onOpenRepositoryPath?: (repositoryPath: string) => void | Promise<void>
   }
 
-  let { api, content, filePath, projectId, scrollTop = 0, onScrollTopChange }: Props = $props()
+  let { api, content, filePath, projectId, scrollTop = 0, onScrollTopChange, onOpenRepositoryPath }: Props = $props()
 
   let scrollRegion = $state<HTMLDivElement | null>(null)
   let appliedScrollKey = $state<string | null>(null)
-  let imageResolutionId = 0
 
   function handleScroll() {
     if (scrollRegion) {
@@ -24,23 +23,16 @@
     }
   }
 
-  async function resolveMarkdownImages(runId: number) {
-    if (!scrollRegion || !projectId) return
+  async function resolveRepositoryImage(repositoryPath: string): Promise<string | null> {
+    if (!projectId) return null
 
-    const images = Array.from(scrollRegion.querySelectorAll('img[src]'))
-    await Promise.all(images.map(async (image) => {
-      const imagePath = resolveMarkdownImageProjectPath(image.getAttribute('src'), filePath)
-      if (!imagePath) return
-
-      try {
-        const imageContent = await api.fs.readFile({ projectId, path: imagePath })
-        if (runId !== imageResolutionId || imageContent.type !== 'image' || !imageContent.content) return
-
-        image.setAttribute('src', `data:${imageContent.mimeType ?? 'image/*'};base64,${imageContent.content}`)
-      } catch {
-        // Keep the original src when a referenced image is missing or cannot be previewed.
-      }
-    }))
+    try {
+      const imageContent = await api.fs.readFile({ projectId, path: repositoryPath })
+      if (imageContent.type !== 'image' || !imageContent.content) return null
+      return `data:${imageContent.mimeType ?? 'image/*'};base64,${imageContent.content}`
+    } catch {
+      return null
+    }
   }
 
   const scrollKey = $derived(`${filePath}:markdown:${scrollTop}`)
@@ -52,12 +44,6 @@
     }
   })
 
-  $effect(() => {
-    const runId = ++imageResolutionId
-    if (!content || !scrollRegion || !projectId) return
-
-    void resolveMarkdownImages(runId)
-  })
 </script>
 
 <div
@@ -67,5 +53,11 @@
   bind:this={scrollRegion}
   onscroll={handleScroll}
 >
-  <MarkdownContent {content} onOpenUrl={(url) => api.system.openUrl(url)} />
+  <MarkdownContent
+    {content}
+    markdownFilePath={filePath}
+    {resolveRepositoryImage}
+    {onOpenRepositoryPath}
+    onOpenUrl={(url) => api.system.openUrl(url)}
+  />
 </div>

@@ -221,6 +221,18 @@ fn bytes_to_frontend_content(path: &str, bytes: &[u8]) -> String {
     }
 }
 
+async fn read_contained_worktree_file(worktree_path: &str, path: &str) -> Option<Vec<u8>> {
+    let canonical_root = tokio::fs::canonicalize(worktree_path).await.ok()?;
+    let canonical_file = tokio::fs::canonicalize(canonical_root.join(path))
+        .await
+        .ok()?;
+    if !canonical_file.starts_with(&canonical_root) {
+        return None;
+    }
+
+    tokio::fs::read(canonical_file).await.ok()
+}
+
 async fn fetch_file_contents(
     worktree_path: &str,
     base_ref: &str,
@@ -251,10 +263,9 @@ async fn fetch_file_contents(
     let new_content = if is_removed_status(status) {
         String::new()
     } else if include_uncommitted {
-        let full_path = std::path::Path::new(worktree_path).join(path);
-        match tokio::fs::read(&full_path).await {
-            Ok(bytes) => bytes_to_frontend_content(path, &bytes),
-            Err(_) => String::new(),
+        match read_contained_worktree_file(worktree_path, path).await {
+            Some(bytes) => bytes_to_frontend_content(path, &bytes),
+            None => String::new(),
         }
     } else {
         let new_output = tokio::process::Command::new("git")
@@ -1378,6 +1389,40 @@ mod tests {
     fn test_text_content_stays_text_for_frontend() {
         let content = bytes_to_frontend_content("src/main.rs", b"fn main() {}\n");
         assert_eq!(content, "fn main() {}\n");
+    }
+
+    #[tokio::test]
+    async fn test_worktree_file_reads_stay_within_canonical_root() {
+        let worktree = tempdir().expect("create worktree");
+        fs::create_dir_all(worktree.path().join("assets")).expect("create assets directory");
+        fs::write(worktree.path().join("assets/logo.png"), b"image").expect("write image");
+
+        assert_eq!(
+            read_contained_worktree_file(
+                worktree.path().to_str().expect("worktree path is UTF-8"),
+                "assets/logo.png",
+            )
+            .await,
+            Some(b"image".to_vec()),
+        );
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+
+            let outside = tempdir().expect("create outside directory");
+            fs::write(outside.path().join("secret.png"), b"secret").expect("write secret");
+            symlink(outside.path(), worktree.path().join("linked")).expect("create symlink");
+
+            assert_eq!(
+                read_contained_worktree_file(
+                    worktree.path().to_str().expect("worktree path is UTF-8"),
+                    "linked/secret.png",
+                )
+                .await,
+                None,
+            );
+        }
     }
 
     #[test]

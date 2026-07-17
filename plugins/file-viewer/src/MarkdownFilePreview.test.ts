@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/svelte'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import MarkdownFilePreview from './MarkdownFilePreview.svelte'
@@ -50,5 +50,21 @@ describe('MarkdownFilePreview', () => {
       expect(screen.getByRole('img', { name: 'Same directory' }).getAttribute('src')).toBe('data:image/png;base64,same-image')
       expect(screen.getByRole('img', { name: 'Parent directory' }).getAttribute('src')).toBe('data:image/png;base64,parent-image')
     })
+  })
+
+  it('opens nested repository links through the file selection callback', async () => {
+    const onOpenRepositoryPath = vi.fn()
+    render(MarkdownFilePreview, {
+      props: {
+        api: makeApi(),
+        content: '[Setup](../SETUP.md)',
+        filePath: 'docs/guides/README.md',
+        projectId: 'project-1',
+        onOpenRepositoryPath,
+      },
+    })
+
+    await fireEvent.click(screen.getByRole('link', { name: 'Setup' }))
+    expect(onOpenRepositoryPath).toHaveBeenCalledWith('docs/SETUP.md', '')
   })
 })

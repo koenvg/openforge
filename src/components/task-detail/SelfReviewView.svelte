@@ -7,6 +7,7 @@
   import { createCommentSelection } from '../../lib/useCommentSelection.svelte'
   import { prCommentsToReviewComments } from '@openforge-app/pr-review-ui/diffComments'
   import { countNonApplicationFiles, filterApplicationFiles } from '@openforge-app/pr-review-ui/applicationFiles'
+  import { getImagePreviewDataUrl } from '@openforge-app/pr-review-ui/diffAdapter'
   import {
     getTaskReviewFileIdentity,
     getTaskReviewPaneState,
@@ -20,6 +21,8 @@
   } from '../../lib/taskReviewPaneState'
   import { getGitHubMarkdownImageBaseUrl } from '../../lib/githubMarkdown'
   import { buildReviewedBaselineComparison } from '../../lib/reviewedBaselineDiff'
+  import { FILE_VIEWER_VIEW_KEY, revealFileInFileViewer } from '../../lib/fileViewerPlugin'
+  import { useAppRouter } from '../../lib/router.svelte'
 
   import type { Task, PrFileDiff, ReviewSubmissionComment } from '../../lib/types'
   import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
@@ -38,6 +41,7 @@
   }
 
   let { task, agentStatus, onSendToAgent }: Props = $props()
+  const router = useAppRouter()
 
   let diffViewer = $state<DiffViewer>()
   let fileTreeVisible = $state(true)
@@ -169,6 +173,30 @@
       map.set(file.filename, { oldContent, newContent })
     })
     return map
+  }
+
+  async function resolveRepositoryImage(repositoryPath: string): Promise<string | null> {
+    const sha = diffLoader.selectedCommitSha
+    const [, content] = sha !== null
+      ? await getCommitFileContents(task.id, sha, repositoryPath, null, 'modified')
+      : await getTaskFileContents(
+        task.id,
+        repositoryPath,
+        null,
+        'modified',
+        includeCommitted,
+        includeUncommitted,
+      )
+
+    return getImagePreviewDataUrl(repositoryPath, content)
+  }
+
+  async function openRepositoryPath(repositoryPath: string) {
+    try {
+      await revealFileInFileViewer(repositoryPath)
+    } finally {
+      router.navigate(FILE_VIEWER_VIEW_KEY)
+    }
   }
 
   async function fetchTaskFileContents(file: PrFileDiff): Promise<FileContents> {
@@ -465,6 +493,8 @@
               onToggleFileTree={() => { fileTreeVisible = !fileTreeVisible }}
               fetchFileContents={fetchTaskFileContents}
               batchFetchFileContents={batchFetchTaskFileContents}
+              {resolveRepositoryImage}
+              onOpenRepositoryPath={openRepositoryPath}
               {includeCommitted}
               {includeUncommitted}
               initialScrollTop={getTaskReviewPaneState(task.id).diffScrollTop}

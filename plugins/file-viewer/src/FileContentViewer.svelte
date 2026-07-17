@@ -16,6 +16,7 @@
     scrollTop?: number
     onScrollTopChange?: (scrollTop: number) => void
     onRetryFile?: () => void
+    onOpenRepositoryPath?: (repositoryPath: string) => void | Promise<void>
     focusRequestKey?: number | null
     onReturnFocusToTree?: () => void
   }
@@ -31,6 +32,7 @@
     scrollTop = 0,
     onScrollTopChange,
     onRetryFile,
+    onOpenRepositoryPath,
     focusRequestKey = null,
     onReturnFocusToTree,
   }: Props = $props()
@@ -171,6 +173,7 @@
             {projectId}
             {scrollTop}
             onScrollTopChange={onScrollTopChange}
+            {onOpenRepositoryPath}
           />
         {:else}
           <div
