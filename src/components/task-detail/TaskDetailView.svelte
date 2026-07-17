@@ -367,7 +367,7 @@
               <span class="loading loading-spinner loading-xs"></span>
               Completing…
             {:else}
-              Complete 🏁
+              Complete
             {/if}
           </Button>
           {#if actions.length > 0}
