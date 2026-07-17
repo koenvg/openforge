@@ -47,6 +47,7 @@
           "commands",
           "events",
           "views",
+          "injectionPoints",
           "taskPane",
           "settings",
           "background",
