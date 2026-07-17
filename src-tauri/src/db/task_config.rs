@@ -199,7 +199,8 @@ mod tests {
         db.set_project_config(&project.id, "ai_provider", "opencode")
             .unwrap();
         assert_eq!(db.resolve_ai_provider_for_task(&task.id), "opencode");
-        db.set_task_config(&task.id, "ai_provider", "codex").unwrap();
+        db.set_task_config(&task.id, "ai_provider", "codex")
+            .unwrap();
         assert_eq!(db.resolve_ai_provider_for_task(&task.id), "codex");
 
         drop(db);

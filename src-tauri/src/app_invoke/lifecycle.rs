@@ -586,7 +586,8 @@ mod tests {
             let db = crate::db::acquire_db(&state.db);
             let project = db.create_project("P", "/tmp/p").unwrap();
             // Global default OFF; the task snapshot overrides it ON.
-            db.set_config("code_cleanup_tasks_enabled", "false").unwrap();
+            db.set_config("code_cleanup_tasks_enabled", "false")
+                .unwrap();
             let task = db
                 .create_task_with_options(crate::db::NewTaskOptions {
                     initial_prompt: "p",
