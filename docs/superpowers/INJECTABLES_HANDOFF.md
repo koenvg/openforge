@@ -80,6 +80,23 @@ Machine setup:
    already done on this branch — continue at Task 2.
 3. Plugin work pushes to `origin` (`koenvangeert/openforge-plugins`) normally. Commit Plan 2 tasks
    there and push the branch as you go.
+
+### Running via an OpenForge task (worktree mode) — READ IF STARTED AS AN OPENFORGE TASK
+
+An OpenForge task on the `openforge` repo runs in an **isolated worktree**. That worktree HAS
+Plan 1's SDK, but it is NOT the sibling that `openforge-plugins`'s committed `link:../../../openforge/...`
+resolves to. So the ONE task drives both repos like this:
+1. In the task worktree (openforge): `pnpm install && pnpm --filter @openforge-app/plugin-sdk build`.
+   Record its path: `WT=$(git rev-parse --show-toplevel)`.
+2. In the `openforge-plugins` checkout (ASK the user for its absolute path — it is a normal on-disk
+   clone, not a worktree): `git fetch && git checkout aviv/openforge/injectable-picker-design`. Then
+   set a LOCAL SDK link so it builds against the task worktree: edit
+   `plugins/injectables/package.json` dep to `link:$WT/packages/plugin-sdk` and `pnpm install`.
+   **Do NOT commit that machine-specific link** — when committing Plan 2 work, stage only your new/
+   edited source files and keep the committed sibling link (`git checkout -- plugins/injectables/package.json`
+   before committing if needed).
+3. Resume Plan 2 at Task 2. Push plugin commits to `koenvangeert/openforge-plugins`, and doc/handoff
+   updates to `koenvg/openforge`.
 - Root `tsc --noEmit` fails locally (a local `ignoreDeprecations` artifact); CI passes.
   Typecheck per-package + rely on the harness LSP diagnostics.
 
