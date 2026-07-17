@@ -177,11 +177,37 @@ describe('resolveContributions', () => {
     ])
 
     expect(result.settingsSections).toEqual([
-      { pluginId: 'plugin.alpha', contributionId: 'default-order', namespacedId: 'plugin.alpha:default-order', title: 'Default Order', order: 0 },
-      { pluginId: 'plugin.zeta', contributionId: 'same-order-first', namespacedId: 'plugin.zeta:same-order-first', title: 'Same Order First', order: 10 },
-      { pluginId: 'plugin.alpha', contributionId: 'same-order-second', namespacedId: 'plugin.alpha:same-order-second', title: 'Same Order Second', order: 10 },
-      { pluginId: 'plugin.zeta', contributionId: 'later', namespacedId: 'plugin.zeta:later', title: 'Later', order: 30 },
+      { pluginId: 'plugin.alpha', contributionId: 'default-order', namespacedId: 'plugin.alpha:default-order', title: 'Default Order', order: 0, scope: 'project' },
+      { pluginId: 'plugin.zeta', contributionId: 'same-order-first', namespacedId: 'plugin.zeta:same-order-first', title: 'Same Order First', order: 10, scope: 'project' },
+      { pluginId: 'plugin.alpha', contributionId: 'same-order-second', namespacedId: 'plugin.alpha:same-order-second', title: 'Same Order Second', order: 10, scope: 'project' },
+      { pluginId: 'plugin.zeta', contributionId: 'later', namespacedId: 'plugin.zeta:later', title: 'Later', order: 30, scope: 'project' },
     ])
+  })
+
+  it('defaults a settings section to project scope and carries an explicit global scope', () => {
+    const result = resolveContributions([
+      makeSource({
+        pluginId: 'plugin.roadmap',
+        settingsSections: [
+          makeSettingsSection({ id: 'defaulted', title: 'Defaulted' }),
+          makeSettingsSection({ id: 'global-key', title: 'Global Key', scope: 'global' }),
+        ],
+      }),
+    ])
+
+    const byId = Object.fromEntries(result.settingsSections.map((s) => [s.contributionId, s.scope]))
+    expect(byId['defaulted']).toBe('project')
+    expect(byId['global-key']).toBe('global')
+  })
+
+  it('ignores an unrecognized scope value and falls back to project', () => {
+    const result = resolveContributions([
+      makeSource({
+        pluginId: 'plugin.roadmap',
+        settingsSections: [makeSettingsSection({ id: 's', title: 'S', scope: 'sidebar' as never })],
+      }),
+    ])
+    expect(result.settingsSections[0]?.scope).toBe('project')
   })
 
   it('handles empty contribution sources gracefully', () => {

@@ -25,7 +25,7 @@ describe('CreateDialog', () => {
     })
   }
 
-  const NO_KEY_HINT = 'Add API key in project settings → Roadmap.'
+  const NO_KEY_HINT = 'Add API key in global settings → Roadmap.'
 
   it('includes initial labels when manually creating an issue', async () => {
     const onCreate = vi.fn()

@@ -67,7 +67,9 @@ describe('roadmap frontend plugin', () => {
     await plugin.activate(api, context)
 
     expect(api.settings.registerSection).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'roadmap-settings', component: RoadmapSettingsSectionComponent }),
+      // scope: 'global' puts the API key field in the plugin's card on the global
+      // settings page, not on a per-project page.
+      expect.objectContaining({ id: 'roadmap-settings', scope: 'global', component: RoadmapSettingsSectionComponent }),
     )
   })
 
