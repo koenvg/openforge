@@ -3,7 +3,7 @@
   import '@git-diff-view/svelte/styles/diff-view-pure.css'
   import './DiffViewerTheme.css'
   import type { PrFileDiff, ReviewComment, ReviewSubmissionComment, AgentReviewComment } from '@openforge-app/plugin-sdk/domain'
-  import { isTruncated, getTruncationStats, isImageFileDiff, getImagePreviewDataUrl, type FileContents } from './diffAdapter'
+  import { isTruncated, getTruncationStats, isImageFileDiff, getImagePreviewDataUrl, getFileLanguage, type FileContents } from './diffAdapter'
   import { buildExtendData, type CommentDisplayData } from './diffComments'
   import { timeAgo } from './timeAgo'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
@@ -16,6 +16,7 @@
   import { sortFilesAsTree } from './fileSort'
   import { getFileStatusIcon, getFileStatusColor, getFileStatusLabel } from './fileStatus'
   import { loadDiffViewWrap, saveDiffViewWrap } from './diffViewPreferences'
+  import { getDiffFileSectionInputKey } from './diffFileSectionIdentity'
   import type { Snippet } from 'svelte'
   interface BaseProps {
     files?: PrFileDiff[]
@@ -54,6 +55,7 @@
   let internalPendingComments = $state<ReviewSubmissionComment[]>([])
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
   let diffViewWrap = $state(loadDiffViewWrap())
+  let richDiffSectionKeys = $state(new Set<string>())
   let commentText = $state('')
   type InlineCommentDraftSide = ReviewSubmissionComment['side']
   type InlineCommentDraftKey = {
@@ -106,6 +108,25 @@
       next.add(filename)
     }
     collapsedFiles = next
+  }
+
+  function supportsRichDiff(file: PrFileDiff): boolean {
+    return getFileLanguage(file.filename) === 'markdown' && file.status !== 'removed' && file.status !== 'deleted'
+  }
+
+  function isRichDiffActive(file: PrFileDiff): boolean {
+    return supportsRichDiff(file) && richDiffSectionKeys.has(getDiffFileSectionInputKey(file))
+  }
+
+  function setRichDiffActive(file: PrFileDiff, active: boolean) {
+    const sectionKey = getDiffFileSectionInputKey(file)
+    const next = new Set(richDiffSectionKeys)
+    if (active) {
+      next.add(sectionKey)
+    } else {
+      next.delete(sectionKey)
+    }
+    richDiffSectionKeys = next
   }
 
   function getReviewIdentity(file: PrFileDiff): string | null {
@@ -580,6 +601,26 @@
                 {#if fileHeaderExtra}
                   {@render fileHeaderExtra(file)}
                 {/if}
+                {#if supportsRichDiff(file)}
+                  <div class="join flex-shrink-0" role="group" aria-label="Diff presentation for {file.filename}">
+                    <button
+                      class="btn btn-ghost btn-xs join-item {isRichDiffActive(file) ? 'text-base-content/50' : 'text-primary bg-primary/10 border border-primary'}"
+                      aria-label="Show source diff for {file.filename}"
+                      aria-pressed={!isRichDiffActive(file)}
+                      onclick={() => setRichDiffActive(file, false)}
+                    >
+                      Source
+                    </button>
+                    <button
+                      class="btn btn-ghost btn-xs join-item {isRichDiffActive(file) ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
+                      aria-label="Show rich diff for {file.filename}"
+                      aria-pressed={isRichDiffActive(file)}
+                      onclick={() => setRichDiffActive(file, true)}
+                    >
+                      Rich
+                    </button>
+                  </div>
+                {/if}
                 {#if onToggleFileReviewed}
                   <label class="flex items-center gap-1.5 text-xs text-base-content/70 cursor-pointer flex-shrink-0">
                     <input
@@ -606,7 +647,26 @@
                     </span>
                   </div>
                 {/if}
-                {#if isImageFileDiff(file)}
+                {#if isRichDiffActive(file)}
+                  {@const markdownContents = fileContentsFetcher.fileContentsMap.get(file.filename)}
+                  <div class="bg-base-100 p-6 text-base-content leading-relaxed" role="region" aria-label="Rich diff for {file.filename}">
+                    {#if markdownContents}
+                      <MarkdownContent content={markdownContents.newContent} {onOpenUrl} />
+                    {:else if fetchFileContents || batchFetchFileContents}
+                      <div
+                        class="flex min-h-48 items-center justify-center"
+                        role="status"
+                        aria-live="polite"
+                        aria-label="Loading rich diff for {file.filename}"
+                      >
+                        <span class="loading loading-spinner loading-sm text-primary" aria-hidden="true"></span>
+                        <span class="sr-only">Loading rich diff for {file.filename}</span>
+                      </div>
+                    {:else}
+                      <p class="text-sm text-base-content/50">Rich preview unavailable</p>
+                    {/if}
+                  </div>
+                {:else if isImageFileDiff(file)}
                   {@const imageContents = fileContentsFetcher.fileContentsMap.get(file.filename)}
                   {@const oldImageSrc = imageContents ? getImagePreviewDataUrl(file.previous_filename || file.filename, imageContents.oldContent) : null}
                   {@const newImageSrc = imageContents ? getImagePreviewDataUrl(file.filename, imageContents.newContent) : null}

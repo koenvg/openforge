@@ -378,6 +378,67 @@ const fileWithPatch2: PrFileDiff = {
   patch_line_count: null,
 }
 
+describe('DiffViewer Rich Diff View', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('defaults Markdown files to Source and renders the post-change document in Rich view', async () => {
+    const markdownFile: PrFileDiff = {
+      ...fileWithPatch,
+      filename: 'README.md',
+    }
+    const batchFetchFileContents = vi.fn().mockResolvedValue(new Map([
+      ['README.md', {
+        oldContent: '# Previous heading\n',
+        newContent: '# Updated heading\n\n**Rendered body**\n',
+      }],
+    ]))
+
+    const { rerender } = render(DiffViewer, {
+      props: {
+        files: [markdownFile],
+        batchFetchFileContents,
+      },
+    })
+
+    const sourceButton = screen.getByRole('button', { name: 'Show source diff for README.md' })
+    const richButton = screen.getByRole('button', { name: 'Show rich diff for README.md' })
+    expect(sourceButton.getAttribute('aria-pressed')).toBe('true')
+    expect(richButton.getAttribute('aria-pressed')).toBe('false')
+    expect(screen.queryByRole('heading', { name: 'Updated heading' })).toBeNull()
+
+    await fireEvent.click(richButton)
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Updated heading' })).toBeTruthy()
+      expect(screen.getByText('Rendered body').tagName).toBe('STRONG')
+    })
+    expect(sourceButton.getAttribute('aria-pressed')).toBe('false')
+    expect(richButton.getAttribute('aria-pressed')).toBe('true')
+
+    const replacementFile: PrFileDiff = {
+      ...markdownFile,
+      sha: 'replacement-sha',
+      patch: '@@ -1 +1 @@\n-# Updated heading\n+# Replacement heading',
+    }
+    const replacementFetch = vi.fn().mockResolvedValue(new Map([
+      ['README.md', {
+        oldContent: '# Updated heading\n',
+        newContent: '# Replacement heading\n',
+      }],
+    ]))
+
+    await rerender({
+      files: [replacementFile],
+      batchFetchFileContents: replacementFetch,
+    })
+
+    expect(screen.getByRole('button', { name: 'Show source diff for README.md' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Show rich diff for README.md' }).getAttribute('aria-pressed')).toBe('false')
+  })
+})
+
 describe('DiffViewer reviewed files', () => {
   beforeEach(async () => {
     vi.clearAllMocks()

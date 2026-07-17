@@ -80,6 +80,10 @@ _Avoid_: Reviewed-files bucket, hidden-files list
 The per-file review area that contains a changed file's header and diff content.
 _Avoid_: File tree row, reviewed-files group
 
+**Rich Diff View**:
+A supported **Diff File Section** presentation that previews how the changed file will appear after its changes are applied.
+_Avoid_: Before-and-after preview, rendered source diff
+
 **Review Feedback Prompt**:
 The compiled bundle of inline, general, and PR review comments sent as an **Implementation Input** when the user sends collected feedback to the agent.
 _Avoid_: Send-to-agent message, fix-and-push instruction, commit prompt
@@ -307,6 +311,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - A **Reviewed File Snapshot** records the accepted file version for a **Reviewed File**, not the latest commit on the branch.
 - A **Review File Tree** keeps **Reviewed Files** in their original location as navigation items.
 - A **Diff File Section** may collapse after its file becomes a **Reviewed File**, while remaining available to reopen.
+- A supported **Diff File Section** defaults to its source diff and may switch independently to a **Rich Diff View** of the post-change result.
 - A **Review Feedback Prompt** instructs the agent to evaluate and fix the feedback only; it never instructs version-control actions (commit, push, PR) — those decisions stay with the user.
 - A **Project Handoff Notes Template** defines the required shape of **Handoff Notes** for Tasks in one project.
 - Existing Tasks may have unstructured historical summaries; **Handoff Notes** are the forward-looking reviewer brief, not a migration requirement.
