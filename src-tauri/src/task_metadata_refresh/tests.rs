@@ -255,6 +255,17 @@ fn provider_metadata_job_args_are_session_isolated_and_reusable() {
 }
 
 #[test]
+fn codex_metadata_job_places_global_approval_policy_before_exec() {
+    let codex_args = build_codex_title_headless_args(
+        Path::new("/tmp/title.schema.json"),
+        Path::new("/tmp/title.output.json"),
+        "Name this work",
+    );
+
+    assert_eq!(&codex_args[..3], &["--ask-for-approval", "never", "exec"]);
+}
+
+#[test]
 fn pi_metadata_job_resolves_installed_pi_executable_for_sidecar_launch() {
     let dir = tempfile::tempdir().expect("temp dir");
     let pi_path = dir.path().join("pi");
