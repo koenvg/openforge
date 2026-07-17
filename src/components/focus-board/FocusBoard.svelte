@@ -433,19 +433,9 @@
   </div>
 
   <div class="flex gap-6 flex-1 min-h-0">
-    <div class="flex flex-col gap-4 flex-1 min-w-0 overflow-y-auto">
-      {#if activeFilter === 'focus' || activeFilter === 'out-of-focus'}
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <span class="text-sm font-semibold text-base-content/70">Needs attention</span>
-            <span class="badge badge-ghost badge-sm">{filterCounts[activeFilter]}</span>
-          </div>
-          <span class="text-xs text-base-content/40">Quiet by default · select for context</span>
-        </div>
-      {/if}
-
+    <div class="flex flex-col gap-4 flex-1 min-w-0 min-h-0">
       {#if activeFilter === 'backlog' && visibleFilterLabels.length > 0}
-        <div class="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-base-300 bg-base-200 py-2" aria-label="Backlog label filters">
+        <div class="flex flex-wrap items-center gap-2 border-b border-base-300 py-2" role="group" aria-label="Backlog label filters">
           <span class="text-xs font-semibold text-base-content/50">Labels</span>
           {#each visibleFilterLabels as label (label.id)}
             <button
@@ -460,41 +450,53 @@
         </div>
       {/if}
 
-      {#if visibleTasks.length === 0}
-        <FocusEmptyState filter={activeFilter} />
-      {:else}
-        {#each visibleRows as row (row.task.id)}
-          {@const task = row.task}
-          {@const session = activeSessions.get(task.id) ?? null}
-          {@const pullRequests = ticketPrs.get(task.id) ?? []}
-          {@const state = computeTaskState(task, session, pullRequests)}
-          <div>
-            <TaskListItem
-              {task}
-              {state}
-              {session}
-              {pullRequests}
-              reasonText={getTaskReasonText(state, pullRequests)}
-              dependencyHint={activeFilter === 'backlog' ? getDependencyWaitLabel(task, dependencyResolutionTasks) : null}
-              showLabels={activeFilter === 'backlog'}
-              isSelected={selectedTaskIdLocal === task.id}
-              isFocused={vim.focusedIndex === row.taskIndex}
-              justViewed={recentlyViewedTaskId === task.id}
-              isMerging={$mergingTaskIds.has(task.id)}
-              onSelect={() => {
-                if (selectedTaskIdLocal === task.id) {
-                  onOpenTask(task.id)
-                } else {
-                  selectedTaskIdLocal = task.id
-                  vim.setFocusedIndex(row.taskIndex)
-                }
-              }}
-              onContextMenu={(e) => handleContextMenu(e, task.id)}
-              {onTaskUpdated}
-            />
+      <div class="flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto" role="region" aria-label="Task list">
+        {#if activeFilter === 'focus' || activeFilter === 'out-of-focus'}
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="text-sm font-semibold text-base-content/70">Needs attention</span>
+              <span class="badge badge-ghost badge-sm">{filterCounts[activeFilter]}</span>
+            </div>
+            <span class="text-xs text-base-content/40">Quiet by default · select for context</span>
           </div>
-        {/each}
-      {/if}
+        {/if}
+
+        {#if visibleTasks.length === 0}
+          <FocusEmptyState filter={activeFilter} />
+        {:else}
+          {#each visibleRows as row (row.task.id)}
+            {@const task = row.task}
+            {@const session = activeSessions.get(task.id) ?? null}
+            {@const pullRequests = ticketPrs.get(task.id) ?? []}
+            {@const state = computeTaskState(task, session, pullRequests)}
+            <div>
+              <TaskListItem
+                {task}
+                {state}
+                {session}
+                {pullRequests}
+                reasonText={getTaskReasonText(state, pullRequests)}
+                dependencyHint={activeFilter === 'backlog' ? getDependencyWaitLabel(task, dependencyResolutionTasks) : null}
+                showLabels={activeFilter === 'backlog'}
+                isSelected={selectedTaskIdLocal === task.id}
+                isFocused={vim.focusedIndex === row.taskIndex}
+                justViewed={recentlyViewedTaskId === task.id}
+                isMerging={$mergingTaskIds.has(task.id)}
+                onSelect={() => {
+                  if (selectedTaskIdLocal === task.id) {
+                    onOpenTask(task.id)
+                  } else {
+                    selectedTaskIdLocal = task.id
+                    vim.setFocusedIndex(row.taskIndex)
+                  }
+                }}
+                onContextMenu={(e) => handleContextMenu(e, task.id)}
+                {onTaskUpdated}
+              />
+            </div>
+          {/each}
+        {/if}
+      </div>
     </div>
 
     <div class="w-2/5 flex-shrink-0" onfocusin={() => paneHasFocus = true} onfocusout={() => paneHasFocus = false}>
