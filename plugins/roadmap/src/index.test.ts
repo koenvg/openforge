@@ -4,9 +4,10 @@ import { isOpenForgePackageMetadata } from '@openforge-app/plugin-sdk'
 import type { FrontendOpenForgeAPI, FrontendPluginContext } from '@openforge-app/plugin-sdk/frontend'
 import type { BackendOpenForgeAPI, BackendPluginContext } from '@openforge-app/plugin-sdk/backend'
 
-const { mockRoadmapView, mockRoadmapTaskPane } = vi.hoisted(() => ({
+const { mockRoadmapView, mockRoadmapTaskPane, mockSettingsSection } = vi.hoisted(() => ({
   mockRoadmapView: { name: 'RoadmapViewComponent' },
   mockRoadmapTaskPane: { name: 'RoadmapTaskPaneComponent' },
+  mockSettingsSection: { name: 'RoadmapSettingsSectionComponent' },
 }))
 
 vi.mock('./components/RoadmapView.svelte', () => ({
@@ -17,6 +18,10 @@ vi.mock('./components/RoadmapTaskPane.svelte', () => ({
   default: mockRoadmapTaskPane,
 }))
 
+vi.mock('./components/SettingsSection.svelte', () => ({
+  default: mockSettingsSection,
+}))
+
 import packageJson from '../package.json'
 
 function makeFrontendHarness() {
@@ -24,6 +29,7 @@ function makeFrontendHarness() {
   const api = {
     views: { register: vi.fn(() => ({ dispose: vi.fn() })) },
     taskPane: { registerTab: vi.fn(() => ({ dispose: vi.fn() })) },
+    settings: { registerSection: vi.fn(() => ({ dispose: vi.fn() })) },
   } as unknown as FrontendOpenForgeAPI
   const context = {
     pluginId: packageJson.openforge.id,
@@ -45,9 +51,26 @@ describe('roadmap plugin metadata', () => {
       expect.arrayContaining(['views', 'taskPane', 'backend', 'commands', 'events', 'tasks', 'projectConfig', 'storage', 'system.openUrl', 'context']),
     )
   })
+
+  // Refine reads its API key from a settings section and grounds drafts in the
+  // project's README, neither of which the plugin can do uncapability'd.
+  it('declares the settings and fs capabilities that Refine depends on', () => {
+    expect(packageJson.openforge.requires).toEqual(expect.arrayContaining(['settings', 'fs']))
+  })
 })
 
 describe('roadmap frontend plugin', () => {
+  it('registers a settings section so the API key has somewhere to live', async () => {
+    const { default: plugin, RoadmapSettingsSectionComponent } = await import('./index')
+    const { api, context } = makeFrontendHarness()
+
+    await plugin.activate(api, context)
+
+    expect(api.settings.registerSection).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'roadmap-settings', component: RoadmapSettingsSectionComponent }),
+    )
+  })
+
   it('registers the Roadmap rail view with a non-colliding Cmd shortcut', async () => {
     const { default: plugin, RoadmapViewComponent, RoadmapTaskPaneComponent } = await import('./index')
     const { api, context, subscriptions } = makeFrontendHarness()
@@ -137,12 +160,39 @@ describe('roadmap backend plugin', () => {
       color: '0e8a16',
     })
 
-    const refineTicket = registerCalls.find((c) => c[0] === 'roadmap_refine_ticket')![1] as { handler: (p: unknown) => unknown }
-    await refineTicket.handler({ projectId: 'P-1', text: 'rough idea', labels: ['bug'] })
-    expect(invokeGlobal).toHaveBeenCalledWith('openforge.roadmapRefineTicket', {
-      projectId: 'P-1',
-      text: 'rough idea',
-      labels: ['bug'],
-    })
+  })
+
+  // Refine is the one method that doesn't proxy: it calls the Anthropic API from the
+  // plugin so the dialog isn't waiting on an agent CLI spawn. Core's
+  // openforge.roadmapRefineTicket must not be reached.
+  it('handles roadmap_refine_ticket in-plugin instead of proxying it to core', async () => {
+    const { default: backend } = await import('./backend')
+    const invokeGlobal = vi.fn(() => Promise.resolve(null))
+    const api = {
+      backend: { registerMethod: vi.fn(() => ({ dispose: vi.fn() })) },
+      commands: { invokeGlobal },
+      storage: { global: { get: vi.fn().mockResolvedValue(null), set: vi.fn(), delete: vi.fn() } },
+      fs: { readFile: vi.fn().mockRejectedValue(new Error('no readme')) },
+    } as unknown as BackendOpenForgeAPI
+    const context = {
+      pluginId: packageJson.openforge.id,
+      apiVersion: 1,
+      packageMetadata: packageJson.openforge,
+      subscriptions: { add: vi.fn() },
+    } as unknown as BackendPluginContext
+
+    await backend.activate(api, context)
+
+    const registerCalls = (api.backend.registerMethod as ReturnType<typeof vi.fn>).mock.calls
+    const refineTicket = registerCalls.find((c) => c[0] === 'roadmap_refine_ticket')![1] as {
+      handler: (p: unknown) => Promise<unknown>
+    }
+
+    // No key configured, so it fails before any request — the point is where it stops.
+    await expect(
+      refineTicket.handler({ projectId: 'P-1', repo: 'acme/app', repoLabels: [], text: 'rough idea', draft: null, feedback: '' }),
+    ).rejects.toThrow(/global settings/)
+
+    expect(invokeGlobal).not.toHaveBeenCalledWith('openforge.roadmapRefineTicket', expect.anything())
   })
 })
