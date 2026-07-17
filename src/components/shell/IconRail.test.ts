@@ -70,6 +70,30 @@ describe('IconRail', () => {
     expect(onNavigate).toHaveBeenCalledWith('settings')
   })
 
+  it('renders a custom SVG plugin icon as decorative content inside the accessible navigation button', () => {
+    render(IconRail, {
+      props: {
+        currentView: 'board' as AppView,
+        onNavigate: vi.fn(),
+        pluginNavItems: [
+          {
+            viewKey: 'plugin:acme.issues:issues',
+            icon: {
+              type: 'svg',
+              svg: '<svg viewBox="0 0 24 24"><path d="M12 2 22 12 12 22 2 12Z" fill="currentColor"></path></svg>',
+            },
+            title: 'Issues',
+            shortcut: null,
+          },
+        ],
+      },
+    })
+
+    const button = screen.getByRole('button', { name: 'Issues' })
+    expect(button.querySelector('path')?.getAttribute('d')).toBe('M12 2 22 12 12 22 2 12Z')
+    expect(button.querySelector('[aria-hidden="true"]')).toBeTruthy()
+  })
+
   describe('active-repo PR count badge', () => {
     const prRailItem = {
       viewKey: 'plugin:com.openforge.github-sync:pr_review' as AppView,

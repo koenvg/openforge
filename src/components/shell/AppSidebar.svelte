@@ -8,11 +8,11 @@
     moveVisibleProject,
     saveHiddenProjectIds,
   } from '../../lib/projectVisibility'
-  import { resolveIconRailIcon } from '../../lib/iconRailIcons'
   import { GITHUB_SYNC_GLOBAL_VIEW_KEY } from '../../lib/githubSyncPlugin'
   import { isPluginViewKey } from '../../lib/plugin/types'
   import type { IconRailPluginNavItem } from '../../lib/iconRailNav'
   import type { AppView } from '../../lib/types'
+  import PluginNavigationIcon from './PluginNavigationIcon.svelte'
 
   interface Props {
     collapsed: boolean
@@ -37,13 +37,6 @@
     pluginNavItems = [],
     reviewRequestCount = 0,
   }: Props = $props()
-
-  let sidebarPluginNavItems = $derived(
-    pluginNavItems.map((item) => ({
-      ...item,
-      Icon: resolveIconRailIcon(item.icon),
-    }))
-  )
 
   // The active project stays highlighted while the current view belongs to that
   // project's context: the board or a per-project (icon-rail) plugin view such as
@@ -322,7 +315,7 @@
   </div>
 
   <div class="border-t border-base-300/50 py-2">
-    {#each sidebarPluginNavItems as { viewKey, Icon, title }}
+    {#each pluginNavItems as { viewKey, icon, title }}
       {@const isActive = currentView === viewKey}
       <button
         type="button"
@@ -333,7 +326,7 @@
         onclick={() => onNavigate(viewKey)}
       >
         <span class="relative shrink-0">
-          <Icon size={18} />
+          <PluginNavigationIcon {icon} size={18} />
           <!-- When collapsed there is no text label, so the counts overlay the icon. -->
           {#if collapsed && viewKey === GITHUB_SYNC_GLOBAL_VIEW_KEY && reviewRequestCount > 0}
             <span class="badge badge-error badge-xs absolute -top-2 -right-2 text-[0.6rem] font-bold min-w-4 h-4">{reviewRequestCount}</span>

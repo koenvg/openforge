@@ -1,5 +1,6 @@
 import { isPluginViewKey, parsePluginViewKey } from './types'
-import type { CommandShortcutMetadata } from '@openforge-app/plugin-sdk'
+import { sanitizePluginIcon } from '@openforge-app/plugin-sdk/pluginIcons'
+import type { CommandShortcutMetadata, PluginIcon } from '@openforge-app/plugin-sdk'
 import type {
   RuntimeBackgroundServiceContribution,
   RuntimeCommandContribution,
@@ -21,7 +22,7 @@ export interface ResolvedView {
   contributionId: string
   namespacedId: string
   title: string
-  icon: string
+  icon: PluginIcon
   shortcut: string | null
   showInRail: boolean
   showInSidebar: boolean
@@ -148,7 +149,14 @@ function resolveView(pluginId: string, item: unknown): ResolvedView | null {
   }
 
   const { id, title, icon, shortcut, placement, order } = item
-  if (!isNonEmptyString(id) || !isNonEmptyString(title) || !isNonEmptyString(icon)) {
+  if (!isNonEmptyString(id) || !isNonEmptyString(title)) {
+    return null
+  }
+
+  let sanitizedIcon: PluginIcon
+  try {
+    sanitizedIcon = sanitizePluginIcon(icon)
+  } catch {
     return null
   }
 
@@ -157,7 +165,7 @@ function resolveView(pluginId: string, item: unknown): ResolvedView | null {
     contributionId: id,
     namespacedId: toNamespacedId(pluginId, id),
     title,
-    icon,
+    icon: sanitizedIcon,
     shortcut: isNonEmptyString(shortcut) ? normalizeShortcut(shortcut) : null,
     showInRail: placement === undefined || placement === 'rail',
     showInSidebar: placement === 'sidebar',

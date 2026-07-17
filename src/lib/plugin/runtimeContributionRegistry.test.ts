@@ -100,6 +100,24 @@ describe('runtime contribution registry', () => {
     })
   })
 
+  it('sanitizes custom SVG view icons at the runtime registration boundary', () => {
+    const registry = makeRegistry()
+
+    registry.getFrontendApi().views.register({
+      id: 'issues',
+      title: 'Issues',
+      icon: {
+        type: 'svg',
+        svg: '<svg viewBox="0 0 24 24" onload="alert(1)"><path d="M12 2 22 12 12 22 2 12Z" fill="currentColor"/></svg>',
+      },
+      placement: 'rail',
+      component: PluginView,
+    })
+
+    expect(registry.getSnapshot().views[0]?.icon).toMatchObject({ type: 'svg' })
+    expect(registry.getSnapshot().views[0]?.icon).not.toEqual(expect.objectContaining({ svg: expect.stringContaining('onload') }))
+  })
+
   it('uses taskUI as the canonical tab and section registry and disposes both contribution types', async () => {
     const registry = makeRegistry()
     const frontend = registry.getFrontendApi()
@@ -588,6 +606,11 @@ describe('runtime contribution registry', () => {
       label: 'view component',
       register: (registry: ReturnType<typeof makeRegistry>) => registry.getFrontendApi().views.register({ id: 'prs', title: 'Pull Requests', icon: 'git-pull-request', placement: 'rail' } as never),
       error: /views.*component/i,
+    },
+    {
+      label: 'view icon',
+      register: (registry: ReturnType<typeof makeRegistry>) => registry.getFrontendApi().views.register({ id: 'prs', title: 'Pull Requests', icon: { type: 'svg', svg: '<svg></svg>' }, placement: 'rail', component: PluginView }),
+      error: /views.*invalid icon.*viewBox/i,
     },
     {
       label: 'task pane title',

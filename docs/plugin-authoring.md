@@ -71,6 +71,7 @@ Use the public package exports only:
 | `@openforge-app/plugin-sdk/domain` | Shared OpenForge domain types |
 | `@openforge-app/plugin-sdk/markdown` | Markdown rendering helpers |
 | `@openforge-app/plugin-sdk/numberParsing` | Numeric parsing helpers |
+| `@openforge-app/plugin-sdk/pluginIcons` | Frontend custom-icon validation and sanitization helpers |
 | `@openforge-app/plugin-sdk/projectFileTree` | Project file tree helpers |
 | `@openforge-app/plugin-sdk/prStatusPresentation` | Pull request status presentation helpers |
 | `@openforge-app/plugin-sdk/sanitize` | Sanitization helpers |
@@ -99,6 +100,38 @@ export default defineFrontendPlugin({
   }
 })
 ```
+
+### View icons
+
+`openforge.views.register(...)` accepts either an existing host icon name or an inline SVG icon:
+
+```ts
+const acmeIcon = {
+  type: 'svg' as const,
+  svg: '<svg viewBox="0 0 24 24"><path d="M12 2 22 12 12 22 2 12Z" fill="currentColor"/></svg>'
+}
+
+context.subscriptions.add(openforge.views.register({
+  id: 'issues',
+  title: 'Issues',
+  icon: acmeIcon,
+  placement: 'rail',
+  component: () => import('./IssuesView.svelte')
+}))
+```
+
+The string form remains backward compatible. OpenForge resolves registered names such as `layout-dashboard`; an unknown name keeps the existing generic Plug fallback.
+
+Custom SVG icons use this authoring contract:
+
+- Provide exactly one `<svg>` root, no more than 10,000 characters, with a four-number `viewBox` whose width and height are positive.
+- Keep the icon static and self-contained. The allowed elements are `svg`, `g`, `path`, `rect`, `circle`, `ellipse`, `line`, `polyline`, and `polygon`. Scripts, styles, links, external resources, embedded HTML, animation, definitions, and URL-based paint are removed.
+- OpenForge owns sizing: 24px in the icon rail and 18px in the sidebar. Root `width` and `height` are stripped. Authors own the `viewBox` and geometry.
+- Authors own paint. Prefer `currentColor` so active, inactive, hover, and theme colors continue to come from the host. Safe literal colors are retained but do not participate in host navigation states.
+- OpenForge owns accessibility. The navigation button uses the registered view `title` as its accessible name, and the icon is decorative. SVG `title`, `desc`, ARIA, focus, and event attributes are stripped.
+- Registration rejects an empty icon, malformed SVG, a missing/invalid `viewBox`, an oversized SVG, or SVG with no visible geometry. `sanitizePluginIcon(...)` from `@openforge-app/plugin-sdk/pluginIcons` is available for optional frontend author-side preflight; the host still validates at registration and before rendering.
+
+This custom SVG form currently applies to view navigation icons. Other contribution icon fields continue to use their documented named-icon strings.
 
 Frontend-only registries and helpers:
 
