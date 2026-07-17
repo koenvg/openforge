@@ -549,10 +549,11 @@ describe('TaskDetailView', () => {
     expect(mockOnRunAction).toHaveBeenCalledWith({ taskId: 'T-42', actionPrompt: '', agent: null })
   })
 
-  it('shows Complete and action buttons for doing tasks', async () => {
+  it('shows Complete without a flag and action buttons for doing tasks', async () => {
     const doingTask = { ...baseTask, status: 'doing' }
     render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
-    expect(screen.getByRole('button', { name: /Complete/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Complete' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Complete 🏁' })).toBeNull()
     expect(screen.queryByText('Move to Done')).toBeNull()
     await waitFor(() => {
       expect(screen.getByText('Go')).toBeTruthy()
