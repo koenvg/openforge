@@ -40,7 +40,6 @@ export default defineConfig({
             'src/**/*.test.ts',
             'plugins/file-viewer/src/**/*.test.ts',
             'plugins/github-sync/src/**/*.test.ts',
-            'plugins/skills-viewer/src/**/*.test.ts',
             'plugins/task-schedules/src/**/*.test.ts',
             'plugins/terminal/src/**/*.test.ts',
             'packages/pr-review-ui/src/**/*.test.ts',

@@ -31,8 +31,8 @@ function builtinRuntimeContributionSourceForTest(pluginId: string): Omit<Runtime
         views: [{ id: 'pr_review', title: 'Pull Requests', icon: 'git-pull-request', placement: 'rail', order: 20, shortcut: 'Cmd+G' }],
         commands: [{ id: 'refresh', title: 'Refresh Pull Requests', shortcut: 'Cmd+Shift+R' }],
       }
-    case 'com.openforge.skills-viewer':
-      return { views: [{ id: 'skills', title: 'Skills', icon: 'sparkles', placement: 'rail', order: 30, shortcut: 'Cmd+L' }] }
+    case 'com.openforge.roadmap':
+      return { views: [{ id: 'roadmap', title: 'Roadmap', icon: 'kanban', placement: 'rail', order: 21, shortcut: 'Cmd+R' }] }
     case 'com.openforge.task-schedules':
       return { views: [{ id: 'schedules', title: 'Task Schedules', icon: 'clock', placement: 'rail', order: 50, shortcut: 'Cmd+S' }] }
     case 'com.openforge.terminal':
@@ -99,7 +99,7 @@ export const mockWindowDestroy = vi.fn(async () => undefined)
 export const mockSelectedTaskIdStore = writable<string | null>(null)
 export const mockActiveProjectIdStore = writable<string | null>(null)
 export const mockMergingTaskIdsStore = writable<Set<string>>(new Set())
-export const mockCurrentViewStore = writable<'board' | 'files' | 'settings' | 'global_settings' | 'plugin:com.openforge.file-viewer:files' | 'plugin:com.openforge.github-sync:pr_review' | 'plugin:com.openforge.skills-viewer:skills' | 'plugin:com.openforge.task-schedules:schedules'>('board')
+export const mockCurrentViewStore = writable<'board' | 'files' | 'settings' | 'global_settings' | 'plugin:com.openforge.file-viewer:files' | 'plugin:com.openforge.github-sync:pr_review' | 'plugin:com.openforge.roadmap:roadmap' | 'plugin:com.openforge.task-schedules:schedules'>('board')
 export const mockSelectedReviewPrStore = writable(null)
 const {
   mockActivatePlugin,

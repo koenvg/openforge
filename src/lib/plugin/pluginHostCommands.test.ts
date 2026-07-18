@@ -203,7 +203,7 @@ describe('plugin host commands', () => {
     expect(invoke).not.toHaveBeenCalled()
   })
 
-  it('does not expose removed live agent review, resume implementation, or skills-viewer host commands', async () => {
+  it('does not expose removed live agent review, resume implementation, or legacy OpenCode skills host commands', async () => {
     const { invoke } = installDesktopBridge()
 
     await expect(invokePluginHostCommand('startAgentReview', { reviewPrId: 42 })).rejects.toThrow('Unknown plugin host command: startAgentReview')

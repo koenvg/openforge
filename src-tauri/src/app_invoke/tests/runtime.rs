@@ -70,7 +70,7 @@ async fn accepts_remaining_electron_cutover_ipc_commands() {
         assert_eq!(
             result.err().map(|err| err.0),
             Some(StatusCode::NOT_IMPLEMENTED),
-            "legacy core skills-viewer command {command} should not be routed after plugin migration"
+            "legacy core OpenCode skills command {command} should not be routed after plugin migration"
         );
     }
 

@@ -355,7 +355,7 @@ describe('Electron macOS packaging helpers', () => {
     const builtInPluginCatalog = [
       { id: 'com.openforge.file-viewer', directoryName: 'file-viewer' },
       { id: 'com.openforge.github-sync', directoryName: 'github-sync' },
-      { id: 'com.openforge.skills-viewer', directoryName: 'skills-viewer' },
+      { id: 'com.openforge.task-schedules', directoryName: 'task-schedules' },
       { id: 'com.openforge.terminal', directoryName: 'terminal' },
       { id: 'com.openforge.catalog-only-test', directoryName: 'catalog-only-test' },
     ]

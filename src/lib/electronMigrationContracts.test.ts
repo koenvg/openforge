@@ -130,7 +130,7 @@ describe('Electron migration Phase 0 contract inventory', () => {
     expect(inventoriedContracts).toEqual(parsedContracts)
   })
 
-  it('does not keep dead live agent-review controls or legacy core skills-viewer commands in the public IPC inventory', () => {
+  it('does not keep dead live agent-review controls or legacy core OpenCode skills commands in the public IPC inventory', () => {
     const functionNames = ipcCommandContracts.map(contract => contract.functionName)
     const ipcCommands = ipcCommandContracts.map(contract => contract.ipcCommand)
 
