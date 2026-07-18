@@ -37,6 +37,8 @@ Each task ends with: build green, the relevant test suite green, and (for the Op
 
 ### Task 1: Remove the ⌘⇧I shortcut + built-in picker open-path wiring
 
+> **STATUS: ✅ DONE** — commit `95916418` (openforge, this branch). Review clean.
+
 Remove every *reference* to the built-in picker so its files (Task 2) can be deleted without breaking the build. Do NOT touch the `InjectionPointSlot` / `injectableInsertRequest` wiring.
 
 **Files:**
@@ -79,6 +81,8 @@ git commit -m "refactor: drop the built-in injectable picker open-path (⌘⇧I)
 
 ### Task 2: Delete the built-in picker components + state
 
+> **STATUS: ✅ DONE** — commit `8632d170` (openforge, this branch). Review clean.
+
 **Files:**
 - Delete: `src/components/injectables/` (entire dir) — `InjectablePicker.svelte`, `InjectablePicker.test.ts`.
 - Delete: `src/lib/injectables/` (entire dir) — `pickerState.svelte.ts` (+ test), `useInjectableCatalog.svelte.ts` (+ test), `pluginSnippetStore.ts` (+ test).
@@ -117,6 +121,9 @@ git commit -m "refactor: delete the built-in injectable picker components and st
 ---
 
 ### Task 3: Remove the in-repo skills-viewer builtin plugin
+
+> **STATUS: ✅ DONE** — commit `978ac6df` (openforge, this branch). Review clean. 11 test fixtures
+> repointed to real remaining builtins (roadmap/github-sync/task-schedules).
 
 The `skills-viewer` builtin registered only a `views` "Skills" tab (no `injectionPoints`), so removing it does not touch the generic injection-point path. The builtin catalog is data-driven from `builtin-plugins.json`, so production Rust needs no change — only a test repoint.
 

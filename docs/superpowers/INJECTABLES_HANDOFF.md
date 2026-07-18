@@ -27,8 +27,9 @@ Three sequential plans:
 - **Plan 2** — build the plugin in `openforge-plugins`. **DONE — user smoke-tested green + all fixes
   committed** (dev-mode Svelte sharing, svelte 5.56.4 pin, modal-over-modal portal). User still to push
   `openforge-plugins`.
-- **Plan 3** — cutover/cleanup in OpenForge. **AUTHORED — ready to execute**
-  (`docs/superpowers/plans/2026-07-18-injectables-cutover-cleanup.md`, 6 tasks). **This is the ACTIVE plan.**
+- **Plan 3** — cutover/cleanup in OpenForge. **IN PROGRESS — Tasks 1–3 DONE (committed on this branch),
+  Tasks 4–6 TODO** (`docs/superpowers/plans/2026-07-18-injectables-cutover-cleanup.md`, 6 tasks).
+  **This is the ACTIVE plan. Resume at Task 4.**
 
 ## Current Position  *(update after every task)*
 
@@ -126,15 +127,41 @@ Three sequential plans:
 - Task 7: **DONE** — user smoke test passed (⌘L view, modal-over-modal stacking, injection insert in all
   3 locations). Three fixes found + committed (see *Current Position*). Snippet-persistence spot-check is
   the only optional remaining item (40 backend tests cover it).
-- **Plan 3:** **AUTHORED — ready to execute:** `docs/superpowers/plans/2026-07-18-injectables-cutover-cleanup.md`.
-  6 tasks: **T1** remove ⌘⇧I + built-in-picker open-path wiring; **T2** delete `src/{components,lib}/injectables/`;
-  **T3** remove the `skills-viewer` builtin (3 registration points + `plugins/skills-viewer/` + fixture updates);
-  **T4** trim the SDK injectable surface (delete `packages/plugin-sdk/src/injectables/` + the domain injectable block,
-  **KEEP `CommandInfo` + `Project`**); **T5** append a forward DB migration dropping `snippets`/`snippet_projects`
-  (never delete old migrations); **T6** (openforge-plugins repo) deferred F2 (snippet-scope-on-edit) + F3 (drop unused
-  `listSkills`). Grounded in a full footprint inventory (resolved the SDK AMBIGUOUS call: the external plugin imports
-  only `CommandInfo`/`Project` from the SDK — verified). **NEXT SESSION: execute Plan 3 from Task 1 via
-  `superpowers:subagent-driven-development`.**
+- **Plan 3:** **IN PROGRESS — Tasks 1–3 DONE, Tasks 4–6 TODO.** Plan doc
+  `docs/superpowers/plans/2026-07-18-injectables-cutover-cleanup.md`. Each task got a fresh sonnet
+  implementer + independent sonnet reviewer (all ✅ Approved, no Critical/Important). Commits are on this
+  branch in the **openforge** repo (base was `e06ab585`):
+  - **T1 DONE `95916418`** — removed the ⌘⇧I + built-in-picker open-path wiring (6 src + 3 test files);
+    all generic `InjectionPoint*`/`injectableInsertRequest` wiring KEPT; orphaned imports
+    (writePty/isPtyActive/focusTerminal) removed, `selectedTaskId` kept. Review clean.
+  - **T2 DONE `8632d170`** — pure deletion of `src/components/injectables/` + `src/lib/injectables/`
+    (8 files). No dangling imports; `src/components/plugin/` + skills-viewer's own `injectableCatalog.ts`
+    untouched. Review clean.
+  - **T3 DONE `978ac6df`** — removed the `skills-viewer` builtin from all registration points
+    (`builtin-plugins.json`, `builtinPluginModules.ts`, `vitest.config.ts`) + deleted
+    `src/lib/skillsViewerPlugin.ts` and `plugins/skills-viewer/`. 11 test fixtures repointed to REAL
+    remaining builtins (roadmap/github-sync/task-schedules) — reviewer verified real values, no vacuous
+    tests. `cargo test builtin_plugins` 8/8, `app_invoke` 82/82. Review clean.
+  - **T4 TODO** — trim the SDK injectable surface (delete `packages/plugin-sdk/src/injectables/` + the
+    domain injectable block, **KEEP `CommandInfo` + `Project`**; remove `./injectables` export + vite alias
+    + `src/lib/types.ts` comment). **NOTE: also delete the stale `⌘⇧I picker` comment at `src/lib/types.ts:50`**
+    (Task-1 reviewer flagged it; it sits in/next to the :47-51 block Task 4 already removes).
+  - **T5 TODO** — append a forward DB migration dropping `snippets`/`snippet_projects` (never delete old
+    migrations). **Confirm the data note with the user first** (drops any snippets a user created via the
+    OLD built-in picker — the plan's decided scope is drop, no migration; new plugin uses the filesystem).
+  - **T6 TODO** (openforge-plugins repo `/Users/avivhadar/repos/openforge-plugins`) — deferred F2
+    (snippet-scope-on-edit) + F3 (drop unused `listSkills`).
+  - **KNOWN PRE-EXISTING failure (NOT a Plan-3 regression):** `scripts/build-plugin-sdk-runtime.test.mjs`
+    fails at the Plan-3 base `e06ab585` — it rebuilds the SDK runtime and asserts `generated.toEqual(checkedIn)`,
+    but the checked-in `packages/plugin-sdk` runtime artifact is STALE vs the schema (now has
+    `injectionPoints`/`listCatalog` from Plan 1/2). No Plan-3 commit touches it. **Likely needs the SDK
+    runtime artifact regenerated + committed** — Task 4 rebuilds the SDK (removing the injectables surface),
+    so regenerate + commit the artifact there (or as a follow-up). Raise with the user before merge.
+  - **Open Minor (roll-up for final review):** `CLAUDE.md` shortcut list still says `⌘L (Skills)` — stale
+    after skills-viewer removal (⌘L is now the external Injectables plugin's view). One-line doc fix; out of
+    Plan 3's file-list, not test-covered — decide at final review / with the user.
+  - **NEXT SESSION: resume Plan 3 at Task 4 via `superpowers:subagent-driven-development`.** Ledger:
+    `.superpowers/sdd/progress-plan3.md` (gitignored — trust THIS section + `git log` if it's absent).
 
 ### Deferred findings (whole-branch review — human decisions)
 
