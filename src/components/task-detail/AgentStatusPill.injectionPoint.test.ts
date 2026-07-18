@@ -47,16 +47,6 @@ vi.mock('../../lib/agentTerminalPanel', () => ({
   hydrateAgentTerminalPtyInstance: () => {},
 }))
 
-vi.mock('../../lib/injectables/pickerState.svelte', () => ({
-  pickerState: {
-    get open() { return false },
-    get projectId() { return null },
-    openPicker: vi.fn(),
-    close: vi.fn(),
-    handleSelect: vi.fn(),
-  },
-}))
-
 vi.mock('../../lib/stores', () => ({
   activeSessions: activeSessionsStore,
   tasks: {

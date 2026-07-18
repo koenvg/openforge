@@ -17,7 +17,6 @@
   import AnchoredMenu from './shared/ui/AnchoredMenu.svelte'
   import ContextMenuItem from './shared/ui/ContextMenuItem.svelte'
   import PromptInput from './prompt/PromptInput.svelte'
-import { pickerState } from '../lib/injectables/pickerState.svelte'
   import InjectionPointSlot from './plugin/InjectionPointSlot.svelte'
   import type { InjectionPointLocation } from '@openforge-app/plugin-sdk'
 
@@ -74,15 +73,6 @@ import { pickerState } from '../lib/injectables/pickerState.svelte'
   let nextInjectableInsertRequestId = 1
   let injectionLocation = $derived<InjectionPointLocation>(mode === 'create' ? 'createTaskPrompt' : 'backlogPrompt')
 
-  function openInjectables() {
-    pickerState.openPicker({
-      projectId: $activeProjectId,
-      onInsert: (text) => {
-        injectableInsertRequest = { id: nextInjectableInsertRequestId, text }
-        nextInjectableInsertRequestId += 1
-      },
-    })
-  }
   let taskTitle = $state('')
   let handoffNotesEnabled = $state(true)
   let taskDefaultsLoading = $state(true)
@@ -460,7 +450,6 @@ import { pickerState } from '../lib/injectables/pickerState.svelte'
       onImageMarkerClick={openImagePreview}
       imageMarkerInsertRequest={imageMarkerInsertRequest}
       injectableInsertRequest={injectableInsertRequest}
-      onOpenPicker={openInjectables}
       onSubmit={(prompt) => mode === 'create' ? handleCreateOrUpdate(prompt, true) : handleCreateOrUpdate(prompt)}
       onValueChange={handlePromptDraftChange}
       onCancel={() => onClose?.()}

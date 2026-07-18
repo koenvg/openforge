@@ -5,10 +5,7 @@
   import { createDesktopWindow } from './lib/desktopWindow'
   import type { DesktopWindowTarget } from './lib/desktopWindow'
   import { tasks, dependencyReferenceTasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, isLoading, projects, activeProjectId, activeProjectColorId, currentView, reviewRequestCount, activeRepoReviewRequestCount, activeProjectAttentionCount, reviewPrs, codeCleanupTasksEnabled, focusBoardFilters, outOfFocusTaskIdsByProject, sidebarPluginViewKeys } from './lib/stores'
-  import { getAppMode, getConfig, getProjectConfig, resumeStartupSessions, setPollContext, getProjectRepo, openUrl, markReviewPrViewed, writePty } from './lib/ipc'
-  import { isPtyActive, focusTerminal } from './lib/terminalPool'
-  import InjectablePicker from './components/injectables/InjectablePicker.svelte'
-  import { pickerState } from './lib/injectables/pickerState.svelte'
+  import { getAppMode, getConfig, getProjectConfig, resumeStartupSessions, setPollContext, getProjectRepo, openUrl, markReviewPrViewed } from './lib/ipc'
   import { computePollContext, pollContextEquals, type PollContextPayload } from './lib/pollContext'
   import { GITHUB_SYNC_GLOBAL_VIEW_KEY, GITHUB_SYNC_PLUGIN_ID } from './lib/githubSyncPlugin'
   import type { Task, AppView, Project, ReviewPullRequest } from './lib/types'
@@ -486,20 +483,6 @@
       resetToBoard: () => { router.resetToBoard() },
       navigateToGlobalSettings: () => { handleNavigate('global_settings') },
       cycleActiveProject,
-      openInjectablePicker: () => {
-        const taskId = $selectedTaskId
-        pickerState.openPicker({
-          projectId: $activeProjectId,
-          onInsert: (text) => {
-            // Global shortcut: route into the active task's terminal when one is live.
-            // Per-surface entry points (Create Task dialog, live session) pass their own onInsert.
-            if (taskId && isPtyActive(taskId)) {
-              void writePty(taskId, text)
-              focusTerminal(taskId)
-            }
-          },
-        })
-      },
     })
 
     unlisteners.push(...await registerAppDesktopEventListeners({
@@ -632,13 +615,6 @@
     {/if}
   </div>
 </div>
-
-<InjectablePicker
-  projectId={pickerState.projectId}
-  open={pickerState.open}
-  onClose={() => pickerState.close()}
-  onSelect={(injectable) => pickerState.handleSelect(injectable)}
-/>
 
 <ToastHost />
 
