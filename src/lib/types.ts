@@ -43,9 +43,3 @@ export interface GitStatusSummary {
   insertions: number
   deletions: number
 }
-
-// The injectable picker view model (`Injectable`, `InjectableKind`,
-// `InjectableOrigin`, `InjectableTriggerMode`, `InjectableGroupBy`,
-// `InjectableSection`) and `Snippet` now live in the plugin SDK domain — shared
-// by the core ⌘⇧I picker and the skills plugin — and are re-exported via the
-// `export * from '@openforge-app/plugin-sdk/domain'` above.

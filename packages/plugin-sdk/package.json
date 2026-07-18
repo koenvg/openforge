@@ -55,10 +55,6 @@
       "types": "./dist/fileIcons.d.ts",
       "default": "./dist/fileIcons.js"
     },
-    "./injectables": {
-      "types": "./dist/injectables/index.d.ts",
-      "default": "./dist/injectables/index.js"
-    },
     "./ui/Button.svelte": "./dist/ui/Button.svelte",
     "./ui/MarkdownContent.svelte": "./dist/ui/MarkdownContent.svelte",
     "./ui/ResizablePanel.svelte": "./dist/ui/ResizablePanel.svelte",
