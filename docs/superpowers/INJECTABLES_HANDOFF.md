@@ -52,34 +52,41 @@ Three sequential plans:
   independent reviewer (all ✅ Approved).
   **Deferred-finding decisions taken (this session):** F1 icons = **add the library** (DONE, `becb8c5`);
   F2 snippet-scope-widening bug = **fix during Plan 3**; F3 unused `listSkills` = **trim during Plan 3**.
-  **SMOKE TEST FAILED then ROOT-CAUSED + FIXED (2026-07-18, worktree AVIV-113).** User installed
-  the plugin (global settings → local path), enabled it for a project, saw the rail icon, clicked
-  it → the view was empty with `Plugin Error: Injectables` / `https://svelte.dev/e/effect_orphan`.
-  - **Root cause (confirmed via systematic-debugging):** Svelte compiler/runtime **version skew**.
-    The plugin bundle was compiled by Svelte **5.56.5** (plugins-repo catalog `^5.56.3` floated),
-    but at runtime its externalized `svelte/internal/client` resolves — via the host renderer
-    import map — to the host's shared Svelte **5.56.4** (`plugin://host-runtime/svelte`, baked into
-    `/Applications/Open Forge.app`). `svelte/internal/*` is a PRIVATE, version-locked API whose
-    reactivity core (`runtime.js` — `is_updating_effect`/reactive-context handling) differs between
-    5.56.4↔5.56.5, so a 5.56.5-compiled component's effect setup is incompatible with the 5.56.4
-    runtime → `effect_orphan` on mount. (Svelte instance IS correctly shared/single; import map,
-    externalization, and host-runtime assets are all correct — it was purely the version.) Evaded
-    all gates because vitest uses the plugin's OWN svelte for BOTH compile+runtime (consistent).
-    The picker + injection triggers would hit the same wall.
-  - **FIX APPLIED (uncommitted, pending user retest):** pinned the plugins-repo catalog
-    `svelte` to **exact `5.56.4`** (was `^5.56.3`) in `pnpm-workspace.yaml` (with an explanatory
-    comment) → `pnpm install` (svelte 5.56.5→5.56.4, lockfile updated, zero 5.56.5 refs) → rebuilt.
-    `test` **138/138**, `tsc --noEmit` clean, `dist/frontend.js`+`dist/backend.js` recompiled
-    against 5.56.4. Local installs serve `dist/` **in place** (no copy — `install_local_package_*`
-    test), so no reinstall needed.
-  - **NEXT (user):** fully quit + relaunch Open Forge (re-imports the rebuilt bundle), ⌘L → the
-    Injectables view should render (no effect_orphan); then finish the smoke test (snippet CRUD
-    persistence, the 3 injection triggers, modal-over-modal stacking). If green → commit the plugin
-    fix in `openforge-plugins`, mark Plan 2 done, author Plan 3.
-  - **Follow-up (SDK/host, note for Plan 1/3 or a separate host issue):** the "share host Svelte"
-    design makes EVERY external Svelte plugin's compile-time version couple to the host's exact
-    Svelte patch. The SDK should surface/enforce this (pin or expose the required svelte version)
-    so plugin authors don't silently drift. Mirrors the existing @lucide/svelte pin concern.
+  **SMOKE TEST (2026-07-18, worktree AVIV-113): TWO distinct `effect_orphan` causes found; BOTH
+  fixed, PENDING a user `electron:dev` retest.** Clicking the ⌘L rail icon showed an empty pane +
+  `Plugin Error: Injectables` / `https://svelte.dev/e/effect_orphan`. The user tests in **dev mode
+  (`pnpm electron:dev`)** — NOT the packaged app. (The installed `/Applications/Open Forge.app` is a
+  STALE build whose Rust sidecar rejects `injectionPoints` — `openforge.requires[6] has unknown
+  capability` — so the plugin can't even install there; a fresh `electron:install` would fix that.)
+  - **Cause #1 — Svelte compiler/runtime VERSION SKEW (packaged-relevant).** Plugin compiled by
+    Svelte **5.56.5** (plugins catalog `^5.56.3` floated) but the host-runtime Svelte is **5.56.4**.
+    `svelte/internal/*` is a PRIVATE, version-locked API whose reactivity core (`runtime.js` —
+    `is_updating_effect`/reactive-context) differs 5.56.4↔5.56.5 → orphan. **FIX (plugins repo,
+    uncommitted):** pinned catalog `svelte` to EXACT `5.56.4` in `pnpm-workspace.yaml` → reinstall
+    (zero 5.56.5 refs) → rebuild. `test` 138/138, tsc + build clean. This is a PREREQUISITE for both
+    modes (once instances are shared, versions must still match).
+  - **Cause #2 — DEV-MODE two-instance Svelte (the actual dev blocker).** In `vite` dev serve the
+    host does NOT externalize Svelte (only `vite build` did), so the host pre-bundled its OWN Svelte
+    while external plugins resolve Svelte via the import map to `plugin://host-runtime/svelte` — TWO
+    instances → orphan regardless of version. **FIX (openforge repo `vite.config.ts`, uncommitted):**
+    added a dev-serve-only vite plugin (`apply:'serve'`, `enforce:'pre'`) whose `resolveId` rewrites
+    the host's host-runtime Svelte imports to the SAME absolute `plugin://host-runtime/svelte/*` URLs
+    the plugins load, marked `external` (vite emits them verbatim) + `optimizeDeps.exclude` the same
+    specifiers so no second copy is pre-bundled. **Module-level VERIFIED** via `pnpm dev` + curl: host
+    components, `.svelte.ts` runes, AND pre-bundled `@lucide/svelte` all now import
+    `plugin://host-runtime/svelte/...` (no node_modules/@id leaks). Packaged build UNCHANGED (still
+    externalizes svelte, 0 bundled runtimes) and the 17 svelte-runtime-contract tests pass.
+  - **NEXT (user):** re-run `pnpm electron:dev`, ⌘L → the Injectables view should now render (no
+    effect_orphan; host + plugin share ONE Svelte instance). Then finish the smoke test: snippet CRUD
+    persistence (`~/.openforge/injectables/snippets.json`), the 3 injection triggers, modal-over-modal
+    stacking. If green → commit BOTH fixes (openforge `vite.config.ts`; openforge-plugins
+    `pnpm-workspace.yaml`+lockfile+rebuilt `dist/`), mark Plan 2 done, author Plan 3.
+  - **Follow-up (SDK/host):** the "share host Svelte" design couples every external Svelte plugin's
+    compile-time version to the host's exact Svelte patch — the SDK should pin/expose the required
+    version so authors don't drift (mirrors the @lucide/svelte pin concern). Also: `electron:dev`
+    plugin-loading was previously impossible (the "NEVER run electron:dev" note) — Cause #2's fix
+    removes that limitation for ALL external Svelte plugins, so that guidance can be relaxed once the
+    retest confirms it.
 
 ## Plan 2 — Task Status (authoritative)
 
@@ -188,6 +195,15 @@ resolves to. So the ONE task drives both repos like this:
   plugin's own Svelte, so it's always self-consistent. Keep `svelte` in the plugins-repo catalog
   (`pnpm-workspace.yaml`) an EXACT pin equal to `svelte` in `openforge/package.json` (currently
   **5.56.4**). This bit Plan 2 Task 7 (a `^` range floated to 5.56.5 vs a 5.56.4 host).
+- **`vite` dev serve shares Svelte with plugins only because of a dedicated dev plugin.** `vite build`
+  externalizes host-runtime Svelte (`build.rolldownOptions.external`), but that does NOT apply to dev
+  serve — so the host would otherwise pre-bundle a SECOND Svelte instance and any external plugin
+  component throws `effect_orphan`. `openforge/vite.config.ts` has a `apply:'serve'` plugin that
+  rewrites the host's Svelte imports to the `plugin://host-runtime/svelte/*` URLs (the same ones the
+  import map gives plugins) + `optimizeDeps.exclude` for those specifiers. `external:true` alone does
+  NOT work in dev (vite emits `/@id/…`, not a bare/URL specifier) — you must return the absolute
+  `plugin://` URL from `resolveId`. Verify changes with `pnpm dev` (vite-only) + curl a served
+  `.svelte` module: every Svelte import must read `plugin://host-runtime/svelte/...`.
 - **`import type` is invisible to vitest** (esbuild strips it) — only tsc/LSP catch a missing
   barrel export. After adding an SDK type, export it from BOTH the specific barrel
   (`frontend.ts`) AND the main `index.ts` barrel, then rebuild the SDK. This bit Plan 1 twice.
