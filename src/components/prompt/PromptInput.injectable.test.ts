@@ -25,4 +25,17 @@ describe('PromptInput injectable button', () => {
     })
     expect(queryByLabelText('Open injectables')).toBeNull()
   })
+
+  it('inserts injectable text into the textarea when injectableInsertRequest changes', async () => {
+    const base = { projectId: 'P-1', onSubmit: vi.fn(), onCancel: vi.fn(), value: '' }
+    const { container, rerender } = render(PromptInput, {
+      props: { ...base, injectableInsertRequest: null },
+    })
+    const textarea = container.querySelector('textarea') as HTMLTextAreaElement
+    expect(textarea).not.toBeNull()
+    expect(textarea.value).toBe('')
+
+    await rerender({ ...base, injectableInsertRequest: { id: 1, text: '/refactor ' } })
+    expect(textarea.value).toContain('/refactor ')
+  })
 })
