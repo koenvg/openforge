@@ -52,14 +52,34 @@ Three sequential plans:
   independent reviewer (all ✅ Approved).
   **Deferred-finding decisions taken (this session):** F1 icons = **add the library** (DONE, `becb8c5`);
   F2 snippet-scope-widening bug = **fix during Plan 3**; F3 unused `listSkills` = **trim during Plan 3**.
-  **NEXT: Task 7 Steps 3–4 — the USER installs the plugin + runs the smoke test** (⌘L view; snippet
-  CRUD persistence; the 3 injection triggers; modal-over-modal stacking). Steps 1–2 (build/test/tsc)
-  are green — **re-verified again 2026-07-18 in worktree AVIV-113: `build` clean, `test` 138/138,
-  `tsc --noEmit` clean, `dist/frontend.js`+`dist/backend.js` freshly rebuilt with icons.** The
-  user will smoke-test the **icon version**. Then author **Plan 3**.
-  **This session (2026-07-18) found NO autonomous task remaining** — Plan 2 is fully blocked on the
-  user smoke test, and Plan 3 stays gated on it. Progress made: re-verified Steps 1–2 green, and
-  **resolved open-minor #3 (rail-view icons) by investigation — no action needed** (see below).
+  **SMOKE TEST FAILED then ROOT-CAUSED + FIXED (2026-07-18, worktree AVIV-113).** User installed
+  the plugin (global settings → local path), enabled it for a project, saw the rail icon, clicked
+  it → the view was empty with `Plugin Error: Injectables` / `https://svelte.dev/e/effect_orphan`.
+  - **Root cause (confirmed via systematic-debugging):** Svelte compiler/runtime **version skew**.
+    The plugin bundle was compiled by Svelte **5.56.5** (plugins-repo catalog `^5.56.3` floated),
+    but at runtime its externalized `svelte/internal/client` resolves — via the host renderer
+    import map — to the host's shared Svelte **5.56.4** (`plugin://host-runtime/svelte`, baked into
+    `/Applications/Open Forge.app`). `svelte/internal/*` is a PRIVATE, version-locked API whose
+    reactivity core (`runtime.js` — `is_updating_effect`/reactive-context handling) differs between
+    5.56.4↔5.56.5, so a 5.56.5-compiled component's effect setup is incompatible with the 5.56.4
+    runtime → `effect_orphan` on mount. (Svelte instance IS correctly shared/single; import map,
+    externalization, and host-runtime assets are all correct — it was purely the version.) Evaded
+    all gates because vitest uses the plugin's OWN svelte for BOTH compile+runtime (consistent).
+    The picker + injection triggers would hit the same wall.
+  - **FIX APPLIED (uncommitted, pending user retest):** pinned the plugins-repo catalog
+    `svelte` to **exact `5.56.4`** (was `^5.56.3`) in `pnpm-workspace.yaml` (with an explanatory
+    comment) → `pnpm install` (svelte 5.56.5→5.56.4, lockfile updated, zero 5.56.5 refs) → rebuilt.
+    `test` **138/138**, `tsc --noEmit` clean, `dist/frontend.js`+`dist/backend.js` recompiled
+    against 5.56.4. Local installs serve `dist/` **in place** (no copy — `install_local_package_*`
+    test), so no reinstall needed.
+  - **NEXT (user):** fully quit + relaunch Open Forge (re-imports the rebuilt bundle), ⌘L → the
+    Injectables view should render (no effect_orphan); then finish the smoke test (snippet CRUD
+    persistence, the 3 injection triggers, modal-over-modal stacking). If green → commit the plugin
+    fix in `openforge-plugins`, mark Plan 2 done, author Plan 3.
+  - **Follow-up (SDK/host, note for Plan 1/3 or a separate host issue):** the "share host Svelte"
+    design makes EVERY external Svelte plugin's compile-time version couple to the host's exact
+    Svelte patch. The SDK should surface/enforce this (pin or expose the required svelte version)
+    so plugin authors don't silently drift. Mirrors the existing @lucide/svelte pin concern.
 
 ## Plan 2 — Task Status (authoritative)
 
@@ -70,7 +90,7 @@ Three sequential plans:
 - Task 4: **DONE + pushed** — `6a5e3f0`. Ported `InjectablesView.svelte` + `src/lib/injectableCatalog.ts`; snippet reads/writes via `api.backend.invoke(METHOD.*)`; view registered id=`injectables`, title=`Injectables`, ⌘L. 101/101, tsc + build clean.
 - Task 5: **DONE + pushed** — `7addaf5` (picker `src/InjectablePicker.svelte` + `src/lib/useInjectableCatalog.svelte.ts`, import-remap applied, new `api` prop; picker test adapted to `api.backend.invoke` assertions) + `33ff312` (reviewer fix: the hook now takes `getApi: () => api` and reads it fresh in `reload()`, removing a stale-reference/reactivity warning). 131 tests at the time. Reviewer ✅ Approved. **ICONS RESTORED (`becb8c5`, human decision = add library):** the picker's 4 Lucide icons (Sparkles/skill, SquareTerminal/command, NotebookText/snippet, Plus/new-snippet) are back at exact parity with the app via `@lucide/svelte` (bundled, not externalized). `KIND_MARK` emoji record replaced with `KIND_ICON`/`KIND_ICON_CLASS` component+class records. Fresh implementer + reviewer, clean. See *Deferred findings* F1.
 - Task 6: **DONE + pushed** — `b68a19a`. `src/InjectionTrigger.svelte` (Props = `PluginInjectionPointProps`; opens the picker, maps `onSelect`→`onInsert(inj.invocationText)`+close) registered at all three locations (`picker-createTaskPrompt`/`picker-agentSession`/`picker-backlogPrompt`) via a loop in `src/index.ts`. Test mocks the picker child (`InjectablePickerTestDouble`). 136 tests. Reviewer ✅ Approved.
-- Task 7: **IN PROGRESS — Steps 1–2 DONE, Steps 3–4 PENDING USER.** Automated verify green: `pnpm --filter @openforge-app/plugin-injectables build && test` = **138/138**, `tsc --noEmit` clean, `dist/frontend.js` + `dist/backend.js` present. Final-review fixes committed `ae338c0`. **Remaining (Steps 3–4, requires the human):** run the OpenForge app (this branch), Settings → Plugins → install via local path `.../openforge-plugins/plugins/injectables`, enable for a project, then smoke-test: ⌘L Injectables view (skills+commands+snippets; snippet create/edit/delete persists to `~/.openforge/injectables/snippets.json`); the injection trigger in the create-task dialog (validate **modal-over-modal stacking**), agent session, and backlog prompt. Fix any issues, then Step 5 tags Plan 2 complete.
+- Task 7: **IN PROGRESS — Steps 1–2 DONE; Step 3 smoke test FOUND + FIXED an `effect_orphan` bug, PENDING user retest.** Automated verify green: `build` + `test` = **138/138**, `tsc --noEmit` clean, `dist/frontend.js` + `dist/backend.js` present (now compiled against svelte **5.56.4**). Final-review fixes committed `ae338c0`. **Smoke-test finding (2026-07-18):** clicking the ⌘L rail icon threw `effect_orphan` — root-caused to a Svelte compiler(5.56.5)/host-runtime(5.56.4) version skew; **fixed by pinning the plugins catalog `svelte` to exact 5.56.4 + rebuild (uncommitted)**. See *Current Position* for the full write-up + the version-lock gotcha. **Remaining (requires the human):** quit + relaunch the app, re-run: ⌘L Injectables view (skills+commands+snippets; snippet create/edit/delete persists to `~/.openforge/injectables/snippets.json`); the injection trigger in the create-task dialog (validate **modal-over-modal stacking**), agent session, and backlog prompt. If green → commit the plugin fix, then Step 5 tags Plan 2 complete.
 - **Plan 3:** not written yet — author it after Plan 2's user smoke test passes.
 
 ### Deferred findings (whole-branch review — human decisions)
@@ -159,6 +179,15 @@ resolves to. So the ONE task drives both repos like this:
 
 ## Gotchas (don't rediscover)
 
+- **External Svelte plugins are version-locked to the host's Svelte.** A plugin's frontend bundle
+  externalizes `svelte/internal/*` and, at runtime, resolves it (via the renderer import map) to the
+  host's ONE shared Svelte instance (`plugin://host-runtime/svelte`). That internal API is private
+  and changes between patch releases, so the plugin MUST **compile** against the EXACT Svelte version
+  the host **ships**, or mounting a plugin component throws `effect_orphan` (host tree + plugin
+  disagree on effect-context setup). vitest can NOT catch this — it compiles AND runs against the
+  plugin's own Svelte, so it's always self-consistent. Keep `svelte` in the plugins-repo catalog
+  (`pnpm-workspace.yaml`) an EXACT pin equal to `svelte` in `openforge/package.json` (currently
+  **5.56.4**). This bit Plan 2 Task 7 (a `^` range floated to 5.56.5 vs a 5.56.4 host).
 - **`import type` is invisible to vitest** (esbuild strips it) — only tsc/LSP catch a missing
   barrel export. After adding an SDK type, export it from BOTH the specific barrel
   (`frontend.ts`) AND the main `index.ts` barrel, then rebuild the SDK. This bit Plan 1 twice.
