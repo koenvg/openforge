@@ -24,8 +24,10 @@ functionality, with **zero injectable-specific footprint left in OpenForge**. De
 
 Three sequential plans:
 - **Plan 1** — generic `injectionPoints` extension point in OpenForge. **DONE.**
-- **Plan 2** — build the plugin in `openforge-plugins`. **IN PROGRESS.**
-- **Plan 3** — cutover/cleanup in OpenForge. **NOT WRITTEN YET** (author after Plan 2 verified).
+- **Plan 2** — build the plugin in `openforge-plugins`. **DONE — user smoke-tested green + all fixes
+  committed** (dev-mode Svelte sharing, svelte 5.56.4 pin, modal-over-modal portal). User still to push
+  `openforge-plugins`.
+- **Plan 3** — cutover/cleanup in OpenForge. **AUTHORING NOW** (Plan 2 verified).
 
 ## Current Position  *(update after every task)*
 
@@ -91,13 +93,18 @@ Three sequential plans:
     clicks/keys keep working. Fixes all 3 injection points (same picker). 7 keyboard tests that used
     `container.querySelector` were updated to `document.querySelector` (portaled content leaves the
     Testing-Library container). **138/138, tsc + build clean; `dist/` rebuilt.**
-  - **NEXT (user):** in the running `electron:dev`, reload the window (⌘R) or restart it so the
-    rebuilt plugin bundle loads, then open the create-task dialog → **Insert injectable** → the picker
-    should now be a centered full-viewport overlay ON TOP of the dialog (not clipped); check the same
-    in the backlog-prompt edit + agent session. Then finish: snippet CRUD persistence
-    (`~/.openforge/injectables/snippets.json`). If green → commit ALL THREE fixes (openforge
-    `vite.config.ts`; openforge-plugins `pnpm-workspace.yaml`+lockfile+`InjectablePicker.svelte`+
-    `.test.ts`+rebuilt `dist/`), mark Plan 2 done, author Plan 3.
+  - **RETEST #2 PASSED (modal + insertion):** the portaled picker renders as a centered full-viewport
+    overlay in all 3 spots; injection **insert works in all three** (create-task, backlog, agent
+    session). The earlier "insert does nothing" report was the picker's preview-first interaction
+    (single click previews; insert via the button / double-click / Enter) — not a bug; the host
+    insertion path (`onInsert → injectableInsertRequest → PromptInput.insertTextAtCursor`) is proven +
+    now covered by a regression test.
+  - **ALL FIXES COMMITTED (2026-07-18):** openforge `21cfe24a` (vite dev Svelte sharing) + `0494d3a3`
+    (PromptInput insertion test); openforge-plugins `58aef39` (svelte 5.56.4 pin) + `0920801` (portal
+    picker to body). Plugins repo commits kept the machine-local SDK link OUT (package.json stays the
+    sibling link; lockfile SDK path untouched). **User still needs to push `openforge-plugins`.**
+  - **REMAINING (optional, low-risk):** user can spot-check snippet create/edit/delete persistence to
+    `~/.openforge/injectables/snippets.json` (covered by 40 backend tests).
   - **Follow-up (SDK/host):** the "share host Svelte" design couples every external Svelte plugin's
     compile-time version to the host's exact Svelte patch — the SDK should pin/expose the required
     version so authors don't drift (mirrors the @lucide/svelte pin concern). Also: `electron:dev`
@@ -115,7 +122,11 @@ Three sequential plans:
 - Task 5: **DONE + pushed** — `7addaf5` (picker `src/InjectablePicker.svelte` + `src/lib/useInjectableCatalog.svelte.ts`, import-remap applied, new `api` prop; picker test adapted to `api.backend.invoke` assertions) + `33ff312` (reviewer fix: the hook now takes `getApi: () => api` and reads it fresh in `reload()`, removing a stale-reference/reactivity warning). 131 tests at the time. Reviewer ✅ Approved. **ICONS RESTORED (`becb8c5`, human decision = add library):** the picker's 4 Lucide icons (Sparkles/skill, SquareTerminal/command, NotebookText/snippet, Plus/new-snippet) are back at exact parity with the app via `@lucide/svelte` (bundled, not externalized). `KIND_MARK` emoji record replaced with `KIND_ICON`/`KIND_ICON_CLASS` component+class records. Fresh implementer + reviewer, clean. See *Deferred findings* F1.
 - Task 6: **DONE + pushed** — `b68a19a`. `src/InjectionTrigger.svelte` (Props = `PluginInjectionPointProps`; opens the picker, maps `onSelect`→`onInsert(inj.invocationText)`+close) registered at all three locations (`picker-createTaskPrompt`/`picker-agentSession`/`picker-backlogPrompt`) via a loop in `src/index.ts`. Test mocks the picker child (`InjectablePickerTestDouble`). 136 tests. Reviewer ✅ Approved.
 - Task 7: **IN PROGRESS — Steps 1–2 DONE; Step 3 smoke test FOUND + FIXED an `effect_orphan` bug, PENDING user retest.** Automated verify green: `build` + `test` = **138/138**, `tsc --noEmit` clean, `dist/frontend.js` + `dist/backend.js` present (now compiled against svelte **5.56.4**). Final-review fixes committed `ae338c0`. **Smoke-test finding (2026-07-18):** clicking the ⌘L rail icon threw `effect_orphan` — root-caused to a Svelte compiler(5.56.5)/host-runtime(5.56.4) version skew; **fixed by pinning the plugins catalog `svelte` to exact 5.56.4 + rebuild (uncommitted)**. See *Current Position* for the full write-up + the version-lock gotcha. **Remaining (requires the human):** quit + relaunch the app, re-run: ⌘L Injectables view (skills+commands+snippets; snippet create/edit/delete persists to `~/.openforge/injectables/snippets.json`); the injection trigger in the create-task dialog (validate **modal-over-modal stacking**), agent session, and backlog prompt. If green → commit the plugin fix, then Step 5 tags Plan 2 complete.
-- **Plan 3:** not written yet — author it after Plan 2's user smoke test passes.
+- Task 7: **DONE** — user smoke test passed (⌘L view, modal-over-modal stacking, injection insert in all
+  3 locations). Three fixes found + committed (see *Current Position*). Snippet-persistence spot-check is
+  the only optional remaining item (40 backend tests cover it).
+- **Plan 3:** **AUTHORING NOW.** Scope in *Documents & ledgers* below; also fold in deferred findings F2
+  (view snippet-scope widening on edit) + F3 (unused `listSkills`). Draft: `docs/superpowers/plans/2026-07-18-injectables-cutover-cleanup.md` (once written).
 
 ### Deferred findings (whole-branch review — human decisions)
 
