@@ -21,11 +21,13 @@ vi.mock('../../lib/plugin/pluginStore', () => {
   return {
     installedPlugins: writable(new Map()),
     enabledPluginIds: writable(new Set()),
+    runtimeContributionSources: writable(new Map()),
     error: writable(null),
   }
 })
 
 vi.mock('../../lib/plugin/pluginRegistry', () => ({
+  activatePlugin: vi.fn(),
   enablePluginForProject: vi.fn(),
   disablePluginForProject: vi.fn(),
   installFromLocal: vi.fn(),
