@@ -33,7 +33,7 @@
   {#each navItems as { view, icon, shortcut, label }}
     <button
       type="button"
-      class="relative cursor-pointer {currentView === view ? 'text-primary' : 'text-base-content/35'}"
+      class="relative cursor-pointer transition-colors {currentView === view ? 'text-primary' : 'text-base-content/35 hover:text-base-content'}"
       title={label}
       aria-label={label}
       aria-current={currentView === view ? 'page' : undefined}

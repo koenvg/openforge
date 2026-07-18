@@ -9,7 +9,7 @@
     saveHiddenProjectIds,
   } from '../../lib/projectVisibility'
   import { GITHUB_SYNC_GLOBAL_VIEW_KEY } from '../../lib/githubSyncPlugin'
-  import { isPluginViewKey } from '../../lib/plugin/types'
+  import { isCrossProjectView } from '../../lib/views'
   import type { IconRailPluginNavItem } from '../../lib/iconRailNav'
   import type { AppView } from '../../lib/types'
   import PluginNavigationIcon from './PluginNavigationIcon.svelte'
@@ -43,9 +43,7 @@
   // the per-repo PR review. Global views — global settings and sidebar-placed plugin
   // views like "All Pull Requests" — are cross-project, so no project row highlights.
   let sidebarPluginViewKeys = $derived(new Set(pluginNavItems.map((item) => item.viewKey)))
-  let isProjectContextView = $derived(
-    currentView === 'board' || (isPluginViewKey(currentView) && !sidebarPluginViewKeys.has(currentView))
-  )
+  let isProjectContextView = $derived(!isCrossProjectView(currentView, sidebarPluginViewKeys))
 
   let branchName = $state<string | null>(null)
   let isSavingProjectOrder = $state(false)
@@ -165,7 +163,7 @@
      {#if !collapsed}
        <span class="text-[10px] text-secondary font-bold">PROJECTS</span>
      {/if}
-    <button type="button" class="btn btn-ghost btn-xs" aria-label="Add project" onclick={() => onNewProject?.()}>
+    <button type="button" class="btn btn-ghost btn-xs btn-square" aria-label="Add project" onclick={() => onNewProject?.()}>
       <Plus size={14} />
     </button>
   </div>
@@ -179,7 +177,7 @@
       {#if collapsed}
         <button
           type="button"
-           class="w-full flex justify-center py-2 transition-colors {isActive ? 'bg-base-100' : 'hover:bg-base-300/30'}"
+           class="w-full flex justify-center py-2 transition-colors {isActive ? 'bg-base-100' : 'hover:bg-base-content/10 active:bg-base-content/20'}"
           aria-current={isActive ? 'true' : undefined}
           title={project.name}
           onclick={() => selectProject(project.id)}
@@ -203,7 +201,7 @@
           </div>
         </button>
       {:else}
-        <div class="group relative flex border-l-2 transition-colors {isActive ? 'border-primary bg-base-100' : 'border-transparent hover:bg-base-300/30'}">
+        <div class="group relative flex border-l-2 transition-colors {isActive ? 'border-primary bg-base-100' : 'border-transparent hover:bg-base-content/10 active:bg-base-content/20'}">
           <button
             type="button"
             class="flex-1 px-3 py-2 text-left"
@@ -228,37 +226,37 @@
                </div>
              {/if}
           </button>
-          <div class="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+          <div class="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
             <button
               type="button"
-              class="btn btn-ghost btn-xs p-0.5 min-h-0 h-auto"
+              class="btn btn-ghost btn-xs p-1 min-h-0 h-auto"
               aria-label="Hide {project.name}"
               disabled={isSavingHidden}
               onclick={(e) => { e.stopPropagation(); setProjectHidden(project.id, true) }}
             >
-              <EyeOff size={12} />
+              <EyeOff size={14} />
             </button>
-            <div class="flex flex-col gap-0.5">
+            <div class="flex flex-col gap-1">
               {#if index > 0}
                 <button
                   type="button"
-                  class="btn btn-ghost btn-xs p-0.5 min-h-0 h-auto"
+                  class="btn btn-ghost btn-xs p-1 min-h-0 h-auto"
                   aria-label="Move {project.name} up"
                   disabled={isSavingProjectOrder}
                   onclick={(e) => { e.stopPropagation(); moveProject(index, 'up') }}
                 >
-                  <ArrowUp size={12} />
+                  <ArrowUp size={14} />
                 </button>
               {/if}
               {#if index < visibleProjects.length - 1}
                 <button
                   type="button"
-                  class="btn btn-ghost btn-xs p-0.5 min-h-0 h-auto"
+                  class="btn btn-ghost btn-xs p-1 min-h-0 h-auto"
                   aria-label="Move {project.name} down"
                   disabled={isSavingProjectOrder}
                   onclick={(e) => { e.stopPropagation(); moveProject(index, 'down') }}
                 >
-                  <ArrowDown size={12} />
+                  <ArrowDown size={14} />
                 </button>
               {/if}
             </div>
@@ -319,7 +317,7 @@
       {@const isActive = currentView === viewKey}
       <button
         type="button"
-        class="relative w-full flex items-center {collapsed ? 'justify-center px-0' : 'px-3'} gap-2 py-2 transition-colors {isActive ? 'text-primary' : 'text-base-content/50 hover:text-base-content/80'}"
+        class="relative w-full flex items-center {collapsed ? 'justify-center px-0' : 'px-3'} gap-2 py-2 cursor-pointer transition-colors {isActive ? 'text-primary' : 'text-base-content/50 hover:text-base-content'}"
         title={collapsed ? title : undefined}
         aria-label={title}
         aria-current={isActive ? 'page' : undefined}
@@ -346,7 +344,7 @@
       {@const isActive = currentView === view}
       <button
         type="button"
-        class="w-full flex items-center {collapsed ? 'justify-center px-0' : 'px-3'} gap-2 py-2 transition-colors {isActive ? 'text-primary' : 'text-base-content/50 hover:text-base-content/80'}"
+        class="w-full flex items-center {collapsed ? 'justify-center px-0' : 'px-3'} gap-2 py-2 cursor-pointer transition-colors {isActive ? 'text-primary' : 'text-base-content/50 hover:text-base-content'}"
         title={collapsed ? label : undefined}
         aria-label={label}
         aria-current={isActive ? 'page' : undefined}

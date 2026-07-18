@@ -16,3 +16,9 @@ __pycache__/
 
 # Local screenshot scratch output (scripts/capture-screenshots.mjs)
 /screenshots/
+
+# Babysitter (a5c) local orchestration workspace — per-developer, not shared
+.a5c/
+
+# JetBrains IDE settings
+.idea/

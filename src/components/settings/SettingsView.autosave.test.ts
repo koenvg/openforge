@@ -91,7 +91,7 @@ describe('SettingsView auto-save', () => {
       await vi.advanceTimersByTimeAsync(50)
       vi.mocked(setProjectConfig).mockClear()
 
-      await fireEvent.click(screen.getByTitle('Violet'))
+      await fireEvent.click(screen.getByRole('radio', { name: 'Violet project color' }))
 
       expect(get(activeProjectColorId)).toBe('violet')
       expect(vi.mocked(setProjectConfig)).not.toHaveBeenCalled()

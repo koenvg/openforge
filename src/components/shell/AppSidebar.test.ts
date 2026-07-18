@@ -243,11 +243,11 @@ describe('AppSidebar', () => {
     expect(activeProjectButton.getAttribute('aria-current')).toBeNull()
   })
 
-  it('project is NOT visually active (aria-current) when on project settings view', () => {
+  it('project IS visually active (aria-current) when on project settings view', () => {
     renderSidebar({ currentView: 'settings' })
 
     const activeProjectButton = screen.getByRole('button', { name: /^alpha project$/i })
-    expect(activeProjectButton.getAttribute('aria-current')).toBeNull()
+    expect(activeProjectButton.getAttribute('aria-current')).toBe('true')
   })
 
   it('project IS visually active (aria-current) when on board view', () => {
