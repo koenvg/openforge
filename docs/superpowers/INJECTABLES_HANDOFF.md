@@ -76,11 +76,28 @@ Three sequential plans:
     components, `.svelte.ts` runes, AND pre-bundled `@lucide/svelte` all now import
     `plugin://host-runtime/svelte/...` (no node_modules/@id leaks). Packaged build UNCHANGED (still
     externalizes svelte, 0 bundled runtimes) and the 17 svelte-runtime-contract tests pass.
-  - **NEXT (user):** re-run `pnpm electron:dev`, ⌘L → the Injectables view should now render (no
-    effect_orphan; host + plugin share ONE Svelte instance). Then finish the smoke test: snippet CRUD
-    persistence (`~/.openforge/injectables/snippets.json`), the 3 injection triggers, modal-over-modal
-    stacking. If green → commit BOTH fixes (openforge `vite.config.ts`; openforge-plugins
-    `pnpm-workspace.yaml`+lockfile+rebuilt `dist/`), mark Plan 2 done, author Plan 3.
+  - **RETEST #1 PASSED (dev-mode render):** after Cause #1+#2 fixes, `electron:dev` renders the
+    ⌘L view + the picker mounts (no effect_orphan). Confirmed by the user.
+  - **Cause #3 — MODAL-OVER-MODAL clipping (the flagged untested risk), found in RETEST #1.** The
+    picker opened from the create-task dialog (and backlog-prompt edit) was clipped/overflowing — not
+    a centered full-viewport overlay. Root cause: daisyUI v5 `.modal-box` sets `translate:0; scale:1`;
+    the individual `translate`/`scale` props establish a CONTAINING BLOCK for `position:fixed`
+    descendants, so the picker's fixed `.modal`, nested in the host dialog's `.modal-box`, was scoped
+    to that box instead of the viewport. **FIX (plugins repo `InjectablePicker.svelte`, uncommitted):**
+    portal the picker's overlay (both the main + confirm-delete `Modal`s, wrapped in one
+    `use:portalToBody` `display:contents` div) to `document.body`, escaping the containing block. Safe
+    in Svelte 5 — it attaches delegated listeners to `document` too, expressly "to catch events from
+    elements manually moved outside the container (e.g. via manual portals)", so the picker's
+    clicks/keys keep working. Fixes all 3 injection points (same picker). 7 keyboard tests that used
+    `container.querySelector` were updated to `document.querySelector` (portaled content leaves the
+    Testing-Library container). **138/138, tsc + build clean; `dist/` rebuilt.**
+  - **NEXT (user):** in the running `electron:dev`, reload the window (⌘R) or restart it so the
+    rebuilt plugin bundle loads, then open the create-task dialog → **Insert injectable** → the picker
+    should now be a centered full-viewport overlay ON TOP of the dialog (not clipped); check the same
+    in the backlog-prompt edit + agent session. Then finish: snippet CRUD persistence
+    (`~/.openforge/injectables/snippets.json`). If green → commit ALL THREE fixes (openforge
+    `vite.config.ts`; openforge-plugins `pnpm-workspace.yaml`+lockfile+`InjectablePicker.svelte`+
+    `.test.ts`+rebuilt `dist/`), mark Plan 2 done, author Plan 3.
   - **Follow-up (SDK/host):** the "share host Svelte" design couples every external Svelte plugin's
     compile-time version to the host's exact Svelte patch — the SDK should pin/expose the required
     version so authors don't drift (mirrors the @lucide/svelte pin concern). Also: `electron:dev`
