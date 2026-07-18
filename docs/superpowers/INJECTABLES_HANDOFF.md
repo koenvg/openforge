@@ -34,15 +34,23 @@ Three sequential plans:
   User smoke-tested; no regressions.
 - **Task-0 prereq: DONE** — `injectionPoints` added as a declarable SDK capability
   (openforge commit `a16a12dd`), SDK rebuilt.
-- **Plan 2: IN PROGRESS.** Tasks 1–4 **DONE + pushed** on the `openforge-plugins` branch
-  `aviv/openforge/injectable-picker-design` (→ `koenvangeert/openforge-plugins`):
+- **Plan 2: IN PROGRESS — Tasks 1–6 DONE, all code written + committed on the `openforge-plugins`
+  branch `aviv/openforge/injectable-picker-design` (→ `koenvangeert/openforge-plugins`, pushed).**
   - Task 1 scaffold `cd29406`.
   - Task 2 (plugin-local injectable domain + `/injectables` logic) `3775e78`.
   - Task 3 (backend: verbatim skill fs + filesystem snippet store; all 7 methods) `4ad32e6`.
   - Task 4 (Injectables rail view + catalog; snippets via `api.backend.invoke`) `6a5e3f0`.
-  Full plugin suite 101/101, `tsc --noEmit` + build clean. Each task got a fresh implementer +
-  independent reviewer (all ✅ Approved, no Critical/Important findings).
-  **NEXT: Task 5** (port the ~990-line injectable picker dialog — import-remap per the plan's table).
+  - Task 5 (picker dialog port) `7addaf5` + reactivity fix `33ff312` (read `api` fresh in the hook).
+  - Task 6 (register injection triggers at the 3 locations) `b68a19a`.
+  - Final whole-branch review (opus) = **"Ready to merge: With fixes"**; fixes applied in `ae338c0`
+    (backend `whenReady()` guard on catalog load, nullable `projectId` for user-level skill methods,
+    stale-comment + `METHOD.*` consistency cleanup, test-double hardening).
+  Full plugin suite **138/138**, `tsc --noEmit` + build clean. Each task got a fresh implementer +
+  independent reviewer (all ✅ Approved).
+  **NEXT: Task 7 Steps 3–4 — the USER installs the plugin + runs the smoke test** (⌘L view; snippet
+  CRUD persistence; the 3 injection triggers; modal-over-modal stacking). Steps 1–2 (build/test/tsc)
+  are already green. Then author **Plan 3**. See *Deferred findings* below for two items the human
+  must decide.
 
 ## Plan 2 — Task Status (authoritative)
 
@@ -51,10 +59,16 @@ Three sequential plans:
 - Task 2: **DONE + pushed** — `3775e78`. Plugin-local injectable domain (`src/lib/injectableDomain.ts`) + `/injectables` logic (`src/lib/injectables/`), byte-identical port, only `CommandInfo` imported from SDK. 53 tests.
 - Task 3: **DONE + pushed** — `4ad32e6`. Backend: verbatim skill fs backend + `skillDomain` + filesystem snippet store (`src/backend/snippetFileStore.ts`, persists to `~/.openforge/injectables/snippets.json`, env override `OPENFORGE_INJECTABLES_DIR`); `src/lib/protocol.ts` METHOD constants; all 7 methods registered. 40/40. NOTE: the copied `skillDomain.test.ts` Rust-parity test (read `src-tauri/.../command_discovery.rs`) was replaced with a standalone `SKILL_SOURCE_DIRS` literal assertion — that cross-repo coupling can't exist in the standalone plugin (controller decision).
 - Task 4: **DONE + pushed** — `6a5e3f0`. Ported `InjectablesView.svelte` + `src/lib/injectableCatalog.ts`; snippet reads/writes via `api.backend.invoke(METHOD.*)`; view registered id=`injectables`, title=`Injectables`, ⌘L. 101/101, tsc + build clean.
-- Task 5: **TODO — NEXT** — port the ~990-line injectable picker dialog (`src/InjectablePicker.svelte` + `src/lib/useInjectableCatalog.svelte.ts`); apply the Task-5 import-remap table; new `api` prop.
-- Task 6: **TODO** — register injection-point components at the 3 locations.
-- Task 7: **TODO** — full verify + user install + smoke test (incl. modal-stacking check).
-- **Plan 3:** not written yet — author it after Plan 2 is verified.
+- Task 5: **DONE + pushed** — `7addaf5` (picker `src/InjectablePicker.svelte` + `src/lib/useInjectableCatalog.svelte.ts`, import-remap applied, new `api` prop; picker test adapted to `api.backend.invoke` assertions) + `33ff312` (reviewer fix: the hook now takes `getApi: () => api` and reads it fresh in `reload()`, removing a stale-reference/reactivity warning). 131 tests at the time. Reviewer ✅ Approved. **KNOWN DEVIATION (human decision):** the picker's 4 Lucide icons were dropped (`@lucide/svelte` is not a dep in `openforge-plugins` and the SDK link forbids editing `package.json`) and replaced with emoji/text markers matching `InjectablesView.svelte`'s icon-free convention — see *Deferred findings*.
+- Task 6: **DONE + pushed** — `b68a19a`. `src/InjectionTrigger.svelte` (Props = `PluginInjectionPointProps`; opens the picker, maps `onSelect`→`onInsert(inj.invocationText)`+close) registered at all three locations (`picker-createTaskPrompt`/`picker-agentSession`/`picker-backlogPrompt`) via a loop in `src/index.ts`. Test mocks the picker child (`InjectablePickerTestDouble`). 136 tests. Reviewer ✅ Approved.
+- Task 7: **IN PROGRESS — Steps 1–2 DONE, Steps 3–4 PENDING USER.** Automated verify green: `pnpm --filter @openforge-app/plugin-injectables build && test` = **138/138**, `tsc --noEmit` clean, `dist/frontend.js` + `dist/backend.js` present. Final-review fixes committed `ae338c0`. **Remaining (Steps 3–4, requires the human):** run the OpenForge app (this branch), Settings → Plugins → install via local path `.../openforge-plugins/plugins/injectables`, enable for a project, then smoke-test: ⌘L Injectables view (skills+commands+snippets; snippet create/edit/delete persists to `~/.openforge/injectables/snippets.json`); the injection trigger in the create-task dialog (validate **modal-over-modal stacking**), agent session, and backlog prompt. Fix any issues, then Step 5 tags Plan 2 complete.
+- **Plan 3:** not written yet — author it after Plan 2's user smoke test passes.
+
+### Deferred findings (whole-branch review — human decides before/with Plan 3)
+
+1. **Lucide icons dropped in the picker (Task 5).** Plan's import table said "unchanged," but `@lucide/svelte` isn't a dependency in `openforge-plugins`. Resolved icon-free (emoji/text markers) to match `InjectablesView.svelte`. Reviewer's recommendation: **accept icon-free** (self-contained, no mid-migration dep, no test asserts on icons); adding `@lucide/svelte` for exact visual parity is an optional, non-blocking follow-up.
+2. **⌘L view widens a snippet's project scope to "all projects" on edit (`InjectablesView.svelte`, Task 4).** Editing a snippet's body resets its scope. **Verified this is PRE-EXISTING faithful-port behavior** (the source `plugins/skills-viewer/src/InjectablesView.svelte` line 71 discards `result.snippets` and line 123 forces `snippetAllProjects = true`) — NOT a Plan-2 regression. The picker preserves scope correctly. Left as-is to keep the relocation faithful; decide whether to fix in Plan 3 or a separate ticket. (Fix: keep raw `snippets` in view state and seed the edit form from the selected snippet's real scope, mirroring the picker.)
+3. **Unused `listSkills` skill-discovery subsystem (Task 3).** The frontend sources skills via `api.commands.listCatalog`, so the ported `listSkills` handler + most of `skillDomain.ts` are unreferenced in production (plan-mandated verbatim copy). Candidate for Plan-3 cleanup — decide whether to trim now or defer.
 
 ## Environment (critical)
 
