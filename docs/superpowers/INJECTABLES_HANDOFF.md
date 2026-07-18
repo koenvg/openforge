@@ -54,8 +54,12 @@ Three sequential plans:
   F2 snippet-scope-widening bug = **fix during Plan 3**; F3 unused `listSkills` = **trim during Plan 3**.
   **NEXT: Task 7 Steps 3–4 — the USER installs the plugin + runs the smoke test** (⌘L view; snippet
   CRUD persistence; the 3 injection triggers; modal-over-modal stacking). Steps 1–2 (build/test/tsc)
-  are green — re-verified in worktree AVIV-113 (138/138, tsc clean, dist rebuilt with icons). The
+  are green — **re-verified again 2026-07-18 in worktree AVIV-113: `build` clean, `test` 138/138,
+  `tsc --noEmit` clean, `dist/frontend.js`+`dist/backend.js` freshly rebuilt with icons.** The
   user will smoke-test the **icon version**. Then author **Plan 3**.
+  **This session (2026-07-18) found NO autonomous task remaining** — Plan 2 is fully blocked on the
+  user smoke test, and Plan 3 stays gated on it. Progress made: re-verified Steps 1–2 green, and
+  **resolved open-minor #3 (rail-view icons) by investigation — no action needed** (see below).
 
 ## Plan 2 — Task Status (authoritative)
 
@@ -90,10 +94,12 @@ Three sequential plans:
   allows it; plugin bundles its own copy). Optional: pin to `^1.23.0` for exact declared parity.
 - `pnpm add` reformatted `peerDependencies` + the `requires` array in `plugins/injectables/package.json` to
   multi-line — benign diff noise (could be tidied on a future package.json touch).
-- **Picker now uses Lucide icons but the rail view `InjectablesView.svelte` still uses emoji/text markers.**
-  Now that `@lucide/svelte` is a plugin dep, the two plugin surfaces are icon-inconsistent. **Undecided:** whether
-  to also restore the rail view's icons (check whether the app's original skills-viewer rail view had icons; if
-  so, restore for parity). Surface to the user.
+- ~~**Picker uses Lucide icons but the rail view `InjectablesView.svelte` uses text markers.**~~ ✅ **RESOLVED
+  2026-07-18 by investigation — no action.** The ORIGINAL app rail view (`plugins/skills-viewer/src/InjectablesView.svelte`,
+  lines 241–244 + 304) uses **text markers only** (`All`/`Snippets`/`ORIGIN_LABELS[section]`, `{selected.kind}` text)
+  with **zero Lucide icons** — byte-identical to the plugin's rail view. So the plugin rail view is **already at exact
+  parity**; the picker correctly had icons (restored `becb8c5`), the rail view never did. The picker/rail-view icon
+  difference faithfully mirrors the original app. Nothing to restore.
 
 ## Environment (critical)
 
