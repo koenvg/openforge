@@ -27,7 +27,8 @@ Three sequential plans:
 - **Plan 2** — build the plugin in `openforge-plugins`. **DONE — user smoke-tested green + all fixes
   committed** (dev-mode Svelte sharing, svelte 5.56.4 pin, modal-over-modal portal). User still to push
   `openforge-plugins`.
-- **Plan 3** — cutover/cleanup in OpenForge. **AUTHORING NOW** (Plan 2 verified).
+- **Plan 3** — cutover/cleanup in OpenForge. **AUTHORED — ready to execute**
+  (`docs/superpowers/plans/2026-07-18-injectables-cutover-cleanup.md`, 6 tasks). **This is the ACTIVE plan.**
 
 ## Current Position  *(update after every task)*
 
@@ -125,8 +126,15 @@ Three sequential plans:
 - Task 7: **DONE** — user smoke test passed (⌘L view, modal-over-modal stacking, injection insert in all
   3 locations). Three fixes found + committed (see *Current Position*). Snippet-persistence spot-check is
   the only optional remaining item (40 backend tests cover it).
-- **Plan 3:** **AUTHORING NOW.** Scope in *Documents & ledgers* below; also fold in deferred findings F2
-  (view snippet-scope widening on edit) + F3 (unused `listSkills`). Draft: `docs/superpowers/plans/2026-07-18-injectables-cutover-cleanup.md` (once written).
+- **Plan 3:** **AUTHORED — ready to execute:** `docs/superpowers/plans/2026-07-18-injectables-cutover-cleanup.md`.
+  6 tasks: **T1** remove ⌘⇧I + built-in-picker open-path wiring; **T2** delete `src/{components,lib}/injectables/`;
+  **T3** remove the `skills-viewer` builtin (3 registration points + `plugins/skills-viewer/` + fixture updates);
+  **T4** trim the SDK injectable surface (delete `packages/plugin-sdk/src/injectables/` + the domain injectable block,
+  **KEEP `CommandInfo` + `Project`**); **T5** append a forward DB migration dropping `snippets`/`snippet_projects`
+  (never delete old migrations); **T6** (openforge-plugins repo) deferred F2 (snippet-scope-on-edit) + F3 (drop unused
+  `listSkills`). Grounded in a full footprint inventory (resolved the SDK AMBIGUOUS call: the external plugin imports
+  only `CommandInfo`/`Project` from the SDK — verified). **NEXT SESSION: execute Plan 3 from Task 1 via
+  `superpowers:subagent-driven-development`.**
 
 ### Deferred findings (whole-branch review — human decisions)
 
@@ -251,12 +259,11 @@ resolves to. So the ONE task drives both repos like this:
 - Spec: `docs/superpowers/specs/2026-07-16-injectable-picker-plugin-migration-design.md`
 - Plan 1 (DONE): `docs/superpowers/plans/2026-07-16-injection-point-extension-point.md`
 - Plan 2 (ACTIVE): `docs/superpowers/plans/2026-07-17-injectables-plugin-package.md`
-- Plan 3 (TODO): write after Plan 2. Scope: delete OpenForge `src/components/injectables/` +
-  `src/lib/injectables/`, the SDK `/injectables` logic + injectable domain types, the
-  `skills-viewer` builtin (from `builtin-plugins.json` + `builtinPluginModules.ts` +
-  `builtin_plugins.rs`), the ⌘⇧I wiring/old triggers; add a FORWARD migration dropping
-  `snippets`/`snippet_projects` (never delete old migrations → `DatabaseTooFarAhead`; fix
-  relative-offset migration tests).
+- Plan 3 (ACTIVE): `docs/superpowers/plans/2026-07-18-injectables-cutover-cleanup.md` — the cutover/cleanup
+  plan, authored 2026-07-18 from a full footprint inventory. Deletes the OpenForge injectable footprint
+  (built-in picker, `src/{components,lib}/injectables/`, SDK injectable surface [KEEPS `CommandInfo`/`Project`],
+  `skills-viewer` builtin, ⌘⇧I wiring) + a forward DB drop-migration + plugin F2/F3. KEEP-list + DB-safety
+  (never delete old migrations; `MigrationBoundary` literals untouched) are in the plan's Global Constraints.
 - Ledgers: `.superpowers/sdd/progress.md` (Plan 1), `.superpowers/sdd/progress-plan2.md` (Plan 2).
 
 ## Execution protocol
