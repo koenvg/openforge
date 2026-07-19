@@ -37,6 +37,22 @@ Three sequential plans:
   (body refreshed to final architecture); openforge-plugins → https://github.com/koenvangeert/openforge-plugins/pull/3.
   Deferred pre-existing failure `scripts/build-plugin-sdk-runtime.test.mjs` (stale checked-in SDK runtime
   artifact) flagged in the openforge PR body as a follow-up. Worktree kept alive for PR iteration.
+- **Follow-up (2026-07-20) — FULL skills-plugin trace removal**, onto the same branch/PR #1286:
+  - `3cb3b4e0` **DB ghost purge.** Existing DBs still carried `com.openforge.skills-viewer` rows in
+    `plugins`/`project_plugins` (confirmed in the live DB), which resolve as an enabled builtin whose
+    files are gone. Appended a forward migration purging them (children first). **Gotcha found via the
+    suite:** an unconditional DELETE broke 5 legacy-fixture tests — a replay chain can have the child
+    tables WITHOUT the `plugins` parent, so `DELETE FROM plugin_storage` fails resolving its FK. The
+    migration now skips entirely when `plugins` is absent and existence-guards each table. migrations 30/30.
+  - `c93411f7` **Dead personal-skill stack removed.** `claude_skill_write`/`claude_skill_delete` were
+    unreachable after the built-in picker went away (the plugin writes skill files from its OWN backend).
+    Dropped the 2 `ipc.ts` wrappers, sidecar-bridge allow-list entries, migration contracts, both sidecar
+    handlers, and `claude_assets.rs`; extended the existing retired-command guards (frontend + `runtime.rs`).
+  - `156db692` **Stale docs** in `component-library-audit.md` (current-state claims only; history kept),
+    an `App.svelte` comment, and the `CommandInfo` doc comments.
+  - Verified: **cargo 1149/1149**, frontend 3333 passing with the SAME single pre-existing failure as before
+    (no regression). KEPT deliberately: `$skill:` autocomplete, `command_discovery` skill scanning (the
+    plugin sources skills via `listCatalog`), and the CLI `openforge-skill.md` templates.
 
 ## Current Position  *(update after every task)*
 
