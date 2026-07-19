@@ -27,9 +27,11 @@ Three sequential plans:
 - **Plan 2** — build the plugin in `openforge-plugins`. **DONE — user smoke-tested green + all fixes
   committed** (dev-mode Svelte sharing, svelte 5.56.4 pin, modal-over-modal portal). User still to push
   `openforge-plugins`.
-- **Plan 3** — cutover/cleanup in OpenForge. **IN PROGRESS — Tasks 1–3 DONE (committed on this branch),
-  Tasks 4–6 TODO** (`docs/superpowers/plans/2026-07-18-injectables-cutover-cleanup.md`, 6 tasks).
-  **This is the ACTIVE plan. Resume at Task 4.**
+- **Plan 3** — cutover/cleanup in OpenForge. **ALL 6 TASKS DONE + each reviewed clean**
+  (`docs/superpowers/plans/2026-07-18-injectables-cutover-cleanup.md`, 6 tasks). Tasks 1–5 committed on
+  this branch in **openforge** (base `e06ab585`); Task 6 committed in **openforge-plugins** (`e5eb622`).
+  **REMAINING: (a) final whole-branch review (opus, cross-repo), (b) user smoke test. This is the ACTIVE
+  plan. Resume at the final whole-branch review.**
 
 ## Current Position  *(update after every task)*
 
@@ -127,10 +129,10 @@ Three sequential plans:
 - Task 7: **DONE** — user smoke test passed (⌘L view, modal-over-modal stacking, injection insert in all
   3 locations). Three fixes found + committed (see *Current Position*). Snippet-persistence spot-check is
   the only optional remaining item (40 backend tests cover it).
-- **Plan 3:** **IN PROGRESS — Tasks 1–3 DONE, Tasks 4–6 TODO.** Plan doc
+- **Plan 3:** **ALL 6 TASKS DONE + each reviewed clean.** Plan doc
   `docs/superpowers/plans/2026-07-18-injectables-cutover-cleanup.md`. Each task got a fresh sonnet
-  implementer + independent sonnet reviewer (all ✅ Approved, no Critical/Important). Commits are on this
-  branch in the **openforge** repo (base was `e06ab585`):
+  implementer + independent sonnet reviewer (all ✅ Approved, no Critical/Important). Tasks 1–5 committed
+  on this branch in the **openforge** repo (base was `e06ab585`); Task 6 in **openforge-plugins**:
   - **T1 DONE `95916418`** — removed the ⌘⇧I + built-in-picker open-path wiring (6 src + 3 test files);
     all generic `InjectionPoint*`/`injectableInsertRequest` wiring KEPT; orphaned imports
     (writePty/isPtyActive/focusTerminal) removed, `selectedTaskId` kept. Review clean.
@@ -142,26 +144,49 @@ Three sequential plans:
     `src/lib/skillsViewerPlugin.ts` and `plugins/skills-viewer/`. 11 test fixtures repointed to REAL
     remaining builtins (roadmap/github-sync/task-schedules) — reviewer verified real values, no vacuous
     tests. `cargo test builtin_plugins` 8/8, `app_invoke` 82/82. Review clean.
-  - **T4 TODO** — trim the SDK injectable surface (delete `packages/plugin-sdk/src/injectables/` + the
-    domain injectable block, **KEEP `CommandInfo` + `Project`**; remove `./injectables` export + vite alias
-    + `src/lib/types.ts` comment). **NOTE: also delete the stale `⌘⇧I picker` comment at `src/lib/types.ts:50`**
-    (Task-1 reviewer flagged it; it sits in/next to the :47-51 block Task 4 already removes).
-  - **T5 TODO** — append a forward DB migration dropping `snippets`/`snippet_projects` (never delete old
-    migrations). **Confirm the data note with the user first** (drops any snippets a user created via the
-    OLD built-in picker — the plan's decided scope is drop, no migration; new plugin uses the filesystem).
-  - **T6 TODO** (openforge-plugins repo `/Users/avivhadar/repos/openforge-plugins`) — deferred F2
-    (snippet-scope-on-edit) + F3 (drop unused `listSkills`).
-  - **KNOWN PRE-EXISTING failure (NOT a Plan-3 regression):** `scripts/build-plugin-sdk-runtime.test.mjs`
-    fails at the Plan-3 base `e06ab585` — it rebuilds the SDK runtime and asserts `generated.toEqual(checkedIn)`,
-    but the checked-in `packages/plugin-sdk` runtime artifact is STALE vs the schema (now has
-    `injectionPoints`/`listCatalog` from Plan 1/2). No Plan-3 commit touches it. **Likely needs the SDK
-    runtime artifact regenerated + committed** — Task 4 rebuilds the SDK (removing the injectables surface),
-    so regenerate + commit the artifact there (or as a follow-up). Raise with the user before merge.
-  - **Open Minor (roll-up for final review):** `CLAUDE.md` shortcut list still says `⌘L (Skills)` — stale
-    after skills-viewer removal (⌘L is now the external Injectables plugin's view). One-line doc fix; out of
-    Plan 3's file-list, not test-covered — decide at final review / with the user.
-  - **NEXT SESSION: resume Plan 3 at Task 4 via `superpowers:subagent-driven-development`.** Ledger:
-    `.superpowers/sdd/progress-plan3.md` (gitignored — trust THIS section + `git log` if it's absent).
+  - **T4 DONE `f618e7ae` (+ Minor fix `c10bdf36`)** — trimmed the SDK injectable surface: deleted
+    `packages/plugin-sdk/src/injectables/`, the domain injectable block (KEPT `CommandInfo` + `Project`),
+    the `./injectables` package.json export, the `vite.ts` alias + `vite.test.ts` assertions, and the
+    `src/lib/types.ts` comment block (incl. the stale `⌘⇧I picker` line). Implementer also removed a
+    dangling `tsconfig.json` injectables path mapping. Review Minor: a stale `/injectables` entry in
+    `scripts/check-plugin-import-boundaries.mjs` allow-list — fixed in `c10bdf36`. SDK 107 tests pass,
+    build + tsc clean.
+  - **T5 DONE `d6d9a69`** — appended one forward DB migration to `src-tauri/src/db/migrations.rs`
+    (`M::up("DROP TABLE IF EXISTS snippet_projects; DROP TABLE IF EXISTS snippets;")`, FK child first),
+    append-only (no prior migration edited, `MigrationBoundary` literals untouched). TDD test
+    `test_fresh_db_has_no_legacy_snippet_tables` (red→green). **User confirmed the data-note drop
+    (no data migration).** `cargo test migrations` 29/29.
+  - **T6 DONE `e5eb622`** (openforge-plugins repo `/Users/avivhadar/repos/openforge-plugins`) — F2:
+    `InjectablesView.svelte` now preserves a snippet's real project scope on edit (mirrors the picker);
+    new genuine red→green test. F3: removed dead `listSkills` handler + `skillDomain.ts`/`.test.ts` +
+    ~7 listSkills-only backend tests (reviewer verified NO live coverage lost). 115/115, tsc + build clean.
+    **`plugins/injectables/package.json` machine-local SDK link kept UNCOMMITTED** (still shows modified).
+  - **KNOWN PRE-EXISTING failure — USER CHOSE TO DEFER (flag at merge):** `scripts/build-plugin-sdk-runtime.test.mjs`
+    fails at the Plan-3 base `e06ab585` — it rebuilds the SDK runtime and asserts `generated.toEqual(checkedIn)`
+    against the checked-in `src-tauri/plugin-host/plugin-sdk/index.js`, which is STALE vs the schema (Plan 1/2
+    added `injectionPoints`/`listCatalog`). **NOT caused by Task 4** — the main SDK `index.ts` does NOT export
+    the injectables module (it's only the `./injectables` subpath), so trimming injectables did not change that
+    runtime artifact. Extra wrinkle: `build-plugin-sdk-runtime.mjs`'s DEFAULT output is now
+    `dist-electron/plugin-host/plugin-sdk/index.js`, NOT the `src-tauri/...` path the test compares against —
+    suggests a deliberate-but-incomplete artifact-location migration. **Follow-up (out of Plan 3 scope):**
+    regenerate/relocate the checked-in artifact (or update the test) so it matches the current schema + output
+    path. This session the user explicitly chose to DEFER it.
+  - **Open Minors (roll-up for final review):**
+    - `CLAUDE.md` shortcut list still says `⌘L (Skills)` — stale after skills-viewer removal (⌘L is now the
+      external Injectables plugin's view). One-line doc fix; out of Plan 3's file-list, not test-covered.
+    - `CommandInfo`'s doc comments in `packages/plugin-sdk/src/domain.ts` still mention "the injectable picker"
+      (Task 4 KEPT `CommandInfo` and was scoped to delete only the named block, so the wording wasn't touched).
+      Optional doc-comment refresh; `CommandInfo` itself is generic and correct.
+    - Trivial Minors from task reviews (redundant inline comment in the Task-5 migration; @lucide/svelte
+      `^1.25.0` vs app `^1.23.0` — see Plan-2 "Open Minors") — none require a fix.
+  - **NEXT SESSION: run the FINAL WHOLE-BRANCH REVIEW (opus, cross-repo) + then the user smoke test.** All 6
+    Plan-3 tasks are implemented + individually reviewed clean; the final review is the remaining SDD step.
+    It spans TWO repos: openforge `e06ab585..HEAD` (Tasks 1–5 + the import-boundary fix) and openforge-plugins
+    `0920801..e5eb622` (Task 6). Hand the final reviewer BOTH ranges + this Open-Minors roll-up + the deferred
+    pre-existing failure so it can triage what must be fixed before merge. Then ask the user to smoke-test
+    (install external plugin, ⌘L renders, snippet CRUD persists to `~/.openforge/injectables/snippets.json`,
+    injection inserts at all 3 points). Ledger: `.superpowers/sdd/progress-plan3.md` (gitignored — trust THIS
+    section + `git log` if absent). **User still needs to push `openforge-plugins` (now through `e5eb622`).**
 
 ### Deferred findings (whole-branch review — human decisions)
 

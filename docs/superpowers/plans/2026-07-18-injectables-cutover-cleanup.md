@@ -172,6 +172,9 @@ git commit -m "refactor: remove the in-repo skills-viewer builtin plugin"
 
 ### Task 4: Remove the injectable-specific SDK surface
 
+> **STATUS: ✅ DONE** — commit `f618e7ae` + Minor-fix follow-up `c10bdf36` (openforge, this branch).
+> Review clean (Spec ✅, quality Approved; one Minor stale allow-list entry fixed in `c10bdf36`).
+
 Delete the SDK's injectable logic + domain types. **KEEP `CommandInfo` and `Project`** (the external plugin imports both). After Tasks 2–3 there are no in-repo consumers of the deleted symbols.
 
 **Files:**
@@ -220,6 +223,10 @@ git commit -m "refactor: remove injectable-specific SDK logic + domain types (ke
 
 ### Task 5: Add a forward migration dropping snippets / snippet_projects
 
+> **STATUS: ✅ DONE** — commit `d6d9a69` (openforge, this branch). User confirmed the data-note drop
+> (no data migration). Review clean (append-only verified; TDD `test_fresh_db_has_no_legacy_snippet_tables`
+> red→green; `cargo test migrations` 29/29).
+
 `src-tauri/src/db/migrations.rs` builds a positional migration list via `define_migrations!`; `LATEST_USER_VERSION` is derived from the count. The `snippets` (`:1350-1360`) and `snippet_projects` (`:1366-1402`) tables are the LAST entries. **Do not delete them** — append one new forward migration that drops them (drop the FK child first).
 
 > **Data note (confirm during execution):** the external plugin stores snippets on the filesystem (`~/.openforge/injectables/snippets.json`), NOT the DB, so these tables are legacy/orphaned. Dropping them discards any snippets a user created via the OLD built-in picker without migrating them. This matches the documented Plan 3 scope (drop, no data migration). If real users may have DB snippets, raise it before running — otherwise proceed.
@@ -261,6 +268,10 @@ git commit -m "feat(db): forward migration dropping legacy snippets/snippet_proj
 ---
 
 ### Task 6: Plugin-repo cleanups — deferred findings F2 + F3
+
+> **STATUS: ✅ DONE** — commit `e5eb622` (openforge-plugins, this branch). Review clean (F2 fix mirrors the
+> picker + genuine red→green test; F3 removed only dead code, reviewer verified NO live test coverage lost;
+> 115/115, tsc + build clean; machine-local `package.json` SDK link kept uncommitted).
 
 **Repo: `openforge-plugins`** (`/Users/avivhadar/repos/openforge-plugins`, same branch). These are the two findings deferred from Plan 2. Independent of Tasks 1–5.
 
