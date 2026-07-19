@@ -73,6 +73,7 @@ import {
 	getActiveSelfReviewComments,
 	getCommitDiff,
 	getPrComments,
+	markCommentAddressed,
 	getTaskBatchFileContents,
 	getTaskCommits,
 	getTaskFileContents,
@@ -984,6 +985,40 @@ describe("SelfReviewView — hide addressed comments", () => {
 			expect(screen.getByText("Comment 1")).toBeTruthy();
 			// Addressed comment should NOT be in DOM
 			expect(screen.queryByText("Comment 2")).toBeNull();
+		});
+	});
+
+	it("keeps failed Review comment addressing visible and retryable", async () => {
+		const comment = makeComment(7, 0, "Review retry comment");
+		vi.mocked(getPrComments).mockResolvedValue([comment]);
+		vi.mocked(markCommentAddressed)
+			.mockRejectedValueOnce(new Error("review address failed"))
+			.mockResolvedValueOnce(undefined);
+		ticketPrs.set(new Map([["task-1", [mockPr]]]));
+		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
+
+		render(SelfReviewView, {
+			props: {
+				task: baseTask,
+				agentStatus: null,
+				onSendToAgent: vi.fn(),
+			},
+		});
+
+		await fireEvent.click(await screen.findByRole("button", { name: /mark addressed/i }));
+
+		await waitFor(() => {
+			expect(screen.getByText("Review retry comment")).toBeTruthy();
+			expect(screen.getByRole("alert").textContent).toContain("review address failed");
+			expect(screen.getByRole("button", { name: "Retry mark addressed" })).toBeTruthy();
+		});
+
+		await fireEvent.click(screen.getByRole("button", { name: "Retry mark addressed" }));
+
+		await waitFor(() => {
+			expect(markCommentAddressed).toHaveBeenCalledTimes(2);
+			expect(screen.queryByText("Review retry comment")).toBeNull();
+			expect(screen.queryByRole("alert")).toBeNull();
 		});
 	});
 

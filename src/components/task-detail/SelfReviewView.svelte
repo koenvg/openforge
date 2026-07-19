@@ -618,10 +618,24 @@
                                 <MarkdownContent content={comment.body} imageBaseUrl={markdownImageBaseUrl} />
                               </div>
                               {#if comment.addressed === 0}
+                                {@const addressError = commentSelection.addressErrorFor(comment.id)}
+                                {@const isAddressing = commentSelection.isAddressing(comment.id)}
                                 <button
                                   class="btn btn-ghost btn-xs mt-1.5 text-base-content/50 hover:text-success hover:bg-success/10"
-                                  onclick={() => commentSelection.markAddressed(comment.id)}
-                                >✓ Mark addressed</button>
+                                  disabled={isAddressing}
+                                  onclick={() => void commentSelection.markAddressed(comment.id)}
+                                >
+                                  {#if isAddressing}
+                                    Marking…
+                                  {:else if addressError}
+                                    Retry mark addressed
+                                  {:else}
+                                    ✓ Mark addressed
+                                  {/if}
+                                </button>
+                                {#if addressError}
+                                  <p class="m-0 mt-1 text-xs text-error" role="alert">{addressError}</p>
+                                {/if}
                               {:else}
                                 <span class="text-[0.65rem] text-success font-medium mt-1">✓ Addressed</span>
                               {/if}
