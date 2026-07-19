@@ -1405,6 +1405,42 @@ CREATE TABLE IF NOT EXISTS snippets (
     // tables. New migration (never edit/delete the CREATE migrations above — that
     // lowers LATEST_USER_VERSION and triggers DatabaseTooFarAhead).
     M::up("DROP TABLE IF EXISTS snippet_projects; DROP TABLE IF EXISTS snippets;"),
+    // The skills-viewer builtin was replaced by the external com.openforge.injectables
+    // plugin and removed from the builtin catalog, but existing databases still carry its
+    // install rows — which resolve as an enabled builtin whose files no longer exist.
+    // Purge them. Children first: FK enforcement (ON DELETE CASCADE) is not guaranteed
+    // to be enabled while migrations run. Each table is existence-guarded because a
+    // database replaying from an older version may not have the plugin tables yet.
+    M::up_with_hook("", |tx| {
+        let table_exists = |name: &str| -> bool {
+            tx.query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name=?1",
+                [name],
+                |r| r.get(0),
+            )
+            .unwrap_or(false)
+        };
+        // If the plugin registry itself was never created in this database's migration
+        // history there is nothing to purge — and deleting from the child tables would
+        // fail anyway, since their FK resolves against the missing `plugins` parent.
+        if !table_exists("plugins") {
+            return Ok(());
+        }
+        for (table, column) in [
+            ("plugin_storage", "plugin_id"),
+            ("project_plugins", "plugin_id"),
+            ("plugins", "id"),
+        ] {
+            if table_exists(table) {
+                tx.execute(
+                    &format!("DELETE FROM {table} WHERE {column} = 'com.openforge.skills-viewer'"),
+                    [],
+                )
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            }
+        }
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -2680,6 +2716,77 @@ mod tests {
             !snippet_projects_exists,
             "freshly migrated DB should not have a 'snippet_projects' table"
         );
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_upgrade_removes_orphaned_skills_viewer_plugin_rows() {
+        let path = std::env::temp_dir().join(format!(
+            "test_upgrade_removes_skills_viewer_{}.db",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+
+        {
+            let db = Database::new(path.clone()).expect("Database::new");
+            let conn = db.connection();
+            let conn = conn.lock().unwrap();
+
+            // Simulate a database installed before the skills-viewer builtin was retired:
+            // its install row plus per-project enablement and plugin storage.
+            conn.execute(
+                "INSERT INTO plugins (id, name, version, api_version, frontend_entry, install_path, source_kind, is_builtin)
+                 VALUES ('com.openforge.skills-viewer', 'Skills', '1.0.0', 1, 'frontend.js', '/tmp/skills-viewer', 'builtin', 1)",
+                [],
+            )
+            .expect("insert skills-viewer plugin row");
+            conn.execute(
+                "INSERT INTO project_plugins (project_id, plugin_id, enabled)
+                 VALUES ('P-1', 'com.openforge.skills-viewer', 1)",
+                [],
+            )
+            .expect("insert skills-viewer project_plugins row");
+            conn.execute(
+                "INSERT INTO plugin_storage (plugin_id, scope, scope_id, key, value)
+                 VALUES ('com.openforge.skills-viewer', 'global', '', 'snippets', '[]')",
+                [],
+            )
+            .expect("insert skills-viewer plugin_storage row");
+
+            // Rewind one version so reopening replays the purge migration.
+            conn.execute_batch(&format!(
+                "PRAGMA user_version = {}",
+                LATEST_USER_VERSION - 1
+            ))
+            .expect("rewind user_version");
+        }
+
+        let db = Database::new(path.clone()).expect("Database::new should apply the purge migration");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        for (table, column) in [
+            ("plugins", "id"),
+            ("project_plugins", "plugin_id"),
+            ("plugin_storage", "plugin_id"),
+        ] {
+            let remaining: i64 = conn
+                .query_row(
+                    &format!(
+                        "SELECT COUNT(*) FROM {table} WHERE {column} = 'com.openforge.skills-viewer'"
+                    ),
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(
+                remaining, 0,
+                "upgraded DB should have no skills-viewer rows left in {table}"
+            );
+        }
 
         drop(conn);
         drop(db);
