@@ -1400,6 +1400,11 @@ CREATE TABLE IF NOT EXISTS snippets (
         .map_err(rusqlite_migration::HookError::RusqliteError)?;
         Ok(())
     }),
+    // Injectable/snippet picker moved to the external com.openforge.injectables
+    // plugin, which persists snippets to the filesystem. Drop the now-unused DB
+    // tables. New migration (never edit/delete the CREATE migrations above — that
+    // lowers LATEST_USER_VERSION and triggers DatabaseTooFarAhead).
+    M::up("DROP TABLE IF EXISTS snippet_projects; DROP TABLE IF EXISTS snippets;"),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -2633,6 +2638,47 @@ mod tests {
             uv, LATEST_USER_VERSION,
             "Fresh DB should have user_version={} after migrations, got {}",
             LATEST_USER_VERSION, uv
+        );
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_fresh_db_has_no_legacy_snippet_tables() {
+        let path = std::env::temp_dir().join(format!(
+            "test_fresh_db_no_snippet_tables_{}.db",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+
+        let db = Database::new(path.clone()).expect("Database::new");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        let snippets_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='snippets'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            !snippets_exists,
+            "freshly migrated DB should not have a 'snippets' table"
+        );
+
+        let snippet_projects_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='snippet_projects'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            !snippet_projects_exists,
+            "freshly migrated DB should not have a 'snippet_projects' table"
         );
 
         drop(conn);
