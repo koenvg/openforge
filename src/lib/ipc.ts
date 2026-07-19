@@ -467,17 +467,6 @@ export async function listOpenCodeCommands(projectId: string): Promise<CommandIn
   return invoke<CommandInfo[]>("list_opencode_commands", { projectId });
 }
 
-// Edit/delete for the user's personal Claude skills. The backend reconstructs the
-// on-disk path from (sourceDir, sourcePath) under ~/<sourceDir>/skills and validates it,
-// so no raw filesystem path is sent from the renderer.
-export async function writePersonalSkill(sourceDir: string, sourcePath: string, content: string): Promise<void> {
-  return invoke<void>("claude_skill_write", { sourceDir, sourcePath, content });
-}
-
-export async function deletePersonalSkill(sourceDir: string, sourcePath: string): Promise<void> {
-  return invoke<void>("claude_skill_delete", { sourceDir, sourcePath });
-}
-
 export async function searchOpenCodeFiles(projectId: string, query: string): Promise<string[]> {
   return invoke<string[]>("search_opencode_files", { projectId, query });
 }

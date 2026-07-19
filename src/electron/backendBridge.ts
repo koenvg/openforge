@@ -145,8 +145,6 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'search_opencode_files',
   'list_opencode_agents',
   'list_opencode_models',
-  'claude_skill_write',
-  'claude_skill_delete',
   'register_builtin_plugin',
   'install_plugin_from_local',
   'install_plugin_from_npm',
