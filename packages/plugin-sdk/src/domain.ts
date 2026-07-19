@@ -635,7 +635,7 @@ export interface AgentInfo {
 // Autocomplete Types
 // ============================================================================
 
-/** Command info from provider command endpoints — used for / autocomplete and the injectable picker */
+/** Command info from provider command endpoints — used for / autocomplete and injectable catalogs */
 export interface CommandInfo {
   name: string;
   description: string | null;
@@ -645,14 +645,14 @@ export interface CommandInfo {
   origin?: string | null;
   /** "auto+manual" | "manual-only" — derived from disable-model-invocation / command semantics */
   triggerMode?: string | null;
-  /** false => hidden background skill; the injectable picker drops it */
+  /** false => hidden background skill; injectable catalogs drop it */
   userInvocable?: boolean | null;
   /** e.g. ".claude" | ".agents"; null for builtin/plugin */
   sourceDir?: string | null;
   /** stable on-disk identity under the source skills dir — for a skill, its folder name
    * (a single path component, e.g. "pr-writer"); for a command, the file name. null for builtin */
   sourcePath?: string | null;
-  /** full SKILL.md body for the picker reading pane; null when there is no source file */
+  /** full SKILL.md body for a consumer's reading pane; null when there is no source file */
   content?: string | null;
 }
 
