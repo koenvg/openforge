@@ -173,6 +173,32 @@ describe('createCommentSelection', () => {
     cleanup()
   })
 
+  it('keeps a failed comment visible and exposes retry state until addressing succeeds', async () => {
+    const comments = [makeComment(1)]
+    mockMarkCommentAddressed
+      .mockRejectedValueOnce(new Error('address request failed'))
+      .mockResolvedValueOnce(undefined)
+    let selection!: ReturnType<typeof createCommentSelection>
+    const cleanup = $effect.root(() => {
+      selection = createCommentSelection({ getPrComments: () => comments })
+    })
+    flushSync()
+
+    await selection.markAddressed(1)
+    flushSync()
+
+    expect(selection.unaddressedComments.find(c => c.id === 1)).toBeTruthy()
+    expect(selection.addressErrorFor(1)).toContain('address request failed')
+
+    await selection.markAddressed(1)
+    flushSync()
+
+    expect(mockMarkCommentAddressed).toHaveBeenCalledTimes(2)
+    expect(selection.unaddressedComments.find(c => c.id === 1)).toBeUndefined()
+    expect(selection.addressErrorFor(1)).toBeNull()
+    cleanup()
+  })
+
   it('derived counts update correctly when prComments change', () => {
     let comments = $state<PrComment[]>([makeComment(1), makeComment(2)])
     let selection!: ReturnType<typeof createCommentSelection>

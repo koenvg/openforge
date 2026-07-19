@@ -1,3 +1,4 @@
+import { createCommentAddressing } from './commentAddressing.svelte'
 import { markCommentAddressed } from './ipc'
 import type { PrComment } from './types'
 
@@ -15,6 +16,8 @@ export interface CommentSelectionState {
   toggleSelected(id: number): void
   selectAll(): void
   deselectAll(): void
+  isAddressing(commentId: number): boolean
+  addressErrorFor(commentId: number): string | null
   markAddressed(commentId: number): Promise<void>
 }
 
@@ -27,6 +30,7 @@ export function createCommentSelection(deps: {
 }): CommentSelectionState {
   let selectedPrCommentIds = $state<Set<number>>(new Set())
   let localPrComments = $state<PrComment[]>([])
+  const commentAddressing = createCommentAddressing()
 
   // Sync local copy from external source reactively
   $effect(() => {
@@ -55,7 +59,7 @@ export function createCommentSelection(deps: {
   }
 
   async function markAddressed(commentId: number): Promise<void> {
-    try {
+    await commentAddressing.run(commentId, async () => {
       await markCommentAddressed(commentId)
       localPrComments = localPrComments.map(c =>
         c.id === commentId ? { ...c, addressed: 1 } : c
@@ -65,9 +69,7 @@ export function createCommentSelection(deps: {
         next.delete(commentId)
         selectedPrCommentIds = next
       }
-    } catch (e) {
-      console.error('Failed to mark comment addressed:', e)
-    }
+    })
   }
 
   return {
@@ -80,6 +82,8 @@ export function createCommentSelection(deps: {
     toggleSelected,
     selectAll,
     deselectAll,
+    isAddressing: commentAddressing.isAddressing,
+    addressErrorFor: commentAddressing.errorFor,
     markAddressed,
   }
 }
