@@ -36,8 +36,15 @@ export interface AppShortcutDefinition {
 export const APP_SHORTCUT_DEFINITIONS: readonly AppShortcutDefinition[] = [
   {
     id: 'attention-overview',
-    registrations: [{ key: '⌘⇧A', action: 'toggleAttentionOverview' }],
-    help: { id: 'attention-overview', label: 'Attention overview', keys: [['⌘', '⇧', 'A']] },
+    // Two two-key chords rather than one three-key chord, so the dialog is reachable with
+    // either hand alone: ⌘E on the left, ⌘; on the right. ⌥ is deliberately not used —
+    // physicalShortcutKeysByCode covers no letters, and ⌥ mutates e.key on macOS
+    // (⌥A → å), so ⌥+letter chords can never match.
+    registrations: [
+      { key: '⌘E', action: 'toggleAttentionOverview' },
+      { key: '⌘;', action: 'toggleAttentionOverview' },
+    ],
+    help: { id: 'attention-overview', label: 'Attention overview', keys: [['⌘', 'E'], ['⌘', ';']] },
   },
   {
     id: 'switch-project',

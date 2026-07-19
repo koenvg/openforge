@@ -680,11 +680,20 @@
           {#each globalShortcutHelpEntries as shortcut}
             <div class="flex items-center justify-between">
               <span class="text-sm text-base-content">{shortcut.label}</span>
-              <div class="flex gap-0.5">
-                {#each shortcut.keys as keySequence}
-                  {#each keySequence as key}
-                    <kbd class="kbd kbd-sm">{key}</kbd>
-                  {/each}
+              <!-- Each entry in `keys` is an alternative chord for the same action, so
+                   sequences are separated by "or" while keys within a sequence stay
+                   grouped. Without the separator two alternatives render as one long
+                   nonsensical chord. -->
+              <div class="flex items-center gap-1.5">
+                {#each shortcut.keys as keySequence, sequenceIndex}
+                  {#if sequenceIndex > 0}
+                    <span class="text-xs text-base-content/50">or</span>
+                  {/if}
+                  <span class="flex gap-0.5">
+                    {#each keySequence as key}
+                      <kbd class="kbd kbd-sm">{key}</kbd>
+                    {/each}
+                  </span>
                 {/each}
               </div>
             </div>
