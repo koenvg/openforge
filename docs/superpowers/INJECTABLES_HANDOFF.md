@@ -27,11 +27,16 @@ Three sequential plans:
 - **Plan 2** — build the plugin in `openforge-plugins`. **DONE — user smoke-tested green + all fixes
   committed** (dev-mode Svelte sharing, svelte 5.56.4 pin, modal-over-modal portal). User still to push
   `openforge-plugins`.
-- **Plan 3** — cutover/cleanup in OpenForge. **ALL 6 TASKS DONE + each reviewed clean**
-  (`docs/superpowers/plans/2026-07-18-injectables-cutover-cleanup.md`, 6 tasks). Tasks 1–5 committed on
-  this branch in **openforge** (base `e06ab585`); Task 6 committed in **openforge-plugins** (`e5eb622`).
-  **REMAINING: (a) final whole-branch review (opus, cross-repo), (b) user smoke test. This is the ACTIVE
-  plan. Resume at the final whole-branch review.**
+- **Plan 3** — cutover/cleanup in OpenForge. **✅ COMPLETE.** All 6 tasks done + each reviewed clean
+  (`docs/superpowers/plans/2026-07-18-injectables-cutover-cleanup.md`). Final whole-branch review (opus,
+  cross-repo, `e06ab585..HEAD` + plugins `0920801..e5eb622`) = **Ready to merge: Yes** (zero Critical/Important;
+  KEEP-list intact; migration append-only). One Minor resolved (AGENTS.md/CLAUDE.md `⌘L (Skills)` stale line,
+  openforge `e87ad122`). **USER SMOKE TEST PASSED (2026-07-19)** — external plugin installs, ⌘L renders,
+  snippet CRUD persists, injection inserts at all 3 points.
+  **BOTH BRANCHES PUSHED + DRAFT PRs OPEN:** openforge → https://github.com/koenvg/openforge/pull/1286
+  (body refreshed to final architecture); openforge-plugins → https://github.com/koenvangeert/openforge-plugins/pull/3.
+  Deferred pre-existing failure `scripts/build-plugin-sdk-runtime.test.mjs` (stale checked-in SDK runtime
+  artifact) flagged in the openforge PR body as a follow-up. Worktree kept alive for PR iteration.
 
 ## Current Position  *(update after every task)*
 
