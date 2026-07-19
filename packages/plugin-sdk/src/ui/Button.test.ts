@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import Button from './Button.svelte'
 
 const children = createRawSnippet(() => ({
-  render: () => 'Run review',
+  render: () => '<span>Run review</span>',
 }))
 
 function getButton(name: string): HTMLButtonElement {
