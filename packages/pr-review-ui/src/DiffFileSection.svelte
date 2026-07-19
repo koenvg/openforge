@@ -28,6 +28,8 @@
     richDiffActive,
     reviewed,
     fileContents,
+    fileContentError,
+    onRetryFileContents,
     canFetchFileContents,
     workerDiffFile,
     diffViewMode,
@@ -82,6 +84,8 @@
       {file}
       {richDiffActive}
       {fileContents}
+      {fileContentError}
+      {onRetryFileContents}
       {canFetchFileContents}
       {workerDiffFile}
       {diffViewMode}

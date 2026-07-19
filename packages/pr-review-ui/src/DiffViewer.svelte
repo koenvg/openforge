@@ -592,6 +592,8 @@
               richDiffActive={isRichDiffActive(file)}
               reviewed={isFileReviewed(file)}
               fileContents={fileContentsFetcher.fileContentsMap.get(file.filename)}
+              fileContentError={fileContentsFetcher.fileContentErrors.get(file.filename)}
+              onRetryFileContents={() => fileContentsFetcher.retryFileContents(file.filename)}
               canFetchFileContents={Boolean(fetchFileContents || batchFetchFileContents)}
               workerDiffFile={diffWorker.getDiffFile(file.filename)}
               {diffViewMode}
