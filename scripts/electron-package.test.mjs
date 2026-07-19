@@ -10,6 +10,7 @@ import {
   createElectronAppPackageJson,
   electronBundlePath,
   expectedDarwinArchForTarget,
+  hydrateElectronTemplate,
   packageElectronApp,
   readBuiltinPluginCatalog,
   updatePlistBooleanValue,
@@ -260,6 +261,56 @@ describe('Electron macOS packaging helpers', () => {
       args: ['/repo/crates/openforge-backend/target/aarch64-apple-darwin/release/openforge-backend', 'aarch64-apple-darwin'],
       cwd: '/repo',
     })
+  })
+
+  it('retries Electron template hydration after transient install failures', async () => {
+    const root = await import('node:os').then(os => os.tmpdir()).then(tmp => join(tmp, `openforge-electron-hydration-retry-${process.pid}-${Date.now()}`))
+    const electronPackageRoot = join(root, 'node_modules/electron')
+    const electronTemplatePath = join(electronPackageRoot, 'dist/Electron.app')
+    const calls = []
+    const delays = []
+    await mkdir(electronPackageRoot, { recursive: true })
+    await writeFile(join(electronPackageRoot, 'install.js'), '')
+
+    const result = await hydrateElectronTemplate({
+      electronPackageRoot,
+      electronTemplatePath,
+      maxAttempts: 3,
+      retryDelayMs: 100,
+      sleep: async delayMs => { delays.push(delayMs) },
+      runCommand: async () => {
+        calls.push('install')
+        if (calls.length < 3) throw new Error(`transient failure ${calls.length}`)
+        await mkdir(electronTemplatePath, { recursive: true })
+      },
+    })
+
+    expect(result).toEqual({ hydrated: true })
+    expect(calls).toEqual(['install', 'install', 'install'])
+    expect(delays).toEqual([100, 200])
+  })
+
+  it('stops Electron template hydration after the configured attempt limit', async () => {
+    const root = await import('node:os').then(os => os.tmpdir()).then(tmp => join(tmp, `openforge-electron-hydration-limit-${process.pid}-${Date.now()}`))
+    const electronPackageRoot = join(root, 'node_modules/electron')
+    const electronTemplatePath = join(electronPackageRoot, 'dist/Electron.app')
+    const calls = []
+    await mkdir(electronPackageRoot, { recursive: true })
+    await writeFile(join(electronPackageRoot, 'install.js'), '')
+
+    await expect(hydrateElectronTemplate({
+      electronPackageRoot,
+      electronTemplatePath,
+      maxAttempts: 3,
+      retryDelayMs: 100,
+      sleep: async () => {},
+      runCommand: async () => {
+        calls.push('install')
+        throw new Error(`install failure ${calls.length}`)
+      },
+    })).rejects.toThrow('install failure 3')
+
+    expect(calls).toEqual(['install', 'install', 'install'])
   })
 
   it('hydrates the Electron app template when the installed electron package is missing its dist payload', async () => {

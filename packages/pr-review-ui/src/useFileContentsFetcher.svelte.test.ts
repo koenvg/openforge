@@ -536,4 +536,71 @@ describe('createFileContentsFetcher', () => {
     expect(fetcher.fileContentsMap.size).toBe(1)
     cleanup()
   })
+
+  it('discards a stale per-file rejection after the diff basis changes', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    let rejectFirst!: (error: Error) => void
+    const firstPromise = new Promise<FileContents>((_resolve, reject) => { rejectFirst = reject })
+    const perFileFn = vi.fn<(file: PrFileDiff) => Promise<FileContents>>()
+      .mockReturnValueOnce(firstPromise)
+      .mockResolvedValueOnce({ oldContent: 'fresh old', newContent: 'fresh new' })
+    let includeUncommitted = $state(false)
+    let fetcher!: FileContentsFetcherState
+
+    const cleanup = $effect.root(() => {
+      fetcher = createFileContentsFetcher({
+        getFiles: () => [fileWithPatch],
+        getIncludeUncommitted: () => includeUncommitted,
+        getFetchFileContents: () => perFileFn,
+        getBatchFetchFileContents: () => undefined,
+      })
+    })
+
+    await new Promise(resolve => setTimeout(resolve, 0))
+    includeUncommitted = true
+    flushSync()
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(fetcher.fileContentsMap.get('src/test.ts')?.newContent).toBe('fresh new')
+
+    rejectFirst(new Error('stale failure'))
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    expect(fetcher.fileContentErrors.has('src/test.ts')).toBe(false)
+    expect(fetcher.fileContentsMap.get('src/test.ts')?.newContent).toBe('fresh new')
+    cleanup()
+    consoleError.mockRestore()
+  })
+
+  it('clears every failed batch entry when retrying the batch', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    let resolveRetry!: (contents: Map<string, FileContents>) => void
+    const retryPromise = new Promise<Map<string, FileContents>>(resolve => { resolveRetry = resolve })
+    const batchFn = vi.fn<(files: PrFileDiff[]) => Promise<Map<string, FileContents>>>()
+      .mockRejectedValueOnce(new Error('batch failed'))
+      .mockReturnValueOnce(retryPromise)
+    let fetcher!: FileContentsFetcherState
+
+    const cleanup = $effect.root(() => {
+      fetcher = createFileContentsFetcher({
+        getFiles: () => [fileWithPatch, fileWithPatch2],
+        getIncludeUncommitted: () => false,
+        getFetchFileContents: () => undefined,
+        getBatchFetchFileContents: () => batchFn,
+      })
+    })
+
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(fetcher.fileContentErrors.size).toBe(2)
+
+    fetcher.retryFileContents('src/test.ts')
+    flushSync()
+
+    expect(fetcher.fileContentErrors.size).toBe(0)
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(batchFn).toHaveBeenCalledTimes(2)
+
+    resolveRetry(new Map())
+    cleanup()
+    consoleError.mockRestore()
+  })
 })

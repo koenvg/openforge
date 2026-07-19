@@ -8,11 +8,14 @@
   import { getImagePreviewDataUrl, isImageFileDiff, type FileContents } from './diffAdapter'
   import InlineCommentForm from './InlineCommentForm.svelte'
   import InlineCommentThread from './InlineCommentThread.svelte'
+  import FileContentsError from './FileContentsError.svelte'
 
   interface Props {
     file: PrFileDiff
     richDiffActive: boolean
     fileContents: FileContents | undefined
+    fileContentError: string | undefined
+    onRetryFileContents: () => void
     canFetchFileContents: boolean
     workerDiffFile: DiffFile | undefined
     diffViewMode: DiffModeEnum
@@ -39,6 +42,8 @@
     file,
     richDiffActive,
     fileContents,
+    fileContentError,
+    onRetryFileContents,
     canFetchFileContents,
     workerDiffFile,
     diffViewMode,
@@ -73,6 +78,8 @@
         {onOpenRepositoryPath}
         {onOpenUrl}
       />
+    {:else if fileContentError}
+      <FileContentsError filename={file.filename} error={fileContentError} onRetry={onRetryFileContents} />
     {:else if canFetchFileContents}
       <div
         class="flex min-h-48 items-center justify-center"
@@ -88,9 +95,14 @@
     {/if}
   </div>
 {:else if isImageFileDiff(file)}
-  {@const oldImageSrc = fileContents ? getImagePreviewDataUrl(file.previous_filename || file.filename, fileContents.oldContent) : null}
-  {@const newImageSrc = fileContents ? getImagePreviewDataUrl(file.filename, fileContents.newContent) : null}
-  <div class="grid gap-4 p-4 md:grid-cols-2 bg-base-100">
+  {#if fileContentError}
+    <div class="bg-base-100 p-4">
+      <FileContentsError filename={file.filename} error={fileContentError} onRetry={onRetryFileContents} />
+    </div>
+  {:else}
+    {@const oldImageSrc = fileContents ? getImagePreviewDataUrl(file.previous_filename || file.filename, fileContents.oldContent) : null}
+    {@const newImageSrc = fileContents ? getImagePreviewDataUrl(file.filename, fileContents.newContent) : null}
+    <div class="grid gap-4 p-4 md:grid-cols-2 bg-base-100">
     {#if file.status !== 'added'}
       <div class="rounded border border-base-300 bg-base-200/40 p-3 min-h-48 flex flex-col">
         <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-base-content/60">Before</div>
@@ -119,7 +131,8 @@
         </div>
       </div>
     {/if}
-  </div>
+    </div>
+  {/if}
 {:else if workerDiffFile}
   <DiffView
     diffFile={workerDiffFile}
