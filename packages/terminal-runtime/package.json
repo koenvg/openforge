@@ -35,5 +35,8 @@
   "scripts": {
     "test": "cd ../.. && vitest run --config packages/terminal-runtime/vitest.config.ts",
     "build": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "svelte": "5.56.5"
   }
 }

@@ -6,14 +6,7 @@ packages:
 # Keep Renovate's npm minimumReleaseAge in renovate.json aligned with this value,
 # because Renovate does not infer pnpm's release-age policy.
 minimumReleaseAge: 7200
-# minimumReleaseAgeExclude is for emergency artifact regeneration only.
-# Prefer package+version-pinned exceptions (package@version), and remove them
-# after the lockfile/artifact issue is resolved. Broad package or scope
-# exceptions must be intentional and mirrored by an explicit Renovate packageRule
-# so Renovate and pnpm continue to agree about release-age policy.
-minimumReleaseAgeExclude:
-  - dompurify@3.4.8
 allowBuilds:
   electron: true
 patchedDependencies:
-  '@git-diff-view/svelte@0.1.6': patches/@git-diff-view__svelte@0.1.6.patch
+  '@git-diff-view/svelte@0.1.7': patches/@git-diff-view__svelte@0.1.7.patch

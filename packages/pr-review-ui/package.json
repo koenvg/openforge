@@ -33,12 +33,12 @@
     "./timeAgo": "./src/timeAgo.ts"
   },
   "dependencies": {
-    "@git-diff-view/core": "0.1.6",
-    "@git-diff-view/lowlight": "^0.1.6",
-    "@git-diff-view/svelte": "^0.1.6",
-    "@lucide/svelte": "^1.23.0",
+    "@git-diff-view/core": "0.1.7",
+    "@git-diff-view/lowlight": "^0.1.7",
+    "@git-diff-view/svelte": "^0.1.7",
+    "@lucide/svelte": "^1.24.0",
     "@openforge-app/plugin-sdk": "workspace:*",
-    "@tanstack/virtual-core": "^3.17.3"
+    "@tanstack/virtual-core": "^3.17.4"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"
