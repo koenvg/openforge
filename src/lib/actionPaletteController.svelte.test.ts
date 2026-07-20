@@ -212,4 +212,40 @@ describe('useActionPaletteController', () => {
     expect(taskActions.setTaskOutOfFocus).toHaveBeenNthCalledWith(1, selectedTask.id, true)
     expect(taskActions.setTaskOutOfFocus).toHaveBeenNthCalledWith(2, selectedTask.id, false)
   })
+
+  it('runs the task-bound app command captured when the palette opened', async () => {
+    let currentSelectedTask: Task | null = selectedTask
+    let currentRunner: (() => Promise<void>) | null = vi.fn(async () => undefined)
+    const capturedRunner = currentRunner
+    const runApp = {
+      capture: vi.fn(() => currentRunner),
+    }
+    const controller = useActionPaletteController({
+      getSelectedTask: () => currentSelectedTask,
+      taskActions: {
+        handleRunAction: vi.fn(async () => undefined),
+        deleteTaskAndReload: vi.fn(async () => undefined),
+        mergeReadyPullRequest: vi.fn(async () => undefined),
+        enqueueReadyPullRequest: vi.fn(async () => undefined),
+        setTaskOutOfFocus: vi.fn(async () => undefined),
+      },
+      goBack: vi.fn(),
+      showSearchTasks: vi.fn(),
+      showNewTask: vi.fn(),
+      showProjectSwitcher: vi.fn(),
+      triggerGithubSync: vi.fn(async () => undefined),
+      runApp,
+    })
+
+    await controller.openActionPalette()
+    expect(controller.actionPaletteCanRunApp).toBe(true)
+    expect(runApp.capture).toHaveBeenCalledWith(selectedTask)
+
+    currentSelectedTask = laterSelectedTask
+    currentRunner = null
+    await controller.executeAction('run-app')
+
+    expect(capturedRunner).toHaveBeenCalledOnce()
+    expect(controller.showActionPalette).toBe(false)
+  })
 })
