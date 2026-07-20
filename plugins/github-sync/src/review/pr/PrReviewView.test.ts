@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { get, writable } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PrFileDiff, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+import type { AuthoredPullRequest, PrFileDiff, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
 import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 import type { TestingOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 
@@ -712,6 +712,123 @@ describe('PrReviewView empty and recovery states', () => {
     expect(screen.getByText(/GitHub API unavailable/)).toBeTruthy()
     await fireEvent.click(screen.getByRole('button', { name: 'Retry loading review requests' }))
     await waitFor(() => expect(screen.getByText('No PRs requesting your review')).toBeTruthy())
+  })
+})
+
+const baseAuthoredPr: AuthoredPullRequest = {
+  id: 900,
+  number: 900,
+  title: 'Authored PR',
+  body: null,
+  state: 'open',
+  draft: false,
+  html_url: 'https://github.com/acme/repo/pull/900',
+  user_login: 'alice',
+  user_avatar_url: null,
+  repo_owner: 'acme',
+  repo_name: 'repo',
+  head_ref: 'feature',
+  base_ref: 'main',
+  head_sha: 'authored-head-sha',
+  additions: 1,
+  deletions: 1,
+  changed_files: 1,
+  ci_status: 'success',
+  ci_check_runs: null,
+  review_status: 'review_required',
+  mergeable: true,
+  mergeable_state: 'clean',
+  merged_at: null,
+  is_queued: false,
+  task_id: null,
+  created_at: 1_700_000_000,
+  updated_at: 1_700_000_000,
+  labels: [],
+}
+
+/** Titles of the cards rendered under the "My Pull Requests" heading, in display order. */
+function authoredColumnHeadings(): string[] {
+  const headings = [...document.querySelectorAll('h3')].map((h) => h.textContent?.trim() ?? '')
+  const start = headings.indexOf('My Pull Requests')
+  return start === -1 ? [] : headings.slice(start + 1)
+}
+
+describe('PrReviewView authored PR ordering', () => {
+  beforeEach(() => {
+    resetStores()
+    vi.clearAllMocks()
+  })
+
+  it('leads each repo section with PRs needing attention and trails it with drafts', async () => {
+    // Seeded in an order that only the attention ranking can produce the expectation from:
+    // the healthy draft arrives first and the conflicted PR last.
+    const authored: AuthoredPullRequest[] = [
+      { ...baseAuthoredPr, id: 1, number: 1, title: 'Plain draft', draft: true },
+      { ...baseAuthoredPr, id: 2, number: 2, title: 'Healthy PR' },
+      { ...baseAuthoredPr, id: 3, number: 3, title: 'Draft with failing checks', draft: true, ci_status: 'failure' },
+      { ...baseAuthoredPr, id: 4, number: 4, title: 'Conflicted PR', mergeable: false, mergeable_state: 'dirty' },
+    ]
+
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    await registry.frontendApi.config.set('github_token', 'ghp_test')
+    await registry.frontendApi.projectConfig.set('resolved_repo', 'acme/repo')
+    const backend = registry.backendApi.backend
+    backend.registerMethod('getReviewPrs', { handler: async () => [] })
+    backend.registerMethod('fetchReviewPrs', { handler: async () => [] })
+    backend.registerMethod('getAuthoredPrs', { handler: async () => authored })
+    backend.registerMethod('fetchAuthoredPrs', { handler: async () => authored })
+
+    render(PrReviewView, {
+      props: {
+        api: registry.frontendApi,
+        context: registry.frontendApi.context.getSnapshot(),
+        projectName: 'Demo Project',
+        projectId: 'project-1',
+      },
+    })
+
+    await screen.findByText('Conflicted PR')
+    expect(authoredColumnHeadings()).toEqual([
+      'acme/repo',
+      'Conflicted PR',
+      'Healthy PR',
+      'Draft with failing checks',
+      'Plain draft',
+    ])
+  })
+
+  it('does not sink a DO NOT REVIEW labelled PR in the authored column', async () => {
+    const authored: AuthoredPullRequest[] = [
+      {
+        ...baseAuthoredPr,
+        id: 1,
+        number: 1,
+        title: 'Labelled but active',
+        labels: [{ name: 'DO NOT REVIEW', color: 'b60205' }],
+      },
+      { ...baseAuthoredPr, id: 2, number: 2, title: 'Unlabelled draft', draft: true },
+    ]
+
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    await registry.frontendApi.config.set('github_token', 'ghp_test')
+    await registry.frontendApi.projectConfig.set('resolved_repo', 'acme/repo')
+    const backend = registry.backendApi.backend
+    backend.registerMethod('getReviewPrs', { handler: async () => [] })
+    backend.registerMethod('fetchReviewPrs', { handler: async () => [] })
+    backend.registerMethod('getAuthoredPrs', { handler: async () => authored })
+    backend.registerMethod('fetchAuthoredPrs', { handler: async () => authored })
+
+    render(PrReviewView, {
+      props: {
+        api: registry.frontendApi,
+        context: registry.frontendApi.context.getSnapshot(),
+        projectName: 'Demo Project',
+        projectId: 'project-1',
+      },
+    })
+
+    await screen.findByText('Labelled but active')
+    expect(authoredColumnHeadings()).toEqual(['acme/repo', 'Labelled but active', 'Unlabelled draft'])
   })
 })
 
