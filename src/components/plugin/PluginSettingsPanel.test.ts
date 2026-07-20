@@ -21,11 +21,13 @@ vi.mock('../../lib/plugin/pluginStore', () => {
   return {
     installedPlugins: writable(new Map()),
     enabledPluginIds: writable(new Set()),
+    runtimeContributionSources: writable(new Map()),
     error: writable(null),
   }
 })
 
 vi.mock('../../lib/plugin/pluginRegistry', () => ({
+  activatePlugin: vi.fn(),
   enablePluginForProject: vi.fn(),
   disablePluginForProject: vi.fn(),
   installFromLocal: vi.fn(),
@@ -74,6 +76,12 @@ describe('PluginSettingsPanel', () => {
     expect(screen.getByText('Project plugins')).toBeTruthy()
     expect(screen.getByText('Enable installed plugins for this project.')).toBeTruthy()
     expect(screen.getByText('No plugins installed app-wide')).toBeTruthy()
+  })
+
+  it('clarifies that plugin enablement inherits global defaults and applies to this project only', () => {
+    render(PluginSettingsPanel, { projectId: 'proj-1' })
+    expect(screen.getByText(/inherit(s)? your global plugin defaults/i)).toBeTruthy()
+    expect(screen.getByText(/apply to this project only/i)).toBeTruthy()
   })
 
   it('renders only per-project enablement metadata for installed plugins', () => {
@@ -346,5 +354,54 @@ describe('GlobalPluginSettingsPanel', () => {
     render(GlobalPluginSettingsPanel)
 
     expect(screen.queryByRole('button', { name: /Uninstall plugin/i })).toBeNull()
+  })
+
+  it('renders an enable-by-default toggle per plugin reflecting the passed global default', () => {
+    installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
+
+    render(GlobalPluginSettingsPanel, {
+      pluginDefaults: new Map([['test-plugin', true]]),
+      onToggleDefault: vi.fn(),
+    })
+
+    const toggle = screen.getByRole('switch', { name: 'Enable by default: Test Plugin' }) as HTMLInputElement
+    expect(toggle.checked).toBe(true)
+    expect(toggle.dataset.testid).toBe('plugin-default-test-plugin')
+  })
+
+  it('reflects a plugin without an explicit global default as unchecked', () => {
+    installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
+
+    render(GlobalPluginSettingsPanel, {
+      pluginDefaults: new Map(),
+      onToggleDefault: vi.fn(),
+    })
+
+    expect((screen.getByRole('switch', { name: 'Enable by default: Test Plugin' }) as HTMLInputElement).checked).toBe(false)
+  })
+
+  it('invokes onToggleDefault with the plugin id and next enabled state', async () => {
+    installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
+    const onToggleDefault = vi.fn()
+
+    render(GlobalPluginSettingsPanel, {
+      pluginDefaults: new Map([['test-plugin', false]]),
+      onToggleDefault,
+    })
+
+    await fireEvent.click(screen.getByRole('switch', { name: 'Enable by default: Test Plugin' }))
+    expect(onToggleDefault).toHaveBeenCalledWith('test-plugin', true)
+  })
+
+  it('disables the enable-by-default toggle when the panel is disabled', () => {
+    installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
+
+    render(GlobalPluginSettingsPanel, {
+      disabled: true,
+      pluginDefaults: new Map([['test-plugin', true]]),
+      onToggleDefault: vi.fn(),
+    })
+
+    expect((screen.getByRole('switch', { name: 'Enable by default: Test Plugin' }) as HTMLInputElement).disabled).toBe(true)
   })
 })

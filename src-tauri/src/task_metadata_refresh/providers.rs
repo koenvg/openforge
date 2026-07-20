@@ -54,11 +54,11 @@ pub(super) fn build_codex_title_headless_args(
     prompt: &str,
 ) -> Vec<String> {
     vec![
+        "--ask-for-approval".to_string(),
+        "never".to_string(),
         "exec".to_string(),
         "--sandbox".to_string(),
         "read-only".to_string(),
-        "--ask-for-approval".to_string(),
-        "never".to_string(),
         "--skip-git-repo-check".to_string(),
         "--ephemeral".to_string(),
         "--ignore-rules".to_string(),

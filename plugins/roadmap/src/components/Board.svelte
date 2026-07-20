@@ -8,7 +8,7 @@
   interface Props {
     columns: BoardColumn[]
     repo: string
-    onCardClick: (card: BoardCard) => void
+    onCardClick: (card: BoardCard, column: BoardColumn) => void
     onOpenUrl: (url: string) => void
     onCopyLink: (issueNumber: number) => void
     onRecolor: (label: string, color: string) => void
@@ -127,7 +127,7 @@
             {repo}
             onOpen={() => {
               closeContextMenu()
-              onCardClick(card)
+              onCardClick(card, column)
             }}
             {onOpenUrl}
             {onCopyLink}

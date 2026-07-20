@@ -166,7 +166,11 @@ fn load_start_implementation_context(
         .get_project_config(&project_id, "additional_instructions")
         .ok()
         .flatten();
-    let start_prompt_contributions = db
+    let handoff_notes_template = db
+        .get_project_config(&project_id, "handoff_notes_template")
+        .ok()
+        .flatten();
+    let mut start_prompt_contributions: Vec<crate::agent_lifecycle::StartPromptContribution> = db
         .get_project_config(
             &project_id,
             crate::agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY,
@@ -175,13 +179,12 @@ fn load_start_implementation_context(
         .flatten()
         .and_then(|value| serde_json::from_str(&value).ok())
         .unwrap_or_default();
-    let code_cleanup_enabled = db
-        .get_config("code_cleanup_tasks_enabled")
-        .ok()
-        .flatten()
-        .map(|value| value == "true")
-        .unwrap_or(false);
-    let provider_name = db.resolve_ai_provider(&project_id);
+    crate::agent_lifecycle::apply_project_handoff_notes_template(
+        &mut start_prompt_contributions,
+        handoff_notes_template.as_deref(),
+    );
+    let code_cleanup_enabled = db.resolve_task_bool(&task.id, "code_cleanup_tasks_enabled", false);
+    let provider_name = db.resolve_ai_provider_for_task(&task.id);
 
     Ok(StartImplementationContext {
         task,
@@ -363,21 +366,12 @@ fn persist_active_task_workspace(
     })
 }
 
-pub(super) async fn handle_app_start_implementation_command(
+pub(crate) async fn start_implementation(
     state: &AppState,
-    request: &AppInvokeRequest,
-) -> Result<Option<serde_json::Value>, (StatusCode, String)> {
-    if request.command != "start_implementation" {
-        return Ok(None);
-    }
-
-    let task_id = payload_string(&request.payload, "taskId")?;
-    let repo_path = payload_string(&request.payload, "repoPath")?;
-    // Optional: the frontend divergence gate supplies how to resolve a diverged
-    // existing branch. Absent (or null) means the defensive `Auto` behavior.
-    let divergence_resolution: crate::git_worktree::DivergenceResolution =
-        payload_field(&request.payload, "divergenceResolution")
-            .unwrap_or(crate::git_worktree::DivergenceResolution::Auto);
+    task_id: &str,
+    repo_path: &str,
+    divergence_resolution: crate::git_worktree::DivergenceResolution,
+) -> Result<serde_json::Value, (StatusCode, String)> {
     let pty_manager = state.pty_manager.as_ref().ok_or_else(|| {
         (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -386,7 +380,7 @@ pub(super) async fn handle_app_start_implementation_command(
     })?;
     let _start_claim = state
         .task_claims
-        .try_claim(&task_id, TaskOperation::StartImplementation)
+        .try_claim(task_id, TaskOperation::StartImplementation)
         .ok_or_else(|| {
             (
                 StatusCode::CONFLICT,
@@ -394,12 +388,12 @@ pub(super) async fn handle_app_start_implementation_command(
             )
         })?;
 
-    let start_context = load_start_implementation_context(state, &task_id)?;
+    let start_context = load_start_implementation_context(state, task_id)?;
     let workspace = prepare_start_workspace(
         state,
         &start_context.project_id,
-        &task_id,
-        &repo_path,
+        task_id,
+        repo_path,
         start_context.task.worktree_source.as_deref(),
         start_context.task.worktree_branch.as_deref(),
         divergence_resolution,
@@ -425,9 +419,9 @@ pub(super) async fn handle_app_start_implementation_command(
         })?
         .unwrap_or_else(|| std::env::temp_dir().join("openforge"));
     let image_attachment_dir =
-        crate::agent_lifecycle::task_prompt_image_attachment_dir(&image_attachment_root, &task_id);
+        crate::agent_lifecycle::task_prompt_image_attachment_dir(&image_attachment_root, task_id);
     let prompt = crate::agent_lifecycle::materialize_task_prompt_images(
-        &task_id,
+        task_id,
         &prompt,
         &image_attachment_dir,
     )
@@ -441,7 +435,7 @@ pub(super) async fn handle_app_start_implementation_command(
         crate::providers::ProviderStartContext::new(state.app.clone(), state.app_event_tx.clone());
     let provider_result = match provider
         .start(
-            &task_id,
+            task_id,
             &workspace.working_dir,
             &prompt,
             provider_options.agent,
@@ -461,8 +455,8 @@ pub(super) async fn handle_app_start_implementation_command(
                 start_context.task.worktree_source.as_deref() == Some("existingBranch");
             rollback_failed_start_workspace(
                 state,
-                &task_id,
-                &repo_path,
+                task_id,
+                repo_path,
                 &workspace,
                 uses_existing_branch,
             )
@@ -477,16 +471,16 @@ pub(super) async fn handle_app_start_implementation_command(
 
     persist_active_task_workspace(
         state,
-        &task_id,
+        task_id,
         &start_context.project_id,
-        &repo_path,
+        repo_path,
         &workspace,
         &start_context.provider_name,
     )?;
 
     let agent_session_id = crate::agent_lifecycle::create_and_record_session(
         &state.db,
-        &task_id,
+        task_id,
         &provider_result,
         &start_context.provider_name,
     )
@@ -494,18 +488,18 @@ pub(super) async fn handle_app_start_implementation_command(
 
     if start_context.task.status == "backlog" {
         let db = crate::db::acquire_db(&state.db);
-        db.update_task_status(&task_id, "doing").map_err(|e| {
+        db.update_task_status(task_id, "doing").map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Failed to update task status: {e}"),
             )
         })?;
         drop(db);
-        publish_task_changed(state, &task_id);
+        publish_task_changed(state, task_id);
     }
 
-    Ok(Some(crate::agent_lifecycle::build_start_response(
-        &task_id,
+    Ok(crate::agent_lifecycle::build_start_response(
+        task_id,
         &agent_session_id,
         workspace.working_dir.to_str().ok_or_else(|| {
             (
@@ -514,7 +508,28 @@ pub(super) async fn handle_app_start_implementation_command(
             )
         })?,
         provider_result.port,
-    )))
+    ))
+}
+
+pub(super) async fn handle_app_start_implementation_command(
+    state: &AppState,
+    request: &AppInvokeRequest,
+) -> Result<Option<serde_json::Value>, (StatusCode, String)> {
+    if request.command != "start_implementation" {
+        return Ok(None);
+    }
+
+    let task_id = payload_string(&request.payload, "taskId")?;
+    let repo_path = payload_string(&request.payload, "repoPath")?;
+    // Optional: the frontend divergence gate supplies how to resolve a diverged
+    // existing branch. Absent (or null) means the defensive `Auto` behavior.
+    let divergence_resolution: crate::git_worktree::DivergenceResolution =
+        payload_field(&request.payload, "divergenceResolution")
+            .unwrap_or(crate::git_worktree::DivergenceResolution::Auto);
+
+    Ok(Some(
+        start_implementation(state, &task_id, &repo_path, divergence_resolution).await?,
+    ))
 }
 
 #[cfg(test)]
@@ -542,6 +557,7 @@ mod tests {
             title_source: None,
             title_generated_at: None,
             handoff_notes_enabled: true,
+            source_ticket_url: None,
             depends_on: Vec::new(),
             labels: Vec::new(),
         }
@@ -567,5 +583,92 @@ mod tests {
         assert_eq!(options.agent, None);
         assert_eq!(options.permission_mode, None);
         assert!(options.model.is_none());
+    }
+
+    #[test]
+    fn start_context_cleanup_reads_task_override() {
+        let (state, path) =
+            crate::app_invoke::test_support::test_state("start_context_cleanup_task_override");
+
+        let task_id = {
+            let db = crate::db::acquire_db(&state.db);
+            let project = db.create_project("P", "/tmp/p").unwrap();
+            // Global default OFF; the task snapshot overrides it ON.
+            db.set_config("code_cleanup_tasks_enabled", "false")
+                .unwrap();
+            let task = db
+                .create_task_with_options(crate::db::NewTaskOptions {
+                    initial_prompt: "p",
+                    status: "backlog",
+                    project_id: Some(&project.id),
+                    prompt: None,
+                    permission_mode: None,
+                    worktree_source: None,
+                    worktree_branch: None,
+                    title: None,
+                    handoff_notes_enabled: true,
+                    source_ticket_url: None,
+                    code_cleanup_enabled: None,
+                    task_display_title_updates_enabled: None,
+                    ai_provider: None,
+                })
+                .unwrap();
+            db.set_task_config(&task.id, "code_cleanup_tasks_enabled", "true")
+                .unwrap();
+            task.id
+        };
+
+        let context =
+            load_start_implementation_context(&state, &task_id).expect("load start context");
+        assert!(
+            context.code_cleanup_enabled,
+            "task-level code_cleanup override should win over global config"
+        );
+
+        drop(state);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn start_context_reads_task_provider_override() {
+        let (state, path) =
+            crate::app_invoke::test_support::test_state("start_context_task_provider_override");
+
+        let task_id = {
+            let db = crate::db::acquire_db(&state.db);
+            let project = db.create_project("P", "/tmp/p").unwrap();
+            // Global and project providers stay at the default; only the task
+            // overrides the provider.
+            let task = db
+                .create_task_with_options(crate::db::NewTaskOptions {
+                    initial_prompt: "p",
+                    status: "backlog",
+                    project_id: Some(&project.id),
+                    prompt: None,
+                    permission_mode: None,
+                    worktree_source: None,
+                    worktree_branch: None,
+                    title: None,
+                    handoff_notes_enabled: true,
+                    source_ticket_url: None,
+                    code_cleanup_enabled: None,
+                    task_display_title_updates_enabled: None,
+                    ai_provider: None,
+                })
+                .unwrap();
+            db.set_task_config(&task.id, "ai_provider", "opencode")
+                .unwrap();
+            task.id
+        };
+
+        let context =
+            load_start_implementation_context(&state, &task_id).expect("load start context");
+        assert_eq!(
+            context.provider_name, "opencode",
+            "task-level ai_provider override should win over project/global provider"
+        );
+
+        drop(state);
+        let _ = std::fs::remove_file(path);
     }
 }

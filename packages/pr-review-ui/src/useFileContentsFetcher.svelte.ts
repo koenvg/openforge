@@ -4,6 +4,14 @@ import { getDiffFileSectionInputKey } from './diffFileSectionIdentity'
 
 export interface FileContentsFetcherState {
   readonly fileContentsMap: Map<string, FileContents>
+  readonly fileContentErrors: Map<string, string>
+  retryFileContents: (filename: string) => void
+}
+
+function getFetchErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message
+  if (typeof error === 'string' && error.trim()) return error
+  return 'Unknown error'
 }
 
 /**
@@ -19,8 +27,11 @@ export function createFileContentsFetcher(deps: {
   getBatchFetchFileContents: () => ((files: PrFileDiff[]) => Promise<Map<string, FileContents>>) | undefined
 }): FileContentsFetcherState {
   let fileContentsMap = $state<Map<string, FileContents>>(new Map())
+  let fileContentErrors = $state<Map<string, string>>(new Map())
   let fetchedKeys = new Map<string, string>()
   let activeFileKeys = new Map<string, string>()
+  let activePerFileRequestIds = new Map<string, number>()
+  let nextPerFileRequestId = 0
   let fetchGeneration = 0
   let prevBasis: string | undefined = undefined
   // Incremented on reset to force the fetch effect to re-run
@@ -35,7 +46,9 @@ export function createFileContentsFetcher(deps: {
     if (prevBasis !== undefined && prevBasis !== current) {
       // Clear fetch state to trigger re-fetch with the new diff basis
       fetchedKeys = new Map()
+      activePerFileRequestIds = new Map()
       fileContentsMap = new Map()
+      fileContentErrors = new Map()
       fetchGeneration++ // invalidate any in-flight fetches
       resetSignal++ // signal fetch effect to re-run
     }
@@ -52,14 +65,20 @@ export function createFileContentsFetcher(deps: {
 
     const currentFileKeys = new Map(files.map(file => [file.filename, getDiffFileSectionInputKey(file)]))
     let nextContentsMap: Map<string, FileContents> | null = null
+    let nextErrorsMap: Map<string, string> | null = null
     let didFileKeyChange = false
     for (const [filename, previousKey] of activeFileKeys) {
       if (currentFileKeys.get(filename) !== previousKey) {
         didFileKeyChange = true
         fetchedKeys.delete(filename)
+        activePerFileRequestIds.delete(filename)
         if (fileContentsMap.has(filename)) {
           nextContentsMap ??= new Map(fileContentsMap)
           nextContentsMap.delete(filename)
+        }
+        if (fileContentErrors.has(filename)) {
+          nextErrorsMap ??= new Map(fileContentErrors)
+          nextErrorsMap.delete(filename)
         }
       }
     }
@@ -68,6 +87,9 @@ export function createFileContentsFetcher(deps: {
       if (nextContentsMap !== null) {
         fileContentsMap = nextContentsMap
       }
+      if (nextErrorsMap !== null) {
+        fileContentErrors = nextErrorsMap
+      }
       fetchGeneration++
       resetSignal++
       return
@@ -75,6 +97,7 @@ export function createFileContentsFetcher(deps: {
 
     const pendingFiles = files.filter(f => (f.patch || isImageFileDiff(f)) && fetchedKeys.get(f.filename) !== currentFileKeys.get(f.filename))
     if (pendingFiles.length === 0) return
+
 
     const thisGeneration = ++fetchGeneration
 
@@ -85,15 +108,23 @@ export function createFileContentsFetcher(deps: {
       batchFetchFileContents(pendingFiles).then(results => {
         if (thisGeneration !== fetchGeneration) return // stale, discard
         const next = new Map(fileContentsMap)
+        const nextErrors = new Map(fileContentErrors)
         for (const [filename, contents] of results) {
           const fetchKey = currentFileKeys.get(filename)
           if (fetchKey === undefined) continue
           next.set(filename, contents)
           fetchedKeys.set(filename, fetchKey)
+          nextErrors.delete(filename)
         }
         fileContentsMap = next
+        fileContentErrors = nextErrors
       }).catch(err => {
+        if (thisGeneration !== fetchGeneration) return
         console.error('Failed to batch-fetch file contents:', err)
+        const message = getFetchErrorMessage(err)
+        const nextErrors = new Map(fileContentErrors)
+        for (const file of pendingFiles) nextErrors.set(file.filename, message)
+        fileContentErrors = nextErrors
       })
     } else {
       // ===========================================================================
@@ -105,17 +136,43 @@ export function createFileContentsFetcher(deps: {
         const fetchKey = currentFileKeys.get(filename)
         if (fetchKey === undefined) continue
         fetchedKeys.set(filename, fetchKey)
+        const requestId = ++nextPerFileRequestId
+        activePerFileRequestIds.set(filename, requestId)
         fetcher(file).then(contents => {
-          if (fetchedKeys.get(filename) !== fetchKey) return
+          if (activePerFileRequestIds.get(filename) !== requestId || fetchedKeys.get(filename) !== fetchKey) return
+          activePerFileRequestIds.delete(filename)
           fileContentsMap = new Map(fileContentsMap).set(filename, contents)
+          if (fileContentErrors.has(filename)) {
+            const nextErrors = new Map(fileContentErrors)
+            nextErrors.delete(filename)
+            fileContentErrors = nextErrors
+          }
         }).catch(err => {
+          if (activePerFileRequestIds.get(filename) !== requestId || fetchedKeys.get(filename) !== fetchKey) return
+          activePerFileRequestIds.delete(filename)
           console.error(`Failed to fetch content for ${filename}:`, err)
+          fileContentErrors = new Map(fileContentErrors).set(filename, getFetchErrorMessage(err))
         })
       }
     }
   })
 
+  function retryFileContents(filename: string) {
+    if (!activeFileKeys.has(filename)) return
+    fetchedKeys.delete(filename)
+    if (deps.getBatchFetchFileContents()) {
+      fileContentErrors = new Map()
+    } else if (fileContentErrors.has(filename)) {
+      const nextErrors = new Map(fileContentErrors)
+      nextErrors.delete(filename)
+      fileContentErrors = nextErrors
+    }
+    resetSignal++
+  }
+
   return {
     get fileContentsMap() { return fileContentsMap },
+    get fileContentErrors() { return fileContentErrors },
+    retryFileContents,
   }
 }

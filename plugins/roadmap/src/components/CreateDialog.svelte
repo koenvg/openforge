@@ -7,20 +7,26 @@
     text: string
     draft: TicketDraft | null
     feedback: string
-    labels: string[]
   }
 
   interface Props {
     labelOptions: RepoLabel[]
     initialLabels?: string[]
     busy: boolean
+    /** Refine calls the Anthropic API directly; without a key there is nothing to call. */
+    hasApiKey: boolean
     onClose: () => void
     onCreate: (title: string, body: string, labels: string[]) => void
     onRefine: (request: RefineDraftRequest) => Promise<TicketDraft>
     onOpenUrl: (url: string) => void
   }
 
-  let { labelOptions, initialLabels = [], busy, onClose, onCreate, onRefine, onOpenUrl }: Props = $props()
+  let { labelOptions, initialLabels = [], busy, hasApiKey, onClose, onCreate, onRefine, onOpenUrl }: Props = $props()
+
+  // The key field lives in the Roadmap card in global settings (the section is
+  // registered with scope: 'global').
+  const NO_KEY_HINT = 'Add API key in global settings → Roadmap.'
+  let refineHint = $derived(hasApiKey ? null : NO_KEY_HINT)
 
   let note = $state('')
   let title = $state('')
@@ -45,7 +51,7 @@
   }
 
   async function applyRefine(request: RefineDraftRequest) {
-    if (busy || refining) return
+    if (busy || refining || !hasApiKey) return
     refining = true
     refineError = null
     try {
@@ -65,7 +71,7 @@
   function refine() {
     const text = note.trim()
     if (!text) return
-    void applyRefine({ text, draft: null, feedback: '', labels: [...labels] })
+    void applyRefine({ text, draft: null, feedback: '' })
   }
 
   function revise() {
@@ -75,7 +81,6 @@
       text: note.trim(),
       draft: { title: title.trim(), body: body.trim() },
       feedback: fb,
-      labels: [...labels],
     })
   }
 
@@ -177,7 +182,13 @@
             bind:value={feedback}
             placeholder="Adjust the draft"
           ></textarea>
-          <button class="btn btn-sm self-start" type="button" onclick={revise} disabled={busy || refining || !feedback.trim()}>
+          <button
+            class="btn btn-sm self-start"
+            type="button"
+            onclick={revise}
+            title={refineHint}
+            disabled={busy || refining || !feedback.trim() || !hasApiKey}
+          >
             {refining ? 'Refining…' : 'Refine with feedback'}
           </button>
         </div>
@@ -196,7 +207,13 @@
         </button>
       {:else}
         <button class="btn btn-sm" type="button" onclick={skipAi} disabled={!note.trim() || busy || refining}>Skip AI</button>
-        <button class="btn btn-sm btn-primary" type="button" onclick={refine} disabled={!note.trim() || busy || refining}>
+        <button
+          class="btn btn-sm btn-primary"
+          type="button"
+          onclick={refine}
+          title={refineHint}
+          disabled={!note.trim() || busy || refining || !hasApiKey}
+        >
           {refining ? 'Refining…' : 'Refine'}
         </button>
       {/if}

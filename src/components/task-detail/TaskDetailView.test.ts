@@ -31,6 +31,16 @@ vi.mock('@xterm/addon-web-links', () => {
 
 vi.mock('@openforge-app/terminal-runtime/xterm.css', () => ({}))
 
+const mockRunAppCommandInTaskTerminal = vi.hoisted(() => vi.fn(async () => true))
+
+vi.mock('../../lib/runAppCommand', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/runAppCommand')>()
+  return {
+    ...actual,
+    runAppCommandInTaskTerminal: mockRunAppCommandInTaskTerminal,
+  }
+})
+
 vi.mock('../../lib/audioRecorder', () => ({
   createAudioRecorder: vi.fn(),
 }))
@@ -214,8 +224,8 @@ vi.mock('../../lib/router.svelte', () => ({
   }),
 }))
 
-import { completingTasks, taskActiveView, commandHeld, taskRuntimeInfo, tasks } from '../../lib/stores'
-import type { Task, TaskWorkspaceInfo } from '../../lib/types'
+import { activeSessions, completingTasks, taskActiveView, commandHeld, taskRuntimeInfo, tasks, ticketPrs } from '../../lib/stores'
+import type { Task, AgentSession, PrComment, PullRequestInfo, TaskWorkspaceInfo } from '../../lib/types'
 import PluginSlotTestView from '../plugin/PluginSlotTestView.svelte'
 import TerminalTaskPane from './TerminalTaskPane.svelte'
 import { clearComponentRegistry, registerRenderableContributionComponent } from '../../lib/plugin/componentRegistry'
@@ -239,6 +249,7 @@ const baseTask: Task = {
   worktree_source: null,
   worktree_branch: null,
   handoff_notes_enabled: true,
+  source_ticket_url: null,
   depends_on: [],
   project_id: null,
   created_at: 1000,
@@ -290,6 +301,7 @@ describe('TaskDetailView', () => {
     completingTasks.set(new Set())
     commandHeld.set(false)
     tasks.set([])
+    ticketPrs.set(new Map())
     taskTabSessions.clear()
     clearTerminalTaskPaneControllers()
     installedPlugins.set(new Map([[
@@ -335,6 +347,44 @@ describe('TaskDetailView', () => {
     expect(titles.length).toBeGreaterThanOrEqual(1)
   })
 
+  it('registers a task-bound Run app command when the existing button is available', async () => {
+    const { getProjectConfig, getTaskWorkspace } = await import('../../lib/ipc')
+    vi.mocked(getProjectConfig).mockResolvedValue('pnpm dev')
+    vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo())
+    const onRunAppRegistrationChange = vi.fn()
+
+    const rendered = render(TaskDetailView, {
+      props: { task: baseTask, onRunAction: mockOnRunAction, onRunAppRegistrationChange },
+    })
+
+    let capturedRegistration: { taskId: string; available: boolean; run: () => Promise<void> } | null = null
+    await waitFor(() => {
+      const registration = onRunAppRegistrationChange.mock.calls
+        .map(([value]) => value)
+        .find((value) => value?.taskId === baseTask.id && value.available)
+      expect(registration).toBeDefined()
+      capturedRegistration = registration
+    })
+
+    await rendered.rerender({
+      task: secondaryTask,
+      onRunAction: mockOnRunAction,
+      onRunAppRegistrationChange,
+    })
+    await capturedRegistration!.run()
+
+    expect(mockRunAppCommandInTaskTerminal).toHaveBeenCalledWith(
+      baseTask.id,
+      'pnpm dev',
+      expect.objectContaining({ openTerminalView: expect.any(Function) }),
+    )
+
+    rendered.unmount()
+    expect(onRunAppRegistrationChange).toHaveBeenLastCalledWith(null)
+    vi.mocked(getProjectConfig).mockResolvedValue(null)
+    vi.mocked(getTaskWorkspace).mockResolvedValue(null)
+  })
+
   it('has AgentPanel child with empty state text', async () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     await vi.waitFor(() => {
@@ -345,6 +395,67 @@ describe('TaskDetailView', () => {
   it('has TaskInfoPanel child with Initial Prompt section', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     expect(screen.getByText('Initial Prompt')).toBeTruthy()
+  })
+
+  it('marks an unaddressed pull request comment from the Agent tab', async () => {
+    const pullRequest: PullRequestInfo = {
+      id: 42,
+      pr_number: 42,
+      ticket_id: baseTask.id,
+      repo_owner: 'owner',
+      repo_name: 'repo',
+      title: 'Agent feedback',
+      url: 'https://github.com/owner/repo/pull/42',
+      state: 'open',
+      head_sha: 'abc123',
+      ci_status: null,
+      ci_check_runs: null,
+      review_status: null,
+      mergeable: null,
+      mergeable_state: null,
+      merged_at: null,
+      created_at: 1000,
+      updated_at: 2000,
+      draft: false,
+      is_queued: false,
+      unaddressed_comment_count: 1,
+      merge_readiness_status: null,
+      merge_readiness_action: null,
+      merge_readiness_blockers: null,
+      merge_readiness_warnings: null,
+      readiness_source_head_sha: null,
+      merge_group_sha: null,
+      required_checks_policy_known: null,
+      required_reviews_policy_known: null,
+      merge_queue_required: null,
+      merge_queue_state: null,
+      readiness_updated_at: null,
+    }
+    const comment: PrComment = {
+      id: 123,
+      pr_id: pullRequest.id,
+      author: 'reviewer',
+      body: 'Please address this from the Agent tab.',
+      comment_type: 'review',
+      file_path: 'src/App.svelte',
+      line_number: 42,
+      addressed: 0,
+      created_at: 1000,
+    }
+    const { getPrComments, markCommentAddressed } = await import('../../lib/ipc')
+    vi.mocked(getPrComments)
+      .mockResolvedValueOnce([comment])
+      .mockResolvedValueOnce([{ ...comment, addressed: 1 }])
+    ticketPrs.set(new Map([[baseTask.id, [pullRequest]]]))
+
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+
+    await fireEvent.click(await screen.findByRole('button', { name: /mark addressed/i }))
+
+    await waitFor(() => {
+      expect(markCommentAddressed).toHaveBeenCalledWith(comment.id)
+      expect(screen.queryByText(comment.body)).toBeNull()
+    })
   })
 
   it('owns right info pane scrolling at the sidebar boundary', () => {
@@ -463,10 +574,11 @@ describe('TaskDetailView', () => {
     expect(mockOnRunAction).toHaveBeenCalledWith({ taskId: 'T-42', actionPrompt: '', agent: null })
   })
 
-  it('shows Complete for doing tasks and no Start Task', () => {
+  it('shows Complete without a flag for doing tasks and no Start Task', () => {
     const doingTask = { ...baseTask, status: 'doing' }
     render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
-    expect(screen.getByRole('button', { name: /Complete/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Complete' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Complete 🏁' })).toBeNull()
     expect(screen.queryByText('Move to Done')).toBeNull()
     expect(screen.queryByText('Start Task')).toBeNull()
   })

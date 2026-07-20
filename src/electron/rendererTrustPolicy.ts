@@ -157,9 +157,9 @@ export class RendererTrustPolicy {
     return [
       "default-src 'self'",
       `script-src 'self' plugin: ${rendererImportMapScriptHashSource()}`,
-      "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' https: data:",
-      "font-src 'self' data:",
+      "style-src 'self' plugin: 'unsafe-inline'",
+      "img-src 'self' plugin: https: data:",
+      "font-src 'self' plugin: data:",
       `connect-src 'self' ${[sidecarOrigin(sidecarConfig), ...TRUSTED_CONNECT_SRC].join(' ')}`,
     ].join('; ')
   }

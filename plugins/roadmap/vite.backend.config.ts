@@ -15,6 +15,9 @@ export default defineConfig({
     },
   },
   ssr: {
-    noExternal: ['@openforge-app/plugin-sdk'],
+    // SSR externalizes dependencies by default, which would leave these as bare
+    // imports in dist/backend.js for the plugin host to resolve at runtime. Bundle
+    // them in so the built backend is self-contained.
+    noExternal: ['@openforge-app/plugin-sdk', '@anthropic-ai/sdk'],
   },
 })

@@ -21,6 +21,8 @@ export interface LoadedPlugin {
 }
 
 const loadedPlugins = new Map<string, LoadedPlugin>()
+const loadedStylesheets = new Map<string, HTMLLinkElement[]>()
+const pluginLoadGenerations = new Map<string, number>()
 
 let moduleLoader: (path: string) => Promise<unknown> = path => import(/* @vite-ignore */ path) as Promise<unknown>
 
@@ -63,21 +65,67 @@ export function isFrontendPluginModule(module: unknown): module is FrontendPlugi
     || (module as { activate: (...args: never[]) => unknown }).activate.length >= 2
 }
 
+function removeStylesheetElements(pluginId: string, stylesheets: readonly HTMLLinkElement[]): void {
+  for (const stylesheet of stylesheets) {
+    stylesheet.remove()
+  }
+  if (loadedStylesheets.get(pluginId) === stylesheets) {
+    loadedStylesheets.delete(pluginId)
+  }
+}
+
+function removePluginStylesheets(pluginId: string): void {
+  removeStylesheetElements(pluginId, loadedStylesheets.get(pluginId) ?? [])
+}
+
+function attachPluginStylesheets(pluginId: string, stylesheetPaths: readonly string[]): HTMLLinkElement[] {
+  if (stylesheetPaths.length === 0) return []
+  if (typeof document === 'undefined') {
+    throw new Error(`Plugin ${pluginId} frontend styles require a renderer document`)
+  }
+
+  const stylesheets = stylesheetPaths.map((path) => {
+    const stylesheet = document.createElement('link')
+    stylesheet.rel = 'stylesheet'
+    stylesheet.href = path
+    stylesheet.dataset.openforgePluginStylesheet = pluginId
+    document.head.append(stylesheet)
+    return stylesheet
+  })
+  loadedStylesheets.set(pluginId, stylesheets)
+  return stylesheets
+}
+
 export function _setModuleLoader(loader: (path: string) => Promise<unknown>): void {
   moduleLoader = loader
 }
 
 export function _resetPluginLoaderForTests(): void {
+  for (const pluginId of loadedStylesheets.keys()) {
+    removePluginStylesheets(pluginId)
+  }
   loadedPlugins.clear()
+  pluginLoadGenerations.clear()
   moduleLoader = path => import(/* @vite-ignore */ path) as Promise<unknown>
 }
 
-export async function loadPluginFrontend(pluginId: string, installPath: string): Promise<LoadedPlugin | null> {
+export async function loadPluginFrontend(
+  pluginId: string,
+  installPath: string,
+  stylesheetPaths: readonly string[] = [],
+): Promise<LoadedPlugin | null> {
   const existing = loadedPlugins.get(pluginId)
   if (existing) return existing
 
+  const loadGeneration = pluginLoadGenerations.get(pluginId) ?? 0
+  let stylesheets: HTMLLinkElement[] = []
   try {
+    stylesheets = attachPluginStylesheets(pluginId, stylesheetPaths)
     const loadedModule = getModuleCandidate(await moduleLoader(installPath))
+    if ((pluginLoadGenerations.get(pluginId) ?? 0) !== loadGeneration) {
+      removeStylesheetElements(pluginId, stylesheets)
+      return null
+    }
     if (!isPluginModule(loadedModule)) {
       throw new Error(`Plugin ${pluginId} frontend is missing an activate() export`)
     }
@@ -91,6 +139,8 @@ export async function loadPluginFrontend(pluginId: string, installPath: string):
     setPluginState(pluginId, 'installed', null)
     return loadedPlugin
   } catch (error) {
+    removeStylesheetElements(pluginId, stylesheets)
+    if ((pluginLoadGenerations.get(pluginId) ?? 0) !== loadGeneration) return null
     setPluginState(pluginId, 'error', normalizeErrorMessage(error))
     return null
   }
@@ -108,12 +158,17 @@ export async function activatePlugin(pluginId: string): Promise<null> {
 }
 
 export function clearLoadedPlugin(pluginId: string): void {
+  pluginLoadGenerations.set(pluginId, (pluginLoadGenerations.get(pluginId) ?? 0) + 1)
   loadedPlugins.delete(pluginId)
+  removePluginStylesheets(pluginId)
 }
 
 export async function deactivatePlugin(pluginId: string): Promise<void> {
   const loadedPlugin = loadedPlugins.get(pluginId)
-  if (!loadedPlugin) return
+  if (!loadedPlugin) {
+    clearLoadedPlugin(pluginId)
+    return
+  }
 
   try {
     await loadedPlugin.module.deactivate?.()

@@ -171,6 +171,7 @@ vi.mock('./lib/stores', () => {
   isLoading: writable(false),
   error: writable<string | null>(null),
   projects: writable<Project[]>([]),
+  hiddenProjectIds: writable<Set<string>>(new Set()),
   activeProjectId: mockActiveProjectIdStore,
   activeProjectColorId: writable<string | null>(null),
   projectAttention: writable<Map<string, ProjectAttention>>(new Map()),

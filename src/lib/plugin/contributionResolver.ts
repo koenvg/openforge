@@ -1,5 +1,6 @@
 import { isPluginViewKey, parsePluginViewKey } from './types'
-import type { CommandShortcutMetadata } from '@openforge-app/plugin-sdk'
+import { sanitizePluginIcon } from '@openforge-app/plugin-sdk/pluginIcons'
+import type { CommandShortcutMetadata, PluginIcon } from '@openforge-app/plugin-sdk'
 import type {
   RuntimeBackgroundServiceContribution,
   RuntimeCommandContribution,
@@ -13,7 +14,7 @@ type RuntimeViewSource = Pick<RuntimeViewContribution, 'id' | 'title' | 'icon' |
 type RuntimeTaskPaneTabSource = Pick<RuntimeTaskPaneTabContribution, 'id' | 'title' | 'icon' | 'order'>
 type RuntimeTaskUISectionSource = Pick<RuntimeTaskUISectionContribution, 'id' | 'order'>
 type RuntimeCommandSource = Pick<RuntimeCommandContribution, 'id' | 'title' | 'shortcut' | 'discoverable'>
-type RuntimeSettingsSectionSource = Pick<RuntimeSettingsSectionContribution, 'id' | 'title' | 'order'>
+type RuntimeSettingsSectionSource = Pick<RuntimeSettingsSectionContribution, 'id' | 'title' | 'order' | 'scope'>
 type RuntimeBackgroundServiceSource = Pick<RuntimeBackgroundServiceContribution, 'id' | 'scope'>
 
 export interface ResolvedView {
@@ -21,7 +22,7 @@ export interface ResolvedView {
   contributionId: string
   namespacedId: string
   title: string
-  icon: string
+  icon: PluginIcon
   shortcut: string | null
   showInRail: boolean
   showInSidebar: boolean
@@ -59,6 +60,7 @@ export interface ResolvedSettingsSection {
   namespacedId: string
   title: string
   order: number
+  scope: 'project' | 'global'
 }
 
 export interface ResolvedBackgroundService {
@@ -148,7 +150,14 @@ function resolveView(pluginId: string, item: unknown): ResolvedView | null {
   }
 
   const { id, title, icon, shortcut, placement, order } = item
-  if (!isNonEmptyString(id) || !isNonEmptyString(title) || !isNonEmptyString(icon)) {
+  if (!isNonEmptyString(id) || !isNonEmptyString(title)) {
+    return null
+  }
+
+  let sanitizedIcon: PluginIcon
+  try {
+    sanitizedIcon = sanitizePluginIcon(icon)
+  } catch {
     return null
   }
 
@@ -157,7 +166,7 @@ function resolveView(pluginId: string, item: unknown): ResolvedView | null {
     contributionId: id,
     namespacedId: toNamespacedId(pluginId, id),
     title,
-    icon,
+    icon: sanitizedIcon,
     shortcut: isNonEmptyString(shortcut) ? normalizeShortcut(shortcut) : null,
     showInRail: placement === undefined || placement === 'rail',
     showInSidebar: placement === 'sidebar',
@@ -241,7 +250,7 @@ function resolveSettingsSection(pluginId: string, item: unknown): ResolvedSettin
     return null
   }
 
-  const { id, title, order } = item
+  const { id, title, order, scope } = item
   if (!isNonEmptyString(id) || !isNonEmptyString(title)) {
     return null
   }
@@ -252,6 +261,9 @@ function resolveSettingsSection(pluginId: string, item: unknown): ResolvedSettin
     namespacedId: toNamespacedId(pluginId, id),
     title,
     order: isNumber(order) ? order : 0,
+    // Unknown values fall back to project so a typo can't strand a section off
+    // both pages.
+    scope: scope === 'global' ? 'global' : 'project',
   }
 }
 

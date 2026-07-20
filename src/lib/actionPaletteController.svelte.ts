@@ -10,15 +10,20 @@ interface ActionPaletteControllerOptions {
   showNewTask(): void
   showProjectSwitcher(): void
   triggerGithubSync(): Promise<void>
+  runApp?: {
+    capture(task: Task): (() => Promise<void>) | null
+  }
 }
 
 export function useActionPaletteController(options: ActionPaletteControllerOptions) {
   let showActionPalette = $state(false)
   let actionPaletteTask = $state<Task | null>(null)
+  let actionPaletteRunApp = $state<(() => Promise<void>) | null>(null)
 
   function closeActionPalette(): void {
     showActionPalette = false
     actionPaletteTask = null
+    actionPaletteRunApp = null
   }
 
   function openActionPalette(): void {
@@ -28,14 +33,20 @@ export function useActionPaletteController(options: ActionPaletteControllerOptio
     }
 
     actionPaletteTask = options.getSelectedTask()
+    actionPaletteRunApp = actionPaletteTask !== null ? (options.runApp?.capture(actionPaletteTask) ?? null) : null
+
     showActionPalette = true
   }
 
   async function executeAction(actionId: string): Promise<void> {
     const task = actionPaletteTask
+    const runApp = actionPaletteRunApp
     closeActionPalette()
 
     switch (actionId) {
+      case 'run-app':
+        await runApp?.()
+        break
       case 'start-task':
         if (task) await options.taskActions.handleRunAction({ taskId: task.id, actionPrompt: '', agent: null })
         break
@@ -88,6 +99,9 @@ export function useActionPaletteController(options: ActionPaletteControllerOptio
     },
     get actionPaletteTask() {
       return actionPaletteTask
+    },
+    get actionPaletteCanRunApp() {
+      return actionPaletteRunApp !== null
     },
     closeActionPalette,
     openActionPalette,

@@ -10,7 +10,20 @@ export interface PaletteAction {
   keywords: string[]
 }
 
-export function getTaskActions(task: Task, taskPrs: PullRequestInfo[] = [], outOfFocusTaskIds: Set<string> = new Set()): PaletteAction[] {
+export interface TaskActionCapabilities {
+  canRunApp: boolean
+}
+
+const DEFAULT_TASK_ACTION_CAPABILITIES: TaskActionCapabilities = {
+  canRunApp: false,
+}
+
+export function getTaskActions(
+  task: Task,
+  taskPrs: PullRequestInfo[] = [],
+  outOfFocusTaskIds: Set<string> = new Set(),
+  capabilities: TaskActionCapabilities = DEFAULT_TASK_ACTION_CAPABILITIES,
+): PaletteAction[] {
   const actions: PaletteAction[] = []
 
   if (task.status === 'backlog') {
@@ -20,6 +33,16 @@ export function getTaskActions(task: Task, taskPrs: PullRequestInfo[] = [], outO
       shortcut: null,
       category: 'task',
       keywords: ['run', 'execute', 'begin', 'agent'],
+    })
+  }
+
+  if (capabilities.canRunApp) {
+    actions.push({
+      id: 'run-app',
+      label: 'Run app',
+      shortcut: null,
+      category: 'task',
+      keywords: ['run', 'app', 'local', 'terminal', 'serve', 'dev'],
     })
   }
 
@@ -115,8 +138,13 @@ export function getGlobalActions(): PaletteAction[] {
   return GLOBAL_ACTION_DEFINITIONS.map(getShortcutBackedGlobalAction)
 }
 
-export function getAvailableActions(task: Task | null, taskPrs: PullRequestInfo[] = [], outOfFocusTaskIds: Set<string> = new Set()): PaletteAction[] {
-  const taskActions = task ? getTaskActions(task, taskPrs, outOfFocusTaskIds) : []
+export function getAvailableActions(
+  task: Task | null,
+  taskPrs: PullRequestInfo[] = [],
+  outOfFocusTaskIds: Set<string> = new Set(),
+  capabilities: TaskActionCapabilities = DEFAULT_TASK_ACTION_CAPABILITIES,
+): PaletteAction[] {
+  const taskActions = task ? getTaskActions(task, taskPrs, outOfFocusTaskIds, capabilities) : []
   return [...taskActions, ...getGlobalActions()]
 }
 

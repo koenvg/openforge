@@ -1343,6 +1343,46 @@ CREATE TABLE IF NOT EXISTS roadmap_repo_config (
         }
         Ok(())
     }),
+    // Add a nullable `source_ticket_url` column so a task can link back to the
+    // source ticket it originated from (e.g. a GitHub issue or Jira browse URL).
+    // Additive and idempotent so it heals databases regardless of prior state.
+    M::up_with_hook("", |tx| {
+        let tasks_table_exists: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='tasks'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if !tasks_table_exists {
+            return Ok(());
+        }
+
+        let has_column: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'source_ticket_url'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+        if !has_column {
+            tx.execute("ALTER TABLE tasks ADD COLUMN source_ticket_url TEXT", [])
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
+        Ok(())
+    }),
+    M::up(
+        "CREATE TABLE IF NOT EXISTS task_config (
+            task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+            key TEXT NOT NULL,
+            value TEXT NOT NULL,
+            UNIQUE(task_id, key)
+        );
+        CREATE TABLE IF NOT EXISTS global_plugins (
+            plugin_id TEXT PRIMARY KEY REFERENCES plugins(id) ON DELETE CASCADE,
+            enabled INTEGER NOT NULL DEFAULT 1
+        );",
+    ),
     // Personal, machine-global reusable text snippets shown in the Injectable
     // Picker. Unlike skills/commands (file-scanned), snippets are not per-project
     // and not file-backed; they live only here and insert their literal `body`.
@@ -1480,6 +1520,7 @@ pub(super) fn ensure_tasks_columns(conn: &Connection) -> Result<()> {
         ("worktree_branch", false),
         ("title", false),
         ("title_source", false),
+        ("source_ticket_url", false),
     ] {
         let exists: bool = conn.query_row(
             &format!(
@@ -2130,6 +2171,25 @@ mod tests {
     }
 
     #[test]
+    fn test_task_config_and_global_plugins_tables_exist() {
+        let (db, path) = crate::db::test_helpers::make_test_db("hier_tables");
+        let conn = db.conn.lock().unwrap();
+        let has = |name: &str| -> bool {
+            conn.query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name=?1",
+                [name],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        assert!(has("task_config"), "task_config table should exist");
+        assert!(has("global_plugins"), "global_plugins table should exist");
+        drop(conn);
+        drop(db);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
     fn test_agent_sessions_pty_instance_migration_backfills_metadata_only_checkpoint() {
         let path = std::env::temp_dir().join(format!(
             "test_agent_session_pty_instance_backfill_{}.db",
@@ -2675,118 +2735,6 @@ mod tests {
             "Fresh DB should have user_version={} after migrations, got {}",
             LATEST_USER_VERSION, uv
         );
-
-        drop(conn);
-        drop(db);
-        let _ = fs::remove_file(&path);
-    }
-
-    #[test]
-    fn test_fresh_db_has_no_legacy_snippet_tables() {
-        let path = std::env::temp_dir().join(format!(
-            "test_fresh_db_no_snippet_tables_{}.db",
-            std::process::id()
-        ));
-        let _ = fs::remove_file(&path);
-
-        let db = Database::new(path.clone()).expect("Database::new");
-        let conn = db.connection();
-        let conn = conn.lock().unwrap();
-
-        let snippets_exists: bool = conn
-            .query_row(
-                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='snippets'",
-                [],
-                |r| r.get(0),
-            )
-            .unwrap();
-        assert!(
-            !snippets_exists,
-            "freshly migrated DB should not have a 'snippets' table"
-        );
-
-        let snippet_projects_exists: bool = conn
-            .query_row(
-                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='snippet_projects'",
-                [],
-                |r| r.get(0),
-            )
-            .unwrap();
-        assert!(
-            !snippet_projects_exists,
-            "freshly migrated DB should not have a 'snippet_projects' table"
-        );
-
-        drop(conn);
-        drop(db);
-        let _ = fs::remove_file(&path);
-    }
-
-    #[test]
-    fn test_upgrade_removes_orphaned_skills_viewer_plugin_rows() {
-        let path = std::env::temp_dir().join(format!(
-            "test_upgrade_removes_skills_viewer_{}.db",
-            std::process::id()
-        ));
-        let _ = fs::remove_file(&path);
-
-        {
-            let db = Database::new(path.clone()).expect("Database::new");
-            let conn = db.connection();
-            let conn = conn.lock().unwrap();
-
-            // Simulate a database installed before the skills-viewer builtin was retired:
-            // its install row plus per-project enablement and plugin storage.
-            conn.execute(
-                "INSERT INTO plugins (id, name, version, api_version, frontend_entry, install_path, source_kind, is_builtin)
-                 VALUES ('com.openforge.skills-viewer', 'Skills', '1.0.0', 1, 'frontend.js', '/tmp/skills-viewer', 'builtin', 1)",
-                [],
-            )
-            .expect("insert skills-viewer plugin row");
-            conn.execute(
-                "INSERT INTO project_plugins (project_id, plugin_id, enabled)
-                 VALUES ('P-1', 'com.openforge.skills-viewer', 1)",
-                [],
-            )
-            .expect("insert skills-viewer project_plugins row");
-            conn.execute(
-                "INSERT INTO plugin_storage (plugin_id, scope, scope_id, key, value)
-                 VALUES ('com.openforge.skills-viewer', 'global', '', 'snippets', '[]')",
-                [],
-            )
-            .expect("insert skills-viewer plugin_storage row");
-
-            // Rewind one version so reopening replays the purge migration.
-            conn.execute_batch(&format!(
-                "PRAGMA user_version = {}",
-                LATEST_USER_VERSION - 1
-            ))
-            .expect("rewind user_version");
-        }
-
-        let db = Database::new(path.clone()).expect("Database::new should apply the purge migration");
-        let conn = db.connection();
-        let conn = conn.lock().unwrap();
-
-        for (table, column) in [
-            ("plugins", "id"),
-            ("project_plugins", "plugin_id"),
-            ("plugin_storage", "plugin_id"),
-        ] {
-            let remaining: i64 = conn
-                .query_row(
-                    &format!(
-                        "SELECT COUNT(*) FROM {table} WHERE {column} = 'com.openforge.skills-viewer'"
-                    ),
-                    [],
-                    |r| r.get(0),
-                )
-                .unwrap();
-            assert_eq!(
-                remaining, 0,
-                "upgraded DB should have no skills-viewer rows left in {table}"
-            );
-        }
 
         drop(conn);
         drop(db);

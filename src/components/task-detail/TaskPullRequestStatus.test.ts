@@ -118,6 +118,7 @@ describe('TaskPullRequestStatus', () => {
     })
     vi.mocked(ipc.getPullRequests).mockResolvedValue([])
     vi.mocked(ipc.getPrComments).mockResolvedValue([])
+    vi.mocked(ipc.markCommentAddressed).mockResolvedValue(undefined)
     vi.mocked(ipc.linkPullRequest).mockResolvedValue(createPullRequest())
     vi.mocked(ipc.mergePullRequest).mockResolvedValue(undefined)
     vi.mocked(ipc.enqueuePullRequest).mockResolvedValue(undefined)
@@ -305,6 +306,145 @@ describe('TaskPullRequestStatus', () => {
       expect(ipc.markCommentAddressed).toHaveBeenCalledWith(123)
       expect(ipc.getPrComments).toHaveBeenCalledTimes(2)
     })
+  })
+
+  it('keeps a comment visible and retryable when marking it addressed fails', async () => {
+    const comment = createComment({ id: 124, body: 'Retry this comment', addressed: 0 })
+    vi.mocked(ipc.getPrComments)
+      .mockResolvedValueOnce([comment])
+      .mockResolvedValueOnce([])
+    vi.mocked(ipc.markCommentAddressed)
+      .mockRejectedValueOnce(new Error('mark request failed'))
+      .mockResolvedValueOnce(undefined)
+
+    render(TaskPullRequestStatus, {
+      props: {
+        taskId: 'T-42',
+        taskPrs: [createPullRequest({ unaddressed_comment_count: 1 })],
+        allowCommentAddressing: true,
+      },
+    })
+
+    await fireEvent.click(await screen.findByRole('button', { name: /mark addressed/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Retry this comment')).toBeTruthy()
+      expect(screen.getByRole('alert').textContent).toContain('mark request failed')
+      expect(screen.getByRole('button', { name: 'Retry mark addressed' })).toBeTruthy()
+    })
+    expect(ipc.getPrComments).toHaveBeenCalledTimes(1)
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Retry mark addressed' }))
+
+    await waitFor(() => {
+      expect(ipc.markCommentAddressed).toHaveBeenCalledTimes(2)
+      expect(screen.queryByText('Retry this comment')).toBeNull()
+    })
+  })
+
+  it('keeps a comment visible and retryable when refreshing after addressing fails', async () => {
+    const comment = createComment({ id: 125, body: 'Refresh failed comment', addressed: 0 })
+    vi.mocked(ipc.getPrComments)
+      .mockResolvedValueOnce([comment])
+      .mockRejectedValueOnce(new Error('comment refresh failed'))
+      .mockResolvedValueOnce([])
+
+    render(TaskPullRequestStatus, {
+      props: {
+        taskId: 'T-42',
+        taskPrs: [createPullRequest({ unaddressed_comment_count: 1 })],
+        allowCommentAddressing: true,
+      },
+    })
+
+    await fireEvent.click(await screen.findByRole('button', { name: /mark addressed/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Refresh failed comment')).toBeTruthy()
+      expect(screen.getByRole('alert').textContent).toContain('comment refresh failed')
+      expect(screen.getByRole('button', { name: 'Retry mark addressed' })).toBeTruthy()
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Retry mark addressed' }))
+
+    await waitFor(() => {
+      expect(ipc.markCommentAddressed).toHaveBeenCalledTimes(2)
+      expect(ipc.getPrComments).toHaveBeenCalledTimes(3)
+      expect(screen.queryByText('Refresh failed comment')).toBeNull()
+    })
+  })
+
+  it('refreshes only the addressed comment PR so unrelated PR failures cannot remove its retry state', async () => {
+    const firstPr = createPullRequest({ id: 42, title: 'First PR', unaddressed_comment_count: 1 })
+    const secondPr = createPullRequest({ id: 99, pr_number: 99, title: 'Second PR', url: 'https://github.com/owner/repo/pull/99' })
+    const comment = createComment({ id: 126, pr_id: 42, body: 'First PR comment' })
+    let firstPrLoads = 0
+    let secondPrLoads = 0
+    vi.mocked(ipc.getPrComments).mockImplementation(async (prId: number) => {
+      if (prId === 42) {
+        firstPrLoads += 1
+        return firstPrLoads === 1 ? [comment] : []
+      }
+      secondPrLoads += 1
+      if (secondPrLoads > 1) throw new Error('unrelated PR refresh failed')
+      return []
+    })
+
+    render(TaskPullRequestStatus, {
+      props: { taskId: 'T-42', taskPrs: [firstPr, secondPr], allowCommentAddressing: true },
+    })
+
+    await fireEvent.click(await screen.findByRole('button', { name: /mark addressed/i }))
+
+    await waitFor(() => {
+      expect(screen.queryByText('First PR comment')).toBeNull()
+    })
+    expect(firstPrLoads).toBe(2)
+    expect(secondPrLoads).toBe(1)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('applies concurrent addressed-comment refreshes independently across PRs', async () => {
+    const firstPr = createPullRequest({ id: 42, title: 'First PR', unaddressed_comment_count: 1 })
+    const secondPr = createPullRequest({ id: 99, pr_number: 99, title: 'Second PR', url: 'https://github.com/owner/repo/pull/99', unaddressed_comment_count: 1 })
+    const firstRefresh = createDeferred<PrComment[]>()
+    const secondRefresh = createDeferred<PrComment[]>()
+    let firstPrLoads = 0
+    let secondPrLoads = 0
+    vi.mocked(ipc.getPrComments).mockImplementation((prId: number) => {
+      if (prId === 42) {
+        firstPrLoads += 1
+        return firstPrLoads === 1
+          ? Promise.resolve([createComment({ id: 127, pr_id: 42, author: 'first', body: 'First concurrent comment' })])
+          : firstRefresh.promise
+      }
+      secondPrLoads += 1
+      return secondPrLoads === 1
+        ? Promise.resolve([createComment({ id: 128, pr_id: 99, author: 'second', body: 'Second concurrent comment' })])
+        : secondRefresh.promise
+    })
+
+    render(TaskPullRequestStatus, {
+      props: { taskId: 'T-42', taskPrs: [firstPr, secondPr], allowCommentAddressing: true },
+    })
+
+    await screen.findByText('First concurrent comment')
+    await screen.findByText('Second concurrent comment')
+    const buttons = screen.getAllByRole('button', { name: /mark addressed/i })
+    await fireEvent.click(buttons[0])
+    await fireEvent.click(buttons[1])
+
+    secondRefresh.resolve([])
+    await waitFor(() => {
+      expect(screen.queryByText('Second concurrent comment')).toBeNull()
+      expect(screen.getByText('First concurrent comment')).toBeTruthy()
+    })
+
+    firstRefresh.resolve([])
+    await waitFor(() => {
+      expect(screen.queryByText('First concurrent comment')).toBeNull()
+    })
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('renders deeply nested comment paths with the shared address control', async () => {

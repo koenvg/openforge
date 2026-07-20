@@ -3,9 +3,9 @@
   import { get } from 'svelte/store'
   import { createTaskTerminalPaneLifecycle } from '@openforge-app/terminal-runtime'
   import { Play } from '@lucide/svelte'
-  import { activeProjectId, activeSessions, commandHeld, completingTasks, startingTasks, taskActiveView, taskRuntimeInfo } from '../../lib/stores'
+  import { activeProjectId, activeSessions, commandHeld, completingTasks, currentView, selectedTaskId, startingTasks, taskActiveView, taskRuntimeInfo } from '../../lib/stores'
   import { getProjectConfig, getTaskWorkspace, openInEditor, writePty } from '../../lib/ipc'
-  import { RUN_COMMAND_CONFIG_KEY, runAppCommandInTaskTerminal } from '../../lib/runAppCommand'
+  import { isTaskRunAppAvailable, RUN_COMMAND_CONFIG_KEY, runAppCommandInTaskTerminal, type TaskRunAppRegistration } from '../../lib/runAppCommand'
   import { confirmCompleteTask, runCompleteTask } from '../../lib/completeTask'
   import { getTaskTitle } from '../../lib/taskTitle'
   import { createTaskTitleRename } from '../../lib/useTaskTitleRename.svelte'
@@ -35,9 +35,10 @@
     onEdit?: (taskId: string) => void
     onOpenTask?: (taskId: string) => void
     onTaskUpdated?: () => void | Promise<void>
+    onRunAppRegistrationChange?: (registration: TaskRunAppRegistration | null) => void
   }
 
-  let { task, onRunAction, onEdit, onOpenTask, onTaskUpdated }: Props = $props()
+  let { task, onRunAction, onEdit, onOpenTask, onTaskUpdated, onRunAppRegistrationChange }: Props = $props()
 
   const titleRename = createTaskTitleRename(() => task, () => onTaskUpdated?.())
 
@@ -183,7 +184,25 @@
   })
 
   let hasRunCommand = $derived(runCommand !== '')
-  let canRunApp = $derived(hasRunCommand && terminalTaskPaneTab !== null)
+  let canRunApp = $derived(isTaskRunAppAvailable({
+    workspacePath,
+    command: runCommand,
+    terminalAvailable: terminalTaskPaneTab !== null,
+    isLaunching: isRunningApp,
+  }))
+
+  $effect(() => {
+    const taskId = task.id
+    const command = runCommand
+    const terminalViewId = terminalTaskPaneTab?.namespacedId ?? null
+    const available = canRunApp
+
+    onRunAppRegistrationChange?.({
+      taskId,
+      available,
+      run: () => runAppForTask(taskId, command, terminalViewId),
+    })
+  })
   let runAppTitle = $derived(
     terminalTaskPaneTab === null
       ? 'Enable the Terminal plugin to run the app locally'
@@ -222,6 +241,7 @@
 
   onDestroy(() => {
     taskTerminalLifecycle.destroy()
+    onRunAppRegistrationChange?.(null)
   })
 
   function handleBack() {
@@ -242,22 +262,38 @@
     }
   }
 
-  async function handleRunApp() {
-    const terminalTab = terminalTaskPaneTab
-    if (!hasRunCommand || isRunningApp || terminalTab === null) return
+  function openTerminalViewForTask(taskId: string, terminalViewId: string): void {
+    const updated = new Map(get(taskActiveView) as Map<string, string>)
+    updated.set(taskId, terminalViewId)
+    taskActiveView.set(updated)
+
+    if (task.id === taskId) {
+      activeView = terminalViewId
+    }
+    if (get(currentView) !== 'board' || get(selectedTaskId) !== taskId) {
+      router.navigateToTask(taskId)
+    }
+  }
+
+  async function runAppForTask(taskId: string, command: string, terminalViewId: string | null): Promise<void> {
+    if (command === '' || isRunningApp || terminalViewId === null) return
     isRunningApp = true
     try {
-      await runAppCommandInTaskTerminal(task.id, runCommand, {
+      await runAppCommandInTaskTerminal(taskId, command, {
         getSession: getTaskTerminalTabsSession,
         getShellLifecycleState,
         writePty,
-        openTerminalView: () => setActiveView(terminalTab.namespacedId),
+        openTerminalView: () => openTerminalViewForTask(taskId, terminalViewId),
       })
     } catch (e) {
       console.error('[TaskDetailView] Failed to run app command:', e)
     } finally {
       isRunningApp = false
     }
+  }
+
+  async function handleRunApp(): Promise<void> {
+    await runAppForTask(task.id, runCommand, terminalTaskPaneTab?.namespacedId ?? null)
   }
 
   function handleSendToAgent(prompt: string) {
@@ -351,7 +387,7 @@
               <span class="loading loading-spinner loading-xs"></span>
               Completing…
             {:else}
-              Complete 🏁
+              Complete
             {/if}
           </Button>
         {/if}
@@ -443,7 +479,13 @@
                 data-scroll-owner="task-info-panel"
                 class="h-full min-h-0 overflow-y-auto bg-base-200 border-l border-base-300"
               >
-                <TaskInfoPanel task={task} {workspacePath} onEditPrompt={onEdit ? () => onEdit?.(task.id) : undefined} onOpenDependentTask={onOpenTask} />
+                <TaskInfoPanel
+                  task={task}
+                  {workspacePath}
+                  allowCommentAddressing={true}
+                  onEditPrompt={onEdit ? () => onEdit?.(task.id) : undefined}
+                  onOpenDependentTask={onOpenTask}
+                />
               </div>
             </ResizablePanel>
           {/if}

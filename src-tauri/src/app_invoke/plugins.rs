@@ -178,6 +178,38 @@ pub(super) async fn handle_app_plugin_command(
                     .map_err(map_plugin_platform_error)?,
             )?
         }
+        "set_global_plugin_default" => {
+            let plugin_id = payload_string(&request.payload, "pluginId")?;
+            let enabled = request
+                .payload
+                .get("enabled")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let db = crate::db::acquire_db(&state.db);
+            db.set_global_plugin_enabled(&plugin_id, enabled)
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to set global plugin default: {e}"),
+                    )
+                })?;
+            serde_json::Value::Null
+        }
+        "get_global_plugin_defaults" => {
+            let db = crate::db::acquire_db(&state.db);
+            let defaults = db.get_global_plugin_defaults().map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to get global plugin defaults: {e}"),
+                )
+            })?;
+            json_value(
+                defaults
+                    .into_iter()
+                    .map(|(id, enabled)| serde_json::json!({ "pluginId": id, "enabled": enabled }))
+                    .collect::<Vec<_>>(),
+            )?
+        }
         "get_plugin_storage" => {
             let plugin_id = payload_string(&request.payload, "pluginId")?;
             let scope = payload_string(&request.payload, "scope")?;
@@ -239,6 +271,13 @@ pub(super) async fn handle_app_plugin_command(
             let plugin_id = payload_string(&request.payload, "pluginId")?;
             plugin_platform(state, false)?
                 .backend_when_ready(&plugin_id)
+                .await
+                .map_err(map_plugin_platform_error)?
+        }
+        "plugin_backend_deactivate" => {
+            let plugin_id = payload_string(&request.payload, "pluginId")?;
+            plugin_platform(state, false)?
+                .deactivate_backend(&plugin_id)
                 .await
                 .map_err(map_plugin_platform_error)?
         }

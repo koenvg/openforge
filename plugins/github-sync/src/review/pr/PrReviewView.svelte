@@ -18,7 +18,7 @@
     reviewedFileMapsEqual,
     updatePrReviewedFileShas,
   } from './reviewedFilesState'
-  import { isImageFileDiff, type FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
+  import { getImagePreviewDataUrl, isImageFileDiff, type FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
 
   type PrDetailTab = 'overview' | 'files' | 'walkthrough'
 
@@ -712,6 +712,23 @@
     return { oldContent, newContent }
   }
 
+  async function resolvePrRepositoryImage(repositoryPath: string): Promise<string | null> {
+    const pr = $selectedReviewPr
+    if (!pr) return null
+
+    try {
+      const content = await githubSync.getFileAtRefBase64({
+        owner: pr.repo_owner,
+        repo: pr.repo_name,
+        path: repositoryPath,
+        refSha: pr.head_sha,
+      })
+      return getImagePreviewDataUrl(repositoryPath, content)
+    } catch {
+      return null
+    }
+  }
+
   onMount(async () => {
     loadGithubConfiguration()
     loadPrs()
@@ -769,6 +786,7 @@
       onOverviewCommentsChange={(comments) => { $prOverviewComments = comments }}
       {loadOverviewComments}
       fetchFileContents={fetchPrFileContents}
+      resolveRepositoryImage={resolvePrRepositoryImage}
       onToggleFileTree={() => { fileTreeVisible = !fileTreeVisible }}
       onPendingCommentsChange={(comments) => { $pendingManualComments = comments }}
       onAgentCommentsChange={(comments) => { $agentReviewComments = comments }}

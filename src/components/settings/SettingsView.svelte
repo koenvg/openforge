@@ -4,7 +4,11 @@
   import {
     deleteProject,
     setWhisperModel,
+    getGlobalPluginDefaults,
+    setGlobalPluginDefault,
+    setProjectConfig,
   } from '../../lib/ipc'
+  import { computeEffectiveProjectSettings } from '../../lib/hierarchicalSettings'
   import { DEFAULT_FOCUS_STATES } from '../../lib/boardFilters'
   import { createTrackedDebouncedSave } from '../../lib/createTrackedDebouncedSave'
   import {
@@ -12,9 +16,12 @@
     loadGlobalSettings,
     loadInstallationStatus,
     loadProjectSettings,
+    loadProjectHierarchyOverrides,
     loadWhisperModelStatuses,
+    parseGitHubPollIntervalSeconds,
   } from '../../lib/settingsConfig'
-  import { mergeUpdatedProject, getProjectIdentity } from '../../lib/settingsProjectSync'
+  import type { ProjectSettingsConfig } from '../../lib/settingsConfig'
+  import { mergeUpdatedProject, getProjectIdentity, resetProjectAndReload } from '../../lib/settingsProjectSync'
   import { saveGlobalSettings, saveProjectSettings } from '../../lib/settingsSaver'
   import type { GlobalSettingsSavePayload, ProjectSettingsSavePayload } from '../../lib/settingsSaver'
   import { themeMode, applyTheme } from '../../lib/theme'
@@ -22,15 +29,16 @@
   import type { WhisperModelStatus, WhisperModelSizeId } from '../../lib/types'
   import type { TaskState } from '../../lib/taskState'
   import { resolveContributions } from '../../lib/plugin/contributionResolver'
-  import { enabledPluginIds, runtimeContributionSources } from '../../lib/plugin/pluginStore'
+  import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
   import SettingsGeneralCard from './SettingsGeneralCard.svelte'
+  import ProviderSelectField from './ProviderSelectField.svelte'
   import SettingsFocusFilterCard from './SettingsFocusFilterCard.svelte'
   import SettingsPreferencesCard from './SettingsPreferencesCard.svelte'
   import SettingsAICard from './SettingsAICard.svelte'
   import SettingsInstructionsCard from './SettingsInstructionsCard.svelte'
   import SettingsCredentialsCard from './SettingsCredentialsCard.svelte'
   import SettingsTaskLabelsCard from './SettingsTaskLabelsCard.svelte'
-  import SettingsExperimentalCard from './SettingsExperimentalCard.svelte'
+  import HierarchicalSettingsCard from './HierarchicalSettingsCard.svelte'
   import SettingsDeveloperLogsCard from './SettingsDeveloperLogsCard.svelte'
   import SettingsSectionCard from './SettingsSectionCard.svelte'
   import ProjectPageHeader from '../project/ProjectPageHeader.svelte'
@@ -53,15 +61,21 @@
   let projectPath = $state('')
   let agentInstructions = $state('')
   let handoffNotesTemplate = $state('')
-  let aiProvider = $state('claude-code')
   let projectColor = $state('')
-  let useWorktrees = $state(true)
   let runCommand = $state('')
+  // Raw per-project overrides for the unified-settings hierarchy keys (null = inherit global).
+  // `ai_provider` and `use_worktrees` live here (via projectHierarchyValues) and are
+  // rendered/persisted exclusively through the Configuration card, not local state.
+  let projectRawOverrides = $state<Record<string, string | null>>({})
 
   // Global state
   let taskIdPrefix = $state('')
   let githubToken = $state('')
   let githubPollInterval = $state(DEFAULT_GITHUB_POLL_INTERVAL_SECONDS)
+  let globalHandoffNotesEnabled = $state(true)
+  let globalUseWorktrees = $state(true)
+  let globalAiProvider = $state('claude-code')
+  let globalPluginDefaults = $state<Map<string, boolean>>(new Map())
   let globalSettingsLoaded = $state(false)
   let globalSettingsLoadError = $state<string | null>(null)
 
@@ -98,13 +112,69 @@
     applyTheme(next)
   }
 
-  function handleCodeCleanupTasksToggle() {
-    isCodeCleanupTasksEnabled = !isCodeCleanupTasksEnabled
-    $codeCleanupTasksEnabled = isCodeCleanupTasksEnabled
+  function handleGlobalSettingChange(key: string, value: string) {
+    switch (key) {
+      case 'code_cleanup_tasks_enabled':
+        isCodeCleanupTasksEnabled = value === 'true'
+        $codeCleanupTasksEnabled = isCodeCleanupTasksEnabled
+        break
+      case 'task_display_title_metadata_updates_enabled':
+        isTaskDisplayTitleMetadataUpdatesEnabled = value === 'true'
+        break
+      case 'handoff_notes_enabled':
+        globalHandoffNotesEnabled = value === 'true'
+        break
+      case 'ai_provider':
+        globalAiProvider = value
+        break
+      case 'use_worktrees':
+        globalUseWorktrees = value === 'true'
+        break
+      case 'task_id_prefix':
+        taskIdPrefix = value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 5)
+        break
+      case 'github_poll_interval':
+        githubPollInterval = parseGitHubPollIntervalSeconds(value)
+        break
+    }
+    scheduleSave()
   }
 
-  function handleTaskDisplayTitleMetadataUpdatesToggle() {
-    isTaskDisplayTitleMetadataUpdatesEnabled = !isTaskDisplayTitleMetadataUpdatesEnabled
+  async function handleGlobalPluginToggle(pluginId: string, enabled: boolean) {
+    try {
+      await setGlobalPluginDefault(pluginId, enabled)
+      const next = new Map(globalPluginDefaults)
+      next.set(pluginId, enabled)
+      globalPluginDefaults = next
+    } catch (e) {
+      $error = getErrorMessage(e)
+    }
+  }
+
+  // A project change writes an explicit override immediately. The grouped
+  // Configuration card owns every globally-inherited setting except `plugins`
+  // (which keeps its dedicated panel) — including `ai_provider` and `use_worktrees`.
+  // This immediate per-key write is the single persistence path for those keys, so
+  // there is no debounced-vs-immediate race with the General card's autosave.
+  async function handleProjectSettingChange(key: string, value: string) {
+    const pid = $activeProjectId
+    if (!pid) return
+    projectRawOverrides = { ...projectRawOverrides, [key]: value }
+    try {
+      await setProjectConfig(pid, key, value)
+    } catch (e) {
+      $error = getErrorMessage(e)
+    }
+  }
+
+  async function handleResetToGlobal() {
+    const pid = $activeProjectId
+    if (!pid) return
+    try {
+      await resetProjectAndReload(pid, () => reloadProjectSettings(pid))
+    } catch (e) {
+      $error = getErrorMessage(e)
+    }
   }
 
   function handleProjectColorChange(value: string) {
@@ -140,7 +210,7 @@
   let scrollContainer = $state<HTMLDivElement | null>(null)
   let isNavigating = false
   const projectSections = ['general', 'labels', 'instructions', 'plugins']
-  const globalSections = ['preferences', 'ai', 'credentials', 'plugins', 'experimental', 'developer']
+  const globalSections = ['configuration', 'preferences', 'ai', 'credentials', 'plugins', 'developer']
 
   function getErrorMessage(e: unknown): string {
     return e instanceof Error ? e.message : String(e)
@@ -186,7 +256,39 @@
       .map((id) => $runtimeContributionSources.get(id))
       .filter((source) => source !== undefined)
   )
-  let pluginSettingsSections = $derived(resolveContributions(enabledPluginContributionSources).settingsSections)
+  // Project settings page shows only project-scoped sections; global-scoped ones
+  // render in the plugin's card on the global settings page instead.
+  let pluginSettingsSections = $derived(
+    resolveContributions(enabledPluginContributionSources).settingsSections.filter((section) => section.scope !== 'global'),
+  )
+
+  // Grouped hierarchy settings (global mode) — effective string values keyed by setting key.
+  const globalHierarchyValues = $derived<Record<string, string>>({
+    code_cleanup_tasks_enabled: isCodeCleanupTasksEnabled ? 'true' : 'false',
+    task_display_title_metadata_updates_enabled: isTaskDisplayTitleMetadataUpdatesEnabled ? 'true' : 'false',
+    handoff_notes_enabled: globalHandoffNotesEnabled ? 'true' : 'false',
+    ai_provider: globalAiProvider,
+    use_worktrees: globalUseWorktrees ? 'true' : 'false',
+    task_id_prefix: taskIdPrefix,
+    github_poll_interval: String(githubPollInterval),
+  })
+
+  // Per-plugin global default keyed by plugin id: explicit global default if
+  // present, else builtin default. Consumed by the dedicated plugin panel's
+  // enable-by-default toggles (the grouped Configuration card no longer renders plugins).
+  let globalPluginDefaultsById = $derived(
+    new Map(
+      Array.from($installedPlugins.values()).map((plugin) => [
+        plugin.manifest.id,
+        globalPluginDefaults.get(plugin.manifest.id) ?? (plugin.isBuiltin ?? false),
+      ]),
+    )
+  )
+
+  // Grouped hierarchy settings (project mode) — effective = project override ?? global ?? default.
+  const projectHierarchyValues = $derived<Record<string, string>>(
+    computeEffectiveProjectSettings(globalHierarchyValues, projectRawOverrides),
+  )
 
   // Sync project name/path from project list
   $effect(() => {
@@ -195,44 +297,56 @@
     projectPath = nextProjectPath
   })
 
+  function applyProjectSettings(settings: ProjectSettingsConfig) {
+    agentInstructions = settings.agentInstructions
+    handoffNotesTemplate = settings.handoffNotesTemplate
+    projectColor = settings.projectColor
+    runCommand = settings.runCommand
+    focusFilterStates = settings.focusFilterStates
+  }
+
+  // Load the General-card settings plus the raw hierarchy overrides and project
+  // plugin enablement, guarding against races when the active project changes.
+  async function reloadProjectSettings(pid: string) {
+    const requestId = ++projectSettingsRequestId
+    projectSettingsLoadError = null
+    projectSettingsLoading = true
+    try {
+      const [settings, overrides] = await Promise.all([
+        loadProjectSettings(pid),
+        loadProjectHierarchyOverrides(pid),
+      ])
+      if (requestId !== projectSettingsRequestId) return
+      applyProjectSettings(settings)
+      projectRawOverrides = overrides
+    } catch (e) {
+      if (requestId !== projectSettingsRequestId) return
+      projectSettingsLoadError = getErrorMessage(e)
+      $error = projectSettingsLoadError
+    } finally {
+      if (requestId === projectSettingsRequestId) {
+        projectSettingsLoading = false
+      }
+    }
+  }
+
   // Load project config on activeProjectId change
   $effect(() => {
     const pid = $activeProjectId
-    const requestId = ++projectSettingsRequestId
-    projectSettingsLoadError = null
 
     if (mode === 'project' && pid) {
-      projectSettingsLoading = true
-      loadProjectSettings(pid)
-        .then((settings) => {
-          if (requestId !== projectSettingsRequestId) return
-          agentInstructions = settings.agentInstructions
-          handoffNotesTemplate = settings.handoffNotesTemplate
-          aiProvider = settings.aiProvider
-          projectColor = settings.projectColor
-          useWorktrees = settings.useWorktrees
-          runCommand = settings.runCommand
-          focusFilterStates = settings.focusFilterStates
-        })
-        .catch((e) => {
-          if (requestId !== projectSettingsRequestId) return
-          projectSettingsLoadError = getErrorMessage(e)
-          $error = projectSettingsLoadError
-        })
-        .finally(() => {
-          if (requestId === projectSettingsRequestId) {
-            projectSettingsLoading = false
-          }
-        })
+      void reloadProjectSettings(pid)
     } else {
+      // Cancel any in-flight load and reset to the empty/default project state.
+      projectSettingsRequestId++
+      projectSettingsLoadError = null
       projectSettingsLoading = false
       agentInstructions = ''
       handoffNotesTemplate = ''
-      aiProvider = 'claude-code'
       projectColor = ''
-      useWorktrees = true
       runCommand = ''
       focusFilterStates = [...DEFAULT_FOCUS_STATES]
+      projectRawOverrides = {}
     }
   })
 
@@ -262,10 +376,20 @@
       $codeCleanupTasksEnabled = isCodeCleanupTasksEnabled
       isTaskDisplayTitleMetadataUpdatesEnabled = globalSettings.taskDisplayTitleMetadataUpdatesEnabled
       githubPollInterval = globalSettings.githubPollInterval
+      globalHandoffNotesEnabled = globalSettings.handoffNotesEnabled
+      globalUseWorktrees = globalSettings.useWorktrees
+      globalAiProvider = globalSettings.aiProvider
       globalSettingsLoaded = true
     } catch (e) {
       globalSettingsLoadError = getErrorMessage(e)
       $error = globalSettingsLoadError
+    }
+
+    try {
+      const defaults = await getGlobalPluginDefaults()
+      globalPluginDefaults = new Map(defaults.map((d) => [d.pluginId, d.enabled]))
+    } catch (e) {
+      console.error('Failed to load global plugin defaults:', e)
     }
 
     modelStatuses = await whisperStatusesPromise
@@ -323,9 +447,7 @@
         projectPath,
         agentInstructions,
         handoffNotesTemplate,
-        aiProvider,
         projectColor,
-        useWorktrees,
         runCommand,
         focusFilterStates,
       }
@@ -339,6 +461,9 @@
         codeCleanupTasksEnabled: isCodeCleanupTasksEnabled,
         taskDisplayTitleMetadataUpdatesEnabled: isTaskDisplayTitleMetadataUpdatesEnabled,
         githubPollInterval,
+        handoffNotesEnabled: globalHandoffNotesEnabled,
+        useWorktrees: globalUseWorktrees,
+        aiProvider: globalAiProvider,
       }
       return true
     }
@@ -464,7 +589,7 @@
 
 <div class="flex h-full w-full">
   <div bind:this={scrollContainer} class="flex-1 overflow-y-auto" style="background: linear-gradient(180deg, var(--project-bg-alt, oklch(var(--b2))) 0%, var(--project-bg, oklch(var(--b1))) 100%)">
-    <div class="px-6 py-6 flex flex-col gap-6">
+    <div class="w-full max-w-4xl px-6 py-6 flex flex-col gap-6">
       <ProjectPageHeader
         title={activePage === 'project'
           ? `${projectName || 'Project'} — Project Settings`
@@ -509,30 +634,44 @@
         <SettingsGeneralCard
           {projectName}
           {projectPath}
-          {aiProvider}
           {projectColor}
-          {useWorktrees}
           {runCommand}
           disabled={!hasProject}
-          {opencodeInstalled}
-          {opencodeVersion}
-          {claudeInstalled}
-          {claudeVersion}
-          {claudeAuthenticated}
-          {piInstalled}
-          {piVersion}
-          {codexInstalled}
-          {codexVersion}
-          {installationStatusLoading}
-          {installationStatusError}
           onProjectNameChange={(v) => { projectName = v; scheduleSave() }}
           onProjectPathChange={(v) => { projectPath = v; scheduleSave() }}
-          onAiProviderChange={(v) => { aiProvider = v; scheduleSave() }}
           onProjectColorChange={handleProjectColorChange}
-          onUseWorktreesChange={(v) => { useWorktrees = v; scheduleSave() }}
           onRunCommandChange={(v) => { runCommand = v; scheduleSave() }}
-          onRefreshInstallationStatus={refreshInstallationStatus}
         />
+
+        <HierarchicalSettingsCard
+          mode="project"
+          values={projectHierarchyValues}
+          excludeKeys={['plugins']}
+          onChange={handleProjectSettingChange}
+          onResetToGlobal={handleResetToGlobal}
+          disabled={!hasProject}
+        >
+          {#snippet providerField()}
+            <ProviderSelectField
+              aiProvider={projectHierarchyValues.ai_provider}
+              {opencodeInstalled}
+              {opencodeVersion}
+              {claudeInstalled}
+              {claudeVersion}
+              {claudeAuthenticated}
+              {piInstalled}
+              {piVersion}
+              {codexInstalled}
+              {codexVersion}
+              {installationStatusLoading}
+              {installationStatusError}
+              disabled={!hasProject}
+              onChange={(v) => handleProjectSettingChange('ai_provider', v)}
+              onRefreshInstallationStatus={refreshInstallationStatus}
+            />
+          {/snippet}
+        </HierarchicalSettingsCard>
+
         <SettingsTaskLabelsCard
           projectId={$activeProjectId}
           disabled={!hasProject}
@@ -593,14 +732,17 @@
           </SettingsSectionCard>
         {/if}
       {:else}
+        <HierarchicalSettingsCard
+          mode="global"
+          values={globalHierarchyValues}
+          excludeKeys={['plugins']}
+          onChange={handleGlobalSettingChange}
+          disabled={!globalSettingsLoaded}
+        />
+
         <SettingsPreferencesCard
-          {taskIdPrefix}
-          onTaskIdPrefixChange={(v) => { taskIdPrefix = v; scheduleSave() }}
           {isDarkMode}
           onThemeToggle={() => { handleThemeToggle(); scheduleSave() }}
-          {githubPollInterval}
-          onGithubPollIntervalChange={(v) => { githubPollInterval = v; scheduleSave() }}
-          disabled={!globalSettingsLoaded}
         />
 
         <SettingsAICard
@@ -623,14 +765,8 @@
 
         <GlobalPluginSettingsPanel
           activeProjectId={$activeProjectId}
-          disabled={!globalSettingsLoaded}
-        />
-
-        <SettingsExperimentalCard
-          codeCleanupTasksEnabled={isCodeCleanupTasksEnabled}
-          taskDisplayTitleMetadataUpdatesEnabled={isTaskDisplayTitleMetadataUpdatesEnabled}
-          onCodeCleanupTasksToggle={() => { handleCodeCleanupTasksToggle(); scheduleSave() }}
-          onTaskDisplayTitleMetadataUpdatesToggle={() => { handleTaskDisplayTitleMetadataUpdatesToggle(); scheduleSave() }}
+          pluginDefaults={globalPluginDefaultsById}
+          onToggleDefault={handleGlobalPluginToggle}
           disabled={!globalSettingsLoaded}
         />
 

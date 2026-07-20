@@ -11,6 +11,7 @@ var openforgePackageMetadataSchema_default = {
 		"displayName",
 		"description"
 	],
+	dependentRequired: { "frontendStyles": ["frontend"] },
 	properties: {
 		"id": {
 			"type": "string",
@@ -36,6 +37,17 @@ var openforgePackageMetadataSchema_default = {
 			"type": "string",
 			"minLength": 1,
 			"description": "Path to the built frontend JavaScript entry artifact."
+		},
+		"frontendStyles": {
+			"type": "array",
+			"minItems": 1,
+			"uniqueItems": true,
+			"items": {
+				"type": "string",
+				"minLength": 1,
+				"pattern": "\\.css$"
+			},
+			"description": "Paths to built frontend CSS artifacts. The renderer attaches them before importing the frontend entry and removes them when the plugin deactivates."
 		},
 		"backend": {
 			"type": "string",
@@ -122,6 +134,35 @@ function validateOptionalString(value, path) {
 	}];
 	return [];
 }
+function validateFrontendStyles(value) {
+	if (value === void 0) return [];
+	if (!Array.isArray(value)) return [{
+		path: "frontendStyles",
+		message: "Must be an array"
+	}];
+	const errors = [];
+	if (value.length === 0) errors.push({
+		path: "frontendStyles",
+		message: "Must contain at least one stylesheet path"
+	});
+	const seen = /* @__PURE__ */ new Set();
+	value.forEach((item, index) => {
+		if (!isNonEmptyString(item)) errors.push({
+			path: `frontendStyles[${index}]`,
+			message: "Must be a non-empty string"
+		});
+		else if (!item.endsWith(".css")) errors.push({
+			path: `frontendStyles[${index}]`,
+			message: "Must point to a built CSS artifact"
+		});
+		else if (seen.has(item)) errors.push({
+			path: `frontendStyles[${index}]`,
+			message: "Duplicate stylesheet path"
+		});
+		else seen.add(item);
+	});
+	return errors;
+}
 function isSupportedOpenForgeApiVersion(apiVersion) {
 	return typeof apiVersion === "number" && Number.isInteger(apiVersion) && SUPPORTED_OPENFORGE_API_VERSIONS.includes(apiVersion);
 }
@@ -171,6 +212,11 @@ function validateOpenForgePackageMetadata(data) {
 	errors.push(...validateRequiredString(data.description, "description"));
 	errors.push(...validateOptionalString(data.icon, "icon"));
 	errors.push(...validateOptionalString(data.frontend, "frontend"));
+	errors.push(...validateFrontendStyles(data.frontendStyles));
+	if (data.frontendStyles !== void 0 && !isNonEmptyString(data.frontend)) errors.push({
+		path: "frontendStyles",
+		message: "Requires a frontend entry"
+	});
 	errors.push(...validateOptionalString(data.backend, "backend"));
 	errors.push(...validateRequires(data.requires));
 	if (data.contributes !== void 0) errors.push({
@@ -377,6 +423,7 @@ var TestingOpenForgeRegistryFake = class {
 						worktree_source: null,
 						worktree_branch: null,
 						handoff_notes_enabled: true,
+						source_ticket_url: null,
 						depends_on: request.dependsOn ?? [],
 						project_id: request.projectId,
 						created_at: 0,

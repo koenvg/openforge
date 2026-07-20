@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
+import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import RoadmapView from './RoadmapView.svelte'
 import type { RoadmapBoard, RoadmapConfig } from '../lib/types'
 

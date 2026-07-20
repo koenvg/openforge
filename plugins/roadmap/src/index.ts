@@ -1,9 +1,11 @@
 import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
 import RoadmapView from './components/RoadmapView.svelte'
 import RoadmapTaskPane from './components/RoadmapTaskPane.svelte'
+import SettingsSection from './components/SettingsSection.svelte'
 
 export const RoadmapViewComponent = RoadmapView
 export const RoadmapTaskPaneComponent = RoadmapTaskPane
+export const RoadmapSettingsSectionComponent = SettingsSection
 
 export default defineFrontendPlugin({
   activate(openforge, context) {
@@ -25,6 +27,17 @@ export default defineFrontendPlugin({
         icon: 'ticket',
         order: 30,
         component: RoadmapTaskPane,
+      }),
+    )
+    context.subscriptions.add(
+      openforge.settings.registerSection({
+        id: 'roadmap-settings',
+        title: 'Roadmap',
+        // The API key is one value for the whole app (stored in global plugin
+        // storage), so it belongs in the plugin's card in global settings, not on a
+        // per-project page.
+        scope: 'global',
+        component: SettingsSection,
       }),
     )
   },

@@ -17,6 +17,7 @@ const baseTask: Task = {
   worktree_source: null,
   worktree_branch: null,
   handoff_notes_enabled: true,
+  source_ticket_url: null,
   depends_on: [],
   project_id: null,
   created_at: 1000,
@@ -44,6 +45,22 @@ describe('TaskPromptSummary', () => {
     // Handoff Notes behavior is unchanged.
     expect(screen.getByText('Handoff Notes')).toBeTruthy()
     expect(screen.getByText('Implemented JWT auth')).toBeTruthy()
+  })
+
+  it('renders the collapsed Initial Prompt preview as Markdown', () => {
+    render(TaskPromptSummary, {
+      props: {
+        task: {
+          ...baseTask,
+          initial_prompt: '# Release plan\n\nShip the **renderer**\nHidden fourth line',
+        },
+      },
+    })
+
+    const promptContent = screen.getByRole('region', { name: 'Initial Prompt content' })
+    expect(screen.getByRole('heading', { name: 'Release plan' })).toBeTruthy()
+    expect(promptContent.querySelector('strong')?.textContent).toBe('renderer')
+    expect(promptContent.textContent).not.toContain('Hidden fourth line')
   })
 
   it('expands and collapses the initial prompt text when the toggle is clicked', async () => {

@@ -254,6 +254,11 @@ pub struct CreateTaskResponse {
     pub status: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StartTaskRequest {
+    pub task_id: String,
+}
+
 /// Request to update exactly one task field. Summary remains the Handoff Notes
 /// channel; initial_prompt invokes the guarded never-started prompt replacement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -566,23 +571,19 @@ async fn handle_agent_lifecycle_notification(
     Ok(Json(serde_json::json!({ "status": "ok" })))
 }
 
-fn task_display_title_metadata_updates_enabled(state: &AppState) -> bool {
-    state
-        .db
-        .lock()
-        .unwrap()
-        .get_config(TASK_DISPLAY_TITLE_METADATA_UPDATES_ENABLED_CONFIG_KEY)
-        .ok()
-        .flatten()
-        .as_deref()
-        == Some("true")
+fn task_display_title_metadata_updates_enabled(state: &AppState, task_id: &str) -> bool {
+    state.db.lock().unwrap().resolve_task_bool(
+        task_id,
+        TASK_DISPLAY_TITLE_METADATA_UPDATES_ENABLED_CONFIG_KEY,
+        false,
+    )
 }
 
 fn should_start_task_display_title_refresh(
     state: &AppState,
     notification: &crate::agent_lifecycle::AgentLifecycleNotification,
 ) -> bool {
-    if !task_display_title_metadata_updates_enabled(state) {
+    if !task_display_title_metadata_updates_enabled(state, &notification.task_id) {
         return false;
     }
 
@@ -702,6 +703,70 @@ pub async fn create_task_handler(
         project_id: task.project_id,
         status: "created".to_string(),
     }))
+}
+
+pub async fn start_task_handler(
+    State(state): State<AppState>,
+    Json(request): Json<StartTaskRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let repo_path = {
+        let db = state.db.lock().map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to lock database while starting task: {e}"),
+            )
+        })?;
+        let task = db
+            .get_task(&request.task_id)
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to get task before start: {e}"),
+                )
+            })?
+            .ok_or_else(|| {
+                (
+                    StatusCode::NOT_FOUND,
+                    format!("Task not found: {}", request.task_id),
+                )
+            })?;
+        let project_id = task.project_id.ok_or_else(|| {
+            (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                format!(
+                    "Cannot start task {}: task is not associated with a project",
+                    request.task_id
+                ),
+            )
+        })?;
+        db.get_project(&project_id)
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to get project before task start: {e}"),
+                )
+            })?
+            .ok_or_else(|| {
+                (
+                    StatusCode::NOT_FOUND,
+                    format!(
+                        "Cannot start task {}: project {} not found",
+                        request.task_id, project_id
+                    ),
+                )
+            })?
+            .path
+    };
+
+    let response = crate::app_invoke::start_implementation(
+        &state,
+        &request.task_id,
+        &repo_path,
+        crate::git_worktree::DivergenceResolution::Auto,
+    )
+    .await?;
+
+    Ok(Json(response))
 }
 
 pub async fn update_task_handler(
@@ -1686,6 +1751,7 @@ pub fn create_router(state: AppState) -> Router {
         )
         .route("/debug/process-memory", get(debug_process_memory_handler))
         .route("/create_task", post(create_task_handler))
+        .route("/start_task", post(start_task_handler))
         .route("/update_task", post(update_task_handler))
         .route("/delete_task", post(delete_task_handler))
         .route("/hard_delete_task", post(hard_delete_task_handler))

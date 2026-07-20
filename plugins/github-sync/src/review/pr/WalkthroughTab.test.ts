@@ -106,6 +106,7 @@ function renderWalkthrough(overrides: Record<string, unknown> = {}) {
       pr: basePr,
       files: [fileA, fileB],
       fetchFileContents: vi.fn(async () => ({ oldContent: '', newContent: '' })),
+      resolveRepositoryImage: vi.fn(async () => null),
       projectId: 'project-1',
       existingComments: [],
       pendingComments: [] as ReviewSubmissionComment[],

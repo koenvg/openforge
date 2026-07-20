@@ -1,15 +1,16 @@
+import type { PluginIcon } from '@openforge-app/plugin-sdk'
 import type { AppView } from './types'
 
 export interface IconRailPluginNavItem {
   viewKey: AppView
-  icon: string
+  icon: PluginIcon
   title: string
   shortcut: string | null
 }
 
 export interface IconRailNavItem {
   view: AppView
-  icon: string
+  icon: PluginIcon
   shortcut: string
   label: string
 }

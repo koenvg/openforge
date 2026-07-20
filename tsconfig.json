@@ -28,6 +28,7 @@
       "@openforge-app/plugin-sdk/projectFileTree": ["packages/plugin-sdk/src/projectFileTree.ts"],
       "@openforge-app/plugin-sdk/package-metadata-schema.json": ["packages/plugin-sdk/src/openforgePackageMetadataSchema.json"],
       "@openforge-app/plugin-sdk/sanitize": ["packages/plugin-sdk/src/sanitize.ts"],
+      "@openforge-app/plugin-sdk/pluginIcons": ["packages/plugin-sdk/src/pluginIcons.ts"],
       "@openforge-app/plugin-sdk/testing": ["packages/plugin-sdk/src/testing.ts"],
       "@openforge-app/plugin-sdk/fileIcons": ["packages/plugin-sdk/src/fileIcons.ts"],
       "@openforge-app/plugin-sdk/ui/MarkdownContent.svelte": ["packages/plugin-sdk/src/ui/MarkdownContent.svelte"],

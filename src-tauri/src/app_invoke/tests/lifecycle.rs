@@ -342,6 +342,9 @@ async fn start_implementation_starts_configured_pi_provider_through_app_invoke_b
     .await;
 
     assert_eq!(response["task_id"], task_id);
+    assert!(response["session_id"]
+        .as_str()
+        .is_some_and(|session_id| !session_id.is_empty()));
     assert_eq!(
         response["workspace_path"],
         repo_dir.to_string_lossy().as_ref()
@@ -465,6 +468,89 @@ async fn start_implementation_injects_plugin_configured_handoff_workflow() {
     assert!(
         log.contains("Preserve plugin-owned reviewer brief"),
         "got provider log: {log}"
+    );
+
+    if let Some(pty_manager) = state.pty_manager.as_ref() {
+        let _ = pty_manager.kill_pty(&task_id).await;
+    }
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn start_implementation_uses_current_project_handoff_template() {
+    let _env_lock = PROVIDER_PATH_ENV_LOCK.lock().await;
+    let sandbox = &*PROVIDER_TEST_SANDBOX;
+    sandbox.clear_log();
+    let (_temp, repo_dir) = provider_repo_dir();
+    let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
+    let (state, path) = test_state("app_invoke_start_current_handoff_template");
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let project = db
+            .create_project(
+                "Current Handoff Template Project",
+                repo_dir.to_str().expect("utf8 repo path"),
+            )
+            .expect("create project");
+        db.set_project_config(&project.id, "ai_provider", "pi")
+            .expect("set provider");
+        db.set_project_config(
+            &project.id,
+            "handoff_notes_template",
+            "## Latest Template\n- Use the value currently saved in Settings",
+        )
+        .expect("set current handoff template");
+        let contribution = crate::agent_lifecycle::StartPromptContribution {
+            id: crate::agent_lifecycle::HANDOFF_NOTES_WORKFLOW_CONTRIBUTION_ID.to_string(),
+            enabled: true,
+            content: crate::agent_lifecycle::legacy_handoff_notes_start_prompt_content(Some(
+                "## Stale Template\n- Do not keep this old value",
+            )),
+            order: 0,
+        };
+        db.set_project_config(
+            &project.id,
+            crate::agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY,
+            &serde_json::to_string(&vec![contribution]).expect("serialize contribution"),
+        )
+        .expect("set start prompt contribution");
+        db.create_task_with_worktree_source(
+            "Start with the current handoff template",
+            "backlog",
+            Some(&project.id),
+            None,
+            None,
+            crate::db::TaskWorktreeOptions {
+                source: Some("disabled"),
+                branch: None,
+            },
+        )
+        .expect("create task")
+        .id
+    };
+
+    let response = invoke_ok(
+        &state,
+        "start_implementation",
+        json!({ "taskId": task_id, "repoPath": repo_dir.to_string_lossy() }),
+    )
+    .await;
+
+    assert_eq!(response["task_id"], task_id);
+    let log = wait_for_provider_log_record(
+        &sandbox.log_path,
+        "pi",
+        "Start with the current handoff template",
+    )
+    .await;
+    assert!(
+        log.contains("## Latest Template")
+            && log.contains("Use the value currently saved in Settings"),
+        "current project handoff template should be injected, got provider log: {log}"
+    );
+    assert!(
+        !log.contains("## Stale Template") && !log.contains("Do not keep this old value"),
+        "stale persisted handoff template should be replaced, got provider log: {log}"
     );
 
     if let Some(pty_manager) = state.pty_manager.as_ref() {

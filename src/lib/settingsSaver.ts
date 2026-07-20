@@ -10,9 +10,7 @@ export interface ProjectSettingsSavePayload {
   projectPath: string
   agentInstructions: string
   handoffNotesTemplate: string
-  aiProvider: string
   projectColor: string
-  useWorktrees: boolean
   runCommand: string
   focusFilterStates: TaskState[]
 }
@@ -23,14 +21,19 @@ export interface GlobalSettingsSavePayload {
   codeCleanupTasksEnabled: boolean
   taskDisplayTitleMetadataUpdatesEnabled: boolean
   githubPollInterval: number
+  handoffNotesEnabled: boolean
+  useWorktrees: boolean
+  aiProvider: string
 }
 
 export async function saveProjectSettings(payload: ProjectSettingsSavePayload): Promise<void> {
+  // `ai_provider` and `use_worktrees` inherit from global defaults and are owned
+  // exclusively by the Configuration card's immediate per-key write path
+  // (handleProjectSettingChange -> setProjectConfig). They are intentionally not
+  // written here so exactly one path persists them, avoiding a debounced-vs-immediate race.
   await updateProject(payload.projectId, payload.projectName, payload.projectPath)
   await setProjectConfig(payload.projectId, 'additional_instructions', payload.agentInstructions)
   await setProjectConfig(payload.projectId, 'handoff_notes_template', payload.handoffNotesTemplate)
-  await setProjectConfig(payload.projectId, 'ai_provider', payload.aiProvider)
-  await setProjectConfig(payload.projectId, 'use_worktrees', payload.useWorktrees ? 'true' : 'false')
   await setProjectConfig(payload.projectId, 'project_color', payload.projectColor)
   await setProjectConfig(payload.projectId, RUN_COMMAND_CONFIG_KEY, payload.runCommand)
   await saveFocusFilterStates(payload.projectId, payload.focusFilterStates)
@@ -42,4 +45,7 @@ export async function saveGlobalSettings(payload: GlobalSettingsSavePayload): Pr
   await setConfig('code_cleanup_tasks_enabled', payload.codeCleanupTasksEnabled ? 'true' : 'false')
   await setConfig('task_display_title_metadata_updates_enabled', payload.taskDisplayTitleMetadataUpdatesEnabled ? 'true' : 'false')
   await setConfig('github_poll_interval', String(normalizeGitHubPollIntervalSeconds(payload.githubPollInterval)))
+  await setConfig('handoff_notes_enabled', payload.handoffNotesEnabled ? 'true' : 'false')
+  await setConfig('use_worktrees', payload.useWorktrees ? 'true' : 'false')
+  await setConfig('ai_provider', payload.aiProvider)
 }

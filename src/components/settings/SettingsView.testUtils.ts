@@ -86,6 +86,8 @@ vi.mock('../../lib/ipc', () => ({
   getPlugin: vi.fn(),
   setPluginEnabled: vi.fn(),
   getEnabledPlugins: vi.fn(() => Promise.resolve([])),
+  getGlobalPluginDefaults: vi.fn(() => Promise.resolve([])),
+  setGlobalPluginDefault: vi.fn(() => Promise.resolve(undefined)),
 }))
 
 vi.mock('../../lib/boardFilters', () => ({

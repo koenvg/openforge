@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ShellLifecycleState, TaskTerminalTabsSession } from '@openforge-app/terminal-runtime'
-import { activeShellKey, runAppCommandInTaskTerminal, type RunAppCommandDeps } from './runAppCommand'
+import { activeShellKey, isTaskRunAppAvailable, runAppCommandInTaskTerminal, type RunAppCommandDeps } from './runAppCommand'
 
 function makeSession(overrides: Partial<TaskTerminalTabsSession> = {}): TaskTerminalTabsSession {
   return {
@@ -50,6 +50,18 @@ describe('activeShellKey', () => {
   it('falls back to a shell-index key when no tab matches the active index', () => {
     const session = makeSession({ tabs: [], activeTabIndex: 0 })
     expect(activeShellKey('task-1', session)).toBe('task-1-shell-0')
+  })
+})
+
+describe('isTaskRunAppAvailable', () => {
+  it.each([
+    ['available', '/tmp/worktree', 'pnpm dev', true, false, true],
+    ['missing workspace', null, 'pnpm dev', true, false, false],
+    ['missing command', '/tmp/worktree', '', true, false, false],
+    ['missing Terminal plugin', '/tmp/worktree', 'pnpm dev', false, false, false],
+    ['already launching', '/tmp/worktree', 'pnpm dev', true, true, false],
+  ])('is %s', (_case, workspacePath, command, terminalAvailable, isLaunching, expected) => {
+    expect(isTaskRunAppAvailable({ workspacePath, command, terminalAvailable, isLaunching })).toBe(expected)
   })
 })
 

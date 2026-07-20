@@ -239,6 +239,14 @@ impl<'a> PluginPlatform<'a> {
             .await
     }
 
+    pub(crate) async fn deactivate_backend(&self, plugin_id: &str) -> Result<Value, String> {
+        let plugin_host = self
+            .plugin_host
+            .ok_or_else(|| "plugin host state is not available".to_string())?;
+
+        plugin_host.deactivate_backend(plugin_id).await
+    }
+
     fn resolve_installed_backend_path(&self, plugin_id: &str) -> Result<PathBuf, String> {
         let plugin = self
             .plugin(plugin_id)?

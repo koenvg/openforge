@@ -42,7 +42,7 @@ export interface DynamicShellEventContract {
 }
 
 export const ipcCommandContracts = [
-  { functionName: 'createTask', ipcCommand: 'create_task', payloadKeys: ['initialPrompt', 'status', 'projectId', 'permissionMode', 'dependsOn', 'labelNames', 'worktreeSource', 'worktreeBranch', 'title', 'handoffNotesEnabled'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
+  { functionName: 'createTask', ipcCommand: 'create_task', payloadKeys: ['initialPrompt', 'status', 'projectId', 'permissionMode', 'dependsOn', 'labelNames', 'worktreeSource', 'worktreeBranch', 'title', 'handoffNotesEnabled', 'sourceTicketUrl', 'codeCleanupEnabled', 'taskDisplayTitleUpdatesEnabled', 'aiProvider'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'updateTaskInitialPrompt', ipcCommand: 'update_task', payloadKeys: ['id', 'initialPrompt'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'updateTaskTitle', ipcCommand: 'update_task_title', payloadKeys: ['id', 'title'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'updateTaskSummary', ipcCommand: 'update_task_summary', payloadKeys: ['id', 'summary'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
@@ -60,6 +60,9 @@ export const ipcCommandContracts = [
   { functionName: 'getProjectConfig', ipcCommand: 'get_project_config', payloadKeys: ['projectId', 'key'], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'getResolvedAiProvider', ipcCommand: 'resolve_ai_provider', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'setProjectConfig', ipcCommand: 'set_project_config', payloadKeys: ['projectId', 'key', 'value'], targetOwner: 'rust-sidecar', domain: 'config' },
+  { functionName: 'getTaskConfig', ipcCommand: 'get_task_config', payloadKeys: ['taskId', 'key'], targetOwner: 'rust-sidecar', domain: 'config' },
+  { functionName: 'setTaskConfig', ipcCommand: 'set_task_config', payloadKeys: ['taskId', 'key', 'value'], targetOwner: 'rust-sidecar', domain: 'config' },
+  { functionName: 'resetProjectSettingsToGlobal', ipcCommand: 'reset_project_settings_to_global', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'getAllTasks', ipcCommand: 'get_tasks', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'getTasksForProject', ipcCommand: 'get_tasks_for_project', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'getProjectTaskLabels', ipcCommand: 'get_project_task_labels', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
@@ -165,10 +168,13 @@ export const ipcCommandContracts = [
   { functionName: 'listPlugins', ipcCommand: 'list_plugins', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'setPluginEnabled', ipcCommand: 'set_plugin_enabled', payloadKeys: ['projectId', 'pluginId', 'enabled'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'getEnabledPlugins', ipcCommand: 'get_enabled_plugins', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'plugins' },
+  { functionName: 'setGlobalPluginDefault', ipcCommand: 'set_global_plugin_default', payloadKeys: ['pluginId', 'enabled'], targetOwner: 'rust-sidecar', domain: 'plugins' },
+  { functionName: 'getGlobalPluginDefaults', ipcCommand: 'get_global_plugin_defaults', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'getPluginStorage', ipcCommand: 'get_plugin_storage', payloadKeys: ['pluginId', 'scope', 'scopeId', 'key'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'setPluginStorage', ipcCommand: 'set_plugin_storage', payloadKeys: ['pluginId', 'scope', 'scopeId', 'key', 'value'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'deletePluginStorage', ipcCommand: 'delete_plugin_storage', payloadKeys: ['pluginId', 'scope', 'scopeId', 'key'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'pluginInvoke', ipcCommand: 'plugin_invoke', payloadKeys: ['pluginId', 'command', 'payload'], targetOwner: 'rust-sidecar', domain: 'plugins' },
+  { functionName: 'pluginBackendDeactivate', ipcCommand: 'plugin_backend_deactivate', payloadKeys: ['pluginId'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'pluginBackendWhenReady', ipcCommand: 'plugin_backend_when_ready', payloadKeys: ['pluginId'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'stopPluginSidecar', ipcCommand: 'stop_plugin_sidecar', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'plugins' },
 ] as const satisfies readonly IpcCommandContract[]

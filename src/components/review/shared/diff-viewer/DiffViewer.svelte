@@ -2,7 +2,7 @@
   import SharedDiffViewer from '@openforge-app/pr-review-ui/DiffViewer.svelte'
   import type { PrFileDiff, ReviewComment, ReviewSubmissionComment, AgentReviewComment } from '../../../../lib/types'
   import { pendingManualComments, agentReviewComments } from '../../../../lib/stores'
-  import { updateAgentReviewCommentStatus, openUrl } from '../../../../lib/ipc'
+  import { updateAgentReviewCommentStatus, openUrl as hostOpenUrl } from '../../../../lib/ipc'
   import { clearSelfReviewInlineCommentDraft, getSelfReviewInlineCommentDraft, setSelfReviewInlineCommentDraft } from '../../../../lib/taskScopedReviewComments'
   import { getDiffTheme, themeMode } from '../../../../lib/theme'
   import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
@@ -13,13 +13,17 @@
     existingComments?: ReviewComment[]
     repoOwner?: string
     repoName?: string
+    headSha?: string
     fileTreeVisible?: boolean
     onToggleFileTree?: () => void
     fetchFileContents?: (file: PrFileDiff) => Promise<FileContents>
     batchFetchFileContents?: (files: PrFileDiff[]) => Promise<Map<string, FileContents>>
+    resolveRepositoryImage?: (repositoryPath: string) => Promise<string | null>
+    onOpenRepositoryPath?: (repositoryPath: string, suffix: string) => void | Promise<void>
     toolbarExtra?: Snippet
     fileHeaderExtra?: Snippet<[PrFileDiff]>
     includeCommitted?: boolean
+    onOpenUrl?: (url: string) => void | Promise<void>
     includeUncommitted?: boolean
     agentComments?: AgentReviewComment[]
     onScrollTopChange?: (scrollTop: number) => void
@@ -41,13 +45,17 @@
     existingComments = [],
     repoOwner = '',
     repoName = '',
+    headSha = '',
     fileTreeVisible = true,
     onToggleFileTree,
     fetchFileContents,
     batchFetchFileContents,
+    resolveRepositoryImage,
+    onOpenRepositoryPath,
     toolbarExtra,
     fileHeaderExtra,
     includeCommitted = true,
+    onOpenUrl = hostOpenUrl,
     includeUncommitted = false,
     agentComments = [],
     pendingComments,
@@ -101,10 +109,13 @@
   {existingComments}
   {repoOwner}
   {repoName}
+  {headSha}
   {fileTreeVisible}
   {onToggleFileTree}
   {fetchFileContents}
   {batchFetchFileContents}
+  {resolveRepositoryImage}
+  {onOpenRepositoryPath}
   {toolbarExtra}
   {fileHeaderExtra}
   {includeCommitted}
@@ -114,7 +125,7 @@
   onPendingCommentsChange={setVisiblePendingComments}
   onAgentCommentsChange={(comments) => { $agentReviewComments = comments }}
   onUpdateAgentCommentStatus={updateAgentReviewCommentStatus}
-  onOpenUrl={openUrl}
+  {onOpenUrl}
   {onScrollTopChange}
   {initialScrollTop}
   {inlineDraftScopeId}

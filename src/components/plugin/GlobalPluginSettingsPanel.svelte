@@ -4,8 +4,10 @@
     installedPlugins,
     enabledPluginIds,
     error as pluginLoadError,
+    runtimeContributionSources,
   } from '../../lib/plugin/pluginStore'
   import {
+    activatePlugin,
     enablePluginForProject,
     installFromLocal,
     installPluginFromGit,
@@ -14,14 +16,20 @@
     reloadPluginForProject,
     uninstallPlugin,
   } from '../../lib/plugin/pluginRegistry'
+  import { resolveContributions, type ResolvedSettingsSection } from '../../lib/plugin/contributionResolver'
   import { writeClipboardText } from '../../lib/ipc'
   import type { PluginEntry } from '../../lib/plugin/types'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import SettingsSectionCard from '../settings/SettingsSectionCard.svelte'
+  import PluginSlot from './PluginSlot.svelte'
 
   interface Props {
     activeProjectId?: string | null
     disabled?: boolean
+    // Global enable-by-default state keyed by plugin id (explicit global default
+    // if set, else builtin default). This is the GLOBAL layer, not per-project enablement.
+    pluginDefaults?: Map<string, boolean>
+    onToggleDefault?: (pluginId: string, enabled: boolean) => void
   }
 
   type SourceType = 'npm' | 'git' | 'local'
@@ -29,6 +37,8 @@
   let {
     activeProjectId = null,
     disabled = false,
+    pluginDefaults = new Map(),
+    onToggleDefault,
   }: Props = $props()
 
   let sourceType = $state<SourceType>('npm')
@@ -40,6 +50,31 @@
   let actionError = $state<string | null>(null)
 
   let pluginsList = $derived(Array.from($installedPlugins.values()))
+
+  // A plugin's settings sections are only registered once its frontend activates, and
+  // activation is otherwise driven by per-project enablement — which the global page
+  // isn't tied to. Activate installed, non-errored plugins here so any global-scoped
+  // sections they declare become discoverable. Activation is idempotent for plugins
+  // already active.
+  $effect(() => {
+    for (const plugin of pluginsList) {
+      if (plugin.state !== 'error') void activatePlugin(plugin.manifest.id)
+    }
+  })
+
+  // Global-scoped settings sections, grouped by the plugin that owns them, so each
+  // renders inside that plugin's card. Project-scoped sections are left to the
+  // per-project settings page.
+  let globalSectionsByPlugin = $derived.by(() => {
+    const map = new Map<string, ResolvedSettingsSection[]>()
+    for (const plugin of pluginsList) {
+      const source = $runtimeContributionSources.get(plugin.manifest.id)
+      if (!source) continue
+      const sections = resolveContributions([source]).settingsSections.filter((section) => section.scope === 'global')
+      if (sections.length > 0) map.set(plugin.manifest.id, sections)
+    }
+    return map
+  })
   let installedPluginToEnable = $derived(installedPluginToEnableId ? $installedPlugins.get(installedPluginToEnableId) : null)
   let canEnableInstalledPluginForActiveProject = $derived(!!activeProjectId && !!installedPluginToEnableId && !$enabledPluginIds.has(installedPluginToEnableId))
   let sourcePlaceholder = $derived(sourceType === 'npm'
@@ -279,6 +314,19 @@
                 </div>
 
                 <div class="flex flex-col items-end gap-2 shrink-0">
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <span class="text-xs text-base-content/70">Enable by default</span>
+                    <input
+                      type="checkbox"
+                      class="toggle toggle-primary toggle-sm"
+                      role="switch"
+                      aria-label="Enable by default: {plugin.manifest.name}"
+                      data-testid="plugin-default-{plugin.manifest.id}"
+                      checked={pluginDefaults.get(plugin.manifest.id) ?? false}
+                      disabled={disabled}
+                      onchange={(e) => onToggleDefault?.(plugin.manifest.id, e.currentTarget.checked)}
+                    />
+                  </label>
                   <button class="btn btn-ghost btn-xs" type="button" aria-label="Reload plugin: {plugin.manifest.name}" disabled={disabled} onclick={() => handleReload(plugin.manifest.id)}>Reload plugin</button>
                   {#if !isBuiltIn}
                     <button class="btn btn-error btn-outline btn-xs" type="button" aria-label="Uninstall plugin: {plugin.manifest.name}" disabled={disabled} onclick={() => handleUninstall(plugin.manifest.id)}>Uninstall plugin</button>
@@ -293,6 +341,17 @@
                   <span class="break-words">{plugin.error}</span>
                 </div>
               {/if}
+
+              {#each globalSectionsByPlugin.get(plugin.manifest.id) ?? [] as section (section.namespacedId)}
+                <div class="border-t border-base-300 pt-3">
+                  <PluginSlot
+                    slotType="settingsSections"
+                    slotId={section.namespacedId}
+                    sourcePluginIds={[plugin.manifest.id]}
+                    projectId={activeProjectId}
+                  />
+                </div>
+              {/each}
             </div>
           {/each}
         </div>

@@ -102,6 +102,7 @@
     <span class="badge badge-ghost">{disabledCount} disabled</span>
   {/snippet}
   <div class="flex flex-col gap-4">
+    <p class="m-0 text-xs text-base-content/50">Plugin enablement inherits your global plugin defaults; changes here apply to this project only.</p>
     <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
       <label class="input input-bordered input-sm flex items-center gap-2 xl:w-80">
         <Search size={16} class="text-base-content/50" />

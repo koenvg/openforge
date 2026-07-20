@@ -1229,3 +1229,57 @@ fn task_display_title_refresh_ignores_unsupported_provider_activity() {
 
     let _ = std::fs::remove_file(path);
 }
+
+#[test]
+fn task_display_title_refresh_reads_task_override() {
+    let (state, path) = test_state("task_title_refresh_task_override");
+
+    let task_id = {
+        let db = state.db.lock().expect("lock db");
+        let project = db.create_project("P", "/tmp/p").expect("create project");
+        // Global default OFF; the task snapshot overrides it ON.
+        db.set_config("task_display_title_metadata_updates_enabled", "false")
+            .expect("set global title config");
+        let task = db
+            .create_task_with_options(crate::db::NewTaskOptions {
+                initial_prompt: "p",
+                status: "backlog",
+                project_id: Some(&project.id),
+                prompt: None,
+                permission_mode: None,
+                worktree_source: None,
+                worktree_branch: None,
+                title: None,
+                handoff_notes_enabled: true,
+                source_ticket_url: None,
+                code_cleanup_enabled: None,
+                task_display_title_updates_enabled: None,
+                ai_provider: None,
+            })
+            .expect("create task");
+        db.set_task_config(
+            &task.id,
+            "task_display_title_metadata_updates_enabled",
+            "true",
+        )
+        .expect("set task title config");
+        task.id
+    };
+
+    let notification = crate::agent_lifecycle::AgentLifecycleNotification {
+        provider: "codex".to_string(),
+        task_id: task_id.clone(),
+        pty_instance_id: Some(1),
+        provider_session_id: None,
+        kind: crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy,
+        raw_event_type: Some("UserPromptSubmit".to_string()),
+        raw_status_type: None,
+    };
+
+    assert!(
+        should_start_task_display_title_refresh(&state, &notification),
+        "task-level title-update override should win over global config"
+    );
+
+    let _ = std::fs::remove_file(path);
+}

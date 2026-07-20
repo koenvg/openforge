@@ -72,6 +72,7 @@ export interface OpenForgePackageMetadata {
   description: string
   icon?: string
   frontend?: string
+  frontendStyles?: string[]
   backend?: string
   requires?: OpenForgePluginCapability[]
 }
@@ -225,10 +226,27 @@ export interface PluginSettingsSectionProps extends Record<string, unknown> {
   context: OpenForgeContextSnapshot
 }
 
+/**
+ * Inline SVG geometry for a plugin view icon.
+ *
+ * The host sanitizes the markup, strips root sizing and accessibility metadata,
+ * renders it decoratively at the navigation surface's size, and uses the view
+ * title as the accessible navigation label. Plugins own the `viewBox`, paths,
+ * and paint. Use `currentColor` when the icon should follow host navigation
+ * states; literal safe colors remain plugin-owned and do not change with state.
+ */
+export interface PluginSvgIcon {
+  type: 'svg'
+  svg: string
+}
+
+/** A host-registered icon name or inline SVG geometry. */
+export type PluginIcon = string | PluginSvgIcon
+
 export interface PluginViewRegistration {
   id: string
   title: string
-  icon: string
+  icon: PluginIcon
   /**
    * Where the host surfaces the view's nav entry. `'rail'` (default) places it on
    * the icon rail; `'sidebar'` places it in the left projects sidebar. Either way
@@ -254,10 +272,20 @@ export interface PluginTaskUISectionRegistration {
   component: PluginComponentLoader<PluginTaskUISectionProps> | PluginComponent<PluginTaskUISectionProps>
 }
 
+/**
+ * Where a settings section is surfaced. `'project'` (the default) renders it on the
+ * per-project settings page, scoped to the active project. `'global'` renders it
+ * inside the plugin's own card on the global settings page — for configuration that
+ * is one value for the whole app (an API key, a credential) rather than per-project.
+ */
+export type PluginSettingsSectionScope = 'project' | 'global'
+
 export interface PluginSettingsSectionRegistration {
   id: string
   title: string
   order?: number
+  /** Defaults to `'project'` when omitted. */
+  scope?: PluginSettingsSectionScope
   component: PluginComponentLoader<PluginSettingsSectionProps> | PluginComponent<PluginSettingsSectionProps>
 }
 
@@ -382,7 +410,13 @@ export interface CreateTaskRequest {
 export interface StartPromptContribution {
   id: string
   enabled: boolean
-  /** Prompt text injected before OpenForge's task prompt. The host substitutes {{taskId}} and {{task_id}}. */
+  /**
+   * Prompt text injected before OpenForge's task prompt.
+   * The host substitutes {{taskId}} and {{task_id}}. Contributions using the
+   * reserved handoff-notes-workflow ID may opt into the current project template
+   * with {{handoffNotesTemplate}}. The exact retired OpenForge handoff envelope is
+   * also refreshed for backward compatibility; other content remains unchanged.
+   */
   content: string
   /** Lower values are injected first. Defaults to 0. */
   order?: number

@@ -18,6 +18,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     worktree_source: null,
     worktree_branch: null,
     handoff_notes_enabled: true,
+    source_ticket_url: null,
     depends_on: [],
     project_id: null,
     created_at: 0,
@@ -86,6 +87,19 @@ describe('getTaskActions', () => {
     expect(ids).toContain('delete-task')
     expect(actions.find(a => a.id === 'delete-task')?.label).toBe('Complete')
     expect(ids.indexOf('set-aside-task')).toBeGreaterThan(ids.indexOf('delete-task'))
+  })
+
+  it('returns Run app only when the task run command is available', () => {
+    const task = makeTask({ status: 'doing' })
+
+    const availableActions = getTaskActions(task, [], new Set(), { canRunApp: true })
+    const unavailableActions = getTaskActions(task, [], new Set(), { canRunApp: false })
+
+    expect(availableActions.find(action => action.id === 'run-app')).toMatchObject({
+      label: 'Run app',
+      category: 'task',
+    })
+    expect(unavailableActions.some(action => action.id === 'run-app')).toBe(false)
   })
 
   it('returns Move task back in focus for doing task already Out of Focus', () => {

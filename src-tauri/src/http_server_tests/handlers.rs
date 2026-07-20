@@ -851,6 +851,149 @@ async fn test_get_tasks_handler_filters_by_state() {
 }
 
 #[tokio::test]
+async fn test_start_task_handler_rejects_missing_task_id() {
+    let (state, path) = test_state("http_start_task_missing_task_id");
+    let response = create_router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/start_task")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{}"#))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn test_start_task_handler_returns_not_found_for_unknown_task() {
+    let (state, path) = test_state("http_start_task_unknown_task");
+    let response = create_router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/start_task")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"task_id":"T-404"}"#))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    assert!(response_body_text(response)
+        .await
+        .contains("Task not found: T-404"));
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn test_start_task_handler_rejects_projectless_task() {
+    let (state, path) = test_state("http_start_task_projectless_task");
+    let task_id = {
+        let db = state.db.lock().expect("lock db");
+        db.create_task("Projectless", "backlog", None, None, None)
+            .expect("create task")
+            .id
+    };
+    let response = create_router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/start_task")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(r#"{{"task_id":"{task_id}"}}"#)))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(response_body_text(response)
+        .await
+        .contains("task is not associated with a project"));
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn test_start_task_handler_preserves_dependency_conflicts() {
+    let (state, path) = test_state("http_start_task_dependency_conflict");
+    let (dependency_id, task_id) = {
+        let db = state.db.lock().expect("lock db");
+        let project = db
+            .create_project("Project", "/tmp/project")
+            .expect("create project");
+        let dependency = db
+            .create_task("Dependency", "backlog", Some(&project.id), None, None)
+            .expect("create dependency");
+        let task = db
+            .create_task("Dependent", "backlog", Some(&project.id), None, None)
+            .expect("create dependent task");
+        db.set_task_dependencies(&task.id, std::slice::from_ref(&dependency.id))
+            .expect("set dependency");
+        (dependency.id, task.id)
+    };
+    let response = create_router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/start_task")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(r#"{{"task_id":"{task_id}"}}"#)))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert!(response_body_text(response)
+        .await
+        .contains(&format!("Task dependency {dependency_id} is not done")));
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn test_start_task_handler_delegates_valid_task_to_native_lifecycle() {
+    let (mut state, path) = test_state("http_start_task_native_lifecycle");
+    let task_id = {
+        let db = state.db.lock().expect("lock db");
+        let project = db
+            .create_project("Project", "/tmp/project")
+            .expect("create project");
+        db.create_task("Start me", "backlog", Some(&project.id), None, None)
+            .expect("create task")
+            .id
+    };
+    state.pty_manager = None;
+    let response = create_router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/start_task")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(r#"{{"task_id":"{task_id}"}}"#)))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert!(response_body_text(response)
+        .await
+        .contains("PTY manager is not available"));
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn test_get_tasks_handler_rejects_invalid_state() {
     let (state, path) = test_state("http_get_tasks_handler_rejects_invalid_state");
     {

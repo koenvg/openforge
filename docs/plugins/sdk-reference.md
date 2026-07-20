@@ -19,6 +19,7 @@ Do not import from SDK internals such as `@openforge-app/plugin-sdk/dist/...` or
 | `@openforge-app/plugin-sdk/projectFileTree` | Project file-tree building, flattening, sizing, accessibility, and keyboard helpers. |
 | `@openforge-app/plugin-sdk/markdown` | Markdown rendering helpers. |
 | `@openforge-app/plugin-sdk/numberParsing` | Strict finite-number parsing helper. |
+| `@openforge-app/plugin-sdk/pluginIcons` | Frontend custom-icon validation and sanitization helpers. |
 | `@openforge-app/plugin-sdk/sanitize` | HTML sanitization helper. |
 | `@openforge-app/plugin-sdk/ui/MarkdownContent.svelte` | Svelte Markdown rendering component. |
 | `@openforge-app/plugin-sdk/ui/ResizablePanel.svelte` | Svelte resizable panel component. |
@@ -65,6 +66,8 @@ Frontend-specific API areas are:
 - `backend`: wait for and invoke this plugin's backend methods.
 
 Frontend UI contribution registrations use Svelte component loaders or components for `PluginViewProps`, `PluginTaskPaneProps`, `PluginTaskUISectionProps`, and `PluginSettingsSectionProps`. Register sections with `openforge.taskUI.registerSection({ id, order?, component })`; sections receive `api`, `context`, `taskId`, and `projectId`, and do not require presentation metadata such as a title, icon, heading, or host card. Sections are ordered by numeric `order`, then namespaced contribution id.
+
+View registrations use `PluginIcon` for `icon`: either a host icon-name string or `{ type: 'svg', svg: string }`. Custom SVGs are limited to static, self-contained geometry with one positive `viewBox` root and a 10,000-character maximum. The host sanitizes them, owns rail/sidebar sizing and decorative accessibility, and uses the view title as the navigation label. Plugins own geometry and paint; use `currentColor` for host theme and active-state colors. Invalid custom SVG registrations are rejected. Unknown named icons retain the generic Plug fallback. See [View icons](../plugin-authoring.md#view-icons) for the exact allowed subset and an example.
 
 ## Backend plugins
 

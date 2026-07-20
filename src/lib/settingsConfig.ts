@@ -9,8 +9,18 @@ import {
   getProjectConfig,
 } from './ipc'
 import { RUN_COMMAND_CONFIG_KEY } from './runAppCommand'
+import { HIERARCHICAL_SETTINGS } from './hierarchicalSettings'
 import type { TaskState } from './taskState'
 import type { ClaudeInstallStatus, WhisperModelStatus } from './types'
+
+/**
+ * Unified-settings keys (excluding the plugins control) that a project can
+ * override. Used to load the raw project overrides that feed the shared
+ * hierarchical settings card's effective-value merge.
+ */
+export const PROJECT_HIERARCHY_KEYS: string[] = HIERARCHICAL_SETTINGS
+  .filter((setting) => setting.control !== 'plugins' && setting.levels.includes('project'))
+  .map((setting) => setting.key)
 
 export interface ProjectSettingsConfig {
   agentInstructions: string
@@ -28,6 +38,9 @@ export interface GlobalSettingsConfig {
   codeCleanupTasksEnabled: boolean
   taskDisplayTitleMetadataUpdatesEnabled: boolean
   githubPollInterval: number
+  handoffNotesEnabled: boolean
+  useWorktrees: boolean
+  aiProvider: string
 }
 
 export interface InstallationStatus {
@@ -90,6 +103,9 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettingsConfig = {
   codeCleanupTasksEnabled: false,
   taskDisplayTitleMetadataUpdatesEnabled: false,
   githubPollInterval: DEFAULT_GITHUB_POLL_INTERVAL_SECONDS,
+  handoffNotesEnabled: true,
+  useWorktrees: true,
+  aiProvider: 'claude-code',
 }
 
 export async function loadProjectSettings(projectId: string): Promise<ProjectSettingsConfig> {
@@ -114,13 +130,31 @@ export async function loadProjectSettings(projectId: string): Promise<ProjectSet
   }
 }
 
+/**
+ * Load the raw project overrides for every unified-settings hierarchy key.
+ * A `null` value means the project has no override and inherits from global.
+ */
+export async function loadProjectHierarchyOverrides(
+  projectId: string,
+): Promise<Record<string, string | null>> {
+  const entries = await Promise.all(
+    PROJECT_HIERARCHY_KEYS.map(
+      async (key) => [key, await getProjectConfig(projectId, key)] as const,
+    ),
+  )
+  return Object.fromEntries(entries)
+}
+
 export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
-  const [taskIdPrefix, githubToken, codeCleanupTasksEnabled, taskDisplayTitleMetadataUpdatesEnabled, githubPollInterval] = await Promise.all([
+  const [taskIdPrefix, githubToken, codeCleanupTasksEnabled, taskDisplayTitleMetadataUpdatesEnabled, githubPollInterval, handoffNotesEnabled, useWorktrees, aiProvider] = await Promise.all([
     getConfig('task_id_prefix'),
     getConfig('github_token'),
     getConfig('code_cleanup_tasks_enabled'),
     getConfig('task_display_title_metadata_updates_enabled'),
     getConfig('github_poll_interval'),
+    getConfig('handoff_notes_enabled'),
+    getConfig('use_worktrees'),
+    getConfig('ai_provider'),
   ])
 
   return {
@@ -129,6 +163,9 @@ export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
     codeCleanupTasksEnabled: codeCleanupTasksEnabled === 'true',
     taskDisplayTitleMetadataUpdatesEnabled: taskDisplayTitleMetadataUpdatesEnabled === 'true',
     githubPollInterval: parseGitHubPollIntervalSeconds(githubPollInterval),
+    handoffNotesEnabled: handoffNotesEnabled == null ? DEFAULT_GLOBAL_SETTINGS.handoffNotesEnabled : handoffNotesEnabled === 'true',
+    useWorktrees: useWorktrees == null ? DEFAULT_GLOBAL_SETTINGS.useWorktrees : useWorktrees === 'true',
+    aiProvider: aiProvider ?? DEFAULT_GLOBAL_SETTINGS.aiProvider,
   }
 }
 

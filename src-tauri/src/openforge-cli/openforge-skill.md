@@ -22,7 +22,9 @@ Do not bypass the launcher with the underlying script path.
 
 If OpenForge is listening on a non-default HTTP bridge port, set `OPENFORGE_HTTP_PORT` before running the command. The default is `17422`.
 
-Use canonical nested command groups (`openforge task create`, `openforge task update`, `openforge task list`, `openforge task plan apply`, `openforge project list`, `openforge project labels list`, `openforge debug process-memory`). Flat task/project compatibility aliases are no longer supported.
+Use canonical nested command groups (`openforge task create`, `openforge task update`, `openforge task start`, `openforge task list`, `openforge task plan apply`, `openforge project list`, `openforge project labels list`, `openforge debug process-memory`). Flat task/project compatibility aliases are no longer supported.
+
+`openforge task start --task-id <id>` starts the native configured implementation flow using persisted task and project configuration. Dependency, concurrent-start, active-session, workspace, provider, and PTY safeguards remain authoritative; the command does not accept runtime overrides.
 
 Plugin management commands are local-only for agent-facing use: install from a local source path with `openforge plugin install --path <local-plugin-source>`, separately enable or disable an installed plugin for a project with `openforge plugin enable|disable --plugin-id <id> --project-id <id>`, and explicitly reload installed artifacts with `openforge plugin reload --plugin-id <id> [--project-id <id>]`. Do not pass npm, git, source-spec, watch, or rebuild inputs to these commands.
 
@@ -42,6 +44,7 @@ openforge task create --initial-prompt "Describe the follow-up work" --worktree 
 openforge task update --task-id T-123 --summary "What changed and what needs attention"
 openforge task update --task-id T-124 --initial-prompt "Corrected backlog prompt"
 openforge task get --task-id T-123
+openforge task start --task-id T-123
 openforge project labels list --project-id P-1
 openforge debug process-memory
 openforge task labels list --task-id T-123
@@ -85,7 +88,7 @@ openforge task update --help
 - Create follow-up tasks for real cleanup or missing work; do not create tasks for trivial preferences.
 - Update the active task with concise Handoff Notes before finishing; this writes the task summary only.
 - Use `task delete` only when the user explicitly wants an OpenForge task removed; it returns JSON status output from the backend deletion bridge.
-- Use dependencies to record prerequisite ordering, not to mark tasks blocked; Start Task enforcement is intentionally left to the app UX.
+- Use dependencies to record prerequisite ordering. `task start` enforces that every dependency is done before launching the configured implementation flow.
 - Use labels to record task categories or triage context when useful. Run `project labels list` before creating follow-up tasks when a project id is available; reuse useful existing labels and avoid noisy one-off labels.
 - Task summaries are Markdown-formatted; use short paragraphs or bullets when they improve readability.
 - The CLI prints JSON so you can pass results back into your reasoning without scraping UI text.

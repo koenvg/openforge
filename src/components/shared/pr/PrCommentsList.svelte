@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { PrComment } from '../../../lib/types'
+  import { createCommentAddressing } from '../../../lib/commentAddressing.svelte'
   import MarkdownContent from '../adapters/MarkdownContent.svelte'
 
   interface Props {
@@ -19,6 +20,12 @@
     showMarkAddressed = false,
     density = 'detail',
   }: Props = $props()
+
+  const commentAddressing = createCommentAddressing()
+
+  function handleMarkAddressed(commentId: number): Promise<boolean> {
+    return commentAddressing.run(commentId, () => onMarkAddressed?.(commentId))
+  }
 </script>
 
 <div class="flex flex-col gap-2 min-w-0">
@@ -35,11 +42,20 @@
           {/if}
         </div>
         {#if showMarkAddressed && onMarkAddressed}
+          {@const addressError = commentAddressing.errorFor(comment.id)}
+          {@const isAddressing = commentAddressing.isAddressing(comment.id)}
           <button
             class="btn btn-ghost btn-xs text-success text-[0.65rem] h-auto min-h-0 py-0.5 shrink-0"
-            onclick={() => void onMarkAddressed(comment.id)}
+            disabled={isAddressing}
+            onclick={() => void handleMarkAddressed(comment.id)}
           >
-            ✓ Mark addressed
+            {#if isAddressing}
+              Marking…
+            {:else if addressError}
+              Retry mark addressed
+            {:else}
+              ✓ Mark addressed
+            {/if}
           </button>
         {/if}
       </div>
@@ -48,6 +64,9 @@
         : 'text-xs text-base-content/75 leading-relaxed break-words [&_.markdown-body]:text-xs [&_.markdown-body_pre]:text-[10px] [&_.markdown-body_code]:text-[10px] [&_.markdown-body_p]:my-1'}>
         <MarkdownContent content={comment.body} imageBaseUrl={imageBaseUrlForComment(comment)} />
       </div>
+      {#if commentAddressing.errorFor(comment.id)}
+        <p class="m-0 text-xs text-error" role="alert">{commentAddressing.errorFor(comment.id)}</p>
+      {/if}
     </article>
   {/each}
 </div>

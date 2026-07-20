@@ -19,6 +19,17 @@ vi.mock("../../lib/stores", () => ({
 	taskDraftNotes: writable(new Map()),
 }));
 
+const { navigateMock } = vi.hoisted(() => ({ navigateMock: vi.fn() }))
+
+vi.mock('../../lib/fileViewerPlugin', () => ({
+  FILE_VIEWER_VIEW_KEY: 'plugin:com.openforge.file-viewer:files',
+  revealFileInFileViewer: vi.fn().mockResolvedValue(true),
+}))
+
+vi.mock('../../lib/router.svelte', () => ({
+  useAppRouter: () => ({ navigate: navigateMock }),
+}))
+
 vi.mock("@openforge-app/pr-review-ui/useVirtualizer.svelte", () => ({
 	createVirtualizer: vi.fn((opts: { getCount: () => number }) => ({
 		get virtualItems() {
@@ -62,6 +73,7 @@ import {
 	getActiveSelfReviewComments,
 	getCommitDiff,
 	getPrComments,
+	markCommentAddressed,
 	getTaskBatchFileContents,
 	getTaskCommits,
 	getTaskFileContents,
@@ -76,7 +88,7 @@ import {
 } from "../../lib/taskScopedSelfReviewState";
 import { createVirtualizer } from "@openforge-app/pr-review-ui/useVirtualizer.svelte";
 import { clearTaskReviewPaneState, getTaskReviewFileIdentity, getTaskReviewPaneState, markTaskReviewFileReviewed } from "../../lib/taskReviewPaneState";
-
+import { FILE_VIEWER_VIEW_KEY, revealFileInFileViewer } from '../../lib/fileViewerPlugin';
 const baseTask: Task = {
 	id: "task-1",
 	initial_prompt: "Test Task",
@@ -92,6 +104,7 @@ const baseTask: Task = {
 	worktree_source: null,
 	worktree_branch: null,
 	handoff_notes_enabled: true,
+	source_ticket_url: null,
 	depends_on: [],
 	created_at: Date.now(),
 	updated_at: Date.now(),
@@ -975,6 +988,40 @@ describe("SelfReviewView — hide addressed comments", () => {
 		});
 	});
 
+	it("keeps failed Review comment addressing visible and retryable", async () => {
+		const comment = makeComment(7, 0, "Review retry comment");
+		vi.mocked(getPrComments).mockResolvedValue([comment]);
+		vi.mocked(markCommentAddressed)
+			.mockRejectedValueOnce(new Error("review address failed"))
+			.mockResolvedValueOnce(undefined);
+		ticketPrs.set(new Map([["task-1", [mockPr]]]));
+		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
+
+		render(SelfReviewView, {
+			props: {
+				task: baseTask,
+				agentStatus: null,
+				onSendToAgent: vi.fn(),
+			},
+		});
+
+		await fireEvent.click(await screen.findByRole("button", { name: /mark addressed/i }));
+
+		await waitFor(() => {
+			expect(screen.getByText("Review retry comment")).toBeTruthy();
+			expect(screen.getByRole("alert").textContent).toContain("review address failed");
+			expect(screen.getByRole("button", { name: "Retry mark addressed" })).toBeTruthy();
+		});
+
+		await fireEvent.click(screen.getByRole("button", { name: "Retry mark addressed" }));
+
+		await waitFor(() => {
+			expect(markCommentAddressed).toHaveBeenCalledTimes(2);
+			expect(screen.queryByText("Review retry comment")).toBeNull();
+			expect(screen.queryByRole("alert")).toBeNull();
+		});
+	});
+
 	it("toggle shows addressed comments", async () => {
 		const comments = [
 			makeComment(1, 0), // unaddressed
@@ -1166,4 +1213,48 @@ describe("SelfReviewView — non-application file filter", () => {
 			expect(screen.getByLabelText("Mark docs/guide.mdx reviewed")).toBeTruthy();
 		});
 	});
+});
+
+describe('SelfReviewView Rich Diff repository paths', () => {
+  beforeEach(() => {
+    clearTaskReviewPaneState();
+    selfReviewStateByTask.set(new Map());
+    pendingManualComments.set([]);
+    ticketPrs.set(new Map());
+    vi.clearAllMocks();
+    globalThis.Worker = InlineDiffWorker as unknown as typeof Worker;
+  });
+
+  it('loads nested worktree images and reveals relative links in the file viewer', async () => {
+    const markdownFile: PrFileDiff = { ...baseDiff, filename: 'docs/guides/README.md', sha: 'docs-sha' };
+    vi.mocked(getTaskDiff).mockResolvedValue([markdownFile]);
+    vi.mocked(getTaskBatchFileContents).mockResolvedValue([[
+      '',
+      '![Diagram](../assets/diagram.png)\n\n[Setup](../SETUP.md)',
+    ]]);
+    vi.mocked(getTaskFileContents).mockResolvedValue(['', 'base64-diagram']);
+
+    render(SelfReviewView, {
+      props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
+    });
+
+    await fireEvent.click(await screen.findByRole('button', { name: `Show rich diff for ${markdownFile.filename}` }));
+
+    await waitFor(() => {
+      expect(getTaskFileContents).toHaveBeenCalledWith(
+        baseTask.id,
+        'docs/assets/diagram.png',
+        null,
+        'modified',
+        true,
+        true,
+      );
+      expect(screen.getByRole('img', { name: 'Diagram' }).getAttribute('src'))
+        .toBe('data:image/png;base64,base64-diagram');
+    });
+
+    await fireEvent.click(screen.getByRole('link', { name: 'Setup' }));
+    expect(revealFileInFileViewer).toHaveBeenCalledWith('docs/SETUP.md');
+    expect(navigateMock).toHaveBeenCalledWith(FILE_VIEWER_VIEW_KEY);
+  });
 });

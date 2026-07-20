@@ -10,7 +10,7 @@ import type { RuntimeContributionRegistryInstance } from './runtimeContributionR
 import { createIpcPluginStorage } from './pluginStorage'
 import type { PluginManifest } from './types'
 import { getPackageMetadataForPlugin, setPluginRuntimeError, setPluginRuntimeState } from './pluginInstallState'
-import { clearPluginRuntimeHostState, createPluginRuntimeHost } from './pluginHostCommands'
+import { clearPluginRuntimeHostState, createPluginRuntimeHost, deactivatePluginBackend } from './pluginHostCommands'
 import { clearPluginHostSubscriptions } from './pluginHostEvents'
 import {
   applyRuntimeSnapshotContributions,
@@ -20,7 +20,12 @@ import {
   stopPluginBackgroundServices,
 } from './pluginRuntimeContributions'
 
-const activationPromises = new Map<string, Promise<boolean>>()
+type ActivationRecord = {
+  generation: number
+  promise: Promise<boolean>
+}
+
+const activationPromises = new Map<string, ActivationRecord>()
 const activeRuntimeRegistries = new Map<string, RuntimeContributionRegistryInstance>()
 const pluginFrontendReloadGenerations = new Map<string, number>()
 
@@ -36,13 +41,12 @@ function bumpPluginFrontendReloadGeneration(pluginId: string): void {
   pluginFrontendReloadGenerations.set(pluginId, (pluginFrontendReloadGenerations.get(pluginId) ?? 0) + 1)
 }
 
-function normalizePluginAssetUrl(pluginId: string, frontendEntry: string): string {
+function normalizePluginAssetUrl(pluginId: string, frontendEntry: string, activationGeneration: number): string {
   const entry = frontendEntry.replace(/^\.\//, '').replace(/^\//, '')
   const assetUrl = `plugin://${pluginId}/${entry}`
-  const reloadGeneration = pluginFrontendReloadGenerations.get(pluginId)
-  return reloadGeneration === undefined
+  return activationGeneration === 0
     ? assetUrl
-    : appendReloadGenerationQuery(assetUrl, reloadGeneration)
+    : appendReloadGenerationQuery(assetUrl, activationGeneration)
 }
 
 function createFrontendRuntimeRegistryForPlugin(pluginId: string, manifest: PluginManifest): RuntimeContributionRegistryInstance {
@@ -55,26 +59,65 @@ function createFrontendRuntimeRegistryForPlugin(pluginId: string, manifest: Plug
   })
 }
 
-async function activateFrontendRuntimePlugin(pluginId: string, manifest: PluginManifest, frontendPlugin: Parameters<RuntimeContributionRegistryInstance['activateFrontend']>[0]): Promise<boolean> {
+async function discardFrontendRuntimeActivation(pluginId: string, runtimeRegistry: RuntimeContributionRegistryInstance): Promise<void> {
+  let cleanupError: unknown = null
+  try {
+    await runtimeRegistry.deactivate()
+  } catch (error) {
+    cleanupError = error
+  }
+
+  activeRuntimeRegistries.delete(pluginId)
+  clearPluginRuntimeHostState(pluginId)
+  try {
+    await stopPluginBackgroundServices(pluginId)
+  } catch (error) {
+    cleanupError ??= error
+  } finally {
+    clearPluginRuntimeContributions(pluginId)
+  }
+
+  if (cleanupError !== null) {
+    console.error(`[pluginActivationLifecycle] Failed to discard frontend runtime activation for ${pluginId}:`, cleanupError)
+  }
+}
+
+async function activateFrontendRuntimePlugin(
+  pluginId: string,
+  manifest: PluginManifest,
+  frontendPlugin: Parameters<RuntimeContributionRegistryInstance['activateFrontend']>[0],
+  activationGeneration: number,
+): Promise<boolean> {
   const runtimeRegistry = createFrontendRuntimeRegistryForPlugin(pluginId, manifest)
 
   try {
     await runtimeRegistry.activateFrontend(frontendPlugin)
-    activeRuntimeRegistries.set(pluginId, runtimeRegistry)
+    if ((pluginFrontendReloadGenerations.get(pluginId) ?? 0) !== activationGeneration) {
+      await discardFrontendRuntimeActivation(pluginId, runtimeRegistry)
+      setPluginRuntimeState(pluginId, 'installed', null)
+      return false
+    }
     await applyRuntimeSnapshotContributions(pluginId, runtimeRegistry.getSnapshot())
+    if ((pluginFrontendReloadGenerations.get(pluginId) ?? 0) !== activationGeneration) {
+      await discardFrontendRuntimeActivation(pluginId, runtimeRegistry)
+      setPluginRuntimeState(pluginId, 'installed', null)
+      return false
+    }
+    activeRuntimeRegistries.set(pluginId, runtimeRegistry)
     setPluginRuntimeState(pluginId, 'active', null)
     return true
   } catch (error) {
-    await runtimeRegistry.deactivate()
-    activeRuntimeRegistries.delete(pluginId)
-    clearPluginRuntimeHostState(pluginId)
-    clearPluginRuntimeContributions(pluginId)
+    await discardFrontendRuntimeActivation(pluginId, runtimeRegistry)
+    if ((pluginFrontendReloadGenerations.get(pluginId) ?? 0) !== activationGeneration) {
+      setPluginRuntimeState(pluginId, 'installed', null)
+      return false
+    }
     setPluginRuntimeError(pluginId, error)
     return false
   }
 }
 
-async function activateBuiltinPluginModule(pluginId: string): Promise<boolean> {
+async function activateBuiltinPluginModule(pluginId: string, activationGeneration: number): Promise<boolean> {
   try {
     const { getBuiltinPluginModule } = await import('./builtinPluginModules')
     const builtinModule = getBuiltinPluginModule(pluginId)
@@ -87,7 +130,7 @@ async function activateBuiltinPluginModule(pluginId: string): Promise<boolean> {
       if (!manifest) {
         throw new Error(`Builtin plugin ${pluginId} is not installed`)
       }
-      return activateFrontendRuntimePlugin(pluginId, manifest, builtinModule)
+      return activateFrontendRuntimePlugin(pluginId, manifest, builtinModule, activationGeneration)
     }
 
     throw new Error(`Builtin plugin ${pluginId} uses the legacy activate(context) API, which is no longer supported; built-ins must use defineFrontendPlugin(...) runtime registration`)
@@ -97,7 +140,7 @@ async function activateBuiltinPluginModule(pluginId: string): Promise<boolean> {
   }
 }
 
-async function activateExternalPluginModule(pluginId: string, manifest: PluginManifest): Promise<boolean> {
+async function activateExternalPluginModule(pluginId: string, manifest: PluginManifest, activationGeneration: number): Promise<boolean> {
   if (!manifest.frontend) {
     if (!manifest.backend) {
       setPluginRuntimeError(pluginId, new Error(`Plugin ${pluginId} metadata is missing a frontend or backend entry`))
@@ -108,13 +151,21 @@ async function activateExternalPluginModule(pluginId: string, manifest: PluginMa
     return true
   }
 
-  const loaded = await loadPluginFrontend(pluginId, normalizePluginAssetUrl(pluginId, manifest.frontend))
+  const frontendUrl = normalizePluginAssetUrl(pluginId, manifest.frontend, activationGeneration)
+  const frontendStyles = get(installedPlugins).get(pluginId)?.packageMetadata?.frontendStyles ?? []
+  const stylesheetUrls = frontendStyles.map(stylesheet => normalizePluginAssetUrl(pluginId, stylesheet, activationGeneration))
+  const loaded = stylesheetUrls.length > 0
+    ? await loadPluginFrontend(pluginId, frontendUrl, stylesheetUrls)
+    : await loadPluginFrontend(pluginId, frontendUrl)
   if (!loaded) return false
 
   if (isFrontendPluginModule(loaded.module)) {
-    return activateFrontendRuntimePlugin(pluginId, manifest, loaded.module)
+    const activated = await activateFrontendRuntimePlugin(pluginId, manifest, loaded.module, activationGeneration)
+    if (!activated) clearLoadedPlugin(pluginId)
+    return activated
   }
 
+  clearLoadedPlugin(pluginId)
   setPluginRuntimeError(pluginId, new Error(`Plugin ${pluginId} uses the legacy activate(context) API, which is no longer supported; export defineFrontendPlugin(...) and register contributions at runtime`))
   return false
 }
@@ -154,8 +205,15 @@ export function _resetPluginActivationLifecycleForTests(): void {
 }
 
 export async function activatePlugin(pluginId: string): Promise<boolean> {
-  if (activationPromises.has(pluginId)) {
-    return activationPromises.get(pluginId) as Promise<boolean>
+  const activationGeneration = pluginFrontendReloadGenerations.get(pluginId) ?? 0
+  const pendingActivation = activationPromises.get(pluginId)
+  if (pendingActivation) {
+    if (pendingActivation.generation === activationGeneration) {
+      return pendingActivation.promise
+    }
+
+    await pendingActivation.promise.catch(() => false)
+    return activatePlugin(pluginId)
   }
 
   const map = get(installedPlugins)
@@ -171,19 +229,20 @@ export async function activatePlugin(pluginId: string): Promise<boolean> {
     await stopPluginBackgroundServices(pluginId)
 
     const activated = entry.isBuiltin
-      ? await activateBuiltinPluginModule(pluginId)
-      : await activateExternalPluginModule(pluginId, entry.manifest)
+      ? await activateBuiltinPluginModule(pluginId, activationGeneration)
+      : await activateExternalPluginModule(pluginId, entry.manifest, activationGeneration)
 
     return activated
   })()
 
-  activationPromises.set(pluginId, activation)
-
-  try {
-    return await activation
-  } finally {
-    activationPromises.delete(pluginId)
-  }
+  const activationRecord: ActivationRecord = { generation: activationGeneration, promise: activation }
+  activationRecord.promise = activation.finally(() => {
+    if (activationPromises.get(pluginId) === activationRecord) {
+      activationPromises.delete(pluginId)
+    }
+  })
+  activationPromises.set(pluginId, activationRecord)
+  return activationRecord.promise
 }
 
 export async function executePluginCommand(pluginId: string, commandId: string, payload?: unknown): Promise<boolean> {
@@ -313,8 +372,9 @@ export function listInjectionPointsAcrossPlugins(
 }
 
 export async function deactivatePluginById(pluginId: string): Promise<void> {
-  await deactivateLoadedPluginModule(pluginId)
+  await deactivatePluginBackend(pluginId)
   bumpPluginFrontendReloadGeneration(pluginId)
+  await deactivateLoadedPluginModule(pluginId)
   clearPluginRuntimeContributions(pluginId)
   await stopPluginBackgroundServices(pluginId)
   clearPluginHostSubscriptions(pluginId)

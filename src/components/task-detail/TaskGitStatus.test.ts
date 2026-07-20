@@ -25,6 +25,8 @@ function summary(overrides: Partial<GitStatusSummary> = {}): GitStatusSummary {
     uncommitted_files: 38,
     insertions: 1607,
     deletions: 642,
+    untracked_files: 3,
+    untracked_insertions: 156,
     ...overrides,
   }
 }
@@ -70,12 +72,29 @@ describe('TaskGitStatus', () => {
     expect(await screen.findByText('up to date')).toBeTruthy()
   })
 
-  it('shows "none" for both commits and uncommitted when nothing has changed', async () => {
-    mockGet.mockResolvedValue(summary({ has_remote: true, remote_ahead: 0, remote_behind: 0, local_commits: 0, uncommitted_files: 0, insertions: 0, deletions: 0 }))
+  it('shows "none" for commits, uncommitted, and untracked when nothing has changed', async () => {
+    mockGet.mockResolvedValue(summary({ has_remote: true, remote_ahead: 0, remote_behind: 0, local_commits: 0, uncommitted_files: 0, insertions: 0, deletions: 0, untracked_files: 0, untracked_insertions: 0 }))
     render(TaskGitStatus, { props: { taskId: 'T-1' } })
 
     await waitFor(() => expect(mockGet).toHaveBeenCalled())
-    expect(await screen.findAllByText('none')).toHaveLength(2)
+    expect(await screen.findAllByText('none')).toHaveLength(3)
+  })
+
+  it('shows untracked files and their line count', async () => {
+    render(TaskGitStatus, { props: { taskId: 'T-1' } })
+
+    const untracked = await screen.findByLabelText('Untracked files')
+    expect(untracked.textContent).toContain('3 files')
+    expect(untracked.textContent).toContain('+156')
+  })
+
+  it('reports untracked new files even when no tracked file has changed', async () => {
+    mockGet.mockResolvedValue(summary({ uncommitted_files: 0, insertions: 0, deletions: 0, untracked_files: 1, untracked_insertions: 12 }))
+    render(TaskGitStatus, { props: { taskId: 'T-1' } })
+
+    const untracked = await screen.findByLabelText('Untracked files')
+    expect(untracked.textContent).toContain('1 file')
+    expect(untracked.textContent).toContain('+12')
   })
 
   it('refetches when the refresh button is clicked', async () => {

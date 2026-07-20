@@ -26,6 +26,7 @@ const makeTask = (id: string, status: BoardStatus): Task => ({
   worktree_source: null,
   worktree_branch: null,
   handoff_notes_enabled: true,
+  source_ticket_url: null,
   depends_on: [],
 })
 

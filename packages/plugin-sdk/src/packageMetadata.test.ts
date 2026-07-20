@@ -21,6 +21,7 @@ function validMetadata(overrides: Record<string, unknown> = {}): Record<string, 
     description: 'GitHub PR review and sync',
     icon: 'github',
     frontend: './dist/frontend.js',
+    frontendStyles: ['./dist/plugin.css'],
     backend: './dist/backend.js',
     requires: ['projects', 'tasks', 'commands', 'storage'],
     ...overrides,
@@ -59,6 +60,7 @@ describe('package.json#openforge metadata contract', () => {
       description: '',
       frontend: '',
       backend: 123,
+      frontendStyles: 'dist/plugin.css',
       requires: ['tasks', 'unknown-capability', 42],
     })
 
@@ -68,8 +70,44 @@ describe('package.json#openforge metadata contract', () => {
     expect(errors).toContainEqual({ path: 'description', message: 'Required string' })
     expect(errors).toContainEqual({ path: 'frontend', message: 'Must be a non-empty string' })
     expect(errors).toContainEqual({ path: 'backend', message: 'Must be a non-empty string' })
+    expect(errors).toContainEqual({ path: 'frontendStyles', message: 'Must be an array' })
     expect(errors).toContainEqual({ path: 'requires[1]', message: 'Unknown OpenForge capability "unknown-capability"' })
     expect(errors).toContainEqual({ path: 'requires[2]', message: 'Must be a string' })
+  })
+
+  it('validates declared frontend stylesheet paths', () => {
+    expect(validateOpenForgePackageMetadata(validMetadata({
+      frontendStyles: ['./dist/plugin.css', './dist/theme.css'],
+    }))).toEqual([])
+
+    expect(validateOpenForgePackageMetadata(validMetadata({ frontendStyles: 'dist/plugin.css' }))).toContainEqual({
+      path: 'frontendStyles',
+      message: 'Must be an array',
+    })
+    expect(validateOpenForgePackageMetadata(validMetadata({ frontendStyles: ['', 42] }))).toEqual(expect.arrayContaining([
+      { path: 'frontendStyles[0]', message: 'Must be a non-empty string' },
+      { path: 'frontendStyles[1]', message: 'Must be a non-empty string' },
+    ]))
+    expect(validateOpenForgePackageMetadata(validMetadata({ frontendStyles: [] }))).toContainEqual({
+      path: 'frontendStyles',
+      message: 'Must contain at least one stylesheet path',
+    })
+    expect(validateOpenForgePackageMetadata(validMetadata({
+      frontendStyles: ['./dist/plugin.css', './dist/plugin.css'],
+    }))).toContainEqual({
+      path: 'frontendStyles[1]',
+      message: 'Duplicate stylesheet path',
+    })
+    expect(validateOpenForgePackageMetadata(validMetadata({
+      frontendStyles: ['./dist/plugin.js'],
+    }))).toContainEqual({
+      path: 'frontendStyles[0]',
+      message: 'Must point to a built CSS artifact',
+    })
+    expect(validateOpenForgePackageMetadata(validMetadata({ frontend: undefined }))).toContainEqual({
+      path: 'frontendStyles',
+      message: 'Requires a frontend entry',
+    })
   })
 
   it('uses apiVersion as a hard compatibility gate', () => {
@@ -93,6 +131,12 @@ describe('package.json#openforge metadata contract', () => {
       required: ['id', 'apiVersion', 'displayName', 'description'],
     })
     expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.properties).not.toHaveProperty('contributes')
+    expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.properties.frontendStyles).toMatchObject({
+      type: 'array',
+      uniqueItems: true,
+      items: { type: 'string', minLength: 1 },
+    })
+    expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.dependentRequired).toEqual({ frontendStyles: ['frontend'] })
     expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.additionalProperties).toBe(false)
     expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.properties.apiVersion).toEqual({ enum: [1] })
   })

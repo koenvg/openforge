@@ -100,6 +100,24 @@ describe('runtime contribution registry', () => {
     })
   })
 
+  it('sanitizes custom SVG view icons at the runtime registration boundary', () => {
+    const registry = makeRegistry()
+
+    registry.getFrontendApi().views.register({
+      id: 'issues',
+      title: 'Issues',
+      icon: {
+        type: 'svg',
+        svg: '<svg viewBox="0 0 24 24" onload="alert(1)"><path d="M12 2 22 12 12 22 2 12Z" fill="currentColor"/></svg>',
+      },
+      placement: 'rail',
+      component: PluginView,
+    })
+
+    expect(registry.getSnapshot().views[0]?.icon).toMatchObject({ type: 'svg' })
+    expect(registry.getSnapshot().views[0]?.icon).not.toEqual(expect.objectContaining({ svg: expect.stringContaining('onload') }))
+  })
+
   it('uses taskUI as the canonical tab and section registry and disposes both contribution types', async () => {
     const registry = makeRegistry()
     const frontend = registry.getFrontendApi()
@@ -312,7 +330,7 @@ describe('runtime contribution registry', () => {
   })
 
   it('supports frontend-only plugins using storage, task creation, and notifications', async () => {
-    const createdTask = { id: 'T-scheduled', initial_prompt: 'Scheduled prompt', prompt: null, title: null, title_source: null, title_generated_at: null, summary: null, status: 'backlog' as const, agent: null, permission_mode: null, worktree_source: null, worktree_branch: null, handoff_notes_enabled: true, depends_on: [], project_id: 'P-1', created_at: 3, updated_at: 3 }
+    const createdTask = { id: 'T-scheduled', initial_prompt: 'Scheduled prompt', prompt: null, title: null, title_source: null, title_generated_at: null, summary: null, status: 'backlog' as const, agent: null, permission_mode: null, worktree_source: null, worktree_branch: null, handoff_notes_enabled: true, source_ticket_url: null, depends_on: [], project_id: 'P-1', created_at: 3, updated_at: 3 }
     const host = {
       createTask: vi.fn(async () => createdTask),
       notify: vi.fn(async () => undefined),
@@ -335,10 +353,10 @@ describe('runtime contribution registry', () => {
   })
 
   it('exposes typed core API wrappers through the configured host bridge', async () => {
-    const createdTask = { id: 'T-2', initial_prompt: 'New prompt', prompt: null, title: null, title_source: null, title_generated_at: null, summary: null, status: 'backlog' as const, agent: null, permission_mode: null, worktree_source: null, worktree_branch: null, handoff_notes_enabled: true, depends_on: ['T-1'], project_id: 'P-1', created_at: 3, updated_at: 3 }
+    const createdTask = { id: 'T-2', initial_prompt: 'New prompt', prompt: null, title: null, title_source: null, title_generated_at: null, summary: null, status: 'backlog' as const, agent: null, permission_mode: null, worktree_source: null, worktree_branch: null, handoff_notes_enabled: true, source_ticket_url: null, depends_on: ['T-1'], project_id: 'P-1', created_at: 3, updated_at: 3 }
     const host = {
       listProjects: vi.fn(async () => [{ id: 'P-1', name: 'OpenForge', path: '/repo', created_at: 1, updated_at: 2 }]),
-      listTasks: vi.fn(async () => [{ id: 'T-1', initial_prompt: 'Prompt', prompt: null, title: null, title_source: null, title_generated_at: null, summary: null, status: 'doing' as const, agent: null, permission_mode: null, worktree_source: null, worktree_branch: null, handoff_notes_enabled: true, depends_on: [], project_id: 'P-1', created_at: 1, updated_at: 2 }]),
+      listTasks: vi.fn(async () => [{ id: 'T-1', initial_prompt: 'Prompt', prompt: null, title: null, title_source: null, title_generated_at: null, summary: null, status: 'doing' as const, agent: null, permission_mode: null, worktree_source: null, worktree_branch: null, handoff_notes_enabled: true, source_ticket_url: null, depends_on: [], project_id: 'P-1', created_at: 1, updated_at: 2 }]),
       createTask: vi.fn(async () => createdTask),
       startTaskImplementation: vi.fn(async () => ({ taskId: 'T-2', workspacePath: '/repo/.worktrees/T-2', sessionId: 'S-1' })),
       readFile: vi.fn(async () => ({ type: 'text' as const, content: 'hello', mimeType: null, size: 5 })),
@@ -602,6 +620,11 @@ describe('runtime contribution registry', () => {
       label: 'view component',
       register: (registry: ReturnType<typeof makeRegistry>) => registry.getFrontendApi().views.register({ id: 'prs', title: 'Pull Requests', icon: 'git-pull-request', placement: 'rail' } as never),
       error: /views.*component/i,
+    },
+    {
+      label: 'view icon',
+      register: (registry: ReturnType<typeof makeRegistry>) => registry.getFrontendApi().views.register({ id: 'prs', title: 'Pull Requests', icon: { type: 'svg', svg: '<svg></svg>' }, placement: 'rail', component: PluginView }),
+      error: /views.*invalid icon.*viewBox/i,
     },
     {
       label: 'task pane title',

@@ -115,7 +115,7 @@
   <div class="sr-only" aria-live="polite" aria-atomic="true">{liveMessage}</div>
   <div class="flex items-center overflow-x-auto border-b border-base-300 bg-base-200 shrink-0" role="tablist" aria-label="Shell terminals">
     {#each tabs as tab, tabPosition (tab.index)}
-      <div class="flex items-center whitespace-nowrap">
+      <div class="flex items-center whitespace-nowrap border-b-2 {activeTabIndex === tab.index ? 'border-primary' : 'border-transparent'}">
         <button
           id={tabId(tab)}
           role="tab"
@@ -125,7 +125,7 @@
           aria-controls={panelId(tab)}
           aria-label={tabAccessibleLabel(tab)}
           title={`${tab.label} (${tabStatus(tab)})`}
-          class="flex items-center gap-1 px-3 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-primary rounded {activeTabIndex === tab.index ? 'border-b-2 border-primary text-base-content font-semibold' : 'text-base-content/50'}"
+          class="flex items-center gap-1 pl-3 pr-1 py-1.5 text-sm cursor-pointer focus-visible:ring-2 focus-visible:ring-primary rounded {activeTabIndex === tab.index ? 'text-base-content font-semibold' : 'text-base-content/50'}"
           onclick={() => switchToTab(tabPosition)}
         >
           <span>{tab.label}</span>
@@ -134,7 +134,7 @@
         </button>
         <button
           type="button"
-          class="px-2 py-1.5 text-xs leading-none opacity-70 hover:opacity-100 focus-visible:ring-2 focus-visible:ring-primary rounded"
+          class="flex items-center pl-1 pr-3 py-1.5 text-base leading-none cursor-pointer disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-primary rounded {activeTabIndex === tab.index ? 'text-base-content/70 hover:text-base-content' : 'text-base-content/40 hover:text-base-content/70'}"
           disabled={tabs.length <= 1 && !isTabExited(tab.key)}
           onclick={() => closeTab(tab, { allowClosingLastTab: isTabExited(tab.key) })}
           aria-label={`Close ${tab.label}`}

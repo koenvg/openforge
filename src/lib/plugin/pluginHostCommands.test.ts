@@ -55,6 +55,10 @@ describe('plugin host commands', () => {
       worktreeBranch: null,
       title: null,
       handoffNotesEnabled: true,
+      sourceTicketUrl: null,
+      codeCleanupEnabled: undefined,
+      taskDisplayTitleUpdatesEnabled: undefined,
+      aiProvider: null,
     })
 
     invoke.mockResolvedValueOnce(task)

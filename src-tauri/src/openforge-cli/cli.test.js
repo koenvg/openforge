@@ -200,6 +200,7 @@ describe('OpenForge CLI', () => {
     for (const command of [
       'openforge task create',
       'openforge task update',
+      'openforge task start',
       'openforge task delete',
       'openforge task get',
       'openforge task list',
@@ -241,6 +242,7 @@ describe('OpenForge CLI', () => {
 
     expect(stdout).toContain('Usage:\n  openforge task create');
     expect(stdout).toContain('openforge task delete --task-id <id>');
+    expect(stdout).toContain('openforge task start --task-id <id>');
     expect(stdout).toContain('openforge project list');
     expect(stdout).toContain('openforge project labels list --project-id <id>');
     expect(stdout).toContain('task list prints compact rows by default');
@@ -310,6 +312,7 @@ describe('OpenForge CLI', () => {
     for (const command of [
       'openforge task create --initial-prompt <text>',
       'openforge task update --task-id <id> (--summary <text> | --initial-prompt <text>)',
+      'openforge task start --task-id <id>',
       'openforge task list --project-id <id>',
       'openforge task get --task-id <id>',
       'openforge task labels list --task-id <id>',
@@ -358,6 +361,29 @@ describe('OpenForge CLI', () => {
       expect(stdout).not.toContain('Flat compatibility alias:');
       expect(stdout).toContain('Task creation hygiene:');
       expect(stdout).toContain('include useful --label values and dependency links when creating related follow-up Tasks');
+      expect(requestCount).toBe(0);
+    } finally {
+      await close(server);
+    }
+  });
+
+  it('prints task start help before contacting the HTTP bridge', async () => {
+    let requestCount = 0;
+    const server = createServer((_req, res) => {
+      requestCount += 1;
+      res.writeHead(500, { 'content-type': 'text/plain' });
+      res.end('should not be called');
+    });
+    const port = await listen(server);
+
+    try {
+      const { stdout } = await runCli(['task', 'start', '--help'], {
+        OPENFORGE_HTTP_PORT: String(port),
+      });
+
+      expect(stdout).toContain('Usage:\n  openforge task start --task-id <id>');
+      expect(stdout).toContain('starts the native configured implementation flow');
+      expect(stdout).toContain('dependency and active-session safeguards');
       expect(requestCount).toBe(0);
     } finally {
       await close(server);
@@ -435,6 +461,27 @@ describe('OpenForge CLI', () => {
     }
   });
 
+  it('requires task start task-id before contacting the HTTP bridge', async () => {
+    let requestCount = 0;
+    const server = createServer((_req, res) => {
+      requestCount += 1;
+      res.writeHead(500, { 'content-type': 'text/plain' });
+      res.end('should not be called');
+    });
+    const port = await listen(server);
+
+    try {
+      await expect(
+        runCli(['task', 'start'], { OPENFORGE_HTTP_PORT: String(port) }),
+      ).rejects.toMatchObject({
+        stderr: expect.stringContaining('missing required flag --task-id'),
+      });
+      expect(requestCount).toBe(0);
+    } finally {
+      await close(server);
+    }
+  });
+
   it('rejects unsupported command flags before contacting the HTTP bridge', async () => {
     let requestCount = 0;
     const server = createServer((_req, res) => {
@@ -451,6 +498,13 @@ describe('OpenForge CLI', () => {
         }),
       ).rejects.toMatchObject({
         stderr: expect.stringContaining('task create does not support --summary'),
+      });
+      await expect(
+        runCli(['task', 'start', '--task-id', 'T-1', '--provider', 'pi'], {
+          OPENFORGE_HTTP_PORT: String(port),
+        }),
+      ).rejects.toMatchObject({
+        stderr: expect.stringContaining('task start does not support --provider'),
       });
       expect(requestCount).toBe(0);
     } finally {
@@ -485,6 +539,46 @@ describe('OpenForge CLI', () => {
     });
 
     expect(result).toEqual({ task_id: 'T-3', project_id: 'P-1', status: 'created' });
+  });
+
+  it('starts tasks through the nested task start command and preserves native run details', async () => {
+    const response = {
+      task_id: 'T-3',
+      session_id: 'session-3',
+      workspace_path: '/tmp/task-3',
+      port: 4321,
+    };
+    const result = await runCliAgainstJsonBridge(['task', 'start', '--task-id', 'T-3'], {
+      method: 'POST',
+      url: '/start_task',
+      expectedBody: { task_id: 'T-3' },
+      response,
+    });
+
+    expect(result).toEqual(response);
+  });
+
+  it('reports native task start lifecycle failures', async () => {
+    const server = createServer((req, res) => {
+      if (req.url !== '/start_task' || req.method !== 'POST') {
+        res.writeHead(404, { 'content-type': 'text/plain' });
+        res.end('not found');
+        return;
+      }
+      res.writeHead(409, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Task dependency T-2 is not done' }));
+    });
+    const port = await listen(server);
+
+    try {
+      await expect(
+        runCli(['task', 'start', '--task-id', 'T-3'], { OPENFORGE_HTTP_PORT: String(port) }),
+      ).rejects.toMatchObject({
+        stderr: expect.stringContaining('OpenForge HTTP 409: {"error":"Task dependency T-2 is not done"}'),
+      });
+    } finally {
+      await close(server);
+    }
   });
 
   it('updates task summaries through the nested task update command', async () => {

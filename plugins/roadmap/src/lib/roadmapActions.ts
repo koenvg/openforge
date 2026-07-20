@@ -1,4 +1,4 @@
-import type { ImplementationRun } from '@openforge-app/plugin-sdk'
+import type { ImplementationRun, JsonObject } from '@openforge-app/plugin-sdk'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import type { BoardCard, RoadmapIssueTaskLink } from './board'
 
@@ -38,6 +38,16 @@ function normalizeRoadmapIssueTaskLink(value: RoadmapIssueTaskLink): RoadmapIssu
     workspacePath: value.workspacePath,
     repo: typeof (value as { repo?: unknown }).repo === 'string' ? (value as { repo: string }).repo : null,
     title: typeof (value as { title?: unknown }).title === 'string' ? (value as { title: string }).title : null,
+  }
+}
+
+function serializeRoadmapIssueTaskLink(link: RoadmapIssueTaskLink): JsonObject {
+  return {
+    taskId: link.taskId,
+    sessionId: link.sessionId,
+    workspacePath: link.workspacePath,
+    repo: link.repo,
+    title: link.title,
   }
 }
 
@@ -122,20 +132,17 @@ async function saveRoadmapIssueTaskLink(
     repo,
     title,
   }
-  await api.storage.task(run.taskId).set(TASK_ISSUE_LINK_KEY, { issueNumber, link })
+  await api.storage.task(run.taskId).set(TASK_ISSUE_LINK_KEY, {
+    issueNumber,
+    link: serializeRoadmapIssueTaskLink(link),
+  })
 
   const links = await loadRoadmapIssueTaskLinks(api, projectId)
   links[issueNumber] = link
 
-  const stored: Record<string, RoadmapIssueTaskLink> = {}
+  const stored: JsonObject = {}
   for (const [issue, link] of Object.entries(links)) {
-    stored[issue] = {
-      taskId: link.taskId,
-      sessionId: link.sessionId,
-      workspacePath: link.workspacePath,
-      repo: link.repo,
-      title: link.title,
-    }
+    stored[issue] = serializeRoadmapIssueTaskLink(link)
   }
   await api.storage.project(projectId).set(ISSUE_TASK_LINKS_KEY, stored)
 }

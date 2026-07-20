@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { setConfig } from '../../lib/ipc'
 import { activeProjectId, attentionCountByProject, hiddenProjectIds, projects, reviewRequestCountByProject } from '../../lib/stores'
 import type { AppView, Project } from '../../lib/types'
+import type { IconRailPluginNavItem } from '../../lib/iconRailNav'
 import AppSidebar from './AppSidebar.svelte'
 
 // In production reviewRequestCountByProject is a `derived` (Readable) store, but this suite
@@ -43,10 +44,23 @@ vi.mock('../../lib/router.svelte', () => ({
 vi.mock('@lucide/svelte', () => {
   const stub = vi.fn()
   return {
+    Boxes: stub,
     ChevronLeft: stub,
     ChevronRight: stub,
     ChevronDown: stub,
+    Clock: stub,
+    Code: stub,
+    FileText: stub,
+    FolderOpen: stub,
+    GitPullRequest: stub,
+    Kanban: stub,
+    LayoutDashboard: stub,
+    Plug: stub,
+    Puzzle: stub,
     Settings: stub,
+    Sparkles: stub,
+    Terminal: stub,
+    Wrench: stub,
     Plus: stub,
     ArrowUp: stub,
     ArrowDown: stub,
@@ -55,13 +69,9 @@ vi.mock('@lucide/svelte', () => {
   }
 })
 
-vi.mock('../../lib/iconRailIcons', () => ({
-  resolveIconRailIcon: () => vi.fn(),
-}))
-
 const GLOBAL_PR_VIEW_KEY = 'plugin:com.openforge.github-sync:pr_review_global'
 
-const globalPrNavItem = {
+const globalPrNavItem: IconRailPluginNavItem = {
   viewKey: GLOBAL_PR_VIEW_KEY as AppView,
   icon: 'boxes',
   title: 'All Pull Requests',
@@ -233,11 +243,11 @@ describe('AppSidebar', () => {
     expect(activeProjectButton.getAttribute('aria-current')).toBeNull()
   })
 
-  it('project is NOT visually active (aria-current) when on project settings view', () => {
+  it('project IS visually active (aria-current) when on project settings view', () => {
     renderSidebar({ currentView: 'settings' })
 
     const activeProjectButton = screen.getByRole('button', { name: /^alpha project$/i })
-    expect(activeProjectButton.getAttribute('aria-current')).toBeNull()
+    expect(activeProjectButton.getAttribute('aria-current')).toBe('true')
   })
 
   it('project IS visually active (aria-current) when on board view', () => {
@@ -268,6 +278,21 @@ describe('AppSidebar', () => {
     it('renders a sidebar plugin nav item with its title', () => {
       renderSidebar({ pluginNavItems: [globalPrNavItem] })
       expect(screen.getByRole('button', { name: /all pull requests/i })).toBeTruthy()
+    })
+
+    it('renders a custom SVG icon inside the sidebar plugin navigation button', () => {
+      renderSidebar({
+        pluginNavItems: [{
+          ...globalPrNavItem,
+          icon: {
+            type: 'svg',
+            svg: '<svg viewBox="0 0 24 24"><path d="M12 2 22 12 12 22 2 12Z" fill="currentColor"></path></svg>',
+          },
+        }],
+      })
+
+      const button = screen.getByRole('button', { name: /all pull requests/i })
+      expect(button.querySelector('path')?.getAttribute('d')).toBe('M12 2 22 12 12 22 2 12Z')
     })
 
     it('clicking a sidebar plugin nav item navigates to its view key', async () => {

@@ -10,11 +10,12 @@
   interface Props {
     task: Task | null
     taskPrs: PullRequestInfo[]
+    canRunApp?: boolean
     onClose: () => void
     onExecute: (actionId: string) => void
   }
 
-  let { task, taskPrs, onClose, onExecute }: Props = $props()
+  let { task, taskPrs, canRunApp = false, onClose, onExecute }: Props = $props()
   let searchQuery = $state('')
   let selectedActionId = $state<string | null>(null)
   let paletteListbox: { handleKeydown: (event: KeyboardEvent) => boolean } | null = $state(null)
@@ -23,7 +24,7 @@
     const taskProjectId = task?.project_id ?? $activeProjectId
     return taskProjectId ? $outOfFocusTaskIdsByProject.get(taskProjectId) ?? new Set<string>() : new Set<string>()
   })
-  let allActions = $derived(getAvailableActions(task, taskPrs, outOfFocusTaskIds))
+  let allActions = $derived(getAvailableActions(task, taskPrs, outOfFocusTaskIds, { canRunApp }))
   let filtered = $derived(filterActions(allActions, searchQuery))
   let orderedActions = $derived(
     ['task', 'navigation', 'general'].flatMap(category => filtered.filter(action => action.category === category))

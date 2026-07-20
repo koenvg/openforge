@@ -3,8 +3,8 @@
   import { commandHeld } from '../../lib/stores'
   import { getIconRailNavItems } from '../../lib/iconRailNav'
   import type { IconRailPluginNavItem } from '../../lib/iconRailNav'
-  import { resolveIconRailIcon } from '../../lib/iconRailIcons'
   import { GITHUB_SYNC_VIEW_KEY } from '../../lib/githubSyncPlugin'
+  import PluginNavigationIcon from './PluginNavigationIcon.svelte'
 
   interface Props {
     currentView: AppView
@@ -26,25 +26,20 @@
     activeProjectAttentionCount = 0,
   }: Props = $props()
 
-  let navItems = $derived(
-    getIconRailNavItems(pluginNavItems).map((item) => ({
-      ...item,
-      Icon: resolveIconRailIcon(item.icon),
-    }))
-  )
+  let navItems = $derived(getIconRailNavItems(pluginNavItems))
 </script>
 
 <div class="w-16 h-full border-r border-base-300/50 flex flex-col items-center py-4 gap-5" style="background-color: {railBg}">
-  {#each navItems as { view, Icon, shortcut, label }}
+  {#each navItems as { view, icon, shortcut, label }}
     <button
       type="button"
-      class="relative cursor-pointer {currentView === view ? 'text-primary' : 'text-base-content/35'}"
+      class="relative cursor-pointer transition-colors {currentView === view ? 'text-primary' : 'text-base-content/35 hover:text-base-content'}"
       title={label}
       aria-label={label}
       aria-current={currentView === view ? 'page' : undefined}
       onclick={() => onNavigate(view)}
     >
-      <Icon size={24} />
+      <PluginNavigationIcon {icon} size={24} />
       <!-- Active project's Focus attention count. Uses the same success/green as the
            project sidebar's green dot, so the rail badge matches the sidebar for the
            active project. Only shown when there are tasks in focus. -->

@@ -40,6 +40,7 @@ Each plugin declares OpenForge metadata in `package.json#openforge` and ships al
     "description": "Project notes and scheduled follow-ups",
     "icon": "notebook-text",
     "frontend": "./dist/frontend.js",
+    "frontendStyles": ["./dist/openforge-notes.css"],
     "backend": "./dist/backend.js",
     "requires": ["views", "tasks", "storage", "notifications", "backend"]
   }
@@ -50,7 +51,8 @@ Metadata rules:
 
 - `openforge.id` must be unique app-wide. Runtime contribution IDs are local to the plugin and are auto-qualified with the plugin id.
 - `openforge.apiVersion` is the compatibility gate. The current SDK supports API version `1`.
-- `frontend` and `backend` are optional, independent built artifacts.
+- `frontend` and `backend` are optional, independent built JavaScript artifacts.
+- `frontendStyles` optionally lists one or more built CSS artifacts for a frontend plugin. Paths are package-relative, must end in `.css`, and are validated during installation.
 - `requires` should list the host capabilities the package expects. Metadata validation rejects unknown capability names; runtime capability availability is still determined by the active OpenForge host.
 - Installed packages should include their built `dist/` artifacts.
 
@@ -69,6 +71,7 @@ Use the public package exports only:
 | `@openforge-app/plugin-sdk/domain` | Shared OpenForge domain types |
 | `@openforge-app/plugin-sdk/markdown` | Markdown rendering helpers |
 | `@openforge-app/plugin-sdk/numberParsing` | Numeric parsing helpers |
+| `@openforge-app/plugin-sdk/pluginIcons` | Frontend custom-icon validation and sanitization helpers |
 | `@openforge-app/plugin-sdk/projectFileTree` | Project file tree helpers |
 | `@openforge-app/plugin-sdk/prStatusPresentation` | Pull request status presentation helpers |
 | `@openforge-app/plugin-sdk/sanitize` | Sanitization helpers |
@@ -98,6 +101,38 @@ export default defineFrontendPlugin({
 })
 ```
 
+### View icons
+
+`openforge.views.register(...)` accepts either an existing host icon name or an inline SVG icon:
+
+```ts
+const acmeIcon = {
+  type: 'svg' as const,
+  svg: '<svg viewBox="0 0 24 24"><path d="M12 2 22 12 12 22 2 12Z" fill="currentColor"/></svg>'
+}
+
+context.subscriptions.add(openforge.views.register({
+  id: 'issues',
+  title: 'Issues',
+  icon: acmeIcon,
+  placement: 'rail',
+  component: () => import('./IssuesView.svelte')
+}))
+```
+
+The string form remains backward compatible. OpenForge resolves registered names such as `layout-dashboard`; an unknown name keeps the existing generic Plug fallback.
+
+Custom SVG icons use this authoring contract:
+
+- Provide exactly one `<svg>` root, no more than 10,000 characters, with a four-number `viewBox` whose width and height are positive.
+- Keep the icon static and self-contained. The allowed elements are `svg`, `g`, `path`, `rect`, `circle`, `ellipse`, `line`, `polyline`, and `polygon`. Scripts, styles, links, external resources, embedded HTML, animation, definitions, and URL-based paint are removed.
+- OpenForge owns sizing: 24px in the icon rail and 18px in the sidebar. Root `width` and `height` are stripped. Authors own the `viewBox` and geometry.
+- Authors own paint. Prefer `currentColor` so active, inactive, hover, and theme colors continue to come from the host. Safe literal colors are retained but do not participate in host navigation states.
+- OpenForge owns accessibility. The navigation button uses the registered view `title` as its accessible name, and the icon is decorative. SVG `title`, `desc`, ARIA, focus, and event attributes are stripped.
+- Registration rejects an empty icon, malformed SVG, a missing/invalid `viewBox`, an oversized SVG, or SVG with no visible geometry. `sanitizePluginIcon(...)` from `@openforge-app/plugin-sdk/pluginIcons` is available for optional frontend author-side preflight; the host still validates at registration and before rendering.
+
+This custom SVG form currently applies to view navigation icons. Other contribution icon fields continue to use their documented named-icon strings.
+
 Frontend-only registries and helpers:
 
 - `openforge.views.register(...)`
@@ -109,6 +144,23 @@ Frontend-only registries and helpers:
 - `openforge.backend.whenReady()` / `openforge.backend.invoke(...)` for the same plugin's backend methods
 
 Svelte plugin components receive `api` and `context` props. Task UI tabs and sections also receive `taskId` and `projectId`. Task UI sections are rendered as plugin-owned content in the shared task information pane; they do not require a title, icon, heading, or host card. Use Svelte 5 runes in components and avoid importing app stores directly.
+
+### Svelte build and CSS contract
+
+Frontend plugins share the host's Svelte runtime. Declare `svelte` as both a peer dependency and an author-time dev dependency, and use `openforgePluginViteExternals` from `@openforge-app/plugin-sdk/vite` in the frontend Vite build so Svelte is not bundled into the plugin.
+
+`@sveltejs/vite-plugin-svelte` library builds extract component styles into separate CSS files. Declare every emitted file explicitly in `package.json#openforge.frontendStyles`; the host does not guess Vite's output filename:
+
+```json
+{
+  "openforge": {
+    "frontend": "./dist/frontend.js",
+    "frontendStyles": ["./dist/plugin-handoff-notes-workflow.css"]
+  }
+}
+```
+
+OpenForge validates the JavaScript and CSS artifacts during installation, serves them through `plugin://<plugin-id>/...`, attaches stylesheets before importing the frontend entry, and removes them when the plugin is disabled, reloaded, or uninstalled. Reload cache-busting applies to both JavaScript and CSS. Package-relative URLs inside the CSS continue to resolve through the same plugin asset protocol.
 
 ## Backend entry point
 
@@ -200,7 +252,7 @@ await openforge.tasks.configureStartPromptContribution({
   projectId,
   id: 'handoff-notes-workflow',
   enabled: true,
-  content: '<openforge_task_management>Task {{taskId}}\n## Current summary\nWhat changed and whether the task is ready for review.</openforge_task_management>',
+  content: '<openforge_task_management>Task {{taskId}}\n{{handoffNotesTemplate}}</openforge_task_management>',
   order: 0
 })
 ```
@@ -211,6 +263,8 @@ Behavior and limits:
 - `tasks.create` creates backlog Tasks. Plugins may attach dependency task IDs and label names; missing labels are created by the host.
 - `tasks.startImplementation` starts OpenForge's native implementation flow and returns `{ taskId, sessionId, workspacePath }` once launch is accepted.
 - The host resolves provider, agent, permission mode, model, branch/worktree strategy, and project checkout from OpenForge state. Plugins cannot override those execution settings in the API call or through start-prompt contribution configuration.
+- Start-prompt content may use `{{taskId}}` or `{{task_id}}` for the active Task ID. A contribution with the reserved `handoff-notes-workflow` ID may also use `{{handoffNotesTemplate}}` to inject the project's current Handoff Notes Template at run start. OpenForge escapes a literal `</handoff_notes_template>` in the injected template so it cannot close the host prompt block.
+- For backward compatibility, OpenForge also refreshes the template inside the exact full handoff workflow envelope generated by pre-placeholder OpenForge versions. Plugins should use `{{handoffNotesTemplate}}` rather than copy that retired host envelope; all other content without the placeholder remains plugin-owned and is not rewritten.
 - Starting an Implementation Run can fail when dependencies are unmet, an active Agent Session already exists, the Task/Project cannot be resolved, the checkout/workspace cannot be prepared, or the configured provider/PTY runtime is unavailable.
 - `tasks.getWorkspace(taskId)` and `tasks.getLatestSession(taskId)` return `null` until OpenForge has recorded that state.
 
@@ -268,3 +322,4 @@ For unit tests that only need an API object, use `createMockOpenForgeApi`, `crea
 - Prefer SDK task APIs for scheduler-style Task Creation and Implementation Run requests.
 - Use host capabilities for files, shell, notifications, links, config, and task/project data.
 - Add focused tests for registrations, storage scoping, task creation/start behavior, and lifecycle cleanup.
+- For styled Svelte components, build first and declare every emitted CSS file in `openforge.frontendStyles`.

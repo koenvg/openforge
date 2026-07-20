@@ -14,6 +14,7 @@ const {
   uninstallPluginIpcMock,
   getEnabledPluginsMock,
   pluginInvokeMock,
+  pluginBackendDeactivateMock,
   pluginBackendWhenReadyMock,
   getPluginStorageMock,
   setPluginStorageMock,
@@ -38,6 +39,7 @@ const {
   uninstallPluginIpcMock: vi.fn(),
   getEnabledPluginsMock: vi.fn(),
   pluginInvokeMock: vi.fn(),
+  pluginBackendDeactivateMock: vi.fn(),
   pluginBackendWhenReadyMock: vi.fn(),
   getPluginStorageMock: vi.fn(),
   setPluginStorageMock: vi.fn(),
@@ -65,6 +67,7 @@ vi.mock('../ipc', () => ({
   installPluginFromLocal: installPluginFromLocalIpcMock,
   installPluginFromNpm: installPluginFromNpmIpcMock,
   pluginInvoke: pluginInvokeMock,
+  pluginBackendDeactivate: pluginBackendDeactivateMock,
   pluginBackendWhenReady: pluginBackendWhenReadyMock,
   getPluginStorage: getPluginStorageMock,
   setPluginStorage: setPluginStorageMock,
@@ -202,6 +205,8 @@ describe('pluginRegistry', () => {
     getEnabledPluginsMock.mockReset()
     pluginInvokeMock.mockReset()
     pluginInvokeMock.mockResolvedValue(undefined)
+    pluginBackendDeactivateMock.mockReset()
+    pluginBackendDeactivateMock.mockResolvedValue(undefined)
     pluginBackendWhenReadyMock.mockReset()
     pluginBackendWhenReadyMock.mockResolvedValue(undefined)
     getPluginStorageMock.mockReset()
@@ -1004,6 +1009,34 @@ describe('pluginRegistry', () => {
     expect(get(enabledPluginIds).has('local-plugin')).toBe(false)
   })
 
+  it('loads declared Svelte styles when an installed local plugin is enabled', async () => {
+    const frontendPlugin = defineFrontendPlugin({ activate: vi.fn(() => undefined) })
+    installPluginFromLocalIpcMock.mockResolvedValue({
+      ...makeNormalized('local-svelte-plugin'),
+      frontendEntry: './dist/frontend.js',
+      sourceKind: 'local',
+      sourceSpec: '/plugins/local-svelte-plugin',
+      packageMetadata: JSON.stringify({
+        id: 'local-svelte-plugin',
+        apiVersion: 1,
+        displayName: 'Local Svelte Plugin',
+        description: 'Styled local plugin',
+        frontend: './dist/frontend.js',
+        frontendStyles: ['./dist/plugin-local-svelte.css'],
+      }),
+    })
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'local-svelte-plugin', module: frontendPlugin })
+
+    await installFromLocal('/plugins/local-svelte-plugin', 'project-1')
+    await expect(enablePluginForProject('project-1', 'local-svelte-plugin')).resolves.toBe(true)
+
+    expect(loadPluginFrontendMock).toHaveBeenCalledWith(
+      'local-svelte-plugin',
+      'plugin://local-svelte-plugin/dist/frontend.js',
+      ['plugin://local-svelte-plugin/dist/plugin-local-svelte.css'],
+    )
+  })
+
   it('reloadInstalledPluginMetadata refreshes global install state without project activation', async () => {
     const manifest = makeManifest({ id: 'reload-plugin' })
     enabledPluginIds.set(new Set(['reload-plugin']))
@@ -1028,8 +1061,80 @@ describe('pluginRegistry', () => {
     })
   })
 
+  it('reloadPluginForProject waits for pending activation cleanup before activating refreshed artifacts', async () => {
+    const manifest = makeManifest({ id: 'reload-plugin', frontend: './dist/frontend.js' })
+    const StaleComponent = vi.fn() as never
+    const RefreshedComponent = vi.fn() as never
+    let markActivationStarted: (() => void) | null = null
+    let finishActivation: (() => void) | null = null
+    const activationStarted = new Promise<void>((resolve) => {
+      markActivationStarted = resolve
+    })
+    const activationGate = new Promise<void>((resolve) => {
+      finishActivation = resolve
+    })
+    const staleFrontendPlugin = defineFrontendPlugin({
+      async activate(openforge, context) {
+        markActivationStarted?.()
+        await activationGate
+        context.subscriptions.add(openforge.views.register({
+          id: 'main',
+          title: 'Stale Main',
+          icon: 'sparkles',
+          placement: 'rail',
+          component: StaleComponent,
+        }))
+      },
+    })
+    const refreshedFrontendPlugin = defineFrontendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.views.register({
+          id: 'main',
+          title: 'Refreshed Main',
+          icon: 'sparkles',
+          placement: 'rail',
+          component: RefreshedComponent,
+        }))
+      },
+    })
+    installedPlugins.set(new Map([['reload-plugin', { manifest, state: 'installed', error: null }]]))
+    enabledPluginIds.set(new Set(['reload-plugin']))
+    getPluginIpcMock.mockResolvedValue(makeNormalized('reload-plugin'))
+    getEnabledPluginsMock.mockResolvedValue([makeNormalized('reload-plugin')])
+    loadPluginFrontendMock
+      .mockResolvedValueOnce({ pluginId: 'reload-plugin', module: staleFrontendPlugin })
+      .mockResolvedValueOnce({ pluginId: 'reload-plugin', module: refreshedFrontendPlugin })
+
+    const pendingActivation = activatePlugin('reload-plugin')
+    await activationStarted
+    const reload = reloadPluginForProject('project-1', 'reload-plugin')
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const releaseActivation = finishActivation as (() => void) | null
+    if (!releaseActivation) throw new Error('Expected frontend activation to be pending')
+    releaseActivation()
+
+    await expect(pendingActivation).resolves.toBe(false)
+    await expect(reload).resolves.toBe(true)
+    expect(loadPluginFrontendMock).toHaveBeenCalledTimes(2)
+    expect(getRegisteredComponent('plugin:reload-plugin:main')).toBe(RefreshedComponent)
+    expect(get(installedPlugins).get('reload-plugin')).toMatchObject({
+      state: 'active',
+      error: null,
+    })
+  })
+
   it('reloadPluginForProject re-imports changed local frontend bundles with a cache-busted URL', async () => {
     const manifest = makeManifest({ id: 'reload-plugin', frontend: './dist/frontend.js' })
+    const packageMetadata = {
+      id: 'reload-plugin',
+      apiVersion: 1 as const,
+      displayName: 'Reload Plugin',
+      description: 'Reload plugin',
+      frontend: './dist/frontend.js',
+      frontendStyles: ['./dist/reload-plugin.css'],
+    }
     enabledPluginIds.set(new Set(['reload-plugin']))
     installedPlugins.set(new Map([['reload-plugin', {
       manifest,
@@ -1037,14 +1142,20 @@ describe('pluginRegistry', () => {
       error: null,
       sourceKind: 'local',
       sourceSpec: '/plugins/reload-plugin',
+      packageMetadata,
     }]]))
     getPluginIpcMock.mockResolvedValue({
       ...makeNormalized('reload-plugin'),
       frontendEntry: './dist/frontend.js',
       sourceKind: 'local',
       sourceSpec: '/plugins/reload-plugin',
+      packageMetadata: JSON.stringify(packageMetadata),
     })
-    getEnabledPluginsMock.mockResolvedValue([{ ...makeNormalized('reload-plugin'), frontendEntry: './dist/frontend.js' }])
+    getEnabledPluginsMock.mockResolvedValue([{
+      ...makeNormalized('reload-plugin'),
+      frontendEntry: './dist/frontend.js',
+      packageMetadata: JSON.stringify(packageMetadata),
+    }])
     const firstActivate = vi.fn(() => undefined)
     const secondActivate = vi.fn(() => undefined)
     loadPluginFrontendMock
@@ -1055,10 +1166,68 @@ describe('pluginRegistry', () => {
     await expect(reloadPluginForProject('project-1', 'reload-plugin')).resolves.toBe(true)
 
     expect(clearLoadedPluginMock).toHaveBeenCalledWith('reload-plugin')
-    expect(loadPluginFrontendMock).toHaveBeenNthCalledWith(1, 'reload-plugin', 'plugin://reload-plugin/dist/frontend.js')
-    expect(loadPluginFrontendMock).toHaveBeenNthCalledWith(2, 'reload-plugin', 'plugin://reload-plugin/dist/frontend.js?openforgeReload=1')
+    expect(loadPluginFrontendMock).toHaveBeenNthCalledWith(
+      1,
+      'reload-plugin',
+      'plugin://reload-plugin/dist/frontend.js',
+      ['plugin://reload-plugin/dist/reload-plugin.css'],
+    )
+    expect(loadPluginFrontendMock).toHaveBeenNthCalledWith(
+      2,
+      'reload-plugin',
+      'plugin://reload-plugin/dist/frontend.js?openforgeReload=1',
+      ['plugin://reload-plugin/dist/reload-plugin.css?openforgeReload=1'],
+    )
     expect(firstActivate).toHaveBeenCalledOnce()
     expect(secondActivate).toHaveBeenCalledOnce()
+  })
+
+  it('reloadPluginForProject deactivates the backend before refreshing installed artifacts', async () => {
+    const manifest = makeManifest({ id: 'reload-plugin', frontend: null, backend: './dist/backend.js' })
+    enabledPluginIds.set(new Set(['reload-plugin']))
+    installedPlugins.set(new Map([['reload-plugin', {
+      manifest,
+      state: 'active',
+      error: null,
+      sourceKind: 'local',
+      sourceSpec: '/plugins/reload-plugin',
+    }]]))
+    getPluginIpcMock.mockResolvedValue({
+      ...makeNormalized('reload-plugin'),
+      frontendEntry: null,
+      backendEntry: './dist/backend.js',
+      sourceKind: 'local',
+      sourceSpec: '/plugins/reload-plugin',
+    })
+    getEnabledPluginsMock.mockResolvedValue([{
+      ...makeNormalized('reload-plugin'),
+      frontendEntry: null,
+      backendEntry: './dist/backend.js',
+    }])
+
+    await expect(reloadPluginForProject('project-1', 'reload-plugin')).resolves.toBe(true)
+
+    expect(pluginBackendDeactivateMock).toHaveBeenCalledWith('reload-plugin')
+    expect(pluginBackendDeactivateMock.mock.invocationCallOrder[0]).toBeLessThan(getPluginIpcMock.mock.invocationCallOrder[0])
+    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('reload-plugin')
+  })
+
+  it('reloadPluginForProject aborts before refreshing artifacts when backend deactivation fails', async () => {
+    const manifest = makeManifest({ id: 'reload-plugin', backend: './dist/backend.js' })
+    installedPlugins.set(new Map([['reload-plugin', {
+      manifest,
+      state: 'active',
+      error: null,
+      sourceKind: 'local',
+      sourceSpec: '/plugins/reload-plugin',
+    }]]))
+    pluginBackendDeactivateMock.mockRejectedValue(new Error('backend deactivation failed'))
+
+    await expect(reloadPluginForProject('project-1', 'reload-plugin')).rejects.toThrow('backend deactivation failed')
+
+    expect(getPluginIpcMock).not.toHaveBeenCalled()
+    expect(getEnabledPluginsMock).not.toHaveBeenCalled()
+    expect(loadPluginFrontendMock).not.toHaveBeenCalled()
   })
 
   it('reloadPluginForProject refreshes target metadata and preserves other active plugins', async () => {
@@ -1118,6 +1287,61 @@ describe('pluginRegistry', () => {
     await expect(second).resolves.toBe(true)
     expect(activateFrontend).toHaveBeenCalledTimes(1)
     expect(activatePluginLoaderMock).not.toHaveBeenCalled()
+  })
+
+  it('clears runtime state when disabled during async activation even if subscription cleanup fails', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const manifest = makeManifest({ id: 'pending-activation-plugin' })
+    const Component = vi.fn() as never
+    let markActivationStarted: (() => void) | null = null
+    let finishActivation: (() => void) | null = null
+    const activationStarted = new Promise<void>((resolve) => {
+      markActivationStarted = resolve
+    })
+    const activationGate = new Promise<void>((resolve) => {
+      finishActivation = resolve
+    })
+    const frontendPlugin = defineFrontendPlugin({
+      async activate(openforge, context) {
+        markActivationStarted?.()
+        await activationGate
+        context.subscriptions.add(openforge.views.register({
+          id: 'main',
+          title: 'Main',
+          icon: 'sparkles',
+          placement: 'rail',
+          component: Component,
+        }))
+        context.subscriptions.add({
+          dispose: async () => {
+            throw new Error('subscription cleanup failed')
+          },
+        })
+      },
+    })
+    installedPlugins.set(new Map([['pending-activation-plugin', { manifest, state: 'installed', error: null }]]))
+    enabledPluginIds.set(new Set(['pending-activation-plugin']))
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'pending-activation-plugin', module: frontendPlugin })
+
+    const activation = activatePlugin('pending-activation-plugin')
+    await activationStarted
+    await disablePluginForProject('P-1', 'pending-activation-plugin')
+    const releaseActivation = finishActivation as (() => void) | null
+    if (!releaseActivation) throw new Error('Expected frontend activation to be pending')
+    releaseActivation()
+
+    await expect(activation).resolves.toBe(false)
+    expect(getRegisteredComponent('plugin:pending-activation-plugin:main')).toBeUndefined()
+    expect(get(runtimeContributionSources).get('pending-activation-plugin')).toBeUndefined()
+    expect(get(installedPlugins).get('pending-activation-plugin')).toMatchObject({
+      state: 'installed',
+      error: null,
+    })
+    expect(consoleError).toHaveBeenCalledWith(
+      '[pluginActivationLifecycle] Failed to discard frontend runtime activation for pending-activation-plugin:',
+      expect.objectContaining({ message: 'subscription cleanup failed' }),
+    )
+    consoleError.mockRestore()
   })
 
   it('disabling a plugin reconciles active lifecycle state and unregisters its views', async () => {

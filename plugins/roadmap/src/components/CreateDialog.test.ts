@@ -15,6 +15,7 @@ describe('CreateDialog', () => {
         labelOptions: labels,
         initialLabels: [],
         busy: false,
+        hasApiKey: true,
         onClose: vi.fn(),
         onCreate: vi.fn(),
         onOpenUrl: vi.fn(),
@@ -23,6 +24,8 @@ describe('CreateDialog', () => {
       },
     })
   }
+
+  const NO_KEY_HINT = 'Add API key in global settings → Roadmap.'
 
   it('includes initial labels when manually creating an issue', async () => {
     const onCreate = vi.fn()
@@ -51,7 +54,6 @@ describe('CreateDialog', () => {
       text: 'users lose their draft when the tab reloads',
       draft: null,
       feedback: '',
-      labels: [],
     })
 
     await fireEvent.click(screen.getByRole('button', { name: 'Create issue' }))
@@ -77,8 +79,66 @@ describe('CreateDialog', () => {
       text: 'do the thing',
       draft: { title: 'Draft v1', body: 'First body.' },
       feedback: 'make it tighter',
-      labels: [],
     })
+  })
+
+  describe('without an API key', () => {
+    it('disables Refine and says where to add the key', async () => {
+      renderDialog({ hasApiKey: false })
+      await fireEvent.input(screen.getByLabelText('Describe the issue'), { target: { value: 'do the thing' } })
+
+      const refine = screen.getByRole('button', { name: 'Refine' })
+      expect((refine as HTMLButtonElement).disabled).toBe(true)
+      expect(refine.getAttribute('title')).toBe(NO_KEY_HINT)
+    })
+
+    it('never calls onRefine, so no request is attempted without a key', async () => {
+      const onRefine = vi.fn()
+      renderDialog({ hasApiKey: false, onRefine })
+
+      await fireEvent.input(screen.getByLabelText('Describe the issue'), { target: { value: 'do the thing' } })
+      await fireEvent.click(screen.getByRole('button', { name: 'Refine' }))
+
+      expect(onRefine).not.toHaveBeenCalled()
+    })
+
+    it('leaves Skip AI usable, so a ticket can still be written by hand', async () => {
+      const onCreate = vi.fn()
+      renderDialog({ hasApiKey: false, onCreate })
+
+      await fireEvent.input(screen.getByLabelText('Describe the issue'), { target: { value: 'Fix login redirect' } })
+      const skip = screen.getByRole('button', { name: 'Skip AI' })
+      expect((skip as HTMLButtonElement).disabled).toBe(false)
+
+      await fireEvent.click(skip)
+      await fireEvent.click(screen.getByRole('button', { name: 'Create issue' }))
+      expect(onCreate).toHaveBeenCalledWith('Fix login redirect', '', [])
+    })
+
+    it('gates the feedback revision too, since it takes the same path', async () => {
+      const onRefine = vi.fn(async () => ({ title: 'Draft v1', body: 'First body.' }))
+      renderDialog({ hasApiKey: false, onRefine })
+
+      await fireEvent.input(screen.getByLabelText('Describe the issue'), { target: { value: 'do the thing' } })
+      await fireEvent.click(screen.getByRole('button', { name: 'Skip AI' }))
+      await fireEvent.input(screen.getByLabelText('Feedback'), { target: { value: 'make it tighter' } })
+
+      const revise = screen.getByRole('button', { name: 'Refine with feedback' })
+      expect((revise as HTMLButtonElement).disabled).toBe(true)
+      expect(revise.getAttribute('title')).toBe(NO_KEY_HINT)
+
+      await fireEvent.click(revise)
+      expect(onRefine).not.toHaveBeenCalled()
+    })
+  })
+
+  it('carries no key hint on Refine once a key is configured', async () => {
+    renderDialog({ hasApiKey: true })
+    await fireEvent.input(screen.getByLabelText('Describe the issue'), { target: { value: 'do the thing' } })
+
+    const refine = screen.getByRole('button', { name: 'Refine' })
+    expect((refine as HTMLButtonElement).disabled).toBe(false)
+    expect(refine.getAttribute('title')).not.toBe(NO_KEY_HINT)
   })
 
   it('uses shared modal close behavior for Escape and backdrop clicks', async () => {

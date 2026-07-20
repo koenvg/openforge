@@ -142,6 +142,7 @@
           scrollTop={projectState.contentScrollTop}
           onScrollTopChange={onContentScrollTopChange}
           onRetryFile={onRetrySelectedFile}
+          onOpenRepositoryPath={async (repositoryPath) => { await onSelectFile(repositoryPath) }}
           focusRequestKey={previewFocusRequest}
           onReturnFocusToTree={onReturnFocusToSelectedFile}
         />

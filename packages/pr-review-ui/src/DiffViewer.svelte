@@ -1,27 +1,26 @@
 <script lang="ts">
-  import { DiffView, DiffModeEnum, SplitSide } from '@git-diff-view/svelte'
+  import { DiffModeEnum, SplitSide } from '@git-diff-view/svelte'
   import '@git-diff-view/svelte/styles/diff-view-pure.css'
   import './DiffViewerTheme.css'
   import type { PrFileDiff, ReviewComment, ReviewSubmissionComment, AgentReviewComment } from '@openforge-app/plugin-sdk/domain'
-  import { isTruncated, getTruncationStats, isImageFileDiff, getImagePreviewDataUrl, type FileContents } from './diffAdapter'
-  import { buildExtendData, type CommentDisplayData } from './diffComments'
-  import { timeAgo } from './timeAgo'
-  import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
-  import { diffHighlighter } from './diffHighlighter'
+  import { isImageFileDiff, getFileLanguage, type FileContents } from './diffAdapter'
   import { createDiffSearch } from './useDiffSearch.svelte'
   import { createDiffWorker } from './useDiffWorker.svelte'
   import { createFileContentsFetcher } from './useFileContentsFetcher.svelte'
   import { createVirtualizer } from './useVirtualizer.svelte'
   import { onDestroy, tick } from 'svelte'
   import { sortFilesAsTree } from './fileSort'
-  import { getFileStatusIcon, getFileStatusColor, getFileStatusLabel } from './fileStatus'
   import { loadDiffViewWrap, saveDiffViewWrap } from './diffViewPreferences'
+  import { getDiffFileSectionInputKey } from './diffFileSectionIdentity'
+  import { getGitHubMarkdownImageBaseUrl, getGitHubMarkdownLinkUrl } from './githubMarkdown'
+  import DiffFileSection from './DiffFileSection.svelte'
   import type { Snippet } from 'svelte'
   interface BaseProps {
     files?: PrFileDiff[]
     existingComments?: ReviewComment[]
     repoOwner?: string
     repoName?: string
+    headSha?: string
     fileTreeVisible?: boolean
     onToggleFileTree?: () => void
     fetchFileContents?: (file: PrFileDiff) => Promise<FileContents>
@@ -37,6 +36,8 @@
     onAgentCommentsChange?: (comments: AgentReviewComment[]) => void
     onUpdateAgentCommentStatus?: (commentId: number, status: 'approved' | 'dismissed') => Promise<void> | void
     onOpenUrl?: (url: string) => void | Promise<void>
+    resolveRepositoryImage?: (repositoryPath: string) => Promise<string | null>
+    onOpenRepositoryPath?: (repositoryPath: string, suffix: string) => void | Promise<void>
     onScrollTopChange?: (scrollTop: number) => void
     initialScrollTop?: number
     inlineDraftScopeId?: string
@@ -50,10 +51,11 @@
     onRequestFocusFileTree?: () => void
   }
   type Props = BaseProps
-  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, fileHeaderExtra, footer, includeCommitted = true, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onAgentCommentsChange, onUpdateAgentCommentStatus, onOpenUrl, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, diffTheme, reviewedFileShas = new Map(), onToggleFileReviewed, getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null, onRequestFocusFileTree }: Props = $props()
+  let { files = [], existingComments = [], repoOwner = '', repoName = '', headSha = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, fileHeaderExtra, footer, includeCommitted = true, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onAgentCommentsChange, onUpdateAgentCommentStatus, onOpenUrl, resolveRepositoryImage, onOpenRepositoryPath, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, diffTheme, reviewedFileShas = new Map(), onToggleFileReviewed, getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null, onRequestFocusFileTree }: Props = $props()
   let internalPendingComments = $state<ReviewSubmissionComment[]>([])
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
   let diffViewWrap = $state(loadDiffViewWrap())
+  let richDiffSectionKeys = $state(new Set<string>())
   let commentText = $state('')
   type InlineCommentDraftSide = ReviewSubmissionComment['side']
   type InlineCommentDraftKey = {
@@ -89,9 +91,6 @@
     return 'light'
   }
 
-  function inlineCommentHelpId(filename: string, lineNumber: number, side: SplitSide): string {
-    return `inline-comment-help-${filename.replace(/[^a-zA-Z0-9_-]/g, '-')}-${lineNumber}-${String(side).replace(/[^a-zA-Z0-9_-]/g, '-')}`
-  }
 
   const diffWorker = createDiffWorker({
     getFiles: () => files,
@@ -106,6 +105,42 @@
       next.add(filename)
     }
     collapsedFiles = next
+  }
+
+  function supportsRichDiff(file: PrFileDiff): boolean {
+    return getFileLanguage(file.filename) === 'markdown' && file.status !== 'removed' && file.status !== 'deleted'
+  }
+
+  const githubMarkdownImageBaseUrl = $derived(getGitHubMarkdownImageBaseUrl({
+    repo_owner: repoOwner,
+    repo_name: repoName,
+    head_sha: headSha,
+  }))
+
+  function openRepositoryPath(repositoryPath: string, suffix: string) {
+    if (onOpenRepositoryPath) {
+      return onOpenRepositoryPath(repositoryPath, suffix)
+    }
+
+    const githubUrl = getGitHubMarkdownLinkUrl(repoOwner, repoName, headSha, repositoryPath, suffix)
+    if (githubUrl) {
+      return onOpenUrl?.(githubUrl)
+    }
+  }
+
+  function isRichDiffActive(file: PrFileDiff): boolean {
+    return supportsRichDiff(file) && richDiffSectionKeys.has(getDiffFileSectionInputKey(file))
+  }
+
+  function setRichDiffActive(file: PrFileDiff, active: boolean) {
+    const sectionKey = getDiffFileSectionInputKey(file)
+    const next = new Set(richDiffSectionKeys)
+    if (active) {
+      next.add(sectionKey)
+    } else {
+      next.delete(sectionKey)
+    }
+    richDiffSectionKeys = next
   }
 
   function getReviewIdentity(file: PrFileDiff): string | null {
@@ -128,9 +163,7 @@
     return reviewedIdentities
   }
 
-  function handleReviewedChange(file: PrFileDiff, event: Event) {
-    if (!(event.currentTarget instanceof HTMLInputElement)) return
-    const reviewed = event.currentTarget.checked
+  function handleReviewedChange(file: PrFileDiff, reviewed: boolean) {
     onToggleFileReviewed?.(file, reviewed)
     const next = new Set(collapsedFiles)
     if (reviewed) {
@@ -305,9 +338,6 @@
     setTimeout(() => targetEl.classList.remove('diff-comment-highlight'), 2000)
   }
 
-  function autofocus(node: HTMLElement) {
-    node.focus()
-  }
 
   const visiblePendingComments = $derived(pendingComments ?? internalPendingComments)
 
@@ -549,246 +579,46 @@
         {#each virtualizer.virtualItems as row (row.key)}
           {@const file = sortedFiles[row.index]}
           {#if file}
-          {@const truncated = isTruncated(file)}
-          {@const truncStats = getTruncationStats(file)}
           <div
             data-diff-file={file.filename}
             data-index={row.index}
             style="position: absolute; top: {row.start}px; width: 100%; padding: 0 0 12px 0;"
             use:virtualizer.measureAction
           >
-            <div class="border border-base-300 rounded-md">
-              <div class="sticky top-0 z-20 w-full flex items-center gap-2 px-4 py-3 bg-base-200 border-b border-base-300 rounded-t-md shadow-sm">
-                <button
-                  class="min-w-0 flex flex-1 items-center gap-2 text-left hover:text-primary transition-colors"
-                  aria-label="{collapsedFiles.has(file.filename) ? 'Expand' : 'Collapse'} diff for {file.filename}"
-                  aria-expanded={!collapsedFiles.has(file.filename)}
-                  onclick={() => toggleCollapse(file.filename)}
-                >
-                  <span class="text-xs text-base-content/50 flex-shrink-0" aria-hidden="true">{collapsedFiles.has(file.filename) ? '▶' : '▼'}</span>
-                  <span class="font-bold text-sm" style="color: {getFileStatusColor(file.status)}">
-                    {getFileStatusIcon(file.status)}
-                  </span>
-                  <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-xs text-base-content" title={file.filename}>
-                    {#if file.previous_filename}
-                      <span class="text-base-content/50 line-through">{file.previous_filename}</span>
-                      <span class="text-primary mx-1">→</span>
-                    {/if}
-                    {file.filename}
-                  </span>
-                </button>
-                {#if fileHeaderExtra}
-                  {@render fileHeaderExtra(file)}
-                {/if}
-                {#if onToggleFileReviewed}
-                  <label class="flex items-center gap-1.5 text-xs text-base-content/70 cursor-pointer flex-shrink-0">
-                    <input
-                      type="checkbox"
-                      class="checkbox checkbox-xs"
-                      aria-label="Mark {file.filename} reviewed"
-                      checked={isFileReviewed(file)}
-                      onchange={(event) => handleReviewedChange(file, event)}
-                    />
-                    <span>Reviewed</span>
-                  </label>
-                {/if}
-                <span class="text-xs font-semibold uppercase tracking-wider flex-shrink-0" style="color: {getFileStatusColor(file.status)}">{getFileStatusLabel(file.status)}</span>
-                <span class="flex gap-2 text-xs flex-shrink-0">
-                  {#if file.additions > 0}<span class="text-success">+{file.additions}</span>{/if}
-                  {#if file.deletions > 0}<span class="text-error">−{file.deletions}</span>{/if}
-                </span>
-              </div>
-              {#if !collapsedFiles.has(file.filename)}
-                {#if truncated}
-                  <div class="alert alert-info py-1.5 px-4 rounded-none border-x-0 text-xs">
-                    <span>
-                      Diff truncated — {truncStats ? `${truncStats.total} lines total, showing first ${truncStats.shown}` : 'showing partial diff'}
-                    </span>
-                  </div>
-                {/if}
-                {#if isImageFileDiff(file)}
-                  {@const imageContents = fileContentsFetcher.fileContentsMap.get(file.filename)}
-                  {@const oldImageSrc = imageContents ? getImagePreviewDataUrl(file.previous_filename || file.filename, imageContents.oldContent) : null}
-                  {@const newImageSrc = imageContents ? getImagePreviewDataUrl(file.filename, imageContents.newContent) : null}
-                  <div class="grid gap-4 p-4 md:grid-cols-2 bg-base-100">
-                    {#if file.status !== 'added'}
-                      <div class="rounded border border-base-300 bg-base-200/40 p-3 min-h-48 flex flex-col">
-                        <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-base-content/60">Before</div>
-                        <div class="flex flex-1 items-center justify-center overflow-auto">
-                          {#if oldImageSrc}
-                            <img src={oldImageSrc} alt={`${file.previous_filename || file.filename} old preview`} class="max-h-96 max-w-full object-contain" />
-                          {:else if imageContents === undefined && (fetchFileContents || batchFetchFileContents)}
-                            <span class="loading loading-spinner loading-sm text-primary" aria-label="Loading old image preview"></span>
-                          {:else}
-                            <span class="text-sm text-base-content/50">No previous image preview</span>
-                          {/if}
-                        </div>
-                      </div>
-                    {/if}
-                    {#if file.status !== 'removed' && file.status !== 'deleted'}
-                      <div class="rounded border border-base-300 bg-base-200/40 p-3 min-h-48 flex flex-col">
-                        <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-base-content/60">After</div>
-                        <div class="flex flex-1 items-center justify-center overflow-auto">
-                          {#if newImageSrc}
-                            <img src={newImageSrc} alt={`${file.filename} new preview`} class="max-h-96 max-w-full object-contain" />
-                          {:else if imageContents === undefined && (fetchFileContents || batchFetchFileContents)}
-                            <span class="loading loading-spinner loading-sm text-primary" aria-label="Loading new image preview"></span>
-                          {:else}
-                            <span class="text-sm text-base-content/50">No image preview</span>
-                          {/if}
-                        </div>
-                      </div>
-                    {/if}
-                  </div>
-                {:else}
-                {@const workerDiffFile = diffWorker.getDiffFile(file.filename)}
-                {#if workerDiffFile}
-                <DiffView
-                  diffFile={workerDiffFile}
-                  extendData={buildExtendData(file.filename, existingComments, visiblePendingComments, agentComments)}
-                  diffViewMode={diffViewMode}
-                  diffViewWrap={diffViewWrap}
-                  diffViewTheme={resolveDiffTheme()}
-                  diffViewHighlight={true}
-                  diffViewAddWidget={true}
-                  diffViewFontSize={12}
-                  registerHighlighter={diffHighlighter}
-                  onAddWidgetClick={(lineNumber, side) => {
-                    openInlineCommentWidget(file.filename, lineNumber, side)
-                  }}
-                >
-                    {#snippet renderExtendLine({ lineNumber: _ln, side: _side, data, diffFile: _df, onUpdate: _ou }: { lineNumber: number; side: SplitSide; data: CommentDisplayData; diffFile: import('@git-diff-view/core').DiffFile; onUpdate: () => void })}
-                      <div class="w-full">
-                        {#each data.comments as comment}
-                          <div class="{comment.isReply ? 'ml-8' : ''} px-4 py-2.5 mx-4 {comment.isReply ? 'mt-0 mb-1.5 border-t-0 rounded-t-none' : 'my-1.5'} bg-base-100 border border-base-300 rounded-md text-[0.8rem] {comment.type === 'pending' ? 'border-l-4 border-l-warning' : comment.type === 'existing' ? 'border-l-4 border-l-primary' : comment.type === 'agent' ? 'border-l-4 border-l-success' : ''}">
-                            <div class="flex items-center gap-2 mb-1.5">
-                              {#if comment.type === 'existing'}
-                                <div class="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center text-[0.6rem] font-bold text-primary shrink-0">
-                                  {(comment.author ?? '?').charAt(0).toUpperCase()}
-                                </div>
-                                <strong class="text-base-content font-semibold text-xs">{comment.author}</strong>
-                                {#if comment.createdAt}
-                                  <span class="text-base-content/50 text-[0.7rem]">{timeAgo(new Date(comment.createdAt).getTime())}</span>
-                                {/if}
-                                {#if comment.isReply}
-                                  <span class="text-base-content/30 text-[0.65rem]">↩ reply</span>
-                                {/if}
-                              {:else if comment.type === 'agent'}
-                                <span class="badge badge-success badge-sm">AI Review</span>
-                                {#if comment.status === 'approved'}
-                                  <span class="badge badge-info badge-sm">Approved</span>
-                                {/if}
-                                <div class="ml-auto flex gap-1">
-                                  {#if comment.status !== 'approved'}
-                                    <button
-                                      class="btn btn-ghost btn-xs text-success hover:text-success/80"
-                                      title="Approve — add to pending comments"
-                                      aria-label="Approve AI review comment and add to pending comments"
-                                      onclick={async () => {
-                                        if (comment.commentId === undefined) return
-                                        try {
-                                          await onUpdateAgentCommentStatus?.(comment.commentId, 'approved')
-                                          setVisiblePendingComments([...visiblePendingComments, {
-                                            path: comment.filePath || file.filename,
-                                            line: comment.lineNumber || 0,
-                                            side: comment.commentSide || 'RIGHT',
-                                            body: comment.body
-                                          }])
-                                          setVisibleAgentComments(agentComments.map(c =>
-                                            c.id === comment.commentId ? { ...c, status: 'approved' } : c
-                                          ))
-                                        } catch (e) {
-                                          console.error('[DiffViewer] Failed to approve comment:', e)
-                                        }
-                                      }}
-                                    >✓</button>
-                                  {/if}
-                                  <button
-                                    class="btn btn-ghost btn-xs text-base-content/50 hover:text-error"
-                                    title="Dismiss"
-                                    aria-label="Dismiss AI review comment"
-                                    onclick={async () => {
-                                      if (comment.commentId === undefined) return
-                                      try {
-                                        await onUpdateAgentCommentStatus?.(comment.commentId, 'dismissed')
-                                        setVisibleAgentComments(agentComments.map(c =>
-                                          c.id === comment.commentId ? { ...c, status: 'dismissed' } : c
-                                        ))
-                                      } catch (e) {
-                                        console.error('[DiffViewer] Failed to dismiss comment:', e)
-                                      }
-                                    }}
-                                  >✕</button>
-                                </div>
-                              {:else}
-                                <span class="badge badge-warning badge-sm">Pending</span>
-                                <button
-                                  class="btn btn-ghost btn-xs text-base-content/50 hover:text-error ml-auto"
-                                  aria-label="Remove pending comment"
-                                  onclick={() => {
-                                    setVisiblePendingComments(visiblePendingComments.filter(
-                                      (_, i) => i !== comment.index
-                                    ))
-                                  }}
-                                >✕</button>
-                              {/if}
-                            </div>
-                            <div class="text-base-content leading-relaxed text-[0.8rem] [&_p]:m-0 [&_p+p]:mt-1.5 [&_pre]:text-[0.75rem] [&_code]:text-[0.75rem] [&_pre]:bg-base-200 [&_pre]:rounded [&_pre]:p-2 [&_pre]:my-1.5 [&_code]:bg-base-200 [&_code]:px-1 [&_code]:rounded [&_ul]:my-1 [&_ol]:my-1 [&_li]:ml-4 [&_blockquote]:border-l-2 [&_blockquote]:border-base-300 [&_blockquote]:pl-3 [&_blockquote]:text-base-content/70 [&_a]:text-primary [&_a]:underline">
-                              <MarkdownContent content={comment.body} {onOpenUrl} />
-                            </div>
-                          </div>
-                        {/each}
-                      </div>
-                    {/snippet}
-                    {#snippet renderWidgetLine({ lineNumber, side, diffFile, onClose }: { lineNumber: number; side: SplitSide; diffFile: import('@git-diff-view/core').DiffFile; onClose: () => void })}
-                      <div class="review-inline-comment-form p-3 mx-4 my-2 bg-base-100 border border-base-300 rounded-md">
-                        <textarea
-                          class="textarea textarea-bordered w-full min-h-[60px] text-[0.8rem] leading-relaxed resize-y"
-                          aria-label="Inline review comment for {file.filename} line {lineNumber}"
-                          aria-describedby={inlineCommentHelpId(file.filename, lineNumber, side)}
-                          placeholder="Leave a comment… (Cmd/Ctrl+Enter to submit)"
-                          rows="3"
-                          value={getInlineCommentText(file.filename, lineNumber, side)}
-                          use:autofocus
-                          oninput={(e: Event) => {
-                            if (!(e.currentTarget instanceof HTMLTextAreaElement)) return
-                            setInlineCommentText(file.filename, lineNumber, side, e.currentTarget.value)
-                          }}
-                          onkeydown={(e: KeyboardEvent) => {
-                            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                              e.preventDefault()
-                              submitInlineComment(file.filename, lineNumber, side, onClose)
-                            }
-                          }}
-                        ></textarea>
-                        <p id={inlineCommentHelpId(file.filename, lineNumber, side)} class="text-xs text-base-content/50 mt-1 mb-0">Submit with Command+Enter or Control+Enter.</p>
-                        <div class="flex justify-end gap-2.5 mt-2">
-                          <button
-                            type="button"
-                            class="btn btn-sm border border-base-300 hover:border-primary hover:text-primary"
-                            onclick={() => {
-                              clearInlineCommentText(file.filename, lineNumber, side)
-                              onClose()
-                            }}
-                          >Cancel</button>
-                          <button
-                            type="button"
-                            class="btn btn-primary btn-sm"
-                            onclick={() => submitInlineComment(file.filename, lineNumber, side, onClose)}
-                          >Add Comment</button>
-                        </div>
-                      </div>
-                    {/snippet}
-                  </DiffView>
-                {:else}
-                  <div class="flex items-center justify-center py-8 text-base-content/40">
-                    <span class="loading loading-spinner loading-sm mr-2"></span>
-                    <span class="text-xs">Processing diff…</span>
-                  </div>
-                {/if}
-                {/if}
-              {/if}
-            </div>
+            <DiffFileSection
+              {file}
+              collapsed={collapsedFiles.has(file.filename)}
+              richDiffSupported={supportsRichDiff(file)}
+              richDiffActive={isRichDiffActive(file)}
+              reviewed={isFileReviewed(file)}
+              fileContents={fileContentsFetcher.fileContentsMap.get(file.filename)}
+              fileContentError={fileContentsFetcher.fileContentErrors.get(file.filename)}
+              onRetryFileContents={() => fileContentsFetcher.retryFileContents(file.filename)}
+              canFetchFileContents={Boolean(fetchFileContents || batchFetchFileContents)}
+              workerDiffFile={diffWorker.getDiffFile(file.filename)}
+              {diffViewMode}
+              {diffViewWrap}
+              diffViewTheme={resolveDiffTheme()}
+              {githubMarkdownImageBaseUrl}
+              {existingComments}
+              pendingComments={visiblePendingComments}
+              {agentComments}
+              {resolveRepositoryImage}
+              onOpenRepositoryPath={openRepositoryPath}
+              {onOpenUrl}
+              onOpenInlineCommentWidget={(lineNumber, side) => openInlineCommentWidget(file.filename, lineNumber, side)}
+              getInlineCommentText={(lineNumber, side) => getInlineCommentText(file.filename, lineNumber, side)}
+              onSetInlineCommentText={(lineNumber, side, text) => setInlineCommentText(file.filename, lineNumber, side, text)}
+              onClearInlineCommentText={(lineNumber, side) => clearInlineCommentText(file.filename, lineNumber, side)}
+              onSubmitInlineComment={(lineNumber, side, onClose) => submitInlineComment(file.filename, lineNumber, side, onClose)}
+              onPendingCommentsChange={setVisiblePendingComments}
+              onAgentCommentsChange={setVisibleAgentComments}
+              {onUpdateAgentCommentStatus}
+              {fileHeaderExtra}
+              onToggleCollapse={() => toggleCollapse(file.filename)}
+              onSetRichDiffActive={(active) => setRichDiffActive(file, active)}
+              onReviewedChange={onToggleFileReviewed ? (reviewed) => handleReviewedChange(file, reviewed) : undefined}
+            />
           </div>
           {/if}
         {/each}

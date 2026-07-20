@@ -472,6 +472,35 @@ describe('plugin-host backend runtime', () => {
     expect(await runtime.getBackendState('worker')).toMatchObject({ state: 'missing' })
   })
 
+  it('imports changed backend methods after deactivation without restarting the plugin host', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('beforeReload', {
+            handler() { return 'before' }
+          }))
+        }
+      }
+    `)
+    const runtime = createPluginHostRuntime()
+
+    await expect(runtime.invokeBackend({ pluginId: 'reloadable', backendPath, command: 'beforeReload' })).resolves.toBe('before')
+
+    await writeFile(backendPath, `
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('afterReload', {
+            handler() { return 'after' }
+          }))
+        }
+      }
+    `)
+    await runtime.deactivateBackend('reloadable')
+
+    await expect(runtime.invokeBackend({ pluginId: 'reloadable', backendPath, command: 'afterReload' })).resolves.toBe('after')
+    await expect(runtime.invokeBackend({ pluginId: 'reloadable', command: 'beforeReload' })).rejects.toThrow(/not found/i)
+  })
+
   it('tags plugin activation and handler logs/errors with plugin id', async () => {
     const backendPath = await writeBackendModule(`
       export default {
