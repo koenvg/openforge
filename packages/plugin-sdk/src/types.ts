@@ -377,7 +377,13 @@ export interface CreateTaskRequest {
 export interface StartPromptContribution {
   id: string
   enabled: boolean
-  /** Prompt text injected before OpenForge's task prompt. The host substitutes {{taskId}} and {{task_id}}. */
+  /**
+   * Prompt text injected before OpenForge's task prompt.
+   * The host substitutes {{taskId}} and {{task_id}}. Contributions using the
+   * reserved handoff-notes-workflow ID may opt into the current project template
+   * with {{handoffNotesTemplate}}. The exact retired OpenForge handoff envelope is
+   * also refreshed for backward compatibility; other content remains unchanged.
+   */
   content: string
   /** Lower values are injected first. Defaults to 0. */
   order?: number

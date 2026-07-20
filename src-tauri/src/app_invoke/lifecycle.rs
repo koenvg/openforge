@@ -166,7 +166,11 @@ fn load_start_implementation_context(
         .get_project_config(&project_id, "additional_instructions")
         .ok()
         .flatten();
-    let start_prompt_contributions = db
+    let handoff_notes_template = db
+        .get_project_config(&project_id, "handoff_notes_template")
+        .ok()
+        .flatten();
+    let mut start_prompt_contributions: Vec<crate::agent_lifecycle::StartPromptContribution> = db
         .get_project_config(
             &project_id,
             crate::agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY,
@@ -175,6 +179,10 @@ fn load_start_implementation_context(
         .flatten()
         .and_then(|value| serde_json::from_str(&value).ok())
         .unwrap_or_default();
+    crate::agent_lifecycle::apply_project_handoff_notes_template(
+        &mut start_prompt_contributions,
+        handoff_notes_template.as_deref(),
+    );
     let code_cleanup_enabled = db.resolve_task_bool(&task.id, "code_cleanup_tasks_enabled", false);
     let provider_name = db.resolve_ai_provider_for_task(&task.id);
 
