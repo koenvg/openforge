@@ -103,6 +103,19 @@ describe('getTaskActions', () => {
     expect(ids.indexOf('set-aside-task')).toBeGreaterThan(ids.indexOf('custom-action-custom-1'))
   })
 
+  it('returns Run app only when the task run command is available', () => {
+    const task = makeTask({ status: 'doing' })
+
+    const availableActions = getTaskActions(task, [], [], new Set(), { canRunApp: true })
+    const unavailableActions = getTaskActions(task, [], [], new Set(), { canRunApp: false })
+
+    expect(availableActions.find(action => action.id === 'run-app')).toMatchObject({
+      label: 'Run app',
+      category: 'task',
+    })
+    expect(unavailableActions.some(action => action.id === 'run-app')).toBe(false)
+  })
+
   it('returns Move task back in focus for doing task already Out of Focus', () => {
     const task = makeTask({ status: 'doing' })
     const actions = getTaskActions(task, [], [], new Set([task.id]))

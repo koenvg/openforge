@@ -42,6 +42,7 @@
   import { useAppDataOrchestrator } from './lib/appDataOrchestrator.svelte'
   import { createTaskActionRunner } from './lib/taskActionRunner'
   import { useActionPaletteController } from './lib/actionPaletteController.svelte'
+  import type { TaskRunAppRegistration } from './lib/runAppCommand'
   
   let unlisteners: DesktopUnlistenFn[] = []
   let showAddDialog = $state(false)
@@ -57,6 +58,7 @@
   let appSidebarCollapsed = $state(localStorage.getItem('appSidebarCollapsed') === 'true')
   let showCommandPalette = $state(false)
   let showFileQuickOpen = $state(false)
+  let taskRunAppRegistration = $state<TaskRunAppRegistration | null>(null)
   let router = useAppRouter()
   let registeredPluginShortcuts = new Set<string>()
   const globalShortcutHelpEntries = getGlobalShortcutHelpEntries()
@@ -76,6 +78,10 @@
       .filter((source) => source !== undefined)
   )
   let activeProject = $derived($projects.find(p => p.id === $activeProjectId) || null)
+  function handleRunAppRegistrationChange(registration: TaskRunAppRegistration | null): void {
+    taskRunAppRegistration = registration
+  }
+
   const appData = useAppDataOrchestrator({
     setShowProjectSetup: (show) => { showProjectSetup = show },
   })
@@ -96,6 +102,12 @@
     },
     showProjectSwitcher: () => { showProjectSwitcher = true },
     triggerGithubSync: appData.triggerGithubSync,
+    runApp: {
+      capture: (task) => {
+        const registration = taskRunAppRegistration
+        return registration?.taskId === task.id && registration.available ? registration.run : null
+      },
+    },
   })
   const handleRunAction = taskActions.handleRunAction
   let resolvedPluginContributions = $derived(resolveContributions(enabledPluginContributionSources))
@@ -552,7 +564,14 @@
         {:else if pluginViewActive}
           <PluginSlot slotType="views" slotId={$currentView} />
         {:else if selectedTask}
-          <TaskDetailView task={selectedTask} onRunAction={handleRunAction} onEdit={openEditTask} onOpenTask={handleOpenTask} onTaskUpdated={async () => { await appData.loadTasks() }} />
+          <TaskDetailView
+            task={selectedTask}
+            onRunAction={handleRunAction}
+            onEdit={openEditTask}
+            onOpenTask={handleOpenTask}
+            onTaskUpdated={async () => { await appData.loadTasks() }}
+            onRunAppRegistrationChange={handleRunAppRegistrationChange}
+          />
         {:else}
           <div class="flex-1 overflow-hidden">
             {#if $isLoading && $tasks.length === 0}
@@ -639,6 +658,7 @@
     task={actionPalette.actionPaletteTask}
     customActions={actionPalette.actionPaletteActions}
     taskPrs={actionPalette.actionPaletteTask ? ($ticketPrs.get(actionPalette.actionPaletteTask.id) || []) : []}
+    canRunApp={actionPalette.actionPaletteCanRunApp}
     onClose={actionPalette.closeActionPalette}
     onExecute={actionPalette.executeAction}
   />

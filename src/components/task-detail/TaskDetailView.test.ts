@@ -31,6 +31,16 @@ vi.mock('@xterm/addon-web-links', () => {
 
 vi.mock('@openforge-app/terminal-runtime/xterm.css', () => ({}))
 
+const mockRunAppCommandInTaskTerminal = vi.hoisted(() => vi.fn(async () => true))
+
+vi.mock('../../lib/runAppCommand', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/runAppCommand')>()
+  return {
+    ...actual,
+    runAppCommandInTaskTerminal: mockRunAppCommandInTaskTerminal,
+  }
+})
+
 vi.mock('../../lib/audioRecorder', () => ({
   createAudioRecorder: vi.fn(),
 }))
@@ -358,6 +368,44 @@ describe('TaskDetailView', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     const titles = screen.getAllByText('Implement auth middleware')
     expect(titles.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('registers a task-bound Run app command when the existing button is available', async () => {
+    const { getProjectConfig, getTaskWorkspace } = await import('../../lib/ipc')
+    vi.mocked(getProjectConfig).mockResolvedValue('pnpm dev')
+    vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo())
+    const onRunAppRegistrationChange = vi.fn()
+
+    const rendered = render(TaskDetailView, {
+      props: { task: baseTask, onRunAction: mockOnRunAction, onRunAppRegistrationChange },
+    })
+
+    let capturedRegistration: { taskId: string; available: boolean; run: () => Promise<void> } | null = null
+    await waitFor(() => {
+      const registration = onRunAppRegistrationChange.mock.calls
+        .map(([value]) => value)
+        .find((value) => value?.taskId === baseTask.id && value.available)
+      expect(registration).toBeDefined()
+      capturedRegistration = registration
+    })
+
+    await rendered.rerender({
+      task: secondaryTask,
+      onRunAction: mockOnRunAction,
+      onRunAppRegistrationChange,
+    })
+    await capturedRegistration!.run()
+
+    expect(mockRunAppCommandInTaskTerminal).toHaveBeenCalledWith(
+      baseTask.id,
+      'pnpm dev',
+      expect.objectContaining({ openTerminalView: expect.any(Function) }),
+    )
+
+    rendered.unmount()
+    expect(onRunAppRegistrationChange).toHaveBeenLastCalledWith(null)
+    vi.mocked(getProjectConfig).mockResolvedValue(null)
+    vi.mocked(getTaskWorkspace).mockResolvedValue(null)
   })
 
   it('has AgentPanel child with empty state text', async () => {

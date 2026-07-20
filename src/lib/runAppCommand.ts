@@ -33,6 +33,26 @@ export interface RunAppCommandDeps {
   openTerminalView: () => void
 }
 
+export interface TaskRunAppRegistration {
+  taskId: string
+  available: boolean
+  run: () => Promise<void>
+}
+
+interface TaskRunAppAvailability {
+  workspacePath: string | null
+  command: string
+  terminalAvailable: boolean
+  isLaunching: boolean
+}
+
+export function isTaskRunAppAvailable(availability: TaskRunAppAvailability): boolean {
+  return availability.workspacePath !== null
+    && availability.command.trim() !== ''
+    && availability.terminalAvailable
+    && !availability.isLaunching
+}
+
 export interface RunAppCommandOptions {
   timeoutMs?: number
   pollIntervalMs?: number
