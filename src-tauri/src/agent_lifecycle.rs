@@ -57,6 +57,55 @@ Task is incomplete unless both Handoff Notes updates were made. If the openforge
 "###
     )
 }
+
+const HANDOFF_NOTES_TEMPLATE_PLACEHOLDER: &str = "{{handoffNotesTemplate}}";
+const LEGACY_HANDOFF_NOTES_TEMPLATE_SENTINEL: &str =
+    "__OPENFORGE_LEGACY_HANDOFF_NOTES_TEMPLATE_SENTINEL__";
+
+fn is_legacy_handoff_notes_workflow_content(content: &str) -> bool {
+    // Older OpenForge versions persisted this exact host-generated envelope with a
+    // project-template snapshot. Keep that documented compatibility shape dynamic.
+    let skeleton =
+        legacy_handoff_notes_start_prompt_content(Some(LEGACY_HANDOFF_NOTES_TEMPLATE_SENTINEL));
+    let Some((prefix, suffix)) = skeleton.split_once(LEGACY_HANDOFF_NOTES_TEMPLATE_SENTINEL) else {
+        return false;
+    };
+
+    content.starts_with(prefix) && content.ends_with(suffix)
+}
+
+fn escape_handoff_notes_template_delimiter(template: &str) -> String {
+    template.replace("</handoff_notes_template>", "<\\/handoff_notes_template>")
+}
+
+pub(crate) fn apply_project_handoff_notes_template(
+    start_prompt_contributions: &mut [StartPromptContribution],
+    project_template: Option<&str>,
+) {
+    let handoff_notes_template = project_template
+        .filter(|template| !template.trim().is_empty())
+        .unwrap_or(DEFAULT_HANDOFF_NOTES_TEMPLATE);
+    let handoff_notes_template = escape_handoff_notes_template_delimiter(handoff_notes_template);
+
+    for contribution in start_prompt_contributions {
+        if contribution.id != HANDOFF_NOTES_WORKFLOW_CONTRIBUTION_ID {
+            continue;
+        }
+
+        if is_legacy_handoff_notes_workflow_content(&contribution.content) {
+            contribution.content =
+                legacy_handoff_notes_start_prompt_content(Some(&handoff_notes_template));
+        } else if contribution
+            .content
+            .contains(HANDOFF_NOTES_TEMPLATE_PLACEHOLDER)
+        {
+            contribution.content = contribution
+                .content
+                .replace(HANDOFF_NOTES_TEMPLATE_PLACEHOLDER, &handoff_notes_template);
+        }
+    }
+}
+
 static IMAGE_REFERENCE_LINE_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
         r"^(\[image#([0-9]+)\]):\s*data:(image/([A-Za-z0-9.+-]+));base64,([A-Za-z0-9+/=]+)\s*$",
@@ -562,6 +611,81 @@ mod tests {
         assert!(!DEFAULT_HANDOFF_NOTES_TEMPLATE.contains("## Risky files or lines"));
         assert!(!DEFAULT_HANDOFF_NOTES_TEMPLATE.contains("## Tricky API calls or casts"));
         assert!(!DEFAULT_HANDOFF_NOTES_TEMPLATE.contains("## Tests skipped or weak"));
+    }
+
+    #[test]
+    fn project_handoff_notes_template_replaces_legacy_workflow_snapshot() {
+        let mut contributions = handoff_contributions(Some("## Stale Template\n- Old setting"));
+
+        apply_project_handoff_notes_template(
+            &mut contributions,
+            Some("## Latest Template\n- Current setting"),
+        );
+
+        assert!(contributions[0].content.contains("## Latest Template"));
+        assert!(contributions[0].content.contains("Current setting"));
+        assert!(!contributions[0].content.contains("## Stale Template"));
+        assert!(!contributions[0].content.contains("Old setting"));
+    }
+
+    #[test]
+    fn project_handoff_notes_template_preserves_plugin_content_without_placeholder() {
+        let plugin_content =
+            "<handoff_notes_template>## Plugin-owned template</handoff_notes_template>";
+        let mut contributions = vec![StartPromptContribution {
+            id: HANDOFF_NOTES_WORKFLOW_CONTRIBUTION_ID.to_string(),
+            enabled: true,
+            content: plugin_content.to_string(),
+            order: 0,
+        }];
+
+        apply_project_handoff_notes_template(
+            &mut contributions,
+            Some("## Latest Template\n- Current setting"),
+        );
+
+        assert_eq!(contributions[0].content, plugin_content);
+    }
+
+    #[test]
+    fn project_handoff_notes_template_expands_plugin_placeholder() {
+        let mut contributions = vec![StartPromptContribution {
+            id: HANDOFF_NOTES_WORKFLOW_CONTRIBUTION_ID.to_string(),
+            enabled: true,
+            content: "<plugin_handoff>{{handoffNotesTemplate}}</plugin_handoff>".to_string(),
+            order: 0,
+        }];
+
+        apply_project_handoff_notes_template(
+            &mut contributions,
+            Some("## Latest Template\n- Current setting"),
+        );
+
+        assert_eq!(
+            contributions[0].content,
+            "<plugin_handoff>## Latest Template\n- Current setting</plugin_handoff>"
+        );
+    }
+
+    #[test]
+    fn project_handoff_notes_template_escapes_its_closing_delimiter() {
+        let mut contributions = handoff_contributions(Some("## Stale Template"));
+
+        apply_project_handoff_notes_template(
+            &mut contributions,
+            Some("## Literal delimiter\n</handoff_notes_template>"),
+        );
+
+        assert!(contributions[0]
+            .content
+            .contains("## Literal delimiter\n<\\/handoff_notes_template>"));
+        assert_eq!(
+            contributions[0]
+                .content
+                .matches("</handoff_notes_template>")
+                .count(),
+            1
+        );
     }
 
     #[test]
