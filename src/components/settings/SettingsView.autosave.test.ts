@@ -197,11 +197,11 @@ describe('SettingsView auto-save', () => {
 
       render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
 
-      const prefixInput = requireElement(screen.getByPlaceholderText('e.g. ABC'), HTMLInputElement)
-      const pollIntervalInput = requireElement(screen.getByTestId('poll-interval-input'), HTMLInputElement)
+      const prefixInput = requireElement(screen.getByTestId('task_id_prefix'), HTMLInputElement)
+      const pollIntervalInput = requireElement(screen.getByTestId('github_poll_interval'), HTMLInputElement)
       const tokenInput = requireElement(screen.getByPlaceholderText('ghp_...'), HTMLInputElement)
-      const cleanupToggle = requireElement(screen.getByTestId('code-cleanup-tasks-toggle'), HTMLInputElement)
-      const titleMetadataToggle = requireElement(screen.getByTestId('task-display-title-metadata-updates-toggle'), HTMLInputElement)
+      const cleanupToggle = requireElement(screen.getByTestId('code_cleanup_tasks_enabled'), HTMLInputElement)
+      const titleMetadataToggle = requireElement(screen.getByTestId('task_display_title_metadata_updates_enabled'), HTMLInputElement)
       expect(prefixInput.disabled).toBe(true)
       expect(pollIntervalInput.disabled).toBe(true)
       expect(tokenInput.disabled).toBe(true)
@@ -209,7 +209,7 @@ describe('SettingsView auto-save', () => {
       expect(titleMetadataToggle.disabled).toBe(true)
 
       await vi.waitFor(() => {
-        expect(resolvers.size).toBeGreaterThanOrEqual(5)
+        expect(resolvers.size).toBeGreaterThanOrEqual(8)
       })
 
       resolvers.get('task_id_prefix')?.('OF')
@@ -217,6 +217,9 @@ describe('SettingsView auto-save', () => {
       resolvers.get('code_cleanup_tasks_enabled')?.('false')
       resolvers.get('task_display_title_metadata_updates_enabled')?.('false')
       resolvers.get('github_poll_interval')?.('60')
+      resolvers.get('handoff_notes_enabled')?.('true')
+      resolvers.get('use_worktrees')?.('true')
+      resolvers.get('ai_provider')?.('claude-code')
       await vi.waitFor(() => {
         expect(prefixInput.disabled).toBe(false)
         expect(pollIntervalInput.disabled).toBe(false)
@@ -349,7 +352,7 @@ describe('SettingsView auto-save', () => {
       render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
 
       const toggle = requireElement(
-        await screen.findByTestId('task-display-title-metadata-updates-toggle'),
+        await screen.findByTestId('task_display_title_metadata_updates_enabled'),
         HTMLInputElement,
       )
 

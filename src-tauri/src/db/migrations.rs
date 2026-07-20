@@ -1371,6 +1371,18 @@ CREATE TABLE IF NOT EXISTS roadmap_repo_config (
         }
         Ok(())
     }),
+    M::up(
+        "CREATE TABLE IF NOT EXISTS task_config (
+            task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+            key TEXT NOT NULL,
+            value TEXT NOT NULL,
+            UNIQUE(task_id, key)
+        );
+        CREATE TABLE IF NOT EXISTS global_plugins (
+            plugin_id TEXT PRIMARY KEY REFERENCES plugins(id) ON DELETE CASCADE,
+            enabled INTEGER NOT NULL DEFAULT 1
+        );",
+    ),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -2058,6 +2070,25 @@ mod tests {
             migration_count(),
             "LATEST_USER_VERSION must stay aligned with the number of declared migrations"
         );
+    }
+
+    #[test]
+    fn test_task_config_and_global_plugins_tables_exist() {
+        let (db, path) = crate::db::test_helpers::make_test_db("hier_tables");
+        let conn = db.conn.lock().unwrap();
+        let has = |name: &str| -> bool {
+            conn.query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name=?1",
+                [name],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        assert!(has("task_config"), "task_config table should exist");
+        assert!(has("global_plugins"), "global_plugins table should exist");
+        drop(conn);
+        drop(db);
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]

@@ -116,6 +116,15 @@ pub struct NewTaskOptions<'a> {
     pub title: Option<&'a str>,
     pub handoff_notes_enabled: bool,
     pub source_ticket_url: Option<&'a str>,
+    /// When `Some`, snapshot `code_cleanup_tasks_enabled` into `task_config` at
+    /// creation. `None` leaves it unset so the runtime resolves project/global.
+    pub code_cleanup_enabled: Option<bool>,
+    /// When `Some`, snapshot `task_display_title_metadata_updates_enabled` into
+    /// `task_config` at creation. `None` leaves it unset.
+    pub task_display_title_updates_enabled: Option<bool>,
+    /// When `Some` (and non-empty), snapshot `ai_provider` into `task_config` at
+    /// creation. `None`/empty leaves it unset so the runtime resolves project/global.
+    pub ai_provider: Option<&'a str>,
 }
 
 fn load_task_dependency_ids(conn: &rusqlite::Connection, task_id: &str) -> Result<Vec<String>> {
@@ -528,6 +537,9 @@ impl super::Database {
             title: None,
             handoff_notes_enabled: true,
             source_ticket_url: None,
+            code_cleanup_enabled: None,
+            task_display_title_updates_enabled: None,
+            ai_provider: None,
         })
     }
 
@@ -543,6 +555,9 @@ impl super::Database {
             title,
             handoff_notes_enabled,
             source_ticket_url,
+            code_cleanup_enabled,
+            task_display_title_updates_enabled,
+            ai_provider,
         } = opts;
         let conn = self.conn.lock().unwrap();
         let defaulted_worktree_source =
@@ -570,18 +585,30 @@ impl super::Database {
             },
         )?;
 
-        let prefix: String = conn
+        // Resolve the task-ID prefix as project_config ?? config ?? "T". The
+        // single global `next_task_id` counter is unchanged, so IDs stay globally
+        // unique and sequential; only the prefix is per-project.
+        let global_prefix: String = conn
             .query_row(
                 "SELECT value FROM config WHERE key = 'task_id_prefix'",
                 [],
                 |row| row.get(0),
             )
             .unwrap_or_else(|_| "T".to_string());
-        let prefix = if prefix.is_empty() {
-            "T".to_string()
-        } else {
-            prefix
+        let project_prefix: Option<String> = match project_id {
+            Some(pid) => conn
+                .query_row(
+                    "SELECT value FROM project_config WHERE project_id = ?1 AND key = 'task_id_prefix'",
+                    [pid],
+                    |row| row.get(0),
+                )
+                .ok(),
+            None => None,
         };
+        let prefix = project_prefix
+            .filter(|p| !p.is_empty())
+            .or_else(|| Some(global_prefix).filter(|p| !p.is_empty()))
+            .unwrap_or_else(|| "T".to_string());
         let task_id = format!("{}-{}", prefix, next_id);
 
         conn.execute(
@@ -623,6 +650,35 @@ impl super::Database {
                 source_ticket_url.as_deref(),
             ],
         )?;
+
+        // Snapshot the task-level hierarchy settings that live in `task_config`.
+        // A `None` field leaves the row unset so the runtime falls back to the
+        // resolved project/global value (preserving legacy-task behavior).
+        let bool_str = |b: bool| if b { "true" } else { "false" };
+        if let Some(v) = code_cleanup_enabled {
+            conn.execute(
+                "INSERT OR REPLACE INTO task_config (task_id, key, value) VALUES (?1, ?2, ?3)",
+                [&task_id, "code_cleanup_tasks_enabled", bool_str(v)],
+            )?;
+        }
+        if let Some(v) = task_display_title_updates_enabled {
+            conn.execute(
+                "INSERT OR REPLACE INTO task_config (task_id, key, value) VALUES (?1, ?2, ?3)",
+                [
+                    &task_id,
+                    "task_display_title_metadata_updates_enabled",
+                    bool_str(v),
+                ],
+            )?;
+        }
+        if let Some(v) = ai_provider {
+            if !v.is_empty() {
+                conn.execute(
+                    "INSERT OR REPLACE INTO task_config (task_id, key, value) VALUES (?1, ?2, ?3)",
+                    [&task_id, "ai_provider", v],
+                )?;
+            }
+        }
 
         Ok(TaskRow {
             id: task_id,
@@ -1506,6 +1562,9 @@ mod tests {
                 title: Some("  Custom title  "),
                 handoff_notes_enabled: false,
                 source_ticket_url: None,
+                code_cleanup_enabled: None,
+                task_display_title_updates_enabled: None,
+                ai_provider: None,
             })
             .expect("create failed");
 
@@ -1526,6 +1585,79 @@ mod tests {
     }
 
     #[test]
+    fn test_task_id_prefix_prefers_project_override() {
+        let (db, path) = crate::db::test_helpers::make_test_db("prefix_override");
+        let project = db.create_project("Web", "/tmp/web").unwrap();
+        db.set_project_config(&project.id, "task_id_prefix", "WEB")
+            .unwrap();
+        let task = db
+            .create_task_with_options(crate::db::NewTaskOptions {
+                initial_prompt: "p",
+                status: "backlog",
+                project_id: Some(&project.id),
+                prompt: None,
+                permission_mode: None,
+                worktree_source: None,
+                worktree_branch: None,
+                title: None,
+                handoff_notes_enabled: true,
+                source_ticket_url: None,
+                code_cleanup_enabled: None,
+                task_display_title_updates_enabled: None,
+                ai_provider: None,
+            })
+            .unwrap();
+        assert!(task.id.starts_with("WEB-"), "got {}", task.id);
+
+        drop(db);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_create_task_snapshots_task_config_when_provided() {
+        let (db, path) = crate::db::test_helpers::make_test_db("task_snapshot");
+        let project = db.create_project("P", "/tmp/p").unwrap();
+        let task = db
+            .create_task_with_options(crate::db::NewTaskOptions {
+                initial_prompt: "p",
+                status: "backlog",
+                project_id: Some(&project.id),
+                prompt: None,
+                permission_mode: None,
+                worktree_source: None,
+                worktree_branch: None,
+                title: None,
+                handoff_notes_enabled: true,
+                source_ticket_url: None,
+                code_cleanup_enabled: Some(true),
+                task_display_title_updates_enabled: Some(false),
+                ai_provider: Some("opencode"),
+            })
+            .unwrap();
+
+        assert_eq!(
+            db.get_task_config(&task.id, "code_cleanup_tasks_enabled")
+                .unwrap(),
+            Some("true".to_string())
+        );
+        assert_eq!(
+            db.get_task_config(&task.id, "task_display_title_metadata_updates_enabled")
+                .unwrap(),
+            Some("false".to_string())
+        );
+        assert_eq!(
+            db.get_task_config(&task.id, "ai_provider").unwrap(),
+            Some("opencode".to_string())
+        );
+        // Resolver reads the snapshot.
+        assert!(db.resolve_task_bool(&task.id, "code_cleanup_tasks_enabled", false));
+        assert_eq!(db.resolve_ai_provider_for_task(&task.id), "opencode");
+
+        drop(db);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
     fn test_create_task_with_options_blank_title_falls_back_to_null() {
         let (db, path) = make_test_db("create_task_options_blank_title");
 
@@ -1541,6 +1673,9 @@ mod tests {
                 title: Some("   "),
                 handoff_notes_enabled: true,
                 source_ticket_url: None,
+                code_cleanup_enabled: None,
+                task_display_title_updates_enabled: None,
+                ai_provider: None,
             })
             .expect("create failed");
 
@@ -1569,6 +1704,9 @@ mod tests {
                 title: None,
                 handoff_notes_enabled: true,
                 source_ticket_url: Some(url),
+                code_cleanup_enabled: None,
+                task_display_title_updates_enabled: None,
+                ai_provider: None,
             })
             .expect("create failed");
 
@@ -1603,6 +1741,9 @@ mod tests {
                 title: None,
                 handoff_notes_enabled: true,
                 source_ticket_url: Some("   "),
+                code_cleanup_enabled: None,
+                task_display_title_updates_enabled: None,
+                ai_provider: None,
             })
             .expect("create failed");
 
@@ -1720,6 +1861,9 @@ mod tests {
                 title: Some("Manual title"),
                 handoff_notes_enabled: true,
                 source_ticket_url: None,
+                code_cleanup_enabled: None,
+                task_display_title_updates_enabled: None,
+                ai_provider: None,
             })
             .expect("create failed");
 

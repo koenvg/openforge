@@ -243,6 +243,9 @@ describe("ipc spawnShellPty", () => {
 			title: null,
 			handoffNotesEnabled: true,
 			sourceTicketUrl: null,
+			codeCleanupEnabled: undefined,
+			taskDisplayTitleUpdatesEnabled: undefined,
+			aiProvider: null,
 		});
 	});
 
@@ -280,6 +283,9 @@ describe("ipc spawnShellPty", () => {
 			title: null,
 			handoffNotesEnabled: true,
 			sourceTicketUrl: null,
+			codeCleanupEnabled: undefined,
+			taskDisplayTitleUpdatesEnabled: undefined,
+			aiProvider: null,
 		});
 	});
 
@@ -317,6 +323,9 @@ describe("ipc spawnShellPty", () => {
 			title: null,
 			handoffNotesEnabled: true,
 			sourceTicketUrl: null,
+			codeCleanupEnabled: undefined,
+			taskDisplayTitleUpdatesEnabled: undefined,
+			aiProvider: null,
 		});
 	});
 

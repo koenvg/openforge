@@ -1,8 +1,37 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
-import { getProjectIdentity, mergeUpdatedProject } from './settingsProjectSync'
+vi.mock('./ipc', () => ({
+  resetProjectSettingsToGlobal: vi.fn(),
+}))
+
+import { resetProjectSettingsToGlobal } from './ipc'
+import { getProjectIdentity, mergeUpdatedProject, resetProjectAndReload } from './settingsProjectSync'
 
 describe('settingsProjectSync', () => {
+  it('resets project overrides then reloads', async () => {
+    vi.mocked(resetProjectSettingsToGlobal).mockResolvedValue(undefined)
+    const reload = vi.fn().mockResolvedValue(undefined)
+
+    await resetProjectAndReload('P-1', reload)
+
+    expect(resetProjectSettingsToGlobal).toHaveBeenCalledWith('P-1')
+    expect(reload).toHaveBeenCalled()
+  })
+
+  it('reloads only after the reset has resolved', async () => {
+    const order: string[] = []
+    vi.mocked(resetProjectSettingsToGlobal).mockImplementation(async () => {
+      order.push('reset')
+    })
+    const reload = vi.fn().mockImplementation(async () => {
+      order.push('reload')
+    })
+
+    await resetProjectAndReload('P-2', reload)
+
+    expect(order).toEqual(['reset', 'reload'])
+  })
+
   it('returns blank identity when there is no active project', () => {
     expect(getProjectIdentity(null, [])).toEqual({
       projectName: '',

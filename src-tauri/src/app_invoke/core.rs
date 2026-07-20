@@ -258,6 +258,39 @@ pub(super) async fn handle_app_unmatched_command(
                 })?;
             serde_json::Value::Null
         }
+        "get_task_config" => {
+            let task_id = payload_string(&request.payload, "taskId")?;
+            let key = payload_string(&request.payload, "key")?;
+            json_value(db.get_task_config(&task_id, &key).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to get task config: {e}"),
+                )
+            })?)?
+        }
+        "set_task_config" => {
+            let task_id = payload_string(&request.payload, "taskId")?;
+            let key = payload_string(&request.payload, "key")?;
+            let value = payload_string(&request.payload, "value")?;
+            db.set_task_config(&task_id, &key, &value).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to set task config: {e}"),
+                )
+            })?;
+            serde_json::Value::Null
+        }
+        "reset_project_settings_to_global" => {
+            let project_id = payload_string(&request.payload, "projectId")?;
+            db.reset_project_settings_to_global(&project_id)
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to reset project settings: {e}"),
+                    )
+                })?;
+            serde_json::Value::Null
+        }
         "create_task" => {
             let initial_prompt = payload_string(&request.payload, "initialPrompt")?;
             let status = payload_string(&request.payload, "status")?;
@@ -275,6 +308,17 @@ pub(super) async fn handle_app_unmatched_command(
                 .get("handoffNotesEnabled")
                 .and_then(|value| value.as_bool())
                 .unwrap_or(true);
+            // Task-level hierarchy overrides: absent (None) means "inherit
+            // project/global" so the runtime resolves them at start time.
+            let code_cleanup_enabled = request
+                .payload
+                .get("codeCleanupEnabled")
+                .and_then(|v| v.as_bool());
+            let task_display_title_updates_enabled = request
+                .payload
+                .get("taskDisplayTitleUpdatesEnabled")
+                .and_then(|v| v.as_bool());
+            let ai_provider = payload_optional_string(&request.payload, "aiProvider")?;
             let task = db
                 .create_task_with_options(crate::db::NewTaskOptions {
                     initial_prompt: &initial_prompt,
@@ -287,6 +331,9 @@ pub(super) async fn handle_app_unmatched_command(
                     title: title.as_deref(),
                     handoff_notes_enabled,
                     source_ticket_url: source_ticket_url.as_deref(),
+                    code_cleanup_enabled,
+                    task_display_title_updates_enabled,
+                    ai_provider: ai_provider.as_deref(),
                 })
                 .map_err(|e| {
                     (

@@ -26,6 +26,10 @@
   interface Props {
     activeProjectId?: string | null
     disabled?: boolean
+    // Global enable-by-default state keyed by plugin id (explicit global default
+    // if set, else builtin default). This is the GLOBAL layer, not per-project enablement.
+    pluginDefaults?: Map<string, boolean>
+    onToggleDefault?: (pluginId: string, enabled: boolean) => void
   }
 
   type SourceType = 'npm' | 'git' | 'local'
@@ -33,6 +37,8 @@
   let {
     activeProjectId = null,
     disabled = false,
+    pluginDefaults = new Map(),
+    onToggleDefault,
   }: Props = $props()
 
   let sourceType = $state<SourceType>('npm')
@@ -308,6 +314,19 @@
                 </div>
 
                 <div class="flex flex-col items-end gap-2 shrink-0">
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <span class="text-xs text-base-content/70">Enable by default</span>
+                    <input
+                      type="checkbox"
+                      class="toggle toggle-primary toggle-sm"
+                      role="switch"
+                      aria-label="Enable by default: {plugin.manifest.name}"
+                      data-testid="plugin-default-{plugin.manifest.id}"
+                      checked={pluginDefaults.get(plugin.manifest.id) ?? false}
+                      disabled={disabled}
+                      onchange={(e) => onToggleDefault?.(plugin.manifest.id, e.currentTarget.checked)}
+                    />
+                  </label>
                   <button class="btn btn-ghost btn-xs" type="button" aria-label="Reload plugin: {plugin.manifest.name}" disabled={disabled} onclick={() => handleReload(plugin.manifest.id)}>Reload plugin</button>
                   {#if !isBuiltIn}
                     <button class="btn btn-error btn-outline btn-xs" type="button" aria-label="Uninstall plugin: {plugin.manifest.name}" disabled={disabled} onclick={() => handleUninstall(plugin.manifest.id)}>Uninstall plugin</button>

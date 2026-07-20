@@ -36,9 +36,7 @@ describe('settingsSaver', () => {
       projectPath: '/tmp/project',
       agentInstructions: 'Do the thing',
       handoffNotesTemplate: '## Current summary\nCustom template',
-      aiProvider: 'opencode',
       projectColor: 'violet',
-      useWorktrees: false,
       runCommand: 'pnpm dev',
       actions: [{ id: 'a1', name: 'Action', prompt: '', builtin: false, enabled: true }],
       focusFilterStates: ['idle'],
@@ -48,14 +46,29 @@ describe('settingsSaver', () => {
     expect(setProjectConfig).not.toHaveBeenCalledWith('project-1', 'github_default_repo', expect.anything())
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'additional_instructions', 'Do the thing')
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'handoff_notes_template', '## Current summary\nCustom template')
-    expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'ai_provider', 'opencode')
-    expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'use_worktrees', 'false')
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'project_color', 'violet')
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'run_command', 'pnpm dev')
     expect(saveActions).toHaveBeenCalledWith('project-1', [
       { id: 'a1', name: 'Action', prompt: '', builtin: false, enabled: true },
     ])
     expect(saveFocusFilterStates).toHaveBeenCalledWith('project-1', ['idle'])
+  })
+
+  it('does not write ai_provider or use_worktrees, which the Configuration card owns via a single write path', async () => {
+    await saveProjectSettings({
+      projectId: 'project-1',
+      projectName: 'My Project',
+      projectPath: '/tmp/project',
+      agentInstructions: 'Do the thing',
+      handoffNotesTemplate: '## Current summary\nCustom template',
+      projectColor: 'violet',
+      runCommand: '',
+      actions: [],
+      focusFilterStates: ['idle'],
+    })
+
+    expect(setProjectConfig).not.toHaveBeenCalledWith('project-1', 'ai_provider', expect.anything())
+    expect(setProjectConfig).not.toHaveBeenCalledWith('project-1', 'use_worktrees', expect.anything())
   })
 
   it('persists global settings through the existing global config helpers', async () => {
@@ -65,6 +78,9 @@ describe('settingsSaver', () => {
       codeCleanupTasksEnabled: true,
       taskDisplayTitleMetadataUpdatesEnabled: true,
       githubPollInterval: 45,
+      handoffNotesEnabled: false,
+      useWorktrees: false,
+      aiProvider: 'opencode',
     })
 
     expect(setConfig).toHaveBeenCalledWith('task_id_prefix', 'T-')
@@ -72,6 +88,9 @@ describe('settingsSaver', () => {
     expect(setConfig).toHaveBeenCalledWith('code_cleanup_tasks_enabled', 'true')
     expect(setConfig).toHaveBeenCalledWith('task_display_title_metadata_updates_enabled', 'true')
     expect(setConfig).toHaveBeenCalledWith('github_poll_interval', '45')
+    expect(setConfig).toHaveBeenCalledWith('handoff_notes_enabled', 'false')
+    expect(setConfig).toHaveBeenCalledWith('use_worktrees', 'false')
+    expect(setConfig).toHaveBeenCalledWith('ai_provider', 'opencode')
   })
 
   it('clamps persisted global GitHub poll interval of 0 seconds to the minimum supported value', async () => {
@@ -81,6 +100,9 @@ describe('settingsSaver', () => {
       codeCleanupTasksEnabled: true,
       taskDisplayTitleMetadataUpdatesEnabled: false,
       githubPollInterval: 0,
+      handoffNotesEnabled: true,
+      useWorktrees: true,
+      aiProvider: 'claude-code',
     })
 
     expect(setConfig).toHaveBeenCalledWith('github_poll_interval', '15')
@@ -93,6 +115,9 @@ describe('settingsSaver', () => {
       codeCleanupTasksEnabled: true,
       taskDisplayTitleMetadataUpdatesEnabled: false,
       githubPollInterval: 10,
+      handoffNotesEnabled: true,
+      useWorktrees: true,
+      aiProvider: 'claude-code',
     })
 
     expect(setConfig).toHaveBeenCalledWith('github_poll_interval', '15')
@@ -105,6 +130,9 @@ describe('settingsSaver', () => {
       codeCleanupTasksEnabled: true,
       taskDisplayTitleMetadataUpdatesEnabled: false,
       githubPollInterval: 301,
+      handoffNotesEnabled: true,
+      useWorktrees: true,
+      aiProvider: 'claude-code',
     })
 
     expect(setConfig).toHaveBeenCalledWith('github_poll_interval', '300')
@@ -117,6 +145,9 @@ describe('settingsSaver', () => {
       codeCleanupTasksEnabled: true,
       taskDisplayTitleMetadataUpdatesEnabled: false,
       githubPollInterval: Number.NaN,
+      handoffNotesEnabled: true,
+      useWorktrees: true,
+      aiProvider: 'claude-code',
     })
 
     expect(setConfig).toHaveBeenCalledWith('github_poll_interval', '60')

@@ -16,6 +16,12 @@ export interface CreateTaskOptions {
   handoffNotesEnabled?: boolean
   /** Optional link to the source ticket (e.g. GitHub issue / Jira URL); null/empty stores nothing. */
   sourceTicketUrl?: string | null
+  /** Task-level cleanup override; omit to inherit the project/global default. */
+  codeCleanupEnabled?: boolean
+  /** Task-level title-auto-update override; omit to inherit the project/global default. */
+  taskDisplayTitleUpdatesEnabled?: boolean
+  /** Task-level AI provider override; null/omit to inherit the project/global default. */
+  aiProvider?: string | null
 }
 
 export async function createTask(initialPrompt: string, status: BoardStatus, projectId: string | null, permissionMode: string | null, options: CreateTaskOptions = {}): Promise<Task> {
@@ -27,8 +33,11 @@ export async function createTask(initialPrompt: string, status: BoardStatus, pro
     title = null,
     handoffNotesEnabled = true,
     sourceTicketUrl = null,
+    codeCleanupEnabled,
+    taskDisplayTitleUpdatesEnabled,
+    aiProvider = null,
   } = options
-  const task = await invoke<RawTask>("create_task", { initialPrompt, status, projectId, permissionMode, dependsOn, labelNames, worktreeSource, worktreeBranch, title, handoffNotesEnabled, sourceTicketUrl });
+  const task = await invoke<RawTask>("create_task", { initialPrompt, status, projectId, permissionMode, dependsOn, labelNames, worktreeSource, worktreeBranch, title, handoffNotesEnabled, sourceTicketUrl, codeCleanupEnabled, taskDisplayTitleUpdatesEnabled, aiProvider });
   return normalizeTask(task)
 }
 
@@ -107,6 +116,18 @@ export async function getResolvedAiProvider(projectId: string): Promise<string> 
 
 export async function setProjectConfig(projectId: string, key: string, value: string): Promise<void> {
   return invoke("set_project_config", { projectId, key, value });
+}
+
+export async function getTaskConfig(taskId: string, key: string): Promise<string | null> {
+  return invoke<string | null>("get_task_config", { taskId, key });
+}
+
+export async function setTaskConfig(taskId: string, key: string, value: string): Promise<void> {
+  return invoke("set_task_config", { taskId, key, value });
+}
+
+export async function resetProjectSettingsToGlobal(projectId: string): Promise<void> {
+  return invoke("reset_project_settings_to_global", { projectId });
 }
 
 export async function getAllTasks(): Promise<Task[]> {
@@ -683,6 +704,14 @@ export async function setPluginEnabled(projectId: string, pluginId: string, enab
 export async function getEnabledPlugins(projectId: string): Promise<NormalizedPluginRow[]> {
   const rows = await invoke<PluginRowSnake[]>("get_enabled_plugins", { projectId });
   return rows.map(normalizePluginRow);
+}
+
+export async function setGlobalPluginDefault(pluginId: string, enabled: boolean): Promise<void> {
+  return invoke("set_global_plugin_default", { pluginId, enabled });
+}
+
+export async function getGlobalPluginDefaults(): Promise<{ pluginId: string; enabled: boolean }[]> {
+  return invoke<{ pluginId: string; enabled: boolean }[]>("get_global_plugin_defaults", {});
 }
 
 export type PluginStorageScopeKind = 'global' | 'project' | 'task'

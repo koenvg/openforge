@@ -16,6 +16,8 @@ mod pull_requests;
 mod review;
 mod roadmap;
 mod self_review;
+mod settings_reset;
+mod task_config;
 mod task_workspaces;
 mod tasks;
 mod worktrees;

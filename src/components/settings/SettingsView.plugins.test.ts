@@ -134,12 +134,17 @@ describe('SettingsView plugin integration', () => {
 
     await vi.waitFor(() => {
       expect(screen.getByRole('button', { name: /install package/i })).toBeTruthy()
-      expect(screen.getByText('Global Plugin')).toBeTruthy()
+      expect(screen.getAllByText('Global Plugin').length).toBeGreaterThan(0)
     })
     expect(screen.getByText('Install plugins app-wide. Projects enable installed plugins explicitly.')).toBeTruthy()
     expect(screen.getByRole('button', { name: /reload plugin: global plugin/i })).toBeTruthy()
     expect(screen.getByRole('button', { name: /uninstall plugin: global plugin/i })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /enable for this project: global plugin/i })).toBeNull()
+
+    // Enable-by-default lives only in the dedicated plugin panel now — it must not
+    // be duplicated inside the grouped Configuration card.
+    expect(screen.queryByRole('switch', { name: /toggle plugin default: global plugin/i })).toBeNull()
+    expect(screen.getByRole('switch', { name: /enable by default: global plugin/i })).toBeTruthy()
   })
 
   it('renders only project enablement controls for installed plugins on the project settings page', async () => {
@@ -151,7 +156,8 @@ describe('SettingsView plugin integration', () => {
     render(SettingsView, { props: defaultProps })
 
     await vi.waitFor(() => {
-      expect(screen.getByText('Project Plugin')).toBeTruthy()
+      // Rendered by both the shared configuration card and the plugin panel.
+      expect(screen.getAllByText('Project Plugin').length).toBeGreaterThan(0)
     })
     expect(screen.queryByText('Install package')).toBeNull()
     expect(screen.getByText('Enable installed plugins for this project.')).toBeTruthy()

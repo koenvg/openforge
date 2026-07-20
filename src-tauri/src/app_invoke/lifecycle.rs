@@ -175,13 +175,8 @@ fn load_start_implementation_context(
         .flatten()
         .and_then(|value| serde_json::from_str(&value).ok())
         .unwrap_or_default();
-    let code_cleanup_enabled = db
-        .get_config("code_cleanup_tasks_enabled")
-        .ok()
-        .flatten()
-        .map(|value| value == "true")
-        .unwrap_or(false);
-    let provider_name = db.resolve_ai_provider(&project_id);
+    let code_cleanup_enabled = db.resolve_task_bool(&task.id, "code_cleanup_tasks_enabled", false);
+    let provider_name = db.resolve_ai_provider_for_task(&task.id);
 
     Ok(StartImplementationContext {
         task,
@@ -580,5 +575,92 @@ mod tests {
         assert_eq!(options.agent, None);
         assert_eq!(options.permission_mode, None);
         assert!(options.model.is_none());
+    }
+
+    #[test]
+    fn start_context_cleanup_reads_task_override() {
+        let (state, path) =
+            crate::app_invoke::test_support::test_state("start_context_cleanup_task_override");
+
+        let task_id = {
+            let db = crate::db::acquire_db(&state.db);
+            let project = db.create_project("P", "/tmp/p").unwrap();
+            // Global default OFF; the task snapshot overrides it ON.
+            db.set_config("code_cleanup_tasks_enabled", "false")
+                .unwrap();
+            let task = db
+                .create_task_with_options(crate::db::NewTaskOptions {
+                    initial_prompt: "p",
+                    status: "backlog",
+                    project_id: Some(&project.id),
+                    prompt: None,
+                    permission_mode: None,
+                    worktree_source: None,
+                    worktree_branch: None,
+                    title: None,
+                    handoff_notes_enabled: true,
+                    source_ticket_url: None,
+                    code_cleanup_enabled: None,
+                    task_display_title_updates_enabled: None,
+                    ai_provider: None,
+                })
+                .unwrap();
+            db.set_task_config(&task.id, "code_cleanup_tasks_enabled", "true")
+                .unwrap();
+            task.id
+        };
+
+        let context =
+            load_start_implementation_context(&state, &task_id).expect("load start context");
+        assert!(
+            context.code_cleanup_enabled,
+            "task-level code_cleanup override should win over global config"
+        );
+
+        drop(state);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn start_context_reads_task_provider_override() {
+        let (state, path) =
+            crate::app_invoke::test_support::test_state("start_context_task_provider_override");
+
+        let task_id = {
+            let db = crate::db::acquire_db(&state.db);
+            let project = db.create_project("P", "/tmp/p").unwrap();
+            // Global and project providers stay at the default; only the task
+            // overrides the provider.
+            let task = db
+                .create_task_with_options(crate::db::NewTaskOptions {
+                    initial_prompt: "p",
+                    status: "backlog",
+                    project_id: Some(&project.id),
+                    prompt: None,
+                    permission_mode: None,
+                    worktree_source: None,
+                    worktree_branch: None,
+                    title: None,
+                    handoff_notes_enabled: true,
+                    source_ticket_url: None,
+                    code_cleanup_enabled: None,
+                    task_display_title_updates_enabled: None,
+                    ai_provider: None,
+                })
+                .unwrap();
+            db.set_task_config(&task.id, "ai_provider", "opencode")
+                .unwrap();
+            task.id
+        };
+
+        let context =
+            load_start_implementation_context(&state, &task_id).expect("load start context");
+        assert_eq!(
+            context.provider_name, "opencode",
+            "task-level ai_provider override should win over project/global provider"
+        );
+
+        drop(state);
+        let _ = std::fs::remove_file(path);
     }
 }

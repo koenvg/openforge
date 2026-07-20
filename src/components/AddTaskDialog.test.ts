@@ -22,6 +22,7 @@ vi.mock('../lib/ipc', () => ({
     updated_at: 1000,
   }),
   updateTaskInitialPrompt: vi.fn().mockResolvedValue(undefined),
+  getConfig: vi.fn().mockResolvedValue(null),
   getProjectConfig: vi.fn().mockResolvedValue(null),
   getResolvedAiProvider: vi.fn().mockResolvedValue('claude-code'),
   listGitBranches: vi.fn().mockResolvedValue([
@@ -41,6 +42,20 @@ const DEFAULT_WORKTREE_OPTIONS = {
   title: null,
   handoffNotesEnabled: true,
   sourceTicketUrl: null,
+  codeCleanupEnabled: false,
+  taskDisplayTitleUpdatesEnabled: false,
+  aiProvider: 'claude-code',
+}
+
+const PROJECT_DIRECTORY_OPTIONS = {
+  worktreeSource: 'disabled',
+  worktreeBranch: null,
+  title: null,
+  handoffNotesEnabled: true,
+  sourceTicketUrl: null,
+  codeCleanupEnabled: false,
+  taskDisplayTitleUpdatesEnabled: false,
+  aiProvider: 'claude-code',
 }
 
 vi.mock('../lib/actions', () => ({
@@ -258,9 +273,15 @@ describe('AddTaskDialog', () => {
 
   it('gates task creation until the project workspace default has loaded', async () => {
     let resolveProjectConfig: (value: string | null) => void = () => {}
-    vi.mocked(getProjectConfig).mockReturnValue(new Promise((resolve) => {
-      resolveProjectConfig = resolve
-    }))
+    // Only gate on the worktree default; other hierarchy keys resolve immediately so
+    // the dialog is blocked purely on the workspace default loading.
+    vi.mocked(getProjectConfig).mockImplementation((_projectId: string, key: string) =>
+      key === 'use_worktrees'
+        ? new Promise((resolve) => {
+            resolveProjectConfig = resolve
+          })
+        : Promise.resolve(null),
+    )
     render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
 
     const textbox = await findPromptTextbox()
@@ -284,19 +305,15 @@ describe('AddTaskDialog', () => {
         'backlog',
         'test-project-id',
         'default',
-        {
-          worktreeSource: 'disabled',
-          worktreeBranch: null,
-          title: null,
-          handoffNotesEnabled: true,
-          sourceTicketUrl: null,
-        },
+        PROJECT_DIRECTORY_OPTIONS,
       )
     })
   })
 
   it('uses the project default when new tasks should start in the project directory', async () => {
-    vi.mocked(getProjectConfig).mockResolvedValue('false')
+    vi.mocked(getProjectConfig).mockImplementation((_projectId: string, key: string) =>
+      Promise.resolve(key === 'use_worktrees' ? 'false' : null),
+    )
     const onTaskSaved = vi.fn()
     render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo', onTaskSaved } })
 
@@ -315,13 +332,7 @@ describe('AddTaskDialog', () => {
         'backlog',
         'test-project-id',
         'default',
-        {
-          worktreeSource: 'disabled',
-          worktreeBranch: null,
-          title: null,
-          handoffNotesEnabled: true,
-          sourceTicketUrl: null,
-        },
+        PROJECT_DIRECTORY_OPTIONS,
       )
       expect(onTaskSaved).toHaveBeenCalled()
     })
@@ -347,13 +358,7 @@ describe('AddTaskDialog', () => {
         'backlog',
         'test-project-id',
         'default',
-        {
-          worktreeSource: 'disabled',
-          worktreeBranch: null,
-          title: null,
-          handoffNotesEnabled: true,
-          sourceTicketUrl: null,
-        },
+        PROJECT_DIRECTORY_OPTIONS,
       )
       expect(onTaskSaved).toHaveBeenCalled()
     })
@@ -391,6 +396,9 @@ describe('AddTaskDialog', () => {
           title: null,
           handoffNotesEnabled: true,
           sourceTicketUrl: null,
+          codeCleanupEnabled: false,
+          taskDisplayTitleUpdatesEnabled: false,
+          aiProvider: 'claude-code',
         },
       )
       expect(onTaskSaved).toHaveBeenCalled()
@@ -417,13 +425,7 @@ describe('AddTaskDialog', () => {
         'backlog',
         'test-project-id',
         'default',
-        {
-          worktreeSource: 'disabled',
-          worktreeBranch: null,
-          title: null,
-          handoffNotesEnabled: true,
-          sourceTicketUrl: null,
-        },
+        PROJECT_DIRECTORY_OPTIONS,
       )
       expect(onTaskSaved).toHaveBeenCalled()
     })
@@ -852,7 +854,7 @@ describe('AddTaskDialog', () => {
     await expandEnvironment()
 
     await waitFor(() => {
-      expect(screen.getByRole('combobox')).toBeTruthy() // Mode select
+      expect(screen.getByRole('combobox', { name: 'Mode' })).toBeTruthy() // Mode select
     })
   })
 
@@ -860,10 +862,31 @@ describe('AddTaskDialog', () => {
     render(AddTaskDialog, { props: { mode: 'create' } })
 
     await expandEnvironment()
-    const select = await screen.findByRole('combobox') as HTMLSelectElement
+    const select = await screen.findByRole('combobox', { name: 'Mode' }) as HTMLSelectElement
     const autorunOption = Array.from(select.options).find((option) => option.textContent === 'Autorun')
 
     expect(autorunOption?.value).toBe('auto')
+  })
+
+  it('creates a task with the AI provider chosen in the environment controls', async () => {
+    render(AddTaskDialog, { props: { mode: 'create' } })
+
+    const textbox = await findPromptTextbox()
+    await expandEnvironment()
+
+    const providerSelect = await screen.findByRole('combobox', { name: 'Provider' }) as HTMLSelectElement
+    expect(providerSelect.value).toBe('claude-code')
+    await fireEvent.change(providerSelect, { target: { value: 'opencode' } })
+
+    await fireEvent.input(textbox, { target: { value: 'Task with chosen provider' } })
+    await clickAddToBacklogFromMore()
+
+    await waitFor(() => {
+      expect(createTask).toHaveBeenCalledWith('Task with chosen provider', 'backlog', 'test-project-id', 'default', {
+        ...DEFAULT_WORKTREE_OPTIONS,
+        aiProvider: 'opencode',
+      })
+    })
   })
 
   it('persists Claude auto mode when Autorun is selected for a new Claude Code task', async () => {
@@ -871,7 +894,7 @@ describe('AddTaskDialog', () => {
 
     const textbox = await findPromptTextbox()
     await expandEnvironment()
-    const select = await screen.findByRole('combobox') as HTMLSelectElement
+    const select = await screen.findByRole('combobox', { name: 'Mode' }) as HTMLSelectElement
 
     await fireEvent.change(select, { target: { value: 'auto' } })
     expect(screen.getByRole('button', { name: /Environment: Worktree · latest main · autorun/ })).toBeTruthy()
@@ -919,7 +942,7 @@ describe('AddTaskDialog', () => {
     await fireEvent.click(await screen.findByRole('button', { name: /Start Task/ }))
 
     await waitFor(() => {
-      expect(createTask).toHaveBeenCalledWith('Task for default agent', 'backlog', 'test-project-id', 'default', DEFAULT_WORKTREE_OPTIONS)
+      expect(createTask).toHaveBeenCalledWith('Task for default agent', 'backlog', 'test-project-id', 'default', { ...DEFAULT_WORKTREE_OPTIONS, aiProvider: 'opencode' })
       expect(onRunAction).toHaveBeenCalledWith('T-1', '', null)
     })
   })

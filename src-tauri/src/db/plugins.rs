@@ -125,7 +125,36 @@ impl super::Database {
         Ok(())
     }
 
+    /// Set the global default enabled flag for a plugin (upsert).
+    pub fn set_global_plugin_enabled(&self, plugin_id: &str, enabled: bool) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO global_plugins (plugin_id, enabled) VALUES (?1, ?2)
+             ON CONFLICT(plugin_id) DO UPDATE SET enabled = excluded.enabled",
+            rusqlite::params![plugin_id, enabled as i64],
+        )?;
+        Ok(())
+    }
+
+    /// Return (plugin_id, enabled) for every plugin with an explicit global default.
+    pub fn get_global_plugin_defaults(&self) -> Result<Vec<(String, bool)>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT plugin_id, enabled FROM global_plugins")?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, bool>(1)?))
+        })?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
     /// Return all plugins that are enabled for the given project.
+    ///
+    /// Enablement layers `project_plugins.enabled ?? global_plugins.enabled ??
+    /// is_builtin`, so a project inherits the global default when it has no
+    /// explicit override, and falls back to the built-in default otherwise.
     pub fn get_enabled_plugins(&self, project_id: &str) -> Result<Vec<PluginRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -134,7 +163,8 @@ impl super::Database {
                     p.source_kind, p.source_spec, p.package_metadata, p.installed_at, p.is_builtin
              FROM plugins p
              LEFT JOIN project_plugins pp ON pp.plugin_id = p.id AND pp.project_id = ?1
-             WHERE pp.enabled = 1 OR (pp.plugin_id IS NULL AND p.is_builtin = 1)
+             LEFT JOIN global_plugins gp ON gp.plugin_id = p.id
+             WHERE COALESCE(pp.enabled, gp.enabled, CASE WHEN p.is_builtin = 1 THEN 1 ELSE 0 END) = 1
              ORDER BY p.name ASC",
         )?;
         let rows = stmt.query_map([project_id], row_to_plugin)?;
@@ -146,13 +176,20 @@ impl super::Database {
     }
 
     /// Return true if the plugin is enabled for the given project.
+    ///
+    /// Precedence: `project_plugins.enabled ?? global_plugins.enabled ??
+    /// is_builtin`.
     pub fn is_plugin_enabled(&self, project_id: &str, plugin_id: &str) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
         let enabled = conn
             .query_row(
-                "SELECT COALESCE(pp.enabled, CASE WHEN p.is_builtin = 1 THEN 1 ELSE 0 END)
+                "SELECT COALESCE(
+                        pp.enabled,
+                        gp.enabled,
+                        CASE WHEN p.is_builtin = 1 THEN 1 ELSE 0 END)
                  FROM plugins p
                  LEFT JOIN project_plugins pp ON pp.plugin_id = p.id AND pp.project_id = ?1
+                 LEFT JOIN global_plugins gp ON gp.plugin_id = p.id
                  WHERE p.id = ?2",
                 rusqlite::params![project_id, plugin_id],
                 |row| row.get::<_, bool>(0),
@@ -271,6 +308,38 @@ mod tests {
             installed_at: 0,
             is_builtin: false,
         }
+    }
+
+    fn insert_test_plugin(db: &super::super::Database, id: &str, is_builtin: bool) {
+        let mut plugin = sample_plugin(id);
+        plugin.is_builtin = is_builtin;
+        if is_builtin {
+            plugin.source_kind = "builtin".to_string();
+        }
+        db.install_plugin(&plugin).unwrap();
+    }
+
+    #[test]
+    fn test_global_plugin_default_layers_under_project() {
+        let (db, path) = crate::db::test_helpers::make_test_db("global_plugin_defaults");
+        let project = db.create_project("P", "/tmp/p").unwrap();
+        // Insert a NON-builtin plugin (is_builtin = 0) via the existing test insert helper.
+        insert_test_plugin(&db, "acme.tool", /* is_builtin */ false);
+
+        // No project row, no global default, not builtin -> disabled.
+        assert!(!db.is_plugin_enabled(&project.id, "acme.tool").unwrap());
+
+        // Global default ON -> project with no override inherits enabled.
+        db.set_global_plugin_enabled("acme.tool", true).unwrap();
+        assert!(db.is_plugin_enabled(&project.id, "acme.tool").unwrap());
+
+        // Project override OFF beats global default ON.
+        db.set_plugin_enabled(&project.id, "acme.tool", false)
+            .unwrap();
+        assert!(!db.is_plugin_enabled(&project.id, "acme.tool").unwrap());
+
+        drop(db);
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
