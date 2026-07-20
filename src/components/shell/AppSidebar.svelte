@@ -1,7 +1,7 @@
 <script lang="ts">
   import { projects, activeProjectId, attentionCountByProject, reviewRequestCountByProject, hiddenProjectIds } from '../../lib/stores'
   import { getGitBranch, setConfig } from '../../lib/ipc'
-  import { ChevronLeft, ChevronRight, ChevronDown, Settings, Plus, ArrowUp, ArrowDown, EyeOff, Eye, LocateFixed } from '@lucide/svelte'
+  import { ChevronLeft, ChevronRight, ChevronDown, Settings, Plus, ArrowUp, ArrowDown, EyeOff, Eye, LocateFixed, Bot, GitPullRequest } from '@lucide/svelte'
   import {
     partitionProjectsByHidden,
     withProjectHidden,
@@ -190,15 +190,19 @@
              </div>
             {#if attentionCount > 0}
               <span
-                class="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-success/70 ring-2 ring-base-300"
+                class="absolute -bottom-1 -right-1 grid place-items-center w-4 h-4 rounded-full bg-success text-success-content ring-2 ring-base-300"
                 title="{attentionCount} item{attentionCount === 1 ? '' : 's'} needing attention"
-              ></span>
+              >
+                <Bot size={9} />
+              </span>
             {/if}
             {#if reviewCount > 0}
               <span
-                class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-error/70 ring-2 ring-base-300"
+                class="absolute -top-1 -right-1 grid place-items-center w-4 h-4 rounded-full bg-error text-error-content ring-2 ring-base-300"
                 title="{reviewCount} PR{reviewCount === 1 ? '' : 's'} awaiting your review"
-              ></span>
+              >
+                <GitPullRequest size={9} />
+              </span>
             {/if}
           </div>
         </button>
@@ -214,14 +218,14 @@
              {#if reviewCount > 0 || attentionCount > 0}
                <div class="mt-1 flex items-center gap-2">
                  {#if reviewCount > 0}
-                   <span class="flex items-center gap-1" title="{reviewCount} PR{reviewCount === 1 ? '' : 's'} awaiting your review">
-                     <span class="w-1.5 h-1.5 rounded-full bg-error/70"></span>
+                   <span class="flex items-center gap-1 text-error" title="{reviewCount} PR{reviewCount === 1 ? '' : 's'} awaiting your review">
+                     <GitPullRequest size={12} />
                      <span class="text-[10px] text-base-content/60">{reviewCount}</span>
                    </span>
                  {/if}
                  {#if attentionCount > 0}
-                   <span class="flex items-center gap-1" title="{attentionCount} item{attentionCount === 1 ? '' : 's'} needing attention">
-                     <span class="w-1.5 h-1.5 rounded-full bg-success/70"></span>
+                   <span class="flex items-center gap-1 text-success" title="{attentionCount} item{attentionCount === 1 ? '' : 's'} needing attention">
+                     <Bot size={12} />
                      <span class="text-[10px] text-base-content/60">{attentionCount}</span>
                    </span>
                  {/if}

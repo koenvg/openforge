@@ -1,12 +1,14 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte'
   import { get } from 'svelte/store'
+  import { Bot, GitPullRequest } from '@lucide/svelte'
   import Modal from '../shared/ui/Modal.svelte'
   import { projects, activeProjectId, reviewPrs, globalExcludedPrRepos, ticketPrs, hiddenProjectIds, attentionCountByProject } from '../../lib/stores'
   import { getAllTasks, getLatestSessions, getProjectConfig, getConfig, setConfig } from '../../lib/ipc'
   import { loadOutOfFocusTaskIds, loadFocusFilterStates, DEFAULT_FOCUS_STATES } from '../../lib/boardFilters'
   import { buildAttentionOverview } from '../../lib/attentionOverview'
   import { resolveFocusedIndex, subscribeDebounced } from '../../lib/attentionOverviewRefresh'
+  import { stepFocus, initialFocusIndex, clampFocus, headerIndexForGroup } from '../../lib/attentionOverviewNav'
   import type { AttentionOverview, AttentionFocusTask } from '../../lib/attentionOverview'
   import type { ReviewPullRequest, Task } from '../../lib/types'
   import type { TaskState } from '../../lib/taskState'
@@ -128,8 +130,25 @@
     void persistCollapsed(next)
   }
 
-  function headerIndexForGroup(id: string): number {
-    return rows.findIndex((row) => row.kind === 'header' && row.group.id === id)
+  // Collapse a project and park the cursor on its (now reachable) header, so ←/→
+  // round-trip: the header index is stable across this toggle because a group's
+  // items sit *after* its header.
+  function collapseGroup(id: string): void {
+    const headerIndex = headerIndexForGroup(rows, id)
+    setCollapsed(id, true)
+    if (headerIndex >= 0) focusedIndex = headerIndex
+  }
+
+  // Expand a project and drop the cursor onto its first item (header index + 1).
+  function expandGroup(id: string): void {
+    const headerIndex = headerIndexForGroup(rows, id)
+    setCollapsed(id, false)
+    if (headerIndex >= 0) focusedIndex = headerIndex + 1
+  }
+
+  function toggleGroup(id: string): void {
+    if (collapsedIds.has(id)) expandGroup(id)
+    else collapseGroup(id)
   }
 
   // Stable logical identity for a row, so the cursor can follow the same task/PR/header
@@ -159,33 +178,28 @@
     switch (e.key) {
       case 'ArrowDown':
       case 'j':
+        // ↑/↓ move between tasks, reviews, and collapsed-project headers only;
+        // an expanded project's header is skipped (see attentionOverviewNav).
         e.preventDefault()
-        focusedIndex = Math.min(rows.length - 1, focusedIndex + 1)
+        focusedIndex = stepFocus(rows, focusedIndex, 1, collapsedIds)
         return true
       case 'ArrowUp':
       case 'k':
         e.preventDefault()
-        focusedIndex = Math.max(0, focusedIndex - 1)
+        focusedIndex = stepFocus(rows, focusedIndex, -1, collapsedIds)
         return true
       case 'ArrowLeft':
       case 'h':
+        // Collapse the focused item's project; on a collapsed header there is
+        // nothing left to collapse.
         e.preventDefault()
-        if (!row) return true
-        if (row.kind === 'header') {
-          setCollapsed(row.group.id, true)
-        } else {
-          // Collapse the whole project and move the cursor up to its header.
-          setCollapsed(row.group.id, true)
-          const headerIndex = headerIndexForGroup(row.group.id)
-          if (headerIndex >= 0) focusedIndex = headerIndex
-        }
+        if (row && row.kind !== 'header') collapseGroup(row.group.id)
         return true
       case 'ArrowRight':
       case 'l':
+        // Expand a collapsed project's header.
         e.preventDefault()
-        if (row?.kind === 'header' && collapsedIds.has(row.group.id)) {
-          setCollapsed(row.group.id, false)
-        }
+        if (row?.kind === 'header' && collapsedIds.has(row.group.id)) expandGroup(row.group.id)
         return true
     }
     // Enter/Space are handled per-row; Escape and everything else fall through
@@ -254,9 +268,8 @@
       collapsedIds = parseCollapsed(await collapsedRawPromise)
 
       await tick()
-      // Open scrolled to the project the user is currently viewing.
-      const activeHeaderIndex = activeId ? headerIndexForGroup(activeId) : -1
-      focusedIndex = activeHeaderIndex >= 0 ? activeHeaderIndex : 0
+      // Open on the first task/review of the project the user is currently viewing.
+      focusedIndex = initialFocusIndex(rows, activeId, collapsedIds)
     } finally {
       loading = false
     }
@@ -280,12 +293,13 @@
     focusedIndex = resolveFocusedIndex(previousKey, rows.map(rowKey), previousIndex)
   }
 
-  // Defensive: if the row list ever shrinks out from under the cursor, keep the
-  // index in range (converges immediately; only writes when out of bounds).
+  // Defensive: if the row list changes under the cursor (e.g. a project was
+  // collapsed), keep it on a navigable row. Converges in one step, so it only
+  // writes when the cursor actually needs to move.
   $effect(() => {
-    if (rows.length > 0 && focusedIndex > rows.length - 1) {
-      focusedIndex = rows.length - 1
-    }
+    if (rows.length === 0) return
+    const next = clampFocus(rows, focusedIndex, collapsedIds)
+    if (next !== focusedIndex) focusedIndex = next
   })
 
   // Keep the focused row scrolled into view and holding DOM focus as the cursor
@@ -312,23 +326,6 @@
       REFRESH_DEBOUNCE_MS,
     )
   })
-
-  function dotClass(state: TaskState): string {
-    switch (state) {
-      case 'active': return 'bg-success animate-pulse'
-      case 'needs-input':
-      case 'unaddressed-comments': return 'bg-warning'
-      case 'failed':
-      case 'ci-failed':
-      case 'changes-requested':
-      case 'merge-conflict': return 'bg-error'
-      case 'agent-done':
-      case 'ready-to-merge':
-      case 'ready-to-enqueue':
-      case 'pr-queued': return 'bg-info'
-      default: return 'bg-base-content/30'
-    }
-  }
 
   function relTime(seconds: number): string {
     if (!seconds) return ''
@@ -384,7 +381,8 @@
         {#each navGroups as ng (ng.group.id)}
           {@const collapsed = collapsedIds.has(ng.group.id)}
           <div class="py-1">
-            <!-- Project header (selectable, collapsible) -->
+            <!-- Project header: collapse/expand target. ↑/↓ only land here while
+                 collapsed (then it's the group's only row); expanded, it's skipped. -->
             <div
               role="button"
               tabindex="0"
@@ -392,9 +390,8 @@
               aria-expanded={!collapsed}
               class="flex items-center gap-2.5 px-2 py-2 rounded-lg cursor-pointer border border-transparent transition-colors
                 {focusedIndex === ng.headerIndex ? 'bg-base-200 border-primary ring-1 ring-primary' : 'hover:bg-base-200/70'}"
-              onclick={() => { focusRow(ng.headerIndex); setCollapsed(ng.group.id, !collapsed) }}
-              onkeydown={(e) => rowKeydown(e, () => setCollapsed(ng.group.id, !collapsed))}
-              onfocus={() => focusRow(ng.headerIndex)}
+              onclick={() => toggleGroup(ng.group.id)}
+              onkeydown={(e) => rowKeydown(e, () => toggleGroup(ng.group.id))}
             >
               <span class="w-4 grid place-items-center text-base-content/40 transition-transform {collapsed ? '' : 'rotate-90'}">
                 <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4z" /></svg>
@@ -419,9 +416,6 @@
             <!-- Nested items with a guide rail -->
             {#if !collapsed}
               <div class="ml-3.5 pl-4 border-l border-base-300 flex flex-col gap-0.5 mt-0.5">
-                {#if ng.group.focusTasks.length > 0}
-                  <div class="text-[10px] uppercase tracking-wider text-base-content/40 font-semibold px-2.5 pt-2 pb-1">Focus</div>
-                {/if}
                 {#each ng.items.filter((it) => it.row.kind === 'task') as it (it.row.kind === 'task' ? it.row.item.task.id : it.index)}
                   {#if it.row.kind === 'task'}
                     {@const task = it.row.item.task}
@@ -436,7 +430,11 @@
                       onkeydown={(e) => rowKeydown(e, () => onOpenTask(task))}
                       onfocus={() => focusRow(it.index)}
                     >
-                      <span class="w-2.5 h-2.5 rounded-full shrink-0 {dotClass(state)}"></span>
+                      <!-- Agent icon (green) — an OpenForge agent/task that needs you.
+                           Same icon + colour as the project sidebar. -->
+                      <span class="w-4 grid place-items-center shrink-0 text-success" aria-hidden="true">
+                        <Bot size={15} />
+                      </span>
                       <div class="min-w-0 flex-1 flex flex-col gap-0.5">
                         <span class="text-sm text-base-content truncate">{taskTitle(task)}</span>
                         <span class="text-[11px] text-base-content/45 truncate">
@@ -448,9 +446,6 @@
                   {/if}
                 {/each}
 
-                {#if ng.group.reviewPrs.length > 0}
-                  <div class="text-[10px] uppercase tracking-wider text-base-content/40 font-semibold px-2.5 pt-2 pb-1">Review requests</div>
-                {/if}
                 {#each ng.items.filter((it) => it.row.kind === 'review') as it (it.row.kind === 'review' ? it.row.pr.id : it.index)}
                   {#if it.row.kind === 'review'}
                     {@const pr = it.row.pr}
@@ -465,8 +460,10 @@
                       onkeydown={(e) => rowKeydown(e, () => onOpenPr(pr, prProjectId))}
                       onfocus={() => focusRow(it.index)}
                     >
-                      <span class="w-4 grid place-items-center shrink-0 text-success">
-                        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M11.5 3.5a2 2 0 10-2.45 1.95v5.1a2 2 0 102 .95V5.45A2 2 0 0011.5 3.5zM3.5 1.5a2 2 0 00-1 3.73v5.54a2 2 0 101 0V5.23a2 2 0 00-1-3.73z" /></svg>
+                      <!-- Pull-request icon (red) — a review request.
+                           Same icon + colour as the project sidebar. -->
+                      <span class="w-4 grid place-items-center shrink-0 text-error" aria-hidden="true">
+                        <GitPullRequest size={15} />
                       </span>
                       <div class="min-w-0 flex-1 flex flex-col gap-0.5">
                         <span class="text-sm text-base-content truncate">{pr.title}</span>
@@ -486,15 +483,6 @@
           </div>
         {/each}
       {/if}
-    </div>
-
-    <!-- Footer hints -->
-    <div class="flex items-center gap-4 px-4 py-2.5 border-t border-base-300 bg-base-200/40 text-[11px] text-base-content/40">
-      <span><kbd class="kbd kbd-xs">↑</kbd><kbd class="kbd kbd-xs">↓</kbd> navigate</span>
-      <span><kbd class="kbd kbd-xs">←</kbd> collapse</span>
-      <span><kbd class="kbd kbd-xs">→</kbd> expand</span>
-      <span><kbd class="kbd kbd-xs">↵</kbd> open</span>
-      <span><kbd class="kbd kbd-xs">esc</kbd> close</span>
     </div>
   </div>
 </Modal>
