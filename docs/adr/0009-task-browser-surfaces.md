@@ -1,0 +1,22 @@
+# Electron-main-owned task browser surfaces
+
+Status: Accepted
+Task: KVG-2441
+
+OpenForge plugins need to present task-scoped interactive browsers, but exposing Electron `WebContentsView`, `<webview>`, or raw `webContents` would couple trusted plugins to shell internals and let them bypass shared security and cleanup policy. OpenForge will instead provide a frontend-only `browserSurfaces` capability whose typed `getOrCreate({ taskId, id, initialUrl? })` controller delegates browser ownership to Electron main. The frontend plugin host qualifies plugin identity; Electron accepts browser requests only from the trusted OpenForge renderer and treats cross-plugin namespacing as a trusted-plugin contract, not a sandbox against malicious renderer code.
+
+A live Task Browser Surface is identified by OpenForge window, plugin, Task, and plugin-local surface ID. Separate windows may own separate live surfaces for the same plugin, Task, and local ID, while surfaces for the same plugin and Task share one durable, isolated Task Browser Session across windows; different plugins and Tasks never share site data. The plugin persists the last committed URL in task-scoped plugin storage, while Electron persists the session partition. A DOM-element attachment lets the host track and clamp bounds without exposing Electron coordinates. Detaching preserves the live, background-throttled page when capacity permits; each window retains at most four detached surfaces and evicts the least recently used detached surface when necessary. Surface destruction does not clear the durable session.
+
+Electron main enforces live-resource cleanup on plugin deactivation, reload, or uninstall, Task deletion, and window closure. The Rust Sidecar records Task-deletion and plugin-uninstall browser-session purge intents transactionally with those destructive operations; Electron drains and acknowledges that durable outbox after the operation and on startup, using its durable partition registry to retry idempotently until cleanup succeeds. An explicit session reset destroys the plugin's live surfaces and popups for that Task and clears site data, cache, service workers, and remembered permissions without modifying plugin-owned task storage or changing the deterministic session identity.
+
+Every surface and host-owned HTTP(S) popup uses non-configurable sandboxed preferences: no Node integration, preload, webview embedding, insecure-content override, drag-drop navigation, or packaged-build DevTools. Top-level navigation is limited to HTTP(S), with `about:blank` reserved for startup. Electron main mediates site permissions by origin, Task Browser Session, and a normalized permission descriptor that includes security-relevant subtypes such as exact requested media types; it may remember the user's decision and denies unknown permissions. Downloads require a host-owned save prompt. Electron 43's default native chooser remains in use for HTML file inputs because it exposes no supported interception hook compatible with the no-preload/no-injection boundary; the selected page receives the user-chosen file, while plugins receive no path or chooser handle. Plugins receive consolidated URL, title, loading, history-availability, and navigation-error state plus typed navigation controls; they never receive Electron objects.
+
+## Considered options
+
+- Raw Electron or `<webview>` access was rejected because plugins could bypass host policy and become coupled to Electron implementation details.
+- Iframes were rejected because they cannot provide the required durable Electron session, navigation control, and unrestricted site compatibility.
+- One shared browser profile was rejected because authentication and site data would leak across Tasks and plugins.
+
+## Consequences
+
+The browser plugin can restore a Task's URL and authenticated session while attaching a surface only when its task tab is visible. The host assumes additional responsibility for native view placement, permission prompts, popup and download handling, resource limits, persistence cleanup, and test fakes, but keeps one auditable security boundary for every plugin-provided browser.
