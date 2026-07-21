@@ -66,6 +66,36 @@ function makePullRequest(overrides: Partial<PullRequestInfo> = {}): PullRequestI
 }
 
 describe('ActionPalette component', () => {
+  it('does not select Run app first when CMD+K opens the palette', async () => {
+    const { default: ActionPalette } = await import('./ActionPalette.svelte')
+    const onExecute = vi.fn()
+
+    render(ActionPalette, {
+      props: {
+        task: makeTask({ id: 'T-100', status: 'doing' }),
+        customActions: [{
+          id: 'custom-1',
+          name: 'Custom Action',
+          prompt: 'Do custom work',
+          builtin: false,
+          enabled: true,
+        }],
+        taskPrs: [],
+        canRunApp: true,
+        onClose: vi.fn(),
+        onExecute,
+      },
+    })
+
+    const options = screen.getAllByRole('option')
+    expect(options[0].textContent).not.toContain('Run app')
+    expect(options.findIndex(option => option.textContent?.includes('Run app'))).toBeGreaterThan(0)
+
+    await fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Enter' })
+
+    expect(onExecute).not.toHaveBeenCalledWith('run-app')
+  })
+
   it('preserves keyboard selection when available actions reorder', async () => {
     const { default: ActionPalette } = await import('./ActionPalette.svelte')
     const onClose = vi.fn()

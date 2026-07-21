@@ -36,15 +36,6 @@ export function getTaskActions(
     })
   }
 
-  if (capabilities.canRunApp) {
-    actions.push({
-      id: 'run-app',
-      label: 'Run app',
-      shortcut: null,
-      category: 'task',
-      keywords: ['run', 'app', 'local', 'terminal', 'serve', 'dev'],
-    })
-  }
 
   const readyToMergePrs = taskPrs.filter((pr) => {
     const readiness = getMergeReadiness(pr)
@@ -99,6 +90,16 @@ export function getTaskActions(
       shortcut: null,
       category: 'task',
       keywords: ['set aside', 'out of focus', 'hide', 'defer'],
+    })
+  }
+
+  if (capabilities.canRunApp) {
+    actions.push({
+      id: 'run-app',
+      label: 'Run app',
+      shortcut: null,
+      category: 'task',
+      keywords: ['run', 'app', 'local', 'terminal', 'serve', 'dev'],
     })
   }
 
