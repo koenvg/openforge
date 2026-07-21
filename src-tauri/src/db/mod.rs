@@ -99,6 +99,8 @@ impl Database {
         migrations::ensure_task_dependency_table(&conn)?;
         migrations::ensure_task_label_tables(&conn)?;
         migrations::ensure_plugin_tables(&conn)?;
+        // After ensure_plugin_tables: global_plugins has a foreign key onto plugins.
+        migrations::ensure_hierarchy_tables(&conn)?;
 
         conn.execute("PRAGMA foreign_keys = ON", [])?;
 

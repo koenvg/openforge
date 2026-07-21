@@ -2053,6 +2053,30 @@ CREATE INDEX IF NOT EXISTS idx_task_label_assignments_label ON task_label_assign
     Ok(())
 }
 
+/// Recreate the hierarchy tables added alongside the plugin tables. Kept here (rather
+/// than relying solely on their migration) because a database can carry a
+/// user_version that already covers them while the tables themselves are absent —
+/// e.g. one migrated on a branch that appended its own migrations before these
+/// existed, so the positional indexes no longer line up. Without this, every
+/// enabled-plugins query fails with "no such table: global_plugins".
+pub(super) fn ensure_hierarchy_tables(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        r#"
+CREATE TABLE IF NOT EXISTS task_config (
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    UNIQUE(task_id, key)
+);
+CREATE TABLE IF NOT EXISTS global_plugins (
+    plugin_id TEXT PRIMARY KEY REFERENCES plugins(id) ON DELETE CASCADE,
+    enabled INTEGER NOT NULL DEFAULT 1
+);
+        "#,
+    )?;
+    Ok(())
+}
+
 pub(super) fn ensure_plugin_tables(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"
@@ -2187,6 +2211,56 @@ mod tests {
         drop(conn);
         drop(db);
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_recreates_missing_task_config_and_global_plugins_for_upgraded_db() {
+        // A database whose recorded user_version already covers these migrations but
+        // which is missing the tables (e.g. it was migrated on a branch that appended
+        // its own migrations before these existed, so the indexes no longer line up)
+        // must heal on open rather than failing every enabled-plugins query.
+        let path = std::env::temp_dir().join(format!(
+            "test_recreate_hier_tables_mig_{}.db",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+
+        {
+            let db = Database::new(path.clone()).expect("Database::new");
+            let conn = db.connection();
+            let conn = conn.lock().unwrap();
+
+            conn.execute("DROP TABLE global_plugins", [])
+                .expect("drop global_plugins");
+            conn.execute("DROP TABLE task_config", [])
+                .expect("drop task_config");
+
+            let uv: i32 = conn
+                .query_row("PRAGMA user_version", [], |r| r.get(0))
+                .expect("read user_version");
+            assert_eq!(
+                uv, LATEST_USER_VERSION,
+                "fixture should simulate an already-upgraded schema version"
+            );
+        }
+
+        let db = Database::new(path.clone()).expect("Database::new should repair schema");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+        for table in ["global_plugins", "task_config"] {
+            let exists: bool = conn
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name=?1",
+                    [table],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert!(exists, "{table} should be recreated on open");
+        }
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(&path);
     }
 
     #[test]
