@@ -224,8 +224,8 @@ vi.mock('../../lib/router.svelte', () => ({
   }),
 }))
 
-import { activeSessions, completingTasks, taskActiveView, commandHeld, taskRuntimeInfo, tasks, ticketPrs } from '../../lib/stores'
-import type { Task, AgentSession, PrComment, PullRequestInfo, TaskWorkspaceInfo } from '../../lib/types'
+import { completingTasks, taskActiveView, commandHeld, taskRuntimeInfo, tasks, ticketPrs } from '../../lib/stores'
+import type { Task, PrComment, PullRequestInfo, TaskWorkspaceInfo } from '../../lib/types'
 import PluginSlotTestView from '../plugin/PluginSlotTestView.svelte'
 import TerminalTaskPane from './TerminalTaskPane.svelte'
 import { clearComponentRegistry, registerRenderableContributionComponent } from '../../lib/plugin/componentRegistry'

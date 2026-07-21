@@ -174,10 +174,7 @@ mod tests {
         )
         .expect("builtin plugin path should resolve");
 
-        assert_eq!(
-            path,
-            Path::new("/workspace/openforge/plugins/github-sync")
-        );
+        assert_eq!(path, Path::new("/workspace/openforge/plugins/github-sync"));
     }
 
     #[test]

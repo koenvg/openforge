@@ -53,7 +53,6 @@ describe('settingsSaver', () => {
       handoffNotesTemplate: '## Current summary\nCustom template',
       projectColor: 'violet',
       runCommand: '',
-      actions: [],
       focusFilterStates: ['idle'],
     })
 

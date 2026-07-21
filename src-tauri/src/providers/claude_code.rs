@@ -206,7 +206,14 @@ impl ClaudeCodeProvider {
                 (home.join(".opencode").join("commands"), ".opencode"),
             ] {
                 for mut cmd in scan_commands_directory(&commands_dir) {
-                    enrich_command(&mut cmd, "personal", "manual-only", Some(source_dir), None, None);
+                    enrich_command(
+                        &mut cmd,
+                        "personal",
+                        "manual-only",
+                        Some(source_dir),
+                        None,
+                        None,
+                    );
                     commands_map.insert(cmd.name.clone(), cmd);
                 }
             }
@@ -220,7 +227,14 @@ impl ClaudeCodeProvider {
                 (proj.join(".opencode").join("commands"), ".opencode"),
             ] {
                 for mut cmd in scan_commands_directory(&commands_dir) {
-                    enrich_command(&mut cmd, "project", "manual-only", Some(source_dir), None, None);
+                    enrich_command(
+                        &mut cmd,
+                        "project",
+                        "manual-only",
+                        Some(source_dir),
+                        None,
+                        None,
+                    );
                     commands_map.insert(cmd.name.clone(), cmd);
                 }
             }
@@ -391,7 +405,10 @@ mod tests {
             .iter()
             .find(|c| c.name == "manual")
             .expect("project skill present");
-        assert_eq!(c.extra.get("origin").and_then(|v| v.as_str()), Some("project"));
+        assert_eq!(
+            c.extra.get("origin").and_then(|v| v.as_str()),
+            Some("project")
+        );
         assert_eq!(
             c.extra.get("triggerMode").and_then(|v| v.as_str()),
             Some("manual-only")
