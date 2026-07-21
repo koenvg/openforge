@@ -18,7 +18,11 @@ __pycache__/
 /screenshots/
 
 # Babysitter (a5c) local orchestration workspace — per-developer, not shared
+# (covers .a5c/processes and .a5c/cache)
 .a5c/
+
+# Impeccable design-hook local cache — per-developer, not shared
+.impeccable/
 
 # JetBrains IDE settings
 .idea/
