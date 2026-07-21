@@ -103,17 +103,19 @@ describe('getTaskActions', () => {
     expect(ids.indexOf('set-aside-task')).toBeGreaterThan(ids.indexOf('custom-action-custom-1'))
   })
 
-  it('returns Run app only when the task run command is available', () => {
+  it('appends Run app without displacing the existing task action order when available', () => {
     const task = makeTask({ status: 'doing' })
+    const custom = makeAction({ id: 'custom-1', name: 'Deploy' })
 
-    const availableActions = getTaskActions(task, [], [], new Set(), { canRunApp: true })
-    const unavailableActions = getTaskActions(task, [], [], new Set(), { canRunApp: false })
+    const availableActions = getTaskActions(task, [custom], [], new Set(), { canRunApp: true })
+    const unavailableActions = getTaskActions(task, [custom], [], new Set(), { canRunApp: false })
 
-    expect(availableActions.find(action => action.id === 'run-app')).toMatchObject({
+    expect(availableActions.at(-1)).toMatchObject({
+      id: 'run-app',
       label: 'Run app',
       category: 'task',
     })
-    expect(unavailableActions.some(action => action.id === 'run-app')).toBe(false)
+    expect(availableActions.filter(action => action.id !== 'run-app')).toEqual(unavailableActions)
   })
 
   it('returns Move task back in focus for doing task already Out of Focus', () => {
