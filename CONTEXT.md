@@ -108,6 +108,22 @@ _Avoid_: Agent run settings, global task defaults, plugin task policy
 An installed OpenForge extension that may act across tasks when using explicit host capabilities.
 _Avoid_: Sandboxed widget, project-only script
 
+**Task Browser Surface**:
+A browser presentation owned by a **Trusted Plugin** for one **Task** in one OpenForge window, identified within that window, plugin, and Task by a stable local surface identifier.
+_Avoid_: Webview, browser tab, raw WebContentsView
+
+**Task Browser Session**:
+The durable browsing identity and site data shared by a **Trusted Plugin's** browser surfaces within one **Task**, isolated from every other plugin and Task.
+_Avoid_: Global browser profile, shared login, surface state
+
+**Task Browser Permission**:
+A user-approved site privilege scoped to one requesting origin and **Task Browser Session**. Its identity includes security-relevant request details, such as the exact requested media types.
+_Avoid_: Plugin permission, global site grant, automatic permission
+
+**Task Browser Attachment**:
+The temporary binding between a **Task Browser Surface** and the visible plugin-owned UI region where OpenForge presents it.
+_Avoid_: Raw bounds, WebContentsView mount, permanent surface placement
+
 **Plugin Installation**:
 Recording a **Trusted Plugin** as available app-wide in OpenForge, without making it active for any **Project**.
 _Avoid_: Project plugin install, global enablement
@@ -276,6 +292,27 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - An **Implementation Run** uses exactly one **Agent Session** at a time.
 - A new **Implementation Run** uses the **Project Agent Settings** rather than plugin-supplied provider or agent overrides.
 - A **Trusted Plugin** may start an **Implementation Run** for any **Task** when using the host-provided task capability.
+- A live **Task Browser Surface** is uniquely identified by its owning OpenForge window, **Trusted Plugin**, **Task**, and plugin-local surface identifier.
+- Every **Task Browser Surface** for the same **Trusted Plugin** and **Task** shares one **Task Browser Session**; no browser session data is shared across plugins or Tasks.
+- Detaching a **Task Browser Surface** hides it while preserving its live, background-throttled page state; destroying it releases that live page without deleting its **Task Browser Session**.
+- OpenForge destroys live **Task Browser Surfaces** when their owning plugin deactivates, reloads, or is uninstalled; when their owning **Task** is permanently deleted; or when their OpenForge window closes, even if the plugin omitted cleanup.
+- A **Task Browser Session** survives surface destruction, app restart, and plugin disablement or reload; OpenForge purges it when its **Task** is permanently deleted or its plugin is uninstalled, and clears it on explicit session reset.
+- OpenForge mediates every **Task Browser Permission** request; plugins cannot grant permissions, unknown permissions are denied, and approved permissions are limited to the requesting origin, **Task Browser Session**, and exact permission descriptor.
+- A user may remember an allow or block decision for one origin and exact permission descriptor in a **Task Browser Session**; unremembered decisions apply only to the current request, and resetting the session clears remembered decisions.
+- Resetting a **Task Browser Session** destroys its plugin's live surfaces and popups for the Task and clears site data, cache, service workers, and remembered permissions without deleting plugin-owned task storage.
+- HTTP(S) popups requested by a **Task Browser Surface** are host-owned child windows that share its **Task Browser Session** and security policies; plugins cannot access the child window directly, and unsupported schemes or window options are rejected.
+- A **Task Browser Surface** permits only HTTP(S) top-level navigation, with `about:blank` reserved for host startup; filesystem, executable, app-internal, custom, malformed, and other schemes are blocked.
+- A **Task Browser Session** persists site data only; its plugin persists each surface's last committed URL in task-scoped plugin storage and supplies that URL when recreating the surface.
+- A plugin creates a **Task Browser Attachment** by giving OpenForge a visible DOM element; OpenForge tracks and clamps that element's bounds and detaches the surface when the element is hidden, disconnected, or explicitly released.
+- A **Task Browser Surface** reports URL, title, loading, history availability, and navigation failure as one current state snapshot so plugins do not reconcile independently ordered event fragments.
+- Downloads from a **Task Browser Surface** require a host-owned save prompt for each file; plugins cannot choose download paths, auto-accept downloads, or access Electron download handles.
+- Every **Task Browser Surface** and host-owned child window uses a non-configurable sandboxed browser configuration with no Node integration, preload script, webview embedding, insecure-content override, drag-drop navigation, or packaged-build DevTools access.
+- Each OpenForge window keeps at most four detached **Task Browser Surfaces** alive; when capacity is exceeded, OpenForge destroys the least-recently-used detached surface while preserving its durable session and restorable URL.
+- The frontend-only browser-surface capability qualifies the owning plugin, requires a valid Task and plugin-local surface identifier, and returns only typed controls after verifying the plugin is enabled for the Task's project.
+- Permanent Task deletion and plugin uninstall durably schedule their **Task Browser Session** purges until Electron completes and acknowledges them.
+- A plugin may omit a surface's initial URL; newly created surfaces start at `about:blank` until the plugin navigates them.
+- `getOrCreate` communicates that requesting an existing **Task Browser Surface** returns control of that live surface; an initial URL applies only when no live surface exists.
+- Attaching a **Task Browser Surface** to a new element atomically replaces its previous attachment; releasing an older attachment cannot detach a newer one.
 - A **Trusted Plugin** may own a **Plugin-owned Domain** when the concept is not shared across plugins or core workflows.
 - **Plugin Installation** makes a **Trusted Plugin** available app-wide; **Project Plugin Enablement** decides whether it contributes in a specific **Project**.
 - **Plugin Installation** does not automatically imply **Project Plugin Enablement**.
