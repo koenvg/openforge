@@ -477,7 +477,7 @@ async fn start_implementation_injects_plugin_configured_handoff_workflow() {
 }
 
 #[tokio::test]
-async fn start_implementation_uses_current_project_handoff_template() {
+async fn start_implementation_refreshes_pre_nested_cli_handoff_template() {
     let _env_lock = PROVIDER_PATH_ENV_LOCK.lock().await;
     let sandbox = &*PROVIDER_TEST_SANDBOX;
     sandbox.clear_log();
@@ -503,9 +503,10 @@ async fn start_implementation_uses_current_project_handoff_template() {
         let contribution = crate::agent_lifecycle::StartPromptContribution {
             id: crate::agent_lifecycle::HANDOFF_NOTES_WORKFLOW_CONTRIBUTION_ID.to_string(),
             enabled: true,
-            content: crate::agent_lifecycle::legacy_handoff_notes_start_prompt_content(Some(
-                "## Stale Template\n- Do not keep this old value",
-            )),
+            content: include_str!(
+                "../../../test_fixtures/handoff_notes_workflow_pre_nested_cli.txt",
+            )
+            .to_string(),
             order: 0,
         };
         db.set_project_config(
@@ -552,7 +553,11 @@ async fn start_implementation_uses_current_project_handoff_template() {
         !log.contains("## Stale Template") && !log.contains("Do not keep this old value"),
         "stale persisted handoff template should be replaced, got provider log: {log}"
     );
-
+    assert!(
+        log.contains("openforge task update --task-id")
+            && !log.contains("openforge update-task --task-id"),
+        "historical workflow should be regenerated with the supported CLI command, got provider log: {log}"
+    );
     if let Some(pty_manager) = state.pty_manager.as_ref() {
         let _ = pty_manager.kill_pty(&task_id).await;
     }
