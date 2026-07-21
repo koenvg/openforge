@@ -26,7 +26,15 @@ fn default_start_prompt_contribution_enabled() -> bool {
     true
 }
 
-pub fn legacy_handoff_notes_start_prompt_content(project_template: Option<&str>) -> String {
+const TASK_UPDATE_COMMAND: &str = "openforge task update";
+const PRE_NESTED_TASK_UPDATE_COMMAND: &str = "openforge update-task";
+
+// Frozen v1 host envelope: existing projects persist this exact format. Add a new
+// version instead of editing it when future prompt wording changes.
+fn handoff_notes_start_prompt_content_v1(
+    project_template: Option<&str>,
+    task_update_command: &str,
+) -> String {
     let handoff_notes_template = project_template
         .filter(|template| !template.trim().is_empty())
         .unwrap_or(DEFAULT_HANDOFF_NOTES_TEMPLATE);
@@ -39,13 +47,13 @@ This task is {{{{taskId}}}}. OpenForge stores this task's user-facing Handoff No
 </handoff_notes_template>
 
 <analysis_update trigger="after_initial_analysis">
-Once you understand the scope, run: openforge task update --task-id "{{{{taskId}}}}" --summary "..."
+Once you understand the scope, run: {task_update_command} --task-id "{{{{taskId}}}}" --summary "..."
 Write concise initial Handoff Notes reflecting the actual work and the active template, not the original request verbatim.
 Good: "## Summary\nScoped JWT refresh token rotation in auth middleware\n\n## Decisions made\nKept rotation inside existing auth middleware." — Bad: "implement the auth thing"
 </analysis_update>
 
 <summary_update trigger="before_finalizing">
-Before reporting completion, run: openforge task update --task-id "{{{{taskId}}}}" --summary "..."
+Before reporting completion, run: {task_update_command} --task-id "{{{{taskId}}}}" --summary "..."
 Update the task's Handoff Notes with an accurate, up-to-date reviewer brief using the active template. Preserve useful existing Summary context while adding new information, decisions, open questions, and follow-up tasks; do not discard earlier relevant work just to make the note "current".
 </summary_update>
 
@@ -58,20 +66,32 @@ Task is incomplete unless both Handoff Notes updates were made. If the openforge
     )
 }
 
+pub fn legacy_handoff_notes_start_prompt_content(project_template: Option<&str>) -> String {
+    handoff_notes_start_prompt_content_v1(project_template, TASK_UPDATE_COMMAND)
+}
+
 const HANDOFF_NOTES_TEMPLATE_PLACEHOLDER: &str = "{{handoffNotesTemplate}}";
 const LEGACY_HANDOFF_NOTES_TEMPLATE_SENTINEL: &str =
     "__OPENFORGE_LEGACY_HANDOFF_NOTES_TEMPLATE_SENTINEL__";
 
-fn is_legacy_handoff_notes_workflow_content(content: &str) -> bool {
-    // Older OpenForge versions persisted this exact host-generated envelope with a
-    // project-template snapshot. Keep that documented compatibility shape dynamic.
-    let skeleton =
-        legacy_handoff_notes_start_prompt_content(Some(LEGACY_HANDOFF_NOTES_TEMPLATE_SENTINEL));
+fn matches_host_handoff_notes_workflow_content(content: &str, task_update_command: &str) -> bool {
+    let skeleton = handoff_notes_start_prompt_content_v1(
+        Some(LEGACY_HANDOFF_NOTES_TEMPLATE_SENTINEL),
+        task_update_command,
+    );
     let Some((prefix, suffix)) = skeleton.split_once(LEGACY_HANDOFF_NOTES_TEMPLATE_SENTINEL) else {
         return false;
     };
 
     content.starts_with(prefix) && content.ends_with(suffix)
+}
+
+fn is_legacy_handoff_notes_workflow_content(content: &str) -> bool {
+    // The host persisted this envelope before placeholders existed. Match only known
+    // host-generated variants so plugin-owned content remains untouched.
+    [TASK_UPDATE_COMMAND, PRE_NESTED_TASK_UPDATE_COMMAND]
+        .iter()
+        .any(|command| matches_host_handoff_notes_workflow_content(content, command))
 }
 
 fn escape_handoff_notes_template_delimiter(template: &str) -> String {
