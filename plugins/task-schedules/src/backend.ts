@@ -39,13 +39,14 @@ export default defineBackendPlugin({
       handler: (input: unknown) => runScheduleNow(openforge, requireScheduleIdRequest(input)),
     }))
 
+    const runPoll = createGuardedPoll(() => processDueSchedulesForAllProjects(openforge))
     context.subscriptions.add(openforge.background.register({
       id: 'scheduled-fires',
       scope: 'global',
       async start() {
-        await processDueSchedulesForAllProjects(openforge)
+        await runPoll()
         const interval = setInterval(() => {
-          void processDueSchedulesForAllProjects(openforge)
+          void runPoll()
         }, BACKGROUND_POLL_MS)
         backgroundInterval = interval
       },
@@ -58,6 +59,21 @@ export default defineBackendPlugin({
 })
 
 let backgroundInterval: ReturnType<typeof setInterval> | null = null
+
+// Drops overlapping runs: two concurrent polls would read the same pre-write
+// schedules and both fire, creating duplicate Tasks.
+export function createGuardedPoll(run: () => Promise<unknown>): () => Promise<void> {
+  let inFlight = false
+  return async () => {
+    if (inFlight) return
+    inFlight = true
+    try {
+      await run()
+    } finally {
+      inFlight = false
+    }
+  }
+}
 
 export async function listTaskSchedules(openforge: BackendOpenForgeAPI, request: ProjectRequest): Promise<TaskSchedule[]> {
   return readSchedules(openforge, request.projectId)
@@ -137,51 +153,70 @@ async function performScheduledFire(
   trigger: ScheduledFireOutcome['trigger'],
   now: number
 ): Promise<{ updatedSchedule: TaskSchedule; outcome: ScheduledFireOutcome }> {
-  const openTask = await getOpenPreviousTask(openforge, schedule)
-  if (openTask) {
-    const outcome = createOutcome(now, trigger, 'skipped', `Skipped because previous scheduled Task ${openTask.id} is ${openTask.status}`, openTask.id)
-    return { updatedSchedule: withOutcome(schedule, outcome), outcome }
+  const outcome = await computeFireOutcome(openforge, projectId, schedule, trigger, now)
+  return { updatedSchedule: withOutcome(schedule, outcome), outcome }
+}
+
+async function computeFireOutcome(
+  openforge: BackendOpenForgeAPI,
+  projectId: string,
+  schedule: TaskSchedule,
+  trigger: ScheduledFireOutcome['trigger'],
+  now: number
+): Promise<ScheduledFireOutcome> {
+  const block = await getPreviousTaskBlock(openforge, schedule)
+  if (block) return createOutcome(now, trigger, 'skipped', block.message, block.taskId)
+
+  let task: Task
+  try {
+    task = await openforge.tasks.create({ initialPrompt: schedule.prompt, projectId, labelNames: ['scheduled'] })
+  } catch (error) {
+    return createOutcome(now, trigger, 'failed', errorMessage(error))
+  }
+
+  if (schedule.mode === 'create-only') {
+    return createOutcome(now, trigger, 'created', `Created scheduled Task ${task.id}`, task.id)
   }
 
   try {
-    const task = await openforge.tasks.create({
-      initialPrompt: schedule.prompt,
-      projectId,
-      labelNames: ['scheduled'],
-    })
-
-    if (schedule.mode === 'create-only') {
-      const outcome = createOutcome(now, trigger, 'created', `Created scheduled Task ${task.id}`, task.id)
-      return {
-        updatedSchedule: { ...withOutcome(schedule, outcome), lastTaskId: task.id },
-        outcome,
-      }
-    }
-
     await openforge.tasks.startImplementation({ taskId: task.id })
-    const outcome = createOutcome(now, trigger, 'started', `Created and started scheduled Task ${task.id}`, task.id)
-    return {
-      updatedSchedule: { ...withOutcome(schedule, outcome), lastTaskId: task.id },
-      outcome,
-    }
+    return createOutcome(now, trigger, 'started', `Created and started scheduled Task ${task.id}`, task.id)
   } catch (error) {
-    const outcome = createOutcome(now, trigger, 'failed', error instanceof Error ? error.message : String(error))
-    return { updatedSchedule: withOutcome(schedule, outcome), outcome }
+    return createOutcome(now, trigger, 'failed', `Created scheduled Task ${task.id} but failed to start it: ${errorMessage(error)}`, task.id)
   }
 }
 
-async function getOpenPreviousTask(openforge: BackendOpenForgeAPI, schedule: TaskSchedule): Promise<Task | null> {
+type PreviousTaskBlock = { taskId: string; message: string }
+
+async function getPreviousTaskBlock(openforge: BackendOpenForgeAPI, schedule: TaskSchedule): Promise<PreviousTaskBlock | null> {
   if (!schedule.lastTaskId) return null
 
   try {
     const task = await openforge.tasks.get(schedule.lastTaskId)
-    return task.status === 'done' ? null : task
-  } catch {
-    // Since AVIV-118, completing a Task deletes it: openforge.tasks.get then
-    // rejects with 'task not found'. Treat a missing last Task as closed so the
-    // schedule keeps firing instead of skipping forever.
-    return null
+    // 'done' is a recognized-but-unreachable status after AVIV-118 (legacy rows
+    // only); such a last Task counts as closed and does not block firing.
+    if (task.status === 'done') return null
+    return { taskId: task.id, message: `Skipped because previous scheduled Task ${task.id} is ${task.status}` }
+  } catch (error) {
+    if (isMissingTaskError(error)) {
+      // Since AVIV-118, completing a Task deletes it: openforge.tasks.get then
+      // rejects with 'task not found'. A missing last Task is closed, so keep
+      // firing instead of skipping forever.
+      return null
+    }
+    // Any other failure (e.g. a locked database) leaves the last Task's state
+    // unknown. Skip this fire rather than risk spawning a duplicate alongside a
+    // Task that may still be open; firing resumes at the next scheduled fire.
+    return { taskId: schedule.lastTaskId, message: `Skipped because previous scheduled Task ${schedule.lastTaskId} could not be verified: ${errorMessage(error)}` }
   }
+}
+
+function isMissingTaskError(error: unknown): boolean {
+  return /not found/i.test(errorMessage(error))
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 function normalizeScheduleDraft(draft: TaskScheduleDraft, existing: TaskSchedule | null, now: number): TaskSchedule {
@@ -254,6 +289,10 @@ function createOutcome(
 function withOutcome(schedule: TaskSchedule, outcome: ScheduledFireOutcome): TaskSchedule {
   return {
     ...schedule,
+    // A fire that touched a Task (created/started, or created-then-failed-to-start)
+    // becomes the last Task; a fire that created none leaves the pointer intact.
+    // This keeps the de-dup guard fed even when starting the Task failed.
+    lastTaskId: outcome.taskId ?? schedule.lastTaskId,
     history: [...schedule.history, outcome].slice(-HISTORY_LIMIT),
   }
 }
