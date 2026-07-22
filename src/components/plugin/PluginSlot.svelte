@@ -30,6 +30,7 @@
   let renderedComponents = $state(new Map<string, Component<Record<string, unknown>>>())
   let renderErrors = $state(new Map<string, string>())
   let activationRunId = 0
+  let lastContributionSignature: string | null = null
 
   let slotLayout = $derived(slotType === 'views' || slotType === 'taskPaneTabs' ? 'fill' : null)
   let slotHostClass = $derived(slotLayout === 'fill' ? 'flex flex-col flex-1 min-h-0 overflow-hidden' : '')
@@ -77,16 +78,34 @@
     activationRunId += 1
   })
 
+  function contributionSetSignature(contributions: readonly (typeof slotContributions)[number][]): string {
+    // Include whether each contribution currently resolves to a registered component so a
+    // recovery (component registered after a failed activation) still rebuilds, while a
+    // re-activation that re-registers the same components keeps the same signature.
+    return contributions.map((contrib) => `${contrib.namespacedId}:${getContributionComponent(contrib) ? '1' : '0'}`).join('|')
+  }
+
   $effect(() => {
+    const contributions = [...slotContributions]
+    const signature = contributionSetSignature(contributions)
+
+    // Rebuild only when the contribution set actually changes. A plugin re-activating
+    // re-emits an equivalent runtimeContributionSources map (same namespacedIds); wiping
+    // renderedComponents on every store tick would unmount + remount the mounted section,
+    // which is the visible flash on the Settings page.
+    if (signature === lastContributionSignature) {
+      return
+    }
+    lastContributionSignature = signature
+
     renderedComponents = new Map()
     renderErrors = new Map()
 
-    if (slotContributions.length === 0) {
+    if (contributions.length === 0) {
       return
     }
 
     const runId = ++activationRunId
-    const contributions = [...slotContributions]
 
     void (async () => {
       const nextRenderedComponents = new Map<string, Component<Record<string, unknown>>>()

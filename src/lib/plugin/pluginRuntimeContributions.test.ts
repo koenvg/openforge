@@ -37,6 +37,26 @@ describe('plugin runtime task UI contributions', () => {
     expect(getRegisteredRenderableComponent('taskUISections', 'plugin.sections:lazy')).toBeUndefined()
   })
 
+  it('re-applies a snapshot in a single store update without clearing the source first', async () => {
+    const seed = createRuntimeContributionRegistry({ pluginId: 'plugin.sections', projectId: 'P-1' })
+    seed.getFrontendApi().taskUI.registerSection({ id: 'direct', order: 20, component: DirectSection })
+    await applyRuntimeSnapshotContributions('plugin.sections', seed.getSnapshot())
+
+    const presence: boolean[] = []
+    const unsubscribe = runtimeContributionSources.subscribe(map => presence.push(map.has('plugin.sections')))
+    presence.length = 0
+
+    const reapply = createRuntimeContributionRegistry({ pluginId: 'plugin.sections', projectId: 'P-1' })
+    reapply.getFrontendApi().taskUI.registerSection({ id: 'direct', order: 20, component: DirectSection })
+    await applyRuntimeSnapshotContributions('plugin.sections', reapply.getSnapshot())
+    unsubscribe()
+
+    // A clear-then-set flip would emit an intermediate map without the plugin, which
+    // unmounts the plugin's rendered sections and causes the Settings page flash.
+    expect(presence.length).toBeGreaterThan(0)
+    expect(presence).not.toContain(false)
+  })
+
   it('preserves sanitized custom SVG icons while applying runtime view snapshots', async () => {
     const registry = createRuntimeContributionRegistry({ pluginId: 'plugin.sections', projectId: 'P-1' })
     registry.getFrontendApi().views.register({
