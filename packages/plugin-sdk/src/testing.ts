@@ -31,6 +31,7 @@ import type {
   PluginViewRegistration,
   SubscriptionSink,
 } from './types'
+import type { Task } from './domain'
 
 export type TestingRuntimeScope = 'global' | 'project' | 'task'
 export type TestingRuntimeKind = 'commands' | 'events' | 'views' | 'taskPane' | 'taskUI' | 'settings' | 'backend' | 'background'
@@ -47,6 +48,12 @@ export interface TestingOpenForgeApiOptions {
   viewId?: string
   packageMetadata?: OpenForgePackageMetadata
   storage?: PluginStorage
+  /**
+   * Tasks returned by `tasks.list`. The mock filters them by the requested
+   * `projectId` (when given) and drops `done` tasks unless `includeDone: true`,
+   * mirroring the host capability. Defaults to an empty list.
+   */
+  tasks?: Task[]
 }
 
 export interface TestingOpenForgeApiCalls {
@@ -61,6 +68,7 @@ export interface TestingOpenForgeApiCalls {
   taskCreations: CreateTaskRequest[]
   startPromptContributionConfigurations: ConfigureStartPromptContributionRequest[]
   taskImplementationStarts: StartTaskImplementationRequest[]
+  taskListRequests: Array<{ projectId: string | null; includeDone: boolean }>
   taskSummaryUpdates: Array<{ taskId: string; summary: string }>
   taskStatusUpdates: Array<{ taskId: string; status: string }>
   configWrites: Array<{ key: string; value: JsonValue; projectId: string | null }>
@@ -185,6 +193,7 @@ export class TestingOpenForgeRegistryFake {
   private readonly injectionPointsMap = new Map<string, TestingInjectionPointContribution>()
   private readonly claimedIds = new Set<string>()
   private readonly config = new Map<string, JsonValue>()
+  private readonly seededTasks: Task[]
   private eventListenerSequence = 0
   private cachedFrontendApi: MockFrontendOpenForgeAPI | null = null
   private cachedBackendApi: MockBackendOpenForgeAPI | null = null
@@ -202,6 +211,7 @@ export class TestingOpenForgeRegistryFake {
     }
     this.calls = createTestingCalls()
     this.storage = options.storage ?? createMemoryPluginStorage(this.calls)
+    this.seededTasks = options.tasks ?? []
   }
 
   get frontendApi(): MockFrontendOpenForgeAPI {
@@ -355,7 +365,16 @@ export class TestingOpenForgeRegistryFake {
         getSnapshot: () => this.getContextSnapshot(),
       },
       tasks: {
-        list: async () => [],
+        list: async (request) => {
+          const projectId = request?.projectId ?? null
+          const includeDone = request?.includeDone ?? false
+          this.calls.taskListRequests.push({ projectId, includeDone })
+          return this.seededTasks.filter((task) => {
+            if (projectId !== null && task.project_id !== projectId) return false
+            if (!includeDone && task.status === 'done') return false
+            return true
+          })
+        },
         get: async () => null,
         create: async (request) => {
           this.calls.taskCreations.push(request)
@@ -803,6 +822,7 @@ export function createTestingCalls(): TestingOpenForgeApiCalls {
     taskCreations: [],
     startPromptContributionConfigurations: [],
     taskImplementationStarts: [],
+    taskListRequests: [],
     taskSummaryUpdates: [],
     taskStatusUpdates: [],
     configWrites: [],

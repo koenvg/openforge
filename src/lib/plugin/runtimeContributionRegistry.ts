@@ -55,7 +55,7 @@ type RuntimeEventHandler = (payload: unknown) => void
 export type RuntimeHostBridge = {
   listProjects?(): Promise<Project[]>
   getProject?(projectId: string): Promise<Project | null>
-  listTasks?(request?: { projectId?: string | null }): Promise<Task[]>
+  listTasks?(request?: { projectId?: string | null; includeDone?: boolean }): Promise<Task[]>
   getTask?(taskId: string): Promise<Task>
   createTask?(request: CreateTaskRequest): Promise<Task>
   updateTaskSummary?(taskId: string, summary: string): Promise<void>

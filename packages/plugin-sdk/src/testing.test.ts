@@ -155,4 +155,31 @@ describe('plugin SDK testing utilities', () => {
     await expect(frontendApi.storage.global.get('flag')).resolves.toBe(true)
     expect(backendApi.context.getSnapshot()).toEqual({ pluginId: 'demo', projectId: null })
   })
+
+  it('filters seeded tasks by project and drops done tasks unless includeDone is set', async () => {
+    const baseTask = {
+      initial_prompt: 'Prompt', prompt: null, title: null, title_source: null, title_generated_at: null,
+      summary: null, agent: null, permission_mode: null, worktree_source: null, worktree_branch: null,
+      handoff_notes_enabled: true, source_ticket_url: null, depends_on: [], created_at: 1, updated_at: 2,
+    }
+    const api = createMockFrontendOpenForgeApi({
+      pluginId: 'demo',
+      tasks: [
+        { ...baseTask, id: 'T-active', status: 'doing', project_id: 'P-1' },
+        { ...baseTask, id: 'T-done', status: 'done', project_id: 'P-1' },
+        { ...baseTask, id: 'T-other', status: 'doing', project_id: 'P-2' },
+      ],
+    })
+
+    const activeOnly = await api.tasks.list({ projectId: 'P-1' })
+    expect(activeOnly.map((task) => task.id)).toEqual(['T-active'])
+
+    const withDone = await api.tasks.list({ projectId: 'P-1', includeDone: true })
+    expect(withDone.map((task) => task.id)).toEqual(['T-active', 'T-done'])
+
+    expect(api.__testing.calls.taskListRequests).toEqual([
+      { projectId: 'P-1', includeDone: false },
+      { projectId: 'P-1', includeDone: true },
+    ])
+  })
 })

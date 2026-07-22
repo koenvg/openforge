@@ -253,6 +253,27 @@ async fn app_invoke_delete_task_completes_record_and_removes_worktree_metadata()
     .await;
     assert_eq!(visible_tasks.as_array().expect("visible tasks").len(), 0);
 
+    // includeDone: true opts into the done task the default view drops.
+    let all_tasks = invoke_ok(
+        &state,
+        "get_tasks_for_project",
+        json!({ "projectId": project_id, "includeDone": true }),
+    )
+    .await;
+    let all_tasks = all_tasks.as_array().expect("all tasks");
+    assert_eq!(all_tasks.len(), 1);
+    assert_eq!(all_tasks[0]["id"].as_str(), Some(task_id.as_str()));
+    assert_eq!(all_tasks[0]["status"].as_str(), Some("done"));
+
+    // includeDone: false is explicitly the active-only default.
+    let active_tasks = invoke_ok(
+        &state,
+        "get_tasks_for_project",
+        json!({ "projectId": project_id, "includeDone": false }),
+    )
+    .await;
+    assert_eq!(active_tasks.as_array().expect("active tasks").len(), 0);
+
     let _ = std::fs::remove_file(path);
 }
 

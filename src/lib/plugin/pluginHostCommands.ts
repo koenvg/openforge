@@ -217,7 +217,7 @@ export function createPluginRuntimeHost(pluginId: string) {
   return {
     listProjects: () => getProjects(),
     getProject: async (projectId: string) => (await getProjects()).find((project) => project.id === projectId) ?? null,
-    listTasks: (request?: { projectId?: string }) => request?.projectId ? getTasksForProject(request.projectId) : getAllTasks(),
+    listTasks: (request?: { projectId?: string | null; includeDone?: boolean }) => request?.projectId ? getTasksForProject(request.projectId, request.includeDone) : getAllTasks(),
     getTask: (taskId: string) => getTaskDetail(taskId),
     createTask: (request: CreateTaskRequest) => createTaskFromPluginRequest(request),
     updateTaskSummary: (taskId: string, summary: string) => updateTaskSummary(taskId, summary),

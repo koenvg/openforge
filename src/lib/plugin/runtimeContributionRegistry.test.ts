@@ -378,6 +378,8 @@ describe('runtime contribution registry', () => {
 
     await expect(api.projects.list()).resolves.toHaveLength(1)
     await expect(api.tasks.list({ projectId: 'P-1' })).resolves.toHaveLength(1)
+    await api.tasks.list({ projectId: 'P-1', includeDone: true })
+    expect(host.listTasks).toHaveBeenCalledWith({ projectId: 'P-1', includeDone: true })
     await expect(api.tasks.create({
       initialPrompt: 'New prompt',
       projectId: 'P-1',

@@ -52,6 +52,18 @@ pub(crate) fn bool(payload: &serde_json::Value, key: &str) -> Result<bool, AppIn
         .ok_or_else(|| AppInvokeError::bad_request(format!("payload.{key} must be a boolean")))
 }
 
+pub(crate) fn optional_bool(
+    payload: &serde_json::Value,
+    key: &str,
+) -> Result<Option<bool>, AppInvokeError> {
+    match payload.get(key) {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(value) => value.as_bool().map(Some).ok_or_else(|| {
+            AppInvokeError::bad_request(format!("payload.{key} must be a boolean or null"))
+        }),
+    }
+}
+
 pub(crate) fn field<T: DeserializeOwned>(
     payload: &serde_json::Value,
     key: &str,

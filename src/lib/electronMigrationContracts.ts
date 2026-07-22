@@ -64,7 +64,7 @@ export const ipcCommandContracts = [
   { functionName: 'setTaskConfig', ipcCommand: 'set_task_config', payloadKeys: ['taskId', 'key', 'value'], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'resetProjectSettingsToGlobal', ipcCommand: 'reset_project_settings_to_global', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'getAllTasks', ipcCommand: 'get_tasks', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
-  { functionName: 'getTasksForProject', ipcCommand: 'get_tasks_for_project', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
+  { functionName: 'getTasksForProject', ipcCommand: 'get_tasks_for_project', payloadKeys: ['projectId', 'includeDone'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'getProjectTaskLabels', ipcCommand: 'get_project_task_labels', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'createTaskLabel', ipcCommand: 'create_task_label', payloadKeys: ['projectId', 'name'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'addTaskLabel', ipcCommand: 'add_task_label', payloadKeys: ['taskId', 'name'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
