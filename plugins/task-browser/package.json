@@ -1,0 +1,39 @@
+{
+  "name": "@openforge-app/plugin-task-browser",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm --filter @openforge-app/plugin-sdk build && pnpm run build:bundle",
+    "build:bundle": "vite build",
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lucide/svelte": "^1.24.0",
+    "@openforge-app/plugin-sdk": "workspace:*"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.2.0",
+    "@testing-library/svelte": "^5.4.2",
+    "svelte": "^5.56.5",
+    "typescript": "^6.0.3",
+    "vite": "^8.1.4",
+    "vitest": "^4.1.10"
+  },
+  "openforge": {
+    "id": "com.openforge.task-browser",
+    "apiVersion": 1,
+    "displayName": "Task Browser",
+    "description": "Adds a secure browser tab to every OpenForge task",
+    "icon": "globe",
+    "frontend": "./dist/frontend.js",
+    "requires": [
+      "taskPane",
+      "browserSurfaces",
+      "storage"
+    ]
+  }
+}
