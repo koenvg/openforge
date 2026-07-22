@@ -368,6 +368,99 @@ describe('PluginSlot', () => {
     })
   })
 
+  it('does not remount a settings section when contributions are re-emitted unchanged', async () => {
+    const manifest = makeManifest('plugin.settings')
+    installedPlugins.set(new Map([[manifest.id, { manifest, state: 'active', error: null }]]))
+    enabledPluginIds.set(new Set([manifest.id]))
+    runtimeContributionSources.set(new Map([[
+      manifest.id,
+      { pluginId: manifest.id, settingsSections: [{ id: 'preferences', title: 'Preferences' }] },
+    ]]))
+    registerRenderableContributionComponent('settingsSections', 'plugin.settings:preferences', PluginSlotTestView)
+
+    render(PluginSlot, {
+      props: {
+        slotType: 'settingsSections',
+        slotId: 'plugin.settings:preferences',
+        sourcePluginIds: ['plugin.settings'],
+      },
+    })
+
+    const nodeBefore = await waitFor(() => screen.getByTestId('plugin-slot-view'))
+
+    // A plugin re-activating re-emits an equivalent contribution source (new Map,
+    // new source object, identical namespacedIds). This must not wipe + remount the
+    // already-mounted section — that remount is the visible flash on the Settings page.
+    runtimeContributionSources.set(new Map([[
+      manifest.id,
+      { pluginId: manifest.id, settingsSections: [{ id: 'preferences', title: 'Preferences' }] },
+    ]]))
+
+    await new Promise(r => setTimeout(r, 10))
+
+    expect(screen.getByTestId('plugin-slot-view')).toBe(nodeBefore)
+  })
+
+  it('rebuilds when a contribution becomes resolvable after re-emitting the same set', async () => {
+    const manifest = makeManifest('plugin.settings')
+    installedPlugins.set(new Map([[manifest.id, { manifest, state: 'active', error: null }]]))
+    enabledPluginIds.set(new Set([manifest.id]))
+    // Source present but the component is not registered yet (e.g. activation not done).
+    activatePluginMock.mockResolvedValueOnce(false)
+    runtimeContributionSources.set(new Map([[
+      manifest.id,
+      { pluginId: manifest.id, settingsSections: [{ id: 'preferences', title: 'Preferences' }] },
+    ]]))
+
+    render(PluginSlot, {
+      props: {
+        slotType: 'settingsSections',
+        slotId: 'plugin.settings:preferences',
+        sourcePluginIds: ['plugin.settings'],
+      },
+    })
+
+    await new Promise(r => setTimeout(r, 10))
+    expect(screen.queryByTestId('plugin-slot-view')).toBeNull()
+
+    // Component now registers, and the same contribution set is re-emitted: the section
+    // must appear rather than stay blank.
+    registerRenderableContributionComponent('settingsSections', 'plugin.settings:preferences', PluginSlotTestView)
+    runtimeContributionSources.set(new Map([[
+      manifest.id,
+      { pluginId: manifest.id, settingsSections: [{ id: 'preferences', title: 'Preferences' }] },
+    ]]))
+
+    await waitFor(() => expect(screen.getByTestId('plugin-slot-view')).toBeTruthy())
+  })
+
+  it('rebuilds when the contribution set actually changes', async () => {
+    const manifest = makeManifest('plugin.settings')
+    installedPlugins.set(new Map([[manifest.id, { manifest, state: 'active', error: null }]]))
+    enabledPluginIds.set(new Set([manifest.id]))
+    runtimeContributionSources.set(new Map([[
+      manifest.id,
+      { pluginId: manifest.id, settingsSections: [{ id: 'preferences', title: 'Preferences' }] },
+    ]]))
+    registerRenderableContributionComponent('settingsSections', 'plugin.settings:preferences', PluginSlotTestView)
+
+    render(PluginSlot, {
+      props: {
+        slotType: 'settingsSections',
+        slotId: 'plugin.settings:preferences',
+        sourcePluginIds: ['plugin.settings'],
+      },
+    })
+
+    await waitFor(() => expect(screen.getByTestId('plugin-slot-view')).toBeTruthy())
+
+    // Drop the contribution entirely: the section must unmount.
+    runtimeContributionSources.set(new Map())
+    await new Promise(r => setTimeout(r, 10))
+
+    expect(screen.queryByTestId('plugin-slot-view')).toBeNull()
+  })
+
   it('renders a registered settings section contribution component', async () => {
     const manifest = makeManifest('plugin.settings')
     enablePlugin(

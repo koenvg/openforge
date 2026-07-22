@@ -57,15 +57,19 @@ function runtimeSnapshotToContributionSource(snapshot: RuntimeContributionSnapsh
   }
 }
 
-export function clearPluginRuntimeContributions(pluginId: string): void {
+function clearPluginComponentAndCommandRegistrations(pluginId: string): void {
   unregisterViewComponentsForPlugin(pluginId)
-  clearRuntimeContributionSource(pluginId)
 
   for (const key of Array.from(pluginCommandHandlers.keys())) {
     if (key.startsWith(`${pluginId}:`)) {
       pluginCommandHandlers.delete(key)
     }
   }
+}
+
+export function clearPluginRuntimeContributions(pluginId: string): void {
+  clearPluginComponentAndCommandRegistrations(pluginId)
+  clearRuntimeContributionSource(pluginId)
 }
 
 async function stopBackgroundServiceEntries(stopEntries: Array<[string, () => Promise<void>]>): Promise<void> {
@@ -147,7 +151,11 @@ async function rollbackAppliedRuntimeContributions(pluginId: string, registeredS
 
 export async function applyRuntimeSnapshotContributions(pluginId: string, snapshot: RuntimeContributionSnapshot): Promise<void> {
   await stopPluginBackgroundServices(pluginId)
-  clearPluginRuntimeContributions(pluginId)
+  // Clear only the component/command registries here. The runtimeContributionSources
+  // store is replaced in a single atomic write below (setRuntimeContributionSource
+  // overwrites any existing entry), so re-activation never drops the plugin from the
+  // store between a clear and a set — that mid-flight gap flashes the Settings page.
+  clearPluginComponentAndCommandRegistrations(pluginId)
 
   const registeredStopKeys: string[] = []
 
