@@ -438,7 +438,7 @@ export interface ImplementationRun {
 
 export interface TasksAPI {
   list(request?: { projectId?: string | null }): Promise<Task[]>
-  get(taskId: string): Promise<Task>
+  get(taskId: string): Promise<Task | null>
   create(request: CreateTaskRequest): Promise<Task>
   updateSummary(taskId: string, summary: string): Promise<void>
   updateStatus(taskId: string, status: WritableBoardStatus): Promise<void>

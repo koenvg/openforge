@@ -284,7 +284,7 @@ it('records task creation, summary updates, status updates, and implementation s
 })
 ```
 
-`tasks.list()` returns an empty array by default, `tasks.get()` rejects with `Mock task not found`, and workspace/session lookups return `null`. If your plugin needs richer task fixtures, wrap the API behind your own test double at your plugin boundary.
+`tasks.list()` returns an empty array by default, `tasks.get()` resolves to `null` (a missing Task is not an error), and workspace/session lookups return `null`. If your plugin needs richer task fixtures, wrap the API behind your own test double at your plugin boundary.
 
 ## Backend RPC
 

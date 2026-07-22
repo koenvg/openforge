@@ -229,8 +229,10 @@ describe('Task Schedules backend plugin', () => {
   })
 
   it('fires again after the previous scheduled Task was completed and deleted', async () => {
+    // Since AVIV-118, completing a Task deletes it and tasks.get resolves to
+    // null. A missing last Task is closed, so the schedule keeps firing.
     const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
-    api.tasks.get = vi.fn(async (taskId: string) => { throw new Error(`task not found: ${taskId}`) })
+    api.tasks.get = vi.fn(async () => null)
     await setStoredSchedules(api, [makeSchedule({ lastTaskId: 'T-completed' })])
 
     const outcome = await runScheduleNow(api, { projectId, scheduleId: 'schedule-1' }, Date.UTC(2026, 0, 1, 10))
@@ -243,7 +245,7 @@ describe('Task Schedules backend plugin', () => {
 
   it('does not skip a due background Scheduled Fire when the previous scheduled Task was deleted', async () => {
     const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
-    api.tasks.get = vi.fn(async (taskId: string) => { throw new Error(`task not found: ${taskId}`) })
+    api.tasks.get = vi.fn(async () => null)
     await setStoredSchedules(api, [makeSchedule({ lastTaskId: 'T-completed', nextFireAt: Date.UTC(2025, 11, 28, 9) })])
 
     const outcomes = await processDueSchedules(api, projectId, Date.UTC(2026, 0, 1, 10))

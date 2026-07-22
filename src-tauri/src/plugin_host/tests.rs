@@ -546,6 +546,14 @@ async fn plugin_host_task_callbacks_create_start_and_read_state() {
         .expect("task get callback");
     assert_eq!(fetched["id"], task_id);
 
+    // A missing Task resolves to null instead of rejecting, so plugins can tell a
+    // deleted/completed Task apart from a transient load failure.
+    let missing = host
+        .handle_host_callback("openforge.tasks.get", &json!({ "taskId": "T-missing" }))
+        .await
+        .expect("missing task get callback");
+    assert_eq!(missing, Value::Null);
+
     assert_eq!(
         host.handle_host_callback(
             "openforge.tasks.updateSummary",

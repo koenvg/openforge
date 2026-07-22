@@ -417,9 +417,7 @@ var TestingOpenForgeRegistryFake = class {
 			context: { getSnapshot: () => this.getContextSnapshot() },
 			tasks: {
 				list: async () => [],
-				get: async (taskId) => {
-					throw new Error(`Mock task not found: ${taskId}`);
-				},
+				get: async () => null,
 				create: async (request) => {
 					this.calls.taskCreations.push(request);
 					return {
