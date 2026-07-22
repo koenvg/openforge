@@ -1,7 +1,7 @@
 <script lang="ts">
   import { projects, activeProjectId, attentionCountByProject, reviewRequestCountByProject, hiddenProjectIds } from '../../lib/stores'
   import { getGitBranch, setConfig } from '../../lib/ipc'
-  import { ChevronLeft, ChevronRight, ChevronDown, Settings, Plus, ArrowUp, ArrowDown, EyeOff, Eye } from '@lucide/svelte'
+  import { ChevronLeft, ChevronRight, ChevronDown, Settings, Plus, ArrowUp, ArrowDown, EyeOff, Eye, LocateFixed } from '@lucide/svelte'
   import {
     partitionProjectsByHidden,
     withProjectHidden,
@@ -22,6 +22,7 @@
     onNewProject?: () => void
     onNavigate: (view: AppView) => void
     onSelectProject: (projectId: string) => void
+    onOpenAttentionOverview: () => void
     pluginNavItems?: IconRailPluginNavItem[]
     reviewRequestCount?: number
   }
@@ -34,6 +35,7 @@
     onNewProject,
     onNavigate,
     onSelectProject,
+    onOpenAttentionOverview,
     pluginNavItems = [],
     reviewRequestCount = 0,
   }: Props = $props()
@@ -313,6 +315,22 @@
   </div>
 
   <div class="border-t border-base-300/50 py-2">
+    <!-- Attention overview trigger. Mirrors the keyboard shortcut (⌘E / ⌘;) so mouse-only
+         users have a persistent way to open the dialog. It opens a modal rather than
+         navigating to a view, so it never carries aria-current. The LocateFixed glyph
+         matches the target icon in the dialog's own header. -->
+    <button
+      type="button"
+      class="w-full flex items-center {collapsed ? 'justify-center px-0' : 'px-3'} gap-2 py-2 cursor-pointer transition-colors text-base-content/50 hover:text-base-content"
+      title={collapsed ? 'Attention' : undefined}
+      aria-label="Attention"
+      onclick={onOpenAttentionOverview}
+    >
+      <LocateFixed size={18} class="shrink-0" />
+      {#if !collapsed}
+        <span class="text-xs font-medium">Attention</span>
+      {/if}
+    </button>
     {#each pluginNavItems as { viewKey, icon, title }}
       {@const isActive = currentView === viewKey}
       <button

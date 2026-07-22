@@ -537,6 +537,7 @@
     onNewProject={() => showProjectSetup = true}
     onNavigate={handleNavigate}
     onSelectProject={switchToProject}
+    onOpenAttentionOverview={() => { showAttentionOverview = true }}
     pluginNavItems={sidebarPluginNavItems}
     reviewRequestCount={$reviewRequestCount}
   />

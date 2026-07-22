@@ -66,6 +66,7 @@ vi.mock('@lucide/svelte', () => {
     ArrowDown: stub,
     EyeOff: stub,
     Eye: stub,
+    LocateFixed: stub,
   }
 })
 
@@ -91,7 +92,7 @@ const mockSelectProject = vi.fn((projectId: string) => {
   activeProjectId.set(projectId)
 })
 
-function renderSidebar(props?: Partial<{ collapsed: boolean; currentView: AppView; onToggleCollapse: () => void; onNewProject?: () => void; onNavigate: (view: AppView) => void; onSelectProject: (projectId: string) => void; pluginNavItems: typeof globalPrNavItem[]; reviewRequestCount: number }>) {
+function renderSidebar(props?: Partial<{ collapsed: boolean; currentView: AppView; onToggleCollapse: () => void; onNewProject?: () => void; onNavigate: (view: AppView) => void; onSelectProject: (projectId: string) => void; onOpenAttentionOverview: () => void; pluginNavItems: typeof globalPrNavItem[]; reviewRequestCount: number }>) {
   const defaultProps = {
     collapsed: false,
     currentView: 'board' as AppView,
@@ -99,6 +100,7 @@ function renderSidebar(props?: Partial<{ collapsed: boolean; currentView: AppVie
     onNewProject: vi.fn(),
     onNavigate: vi.fn(),
     onSelectProject: mockSelectProject,
+    onOpenAttentionOverview: vi.fn(),
   }
 
   return render(AppSidebar, { props: { ...defaultProps, ...props } })
@@ -193,6 +195,29 @@ describe('AppSidebar', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: /global settings/i }))
     expect(onNavigate).toHaveBeenCalledWith('global_settings')
+  })
+
+  it('renders an Attention nav button so mouse-only users can open the dialog', () => {
+    renderSidebar()
+    expect(screen.getByRole('button', { name: /attention/i })).toBeTruthy()
+  })
+
+  it('exposes the Attention button when collapsed via its accessible label', () => {
+    renderSidebar({ collapsed: true })
+    expect(screen.getByRole('button', { name: /attention/i })).toBeTruthy()
+  })
+
+  it('clicking Attention calls onOpenAttentionOverview', async () => {
+    const onOpenAttentionOverview = vi.fn()
+    renderSidebar({ onOpenAttentionOverview })
+
+    await fireEvent.click(screen.getByRole('button', { name: /attention/i }))
+    expect(onOpenAttentionOverview).toHaveBeenCalledOnce()
+  })
+
+  it('does not mark Attention as a current view since it opens a dialog rather than navigating', () => {
+    renderSidebar({ currentView: 'global_settings' })
+    expect(screen.getByRole('button', { name: /attention/i }).getAttribute('aria-current')).toBeNull()
   })
 
   it('clicking collapse toggle calls onToggleCollapse', async () => {
