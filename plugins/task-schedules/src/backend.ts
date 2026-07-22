@@ -1,5 +1,5 @@
 import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
-import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
+import type { BackendOpenForgeAPI, BackgroundServiceRegistration } from '@openforge-app/plugin-sdk/backend'
 import type { JsonValue, Task } from '@openforge-app/plugin-sdk'
 import { cronForPreset, getNextScheduledFireAt, validateFiveFieldCron } from './lib/cron'
 import type { ScheduledFireOutcome, TaskSchedule, TaskScheduleDraft, TaskScheduleMode } from './lib/types'
@@ -39,26 +39,31 @@ export default defineBackendPlugin({
       handler: (input: unknown) => runScheduleNow(openforge, requireScheduleIdRequest(input)),
     }))
 
-    const runPoll = createGuardedPoll(() => processDueSchedulesForAllProjects(openforge))
-    context.subscriptions.add(openforge.background.register({
-      id: 'scheduled-fires',
-      scope: 'global',
-      async start() {
-        await runPoll()
-        const interval = setInterval(() => {
-          void runPoll()
-        }, BACKGROUND_POLL_MS)
-        backgroundInterval = interval
-      },
-      stop() {
-        if (backgroundInterval) clearInterval(backgroundInterval)
-        backgroundInterval = null
-      },
-    }))
+    context.subscriptions.add(openforge.background.register(createScheduledFiresService(openforge)))
   },
 })
 
-let backgroundInterval: ReturnType<typeof setInterval> | null = null
+// Each registration owns its own interval handle via closure state. A
+// module-level handle would let a second activation clobber the first's timer
+// (leaking a poller that never stops) and let stop() clear the wrong interval.
+export function createScheduledFiresService(openforge: BackendOpenForgeAPI): BackgroundServiceRegistration {
+  const runPoll = createGuardedPoll(() => processDueSchedulesForAllProjects(openforge))
+  let interval: ReturnType<typeof setInterval> | null = null
+  return {
+    id: 'scheduled-fires',
+    scope: 'global',
+    async start() {
+      await runPoll()
+      interval = setInterval(() => {
+        void runPoll()
+      }, BACKGROUND_POLL_MS)
+    },
+    stop() {
+      if (interval) clearInterval(interval)
+      interval = null
+    },
+  }
+}
 
 // Drops overlapping runs: two concurrent polls would read the same pre-write
 // schedules and both fire, creating duplicate Tasks.

@@ -6,6 +6,7 @@ import backendPlugin, {
   SAVE_SCHEDULE_METHOD,
   SCHEDULES_STORAGE_KEY,
   createGuardedPoll,
+  createScheduledFiresService,
   listTaskSchedules,
   processDueSchedules,
   processDueSchedulesForAllProjects,
@@ -39,7 +40,7 @@ function makeSchedule(overrides: Partial<TaskSchedule> = {}): TaskSchedule {
 
 
 describe('Task Schedules backend plugin', () => {
-  it('registers backend methods and a project background service', async () => {
+  it('registers backend methods and a global background service', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.task-schedules', projectId })
 
     await registry.activateBackend(backendPlugin)
@@ -318,6 +319,39 @@ describe('Task Schedules backend plugin', () => {
     expect(outcome.taskId).toBeUndefined()
     const [saved] = await listTaskSchedules(api, { projectId })
     expect(saved.lastTaskId).toBeNull()
+  })
+
+  it('keeps each scheduled-fires registration self-contained so stopping one does not leak or clobber another', async () => {
+    vi.useFakeTimers()
+    try {
+      const apiA = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
+      const apiB = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
+      apiA.projects.list = vi.fn(async () => [])
+      apiB.projects.list = vi.fn(async () => [])
+
+      // Two activations register their own service; each owns its interval.
+      const serviceA = createScheduledFiresService(apiA)
+      const serviceB = createScheduledFiresService(apiB)
+
+      await serviceA.start()
+      await serviceB.start()
+      expect(apiA.projects.list).toHaveBeenCalledTimes(1)
+      expect(apiB.projects.list).toHaveBeenCalledTimes(1)
+
+      // Stopping A must clear only A's interval, never B's.
+      await serviceA.stop?.()
+      await vi.advanceTimersByTimeAsync(60_000)
+
+      // A is stopped: no further polls. B keeps polling: it was not clobbered.
+      expect(apiA.projects.list).toHaveBeenCalledTimes(1)
+      expect(apiB.projects.list).toHaveBeenCalledTimes(2)
+
+      await serviceB.stop?.()
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(apiB.projects.list).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('createGuardedPoll runs the body once while a previous run is still in flight', async () => {
