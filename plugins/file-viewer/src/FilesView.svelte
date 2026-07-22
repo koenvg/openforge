@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte'
   import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
   import PluginPageHeader from '@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte'
   import { activeProjectId, fileBrowserStates, pendingFileReveal } from './lib/stores'
@@ -11,7 +12,11 @@
     updateFileBrowserProjectState,
     type FileBrowserProjectState,
   } from './lib/fileExplorer'
+  import { buildSearchResultEntries, collectDirPaths } from './lib/fileSearch'
   import FilesBrowserSection from './FilesBrowserSection.svelte'
+
+  const SEARCH_LIMIT = 50
+  const SEARCH_DEBOUNCE_MS = 150
 
   interface Props {
     api: FrontendOpenForgeAPI
@@ -33,6 +38,13 @@
   let treeFocusRequest = $state<number | null>(null)
   let activeFileRequestId = 0
 
+  let searchQuery = $state('')
+  let searchResults = $state<string[]>([])
+  let searchLoading = $state(false)
+  let searchError = $state<string | null>(null)
+  let searchRequestId = 0
+  let searchTimer: ReturnType<typeof setTimeout> | null = null
+
   const projectState = $derived.by((): FileBrowserProjectState => {
     const currentProjectId = $activeProjectId
     return currentProjectId ? getFileBrowserProjectState($fileBrowserStates, currentProjectId) : createEmptyFileBrowserProjectState()
@@ -52,6 +64,12 @@
   const selectedFileName = $derived(
     selectedPath ? selectedPath.split('/').at(-1) ?? selectedPath : ''
   )
+
+  const searchActive = $derived(searchQuery.trim().length > 0)
+  const searchEntries = $derived(buildSearchResultEntries(searchResults))
+  const searchExpandedDirs = $derived(collectDirPaths(searchEntries))
+  const searchFileCount = $derived(searchEntries.filter((entry) => !entry.isDir).length)
+  const searchLimitReached = $derived(searchFileCount >= SEARCH_LIMIT)
 
   function updateProjectState(
     projectId: string,
@@ -186,6 +204,72 @@
     void selectFile(path)
   }
 
+  function resetSearch() {
+    if (searchTimer) {
+      clearTimeout(searchTimer)
+      searchTimer = null
+    }
+    searchRequestId++
+    searchQuery = ''
+    searchResults = []
+    searchLoading = false
+    searchError = null
+  }
+
+  async function runSearch(query: string, projectId: string) {
+    const requestId = ++searchRequestId
+    searchLoading = true
+    searchError = null
+    try {
+      const results = await api.fs.searchFiles({ projectId, query, limit: SEARCH_LIMIT })
+      if (requestId !== searchRequestId || $activeProjectId !== projectId) return
+      searchResults = results
+    } catch (e) {
+      if (requestId !== searchRequestId || $activeProjectId !== projectId) return
+      searchError = formatError(e)
+      searchResults = []
+    } finally {
+      if (requestId === searchRequestId && $activeProjectId === projectId) {
+        searchLoading = false
+      }
+    }
+  }
+
+  function handleSearchInput(value: string) {
+    searchQuery = value
+    if (searchTimer) {
+      clearTimeout(searchTimer)
+      searchTimer = null
+    }
+
+    const projectId = $activeProjectId
+    const trimmed = value.trim()
+    if (!projectId || trimmed.length === 0) {
+      searchRequestId++
+      searchResults = []
+      searchLoading = false
+      searchError = null
+      return
+    }
+
+    searchLoading = true
+    searchTimer = setTimeout(() => {
+      searchTimer = null
+      void runSearch(trimmed, projectId)
+    }, SEARCH_DEBOUNCE_MS)
+  }
+
+  function clearSearch() {
+    resetSearch()
+  }
+
+  function retrySearch() {
+    const projectId = $activeProjectId
+    const trimmed = searchQuery.trim()
+    if (!projectId || trimmed.length === 0) return
+    void runSearch(trimmed, projectId)
+  }
+
   function retryRevealPath(path: string) {
     void revealPath(path)
   }
@@ -280,6 +364,7 @@
     rootError = null
     directoryError = null
     fileError = null
+    resetSearch()
 
     if (!currentProjectId) {
       loading = false
@@ -310,6 +395,13 @@
 
     if (hasLoaded && processingRevealPath !== path && failedRevealPath !== path) {
       void revealPath(path)
+    }
+  })
+
+  onDestroy(() => {
+    if (searchTimer) {
+      clearTimeout(searchTimer)
+      searchTimer = null
     }
   })
 </script>
@@ -356,6 +448,17 @@
     {fileContent}
     {previewFocusRequest}
     {treeFocusRequest}
+    {searchQuery}
+    {searchActive}
+    {searchLoading}
+    {searchError}
+    {searchEntries}
+    {searchExpandedDirs}
+    {searchLimitReached}
+    searchLimit={SEARCH_LIMIT}
+    onSearchInput={handleSearchInput}
+    onClearSearch={clearSearch}
+    onRetrySearch={retrySearch}
     onRetryRootLoad={retryRootLoad}
     onRetryDirectoryLoad={retryDirectoryLoad}
     onRetrySelectedFile={retrySelectedFile}
