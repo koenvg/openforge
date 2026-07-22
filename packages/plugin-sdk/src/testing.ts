@@ -356,7 +356,7 @@ export class TestingOpenForgeRegistryFake {
       },
       tasks: {
         list: async () => [],
-        get: async (taskId) => { throw new Error(`Mock task not found: ${taskId}`) },
+        get: async () => null,
         create: async (request) => {
           this.calls.taskCreations.push(request)
           return {

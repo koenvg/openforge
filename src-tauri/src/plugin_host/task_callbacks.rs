@@ -75,9 +75,15 @@ impl PluginHost {
         let db = crate::db::acquire_db(db_state.as_ref());
         let task = db
             .get_task(&task_id)
-            .map_err(|error| format!("failed to get task: {error}"))?
-            .ok_or_else(|| format!("task not found: {task_id}"))?;
-        serde_json::to_value(task).map_err(|error| format!("failed to serialize task: {error}"))
+            .map_err(|error| format!("failed to get task: {error}"))?;
+        match task {
+            // A missing row is a closed/deleted Task, not a failure: return null so
+            // the plugin API resolves to `null` rather than rejecting. A genuine DB
+            // failure above still surfaces as an Err the caller can distinguish.
+            None => Ok(Value::Null),
+            Some(task) => serde_json::to_value(task)
+                .map_err(|error| format!("failed to serialize task: {error}")),
+        }
     }
 
     pub(super) fn create_task_for_host(&self, params: &Value) -> Result<Value, String> {

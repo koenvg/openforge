@@ -191,28 +191,25 @@ type PreviousTaskBlock = { taskId: string; message: string }
 async function getPreviousTaskBlock(openforge: BackendOpenForgeAPI, schedule: TaskSchedule): Promise<PreviousTaskBlock | null> {
   if (!schedule.lastTaskId) return null
 
+  let task: Task | null
   try {
-    const task = await openforge.tasks.get(schedule.lastTaskId)
-    // 'done' is a recognized-but-unreachable status after AVIV-118 (legacy rows
-    // only); such a last Task counts as closed and does not block firing.
-    if (task.status === 'done') return null
-    return { taskId: task.id, message: `Skipped because previous scheduled Task ${task.id} is ${task.status}` }
+    task = await openforge.tasks.get(schedule.lastTaskId)
   } catch (error) {
-    if (isMissingTaskError(error)) {
-      // Since AVIV-118, completing a Task deletes it: openforge.tasks.get then
-      // rejects with 'task not found'. A missing last Task is closed, so keep
-      // firing instead of skipping forever.
-      return null
-    }
-    // Any other failure (e.g. a locked database) leaves the last Task's state
-    // unknown. Skip this fire rather than risk spawning a duplicate alongside a
-    // Task that may still be open; firing resumes at the next scheduled fire.
+    // A tasks.get rejection (e.g. a locked database) leaves the last Task's
+    // state unknown. Skip this fire rather than risk spawning a duplicate
+    // alongside a Task that may still be open; firing resumes at the next
+    // scheduled fire.
     return { taskId: schedule.lastTaskId, message: `Skipped because previous scheduled Task ${schedule.lastTaskId} could not be verified: ${errorMessage(error)}` }
   }
-}
 
-function isMissingTaskError(error: unknown): boolean {
-  return /not found/i.test(errorMessage(error))
+  // Since AVIV-118, completing a Task deletes it: openforge.tasks.get then
+  // resolves to null. A missing last Task is closed, so keep firing instead of
+  // skipping forever.
+  if (!task) return null
+  // 'done' is a recognized-but-unreachable status after AVIV-118 (legacy rows
+  // only); such a last Task counts as closed and does not block firing.
+  if (task.status === 'done') return null
+  return { taskId: task.id, message: `Skipped because previous scheduled Task ${task.id} is ${task.status}` }
 }
 
 function errorMessage(error: unknown): string {
