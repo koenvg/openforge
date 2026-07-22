@@ -599,7 +599,7 @@ async fn git_remote_names(repo_path: &Path) -> Result<Vec<String>, GitWorktreeEr
         .collect())
 }
 
-async fn current_worktree_branch(worktree_path: &Path) -> Result<String, GitWorktreeError> {
+pub async fn current_worktree_branch(worktree_path: &Path) -> Result<String, GitWorktreeError> {
     let output = git_command()
         .arg("-C")
         .arg(worktree_path)
@@ -619,6 +619,31 @@ async fn current_worktree_branch(worktree_path: &Path) -> Result<String, GitWork
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+/// Resolve the GitHub `(owner, repo)` of `repo_path`'s `origin` remote.
+///
+/// Returns `None` when there is no `origin` remote or its URL is not a GitHub
+/// URL. Used to repo-scope worktree-branch PR matching so a branch name shared
+/// across repos never produces a cross-repo link.
+pub async fn remote_owner_repo(repo_path: &Path) -> Option<(String, String)> {
+    let output = git_command()
+        .arg("-C")
+        .arg(repo_path)
+        .arg("remote")
+        .arg("get-url")
+        .arg("origin")
+        .output()
+        .await
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let parsed = crate::git_clone::parse_repo_url(&url).ok()?;
+    Some((parsed.owner, parsed.repo))
 }
 
 async fn worktree_has_local_changes(worktree_path: &Path) -> Result<bool, GitWorktreeError> {
@@ -1727,6 +1752,52 @@ mod tests {
             !branches.iter().any(|branch| branch.name == "origin/HEAD"),
             "remote HEAD aliases should not be shown as selectable branches"
         );
+    }
+
+    #[tokio::test]
+    async fn current_worktree_branch_returns_checked_out_branch() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("repo");
+        init_committed_repo(&repo_path);
+        assert_git_success(&repo_path, &["checkout", "-b", "refactor/item-60-tag-write-tests"]);
+
+        let branch = current_worktree_branch(&repo_path)
+            .await
+            .expect("current branch should resolve");
+
+        assert_eq!(branch, "refactor/item-60-tag-write-tests");
+    }
+
+    #[tokio::test]
+    async fn remote_owner_repo_parses_github_origin() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("repo");
+        init_committed_repo(&repo_path);
+        assert_git_success(
+            &repo_path,
+            &[
+                "remote",
+                "add",
+                "origin",
+                "git@github.com:acme/widgets.git",
+            ],
+        );
+
+        let resolved = remote_owner_repo(&repo_path).await;
+
+        assert_eq!(
+            resolved,
+            Some(("acme".to_string(), "widgets".to_string()))
+        );
+    }
+
+    #[tokio::test]
+    async fn remote_owner_repo_returns_none_without_origin() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("repo");
+        init_committed_repo(&repo_path);
+
+        assert_eq!(remote_owner_repo(&repo_path).await, None);
     }
 
     fn init_uncommitted_repo(repo_path: &Path) {

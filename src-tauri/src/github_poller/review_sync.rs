@@ -1,9 +1,10 @@
 use super::common::{parse_github_timestamp, GitHubEventTarget};
 use crate::db::{Database, PrRow};
 use crate::github_client::GitHubClient;
-use log::{error, warn};
+use log::{debug, error, warn};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::path::Path;
 use std::sync::Mutex;
 
 pub(super) enum PollPhaseError {
@@ -215,12 +216,23 @@ pub(super) async fn sync_authored_task_prs(
 
     let mut synced = 0;
     let should_reconcile_stale = !all_search_ids.is_empty() || github_prs.is_empty();
+
+    // Built outside the DB lock below: it performs git subprocess calls, and the
+    // std Mutex guarding the DB is not reentrant.
+    let worktree_index = build_worktree_branch_index(db).await;
+
     {
         let db_lock = db.lock().unwrap();
         for pr in &github_prs {
-            if let Some(task_id) =
-                find_authoritative_task_id(&pr.title, &pr.head_ref, pr.body.as_deref(), &task_ids)
-            {
+            if let Some(task_id) = resolve_authored_pr_task_id(
+                &pr.repo_owner,
+                &pr.repo_name,
+                &pr.head_ref,
+                &pr.title,
+                pr.body.as_deref(),
+                &task_ids,
+                &worktree_index,
+            ) {
                 db_lock
                     .insert_pull_request_with_number(
                         pr.id,
@@ -256,6 +268,76 @@ pub(super) async fn sync_authored_task_prs(
     }
 
     Ok(synced)
+}
+
+/// Build a repo-scoped index of the branches OpenForge's active worktrees
+/// currently occupy, so an authored PR can be linked to its task by head branch
+/// even when the task id appears nowhere in the PR's branch, title, or body.
+///
+/// For each active worktree it records the provisioned branch (from the DB) and,
+/// when it differs, the branch actually checked out now (resolved via git). Both
+/// are scoped by the repo's GitHub `(owner, name)`. Worktrees whose repo or path
+/// can no longer be resolved are skipped rather than failing the sync.
+pub(super) async fn build_worktree_branch_index(db: &Mutex<Database>) -> WorktreeBranchIndex {
+    let worktrees = {
+        let db_lock = db.lock().unwrap();
+        db_lock.get_active_worktrees().unwrap_or_default()
+    };
+
+    let mut entries: Vec<WorktreeBranchEntry> = Vec::new();
+    let mut repo_cache: HashMap<String, Option<(String, String)>> = HashMap::new();
+
+    for worktree in worktrees {
+        let repo = match repo_cache.get(&worktree.repo_path) {
+            Some(cached) => cached.clone(),
+            None => {
+                let resolved =
+                    crate::git_worktree::remote_owner_repo(Path::new(&worktree.repo_path)).await;
+                repo_cache.insert(worktree.repo_path.clone(), resolved.clone());
+                resolved
+            }
+        };
+        let Some((repo_owner, repo_name)) = repo else {
+            continue;
+        };
+
+        // The branch OpenForge provisioned/created for the worktree (persisted,
+        // no git call needed).
+        entries.push(WorktreeBranchEntry {
+            task_id: worktree.task_id.clone(),
+            repo_owner: repo_owner.clone(),
+            repo_name: repo_name.clone(),
+            branch: worktree.branch_name.clone(),
+        });
+
+        // The branch actually checked out now — e.g. a hand-named branch the
+        // user switched to after provisioning. This is the case the provisioned
+        // branch alone cannot cover.
+        match crate::git_worktree::current_worktree_branch(Path::new(&worktree.worktree_path)).await
+        {
+            Ok(current)
+                if !current.is_empty()
+                    && current != "HEAD"
+                    && current != worktree.branch_name =>
+            {
+                entries.push(WorktreeBranchEntry {
+                    task_id: worktree.task_id.clone(),
+                    repo_owner,
+                    repo_name,
+                    branch: current,
+                });
+            }
+            Ok(_) => {}
+            Err(e) => {
+                debug!(
+                    "[GitHub Poller] Skipping current-branch resolution for task {}: {}",
+                    worktree.task_id, e
+                );
+            }
+        }
+    }
+
+    WorktreeBranchIndex::build(entries)
 }
 
 pub(super) async fn read_or_fetch_github_username(
@@ -348,6 +430,86 @@ pub(super) fn find_authoritative_task_id(
             }
         },
     }
+}
+
+/// A task's worktree occupies `branch` in the GitHub repo identified by
+/// `repo_owner`/`repo_name`. Feeds [`WorktreeBranchIndex`] so an authored PR can
+/// be linked by its actual head branch even when the task id never appears in
+/// the PR's branch, title, or body (e.g. a descriptively named branch).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct WorktreeBranchEntry {
+    pub(super) task_id: String,
+    pub(super) repo_owner: String,
+    pub(super) repo_name: String,
+    pub(super) branch: String,
+}
+
+/// Repo-scoped index from a PR head branch to the single task whose worktree
+/// occupies it.
+///
+/// Scoping by `(repo_owner, repo_name, branch)` is deliberate: task ids are
+/// globally unique so the textual matcher can search across repos safely, but
+/// branch names are not — two repos can both have a `dev` branch — so an
+/// exact-branch match must be qualified by the repo. Branches claimed by more
+/// than one task are dropped (mapped to `None`) so an ambiguous branch never
+/// produces a wrong link; the textual matcher still applies as a fallback.
+#[derive(Debug, Default)]
+pub(super) struct WorktreeBranchIndex {
+    by_repo_branch: HashMap<(String, String, String), Option<String>>,
+}
+
+impl WorktreeBranchIndex {
+    pub(super) fn build(entries: impl IntoIterator<Item = WorktreeBranchEntry>) -> Self {
+        let mut by_repo_branch: HashMap<(String, String, String), Option<String>> = HashMap::new();
+        for entry in entries {
+            let key = (entry.repo_owner, entry.repo_name, entry.branch);
+            match by_repo_branch.get_mut(&key) {
+                None => {
+                    by_repo_branch.insert(key, Some(entry.task_id));
+                }
+                Some(existing) => {
+                    // A different task claiming the same repo+branch is
+                    // ambiguous; repeating the same task (e.g. its provisioned
+                    // branch equals its current branch) is not.
+                    if existing.as_deref() != Some(entry.task_id.as_str()) {
+                        *existing = None;
+                    }
+                }
+            }
+        }
+        Self { by_repo_branch }
+    }
+
+    pub(super) fn task_for(&self, repo_owner: &str, repo_name: &str, branch: &str) -> Option<&str> {
+        self.by_repo_branch
+            .get(&(
+                repo_owner.to_string(),
+                repo_name.to_string(),
+                branch.to_string(),
+            ))
+            .and_then(|task| task.as_deref())
+    }
+}
+
+/// Resolve the task an authored PR belongs to.
+///
+/// Prefers an exact, repo-scoped match on the PR's actual head branch so PRs
+/// opened from a descriptively named branch still link to their task. Falls
+/// back to the textual task-id search in branch/title/body when the worktree
+/// index has no entry for the branch.
+pub(super) fn resolve_authored_pr_task_id(
+    pr_repo_owner: &str,
+    pr_repo_name: &str,
+    pr_head_ref: &str,
+    pr_title: &str,
+    pr_body: Option<&str>,
+    task_ids: &[String],
+    worktree_index: &WorktreeBranchIndex,
+) -> Option<String> {
+    if let Some(task_id) = worktree_index.task_for(pr_repo_owner, pr_repo_name, pr_head_ref) {
+        return Some(task_id.to_string());
+    }
+    find_authoritative_task_id(pr_title, pr_head_ref, pr_body, task_ids)
 }
 
 pub(super) fn count_poll_phase_error(
