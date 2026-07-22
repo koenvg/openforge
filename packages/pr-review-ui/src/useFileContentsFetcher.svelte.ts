@@ -14,6 +14,8 @@ function getFetchErrorMessage(error: unknown): string {
   return 'Unknown error'
 }
 
+const missingBatchFileContentsError = 'No file contents were returned for this file.'
+
 /**
  * Manages batch and per-file content fetching with generation tracking to
  * discard stale results. Resets fetch state when the diff basis (committed
@@ -109,9 +111,17 @@ export function createFileContentsFetcher(deps: {
         if (thisGeneration !== fetchGeneration) return // stale, discard
         const next = new Map(fileContentsMap)
         const nextErrors = new Map(fileContentErrors)
-        for (const [filename, contents] of results) {
+        for (const file of pendingFiles) {
+          const filename = file.filename
           const fetchKey = currentFileKeys.get(filename)
           if (fetchKey === undefined) continue
+          const contents = results.get(filename)
+          if (contents === undefined) {
+            next.delete(filename)
+            fetchedKeys.delete(filename)
+            nextErrors.set(filename, missingBatchFileContentsError)
+            continue
+          }
           next.set(filename, contents)
           fetchedKeys.set(filename, fetchKey)
           nextErrors.delete(filename)
