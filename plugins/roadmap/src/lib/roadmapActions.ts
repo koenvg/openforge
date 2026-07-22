@@ -32,6 +32,8 @@ export interface RoadmapTaskIssueLink {
 
 const ISSUE_TASK_LINKS_KEY = 'issueTaskLinks'
 const TASK_ISSUE_LINK_KEY = 'roadmapIssueLink'
+// Project storage has no atomic update operation, so serialize each project's read/merge/write cycle.
+const issueTaskLinkUpdates = new Map<string, Promise<void>>()
 
 function isAction(value: unknown): value is Action {
   if (typeof value !== 'object' || value === null) return false
@@ -122,14 +124,21 @@ function parseStoredIssueTaskLinks(value: unknown): Record<number, RoadmapIssueT
   return links
 }
 
+async function readRoadmapIssueTaskLinks(
+  api: FrontendOpenForgeAPI,
+  projectId: string,
+): Promise<Record<number, RoadmapIssueTaskLink>> {
+  const stored = await api.storage.project(projectId).get(ISSUE_TASK_LINKS_KEY)
+  return parseStoredIssueTaskLinks(stored)
+}
+
 export async function loadRoadmapIssueTaskLinks(
   api: FrontendOpenForgeAPI,
   projectId: string | null,
 ): Promise<Record<number, RoadmapIssueTaskLink>> {
   if (!projectId) return {}
   try {
-    const stored = await api.storage.project(projectId).get(ISSUE_TASK_LINKS_KEY)
-    return parseStoredIssueTaskLinks(stored)
+    return await readRoadmapIssueTaskLinks(api, projectId)
   } catch {
     return {}
   }
@@ -168,6 +177,35 @@ export async function loadRoadmapIssueTaskLinkForTask(
   const projectLinks = await loadRoadmapIssueTaskLinks(api, projectId)
   return findRoadmapIssueTaskLinkForTask(projectLinks, taskId)
 }
+
+async function updateRoadmapIssueTaskLinks(
+  api: FrontendOpenForgeAPI,
+  projectId: string,
+  issueNumber: number,
+  link: RoadmapIssueTaskLink,
+): Promise<void> {
+  const previousUpdate = issueTaskLinkUpdates.get(projectId) ?? Promise.resolve()
+  const update = previousUpdate.catch(() => undefined).then(async () => {
+    const links = await readRoadmapIssueTaskLinks(api, projectId)
+    links[issueNumber] = link
+
+    const stored: JsonObject = {}
+    for (const [issue, storedLink] of Object.entries(links)) {
+      stored[issue] = serializeRoadmapIssueTaskLink(storedLink)
+    }
+    await api.storage.project(projectId).set(ISSUE_TASK_LINKS_KEY, stored)
+  })
+
+  issueTaskLinkUpdates.set(projectId, update)
+  try {
+    await update
+  } finally {
+    if (issueTaskLinkUpdates.get(projectId) === update) {
+      issueTaskLinkUpdates.delete(projectId)
+    }
+  }
+}
+
 async function saveRoadmapIssueTaskLink(
   api: FrontendOpenForgeAPI,
   projectId: string,
@@ -187,15 +225,7 @@ async function saveRoadmapIssueTaskLink(
     issueNumber,
     link: serializeRoadmapIssueTaskLink(link),
   })
-
-  const links = await loadRoadmapIssueTaskLinks(api, projectId)
-  links[issueNumber] = link
-
-  const stored: JsonObject = {}
-  for (const [issue, link] of Object.entries(links)) {
-    stored[issue] = serializeRoadmapIssueTaskLink(link)
-  }
-  await api.storage.project(projectId).set(ISSUE_TASK_LINKS_KEY, stored)
+  await updateRoadmapIssueTaskLinks(api, projectId, issueNumber, link)
 }
 
 export function buildIssueTaskPrompt({ repo, card, actionPrompt }: BuildIssueTaskPromptRequest): string {
