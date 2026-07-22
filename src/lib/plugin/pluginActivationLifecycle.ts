@@ -1,4 +1,5 @@
 import { get } from 'svelte/store'
+import { BrowserSurfaceError } from '@openforge-app/plugin-sdk/frontend'
 import type { OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import { openUrl } from '../ipc'
@@ -273,6 +274,14 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
   })
 
   return {
+    browserSurfaces: {
+      getOrCreate: async () => {
+        throw new BrowserSurfaceError('CAPABILITY_UNAVAILABLE', `OpenForge frontend runtime API is unavailable for plugin ${pluginId}: browserSurfaces.getOrCreate`)
+      },
+      resetSession: async () => {
+        throw new BrowserSurfaceError('CAPABILITY_UNAVAILABLE', `OpenForge frontend runtime API is unavailable for plugin ${pluginId}: browserSurfaces.resetSession`)
+      },
+    },
     commands: {
       register: () => ({ dispose: () => undefined }),
       invoke: unavailable('commands.invoke'),

@@ -38,6 +38,20 @@ describe('package.json#openforge metadata contract', () => {
     expect(validateOpenForgePackageMetadata(validMetadata())).toEqual([])
     expect(isOpenForgePackageMetadata(validMetadata())).toBe(true)
   })
+  it('accepts browserSurfaces only as a declared frontend capability', () => {
+    expect(validateOpenForgePackageMetadata(validMetadata({
+      requires: ['browserSurfaces'],
+    }))).toEqual([])
+    expect(OPENFORGE_PLUGIN_CAPABILITIES).toContain('browserSurfaces')
+    expect(validateOpenForgePackageMetadata(validMetadata({
+      frontend: undefined,
+      frontendStyles: undefined,
+      requires: ['browserSurfaces'],
+    }))).toContainEqual({
+      path: 'requires',
+      message: 'browserSurfaces capability requires a frontend entry',
+    })
+  })
 
   it('rejects legacy manifest contribution arrays', () => {
     const errors = validateOpenForgePackageMetadata(validMetadata({
@@ -137,6 +151,13 @@ describe('package.json#openforge metadata contract', () => {
       items: { type: 'string', minLength: 1 },
     })
     expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.dependentRequired).toEqual({ frontendStyles: ['frontend'] })
+    expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.allOf).toContainEqual({
+      if: {
+        properties: { requires: { contains: { const: 'browserSurfaces' } } },
+        required: ['requires'],
+      },
+      then: { required: ['frontend'] },
+    })
     expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.additionalProperties).toBe(false)
     expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.properties.apiVersion).toEqual({ enum: [1] })
   })

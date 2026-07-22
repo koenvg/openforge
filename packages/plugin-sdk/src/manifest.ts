@@ -125,6 +125,9 @@ export function validateOpenForgePackageMetadata(data: unknown): ValidationError
   }
   errors.push(...validateOptionalString(data.backend, 'backend'))
   errors.push(...validateRequires(data.requires))
+  if (Array.isArray(data.requires) && data.requires.includes('browserSurfaces') && !isNonEmptyString(data.frontend)) {
+    errors.push({ path: 'requires', message: 'browserSurfaces capability requires a frontend entry' })
+  }
 
   if (data.contributes !== undefined) {
     errors.push({ path: 'contributes', message: 'Manifest contribution arrays are not supported; register contributions at runtime' })

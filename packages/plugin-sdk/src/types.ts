@@ -1,6 +1,7 @@
 import packageMetadataSchemaData from './openforgePackageMetadataSchema.json'
 
 import type { Component } from 'svelte'
+import type { BrowserSurfacesAPI } from './browserSurfaces'
 import type {
   AgentSession,
   CommandInfo,
@@ -64,6 +65,7 @@ export type OpenForgePluginCapability =
   | 'system.openUrl'
   | 'config'
   | 'projectConfig'
+  | 'browserSurfaces'
 
 export interface OpenForgePackageMetadata {
   id: string
@@ -503,6 +505,7 @@ export interface OpenForgeCommonAPI {
 }
 
 export interface FrontendOpenForgeAPI extends OpenForgeCommonAPI {
+  browserSurfaces: BrowserSurfacesAPI
   navigation: NavigationAPI
   views: FrontendViewRegistry
   taskUI: FrontendTaskUIRegistry

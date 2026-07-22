@@ -2,6 +2,10 @@ import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { BrowserWindow, app, clipboard, dialog, ipcMain, protocol, session, shell } from 'electron'
 import { handleElectronInvoke } from './backendBridge.js'
+import { createTaskBrowserSurfaceAuthorizer } from './taskBrowserSurfaceAuthorization.js'
+import { ElectronTaskBrowserSurfaceFactory } from './taskBrowserSurfaceElectronAdapter.js'
+import { TaskBrowserSurfaceIpcRouter, isTaskBrowserSurfaceCommand } from './taskBrowserSurfaceIpc.js'
+import { TaskBrowserSurfaceManager } from './taskBrowserSurfaceManager.js'
 import { createMainWindowOptions } from './windowConfig.js'
 import { createPreloadPath } from './preloadPath.js'
 import { loadAndRevealMainWindow } from './windowStartup.js'
@@ -16,6 +20,7 @@ import {
 } from './pluginProtocol.js'
 import { asChildProcessLike, createSidecarLaunchConfig, resolveSidecarPort, startSidecarReadiness } from './sidecar.js'
 import type { OpenDialogOptions } from 'electron'
+import type { ElectronInvokeDeps } from './backendBridge.js'
 import type { BootBackendInvokeContext, BootLifecycleAdapter } from './bootLifecycle.js'
 import type { ElectronFailureReporter } from './failureReporting.js'
 import type { SidecarEventEnvelopeLike, SidecarLaunchConfig, SidecarReadinessHandle } from './sidecar.js'
@@ -31,10 +36,61 @@ export interface ElectronBootAdapterOptions {
 export function createElectronBootAdapter(options: ElectronBootAdapterOptions): BootLifecycleAdapter {
   let sidecarLaunchProcess: SidecarReadinessHandle['process'] | null = null
   const rendererTrustAdapter = new ElectronRendererTrustAdapter()
+  let backendInvokeContext: BootBackendInvokeContext | null = null
+
+  function createInvokeDeps(context: BootBackendInvokeContext): ElectronInvokeDeps {
+    return {
+      sidecarConfig: context.getSidecarConfig(),
+      fetch: (url, init) => fetch(url, init),
+      openExternal: (url) => shell.openExternal(url),
+      quitApp: () => app.quit(),
+      writeClipboardText: (text) => clipboard.writeText(text),
+      selectDirectory: async ({ defaultPath, buttonLabel, message }) => {
+        const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null
+        const dialogOptions: OpenDialogOptions = {
+          properties: ['openDirectory'],
+          defaultPath,
+          buttonLabel,
+          message,
+        }
+        const result = window
+          ? await dialog.showOpenDialog(window, dialogOptions)
+          : await dialog.showOpenDialog(dialogOptions)
+        return result.canceled ? null : result.filePaths[0] ?? null
+      },
+      getDeveloperLogs: (limit) => developerLogStore.getRecentLogs(limit),
+      getDeveloperLogSnapshot: (limit) => developerLogStore.getSnapshot(limit),
+    }
+  }
+
+  const taskBrowserSurfaceManager = new TaskBrowserSurfaceManager({
+    factory: new ElectronTaskBrowserSurfaceFactory(),
+    authorize: createTaskBrowserSurfaceAuthorizer(async (command, payload) => {
+      if (!backendInvokeContext) throw new Error('Rust sidecar is not available')
+      return handleElectronInvoke({ command, payload }, createInvokeDeps(backendInvokeContext))
+    }),
+    onStateChanged: event => {
+      const window = BrowserWindow.fromId(event.windowId)
+      if (!window || window.isDestroyed()) return
+      window.webContents.send('openforge:event', {
+        eventName: 'task-browser-surface-state',
+        payload: event,
+      })
+    },
+  })
+  const taskBrowserSurfaceIpc = new TaskBrowserSurfaceIpcRouter(taskBrowserSurfaceManager)
 
   async function createMainWindow(): Promise<BrowserWindow> {
     const preloadPath = createPreloadPath(options.currentDir)
     const window = new BrowserWindow(createMainWindowOptions(preloadPath))
+    const updateTaskBrowserWindowBounds = () => {
+      const { width, height } = window.getContentBounds()
+      taskBrowserSurfaceManager.updateWindowBounds(window.id, { x: 0, y: 0, width, height })
+    }
+    const { width, height } = window.getContentBounds()
+    taskBrowserSurfaceManager.registerWindow(window.id, { x: 0, y: 0, width, height })
+    window.on('resize', updateTaskBrowserWindowBounds)
+    window.on('closed', () => taskBrowserSurfaceManager.unregisterWindow(window.id))
 
     const rendererUrl = rendererTrustAdapter.trustedRendererUrlFromEnv(options.env)
     const trustedOrigins = rendererTrustAdapter.trustedRendererOrigins(rendererUrl)
@@ -64,31 +120,16 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     },
 
     registerBackendInvokeHandler(context: BootBackendInvokeContext): void {
-      ipcMain.handle('openforge:invoke', async (_event, request: unknown) => handleElectronInvoke(
-        request as { command?: unknown; payload?: unknown },
-        {
-          sidecarConfig: context.getSidecarConfig(),
-          fetch: (url, init) => fetch(url, init),
-          openExternal: (url) => shell.openExternal(url),
-          quitApp: () => app.quit(),
-          writeClipboardText: (text) => clipboard.writeText(text),
-          selectDirectory: async ({ defaultPath, buttonLabel, message }) => {
-            const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null
-            const options: OpenDialogOptions = {
-              properties: ['openDirectory'],
-              defaultPath,
-              buttonLabel,
-              message,
-            }
-            const result = window
-              ? await dialog.showOpenDialog(window, options)
-              : await dialog.showOpenDialog(options)
-            return result.canceled ? null : result.filePaths[0] ?? null
-          },
-          getDeveloperLogs: (limit) => developerLogStore.getRecentLogs(limit),
-          getDeveloperLogSnapshot: (limit) => developerLogStore.getSnapshot(limit),
-        },
-      ))
+      backendInvokeContext = context
+      ipcMain.handle('openforge:invoke', async (event, request: unknown) => {
+        const typedRequest = request as { command?: unknown; payload?: unknown }
+        if (typeof typedRequest.command === 'string' && isTaskBrowserSurfaceCommand(typedRequest.command)) {
+          const owningWindow = BrowserWindow.fromWebContents(event.sender)
+          const windowId = owningWindow && owningWindow.webContents.id === event.sender.id ? owningWindow.id : null
+          return taskBrowserSurfaceIpc.handle(typedRequest.command, typedRequest.payload, windowId)
+        }
+        return handleElectronInvoke(typedRequest, createInvokeDeps(context))
+      })
     },
 
     configureUserDataPath(): string | null {
@@ -100,7 +141,10 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     },
 
     onBeforeQuit(handler: (event: { preventDefault(): void }) => void): void {
-      app.on('before-quit', handler)
+      app.on('before-quit', event => {
+        taskBrowserSurfaceManager.destroyAll()
+        handler(event)
+      })
     },
 
     exit(exitCode?: number): void {
