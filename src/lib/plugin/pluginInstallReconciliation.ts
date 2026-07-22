@@ -120,10 +120,45 @@ async function reconcileLoadedPlugins(): Promise<void> {
   }
 }
 
+// The reconcile subscribers below fire on every write to installedPlugins and enabledPluginIds,
+// including the transient writes that happen mid-activation (e.g. setPluginRuntimeState). Because
+// reconcile is async, firing it directly per write spawns overlapping passes that all read the same
+// 'active' snapshot before any awaited deactivation lands, tearing a plugin down several times over
+// (an activation/reconcile tug-of-war for backend-bearing plugins). Coalesce instead: schedule a
+// single pass on a microtask, run at most one pass at a time, and re-run once more if any further
+// store writes arrived while a pass was in flight (including reconcile's own state writes), so a
+// burst of writes settles into a single teardown.
+let reconcilePending = false
+let reconcileInFlight: Promise<void> | null = null
+
+async function drainReconcile(): Promise<void> {
+  // Yield once so a synchronous burst of store writes coalesces into this single pass.
+  await Promise.resolve()
+  try {
+    while (reconcilePending) {
+      reconcilePending = false
+      try {
+        await reconcileLoadedPlugins()
+      } catch (error) {
+        // A failed deactivation must not wedge the loop or surface as an unhandled rejection.
+        console.error('[pluginInstallReconciliation] reconcile pass failed:', error)
+      }
+    }
+  } finally {
+    reconcileInFlight = null
+  }
+}
+
+function scheduleReconcile(): void {
+  reconcilePending = true
+  if (reconcileInFlight) return
+  reconcileInFlight = drainReconcile()
+}
+
 enabledPluginIds.subscribe(() => {
-  void reconcileLoadedPlugins()
+  scheduleReconcile()
 })
 
 installedPlugins.subscribe(() => {
-  void reconcileLoadedPlugins()
+  scheduleReconcile()
 })
