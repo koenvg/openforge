@@ -336,25 +336,40 @@ describe('registerAppDesktopEventListeners', () => {
     await registerAppDesktopEventListeners(deps)
     await handlers.get('plugin-installation-changed')?.({ payload: { plugin_id: 'review-helper' } })
     await handlers.get('project-plugin-enablement-changed')?.({ payload: { plugin_id: 'review-helper', project_id: 'P-1', enabled: true } })
-    await handlers.get('plugin-reload-requested')?.({ payload: { plugin_id: 'review-helper', project_id: null } })
-    await handlers.get('plugin-reload-requested')?.({ payload: { plugin_id: 'review-helper', project_id: 'P-1' } })
 
-    expect(deps.reloadInstalledPluginMetadata).toHaveBeenCalledTimes(2)
+    expect(deps.reloadInstalledPluginMetadata).toHaveBeenCalledOnce()
     expect(deps.reloadInstalledPluginMetadata).toHaveBeenCalledWith('review-helper')
     expect(deps.loadEnabledPluginsForProject).toHaveBeenCalledWith('P-1')
+  })
+
+  it('reloads an unscoped plugin request for the active project', async () => {
+    const { deps, handlers } = createHarness()
+
+    await registerAppDesktopEventListeners(deps)
+    await handlers.get('plugin-reload-requested')?.({ payload: { plugin_id: 'review-helper', project_id: null } })
+
+    expect(deps.reloadInstalledPluginMetadata).not.toHaveBeenCalled()
     expect(deps.reloadPluginForProject).toHaveBeenCalledWith('P-1', 'review-helper')
   })
 
-  it('ignores project plugin enablement and reload events for inactive projects', async () => {
+  it('ignores project plugin enablement events for inactive projects', async () => {
     const { deps, handlers } = createHarness()
     deps.getActiveProjectId.mockReturnValue('P-2')
 
     await registerAppDesktopEventListeners(deps)
     await handlers.get('project-plugin-enablement-changed')?.({ payload: { plugin_id: 'review-helper', project_id: 'P-1', enabled: true } })
-    await handlers.get('plugin-reload-requested')?.({ payload: { plugin_id: 'review-helper', project_id: 'P-1' } })
 
     expect(deps.loadEnabledPluginsForProject).not.toHaveBeenCalled()
-    expect(deps.reloadPluginForProject).not.toHaveBeenCalled()
+  })
+
+  it('reloads a scoped plugin request for the active project regardless of the requested project', async () => {
+    const { deps, handlers } = createHarness()
+    deps.getActiveProjectId.mockReturnValue('P-2')
+
+    await registerAppDesktopEventListeners(deps)
+    await handlers.get('plugin-reload-requested')?.({ payload: { plugin_id: 'review-helper', project_id: 'P-1' } })
+
+    expect(deps.reloadPluginForProject).toHaveBeenCalledWith('P-2', 'review-helper')
   })
 
   it('clears active session and releases terminal when task is deleted', async () => {

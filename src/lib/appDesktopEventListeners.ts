@@ -415,8 +415,7 @@ export async function registerAppDesktopEventListeners(deps: AppDesktopEventDeps
   unlisteners.push(
     await listen<{ plugin_id: string; project_id?: string | null }>('plugin-reload-requested', async (event) => {
       const pluginId = event.payload.plugin_id
-      const projectId = event.payload.project_id
-      if (projectId && (deps.getActiveProjectId?.() ?? projectId) !== projectId) return
+      const projectId = deps.getActiveProjectId?.() ?? null
       try {
         if (projectId) {
           await (deps.reloadPluginForProject ?? defaultReloadPluginForProject)(projectId, pluginId)
