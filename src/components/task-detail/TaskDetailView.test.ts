@@ -224,15 +224,8 @@ vi.mock('../../lib/router.svelte', () => ({
   }),
 }))
 
-vi.mock('../../lib/actions', () => ({
-  loadActions: vi.fn(() => Promise.resolve([
-    { id: 'builtin-go', name: 'Go', prompt: '', builtin: true, enabled: true },
-  ])),
-  getEnabledActions: vi.fn((actions: { enabled: boolean }[]) => actions.filter(a => a.enabled)),
-}))
-
-import { activeSessions, completingTasks, taskActiveView, commandHeld, taskRuntimeInfo, tasks, ticketPrs } from '../../lib/stores'
-import type { Task, AgentSession, PrComment, PullRequestInfo, TaskWorkspaceInfo } from '../../lib/types'
+import { completingTasks, taskActiveView, commandHeld, taskRuntimeInfo, tasks, ticketPrs } from '../../lib/stores'
+import type { Task, PrComment, PullRequestInfo, TaskWorkspaceInfo } from '../../lib/types'
 import PluginSlotTestView from '../plugin/PluginSlotTestView.svelte'
 import TerminalTaskPane from './TerminalTaskPane.svelte'
 import { clearComponentRegistry, registerRenderableContributionComponent } from '../../lib/plugin/componentRegistry'
@@ -270,22 +263,6 @@ const secondaryTask: Task = {
 }
 
 const mockOnRunAction = vi.fn()
-
-const baseSession: AgentSession = {
-  id: 'session-1',
-  ticket_id: 'T-42',
-  opencode_session_id: null,
-  stage: 'implement',
-  status: 'running',
-  checkpoint_data: null,
-  pty_instance_id: null,
-  error_message: null,
-  created_at: 1000,
-  updated_at: 2000,
-  provider: 'opencode',
-  claude_session_id: null,
-    pi_session_id: null,
-}
 
 function createTaskWorkspaceInfo(overrides: Partial<TaskWorkspaceInfo> = {}): TaskWorkspaceInfo {
   return {
@@ -597,15 +574,12 @@ describe('TaskDetailView', () => {
     expect(mockOnRunAction).toHaveBeenCalledWith({ taskId: 'T-42', actionPrompt: '', agent: null })
   })
 
-  it('shows Complete without a flag and action buttons for doing tasks', async () => {
+  it('shows Complete without a flag for doing tasks and no Start Task', () => {
     const doingTask = { ...baseTask, status: 'doing' }
     render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
     expect(screen.getByRole('button', { name: 'Complete' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Complete 🏁' })).toBeNull()
     expect(screen.queryByText('Move to Done')).toBeNull()
-    await waitFor(() => {
-      expect(screen.getByText('Go')).toBeTruthy()
-    })
     expect(screen.queryByText('Start Task')).toBeNull()
   })
 
@@ -613,14 +587,6 @@ describe('TaskDetailView', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     await waitFor(() => {
       expect(screen.queryByText('review')).toBeNull()
-    })
-  })
-
-  it('renders action buttons in header', async () => {
-    const doingTask = { ...baseTask, status: 'doing' }
-    render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
-    await waitFor(() => {
-      expect(screen.getByText('Go')).toBeTruthy()
     })
   })
 
@@ -763,39 +729,6 @@ describe('TaskDetailView', () => {
       expect(slotHost?.getAttribute('data-slot-id')).toBe('com.openforge.terminal:terminal')
       expect(screen.getByTestId('plugin-slot-view')).toBeTruthy()
     })
-  })
-
-  it('calls onRunAction when action button clicked', async () => {
-    const doingTask = { ...baseTask, status: 'doing' }
-    render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
-    await waitFor(() => {
-      expect(screen.getByText('Go')).toBeTruthy()
-    })
-    await fireEvent.click(screen.getByText('Go'))
-    expect(mockOnRunAction).toHaveBeenCalledWith({ taskId: 'T-42', actionPrompt: '', agent: null })
-  })
-
-  it('action buttons stay enabled when session is running (prompt sent to active PTY)', async () => {
-    const doingTask = { ...baseTask, status: 'doing' }
-    activeSessions.set(new Map([['T-42', { ...baseSession, status: 'running' }]]))
-    render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
-    await waitFor(() => {
-      expect(screen.getByText('Go')).toBeTruthy()
-    })
-    const button = screen.getByText('Go').closest('button')
-    expect(button?.disabled).toBe(false)
-    activeSessions.set(new Map())
-  })
-
-  it('action buttons enabled when no active session', async () => {
-    const doingTask = { ...baseTask, status: 'doing' }
-    activeSessions.set(new Map())
-    render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
-    await waitFor(() => {
-      expect(screen.getByText('Go')).toBeTruthy()
-    })
-    const button = screen.getByText('Go').closest('button')
-    expect(button?.disabled).toBe(false)
   })
 
   it('no longer renders the terminal-style breadcrumb row', () => {
@@ -1169,33 +1102,6 @@ describe('TaskDetailView', () => {
     expect(deleteTask).not.toHaveBeenCalled()
     expect(mockResetToBoard).not.toHaveBeenCalled()
     confirmSpy.mockRestore()
-  })
-
-  it('shows action buttons in dropdown when actions exist', async () => {
-    const { loadActions } = await import('../../lib/actions')
-    vi.mocked(loadActions).mockResolvedValue([
-      { id: 'builtin-go', name: 'Go', prompt: 'Implement the task', builtin: true, enabled: true },
-    ])
-    const doingTask = { ...baseTask, status: 'doing' }
-    render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
-    await vi.waitFor(() => {
-      expect(screen.getByText('Go')).toBeTruthy()
-    })
-  })
-
-  it('action button triggers onRunAction with correct prompt', async () => {
-    mockOnRunAction.mockClear()
-    const { loadActions } = await import('../../lib/actions')
-    vi.mocked(loadActions).mockResolvedValue([
-      { id: 'builtin-go', name: 'Go', prompt: 'Implement the task', builtin: true, enabled: true },
-    ])
-    const doingTask = { ...baseTask, status: 'doing' }
-    render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
-    await vi.waitFor(() => {
-      expect(screen.getByText('Go')).toBeTruthy()
-    })
-    await fireEvent.click(screen.getByText('Go'))
-    expect(mockOnRunAction).toHaveBeenCalledWith({ taskId: 'T-42', actionPrompt: 'Implement the task', agent: null })
   })
 
   describe('keyboard shortcuts', () => {

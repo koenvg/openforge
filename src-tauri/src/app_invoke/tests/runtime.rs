@@ -65,12 +65,19 @@ async fn accepts_remaining_electron_cutover_ipc_commands() {
         "legacy OpenCode REST session output recovery should not be routed after direct TTY migration"
     );
 
-    for command in ["list_opencode_skills", "save_skill_content"] {
+    for command in [
+        "list_opencode_skills",
+        "save_skill_content",
+        // Personal-skill editing moved to the external com.openforge.injectables
+        // plugin, which writes skill files from its own backend.
+        "claude_skill_write",
+        "claude_skill_delete",
+    ] {
         let result = invoke(&state, command, json!({ "projectId": project_id })).await;
         assert_eq!(
             result.err().map(|err| err.0),
             Some(StatusCode::NOT_IMPLEMENTED),
-            "legacy core skills-viewer command {command} should not be routed after plugin migration"
+            "retired core skill command {command} should not be routed after plugin migration"
         );
     }
 

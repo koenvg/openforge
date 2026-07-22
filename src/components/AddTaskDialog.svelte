@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { ImagePlus } from '@lucide/svelte'
-  import type { Task, PermissionMode, Action, GitBranchInfo, WorktreeSource } from '../lib/types'
+  import type { Task, PermissionMode, GitBranchInfo, WorktreeSource } from '../lib/types'
   import { createTask, updateTaskInitialPrompt, listGitBranches, repoHasCommits } from '../lib/ipc'
   import { loadTaskLevelDefaults } from '../lib/taskDefaults'
   import { HIERARCHICAL_SETTINGS } from '../lib/hierarchicalSettings'
@@ -19,7 +19,8 @@
   import AnchoredMenu from './shared/ui/AnchoredMenu.svelte'
   import ContextMenuItem from './shared/ui/ContextMenuItem.svelte'
   import PromptInput from './prompt/PromptInput.svelte'
-  import { getEnabledActions, loadActions } from '../lib/actions'
+  import InjectionPointSlot from './plugin/InjectionPointSlot.svelte'
+  import type { InjectionPointLocation } from '@openforge-app/plugin-sdk'
 
   interface Props {
     mode?: 'create' | 'edit'
@@ -59,7 +60,6 @@
   }
   let branchLoadError = $state<string | null>(null)
   let aiProvider = $state<string | null>(null)
-  let availableActions = $state<Action[]>([])
   let error = $state<string | null>(null)
   let environmentExpanded = $state(false)
   let promptDraft = $state('')
@@ -71,9 +71,13 @@
   let imagePasteError = $state<string | null>(null)
   let imagePastePending = $state(false)
   let imageMarkerInsertRequest = $state<{ id: number, marker: string } | null>(null)
+  let injectableInsertRequest = $state<{ id: number, text: string } | null>(null)
   let loadedPromptSourceKey = $state<string | null>(null)
   let nextPastedImageId = 1
   let nextImageMarkerInsertRequestId = 1
+  let nextInjectableInsertRequestId = 1
+  let injectionLocation = $derived<InjectionPointLocation>(mode === 'create' ? 'createTaskPrompt' : 'backlogPrompt')
+
   let taskTitle = $state('')
   let sourceTicketDraft = $state('')
   let handoffNotesEnabled = $state(true)
@@ -157,9 +161,6 @@
         const projectDefaultUseWorktree = defaults.useWorktrees
         useWorktree = projectDefaultUseWorktree
 
-        const allActions = await loadActions($activeProjectId)
-        availableActions = getEnabledActions(allActions)
-
         if (projectPath) {
           // A repo with no commits can't back a worktree; force the toggle off
           // and disabled so the task runs in the project directory instead of
@@ -201,13 +202,11 @@
         codeCleanupEnabled = false
         taskDisplayTitleUpdatesEnabled = false
         handoffNotesEnabled = true
-        availableActions = []
         gitBranches = []
         selectedExistingBranch = ''
       }
     } catch {
       aiProvider = null
-      availableActions = []
       gitBranches = []
       selectedExistingBranch = ''
       worktreeAllowed = true
@@ -227,17 +226,12 @@
   }
 
   async function handleStartTaskFromDraft() {
-    await handleCreateOrUpdate(promptDraft, '', true)
+    await handleCreateOrUpdate(promptDraft, true)
   }
 
   async function handleAddToBacklogFromDraft() {
     showMoreMenu = false
     await handleCreateOrUpdate(promptDraft)
-  }
-
-  async function handleCustomActionFromDraft(actionPrompt: string) {
-    showMoreMenu = false
-    await handleCreateOrUpdate(promptDraft, actionPrompt, true)
   }
 
   function markerId(marker: string): number {
@@ -381,7 +375,7 @@
     return formatTaskPromptWithImageReferences(prompt, pastedImages)
   }
 
-  async function handleCreateOrUpdate(prompt: string, actionPrompt: string | null = null, autoStart: boolean = false) {
+  async function handleCreateOrUpdate(prompt: string, autoStart: boolean = false) {
     if (!$activeProjectId) return
     const normalizedPrompt = prompt.trim()
     if (!normalizedPrompt) return
@@ -427,7 +421,7 @@
 
         if (autoStart && onRunAction) {
           onClose?.()
-          await onRunAction(savedTask.id, actionPrompt || '', null)
+          await onRunAction(savedTask.id, '', null)
           return
         } else {
           await onTaskSaved?.(savedTask)
@@ -467,6 +461,15 @@
         bind:value={sourceTicketDraft}
       />
     {/if}
+    <InjectionPointSlot
+      location={injectionLocation}
+      projectId={$activeProjectId}
+      taskId={mode === 'edit' && task ? task.id : null}
+      onInsert={(text) => {
+        injectableInsertRequest = { id: nextInjectableInsertRequestId, text }
+        nextInjectableInsertRequestId += 1
+      }}
+    />
     <PromptInput
       projectId={$activeProjectId || ''}
       value={initialPrompt}
@@ -476,7 +479,8 @@
       onPasteImage={attachPastedImage}
       onImageMarkerClick={openImagePreview}
       imageMarkerInsertRequest={imageMarkerInsertRequest}
-      onSubmit={(prompt) => mode === 'create' ? handleCreateOrUpdate(prompt, '', true) : handleCreateOrUpdate(prompt)}
+      injectableInsertRequest={injectableInsertRequest}
+      onSubmit={(prompt) => mode === 'create' ? handleCreateOrUpdate(prompt, true) : handleCreateOrUpdate(prompt)}
       onValueChange={handlePromptDraftChange}
       onCancel={() => onClose?.()}
     >
@@ -485,7 +489,7 @@
           {#if taskDefaultsLoading}
             <span class="truncate text-xs text-base-content/60">Loading task defaults…</span>
           {:else}
-            <span class="truncate text-xs text-base-content/60">Press ⌘↵ to start, or use More for backlog/templates.</span>
+            <span class="truncate text-xs text-base-content/60">Press ⌘↵ to start, or use More to add to the backlog.</span>
           {/if}
         {/if}
       {/snippet}
@@ -512,13 +516,6 @@
                 placementClass="bottom-[calc(100%+0.5rem)] right-0 min-w-48"
               >
                 <ContextMenuItem label="Add to Backlog" onclick={handleAddToBacklogFromDraft} />
-                {#each availableActions as action (action.id)}
-                  <ContextMenuItem
-                    label={action.name}
-                    description={action.prompt || action.name}
-                    onclick={() => handleCustomActionFromDraft(action.prompt)}
-                  />
-                {/each}
               </AnchoredMenu>
             </div>
           {/if}

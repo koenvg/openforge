@@ -17,6 +17,7 @@
     onPasteImage?: (file: File) => string | null | void | Promise<string | null | void>
     onImageMarkerClick?: (marker: string) => void
     imageMarkerInsertRequest?: { id: number, marker: string } | null
+    injectableInsertRequest?: { id: number, text: string } | null
     onCancel: () => void
     autofocus?: boolean
     extras?: Snippet
@@ -35,6 +36,7 @@
     onPasteImage,
     onImageMarkerClick,
     imageMarkerInsertRequest = null,
+    injectableInsertRequest = null,
     onCancel,
     autofocus = false,
     extras,
@@ -53,6 +55,7 @@
   let textareaEl = $state<HTMLTextAreaElement | null>(null)
   const promptReady = $derived(textValue.trim().length > 0)
   let lastImageMarkerInsertRequestId = 0
+  let lastInjectableInsertRequestId = 0
 
   interface TextSelectionSnapshot {
     text: string
@@ -79,7 +82,7 @@
   })
 
   // ── Transcription ────────────────────────────────────────────────────────────
-  function handleTranscription(text: string) {
+  function insertTextAtCursor(text: string) {
     if (!textareaEl) return
     const cursorPos = textareaEl.selectionStart ?? textValue.length
     const before = textValue.slice(0, cursorPos)
@@ -88,9 +91,14 @@
     updateTextValue(before + separator + text + after)
     const newPos = cursorPos + separator.length + text.length
     setTimeout(() => {
+      textareaEl?.focus()
       textareaEl?.setSelectionRange(newPos, newPos)
       autoGrow()
     }, 0)
+  }
+
+  function handleTranscription(text: string) {
+    insertTextAtCursor(text)
   }
 
   function imageMarkerInsertionText(marker: string, before: string, after: string): string {
@@ -137,6 +145,14 @@
 
     lastImageMarkerInsertRequestId = request.id
     insertImageMarkerAtCursor(request.marker)
+  })
+
+  $effect(() => {
+    const request = injectableInsertRequest
+    if (!request || request.id === lastInjectableInsertRequestId || !textareaEl) return
+
+    lastInjectableInsertRequestId = request.id
+    insertTextAtCursor(request.text)
   })
 
   // ── Auto-grow ────────────────────────────────────────────────────────────────

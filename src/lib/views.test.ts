@@ -99,15 +99,15 @@ describe('views registry', () => {
         ],
       }),
       makeSource({
-        pluginId: 'com.openforge.skills-viewer',
+        pluginId: 'com.openforge.roadmap',
         views: [
           {
-            id: 'skills',
-            title: 'Skills',
-            icon: 'sparkles',
-            shortcut: 'Cmd+L',
+            id: 'roadmap',
+            title: 'Roadmap',
+            icon: 'kanban',
+            shortcut: 'Cmd+R',
             placement: 'rail',
-            order: 30,
+            order: 21,
           },
         ],
       }),
@@ -140,7 +140,7 @@ describe('views registry', () => {
     ])
 
     expect(pluginViews['plugin:com.openforge.file-viewer:files']).toBeDefined()
-    expect(pluginViews['plugin:com.openforge.skills-viewer:skills']).toBeDefined()
+    expect(pluginViews['plugin:com.openforge.roadmap:roadmap']).toBeDefined()
     expect(pluginViews['plugin:com.openforge.github-sync:pr_review']).toBeDefined()
     expect(pluginViews['plugin:com.openforge.terminal:terminal']).toBeDefined()
     expect('files' in pluginViews).toBe(false)

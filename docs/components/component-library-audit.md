@@ -190,7 +190,6 @@ Plugin Svelte inventory highlights from the 2026-07-05 snapshot (historical size
 - `plugins/file-viewer` — `FilesView.svelte` (434), `FileContentViewer.svelte` (246), `MarkdownFilePreview.svelte` (72), `ProjectFileTree.svelte` (196). Current `FilesView` uses the SDK `PluginPageHeader`; extracted file-browser UI uses `PluginViewState`.
 - `plugins/github-sync` — `PrReviewView.svelte` (1115), `WalkthroughTab.svelte` (335), `ProjectPageHeader.svelte` (24), and local shared `Card.svelte` / `Modal.svelte`. The current tree splits PR review into sections, uses SDK `PluginPageHeader` / `PluginViewState`, and no longer contains those three local generic components.
 - `plugins/roadmap` — board/card/dialog components including `CreateDialog.svelte` (220), `CardDrawer.svelte` (168), `ColumnSettingsModal.svelte` (178), `IssueContextMenu.svelte` (64), `RoadmapView.svelte` (441). Current dialog components use SDK `Modal`; `RoadmapView` uses SDK `PluginPageHeader` / `PluginViewState`.
-- `plugins/skills-viewer` — `SkillsView.svelte` (558), `ProjectPageHeader.svelte` (24), markdown test double. The current tree uses SDK `PluginPageHeader` / `PluginViewState` and no longer has the local page-header copy.
 - `plugins/task-schedules` — `TaskSchedulesView.svelte` (466). The current view and extracted list section use SDK `PluginPageHeader` / `PluginViewState`.
 - `plugins/terminal` — `TaskTerminal.svelte` (246), `TerminalProjectView.svelte` (76), `TerminalTabs.svelte` (65), `TerminalTaskPane.svelte` (114).
 
@@ -220,7 +219,7 @@ Assessment:
 
 4. **Project page header**
    - **Historical duplicates (2026-07-05):** `plugins/github-sync/src/project/ProjectPageHeader.svelte` and `plugins/skills-viewer/src/ProjectPageHeader.svelte` were identical.
-   - **Current state (2026-07-13):** both copies are gone. `packages/plugin-sdk/src/ui/PluginPageHeader.svelte` is canonical and is imported by GitHub Sync, Skills Viewer, File Viewer, Roadmap, and Task Schedules.
+   - **Current state (2026-07-13):** both copies are gone. `packages/plugin-sdk/src/ui/PluginPageHeader.svelte` is canonical and is imported by GitHub Sync, File Viewer, Roadmap, and Task Schedules. (Skills Viewer was retired in favour of the external `com.openforge.injectables` plugin.)
 
 ### Boundaries that need documentation or enforcement
 

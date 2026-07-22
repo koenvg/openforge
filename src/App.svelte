@@ -412,7 +412,7 @@
   async function switchToProject(projectId: string) {
     // Already on this project, viewing one of its own tabs (a per-project, non
     // cross-project view). Re-clicking the project name is a shortcut back to the
-    // Dashboard: from any other tab (Pull Requests, Skills, Project Settings, …) jump to
+    // Dashboard: from any other tab (Pull Requests, Project Settings, …) jump to
     // the board. On the board already there is nothing to do — and we must NOT reset
     // there, or an open task detail (which renders on the board view) would be wiped.
     if ($activeProjectId === projectId && !isCrossProjectView($currentView, sidebarPluginViewKeySet)) {
@@ -656,7 +656,6 @@
 {#if actionPalette.showActionPalette}
   <ActionPalette
     task={actionPalette.actionPaletteTask}
-    customActions={actionPalette.actionPaletteActions}
     taskPrs={actionPalette.actionPaletteTask ? ($ticketPrs.get(actionPalette.actionPaletteTask.id) || []) : []}
     canRunApp={actionPalette.actionPaletteCanRunApp}
     onClose={actionPalette.closeActionPalette}

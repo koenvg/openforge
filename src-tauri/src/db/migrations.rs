@@ -1383,6 +1383,104 @@ CREATE TABLE IF NOT EXISTS roadmap_repo_config (
             enabled INTEGER NOT NULL DEFAULT 1
         );",
     ),
+    // Personal, machine-global reusable text snippets shown in the Injectable
+    // Picker. Unlike skills/commands (file-scanned), snippets are not per-project
+    // and not file-backed; they live only here and insert their literal `body`.
+    // Appended last so it takes the highest user_version after the merge.
+    M::up(
+        r#"
+CREATE TABLE IF NOT EXISTS snippets (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,
+    body       TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+        "#,
+    ),
+    // Per-snippet project scoping: an `all_projects` flag (default 1 = visible
+    // everywhere, including projects created later) plus a join table for the
+    // explicit project subset. Existing snippets keep all_projects=1. Guarded so it
+    // is idempotent and heals partially-migrated databases (matches the sibling
+    // column-add migrations).
+    M::up_with_hook("", |tx| {
+        let snippets_exists: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='snippets'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+        if snippets_exists {
+            let has_all_projects: bool = tx
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM pragma_table_info('snippets') WHERE name = 'all_projects'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap_or(false);
+            if !has_all_projects {
+                tx.execute(
+                    "ALTER TABLE snippets ADD COLUMN all_projects INTEGER NOT NULL DEFAULT 1",
+                    [],
+                )
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            }
+        }
+        tx.execute(
+            "CREATE TABLE IF NOT EXISTS snippet_projects (
+                snippet_id TEXT NOT NULL,
+                project_id TEXT NOT NULL,
+                PRIMARY KEY (snippet_id, project_id),
+                FOREIGN KEY (snippet_id) REFERENCES snippets(id) ON DELETE CASCADE,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            )",
+            [],
+        )
+        .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        Ok(())
+    }),
+    // Injectable/snippet picker moved to the external com.openforge.injectables
+    // plugin, which persists snippets to the filesystem. Drop the now-unused DB
+    // tables. New migration (never edit/delete the CREATE migrations above — that
+    // lowers LATEST_USER_VERSION and triggers DatabaseTooFarAhead).
+    M::up("DROP TABLE IF EXISTS snippet_projects; DROP TABLE IF EXISTS snippets;"),
+    // The skills-viewer builtin was replaced by the external com.openforge.injectables
+    // plugin and removed from the builtin catalog, but existing databases still carry its
+    // install rows — which resolve as an enabled builtin whose files no longer exist.
+    // Purge them. Children first: FK enforcement (ON DELETE CASCADE) is not guaranteed
+    // to be enabled while migrations run. Each table is existence-guarded because a
+    // database replaying from an older version may not have the plugin tables yet.
+    M::up_with_hook("", |tx| {
+        let table_exists = |name: &str| -> bool {
+            tx.query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name=?1",
+                [name],
+                |r| r.get(0),
+            )
+            .unwrap_or(false)
+        };
+        // If the plugin registry itself was never created in this database's migration
+        // history there is nothing to purge — and deleting from the child tables would
+        // fail anyway, since their FK resolves against the missing `plugins` parent.
+        if !table_exists("plugins") {
+            return Ok(());
+        }
+        for (table, column) in [
+            ("plugin_storage", "plugin_id"),
+            ("project_plugins", "plugin_id"),
+            ("plugins", "id"),
+        ] {
+            if table_exists(table) {
+                tx.execute(
+                    &format!("DELETE FROM {table} WHERE {column} = 'com.openforge.skills-viewer'"),
+                    [],
+                )
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            }
+        }
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -1955,6 +2053,30 @@ CREATE INDEX IF NOT EXISTS idx_task_label_assignments_label ON task_label_assign
     Ok(())
 }
 
+/// Recreate the hierarchy tables added alongside the plugin tables. Kept here (rather
+/// than relying solely on their migration) because a database can carry a
+/// user_version that already covers them while the tables themselves are absent —
+/// e.g. one migrated on a branch that appended its own migrations before these
+/// existed, so the positional indexes no longer line up. Without this, every
+/// enabled-plugins query fails with "no such table: global_plugins".
+pub(super) fn ensure_hierarchy_tables(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        r#"
+CREATE TABLE IF NOT EXISTS task_config (
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    UNIQUE(task_id, key)
+);
+CREATE TABLE IF NOT EXISTS global_plugins (
+    plugin_id TEXT PRIMARY KEY REFERENCES plugins(id) ON DELETE CASCADE,
+    enabled INTEGER NOT NULL DEFAULT 1
+);
+        "#,
+    )?;
+    Ok(())
+}
+
 pub(super) fn ensure_plugin_tables(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"
@@ -2089,6 +2211,56 @@ mod tests {
         drop(conn);
         drop(db);
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_recreates_missing_task_config_and_global_plugins_for_upgraded_db() {
+        // A database whose recorded user_version already covers these migrations but
+        // which is missing the tables (e.g. it was migrated on a branch that appended
+        // its own migrations before these existed, so the indexes no longer line up)
+        // must heal on open rather than failing every enabled-plugins query.
+        let path = std::env::temp_dir().join(format!(
+            "test_recreate_hier_tables_mig_{}.db",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+
+        {
+            let db = Database::new(path.clone()).expect("Database::new");
+            let conn = db.connection();
+            let conn = conn.lock().unwrap();
+
+            conn.execute("DROP TABLE global_plugins", [])
+                .expect("drop global_plugins");
+            conn.execute("DROP TABLE task_config", [])
+                .expect("drop task_config");
+
+            let uv: i32 = conn
+                .query_row("PRAGMA user_version", [], |r| r.get(0))
+                .expect("read user_version");
+            assert_eq!(
+                uv, LATEST_USER_VERSION,
+                "fixture should simulate an already-upgraded schema version"
+            );
+        }
+
+        let db = Database::new(path.clone()).expect("Database::new should repair schema");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+        for table in ["global_plugins", "task_config"] {
+            let exists: bool = conn
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name=?1",
+                    [table],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert!(exists, "{table} should be recreated on open");
+        }
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(&path);
     }
 
     #[test]

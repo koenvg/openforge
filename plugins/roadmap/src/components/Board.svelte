@@ -1,6 +1,5 @@
 <script lang="ts">
   import { Plus } from '@lucide/svelte'
-  import type { Action } from '@openforge-app/plugin-sdk'
   import type { BoardCard, BoardColumn } from '../lib/board'
   import Card from './Card.svelte'
   import ColorPicker from './ColorPicker.svelte'
@@ -13,9 +12,8 @@
     onOpenUrl: (url: string) => void
     onCopyLink: (issueNumber: number) => void
     onRecolor: (label: string, color: string) => void
-    actions?: Action[]
     busy?: boolean
-    onRunAction: (card: BoardCard, actionPrompt: string) => void
+    onStart: (card: BoardCard) => void
     onAddCard: (label: string) => void
   }
 
@@ -26,9 +24,8 @@
     onOpenUrl,
     onCopyLink,
     onRecolor,
-    actions = [],
     busy = false,
-    onRunAction,
+    onStart,
     onAddCard,
   }: Props = $props()
 
@@ -69,10 +66,10 @@
     contextMenu = { ...contextMenu, visible: false }
   }
 
-  function runContextAction(actionPrompt: string) {
+  function runStart() {
     const card = contextMenu.card
     closeContextMenu()
-    if (card) onRunAction(card, actionPrompt)
+    if (card) onStart(card)
   }
 
   function addCard(event: MouseEvent, label: string) {
@@ -148,11 +145,9 @@
     visible={contextMenu.visible}
     x={contextMenu.x}
     y={contextMenu.y}
-    {actions}
     disabled={busy}
     onClose={closeContextMenu}
-    onStart={() => runContextAction('')}
-    onRunAction={(action) => runContextAction(action.prompt)}
+    onStart={runStart}
   />
 </div>
 

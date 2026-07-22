@@ -1,9 +1,6 @@
-import { get } from 'svelte/store'
-import { activeProjectId } from './stores'
-import { getEnabledActions, loadActions } from './actions'
 import { confirmCompleteTask, isTaskCompleting } from './completeTask'
-import type { Action, Task } from './types'
-import type { RunActionData, TaskActionRunner } from './taskActionRunner'
+import type { Task } from './types'
+import type { TaskActionRunner } from './taskActionRunner'
 
 interface ActionPaletteControllerOptions {
   getSelectedTask(): Task | null
@@ -21,7 +18,6 @@ interface ActionPaletteControllerOptions {
 export function useActionPaletteController(options: ActionPaletteControllerOptions) {
   let showActionPalette = $state(false)
   let actionPaletteTask = $state<Task | null>(null)
-  let actionPaletteActions = $state<Action[]>([])
   let actionPaletteRunApp = $state<(() => Promise<void>) | null>(null)
 
   function closeActionPalette(): void {
@@ -30,7 +26,7 @@ export function useActionPaletteController(options: ActionPaletteControllerOptio
     actionPaletteRunApp = null
   }
 
-  async function openActionPalette(): Promise<void> {
+  function openActionPalette(): void {
     if (showActionPalette) {
       closeActionPalette()
       return
@@ -38,18 +34,6 @@ export function useActionPaletteController(options: ActionPaletteControllerOptio
 
     actionPaletteTask = options.getSelectedTask()
     actionPaletteRunApp = actionPaletteTask !== null ? (options.runApp?.capture(actionPaletteTask) ?? null) : null
-
-    const projectId = get(activeProjectId)
-    if (projectId) {
-      try {
-        const all = await loadActions(projectId)
-        actionPaletteActions = getEnabledActions(all)
-      } catch {
-        actionPaletteActions = []
-      }
-    } else {
-      actionPaletteActions = []
-    }
 
     showActionPalette = true
   }
@@ -106,16 +90,6 @@ export function useActionPaletteController(options: ActionPaletteControllerOptio
       case 'refresh-github':
         void options.triggerGithubSync()
         break
-      default:
-        if (actionId.startsWith('custom-action-') && task) {
-          const realId = actionId.replace('custom-action-', '')
-          const action = actionPaletteActions.find(a => a.id === realId)
-          if (action) {
-            const runActionData: RunActionData = { taskId: task.id, actionPrompt: action.prompt, agent: null }
-            await options.taskActions.handleRunAction(runActionData)
-          }
-        }
-        break
     }
   }
 
@@ -125,9 +99,6 @@ export function useActionPaletteController(options: ActionPaletteControllerOptio
     },
     get actionPaletteTask() {
       return actionPaletteTask
-    },
-    get actionPaletteActions() {
-      return actionPaletteActions
     },
     get actionPaletteCanRunApp() {
       return actionPaletteRunApp !== null

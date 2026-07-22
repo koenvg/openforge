@@ -170,14 +170,11 @@ mod tests {
     fn install_path_uses_catalog_directory_name() {
         let path = install_path_from_workspace_root(
             Path::new("/workspace/openforge"),
-            "com.openforge.skills-viewer",
+            "com.openforge.github-sync",
         )
         .expect("builtin plugin path should resolve");
 
-        assert_eq!(
-            path,
-            Path::new("/workspace/openforge/plugins/skills-viewer")
-        );
+        assert_eq!(path, Path::new("/workspace/openforge/plugins/github-sync"));
     }
 
     #[test]

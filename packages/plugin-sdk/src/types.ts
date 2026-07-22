@@ -3,6 +3,7 @@ import packageMetadataSchemaData from './openforgePackageMetadataSchema.json'
 import type { Component } from 'svelte'
 import type {
   AgentSession,
+  CommandInfo,
   FileContent,
   FileEntry,
   Project,
@@ -181,7 +182,16 @@ export interface CommandRegistry {
   register<TInput = unknown, TOutput = unknown>(registration: CommandRegistration<TInput, TOutput>): Disposable
   invoke<TOutput = unknown>(id: string, payload?: unknown): Promise<TOutput>
   invokeGlobal<TOutput = unknown>(qualifiedId: string, payload?: unknown): Promise<TOutput>
+  /** Plugin-registered commands (this and other enabled plugins). */
   list(): Promise<CommandDescriptor[]>
+  /**
+   * The host's Claude skills/commands catalog for the given project (skills from
+   * `~/.claude`/`.agents`, builtin commands, and plugin-provided commands), as the
+   * app's own injectable/autocomplete surfaces see it. Omitting `projectId` (or
+   * passing null) yields only project-independent entries. Distinct from `list()`,
+   * which returns plugin-registered commands.
+   */
+  listCatalog(request?: { projectId?: string | null }): Promise<CommandInfo[]>
 }
 
 export type EventHandler<TPayload = unknown> = (payload: TPayload) => void
@@ -281,6 +291,29 @@ export interface PluginSettingsSectionRegistration {
 
 export interface FrontendViewRegistry {
   register(registration: PluginViewRegistration): Disposable
+}
+
+export type InjectionPointLocation = 'createTaskPrompt' | 'agentSession' | 'backlogPrompt'
+
+export interface PluginInjectionPointProps extends Record<string, unknown> {
+  api: FrontendOpenForgeAPI
+  context: OpenForgeContextSnapshot
+  location: InjectionPointLocation
+  projectId: string | null
+  taskId: string | null
+  onInsert: (text: string) => void
+}
+
+export interface PluginInjectionPointRegistration {
+  id: string
+  location: InjectionPointLocation
+  component:
+    | PluginComponentLoader<PluginInjectionPointProps>
+    | PluginComponent<PluginInjectionPointProps>
+}
+
+export interface FrontendInjectionPointRegistry {
+  register(registration: PluginInjectionPointRegistration): Disposable
 }
 
 export interface FrontendTaskUIRegistry {
@@ -470,6 +503,7 @@ export interface FrontendOpenForgeAPI extends OpenForgeCommonAPI {
   taskPane: FrontendTaskPaneRegistry
   settings: FrontendSettingsRegistry
   backend: FrontendBackendBridge
+  injectionPoints: FrontendInjectionPointRegistry
 }
 
 export interface BackendOpenForgeAPI extends OpenForgeCommonAPI {

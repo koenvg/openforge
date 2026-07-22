@@ -61,6 +61,7 @@ var openforgePackageMetadataSchema_default = {
 				"commands",
 				"events",
 				"views",
+				"injectionPoints",
 				"taskPane",
 				"settings",
 				"background",
@@ -272,6 +273,7 @@ var TestingOpenForgeRegistryFake = class {
 	eventHandlers = /* @__PURE__ */ new Map();
 	backendMethods = /* @__PURE__ */ new Map();
 	backgroundServices = /* @__PURE__ */ new Map();
+	injectionPointsMap = /* @__PURE__ */ new Map();
 	claimedIds = /* @__PURE__ */ new Set();
 	config = /* @__PURE__ */ new Map();
 	eventListenerSequence = 0;
@@ -320,6 +322,15 @@ var TestingOpenForgeRegistryFake = class {
 				},
 				invoke: async (method, payload) => this.invokeBackend(method, payload)
 			},
+			injectionPoints: { register: (registration) => {
+				this.injectionPointsMap.set(registration.id, {
+					id: registration.id,
+					location: registration.location
+				});
+				return createDisposable(() => {
+					this.injectionPointsMap.delete(registration.id);
+				});
+			} },
 			__testing: {
 				calls: this.calls,
 				registry: this
@@ -371,7 +382,8 @@ var TestingOpenForgeRegistryFake = class {
 			commands: Array.from(this.commands.values()),
 			eventListeners: Array.from(this.eventListeners.values()),
 			backendMethods: Array.from(this.backendMethods.values()),
-			backgroundServices: Array.from(this.backgroundServices.values())
+			backgroundServices: Array.from(this.backgroundServices.values()),
+			injectionPoints: Array.from(this.injectionPointsMap.values())
 		};
 	}
 	createContext(subscriptions) {
@@ -392,7 +404,8 @@ var TestingOpenForgeRegistryFake = class {
 				register: (registration) => this.registerCommand(registration),
 				invoke: async (id, payload) => this.invokeCommand(id, payload),
 				invokeGlobal: async (qualifiedId, payload) => this.invokeGlobalCommand(qualifiedId, payload),
-				list: async () => Array.from(this.commands.values()).map(commandDescriptor)
+				list: async () => Array.from(this.commands.values()).map(commandDescriptor),
+				listCatalog: async () => []
 			},
 			events: {
 				on: (event, handler) => this.registerEventListener(event, handler, false),

@@ -130,7 +130,7 @@ describe('Electron migration Phase 0 contract inventory', () => {
     expect(inventoriedContracts).toEqual(parsedContracts)
   })
 
-  it('does not keep dead live agent-review controls or legacy core skills-viewer commands in the public IPC inventory', () => {
+  it('does not keep dead live agent-review controls or retired core skill commands in the public IPC inventory', () => {
     const functionNames = ipcCommandContracts.map(contract => contract.functionName)
     const ipcCommands = ipcCommandContracts.map(contract => contract.ipcCommand)
 
@@ -139,11 +139,17 @@ describe('Electron migration Phase 0 contract inventory', () => {
     expect(functionNames).not.toContain('dismissAllAgentReviewComments')
     expect(functionNames).not.toContain('listOpenCodeSkills')
     expect(functionNames).not.toContain('saveSkillContent')
+    // Personal-skill editing moved to the external com.openforge.injectables plugin,
+    // which writes skill files from its own backend instead of through app IPC.
+    expect(functionNames).not.toContain('writePersonalSkill')
+    expect(functionNames).not.toContain('deletePersonalSkill')
     expect(ipcCommands).not.toContain('start_agent_review')
     expect(ipcCommands).not.toContain('abort_agent_review')
     expect(ipcCommands).not.toContain('dismiss_all_agent_review_comments')
     expect(ipcCommands).not.toContain('list_opencode_skills')
     expect(ipcCommands).not.toContain('save_skill_content')
+    expect(ipcCommands).not.toContain('claude_skill_write')
+    expect(ipcCommands).not.toContain('claude_skill_delete')
     expect(functionNames).toEqual(expect.arrayContaining([
       'getAgentReviewComments',
       'updateAgentReviewCommentStatus',

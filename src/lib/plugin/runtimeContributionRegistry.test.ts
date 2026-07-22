@@ -420,6 +420,17 @@ describe('runtime contribution registry', () => {
     expect(host.killShell).toHaveBeenCalledWith({ taskId: 'T-1', terminalIndex: 2 })
   })
 
+  it('exposes the Claude skills/commands catalog through the configured host bridge', async () => {
+    const catalog = [
+      { name: 'refactor', description: 'Refactor code', source: 'skill', agent: null, origin: 'project', triggerMode: 'auto+manual', userInvocable: null, sourceDir: '.claude', sourcePath: 'refactor', content: '# Refactor' },
+    ]
+    const host = { listCommandCatalog: vi.fn(async () => catalog) }
+    const api = createRuntimeContributionRegistry({ pluginId: 'skills', projectId: 'P-1', host }).getFrontendApi()
+
+    await expect(api.commands.listCatalog({ projectId: 'P-1' })).resolves.toEqual(catalog)
+    expect(host.listCommandCatalog).toHaveBeenCalledWith({ projectId: 'P-1' })
+  })
+
   it('reports unavailable frontend host capabilities with capability names', async () => {
     const api = createRuntimeContributionRegistry({ pluginId: 'scheduler', projectId: 'P-1' }).getFrontendApi()
 
@@ -428,6 +439,9 @@ describe('runtime contribution registry', () => {
     )
     await expect(api.notifications.notify({ title: 'Ready' })).rejects.toThrow(
       'OpenForge host capability is unavailable: notifications.notify'
+    )
+    await expect(api.commands.listCatalog()).rejects.toThrow(
+      'OpenForge host capability is unavailable: commands.listCatalog'
     )
   })
 

@@ -10,15 +10,10 @@ vi.mock('./ipc', () => ({
   getAllWhisperModelStatuses: vi.fn(),
 }))
 
-vi.mock('./actions', () => ({
-  loadActions: vi.fn(),
-}))
-
 vi.mock('./boardFilters', () => ({
   loadFocusFilterStates: vi.fn(),
 }))
 
-import { loadActions } from './actions'
 import { loadFocusFilterStates } from './boardFilters'
 import {
   checkClaudeInstalled,
@@ -41,7 +36,6 @@ describe('settingsConfig', () => {
     vi.clearAllMocks()
     vi.mocked(getProjectConfig).mockResolvedValue(null)
     vi.mocked(getConfig).mockResolvedValue(null)
-    vi.mocked(loadActions).mockResolvedValue([])
     vi.mocked(loadFocusFilterStates).mockResolvedValue([])
     vi.mocked(checkOpenCodeInstalled).mockResolvedValue({
       installed: false,
@@ -77,9 +71,6 @@ describe('settingsConfig', () => {
         .mockResolvedValueOnce('false')
         .mockResolvedValueOnce('pnpm dev')
 
-      vi.mocked(loadActions).mockResolvedValue([
-        { id: 'a1', name: 'Action', prompt: '', builtin: false, enabled: true },
-      ])
       vi.mocked(loadFocusFilterStates).mockResolvedValue(['idle'])
 
       const result = await loadProjectSettings('project-1')
@@ -87,7 +78,6 @@ describe('settingsConfig', () => {
       expect(getProjectConfig).toHaveBeenCalledTimes(6)
       expect(getProjectConfig).toHaveBeenCalledWith('project-1', 'use_worktrees')
       expect(getProjectConfig).toHaveBeenCalledWith('project-1', 'run_command')
-      expect(loadActions).toHaveBeenCalledWith('project-1')
       expect(loadFocusFilterStates).toHaveBeenCalledWith('project-1')
       expect(result).toEqual({
         agentInstructions: 'Be careful',
@@ -96,7 +86,6 @@ describe('settingsConfig', () => {
         projectColor: 'amber',
         useWorktrees: false,
         runCommand: 'pnpm dev',
-        actions: [{ id: 'a1', name: 'Action', prompt: '', builtin: false, enabled: true }],
         focusFilterStates: ['idle'],
       })
     })
@@ -111,7 +100,6 @@ describe('settingsConfig', () => {
         projectColor: '',
         useWorktrees: true,
         runCommand: '',
-        actions: [],
         focusFilterStates: [],
       })
     })

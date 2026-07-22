@@ -1,9 +1,8 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import AddTaskDialog from './AddTaskDialog.svelte'
-import type { Action, Task } from '../lib/types'
+import type { Task } from '../lib/types'
 import { createTask, updateTaskInitialPrompt, getProjectConfig, getResolvedAiProvider, listGitBranches, repoHasCommits, listOpenCodeCommands } from '../lib/ipc'
-import { loadActions } from '../lib/actions'
 
 vi.mock('../lib/ipc', () => ({
   createTask: vi.fn().mockResolvedValue({
@@ -57,13 +56,6 @@ const PROJECT_DIRECTORY_OPTIONS = {
   taskDisplayTitleUpdatesEnabled: false,
   aiProvider: 'claude-code',
 }
-
-vi.mock('../lib/actions', () => ({
-  loadActions: vi.fn().mockResolvedValue([
-    { id: 'act-1', name: 'Test Action', prompt: 'Do test', builtin: false, enabled: true },
-  ]),
-  getEnabledActions: vi.fn((actions: Action[]) => actions.filter((action: Action) => action.enabled)),
-}))
 
 vi.mock('../lib/stores', () => {
   const { writable } = require('svelte/store')
@@ -134,9 +126,6 @@ describe('AddTaskDialog', () => {
     ])
     vi.mocked(repoHasCommits).mockResolvedValue(true)
     vi.mocked(listOpenCodeCommands).mockResolvedValue([])
-    vi.mocked(loadActions).mockResolvedValue([
-      { id: 'act-1', name: 'Test Action', prompt: 'Do test', builtin: false, enabled: true },
-    ])
   })
 
   it('renders create mode with a single primary Start Task action before text entry', async () => {
@@ -145,7 +134,7 @@ describe('AddTaskDialog', () => {
     const textbox = await findPromptTextbox()
     expect(textbox.value).toBe('')
     expect(screen.getByText('Start Task', { exact: false })).toBeTruthy()
-    expect(await screen.findByText('Press ⌘↵ to start, or use More for backlog/templates.')).toBeTruthy()
+    expect(await screen.findByText('Press ⌘↵ to start, or use More to add to the backlog.')).toBeTruthy()
     expect(screen.queryByText('Add to Backlog', { exact: false })).toBeNull()
     expect(screen.queryByRole('button', { name: 'More' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Submit' })).toBeNull()
@@ -944,23 +933,6 @@ describe('AddTaskDialog', () => {
     await waitFor(() => {
       expect(createTask).toHaveBeenCalledWith('Task for default agent', 'backlog', 'test-project-id', 'default', { ...DEFAULT_WORKTREE_OPTIONS, aiProvider: 'opencode' })
       expect(onRunAction).toHaveBeenCalledWith('T-1', '', null)
-    })
-  })
-
-  it('runs the selected custom action through the shared dialog flow', async () => {
-    const onRunAction = vi.fn()
-    render(AddTaskDialog, { props: { mode: 'create', onRunAction } })
-
-    const textbox = await findPromptTextbox()
-    await fireEvent.input(textbox, { target: { value: '  Task with action  ' } })
-
-    await fireEvent.click(await screen.findByRole('button', { name: 'More' }))
-    const actionButton = await screen.findByRole('menuitem', { name: 'Test Action' })
-    await fireEvent.click(actionButton)
-
-    await waitFor(() => {
-      expect(createTask).toHaveBeenCalledWith('Task with action', 'backlog', 'test-project-id', 'default', DEFAULT_WORKTREE_OPTIONS)
-      expect(onRunAction).toHaveBeenCalledWith('T-1', 'Do test', null)
     })
   })
 

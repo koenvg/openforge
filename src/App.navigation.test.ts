@@ -123,12 +123,12 @@ describe('App navigation shortcuts', () => {
     })
   })
 
-    it('CMD+L navigates to plugin skills view', async () => {
+    it('CMD+R navigates to plugin roadmap view', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
       const pluginStore = await import('./lib/plugin/pluginStore')
       const pluginRegistry = await import('./lib/plugin/pluginRegistry')
-      const { SKILLS_VIEWER_PLUGIN_ID } = await import('./lib/skillsViewerPlugin')
+      const { ROADMAP_PLUGIN_ID } = await import('./lib/roadmapPlugin')
       const { get } = await import('svelte/store')
       const { tick } = await import('svelte')
 
@@ -138,18 +138,18 @@ describe('App navigation shortcuts', () => {
         expect(mockLoadEnabledForProject).toHaveBeenCalledWith('proj-1')
       })
       await vi.waitFor(() => {
-        expect(get(pluginStore.installedPlugins).has(SKILLS_VIEWER_PLUGIN_ID)).toBe(true)
+        expect(get(pluginStore.installedPlugins).has(ROADMAP_PLUGIN_ID)).toBe(true)
       })
-      pluginStore.enabledPluginIds.set(new Set([SKILLS_VIEWER_PLUGIN_ID]))
-      await pluginRegistry.activatePlugin(SKILLS_VIEWER_PLUGIN_ID)
-      pluginStore.setRuntimeContributionSource(SKILLS_VIEWER_PLUGIN_ID, {
-        views: [{ id: 'skills', title: 'Skills', icon: 'sparkles', placement: 'rail', order: 30, shortcut: 'Cmd+L' }],
+      pluginStore.enabledPluginIds.set(new Set([ROADMAP_PLUGIN_ID]))
+      await pluginRegistry.activatePlugin(ROADMAP_PLUGIN_ID)
+      pluginStore.setRuntimeContributionSource(ROADMAP_PLUGIN_ID, {
+        views: [{ id: 'roadmap', title: 'Roadmap', icon: 'kanban', placement: 'rail', order: 21, shortcut: 'Cmd+R' }],
       })
       await tick()
 
       await vi.waitFor(() => {
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', code: 'KeyL', metaKey: true, bubbles: true }))
-        expect(get(stores.currentView)).toBe('plugin:com.openforge.skills-viewer:skills')
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', code: 'KeyR', metaKey: true, bubbles: true }))
+        expect(get(stores.currentView)).toBe('plugin:com.openforge.roadmap:roadmap')
       })
     })
 

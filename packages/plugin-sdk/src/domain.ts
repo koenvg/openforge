@@ -640,12 +640,25 @@ export interface AgentInfo {
 // Autocomplete Types
 // ============================================================================
 
-/** Command info from provider command endpoints — used for / autocomplete */
+/** Command info from provider command endpoints — used for / autocomplete and injectable catalogs */
 export interface CommandInfo {
   name: string;
   description: string | null;
   source: string | null;
   agent: string | null;
+  /** Where it comes from: "personal" | "project" | "plugin" | "builtin". Optional enrichment — only claude-code populates it. */
+  origin?: string | null;
+  /** "auto+manual" | "manual-only" — derived from disable-model-invocation / command semantics */
+  triggerMode?: string | null;
+  /** false => hidden background skill; injectable catalogs drop it */
+  userInvocable?: boolean | null;
+  /** e.g. ".claude" | ".agents"; null for builtin/plugin */
+  sourceDir?: string | null;
+  /** stable on-disk identity under the source skills dir — for a skill, its folder name
+   * (a single path component, e.g. "pr-writer"); for a command, the file name. null for builtin */
+  sourcePath?: string | null;
+  /** full SKILL.md body for a consumer's reading pane; null when there is no source file */
+  content?: string | null;
 }
 
 /** Extended agent info from provider agent endpoints — used for @ autocomplete */
@@ -995,14 +1008,6 @@ export function splitCheckRuns(checks: CheckRunInfo[]): { visible: CheckRunInfo[
     }
   }
   return { visible, passingCount };
-}
-
-export interface Action {
-  id: string;
-  name: string;
-  prompt: string;
-  builtin: boolean;
-  enabled: boolean;
 }
 
 // ============================================================================

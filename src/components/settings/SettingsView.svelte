@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy, tick } from 'svelte'
+  import { onMount, onDestroy } from 'svelte'
   import { activeProjectColorId, activeProjectId, projects, codeCleanupTasksEnabled, error } from '../../lib/stores'
   import {
     deleteProject,
@@ -9,7 +9,6 @@
     setProjectConfig,
   } from '../../lib/ipc'
   import { computeEffectiveProjectSettings } from '../../lib/hierarchicalSettings'
-  import { createAction, DEFAULT_ACTIONS } from '../../lib/actions'
   import { DEFAULT_FOCUS_STATES } from '../../lib/boardFilters'
   import { createTrackedDebouncedSave } from '../../lib/createTrackedDebouncedSave'
   import {
@@ -27,7 +26,7 @@
   import type { GlobalSettingsSavePayload, ProjectSettingsSavePayload } from '../../lib/settingsSaver'
   import { themeMode, applyTheme } from '../../lib/theme'
   import type { ThemeMode } from '../../lib/theme'
-  import type { Action, WhisperModelStatus, WhisperModelSizeId } from '../../lib/types'
+  import type { WhisperModelStatus, WhisperModelSizeId } from '../../lib/types'
   import type { TaskState } from '../../lib/taskState'
   import { resolveContributions } from '../../lib/plugin/contributionResolver'
   import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
@@ -38,7 +37,6 @@
   import SettingsAICard from './SettingsAICard.svelte'
   import SettingsInstructionsCard from './SettingsInstructionsCard.svelte'
   import SettingsCredentialsCard from './SettingsCredentialsCard.svelte'
-  import SettingsActionsCard from './SettingsActionsCard.svelte'
   import SettingsTaskLabelsCard from './SettingsTaskLabelsCard.svelte'
   import HierarchicalSettingsCard from './HierarchicalSettingsCard.svelte'
   import SettingsDeveloperLogsCard from './SettingsDeveloperLogsCard.svelte'
@@ -96,8 +94,6 @@
   let installationStatusLoading = $state(false)
   let installationStatusError = $state<string | null>(null)
 
-  // Actions state
-  let actions = $state<Action[]>([])
   // Focus filter state
   let focusFilterStates = $state<TaskState[]>([...DEFAULT_FOCUS_STATES])
 
@@ -213,7 +209,7 @@
   // Scroll spy
   let scrollContainer = $state<HTMLDivElement | null>(null)
   let isNavigating = false
-  const projectSections = ['general', 'labels', 'instructions', 'plugins', 'actions']
+  const projectSections = ['general', 'labels', 'instructions', 'plugins']
   const globalSections = ['configuration', 'preferences', 'ai', 'credentials', 'plugins', 'developer']
 
   function getErrorMessage(e: unknown): string {
@@ -306,7 +302,6 @@
     handoffNotesTemplate = settings.handoffNotesTemplate
     projectColor = settings.projectColor
     runCommand = settings.runCommand
-    actions = settings.actions
     focusFilterStates = settings.focusFilterStates
   }
 
@@ -350,7 +345,6 @@
       handoffNotesTemplate = ''
       projectColor = ''
       runCommand = ''
-      actions = []
       focusFilterStates = [...DEFAULT_FOCUS_STATES]
       projectRawOverrides = {}
     }
@@ -455,7 +449,6 @@
         handoffNotesTemplate,
         projectColor,
         runCommand,
-        actions,
         focusFilterStates,
       }
       return true
@@ -576,36 +569,6 @@
     } finally {
       isDeleting = false
       confirmingDelete = false
-    }
-  }
-
-  function addAction() {
-    actions = [...actions, createAction('New Action', '')]
-  }
-
-  async function removeAction(actionId: string) {
-    actions = actions.filter((a) => a.id !== actionId)
-    if ($activeProjectId) {
-      await tick()
-      await runImmediateSave()
-    }
-  }
-
-  function toggleAction(actionId: string) {
-    actions = actions.map((a) => (a.id === actionId ? { ...a, enabled: !a.enabled } : a))
-  }
-
-  function updateAction(actionId: string, field: string, value: string) {
-    actions = actions.map((a) =>
-      a.id === actionId ? { ...a, [field]: value } : a
-    )
-  }
-
-  async function resetActions() {
-    actions = [...DEFAULT_ACTIONS]
-    if ($activeProjectId) {
-      await tick()
-      await runImmediateSave()
     }
   }
 
@@ -743,16 +706,6 @@
             />
           </SettingsSectionCard>
         {/each}
-
-        <SettingsActionsCard
-          {actions}
-          disabled={!hasProject}
-          onAddAction={() => { addAction(); scheduleSave() }}
-          onDeleteAction={removeAction}
-          onToggleAction={(id: string) => { toggleAction(id); scheduleSave() }}
-          onUpdateAction={(id: string, field: string, value: string) => { updateAction(id, field, value); scheduleSave() }}
-          onResetActions={resetActions}
-        />
 
         {#if hasProject}
           <SettingsSectionCard title="Danger Zone" tone="danger">

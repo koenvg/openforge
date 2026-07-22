@@ -2,7 +2,6 @@
   import { onDestroy } from 'svelte'
   import { RefreshCw, Plus, Columns3 } from '@lucide/svelte'
   import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
-  import type { Action } from '@openforge-app/plugin-sdk'
   import PluginPageHeader from '@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte'
   import PluginViewState from '@openforge-app/plugin-sdk/ui/PluginViewState.svelte'
   import {
@@ -18,7 +17,7 @@
   import { stepIndex } from '../lib/queue'
   import type { LabelUsage, RefineTicketRequest, RepoLabel, RoadmapBoard, TicketDraft } from '../lib/types'
   import { normalizeLabelColor } from '../lib/labelColors'
-  import { loadRoadmapActions, loadRoadmapIssueTaskLinks, startRoadmapIssueAction } from '../lib/roadmapActions'
+  import { loadRoadmapIssueTaskLinks, startRoadmapIssueAction } from '../lib/roadmapActions'
   import { createRoadmapClient } from '../lib/roadmapClient'
   import { readApiKey } from '../lib/settings/apiKey'
   import Board from './Board.svelte'
@@ -43,7 +42,6 @@
 
   let board = $state<BoardModel | null>(null)
   let repoLabels = $state<RepoLabel[]>([])
-  let actions = $state<Action[]>([])
   let isLoading = $state(false)
   let error = $state<string | null>(null)
   let busy = $state(false)
@@ -120,7 +118,6 @@
   // Track the previous projectId to guard the load effect (a board refresh can
   // pass a new prop object with the same logical projectId).
   let lastProjectId = $state<string | null | undefined>(undefined)
-  let actionLoadRequest = 0
 
   function modelFromBoard(raw: RoadmapBoard, taskLinks: Record<number, RoadmapIssueTaskLink> = {}): BoardModel {
     const values: Record<number, number> = {}
@@ -170,20 +167,6 @@
     }
   }
 
-  async function loadActionsForProject(pid: string | null) {
-    const requestId = ++actionLoadRequest
-    if (!pid) {
-      actions = []
-      return
-    }
-    try {
-      const loaded = await loadRoadmapActions(api, pid)
-      if (requestId === actionLoadRequest) actions = loaded
-    } catch {
-      if (requestId === actionLoadRequest) actions = []
-    }
-  }
-
   // Reload when the active project changes (also handles initial load). Guarded
   // by explicit previous-value comparison so a store refresh that re-passes the
   // same projectId does not retrigger a load.
@@ -197,7 +180,6 @@
       pendingCreatedCards = []
       showColumns = false
       void loadBoard()
-      void loadActionsForProject(pid)
     }
   })
 
@@ -351,14 +333,13 @@
     void api.navigation.navigate({ projectId, viewId: 'board', taskId })
   }
 
-  async function runIssueAction(card: BoardCard, actionPrompt: string) {
+  async function runIssueAction(card: BoardCard) {
     if (!projectId || !repoSlug) return
     await withBusy(async () => {
       await startRoadmapIssueAction(api, {
         projectId,
         repo: repoSlug,
         card,
-        actionPrompt,
       })
       await loadBoard()
     })
@@ -464,7 +445,6 @@
         <Board
           columns={board.columns}
           repo={repoSlug}
-          {actions}
           {busy}
           onCardClick={openFrom}
           onOpenUrl={openUrl}
@@ -472,8 +452,8 @@
           onRecolor={(name, color) => {
             void recolorLabel(name, color).catch(() => undefined)
           }}
-          onRunAction={(card, actionPrompt) => {
-            void runIssueAction(card, actionPrompt)
+          onStart={(card) => {
+            void runIssueAction(card)
           }}
           onAddCard={(label) => openCreate(label ? [label] : [])}
         />

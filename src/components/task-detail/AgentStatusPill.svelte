@@ -1,11 +1,12 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import type { DesktopUnlistenFn } from '../../lib/desktopIpc'
-  import { activeSessions } from '../../lib/stores'
+  import { activeSessions, tasks } from '../../lib/stores'
   import { listenToAgentStatusChanged, getAgentPanelStatusFromSessionStatus, type AgentPanelStatus } from '../../lib/agentPanelSessionSync'
   import { writeAgentTerminalTranscription } from '../../lib/agentTerminalPanel'
   import { deriveAgentStatusPillView } from '../../lib/agentStatusPill'
   import VoiceInput from '../shared/adapters/VoiceInput.svelte'
+  import InjectionPointSlot from '../plugin/InjectionPointSlot.svelte'
 
   interface Props {
     taskId: string
@@ -47,8 +48,16 @@
   function handleTranscription(text: string) {
     void writeAgentTerminalTranscription(taskId, text, 'AgentStatusPill')
   }
+
+  let injectableProjectId = $derived($tasks.find((t) => t.id === taskId)?.project_id ?? null)
 </script>
 
+<InjectionPointSlot
+  location="agentSession"
+  projectId={injectableProjectId}
+  taskId={taskId}
+  onInsert={(text) => { void writeAgentTerminalTranscription(taskId, text, 'InjectionPoint') }}
+/>
 {#if view}
   <div class="flex items-center gap-2 min-w-0" data-testid="agent-status-pill" aria-label="Agent status">
     <span class="shrink-0 {dotClass(status)}"></span>

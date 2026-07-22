@@ -202,8 +202,8 @@ describe('useAppRouter', () => {
     expect(get(currentView)).toBe('board')
   })
 
-  it('resetToBoard resets from plugin skills view', () => {
-    currentView.set('plugin:com.openforge.skills-viewer:skills')
+  it('resetToBoard resets from plugin roadmap view', () => {
+    currentView.set('plugin:com.openforge.roadmap:roadmap')
 
     resetToBoard()
 
@@ -426,7 +426,7 @@ describe('project view memory', () => {
 
   it('round-trips: leaving a project on a plugin tab then restoring it returns to that tab', () => {
     activeProjectId.set('proj-A')
-    currentView.set('plugin:com.openforge.skills-viewer:skills')
+    currentView.set('plugin:com.openforge.roadmap:roadmap')
 
     // Switch away — the subscriber captures proj-A — then simulate returning.
     activeProjectId.set('proj-B')
@@ -434,7 +434,7 @@ describe('project view memory', () => {
     activeProjectId.set('proj-A')
     restoreProjectView('proj-A')
 
-    expect(get(currentView)).toBe('plugin:com.openforge.skills-viewer:skills')
+    expect(get(currentView)).toBe('plugin:com.openforge.roadmap:roadmap')
   })
 
   it('cross-project back navigation captures the project being left with its own view', () => {

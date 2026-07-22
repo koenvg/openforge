@@ -16,7 +16,7 @@ function props(onAddCard = vi.fn()) {
     onOpenUrl: vi.fn(),
     onCopyLink: vi.fn(),
     onRecolor: vi.fn(),
-    onRunAction: vi.fn(),
+    onStart: vi.fn(),
     onAddCard,
   }
 }

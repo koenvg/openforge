@@ -278,6 +278,7 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
       invoke: unavailable('commands.invoke'),
       invokeGlobal: unavailable('commands.invokeGlobal'),
       list: unavailable('commands.list'),
+      listCatalog: unavailable('commands.listCatalog'),
     },
     events: {
       on: () => ({ dispose: () => undefined }),
@@ -327,6 +328,7 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
     },
     taskPane: { registerTab: () => ({ dispose: () => undefined }) },
     settings: { registerSection: () => ({ dispose: () => undefined }) },
+    injectionPoints: { register: () => ({ dispose: () => undefined }) },
     backend: {
       state: 'missing',
       whenReady: unavailable('backend.whenReady'),
@@ -353,6 +355,20 @@ export function getPluginRenderProps(pluginId: string, options: { projectId: str
     api: runtimeRegistry.getFrontendApi(),
     context: runtimeRegistry.createRenderContextSnapshot(options.projectId, options.taskId ?? null),
   }
+}
+
+export function listInjectionPointsAcrossPlugins(
+  location: import('@openforge-app/plugin-sdk').InjectionPointLocation,
+  enabledIds: Iterable<string>,
+): import('./runtimeContributionRegistry').RuntimeInjectionPointContribution[] {
+  const result: import('./runtimeContributionRegistry').RuntimeInjectionPointContribution[] = []
+  for (const pluginId of enabledIds) {
+    const registry = activeRuntimeRegistries.get(pluginId)
+    if (registry) {
+      result.push(...registry.listInjectionPoints(location))
+    }
+  }
+  return result
 }
 
 export async function deactivatePluginById(pluginId: string): Promise<void> {

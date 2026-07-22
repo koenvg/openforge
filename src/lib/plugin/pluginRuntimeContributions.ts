@@ -5,6 +5,7 @@ import type {
   RuntimeBackgroundServiceContribution,
   RuntimeCommandContribution,
   RuntimeContributionSnapshot,
+  RuntimeInjectionPointContribution,
   RuntimeSettingsSectionContribution,
   RuntimeTaskPaneTabContribution,
   RuntimeTaskUISectionContribution,
@@ -90,9 +91,9 @@ export async function stopPluginBackgroundServices(pluginId: string): Promise<vo
   return stopBackgroundServiceEntries(stopEntries)
 }
 
-function registerRenderableContributions<T extends RuntimeTaskPaneTabContribution | RuntimeTaskUISectionContribution | RuntimeSettingsSectionContribution>(
+function registerRenderableContributions<T extends RuntimeTaskPaneTabContribution | RuntimeTaskUISectionContribution | RuntimeSettingsSectionContribution | RuntimeInjectionPointContribution>(
   pluginId: string,
-  slotType: 'taskPaneTabs' | 'taskUISections' | 'settingsSections',
+  slotType: 'taskPaneTabs' | 'taskUISections' | 'settingsSections' | 'injectionPoints',
   contributions: T[] | undefined
 ): void {
   for (const contribution of contributions ?? []) {
@@ -160,6 +161,7 @@ export async function applyRuntimeSnapshotContributions(pluginId: string, snapsh
     registerRenderableContributions(pluginId, 'taskPaneTabs', snapshot.taskPaneTabs)
     registerRenderableContributions(pluginId, 'taskUISections', snapshot.taskUISections)
     registerRenderableContributions(pluginId, 'settingsSections', snapshot.settingsSections)
+    registerRenderableContributions(pluginId, 'injectionPoints', snapshot.injectionPoints)
     registerCommandContributions(pluginId, snapshot.commands)
     await startBackgroundServices(pluginId, snapshot.backgroundServices, registeredStopKeys)
   } catch (error) {

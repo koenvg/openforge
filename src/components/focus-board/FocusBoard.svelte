@@ -11,14 +11,13 @@
   import { sortBySessionActivity } from '../../lib/taskSort'
   import { useVimNavigation } from '../../lib/useVimNavigation.svelte'
   import { getHTMLElementAt, isInputFocused } from '../../lib/domUtils'
-  import { loadActions, getEnabledActions } from '../../lib/actions'
   import { getProjectTaskLabels } from '../../lib/ipc'
   import { getBacklogLabelCounts, getLabelsWithBacklogItems, getTaskLabels, pruneSelectedBacklogLabelIds, taskMatchesAnySelectedLabel } from '../../lib/taskLabels'
   import TaskListItem from './TaskListItem.svelte'
   import TaskDetailPane from './TaskDetailPane.svelte'
   import TaskContextMenu from '../shared/tasks/TaskContextMenu.svelte'
   import FocusEmptyState from './FocusEmptyState.svelte'
-  import type { Task, AgentSession, PullRequestInfo, Action, TaskLabel } from '../../lib/types'
+  import type { Task, AgentSession, PullRequestInfo, TaskLabel } from '../../lib/types'
 
   interface Props {
     projectId: string | null
@@ -58,7 +57,6 @@
   let restoredRecentlyViewedTask = $state(false)
   let paneHasFocus = $state(false)
   let contextMenu = $state({ visible: false, x: 0, y: 0, taskId: '' })
-  let projectActions = $state<Action[]>([])
   let projectLabels = $state<TaskLabel[]>([])
   let focusStates = $state<TaskState[]>(DEFAULT_FOCUS_STATES)
   let loadedFocusStatesProjectId: string | null = $state(null)
@@ -248,21 +246,6 @@
     if (task) {
       selectedTaskIdLocal = task.id
     }
-  })
-
-  $effect(() => {
-    const projectId = tasks.find(t => t.project_id !== null)?.project_id
-    if (!projectId) {
-      projectActions = []
-      return
-    }
-    loadActions(projectId)
-      .then((all) => {
-        projectActions = getEnabledActions(all)
-      })
-      .catch(() => {
-        projectActions = []
-      })
   })
 
   $effect(() => {
@@ -523,10 +506,8 @@
     onStart={(taskId) => onRunAction({ taskId, actionPrompt: '', agent: null })}
     onEdit={onEditTask}
     onDelete={() => contextMenu = { ...contextMenu, visible: false }}
-    actions={projectActions}
     {outOfFocusTaskIds}
     onMoveToOutOfFocus={(taskId) => setTaskOutOfFocus(taskId, true)}
     onReturnToBoard={(taskId) => setTaskOutOfFocus(taskId, false)}
-    {onRunAction}
   />
 </div>
