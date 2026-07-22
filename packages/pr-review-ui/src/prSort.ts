@@ -1,18 +1,8 @@
-import type { PrLabel } from '@openforge-app/plugin-sdk/domain'
+import { DO_NOT_REVIEW_LABEL, hasDoNotReviewLabel, type PrLabel } from '@openforge-app/plugin-sdk/domain'
 
-/**
- * Hard-coded GitHub label that forces a pull request to the bottom of its list.
- * A PR tagged with this label never needs the reviewer's immediate attention,
- * so it is always sorted last in both the reviewed and authored lists.
- */
-export const DO_NOT_REVIEW_LABEL = 'DO NOT REVIEW'
-
-const DO_NOT_REVIEW_KEY = DO_NOT_REVIEW_LABEL.toLowerCase()
-
-/** Whether a PR carries the hard-coded "DO NOT REVIEW" label (case-insensitive, trimmed). */
-export function hasDoNotReviewLabel(pr: { labels?: PrLabel[] | null }): boolean {
-  return (pr.labels ?? []).some((label) => label.name.trim().toLowerCase() === DO_NOT_REVIEW_KEY)
-}
+// The "DO NOT REVIEW" label constant and predicate live in plugin-sdk/domain (the
+// canonical home). Re-export them so existing importers of this module keep working.
+export { DO_NOT_REVIEW_LABEL, hasDoNotReviewLabel }
 
 /**
  * Returns a new array with "DO NOT REVIEW"-labeled PRs moved to the end, while
