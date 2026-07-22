@@ -178,6 +178,55 @@ async fn app_invoke_updates_only_never_started_initial_prompts() {
 }
 
 #[tokio::test]
+async fn app_invoke_update_task_source_ticket_url_sets_and_clears() {
+    let (state, path) = test_state("app_invoke_update_source_ticket_url");
+    let task = invoke_ok(
+        &state,
+        "create_task",
+        json!({
+            "initialPrompt": "No ticket at creation",
+            "status": "doing",
+            "projectId": null,
+            "permissionMode": null,
+        }),
+    )
+    .await;
+    let task_id = task["id"].as_str().expect("task id");
+
+    // Add a link after the fact via the camelCase command payload.
+    invoke_ok(
+        &state,
+        "update_task_source_ticket_url",
+        json!({ "id": task_id, "sourceTicketUrl": "https://github.com/koenvg/openforge/issues/1294" }),
+    )
+    .await;
+    let set = crate::db::acquire_db(&state.db)
+        .get_task(task_id)
+        .expect("get task")
+        .expect("task exists");
+    assert_eq!(
+        set.source_ticket_url.as_deref(),
+        Some("https://github.com/koenvg/openforge/issues/1294")
+    );
+    drop(set);
+
+    // Clearing with an explicit null reverts to no ticket.
+    invoke_ok(
+        &state,
+        "update_task_source_ticket_url",
+        json!({ "id": task_id, "sourceTicketUrl": null }),
+    )
+    .await;
+    let cleared = crate::db::acquire_db(&state.db)
+        .get_task(task_id)
+        .expect("get task")
+        .expect("task exists");
+    assert_eq!(cleared.source_ticket_url, None);
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn app_invoke_delete_task_completes_record_and_removes_worktree_metadata() {
     let (state, path) = test_state("app_invoke_delete_task_completes_record");
     let project = invoke_ok(

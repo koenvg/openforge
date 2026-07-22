@@ -53,6 +53,10 @@ export async function updateTaskSummary(id: string, summary: string): Promise<vo
   return invoke("update_task_summary", { id, summary });
 }
 
+export async function updateTaskSourceTicketUrl(id: string, sourceTicketUrl: string | null): Promise<void> {
+  return invoke("update_task_source_ticket_url", { id, sourceTicketUrl });
+}
+
 export async function updateTaskStatus(id: string, status: WritableBoardStatus): Promise<void> {
   return invoke("update_task_status", { id, status });
 }

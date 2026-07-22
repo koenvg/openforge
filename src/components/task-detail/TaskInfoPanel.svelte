@@ -2,7 +2,7 @@
   import type { Task, TaskLabel, PullRequestInfo } from '../../lib/types'
   import { deriveTaskAttention } from '../../lib/taskAttention'
   import { activeSessions, dependencyReferenceTasks, tasks as allTasks, ticketPrs } from '../../lib/stores'
-  import { addTaskLabel, getPullRequests, removeTaskLabel } from '../../lib/ipc'
+  import { addTaskLabel, getPullRequests, removeTaskLabel, updateTaskSourceTicketUrl } from '../../lib/ipc'
   import { getAgentSessionResumeCommand } from '../../lib/agentResumeCommand'
   import { buildTicketPullRequestMap } from '../../lib/pullRequestStore'
   import { getTaskLabels, hasLabelNamed } from '../../lib/taskLabels'
@@ -93,10 +93,18 @@
     ticketPrs.set(buildTicketPullRequestMap(prs, $ticketPrs))
   }
 
+  async function handleSaveSourceTicket(nextUrl: string | null) {
+    await updateTaskSourceTicketUrl(task.id, nextUrl)
+    allTasks.update((current) => current.map((storedTask) => {
+      if (storedTask.id !== task.id) return storedTask
+      return { ...storedTask, source_ticket_url: nextUrl }
+    }))
+  }
+
 </script>
 
 <div data-testid="task-info-panel" data-scroll-owner="false" class="flex flex-col gap-3 p-3 {surfaceClass} min-h-max">
-  <SourceTicketLink url={task.source_ticket_url} />
+  <SourceTicketLink url={task.source_ticket_url} onSave={handleSaveSourceTicket} />
 
   {#if attention}
     <CollapsibleInfoSection sectionKey="attention" title="Attention" cardId="attention">

@@ -425,6 +425,18 @@ pub(super) async fn handle_app_unmatched_command(
             })?;
             serde_json::Value::Null
         }
+        "update_task_source_ticket_url" => {
+            let id = payload_string(&request.payload, "id")?;
+            let source_ticket_url = payload_optional_string(&request.payload, "sourceTicketUrl")?;
+            db.update_task_source_ticket_url(&id, source_ticket_url.as_deref())
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to update task source ticket url: {e}"),
+                    )
+                })?;
+            serde_json::Value::Null
+        }
         "get_tasks" => json_value(db.get_all_tasks().map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
