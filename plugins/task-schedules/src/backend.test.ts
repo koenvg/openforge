@@ -5,6 +5,7 @@ import backendPlugin, {
   RUN_NOW_METHOD,
   SAVE_SCHEDULE_METHOD,
   SCHEDULES_STORAGE_KEY,
+  createGuardedPoll,
   listTaskSchedules,
   processDueSchedules,
   processDueSchedulesForAllProjects,
@@ -265,18 +266,77 @@ describe('Task Schedules backend plugin', () => {
     expect(api.__testing.calls.taskCreations).toHaveLength(1)
   })
 
-  it('treats any failure to load the previous scheduled Task as closed so the schedule keeps firing', async () => {
-    // Any tasks.get rejection (not only 'task not found') is treated as closed:
-    // permanently skipping is the worse outcome, so an unreadable last Task must
-    // not block future fires.
+  it('skips a fire when the previous scheduled Task cannot be verified by a transient error', async () => {
+    // A tasks.get rejection that is NOT a missing-Task error (e.g. a locked
+    // database) must be treated as "still open, unknown state": firing would
+    // spawn a duplicate Task alongside one that may still be running. Only a
+    // genuinely missing/deleted Task counts as closed (see the AVIV-118 tests).
     const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
     api.tasks.get = vi.fn(async () => { throw new Error('failed to get task: database is locked') })
     await setStoredSchedules(api, [makeSchedule({ lastTaskId: 'T-unreadable' })])
 
     const outcome = await runScheduleNow(api, { projectId, scheduleId: 'schedule-1' }, Date.UTC(2026, 0, 1, 10))
 
-    expect(outcome).toMatchObject({ status: 'started', taskId: 'mock-task-1' })
+    expect(outcome).toMatchObject({ status: 'skipped', taskId: 'T-unreadable' })
+    expect(api.__testing.calls.taskCreations).toHaveLength(0)
+  })
+
+  it('records the created Task as the last Task when start implementation fails so the next fire is throttled', async () => {
+    // The Task is created before implementation starts. If startImplementation
+    // throws, the created Task must still be recorded as lastTaskId; otherwise
+    // every subsequent fire spawns another orphan Task (the weekend flood).
+    const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
+    api.tasks.startImplementation = vi.fn(async () => { throw new Error('failed to create worktree') })
+    await setStoredSchedules(api, [makeSchedule()])
+
+    const first = await runScheduleNow(api, { projectId, scheduleId: 'schedule-1' }, Date.UTC(2026, 0, 1, 10))
+    expect(first).toMatchObject({ status: 'failed', taskId: 'mock-task-1' })
+
+    const [afterFirst] = await listTaskSchedules(api, { projectId })
+    expect(afterFirst.lastTaskId).toBe('mock-task-1')
+
+    // The created Task is still open, so the next fire must skip rather than
+    // create a second Task.
+    api.tasks.get = vi.fn(async () => makeScheduleTask('mock-task-1', 'backlog'))
+    const second = await runScheduleNow(api, { projectId, scheduleId: 'schedule-1' }, Date.UTC(2026, 0, 1, 11))
+
+    expect(second).toMatchObject({ status: 'skipped', taskId: 'mock-task-1' })
     expect(api.__testing.calls.taskCreations).toHaveLength(1)
+  })
+
+  it('leaves the last Task untouched when Task creation itself fails', async () => {
+    // If create throws, no Task exists, so lastTaskId must not change.
+    const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
+    api.tasks.create = vi.fn(async () => { throw new Error('failed to create task') })
+    await setStoredSchedules(api, [makeSchedule({ lastTaskId: null })])
+
+    const outcome = await runScheduleNow(api, { projectId, scheduleId: 'schedule-1' }, Date.UTC(2026, 0, 1, 10))
+
+    expect(outcome).toMatchObject({ status: 'failed' })
+    expect(outcome.taskId).toBeUndefined()
+    const [saved] = await listTaskSchedules(api, { projectId })
+    expect(saved.lastTaskId).toBeNull()
+  })
+
+  it('createGuardedPoll runs the body once while a previous run is still in flight', async () => {
+    const releases: Array<() => void> = []
+    let runCount = 0
+    const guarded = createGuardedPoll(() => {
+      runCount += 1
+      return new Promise<void>((resolve) => { releases.push(resolve) })
+    })
+
+    const first = guarded()
+    const second = guarded()
+    expect(runCount).toBe(1)
+
+    releases.splice(0).forEach((release) => release())
+    await Promise.all([first, second])
+
+    const third = guarded()
+    expect(runCount).toBe(2)
+    releases.splice(0).forEach((release) => release())
+    await third
   })
 
   it('background processing scans project-scoped schedules without needing an active project context', async () => {
@@ -343,6 +403,7 @@ function makeScheduleTask(id: string, status: 'backlog' | 'doing' | 'done'): Tas
     worktree_source: null,
     worktree_branch: null,
     handoff_notes_enabled: true,
+    source_ticket_url: null,
     depends_on: [],
     project_id: projectId,
     created_at: 0,
