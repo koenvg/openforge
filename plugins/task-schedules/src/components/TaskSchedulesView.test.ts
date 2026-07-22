@@ -300,7 +300,7 @@ describe('TaskSchedulesView UX feedback', () => {
     await fireEvent.input(screen.getByLabelText('Cron expression'), { target: { value: 'not a cron' } })
     await fireEvent.click(screen.getByRole('button', { name: 'Save Task Schedule' }))
 
-    expect(await screen.findByText('Use five fields: minute hour day-of-month month day-of-week.')).toBeTruthy()
+    expect(await screen.findByText(/Use five fields: minute hour day-of-month month day-of-week\./)).toBeTruthy()
     expect(screen.getByLabelText('Cron expression').getAttribute('aria-invalid')).toBe('true')
     expect(invoke).not.toHaveBeenCalledWith('saveSchedule', expect.anything())
   })
@@ -318,13 +318,29 @@ describe('TaskSchedulesView UX feedback', () => {
     await fireEvent.input(screen.getByLabelText('Title'), { target: { value: 'Bad backend cron' } })
     await fireEvent.input(screen.getByLabelText('Plain prompt'), { target: { value: 'Check the queue' } })
     await fireEvent.click(screen.getByLabelText('Advanced: use a cron expression'))
-    await fireEvent.input(screen.getByLabelText('Cron expression'), { target: { value: '* * * * *' } })
+    await fireEvent.input(screen.getByLabelText('Cron expression'), { target: { value: '0 9 * * *' } })
     await fireEvent.click(screen.getByRole('button', { name: 'Save Task Schedule' }))
 
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('Fix the highlighted schedule fields and try again.')
     expect(alert.textContent).not.toContain('Custom Schedule Preset')
-    expect(screen.getByText('Use five fields: minute hour day-of-month month day-of-week.')).toBeTruthy()
+    expect(screen.getByText(/Use five fields: minute hour day-of-month month day-of-week\./)).toBeTruthy()
+  })
+
+  it('blocks a custom cron that fires more often than every five minutes without calling the backend', async () => {
+    mockScheduleBackend([])
+    renderTaskSchedulesView()
+    await waitForInitialLoad()
+
+    await fireEvent.input(screen.getByLabelText('Title'), { target: { value: 'Flooder' } })
+    await fireEvent.input(screen.getByLabelText('Plain prompt'), { target: { value: 'Check the queue' } })
+    await fireEvent.click(screen.getByLabelText('Advanced: use a cron expression'))
+    await fireEvent.input(screen.getByLabelText('Cron expression'), { target: { value: '* * * * *' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Save Task Schedule' }))
+
+    expect(await screen.findByText(/at most once every 5 minutes/i)).toBeTruthy()
+    expect(screen.getByLabelText('Cron expression').getAttribute('aria-invalid')).toBe('true')
+    expect(invoke).not.toHaveBeenCalledWith('saveSchedule', expect.anything())
   })
 
   it('shows per-action pending feedback for run now and refresh', async () => {

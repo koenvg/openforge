@@ -1,7 +1,7 @@
 import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
 import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
 import type { JsonValue, Task } from '@openforge-app/plugin-sdk'
-import { cronForPreset, getNextScheduledFireAt, validateFiveFieldCron } from './lib/cron'
+import { cronForPreset, getNextScheduledFireAt, validateCronCadence, validateFiveFieldCron } from './lib/cron'
 import type { ScheduledFireOutcome, TaskSchedule, TaskScheduleDraft, TaskScheduleMode } from './lib/types'
 
 export const SCHEDULES_STORAGE_KEY = 'task-schedules.v1'
@@ -233,6 +233,10 @@ function normalizeScheduleDraft(draft: TaskScheduleDraft, existing: TaskSchedule
   const validation = validateFiveFieldCron(cron)
   if (!validation.valid) {
     throw new Error(validation.error ?? 'Invalid custom Schedule Preset')
+  }
+  const cadence = validateCronCadence(cron, now)
+  if (!cadence.valid) {
+    throw new Error(cadence.error ?? 'Task Schedule cadence is too frequent')
   }
 
   const mode: TaskScheduleMode = draft.mode ?? 'create-and-start'

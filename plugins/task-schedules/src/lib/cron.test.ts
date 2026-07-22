@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cronForPreset, dayOfWeekFromCron, describeCronExpression, getNextScheduledFireAt, timeOfDayFromCron, validateFiveFieldCron } from './cron'
+import { MINIMUM_FIRE_INTERVAL_MS, cronForPreset, dayOfWeekFromCron, describeCronExpression, getNextScheduledFireAt, timeOfDayFromCron, validateCronCadence, validateFiveFieldCron } from './cron'
 
 describe('Task Schedule cron utilities', () => {
   it('compiles Schedule Presets with a selected time to private five-field cron expressions', () => {
@@ -62,5 +62,36 @@ describe('Task Schedule cron utilities', () => {
   it('describes cron expressions in human language', () => {
     expect(describeCronExpression('*/30 9-16 * * *')).toMatch(/every 30 minutes/i)
     expect(describeCronExpression('*/30 9-16 * * *')).toMatch(/09:00.*16:59|09:00.*04:59 PM/i)
+  })
+
+  describe('minimum-cadence guard', () => {
+    const from = new Date(2026, 0, 1, 0, 0, 0).getTime()
+
+    it('exposes a five-minute minimum fire interval', () => {
+      expect(MINIMUM_FIRE_INTERVAL_MS).toBe(5 * 60_000)
+    })
+
+    it('rejects cron expressions that fire more often than once every five minutes', () => {
+      expect(validateCronCadence('* * * * *', from).valid).toBe(false)
+      expect(validateCronCadence('*/4 * * * *', from).valid).toBe(false)
+      expect(validateCronCadence('0,1 * * * *', from).valid).toBe(false)
+    })
+
+    it('rejects fast fires that only appear at an hour boundary', () => {
+      // Fires at :00 and :59 every hour, so :59 -> next :00 is a one-minute gap.
+      expect(validateCronCadence('0,59 * * * *', from).valid).toBe(false)
+    })
+
+    it('surfaces a human-readable reason when a cron fires too often', () => {
+      const result = validateCronCadence('* * * * *', from)
+      expect(result.error).toMatch(/5 minutes/i)
+    })
+
+    it('accepts cadences at or below the five-minute threshold', () => {
+      expect(validateCronCadence('*/5 * * * *', from)).toEqual({ valid: true, error: null })
+      expect(validateCronCadence('*/30 9-16 * * *', from)).toEqual({ valid: true, error: null })
+      expect(validateCronCadence('0,30 * * * *', from)).toEqual({ valid: true, error: null })
+      expect(validateCronCadence('0 9 * * *', from)).toEqual({ valid: true, error: null })
+    })
   })
 })

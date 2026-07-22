@@ -117,6 +117,38 @@ describe('Task Schedules backend plugin', () => {
     })).rejects.toThrow('Custom Task Schedule cron is required')
   })
 
+  it('rejects custom Task Schedules that fire more often than once every five minutes', async () => {
+    const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
+
+    await expect(saveTaskSchedule(api, {
+      projectId,
+      schedule: {
+        title: 'Flooder',
+        prompt: 'Do the thing',
+        preset: 'custom',
+        cron: '* * * * *',
+      },
+    }, Date.UTC(2026, 0, 1, 8))).rejects.toThrow(/5 minutes/i)
+
+    await expect(listTaskSchedules(api, { projectId })).resolves.toHaveLength(0)
+  })
+
+  it('allows a custom Task Schedule at the five-minute minimum cadence', async () => {
+    const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
+
+    const saved = await saveTaskSchedule(api, {
+      projectId,
+      schedule: {
+        title: 'Every five minutes',
+        prompt: 'Do the thing',
+        preset: 'custom',
+        cron: '*/5 * * * *',
+      },
+    }, Date.UTC(2026, 0, 1, 8))
+
+    expect(saved).toMatchObject({ preset: 'custom', cron: '*/5 * * * *' })
+  })
+
   it('saves selected weekly Task Schedule days into the cron-backed schedule', async () => {
     const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
 

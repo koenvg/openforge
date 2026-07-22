@@ -65,6 +65,57 @@ export function validateFiveFieldCron(cron: string): { valid: boolean; error: st
   }
 }
 
+// Schedules that fire more often than this can silently flood the board: a
+// create-only schedule, or a create-and-start one whose Tasks finish before the
+// next fire, spawns a fresh Task on every fire regardless of the de-dup guard.
+export const MINIMUM_FIRE_INTERVAL_MS = 5 * 60_000
+
+// Bounded horizon for sampling consecutive fires. A five-field cron repeats at
+// most yearly, so scanning just over a year past `fromMs` reaches every distinct
+// day-of-week / day-of-month / month cluster; the densest gap lives inside one.
+const CADENCE_SAMPLE_HORIZON_MS = 400 * 24 * 60 * 60_000
+
+export function validateCronCadence(cron: string, fromMs: number): { valid: boolean; error: string | null } {
+  if (getMinFireIntervalMs(cron, fromMs) >= MINIMUM_FIRE_INTERVAL_MS) {
+    return { valid: true, error: null }
+  }
+  return {
+    valid: false,
+    error: 'Task Schedules can fire at most once every 5 minutes. Choose a less frequent cadence.',
+  }
+}
+
+// Smallest gap between two consecutive fires within the sampling horizon, or
+// Infinity when fewer than two fires occur (e.g. yearly cadences). Walking fires
+// consecutively keeps total work bounded by the horizon length in minutes,
+// independent of how frequent the cron is.
+function getMinFireIntervalMs(cron: string, fromMs: number): number {
+  const limit = fromMs + CADENCE_SAMPLE_HORIZON_MS
+  let cursor = fromMs
+  let previous: number | null = null
+  let min = Number.POSITIVE_INFINITY
+
+  while (cursor <= limit) {
+    let next: number
+    try {
+      next = getNextScheduledFireAt(cron, cursor)
+    } catch {
+      break
+    }
+    if (next > limit) break
+    if (previous !== null) {
+      min = Math.min(min, next - previous)
+      // Once a sub-threshold gap is found the verdict cannot change; stop early
+      // so pathologically frequent crons return without scanning the horizon.
+      if (min < MINIMUM_FIRE_INTERVAL_MS) break
+    }
+    previous = next
+    cursor = next
+  }
+
+  return min
+}
+
 export function getNextScheduledFireAt(cron: string, afterMs: number): number {
   const parsed = parseCron(cron)
   const cursor = new Date(afterMs)

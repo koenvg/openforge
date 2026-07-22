@@ -2,7 +2,7 @@
   import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
   import PluginPageHeader from '@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte'
   import PluginViewState from '@openforge-app/plugin-sdk/ui/PluginViewState.svelte'
-  import { dayOfWeekFromCron, describeCronExpression, timeOfDayFromCron, validateFiveFieldCron } from '../lib/cron'
+  import { dayOfWeekFromCron, describeCronExpression, timeOfDayFromCron, validateCronCadence, validateFiveFieldCron } from '../lib/cron'
   import type { ScheduledFireOutcome, SchedulePreset, TaskSchedule, TaskScheduleDraft, TaskScheduleMode } from '../lib/types'
   import TaskScheduleComposerSection from './TaskScheduleComposerSection.svelte'
   import TaskSchedulesListSection from './TaskSchedulesListSection.svelte'
@@ -18,7 +18,7 @@
   const SAVE_SCHEDULE_METHOD = 'saveSchedule'
   const DELETE_SCHEDULE_METHOD = 'deleteSchedule'
   const RUN_NOW_METHOD = 'runNow'
-  const CRON_HELP_TEXT = 'Use five fields: minute hour day-of-month month day-of-week.'
+  const CRON_HELP_TEXT = 'Use five fields: minute hour day-of-month month day-of-week. Fires at most once every 5 minutes.'
 
   let { api, context: _context, projectId, projectName = '' }: Props = $props()
 
@@ -202,11 +202,20 @@
     if (!draft.advancedCron) return true
 
     const validation = validateFiveFieldCron(draft.cron)
-    if (validation.valid) return true
+    if (!validation.valid) {
+      fieldErrors = { ...fieldErrors, cron: CRON_HELP_TEXT }
+      error = 'Fix the highlighted schedule fields and try again.'
+      return false
+    }
 
-    fieldErrors = { ...fieldErrors, cron: CRON_HELP_TEXT }
-    error = 'Fix the highlighted schedule fields and try again.'
-    return false
+    const cadence = validateCronCadence(draft.cron, Date.now())
+    if (!cadence.valid) {
+      fieldErrors = { ...fieldErrors, cron: cadence.error }
+      error = 'Fix the highlighted schedule fields and try again.'
+      return false
+    }
+
+    return true
   }
 
   function handleSaveError(cause: unknown): void {
