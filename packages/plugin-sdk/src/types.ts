@@ -437,7 +437,14 @@ export interface ImplementationRun {
 }
 
 export interface TasksAPI {
-  list(request?: { projectId?: string | null }): Promise<Task[]>
+  /**
+   * Lists tasks, optionally scoped to a project. By default done tasks are
+   * excluded (matching the app board's active-only view); pass
+   * `includeDone: true` to include tasks in the terminal `done` state. The
+   * unscoped listing (no `projectId`) always returns all states, so
+   * `includeDone` only affects the project-scoped path.
+   */
+  list(request?: { projectId?: string | null; includeDone?: boolean }): Promise<Task[]>
   get(taskId: string): Promise<Task | null>
   create(request: CreateTaskRequest): Promise<Task>
   updateSummary(taskId: string, summary: string): Promise<void>

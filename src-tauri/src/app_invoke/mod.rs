@@ -43,6 +43,10 @@ fn payload_bool(payload: &serde_json::Value, key: &str) -> AppResult<bool> {
     payload::bool(payload, key).map_err(Into::into)
 }
 
+fn payload_optional_bool(payload: &serde_json::Value, key: &str) -> AppResult<Option<bool>> {
+    payload::optional_bool(payload, key).map_err(Into::into)
+}
+
 fn payload_field<T: serde::de::DeserializeOwned>(
     payload: &serde_json::Value,
     key: &str,

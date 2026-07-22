@@ -135,8 +135,8 @@ export async function getAllTasks(): Promise<Task[]> {
   return tasks.map(normalizeTask)
 }
 
-export async function getTasksForProject(projectId: string): Promise<Task[]> {
-  const tasks = await invoke<RawTask[]>("get_tasks_for_project", { projectId });
+export async function getTasksForProject(projectId: string, includeDone = false): Promise<Task[]> {
+  const tasks = await invoke<RawTask[]>("get_tasks_for_project", { projectId, includeDone });
   return tasks.map(normalizeTask)
 }
 

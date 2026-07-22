@@ -276,6 +276,7 @@ var TestingOpenForgeRegistryFake = class {
 	injectionPointsMap = /* @__PURE__ */ new Map();
 	claimedIds = /* @__PURE__ */ new Set();
 	config = /* @__PURE__ */ new Map();
+	seededTasks;
 	eventListenerSequence = 0;
 	cachedFrontendApi = null;
 	cachedBackendApi = null;
@@ -292,6 +293,7 @@ var TestingOpenForgeRegistryFake = class {
 		};
 		this.calls = createTestingCalls();
 		this.storage = options.storage ?? createMemoryPluginStorage(this.calls);
+		this.seededTasks = options.tasks ?? [];
 	}
 	get frontendApi() {
 		return this.createFrontendApi();
@@ -416,7 +418,19 @@ var TestingOpenForgeRegistryFake = class {
 			storage: this.storage,
 			context: { getSnapshot: () => this.getContextSnapshot() },
 			tasks: {
-				list: async () => [],
+				list: async (request) => {
+					const projectId = request?.projectId ?? null;
+					const includeDone = request?.includeDone ?? false;
+					this.calls.taskListRequests.push({
+						projectId,
+						includeDone
+					});
+					return this.seededTasks.filter((task) => {
+						if (projectId !== null && task.project_id !== projectId) return false;
+						if (!includeDone && task.status === "done") return false;
+						return true;
+					});
+				},
 				get: async () => null,
 				create: async (request) => {
 					this.calls.taskCreations.push(request);
@@ -845,6 +859,7 @@ function createTestingCalls() {
 		taskCreations: [],
 		startPromptContributionConfigurations: [],
 		taskImplementationStarts: [],
+		taskListRequests: [],
 		taskSummaryUpdates: [],
 		taskStatusUpdates: [],
 		configWrites: [],
