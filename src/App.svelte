@@ -4,7 +4,7 @@
   import type { DesktopUnlistenFn } from './lib/desktopIpc'
   import { createDesktopWindow } from './lib/desktopWindow'
   import type { DesktopWindowTarget } from './lib/desktopWindow'
-  import { tasks, dependencyReferenceTasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, isLoading, projects, activeProjectId, activeProjectColorId, currentView, reviewRequestCount, activeRepoReviewRequestCount, activeProjectAttentionCount, reviewPrs, codeCleanupTasksEnabled, focusBoardFilters, outOfFocusTaskIdsByProject, sidebarPluginViewKeys } from './lib/stores'
+  import { tasks, dependencyReferenceTasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, isLoading, projects, activeProjectId, activeProjectColorId, currentView, reviewRequestCount, activeRepoReviewRequestCount, activeProjectAttentionCount, projectAttention, reviewPrs, codeCleanupTasksEnabled, focusBoardFilters, outOfFocusTaskIdsByProject, sidebarPluginViewKeys } from './lib/stores'
   import { getAppMode, getConfig, getProjectConfig, resumeStartupSessions, setPollContext, getProjectRepo, openUrl, markReviewPrViewed } from './lib/ipc'
   import { computePollContext, pollContextEquals, type PollContextPayload } from './lib/pollContext'
   import { GITHUB_SYNC_GLOBAL_VIEW_KEY, GITHUB_SYNC_PLUGIN_ID } from './lib/githubSyncPlugin'
@@ -43,6 +43,7 @@
   import { createTaskActionRunner } from './lib/taskActionRunner'
   import { useActionPaletteController } from './lib/actionPaletteController.svelte'
   import type { TaskRunAppRegistration } from './lib/runAppCommand'
+  import { hasActiveAgentSessions } from './lib/quitGuard'
   
   let unlisteners: DesktopUnlistenFn[] = []
   let showAddDialog = $state(false)
@@ -379,9 +380,25 @@
     }
   }
 
-  function handleCloseRequested(event: { preventDefault: () => void }) {
+  async function handleCloseRequested(event: { preventDefault: () => void }) {
+    // Always cancel this close attempt synchronously; we re-drive the quit below
+    // once we know whether a confirmation is warranted.
     event.preventDefault()
-    showCloseConfirm = true
+
+    // Only interrupt the quit when there are agents that closing would kill —
+    // running, or paused waiting for input — across every project. Refresh the
+    // attention snapshot first so the decision reflects current agent state.
+    try {
+      await appData.loadProjectAttention()
+    } catch (e) {
+      console.error('[App] Failed to refresh project attention before quit:', e)
+    }
+
+    if (hasActiveAgentSessions(get(projectAttention))) {
+      showCloseConfirm = true
+    } else {
+      await handleCloseConfirm()
+    }
   }
 
   async function handleCloseConfirm() {
@@ -673,10 +690,10 @@
 {#if showCloseConfirm}
   <Modal onClose={handleCloseCancel} maxWidth="360px" initialFocus="[data-close-confirm-action='quit']">
     {#snippet header()}
-      <h2 class="text-[0.95rem] font-semibold text-base-content m-0">Quit Open Forge?</h2>
+      <h2 class="text-[0.95rem] font-semibold text-base-content m-0">Agents still running</h2>
     {/snippet}
     <div class="p-5 flex flex-col gap-4">
-      <p class="text-sm text-base-content/70 m-0">Are you sure you want to quit Open Forge?</p>
+      <p class="text-sm text-base-content/70 m-0">One or more agents are still running or waiting for your input. Quitting now will stop them. Are you sure you want to quit?</p>
       <div class="flex justify-end gap-2">
         <button class="btn btn-ghost btn-sm" type="button" onclick={handleCloseCancel}>Cancel</button>
         <button data-close-confirm-action="quit" class="btn btn-error btn-sm" type="button" onclick={handleCloseConfirm}>Quit</button>
