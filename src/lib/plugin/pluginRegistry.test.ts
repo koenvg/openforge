@@ -1368,6 +1368,27 @@ describe('pluginRegistry', () => {
     expect(getRegisteredComponent('plugin:test-plugin:main')).toBeUndefined()
   })
 
+  it('coalesces a synchronous burst of store writes into a single reconcile teardown', async () => {
+    const manifest = makeManifest({ id: 'burst-plugin' })
+    deactivatePluginLoaderMock.mockResolvedValue(undefined)
+
+    // Plugin is active in the store but no longer enabled: reconcile must deactivate it.
+    // Several transient writes land in the same tick (as happens during activation via
+    // setPluginRuntimeState). Each write notifies the reconcile subscribers, but they must
+    // coalesce into a single pass rather than spawning overlapping async reconciles that all
+    // read the same 'active' snapshot and tear the plugin down concurrently.
+    enabledPluginIds.set(new Set())
+    for (let i = 0; i < 5; i++) {
+      installedPlugins.set(new Map([['burst-plugin', { manifest, state: 'active', error: null }]]))
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect(deactivatePluginLoaderMock).toHaveBeenCalledTimes(1)
+    expect(get(installedPlugins).get('burst-plugin')).toMatchObject({ state: 'installed' })
+  })
+
   it('initializePluginRuntime installs builtin package metadata with built frontend entries', async () => {
     installPluginMock.mockResolvedValue(undefined)
 
