@@ -84,6 +84,19 @@ describe('App window and project shortcuts', () => {
       expect(dialog.textContent).not.toContain('// board')
     })
 
+    it('presents alternative chords for one action as separate options rather than one long chord', async () => {
+      const App = (await import('./App.svelte')).default
+
+      render(App)
+
+      await fireEvent.keyDown(window, { key: '?', shiftKey: true, bubbles: true })
+
+      const dialog = screen.getByRole('dialog')
+      const normalized = dialog.textContent?.replace(/\s+/g, '') ?? ''
+
+      expect(normalized).toContain('Attentionoverview⌘Eor⌘;')
+    })
+
     it('shows task view shortcut section without a // prefix when a task is selected', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
@@ -120,8 +133,12 @@ describe('App window and project shortcuts', () => {
       expect(dialog.textContent).not.toContain('Code / Review / Terminal')
       expect(dialog.textContent).not.toContain('Focus agent')
       expect(dialog.textContent).not.toContain('New terminal tab')
-      expect(dialog.textContent).not.toContain('⌘E')
-      expect(dialog.textContent).not.toContain('⌘T')
+      // Scoped to the task view section: ⌘E is a global shortcut (attention overview), so
+      // a dialog-wide assertion would no longer distinguish a returning "Focus agent" row
+      // from an unrelated global binding.
+      const taskViewSection = screen.getByText('Task view').parentElement
+      expect(taskViewSection?.textContent).not.toContain('⌘E')
+      expect(taskViewSection?.textContent).not.toContain('⌘T')
       expect(dialog.textContent).not.toContain('// task view')
     })
 
