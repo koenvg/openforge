@@ -53,8 +53,10 @@ function makeApi(handlers: InvokeHandlers) {
 
 function renderView(handlers: InvokeHandlers) {
   const { api, invoke } = makeApi(handlers)
-  render(RoadmapView, { props: { api, projectId: 'proj-1', projectName: 'Cat' } })
-  return { invoke }
+  const rendered = render(RoadmapView, {
+    props: { api, projectId: 'proj-1', projectName: 'Cat' },
+  })
+  return { api, invoke, rerender: rendered.rerender }
 }
 
 afterEach(() => {
@@ -105,5 +107,45 @@ describe('RoadmapView issue creation', () => {
     // fetch. Only the initial load should have hit roadmap_get_board.
     const boardFetches = invoke.mock.calls.filter(([method]) => method === 'roadmap_get_board').length
     expect(boardFetches).toBe(1)
+  })
+
+  it('ignores a create response from an earlier activation after switching away and back', async () => {
+    let releaseCreate!: () => void
+    let createCompleted = false
+    const createGate = new Promise<void>((resolve) => {
+      releaseCreate = resolve
+    })
+    const dogBoard: RoadmapBoard = {
+      ...staleBoard,
+      repo: { owner: 'octo', name: 'dog' },
+    }
+    const { api, rerender } = renderView({
+      roadmap_get_board: async (payload) =>
+        (payload as { projectId: string }).projectId === 'proj-2' ? dogBoard : staleBoard,
+      roadmap_create_issue: async () => {
+        await createGate
+        createCompleted = true
+        return { issue: createdIssue }
+      },
+    })
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Create issue with no label' }))
+    await fireEvent.input(screen.getByLabelText('Describe the issue'), {
+      target: { value: 'Newly created ticket' },
+    })
+    await fireEvent.click(screen.getByRole('button', { name: 'Skip AI' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Create issue' }))
+    await screen.findByRole('button', { name: 'Creating…' })
+
+    await rerender({ api, projectId: 'proj-2', projectName: 'Dog' })
+    expect(await screen.findByText('octo/dog')).toBeTruthy()
+    await rerender({ api, projectId: 'proj-1', projectName: 'Cat again' })
+    expect(await screen.findByText('octo/cat')).toBeTruthy()
+
+    releaseCreate()
+    await waitFor(() => expect(createCompleted).toBe(true))
+
+    expect(screen.queryByText('Newly created ticket')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Create issue' })).toBeNull()
   })
 })
