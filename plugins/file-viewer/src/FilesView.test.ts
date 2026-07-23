@@ -10,7 +10,9 @@ vi.mock('@lucide/svelte', () => ({
   FileText: vi.fn(() => ({})),
   Folder: vi.fn(() => ({})),
   FolderOpen: vi.fn(() => ({})),
+  Search: vi.fn(() => ({})),
   TriangleAlert: vi.fn(() => ({})),
+  X: vi.fn(() => ({})),
 }))
 
 import FilesView from './FilesView.svelte'
@@ -19,11 +21,12 @@ import { activeProjectId, fileBrowserStates, pendingFileReveal } from './lib/sto
 
 const fsReadDir = vi.fn()
 const fsReadFile = vi.fn()
+const fsSearchFiles = vi.fn()
 const openUrl = vi.fn()
 
 function makeApi(): FrontendOpenForgeAPI {
   return {
-    fs: { readDir: fsReadDir, readFile: fsReadFile },
+    fs: { readDir: fsReadDir, readFile: fsReadFile, searchFiles: fsSearchFiles },
     system: { openUrl },
   } as unknown as FrontendOpenForgeAPI
 }
@@ -84,6 +87,7 @@ describe('plugin FilesView', () => {
     vi.clearAllMocks()
     vi.mocked(fsReadDir).mockResolvedValue([])
     vi.mocked(fsReadFile).mockResolvedValue(sampleFileContent)
+    vi.mocked(fsSearchFiles).mockResolvedValue([])
   })
 
   it('fetches the root directory through the typed runtime fs API on mount', async () => {
@@ -696,5 +700,142 @@ describe('plugin FilesView', () => {
 
     expect(fsReadDir).toHaveBeenCalledTimes(1)
     expect(fsReadFile).not.toHaveBeenCalled()
+  })
+
+  describe('file search', () => {
+    it('searches project files through the typed runtime fs API when a query is typed', async () => {
+      vi.mocked(fsReadDir).mockResolvedValue(sampleEntries)
+
+      renderFilesView()
+
+      await waitFor(() => {
+        expect(screen.getByText('README.md')).toBeTruthy()
+      })
+
+      await fireEvent.input(screen.getByRole('searchbox', { name: 'Search files' }), {
+        target: { value: 'stores' },
+      })
+
+      await waitFor(() => {
+        expect(fsSearchFiles).toHaveBeenCalledWith({ projectId: 'test-project-id', query: 'stores', limit: 50 })
+      })
+    })
+
+    it('renders matching files as a nested tree with ancestor directories', async () => {
+      vi.mocked(fsReadDir).mockResolvedValue(sampleEntries)
+      vi.mocked(fsSearchFiles).mockResolvedValue(['src/lib/stores.ts'])
+
+      renderFilesView()
+
+      await waitFor(() => {
+        expect(screen.getByText('README.md')).toBeTruthy()
+      })
+
+      await fireEvent.input(screen.getByRole('searchbox', { name: 'Search files' }), {
+        target: { value: 'stores' },
+      })
+
+      await waitFor(() => {
+        expect(screen.getByText('stores.ts')).toBeTruthy()
+        expect(screen.getByText('lib/')).toBeTruthy()
+      })
+    })
+
+    it('previews a search result through the typed fs API when it is selected', async () => {
+      vi.mocked(fsReadDir).mockResolvedValue(sampleEntries)
+      vi.mocked(fsSearchFiles).mockResolvedValue(['src/lib/stores.ts'])
+
+      renderFilesView()
+
+      await waitFor(() => {
+        expect(screen.getByText('README.md')).toBeTruthy()
+      })
+
+      await fireEvent.input(screen.getByRole('searchbox', { name: 'Search files' }), {
+        target: { value: 'stores' },
+      })
+
+      await waitFor(() => {
+        expect(screen.getByText('stores.ts')).toBeTruthy()
+      })
+
+      await fireEvent.click(screen.getByRole('treeitem', { name: /stores\.ts/ }))
+
+      await waitFor(() => {
+        expect(fsReadFile).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'src/lib/stores.ts' })
+      })
+    })
+
+    it('shows an empty state when no files match the query', async () => {
+      vi.mocked(fsReadDir).mockResolvedValue(sampleEntries)
+      vi.mocked(fsSearchFiles).mockResolvedValue([])
+
+      renderFilesView()
+
+      await waitFor(() => {
+        expect(screen.getByText('README.md')).toBeTruthy()
+      })
+
+      await fireEvent.input(screen.getByRole('searchbox', { name: 'Search files' }), {
+        target: { value: 'nomatch' },
+      })
+
+      await waitFor(() => {
+        expect(screen.getByText('No files match your search')).toBeTruthy()
+      })
+    })
+
+    it('restores the browse tree when the search is cleared', async () => {
+      vi.mocked(fsReadDir).mockResolvedValue(sampleEntries)
+      vi.mocked(fsSearchFiles).mockResolvedValue(['src/lib/stores.ts'])
+
+      renderFilesView()
+
+      await waitFor(() => {
+        expect(screen.getByText('README.md')).toBeTruthy()
+      })
+
+      const searchbox = screen.getByRole('searchbox', { name: 'Search files' })
+      await fireEvent.input(searchbox, { target: { value: 'stores' } })
+
+      await waitFor(() => {
+        expect(screen.getByText('stores.ts')).toBeTruthy()
+      })
+
+      await fireEvent.click(screen.getByRole('button', { name: 'Clear search' }))
+
+      await waitFor(() => {
+        expect(screen.queryByText('stores.ts')).toBeNull()
+        expect(screen.getByText('README.md')).toBeTruthy()
+        expect(screen.getByText('src/')).toBeTruthy()
+      })
+    })
+
+    it('surfaces a retryable error when the search fails', async () => {
+      vi.mocked(fsReadDir).mockResolvedValue(sampleEntries)
+      vi.mocked(fsSearchFiles)
+        .mockRejectedValueOnce(new Error('search index unavailable'))
+        .mockResolvedValueOnce(['src/lib/stores.ts'])
+
+      renderFilesView()
+
+      await waitFor(() => {
+        expect(screen.getByText('README.md')).toBeTruthy()
+      })
+
+      await fireEvent.input(screen.getByRole('searchbox', { name: 'Search files' }), {
+        target: { value: 'stores' },
+      })
+
+      await waitFor(() => {
+        expect(screen.getByText('search index unavailable')).toBeTruthy()
+      })
+
+      await fireEvent.click(screen.getByRole('button', { name: 'Retry file search' }))
+
+      await waitFor(() => {
+        expect(screen.getByText('stores.ts')).toBeTruthy()
+      })
+    })
   })
 })

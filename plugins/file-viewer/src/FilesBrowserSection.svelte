@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Search, X } from '@lucide/svelte'
   import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
   import type { FileEntry } from '@openforge-app/plugin-sdk/domain'
   import type { FileBrowserProjectState } from './lib/fileExplorer'
@@ -25,6 +26,17 @@
     fileContent: FileBrowserProjectState['fileContent']
     previewFocusRequest: number | null
     treeFocusRequest: number | null
+    searchQuery: string
+    searchActive: boolean
+    searchLoading: boolean
+    searchError: string | null
+    searchEntries: FileEntry[]
+    searchExpandedDirs: Set<string>
+    searchLimitReached: boolean
+    searchLimit: number
+    onSearchInput: (value: string) => void
+    onClearSearch: () => void
+    onRetrySearch: () => void
     onRetryRootLoad: () => void
     onRetryDirectoryLoad: (path: string) => void
     onRetrySelectedFile: () => void
@@ -54,6 +66,17 @@
     fileContent,
     previewFocusRequest,
     treeFocusRequest,
+    searchQuery,
+    searchActive,
+    searchLoading,
+    searchError,
+    searchEntries,
+    searchExpandedDirs,
+    searchLimitReached,
+    searchLimit,
+    onSearchInput,
+    onClearSearch,
+    onRetrySearch,
     onRetryRootLoad,
     onRetryDirectoryLoad,
     onRetrySelectedFile,
@@ -81,6 +104,29 @@
   {:else}
     <ResizablePanel storageKey="files-tree" defaultWidth={240} side="left">
       <div class="flex h-full min-h-0 flex-col">
+        <div class="border-b border-base-300 p-2">
+          <label class="input input-bordered input-sm flex w-full items-center gap-2">
+            <Search size={16} class="shrink-0 text-base-content/50" />
+            <input
+              type="search"
+              class="grow"
+              placeholder="Search files…"
+              aria-label="Search files"
+              value={searchQuery}
+              oninput={(event) => onSearchInput(event.currentTarget.value)}
+            />
+            {#if searchQuery.length > 0}
+              <button
+                type="button"
+                class="btn btn-ghost btn-circle btn-xs"
+                aria-label="Clear search"
+                onclick={onClearSearch}
+              >
+                <X size={14} />
+              </button>
+            {/if}
+          </label>
+        </div>
         {#if directoryError !== null}
           <div class="border-b border-base-300 bg-base-100 p-3 text-xs">
             <div class="space-y-2">
@@ -105,7 +151,46 @@
           </div>
         {/if}
         <div class="min-h-0 flex-1">
-          {#if rootEntries.length === 0}
+          {#if searchActive}
+            {#if searchError !== null}
+              <div class="p-3 text-xs">
+                <div class="space-y-2">
+                  <div>
+                    <p class="font-medium text-base-content">File search failed</p>
+                    <p class="mt-1 text-error break-words">{searchError}</p>
+                  </div>
+                  <button class="btn btn-xs btn-outline" type="button" onclick={onRetrySearch}>
+                    Retry file search
+                  </button>
+                </div>
+              </div>
+            {:else if searchEntries.length > 0}
+              <div class="flex h-full min-h-0 flex-col">
+                <div class="min-h-0 flex-1">
+                  <ProjectFileTree
+                    entries={searchEntries}
+                    expandedDirs={searchExpandedDirs}
+                    {selectedPath}
+                    onToggleDir={() => {}}
+                    onSelectFile={onSelectFile}
+                  />
+                </div>
+                {#if searchLimitReached}
+                  <div class="border-t border-base-300 px-3 py-1.5 text-center text-[0.7rem] text-base-content/50">
+                    Showing top {searchLimit} results
+                  </div>
+                {/if}
+              </div>
+            {:else if searchLoading}
+              <div class="flex items-center justify-center h-full text-base-content/50 text-xs p-4 text-center">
+                Searching…
+              </div>
+            {:else}
+              <div class="flex items-center justify-center h-full text-base-content/50 text-xs p-4 text-center">
+                No files match your search
+              </div>
+            {/if}
+          {:else if rootEntries.length === 0}
             <div class="flex items-center justify-center h-full text-base-content/50 text-xs p-4 text-center">
               This project folder is empty
             </div>
