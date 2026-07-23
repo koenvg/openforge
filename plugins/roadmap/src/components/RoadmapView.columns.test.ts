@@ -54,8 +54,10 @@ function makeApi(handlers: InvokeHandlers) {
 
 function renderView(handlers: InvokeHandlers) {
   const { api, invoke } = makeApi(handlers)
-  render(RoadmapView, { props: { api, projectId: 'proj-1', projectName: 'Cat' } })
-  return { invoke }
+  const rendered = render(RoadmapView, {
+    props: { api, projectId: 'proj-1', projectName: 'Cat' },
+  })
+  return { api, invoke, rerender: rendered.rerender }
 }
 
 async function openColumnsAndReorder() {
@@ -79,6 +81,71 @@ describe('RoadmapView column save', () => {
 
     expect(await screen.findByText('octo/cat')).toBeTruthy()
     expect(screen.queryByText('undefined/undefined')).toBeNull()
+  })
+
+  it('reloads only when the logical project ID changes and hides the previous board while loading', async () => {
+    const loadedProjectIds: string[] = []
+    let releaseSecondProject!: () => void
+    const secondProjectGate = new Promise<void>((resolve) => {
+      releaseSecondProject = resolve
+    })
+    const { api, rerender } = renderView({
+      roadmap_get_board: async (payload) => {
+        const { projectId } = payload as { projectId: string }
+        loadedProjectIds.push(projectId)
+        if (projectId === 'proj-2') await secondProjectGate
+        return projectId === 'proj-2'
+          ? { ...board, repo: { owner: 'octo', name: 'dog' } }
+          : board
+      },
+    })
+
+    expect(await screen.findByText('octo/cat')).toBeTruthy()
+    await rerender({ api, projectId: 'proj-1', projectName: 'Renamed Cat' })
+    expect(loadedProjectIds).toEqual(['proj-1'])
+
+    await rerender({ api, projectId: 'proj-2', projectName: 'Dog' })
+    await waitFor(() => expect(loadedProjectIds).toEqual(['proj-1', 'proj-2']))
+    expect(screen.queryByText('octo/cat')).toBeNull()
+    expect((screen.getByRole('button', { name: 'Create' }) as HTMLButtonElement).disabled).toBe(true)
+
+    releaseSecondProject()
+    expect(await screen.findByText('octo/dog')).toBeTruthy()
+    expect(loadedProjectIds).toEqual(['proj-1', 'proj-2'])
+  })
+
+  it('ignores a board response from an earlier activation after switching away and back', async () => {
+    let firstProjectLoad = true
+    let firstLoadCompleted = false
+    let releaseFirstLoad!: () => void
+    const firstLoadGate = new Promise<void>((resolve) => {
+      releaseFirstLoad = resolve
+    })
+    const { api, rerender } = renderView({
+      roadmap_get_board: async (payload) => {
+        const { projectId } = payload as { projectId: string }
+        if (projectId === 'proj-1' && firstProjectLoad) {
+          firstProjectLoad = false
+          await firstLoadGate
+          firstLoadCompleted = true
+          return { ...board, repo: { owner: 'octo', name: 'stale-cat' } }
+        }
+        return projectId === 'proj-2'
+          ? { ...board, repo: { owner: 'octo', name: 'dog' } }
+          : { ...board, repo: { owner: 'octo', name: 'current-cat' } }
+      },
+    })
+
+    await waitFor(() => expect(firstProjectLoad).toBe(false))
+    await rerender({ api, projectId: 'proj-2', projectName: 'Dog' })
+    expect(await screen.findByText('octo/dog')).toBeTruthy()
+    await rerender({ api, projectId: 'proj-1', projectName: 'Cat again' })
+    expect(await screen.findByText('octo/current-cat')).toBeTruthy()
+
+    releaseFirstLoad()
+    await waitFor(() => expect(firstLoadCompleted).toBe(true))
+    expect(screen.queryByText('octo/stale-cat')).toBeNull()
+    expect(screen.getByText('octo/current-cat')).toBeTruthy()
   })
 
   it('saves the reordered labels and closes the dialog on success', async () => {
