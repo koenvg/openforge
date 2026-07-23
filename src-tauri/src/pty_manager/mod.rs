@@ -1214,6 +1214,8 @@ mod tests {
     #[tokio::test]
     async fn test_agent_pty_exit_preserves_output_buffer_for_later_replay() {
         let manager = PtyManager::new();
+        let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+        let exit_gate = tmp_dir.path().join("agent-exit-gate");
         let pty_system = native_pty_system();
         let size = PtySize {
             rows: 24,
@@ -1226,28 +1228,48 @@ mod tests {
         let shell = get_shell_path();
         let mut cmd = CommandBuilder::new(&shell);
         cmd.arg("-lc");
-        cmd.arg("true");
-        let child = pair
+        cmd.env(
+            "OPENFORGE_TEST_EXIT_GATE",
+            exit_gate.to_string_lossy().to_string(),
+        );
+        cmd.arg("while [ ! -e \"$OPENFORGE_TEST_EXIT_GATE\" ]; do sleep 0.01; done");
+        let mut child = pair
             .slave
             .spawn_command(cmd)
             .expect("spawn command should succeed");
         drop(pair.slave);
-
+        let managed_process =
+            ManagedProcessIdentity::capture(child.process_id().expect("test child PID"))
+                .expect("test process identity");
+        std::fs::write(&exit_gate, b"release").expect("test exit gate should release");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        let exit_status = loop {
+            match child
+                .try_wait()
+                .expect("test child status should be readable")
+            {
+                Some(status) => break status,
+                None if std::time::Instant::now() < deadline => {
+                    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                }
+                None => panic!("test child should exit before EOF cleanup"),
+            }
+        };
+        assert!(
+            exit_status.success(),
+            "test fixture must exit successfully before EOF cleanup"
+        );
         let writer = pair
             .master
             .take_writer()
             .expect("take writer should succeed");
-
         let key = "agent-task-1";
         {
             let mut sessions = manager.sessions.lock().await;
             sessions.insert(
                 key.to_string(),
                 PtySession {
-                    managed_process: ManagedProcessIdentity::capture(
-                        child.process_id().expect("test child PID"),
-                    )
-                    .expect("test process identity"),
+                    managed_process,
                     child,
                     master: pair.master,
                     writer,
@@ -1272,7 +1294,6 @@ mod tests {
             times.insert(key.to_string(), Arc::new(AtomicU64::new(123)));
         }
 
-        let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
         let pid_file = tmp_dir.path().join("agent-task-1-pty.pid");
         write_test_session_metadata(&manager, key, &pid_file).await;
         let lifecycle_lock = Arc::new(tokio::sync::Mutex::new(()));
