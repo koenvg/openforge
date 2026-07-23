@@ -825,8 +825,12 @@ export interface ReviewPullRequest {
 /** GitHub label that suppresses a PR from review counting and grays out its card. */
 export const DO_NOT_REVIEW_LABEL = 'DO NOT REVIEW';
 
-/** True when the PR carries the "DO NOT REVIEW" label (case-insensitive, trimmed). */
-export function hasDoNotReviewLabel(pr: { labels: PrLabel[] }): boolean {
+/**
+ * True when the PR carries the "DO NOT REVIEW" label (case-insensitive, trimmed).
+ * Tolerates a missing or null `labels` field so a single implementation can back
+ * both the plugin PR views and the app-side sort/badge helpers.
+ */
+export function hasDoNotReviewLabel(pr: { labels?: PrLabel[] | null }): boolean {
   return (pr.labels ?? []).some((label) => label.name.trim().toUpperCase() === DO_NOT_REVIEW_LABEL);
 }
 
