@@ -114,13 +114,11 @@ describe('roadmap actions', () => {
         projectId: 'P-1',
         repo: 'octo/cat',
         card,
-        actionPrompt: 'Implement this issue',
       }),
       startRoadmapIssueAction(registry.frontendApi, {
         projectId: 'P-1',
         repo: 'octo/cat',
         card: secondCard,
-        actionPrompt: 'Implement this issue',
       }),
     ])
 
@@ -153,13 +151,11 @@ describe('roadmap actions', () => {
         projectId: 'P-1',
         repo: 'octo/cat',
         card,
-        actionPrompt: 'Implement this issue',
       }),
       startRoadmapIssueAction(registry.frontendApi, {
         projectId: 'P-1',
         repo: 'octo/cat',
         card: secondCard,
-        actionPrompt: 'Implement this issue',
       }),
     ])
 
