@@ -2,10 +2,11 @@
   import { onMount, tick } from 'svelte'
   import { get } from 'svelte/store'
   import Modal from '../shared/ui/Modal.svelte'
-  import { projects, activeProjectId, reviewPrs, globalExcludedPrRepos, ticketPrs, hiddenProjectIds } from '../../lib/stores'
+  import { projects, activeProjectId, reviewPrs, globalExcludedPrRepos, ticketPrs, hiddenProjectIds, attentionCountByProject } from '../../lib/stores'
   import { getAllTasks, getLatestSessions, getProjectConfig, getConfig, setConfig } from '../../lib/ipc'
   import { loadOutOfFocusTaskIds, loadFocusFilterStates, DEFAULT_FOCUS_STATES } from '../../lib/boardFilters'
   import { buildAttentionOverview } from '../../lib/attentionOverview'
+  import { resolveFocusedIndex, subscribeDebounced } from '../../lib/attentionOverviewRefresh'
   import type { AttentionOverview, AttentionFocusTask } from '../../lib/attentionOverview'
   import type { ReviewPullRequest, Task } from '../../lib/types'
   import type { TaskState } from '../../lib/taskState'
@@ -21,6 +22,8 @@
 
   const COLLAPSED_CONFIG_KEY = 'attention_overview_collapsed_projects'
   const OTHER_ID = '__other__'
+  // Coalesce store-change bursts (streaming agents, PR polls) into one reload while open.
+  const REFRESH_DEBOUNCE_MS = 250
 
   interface DisplayGroup {
     id: string
@@ -129,6 +132,16 @@
     return rows.findIndex((row) => row.kind === 'header' && row.group.id === id)
   }
 
+  // Stable logical identity for a row, so the cursor can follow the same task/PR/header
+  // across a refresh even when its index shifts.
+  function rowKey(row: NavRow): string {
+    switch (row.kind) {
+      case 'header': return `header:${row.group.id}`
+      case 'task': return `task:${row.item.task.id}`
+      case 'review': return `review:${row.pr.id}`
+    }
+  }
+
   // Row-level keyboard activation (Enter / Space). Navigation keys are left to
   // bubble up to the modal-level handler; only activation is captured here.
   function rowKeydown(e: KeyboardEvent, action: () => void): void {
@@ -183,41 +196,39 @@
     focusedIndex = index
   }
 
-  async function loadData(): Promise<void> {
-    loading = true
-    try {
-      const projectList = get(projects)
-      activeId = get(activeProjectId)
+  // Read the current stores + fresh IPC snapshots and assemble the overview. Pure gather
+  // step: it does not touch component state, so both the initial load and the live refresh
+  // can share it and apply the result differently (initial resets focus, refresh preserves it).
+  async function gatherOverview(): Promise<{ overview: AttentionOverview; activeId: string | null }> {
+    const projectList = get(projects)
+    const nextActiveId = get(activeProjectId)
 
-      const [allTasks, collapsedRaw] = await Promise.all([
-        getAllTasks(),
-        getConfig(COLLAPSED_CONFIG_KEY),
-      ])
+    const allTasks = await getAllTasks()
+    const doingIds = allTasks.filter((task) => task.status === 'doing').map((task) => task.id)
+    const sessionList = doingIds.length > 0 ? await getLatestSessions(doingIds) : []
+    const sessions = new Map(sessionList.map((session) => [session.ticket_id, session]))
 
-      const doingIds = allTasks.filter((task) => task.status === 'doing').map((task) => task.id)
-      const sessionList = doingIds.length > 0 ? await getLatestSessions(doingIds) : []
-      const sessions = new Map(sessionList.map((session) => [session.ticket_id, session]))
+    const resolvedRepoByProject = new Map<string, string | null>()
+    const outOfFocusByProject = new Map<string, Set<string>>()
+    const focusStatesByProject = new Map<string, TaskState[]>()
+    await Promise.all(
+      projectList.map(async (project) => {
+        const [repoRaw, outOfFocus, focusStates] = await Promise.all([
+          getProjectConfig(project.id, 'resolved_repo').catch(() => null),
+          loadOutOfFocusTaskIds(project.id).catch(() => new Set<string>()),
+          loadFocusFilterStates(project.id).catch(() => DEFAULT_FOCUS_STATES),
+        ])
+        resolvedRepoByProject.set(
+          project.id,
+          typeof repoRaw === 'string' && repoRaw.includes('/') ? repoRaw : null,
+        )
+        if (outOfFocus.size > 0) outOfFocusByProject.set(project.id, outOfFocus)
+        focusStatesByProject.set(project.id, focusStates)
+      }),
+    )
 
-      const resolvedRepoByProject = new Map<string, string | null>()
-      const outOfFocusByProject = new Map<string, Set<string>>()
-      const focusStatesByProject = new Map<string, TaskState[]>()
-      await Promise.all(
-        projectList.map(async (project) => {
-          const [repoRaw, outOfFocus, focusStates] = await Promise.all([
-            getProjectConfig(project.id, 'resolved_repo').catch(() => null),
-            loadOutOfFocusTaskIds(project.id).catch(() => new Set<string>()),
-            loadFocusFilterStates(project.id).catch(() => DEFAULT_FOCUS_STATES),
-          ])
-          resolvedRepoByProject.set(
-            project.id,
-            typeof repoRaw === 'string' && repoRaw.includes('/') ? repoRaw : null,
-          )
-          if (outOfFocus.size > 0) outOfFocusByProject.set(project.id, outOfFocus)
-          focusStatesByProject.set(project.id, focusStates)
-        }),
-      )
-
-      overview = buildAttentionOverview({
+    return {
+      overview: buildAttentionOverview({
         projects: projectList,
         allTasks,
         sessions,
@@ -228,8 +239,19 @@
         excludedRepos: get(globalExcludedPrRepos),
         resolvedRepoByProject,
         hiddenProjectIds: get(hiddenProjectIds),
-      })
-      collapsedIds = parseCollapsed(collapsedRaw)
+      }),
+      activeId: nextActiveId,
+    }
+  }
+
+  async function loadData(): Promise<void> {
+    loading = true
+    try {
+      const collapsedRawPromise = getConfig(COLLAPSED_CONFIG_KEY)
+      const gathered = await gatherOverview()
+      overview = gathered.overview
+      activeId = gathered.activeId
+      collapsedIds = parseCollapsed(await collapsedRawPromise)
 
       await tick()
       // Open scrolled to the project the user is currently viewing.
@@ -238,6 +260,24 @@
     } finally {
       loading = false
     }
+  }
+
+  // Re-assemble the overview in place while the dialog stays open, so a newly idle task
+  // or a freshly-arrived review request shows up without a close/reopen. The cursor stays
+  // on the same logical row and the collapsed layout is preserved (we deliberately keep the
+  // in-memory collapsedIds rather than re-reading config) so nothing jumps under the user.
+  async function refreshData(): Promise<void> {
+    if (loading) return // initial load in flight will produce fresh data anyway
+    const focusedRow = rows[focusedIndex]
+    const previousKey = focusedRow ? rowKey(focusedRow) : null
+    const previousIndex = focusedIndex
+
+    const gathered = await gatherOverview()
+    overview = gathered.overview
+    activeId = gathered.activeId
+
+    await tick()
+    focusedIndex = resolveFocusedIndex(previousKey, rows.map(rowKey), previousIndex)
   }
 
   // Defensive: if the row list ever shrinks out from under the cursor, keep the
@@ -261,6 +301,16 @@
 
   onMount(() => {
     void loadData()
+    // Keep the open dialog live: any change to the data feeding the overview triggers a
+    // debounced refresh. attentionCountByProject is the cross-project "task attention
+    // changed" heartbeat (the data orchestrator recomputes it on agent events), so an agent
+    // finishing — even in a non-active project — surfaces here; reviewPrs covers newly
+    // arrived review requests. Returned teardown unsubscribes + cancels on dialog close.
+    return subscribeDebounced(
+      [projects, reviewPrs, ticketPrs, hiddenProjectIds, globalExcludedPrRepos, activeProjectId, attentionCountByProject],
+      () => { void refreshData() },
+      REFRESH_DEBOUNCE_MS,
+    )
   })
 
   function dotClass(state: TaskState): string {
