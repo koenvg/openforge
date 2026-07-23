@@ -71,6 +71,7 @@ pub struct ProcessMemoryDiagnostics {
     pub sidecar: ProcessMemoryNode,
     pub plugin_host: Option<PluginHostMemoryDiagnostics>,
     pub pty_process_trees: Vec<PtyProcessTreeMemoryDiagnostics>,
+    pub github_response_cache: crate::github_client::GitHubResponseCacheDiagnostics,
     pub totals: ProcessMemoryTotals,
 }
 
@@ -78,6 +79,7 @@ pub async fn collect_process_memory_diagnostics(
     db: Arc<Mutex<crate::db::Database>>,
     pty_manager: Option<PtyManager>,
     plugin_host: Option<PluginHost>,
+    github_response_cache: crate::github_client::GitHubResponseCacheDiagnostics,
 ) -> Result<ProcessMemoryDiagnostics, String> {
     let processes = read_process_table()?;
     let sidecar_pid = std::process::id();
@@ -114,6 +116,7 @@ pub async fn collect_process_memory_diagnostics(
         sidecar,
         plugin_host,
         pty_process_trees,
+        github_response_cache,
         totals,
     })
 }

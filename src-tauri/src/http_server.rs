@@ -1750,6 +1750,7 @@ async fn debug_process_memory_handler(
         Arc::clone(&state.db),
         state.pty_manager.clone(),
         state.plugin_host.clone(),
+        state.github_client.response_cache_diagnostics(),
     )
     .await
     .map(Json)
