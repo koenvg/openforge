@@ -1,7 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
+import { fireEvent, screen, waitFor } from '@testing-library/svelte'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
-import RoadmapView from './RoadmapView.svelte'
+import { renderRoadmapView } from './RoadmapView.testUtils'
 import type { RoadmapBoard, RoadmapIssue } from '../lib/types'
 
 // A board whose issue list intentionally never contains the freshly created
@@ -25,40 +24,6 @@ const createdIssue: RoadmapIssue = {
   labels: [],
 }
 
-type InvokeHandlers = Record<string, (payload: unknown) => Promise<unknown>>
-
-function makeApi(handlers: InvokeHandlers) {
-  const invoke = vi.fn(async (method: string, payload?: unknown) => {
-    // Mirror the Electron IPC boundary: payloads are structured-cloned.
-    const clonedPayload = structuredClone(payload)
-    const handler = handlers[method]
-    if (!handler) return null
-    return handler(clonedPayload)
-  })
-  const api = {
-    backend: {
-      state: 'ready' as const,
-      whenReady: async () => undefined,
-      onReady: (h: () => void) => {
-        h()
-        return { dispose: () => undefined }
-      },
-      invoke,
-    },
-    system: { openUrl: vi.fn(async () => undefined) },
-    projectConfig: { get: vi.fn(async () => null) },
-  }
-  return { api: api as unknown as FrontendOpenForgeAPI, invoke }
-}
-
-function renderView(handlers: InvokeHandlers) {
-  const { api, invoke } = makeApi(handlers)
-  const rendered = render(RoadmapView, {
-    props: { api, projectId: 'proj-1', projectName: 'Cat' },
-  })
-  return { api, invoke, rerender: rendered.rerender }
-}
-
 afterEach(() => {
   vi.clearAllMocks()
 })
@@ -69,7 +34,7 @@ describe('RoadmapView issue creation', () => {
     const createGate = new Promise<void>((resolve) => {
       releaseCreate = resolve
     })
-    const { invoke } = renderView({
+    const { invoke } = renderRoadmapView({
       roadmap_get_board: async () => staleBoard,
       roadmap_create_issue: async () => {
         await createGate
@@ -119,7 +84,7 @@ describe('RoadmapView issue creation', () => {
       ...staleBoard,
       repo: { owner: 'octo', name: 'dog' },
     }
-    const { api, rerender } = renderView({
+    const { api, rerender } = renderRoadmapView({
       roadmap_get_board: async (payload) =>
         (payload as { projectId: string }).projectId === 'proj-2' ? dogBoard : staleBoard,
       roadmap_create_issue: async () => {
