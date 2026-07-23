@@ -589,7 +589,7 @@
 
 <div class="flex h-full w-full">
   <div bind:this={scrollContainer} class="flex-1 overflow-y-auto" style="background: linear-gradient(180deg, var(--project-bg-alt, oklch(var(--b2))) 0%, var(--project-bg, oklch(var(--b1))) 100%)">
-    <div class="w-full max-w-4xl px-6 py-6 flex flex-col gap-6">
+    <div class="flex w-full flex-col gap-6 px-6 py-6">
       <ProjectPageHeader
         title={activePage === 'project'
           ? `${projectName || 'Project'} — Project Settings`
