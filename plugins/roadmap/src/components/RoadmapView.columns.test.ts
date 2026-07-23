@@ -1,7 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
+import { fireEvent, screen, waitFor } from '@testing-library/svelte'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
-import RoadmapView from './RoadmapView.svelte'
+import { renderRoadmapView } from './RoadmapView.testUtils'
 import type { RoadmapBoard, RoadmapConfig } from '../lib/types'
 
 const board: RoadmapBoard = {
@@ -25,41 +24,6 @@ const config: RoadmapConfig = {
   ],
 }
 
-type InvokeHandlers = Record<string, (payload: unknown) => Promise<unknown>>
-
-function makeApi(handlers: InvokeHandlers) {
-  const invoke = vi.fn(async (method: string, payload?: unknown) => {
-    // Mirror the Electron IPC boundary: payloads are structured-cloned, so a raw
-    // Svelte $state proxy would throw "An object could not be cloned" here.
-    const clonedPayload = structuredClone(payload)
-    const handler = handlers[method]
-    if (!handler) return null
-    return handler(clonedPayload)
-  })
-  const api = {
-    backend: {
-      state: 'ready' as const,
-      whenReady: async () => undefined,
-      onReady: (h: () => void) => {
-        h()
-        return { dispose: () => undefined }
-      },
-      invoke,
-    },
-    system: { openUrl: vi.fn(async () => undefined) },
-    projectConfig: { get: vi.fn(async () => null) },
-  }
-  return { api: api as unknown as FrontendOpenForgeAPI, invoke }
-}
-
-function renderView(handlers: InvokeHandlers) {
-  const { api, invoke } = makeApi(handlers)
-  const rendered = render(RoadmapView, {
-    props: { api, projectId: 'proj-1', projectName: 'Cat' },
-  })
-  return { api, invoke, rerender: rendered.rerender }
-}
-
 async function openColumnsAndReorder() {
   // Wait for the board to load (a board-only control appears) so the header
   // Columns button is enabled.
@@ -75,7 +39,7 @@ afterEach(() => {
 
 describe('RoadmapView column save', () => {
   it('shows the loaded repository slug in the header subtitle', async () => {
-    renderView({
+    renderRoadmapView({
       roadmap_get_board: async () => board,
     })
 
@@ -89,7 +53,7 @@ describe('RoadmapView column save', () => {
     const secondProjectGate = new Promise<void>((resolve) => {
       releaseSecondProject = resolve
     })
-    const { api, rerender } = renderView({
+    const { api, rerender } = renderRoadmapView({
       roadmap_get_board: async (payload) => {
         const { projectId } = payload as { projectId: string }
         loadedProjectIds.push(projectId)
@@ -121,7 +85,7 @@ describe('RoadmapView column save', () => {
     const firstLoadGate = new Promise<void>((resolve) => {
       releaseFirstLoad = resolve
     })
-    const { api, rerender } = renderView({
+    const { api, rerender } = renderRoadmapView({
       roadmap_get_board: async (payload) => {
         const { projectId } = payload as { projectId: string }
         if (projectId === 'proj-1' && firstProjectLoad) {
@@ -149,7 +113,7 @@ describe('RoadmapView column save', () => {
   })
 
   it('saves the reordered labels and closes the dialog on success', async () => {
-    const { invoke } = renderView({
+    const { invoke } = renderRoadmapView({
       roadmap_get_board: async () => board,
       roadmap_get_config: async () => config,
       roadmap_set_column_labels: async () => null,
@@ -169,7 +133,7 @@ describe('RoadmapView column save', () => {
   })
 
   it('surfaces an error to the user when the save fails', async () => {
-    renderView({
+    renderRoadmapView({
       roadmap_get_board: async () => board,
       roadmap_get_config: async () => config,
       roadmap_set_column_labels: async () => {
@@ -190,7 +154,7 @@ describe('RoadmapView column save', () => {
 describe('RoadmapView issue creation', () => {
   it('keeps a newly created issue visible when a manual board reload has not caught up', async () => {
     let boardLoads = 0
-    renderView({
+    renderRoadmapView({
       roadmap_get_board: async () => {
         boardLoads += 1
         return board

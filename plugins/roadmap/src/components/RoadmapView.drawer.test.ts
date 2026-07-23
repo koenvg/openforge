@@ -1,7 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
+import { fireEvent, screen, waitFor } from '@testing-library/svelte'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
-import RoadmapView from './RoadmapView.svelte'
+import { renderRoadmapView } from './RoadmapView.testUtils'
 import type { RoadmapBoard } from '../lib/types'
 
 const bug = { name: 'bug', color: 'd73a4a' }
@@ -28,43 +27,13 @@ const board: RoadmapBoard = {
 
 const boardWithout11: RoadmapBoard = { ...board, issues: [issue(10, 'Ten'), issue(12, 'Twelve')] }
 
-type InvokeHandlers = Record<string, (payload: unknown) => Promise<unknown>>
-
-function makeApi(handlers: InvokeHandlers) {
-  const invoke = vi.fn(async (method: string, payload?: unknown) => {
-    const handler = handlers[method]
-    if (!handler) return null
-    return handler(structuredClone(payload))
-  })
-  const api = {
-    backend: {
-      state: 'ready' as const,
-      whenReady: async () => undefined,
-      onReady: (h: () => void) => {
-        h()
-        return { dispose: () => undefined }
-      },
-      invoke,
-    },
-    system: { openUrl: vi.fn(async () => undefined) },
-    projectConfig: { get: vi.fn(async () => null) },
-  }
-  return { api: api as unknown as FrontendOpenForgeAPI, invoke }
-}
-
-function renderView(handlers: InvokeHandlers) {
-  const { api, invoke } = makeApi(handlers)
-  render(RoadmapView, { props: { api, projectId: 'proj-1', projectName: 'Cat' } })
-  return { invoke }
-}
-
 afterEach(() => {
   vi.clearAllMocks()
 })
 
 describe('RoadmapView drawer group navigation', () => {
   it('opens the drawer on the clicked card with its position in the column', async () => {
-    renderView({ roadmap_get_board: async () => board })
+    renderRoadmapView({ roadmap_get_board: async () => board })
 
     await fireEvent.click(await screen.findByText('Eleven'))
 
@@ -73,7 +42,7 @@ describe('RoadmapView drawer group navigation', () => {
   })
 
   it('walks the frozen group with the pager', async () => {
-    renderView({ roadmap_get_board: async () => board })
+    renderRoadmapView({ roadmap_get_board: async () => board })
 
     await fireEvent.click(await screen.findByText('Twelve'))
     expect(await screen.findByText('1 of 3 · bug')).toBeTruthy()
@@ -85,7 +54,7 @@ describe('RoadmapView drawer group navigation', () => {
 
   it('advances to the next issue when the open one is closed rather than closing the drawer', async () => {
     let closed = false
-    renderView({
+    renderRoadmapView({
       roadmap_get_board: async () => (closed ? boardWithout11 : board),
       roadmap_edit_issue: async () => {
         closed = true
