@@ -68,6 +68,8 @@ async fn test_debug_process_memory_handler_returns_read_only_diagnostics() {
             >= json["sidecar"]["rssBytes"].as_u64().unwrap_or(0)
     );
     assert!(json["ptyProcessTrees"].as_array().is_some());
+    assert_eq!(json["githubResponseCache"]["entryCount"], 0);
+    assert_eq!(json["githubResponseCache"]["bodyBytes"], 0);
 
     let _ = std::fs::remove_file(path);
 }

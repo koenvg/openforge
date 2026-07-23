@@ -95,11 +95,17 @@ impl GitHubClient {
             owner, repo, branch
         );
 
-        let response = match self
-            .send_github(self.apply_cached_etag(self.github_get(&url, token), &url))
-            .await
-        {
-            Ok(response) => response,
+        let response = match self.conditional_get(&url, token).await {
+            Ok(super::ConditionalResponse::NotModified(Some(cached_body))) => {
+                return RequiredReviewsPolicy::from_rest_json(&cached_body)
+                    .unwrap_or_else(|e| RequiredReviewsPolicy::unknown(e.to_string()));
+            }
+            Ok(super::ConditionalResponse::NotModified(None)) => {
+                return RequiredReviewsPolicy::unknown(
+                    "304 without cached required reviews response",
+                );
+            }
+            Ok(super::ConditionalResponse::Fresh(response)) => response,
             Err(e) => {
                 warn!(
                     "[GitHub] Failed to fetch required reviews: {}",
@@ -114,14 +120,6 @@ impl GitHubClient {
         }
         if response.status() == reqwest::StatusCode::FORBIDDEN {
             return RequiredReviewsPolicy::from_rest_error(403, "forbidden");
-        }
-
-        if response.status() == reqwest::StatusCode::NOT_MODIFIED {
-            if let Some(cached_body) = self.cached_body_for_url(&url) {
-                return RequiredReviewsPolicy::from_rest_json(&cached_body)
-                    .unwrap_or_else(|e| RequiredReviewsPolicy::unknown(e.to_string()));
-            }
-            return RequiredReviewsPolicy::unknown("304 without cached required reviews response");
         }
 
         if !response.status().is_success() {
