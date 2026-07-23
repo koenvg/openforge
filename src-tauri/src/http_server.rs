@@ -835,46 +835,63 @@ pub async fn delete_task_handler(
     State(state): State<AppState>,
     Json(request): Json<DeleteTaskRequest>,
 ) -> Result<Json<DeleteTaskResponse>, (StatusCode, String)> {
-    let db = state.db.lock().unwrap();
-    let task = db
-        .get_task(&request.task_id)
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get task before deletion: {e}"),
-            )
-        })?
+    let task_id = request.task_id;
+    let delete_claim = state
+        .task_claims
+        .try_claim(&task_id, TaskOperation::DeleteTask)
         .ok_or_else(|| {
             (
-                StatusCode::NOT_FOUND,
-                format!("Task not found: {}", request.task_id),
+                StatusCode::CONFLICT,
+                "Task already has a delete in progress".to_string(),
             )
         })?;
+    let task = {
+        let db = state.db.lock().unwrap();
+        db.get_task(&task_id)
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to get task before deletion: {e}"),
+                )
+            })?
+            .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Task not found: {task_id}")))?
+    };
 
     if task.status != "backlog" {
         return Err((
             StatusCode::CONFLICT,
             format!(
                 "delete_task requires a backlog task; task {} has status {}",
-                request.task_id, task.status
+                task_id, task.status
             ),
         ));
     }
 
     let project_id = task.project_id;
+    let cleanup = crate::app_invoke::prepare_task_runtime_cleanup(&state, &task_id, true).await?;
+    {
+        let db = state.db.lock().unwrap();
+        db.delete_task(&task_id).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to delete task: {e}"),
+            )
+        })?;
+    }
 
-    db.delete_task(&request.task_id).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to delete task: {e}"),
-        )
-    })?;
-    drop(db);
-
-    emit_task_changed(&state, "deleted", &request.task_id, project_id.as_deref());
+    emit_task_changed(&state, "deleted", &task_id, project_id.as_deref());
+    if let Some(cleanup) = cleanup {
+        let cleanup_task_id = task_id.clone();
+        tokio::spawn(async move {
+            let _delete_claim = delete_claim;
+            crate::app_invoke::run_task_runtime_cleanup(&cleanup_task_id, cleanup).await;
+        });
+    } else {
+        drop(delete_claim);
+    }
 
     Ok(Json(DeleteTaskResponse {
-        task_id: request.task_id,
+        task_id,
         status: "completed".to_string(),
     }))
 }

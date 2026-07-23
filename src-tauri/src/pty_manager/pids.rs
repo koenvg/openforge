@@ -1,92 +1,188 @@
-use log::info;
-use std::io;
-use std::path::PathBuf;
+use log::{info, warn};
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
+use super::managed_process::{terminate_managed_process_tree, ManagedProcessIdentity};
 use super::{PtyError, PtyManager};
 
+pub(super) const MANAGED_PROCESS_TERM_TIMEOUT: Duration = Duration::from_secs(2);
+static NEXT_METADATA_TEMP_ID: AtomicU64 = AtomicU64::new(1);
+
+pub(super) fn write_managed_process_identity(
+    path: &Path,
+    identity: &ManagedProcessIdentity,
+) -> Result<(), PtyError> {
+    let contents = serde_json::to_vec_pretty(identity).map_err(|error| {
+        PtyError::CleanupFailed(format!("failed to serialize process identity: {error}"))
+    })?;
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| PtyError::CleanupFailed("invalid process metadata path".to_string()))?;
+    let temporary_path = path.with_file_name(format!(
+        ".{file_name}.{}.{}.tmp",
+        std::process::id(),
+        NEXT_METADATA_TEMP_ID.fetch_add(1, Ordering::Relaxed)
+    ));
+    let write_result = (|| -> io::Result<()> {
+        let mut temporary_file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary_path)?;
+        temporary_file.write_all(&contents)?;
+        temporary_file.sync_all()?;
+        std::fs::hard_link(&temporary_path, path)?;
+        Ok(())
+    })();
+    let _ = std::fs::remove_file(&temporary_path);
+
+    write_result.map_err(|error| {
+        let detail = if error.kind() == io::ErrorKind::AlreadyExists {
+            "existing recovery metadata was preserved; refusing to replace it".to_string()
+        } else {
+            error.to_string()
+        };
+        PtyError::CleanupFailed(format!(
+            "failed to publish process identity at {}: {detail}",
+            path.display()
+        ))
+    })
+}
+
+pub(super) async fn terminate_and_remove_managed_process(
+    identity: &ManagedProcessIdentity,
+    pid_file: &Path,
+    context: &str,
+) -> Result<(), PtyError> {
+    terminate_managed_process_tree(identity, MANAGED_PROCESS_TERM_TIMEOUT)
+        .await
+        .map_err(|error| {
+            warn!(
+                "[PTY cleanup] {} failed; preserving recovery metadata at {}: {}",
+                context,
+                pid_file.display(),
+                error
+            );
+            PtyError::CleanupFailed(format!("{context}: {error}"))
+        })?;
+
+    let contents = match std::fs::read_to_string(pid_file) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(PtyError::CleanupFailed(format!(
+                "{context} terminated, but recovery metadata {} could not be read: {error}",
+                pid_file.display()
+            )))
+        }
+    };
+    let current_identity: ManagedProcessIdentity =
+        serde_json::from_str(&contents).map_err(|error| {
+            PtyError::CleanupFailed(format!(
+            "{context} terminated, but recovery metadata {} is not a verifiable identity: {error}",
+            pid_file.display()
+        ))
+        })?;
+    if current_identity != *identity {
+        return Err(PtyError::CleanupFailed(format!(
+            "{context} terminated, but recovery metadata {} belongs to a different process identity; preserving it",
+            pid_file.display()
+        )));
+    }
+    std::fs::remove_file(pid_file).map_err(|error| {
+        PtyError::CleanupFailed(format!(
+            "{context} terminated, but recovery metadata {} could not be removed: {error}",
+            pid_file.display()
+        ))
+    })
+}
+
+fn process_exists(pid: i32) -> bool {
+    if unsafe { libc::kill(pid, 0) } == 0 {
+        return true;
+    }
+    std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+}
+
 impl PtyManager {
-    /// Cleans up stale PID files for processes that are no longer running
-    pub fn cleanup_stale_pids(&self) -> Result<(), PtyError> {
+    /// Recovers verified managed PTY trees left behind by a previous sidecar.
+    /// Metadata is removed only after the full tree exits; unverifiable or
+    /// failed records remain on disk for diagnostics and a later retry.
+    pub async fn cleanup_stale_pids(&self) -> Result<(), PtyError> {
         let pid_dir = self.get_pid_dir()?;
 
         if !pid_dir.exists() {
             return Ok(());
         }
 
+        let mut failures = Vec::new();
         for entry in std::fs::read_dir(&pid_dir)? {
             let entry = entry?;
             let path = entry.path();
-
-            // Process PTY PID files, including legacy task-scoped shell PIDs
-            // and indexed shell PIDs like task-shell-0.pid.
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if !is_pty_pid_file_name(name) {
-                    continue;
-                }
-            } else {
+            let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+                continue;
+            };
+            if !is_pty_pid_file_name(name) {
                 continue;
             }
 
-            let pid_str = match std::fs::read_to_string(&path) {
-                Ok(s) => s,
-                Err(_) => continue,
-            };
-
-            let pid: i32 = match pid_str.trim().parse() {
-                Ok(p) => p,
-                Err(_) => {
-                    let _ = std::fs::remove_file(&path);
+            let contents = match std::fs::read_to_string(&path) {
+                Ok(contents) => contents,
+                Err(error) => {
+                    warn!(
+                        "[PTY recovery] Failed to read {}; preserving metadata: {}",
+                        path.display(),
+                        error
+                    );
+                    failures.push(format!("{}: {error}", path.display()));
                     continue;
                 }
             };
 
-            let is_running = unsafe {
-                libc::kill(pid, 0) == 0 // Signal 0 checks process existence
-            };
-
-            if !is_running {
-                info!("[cleanup] Removing stale PTY PID file (process dead)");
-                let _ = std::fs::remove_file(&path);
-            } else {
-                // Process is alive — verify it's actually opencode before killing
-                let is_opencode = std::process::Command::new("ps")
-                    .args(["-p", &pid.to_string(), "-o", "command="])
-                    .output()
-                    .map(|output| {
-                        let cmd = String::from_utf8_lossy(&output.stdout);
-                        cmd.contains("opencode")
-                    })
-                    .unwrap_or(false);
-
-                if is_opencode {
-                    info!(
-                        "[cleanup] Killing orphaned opencode PTY process (PID: {})",
-                        pid
-                    );
-                    unsafe {
-                        libc::kill(pid, libc::SIGTERM);
-                    }
-                    // Brief wait for graceful shutdown
-                    std::thread::sleep(std::time::Duration::from_millis(500));
-                    // Check if still running, force kill if needed
-                    let still_running = unsafe { libc::kill(pid, 0) == 0 };
-                    if still_running {
-                        info!("[cleanup] Force killing PTY process (PID: {})", pid);
-                        unsafe {
-                            libc::kill(pid, libc::SIGKILL);
-                        }
-                    }
-                } else {
-                    info!(
-                        "[cleanup] PID {} is not opencode (PID reuse), removing stale PTY file",
-                        pid
-                    );
+            if let Ok(identity) = serde_json::from_str::<ManagedProcessIdentity>(&contents) {
+                let context = format!("startup recovery for {name}");
+                match terminate_and_remove_managed_process(&identity, &path, &context).await {
+                    Ok(()) => info!("[PTY recovery] Recovered managed process tree for {name}"),
+                    Err(error) => failures.push(error.to_string()),
                 }
-                let _ = std::fs::remove_file(&path);
+                continue;
+            }
+
+            match contents.trim().parse::<i32>() {
+                Ok(pid) if process_exists(pid) => {
+                    let message = format!(
+                        "legacy PID metadata {} names live PID {} without a process start identity; refusing to signal it because the PID may have been reused",
+                        path.display(),
+                        pid
+                    );
+                    warn!("[PTY recovery] {}; preserving metadata", message);
+                    failures.push(message);
+                }
+                Ok(_) => {
+                    info!(
+                        "[PTY recovery] Removing legacy metadata for an exited process: {}",
+                        path.display()
+                    );
+                    let _ = std::fs::remove_file(&path);
+                }
+                Err(error) => {
+                    warn!(
+                        "[PTY recovery] Removing invalid PID metadata {}: {}",
+                        path.display(),
+                        error
+                    );
+                    let _ = std::fs::remove_file(&path);
+                }
             }
         }
 
-        Ok(())
+        if failures.is_empty() {
+            Ok(())
+        } else {
+            Err(PtyError::CleanupFailed(failures.join("; ")))
+        }
     }
 
     // ============================================================================
@@ -200,6 +296,10 @@ fn managed_session_key_from_pid_file_name(name: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::process::CommandExt;
+    use std::process::{Child, Command, Stdio};
+    use std::time::Instant;
+    use sysinfo::{Pid, ProcessStatus, System};
 
     #[test]
     fn classifies_indexed_shell_session_keys() {
@@ -240,5 +340,107 @@ mod tests {
         assert!(is_pty_pid_file_name("task-shell-feature-pty.pid"));
         assert!(is_pty_pid_file_name("task-1-claude.pid"));
         assert!(!is_pty_pid_file_name("task-1-shell-x.pid"));
+    }
+
+    fn process_is_alive(pid: i32) -> bool {
+        let system = System::new_all();
+        system
+            .process(Pid::from(pid as usize))
+            .is_some_and(|process| !matches!(process.status(), ProcessStatus::Zombie))
+    }
+
+    fn spawn_recovery_tree(descendant_pid_file: &Path) -> Child {
+        let script = format!(
+            "trap '' TERM; (trap '' TERM; exec sleep 30) & echo $! > '{}'; wait",
+            descendant_pid_file.display()
+        );
+        let mut command = Command::new("/bin/sh");
+        command
+            .args(["-c", &script])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        unsafe {
+            command.pre_exec(|| {
+                if libc::setsid() == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        command.spawn().expect("recovery tree should spawn")
+    }
+
+    fn wait_for_file(path: &Path) {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while !path.exists() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(path.exists(), "descendant PID file should be written");
+    }
+
+    #[tokio::test]
+    async fn startup_recovery_terminates_verified_root_and_descendant() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let descendant_pid_file = temp_dir.path().join("descendant.pid");
+        let mut root = spawn_recovery_tree(&descendant_pid_file);
+        wait_for_file(&descendant_pid_file);
+        let descendant_pid: i32 = std::fs::read_to_string(&descendant_pid_file)
+            .expect("descendant PID should read")
+            .trim()
+            .parse()
+            .expect("descendant PID should parse");
+        let identity = ManagedProcessIdentity::capture(root.id()).expect("identity should capture");
+        let pid_file = temp_dir.path().join("startup-shell-0.pid");
+        write_managed_process_identity(&pid_file, &identity).expect("identity should persist");
+        let mut manager = PtyManager::new();
+        manager.set_pid_dir(temp_dir.path().to_path_buf());
+
+        manager
+            .cleanup_stale_pids()
+            .await
+            .expect("verified stale tree should recover");
+        let _ = root.try_wait();
+
+        assert!(
+            !pid_file.exists(),
+            "successful recovery should remove metadata"
+        );
+        assert!(
+            !process_is_alive(identity.root_pid),
+            "stale root survived recovery"
+        );
+        assert!(
+            !process_is_alive(descendant_pid),
+            "stale descendant survived recovery"
+        );
+    }
+
+    #[tokio::test]
+    async fn startup_recovery_preserves_metadata_on_start_identity_mismatch() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let descendant_pid_file = temp_dir.path().join("descendant.pid");
+        let mut root = spawn_recovery_tree(&descendant_pid_file);
+        wait_for_file(&descendant_pid_file);
+        let mut identity =
+            ManagedProcessIdentity::capture(root.id()).expect("identity should capture");
+        identity.root_start_time = identity.root_start_time.saturating_sub(1);
+        let pid_file = temp_dir.path().join("mismatch-pty.pid");
+        write_managed_process_identity(&pid_file, &identity).expect("identity should persist");
+        let mut manager = PtyManager::new();
+        manager.set_pid_dir(temp_dir.path().to_path_buf());
+
+        let result = manager.cleanup_stale_pids().await;
+
+        assert!(result.is_err(), "identity mismatch must fail closed");
+        assert!(pid_file.exists(), "failed recovery must preserve metadata");
+        assert!(
+            process_is_alive(identity.root_pid),
+            "mismatched PID was signaled"
+        );
+        unsafe {
+            libc::kill(-identity.process_group_id, libc::SIGKILL);
+        }
+        let _ = root.try_wait();
     }
 }

@@ -199,6 +199,9 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
         .enable_all()
         .build()?
         .block_on(async move {
+            if let Err(error) = pty_manager.cleanup_stale_pids().await {
+                warn!("[startup] Managed PTY recovery was incomplete: {}", error);
+            }
             tokio::spawn(startup_resume::resume_task_sessions(
                 app.clone(),
                 http_ready_rx,

@@ -386,7 +386,7 @@ async fn test_create_task_handler_persists_labels() {
 
 #[tokio::test]
 async fn test_delete_task_handler_completes_task_and_keeps_cli_retrieval() {
-    let (state, path) = test_state("http_delete_task_handler_completes_task");
+    let (mut state, path) = test_state("http_delete_task_handler_completes_task");
     {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -408,6 +408,29 @@ async fn test_delete_task_handler_completes_task_and_keeps_cli_retrieval() {
             .expect("create open task");
     }
 
+    let pty_dir = tempfile::tempdir().expect("PTY temp dir");
+    let workspace_dir = tempfile::tempdir().expect("workspace temp dir");
+    let pty_manager = state.pty_manager.as_mut().expect("PTY manager");
+    pty_manager.set_pid_dir(pty_dir.path().to_path_buf());
+    pty_manager
+        .spawn_shell_pty(
+            crate::pty_manager::PtySpawnContext {
+                task_id: "T-1",
+                cwd: workspace_dir.path(),
+                cols: 80,
+                rows: 24,
+                app_handle: None,
+                app_event_tx: None,
+            },
+            Some(0),
+        )
+        .await
+        .expect("legacy delete test shell should spawn");
+    assert_eq!(
+        pty_manager.get_session_keys().await,
+        vec!["T-1-shell-0".to_string()]
+    );
+
     let router = create_router(state.clone());
     let response = router
         .clone()
@@ -426,6 +449,16 @@ async fn test_delete_task_handler_completes_task_and_keeps_cli_retrieval() {
     let json = response_body_json(response).await;
     assert_eq!(json["task_id"], "T-1");
     assert_eq!(json["status"], "completed");
+    assert!(
+        state
+            .pty_manager
+            .as_ref()
+            .expect("PTY manager")
+            .get_session_keys()
+            .await
+            .is_empty(),
+        "legacy delete endpoint must run lifecycle-aware shell cleanup"
+    );
 
     let completed_response = router
         .clone()

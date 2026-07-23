@@ -5,18 +5,26 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
+use super::pids::terminate_and_remove_managed_process;
 use super::session::{LastOutputTimes, PtyOutputBuffers, PtySessions};
 
+pub(super) struct PtyExitCleanupContext<'a> {
+    pub(super) sessions: &'a PtySessions,
+    pub(super) last_output: &'a LastOutputTimes,
+    pub(super) output_buffers: &'a PtyOutputBuffers,
+    pub(super) lifecycle_lock: &'a Arc<tokio::sync::Mutex<()>>,
+    pub(super) pid_file: &'a Path,
+}
+
 pub(super) async fn finalize_pty_exit(
-    sessions: &PtySessions,
-    last_output: &LastOutputTimes,
-    _output_buffers: &PtyOutputBuffers,
-    pid_file: &Path,
+    context: PtyExitCleanupContext<'_>,
     session_key: &str,
     instance_id: u64,
+    remove_output_buffer: bool,
 ) -> bool {
+    let _lifecycle_guard = context.lifecycle_lock.lock().await;
     let removed_session = {
-        let mut sessions = sessions.lock().await;
+        let mut sessions = context.sessions.lock().await;
         let matches_instance = sessions
             .get(session_key)
             .map(|session| session.instance_id == instance_id)
@@ -31,23 +39,35 @@ pub(super) async fn finalize_pty_exit(
     let Some(mut session) = removed_session else {
         return false;
     };
-
-    {
-        let mut times = last_output.lock().await;
-        times.remove(session_key);
-    }
-
-    let _ = std::fs::remove_file(pid_file);
-
-    tokio::task::spawn_blocking(move || {
-        session
-            .child
-            .wait()
-            .map(|status| status.success())
-            .unwrap_or(false)
-    })
+    if let Err(error) = terminate_and_remove_managed_process(
+        &session.managed_process,
+        context.pid_file,
+        &format!("PTY EOF cleanup for {session_key}"),
+    )
     .await
-    .unwrap_or(false)
+    {
+        warn!("[PTY] Failed to finalize process tree for {session_key}: {error}");
+        context
+            .sessions
+            .lock()
+            .await
+            .entry(session_key.to_string())
+            .or_insert(session);
+        return false;
+    }
+    let process_succeeded = session
+        .child
+        .try_wait()
+        .ok()
+        .flatten()
+        .map(|status| status.success())
+        .unwrap_or(false);
+
+    context.last_output.lock().await.remove(session_key);
+    if remove_output_buffer {
+        context.output_buffers.lock().await.remove(session_key);
+    }
+    process_succeeded
 }
 
 // ============================================================================
@@ -235,6 +255,7 @@ pub(super) enum PtyExitAction {
         sessions: PtySessions,
         last_output: LastOutputTimes,
         output_buffers: PtyOutputBuffers,
+        lifecycle_lock: Arc<tokio::sync::Mutex<()>>,
         pid_file: PathBuf,
         emit_agent_exit: bool,
     },
@@ -292,21 +313,22 @@ pub(super) fn spawn_batched_pty_event_emitter(
                                     sessions,
                                     last_output,
                                     output_buffers,
+                                    lifecycle_lock,
                                     pid_file,
                                     emit_agent_exit,
                                 } => {
                                     let success = finalize_pty_exit(
-                                        &sessions,
-                                        &last_output,
-                                        &output_buffers,
-                                        &pid_file,
+                                        PtyExitCleanupContext {
+                                            sessions: &sessions,
+                                            last_output: &last_output,
+                                            output_buffers: &output_buffers,
+                                            lifecycle_lock: &lifecycle_lock,
+                                            pid_file: &pid_file,
+                                        },
                                         &session_key,
                                         instance_id,
+                                        !emit_agent_exit,
                                     ).await;
-                                    if success && !emit_agent_exit {
-                                        let mut buffers = output_buffers.lock().await;
-                                        buffers.remove(&session_key);
-                                    }
                                     emit_agent_exit.then_some(success)
                                 }
                             };

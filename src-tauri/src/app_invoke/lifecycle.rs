@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 /// The worktree/branch cleanup work captured for a task before its workspace
 /// metadata is removed. Running it needs no DB access: `delete_task` drops the
 /// worktree record in the same transaction as completing the task.
-pub(super) struct TaskRuntimeCleanup {
+pub(crate) struct TaskRuntimeCleanup {
     repo_path: PathBuf,
     worktree_path: PathBuf,
     branch_to_delete: Option<String>,
@@ -14,14 +14,25 @@ pub(super) struct TaskRuntimeCleanup {
 /// Kills the task's PTYs and captures its worktree cleanup while the task and
 /// worktree rows still exist. The returned cleanup (if any) is safe to run
 /// after the worktree row is removed, so `delete_task` can publish the deleted event
-pub(super) async fn prepare_task_runtime_cleanup(
+pub(crate) async fn prepare_task_runtime_cleanup(
     state: &AppState,
     task_id: &str,
     remove_branch: bool,
 ) -> Result<Option<TaskRuntimeCleanup>, (StatusCode, String)> {
     if let Some(pty_manager) = state.pty_manager.as_ref() {
-        let _ = pty_manager.kill_pty(task_id).await;
-        pty_manager.kill_shells_for_task(task_id).await;
+        let mut failures = Vec::new();
+        if let Err(error) = pty_manager.kill_pty(task_id).await {
+            failures.push(format!("task PTY: {error}"));
+        }
+        if let Err(error) = pty_manager.kill_shells_for_task(task_id).await {
+            failures.push(format!("task shell PTYs: {error}"));
+        }
+        if !failures.is_empty() {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to clean up task runtime: {}", failures.join("; ")),
+            ));
+        }
     }
     let db = crate::db::acquire_db(&state.db);
     let worktree = db.get_worktree_for_task(task_id).map_err(|e| {
@@ -53,7 +64,7 @@ pub(super) async fn prepare_task_runtime_cleanup(
 /// Runs a captured worktree/branch cleanup. Failures are logged rather than
 /// surfaced: by the time this runs the task is already completed and the deleted event
 /// has been published, so there is no caller left to report to.
-pub(super) async fn run_task_runtime_cleanup(task_id: &str, cleanup: TaskRuntimeCleanup) {
+pub(crate) async fn run_task_runtime_cleanup(task_id: &str, cleanup: TaskRuntimeCleanup) {
     let remove_result = crate::git_worktree::remove_worktree_with_branch(
         &cleanup.repo_path,
         &cleanup.worktree_path,
