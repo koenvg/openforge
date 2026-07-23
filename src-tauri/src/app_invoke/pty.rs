@@ -87,7 +87,15 @@ pub(super) async fn handle_app_pty_command(
         }
         "pty_kill_shells_for_task" => {
             let payload = PtyTaskPayload::decode(&request.command, &request.payload)?;
-            pty_manager.kill_shells_for_task(&payload.task_id).await;
+            pty_manager
+                .kill_shells_for_task(&payload.task_id)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to kill task shells: {e}"),
+                    )
+                })?;
             serde_json::Value::Null
         }
         "get_pty_buffer" => {

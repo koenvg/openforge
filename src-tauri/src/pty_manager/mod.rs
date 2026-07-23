@@ -1,5 +1,6 @@
 mod commands;
 mod events;
+mod managed_process;
 mod pids;
 mod session;
 
@@ -17,10 +18,16 @@ pub(crate) use commands::{build_claude_args, build_pi_args, get_shell_path};
 #[cfg(test)]
 use events::{
     finalize_pty_exit, find_utf8_boundary, read_pty_output_loop, spawn_batched_pty_event_emitter,
-    PtyEventEmitterConfig, PtyExitAction, PtyOutputBatcher, RingBuffer, CLAUDE_BUFFER_CAPACITY,
+    PtyEventEmitterConfig, PtyExitAction, PtyExitCleanupContext, PtyOutputBatcher, RingBuffer,
+    CLAUDE_BUFFER_CAPACITY,
 };
 #[cfg(test)]
-use pids::{is_shell_session_key_for_task, shell_pid_file_name, shell_session_key};
+use managed_process::ManagedProcessIdentity;
+#[cfg(test)]
+use pids::{
+    is_shell_session_key_for_task, shell_pid_file_name, shell_session_key,
+    write_managed_process_identity,
+};
 #[cfg(test)]
 use session::{frozen_seconds, PtySession, PtySessionKind, NEXT_INSTANCE_ID};
 use session::{AgentSpawnGenerations, LastOutputTimes, PtyOutputBuffers, PtySessions};
@@ -36,6 +43,7 @@ pub enum PtyError {
     ProcessNotFound(String),
     IoError(std::io::Error),
     WriteFailed(String),
+    CleanupFailed(String),
 }
 
 impl fmt::Display for PtyError {
@@ -50,6 +58,7 @@ impl fmt::Display for PtyError {
             }
             PtyError::IoError(e) => write!(f, "IO error: {}", e),
             PtyError::WriteFailed(msg) => write!(f, "Failed to write to PTY: {}", msg),
+            PtyError::CleanupFailed(msg) => write!(f, "Failed to clean up PTY: {}", msg),
         }
     }
 }
@@ -74,6 +83,8 @@ pub struct PtyManager {
     last_output: LastOutputTimes,
     output_buffers: PtyOutputBuffers,
     agent_spawn_generations: AgentSpawnGenerations,
+    lifecycle_locks: Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>>,
+    pending_shell_spawns: Arc<dashmap::DashMap<String, (String, u64)>>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -104,6 +115,8 @@ impl PtyManager {
             last_output: Arc::new(Mutex::new(HashMap::new())),
             output_buffers: Arc::new(Mutex::new(HashMap::new())),
             agent_spawn_generations: Arc::new(Mutex::new(HashMap::new())),
+            lifecycle_locks: Arc::new(Mutex::new(HashMap::new())),
+            pending_shell_spawns: Arc::new(dashmap::DashMap::new()),
         }
     }
 }
@@ -355,7 +368,7 @@ mod tests {
         }
 
         let shell_pid_file = tmp_dir.path().join(shell_pid_file_name(task_id, Some(2)));
-        std::fs::write(&shell_pid_file, "1234").expect("shell pid file should write");
+        write_test_session_metadata(&manager, &shell_key, &shell_pid_file).await;
 
         manager.kill_all().await;
 
@@ -381,7 +394,7 @@ mod tests {
 
         let agent_pid_file = tmp_dir.path().join(format!("{}-pty.pid", task_id));
         let misleading_shell_pid_file = tmp_dir.path().join(format!("{}.pid", task_id));
-        std::fs::write(&agent_pid_file, "1234").expect("agent pid file should write");
+        write_test_session_metadata(&manager, task_id, &agent_pid_file).await;
         std::fs::write(&misleading_shell_pid_file, "5678")
             .expect("misleading shell pid file should write");
 
@@ -414,7 +427,7 @@ mod tests {
         }
 
         let pid_file = tmp_dir.path().join(pid_file_name);
-        std::fs::write(&pid_file, "1234").expect("provider pid file should write");
+        write_test_session_metadata(&manager, task_id, &pid_file).await;
 
         manager
             .kill_pty(task_id)
@@ -427,8 +440,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_cleanup_stale_pids_invalid_content() {
+    #[tokio::test]
+    async fn test_cleanup_stale_pids_invalid_content() {
         let mut manager = PtyManager::new();
         let tmp_dir = std::env::temp_dir().join("test_pty_cleanup_invalid");
         std::fs::create_dir_all(&tmp_dir).unwrap();
@@ -439,15 +452,15 @@ mod tests {
         std::fs::write(&pid_file, "not_a_number").unwrap();
         assert!(pid_file.exists());
 
-        let result = manager.cleanup_stale_pids();
+        let result = manager.cleanup_stale_pids().await;
         assert!(result.is_ok());
         assert!(!pid_file.exists(), "Invalid PTY PID file should be removed");
 
         let _ = std::fs::remove_dir_all(&tmp_dir);
     }
 
-    #[test]
-    fn test_cleanup_stale_pids_invalid_indexed_shell_pid() {
+    #[tokio::test]
+    async fn test_cleanup_stale_pids_invalid_indexed_shell_pid() {
         let mut manager = PtyManager::new();
         let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
         manager.set_pid_dir(tmp_dir.path().to_path_buf());
@@ -457,7 +470,7 @@ mod tests {
         std::fs::write(&shell0_pid_file, "not_a_number").unwrap();
         std::fs::write(&shell1_pid_file, "not_a_number").unwrap();
 
-        let result = manager.cleanup_stale_pids();
+        let result = manager.cleanup_stale_pids().await;
 
         assert!(result.is_ok());
         assert!(
@@ -844,6 +857,7 @@ mod tests {
                     sessions: Arc::clone(&manager.sessions),
                     last_output: Arc::clone(&manager.last_output),
                     output_buffers: Arc::clone(&manager.output_buffers),
+                    lifecycle_lock: Arc::new(tokio::sync::Mutex::new(())),
                     pid_file: tmp_dir.path().join("task-dedupe-shell-0.pid"),
                     emit_agent_exit: false,
                 },
@@ -955,6 +969,7 @@ mod tests {
                     sessions: Arc::clone(&manager.sessions),
                     last_output: Arc::clone(&manager.last_output),
                     output_buffers: Arc::clone(&manager.output_buffers),
+                    lifecycle_lock: Arc::new(tokio::sync::Mutex::new(())),
                     pid_file: tmp_dir.path().join("task-dedupe-exit-shell-0.pid"),
                     emit_agent_exit: false,
                 },
@@ -1006,6 +1021,7 @@ mod tests {
                     sessions: Arc::clone(&manager.sessions),
                     last_output: Arc::clone(&manager.last_output),
                     output_buffers: Arc::clone(&manager.output_buffers),
+                    lifecycle_lock: Arc::new(tokio::sync::Mutex::new(())),
                     pid_file: tmp_dir.path().join("agent-dedupe-exit.pid"),
                     emit_agent_exit: true,
                 },
@@ -1054,6 +1070,7 @@ mod tests {
                     sessions: Arc::clone(&manager.sessions),
                     last_output: Arc::clone(&manager.last_output),
                     output_buffers: Arc::clone(&manager.output_buffers),
+                    lifecycle_lock: Arc::new(tokio::sync::Mutex::new(())),
                     pid_file: tmp_dir.path().join("agent-fallback-exit.pid"),
                     emit_agent_exit: true,
                 },
@@ -1108,6 +1125,10 @@ mod tests {
             sessions.insert(
                 key.to_string(),
                 PtySession {
+                    managed_process: ManagedProcessIdentity::capture(
+                        child.process_id().expect("test child PID"),
+                    )
+                    .expect("test process identity"),
                     child,
                     master: pair.master,
                     writer,
@@ -1132,7 +1153,7 @@ mod tests {
 
         let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
         let pid_file = tmp_dir.path().join("task-1-shell-0.pid");
-        std::fs::write(&pid_file, "1234").expect("pid file should write");
+        write_test_session_metadata(&manager, key, &pid_file).await;
 
         let (output_tx, output_rx) = tokio::sync::mpsc::unbounded_channel();
         let (app_event_tx, mut app_event_rx) = tokio::sync::broadcast::channel(8);
@@ -1148,6 +1169,7 @@ mod tests {
                     sessions: Arc::clone(&manager.sessions),
                     last_output: Arc::clone(&manager.last_output),
                     output_buffers: Arc::clone(&manager.output_buffers),
+                    lifecycle_lock: Arc::new(tokio::sync::Mutex::new(())),
                     pid_file: pid_file.clone(),
                     emit_agent_exit: false,
                 },
@@ -1222,6 +1244,10 @@ mod tests {
             sessions.insert(
                 key.to_string(),
                 PtySession {
+                    managed_process: ManagedProcessIdentity::capture(
+                        child.process_id().expect("test child PID"),
+                    )
+                    .expect("test process identity"),
                     child,
                     master: pair.master,
                     writer,
@@ -1248,15 +1274,20 @@ mod tests {
 
         let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
         let pid_file = tmp_dir.path().join("agent-task-1-pty.pid");
-        std::fs::write(&pid_file, "1234").expect("pid file should write");
+        write_test_session_metadata(&manager, key, &pid_file).await;
+        let lifecycle_lock = Arc::new(tokio::sync::Mutex::new(()));
 
         let success = finalize_pty_exit(
-            &manager.sessions,
-            &manager.last_output,
-            &manager.output_buffers,
-            &pid_file,
+            PtyExitCleanupContext {
+                sessions: &manager.sessions,
+                last_output: &manager.last_output,
+                output_buffers: &manager.output_buffers,
+                lifecycle_lock: &lifecycle_lock,
+                pid_file: &pid_file,
+            },
             key,
             1,
+            false,
         )
         .await;
 
@@ -1270,6 +1301,47 @@ mod tests {
             !manager.last_output.lock().await.contains_key(key),
             "liveness timestamps should still be cleaned up after exit"
         );
+    }
+
+    #[tokio::test]
+    async fn test_finalize_pty_exit_terminates_live_root_before_nonblocking_reap() {
+        let mut manager = PtyManager::new();
+        let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+        manager.set_pid_dir(tmp_dir.path().to_path_buf());
+        let key = "live-eof-agent";
+        manager
+            .sessions
+            .lock()
+            .await
+            .insert(key.to_string(), test_agent_pty_session(key));
+        let pid_file = tmp_dir.path().join(format!("{key}-pty.pid"));
+        write_test_session_metadata(&manager, key, &pid_file).await;
+        let lifecycle_lock = Arc::new(tokio::sync::Mutex::new(()));
+
+        let success = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            finalize_pty_exit(
+                PtyExitCleanupContext {
+                    sessions: &manager.sessions,
+                    last_output: &manager.last_output,
+                    output_buffers: &manager.output_buffers,
+                    lifecycle_lock: &lifecycle_lock,
+                    pid_file: &pid_file,
+                },
+                key,
+                1,
+                false,
+            ),
+        )
+        .await
+        .expect("live-root EOF cleanup must not block on child wait");
+
+        assert!(
+            !success,
+            "explicitly terminated root should not report success"
+        );
+        assert!(!manager.sessions.lock().await.contains_key(key));
+        assert!(!pid_file.exists());
     }
 
     #[tokio::test]
@@ -1304,6 +1376,10 @@ mod tests {
             sessions.insert(
                 "task-1".to_string(),
                 PtySession {
+                    managed_process: ManagedProcessIdentity::capture(
+                        child.process_id().expect("test child PID"),
+                    )
+                    .expect("test process identity"),
                     child,
                     master: pair.master,
                     writer,
@@ -1331,14 +1407,19 @@ mod tests {
         let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
         let pid_file = tmp_dir.path().join("task-1-pty.pid");
         std::fs::write(&pid_file, "1234").expect("pid file should write");
+        let lifecycle_lock = Arc::new(tokio::sync::Mutex::new(()));
 
         let success = finalize_pty_exit(
-            &manager.sessions,
-            &manager.last_output,
-            &manager.output_buffers,
-            &pid_file,
+            PtyExitCleanupContext {
+                sessions: &manager.sessions,
+                last_output: &manager.last_output,
+                output_buffers: &manager.output_buffers,
+                lifecycle_lock: &lifecycle_lock,
+                pid_file: &pid_file,
+            },
             "task-1",
             1,
+            false,
         )
         .await;
 
@@ -1564,6 +1645,19 @@ mod tests {
         assert_eq!(key_2, "t1-shell-2");
     }
 
+    async fn write_test_session_metadata(manager: &PtyManager, session_key: &str, pid_file: &Path) {
+        let identity = manager
+            .sessions
+            .lock()
+            .await
+            .get(session_key)
+            .expect("test session should exist")
+            .managed_process
+            .clone();
+        write_managed_process_identity(pid_file, &identity)
+            .expect("test process metadata should write");
+    }
+
     fn test_pty_session(kind: PtySessionKind, pid_file_name: String) -> PtySession {
         let pty_system = native_pty_system();
         let size = PtySize {
@@ -1577,7 +1671,7 @@ mod tests {
         let shell = get_shell_path();
         let mut cmd = CommandBuilder::new(&shell);
         cmd.arg("-lc");
-        cmd.arg("true");
+        cmd.arg("sleep 30");
         let child = pair
             .slave
             .spawn_command(cmd)
@@ -1590,6 +1684,10 @@ mod tests {
             .expect("take writer should succeed");
 
         PtySession {
+            managed_process: ManagedProcessIdentity::capture(
+                child.process_id().expect("test child PID"),
+            )
+            .expect("test process identity"),
             child,
             master: pair.master,
             writer,
@@ -1633,8 +1731,8 @@ mod tests {
         let shell0_pid_file = tmp_dir.path().join(shell_pid_file_name(task_id, Some(0)));
         let shell1_pid_file = tmp_dir.path().join(shell_pid_file_name(task_id, Some(1)));
         let unrelated_pid_file = tmp_dir.path().join(shell_pid_file_name("task-2", Some(0)));
-        std::fs::write(&shell0_pid_file, "1234").expect("shell 0 pid file should write");
-        std::fs::write(&shell1_pid_file, "5678").expect("shell 1 pid file should write");
+        write_test_session_metadata(&manager, &shell0_key, &shell0_pid_file).await;
+        write_test_session_metadata(&manager, &shell1_key, &shell1_pid_file).await;
         std::fs::write(&unrelated_pid_file, "9012").expect("unrelated pid file should write");
 
         let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(128)));
@@ -1651,7 +1749,10 @@ mod tests {
             times.insert(unrelated_key.clone(), Arc::new(AtomicU64::new(789)));
         }
 
-        manager.kill_shells_for_task(task_id).await;
+        manager
+            .kill_shells_for_task(task_id)
+            .await
+            .expect("task shells should be killed");
 
         assert!(
             !shell0_pid_file.exists(),
@@ -1706,10 +1807,13 @@ mod tests {
         let agent_pid_file = tmp_dir
             .path()
             .join(format!("{}-pty.pid", agent_like_shell_key));
-        std::fs::write(&shell_pid_file, "1234").expect("shell pid file should write");
+        write_test_session_metadata(&manager, &shell_key, &shell_pid_file).await;
         std::fs::write(&agent_pid_file, "5678").expect("agent pid file should write");
 
-        manager.kill_shells_for_task(task_id).await;
+        manager
+            .kill_shells_for_task(task_id)
+            .await
+            .expect("matching task shell should be killed");
 
         assert!(
             !shell_pid_file.exists(),

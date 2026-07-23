@@ -1,0 +1,456 @@
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+use std::time::{Duration, Instant};
+use sysinfo::{Pid, ProcessStatus, System};
+
+const PROCESS_IDENTITY_VERSION: u32 = 1;
+const KILL_CONFIRMATION_TIMEOUT: Duration = Duration::from_secs(2);
+const PROCESS_POLL_INTERVAL: Duration = Duration::from_millis(25);
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct ManagedProcessIdentity {
+    pub(super) version: u32,
+    pub(super) root_pid: i32,
+    pub(super) process_group_id: i32,
+    pub(super) session_id: i32,
+    pub(super) root_start_time: u64,
+}
+
+#[derive(Debug, Clone)]
+struct ProcessSnapshot {
+    pid: i32,
+    parent_pid: Option<i32>,
+    process_group_id: i32,
+    session_id: Option<i32>,
+    start_time: u64,
+    terminated: bool,
+}
+
+impl ManagedProcessIdentity {
+    pub(super) fn capture(root_pid: u32) -> Result<Self, String> {
+        let root_pid = i32::try_from(root_pid)
+            .map_err(|_| format!("managed process PID {root_pid} is out of range"))?;
+        let system = System::new_all();
+        let Some(process) = system.process(Pid::from(root_pid as usize)) else {
+            return Ok(Self {
+                version: PROCESS_IDENTITY_VERSION,
+                root_pid,
+                process_group_id: root_pid,
+                session_id: root_pid,
+                root_start_time: 0,
+            });
+        };
+        let process_group_id = process_group_id(root_pid)?;
+        let session_id = session_id(root_pid)?;
+        Ok(Self {
+            version: PROCESS_IDENTITY_VERSION,
+            root_pid,
+            process_group_id,
+            session_id,
+            root_start_time: process.start_time(),
+        })
+    }
+
+    pub(super) fn validate(&self) -> Result<(), String> {
+        if self.version != PROCESS_IDENTITY_VERSION {
+            return Err(format!(
+                "unsupported managed process identity version {}",
+                self.version
+            ));
+        }
+        if self.root_pid <= 0 || self.process_group_id <= 0 || self.session_id <= 0 {
+            return Err(
+                "managed process identity contains a non-positive PID, PGID, or SID".to_string(),
+            );
+        }
+        Ok(())
+    }
+}
+
+fn process_group_id(pid: i32) -> Result<i32, String> {
+    let process_group_id = unsafe { libc::getpgid(pid) };
+    if process_group_id < 0 {
+        let error = std::io::Error::last_os_error();
+        if error.raw_os_error() == Some(libc::ESRCH) {
+            Ok(pid)
+        } else {
+            Err(format!(
+                "failed to read process group for managed process {pid}: {error}"
+            ))
+        }
+    } else {
+        Ok(process_group_id)
+    }
+}
+
+fn session_id(pid: i32) -> Result<i32, String> {
+    let session_id = unsafe { libc::getsid(pid) };
+    if session_id < 0 {
+        let error = std::io::Error::last_os_error();
+        if error.raw_os_error() == Some(libc::ESRCH) {
+            Ok(pid)
+        } else {
+            Err(format!(
+                "failed to read session for managed process {pid}: {error}"
+            ))
+        }
+    } else {
+        Ok(session_id)
+    }
+}
+
+pub(super) fn force_kill_unverified_spawn(root_pid: u32) {
+    let Ok(root_pid) = i32::try_from(root_pid) else {
+        return;
+    };
+    unsafe {
+        libc::kill(-root_pid, libc::SIGKILL);
+        libc::kill(root_pid, libc::SIGKILL);
+    }
+}
+
+fn process_snapshot() -> HashMap<i32, ProcessSnapshot> {
+    let system = System::new_all();
+    system
+        .processes()
+        .values()
+        .filter_map(|process| {
+            let pid = i32::try_from(usize::from(process.pid())).ok()?;
+            let parent_pid = process
+                .parent()
+                .and_then(|parent| i32::try_from(usize::from(parent)).ok());
+            let process_group_id = unsafe { libc::getpgid(pid) };
+            let session_id = process
+                .session_id()
+                .and_then(|session| i32::try_from(usize::from(session)).ok());
+            Some((
+                pid,
+                ProcessSnapshot {
+                    pid,
+                    parent_pid,
+                    process_group_id,
+                    session_id,
+                    start_time: process.start_time(),
+                    terminated: matches!(process.status(), ProcessStatus::Zombie),
+                },
+            ))
+        })
+        .collect()
+}
+
+fn verify_root_identity(
+    identity: &ManagedProcessIdentity,
+    processes: &HashMap<i32, ProcessSnapshot>,
+) -> Result<(), String> {
+    let Some(root) = processes.get(&identity.root_pid) else {
+        return Ok(());
+    };
+    let current_group_or_session_is_available =
+        root.process_group_id > 0 || root.session_id.is_some();
+    if root.start_time != identity.root_start_time
+        || (current_group_or_session_is_available
+            && (root.session_id != Some(identity.session_id)
+                || root.process_group_id != identity.process_group_id))
+    {
+        return Err(format!(
+            "managed process identity mismatch for PID {} (recorded start={}, pgid={}, sid={}; current start={}, pgid={}, sid={:?}); refusing cleanup because the PID may have been reused",
+            identity.root_pid,
+            identity.root_start_time,
+            identity.process_group_id,
+            identity.session_id,
+            root.start_time,
+            root.process_group_id,
+            root.session_id
+        ));
+    }
+    Ok(())
+}
+
+fn collect_managed_processes(
+    identity: &ManagedProcessIdentity,
+    processes: &HashMap<i32, ProcessSnapshot>,
+    tracked: &mut HashMap<i32, u64>,
+) -> Result<Vec<ProcessSnapshot>, String> {
+    verify_root_identity(identity, processes)?;
+
+    for process in processes.values() {
+        if process.session_id == Some(identity.session_id) {
+            tracked.insert(process.pid, process.start_time);
+        }
+    }
+
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for process in processes.values() {
+            if process
+                .parent_pid
+                .is_some_and(|parent| tracked.contains_key(&parent))
+                && !tracked.contains_key(&process.pid)
+            {
+                tracked.insert(process.pid, process.start_time);
+                changed = true;
+            }
+        }
+    }
+
+    Ok(tracked
+        .iter()
+        .filter_map(|(pid, start_time)| {
+            let process = processes.get(pid)?;
+            (process.start_time == *start_time && !process.terminated).then(|| process.clone())
+        })
+        .collect())
+}
+
+fn signal_processes(processes: &[ProcessSnapshot], signal: i32) -> Result<(), String> {
+    let own_pid = i32::try_from(std::process::id()).unwrap_or(i32::MAX);
+    let mut attempted_groups = HashSet::new();
+    let mut successfully_signaled_groups = HashSet::new();
+    let mut errors = Vec::new();
+
+    for process in processes {
+        if process.pid == own_pid {
+            errors.push(format!("refusing to signal sidecar PID {own_pid}"));
+            continue;
+        }
+        if process.process_group_id > 0 && attempted_groups.insert(process.process_group_id) {
+            let result = unsafe { libc::kill(-process.process_group_id, signal) };
+            if result == 0 {
+                successfully_signaled_groups.insert(process.process_group_id);
+            }
+            if result != 0 {
+                let error = std::io::Error::last_os_error();
+                if error.raw_os_error() != Some(libc::ESRCH) {
+                    errors.push(format!(
+                        "failed to signal managed process group {}: {}",
+                        process.process_group_id, error
+                    ));
+                }
+            }
+        }
+    }
+
+    for process in processes {
+        if process.pid == own_pid
+            || successfully_signaled_groups.contains(&process.process_group_id)
+        {
+            continue;
+        }
+        let result = unsafe { libc::kill(process.pid, signal) };
+        if result != 0 {
+            let error = std::io::Error::last_os_error();
+            if error.raw_os_error() != Some(libc::ESRCH) {
+                errors.push(format!(
+                    "failed to signal managed PID {}: {}",
+                    process.pid, error
+                ));
+            }
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
+    }
+}
+
+async fn wait_for_managed_exit(
+    identity: &ManagedProcessIdentity,
+    tracked: &mut HashMap<i32, u64>,
+    timeout: Duration,
+) -> Result<Vec<ProcessSnapshot>, String> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        let processes = process_snapshot();
+        let remaining = collect_managed_processes(identity, &processes, tracked)?;
+        if remaining.is_empty() || Instant::now() >= deadline {
+            return Ok(remaining);
+        }
+        tokio::time::sleep(PROCESS_POLL_INTERVAL).await;
+    }
+}
+
+pub(super) async fn terminate_managed_process_tree(
+    identity: &ManagedProcessIdentity,
+    term_timeout: Duration,
+) -> Result<(), String> {
+    identity.validate()?;
+    let processes = process_snapshot();
+    let mut tracked = HashMap::from([(identity.root_pid, identity.root_start_time)]);
+    let managed = collect_managed_processes(identity, &processes, &mut tracked)?;
+    if managed.is_empty() {
+        return Ok(());
+    }
+
+    signal_processes(&managed, libc::SIGTERM)?;
+    let remaining = wait_for_managed_exit(identity, &mut tracked, term_timeout).await?;
+    if remaining.is_empty() {
+        return Ok(());
+    }
+
+    signal_processes(&remaining, libc::SIGKILL)?;
+    let remaining =
+        wait_for_managed_exit(identity, &mut tracked, KILL_CONFIRMATION_TIMEOUT).await?;
+    if remaining.is_empty() {
+        Ok(())
+    } else {
+        let pids = remaining
+            .iter()
+            .map(|process| process.pid.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+        Err(format!(
+            "managed process tree still has live PIDs after SIGKILL: {pids}"
+        ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::process::CommandExt;
+    use std::path::Path;
+    use std::process::{Child, Command, Stdio};
+
+    fn process_is_alive(pid: i32) -> bool {
+        let system = System::new_all();
+        system
+            .process(Pid::from(pid as usize))
+            .is_some_and(|process| !matches!(process.status(), ProcessStatus::Zombie))
+    }
+
+    fn wait_for_file(path: &Path) {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while !path.exists() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(path.exists(), "child PID file was not created");
+    }
+
+    fn spawn_forking_root(descendant_pid_file: &Path) -> Child {
+        let script = format!(
+            "trap '' TERM; (trap '' TERM; exec sleep 30) & echo $! > '{}'; wait",
+            descendant_pid_file.display()
+        );
+        let mut command = Command::new("/bin/sh");
+        command
+            .args(["-c", &script])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        unsafe {
+            command.pre_exec(|| {
+                if libc::setsid() == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        command.spawn().expect("forking root should spawn")
+    }
+
+    #[tokio::test]
+    async fn term_timeout_kill_terminates_root_and_long_lived_descendant() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let descendant_pid_file = temp_dir.path().join("descendant.pid");
+        let mut root = spawn_forking_root(&descendant_pid_file);
+        wait_for_file(&descendant_pid_file);
+        let descendant_pid: i32 = std::fs::read_to_string(&descendant_pid_file)
+            .expect("descendant PID should read")
+            .trim()
+            .parse()
+            .expect("descendant PID should parse");
+        let identity = ManagedProcessIdentity::capture(root.id()).expect("identity should capture");
+
+        let result = terminate_managed_process_tree(&identity, Duration::from_millis(100)).await;
+        if result.is_err() {
+            unsafe {
+                libc::kill(-identity.process_group_id, libc::SIGKILL);
+            }
+        }
+        let _ = root.wait();
+
+        assert!(result.is_ok(), "cleanup failed: {result:?}");
+        assert!(
+            !process_is_alive(identity.root_pid),
+            "root process survived cleanup"
+        );
+        assert!(
+            !process_is_alive(descendant_pid),
+            "descendant process survived cleanup"
+        );
+    }
+
+    #[tokio::test]
+    async fn graceful_handler_receives_one_term_before_timeout() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let marker_file = temp_dir.path().join("term-marker.txt");
+        let code = r#"
+import os, signal, time
+marker = os.environ["MARKER"]
+def handle_term(_signum, _frame):
+    with open(marker, "a", encoding="utf-8") as output:
+        output.write("term\n")
+        output.flush()
+        os.fsync(output.fileno())
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+    time.sleep(0.2)
+    with open(marker, "a", encoding="utf-8") as output:
+        output.write("graceful\n")
+    raise SystemExit(0)
+signal.signal(signal.SIGTERM, handle_term)
+while True:
+    time.sleep(1)
+"#;
+        let mut command = Command::new("python3");
+        command
+            .args(["-c", code])
+            .env("MARKER", &marker_file)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        unsafe {
+            command.pre_exec(|| {
+                if libc::setsid() == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        let mut root = command.spawn().expect("TERM handler root should spawn");
+        let identity = ManagedProcessIdentity::capture(root.id()).expect("identity should capture");
+        std::thread::sleep(Duration::from_millis(100));
+
+        terminate_managed_process_tree(&identity, Duration::from_secs(1))
+            .await
+            .expect("graceful TERM cleanup should succeed");
+        let _ = root.try_wait();
+
+        let markers = std::fs::read_to_string(&marker_file).expect("TERM markers should read");
+        assert_eq!(markers, "term\ngraceful\n");
+    }
+    #[tokio::test]
+    async fn start_identity_mismatch_refuses_to_signal_reused_pid() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let descendant_pid_file = temp_dir.path().join("descendant.pid");
+        let mut root = spawn_forking_root(&descendant_pid_file);
+        wait_for_file(&descendant_pid_file);
+        let mut identity =
+            ManagedProcessIdentity::capture(root.id()).expect("identity should capture");
+        identity.root_start_time = identity.root_start_time.saturating_sub(1);
+
+        let result = terminate_managed_process_tree(&identity, Duration::from_millis(10)).await;
+
+        assert!(result.is_err());
+        assert!(process_is_alive(
+            i32::try_from(root.id()).expect("PID should fit")
+        ));
+        unsafe {
+            libc::kill(-identity.process_group_id, libc::SIGKILL);
+        }
+        let _ = root.wait();
+    }
+}

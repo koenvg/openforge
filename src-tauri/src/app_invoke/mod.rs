@@ -25,7 +25,7 @@ use crate::{
 };
 use axum::http::StatusCode;
 pub(crate) use lifecycle::start_implementation;
-use lifecycle::{prepare_task_runtime_cleanup, run_task_runtime_cleanup};
+pub(crate) use lifecycle::{prepare_task_runtime_cleanup, run_task_runtime_cleanup};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
