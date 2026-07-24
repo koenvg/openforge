@@ -11,12 +11,16 @@ import type {
   TaskBrowserBounds,
   TaskBrowserNativeState,
   TaskBrowserSurfaceCreateOptions,
+  TaskBrowserSurfaceStateEvent,
 } from './taskBrowserSurfaceManager'
 
 class FakeNativeSurface implements NativeTaskBrowserSurface {
   readonly loadCalls: string[] = []
+  readonly controlCalls: Array<'goBack' | 'goForward' | 'reload' | 'stop'> = []
   readonly bounds: TaskBrowserBounds[] = []
   readonly listeners = new Set<(state: TaskBrowserNativeState) => void>()
+  private readonly history = ['about:blank']
+  private historyIndex = 0
   state: TaskBrowserNativeState = {
     url: 'about:blank',
     title: '',
@@ -27,7 +31,6 @@ class FakeNativeSurface implements NativeTaskBrowserSurface {
   }
   attachedWindowId: number | null = null
   destroyed = false
-
   getState(): TaskBrowserNativeState {
     return { ...this.state }
   }
@@ -40,8 +43,10 @@ class FakeNativeSurface implements NativeTaskBrowserSurface {
   async loadURL(url: string): Promise<void> {
     if (this.loadGate) await this.loadGate
     this.loadCalls.push(url)
-    this.state = { ...this.state, url }
-    this.emit()
+    this.history.splice(this.historyIndex + 1)
+    this.history.push(url)
+    this.historyIndex = this.history.length - 1
+    this.emitHistoryState({ url, loading: true, error: null })
   }
 
   attach(windowId: number, bounds: TaskBrowserBounds): void {
@@ -60,14 +65,39 @@ class FakeNativeSurface implements NativeTaskBrowserSurface {
     this.listeners.clear()
   }
 
-  async goBack(): Promise<void> {}
-  async goForward(): Promise<void> {}
-  async reload(): Promise<void> {}
-  stop(): void {}
+  async goBack(): Promise<void> {
+    this.controlCalls.push('goBack')
+    if (this.historyIndex > 0) this.historyIndex -= 1
+    this.emitHistoryState({ url: this.history[this.historyIndex], loading: true, error: null })
+  }
+
+  async goForward(): Promise<void> {
+    this.controlCalls.push('goForward')
+    if (this.historyIndex < this.history.length - 1) this.historyIndex += 1
+    this.emitHistoryState({ url: this.history[this.historyIndex], loading: true, error: null })
+  }
+
+  async reload(): Promise<void> {
+    this.controlCalls.push('reload')
+    this.emitHistoryState({ loading: true, error: null })
+  }
+
+  stop(): void {
+    this.controlCalls.push('stop')
+    this.emitHistoryState({ loading: false })
+  }
 
   emit(patch: Partial<TaskBrowserNativeState> = {}): void {
     this.state = { ...this.state, ...patch }
     for (const listener of this.listeners) listener(this.getState())
+  }
+
+  private emitHistoryState(patch: Partial<TaskBrowserNativeState>): void {
+    this.emit({
+      ...patch,
+      canGoBack: this.historyIndex > 0,
+      canGoForward: this.historyIndex < this.history.length - 1,
+    })
   }
 }
 
@@ -93,7 +123,7 @@ class FakeNativeFactory implements NativeTaskBrowserSurfaceFactory {
 function createManager(overrides: { authorize?: (pluginId: string, taskId: string) => Promise<void> } = {}) {
   const factory = new FakeNativeFactory()
   const authorize = overrides.authorize ?? vi.fn(async () => undefined)
-  const stateEvents: unknown[] = []
+  const stateEvents: TaskBrowserSurfaceStateEvent[] = []
   const manager = new TaskBrowserSurfaceManager({
     factory,
     authorize,
@@ -275,5 +305,101 @@ describe('Task Browser Surface Manager', () => {
     await manager.resetSession('browser', 'T-4')
     expect(factory.clearedPartitions).toEqual([factory.creations[4].partition])
     expect(factory.surfaces[4].destroyed).toBe(true)
+  })
+
+  it('controls HTTP(S) navigation and returns complete history and loading snapshots', async () => {
+    const { manager, factory, stateEvents } = createManager()
+    const created = await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-nav', id: 'main' })
+    const native = factory.surfaces[0]
+
+    await expect(manager.navigate(created.surfaceId, 'https://example.com/first')).resolves.toEqual({
+      url: 'https://example.com/first',
+      title: '',
+      loading: true,
+      canGoBack: true,
+      canGoForward: false,
+      error: null,
+    })
+    await manager.navigate(created.surfaceId, 'http://example.com/second')
+    await expect(manager.goBack(created.surfaceId)).resolves.toMatchObject({
+      url: 'https://example.com/first',
+      canGoBack: true,
+      canGoForward: true,
+    })
+    await manager.goBack(created.surfaceId)
+    await manager.goBack(created.surfaceId)
+    await expect(manager.goForward(created.surfaceId)).resolves.toMatchObject({
+      url: 'https://example.com/first',
+      canGoBack: true,
+      canGoForward: true,
+    })
+    await expect(manager.reload(created.surfaceId)).resolves.toMatchObject({ loading: true, error: null })
+    await expect(manager.stop(created.surfaceId)).resolves.toMatchObject({ loading: false })
+
+    expect(native.controlCalls).toEqual(['goBack', 'goBack', 'goForward', 'reload', 'stop'])
+    expect(stateEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        windowId: 10,
+        surfaceId: created.surfaceId,
+        generation: created.generation,
+        state: expect.objectContaining({ url: 'https://example.com/first', canGoForward: true }),
+      }),
+    ]))
+    for (const event of stateEvents) {
+      expect(event.state).toEqual(expect.objectContaining({
+        url: expect.any(String),
+        title: expect.any(String),
+        loading: expect.any(Boolean),
+        canGoBack: expect.any(Boolean),
+        canGoForward: expect.any(Boolean),
+      }))
+      expect(event.state).toHaveProperty('error')
+    }
+  })
+
+  it.each([
+    'about:blank',
+    'file:///tmp/secret',
+    'javascript:alert(1)',
+    'data:text/html,unsafe',
+    'plugin://browser/page',
+    'openforge://internal',
+    'mailto:user@example.com',
+    'not a url',
+  ])('blocks unsupported plugin navigation destinations: %s', async blockedUrl => {
+    const { manager } = createManager()
+    const created = await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-policy', id: 'main' })
+
+    await expect(manager.navigate(created.surfaceId, blockedUrl)).rejects.toMatchObject({ code: 'INVALID_URL' })
+  })
+
+  it('rejects state events from destroyed native generations while keeping windows isolated', async () => {
+    const { manager, factory, stateEvents } = createManager()
+    const first = await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-stale', id: 'main' })
+    const otherWindow = await manager.getOrCreate({ windowId: 11, pluginId: 'browser', taskId: 'T-stale', id: 'main' })
+    const staleListener = Array.from(factory.surfaces[0].listeners)[0]
+    expect(staleListener).toBeDefined()
+
+    await manager.destroy(first.surfaceId)
+    const replacement = await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-stale', id: 'main' })
+    staleListener?.({
+      url: 'https://stale.example',
+      title: 'Stale',
+      loading: false,
+      canGoBack: false,
+      canGoForward: false,
+      error: { code: '-105', message: 'stale failure', url: 'https://stale.example' },
+    })
+    factory.surfaces[1].emit({ title: 'Other window' })
+    factory.surfaces[2].emit({ title: 'Replacement' })
+
+    expect(replacement.generation).not.toBe(first.generation)
+    expect(stateEvents).toEqual([
+      expect.objectContaining({ windowId: 11, surfaceId: otherWindow.surfaceId, state: expect.objectContaining({ title: 'Other window' }) }),
+      expect.objectContaining({ windowId: 10, surfaceId: replacement.surfaceId, state: expect.objectContaining({ title: 'Replacement' }) }),
+    ])
+    expect(stateEvents).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ state: expect.objectContaining({ title: 'Stale' }) }),
+    ]))
   })
 })
