@@ -8,7 +8,7 @@ import { activeSessions, dependencyReferenceTasks, mergingTaskIds, tasks, ticket
 import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
 import { clearComponentRegistry, registerRenderableContributionComponent } from '../../lib/plugin/componentRegistry'
 import PluginSlotTestView from '../plugin/PluginSlotTestView.svelte'
-import { addTaskLabel, forceGithubSync, getPrComments, getProjectTaskLabels, getPullRequests, linkPullRequest, mergePullRequest, refreshTaskGithubStatus, removeTaskLabel, writeClipboardText } from '../../lib/ipc'
+import { addTaskLabel, forceGithubSync, getPrComments, getProjectTaskLabels, getPullRequests, linkPullRequest, mergePullRequest, refreshTaskGithubStatus, removeTaskLabel, updateTaskSourceTicketUrl, writeClipboardText } from '../../lib/ipc'
 import { clearInfoPanelSectionCollapse } from '../../lib/infoPanelSectionState'
 
 vi.mock('../../lib/stores', () => ({
@@ -48,6 +48,7 @@ vi.mock('../../lib/ipc', () => ({
   getProjectTaskLabels: vi.fn().mockResolvedValue([]),
   addTaskLabel: vi.fn().mockResolvedValue({ id: 1, project_id: 'proj-1', name: 'bug' }),
   removeTaskLabel: vi.fn().mockResolvedValue(undefined),
+  updateTaskSourceTicketUrl: vi.fn().mockResolvedValue(undefined),
   getTaskGitStatus: vi.fn().mockResolvedValue({ has_remote: false, remote_ahead: 0, remote_behind: 0, local_commits: 0, uncommitted_files: 0, insertions: 0, deletions: 0, untracked_files: 0, untracked_insertions: 0 }),
   writeClipboardText: vi.fn().mockResolvedValue(undefined),
 }))
@@ -230,6 +231,24 @@ describe('TaskInfoPanel', () => {
     expect(screen.queryByText('No CI')).toBeNull()
     expect(screen.queryByText('No review')).toBeNull()
     expect(screen.queryByText('No pull requests linked')).toBeNull()
+  })
+
+  it('lets a source ticket link be added after creation and persists it through the typed IPC wrapper', async () => {
+    tasks.set([baseTask])
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Add source ticket link' }))
+    await fireEvent.input(screen.getByLabelText('Source ticket link'), {
+      target: { value: 'https://github.com/koenvg/openforge/issues/1294' },
+    })
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(updateTaskSourceTicketUrl).toHaveBeenCalledWith(
+        'T-42',
+        'https://github.com/koenvg/openforge/issues/1294',
+      )
+    })
   })
 
   it('marks right-pane information cards as natural-size flow items', () => {

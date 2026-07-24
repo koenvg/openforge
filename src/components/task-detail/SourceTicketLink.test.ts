@@ -54,4 +54,76 @@ describe('SourceTicketLink', () => {
     expect(screen.queryByRole('button')).toBeNull()
     expect(openUrl).not.toHaveBeenCalled()
   })
+
+  describe('editable mode (onSave provided)', () => {
+    it('shows an add affordance when there is no ticket', () => {
+      render(SourceTicketLink, { props: { url: null, onSave: vi.fn() } })
+      expect(screen.getByRole('button', { name: 'Add source ticket link' })).toBeTruthy()
+    })
+
+    it('adds a link: entering a value and saving calls onSave with the normalized URL', async () => {
+      const onSave = vi.fn().mockResolvedValue(undefined)
+      render(SourceTicketLink, { props: { url: null, onSave } })
+
+      await fireEvent.click(screen.getByRole('button', { name: 'Add source ticket link' }))
+      await fireEvent.input(screen.getByLabelText('Source ticket link'), {
+        target: { value: '  https://github.com/koenvg/openforge/issues/1294  ' },
+      })
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+      await waitFor(() => {
+        expect(onSave).toHaveBeenCalledWith('https://github.com/koenvg/openforge/issues/1294')
+      })
+    })
+
+    it('exposes an edit affordance when a ticket already exists', () => {
+      render(SourceTicketLink, {
+        props: { url: 'https://github.com/koenvg/openforge/issues/1294', onSave: vi.fn() },
+      })
+      expect(screen.getByRole('button', { name: 'Edit source ticket link' })).toBeTruthy()
+    })
+
+    it('clears the link when saving a blank value', async () => {
+      const onSave = vi.fn().mockResolvedValue(undefined)
+      render(SourceTicketLink, {
+        props: { url: 'https://github.com/koenvg/openforge/issues/1294', onSave },
+      })
+
+      await fireEvent.click(screen.getByRole('button', { name: 'Edit source ticket link' }))
+      await fireEvent.input(screen.getByLabelText('Source ticket link'), { target: { value: '   ' } })
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+      await waitFor(() => {
+        expect(onSave).toHaveBeenCalledWith(null)
+      })
+    })
+
+    it('cancelling does not call onSave and keeps the original link visible', async () => {
+      const onSave = vi.fn()
+      render(SourceTicketLink, {
+        props: { url: 'https://github.com/koenvg/openforge/issues/1294', onSave },
+      })
+
+      await fireEvent.click(screen.getByRole('button', { name: 'Edit source ticket link' }))
+      await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+      expect(onSave).not.toHaveBeenCalled()
+      expect(screen.getByRole('button', { name: /koenvg\/openforge#1294/ })).toBeTruthy()
+    })
+
+    it('surfaces an error and stays in edit mode when onSave rejects', async () => {
+      const onSave = vi.fn().mockRejectedValue(new Error('Backend unavailable'))
+      render(SourceTicketLink, { props: { url: null, onSave } })
+
+      await fireEvent.click(screen.getByRole('button', { name: 'Add source ticket link' }))
+      await fireEvent.input(screen.getByLabelText('Source ticket link'), {
+        target: { value: 'PROJ-1' },
+      })
+      await fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+      const alert = await screen.findByRole('alert')
+      expect(alert.textContent).toContain('Backend unavailable')
+      expect(screen.getByLabelText('Source ticket link')).toBeTruthy()
+    })
+  })
 })

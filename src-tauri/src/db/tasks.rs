@@ -1037,6 +1037,24 @@ impl super::Database {
         Ok(())
     }
 
+    /// Update a task's optional source-ticket link. Editable at any status so a
+    /// link can be added, changed, or cleared after the task was created. A blank
+    /// or `None` value clears it back to `NULL` so the UI shows nothing.
+    pub fn update_task_source_ticket_url(&self, id: &str, url: Option<&str>) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs() as i64;
+        // Normalize a blank link to NULL, matching creation (see create_task_with_options).
+        let stored_url: Option<&str> = url.map(str::trim).filter(|value| !value.is_empty());
+        conn.execute(
+            "UPDATE tasks SET source_ticket_url = ?1, updated_at = ?2 WHERE id = ?3",
+            rusqlite::params![stored_url, now, id],
+        )?;
+        Ok(())
+    }
+
     /// Set an automatically generated task display title exactly once. Generated
     /// titles never overwrite a manual title and a task with a prior generation
     /// timestamp is skipped even if the title was later cleared.
@@ -1766,6 +1784,49 @@ mod tests {
         assert_eq!(task.source_ticket_url, None);
         let retrieved = db.get_task(&task.id).expect("get failed").unwrap();
         assert_eq!(retrieved.source_ticket_url, None);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_update_task_source_ticket_url_sets_changes_and_clears() {
+        let (db, path) = make_test_db("update_task_source_ticket_url");
+
+        // Starts with no source ticket (the case this feature targets: it was
+        // never set at creation).
+        let task = db
+            .create_task("Original", "doing", None, None, None)
+            .expect("create failed");
+        assert_eq!(task.source_ticket_url, None);
+
+        // Add a link after the fact.
+        let url = "https://github.com/koenvg/openforge/issues/1294";
+        db.update_task_source_ticket_url(&task.id, Some(url))
+            .expect("set source ticket failed");
+        let set = db.get_task(&task.id).expect("get failed").unwrap();
+        assert_eq!(set.source_ticket_url.as_deref(), Some(url));
+
+        // Change it to a different link.
+        let other = "PROJ-42";
+        db.update_task_source_ticket_url(&task.id, Some(other))
+            .expect("change source ticket failed");
+        let changed = db.get_task(&task.id).expect("get failed").unwrap();
+        assert_eq!(changed.source_ticket_url.as_deref(), Some(other));
+
+        // Clearing with a blank value reverts to NULL.
+        db.update_task_source_ticket_url(&task.id, Some("   "))
+            .expect("clear source ticket failed");
+        let cleared = db.get_task(&task.id).expect("get failed").unwrap();
+        assert_eq!(cleared.source_ticket_url, None);
+
+        // Clearing with None also reverts to NULL.
+        db.update_task_source_ticket_url(&task.id, Some(url))
+            .expect("re-set source ticket failed");
+        db.update_task_source_ticket_url(&task.id, None)
+            .expect("clear via none failed");
+        let cleared_none = db.get_task(&task.id).expect("get failed").unwrap();
+        assert_eq!(cleared_none.source_ticket_url, None);
 
         drop(db);
         let _ = fs::remove_file(&path);

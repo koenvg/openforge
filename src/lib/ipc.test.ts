@@ -39,6 +39,7 @@ import {
   spawnShellPty,
   transcribeAudio,
   updateTaskInitialPrompt,
+  updateTaskSourceTicketUrl,
   updateTaskSummary,
   writePty,
 } from "./ipc";
@@ -362,6 +363,24 @@ describe("ipc spawnShellPty", () => {
 		expect(invokeMock).toHaveBeenCalledWith("update_task_summary", {
 			id: "T-42",
 			summary: "Done",
+		});
+	});
+
+	it("sends camelCase sourceTicketUrl when updating a task's source ticket link", async () => {
+		await updateTaskSourceTicketUrl("T-42", "https://github.com/koenvg/openforge/issues/1294");
+
+		expect(invokeMock).toHaveBeenCalledWith("update_task_source_ticket_url", {
+			id: "T-42",
+			sourceTicketUrl: "https://github.com/koenvg/openforge/issues/1294",
+		});
+	});
+
+	it("sends a null sourceTicketUrl when clearing a task's source ticket link", async () => {
+		await updateTaskSourceTicketUrl("T-42", null);
+
+		expect(invokeMock).toHaveBeenCalledWith("update_task_source_ticket_url", {
+			id: "T-42",
+			sourceTicketUrl: null,
 		});
 	});
 

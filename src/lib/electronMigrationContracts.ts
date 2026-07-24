@@ -46,6 +46,7 @@ export const ipcCommandContracts = [
   { functionName: 'updateTaskInitialPrompt', ipcCommand: 'update_task', payloadKeys: ['id', 'initialPrompt'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'updateTaskTitle', ipcCommand: 'update_task_title', payloadKeys: ['id', 'title'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'updateTaskSummary', ipcCommand: 'update_task_summary', payloadKeys: ['id', 'summary'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
+  { functionName: 'updateTaskSourceTicketUrl', ipcCommand: 'update_task_source_ticket_url', payloadKeys: ['id', 'sourceTicketUrl'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'updateTaskStatus', ipcCommand: 'update_task_status', payloadKeys: ['id', 'status'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'deleteTask', ipcCommand: 'delete_task', payloadKeys: ['id'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'getAppMode', ipcCommand: 'get_app_mode', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
