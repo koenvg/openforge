@@ -16,7 +16,9 @@ use super::super::managed_process::{force_kill_unverified_spawn, ManagedProcessI
 use super::super::pids::{
     pid_file_name_for_session_key, shell_session_key, write_managed_process_identity,
 };
-use super::super::{PtyError, PtyManager, PtySpawnContext};
+use super::super::{
+    terminal_environment, PtyError, PtyManager, PtySpawnContext, TerminalImageProtocol,
+};
 use super::invalid_workspace_cwd;
 use super::lifecycle::{PtySession, PtySessionKind, NEXT_INSTANCE_ID};
 use super::provider_adapter::{
@@ -117,6 +119,7 @@ impl PtyManager {
                 app_handle,
                 app_event_tx,
             },
+            None,
         )
         .await
     }
@@ -144,6 +147,7 @@ impl PtyManager {
                 app_handle,
                 app_event_tx,
             },
+            None,
         )
         .await
     }
@@ -198,6 +202,7 @@ impl PtyManager {
                 app_handle,
                 app_event_tx,
             },
+            None,
         )
         .await
     }
@@ -214,6 +219,7 @@ impl PtyManager {
         rows: u16,
         app_handle: Option<crate::backend_runtime::AppHandle>,
         app_event_tx: Option<AppEventSender>,
+        terminal_image_protocol: Option<TerminalImageProtocol>,
     ) -> Result<u64, PtyError> {
         self.spawn_agent_pty(
             PiPtyAdapter::new(prompt, resume_session_id, continue_session, None),
@@ -225,6 +231,7 @@ impl PtyManager {
                 app_handle,
                 app_event_tx,
             },
+            terminal_image_protocol,
         )
         .await
     }
@@ -259,6 +266,7 @@ impl PtyManager {
         &self,
         mut adapter: A,
         context: PtySpawnContext<'_>,
+        terminal_image_protocol: Option<TerminalImageProtocol>,
     ) -> Result<u64, PtyError> {
         let PtySpawnContext {
             task_id,
@@ -343,9 +351,9 @@ impl PtyManager {
         }
         cmd.env("PWD", resolved_cwd.to_string_lossy().to_string());
 
-        cmd.env("TERM", "xterm-256color");
-        cmd.env("COLORTERM", "truecolor");
-        cmd.env("TERM_PROGRAM", "vscode");
+        for (key, value) in terminal_environment(terminal_image_protocol) {
+            cmd.env(key, value);
+        }
         for (key, value) in adapter.extra_env(task_id, instance_id) {
             cmd.env(key, value);
         }
@@ -564,6 +572,7 @@ impl PtyManager {
         &self,
         context: PtySpawnContext<'_>,
         terminal_index: Option<u32>,
+        terminal_image_protocol: Option<TerminalImageProtocol>,
     ) -> Result<u64, PtyError> {
         let PtySpawnContext {
             task_id,
@@ -638,9 +647,9 @@ impl PtyManager {
         }
         cmd.env("PWD", resolved_cwd.to_string_lossy().to_string());
 
-        cmd.env("TERM", "xterm-256color");
-        cmd.env("COLORTERM", "truecolor");
-        cmd.env("TERM_PROGRAM", "vscode");
+        for (key, value) in terminal_environment(terminal_image_protocol) {
+            cmd.env(key, value);
+        }
 
         let mut child = pair
             .slave
@@ -846,6 +855,7 @@ mod tests {
                     app_handle: None,
                     app_event_tx: None,
                 },
+                None,
             )
             .await
             .expect("agent PTY should spawn without holding sessions lock during slow setup");
@@ -916,6 +926,7 @@ mod tests {
                     app_handle: None,
                     app_event_tx: None,
                 },
+                None,
             )
             .await;
 
@@ -1059,6 +1070,7 @@ mod tests {
                         app_event_tx: None,
                     },
                     Some(0),
+                    None,
                 )
                 .await
         });
@@ -1136,6 +1148,7 @@ mod tests {
                     app_handle: None,
                     app_event_tx: None,
                 },
+                None,
             ))
         });
 
@@ -1161,6 +1174,7 @@ mod tests {
                     app_handle: None,
                     app_event_tx: None,
                 },
+                None,
             )
             .await
             .expect("newer spawn should become current");
@@ -1233,6 +1247,7 @@ mod tests {
                     app_handle: None,
                     app_event_tx: None,
                 },
+                None,
             ))
         });
 
@@ -1325,6 +1340,7 @@ mod tests {
                     app_handle: None,
                     app_event_tx: None,
                 },
+                None,
             )
             .await
             .expect("agent PTY should spawn in workspace with spaces");
@@ -1370,6 +1386,7 @@ mod tests {
                     app_handle: None,
                     app_event_tx: None,
                 },
+                None,
             )
             .await;
 

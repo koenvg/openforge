@@ -167,9 +167,11 @@ vi.mock('../../lib/terminalPool', () => ({
   attach: vi.fn(),
   detach: vi.fn(),
   release: vi.fn(),
+  resetTerminal: vi.fn((entry) => entry.terminal.reset()),
   releaseAllForTask: vi.fn().mockReturnValue(0),
   focusTerminal: vi.fn(),
   shouldSpawnPty: vi.fn((entry) => !entry.ptyActive && !entry.spawnPending && !entry.needsClear),
+  getTerminalImageProtocol: vi.fn(() => 'iterm2'),
   markPtySpawnPending: vi.fn((entry) => {
     entry.spawnPending = true
   }),

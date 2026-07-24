@@ -1,6 +1,7 @@
 import { invokeDesktopCommand as invoke, isElectronDesktopBridgeAvailable } from "./desktopIpc";
 import { normalizeTask } from "./boardStatus"
 import type { JsonValue } from '@openforge-app/plugin-sdk'
+import type { TerminalImageProtocol } from '@openforge-app/terminal-runtime'
 import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, DeveloperLogEntry, DeveloperLogSnapshot, DivergenceResolution, ExistingBranchPlan, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, PrWalkthrough, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource, WritableBoardStatus } from "./types";
 
 type RawTask = Omit<Task, 'status'> & { status: string }
@@ -164,8 +165,18 @@ export async function deleteTaskLabel(labelId: number): Promise<void> {
   return invoke("delete_task_label", { labelId })
 }
 
-export async function startImplementation(taskId: string, repoPath: string, divergenceResolution: DivergenceResolution | null = null): Promise<ImplementationStatus> {
-  return invoke<ImplementationStatus>("start_implementation", { taskId, repoPath, divergenceResolution });
+export async function startImplementation(
+  taskId: string,
+  repoPath: string,
+  divergenceResolution: DivergenceResolution | null = null,
+  terminalImageProtocol: TerminalImageProtocol | null = null,
+): Promise<ImplementationStatus> {
+  return invoke<ImplementationStatus>("start_implementation", {
+    taskId,
+    repoPath,
+    divergenceResolution,
+    terminalImageProtocol,
+  });
 }
 
 export async function resumeStartupSessions(): Promise<void> {
@@ -385,8 +396,22 @@ export async function submitPrReview(owner: string, repo: string, prNumber: numb
   return invoke<void>("submit_pr_review", { owner, repo, prNumber, event, body, comments, commitId });
 }
 
-export async function spawnShellPty(taskId: string, cwd: string, cols: number, rows: number, terminalIndex: number): Promise<number> {
-  return invoke<number>("pty_spawn_shell", { taskId, cwd, cols, rows, terminalIndex });
+export async function spawnShellPty(
+  taskId: string,
+  cwd: string,
+  cols: number,
+  rows: number,
+  terminalIndex: number,
+  terminalImageProtocol: TerminalImageProtocol | null = null,
+): Promise<number> {
+  return invoke<number>("pty_spawn_shell", {
+    taskId,
+    cwd,
+    cols,
+    rows,
+    terminalIndex,
+    terminalImageProtocol,
+  });
 }
 
 export async function writePty(taskId: string, data: string): Promise<void> {

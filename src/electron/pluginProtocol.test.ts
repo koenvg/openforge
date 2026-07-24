@@ -405,7 +405,8 @@ describe('Electron plugin:// protocol security contract', () => {
 
   it('keeps renderer CSP compatible with plugin:// import maps and sidecar IPC without unsafe filesystem access', () => {
     expect(ELECTRON_RENDERER_CSP).toContain("default-src 'self'")
-    expect(cspDirective(ELECTRON_RENDERER_CSP, 'script-src')).toBe(`script-src 'self' plugin: ${rendererImportMapScriptHashSource()}`)
+    expect(cspDirective(ELECTRON_RENDERER_CSP, 'script-src')).toBe(`script-src 'self' plugin: 'wasm-unsafe-eval' ${rendererImportMapScriptHashSource()}`)
+    expect(cspDirective(ELECTRON_RENDERER_CSP, 'script-src')).not.toContain("'unsafe-eval'")
     expect(cspDirective(ELECTRON_RENDERER_CSP, 'script-src')).not.toContain("'unsafe-inline'")
     expect(cspDirective(ELECTRON_RENDERER_CSP, 'style-src')).toBe("style-src 'self' plugin: 'unsafe-inline'")
     expect(cspDirective(ELECTRON_RENDERER_CSP, 'img-src')).toBe("img-src 'self' plugin: https: data:")

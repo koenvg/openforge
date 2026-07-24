@@ -763,6 +763,7 @@ pub async fn start_task_handler(
         &request.task_id,
         &repo_path,
         crate::git_worktree::DivergenceResolution::Auto,
+        None,
     )
     .await?;
 

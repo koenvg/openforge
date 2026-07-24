@@ -38,6 +38,7 @@ import type {
   PluginStorage,
   Project,
   ProjectAttention,
+  ShellSpawnRequest,
   StartPromptContribution,
   StartTaskImplementationRequest,
   SubscriptionSink,
@@ -70,7 +71,7 @@ export type RuntimeHostBridge = {
   readFile?(request: { projectId: string; path: string }): Promise<FileContent>
   writeFile?(request: { projectId: string; path: string; content: string }): Promise<void>
   searchFiles?(request: { projectId: string; query: string; limit?: number }): Promise<string[]>
-  spawnShell?(request: { taskId: string; cwd: string; cols: number; rows: number; terminalIndex: number }): Promise<number>
+  spawnShell?(request: ShellSpawnRequest): Promise<number>
   writeShell?(request: { taskId: string; terminalIndex: number; data: string }): Promise<void>
   resizeShell?(request: { taskId: string; terminalIndex: number; cols: number; rows: number }): Promise<void>
   killShell?(request: { taskId: string; terminalIndex: number }): Promise<void>

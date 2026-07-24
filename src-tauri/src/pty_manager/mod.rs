@@ -4,7 +4,7 @@ mod managed_process;
 mod pids;
 mod session;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
@@ -105,6 +105,26 @@ pub(crate) struct PtySpawnContext<'a> {
     pub rows: u16,
     pub app_handle: Option<crate::backend_runtime::AppHandle>,
     pub app_event_tx: Option<crate::app_events::AppEventSender>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum TerminalImageProtocol {
+    Iterm2,
+}
+
+pub(crate) fn terminal_environment(
+    image_protocol: Option<TerminalImageProtocol>,
+) -> Vec<(&'static str, &'static str)> {
+    let mut environment = vec![
+        ("TERM", "xterm-256color"),
+        ("COLORTERM", "truecolor"),
+        ("TERM_PROGRAM", "vscode"),
+    ];
+    if image_protocol == Some(TerminalImageProtocol::Iterm2) {
+        environment.push(("ITERM_SESSION_ID", "openforge"));
+    }
+    environment
 }
 
 impl PtyManager {
@@ -1501,23 +1521,28 @@ mod tests {
     }
 
     #[test]
-    fn test_build_shell_command() {
-        let shell = get_shell_path();
-        assert!(!shell.is_empty(), "shell path should not be empty");
-        assert!(
-            shell.starts_with('/'),
-            "shell path should be absolute: {}",
-            shell
+    fn terminal_environment_keeps_image_capability_unset_by_default() {
+        assert_eq!(
+            terminal_environment(None),
+            vec![
+                ("TERM", "xterm-256color"),
+                ("COLORTERM", "truecolor"),
+                ("TERM_PROGRAM", "vscode"),
+            ]
         );
+    }
 
-        let expected_term_vars: &[(&str, &str)] = &[
-            ("TERM", "xterm-256color"),
-            ("COLORTERM", "truecolor"),
-            ("TERM_PROGRAM", "vscode"),
-        ];
-        assert_eq!(expected_term_vars[0], ("TERM", "xterm-256color"));
-        assert_eq!(expected_term_vars[1], ("COLORTERM", "truecolor"));
-        assert_eq!(expected_term_vars[2], ("TERM_PROGRAM", "vscode"));
+    #[test]
+    fn terminal_environment_advertises_iterm_only_when_requested() {
+        assert_eq!(
+            terminal_environment(Some(TerminalImageProtocol::Iterm2)),
+            vec![
+                ("TERM", "xterm-256color"),
+                ("COLORTERM", "truecolor"),
+                ("TERM_PROGRAM", "vscode"),
+                ("ITERM_SESSION_ID", "openforge"),
+            ]
+        );
     }
 
     #[tokio::test]

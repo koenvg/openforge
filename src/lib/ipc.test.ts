@@ -37,6 +37,7 @@ import {
   repoHasCommits,
   resizePty,
   spawnShellPty,
+  startImplementation,
   transcribeAudio,
   updateTaskInitialPrompt,
   updateTaskSourceTicketUrl,
@@ -137,6 +138,33 @@ describe("ipc spawnShellPty", () => {
 			cols: 80,
 			rows: 24,
 			terminalIndex: 1,
+			terminalImageProtocol: null,
+		});
+	});
+
+	it("advertises iTerm images only when the active terminal requests them", async () => {
+		await spawnShellPty("T-42", "/tmp/worktree", 80, 24, 1, "iterm2");
+
+		expect(invokeMock).toHaveBeenCalledWith("pty_spawn_shell", {
+			taskId: "T-42",
+			cwd: "/tmp/worktree",
+			cols: 80,
+			rows: 24,
+			terminalIndex: 1,
+			terminalImageProtocol: "iterm2",
+		});
+	});
+
+	it("threads active image support into Pi implementation starts", async () => {
+		invokeMock.mockResolvedValue({});
+
+		await startImplementation("T-42", "/tmp/worktree", null, "iterm2");
+
+		expect(invokeMock).toHaveBeenCalledWith("start_implementation", {
+			taskId: "T-42",
+			repoPath: "/tmp/worktree",
+			divergenceResolution: null,
+			terminalImageProtocol: "iterm2",
 		});
 	});
 

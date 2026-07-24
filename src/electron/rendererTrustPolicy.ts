@@ -156,7 +156,7 @@ export class RendererTrustPolicy {
   contentSecurityPolicy(sidecarConfig: Pick<SidecarLaunchConfig, 'host' | 'port'> | null = null): string {
     return [
       "default-src 'self'",
-      `script-src 'self' plugin: ${rendererImportMapScriptHashSource()}`,
+      `script-src 'self' plugin: 'wasm-unsafe-eval' ${rendererImportMapScriptHashSource()}`,
       "style-src 'self' plugin: 'unsafe-inline'",
       "img-src 'self' plugin: https: data:",
       "font-src 'self' plugin: data:",

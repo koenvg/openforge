@@ -336,8 +336,9 @@ describe("terminalPool", () => {
 		const preventDefault = vi.spyOn(event, "preventDefault");
 		const stopPropagation = vi.spyOn(event, "stopPropagation");
 
-		expect(getLoadedAddonNames(entry)).toEqual(["FitAddon", "WebLinksAddon"]);
-		expect(loadAddonSpy).toHaveBeenCalledTimes(2);
+		expect(getLoadedAddonNames(entry).slice(0, 2)).toEqual(["FitAddon", "WebLinksAddon"]);
+		expect(entry.imageProtocol).toBe("iterm2");
+		expect(loadAddonSpy).toHaveBeenCalledTimes(4);
 		expect(webLinksHandler).not.toBeNull();
 
 		getWebLinksHandler()(event, "https://example.com/pool");
@@ -380,15 +381,15 @@ describe("terminalPool", () => {
 		const { loadAddon: loadAddonSpy, open: openSpy } = getTerminalMocks(entry);
 
 		expect(openSpy).not.toHaveBeenCalled();
-		expect(getLoadedAddonNames(entry)).toEqual(["FitAddon", "WebLinksAddon"]);
+		expect(getLoadedAddonNames(entry).slice(0, 2)).toEqual(["FitAddon", "WebLinksAddon"]);
 
 		const wrapper = document.createElement("div");
 		await attach(entry, wrapper);
 
 		expect(openSpy).toHaveBeenCalledWith(entry.hostDiv);
-		expect(getLoadedAddonNames(entry)).toEqual(["FitAddon", "WebLinksAddon", "WebglAddon"]);
+		expect(getLoadedAddonNames(entry)).toContain("WebglAddon");
 		expect(openSpy.mock.invocationCallOrder[0]).toBeLessThan(
-			loadAddonSpy.mock.invocationCallOrder[2],
+			loadAddonSpy.mock.invocationCallOrder[4],
 		);
 	});
 
@@ -408,10 +409,10 @@ describe("terminalPool", () => {
 
 		expect(agentOpenSpy).toHaveBeenCalledWith(agentEntry.hostDiv);
 		expect(shellOpenSpy).toHaveBeenCalledWith(shellEntry.hostDiv);
-		expect(agentLoadAddonSpy).toHaveBeenCalledTimes(3);
-		expect(shellLoadAddonSpy).toHaveBeenCalledTimes(3);
-		expect(getLoadedAddonNames(agentEntry)).toEqual(["FitAddon", "WebLinksAddon", "WebglAddon"]);
-		expect(getLoadedAddonNames(shellEntry)).toEqual(["FitAddon", "WebLinksAddon", "WebglAddon"]);
+		expect(agentLoadAddonSpy).toHaveBeenCalledTimes(5);
+		expect(shellLoadAddonSpy).toHaveBeenCalledTimes(5);
+		expect(getLoadedAddonNames(agentEntry)).toContain("WebglAddon");
+		expect(getLoadedAddonNames(shellEntry)).toContain("WebglAddon");
 	});
 
 	it("attach falls back to the default renderer when WebglAddon construction fails", async () => {
@@ -425,7 +426,7 @@ describe("terminalPool", () => {
 			await attach(entry, wrapper);
 
 			expect(entry).toBeDefined();
-			expect(getLoadedAddonNames(entry)).toEqual(["FitAddon", "WebLinksAddon"]);
+			expect(getLoadedAddonNames(entry)).not.toContain("WebglAddon");
 			expect(warnSpy).toHaveBeenCalledWith(
 				"[terminalPool] WebGL renderer unavailable; falling back to the default renderer:",
 				expect.any(Error),
@@ -446,7 +447,7 @@ describe("terminalPool", () => {
 			await attach(entry, wrapper);
 
 			expect(entry).toBeDefined();
-			expect(getLoadedAddonNames(entry)).toEqual(["FitAddon", "WebLinksAddon", "WebglAddon"]);
+			expect(getLoadedAddonNames(entry)).toContain("WebglAddon");
 			expect(warnSpy).toHaveBeenCalledWith(
 				"[terminalPool] WebGL renderer unavailable; falling back to the default renderer:",
 				expect.any(Error),

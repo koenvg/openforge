@@ -30,10 +30,12 @@ export type {
 
 export const APP_EVENTS_RECONNECTED_EVENT = 'openforge-app-events-reconnected'
 export const isValidTerminalDimensions = terminalRuntime.isValidTerminalDimensions
+export const getTerminalImageProtocol = terminalRuntime.getTerminalImageProtocol
 export const acquire = terminalRuntime.acquire
 export const attach = terminalRuntime.attach
 export const detach = terminalRuntime.detach
 export const release = terminalRuntime.release
+export const resetTerminal = terminalRuntime.resetTerminal
 export const shouldSpawnPty = terminalRuntime.shouldSpawnPty
 export const markPtySpawnPending = terminalRuntime.markPtySpawnPending
 export const clearPtySpawnPending = terminalRuntime.clearPtySpawnPending
@@ -49,6 +51,7 @@ export const clearTaskTerminalTabsSession = terminalRuntime.clearTaskTerminalTab
 export const releaseAll = terminalRuntime.releaseAll
 export const releaseAllForTask = terminalRuntime.releaseAllForTask
 export const focusTerminal = terminalRuntime.focusTerminal
+export const hasTerminal = terminalRuntime.hasTerminal
 export const isPtyActive = terminalRuntime.isPtyActive
 export const recoverActiveTerminal = terminalRuntime.recoverActiveTerminal
 export const replayPtyBuffersForActiveTerminals = terminalRuntime.replayPtyBuffersForActiveTerminals

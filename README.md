@@ -70,7 +70,7 @@ xattr -rd com.apple.quarantine /Applications/Open\ Forge.app
 
 ## Contributing
 
-Development setup, testing, source builds, architecture notes, and CLI maintenance workflows are documented in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Development setup, testing, source builds, architecture notes, and CLI maintenance workflows are documented in [`CONTRIBUTING.md`](CONTRIBUTING.md). Terminal protocol support, image limits, and fallback behavior are documented in [`docs/terminal-inline-images.md`](docs/terminal-inline-images.md).
 
 ## License
 

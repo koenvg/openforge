@@ -1,5 +1,5 @@
 import { get } from 'svelte/store'
-import type { BackendReadyState, ConfigureStartPromptContributionRequest, CreateTaskRequest, ImplementationRun, StartPromptContribution, StartTaskImplementationRequest } from '@openforge-app/plugin-sdk'
+import type { BackendReadyState, ConfigureStartPromptContributionRequest, CreateTaskRequest, ImplementationRun, ShellSpawnRequest, StartPromptContribution, StartTaskImplementationRequest, TerminalImageProtocol } from '@openforge-app/plugin-sdk'
 import {
   createTask,
   fsReadDir,
@@ -234,9 +234,16 @@ export function createPluginRuntimeHost(pluginId: string) {
     readDir: (request: { projectId: string; path?: string | null }) => fsReadDir(request.projectId, request.path ?? null),
     readFile: (request: { projectId: string; path: string }) => fsReadFile(request.projectId, request.path),
     searchFiles: (request: { projectId: string; query: string; limit?: number }) => fsSearchFiles(request.projectId, request.query, request.limit),
-    spawnShell: async (request: { taskId: string; cwd: string; cols: number; rows: number; terminalIndex: number }) => {
+    spawnShell: async (request: ShellSpawnRequest) => {
       await waitForTerminalEventSubscriptions(request)
-      return spawnShellPty(request.taskId, request.cwd, request.cols, request.rows, request.terminalIndex)
+      return spawnShellPty(
+        request.taskId,
+        request.cwd,
+        request.cols,
+        request.rows,
+        request.terminalIndex,
+        request.terminalImageProtocol ?? null,
+      )
     },
     writeShell: (request: { taskId: string; terminalIndex: number; data: string }) => writePty(shellSessionKey(request), request.data),
     resizeShell: (request: { taskId: string; terminalIndex: number; cols: number; rows: number }) => resizePty(shellSessionKey(request), request.cols, request.rows),
@@ -410,7 +417,14 @@ export async function invokePluginHostCommand(command: string, payload: unknown)
       return setProjectConfig(String(commandPayload?.projectId ?? ''), String(commandPayload?.key ?? ''), String(commandPayload?.value ?? ''))
     case 'spawnShellPty':
       await waitForTerminalEventSubscriptions(commandPayload)
-      return spawnShellPty(String(commandPayload?.taskId ?? ''), String(commandPayload?.cwd ?? ''), Number(commandPayload?.cols), Number(commandPayload?.rows), Number(commandPayload?.terminalIndex))
+      return spawnShellPty(
+        String(commandPayload?.taskId ?? ''),
+        String(commandPayload?.cwd ?? ''),
+        Number(commandPayload?.cols),
+        Number(commandPayload?.rows),
+        Number(commandPayload?.terminalIndex),
+        commandPayload?.terminalImageProtocol === 'iterm2' ? commandPayload.terminalImageProtocol as TerminalImageProtocol : null,
+      )
     case 'writePty':
       return writePty(shellSessionKeyFromPayload(commandPayload), String(commandPayload?.data ?? ''))
     case 'resizePty':

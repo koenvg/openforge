@@ -259,6 +259,12 @@ impl PluginHost {
         let cols = required_param_u16(params, "cols")?;
         let rows = required_param_u16(params, "rows")?;
         let terminal_index = Some(u32::from(required_param_u16(params, "terminalIndex")?));
+        let terminal_image_protocol =
+            match optional_param_string(params, "terminalImageProtocol")?.as_deref() {
+                None => None,
+                Some("iterm2") => Some(crate::pty_manager::TerminalImageProtocol::Iterm2),
+                Some(value) => return Err(format!("unsupported terminal image protocol: {value}")),
+            };
         let pty_manager = self.pty_manager_for_host()?;
         serde_json::to_value(
             pty_manager
@@ -272,6 +278,7 @@ impl PluginHost {
                         app_event_tx: self.app_event_tx.clone(),
                     },
                     terminal_index,
+                    terminal_image_protocol,
                 )
                 .await
                 .map_err(|error| format!("failed to spawn shell PTY: {error}"))?,

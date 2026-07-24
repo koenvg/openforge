@@ -8,6 +8,7 @@ export {
   type TerminalRuntime,
   type TerminalRuntimeEvent,
   type TerminalRuntimeHost,
+  type TerminalImageProtocol,
   type TerminalRuntimeUnlistenFn,
   type TerminalTab,
 } from './terminalRuntime'

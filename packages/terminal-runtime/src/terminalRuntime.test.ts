@@ -3,6 +3,8 @@ import { writable } from 'svelte/store'
 import { createTerminalRuntime, type TerminalRuntimeEvent, type TerminalRuntimeHost } from './terminalRuntime'
 
 const terminalMocks = vi.hoisted(() => ({
+  failCompatibilityAddon: false,
+  failImageAddon: false,
   instances: [] as Array<{
     write: ReturnType<typeof vi.fn>
     reset: ReturnType<typeof vi.fn>
@@ -19,6 +21,14 @@ const terminalMocks = vi.hoisted(() => ({
   }>,
 }))
 
+const imageAddonMocks = vi.hoisted(() => ({
+  instances: [] as Array<{
+    options: Record<string, unknown>
+    reset: ReturnType<typeof vi.fn>
+    dispose: ReturnType<typeof vi.fn>
+  }>,
+}))
+
 vi.mock('@xterm/xterm', () => ({
   Terminal: vi.fn(function Terminal() {
     const terminal = {
@@ -28,7 +38,14 @@ vi.mock('@xterm/xterm', () => ({
       dispose: vi.fn(),
       refresh: vi.fn(),
       focus: vi.fn(),
-      loadAddon: vi.fn(),
+      loadAddon: vi.fn((addon: { activate?: unknown; options?: { iipSupport?: boolean } }) => {
+        if (terminalMocks.failImageAddon && addon.options?.iipSupport) {
+          throw new Error('image addon unavailable')
+        }
+        if (terminalMocks.failCompatibilityAddon && addon.activate && !addon.options?.iipSupport) {
+          throw new Error('compatibility addon unavailable')
+        }
+      }),
       onData: vi.fn(),
       attachCustomKeyEventHandler: vi.fn(),
       cols: 80,
@@ -61,6 +78,18 @@ vi.mock('@xterm/addon-webgl', () => ({
       dispose: vi.fn(),
       onContextLoss: vi.fn().mockReturnValue({ dispose: vi.fn() }),
     }
+  }),
+}))
+
+vi.mock('@xterm/addon-image', () => ({
+  ImageAddon: vi.fn(function ImageAddon(options: Record<string, unknown>) {
+    const addon = {
+      options,
+      reset: vi.fn(),
+      dispose: vi.fn(),
+    }
+    imageAddonMocks.instances.push(addon)
+    return addon
   }),
 }))
 
@@ -101,6 +130,7 @@ function createHost(): TestHost {
 describe('terminal runtime shell output lifecycle', () => {
   beforeEach(() => {
     terminalMocks.instances.length = 0
+    imageAddonMocks.instances.length = 0
   })
 
   it('reports no output for a newly acquired shell without backend buffer', async () => {
@@ -178,5 +208,81 @@ describe('terminal runtime shell output lifecycle', () => {
       currentPtyInstance: 2,
       hasOutput: false,
     })
+  })
+})
+
+describe('terminal runtime inline image lifecycle', () => {
+  beforeEach(() => {
+    terminalMocks.instances.length = 0
+    terminalMocks.failCompatibilityAddon = false
+    terminalMocks.failImageAddon = false
+    imageAddonMocks.instances.length = 0
+  })
+
+  it('loads bounded iTerm image support before advertising the protocol', async () => {
+    const runtime = createTerminalRuntime(createHost())
+
+    const entry = await runtime.acquire('T-1')
+
+    expect(imageAddonMocks.instances).toHaveLength(1)
+    expect(imageAddonMocks.instances[0].options).toMatchObject({
+      pixelLimit: 12_000_000,
+      storageLimit: 32,
+      iipSizeLimit: 6 * 1024 * 1024,
+      iipSupport: true,
+      sixelSupport: false,
+      showPlaceholder: true,
+    })
+    expect(runtime.getTerminalImageProtocol(entry)).toBe('iterm2')
+  })
+
+  it('keeps the fallback protocol when image rendering is disabled', async () => {
+    const host = createHost()
+    host.enableImages = false
+    const runtime = createTerminalRuntime(host)
+
+    const entry = await runtime.acquire('T-1')
+
+    expect(imageAddonMocks.instances).toHaveLength(0)
+    expect(runtime.getTerminalImageProtocol(entry)).toBeNull()
+  })
+
+  it('does not advertise image support when the addon cannot initialize', async () => {
+    terminalMocks.failImageAddon = true
+    const runtime = createTerminalRuntime(createHost())
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const entry = await runtime.acquire('T-1')
+
+    expect(runtime.getTerminalImageProtocol(entry)).toBeNull()
+    expect(imageAddonMocks.instances[0].dispose).toHaveBeenCalledOnce()
+    warn.mockRestore()
+  })
+
+  it('disposes image rendering when compatibility validation cannot initialize', async () => {
+    terminalMocks.failCompatibilityAddon = true
+    const runtime = createTerminalRuntime(createHost())
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const entry = await runtime.acquire('T-1')
+
+    expect(runtime.getTerminalImageProtocol(entry)).toBeNull()
+    expect(imageAddonMocks.instances[0].dispose).toHaveBeenCalledOnce()
+    warn.mockRestore()
+  })
+
+  it('resets retained images on reconnect and disposes them with the terminal', async () => {
+    const host = createHost()
+    host.setBuffer('T-1', 'before')
+    const runtime = createTerminalRuntime(host)
+    await runtime.acquire('T-1')
+    host.setBuffer('T-1', 'after')
+
+    host.emit('openforge-app-events-reconnected', {})
+    await vi.waitFor(() => expect(imageAddonMocks.instances[0].reset).toHaveBeenCalled())
+
+    runtime.release('T-1')
+
+    expect(terminalMocks.instances[0].dispose).toHaveBeenCalledOnce()
   })
 })

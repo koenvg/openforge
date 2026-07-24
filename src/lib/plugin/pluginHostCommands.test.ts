@@ -77,6 +77,7 @@ describe('plugin host commands', () => {
       taskId: 'T-2',
       repoPath: '/repo',
       divergenceResolution: null,
+      terminalImageProtocol: null,
     })
   })
 
@@ -153,6 +154,7 @@ describe('plugin host commands', () => {
       cols: 80,
       rows: 24,
       terminalIndex: 2,
+      terminalImageProtocol: 'iterm2',
     })).resolves.toBe('buffered')
     expect(invoke).toHaveBeenLastCalledWith('pty_spawn_shell', {
       taskId: 'T-1',
@@ -160,6 +162,7 @@ describe('plugin host commands', () => {
       cols: 80,
       rows: 24,
       terminalIndex: 2,
+      terminalImageProtocol: 'iterm2',
     })
 
     await invokePluginHostCommand('writePty', { taskId: 'T-1', terminalIndex: 2, data: 'echo hi\n' })

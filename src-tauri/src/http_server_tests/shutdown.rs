@@ -39,6 +39,7 @@ async fn sidecar_runtime_shutdown_terminates_live_indexed_shell() {
                 app_event_tx: None,
             },
             Some(1),
+            None,
         )
         .await
         .expect("shutdown test shell should spawn");

@@ -12,7 +12,7 @@
     getTerminalRegionTitle,
     shouldShowShellReadyAffordance,
   } from '@openforge-app/terminal-runtime'
-  import { acquire, attach, detach, recoverActiveTerminal, markPtySpawnPending, clearPtySpawnPending, shouldSpawnPty, markShellPtyStarted, getShellLifecycleState, subscribeShellLifecycle, type PoolEntry, type ShellLifecycleState } from './lib/terminalPool'
+  import { acquire, attach, detach, recoverActiveTerminal, resetTerminal, markPtySpawnPending, clearPtySpawnPending, shouldSpawnPty, markShellPtyStarted, getShellLifecycleState, getTerminalImageProtocol, subscribeShellLifecycle, type PoolEntry, type ShellLifecycleState } from './lib/terminalPool'
 
   interface Props {
     taskId: string
@@ -94,7 +94,14 @@
     markPtySpawnPending(entry)
     try {
       if (!isCurrentBindingContext(context)) return
-      const instanceId = await spawnShellPty(context.taskId, context.workspacePath, entry.terminal.cols, entry.terminal.rows, context.terminalIndex)
+      const instanceId = await spawnShellPty(
+        context.taskId,
+        context.workspacePath,
+        entry.terminal.cols,
+        entry.terminal.rows,
+        context.terminalIndex,
+        getTerminalImageProtocol(entry),
+      )
       markShellPtyStarted(entry, instanceId)
       if (isCurrentBindingContext(context)) syncLifecycleState(context.terminalKey)
     } finally {
@@ -193,9 +200,16 @@
       await killPty(context.terminalKey).catch(e => {
         console.error('[TaskTerminal] Failed to kill PTY on restart:', e)
       })
-      entry.terminal.reset()
+      resetTerminal(entry)
       markPtySpawnPending(entry)
-      const instanceId = await spawnShellPty(context.taskId, context.workspacePath, entry.terminal.cols, entry.terminal.rows, context.terminalIndex)
+      const instanceId = await spawnShellPty(
+        context.taskId,
+        context.workspacePath,
+        entry.terminal.cols,
+        entry.terminal.rows,
+        context.terminalIndex,
+        getTerminalImageProtocol(entry),
+      )
       markShellPtyStarted(entry, instanceId)
       if (isCurrentBindingContext(context)) syncLifecycleState(context.terminalKey)
     } catch (e) {

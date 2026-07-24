@@ -36,6 +36,7 @@ impl PiProvider {
                 start_context.rows,
                 start_context.app_handle.clone(),
                 start_context.app_event_tx.clone(),
+                start_context.terminal_image_protocol,
             )
             .await?;
 
@@ -75,6 +76,7 @@ impl PiProvider {
                 start_context.rows,
                 start_context.app_handle.clone(),
                 start_context.app_event_tx.clone(),
+                start_context.terminal_image_protocol,
             )
             .await?;
 

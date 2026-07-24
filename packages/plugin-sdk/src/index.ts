@@ -77,6 +77,7 @@ export type {
   ProjectsAPI,
   ShellAPI,
   ShellResizeRequest,
+  TerminalImageProtocol,
   ShellSessionRequest,
   ShellSpawnRequest,
   ShellWriteRequest,
