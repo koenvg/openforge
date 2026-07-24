@@ -93,5 +93,48 @@ describe('Task Schedule cron utilities', () => {
       expect(validateCronCadence('0,30 * * * *', from)).toEqual({ valid: true, error: null })
       expect(validateCronCadence('0 9 * * *', from)).toEqual({ valid: true, error: null })
     })
+
+    it('rejects sparse fast pairs outside the sampling year', () => {
+      const afterFirstFire = new Date(2028, 1, 29, 0, 0, 30).getTime()
+      expect(validateCronCadence('0,4 0 29 2 *', afterFirstFire).valid).toBe(false)
+    })
+
+    it('rejects overnight fast pairs that first align after the sampling year', () => {
+      expect(validateCronCadence('0,59 0,23 1,2 1 0,6', from).valid).toBe(false)
+    })
+
+    it('handles spring-forward gaps without counting normalized local times twice', () => {
+      const previousTimeZone = process.env.TZ
+      process.env.TZ = 'Europe/Amsterdam'
+      try {
+        const beforeSpringForward = new Date(2026, 2, 28, 0, 0, 0).getTime()
+        expect(validateCronCadence('30 2,3 * * *', beforeSpringForward)).toEqual({ valid: true, error: null })
+        expect(validateCronCadence('0,59 1,3 * * *', beforeSpringForward).valid).toBe(false)
+
+        const beforeSparseAlignment = new Date(2026, 0, 1, 0, 0, 0).getTime()
+        expect(validateCronCadence('0,59 1,3 31 3 0', beforeSparseAlignment).valid).toBe(false)
+      } finally {
+        if (previousTimeZone === undefined) {
+          delete process.env.TZ
+        } else {
+          process.env.TZ = previousTimeZone
+        }
+      }
+    })
+
+    it('ignores timezone transitions that occurred before validation starts', () => {
+      const previousTimeZone = process.env.TZ
+      process.env.TZ = 'America/Mexico_City'
+      try {
+        const afterLastSpringForward = new Date(2022, 10, 1, 0, 0, 0).getTime()
+        expect(validateCronCadence('0,59 1,3 3 4 0', afterLastSpringForward)).toEqual({ valid: true, error: null })
+      } finally {
+        if (previousTimeZone === undefined) {
+          delete process.env.TZ
+        } else {
+          process.env.TZ = previousTimeZone
+        }
+      }
+    })
   })
 })
