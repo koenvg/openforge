@@ -884,7 +884,7 @@ describe('pluginRegistry', () => {
     if (!exitResolver) throw new Error('Expected exit listener registration to be pending')
     exitResolver(() => undefined)
     await expect(spawn).resolves.toBe(42)
-    expect(spawnShellPtyMock).toHaveBeenCalledWith('T-1', '/tmp/worktree', 80, 24, 0)
+    expect(spawnShellPtyMock).toHaveBeenCalledWith('T-1', '/tmp/worktree', 80, 24, 0, null)
 
     desktopEventHandlers.get('pty-output-T-1-shell-0')?.({ payload: { data: 'hello' } })
     expect(outputHandler).toHaveBeenCalledWith({ data: 'hello' })

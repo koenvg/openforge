@@ -78,7 +78,9 @@ async function waitForDesktopEventSubscription(event: string): Promise<void> {
   await desktopEventSubscriptions.get(event)?.ready
 }
 
-export async function waitForTerminalEventSubscriptions(commandPayload: Record<string, unknown> | undefined): Promise<void> {
+export async function waitForTerminalEventSubscriptions(
+  commandPayload: { taskId?: unknown; terminalIndex?: unknown } | undefined,
+): Promise<void> {
   const taskId = typeof commandPayload?.taskId === 'string' ? commandPayload.taskId : ''
   const terminalIndex = Number(commandPayload?.terminalIndex)
   if (!taskId || !Number.isInteger(terminalIndex) || terminalIndex < 0) return

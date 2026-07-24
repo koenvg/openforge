@@ -1,12 +1,22 @@
 import { FitAddon } from '@xterm/addon-fit'
+import { ImageAddon } from '@xterm/addon-image'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { Terminal, type IDisposable, type ILinkHandler } from '@xterm/xterm'
 import { get, type Readable } from 'svelte/store'
+import {
+  TERMINAL_IMAGE_PAYLOAD_LIMIT_BYTES,
+  TERMINAL_IMAGE_PIXEL_LIMIT,
+  TERMINAL_IMAGE_STORAGE_LIMIT_MB,
+  createItermImageCompatibilityAddon,
+  type TerminalImageProtocol,
+} from './terminalImages'
 import { getTerminalOptions, preloadTerminalFonts } from './terminalOptions'
 import { getTerminalTheme, themeMode as defaultThemeMode, type ThemeMode } from './theme'
 
 export type TerminalRuntimeUnlistenFn = () => void
+
+export type { TerminalImageProtocol } from './terminalImages'
 
 export interface TerminalRuntimeEvent<TPayload> {
   payload: TPayload
@@ -25,6 +35,7 @@ export interface TerminalRuntimeHost {
   openUrl(url: string): Promise<void>
   themeMode?: Readable<ThemeMode>
   loggerName?: string
+  enableImages?: boolean
 }
 
 export interface PoolEntry {
@@ -42,6 +53,8 @@ export interface PoolEntry {
   spawnPending: boolean
   currentPtyInstance: number | null
   hasOutput: boolean
+  imageAddon: ImageAddon | null
+  imageProtocol: TerminalImageProtocol | null
   webglAddon: WebglAddon | null
   webglContextLossDisposable: IDisposable | null
   webglUnavailable: boolean
@@ -221,10 +234,58 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     const webLinksAddon = new WebLinksAddon((event, uri) => {
       openTerminalLink(event, uri)
     })
-  
+
     terminal.loadAddon(webLinksAddon)
   }
   
+  function loadImageSupport(terminal: Terminal): { imageAddon: ImageAddon | null; imageProtocol: TerminalImageProtocol | null } {
+    if (host.enableImages === false) return { imageAddon: null, imageProtocol: null }
+
+    const imageAddon = new ImageAddon({
+      enableSizeReports: true,
+      pixelLimit: TERMINAL_IMAGE_PIXEL_LIMIT,
+      storageLimit: TERMINAL_IMAGE_STORAGE_LIMIT_MB,
+      showPlaceholder: true,
+      sixelSupport: false,
+      iipSupport: true,
+      iipSizeLimit: TERMINAL_IMAGE_PAYLOAD_LIMIT_BYTES,
+    })
+
+    try {
+      terminal.loadAddon(imageAddon)
+    } catch (error) {
+      try {
+        imageAddon.dispose()
+      } catch (disposeError) {
+        console.warn('[terminalPool] Failed to dispose unavailable image addon:', disposeError)
+      }
+      console.warn('[terminalPool] Inline images unavailable; keeping text fallbacks:', error)
+      return { imageAddon: null, imageProtocol: null }
+    }
+
+    const compatibilityAddon = createItermImageCompatibilityAddon()
+    try {
+      // Register after ImageAddon: xterm checks the newest OSC handler first,
+      // allowing WebP conversion/validation before supported IIP reaches ImageAddon.
+      terminal.loadAddon(compatibilityAddon)
+      return { imageAddon, imageProtocol: 'iterm2' }
+    } catch (error) {
+      compatibilityAddon.dispose()
+      try {
+        imageAddon.dispose()
+      } catch (disposeError) {
+        console.warn('[terminalPool] Failed to dispose unvalidated image addon:', disposeError)
+      }
+      console.warn('[terminalPool] Inline image validation unavailable; keeping text fallbacks:', error)
+      return { imageAddon: null, imageProtocol: null }
+    }
+  }
+
+  function resetTerminal(entry: PoolEntry): void {
+    entry.imageAddon?.reset()
+    entry.terminal.reset()
+  }
+
   function disposeWebglContextLossListener(entry: PoolEntry): void {
     try {
       entry.webglContextLossDisposable?.dispose()
@@ -298,7 +359,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
       const buffered = await host.getPtyBuffer(entry.taskId)
       if (!buffered) return
   
-      entry.terminal.reset()
+      resetTerminal(entry)
       entry.needsClear = false
       entry.terminal.write(buffered)
       entry.ptyActive = true
@@ -354,6 +415,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     const fitAddon = new FitAddon()
     terminal.loadAddon(fitAddon)
     loadWebLinksAddon(terminal)
+    const imageSupport = loadImageSupport(terminal)
   
     const hostDiv = createHostDiv()
   
@@ -381,6 +443,8 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
       spawnPending: false,
       currentPtyInstance: null,
       hasOutput: false,
+      imageAddon: imageSupport.imageAddon,
+      imageProtocol: imageSupport.imageProtocol,
       webglAddon: null,
       webglContextLossDisposable: null,
       webglUnavailable: false,
@@ -406,7 +470,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
       }
       if (event.payload.data) {
         if (entry.needsClear) {
-          entry.terminal.reset()
+          resetTerminal(entry)
           entry.needsClear = false
         }
         entry.terminal.write(event.payload.data)
@@ -656,20 +720,30 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     }
   }
   
+  function hasTerminal(taskId: string): boolean {
+    return pool.has(taskId)
+  }
+
   function isPtyActive(taskId: string): boolean {
     return pool.get(taskId)?.ptyActive ?? false
   }
-  
+
+  function getTerminalImageProtocol(entry: PoolEntry): TerminalImageProtocol | null {
+    return entry.imageProtocol
+  }
+
   function _getPool(): Map<string, PoolEntry> {
     return pool
   }
 
   return {
     isValidTerminalDimensions,
+    getTerminalImageProtocol,
     acquire,
     attach,
     detach,
     release,
+    resetTerminal,
     shouldSpawnPty,
     markPtySpawnPending,
     clearPtySpawnPending,
@@ -685,6 +759,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     releaseAll,
     releaseAllForTask,
     focusTerminal,
+    hasTerminal,
     isPtyActive,
     recoverActiveTerminal,
     replayPtyBuffersForActiveTerminals,

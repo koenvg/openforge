@@ -20,6 +20,7 @@ pub(super) struct PtySpawnShellPayload {
     pub(super) cols: u16,
     pub(super) rows: u16,
     pub(super) terminal_index: Option<u32>,
+    pub(super) terminal_image_protocol: Option<crate::pty_manager::TerminalImageProtocol>,
 }
 
 impl PtySpawnShellPayload {
@@ -146,5 +147,26 @@ mod tests {
             .expect("null terminalIndex should decode");
 
         assert_eq!(decoded.terminal_index, None);
+        assert_eq!(decoded.terminal_image_protocol, None);
+    }
+
+    #[test]
+    fn decodes_scoped_iterm_image_protocol() {
+        let payload = serde_json::json!({
+            "taskId": "T-pty",
+            "cwd": "/tmp/openforge-worktree",
+            "cols": 80,
+            "rows": 24,
+            "terminalIndex": 0,
+            "terminalImageProtocol": "iterm2",
+        });
+
+        let decoded = PtySpawnShellPayload::decode("pty_spawn_shell", &payload)
+            .expect("iTerm image protocol should decode");
+
+        assert_eq!(
+            decoded.terminal_image_protocol,
+            Some(crate::pty_manager::TerminalImageProtocol::Iterm2)
+        );
     }
 }

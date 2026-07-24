@@ -75,7 +75,9 @@ vi.mock('../../lib/terminalPool', () => ({
   detach: vi.fn(),
   recoverActiveTerminal: vi.fn(),
   release: vi.fn(),
+  resetTerminal: vi.fn((entry) => entry.terminal.reset()),
   shouldSpawnPty: vi.fn((entry) => !entry.ptyActive && !entry.spawnPending && !entry.needsClear),
+  getTerminalImageProtocol: vi.fn(() => 'iterm2'),
   markPtySpawnPending: vi.fn((entry) => {
     entry.spawnPending = true
   }),
@@ -357,7 +359,7 @@ describe('TaskTerminal', () => {
     const { rerender } = render(TaskTerminal, { props: { taskId: 'project-P-1', workspacePath: '/path/to/one', terminalKey: 'project-P-1-shell-0', terminalIndex: 0, isActive: true } })
 
     await vi.waitFor(() => {
-      expect(spawnShellPty).toHaveBeenCalledWith('project-P-1', '/path/to/one', 80, 24, 0)
+      expect(spawnShellPty).toHaveBeenCalledWith('project-P-1', '/path/to/one', 80, 24, 0, 'iterm2')
     })
 
     await rerender({ taskId: 'project-P-2', workspacePath: '/path/to/two', terminalKey: 'project-P-2-shell-0', terminalIndex: 0, isActive: true })
@@ -409,7 +411,7 @@ describe('TaskTerminal', () => {
 
     await vi.waitFor(() => {
       expect(killPty).toHaveBeenCalledWith('project-P-1-shell-0')
-      expect(spawnShellPty).toHaveBeenCalledWith('project-P-1', '/path/to/one', 80, 24, 0)
+      expect(spawnShellPty).toHaveBeenCalledWith('project-P-1', '/path/to/one', 80, 24, 0, 'iterm2')
       expect(markShellPtyStarted).toHaveBeenCalledWith(expect.any(Object), 9)
     })
   })
@@ -513,7 +515,7 @@ describe('TaskTerminal', () => {
 
     render(TaskTerminal, { props: { taskId: 'T-1', workspacePath: '/path/to/worktree', terminalKey: 'T-1-shell-2', terminalIndex: 2, isActive: true } })
     await vi.waitFor(() => {
-      expect(spawnShellPty).toHaveBeenCalledWith('T-1', '/path/to/worktree', 80, 24, 2)
+      expect(spawnShellPty).toHaveBeenCalledWith('T-1', '/path/to/worktree', 80, 24, 2, 'iterm2')
     })
   })
 
@@ -566,7 +568,7 @@ describe('TaskTerminal', () => {
     resolveAttach()
 
     await vi.waitFor(() => {
-      expect(spawnShellPty).toHaveBeenCalledWith('T-1', '/path/to/worktree', 132, 40, 0)
+      expect(spawnShellPty).toHaveBeenCalledWith('T-1', '/path/to/worktree', 132, 40, 0, 'iterm2')
     })
   })
 
@@ -707,7 +709,7 @@ describe('TaskTerminal', () => {
     // Verify spawnShellPty was called twice (once on mount, once on restart) with terminalIndex
     await vi.waitFor(() => {
       expect(spawnShellPty).toHaveBeenCalledTimes(2)
-      expect(spawnShellPty).toHaveBeenLastCalledWith('T-1', '/path/to/worktree', 80, 24, 2)
+      expect(spawnShellPty).toHaveBeenLastCalledWith('T-1', '/path/to/worktree', 80, 24, 2, 'iterm2')
     })
   })
 

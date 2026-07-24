@@ -65,6 +65,7 @@ pub struct ProviderStartContext {
     pub app_event_tx: Option<AppEventSender>,
     pub cols: u16,
     pub rows: u16,
+    pub terminal_image_protocol: Option<crate::pty_manager::TerminalImageProtocol>,
 }
 
 impl ProviderStartContext {
@@ -74,7 +75,16 @@ impl ProviderStartContext {
             app_event_tx,
             cols: 80,
             rows: 24,
+            terminal_image_protocol: None,
         }
+    }
+
+    pub fn with_terminal_image_protocol(
+        mut self,
+        terminal_image_protocol: Option<crate::pty_manager::TerminalImageProtocol>,
+    ) -> Self {
+        self.terminal_image_protocol = terminal_image_protocol;
+        self
     }
 }
 

@@ -29,6 +29,7 @@ import type {
   PluginStorageScope,
   PluginTaskPaneTabRegistration,
   PluginTaskUISectionRegistration,
+  ShellSpawnRequest,
   StartPromptContribution,
   StartTaskImplementationRequest,
   PluginViewRegistration,
@@ -76,7 +77,7 @@ export interface TestingOpenForgeApiCalls {
   taskStatusUpdates: Array<{ taskId: string; status: string }>
   configWrites: Array<{ key: string; value: JsonValue; projectId: string | null }>
   fsWrites: Array<{ projectId: string; path: string; content: string }>
-  shellSpawns: Array<{ taskId: string; cwd: string; cols: number; rows: number; terminalIndex: number }>
+  shellSpawns: ShellSpawnRequest[]
   shellWrites: Array<{ taskId: string; terminalIndex: number; data: string }>
   shellResizes: Array<{ taskId: string; terminalIndex: number; cols: number; rows: number }>
   shellKills: Array<{ taskId: string; terminalIndex: number }>

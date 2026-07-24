@@ -322,12 +322,12 @@ mod tests {
             .is_some_and(|process| !matches!(process.status(), ProcessStatus::Zombie))
     }
 
-    fn wait_for_file(path: &Path) {
+    fn wait_for_file(path: &Path) -> bool {
         let deadline = Instant::now() + Duration::from_secs(2);
         while !path.exists() && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(10));
         }
-        assert!(path.exists(), "child PID file was not created");
+        path.exists()
     }
 
     fn spawn_forking_root(descendant_pid_file: &Path) -> Child {
@@ -357,7 +357,10 @@ mod tests {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let descendant_pid_file = temp_dir.path().join("descendant.pid");
         let mut root = spawn_forking_root(&descendant_pid_file);
-        wait_for_file(&descendant_pid_file);
+        assert!(
+            wait_for_file(&descendant_pid_file),
+            "child PID file was not created"
+        );
         let descendant_pid: i32 = std::fs::read_to_string(&descendant_pid_file)
             .expect("descendant PID should read")
             .trim()
@@ -388,9 +391,11 @@ mod tests {
     async fn graceful_handler_receives_one_term_before_timeout() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let marker_file = temp_dir.path().join("term-marker.txt");
+        let ready_file = temp_dir.path().join("term-handler-ready.txt");
         let code = r#"
 import os, signal, time
 marker = os.environ["MARKER"]
+ready = os.environ["READY"]
 def handle_term(_signum, _frame):
     with open(marker, "a", encoding="utf-8") as output:
         output.write("term\n")
@@ -402,6 +407,10 @@ def handle_term(_signum, _frame):
         output.write("graceful\n")
     raise SystemExit(0)
 signal.signal(signal.SIGTERM, handle_term)
+with open(ready, "w", encoding="utf-8") as output:
+    output.write("ready\n")
+    output.flush()
+    os.fsync(output.fileno())
 while True:
     time.sleep(1)
 "#;
@@ -409,6 +418,7 @@ while True:
         command
             .args(["-c", code])
             .env("MARKER", &marker_file)
+            .env("READY", &ready_file)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
@@ -422,7 +432,11 @@ while True:
         }
         let mut root = command.spawn().expect("TERM handler root should spawn");
         let identity = ManagedProcessIdentity::capture(root.id()).expect("identity should capture");
-        std::thread::sleep(Duration::from_millis(100));
+        if !wait_for_file(&ready_file) {
+            force_kill_unverified_spawn(root.id());
+            let _ = root.wait();
+            panic!("TERM handler did not become ready");
+        }
 
         terminate_managed_process_tree(&identity, Duration::from_secs(1))
             .await
@@ -437,7 +451,10 @@ while True:
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let descendant_pid_file = temp_dir.path().join("descendant.pid");
         let mut root = spawn_forking_root(&descendant_pid_file);
-        wait_for_file(&descendant_pid_file);
+        assert!(
+            wait_for_file(&descendant_pid_file),
+            "child PID file was not created"
+        );
         let mut identity =
             ManagedProcessIdentity::capture(root.id()).expect("identity should capture");
         identity.root_start_time = identity.root_start_time.saturating_sub(1);

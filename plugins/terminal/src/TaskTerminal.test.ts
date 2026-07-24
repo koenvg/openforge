@@ -35,12 +35,14 @@ const { ipcMocks, terminalPoolMocks, mockEntry, lifecycleState } = vi.hoisted(()
       attach: vi.fn(),
       detach: vi.fn(),
       recoverActiveTerminal: vi.fn(),
+      resetTerminal: vi.fn((entry) => entry.terminal.reset()),
       shouldSpawnPty: vi.fn(),
       markPtySpawnPending: vi.fn(),
       clearPtySpawnPending: vi.fn(),
       markShellPtyStarted: vi.fn(),
       getShellLifecycleState: vi.fn(),
       subscribeShellLifecycle: vi.fn(),
+      getTerminalImageProtocol: vi.fn(() => 'iterm2'),
       emitLifecycle: null as null | ((state: typeof state) => void),
     },
   }
@@ -58,12 +60,14 @@ vi.mock('./lib/terminalPool', () => ({
   attach: terminalPoolMocks.attach,
   detach: terminalPoolMocks.detach,
   recoverActiveTerminal: terminalPoolMocks.recoverActiveTerminal,
+  resetTerminal: terminalPoolMocks.resetTerminal,
   markPtySpawnPending: terminalPoolMocks.markPtySpawnPending,
   clearPtySpawnPending: terminalPoolMocks.clearPtySpawnPending,
   shouldSpawnPty: terminalPoolMocks.shouldSpawnPty,
   markShellPtyStarted: terminalPoolMocks.markShellPtyStarted,
   getShellLifecycleState: terminalPoolMocks.getShellLifecycleState,
   subscribeShellLifecycle: terminalPoolMocks.subscribeShellLifecycle,
+  getTerminalImageProtocol: terminalPoolMocks.getTerminalImageProtocol,
 }))
 
 function resetReadyState() {
@@ -214,7 +218,7 @@ describe('TaskTerminal ready affordance', () => {
 
     await vi.waitFor(() => {
       expect(ipcMocks.killPty).toHaveBeenCalledWith('T-1-shell-0')
-      expect(ipcMocks.spawnShellPty).toHaveBeenLastCalledWith('T-1', '/worktree/T-1', 80, 24, 0)
+      expect(ipcMocks.spawnShellPty).toHaveBeenLastCalledWith('T-1', '/worktree/T-1', 80, 24, 0, 'iterm2')
     })
   })
 })

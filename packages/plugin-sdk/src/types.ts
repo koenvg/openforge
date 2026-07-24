@@ -374,6 +374,8 @@ export interface FileSystemAPI {
   searchFiles(request: { projectId: string; query: string; limit?: number }): Promise<string[]>
 }
 
+export type TerminalImageProtocol = 'iterm2'
+
 export interface ShellSessionRequest {
   taskId: string
   terminalIndex: number
@@ -383,6 +385,7 @@ export interface ShellSpawnRequest extends ShellSessionRequest {
   cwd: string
   cols: number
   rows: number
+  terminalImageProtocol?: TerminalImageProtocol | null
 }
 
 export interface ShellWriteRequest extends ShellSessionRequest {

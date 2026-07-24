@@ -425,6 +425,7 @@ async fn test_delete_task_handler_completes_task_and_keeps_cli_retrieval() {
                 app_event_tx: None,
             },
             Some(0),
+            None,
         )
         .await
         .expect("legacy delete test shell should spawn");

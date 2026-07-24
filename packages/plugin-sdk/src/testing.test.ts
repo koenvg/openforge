@@ -137,6 +137,7 @@ describe('plugin SDK testing utilities', () => {
     const task = await api.tasks.create({ initialPrompt: 'Scheduled prompt', projectId: 'P-1', labelNames: ['scheduled'] })
     const run = await api.tasks.startImplementation({ taskId: task.id })
     await frontendApi.storage.global.set('flag', true)
+    await api.shell.spawn({ taskId: 'T-1', terminalIndex: 2, cwd: '/repo', cols: 80, rows: 24, terminalImageProtocol: 'iterm2' })
     await api.shell.write({ taskId: 'T-1', terminalIndex: 2, data: 'echo hi\n' })
     await api.shell.resize({ taskId: 'T-1', terminalIndex: 2, cols: 100, rows: 30 })
     await api.shell.getBuffer({ taskId: 'T-1', terminalIndex: 2 })
@@ -148,6 +149,14 @@ describe('plugin SDK testing utilities', () => {
     expect(api.__testing.calls.notify).toEqual([{ title: 'Ready' }])
     expect(api.__testing.calls.taskCreations).toEqual([{ initialPrompt: 'Scheduled prompt', projectId: 'P-1', labelNames: ['scheduled'] }])
     expect(api.__testing.calls.taskImplementationStarts).toEqual([{ taskId: task.id }])
+    expect(api.__testing.calls.shellSpawns).toEqual([{
+      taskId: 'T-1',
+      terminalIndex: 2,
+      cwd: '/repo',
+      cols: 80,
+      rows: 24,
+      terminalImageProtocol: 'iterm2',
+    }])
     expect(api.__testing.calls.shellWrites).toEqual([{ taskId: 'T-1', terminalIndex: 2, data: 'echo hi\n' }])
     expect(api.__testing.calls.shellResizes).toEqual([{ taskId: 'T-1', terminalIndex: 2, cols: 100, rows: 30 }])
     expect(api.__testing.calls.shellBuffers).toEqual([{ taskId: 'T-1', terminalIndex: 2 }])

@@ -40,6 +40,7 @@ import type {
   PluginTaskUISectionRegistration,
   PluginViewProps,
   PluginViewRegistration,
+  TerminalImageProtocol,
 } from './types'
 
 export const OPENFORGE_FRONTEND_PLUGIN_MARKER = '__openforgeFrontendPlugin'
@@ -102,4 +103,5 @@ export type {
   PluginTaskUISectionRegistration,
   PluginViewProps,
   PluginViewRegistration,
+  TerminalImageProtocol,
 }

@@ -8,7 +8,8 @@
         "cwd": "/tmp/openforge-worktree",
         "cols": 80,
         "rows": 24,
-        "terminalIndex": 2
+        "terminalIndex": 2,
+        "terminalImageProtocol": null
       }
     },
     {
@@ -19,7 +20,8 @@
         "cwd": "/tmp/openforge-worktree",
         "cols": 80,
         "rows": 24,
-        "terminalIndex": null
+        "terminalIndex": null,
+        "terminalImageProtocol": null
       }
     },
     {

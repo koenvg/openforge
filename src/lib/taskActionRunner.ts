@@ -18,7 +18,7 @@ import {
 import { runCompleteTask } from './completeTask'
 import { loadOutOfFocusTaskIds, saveOutOfFocusTaskIds } from './boardFilters'
 import { writePtyWithSubmit } from './ptySubmit'
-import { focusTerminal, isPtyActive } from './terminalPool'
+import { acquire, focusTerminal, getTerminalImageProtocol, hasTerminal, isPtyActive, release } from './terminalPool'
 import { resolveBranchStart } from './branchStart'
 import { getMergeReadiness } from './types'
 import type { DivergenceResolution, Project, Task } from './types'
@@ -91,9 +91,21 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
     starting.add(taskId)
     startingTasks.set(starting)
 
+    let releaseTerminalOnStartFailure = false
     try {
-      const result = await startImplementation(taskId, activeProject.path, resolution ?? null)
-
+      let terminalImageProtocol = null
+      try {
+        const terminalAlreadyExists = hasTerminal(taskId)
+        const terminalEntry = await acquire(taskId)
+        releaseTerminalOnStartFailure = !terminalAlreadyExists
+        terminalImageProtocol = getTerminalImageProtocol(terminalEntry)
+      } catch (terminalError) {
+        console.warn('[session] Inline terminal images unavailable; starting with text fallbacks:', terminalError)
+      }
+      const result = terminalImageProtocol
+        ? await startImplementation(taskId, activeProject.path, resolution ?? null, terminalImageProtocol)
+        : await startImplementation(taskId, activeProject.path, resolution ?? null)
+      releaseTerminalOnStartFailure = false
       const updatedRuntimeInfo = new Map(get(taskRuntimeInfo))
       updatedRuntimeInfo.set(taskId, {
         workspacePath: result.workspace_path,
@@ -112,6 +124,7 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
       await options.loadTasks()
       focusTerminal(taskId)
     } catch (e) {
+      if (releaseTerminalOnStartFailure) release(taskId)
       logError('[session] Failed to start task:', e)
       setError(e)
     } finally {

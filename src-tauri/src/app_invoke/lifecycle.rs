@@ -382,6 +382,7 @@ pub(crate) async fn start_implementation(
     task_id: &str,
     repo_path: &str,
     divergence_resolution: crate::git_worktree::DivergenceResolution,
+    terminal_image_protocol: Option<crate::pty_manager::TerminalImageProtocol>,
 ) -> Result<serde_json::Value, (StatusCode, String)> {
     let pty_manager = state.pty_manager.as_ref().ok_or_else(|| {
         (
@@ -443,7 +444,8 @@ pub(crate) async fn start_implementation(
         crate::providers::Provider::from_name(&start_context.provider_name, pty_manager.clone())
             .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     let provider_start_context =
-        crate::providers::ProviderStartContext::new(state.app.clone(), state.app_event_tx.clone());
+        crate::providers::ProviderStartContext::new(state.app.clone(), state.app_event_tx.clone())
+            .with_terminal_image_protocol(terminal_image_protocol);
     let provider_result = match provider
         .start(
             task_id,
@@ -537,9 +539,27 @@ pub(super) async fn handle_app_start_implementation_command(
     let divergence_resolution: crate::git_worktree::DivergenceResolution =
         payload_field(&request.payload, "divergenceResolution")
             .unwrap_or(crate::git_worktree::DivergenceResolution::Auto);
+    let terminal_image_protocol =
+        match payload_optional_string(&request.payload, "terminalImageProtocol")?.as_deref() {
+            None => None,
+            Some("iterm2") => Some(crate::pty_manager::TerminalImageProtocol::Iterm2),
+            Some(value) => {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    format!("Unsupported terminal image protocol: {value}"),
+                ));
+            }
+        };
 
     Ok(Some(
-        start_implementation(state, &task_id, &repo_path, divergence_resolution).await?,
+        start_implementation(
+            state,
+            &task_id,
+            &repo_path,
+            divergence_resolution,
+            terminal_image_protocol,
+        )
+        .await?,
     ))
 }
 

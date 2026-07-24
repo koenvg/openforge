@@ -44,6 +44,7 @@ pub(super) async fn handle_app_pty_command(
                         app_event_tx: state.app_event_tx.clone(),
                     },
                     payload.terminal_index,
+                    payload.terminal_image_protocol,
                 )
                 .await
                 .map_err(|e| pty_command_error_response("Failed to spawn shell PTY", e))?;

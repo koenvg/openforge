@@ -1,4 +1,4 @@
-import type { Disposable, FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
+import type { Disposable, FrontendOpenForgeAPI, TerminalImageProtocol } from '@openforge-app/plugin-sdk/frontend'
 import type { TaskWorkspaceInfo } from './types'
 
 let terminalOpenForgeApi: FrontendOpenForgeAPI | null = null
@@ -57,8 +57,22 @@ export async function openUrl(url: string): Promise<void> {
   await getTerminalOpenForgeApi().system.openUrl(url)
 }
 
-export async function spawnShellPty(taskId: string, cwd: string, cols: number, rows: number, terminalIndex: number): Promise<number> {
-  return getTerminalOpenForgeApi().shell.spawn({ taskId, cwd, cols, rows, terminalIndex })
+export async function spawnShellPty(
+  taskId: string,
+  cwd: string,
+  cols: number,
+  rows: number,
+  terminalIndex: number,
+  terminalImageProtocol: TerminalImageProtocol | null = null,
+ ): Promise<number> {
+  return getTerminalOpenForgeApi().shell.spawn({
+    taskId,
+    cwd,
+    cols,
+    rows,
+    terminalIndex,
+    terminalImageProtocol,
+  })
 }
 
 export async function writePty(taskId: string, data: string): Promise<void> {

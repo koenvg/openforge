@@ -18,8 +18,12 @@ vi.mock('./ptySubmit', () => ({
 }))
 
 vi.mock('./terminalPool', () => ({
+  acquire: vi.fn().mockResolvedValue({}),
   focusTerminal: vi.fn(),
+  getTerminalImageProtocol: vi.fn(() => null),
+  hasTerminal: vi.fn(() => false),
   isPtyActive: vi.fn(() => false),
+  release: vi.fn(),
 }))
 
 import { createTaskActionRunner } from './taskActionRunner'
@@ -35,7 +39,7 @@ import {
 } from './stores'
 import { deleteTask, enqueuePullRequest, getProjectConfig, getSessionStatus, inspectExistingBranch, mergePullRequest, setProjectConfig, startImplementation } from './ipc'
 import { branchDivergenceRequest } from './branchDivergenceModalStore'
-import { focusTerminal, isPtyActive } from './terminalPool'
+import { acquire, focusTerminal, getTerminalImageProtocol, hasTerminal, isPtyActive, release } from './terminalPool'
 import { writePtyWithSubmit } from './ptySubmit'
 import type { ExistingBranchPlan } from './types'
 
@@ -120,6 +124,9 @@ describe('createTaskActionRunner', () => {
     vi.mocked(getProjectConfig).mockResolvedValue(null)
     vi.mocked(setProjectConfig).mockResolvedValue(undefined)
     vi.mocked(isPtyActive).mockReturnValue(false)
+    vi.mocked(acquire).mockResolvedValue({} as never)
+    vi.mocked(getTerminalImageProtocol).mockReturnValue(null)
+    vi.mocked(hasTerminal).mockReturnValue(false)
   })
 
   it('starts a task, stores runtime/session state, reloads tasks, and clears starting state', async () => {
@@ -127,6 +134,7 @@ describe('createTaskActionRunner', () => {
     const triggerGithubSync = vi.fn(async () => undefined)
     vi.mocked(startImplementation).mockResolvedValue({ session_id: 'session-1', workspace_path: '/workspace/T-42', task_id: task.id, port: 0 } as any)
     vi.mocked(getSessionStatus).mockResolvedValue({ ticket_id: task.id, status: 'running' } as any)
+    vi.mocked(getTerminalImageProtocol).mockReturnValue('iterm2')
 
     const runner = createTaskActionRunner({
       getActiveProject: () => activeProject,
@@ -140,12 +148,40 @@ describe('createTaskActionRunner', () => {
     // Non-existing-branch task: the gate never touches the remote and starts
     // immediately with the defensive `auto` resolution.
     expect(inspectExistingBranch).not.toHaveBeenCalled()
-    expect(startImplementation).toHaveBeenCalledWith(task.id, activeProject.path, 'auto')
+    expect(acquire).toHaveBeenCalledWith(task.id)
+    expect(startImplementation).toHaveBeenCalledWith(task.id, activeProject.path, 'auto', 'iterm2')
     expect(get(taskRuntimeInfo).get(task.id)).toEqual({ workspacePath: '/workspace/T-42' })
     expect(get(activeSessions).get(task.id)).toEqual({ ticket_id: task.id, status: 'running' })
     expect(loadTasks).toHaveBeenCalledOnce()
     expect(focusTerminal).toHaveBeenCalledWith(task.id)
     expect(get(startingTasks).has(task.id)).toBe(false)
+  })
+
+  it('releases a terminal created for an implementation start that fails', async () => {
+    vi.mocked(startImplementation).mockRejectedValue(new Error('start failed'))
+    const runner = createTaskActionRunner({
+      getActiveProject: () => activeProject,
+      loadTasks: vi.fn(async () => undefined),
+      triggerGithubSync: vi.fn(async () => undefined),
+    })
+
+    await runner.handleRunAction({ taskId: task.id, actionPrompt: '', agent: null })
+
+    expect(release).toHaveBeenCalledWith(task.id)
+  })
+
+  it('preserves a pre-existing terminal when an implementation start fails', async () => {
+    vi.mocked(hasTerminal).mockReturnValue(true)
+    vi.mocked(startImplementation).mockRejectedValue(new Error('start failed'))
+    const runner = createTaskActionRunner({
+      getActiveProject: () => activeProject,
+      loadTasks: vi.fn(async () => undefined),
+      triggerGithubSync: vi.fn(async () => undefined),
+    })
+
+    await runner.handleRunAction({ taskId: task.id, actionPrompt: '', agent: null })
+
+    expect(release).not.toHaveBeenCalled()
   })
 
   function existingBranchTask(): Task {
