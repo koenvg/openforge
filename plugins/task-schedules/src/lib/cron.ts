@@ -70,10 +70,11 @@ export function validateFiveFieldCron(cron: string): { valid: boolean; error: st
 // next fire, spawns a fresh Task on every fire regardless of the de-dup guard.
 export const MINIMUM_FIRE_INTERVAL_MS = 5 * 60_000
 
-// Bounded horizon for sampling consecutive fires. A five-field cron repeats at
-// most yearly, so scanning just over a year past `fromMs` reaches every distinct
-// day-of-week / day-of-month / month cluster; the densest gap lives inside one.
-const CADENCE_SAMPLE_HORIZON_MS = 400 * 24 * 60 * 60_000
+const GREGORIAN_CALENDAR_CYCLE_YEARS = 400
+const NEXT_FIRE_SEARCH_HORIZON_MS = 5 * 366 * 24 * 60 * 60_000
+
+type CalendarDate = readonly [year: number, month: number, date: number]
+const timeZoneTransitionCache = new Map<string, CalendarDate[]>()
 
 export function validateCronCadence(cron: string, fromMs: number): { valid: boolean; error: string | null } {
   if (getMinFireIntervalMs(cron, fromMs) >= MINIMUM_FIRE_INTERVAL_MS) {
@@ -85,52 +86,205 @@ export function validateCronCadence(cron: string, fromMs: number): { valid: bool
   }
 }
 
-// Smallest gap between two consecutive fires within the sampling horizon, or
-// Infinity when fewer than two fires occur (e.g. yearly cadences). Walking fires
-// consecutively keeps total work bounded by the horizon length in minutes,
-// independent of how frequent the cron is.
+// Return a sentinel below the threshold when either nominal local-time gaps or
+// timezone transitions can compress two fires below the minimum cadence.
 function getMinFireIntervalMs(cron: string, fromMs: number): number {
-  const limit = fromMs + CADENCE_SAMPLE_HORIZON_MS
-  let cursor = fromMs
-  let previous: number | null = null
-  let min = Number.POSITIVE_INFINITY
-
-  while (cursor <= limit) {
-    let next: number
-    try {
-      next = getNextScheduledFireAt(cron, cursor)
-    } catch {
-      break
-    }
-    if (next > limit) break
-    if (previous !== null) {
-      min = Math.min(min, next - previous)
-      // Once a sub-threshold gap is found the verdict cannot change; stop early
-      // so pathologically frequent crons return without scanning the horizon.
-      if (min < MINIMUM_FIRE_INTERVAL_MS) break
-    }
-    previous = next
-    cursor = next
+  let parsed: ParsedCron
+  try {
+    parsed = parseCron(cron)
+  } catch {
+    return Number.POSITIVE_INFINITY
   }
 
-  return min
+  return hasSubMinimumWallClockInterval(parsed, fromMs)
+    || hasSubMinimumDstInterval(parsed, fromMs)
+    ? 0
+    : Number.POSITIVE_INFINITY
+}
+
+function hasSubMinimumWallClockInterval(parsed: ParsedCron, fromMs: number): boolean {
+  const minutesOfDay = scheduledMinutesOfDay(parsed)
+  const minimumMinutes = MINIMUM_FIRE_INTERVAL_MS / 60_000
+
+  const hasShortWithinDayGap = minutesOfDay.some((minuteOfDay, index) => (
+    index > 0 && minuteOfDay - minutesOfDay[index - 1] < minimumMinutes
+  ))
+  if (hasShortWithinDayGap && hasMatchingCalendarDate(parsed, fromMs, false)) {
+    return true
+  }
+
+  const overnightGap = 24 * 60 - minutesOfDay[minutesOfDay.length - 1] + minutesOfDay[0]
+  return overnightGap < minimumMinutes && hasMatchingCalendarDate(parsed, fromMs, true)
+}
+
+function scheduledMinutesOfDay(parsed: ParsedCron): number[] {
+  const minutes = [...parsed[0].values].sort((left, right) => left - right)
+  const hours = [...parsed[1].values].sort((left, right) => left - right)
+  return hours.flatMap((hour) => minutes.map((minute) => hour * 60 + minute))
+}
+
+function hasMatchingCalendarDate(parsed: ParsedCron, fromMs: number, requireConsecutive: boolean): boolean {
+  const day = new Date(fromMs)
+  day.setHours(12, 0, 0, 0)
+  const finalDay = new Date(day)
+  finalDay.setFullYear(finalDay.getFullYear() + GREGORIAN_CALENDAR_CYCLE_YEARS)
+  finalDay.setDate(finalDay.getDate() + 1)
+
+  let previousMatches = false
+  while (day.getTime() <= finalDay.getTime()) {
+    const matches = matchesCronDate(parsed, day)
+    if (matches && (!requireConsecutive || previousMatches)) return true
+    previousMatches = matches
+    day.setDate(day.getDate() + 1)
+  }
+  return false
+}
+
+function hasSubMinimumDstInterval(parsed: ParsedCron, fromMs: number): boolean {
+  const minutes = [...parsed[0].values].sort((left, right) => left - right)
+  const hours = [...parsed[1].values].sort((left, right) => left - right)
+
+  for (const [year, month, date] of timeZoneTransitionDates(fromMs)) {
+    const day = new Date(year, month, date, 12, 0, 0, 0)
+    const previousDay = new Date(day)
+    previousDay.setDate(previousDay.getDate() - 1)
+    const nextDay = new Date(day)
+    nextDay.setDate(nextDay.getDate() + 1)
+
+    const fires = scheduledFireTimesOnDay(parsed, day, hours, minutes)
+    const previousFire = scheduledBoundaryFireTimeOnDay(parsed, previousDay, hours, minutes, false)
+    const nextFire = scheduledBoundaryFireTimeOnDay(parsed, nextDay, hours, minutes, true)
+    if (previousFire !== null) fires.unshift(previousFire)
+    if (nextFire !== null) fires.push(nextFire)
+
+    const futureFires = fires.filter((fireMs) => fireMs > fromMs)
+    for (let index = 1; index < futureFires.length; index += 1) {
+      if (futureFires[index] - futureFires[index - 1] < MINIMUM_FIRE_INTERVAL_MS) return true
+    }
+  }
+  return false
+}
+
+function timeZoneTransitionDates(fromMs: number): CalendarDate[] {
+  const day = new Date(fromMs)
+  day.setHours(12, 0, 0, 0)
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const cacheKey = `${timeZone}:${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`
+  const cached = timeZoneTransitionCache.get(cacheKey)
+  if (cached) return cached
+
+  const transitions: CalendarDate[] = []
+  const finalDay = new Date(day)
+  finalDay.setFullYear(finalDay.getFullYear() + GREGORIAN_CALENDAR_CYCLE_YEARS)
+  while (day.getTime() < finalDay.getTime()) {
+    if (isTimeZoneTransitionDay(day)) {
+      transitions.push([day.getFullYear(), day.getMonth(), day.getDate()])
+    }
+    day.setDate(day.getDate() + 1)
+  }
+
+  timeZoneTransitionCache.set(cacheKey, transitions)
+  return transitions
+}
+
+function isTimeZoneTransitionDay(day: Date): boolean {
+  const start = new Date(day)
+  start.setHours(0, 0, 0, 0)
+  const next = new Date(day)
+  next.setDate(next.getDate() + 1)
+  next.setHours(0, 0, 0, 0)
+  return next.getTime() - start.getTime() !== 24 * 60 * 60_000
+}
+
+function scheduledFireTimesOnDay(
+  parsed: ParsedCron,
+  day: Date,
+  hours: number[],
+  minutes: number[],
+): number[] {
+  if (!matchesCronDate(parsed, day)) return []
+
+  const fires: number[] = []
+  for (const hour of hours) {
+    for (const minute of minutes) {
+      const fireMs = scheduledFireTimeOnDay(day, hour, minute)
+      if (fireMs !== null) fires.push(fireMs)
+    }
+  }
+  return fires
+}
+
+function scheduledBoundaryFireTimeOnDay(
+  parsed: ParsedCron,
+  day: Date,
+  hours: number[],
+  minutes: number[],
+  first: boolean,
+): number | null {
+  if (!matchesCronDate(parsed, day)) return null
+
+  const orderedHours = first ? hours : [...hours].reverse()
+  const orderedMinutes = first ? minutes : [...minutes].reverse()
+  for (const hour of orderedHours) {
+    for (const minute of orderedMinutes) {
+      const fireMs = scheduledFireTimeOnDay(day, hour, minute)
+      if (fireMs !== null) return fireMs
+    }
+  }
+  return null
+}
+
+function scheduledFireTimeOnDay(day: Date, hour: number, minute: number): number | null {
+  const candidate = new Date(day)
+  candidate.setHours(hour, minute, 0, 0)
+
+  // Spring-forward gaps normalize nonexistent local times forward. Only accept
+  // candidates that retained the requested calendar fields.
+  return candidate.getFullYear() === day.getFullYear()
+    && candidate.getMonth() === day.getMonth()
+    && candidate.getDate() === day.getDate()
+    && candidate.getHours() === hour
+    && candidate.getMinutes() === minute
+    ? candidate.getTime()
+    : null
 }
 
 export function getNextScheduledFireAt(cron: string, afterMs: number): number {
   const parsed = parseCron(cron)
-  const cursor = new Date(afterMs)
-  cursor.setSeconds(0, 0)
-  cursor.setMinutes(cursor.getMinutes() + 1)
+  let next: number | null = null
+  visitScheduledFires(parsed, afterMs, afterMs + NEXT_FIRE_SEARCH_HORIZON_MS, (current) => {
+    next = current
+    return true
+  })
 
-  const maxIterations = 366 * 24 * 60 * 5
-  for (let iteration = 0; iteration < maxIterations; iteration += 1) {
-    if (matchesCron(parsed, cursor)) {
-      return cursor.getTime()
-    }
-    cursor.setMinutes(cursor.getMinutes() + 1)
-  }
-
+  if (next !== null) return next
   throw new Error('Unable to find next Scheduled Fire within five years')
+}
+
+// Visit only possible minute/hour combinations on matching calendar days. This
+// keeps local-time and DST normalization in one iterator without walking every
+// minute in the search horizon.
+function visitScheduledFires(
+  parsed: ParsedCron,
+  afterMs: number,
+  throughMs: number,
+  onFire: (fireMs: number) => boolean,
+): void {
+  const minutes = [...parsed[0].values].sort((left, right) => left - right)
+  const hours = [...parsed[1].values].sort((left, right) => left - right)
+  const day = new Date(afterMs)
+  day.setHours(12, 0, 0, 0)
+  const finalDay = new Date(throughMs)
+  finalDay.setHours(12, 0, 0, 0)
+
+  while (day.getTime() <= finalDay.getTime()) {
+    for (const fireMs of scheduledFireTimesOnDay(parsed, day, hours, minutes)) {
+      if (fireMs <= afterMs) continue
+      if (fireMs > throughMs) return
+      if (onFire(fireMs)) return
+    }
+    day.setDate(day.getDate() + 1)
+  }
 }
 
 export function describeCronExpression(cron: string): string {
@@ -244,14 +398,9 @@ function normalizeCronValue(value: number, limit: typeof FIELD_LIMITS[number]): 
   return value
 }
 
-function matchesCron(parsed: ParsedCron, date: Date): boolean {
-  const checks = [
-    date.getMinutes(),
-    date.getHours(),
-    date.getDate(),
-    date.getMonth() + 1,
-    date.getDay(),
-  ]
 
-  return parsed.every((field, index) => field.values.has(checks[index]))
+function matchesCronDate(parsed: ParsedCron, date: Date): boolean {
+  return parsed[2].values.has(date.getDate())
+    && parsed[3].values.has(date.getMonth() + 1)
+    && parsed[4].values.has(date.getDay())
 }
