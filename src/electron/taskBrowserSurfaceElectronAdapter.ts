@@ -10,13 +10,18 @@ import type {
 } from './taskBrowserSurfaceManager.js'
 
 function allowedTopLevelUrl(value: string): boolean {
-  if (value === 'about:blank') return true
   try {
     const url = new URL(value)
     return url.protocol === 'http:' || url.protocol === 'https:'
   } catch {
     return false
   }
+}
+
+function isAbortedNavigationError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false
+  const code = 'code' in error ? error.code : undefined
+  return code === -3 || code === 'ERR_ABORTED'
 }
 
 function integerBounds(bounds: TaskBrowserBounds): TaskBrowserBounds {
@@ -88,7 +93,7 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
     try {
       await this.view.webContents.loadURL(url)
     } catch (error) {
-      if (!this.navigationError) {
+      if (!this.navigationError && !isAbortedNavigationError(error)) {
         this.navigationError = {
           code: 'ERR_FAILED',
           message: error instanceof Error ? error.message : String(error),
@@ -167,7 +172,7 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
     contents.on('did-navigate-in-page', () => this.publish())
     contents.on('page-title-updated', () => this.publish())
     contents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
-      if (!isMainFrame) return
+      if (!isMainFrame || errorCode === -3) return
       this.navigationError = {
         code: String(errorCode),
         message: errorDescription,

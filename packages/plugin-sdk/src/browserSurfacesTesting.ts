@@ -40,6 +40,10 @@ function surfaceKey(taskId: string, id: string): string {
   return `${taskId}\u0000${id}`
 }
 
+function copyState(state: TaskBrowserSurfaceState): TaskBrowserSurfaceState {
+  return { ...state, error: state.error ? { ...state.error } : null }
+}
+
 function validateIdentity(taskId: string, id: string): void {
   if (!taskId.trim()) throw new BrowserSurfaceError('INVALID_TASK', 'Task Browser Surface requires a non-empty Task ID')
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(id)) {
@@ -100,7 +104,7 @@ class TestingTaskBrowserSurface implements TaskBrowserSurfaceController {
 
   async getState(): Promise<TaskBrowserSurfaceState> {
     this.assertLive()
-    return { ...this.state, error: this.state.error ? { ...this.state.error } : null }
+    return copyState(this.state)
   }
 
   onStateChanged(handler: (state: TaskBrowserSurfaceState) => void): Disposable {
@@ -154,7 +158,7 @@ class TestingTaskBrowserSurface implements TaskBrowserSurfaceController {
 
   setState(patch: Partial<TaskBrowserSurfaceState>): void {
     this.assertLive()
-    this.state = { ...this.state, ...patch }
+    this.state = copyState({ ...this.state, ...patch })
     this.notify()
   }
 
@@ -169,8 +173,7 @@ class TestingTaskBrowserSurface implements TaskBrowserSurfaceController {
   }
 
   private notify(): void {
-    const snapshot = { ...this.state, error: this.state.error ? { ...this.state.error } : null }
-    for (const listener of this.listeners) listener(snapshot)
+    for (const listener of this.listeners) listener(copyState(this.state))
   }
 
   private assertLive(): void {

@@ -88,6 +88,35 @@ describe('renderer Task Browser Surface host adapter', () => {
     })
   })
 
+  it('ignores state events for another surface or a replaced native generation', async () => {
+    let stateHandler: ((payload: unknown) => void) | null = null
+    window.openforge = {
+      version: 1,
+      invoke: vi.fn(async command => command === 'task_browser_surface_get_or_create'
+        ? { ok: true, value: { surfaceId: 'surface-current', generation: 7, state: blankState } }
+        : { ok: true, value: blankState }),
+      onEvent(_eventName, handler) {
+        stateHandler = handler
+        return () => { stateHandler = null }
+      },
+    }
+
+    const controller = await createHostBrowserSurfaces('browser').getOrCreate({ taskId: 'T-1', id: 'main' })
+    const titles: string[] = []
+    controller.onStateChanged(state => titles.push(state.title))
+
+    for (const event of [
+      { surfaceId: 'surface-other-window', generation: 7, state: { ...blankState, title: 'Other window' } },
+      { surfaceId: 'surface-current', generation: 6, state: { ...blankState, title: 'Replaced native instance' } },
+      { surfaceId: 'surface-current', generation: 7, state: { ...blankState, title: 'Current instance' } },
+    ]) {
+      ;(stateHandler as ((payload: unknown) => void) | null)?.(event)
+    }
+
+    expect(titles).toEqual(['Current instance'])
+    await expect(controller.getState()).resolves.toMatchObject({ title: '' })
+  })
+
   it('clips native bounds to overflow ancestors', async () => {
     const invoke = vi.fn(async (command: string) => command === 'task_browser_surface_get_or_create'
       ? { ok: true, value: { surfaceId: 'surface-2', generation: 1, state: blankState } }

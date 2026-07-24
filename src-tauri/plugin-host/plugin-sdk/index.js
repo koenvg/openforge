@@ -280,6 +280,12 @@ function disposable(dispose) {
 function surfaceKey(taskId, id) {
 	return `${taskId}\u0000${id}`;
 }
+function copyState(state) {
+	return {
+		...state,
+		error: state.error ? { ...state.error } : null
+	};
+}
 function validateIdentity(taskId, id) {
 	if (!taskId.trim()) throw new BrowserSurfaceError("INVALID_TASK", "Task Browser Surface requires a non-empty Task ID");
 	if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(id)) throw new BrowserSurfaceError("INVALID_ID", "Task Browser Surface id must be a stable non-empty local identifier");
@@ -344,10 +350,7 @@ var TestingTaskBrowserSurface = class {
 	}
 	async getState() {
 		this.assertLive();
-		return {
-			...this.state,
-			error: this.state.error ? { ...this.state.error } : null
-		};
+		return copyState(this.state);
 	}
 	onStateChanged(handler) {
 		this.assertLive();
@@ -424,10 +427,10 @@ var TestingTaskBrowserSurface = class {
 	}
 	setState(patch) {
 		this.assertLive();
-		this.state = {
+		this.state = copyState({
 			...this.state,
 			...patch
-		};
+		});
 		this.notify();
 	}
 	publish(patch) {
@@ -440,11 +443,7 @@ var TestingTaskBrowserSurface = class {
 		this.notify();
 	}
 	notify() {
-		const snapshot = {
-			...this.state,
-			error: this.state.error ? { ...this.state.error } : null
-		};
-		for (const listener of this.listeners) listener(snapshot);
+		for (const listener of this.listeners) listener(copyState(this.state));
 	}
 	assertLive() {
 		if (this.destroyed) throw new BrowserSurfaceError("SURFACE_DESTROYED", "Task Browser Surface has been destroyed");

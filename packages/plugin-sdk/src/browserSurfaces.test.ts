@@ -77,4 +77,57 @@ describe('browser surfaces SDK contract', () => {
     expect(backend).not.toHaveProperty('browserSurfaces')
     expect(vi.fn()).not.toHaveBeenCalled()
   })
+
+  it('drives coherent history and isolated failure snapshots through the testing API', async () => {
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'browser' })
+    const surface = await api.browserSurfaces.getOrCreate({
+      taskId: 'T-history',
+      id: 'main',
+      initialUrl: 'https://example.com/first',
+    })
+
+    await surface.navigate('https://example.com/second')
+    await surface.navigate('https://example.com/third')
+    await expect(surface.goBack()).resolves.toMatchObject({
+      url: 'https://example.com/second',
+      canGoBack: true,
+      canGoForward: true,
+    })
+    await expect(surface.goForward()).resolves.toMatchObject({
+      url: 'https://example.com/third',
+      canGoBack: true,
+      canGoForward: false,
+    })
+
+    const navigationFailure = {
+      code: '-105',
+      message: 'Name not resolved',
+      url: 'https://missing.example',
+    }
+    const observedFailures: string[] = []
+    surface.onStateChanged(state => {
+      if (state.error) state.error.message = 'mutated by first observer'
+    })
+    surface.onStateChanged(state => {
+      if (state.error) observedFailures.push(state.error.message)
+    })
+    api.__testing.registry.setBrowserSurfaceState('T-history', 'main', {
+      loading: false,
+      error: navigationFailure,
+    })
+    navigationFailure.message = 'mutated by test after publication'
+
+    await expect(surface.getState()).resolves.toMatchObject({
+      url: 'https://example.com/third',
+      loading: false,
+      canGoBack: true,
+      canGoForward: false,
+      error: { code: '-105', message: 'Name not resolved', url: 'https://missing.example' },
+    })
+    expect(observedFailures).toEqual(['Name not resolved'])
+    expect(api.__testing.calls.browserSurfaceControls).toEqual([
+      { taskId: 'T-history', id: 'main', action: 'goBack' },
+      { taskId: 'T-history', id: 'main', action: 'goForward' },
+    ])
+  })
 })
