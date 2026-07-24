@@ -10,13 +10,16 @@ A small Trusted Plugin that adds a **Browser** tab to every Task and exercises O
    pnpm --filter @openforge-app/plugin-task-browser build
    ```
 
-2. Launch the full Electron app (Vite-only development cannot host native browser surfaces):
+2. Build and launch the production Electron renderer:
 
    ```sh
-   pnpm electron:dev
+   pnpm electron:package
+   open "src-tauri/target/release/bundle/electron/macos/Open Forge.app"
    ```
 
-3. Open **Settings → Plugins**.
+   Do not use `pnpm electron:dev` for this external Svelte plugin. The Vite dev renderer currently has a separate Svelte runtime and reports `effect_orphan`; production builds externalize the host renderer to the shared plugin Svelte runtime.
+
+3. Open **Settings → Plugins** in the packaged app.
 4. Choose **local path**, enter the absolute path to `plugins/task-browser`, and click **Install package**.
 5. Enable **Task Browser** for the active project.
 6. Open any Task and select its **Browser** tab.
