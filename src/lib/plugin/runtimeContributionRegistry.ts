@@ -1,9 +1,12 @@
+import { BrowserSurfaceError } from '@openforge-app/plugin-sdk/frontend'
 import { validateSchemaValue } from '@openforge-app/plugin-runtime/commandValidation'
 import { sanitizePluginIcon } from '@openforge-app/plugin-sdk/pluginIcons'
 import type {
   Disposable,
   FrontendOpenForgeAPI,
+  GetOrCreateBrowserSurfaceRequest,
   FrontendPlugin,
+  TaskBrowserSurfaceController,
   FrontendPluginContext,
   PluginInjectionPointRegistration,
   PluginSettingsSectionRegistration,
@@ -90,6 +93,9 @@ export type RuntimeHostBridge = {
   invokeBackendMethod?(method: string, payload?: unknown): Promise<unknown>
   invokeHostCommand?(command: string, payload?: unknown): Promise<unknown>
   onHostEvent?(event: string, handler: (payload: unknown) => void): () => void
+  getOrCreateBrowserSurface?(pluginId: string, request: GetOrCreateBrowserSurfaceRequest): Promise<TaskBrowserSurfaceController>
+  resetBrowserSession?(pluginId: string, taskId: string): Promise<void>
+  destroyPluginBrowserSurfaces?(pluginId: string): Promise<void>
 }
 
 type RuntimeOptions = {
@@ -405,8 +411,19 @@ class RuntimeContributionRegistry {
   }
 
   async deactivate(): Promise<void> {
-    await this.backendSubscriptions.disposeAll()
-    await this.frontendSubscriptions.disposeAll()
+    let firstError: unknown = null
+    try {
+      await this.backendSubscriptions.disposeAll()
+      await this.frontendSubscriptions.disposeAll()
+    } catch (error) {
+      firstError = error
+    }
+    try {
+      await this.host.destroyPluginBrowserSurfaces?.(this.pluginId)
+    } catch (error) {
+      firstError ??= error
+    }
+    if (firstError) throw firstError
   }
 
   getSnapshot(): RuntimeContributionSnapshot {
@@ -433,6 +450,14 @@ class RuntimeContributionRegistry {
     const registry = this
     this.frontendApi = {
       ...this.createCommonApi(),
+      browserSurfaces: {
+        getOrCreate: async (request) => this.host.getOrCreateBrowserSurface
+          ? this.host.getOrCreateBrowserSurface(this.pluginId, request)
+          : Promise.reject(new BrowserSurfaceError('CAPABILITY_UNAVAILABLE', 'OpenForge host capability is unavailable: browserSurfaces.getOrCreate')),
+        resetSession: async (taskId) => this.host.resetBrowserSession
+          ? this.host.resetBrowserSession(this.pluginId, taskId)
+          : Promise.reject(new BrowserSurfaceError('CAPABILITY_UNAVAILABLE', 'OpenForge host capability is unavailable: browserSurfaces.resetSession')),
+      },
       views: {
         register: (registration) => this.registerView(registration),
       },
@@ -633,7 +658,7 @@ class RuntimeContributionRegistry {
         get: async (key, projectId = this.projectId ?? '') => this.host.getProjectConfig ? this.host.getProjectConfig(projectId, key) as never : unavailableCapability('projectConfig.get'),
         set: async (key, value, projectId = this.projectId ?? '') => this.host.setProjectConfig ? this.host.setProjectConfig(projectId, key, value) : unavailableCapability('projectConfig.set'),
       },
-    } satisfies Omit<FrontendOpenForgeAPI, 'views' | 'taskUI' | 'taskPane' | 'settings' | 'injectionPoints' | 'backend'>
+    } satisfies Omit<FrontendOpenForgeAPI, 'browserSurfaces' | 'views' | 'taskUI' | 'taskPane' | 'settings' | 'injectionPoints' | 'backend'>
   }
 
   private qualifiedId(kind: RuntimeKind, localId: string): string {

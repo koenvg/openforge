@@ -1,3 +1,6 @@
+import { createTestingBrowserSurfaces } from './browserSurfacesTesting'
+import type { TestingBrowserSurfaces } from './browserSurfacesTesting'
+import type { TaskBrowserSurfaceState } from './browserSurfaces'
 import type {
   BackendMethodRegistration,
   BackendOpenForgeAPI,
@@ -78,6 +81,13 @@ export interface TestingOpenForgeApiCalls {
   shellResizes: Array<{ taskId: string; terminalIndex: number; cols: number; rows: number }>
   shellKills: Array<{ taskId: string; terminalIndex: number }>
   shellBuffers: Array<{ taskId: string; terminalIndex: number }>
+  browserSurfaceGetOrCreate: Array<{ taskId: string; id: string; initialUrl?: string }>
+  browserSurfaceAttachments: Array<{ taskId: string; id: string; element: HTMLElement }>
+  browserSurfaceDetaches: Array<{ taskId: string; id: string }>
+  browserSurfaceDestroys: Array<{ taskId: string; id: string }>
+  browserSurfaceNavigations: Array<{ taskId: string; id: string; url: string }>
+  browserSurfaceControls: Array<{ taskId: string; id: string; action: 'goBack' | 'goForward' | 'reload' | 'stop' }>
+  browserSurfaceSessionResets: Array<{ taskId: string }>
   storageGets: Array<{ scope: TestingRuntimeScope; scopeId: string | null; key: string }>
   storageSets: Array<{ scope: TestingRuntimeScope; scopeId: string | null; key: string; value: JsonValue }>
   storageDeletes: Array<{ scope: TestingRuntimeScope; scopeId: string | null; key: string }>
@@ -192,6 +202,7 @@ export class TestingOpenForgeRegistryFake {
   private readonly backgroundServices = new Map<string, TestingBackgroundServiceContribution>()
   private readonly injectionPointsMap = new Map<string, TestingInjectionPointContribution>()
   private readonly claimedIds = new Set<string>()
+  private readonly testingBrowserSurfaces: TestingBrowserSurfaces
   private readonly config = new Map<string, JsonValue>()
   private readonly seededTasks: Task[]
   private eventListenerSequence = 0
@@ -212,6 +223,7 @@ export class TestingOpenForgeRegistryFake {
     this.calls = createTestingCalls()
     this.storage = options.storage ?? createMemoryPluginStorage(this.calls)
     this.seededTasks = options.tasks ?? []
+    this.testingBrowserSurfaces = createTestingBrowserSurfaces(this.calls)
   }
 
   get frontendApi(): MockFrontendOpenForgeAPI {
@@ -231,6 +243,7 @@ export class TestingOpenForgeRegistryFake {
 
     const api = {
       ...this.createCommonApi(),
+      browserSurfaces: this.testingBrowserSurfaces.api,
       views: {
         register: (registration: PluginViewRegistration) => this.registerView(registration),
       },
@@ -311,6 +324,10 @@ export class TestingOpenForgeRegistryFake {
     await this.startBackgroundServices(existingServices)
   }
 
+  setBrowserSurfaceState(taskId: string, id: string, patch: Partial<TaskBrowserSurfaceState>): void {
+    this.testingBrowserSurfaces.setState(taskId, id, patch)
+  }
+
   async disposeAll(): Promise<void> {
     await this.backendSubscriptions.disposeAll()
     await this.frontendSubscriptions.disposeAll()
@@ -345,7 +362,7 @@ export class TestingOpenForgeRegistryFake {
     return Array.isArray(raw) ? raw.filter((entry): entry is StartPromptContribution => Boolean(entry) && typeof entry === 'object' && typeof (entry as { id?: unknown }).id === 'string' && typeof (entry as { content?: unknown }).content === 'string') : []
   }
 
-  private createCommonApi(): Omit<FrontendOpenForgeAPI, 'views' | 'taskUI' | 'taskPane' | 'settings' | 'backend' | 'injectionPoints'> {
+  private createCommonApi(): Omit<FrontendOpenForgeAPI, 'browserSurfaces' | 'views' | 'taskUI' | 'taskPane' | 'settings' | 'backend' | 'injectionPoints'> {
     return {
       commands: {
         register: (registration) => this.registerCommand(registration),
@@ -832,6 +849,13 @@ export function createTestingCalls(): TestingOpenForgeApiCalls {
     shellResizes: [],
     shellKills: [],
     shellBuffers: [],
+    browserSurfaceGetOrCreate: [],
+    browserSurfaceAttachments: [],
+    browserSurfaceDetaches: [],
+    browserSurfaceDestroys: [],
+    browserSurfaceNavigations: [],
+    browserSurfaceControls: [],
+    browserSurfaceSessionResets: [],
     storageGets: [],
     storageSets: [],
     storageDeletes: [],

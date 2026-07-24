@@ -206,13 +206,51 @@ Capabilities are host APIs exposed through the `openforge` object. Unsupported c
 | --- | --- | --- |
 | `commands`, `events`, `storage`, `context` | Supported | Supported |
 | `tasks`, `projects`, `fs`, `shell`, `notifications`, `attention`, `system.openUrl`, `config`, `projectConfig` | Supported through the renderer host bridge when wired for the active runtime | Supported through backend host callbacks |
-| `views`, `taskUI` (`taskPane` compatibility alias), `settings`, `navigation` | Supported | Not exposed |
+| `views`, `taskUI` (`taskPane` compatibility alias), `settings`, `navigation`, `browserSurfaces` | Supported | Not exposed |
 | `backend.whenReady`, `backend.invoke` | Supported for same-plugin backend RPC | Not applicable |
 | `backend.registerMethod`, `background.register` | Not exposed | Supported |
 
 Current declared capability names are:
 
-`commands`, `events`, `views`, `taskPane`, `settings`, `background`, `backend`, `storage`, `context`, `navigation`, `tasks`, `projects`, `fs`, `shell`, `notifications`, `attention`, `system.openUrl`, `config`, `projectConfig`.
+`commands`, `events`, `views`, `taskPane`, `settings`, `background`, `backend`, `storage`, `context`, `navigation`, `tasks`, `projects`, `fs`, `shell`, `notifications`, `attention`, `system.openUrl`, `config`, `projectConfig`, `browserSurfaces`.
+
+## Task Browser Surfaces
+
+A frontend Trusted Plugin can declare `"browserSurfaces"` in `package.json#openforge.requires` and present an HTTP(S) page inside Task UI without receiving Electron objects. The capability is frontend-only; metadata that requires it must include a frontend entry, and backend APIs do not expose it.
+
+```ts
+const surface = await openforge.browserSurfaces.getOrCreate({
+  taskId,
+  id: 'main',
+  initialUrl: savedUrl ?? undefined
+})
+
+const stateSubscription = surface.onStateChanged(async state => {
+  if (state.error === null && state.url.startsWith('http')) {
+    await openforge.storage.task(taskId).set('lastBrowserUrl', state.url)
+  }
+})
+
+const attachment = await surface.attach(browserRegionElement)
+// On component teardown:
+await attachment.dispose() // detaches but keeps the live page when capacity permits
+await stateSubscription.dispose()
+
+// To release the live page while retaining its durable Task Browser Session:
+await surface.destroy()
+```
+
+`getOrCreate` is idempotent by OpenForge window, plugin, Task, and stable plugin-local `id`. `initialUrl` is optional, must be HTTP(S), and is used only when creating a new live surface; a newly created surface without it starts at host-controlled `about:blank`. Reacquiring a live surface never navigates it. Use `getState()` and `onStateChanged(...)` for the consolidated URL, title, loading, history, and navigation-error snapshot, and use `navigate`, `goBack`, `goForward`, `reload`, and `stop` for typed navigation.
+
+Pass a visible `HTMLElement` to `attach`. OpenForge tracks its CSS-pixel bounds, scrolling, resizing, visibility, and disconnection. A newer attachment atomically replaces an older one, and disposing stale attachment cleanup cannot detach the newer attachment. Detaching may preserve the background-throttled live page; each OpenForge window retains at most four detached surfaces before least-recently-used eviction. Attached surfaces are protected. After destruction or eviction, reacquire with `getOrCreate` and the URL saved in task-scoped plugin storage.
+
+All surfaces for one plugin and Task share a durable, isolated Task Browser Session. Cookies and Chromium site data survive surface destruction, plugin reload/disablement, and app restart; sessions are isolated across plugins and Tasks. `openforge.browserSurfaces.resetSession(taskId)` destroys that plugin's live surfaces for the Task and clears browser session data and remembered site permissions without clearing plugin task storage.
+
+Electron main owns the non-configurable sandboxed browser security baseline, top-level HTTP(S)-only policy, native bounds, resource limits, and cleanup. In this first secure surface path, site permissions, popup creation, and downloads fail closed; later host-owned mediators can add prompts and save flows without expanding the plugin API. Plugins cannot access Electron, preload IPC, `WebContentsView`, `webContents`, session objects, popup handles, download items, file paths, script injection, DOM inspection, CDP, or DevTools policy. Do not import desktop IPC wrappers or Electron APIs directly.
+
+Calls fail with `BrowserSurfaceError` and a stable `code` such as `HOST_UNAVAILABLE`, `INVALID_TASK`, `PLUGIN_NOT_ENABLED`, `INVALID_ID`, `INVALID_URL`, or `SURFACE_DESTROYED`. Vite-only renderer development has no Electron host and therefore reports `HOST_UNAVAILABLE`; it does not emulate a live browser.
+
+The testing API provides the same in-memory capability through `createMockFrontendOpenForgeApi(...)` and `createOpenForgeRegistryFake(...).frontendApi`. Calls are recorded in `api.__testing.calls`, and tests can drive a full state update with `api.__testing.registry.setBrowserSurfaceState(taskId, id, patch)`. The fake covers idempotence, attachment lifecycle, history controls, state subscriptions, navigation validation, destroy, and session reset.
 
 ## Storage and configuration
 

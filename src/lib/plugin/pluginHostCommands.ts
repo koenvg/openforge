@@ -33,6 +33,7 @@ import {
 import { activeProjectId, currentView, selectedTaskId } from '../stores'
 import type { AppView } from '../types'
 import { installedPlugins } from './pluginStore'
+import { createHostBrowserSurfaces, destroyHostPluginBrowserSurfaces } from './taskBrowserSurfaces'
 import { isPluginViewKey } from './types'
 import {
   emitPluginHostEvent,
@@ -207,6 +208,7 @@ export async function ensurePluginBackendReady(pluginId: string): Promise<void> 
 }
 
 export function createPluginRuntimeHost(pluginId: string) {
+  const browserSurfaces = createHostBrowserSurfaces(pluginId)
   const entry = get(installedPlugins).get(pluginId)
   if (entry?.manifest.backend && entry.state !== 'active') {
     pluginBackendReadyStates.set(pluginId, 'starting')
@@ -315,6 +317,18 @@ export function createPluginRuntimeHost(pluginId: string) {
     setConfig: (key: string, value: unknown) => setConfig(key, typeof value === 'string' ? value : JSON.stringify(value)),
     getProjectConfig: (projectId: string, key: string) => getProjectConfig(projectId, key),
     setProjectConfig: (projectId: string, key: string, value: unknown) => setProjectConfig(projectId, key, typeof value === 'string' ? value : JSON.stringify(value)),
+    getOrCreateBrowserSurface: (qualifiedPluginId: string, request: Parameters<typeof browserSurfaces.getOrCreate>[0]) => {
+      if (qualifiedPluginId !== pluginId) throw new Error('Task Browser Surface plugin identity mismatch')
+      return browserSurfaces.getOrCreate(request)
+    },
+    resetBrowserSession: (qualifiedPluginId: string, taskId: string) => {
+      if (qualifiedPluginId !== pluginId) throw new Error('Task Browser Session plugin identity mismatch')
+      return browserSurfaces.resetSession(taskId)
+    },
+    destroyPluginBrowserSurfaces: (qualifiedPluginId: string) => {
+      if (qualifiedPluginId !== pluginId) throw new Error('Task Browser Surface plugin identity mismatch')
+      return destroyHostPluginBrowserSurfaces(pluginId)
+    },
     invokeHostCommand: (command: string, payload: unknown) => {
       ensurePluginHostStoreSubscriptions()
       return invokePluginHostCommand(command, payload)

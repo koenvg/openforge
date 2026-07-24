@@ -1,3 +1,13 @@
+export { BrowserSurfaceError, isAllowedBrowserSurfaceUrl } from './browserSurfaces'
+export type {
+  BrowserSurfaceErrorCode,
+  BrowserSurfaceNavigationError,
+  BrowserSurfacesAPI,
+  GetOrCreateBrowserSurfaceRequest,
+  TaskBrowserSurfaceController,
+  TaskBrowserSurfaceState,
+} from './browserSurfaces'
+
 export {
   OPENFORGE_PACKAGE_METADATA_SCHEMA,
   OPENFORGE_PLUGIN_CAPABILITIES,

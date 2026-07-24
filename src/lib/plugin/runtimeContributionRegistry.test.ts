@@ -433,6 +433,46 @@ describe('runtime contribution registry', () => {
     expect(host.listCommandCatalog).toHaveBeenCalledWith({ projectId: 'P-1' })
   })
 
+  it('qualifies browser surface requests with the active frontend plugin and cleans them up on deactivation', async () => {
+    const state = { url: 'about:blank', title: '', loading: false, canGoBack: false, canGoForward: false, error: null }
+    const controller = {
+      attach: vi.fn(async () => ({ dispose: () => undefined })),
+      detach: vi.fn(async () => undefined),
+      destroy: vi.fn(async () => undefined),
+      getState: vi.fn(async () => state),
+      onStateChanged: vi.fn(() => ({ dispose: () => undefined })),
+      navigate: vi.fn(async () => state),
+      goBack: vi.fn(async () => state),
+      goForward: vi.fn(async () => state),
+      reload: vi.fn(async () => state),
+      stop: vi.fn(async () => state),
+    }
+    const host = {
+      getOrCreateBrowserSurface: vi.fn(async () => controller),
+      resetBrowserSession: vi.fn(async () => undefined),
+      destroyPluginBrowserSurfaces: vi.fn(async () => undefined),
+    }
+    const registry = createRuntimeContributionRegistry({ pluginId: 'browser', projectId: 'P-1', host })
+    const api = registry.getFrontendApi()
+
+    await expect(api.browserSurfaces.getOrCreate({ taskId: 'T-1', id: 'main' })).resolves.toBe(controller)
+    await api.browserSurfaces.resetSession('T-1')
+    await registry.deactivate()
+
+    expect(host.getOrCreateBrowserSurface).toHaveBeenCalledWith('browser', { taskId: 'T-1', id: 'main' })
+    expect(host.resetBrowserSession).toHaveBeenCalledWith('browser', 'T-1')
+    expect(host.destroyPluginBrowserSurfaces).toHaveBeenCalledWith('browser')
+  })
+
+  it('reports unavailable browser surface hosts as a named capability error', async () => {
+    const api = createRuntimeContributionRegistry({ pluginId: 'browser', projectId: 'P-1' }).getFrontendApi()
+
+    await expect(api.browserSurfaces.getOrCreate({ taskId: 'T-1', id: 'main' })).rejects.toMatchObject({
+      name: 'BrowserSurfaceError',
+      code: 'CAPABILITY_UNAVAILABLE',
+    })
+  })
+
   it('reports unavailable frontend host capabilities with capability names', async () => {
     const api = createRuntimeContributionRegistry({ pluginId: 'scheduler', projectId: 'P-1' }).getFrontendApi()
 

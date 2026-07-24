@@ -1,4 +1,12 @@
 import type {
+  BrowserSurfaceErrorCode,
+  BrowserSurfaceNavigationError,
+  BrowserSurfacesAPI,
+  GetOrCreateBrowserSurfaceRequest,
+  TaskBrowserSurfaceController,
+  TaskBrowserSurfaceState,
+} from './browserSurfaces'
+import type {
   CommandDescriptor,
   CommandRegistry,
   CommandRegistration,
@@ -47,6 +55,17 @@ export function defineFrontendPlugin<const TPlugin extends FrontendPlugin>(plugi
     configurable: false,
   })
   return plugin as MarkedFrontendPlugin<TPlugin>
+}
+
+export { BrowserSurfaceError, isAllowedBrowserSurfaceUrl } from './browserSurfaces'
+
+export type {
+  BrowserSurfaceErrorCode,
+  BrowserSurfaceNavigationError,
+  BrowserSurfacesAPI,
+  GetOrCreateBrowserSurfaceRequest,
+  TaskBrowserSurfaceController,
+  TaskBrowserSurfaceState,
 }
 
 export type {
