@@ -13,12 +13,16 @@
 //! current set of command names (and `plugins` gives the on-disk roots of the enabled
 //! plugins). We overlay that authoritative name list additively onto the filesystem
 //! scan — keeping every scanned entry's rich metadata (no regression), appending the
-//! names the scan missed, and enriching each appended name best-effort from the plugin
-//! roots and the marketplace clone.
+//! names the scan missed, and enriching each appended name best-effort from those
+//! active plugin roots.
 //!
 //! The query is warmed in the background at session start / app load and cached, so the
 //! picker (which must open instantly) always reads a cache and never spawns a process;
 //! a cold cache simply falls back to today's filesystem scan until the warm completes.
+//!
+//! Names that resolve to no file on disk — the commands Claude ships inside its own
+//! binary — are described from Anthropic's published command reference instead; see
+//! the "Published command reference" section below.
 
 use crate::opencode_client::CommandInfo;
 use std::io::{BufRead, BufReader};
@@ -811,7 +815,9 @@ mod tests {
         let docs = parse_commands_doc(md);
         assert_eq!(docs.len(), 4);
 
-        let code_review = docs.get("code-review").expect("escaped pipes must not split");
+        let code_review = docs
+            .get("code-review")
+            .expect("escaped pipes must not split");
         assert!(code_review.is_skill);
         assert_eq!(
             code_review.description,
@@ -846,7 +852,10 @@ mod tests {
             |_| None, // nothing on disk — this is a bundled command
         );
         let enriched = apply_doc_descriptions(merged, &docs);
-        let cmd = enriched.iter().find(|c| c.name == "security-review").unwrap();
+        let cmd = enriched
+            .iter()
+            .find(|c| c.name == "security-review")
+            .unwrap();
         assert_eq!(
             cmd.description.as_deref(),
             Some("Analyze pending changes for vulnerabilities")
