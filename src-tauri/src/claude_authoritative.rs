@@ -24,7 +24,6 @@ use crate::opencode_client::CommandInfo;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::mpsc::RecvTimeoutError;
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
@@ -203,24 +202,228 @@ fn frontmatter_bool(content: &str, key: &str) -> Option<bool> {
     None
 }
 
-/// Enumerate marketplace plugin dirs: `<home>/.claude/plugins/marketplaces/*/plugins/*`.
-pub fn marketplace_plugin_dirs(home: &Path) -> Vec<PathBuf> {
-    let marketplaces = home.join(".claude").join("plugins").join("marketplaces");
-    let mut dirs = Vec::new();
-    let Ok(entries) = std::fs::read_dir(&marketplaces) else {
-        return dirs;
-    };
-    for market in entries.flatten() {
-        let plugins = market.path().join("plugins");
-        if let Ok(plugin_entries) = std::fs::read_dir(&plugins) {
-            for plugin in plugin_entries.flatten() {
-                if plugin.path().is_dir() {
-                    dirs.push(plugin.path());
-                }
+/// The directories an authoritative command name may be enriched from.
+///
+/// Only the plugin roots Claude reports as *active* in its `system/init` message are
+/// eligible. An earlier version also walked the marketplace catalog
+/// (`<home>/.claude/plugins/marketplaces/*/plugins/*`), but that is the index of every
+/// plugin **available** to install, not the ones installed — so a bundled command could
+/// be enriched from a same-named command in a plugin the user does not have. `/code-review`
+/// hit exactly that: Claude serves it from its own bundle, while the catalog holds an
+/// unrelated `gh`-based PR reviewer, and the picker showed the latter's prompt as if it
+/// were the real command. Wrong metadata is worse than none, so the catalog is not read.
+pub fn resolver_roots(plugin_roots: &[PathBuf]) -> Vec<PathBuf> {
+    plugin_roots
+        .iter()
+        .filter(|root| root.is_dir())
+        .cloned()
+        .collect()
+}
+
+// ── Published command reference ─────────────────────────────────────────────
+//
+// Claude resolves descriptions for its bundled commands in-process and does not expose
+// them to external tools: `system/init` carries `slash_commands` and `skills` as bare
+// name arrays, `claude --help` has no listing subcommand, and `/help` refuses to run
+// non-interactively. The descriptions are compiled into the CLI binary, partly as
+// runtime-interpolated template strings, so they cannot be recovered from it reliably.
+//
+// Anthropic does publish them, though, as machine-readable markdown at
+// `code.claude.com/docs/en/commands.md` — the same reference the docs site renders.
+// Fetching it once per app launch gives the picker real descriptions for the bundled
+// commands and keeps up with commands Anthropic adds, without a per-open network hit.
+
+/// Where the published command reference lives.
+const COMMANDS_DOC_URL: &str = "https://code.claude.com/docs/en/commands.md";
+
+/// How long the docs fetch may take before the picker gives up on it for this launch.
+const DOC_FETCH_TIMEOUT_SECS: u64 = 10;
+
+/// One row of the published command reference.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocCommand {
+    /// Prose purpose, with doc-site markup (badges, links, version comments) removed.
+    pub description: String,
+    /// Whether the reference tags this as a bundled Skill or Workflow — i.e. a prompt
+    /// handed to Claude, rather than a CLI action like `/context` or `/usage`.
+    pub is_skill: bool,
+}
+
+/// Split one markdown table row on its unescaped `|` delimiters. Argument syntax in the
+/// command cell contains `\|` alternatives (``/code-review [low\|medium\|high]``) which
+/// must not be treated as column breaks.
+fn split_table_row(line: &str) -> Vec<String> {
+    let mut cells = vec![String::new()];
+    let mut escaped = false;
+    for ch in line.chars() {
+        if escaped {
+            // Keep the escaped delimiter itself, drop the backslash.
+            if ch != '|' {
+                cells.last_mut().unwrap().push('\\');
             }
+            cells.last_mut().unwrap().push(ch);
+            escaped = false;
+        } else if ch == '\\' {
+            escaped = true;
+        } else if ch == '|' {
+            cells.push(String::new());
+        } else {
+            cells.last_mut().unwrap().push(ch);
         }
     }
-    dirs
+    cells.iter().map(|c| c.trim().to_string()).collect()
+}
+
+/// Rewrite `[text](url)` as `text`, leaving other bracketed text alone.
+fn strip_markdown_links(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(open) = rest.find('[') {
+        let Some(close) = rest[open..].find("](") else {
+            break;
+        };
+        let close = open + close;
+        let Some(end) = rest[close..].find(')') else {
+            break;
+        };
+        out.push_str(&rest[..open]);
+        out.push_str(&rest[open + 1..close]);
+        rest = &rest[close + end + 1..];
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Remove `{/* ... */}` doc-site directives (e.g. `{/* min-version: 2.1.152 */}`).
+fn strip_doc_directives(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(open) = rest.find("{/*") {
+        let Some(close) = rest[open..].find("*/}") else {
+            break;
+        };
+        out.push_str(&rest[..open]);
+        rest = &rest[open + close + 3..];
+    }
+    out.push_str(rest);
+    out
+}
+
+/// The command name a table row documents, read from the leading `` `/name `` cell.
+fn doc_row_name(cell: &str) -> Option<String> {
+    let after_tick = cell.strip_prefix('`')?;
+    let name: String = after_tick
+        .strip_prefix('/')?
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | ':'))
+        .collect();
+    (!name.is_empty()).then_some(name)
+}
+
+/// Parse the published command reference into `name -> DocCommand`.
+///
+/// Tolerant by design: the source is a human-authored docs page, so anything that does
+/// not look like a command row is skipped rather than treated as an error. The first
+/// row for a name wins, so alias rows later in the page cannot overwrite it.
+pub fn parse_commands_doc(md: &str) -> std::collections::HashMap<String, DocCommand> {
+    let mut out = std::collections::HashMap::new();
+    for line in md.lines() {
+        let line = line.trim();
+        if !line.starts_with('|') {
+            continue;
+        }
+        let cells = split_table_row(line.trim_matches('|'));
+        if cells.len() < 2 {
+            continue;
+        }
+        // Skip the `| --- | :---: |` separator beneath the header.
+        if cells[0].chars().all(|c| matches!(c, '-' | ':' | ' ')) {
+            continue;
+        }
+        let Some(name) = doc_row_name(&cells[0]) else {
+            continue;
+        };
+        let purpose = strip_doc_directives(&cells[1]);
+        let purpose = purpose.trim();
+        // Bundled skills/workflows lead with a bold badge: `**[Skill](...).** …`
+        let (is_skill, body) = match purpose.strip_prefix("**") {
+            Some(after) => match after.find("**") {
+                Some(end) => {
+                    let badge = &after[..end];
+                    let tagged = badge.contains("[Skill]") || badge.contains("[Workflow]");
+                    if tagged {
+                        (true, after[end + 2..].trim_start_matches('.').trim())
+                    } else {
+                        (false, purpose)
+                    }
+                }
+                None => (false, purpose),
+            },
+            None => (false, purpose),
+        };
+        let description = strip_markdown_links(body)
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        if description.is_empty() {
+            continue;
+        }
+        out.entry(name).or_insert(DocCommand {
+            description,
+            is_skill,
+        });
+    }
+    out
+}
+
+/// Fill in descriptions from the published reference for commands that have none.
+///
+/// Only ever fills a gap: anything resolved from disk already carries the authored
+/// frontmatter description plus its body, which is richer than a one-line doc summary.
+pub fn apply_doc_descriptions(
+    commands: Vec<CommandInfo>,
+    docs: &std::collections::HashMap<String, DocCommand>,
+) -> Vec<CommandInfo> {
+    commands
+        .into_iter()
+        .map(|mut cmd| {
+            if cmd.description.is_none() {
+                if let Some(doc) = docs.get(&cmd.name) {
+                    cmd.description = Some(doc.description.clone());
+                }
+            }
+            cmd
+        })
+        .collect()
+}
+
+fn docs_cache() -> &'static Mutex<Option<std::collections::HashMap<String, DocCommand>>> {
+    static DOCS: OnceLock<Mutex<Option<std::collections::HashMap<String, DocCommand>>>> =
+        OnceLock::new();
+    DOCS.get_or_init(|| Mutex::new(None))
+}
+
+/// Fetch and cache the published command reference. Called once per app launch, off the
+/// startup path; a failure (offline, timeout, docs moved) simply leaves the cache empty
+/// and the picker behaves exactly as it did before — names with no description.
+pub fn warm_docs() {
+    std::thread::spawn(|| {
+        let Ok(response) = reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(DOC_FETCH_TIMEOUT_SECS))
+            .build()
+            .and_then(|client| client.get(COMMANDS_DOC_URL).send())
+        else {
+            return;
+        };
+        if !response.status().is_success() {
+            return;
+        }
+        let Ok(body) = response.text() else { return };
+        let parsed = parse_commands_doc(&body);
+        if !parsed.is_empty() {
+            *docs_cache().lock().unwrap() = Some(parsed);
+        }
+    });
 }
 
 // ── Background warm + process-global cache ──────────────────────────────────
@@ -265,16 +468,17 @@ pub fn apply(scanned: Vec<CommandInfo>, project_path: Option<&str>) -> Vec<Comma
             }
         }
     };
+    let docs = docs_cache().lock().unwrap().clone().unwrap_or_default();
     let Some(cat) = catalog else {
-        return scanned;
+        // Cold authoritative cache: still describe whatever the scan produced, so a
+        // warm docs fetch is not wasted while waiting on the Claude subprocess.
+        return apply_doc_descriptions(scanned, &docs);
     };
-    let mut roots = cat.plugin_roots.clone();
-    if let Some(home) = dirs::home_dir() {
-        roots.extend(marketplace_plugin_dirs(&home));
-    }
-    merge_authoritative(scanned, &cat.slash_commands, |name| {
+    let roots = resolver_roots(&cat.plugin_roots);
+    let merged = merge_authoritative(scanned, &cat.slash_commands, |name| {
         resolve_command_source(name, &roots)
-    })
+    });
+    apply_doc_descriptions(merged, &docs)
 }
 
 /// Pre-warm the authoritative catalog (e.g. at session start) so the first picker open
@@ -357,10 +561,8 @@ fn query_init_catalog(project_path: Option<&str>) -> Option<InitCatalog> {
         }
     });
 
-    let result = match rx.recv_timeout(Duration::from_secs(WARM_TIMEOUT_SECS)) {
-        Ok(cat) => Some(cat),
-        Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => None,
-    };
+    // Timeout and Disconnected both mean "no init line" — fall back to the scan.
+    let result = rx.recv_timeout(Duration::from_secs(WARM_TIMEOUT_SECS)).ok();
     let _ = child.kill();
     let _ = child.wait();
     let _ = reader.join();
@@ -515,20 +717,194 @@ mod tests {
         assert!(resolve_command_source("nope", &[tmp.path().to_path_buf()]).is_none());
     }
 
+    // ── Published command reference (code.claude.com/docs/en/commands.md) ────
+
     #[test]
-    fn enumerates_marketplace_plugin_dirs() {
+    fn parses_name_and_purpose_from_a_doc_table_row() {
+        let md = "\
+| Command | Purpose |
+| ------- | ------- |
+| `/context` | Visualize current context usage as a colored grid |
+";
+        let docs = parse_commands_doc(md);
+        let entry = docs.get("context").expect("row should parse");
+        assert_eq!(
+            entry.description,
+            "Visualize current context usage as a colored grid"
+        );
+        assert!(!entry.is_skill);
+    }
+
+    #[test]
+    fn marks_skill_and_workflow_rows_and_strips_their_badge() {
+        let md = "\
+| Command | Purpose |
+| --- | --- |
+| `/dataviz` | **[Skill](/docs/en/skills#bundled-skills).** Design guidance for charts |
+| `/deep-research` | **[Workflow](/docs/en/workflows#bundled-workflows).** Fan out web searches |
+";
+        let docs = parse_commands_doc(md);
+        let dataviz = docs.get("dataviz").expect("skill row");
+        assert!(dataviz.is_skill);
+        assert_eq!(dataviz.description, "Design guidance for charts");
+        let research = docs.get("deep-research").expect("workflow row");
+        assert!(research.is_skill);
+        assert_eq!(research.description, "Fan out web searches");
+    }
+
+    #[test]
+    fn strips_min_version_comments_and_resolves_markdown_links() {
+        let md = "\
+| Command | Purpose |
+| --- | --- |
+| `/reload-skills` | {/* min-version: 2.1.152 */}Re-scan [skill](/docs/en/skills) directories |
+";
+        let docs = parse_commands_doc(md);
+        assert_eq!(
+            docs.get("reload-skills").unwrap().description,
+            "Re-scan skill directories"
+        );
+    }
+
+    #[test]
+    fn parses_rows_whose_command_cell_contains_escaped_pipes() {
+        // `/code-review [low\|medium\|high]` — the escaped pipes must not split the row.
+        let md = "\
+| Command | Purpose |
+| --- | --- |
+| `/code-review [low\\|medium\\|high] [--fix]` | Review the current diff for correctness bugs |
+";
+        let docs = parse_commands_doc(md);
+        assert_eq!(
+            docs.get("code-review").unwrap().description,
+            "Review the current diff for correctness bugs"
+        );
+    }
+
+    #[test]
+    fn ignores_headers_separators_and_non_command_rows() {
+        let md = "\
+| Command | Purpose |
+| ------- | :-----: |
+| not a command | some prose |
+| `/usage` | Show session cost |
+";
+        let docs = parse_commands_doc(md);
+        assert_eq!(docs.len(), 1);
+        assert!(docs.contains_key("usage"));
+    }
+
+    #[test]
+    fn parses_rows_copied_verbatim_from_the_published_reference() {
+        // Real rows from code.claude.com/docs/en/commands.md, kept verbatim so the
+        // parser is exercised against the page's actual conventions: escaped pipes in
+        // argument syntax, a version directive before *and* after the skill badge,
+        // and doc links inside the prose.
+        let md = "\
+| Command | Purpose |
+| --- | --- |
+| `/code-review [low\\|medium\\|high\\|xhigh\\|max\\|ultra] [--fix] [--comment] [target]` | **[Skill](/docs/en/skills#bundled-skills).** Review the current diff for correctness bugs and cleanup opportunities |
+| `/context [all]` | Visualize current context usage as a colored grid. {/* min-version: 2.1.216 */}Shows optimization suggestions |
+| `/simplify [target]` | {/* min-version: 2.1.154 */}**[Skill](/docs/en/skills#bundled-skills).** Review the changed code. Four review [agents](/docs/en/sub-agents) run in parallel |
+| `/deep-research <question>` | **[Workflow](/docs/en/workflows#bundled-workflows).** Fan out web searches on a question |
+";
+        let docs = parse_commands_doc(md);
+        assert_eq!(docs.len(), 4);
+
+        let code_review = docs.get("code-review").expect("escaped pipes must not split");
+        assert!(code_review.is_skill);
+        assert_eq!(
+            code_review.description,
+            "Review the current diff for correctness bugs and cleanup opportunities"
+        );
+
+        let context = docs.get("context").unwrap();
+        assert!(!context.is_skill, "a CLI action is not a skill");
+        assert_eq!(
+            context.description,
+            "Visualize current context usage as a colored grid. Shows optimization suggestions"
+        );
+
+        let simplify = docs.get("simplify").unwrap();
+        assert!(simplify.is_skill, "badge follows the version directive");
+        assert_eq!(
+            simplify.description,
+            "Review the changed code. Four review agents run in parallel"
+        );
+
+        assert!(docs.get("deep-research").unwrap().is_skill);
+    }
+
+    #[test]
+    fn doc_description_fills_a_name_only_authoritative_entry() {
+        let docs = parse_commands_doc(
+            "| Command | Purpose |\n| --- | --- |\n| `/security-review` | Analyze pending changes for vulnerabilities |\n",
+        );
+        let merged = merge_authoritative(
+            vec![],
+            &["security-review".to_string()],
+            |_| None, // nothing on disk — this is a bundled command
+        );
+        let enriched = apply_doc_descriptions(merged, &docs);
+        let cmd = enriched.iter().find(|c| c.name == "security-review").unwrap();
+        assert_eq!(
+            cmd.description.as_deref(),
+            Some("Analyze pending changes for vulnerabilities")
+        );
+    }
+
+    #[test]
+    fn doc_description_never_overrides_metadata_resolved_from_disk() {
+        let docs = parse_commands_doc(
+            "| Command | Purpose |\n| --- | --- |\n| `/brainstorm` | Docs wording |\n",
+        );
+        let scanned = vec![scanned_cmd("brainstorm")];
+        let enriched = apply_doc_descriptions(scanned, &docs);
+        assert_eq!(
+            enriched[0].description.as_deref(),
+            Some("scanned brainstorm"),
+            "on-disk metadata is richer and must win"
+        );
+    }
+
+    #[test]
+    fn resolver_roots_exclude_uninstalled_marketplace_plugins() {
+        // Regression: /code-review is served from Claude's own bundle, but an
+        // identically-named command exists in the marketplace *catalog* for a plugin
+        // that is not installed. Enriching from the catalog showed a stranger's prompt.
         let tmp = tempfile::tempdir().unwrap();
-        let base = tmp
+        let catalog = tmp
             .path()
             .join(".claude")
             .join("plugins")
             .join("marketplaces")
             .join("claude-plugins-official")
-            .join("plugins");
-        std::fs::create_dir_all(base.join("code-review")).unwrap();
-        std::fs::create_dir_all(base.join("security-guidance")).unwrap();
-        let dirs = marketplace_plugin_dirs(tmp.path());
-        assert!(dirs.contains(&base.join("code-review")));
-        assert!(dirs.contains(&base.join("security-guidance")));
+            .join("plugins")
+            .join("code-review")
+            .join("commands");
+        std::fs::create_dir_all(&catalog).unwrap();
+        std::fs::write(
+            catalog.join("code-review.md"),
+            "---\ndescription: Code review a pull request\n---\nbody",
+        )
+        .unwrap();
+
+        let roots = resolver_roots(&[]);
+        assert!(
+            roots.is_empty(),
+            "no plugin is installed, so nothing may be resolved from the catalog: {roots:?}"
+        );
+        assert!(resolve_command_source("code-review", &roots).is_none());
+        // The catalog file is present on disk — proving the resolver simply never looks.
+        assert!(catalog.join("code-review.md").exists());
+    }
+
+    #[test]
+    fn resolver_roots_keep_the_plugin_roots_claude_reports_as_active() {
+        let tmp = tempfile::tempdir().unwrap();
+        let active = tmp.path().join("cache").join("superpowers").join("6.2.0");
+        std::fs::create_dir_all(&active).unwrap();
+        let roots = resolver_roots(std::slice::from_ref(&active));
+        assert_eq!(roots, vec![active]);
     }
 }
