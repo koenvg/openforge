@@ -369,3 +369,56 @@ async fn install_local_plugin_preserves_app_invoke_missing_app_path_contract() {
 
     let _ = std::fs::remove_file(path);
 }
+
+#[tokio::test]
+async fn scans_a_plugin_folder_for_installable_plugin_packages() {
+    let (state, path) = test_state("app_invoke_scan_plugin_folder");
+    let folder = tempfile::tempdir().expect("plugin folder");
+    write_local_plugin_package(&folder.path().join("plugins/alpha"), "com.example.alpha");
+
+    let discovered = invoke_ok(
+        &state,
+        "scan_plugin_folder",
+        json!({ "folderPath": folder.path() }),
+    )
+    .await;
+
+    let rows = discovered.as_array().expect("scan should return an array");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["id"], "com.example.alpha");
+    assert_eq!(rows[0]["installable"], true);
+    assert_eq!(rows[0]["needsBuild"], false);
+    assert_eq!(
+        rows[0]["path"].as_str().expect("path should be a string"),
+        folder
+            .path()
+            .join("plugins/alpha")
+            .canonicalize()
+            .expect("package dir should canonicalize")
+            .to_string_lossy()
+    );
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn scanning_a_missing_plugin_folder_is_a_bad_request() {
+    let (state, path) = test_state("app_invoke_scan_plugin_folder_missing");
+
+    let err = invoke(
+        &state,
+        "scan_plugin_folder",
+        json!({ "folderPath": "/tmp/openforge-nonexistent-plugin-folder" }),
+    )
+    .await
+    .expect_err("scanning a missing folder should fail");
+
+    assert_eq!(err.0, StatusCode::BAD_REQUEST);
+    assert!(
+        err.1.contains("openforge-nonexistent-plugin-folder"),
+        "error should name the folder: {}",
+        err.1
+    );
+
+    let _ = std::fs::remove_file(path);
+}

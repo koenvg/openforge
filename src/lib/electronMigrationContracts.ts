@@ -160,6 +160,7 @@ export const ipcCommandContracts = [
   { functionName: 'fsReadFile', ipcCommand: 'fs_read_file', payloadKeys: ['projectId', 'filePath'], targetOwner: 'rust-sidecar', domain: 'files-review' },
   { functionName: 'fsSearchFiles', ipcCommand: 'fs_search_files', payloadKeys: ['projectId', 'query', 'limit'], targetOwner: 'rust-sidecar', domain: 'files-review' },
   { functionName: 'registerBuiltinPlugin', ipcCommand: 'register_builtin_plugin', payloadKeys: ['plugin'], targetOwner: 'rust-sidecar', domain: 'plugins' },
+  { functionName: 'scanPluginFolder', ipcCommand: 'scan_plugin_folder', payloadKeys: ['folderPath'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'installPluginFromLocal', ipcCommand: 'install_plugin_from_local', payloadKeys: ['sourcePath'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'installPluginFromNpm', ipcCommand: 'install_plugin_from_npm', payloadKeys: ['packageName'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'installPluginFromGit', ipcCommand: 'install_plugin_from_git', payloadKeys: ['gitSpec'], targetOwner: 'rust-sidecar', domain: 'plugins' },

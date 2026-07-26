@@ -32,6 +32,7 @@ import {
   installPluginFromLocal,
   installPluginFromNpm,
   installPluginFromSource,
+  scanPluginFolder,
   killPty,
   killShellsForTask,
   repoHasCommits,
@@ -516,6 +517,16 @@ describe("ipc spawnShellPty", () => {
 
 		await installPluginFromSource("git:github.com/example/openforge-plugin@main");
 		expect(invokeMock).toHaveBeenLastCalledWith("install_plugin_from_source", { sourceSpec: "git:github.com/example/openforge-plugin@main" });
+	});
+
+	it("scans a plugin folder through the sidecar", async () => {
+		invokeMock.mockResolvedValueOnce([]);
+
+		await scanPluginFolder("/Users/me/repos/openforge-plugins");
+
+		expect(invokeMock).toHaveBeenLastCalledWith("scan_plugin_folder", {
+			folderPath: "/Users/me/repos/openforge-plugins",
+		});
 	});
 
 	it("encodes voice audio as base64 little-endian Float32 PCM instead of a JSON number array", async () => {
