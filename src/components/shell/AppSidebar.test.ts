@@ -221,6 +221,29 @@ describe('AppSidebar', () => {
     expect(screen.getByRole('button', { name: /attention/i }).getAttribute('aria-current')).toBeNull()
   })
 
+  it('places Attention above the projects section header and the project list', () => {
+    renderSidebar({ collapsed: false })
+
+    const attention = screen.getByRole('button', { name: /attention/i })
+    const projectsHeader = screen.getByText('PROJECTS')
+    const firstProject = screen.getByRole('button', { name: /^alpha project$/i })
+
+    expect(attention.compareDocumentPosition(projectsHeader) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(attention.compareDocumentPosition(firstProject) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('keeps Attention above the projects when collapsed', () => {
+    renderSidebar({ collapsed: true })
+
+    const attention = screen.getByRole('button', { name: /attention/i })
+    const addProject = screen.getByRole('button', { name: /add project/i })
+    // Collapsed rows are avatar-only, so they identify themselves by title rather than label.
+    const firstProject = screen.getByTitle('Alpha Project')
+
+    expect(attention.compareDocumentPosition(addProject) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(attention.compareDocumentPosition(firstProject) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('clicking collapse toggle calls onToggleCollapse', async () => {
     const onToggleCollapse = vi.fn()
     renderSidebar({ collapsed: false, onToggleCollapse })
