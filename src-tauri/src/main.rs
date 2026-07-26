@@ -6,6 +6,7 @@ mod app_events;
 mod app_invoke;
 mod backend_runtime;
 mod builtin_plugins;
+mod claude_authoritative;
 mod claude_hooks;
 mod cli_installer;
 mod codex_hooks;
@@ -194,6 +195,13 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
         "[electron-sidecar] using database filename={} app_data_dir_resolved=true",
         database_filename()
     );
+
+    // Pull Anthropic's published command reference once per app launch, on a background
+    // thread. It supplies descriptions for Claude's bundled commands, which the CLI
+    // itself does not expose to external tools. Refreshing per launch (rather than per
+    // picker open) picks up commands Anthropic adds without a network hit on the hot
+    // path; a failure just leaves those commands showing a name and no description.
+    claude_authoritative::warm_docs();
 
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()

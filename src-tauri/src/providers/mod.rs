@@ -144,6 +144,11 @@ impl Provider {
                 .await
             }
             Provider::ClaudeCode(p) => {
+                // Pre-warm the authoritative command cache in the background so the
+                // injectable picker's first open already reflects Claude's real
+                // command set (e.g. /code-review) instead of the filesystem-scan
+                // fallback. Non-blocking; never affects session start.
+                crate::claude_authoritative::warm(worktree_path.to_str());
                 p.start(
                     task_id,
                     worktree_path,

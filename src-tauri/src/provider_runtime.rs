@@ -47,10 +47,14 @@ pub(crate) fn provider_commands(
         "codex" => Some(
             CodexProvider::new(crate::pty_manager::PtyManager::new()).list_commands(project_path),
         ),
-        "claude-code" => Some(
+        // Overlay Claude's authoritative command set onto the filesystem scan so
+        // server-bundled commands (e.g. /code-review) that OpenForge cannot see on
+        // disk still appear in the picker. Falls back to the raw scan until warmed.
+        "claude-code" => Some(crate::claude_authoritative::apply(
             ClaudeCodeProvider::new(crate::pty_manager::PtyManager::new())
                 .list_commands(project_path),
-        ),
+            project_path,
+        )),
         "opencode" => Some(
             OpenCodeProvider::new(crate::pty_manager::PtyManager::new())
                 .list_commands(project_path),
