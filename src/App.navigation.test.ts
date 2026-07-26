@@ -123,36 +123,6 @@ describe('App navigation shortcuts', () => {
     })
   })
 
-    it('CMD+R navigates to plugin roadmap view', async () => {
-      const App = (await import('./App.svelte')).default
-      const stores = await import('./lib/stores')
-      const pluginStore = await import('./lib/plugin/pluginStore')
-      const pluginRegistry = await import('./lib/plugin/pluginRegistry')
-      const { ROADMAP_PLUGIN_ID } = await import('./lib/roadmapPlugin')
-      const { get } = await import('svelte/store')
-      const { tick } = await import('svelte')
-
-      stores.currentView.set('board')
-      render(App)
-      await vi.waitFor(() => {
-        expect(mockLoadEnabledForProject).toHaveBeenCalledWith('proj-1')
-      })
-      await vi.waitFor(() => {
-        expect(get(pluginStore.installedPlugins).has(ROADMAP_PLUGIN_ID)).toBe(true)
-      })
-      pluginStore.enabledPluginIds.set(new Set([ROADMAP_PLUGIN_ID]))
-      await pluginRegistry.activatePlugin(ROADMAP_PLUGIN_ID)
-      pluginStore.setRuntimeContributionSource(ROADMAP_PLUGIN_ID, {
-        views: [{ id: 'roadmap', title: 'Roadmap', icon: 'kanban', placement: 'rail', order: 21, shortcut: 'Cmd+R' }],
-      })
-      await tick()
-
-      await vi.waitFor(() => {
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', code: 'KeyR', metaKey: true, bubbles: true }))
-        expect(get(stores.currentView)).toBe('plugin:com.openforge.roadmap:roadmap')
-      })
-    })
-
     it('CMD+S navigates to the Task Schedules plugin view', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')

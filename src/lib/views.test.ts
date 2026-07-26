@@ -99,15 +99,15 @@ describe('views registry', () => {
         ],
       }),
       makeSource({
-        pluginId: 'com.openforge.roadmap',
+        pluginId: 'com.openforge.task-schedules',
         views: [
           {
-            id: 'roadmap',
-            title: 'Roadmap',
-            icon: 'kanban',
-            shortcut: 'Cmd+R',
+            id: 'schedules',
+            title: 'Task Schedules',
+            icon: 'clock',
+            shortcut: 'Cmd+S',
             placement: 'rail',
-            order: 21,
+            order: 50,
           },
         ],
       }),
@@ -140,7 +140,7 @@ describe('views registry', () => {
     ])
 
     expect(pluginViews['plugin:com.openforge.file-viewer:files']).toBeDefined()
-    expect(pluginViews['plugin:com.openforge.roadmap:roadmap']).toBeDefined()
+    expect(pluginViews['plugin:com.openforge.task-schedules:schedules']).toBeDefined()
     expect(pluginViews['plugin:com.openforge.github-sync:pr_review']).toBeDefined()
     expect(pluginViews['plugin:com.openforge.terminal:terminal']).toBeDefined()
     expect('files' in pluginViews).toBe(false)

@@ -50,7 +50,7 @@ function entry(id: string, name: string): PluginEntry {
 function sourceWithSection(pluginId: string, scope: 'project' | 'global'): RuntimeContributionSource {
   return {
     pluginId,
-    settingsSections: [{ id: 'roadmap-settings', title: 'Roadmap', scope }],
+    settingsSections: [{ id: 'notes-settings', title: 'Notes', scope }],
   }
 }
 
@@ -64,35 +64,35 @@ describe('GlobalPluginSettingsPanel', () => {
   })
 
   it('activates installed plugins so their global sections can surface', async () => {
-    installedPlugins.set(new Map([['plugin.roadmap', entry('plugin.roadmap', 'Roadmap')]]))
+    installedPlugins.set(new Map([['plugin.notes', entry('plugin.notes', 'Notes')]]))
 
     render(GlobalPluginSettingsPanel, { props: {} })
 
-    await waitFor(() => expect(activatePluginMock).toHaveBeenCalledWith('plugin.roadmap'))
+    await waitFor(() => expect(activatePluginMock).toHaveBeenCalledWith('plugin.notes'))
   })
 
   it('renders a plugin global-scoped settings section inside its card', async () => {
-    installedPlugins.set(new Map([['plugin.roadmap', entry('plugin.roadmap', 'Roadmap')]]))
-    runtimeContributionSources.set(new Map([['plugin.roadmap', sourceWithSection('plugin.roadmap', 'global')]]))
-    registerRenderableContributionComponent('settingsSections', 'plugin.roadmap:roadmap-settings', PluginSlotTestView)
+    installedPlugins.set(new Map([['plugin.notes', entry('plugin.notes', 'Notes')]]))
+    runtimeContributionSources.set(new Map([['plugin.notes', sourceWithSection('plugin.notes', 'global')]]))
+    registerRenderableContributionComponent('settingsSections', 'plugin.notes:notes-settings', PluginSlotTestView)
 
     render(GlobalPluginSettingsPanel, { props: {} })
 
     await waitFor(() => {
       expect(screen.getByTestId('plugin-slot-view')).toBeTruthy()
-      expect(document.querySelector('[data-slot-id="plugin.roadmap:roadmap-settings"]')).toBeTruthy()
+      expect(document.querySelector('[data-slot-id="plugin.notes:notes-settings"]')).toBeTruthy()
     })
   })
 
   it('does not render a project-scoped section in the global card', async () => {
-    installedPlugins.set(new Map([['plugin.roadmap', entry('plugin.roadmap', 'Roadmap')]]))
-    runtimeContributionSources.set(new Map([['plugin.roadmap', sourceWithSection('plugin.roadmap', 'project')]]))
-    registerRenderableContributionComponent('settingsSections', 'plugin.roadmap:roadmap-settings', PluginSlotTestView)
+    installedPlugins.set(new Map([['plugin.notes', entry('plugin.notes', 'Notes')]]))
+    runtimeContributionSources.set(new Map([['plugin.notes', sourceWithSection('plugin.notes', 'project')]]))
+    registerRenderableContributionComponent('settingsSections', 'plugin.notes:notes-settings', PluginSlotTestView)
 
     render(GlobalPluginSettingsPanel, { props: {} })
 
     await new Promise((r) => setTimeout(r, 20))
     expect(screen.queryByTestId('plugin-slot-view')).toBeNull()
-    expect(document.querySelector('[data-slot-id="plugin.roadmap:roadmap-settings"]')).toBeNull()
+    expect(document.querySelector('[data-slot-id="plugin.notes:notes-settings"]')).toBeNull()
   })
 })

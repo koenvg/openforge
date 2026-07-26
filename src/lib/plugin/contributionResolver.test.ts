@@ -187,7 +187,7 @@ describe('resolveContributions', () => {
   it('defaults a settings section to project scope and carries an explicit global scope', () => {
     const result = resolveContributions([
       makeSource({
-        pluginId: 'plugin.roadmap',
+        pluginId: 'plugin.notes',
         settingsSections: [
           makeSettingsSection({ id: 'defaulted', title: 'Defaulted' }),
           makeSettingsSection({ id: 'global-key', title: 'Global Key', scope: 'global' }),
@@ -203,7 +203,7 @@ describe('resolveContributions', () => {
   it('ignores an unrecognized scope value and falls back to project', () => {
     const result = resolveContributions([
       makeSource({
-        pluginId: 'plugin.roadmap',
+        pluginId: 'plugin.notes',
         settingsSections: [makeSettingsSection({ id: 's', title: 'S', scope: 'sidebar' as never })],
       }),
     ])
