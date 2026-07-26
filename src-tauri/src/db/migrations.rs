@@ -1481,6 +1481,44 @@ CREATE TABLE IF NOT EXISTS snippets (
         }
         Ok(())
     }),
+    // The Roadmap board became the external com.openforge.issues plugin, which
+    // resolves its repo from GitHub and keeps the per-issue value and the curated
+    // column order in project-scoped plugin storage. Drop the tables that state
+    // used to live in. New migration — never edit or delete the CREATE migrations
+    // above, which would lower LATEST_USER_VERSION and trigger DatabaseTooFarAhead.
+    M::up("DROP TABLE IF EXISTS roadmap_item_value; DROP TABLE IF EXISTS roadmap_repo_config;"),
+    // Same story as skills-viewer above: roadmap left the builtin catalog, but
+    // existing databases still carry its install rows, which would resolve as an
+    // enabled builtin whose directory no longer exists. Purge them. Children first,
+    // since FK enforcement is not guaranteed to be on while migrations run, and each
+    // table is existence-guarded for databases replaying from an older version.
+    M::up_with_hook("", |tx| {
+        let table_exists = |name: &str| -> bool {
+            tx.query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name=?1",
+                [name],
+                |r| r.get(0),
+            )
+            .unwrap_or(false)
+        };
+        if !table_exists("plugins") {
+            return Ok(());
+        }
+        for (table, column) in [
+            ("plugin_storage", "plugin_id"),
+            ("project_plugins", "plugin_id"),
+            ("plugins", "id"),
+        ] {
+            if table_exists(table) {
+                tx.execute(
+                    &format!("DELETE FROM {table} WHERE {column} = 'com.openforge.roadmap'"),
+                    [],
+                )
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            }
+        }
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -2787,6 +2825,37 @@ mod tests {
             "user_version should be >= 1 after bootstrap, got {}",
             uv
         );
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    /// The board moved to the external com.openforge.issues plugin, which keeps its
+    /// own state in project-scoped plugin storage. A freshly migrated database must
+    /// carry no trace of the tables it used to keep here.
+    #[test]
+    fn test_fresh_db_has_no_legacy_roadmap_tables() {
+        let path = std::env::temp_dir().join(format!(
+            "test_no_roadmap_tables_mig_{}.db",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+
+        let db = Database::new(path.clone()).expect("Database::new");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        for table in ["roadmap_item_value", "roadmap_repo_config"] {
+            let exists: bool = conn
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name=?1",
+                    [table],
+                    |r| r.get(0),
+                )
+                .expect("query sqlite_master");
+            assert!(!exists, "fresh database should not carry {table}");
+        }
 
         drop(conn);
         drop(db);

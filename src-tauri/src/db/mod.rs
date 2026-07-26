@@ -14,7 +14,6 @@ mod projects;
 mod pull_request_readiness;
 mod pull_requests;
 mod review;
-mod roadmap;
 mod self_review;
 mod settings_reset;
 mod task_config;

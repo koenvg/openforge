@@ -4,7 +4,6 @@ use serde_json::Value;
 use std::sync::{Arc, Mutex};
 
 const GITHUB_SYNC_PLUGIN_ID: &str = "com.openforge.github-sync";
-const ROADMAP_PLUGIN_ID: &str = "com.openforge.roadmap";
 
 fn openforge_global_command_to_app_invoke(qualified_id: &str) -> Result<&'static str, String> {
     let command = qualified_id
@@ -29,14 +28,6 @@ fn openforge_global_command_to_app_invoke(qualified_id: &str) -> Result<&'static
         "submitPrReview" => Ok("submit_pr_review"),
         "getAgentReviewComments" => Ok("get_agent_review_comments"),
         "updateAgentReviewCommentStatus" => Ok("update_agent_review_comment_status"),
-        "roadmapGetBoard" => Ok("roadmap_get_board"),
-        "roadmapSetValue" => Ok("roadmap_set_value"),
-        "roadmapGetConfig" => Ok("roadmap_get_config"),
-        "roadmapSetColumnLabels" => Ok("roadmap_set_column_labels"),
-        "roadmapCreateIssue" => Ok("roadmap_create_issue"),
-        "roadmapEditIssue" => Ok("roadmap_edit_issue"),
-        "roadmapUpdateLabelColor" => Ok("roadmap_update_label_color"),
-        "roadmapRefineTicket" => Ok("roadmap_refine_ticket"),
         "agentGenerate" => Ok("agent_generate"),
         "abortAgentGenerate" => Ok("abort_agent_generate"),
         _ => Err(format!(
@@ -56,21 +47,13 @@ fn is_agent_generate_app_command(command: &str) -> bool {
     matches!(command, "agent_generate" | "abort_agent_generate")
 }
 
-fn is_roadmap_app_command(command: &str) -> bool {
-    command.starts_with("roadmap_")
-}
-
 /// Whether `plugin_id` may invoke the given resolved app command.
 ///
-/// Each built-in plugin owns a set of command prefixes; a plugin may only invoke
-/// commands within its own namespace. This keeps the github-sync authorization
-/// intact while letting the roadmap plugin reach its `roadmap_*` commands.
+/// Only built-in plugins reach app commands, and each owns its own namespace.
+/// Everything else — including every externally installed plugin — is denied.
 fn plugin_may_invoke_command(plugin_id: &str, command: &str) -> bool {
-    match plugin_id {
-        GITHUB_SYNC_PLUGIN_ID => !is_roadmap_app_command(command),
-        ROADMAP_PLUGIN_ID => is_roadmap_app_command(command),
-        _ => false,
-    }
+    let _ = command;
+    matches!(plugin_id, GITHUB_SYNC_PLUGIN_ID)
 }
 
 fn required_shell_session_key(params: &Value) -> Result<String, String> {
@@ -145,9 +128,7 @@ impl PluginHost {
             payload,
         };
         let state = self.app_state_for_host_callback()?;
-        let result = if is_roadmap_app_command(command) {
-            crate::app_invoke::handle_roadmap_command(&state, &request).await
-        } else if is_agent_generate_app_command(command) {
+        let result = if is_agent_generate_app_command(command) {
             crate::app_invoke::handle_agent_generate_command(&state, &request).await
         } else if is_files_review_app_command(command) {
             crate::app_invoke::handle_files_review_command(&state, &request).await
@@ -492,44 +473,8 @@ mod tests {
     }
 
     #[test]
-    fn roadmap_qualified_commands_map_to_app_invoke_commands() {
-        assert_eq!(
-            openforge_global_command_to_app_invoke("openforge.roadmapGetBoard").unwrap(),
-            "roadmap_get_board"
-        );
-        assert_eq!(
-            openforge_global_command_to_app_invoke("openforge.roadmapSetValue").unwrap(),
-            "roadmap_set_value"
-        );
-        assert_eq!(
-            openforge_global_command_to_app_invoke("openforge.roadmapGetConfig").unwrap(),
-            "roadmap_get_config"
-        );
-        assert_eq!(
-            openforge_global_command_to_app_invoke("openforge.roadmapSetColumnLabels").unwrap(),
-            "roadmap_set_column_labels"
-        );
-        assert_eq!(
-            openforge_global_command_to_app_invoke("openforge.roadmapCreateIssue").unwrap(),
-            "roadmap_create_issue"
-        );
-        assert_eq!(
-            openforge_global_command_to_app_invoke("openforge.roadmapEditIssue").unwrap(),
-            "roadmap_edit_issue"
-        );
-        assert_eq!(
-            openforge_global_command_to_app_invoke("openforge.roadmapUpdateLabelColor").unwrap(),
-            "roadmap_update_label_color"
-        );
-        assert_eq!(
-            openforge_global_command_to_app_invoke("openforge.roadmapRefineTicket").unwrap(),
-            "roadmap_refine_ticket"
-        );
-    }
-
-    #[test]
-    fn authorization_gate_scopes_each_plugin_to_its_own_commands() {
-        // github-sync keeps access to its existing commands but cannot reach roadmap.
+    fn authorization_gate_admits_only_built_in_plugins() {
+        // github-sync keeps access to its commands.
         assert!(plugin_may_invoke_command(
             GITHUB_SYNC_PLUGIN_ID,
             "fetch_review_prs"
@@ -538,37 +483,11 @@ mod tests {
             GITHUB_SYNC_PLUGIN_ID,
             "get_agent_review_comments"
         ));
-        assert!(!plugin_may_invoke_command(
-            GITHUB_SYNC_PLUGIN_ID,
-            "roadmap_get_board"
-        ));
 
-        // roadmap may invoke roadmap_* but nothing else.
-        assert!(plugin_may_invoke_command(
-            ROADMAP_PLUGIN_ID,
-            "roadmap_get_board"
-        ));
-        assert!(plugin_may_invoke_command(
-            ROADMAP_PLUGIN_ID,
-            "roadmap_edit_issue"
-        ));
-        assert!(plugin_may_invoke_command(
-            ROADMAP_PLUGIN_ID,
-            "roadmap_update_label_color"
-        ));
-        assert!(plugin_may_invoke_command(
-            ROADMAP_PLUGIN_ID,
-            "roadmap_refine_ticket"
-        ));
+        // Every other plugin, external ones included, is denied everything.
         assert!(!plugin_may_invoke_command(
-            ROADMAP_PLUGIN_ID,
+            "com.openforge.issues",
             "fetch_review_prs"
-        ));
-
-        // Unknown plugins are denied everything.
-        assert!(!plugin_may_invoke_command(
-            "com.example.evil",
-            "roadmap_get_board"
         ));
         assert!(!plugin_may_invoke_command(
             "com.example.evil",
