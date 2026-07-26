@@ -1,6 +1,6 @@
-// Local mirror of the roadmap plugin's GitHub-label color handling
-// (plugins/roadmap/src/lib/labelColors.ts). Kept self-contained because
-// @openforge-app/pr-review-ui must not depend on plugin internals.
+// GitHub-label color handling, kept local because @openforge-app/pr-review-ui
+// must not depend on plugin internals. The external Issues plugin carries its
+// own copy of the same logic.
 //
 // GitHub returns label colors as 6-digit hex strings without a leading '#'
 // (e.g. "b60205"). These are validated API data, not literal design hexes, so
@@ -20,7 +20,7 @@ export function normalizeLabelColor(value: string): string | null {
 /**
  * Inline style for a label chip given a GitHub label color. Returns an empty
  * string when the color is invalid so the caller can fall back to a neutral
- * outline badge. Mirrors the roadmap chipStyle precedent.
+ * outline badge.
  */
 export function labelChipStyle(color: string): string {
   const normalized = normalizeLabelColor(color)

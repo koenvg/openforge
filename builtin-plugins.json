@@ -15,10 +15,6 @@
     {
       "id": "com.openforge.task-schedules",
       "directoryName": "task-schedules"
-    },
-    {
-      "id": "com.openforge.roadmap",
-      "directoryName": "roadmap"
     }
   ]
 }

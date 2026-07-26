@@ -128,7 +128,7 @@ describe('runtime contribution registry', () => {
       component: TaskPaneTab,
     })
     const section = frontend.taskUI.registerSection({
-      id: 'roadmap-context',
+      id: 'notes-context',
       order: 15,
       component: TaskUISection,
     })
@@ -144,7 +144,7 @@ describe('runtime contribution registry', () => {
         { id: 'legacy', qualifiedId: 'github.legacy', pluginId: 'github' },
       ],
       taskUISections: [
-        { id: 'roadmap-context', qualifiedId: 'github.roadmap-context', pluginId: 'github', order: 15 },
+        { id: 'notes-context', qualifiedId: 'github.notes-context', pluginId: 'github', order: 15 },
       ],
     })
     expect(registry.getSnapshot().taskUISections[0]).not.toHaveProperty('title')
@@ -162,7 +162,7 @@ describe('runtime contribution registry', () => {
     await expect(registry.activateFrontend(defineFrontendPlugin({
       activate(openforge) {
         openforge.taskUI.registerTab({ id: 'activity', title: 'Activity', component: TaskPaneTab })
-        openforge.taskUI.registerSection({ id: 'roadmap-context', component: TaskUISection })
+        openforge.taskUI.registerSection({ id: 'notes-context', component: TaskUISection })
         openforge.taskUI.registerSection({ id: '', component: TaskUISection })
       },
     }))).rejects.toThrow(/taskUI.*non-empty id/i)

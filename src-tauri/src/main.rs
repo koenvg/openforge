@@ -36,7 +36,6 @@ mod provider_runtime;
 pub mod providers;
 mod pty_manager;
 pub mod review_parser;
-mod roadmap_ai;
 mod runtime_checks;
 mod secure_store;
 mod self_review_runtime;

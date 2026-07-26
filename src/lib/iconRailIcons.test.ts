@@ -7,7 +7,7 @@ describe('resolveIconRailIcon', () => {
     expect(resolveIconRailIcon('clock')).toBe(Clock)
   })
 
-  it('resolves the roadmap kanban icon instead of using the fallback', () => {
+  it('resolves the kanban icon instead of using the fallback', () => {
     expect(resolveIconRailIcon('kanban')).toBe(Kanban)
   })
 

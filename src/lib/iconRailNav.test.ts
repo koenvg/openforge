@@ -12,14 +12,14 @@ describe('getIconRailNavItems', () => {
         shortcut: '⌘G',
       },
       {
-        viewKey: 'plugin:com.openforge.roadmap:roadmap' as AppView,
-        icon: 'kanban',
-        title: 'Roadmap',
-        shortcut: '⌘R',
+        viewKey: 'plugin:com.openforge.task-schedules:schedules' as AppView,
+        icon: 'clock',
+        title: 'Task Schedules',
+        shortcut: '⌘S',
       },
     ])
 
-    expect(items.map((item) => item.label)).toEqual(['Board', 'PR Review', 'Roadmap', 'Project Settings'])
+    expect(items.map((item) => item.label)).toEqual(['Board', 'PR Review', 'Task Schedules', 'Project Settings'])
   })
 
   it('normalizes shortcut hints for plugin-provided rail items', () => {

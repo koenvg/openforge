@@ -157,22 +157,22 @@ describe('PluginSlot', () => {
   })
 
   it('resolves a settings section from sourcePluginIds even when the plugin is not project-enabled', async () => {
-    const manifest = makeManifest('plugin.roadmap')
+    const manifest = makeManifest('plugin.notes')
     // Installed with a contribution source, but NOT in the enabled set — this is the
     // global settings page's situation.
     installedPlugins.set(new Map([[manifest.id, { manifest, state: 'active', error: null }]]))
     enabledPluginIds.set(new Set())
     runtimeContributionSources.set(new Map([[
       manifest.id,
-      { pluginId: manifest.id, settingsSections: [{ id: 'roadmap-settings', title: 'Roadmap', scope: 'global' }] },
+      { pluginId: manifest.id, settingsSections: [{ id: 'notes-settings', title: 'Notes', scope: 'global' }] },
     ]]))
-    registerRenderableContributionComponent('settingsSections', 'plugin.roadmap:roadmap-settings', PluginSlotTestView)
+    registerRenderableContributionComponent('settingsSections', 'plugin.notes:notes-settings', PluginSlotTestView)
 
     render(PluginSlot, {
       props: {
         slotType: 'settingsSections',
-        slotId: 'plugin.roadmap:roadmap-settings',
-        sourcePluginIds: ['plugin.roadmap'],
+        slotId: 'plugin.notes:notes-settings',
+        sourcePluginIds: ['plugin.notes'],
       },
     })
 
@@ -182,19 +182,19 @@ describe('PluginSlot', () => {
   })
 
   it('renders nothing for a sourcePluginIds set that excludes the plugin', async () => {
-    const manifest = makeManifest('plugin.roadmap')
+    const manifest = makeManifest('plugin.notes')
     installedPlugins.set(new Map([[manifest.id, { manifest, state: 'active', error: null }]]))
-    enabledPluginIds.set(new Set(['plugin.roadmap']))
+    enabledPluginIds.set(new Set(['plugin.notes']))
     runtimeContributionSources.set(new Map([[
       manifest.id,
-      { pluginId: manifest.id, settingsSections: [{ id: 'roadmap-settings', title: 'Roadmap', scope: 'global' }] },
+      { pluginId: manifest.id, settingsSections: [{ id: 'notes-settings', title: 'Notes', scope: 'global' }] },
     ]]))
-    registerRenderableContributionComponent('settingsSections', 'plugin.roadmap:roadmap-settings', PluginSlotTestView)
+    registerRenderableContributionComponent('settingsSections', 'plugin.notes:notes-settings', PluginSlotTestView)
 
     render(PluginSlot, {
       props: {
         slotType: 'settingsSections',
-        slotId: 'plugin.roadmap:roadmap-settings',
+        slotId: 'plugin.notes:notes-settings',
         sourcePluginIds: ['plugin.other'],
       },
     })
