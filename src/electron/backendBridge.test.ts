@@ -436,6 +436,7 @@ describe('Electron backend bridge command forwarding', () => {
     expect(isSidecarBackedCommand('dismiss_all_agent_review_comments')).toBe(false)
     expect(isSidecarBackedCommand('abort_agent_review')).toBe(false)
     expect(isSidecarBackedCommand('register_builtin_plugin')).toBe(true)
+    expect(isSidecarBackedCommand('scan_plugin_folder')).toBe(true)
     expect(isSidecarBackedCommand('install_plugin_from_local')).toBe(true)
     expect(isSidecarBackedCommand('install_plugin_from_npm')).toBe(true)
     expect(isSidecarBackedCommand('install_plugin_from_git')).toBe(true)

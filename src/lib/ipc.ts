@@ -712,6 +712,23 @@ export async function installPluginFromSource(sourceSpec: string): Promise<Norma
   return normalizePluginRow(raw)
 }
 
+/// A plugin package found inside the remembered plugin folder. The sidecar already emits
+/// camelCase for this shape, so it needs no normalization.
+export type DiscoveredPlugin = {
+  path: string
+  id: string
+  name: string
+  version: string
+  description: string
+  installable: boolean
+  needsBuild: boolean
+  problem: string | null
+}
+
+export async function scanPluginFolder(folderPath: string): Promise<DiscoveredPlugin[]> {
+  return invoke<DiscoveredPlugin[]>("scan_plugin_folder", { folderPath })
+}
+
 export async function uninstallPlugin(pluginId: string): Promise<void> {
   return invoke("uninstall_plugin", { pluginId });
 }

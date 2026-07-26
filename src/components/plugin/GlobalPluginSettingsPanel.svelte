@@ -21,6 +21,7 @@
   import type { PluginEntry } from '../../lib/plugin/types'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import SettingsSectionCard from '../settings/SettingsSectionCard.svelte'
+  import PluginFolderPanel from './PluginFolderPanel.svelte'
   import PluginSlot from './PluginSlot.svelte'
 
   interface Props {
@@ -211,6 +212,8 @@
 <SettingsSectionCard id="section-plugins" title="Plugins" {disabled}>
   {#snippet icon()}<Blocks size={16} />{/snippet}
   <div class="flex flex-col gap-6">
+    <PluginFolderPanel {disabled} />
+
     <form class="flex flex-col gap-3 p-4 border border-base-300 rounded-lg bg-base-200/30" onsubmit={handleInstall}>
       <div class="flex flex-col gap-1">
         <span class="text-[0.7rem] text-base-content/50 uppercase tracking-wider">Install package</span>

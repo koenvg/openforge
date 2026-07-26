@@ -109,6 +109,15 @@ pub(super) async fn handle_app_plugin_command(
                 .map_err(map_plugin_platform_error)?;
             serde_json::Value::Null
         }
+        // Read-only discovery over a user-chosen folder: no database or app data dir
+        // involved, so it deliberately skips PluginPlatform.
+        "scan_plugin_folder" => {
+            let folder_path = payload_string(&request.payload, "folderPath")?;
+            let discovered =
+                crate::plugin_folder_scan::scan_plugin_folder(std::path::Path::new(&folder_path))
+                    .map_err(|error| (StatusCode::BAD_REQUEST, error))?;
+            json_value(discovered)?
+        }
         "install_plugin_from_local" => {
             let source_path =
                 std::path::PathBuf::from(payload_string(&request.payload, "sourcePath")?);

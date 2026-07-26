@@ -28,6 +28,10 @@ vi.mock('../../lib/plugin/pluginRegistry', () => ({
 
 vi.mock('../../lib/ipc', () => ({
   writeClipboardText: vi.fn(),
+  getConfig: vi.fn(async () => null),
+  setConfig: vi.fn(),
+  selectDirectory: vi.fn(async () => null),
+  scanPluginFolder: vi.fn(async () => []),
 }))
 
 function entry(id: string, name: string): PluginEntry {
@@ -61,6 +65,14 @@ describe('GlobalPluginSettingsPanel', () => {
     runtimeContributionSources.set(new Map())
     clearComponentRegistry()
     vi.clearAllMocks()
+  })
+
+  it('offers the plugin folder alongside single-package installs', async () => {
+    render(GlobalPluginSettingsPanel, { props: {} })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Choose plugin folder' })).toBeTruthy()
+    })
   })
 
   it('activates installed plugins so their global sections can surface', async () => {
