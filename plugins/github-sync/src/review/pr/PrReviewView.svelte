@@ -5,7 +5,7 @@
   import { reviewPrs, selectedReviewPr, prFileDiffs, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, authoredPrs, activeProjectId, pendingReviewPrOpen } from '../../lib/stores'
   import { getHTMLElementAt, isInputFocused } from '../../lib/domUtils'
   import { useVimNavigation } from '../../lib/useVimNavigation.svelte'
-  import { sortDoNotReviewLast } from '@openforge-app/pr-review-ui/prSort'
+  import { sortAuthoredPrs, sortDoNotReviewLast } from '@openforge-app/pr-review-ui/prSort'
   import PrReviewDetailSection from './PrReviewDetailSection.svelte'
   import PrReviewListSection from './PrReviewListSection.svelte'
   import type { ReviewPullRequest, AuthoredPullRequest, PrFileDiff, PrOverviewComment, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
@@ -143,9 +143,11 @@
   let filteredReviewPrs = $derived($reviewPrs.filter(pr => matchesScope(pr.repo_owner, pr.repo_name) && (!showFilters || !isRepoExcluded(pr.repo_owner, pr.repo_name))))
   let filteredAuthoredPrs = $derived($authoredPrs.filter(pr => matchesScope(pr.repo_owner, pr.repo_name) && (!showFilters || !isRepoExcluded(pr.repo_owner, pr.repo_name))))
 
-  // PRs labeled "DO NOT REVIEW" always sort to the bottom of their list (reviewed & authored).
+  // PRs labeled "DO NOT REVIEW" always sort to the bottom of the review list. The authored
+  // list ignores that label — it tells reviewers to skip a PR, not its author — and is
+  // ordered by attention instead, per repo section in groupedAuthoredPrs below.
   let sortedReviewPrs = $derived(sortDoNotReviewLast(filteredReviewPrs))
-  let sortedAuthoredPrs = $derived(sortDoNotReviewLast(filteredAuthoredPrs))
+  let sortedAuthoredPrs = $derived(filteredAuthoredPrs)
 
   // Text input for manually adding repos
   let newRepoInput = $state('')
@@ -312,6 +314,13 @@
       const existing = grouped.get(key) || []
       existing.push(pr)
       grouped.set(key, existing)
+    }
+    // Ordering happens per section, after grouping: section order stays keyed to recency
+    // (a repo sits where its most recently updated PR put it) so sections do not jump
+    // around as CI results land, while the cards inside each section lead with the PRs
+    // that need work and trail with drafts.
+    for (const [key, repoPrs] of grouped) {
+      grouped.set(key, sortAuthoredPrs(repoPrs))
     }
     return grouped
   }
