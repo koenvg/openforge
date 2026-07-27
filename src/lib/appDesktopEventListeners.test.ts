@@ -60,12 +60,15 @@ function createSession(overrides: Partial<AgentSession> = {}): AgentSession {
 
 function createHarness() {
   const handlers = new Map<string, (event: { payload: unknown }) => unknown>()
-  const unlisten: DesktopUnlistenFn = vi.fn()
+  const closeUnlistener: DesktopUnlistenFn = vi.fn()
+  const eventUnlisteners: DesktopUnlistenFn[] = []
   const listen = vi.fn(async (eventName: string, handler: (event: { payload: unknown }) => unknown) => {
     handlers.set(eventName, handler)
-    return unlisten
+    const unlistener: DesktopUnlistenFn = vi.fn()
+    eventUnlisteners.push(unlistener)
+    return unlistener
   })
-  const onCloseRequested = vi.fn(async () => unlisten)
+  const onCloseRequested = vi.fn(async () => closeUnlistener)
 
   const deps = {
     appWindow: { onCloseRequested },
@@ -82,7 +85,7 @@ function createHarness() {
     listen: listen as unknown as AppEventListen,
   }
 
-  return { handlers, deps, unlisten, listen, onCloseRequested }
+  return { handlers, deps, closeUnlistener, eventUnlisteners, listen, onCloseRequested }
 }
 
 describe('registerAppDesktopEventListeners', () => {
@@ -99,16 +102,16 @@ describe('registerAppDesktopEventListeners', () => {
     })
   })
 
-  it('registers window close handling and all shell event channels', async () => {
-    const { deps, listen, onCloseRequested } = createHarness()
+  it('registers every listener in contract order and returns its unlistener in the same order', async () => {
+    const { deps, closeUnlistener, eventUnlisteners, listen, onCloseRequested } = createHarness()
 
     const unlisteners = await registerAppDesktopEventListeners(deps)
 
     expect(onCloseRequested).toHaveBeenCalledWith(deps.onCloseRequested)
-    expect(unlisteners).toHaveLength(appShellEventContracts.length + 1)
     expect(listen.mock.calls.map(([eventName]) => eventName)).toEqual(
       appShellEventContracts.map(contract => contract.eventName),
     )
+    expect(unlisteners).toEqual([closeUnlistener, ...eventUnlisteners])
   })
 
   it('marks action-complete sessions completed and clears checkpoint notification', async () => {
