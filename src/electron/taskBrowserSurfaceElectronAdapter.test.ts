@@ -1,10 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { SECURE_TASK_BROWSER_WEB_PREFERENCES } from './taskBrowserSurfaceManager'
+import {
+  SECURE_TASK_BROWSER_POPUP_POLICY,
+  SECURE_TASK_BROWSER_WEB_PREFERENCES,
+} from './taskBrowserSurfaceManager'
 import type { TaskBrowserNativeState } from './taskBrowserSurfaceManager'
 
 const electronFakes = vi.hoisted(() => {
   type Listener = (...args: unknown[]) => void
+  type PopupResponse = {
+    action: 'allow' | 'deny'
+    outlivesOpener?: boolean
+    overrideBrowserWindowOptions?: { webPreferences?: { partition?: string }; [key: string]: unknown }
+  }
 
   class FakeSession {
     readonly handlers = new Map<string, Listener[]>()
@@ -98,13 +106,41 @@ const electronFakes = vi.hoisted(() => {
   }
 
   class FakeBrowserWindow {
+    static fromId(id: number): FakeBrowserWindow | null {
+      return windows.get(id) ?? null
+    }
+
     readonly addedViews: FakeWebContentsView[] = []
     readonly removedViews: FakeWebContentsView[] = []
+    readonly handlers = new Map<string, Listener[]>()
+    readonly webContents: FakeWebContents
     readonly contentView = {
       addChildView: (view: FakeWebContentsView) => { this.addedViews.push(view) },
       removeChildView: (view: FakeWebContentsView) => { this.removedViews.push(view) },
     }
     destroyed = false
+
+    constructor(readonly options: PopupResponse['overrideBrowserWindowOptions'] = {}) {
+      const partition = options?.webPreferences?.partition ?? ''
+      this.webContents = new FakeWebContents(sessionFor(partition))
+    }
+
+    on(event: string, handler: Listener): void {
+      const handlers = this.handlers.get(event) ?? []
+      handlers.push(handler)
+      this.handlers.set(event, handlers)
+    }
+
+    emit(event: string, ...args: unknown[]): void {
+      for (const handler of this.handlers.get(event) ?? []) handler(...args)
+    }
+
+    destroy(): void {
+      if (this.destroyed) return
+      this.destroyed = true
+      this.webContents.close()
+      this.emit('closed')
+    }
 
     isDestroyed(): boolean { return this.destroyed }
   }
@@ -112,6 +148,7 @@ const electronFakes = vi.hoisted(() => {
   const views: FakeWebContentsView[] = []
   const sessions = new Map<string, FakeSession>()
   const windows = new Map<number, FakeBrowserWindow>()
+  const childWindows: FakeBrowserWindow[] = []
 
   function sessionFor(partition: string): FakeSession {
     let browserSession = sessions.get(partition)
@@ -124,11 +161,28 @@ const electronFakes = vi.hoisted(() => {
 
   return {
     FakeSession,
+    FakeBrowserWindow,
     FakeWebContentsView,
     views,
+    childWindows,
     sessionFor,
     sessions,
     windows,
+    openPopup(opener: FakeWebContents, url: string, features = '') {
+      const response = opener.windowOpenHandler?.({
+        url,
+        features,
+        frameName: 'task-browser-auth',
+        disposition: 'new-window',
+        referrer: { url: '', policy: 'default' },
+      }) as PopupResponse | undefined
+      if (!response || response.action !== 'allow') return { response, child: null }
+
+      const child = new FakeBrowserWindow(response.overrideBrowserWindowOptions)
+      childWindows.push(child)
+      opener.emit('did-create-window', child, { url, options: response.overrideBrowserWindowOptions })
+      return { response, child }
+    },
     registerWindow(id: number) {
       const window = new FakeBrowserWindow()
       windows.set(id, window)
@@ -136,6 +190,7 @@ const electronFakes = vi.hoisted(() => {
     },
     reset() {
       views.length = 0
+      childWindows.length = 0
       sessions.clear()
       windows.clear()
     },
@@ -144,7 +199,7 @@ const electronFakes = vi.hoisted(() => {
 
 vi.mock('electron', () => ({
   app: { isPackaged: true },
-  BrowserWindow: { fromId: (id: number) => electronFakes.windows.get(id) ?? null },
+  BrowserWindow: electronFakes.FakeBrowserWindow,
   WebContentsView: electronFakes.FakeWebContentsView,
   session: {
     fromPartition: electronFakes.sessionFor,
@@ -169,6 +224,7 @@ describe('Electron Task Browser Surface navigation adapter', () => {
     const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
       partition: 'persist:test-browser',
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
     })
     const view = electronFakes.views[0]
 
@@ -198,14 +254,17 @@ describe('Electron Task Browser Surface navigation adapter', () => {
     const first = factory.createSurface({
       partition,
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
     })
     factory.createSurface({
       partition,
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
     })
     factory.createSurface({
       partition: 'persist:openforge-task-browser-isolated',
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
     })
 
     const sharedSession = electronFakes.views[0].webContents.session
@@ -217,6 +276,7 @@ describe('Electron Task Browser Surface navigation adapter', () => {
     new ElectronTaskBrowserSurfaceFactory().createSurface({
       partition,
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
     })
     expect(electronFakes.views[3].webContents.session).toBe(sharedSession)
     expect(electronFakes.views[3].webContents.session.siteData.get('cookie')).toBe('signed-in')
@@ -231,6 +291,7 @@ describe('Electron Task Browser Surface navigation adapter', () => {
     factory.createSurface({
       partition: 'persist:test-browser',
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
     })
     const view = electronFakes.views[0]
     const contents = view.webContents
@@ -267,13 +328,108 @@ describe('Electron Task Browser Surface navigation adapter', () => {
     const unsafeRedirect = preventableEvent()
     contents.emit('will-redirect', unsafeRedirect, 'file:///tmp/redirected')
     expect(unsafeRedirect.prevented).toBe(true)
-    expect(contents.windowOpenHandler?.({ url: 'https://popup.example' })).toEqual({ action: 'deny' })
+    expect(electronFakes.openPopup(contents, 'https://popup.example').response?.action).toBe('allow')
+    expect(electronFakes.openPopup(contents, 'file:///tmp/popup').response).toEqual({ action: 'deny' })
+    expect(electronFakes.openPopup(contents, 'https://popup.example', 'sandbox=no').response)
+      .toEqual({ action: 'deny' })
+  })
+
+  it('creates host-owned HTTP(S) children with the parent session and complete browser policy', () => {
+    const window = electronFakes.registerWindow(10)
+    const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
+      partition: 'persist:test-browser-popup',
+      webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
+    })
+    surface.attach(10, { x: 0, y: 0, width: 800, height: 600 })
+    const parentContents = electronFakes.views[0].webContents
+
+    const { response, child } = electronFakes.openPopup(
+      parentContents,
+      'https://auth.example/authorize',
+      'width=640,height=720',
+    )
+
+    expect(response).toMatchObject({
+      action: 'allow',
+      outlivesOpener: false,
+      overrideBrowserWindowOptions: {
+        parent: window,
+        webPreferences: {
+          ...SECURE_TASK_BROWSER_WEB_PREFERENCES,
+          partition: 'persist:test-browser-popup',
+          devTools: false,
+        },
+      },
+    })
+    expect(child).not.toBeNull()
+    expect(child!.webContents.session).toBe(parentContents.session)
+    expect(child!.webContents.session.handlers.get('permission-request'))
+      .toBe(parentContents.session.handlers.get('permission-request'))
+    expect(child!.webContents.session.handlers.get('will-download'))
+      .toBe(parentContents.session.handlers.get('will-download'))
+
+    const unsafeNavigation = preventableEvent()
+    child!.webContents.emit('will-navigate', unsafeNavigation, 'file:///tmp/secret')
+    expect(unsafeNavigation.prevented).toBe(true)
+    expect(electronFakes.openPopup(child!.webContents, 'https://nested.example').response?.action).toBe('allow')
+    expect(electronFakes.openPopup(child!.webContents, 'https://nested.example', 'nodeIntegration=yes').response)
+      .toEqual({ action: 'deny' })
+  })
+
+  it('supports a deterministic OAuth-style handoff through one isolated Task Browser Session', () => {
+    const factory = new ElectronTaskBrowserSurfaceFactory()
+    factory.createSurface({
+      partition: 'persist:task-a',
+      webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
+    })
+    factory.createSurface({
+      partition: 'persist:task-a',
+      webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
+    })
+    factory.createSurface({
+      partition: 'persist:task-b',
+      webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
+    })
+    const firstParent = electronFakes.views[0].webContents
+    const sameSessionParent = electronFakes.views[1].webContents
+    const isolatedParent = electronFakes.views[2].webContents
+
+    firstParent.session.siteData.set('oauth-state', 'deterministic-nonce')
+    const { child } = electronFakes.openPopup(firstParent, 'http://127.0.0.1:4173/oauth/authorize')
+    expect(child!.webContents.session.siteData.get('oauth-state')).toBe('deterministic-nonce')
+
+    child!.webContents.session.siteData.set('auth-cookie', 'credential-free-test-token')
+    expect(sameSessionParent.session.siteData.get('auth-cookie')).toBe('credential-free-test-token')
+    expect(isolatedParent.session.siteData.has('oauth-state')).toBe(false)
+    expect(isolatedParent.session.siteData.has('auth-cookie')).toBe(false)
+  })
+
+  it('closes all popup descendants when the parent live surface is destroyed', () => {
+    const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
+      partition: 'persist:test-browser-cleanup',
+      webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
+    })
+    const parentContents = electronFakes.views[0].webContents
+    const first = electronFakes.openPopup(parentContents, 'https://auth.example/first').child!
+    const nested = electronFakes.openPopup(first.webContents, 'https://auth.example/nested').child!
+    const second = electronFakes.openPopup(parentContents, 'https://auth.example/second').child!
+
+    surface.destroy()
+
+    expect([first, nested, second].every(child => child.isDestroyed())).toBe(true)
+    expect(parentContents.destroyed).toBe(true)
   })
 
   it('publishes complete coherent snapshots for loading, redirects, titles, history, and failures', () => {
     const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
       partition: 'persist:test-browser',
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
     })
     const contents = electronFakes.views[0].webContents
     const states: TaskBrowserNativeState[] = []
@@ -320,6 +476,7 @@ describe('Electron Task Browser Surface navigation adapter', () => {
     const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
       partition: 'persist:test-browser',
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
     })
     const contents = electronFakes.views[0].webContents
     const states: TaskBrowserNativeState[] = []
@@ -335,6 +492,7 @@ describe('Electron Task Browser Surface navigation adapter', () => {
     const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
       partition: 'persist:test-browser',
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
     })
     const contents = electronFakes.views[0].webContents
 

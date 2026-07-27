@@ -31,17 +31,14 @@ const securedTaskBrowserSessions = new WeakSet<Session>()
 class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
   private readonly view: WebContentsView
   private readonly listeners = new Set<(state: TaskBrowserNativeState) => void>()
+  private readonly childWindows = new Set<BrowserWindow>()
   private attachedWindow: BrowserWindow | null = null
   private navigationError: TaskBrowserNavigationError | null = null
   private destroyed = false
 
-  constructor(options: TaskBrowserSurfaceCreateOptions) {
+  constructor(private readonly options: TaskBrowserSurfaceCreateOptions) {
     this.view = new WebContentsView({
-      webPreferences: {
-        ...options.webPreferences,
-        partition: options.partition,
-        devTools: !app.isPackaged,
-      },
+      webPreferences: this.secureWebPreferences(),
     })
     const browserSession = this.view.webContents.session
     if (!securedTaskBrowserSessions.has(browserSession)) {
@@ -127,6 +124,7 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
     if (this.destroyed) return
     this.detach()
     this.destroyed = true
+    this.destroyChildWindows()
     this.listeners.clear()
     if (!this.view.webContents.isDestroyed()) {
       this.view.webContents.close({ waitForBeforeUnload: false })
@@ -158,7 +156,46 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
     contents.on('will-redirect', (event, url) => {
       if (!allowedTopLevelUrl(url)) event.preventDefault()
     })
-    contents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    contents.setWindowOpenHandler(({ url, features }) => {
+      if (!this.options.popupPolicy.isAllowed({ url, features })) return { action: 'deny' }
+      return {
+        action: 'allow',
+        outlivesOpener: false,
+        overrideBrowserWindowOptions: {
+          ...(this.attachedWindow && !this.attachedWindow.isDestroyed()
+            ? { parent: this.attachedWindow }
+            : {}),
+          autoHideMenuBar: true,
+          webPreferences: this.secureWebPreferences(),
+        },
+      }
+    })
+    contents.on('did-create-window', window => this.registerChildWindow(window))
+  }
+
+  private secureWebPreferences() {
+    return {
+      ...this.options.webPreferences,
+      partition: this.options.partition,
+      devTools: !app.isPackaged,
+    }
+  }
+
+  private registerChildWindow(window: BrowserWindow): void {
+    if (this.destroyed || window.webContents.session !== this.view.webContents.session) {
+      window.destroy()
+      return
+    }
+    this.childWindows.add(window)
+    window.on('closed', () => this.childWindows.delete(window))
+    this.configureSecurityPolicy(window.webContents)
+  }
+
+  private destroyChildWindows(): void {
+    for (const childWindow of Array.from(this.childWindows)) {
+      if (!childWindow.isDestroyed()) childWindow.destroy()
+    }
+    this.childWindows.clear()
   }
 
   private configureStatePublication(contents: WebContents): void {
