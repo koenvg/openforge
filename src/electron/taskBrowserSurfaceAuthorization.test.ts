@@ -5,7 +5,7 @@ import { createTaskBrowserSurfaceAuthorizer } from './taskBrowserSurfaceAuthoriz
 describe('Task Browser Surface ownership authorization', () => {
   it('requires an existing project-owned Task and project plugin enablement', async () => {
     const invoke = vi.fn(async (command: string) => command === 'get_task_detail'
-      ? { id: 'T-1', project_id: 'P-1' }
+      ? { id: 'T-1', project_id: 'P-1', status: 'doing' }
       : [{ id: 'browser' }])
     const authorize = createTaskBrowserSurfaceAuthorizer(invoke)
 
@@ -18,8 +18,14 @@ describe('Task Browser Surface ownership authorization', () => {
     await expect(createTaskBrowserSurfaceAuthorizer(async () => ({ id: 'T-1', project_id: null }))('browser', 'T-1'))
       .rejects.toMatchObject({ code: 'INVALID_TASK' })
 
+    await expect(createTaskBrowserSurfaceAuthorizer(async () => ({
+      id: 'T-1',
+      project_id: 'P-1',
+      status: 'done',
+    }))('browser', 'T-1')).rejects.toMatchObject({ code: 'INVALID_TASK' })
+
     const disabled = createTaskBrowserSurfaceAuthorizer(async command => command === 'get_task_detail'
-      ? { id: 'T-1', project_id: 'P-1' }
+      ? { id: 'T-1', project_id: 'P-1', status: 'doing' }
       : [])
     await expect(disabled('browser', 'T-1')).rejects.toMatchObject({ code: 'PLUGIN_NOT_ENABLED' })
 

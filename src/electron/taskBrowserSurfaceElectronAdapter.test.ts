@@ -34,6 +34,14 @@ const electronFakes = vi.hoisted(() => {
       this.handlers.set(event, handlers)
     }
 
+    removeListener(event: string, handler: Listener): void {
+      this.handlers.set(event, (this.handlers.get(event) ?? []).filter(candidate => candidate !== handler))
+    }
+
+    emit(event: string, ...args: unknown[]): void {
+      for (const handler of this.handlers.get(event) ?? []) handler(...args)
+    }
+
     async clearStorageData(): Promise<void> {
       this.clearStorageCalls += 1
       this.siteData.clear()
@@ -42,6 +50,38 @@ const electronFakes = vi.hoisted(() => {
     async clearCache(): Promise<void> {
       this.clearCacheCalls += 1
     }
+  }
+
+  class FakeDownloadItem {
+    readonly handlers = new Map<string, Listener[]>()
+    readonly saveDialogOptions: unknown[] = []
+    readonly savePaths: string[] = []
+    saveDialogError: Error | null = null
+    cancelCalls = 0
+
+    constructor(readonly filename: string) {}
+
+    once(event: string, handler: Listener): void {
+      this.handlers.set(event, [...(this.handlers.get(event) ?? []), handler])
+    }
+
+    removeListener(event: string, handler: Listener): void {
+      this.handlers.set(event, (this.handlers.get(event) ?? []).filter(candidate => candidate !== handler))
+    }
+
+    emit(event: string, ...args: unknown[]): void {
+      const handlers = this.handlers.get(event) ?? []
+      this.handlers.delete(event)
+      for (const handler of handlers) handler(...args)
+    }
+
+    getFilename(): string { return this.filename }
+    setSaveDialogOptions(options: unknown): void {
+      if (this.saveDialogError) throw this.saveDialogError
+      this.saveDialogOptions.push(options)
+    }
+    setSavePath(path: string): void { this.savePaths.push(path) }
+    cancel(): void { this.cancelCalls += 1 }
   }
 
   class FakeWebContents {
@@ -162,6 +202,7 @@ const electronFakes = vi.hoisted(() => {
   return {
     FakeSession,
     FakeBrowserWindow,
+    FakeDownloadItem,
     FakeWebContentsView,
     views,
     childWindows,
@@ -198,7 +239,10 @@ const electronFakes = vi.hoisted(() => {
 })
 
 vi.mock('electron', () => ({
-  app: { isPackaged: true },
+  app: {
+    isPackaged: true,
+    getPath: (name: string) => name === 'downloads' ? '/downloads' : '/',
+  },
   BrowserWindow: electronFakes.FakeBrowserWindow,
   WebContentsView: electronFakes.FakeWebContentsView,
   session: {
@@ -206,8 +250,10 @@ vi.mock('electron', () => ({
   },
 }))
 
-import { ElectronTaskBrowserSurfaceFactory } from './taskBrowserSurfaceElectronAdapter'
-
+import {
+  ElectronTaskBrowserSurfaceFactory,
+  sanitizeTaskBrowserDownloadFilename,
+} from './taskBrowserSurfaceElectronAdapter'
 function preventableEvent() {
   let prevented = false
   return {
@@ -222,6 +268,7 @@ describe('Electron Task Browser Surface navigation adapter', () => {
   it('attaches, detaches, throttles, and destroys the native live page', () => {
     const window = electronFakes.registerWindow(10)
     const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
+      windowId: 10,
       partition: 'persist:test-browser',
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
       popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
@@ -252,16 +299,19 @@ describe('Electron Task Browser Surface navigation adapter', () => {
     const partition = 'persist:openforge-task-browser-shared'
     const factory = new ElectronTaskBrowserSurfaceFactory()
     const first = factory.createSurface({
+      windowId: 10,
       partition,
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
       popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
     })
     factory.createSurface({
+      windowId: 10,
       partition,
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
       popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
     })
     factory.createSurface({
+      windowId: 10,
       partition: 'persist:openforge-task-browser-isolated',
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
       popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
@@ -274,6 +324,7 @@ describe('Electron Task Browser Surface navigation adapter', () => {
 
     first.destroy()
     new ElectronTaskBrowserSurfaceFactory().createSurface({
+      windowId: 10,
       partition,
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
       popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
@@ -289,6 +340,7 @@ describe('Electron Task Browser Surface navigation adapter', () => {
   it('keeps secure browser preferences fixed and only permits HTTP(S) top-level destinations', () => {
     const factory = new ElectronTaskBrowserSurfaceFactory()
     factory.createSurface({
+      windowId: 10,
       partition: 'persist:test-browser',
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
       popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
@@ -337,6 +389,7 @@ describe('Electron Task Browser Surface navigation adapter', () => {
   it('creates host-owned HTTP(S) children with the parent session and complete browser policy', () => {
     const window = electronFakes.registerWindow(10)
     const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
+      windowId: 10,
       partition: 'persist:test-browser-popup',
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
       popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
@@ -369,6 +422,13 @@ describe('Electron Task Browser Surface navigation adapter', () => {
     expect(child!.webContents.session.handlers.get('will-download'))
       .toBe(parentContents.session.handlers.get('will-download'))
 
+    const childDownload = new electronFakes.FakeDownloadItem('oauth-token.json')
+    parentContents.session.emit('will-download', {}, childDownload, child!.webContents)
+    expect(childDownload.saveDialogOptions).toEqual([expect.objectContaining({
+      defaultPath: '/downloads/oauth-token.json',
+    })])
+    childDownload.emit('done', {}, 'completed')
+
     const unsafeNavigation = preventableEvent()
     child!.webContents.emit('will-navigate', unsafeNavigation, 'file:///tmp/secret')
     expect(unsafeNavigation.prevented).toBe(true)
@@ -380,16 +440,19 @@ describe('Electron Task Browser Surface navigation adapter', () => {
   it('supports a deterministic OAuth-style handoff through one isolated Task Browser Session', () => {
     const factory = new ElectronTaskBrowserSurfaceFactory()
     factory.createSurface({
+      windowId: 10,
       partition: 'persist:task-a',
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
       popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
     })
     factory.createSurface({
+      windowId: 10,
       partition: 'persist:task-a',
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
       popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
     })
     factory.createSurface({
+      windowId: 10,
       partition: 'persist:task-b',
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
       popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
@@ -410,6 +473,7 @@ describe('Electron Task Browser Surface navigation adapter', () => {
 
   it('closes all popup descendants when the parent live surface is destroyed', () => {
     const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
+      windowId: 10,
       partition: 'persist:test-browser-cleanup',
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
       popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
@@ -427,6 +491,7 @@ describe('Electron Task Browser Surface navigation adapter', () => {
 
   it('publishes complete coherent snapshots for loading, redirects, titles, history, and failures', () => {
     const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
+      windowId: 10,
       partition: 'persist:test-browser',
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
       popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
@@ -474,6 +539,7 @@ describe('Electron Task Browser Surface navigation adapter', () => {
 
   it('does not report an explicitly stopped navigation as a failure', () => {
     const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
+      windowId: 10,
       partition: 'persist:test-browser',
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
       popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
@@ -490,6 +556,7 @@ describe('Electron Task Browser Surface navigation adapter', () => {
 
   it('keeps rejected loadURL cancellations out of structured failure state', async () => {
     const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
+      windowId: 10,
       partition: 'persist:test-browser',
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
       popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
@@ -501,5 +568,112 @@ describe('Electron Task Browser Surface navigation adapter', () => {
       await surface.loadURL('https://cancelled.example')
       expect(surface.getState().error, String(code)).toBeNull()
     }
+  })
+
+  it.each([
+    ['../../report.txt', 'report.txt'],
+    ['..\\..\\unsafe<name>.txt', 'unsafe_name_.txt'],
+    ['CON.txt', '_CON.txt'],
+    ['photo.jpg. ', 'photo.jpg'],
+    ['   ...   ', 'download'],
+  ])('sanitizes suggested download filenames before presentation: %s', (suggested, expected) => {
+    expect(sanitizeTaskBrowserDownloadFilename(suggested)).toBe(expected)
+  })
+
+  it('bounds multibyte suggested filenames while preserving a short extension', () => {
+    const sanitized = sanitizeTaskBrowserDownloadFilename(`${'😀'.repeat(100)}.txt`)
+
+    expect(Buffer.byteLength(sanitized, 'utf8')).toBeLessThanOrEqual(200)
+    expect(sanitized).toMatch(/\.txt$/)
+  })
+
+  it('configures one host-owned Save dialog with a sanitized filename without supplying a destination', () => {
+    electronFakes.registerWindow(10)
+    const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
+      windowId: 10,
+      partition: 'persist:test-browser',
+      webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
+    })
+    const view = electronFakes.views[0]
+    const item = new electronFakes.FakeDownloadItem('../../unsafe<name>.txt')
+
+    view.webContents.session.emit('will-download', {}, item, view.webContents)
+
+    expect(item.saveDialogOptions).toEqual([{
+      title: 'Save download',
+      defaultPath: '/downloads/unsafe_name_.txt',
+      buttonLabel: 'Save',
+      properties: ['showOverwriteConfirmation', 'createDirectory'],
+    }])
+    expect(item.savePaths).toEqual([])
+    expect(item.cancelCalls).toBe(0)
+
+    item.emit('done', {}, 'completed')
+    surface.destroy()
+    expect(item.cancelCalls).toBe(0)
+  })
+
+  it('releases a download after Electron reports native Save dialog cancellation', () => {
+    electronFakes.registerWindow(10)
+    const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
+      windowId: 10,
+      partition: 'persist:test-browser',
+      webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
+    })
+    const view = electronFakes.views[0]
+    const item = new electronFakes.FakeDownloadItem('report.txt')
+
+    view.webContents.session.emit('will-download', {}, item, view.webContents)
+    item.emit('done', {}, 'cancelled')
+    surface.destroy()
+
+    expect(item.saveDialogOptions).toHaveLength(1)
+    expect(item.savePaths).toEqual([])
+    expect(item.cancelCalls).toBe(0)
+  })
+
+  it('fails closed when the host cannot configure the native Save dialog', () => {
+    electronFakes.registerWindow(10)
+    const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
+      windowId: 10,
+      partition: 'persist:test-browser',
+      webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
+    })
+    const view = electronFakes.views[0]
+    const item = new electronFakes.FakeDownloadItem('report.txt')
+    item.saveDialogError = new Error('dialog unavailable')
+
+    view.webContents.session.emit('will-download', {}, item, view.webContents)
+    surface.destroy()
+
+    expect(item.saveDialogOptions).toEqual([])
+    expect(item.savePaths).toEqual([])
+    expect(item.cancelCalls).toBe(1)
+  })
+
+  it('ignores foreign native download handles and cancels owned in-flight downloads during cleanup', () => {
+    electronFakes.registerWindow(10)
+    const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
+      windowId: 10,
+      partition: 'persist:test-browser',
+      webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
+    })
+    const view = electronFakes.views[0]
+    const foreignItem = new electronFakes.FakeDownloadItem('foreign.txt')
+
+    view.webContents.session.emit('will-download', {}, foreignItem, {})
+    expect(foreignItem.saveDialogOptions).toEqual([])
+    expect(foreignItem.cancelCalls).toBe(0)
+
+    const ownedItem = new electronFakes.FakeDownloadItem('owned.txt')
+    view.webContents.session.emit('will-download', {}, ownedItem, view.webContents)
+    surface.destroy()
+
+    expect(ownedItem.cancelCalls).toBe(1)
+    expect(view.webContents.session.handlers.get('will-download')).toEqual([])
   })
 })

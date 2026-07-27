@@ -8,6 +8,12 @@ function projectIdFromTask(value: unknown): string | null {
   return typeof projectId === 'string' && projectId.trim() !== '' ? projectId : null
 }
 
+function taskStatusFromTask(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null) return null
+  const status = (value as Record<string, unknown>).status
+  return typeof status === 'string' && status.trim() !== '' ? status : null
+}
+
 function includesPlugin(value: unknown, pluginId: string): boolean {
   return Array.isArray(value) && value.some(entry => (
     typeof entry === 'object'
@@ -32,6 +38,11 @@ export function createTaskBrowserSurfaceAuthorizer(invoke: InvokeTaskBrowserAuth
     const projectId = projectIdFromTask(task)
     if (!projectId) {
       throw new TaskBrowserSurfaceError('INVALID_TASK', `Task Browser Surface Task ${taskId} is not owned by a project`)
+    }
+
+    const taskStatus = taskStatusFromTask(task)
+    if (!taskStatus || taskStatus === 'done') {
+      throw new TaskBrowserSurfaceError('INVALID_TASK', `Task Browser Surface Task ${taskId} is not active`)
     }
 
     let enabledPlugins: unknown

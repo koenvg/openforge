@@ -1,5 +1,6 @@
+import { join } from 'node:path'
 import { BrowserWindow, WebContentsView, app, session as electronSession } from 'electron'
-import type { Session, WebContents } from 'electron'
+import type { DownloadItem, Event as ElectronEvent, Session, WebContents } from 'electron'
 import { integerTaskBrowserBounds } from './taskBrowserSurfaceManager.js'
 import type {
   NativeTaskBrowserSurface,
@@ -25,13 +26,64 @@ function isAbortedNavigationError(error: unknown): boolean {
   return code === -3 || code === 'ERR_ABORTED'
 }
 
+const INVALID_FILENAME_CHARACTERS = /[\u0000-\u001f\u007f<>:"|?*]/g
+const RESERVED_WINDOWS_FILENAME = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i
+const MAX_SUGGESTED_FILENAME_BYTES = 200
+const MAX_SUGGESTED_FILENAME_CODE_UNITS = 200
+
+function takeFilenamePrefix(value: string, maxBytes: number, maxCodeUnits: number): string {
+  let result = ''
+  let byteLength = 0
+  for (const character of value) {
+    const characterBytes = Buffer.byteLength(character, 'utf8')
+    if (byteLength + characterBytes > maxBytes || result.length + character.length > maxCodeUnits) break
+    result += character
+    byteLength += characterBytes
+  }
+  return result
+}
+
+function truncateSuggestedFilename(value: string): string {
+  if (Buffer.byteLength(value, 'utf8') <= MAX_SUGGESTED_FILENAME_BYTES && value.length <= MAX_SUGGESTED_FILENAME_CODE_UNITS) {
+    return value
+  }
+
+  const extensionStart = value.lastIndexOf('.')
+  const candidateExtension = extensionStart > 0 ? value.slice(extensionStart) : ''
+  const extension = candidateExtension.length <= 32 && Buffer.byteLength(candidateExtension, 'utf8') <= 64
+    ? candidateExtension
+    : ''
+  const basename = extension ? value.slice(0, extensionStart) : value
+  const prefix = takeFilenamePrefix(
+    basename,
+    MAX_SUGGESTED_FILENAME_BYTES - Buffer.byteLength(extension, 'utf8'),
+    MAX_SUGGESTED_FILENAME_CODE_UNITS - extension.length,
+  )
+  return `${prefix}${extension}`
+}
+
+export function sanitizeTaskBrowserDownloadFilename(suggestedFilename: string): string {
+  const leaf = suggestedFilename.normalize('NFKC').split(/[\\/]/).filter(Boolean).at(-1) ?? ''
+  let sanitized = leaf
+    .replace(INVALID_FILENAME_CHARACTERS, '_')
+    .trim()
+    .replace(/[. ]+$/g, '')
+
+  if (!sanitized || sanitized === '.' || sanitized === '..') return 'download'
+  if (RESERVED_WINDOWS_FILENAME.test(sanitized)) sanitized = `_${sanitized}`
+
+  sanitized = truncateSuggestedFilename(sanitized).replace(/[. ]+$/g, '')
+  return sanitized || 'download'
+}
 
 const securedTaskBrowserSessions = new WeakSet<Session>()
 
 class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
   private readonly view: WebContentsView
+  private readonly browserSession: Session
   private readonly listeners = new Set<(state: TaskBrowserNativeState) => void>()
   private readonly childWindows = new Set<BrowserWindow>()
+  private readonly activeDownloads = new Map<DownloadItem, () => void>()
   private attachedWindow: BrowserWindow | null = null
   private navigationError: TaskBrowserNavigationError | null = null
   private destroyed = false
@@ -40,13 +92,13 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
     this.view = new WebContentsView({
       webPreferences: this.secureWebPreferences(),
     })
-    const browserSession = this.view.webContents.session
-    if (!securedTaskBrowserSessions.has(browserSession)) {
-      securedTaskBrowserSessions.add(browserSession)
-      browserSession.setPermissionCheckHandler(() => false)
-      browserSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false))
-      browserSession.on('will-download', (_event, item) => item.cancel())
+    this.browserSession = this.view.webContents.session
+    if (!securedTaskBrowserSessions.has(this.browserSession)) {
+      securedTaskBrowserSessions.add(this.browserSession)
+      this.browserSession.setPermissionCheckHandler(() => false)
+      this.browserSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false))
     }
+    this.browserSession.on('will-download', this.handleWillDownload)
     this.configureSecurityPolicy(this.view.webContents)
     this.configureStatePublication(this.view.webContents)
     this.view.webContents.setBackgroundThrottling(true)
@@ -125,6 +177,8 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
     this.detach()
     this.destroyed = true
     this.destroyChildWindows()
+    this.browserSession.removeListener('will-download', this.handleWillDownload)
+    this.cancelActiveDownloads()
     this.listeners.clear()
     if (!this.view.webContents.isDestroyed()) {
       this.view.webContents.close({ waitForBeforeUnload: false })
@@ -147,6 +201,49 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
   stop(): void {
     this.view.webContents.stop()
     this.publish()
+  }
+
+  private ownsWebContents(webContents: WebContents): boolean {
+    return webContents === this.view.webContents
+      || Array.from(this.childWindows).some(window => !window.isDestroyed() && window.webContents === webContents)
+  }
+
+  private readonly handleWillDownload = (_event: ElectronEvent, item: DownloadItem, webContents: WebContents): void => {
+    if (!this.ownsWebContents(webContents) || this.destroyed) return
+
+    const window = BrowserWindow.fromId(this.options.windowId)
+    if (!window || window.isDestroyed()) {
+      item.cancel()
+      return
+    }
+
+    const release = () => this.activeDownloads.delete(item)
+    this.activeDownloads.set(item, release)
+    item.once('done', release)
+    try {
+      item.setSaveDialogOptions({
+        title: 'Save download',
+        defaultPath: join(app.getPath('downloads'), sanitizeTaskBrowserDownloadFilename(item.getFilename())),
+        buttonLabel: 'Save',
+        properties: ['showOverwriteConfirmation', 'createDirectory'],
+      })
+    } catch {
+      item.removeListener('done', release)
+      release()
+      item.cancel()
+    }
+  }
+
+  private cancelActiveDownloads(): void {
+    for (const [item, release] of this.activeDownloads) {
+      item.removeListener('done', release)
+      try {
+        item.cancel()
+      } catch {
+        // Continue releasing the remaining host-owned downloads.
+      }
+    }
+    this.activeDownloads.clear()
   }
 
   private configureSecurityPolicy(contents: WebContents): void {
