@@ -5,7 +5,7 @@ This document covers the repository's developer workflows. Open Forge is source-
 ## Prerequisites
 
 - [Rust](https://rustup.rs/) 1.77 or newer
-- [Node.js](https://nodejs.org/) 20 or newer
+- [Node.js](https://nodejs.org/) 22.12 or newer (the root `package.json` `engines.node` constraint is authoritative)
 - [pnpm](https://pnpm.io/) 10 or newer
 - macOS with Xcode Command Line Tools for Electron packaging and Metal/Whisper support
 - At least one supported coding-agent provider, such as [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [OpenCode](https://github.com/opencode-ai/opencode), or Pi
