@@ -8,6 +8,9 @@ const electronFakes = vi.hoisted(() => {
 
   class FakeSession {
     readonly handlers = new Map<string, Listener[]>()
+    readonly siteData = new Map<string, string>()
+    clearStorageCalls = 0
+    clearCacheCalls = 0
 
     setPermissionCheckHandler(handler: Listener): void {
       this.handlers.set('permission-check', [handler])
@@ -23,12 +26,18 @@ const electronFakes = vi.hoisted(() => {
       this.handlers.set(event, handlers)
     }
 
-    async clearStorageData(): Promise<void> {}
-    async clearCache(): Promise<void> {}
+    async clearStorageData(): Promise<void> {
+      this.clearStorageCalls += 1
+      this.siteData.clear()
+    }
+
+    async clearCache(): Promise<void> {
+      this.clearCacheCalls += 1
+    }
   }
 
   class FakeWebContents {
-    readonly session = new FakeSession()
+    constructor(readonly session: FakeSession) {}
     readonly handlers = new Map<string, Listener[]>()
     readonly navigationHistory = {
       canGoBack: () => this.historyIndex > 0,
@@ -76,10 +85,12 @@ const electronFakes = vi.hoisted(() => {
   }
 
   class FakeWebContentsView {
-    readonly webContents = new FakeWebContents()
+    readonly webContents: FakeWebContents
     readonly bounds: unknown[] = []
 
     constructor(readonly options: unknown) {
+      const partition = (options as { webPreferences?: { partition?: string } }).webPreferences?.partition ?? ''
+      this.webContents = new FakeWebContents(sessionFor(partition))
       views.push(this)
     }
 
@@ -102,10 +113,20 @@ const electronFakes = vi.hoisted(() => {
   const sessions = new Map<string, FakeSession>()
   const windows = new Map<number, FakeBrowserWindow>()
 
+  function sessionFor(partition: string): FakeSession {
+    let browserSession = sessions.get(partition)
+    if (!browserSession) {
+      browserSession = new FakeSession()
+      sessions.set(partition, browserSession)
+    }
+    return browserSession
+  }
+
   return {
     FakeSession,
     FakeWebContentsView,
     views,
+    sessionFor,
     sessions,
     windows,
     registerWindow(id: number) {
@@ -126,14 +147,7 @@ vi.mock('electron', () => ({
   BrowserWindow: { fromId: (id: number) => electronFakes.windows.get(id) ?? null },
   WebContentsView: electronFakes.FakeWebContentsView,
   session: {
-    fromPartition(partition: string) {
-      let session = electronFakes.sessions.get(partition)
-      if (!session) {
-        session = new electronFakes.FakeSession()
-        electronFakes.sessions.set(partition, session)
-      }
-      return session
-    },
+    fromPartition: electronFakes.sessionFor,
   },
 }))
 
@@ -176,6 +190,41 @@ describe('Electron Task Browser Surface navigation adapter', () => {
 
     surface.destroy()
     expect(view.webContents.destroyed).toBe(true)
+  })
+
+  it('reuses persistent Electron sessions across surfaces, destruction, and factory lifetimes', async () => {
+    const partition = 'persist:openforge-task-browser-shared'
+    const factory = new ElectronTaskBrowserSurfaceFactory()
+    const first = factory.createSurface({
+      partition,
+      webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+    })
+    factory.createSurface({
+      partition,
+      webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+    })
+    factory.createSurface({
+      partition: 'persist:openforge-task-browser-isolated',
+      webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+    })
+
+    const sharedSession = electronFakes.views[0].webContents.session
+    sharedSession.siteData.set('cookie', 'signed-in')
+    expect(electronFakes.views[1].webContents.session).toBe(sharedSession)
+    expect(electronFakes.views[2].webContents.session).not.toBe(sharedSession)
+
+    first.destroy()
+    new ElectronTaskBrowserSurfaceFactory().createSurface({
+      partition,
+      webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+    })
+    expect(electronFakes.views[3].webContents.session).toBe(sharedSession)
+    expect(electronFakes.views[3].webContents.session.siteData.get('cookie')).toBe('signed-in')
+
+    await factory.clearSession(partition)
+    expect(sharedSession.siteData.size).toBe(0)
+    expect(sharedSession.clearStorageCalls).toBe(1)
+    expect(sharedSession.clearCacheCalls).toBe(1)
   })
   it('keeps secure browser preferences fixed and only permits HTTP(S) top-level destinations', () => {
     const factory = new ElectronTaskBrowserSurfaceFactory()
