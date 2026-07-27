@@ -72,6 +72,36 @@ describe('browser surfaces SDK contract', () => {
     await expect(surface.getState()).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
   })
 
+  it('restores only the URL supplied from plugin-owned Task storage and keeps Tasks isolated', async () => {
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'browser' })
+    const taskStorage = api.storage.task('T-restored')
+    const surface = await api.browserSurfaces.getOrCreate({
+      taskId: 'T-restored',
+      id: 'main',
+      initialUrl: 'https://example.com/start',
+    })
+    const committed = await surface.navigate('https://example.com/committed')
+    await taskStorage.set('lastUrl', committed.url)
+
+    const otherTask = await api.browserSurfaces.getOrCreate({ taskId: 'T-isolated', id: 'main' })
+    await expect(otherTask.getState()).resolves.toMatchObject({ url: 'about:blank' })
+
+    await surface.destroy()
+    const withoutSavedUrl = await api.browserSurfaces.getOrCreate({ taskId: 'T-restored', id: 'main' })
+    await expect(withoutSavedUrl.getState()).resolves.toMatchObject({ url: 'about:blank' })
+
+    await withoutSavedUrl.destroy()
+    const savedUrl = await taskStorage.get<string>('lastUrl')
+    const restored = await api.browserSurfaces.getOrCreate({
+      taskId: 'T-restored',
+      id: 'main',
+      initialUrl: savedUrl ?? undefined,
+    })
+
+    await expect(restored.getState()).resolves.toMatchObject({ url: 'https://example.com/committed' })
+    await expect(otherTask.getState()).resolves.toMatchObject({ url: 'about:blank' })
+  })
+
   it('keeps browser surfaces unavailable to backend plugin APIs', () => {
     const backend = createMockBackendOpenForgeApi()
     expect(backend).not.toHaveProperty('browserSurfaces')

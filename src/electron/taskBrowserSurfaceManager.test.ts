@@ -105,11 +105,13 @@ class FakeNativeFactory implements NativeTaskBrowserSurfaceFactory {
   readonly creations: TaskBrowserSurfaceCreateOptions[] = []
   readonly surfaces: FakeNativeSurface[] = []
   readonly clearedPartitions: string[] = []
+  readonly sessionDataByPartition = new Map<string, Map<string, string>>()
   loadGate: Promise<void> | null = null
   clearGate: Promise<void> | null = null
 
   createSurface(options: TaskBrowserSurfaceCreateOptions): NativeTaskBrowserSurface {
     this.creations.push(options)
+    this.sessionDataFor(options.partition)
     const surface = new FakeNativeSurface()
     surface.loadGate = this.loadGate
     this.surfaces.push(surface)
@@ -119,6 +121,16 @@ class FakeNativeFactory implements NativeTaskBrowserSurfaceFactory {
   async clearSession(partition: string): Promise<void> {
     this.clearedPartitions.push(partition)
     if (this.clearGate) await this.clearGate
+    this.sessionDataFor(partition).clear()
+  }
+
+  sessionDataFor(partition: string): Map<string, string> {
+    let data = this.sessionDataByPartition.get(partition)
+    if (!data) {
+      data = new Map()
+      this.sessionDataByPartition.set(partition, data)
+    }
+    return data
   }
 }
 
@@ -172,6 +184,112 @@ describe('Task Browser Surface Manager', () => {
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
     })
     expect(factory.creations[1].partition).toBe(factory.creations[0].partition)
+  })
+
+  it('derives one stable persistent partition per plugin and Task without surface identity collisions', async () => {
+    const { manager, factory } = createManager()
+
+    await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-1', id: 'main' })
+    await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-1', id: 'secondary' })
+    await manager.getOrCreate({ windowId: 11, pluginId: 'browser', taskId: 'T-1', id: 'main' })
+    await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-2', id: 'main' })
+    await manager.getOrCreate({ windowId: 10, pluginId: 'notes', taskId: 'T-1', id: 'main' })
+
+    const partitions = factory.creations.map(creation => creation.partition)
+    expect(partitions.slice(0, 3)).toEqual([
+      'persist:openforge-task-browser-f3c7a3c60de8e74b261b9e88aeaf2593e6ff954e58b3a1c5b3849f6731f97ba0',
+      'persist:openforge-task-browser-f3c7a3c60de8e74b261b9e88aeaf2593e6ff954e58b3a1c5b3849f6731f97ba0',
+      'persist:openforge-task-browser-f3c7a3c60de8e74b261b9e88aeaf2593e6ff954e58b3a1c5b3849f6731f97ba0',
+    ])
+    expect(new Set(partitions)).toEqual(new Set([
+      partitions[0],
+      'persist:openforge-task-browser-70819d092c2822b2e0555899dd6e86a1836fb0b8f9e5b62867d356511acd7697',
+      'persist:openforge-task-browser-c8eb76f24facb80fa89c177bdfc4d94a7ab2b5d1129767299dbea3828eb7798c',
+    ]))
+  })
+
+  it('preserves Task Browser Session data through destruction, plugin cleanup, LRU eviction, and restart', async () => {
+    const { manager, factory } = createManager()
+    const savedUrl = 'https://example.com/restored'
+    const original = await manager.getOrCreate({
+      windowId: 10,
+      pluginId: 'browser',
+      taskId: 'T-durable',
+      id: 'main',
+      initialUrl: savedUrl,
+    })
+    const partition = factory.creations.at(-1)!.partition
+    const durableData = factory.sessionDataFor(partition)
+    for (const dataKind of ['cookies', 'cache', 'localStorage', 'indexedDB', 'serviceWorkers']) {
+      durableData.set(dataKind, 'preserved')
+    }
+
+    await manager.destroy(original.surfaceId)
+    const withoutPluginUrl = await manager.getOrCreate({
+      windowId: 10,
+      pluginId: 'browser',
+      taskId: 'T-durable',
+      id: 'main',
+    })
+    expect(factory.creations.at(-1)!.partition).toBe(partition)
+    await expect(manager.getState(withoutPluginUrl.surfaceId)).resolves.toMatchObject({ url: 'about:blank' })
+
+    await manager.destroy(withoutPluginUrl.surfaceId)
+    const beforePluginCleanup = await manager.getOrCreate({
+      windowId: 10,
+      pluginId: 'browser',
+      taskId: 'T-durable',
+      id: 'main',
+      initialUrl: savedUrl,
+    })
+    manager.destroyPlugin('browser')
+    const afterPluginCleanup = await manager.getOrCreate({
+      windowId: 10,
+      pluginId: 'browser',
+      taskId: 'T-durable',
+      id: 'main',
+      initialUrl: savedUrl,
+    })
+    expect(afterPluginCleanup.surfaceId).not.toBe(beforePluginCleanup.surfaceId)
+
+    for (let index = 0; index < 4; index += 1) {
+      await manager.getOrCreate({
+        windowId: 10,
+        pluginId: 'browser',
+        taskId: `T-lru-${index}`,
+        id: 'main',
+      })
+    }
+    await expect(manager.getState(afterPluginCleanup.surfaceId)).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
+
+    const afterEviction = await manager.getOrCreate({
+      windowId: 10,
+      pluginId: 'browser',
+      taskId: 'T-durable',
+      id: 'main',
+      initialUrl: savedUrl,
+    })
+    expect(factory.creations.at(-1)!.partition).toBe(partition)
+    await expect(manager.getState(afterEviction.surfaceId)).resolves.toMatchObject({ url: savedUrl })
+
+    manager.destroyAll()
+    const restartedManager = new TaskBrowserSurfaceManager({
+      factory,
+      authorize: async () => undefined,
+    })
+    restartedManager.registerWindow(10, { x: 0, y: 0, width: 800, height: 600 })
+    await restartedManager.getOrCreate({
+      windowId: 10,
+      pluginId: 'browser',
+      taskId: 'T-durable',
+      id: 'main',
+      initialUrl: savedUrl,
+    })
+
+    expect(factory.creations.at(-1)!.partition).toBe(partition)
+    expect(factory.sessionDataFor(partition)).toEqual(durableData)
+    expect([...durableData.values()]).toEqual(Array(5).fill('preserved'))
+    expect(factory.clearedPartitions).toEqual([])
   })
 
   it('keeps concurrent callers pending until the initial URL load completes', async () => {

@@ -63,8 +63,10 @@ export const SECURE_TASK_BROWSER_WEB_PREFERENCES: TaskBrowserWebPreferences = Ob
   navigateOnDragDrop: false,
 })
 
+export type TaskBrowserSessionPartition = `persist:${string}`
+
 export interface TaskBrowserSurfaceCreateOptions {
-  partition: string
+  partition: TaskBrowserSessionPartition
   webPreferences: TaskBrowserWebPreferences
 }
 
@@ -83,7 +85,7 @@ export interface NativeTaskBrowserSurface {
 
 export interface NativeTaskBrowserSurfaceFactory {
   createSurface(options: TaskBrowserSurfaceCreateOptions): NativeTaskBrowserSurface
-  clearSession(partition: string): Promise<void>
+  clearSession(partition: TaskBrowserSessionPartition): Promise<void>
 }
 
 export interface TaskBrowserSurfaceStateEvent {
@@ -121,7 +123,7 @@ type SurfaceRecord = {
   pluginId: string
   taskId: string
   id: string
-  partition: string
+  partition: TaskBrowserSessionPartition
   attachmentId: string | null
   attachmentGeneration: number
   requestedBounds: TaskBrowserBounds | null
@@ -146,8 +148,8 @@ function liveKey(request: Pick<GetOrCreateTaskBrowserSurfaceRequest, 'windowId' 
   return [request.windowId, request.pluginId, request.taskId, request.id].join('\u0000')
 }
 
-function partitionFor(pluginId: string, taskId: string): string {
-  const digest = createHash('sha256').update(`${pluginId}\u0000${taskId}`).digest('hex')
+export function taskBrowserSessionPartition(pluginId: string, taskId: string): TaskBrowserSessionPartition {
+  const digest = createHash('sha256').update(`${pluginId}\u0000${taskId}`, 'utf8').digest('hex')
   return `persist:openforge-task-browser-${digest}`
 }
 
@@ -394,7 +396,7 @@ export class TaskBrowserSurfaceManager {
       await previousReset?.catch(() => undefined)
       await this.options.authorize(pluginId, taskId)
       this.destroyWhere(surface => surface.pluginId === pluginId && surface.taskId === taskId)
-      await this.options.factory.clearSession(partitionFor(pluginId, taskId))
+      await this.options.factory.clearSession(taskBrowserSessionPartition(pluginId, taskId))
     })()
     this.sessionResets.set(sessionKey, reset)
     try {
@@ -438,7 +440,7 @@ export class TaskBrowserSurfaceManager {
       throw new TaskBrowserSurfaceError('HOST_UNAVAILABLE', 'Owning OpenForge window is unavailable')
     }
 
-    const partition = partitionFor(request.pluginId, request.taskId)
+    const partition = taskBrowserSessionPartition(request.pluginId, request.taskId)
     const native = this.options.factory.createSurface({
       partition,
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
