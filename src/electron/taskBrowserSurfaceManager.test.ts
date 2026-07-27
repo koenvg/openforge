@@ -13,6 +13,10 @@ import type {
   TaskBrowserSurfaceCreateOptions,
   TaskBrowserSurfaceStateEvent,
 } from './taskBrowserSurfaceManager'
+import type {
+  TaskBrowserPartitionRegistration,
+  TaskBrowserPartitionRegistry,
+} from './taskBrowserPartitionRegistry'
 
 class FakeNativeSurface implements NativeTaskBrowserSurface {
   readonly loadCalls: string[] = []
@@ -108,6 +112,7 @@ class FakeNativeFactory implements NativeTaskBrowserSurfaceFactory {
   readonly sessionDataByPartition = new Map<string, Map<string, string>>()
   loadGate: Promise<void> | null = null
   clearGate: Promise<void> | null = null
+  clearError: Error | null = null
 
   createSurface(options: TaskBrowserSurfaceCreateOptions): NativeTaskBrowserSurface {
     this.creations.push(options)
@@ -121,6 +126,7 @@ class FakeNativeFactory implements NativeTaskBrowserSurfaceFactory {
   async clearSession(partition: string): Promise<void> {
     this.clearedPartitions.push(partition)
     if (this.clearGate) await this.clearGate
+    if (this.clearError) throw this.clearError
     this.sessionDataFor(partition).clear()
   }
 
@@ -134,18 +140,42 @@ class FakeNativeFactory implements NativeTaskBrowserSurfaceFactory {
   }
 }
 
+class FakePartitionRegistry implements TaskBrowserPartitionRegistry {
+  readonly registrations: TaskBrowserPartitionRegistration[] = []
+  readonly records = new Map<string, TaskBrowserPartitionRegistration>()
+
+  async register(record: TaskBrowserPartitionRegistration): Promise<void> {
+    this.registrations.push({ ...record })
+    this.records.set(`${record.pluginId}\u0000${record.taskId}`, { ...record })
+  }
+
+  async listByTask(taskId: string): Promise<TaskBrowserPartitionRegistration[]> {
+    return [...this.records.values()].filter(record => record.taskId === taskId)
+  }
+
+  async listByPlugin(pluginId: string): Promise<TaskBrowserPartitionRegistration[]> {
+    return [...this.records.values()].filter(record => record.pluginId === pluginId)
+  }
+
+  async remove(pluginId: string, taskId: string): Promise<void> {
+    this.records.delete(`${pluginId}\u0000${taskId}`)
+  }
+}
+
 function createManager(overrides: { authorize?: (pluginId: string, taskId: string) => Promise<void> } = {}) {
   const factory = new FakeNativeFactory()
+  const registry = new FakePartitionRegistry()
   const authorize = overrides.authorize ?? vi.fn(async () => undefined)
   const stateEvents: TaskBrowserSurfaceStateEvent[] = []
   const manager = new TaskBrowserSurfaceManager({
     factory,
+    registry,
     authorize,
     onStateChanged: event => stateEvents.push(event),
   })
   manager.registerWindow(10, { x: 0, y: 0, width: 800, height: 600 })
   manager.registerWindow(11, { x: 0, y: 0, width: 800, height: 600 })
-  return { manager, factory, authorize, stateEvents }
+  return { manager, factory, registry, authorize, stateEvents }
 }
 
 describe('Task Browser Surface Manager', () => {
@@ -318,6 +348,7 @@ describe('Task Browser Surface Manager', () => {
     manager.destroyAll()
     const restartedManager = new TaskBrowserSurfaceManager({
       factory,
+      registry: new FakePartitionRegistry(),
       authorize: async () => undefined,
     })
     restartedManager.registerWindow(10, { x: 0, y: 0, width: 800, height: 600 })
@@ -612,6 +643,7 @@ describe('Task Browser Surface Manager', () => {
     ;(releaseTaskCreation as (() => void) | null)?.()
     await expect(pendingTask).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
     expect(taskHarness.factory.creations).toHaveLength(0)
+    expect(taskHarness.registry.registrations).toHaveLength(0)
 
     let releaseInitialLoad: (() => void) | null = null
     const loadHarness = createManager()
@@ -790,6 +822,55 @@ describe('Task Browser Surface Manager', () => {
     manager.destroyAll()
     expect(factory.surfaces[3].destroyed).toBe(true)
     expect(factory.clearedPartitions).toEqual([])
+  })
+
+  it('registers allocated partitions durably without removing them on ordinary destruction or reset', async () => {
+    const { manager, factory, registry } = createManager()
+    const first = await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-registry', id: 'main' })
+    await manager.getOrCreate({ windowId: 11, pluginId: 'browser', taskId: 'T-registry', id: 'main' })
+
+    await manager.destroy(first.surfaceId)
+    await manager.resetSession('browser', 'T-registry')
+
+    expect(registry.registrations).toEqual([
+      { pluginId: 'browser', taskId: 'T-registry', partition: factory.creations[0].partition },
+      { pluginId: 'browser', taskId: 'T-registry', partition: factory.creations[0].partition },
+    ])
+    await expect(registry.listByTask('T-registry')).resolves.toEqual([
+      { pluginId: 'browser', taskId: 'T-registry', partition: factory.creations[0].partition },
+    ])
+  })
+
+  it('purges a registered session across windows without reauthorizing a deleted Task', async () => {
+    const authorize = vi.fn(async () => undefined)
+    const { manager, factory } = createManager({ authorize })
+    const first = await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-purge', id: 'main' })
+    const second = await manager.getOrCreate({ windowId: 11, pluginId: 'browser', taskId: 'T-purge', id: 'main' })
+    const unrelated = await manager.getOrCreate({ windowId: 10, pluginId: 'notes', taskId: 'T-purge', id: 'main' })
+    const partition = factory.creations[0].partition
+    authorize.mockRejectedValue(new Error('Task no longer exists'))
+
+    await manager.purgeRegisteredSession({ pluginId: 'browser', taskId: 'T-purge', partition })
+
+    expect(authorize).toHaveBeenCalledTimes(3)
+    expect(factory.clearedPartitions).toEqual([partition])
+    await expect(manager.getState(first.surfaceId)).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
+    await expect(manager.getState(second.surfaceId)).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
+    await expect(manager.getState(unrelated.surfaceId)).resolves.toBeDefined()
+  })
+
+  it('keeps a failed host purge retryable and idempotent', async () => {
+    const { manager, factory } = createManager()
+    const surface = await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-purge-retry', id: 'main' })
+    const record = { pluginId: 'browser', taskId: 'T-purge-retry', partition: factory.creations[0].partition }
+    factory.clearError = new Error('clear failed')
+
+    await expect(manager.purgeRegisteredSession(record)).rejects.toThrow('clear failed')
+    await expect(manager.getState(surface.surfaceId)).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
+
+    factory.clearError = null
+    await expect(manager.purgeRegisteredSession(record)).resolves.toBeUndefined()
+    expect(factory.clearedPartitions).toEqual([record.partition, record.partition])
   })
 
   it('clears durable session data only for an explicit session reset', async () => {

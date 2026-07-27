@@ -2,6 +2,11 @@ import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { BrowserWindow, app, clipboard, dialog, ipcMain, protocol, session, shell } from 'electron'
 import { handleElectronInvoke } from './backendBridge.js'
+import { FileTaskBrowserPartitionRegistry } from './taskBrowserPartitionRegistry.js'
+import {
+  TaskBrowserSessionPurgeCoordinator,
+  invokeWithTaskBrowserSessionPurgeDrain,
+} from './taskBrowserSessionPurgeCoordinator.js'
 import { createTaskBrowserSurfaceAuthorizer } from './taskBrowserSurfaceAuthorization.js'
 import { ElectronTaskBrowserSurfaceFactory } from './taskBrowserSurfaceElectronAdapter.js'
 import { TaskBrowserSurfaceIpcRouter, isTaskBrowserSurfaceCommand } from './taskBrowserSurfaceIpc.js'
@@ -25,12 +30,38 @@ import type { ElectronInvokeDeps } from './backendBridge.js'
 import type { BootBackendInvokeContext, BootLifecycleAdapter } from './bootLifecycle.js'
 import type { ElectronFailureReporter } from './failureReporting.js'
 import type { SidecarEventEnvelopeLike, SidecarLaunchConfig, SidecarReadinessHandle } from './sidecar.js'
+import type { TaskBrowserSessionPurgeIntent } from './taskBrowserSessionPurgeCoordinator.js'
 
 export interface ElectronBootAdapterOptions {
   currentDir: string
   workspaceRoot: string
   env: NodeJS.ProcessEnv
   failureReporter?: ElectronFailureReporter | null
+}
+
+function taskBrowserSessionPurgeIntents(value: unknown): TaskBrowserSessionPurgeIntent[] {
+  if (!Array.isArray(value)) throw new Error('Rust sidecar returned an invalid Task Browser Session purge intent list')
+  return value.map(candidate => {
+    if (
+      typeof candidate !== 'object'
+      || candidate === null
+      || typeof (candidate as Record<string, unknown>).id !== 'number'
+      || !Number.isSafeInteger((candidate as Record<string, unknown>).id)
+      || !['task', 'plugin'].includes(String((candidate as Record<string, unknown>).scope))
+      || typeof (candidate as Record<string, unknown>).ownerId !== 'string'
+      || !(candidate as Record<string, string>).ownerId.trim()
+      || typeof (candidate as Record<string, unknown>).createdAt !== 'number'
+    ) {
+      throw new Error('Rust sidecar returned an invalid Task Browser Session purge intent')
+    }
+    return candidate as TaskBrowserSessionPurgeIntent
+  })
+}
+
+function shouldDrainTaskBrowserSessionPurges(envelope: SidecarEventEnvelopeLike): boolean {
+  if (envelope.eventName === 'plugin-installation-changed') return true
+  if (envelope.eventName !== 'task-changed' || typeof envelope.payload !== 'object' || envelope.payload === null) return false
+  return (envelope.payload as Record<string, unknown>).action === 'deleted'
 }
 
 /** Real Electron Adapter for the Boot Lifecycle Module seam. */
@@ -64,8 +95,12 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     }
   }
 
+  const taskBrowserPartitionRegistry = new FileTaskBrowserPartitionRegistry(
+    () => join(app.getPath('userData'), 'task-browser-partitions.json'),
+  )
   const taskBrowserSurfaceManager = new TaskBrowserSurfaceManager({
     factory: new ElectronTaskBrowserSurfaceFactory(),
+    registry: taskBrowserPartitionRegistry,
     authorize: createTaskBrowserSurfaceAuthorizer(async (command, payload) => {
       if (!backendInvokeContext) throw new Error('Rust sidecar is not available')
       return handleElectronInvoke({ command, payload }, createInvokeDeps(backendInvokeContext))
@@ -80,8 +115,37 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     },
   })
   const taskBrowserSurfaceIpc = new TaskBrowserSurfaceIpcRouter(taskBrowserSurfaceManager)
+  const taskBrowserSessionPurgeCoordinator = new TaskBrowserSessionPurgeCoordinator({
+    backend: {
+      async listPending() {
+        if (!backendInvokeContext) throw new Error('Rust sidecar is not available')
+        const value = await handleElectronInvoke(
+          { command: 'list_browser_session_purge_intents', payload: null },
+          createInvokeDeps(backendInvokeContext),
+        )
+        return taskBrowserSessionPurgeIntents(value)
+      },
+      async acknowledge(intentId) {
+        if (!backendInvokeContext) throw new Error('Rust sidecar is not available')
+        await handleElectronInvoke(
+          { command: 'acknowledge_browser_session_purge_intent', payload: { intentId } },
+          createInvokeDeps(backendInvokeContext),
+        )
+      },
+    },
+    registry: taskBrowserPartitionRegistry,
+    beginPurge: intent => {
+      if (intent.scope === 'task') taskBrowserSurfaceManager.destroyTask(intent.ownerId)
+      else taskBrowserSurfaceManager.destroyPlugin(intent.ownerId)
+    },
+    purgeSession: record => taskBrowserSurfaceManager.purgeRegisteredSession(record),
+    logger: developerLogSink,
+  })
 
   async function createMainWindow(): Promise<BrowserWindow> {
+    if (backendInvokeContext?.getSidecarConfig()) {
+      await taskBrowserSessionPurgeCoordinator.drain()
+    }
     const preloadPath = createPreloadPath(options.currentDir)
     const window = new BrowserWindow(createMainWindowOptions(preloadPath))
     const updateTaskBrowserWindowBounds = () => {
@@ -129,7 +193,11 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
           const windowId = owningWindow && owningWindow.webContents.id === event.sender.id ? owningWindow.id : null
           return taskBrowserSurfaceIpc.handle(typedRequest.command, typedRequest.payload, windowId)
         }
-        return handleElectronInvoke(typedRequest, createInvokeDeps(context))
+        return invokeWithTaskBrowserSessionPurgeDrain(
+          typedRequest,
+          () => handleElectronInvoke(typedRequest, createInvokeDeps(context)),
+          () => taskBrowserSessionPurgeCoordinator.drain(),
+        )
       })
     },
 
@@ -188,6 +256,9 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
             onEvent: envelope => {
               handleTaskBrowserSurfaceLifecycleEvent(taskBrowserSurfaceManager, envelope)
               eventListener?.(envelope)
+              if (shouldDrainTaskBrowserSessionPurges(envelope)) {
+                void taskBrowserSessionPurgeCoordinator.drain()
+              }
             },
             windows: () => BrowserWindow.getAllWindows(),
             failureReporter: options.failureReporter,

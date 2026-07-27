@@ -1519,6 +1519,22 @@ CREATE TABLE IF NOT EXISTS snippets (
         }
         Ok(())
     }),
+    // Durable outbox for privacy-sensitive Task Browser Session cleanup. The owning
+    // Task/plugin row may be gone before Electron drains the intent, so owner_id is
+    // intentionally not a foreign key.
+    M::up(
+        r#"
+CREATE TABLE IF NOT EXISTS browser_session_purge_intents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scope TEXT NOT NULL CHECK (scope IN ('task', 'plugin')),
+    owner_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    UNIQUE(scope, owner_id)
+);
+CREATE INDEX IF NOT EXISTS idx_browser_session_purge_intents_created
+    ON browser_session_purge_intents(created_at, id);
+        "#,
+    ),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -2178,6 +2194,23 @@ CREATE TABLE IF NOT EXISTS plugin_storage (
         }
     }
 
+    Ok(())
+}
+
+pub(super) fn ensure_browser_session_purge_intents_table(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        r#"
+CREATE TABLE IF NOT EXISTS browser_session_purge_intents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scope TEXT NOT NULL CHECK (scope IN ('task', 'plugin')),
+    owner_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    UNIQUE(scope, owner_id)
+);
+CREATE INDEX IF NOT EXISTS idx_browser_session_purge_intents_created
+    ON browser_session_purge_intents(created_at, id);
+        "#,
+    )?;
     Ok(())
 }
 

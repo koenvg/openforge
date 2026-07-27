@@ -7,6 +7,7 @@ mod agent_review;
 mod agents;
 mod authored_prs;
 mod board_status;
+mod browser_session_purges;
 mod config;
 pub(crate) mod migrations;
 mod plugins;
@@ -24,6 +25,7 @@ mod worktrees;
 pub use agents::AgentSessionRow;
 pub use authored_prs::AuthoredPrRow;
 pub use board_status::BoardStatus;
+pub use browser_session_purges::BrowserSessionPurgeIntentRow;
 pub use plugins::PluginRow;
 pub use projects::{ProjectAttentionRow, ProjectRow};
 pub use pull_request_readiness::PrMergeReadinessFacts;
@@ -98,6 +100,7 @@ impl Database {
         migrations::ensure_task_dependency_table(&conn)?;
         migrations::ensure_task_label_tables(&conn)?;
         migrations::ensure_plugin_tables(&conn)?;
+        migrations::ensure_browser_session_purge_intents_table(&conn)?;
         // After ensure_plugin_tables: global_plugins has a foreign key onto plugins.
         migrations::ensure_hierarchy_tables(&conn)?;
 

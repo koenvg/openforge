@@ -67,10 +67,13 @@ impl super::Database {
         Ok(())
     }
 
-    /// Remove a plugin (and cascade-delete project_plugins rows).
+    /// Remove a plugin and transactionally enqueue its Task Browser Session purge.
     pub fn uninstall_plugin(&self, plugin_id: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM plugins WHERE id = ?1", [plugin_id])?;
+        let mut conn = self.conn.lock().unwrap();
+        let transaction = conn.transaction()?;
+        super::browser_session_purges::enqueue_plugin_purge_if_present(&transaction, plugin_id)?;
+        transaction.execute("DELETE FROM plugins WHERE id = ?1", [plugin_id])?;
+        transaction.commit()?;
         Ok(())
     }
 
