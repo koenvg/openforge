@@ -65,9 +65,19 @@ export const SECURE_TASK_BROWSER_WEB_PREFERENCES: TaskBrowserWebPreferences = Ob
 
 export type TaskBrowserSessionPartition = `persist:${string}`
 
+export interface TaskBrowserPopupRequest {
+  url: string
+  features: string
+}
+
+export interface TaskBrowserPopupPolicy {
+  isAllowed(request: TaskBrowserPopupRequest): boolean
+}
+
 export interface TaskBrowserSurfaceCreateOptions {
   partition: TaskBrowserSessionPartition
   webPreferences: TaskBrowserWebPreferences
+  popupPolicy: TaskBrowserPopupPolicy
 }
 
 export interface NativeTaskBrowserSurface {
@@ -161,6 +171,39 @@ function allowedUrl(value: string): boolean {
     return false
   }
 }
+
+const NON_CONFIGURABLE_POPUP_PREFERENCES = new Set([
+  'allowrunninginsecurecontent',
+  'contextisolation',
+  'devtools',
+  'javascript',
+  'navigateondragdrop',
+  'nodeintegration',
+  'nodeintegrationinsubframes',
+  'nodeintegrationinworker',
+  'partition',
+  'preload',
+  'safedialogs',
+  'sandbox',
+  'session',
+  'webpreferences',
+  'websecurity',
+  'webviewtag',
+  'zoomfactor',
+])
+
+function requestsPopupPreferenceOverride(features: string): boolean {
+  return features.split(',').some(feature => {
+    const [name] = feature.split('=', 1)
+    return NON_CONFIGURABLE_POPUP_PREFERENCES.has(name.trim().toLowerCase())
+  })
+}
+
+export const SECURE_TASK_BROWSER_POPUP_POLICY: TaskBrowserPopupPolicy = Object.freeze({
+  isAllowed: ({ url, features }: TaskBrowserPopupRequest) => (
+    allowedUrl(url) && !requestsPopupPreferenceOverride(features)
+  ),
+})
 
 function validBounds(bounds: TaskBrowserBounds): boolean {
   return [bounds.x, bounds.y, bounds.width, bounds.height, bounds.x + bounds.width, bounds.y + bounds.height]
@@ -444,6 +487,7 @@ export class TaskBrowserSurfaceManager {
     const native = this.options.factory.createSurface({
       partition,
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
     })
     const surfaceId = `task-browser-surface-${++this.surfaceSequence}`
     const generation = ++this.generationSequence

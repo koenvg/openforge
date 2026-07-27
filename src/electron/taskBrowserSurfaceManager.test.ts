@@ -186,6 +186,48 @@ describe('Task Browser Surface Manager', () => {
     expect(factory.creations[1].partition).toBe(factory.creations[0].partition)
   })
 
+  it('allows ordinary HTTP(S) popups and rejects unsafe schemes or requested preference overrides', async () => {
+    const { manager, factory } = createManager()
+    await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-popup-policy', id: 'main' })
+    const { popupPolicy } = factory.creations[0]
+
+    for (const url of ['https://auth.example/start', 'http://127.0.0.1:4173/oauth/start']) {
+      expect(popupPolicy.isAllowed({ url, features: '' }), url).toBe(true)
+      expect(popupPolicy.isAllowed({ url, features: 'width=640,height=720,resizable=yes' }), url).toBe(true)
+    }
+
+    for (const url of [
+      'about:blank',
+      'file:///tmp/secret',
+      'javascript:alert(1)',
+      'data:text/html,unsafe',
+      'plugin://browser/page',
+      'openforge://internal',
+      'mailto:user@example.com',
+      'malformed',
+    ]) {
+      expect(popupPolicy.isAllowed({ url, features: '' }), url).toBe(false)
+    }
+
+    for (const features of [
+      'nodeIntegration=yes',
+      'contextIsolation=no',
+      'sandbox=no',
+      'webSecurity=no',
+      'allowRunningInsecureContent=yes',
+      'webviewTag=yes',
+      'preload=/tmp/unsafe.cjs',
+      'devTools=yes',
+      'partition=persist:other',
+      'javascript=no',
+      'zoomFactor=2',
+      'NODEINTEGRATION=yes',
+      ' nodeIntegration = yes ',
+    ]) {
+      expect(popupPolicy.isAllowed({ url: 'https://auth.example/start', features }), features).toBe(false)
+    }
+  })
+
   it('derives one stable persistent partition per plugin and Task without surface identity collisions', async () => {
     const { manager, factory } = createManager()
 
